@@ -92,7 +92,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
   ./dmm-cli --device <id> capture   # --unverified or --steps a,b for a subset
   ```
 
-  Give the OS-native fallback for an empty `list`: `lsusb | grep -E '10C4:EA80|1A86:E429|1A86:E008'`, `ioreg -p IOUSB -l | grep -i CP2110`, Device Manager.
+  Give the OS-native fallback for an empty `list`: `lsusb | grep -iE '10C4:EA80|1A86:E429|1A86:E008|0820:0001'`, `ioreg -p IOUSB -l | grep -i CP2110`, Device Manager.
 
 ## Standard device- and platform-report asks
 
@@ -100,7 +100,7 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 
 - Meter model, and firmware version if shown at power-on.
 - OS, version and architecture; prebuilt archive (which one) or source build.
-- Bridge chip and VID:PID — CP2110 `10C4:EA80`, CH9329 `1A86:E429`, CH9325 `1A86:E008` (RX-only, no `command` support).
+- Cable and VID:PID — CP2110 `10C4:EA80`, CH9329 `1A86:E429`, CH9325 `1A86:E008` (RX-only, no `command` support), BU-86X `0820:0001`.
 - Cable bundled or bought separately, and where/when — this is how production changes (CP2110 → CH9329 on the UT181A) get tracked.
 - Per-step pass/fail with error output pasted; `capture-<device>.yaml` attached (auto-saves per step, resumable); an LCD photo beside the tool's output for any display-vs-parsed question. GitHub rejects `.yaml` uploads, so ask for files renamed to `.txt`.
 - Match the artefact to the symptom: a `capture` report for readings, parsing or a mode; a `.replay` file — GUI Export… → Replay…, or `dmm-cli read --format replay -o bench.replay` — for behaviour over time (graph, triggers, gaps, a button sequence), which replays their session on our bench.

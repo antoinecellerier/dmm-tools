@@ -3678,6 +3678,7 @@ mod tests {
             &a_full_meter(),
             Quirks {
                 post_switch_errors: vec![dmm_lib::error::Error::NoTransportFound {
+                    cables: Vec::new(),
                     bluetooth_searched: false,
                 }],
                 ..Default::default()

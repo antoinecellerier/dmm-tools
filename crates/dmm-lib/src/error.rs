@@ -42,6 +42,21 @@ pub enum Error {
     #[error("adapter not found: {0}")]
     AdapterNotFound(String),
 
+    /// `--adapter` named a link the named meter cannot be reached through:
+    /// a cable that speaks its own meters' protocol and a meter it does not
+    /// list, or such a meter and a cable that relays UART bytes or the radio.
+    /// `cable` is the name `dmm-cli list` shows, `model` the entry's display
+    /// name.
+    #[error(
+        "--adapter names {}, which cannot carry the {model}: name the meter's own cable with \
+         --adapter, or leave --adapter out",
+        named_link(.cable)
+    )]
+    WrongCable {
+        cable: &'static str,
+        model: &'static str,
+    },
+
     /// The Bluetooth link went away mid-session — out of range, meter powered
     /// off, adapter asleep. The same shape as a pulled USB cable, so consumers
     /// reconnect from it.
@@ -73,25 +88,26 @@ pub enum Error {
         built_in_radio: bool,
     },
 
-    /// The IDs come from the transport modules themselves rather than being
-    /// spelled out here, so a corrected PID or a fourth bridge can't leave
-    /// this message describing adapters we no longer look for.
+    /// `cables` are the cables the open looked for, by the names `dmm-cli
+    /// list` shows: every one for `auto`, only those it can be on for a named
+    /// meter, none when only the radio was. "Looked for", not "tried". The
+    /// IDs come from the transport modules themselves rather than being
+    /// spelled out here, so a corrected PID or another cable can't leave this
+    /// message describing adapters we no longer look for.
     ///
     /// `bluetooth_searched` says whether the radio got a turn as well, which
     /// is what the binaries' help titles itself on — they would otherwise
     /// have to work the answer out again from the build, the settings and the
     /// selected meter.
     #[error(
-        "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x}){}",
-        crate::transport::cp2110::VID,
-        crate::transport::cp2110::PID,
-        crate::transport::ch9329::VID,
-        crate::transport::ch9329::PID,
-        crate::transport::ch9325::VID,
-        crate::transport::ch9325::PID,
+        "no supported USB adapter found{}{}",
+        looked_for(.cables),
         bluetooth_clause(.bluetooth_searched)
     )]
-    NoTransportFound { bluetooth_searched: bool },
+    NoTransportFound {
+        cables: Vec<&'static str>,
+        bluetooth_searched: bool,
+    },
 
     /// A meter with the radio built in, which has no cable, was not opened:
     /// nothing in range carried its name, or the radio was not searched.
@@ -138,6 +154,29 @@ fn bluetooth_only_message(model: &str, miss: &BluetoothOnlyMiss) -> String {
 
 /// The rest of the "nothing found" message when the radio was searched too.
 /// Saying so keeps the user from hunting for a cable fault that isn't there.
+/// The link `--adapter` named, as [`Error::WrongCable`] words it.
+fn named_link(link: &str) -> String {
+    if link == crate::BLUETOOTH {
+        "a Bluetooth adapter".to_string()
+    } else {
+        format!("a {link} cable")
+    }
+}
+
+/// The cables [`Error::NoTransportFound`] looked for, with their IDs.
+fn looked_for(cables: &[&str]) -> String {
+    let ids: Vec<String> = cables
+        .iter()
+        .filter_map(|name| crate::KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
+        .map(|kt| format!("{} {:#06x}:{:#06x}", kt.name, kt.vid, kt.pid))
+        .collect();
+    if ids.is_empty() {
+        String::new()
+    } else {
+        format!(" (looked for {})", ids.join(", "))
+    }
+}
+
 fn bluetooth_clause(searched: &bool) -> &'static str {
     if *searched {
         ", nor a Bluetooth device in range"
@@ -225,6 +264,7 @@ impl Error {
             }
             Self::UnknownDevice(_)
             | Self::AdapterNotFound(_)
+            | Self::WrongCable { .. }
             | Self::UnsupportedCommand(_)
             | Self::CommandRejected(_)
             | Self::Bluetooth(_)
@@ -274,16 +314,47 @@ mod tests {
         assert_eq!(msg, "no meter answered over the Bluetooth link");
     }
 
-    /// The error a failed open carries, with `bluetooth_searched` as the
-    /// open path would have set it.
+    /// The error a failed `auto` open carries, every cable looked for, with
+    /// `bluetooth_searched` as the open path would have set it.
     fn not_found(bluetooth_searched: bool) -> Error {
-        Error::NoTransportFound { bluetooth_searched }
+        Error::NoTransportFound {
+            cables: crate::KNOWN_TRANSPORTS.iter().map(|kt| kt.name).collect(),
+            bluetooth_searched,
+        }
     }
 
     #[test]
     fn kind_maps_not_found() {
         assert_eq!(not_found(false).kind(), ErrorKind::DeviceNotFound);
         assert_eq!(not_found(true).kind(), ErrorKind::DeviceNotFound);
+    }
+
+    /// A named meter's open lists the cables it looked for, and only those.
+    #[test]
+    fn not_found_lists_only_the_cables_looked_for() {
+        let msg = Error::NoTransportFound {
+            cables: vec!["BU-86X"],
+            bluetooth_searched: false,
+        }
+        .to_string();
+        assert_eq!(
+            msg,
+            format!(
+                "no supported USB adapter found (looked for BU-86X {:#06x}:{:#06x})",
+                crate::transport::bu86x::VID,
+                crate::transport::bu86x::PID
+            )
+        );
+        // Only the radio was looked at.
+        let msg = Error::NoTransportFound {
+            cables: Vec::new(),
+            bluetooth_searched: true,
+        }
+        .to_string();
+        assert_eq!(
+            msg,
+            "no supported USB adapter found, nor a Bluetooth device in range"
+        );
     }
 
     /// A lost link is what a pulled cable is: the GUI reconnects from both.
@@ -392,9 +463,32 @@ mod tests {
             (crate::transport::cp2110::VID, crate::transport::cp2110::PID),
             (crate::transport::ch9329::VID, crate::transport::ch9329::PID),
             (crate::transport::ch9325::VID, crate::transport::ch9325::PID),
+            (crate::transport::bu86x::VID, crate::transport::bu86x::PID),
         ] {
             assert!(msg.contains(&format!("{vid:#06x}:{pid:#06x}")), "got {msg}");
         }
+        assert!(
+            msg.contains("(looked for CP2110 0x10c4:0xea80, "),
+            "got {msg}"
+        );
+        assert!(msg.contains(", BU-86X 0x0820:0x0001)"), "got {msg}");
+    }
+
+    /// A cable the named meter cannot use is the user's to change, and the
+    /// message names the cable and the meter.
+    #[test]
+    fn a_wrong_cable_names_both_and_is_the_users_to_fix() {
+        let err = Error::WrongCable {
+            cable: "BU-86X",
+            model: "UT61E+",
+        };
+        assert_eq!(err.kind(), ErrorKind::Configuration);
+        let msg = err.to_string();
+        assert_eq!(
+            msg,
+            "--adapter names a BU-86X cable, which cannot carry the UT61E+: name the meter's own \
+             cable with --adapter, or leave --adapter out"
+        );
     }
 
     /// An open that reached the radio says so; one that never did must not

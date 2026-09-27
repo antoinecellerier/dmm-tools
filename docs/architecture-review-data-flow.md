@@ -11,7 +11,7 @@ Meter (hardware)
   |
   | USB HID (interrupt transfers)
   v
-Transport Layer (CP2110 / CH9329 / CH9325)
+Transport Layer (CP2110 / CH9329 / CH9325 / BU-86X)
   |
   | read_timeout() / write() — raw bytes
   v

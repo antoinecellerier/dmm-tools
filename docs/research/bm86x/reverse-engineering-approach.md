@@ -4,8 +4,8 @@ Scope: the Brymen meters that use the BU-86X optical USB cable — the BM860s
 series (BM867s, BM869s), the BM820s series (BM821s, BM822s, BM827s,
 BM829s) and the BM520s mobile-logging series (BM521s, BM525s) — from the
 USB device to the LCD-segment reply and the BM520s logged-memory download.
-Nothing is implemented; this pair of documents records what the meters and
-the cable do on the wire. Every fact in §1-11 of the spec, and each
+The BM860s is implemented, experimentally; this pair of documents records
+what the meters and the cable do on the wire. Every fact in §1-11 of the spec, and each
 question of §12, comes from vendor sources; §13 compares them with
 community sources, opened 2026-09-27 after §1-12 were committed, and §12's
 "Community:" notes summarise §13.

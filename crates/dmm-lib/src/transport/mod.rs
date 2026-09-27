@@ -4,6 +4,7 @@ pub(crate) mod ble;
 #[cfg(not(feature = "bluetooth"))]
 #[path = "ble_disabled.rs"]
 pub(crate) mod ble;
+pub(crate) mod bu86x;
 pub(crate) mod ch9325;
 pub(crate) mod ch9329;
 pub(crate) mod cp2110;

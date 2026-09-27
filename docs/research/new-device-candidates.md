@@ -10,7 +10,7 @@ Modern multimeters with PC connectivity use one of these transports:
 
 | Transport | Examples | Sigrok coverage |
 |-----------|----------|-----------------|
-| **USB HID** (current dmm-tools) | UNI-T (CP2110/CH9329/CH9325), Brymen (Cypress), Victor | Good on all platforms |
+| **USB HID** (current dmm-tools) | UNI-T (CP2110/CH9329/CH9325), Brymen (BU-86X), Victor | Good on all platforms |
 | **Bluetooth LE** (current dmm-tools) | 121GW, OWON B35T/B41T+, UNI-T UT-D07B, Aneng/BSIDE/ZOYI | **Linux only, experimental, flaky** |
 | **USB serial (CDC)** | OWON XDM (CH340), Fluke IR (FTDI), APPA (CP2102) | Good on all platforms |
 | **USB TMC/SCPI** | Rigol, Siglent bench instruments | Good, well-served by pyvisa/lxi-tools |
@@ -24,38 +24,43 @@ connectivity.
 
 ## USB HID Candidates
 
-### Brymen BM52x / BM82x / BM86x — RECOMMENDED
+### Brymen BM52x / BM82x / BM86x — BM86x SUPPORTED (EXPERIMENTAL) SINCE 2026-09-27
+
+**The BM860s (BM869s, BM867s) is implemented as `bm86x`** — see
+[supported devices](../supported-devices.md) and the spec in
+[research/bm86x](bm86x/reverse-engineered-protocol.md), written from Brymen's
+protocol sheets, programs and manuals; the BM820s and BM520s are specified
+there and not yet implemented. The analysis below is as it stood before,
+corrected where the spec contradicts it.
 
 **Strongest USB HID candidate. Clear software gap. Officially documented protocol.**
 
 | Aspect | Details |
 |--------|---------|
-| Models | BM525s, BM527s, BM821s, BM829s, BM867s, BM869s |
-| Also compatible | BM257s, BM250s (via BRUA-20X cable, same VID/PID) |
-| Price range | ~$120 (BM257s) to ~$340 (BM869s) |
-| Counts | 60000 (BM86x), 40000 (BM82x), 50000 (BM52x) |
+| Models | BM521s, BM525s, BM821s, BM822s, BM827s, BM829s, BM867s, BM869s |
+| Price range | up to ~$340 (BM869s); the lowest unknown |
+| Counts | 50000, 500000 at DC V (BM86x); 9999 or 6000 by function (BM82x, BM52x) |
 | Connection | USB HID via **BU-86X** optical IR cable (~$40) |
-| USB chip | Cypress CY7C63743 enCoRe in cable |
 | VID:PID | `0820:0001` |
-| Protocol | LCD segment bitmap, 72 bytes as 3x24-byte HID reports |
+| Protocol | LCD segment map, 24 data bytes as three 8-byte HID reports |
 | Trigger | 4-byte command: `\x00\x00\x86\x66` |
 | Direction | Read-only (no meter control commands) |
 | Sigrok driver | `brymen-bm86x` (fully supported) |
 
 #### Protocol details
 
-The BU-86X cable contains a Cypress CY7C63743 enCoRe USB controller that
-reads the meter's optical IR output and presents it as a USB HID device.
+The BU-86X cable reads the meter's optical output and presents it as a USB
+HID device.
 
 **Communication sequence:**
 1. Host sends 4-byte HID report: `\x00\x00\x86\x66`
-2. Meter responds with 3 HID interrupt reports of 24 bytes each (72 bytes total)
-3. The 72 bytes encode the LCD segment bitmap — every segment of the LCD display is mapped to a specific bit
+2. Meter responds with 3 HID interrupt reports of 8 data bytes each (24 bytes total)
+3. The 24 bytes encode the LCD segment bitmap — every segment of the LCD display is mapped to a specific bit
 4. Software must decode 7-segment digit patterns into numeric values
 
 **Protocol documentation:** Brymen provides official protocol PDFs
-(e.g., `BM250-BM250s-6000-count-digital-multimeters-r1.pdf`) documenting
-the segment-to-bit mapping.
+(e.g., the BM860 sheet, "Protocol for 500000-count professional dual display DMM series")
+documenting the segment-to-bit mapping.
 
 #### Community popularity
 
@@ -89,10 +94,10 @@ the segment-to-bit mapping.
 
 #### Implementation considerations
 
-- **New transport:** The Cypress CY7C63743 is not a UART bridge — it uses raw HID reports. New `Transport` impl needed, but arguably simpler than CP2110 (no baud rate config, no UART framing).
-- **LCD segment decoder:** New parsing paradigm. 72-byte bitmap → 7-segment digit decode → numeric values + mode + flags. Well-documented in Brymen PDFs.
+- **New transport:** raw HID reports, no baud rate or UART setup.
+- **LCD segment decoder:** New parsing paradigm. 24-byte bitmap → 7-segment digit decode → numeric values + mode + flags. Well-documented in Brymen PDFs.
 - **Device tables:** Per-model segment position mappings. Similar models share layout.
-- **Read-only:** No bidirectional control — simpler than polled protocols.
+- **Read-only:** Polled, one request per reading; no meter control commands.
 
 ---
 
@@ -700,7 +705,7 @@ the same transport.
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
 | **UNI-T UT71A–E** — implemented 2026-09-21 | USB HID (CH9325) | Lowest cost of any candidate: the cable, the bridge and the 11-byte packet shape are already implemented, UNI-T publishes the protocol, and the Tenma and Voltcraft VC9x0 rebrands come with it | Done, experimental: `ut71ab`, `ut71cde`, `vc920` await a hardware report ([supported devices](../supported-devices.md)) |
-| **Brymen BM86x** | USB HID (Cypress) | Official protocol docs, strong community, no cross-platform GUI exists | Large |
+| **Brymen BM86x** — implemented 2026-09-27 | USB HID (BU-86X) | Official protocol docs, strong community, no cross-platform GUI exists; specified from Brymen's protocol sheets, programs and manuals ([research/bm86x](bm86x/reverse-engineered-protocol.md)) | Done for the BM860s, experimental: `bm86x` awaits a hardware report; the BM82x and BM52x are specified, not implemented |
 | **UNI-T via UT-D07B** — implemented 2026-09-22 | BLE | Reuses existing protocol parsers, #1 recommended logging meter on EEVBlog 2024, no desktop BLE tool | Done, verified on a UT61E+: the UT171 and UT181 series UNI-T lists on the adapter await a hardware report ([supported devices](../supported-devices.md)) |
 | **UNI-T UT60BT / UT202BT** — implemented 2026-09-25 | BLE (built in) | The UT61+ protocol over the Bluetooth transport we have; the UT60BT is the #1 logging pick on EEVBlog 2024 | Done, experimental: `ut60bt`, `ut202bt` await a hardware report |
 | **Fluke 287/289** | USB serial (IR) | Officially documented ASCII protocol, millions of units, $200 Windows-only software is terrible | Large |

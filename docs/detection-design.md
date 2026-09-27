@@ -24,7 +24,7 @@ verification status is not repeated here — it lives in the backlog's
 | CH9329 (`1A86:E429`) → UT181A shortcut | Wrong. A UT61B+ was verified over CH9329 (issue #19, commit `1d078a6`). CH9329 and CP2110 need the same cascade. |
 | UT8803 needs a `0x5A` trigger | Stale. Removed in the 2026-06 review; UT8803/UT8802 stream unprompted (`ut8803/mod.rs`). |
 | Get Name `0x5F` unverified beyond UT61E+ | Verified on UT61B+ too, over CH9329 ([verification-backlog.md](verification-backlog.md)). UT61D+/UT161x still unverified. |
-| 4 families | 8 hardware families plus the CH9325 bridge (UT803/UT804). VC-880/VC-890 share the UT61E+'s `AB CD` BE16 framing; VC-890 even polls with `0x5E`. |
+| 4 families | 8 hardware families plus the CH9325 bridge (UT803/UT804) and Brymen's BU-86X cable (BM86x). VC-880/VC-890 share the UT61E+'s `AB CD` BE16 framing; VC-890 even polls with `0x5E`. |
 | No captures | 12 UT61E+ (CP2110) and 2 UT61B+ (CH9329) capture reports under `references/`, all with `init_frames`; UT181A traces in PR #8 (full CH9329 trace) and issue #5 (capture samples); 3 real UT181A frames in `ut181a/parse.rs` and `tests/golden/ut181a/`. UT804 packets in issue #16. Nothing for UT171, UT8802, UT8803, UT803, VC-880, VC-890. |
 
 ## Evidence
@@ -60,6 +60,9 @@ own.
 | 4 | 3× `AB CD 04 FF 00 02 7B` then `AB CD 03 5E 01 D9` (VC-890 poll) | VC-890 |
 | any | — (nothing sent) | UT8803, UT8802, VC-880; on Bluetooth, the ZOTEK meters, the 121GW and the BM78xBT |
 
+The BU-86X gets one step of its own: `00 86 66`, the BM86x's reading request, whose reply
+names the series in its model bytes.
+
 The order is load-bearing, and it is derived rather than written down. Registry order is the
 preference — `DEVICES` lists the most common meters first, which is what puts `0x5F` at the head,
 the best-verified probe and the fastest to answer. The one hard constraint is the UT171
@@ -91,7 +94,7 @@ every read, against every candidate offset in the buffer, and the strongest answ
 | 4 | a model the meter named itself | the UT61+ name frame, the only one that picks an exact sibling |
 | 3 | a model from a frame whose 16-bit checksum held | UT8803, UT171, UT181A, VC-880, VC-890, BM78xBT |
 | 2 | `FamilyOnly` — a checksummed frame naming no model | a bare 14-byte UT61+ reading |
-| 1 | a model from a rule with no checksum, or an 8-bit XOR | UT8802 (`0xAC`), UT804 (any CR LF packet), ZOTEK (a whole descrambled packet), 121GW (a packet whose 8-bit XOR, mode, range and reserved bits hold) |
+| 1 | a model from a rule with no checksum, or an 8-bit XOR | UT8802 (`0xAC`), UT804 (any CR LF packet), ZOTEK (a whole descrambled packet), 121GW (a packet whose 8-bit XOR, mode, range and reserved bits hold), BM86x (four model bytes) |
 
 A `FamilyOnly` at the top is remembered rather than acted on: the window keeps listening, and a
 name frame arriving in it outranks the fallback (see
@@ -129,6 +132,8 @@ The overlaps the ranking arbitrates, each rule declining what is not its own:
   match to about one detection in 10^5.
 - `bm78xbt` — a 32-byte reading packet: `FF 02 20 05`, a CRC-16/MODBUS over bytes 2-27, `FF 03`,
   and a device type of `01` (meter). None of the AB CD, 121GW or ZOTEK frames starts that way.
+- `bm86x` — four `86` bytes in a row, the reply's model bytes. It runs on the BU-86X alone,
+  which carries no other family.
 
 `ut80x` is the CH9325's rule and is the only one consulted there; the AB CD rules are the other
 bridges' (see [Bridges and adapters](#bridges-and-adapters)).
@@ -184,6 +189,12 @@ own too, and its rule takes one packet found by its XOR as above; with "121GW" a
 the only rule that runs. The BM78xBT streams once the transport has logged in, before detection
 starts; its rule takes one CRC-valid reading packet, and with "BM78xBT" advertised it is the only
 rule that runs. Behind an unnamed link it rides the UNI-T probe windows and sends nothing.
+The BU-86X is no UART bridge: the cable answers Brymen's request itself and carries the BM86x
+alone, so detection there sends the reading request, the bytes every reading sends. A BM86x
+in capacitance or at 500000 counts can answer after the window closes; its activation steps
+say to set a voltage function. `auto` tries the BU-86X after every other cable, so with a
+CP2110 plugged in too it is never probed, and a BU-86X whose meter is off stops `auto` there,
+before Bluetooth: name the meter, or pass `--adapter`.
 
 Only the first adapter found is probed. With several plugged in, the existing
 multiple-adapter warning applies and `--adapter` selects one; probing every adapter is a
@@ -195,7 +206,7 @@ A listen window is bounded twice: an `Instant` deadline of ~600 ms (hardware pac
 [protocol.md](protocol.md)) **and** an empty-read cap (`MAX_EMPTY_READS` = 256 reads in a row without data, as in
 `framing::read_uart_bytes`), because a drained `MockTransport` returns `Ok(0)` instantly and
 would otherwise spin until the deadline. Four windows put the walk to "not identified" at
-≈2.6 s, while a UT61+ answers inside the first one — ack in 36–83 ms, name in 144–191 ms — so
+≈2.6 s (one on the BU-86X, ≈0.6 s), while a UT61+ answers inside the first one — ack in 36–83 ms, name in 144–191 ms — so
 an auto open normally costs about 200 ms.
 
 A window that follows no probe — the CH9325's only one — lasts 1.5 s instead. The meter sets
@@ -212,7 +223,7 @@ worth. Extractor errors are ignored, never propagated.
 
 | Failure mode | Cause | What the user sees | Mitigation |
 |---|---|---|---|
-| Nothing answers | Meter off; Communication OFF (UT171/UT181A); PC button not pressed (VC-880); wrong cable; CH9325 at the wrong baud; a meter whose arm is wrong | `DeviceNotIdentified` after ~2.6 s (1.5 s on the CH9325) | Help lists the activation instructions of every family on that bridge and ends with how to name the meter yourself and where to report it; `--device <id>` pins a model and skips probing; in the GUI a first failure shows the help and waits for Connect, while a drop mid-session reconnects and re-probes on its own |
+| Nothing answers | Meter off; Communication OFF (UT171/UT181A); PC button not pressed (VC-880); wrong cable; CH9325 at the wrong baud; a meter whose arm is wrong | `DeviceNotIdentified` after ~2.6 s (1.5 s on the CH9325, 0.6 s on the BU-86X) | Help lists the activation instructions of every family on that bridge and ends with how to name the meter yourself and where to report it; `--device <id>` pins a model and skips probing; in the GUI a first failure shows the help and waits for Connect, while a drop mid-session reconnects and re-probes on its own |
 | Misidentification from junk | Random bytes passing a lax extractor (the `0xAC` 8-byte UT8802 format passes ~1% of random input); garbage from a wrong CH9325 baud | Wrong parser, later checksum or parse errors | Checksummed evidence outranks a pattern match, and a named model outranks both; UT8802 needs two consecutive frames 8 bytes apart, so its claim only stands when no `AB CD` rule made a stronger one; the "Detected X" notice tells the user what was picked and that `--device` overrides it |
 | Stale frame from an earlier session | CH9329 does not purge RX on open; a UT61+ mid-poll or a UT181A left streaming | Family evidence arriving before the probe reply | A name frame outranks a measurement frame within the window; a lone 14-byte UT61+ frame falls back to `ut61eplus`, or to the entry a meter with Bluetooth built in advertises, with `reported_name: None` and a WARN |
 | UT181A vs UT171 ambiguity | Same framing and type byte; payload lengths overlap (UT181A 19 bytes without aux or bargraph, UT171 16/22) | Wrong one of the two | Payload ≥ 31 → UT181A; a payload past 21 bytes is past the UT171's extended frame, and a frame right after SET_MONITOR is the UT181A's, so the UT171 rule declines both; what is left before any LE16 trigger → UT171 with a WARN; recorded in the backlog; parse-based arbitration once UT171 hardware exists |
@@ -221,7 +232,7 @@ worth. Extractor errors are ignored, never propagated.
 | Unknown UT61+ name | UT61D+/UT161x/UT60BT/UT202BT names never seen; a future model | Reading works, tables may be off | Fall back to `ut61eplus` tables (on a meter with Bluetooth built in, to the entry its advertised name picked), keep `reported_name`, notice "meter reports X, using UT61E+ tables"; ask the user to report the name; registry aliases absorb spelling variants. What the GUI saves is that fallback entry, and its toast names the model the meter reported, which is what the user has to quote |
 | Probe side effect on the wrong meter | The UT171 connect is UT181A opcode `0x0A` (start recording); SET_MONITOR `0x05` meaning on a UT171 unknown; `0x5F` on VC-8x0/UT171/UT181A unknown | A recording started, a beep, or nothing | Order: `0x5F` first (registry order puts the most common meter first, and it is the most verified probe, replying within 200 ms), the UT171's `send_after` putting the UT181A trigger before the connect, so a UT181A with Communication ON that answers inside its own window is identified before `0x0A` goes out — a reply that only finishes arriving after that window's deadline is not, and the backlog carries the gap; one with Communication OFF ignores everything; each exposure listed in the backlog for reporters to confirm; `--device` avoids probing entirely |
 | Probe changes meter state | SET_MONITOR left on; the VC-890 ack burst | None expected | SET_MONITOR is what the UT181A init sends anyway; the acks are what the vendor software sends before every command |
-| Slow or sparse replies | UT8803 streams at 2–3 Hz; UT804 a packet every 656 ms; VC-880 rate unknown; UT61+ name seen within 191 ms | A missed frame in a short window | Windows ≥ 600 ms, 1.5 s where nothing is sent; the buffer persists across steps, so a streamer gets the whole ≈2.6 s budget and a frame split across a window boundary survives |
+| Slow or sparse replies | UT8803 streams at 2–3 Hz; UT804 a packet every 656 ms; VC-880 rate unknown; UT61+ name seen within 191 ms; a BM86x in capacitance or at 500000 counts (1.25 readings a second) | A missed frame in a short window | Windows ≥ 600 ms, 1.5 s where nothing is sent; the buffer persists across steps, so a streamer gets the whole ≈2.6 s budget and a frame split across a window boundary survives; a BM86x's activation steps say to set a voltage function, and naming it skips probing |
 | Byte-at-a-time delivery | CP2110 delivers one UART byte per HID report | Partial frames | Accumulate and re-classify after every read; never clear the buffer on a step boundary |
 | Garbage flood | Wrong baud, noisy line | Unbounded buffer | 4096-byte cap, oldest bytes dropped; extractor errors ignored, never propagated |
 | Several adapters plugged in | Only the first bridge found is probed | The other meter is never seen | The existing warning; `--adapter` selects one; probing every adapter is a listed follow-up, not in scope |

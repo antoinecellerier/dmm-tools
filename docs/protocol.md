@@ -44,6 +44,8 @@ other programs.
 
 - [BM788BT, BM787BT — Bluetooth LE, a password login and 152-byte notifications of CRC-checked packets](research/bm78xbt/reverse-engineered-protocol.md)
   — implemented, experimental.
+- [BM860s, BM820s, BM520s — the BU-86X USB cable, a 3-byte request and a 24-byte LCD segment map](research/bm86x/reverse-engineered-protocol.md)
+  — implemented, experimental, for the BM860s (BM869s, BM867s).
 
 ## Shared infrastructure
 
@@ -60,11 +62,12 @@ XOR-scrambled `5A A5` packets with no checksum and take `AB CD` commands
 with no length byte and a 16-bit big-endian sum. The 121GW streams 19-byte
 `F2` packets closed by an 8-bit XOR and takes `F4`-led ASCII-hex key frames.
 The BM78xBT notifies `FF`-led packets closed by a CRC-16/MODBUS and `FF 03`,
-once a 32-byte password command has been written.
+once a 32-byte password command has been written. The BM86x answers a
+3-byte request with a map of its LCD segments and no checksum.
 
 The UART byte stream is transport-agnostic within each family. Three
-HID bridge chips and one Bluetooth adapter appear across the supported
-devices:
+HID bridge chips, one cable that speaks its meters' protocol itself and
+one Bluetooth adapter appear across the supported devices:
 
 - **CP2110** (Silicon Labs) — bidirectional HID-to-UART, used by
   UT61+/UT161 and the UCI bench DMMs (UT8802/UT8803).
@@ -78,6 +81,9 @@ devices:
   and no command for them is known; the UNI-T SDK writes one `0x5A`
   byte at init, and the host-to-meter report framing is
   community-sourced ([UCI bench spec](research/uci-bench-family/reverse-engineered-protocol.md) §4.2, §9).
+- **BU-86X** (Brymen) — an optical USB HID cable, used by the BM860s,
+  BM820s and BM520s
+  ([BM86x spec](research/bm86x/reverse-engineered-protocol.md) §1.2, §2).
 - **UT-D07B** (ISSC/Microchip) — a Bluetooth LE transparent-UART
   adapter rather than a chip in a cable, carrying the same bytes the
   cable does for the meter series UNI-T lists on it

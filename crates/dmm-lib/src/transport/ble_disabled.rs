@@ -25,6 +25,7 @@ pub(crate) fn open_selected(_selector: &str) -> Result<Box<dyn Transport>> {
 /// the help must not offer Bluetooth steps.
 fn not_found() -> Error {
     Error::NoTransportFound {
+        cables: Vec::new(),
         bluetooth_searched: false,
     }
 }

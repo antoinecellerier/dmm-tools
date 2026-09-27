@@ -68,13 +68,13 @@ crate architecture.
 - **Market position:** 50,000 counts (500k DC), CAT IV 1000V, dual display
 
 ### Technical Profile
-- **Transport:** IR-to-USB via Brymen BU-86X cable, using Cypress CY7C63743 enCoRe USB chip — **not CP2110**
+- **Transport:** IR-to-USB via Brymen BU-86X cable (USB HID)
 - **Protocol:** USB/HID, proprietary segment-based encoding
 - **Counts:** 50,000 (500,000 DC)
 - **CAT rating:** CAT IV 1000V
 
 ### Implementation Complexity: High
-- Requires **new `Transport` implementation** for Cypress CY7C63743 HID
+- Requires **new `Transport` implementation** for the BU-86X HID cable
 - New protocol family from scratch
 - IR optical link adds a physical layer concern (cable compatibility)
 - Protocol is manufacturer-documented + sigrok driver available, so RE effort is minimal

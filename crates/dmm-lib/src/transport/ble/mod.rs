@@ -606,6 +606,7 @@ fn not_found(selector: Option<&str>) -> Error {
         Some(selector) => Error::AdapterNotFound(selector.to_string()),
         // The scan ran and found nothing, which is what the flag says.
         None => Error::NoTransportFound {
+            cables: Vec::new(),
             bluetooth_searched: true,
         },
     }
@@ -846,7 +847,8 @@ mod tests {
         assert!(matches!(
             not_found(None),
             Error::NoTransportFound {
-                bluetooth_searched: true
+                bluetooth_searched: true,
+                ..
             }
         ));
     }

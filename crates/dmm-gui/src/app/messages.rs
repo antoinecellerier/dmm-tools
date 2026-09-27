@@ -165,7 +165,10 @@ impl ConnectionIssue {
         // The open path already worked out which links it searched; carrying
         // the answer keeps the help from deriving it again from the build,
         // the settings and the selected meter.
-        if let dmm_lib::error::Error::NoTransportFound { bluetooth_searched } = err {
+        if let dmm_lib::error::Error::NoTransportFound {
+            bluetooth_searched, ..
+        } = err
+        {
             return Self::DeviceNotFound {
                 bluetooth_searched: *bluetooth_searched,
             };
@@ -1703,6 +1706,28 @@ mod tests {
         }
     }
 
+    /// Nothing answering on Brymen's cable: its help names the Brymen
+    /// meters and their steps, and the cable as a USB cable. "BU-86X" is
+    /// the cable's own name, which its steps use.
+    #[test]
+    fn nothing_answering_on_the_bu86x_offers_the_brymen_meters() {
+        let issue = ConnectionIssue::from_error(
+            &dmm_lib::error::Error::DeviceNotIdentified {
+                bridge: "BU-86X",
+                built_in_radio: false,
+            },
+            None,
+            None,
+        );
+        let ConnectionIssue::NotIdentified { help } = issue else {
+            panic!("expected NotIdentified, got {issue:?}");
+        };
+        assert!(help.contains("BM869s"), "got {help}");
+        assert!(help.contains("USB cable"), "got {help}");
+        assert!(help.contains("optical PC-Comm port"), "got {help}");
+        assert!(!help.contains("UT61E+"), "got {help}");
+    }
+
     /// The same probe over the radio: the user switched an adapter on, so the
     /// help must not send them looking at a cable.
     #[test]
@@ -1775,7 +1800,10 @@ mod tests {
         for bluetooth_searched in [false, true] {
             assert_eq!(
                 ConnectionIssue::from_error(
-                    &dmm_lib::error::Error::NoTransportFound { bluetooth_searched },
+                    &dmm_lib::error::Error::NoTransportFound {
+                        cables: Vec::new(),
+                        bluetooth_searched
+                    },
                     None,
                     None,
                 ),

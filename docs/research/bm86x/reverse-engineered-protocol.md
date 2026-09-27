@@ -10,7 +10,9 @@ data bytes. The reply is a map of LCD segments, not a number: digits arrive
 as 7-segment patterns, and function, unit, prefix, sign and decimal point as
 annunciator bits, in one layout for the BM860s and another for the BM820s
 and BM520s. The BM521s and BM525s also answer three commands that page out
-their logged memory. Not implemented. No meter from this group has been on
+their logged memory. The BM860s is implemented, experimentally
+(`crates/dmm-lib/src/protocol/bm86x/`); the BM820s, the BM520s and the
+memory download are not. No meter from this group has been on
 our bench: every fact in §1-11, and each question of §12, comes from
 Brymen's protocol documents, Brymen's two Windows programs and their
 READMEs, and the two user manuals; §13 compares them with community

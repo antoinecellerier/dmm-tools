@@ -11,6 +11,7 @@
 - **ZOTEK Bluetooth meters (ZOYI, BSIDE, ANENG) are supported experimentally** — the ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207 and ZT-5B / V05B, with remote keys, also on the GUI's mode label, and a simulated ZT-5B to try them on ([#28](https://github.com/antoinecellerier/dmm-tools/issues/28), [#29](https://github.com/antoinecellerier/dmm-tools/issues/29), [#30](https://github.com/antoinecellerier/dmm-tools/issues/30), [#31](https://github.com/antoinecellerier/dmm-tools/issues/31)).
 - **The EEVblog 121GW Bluetooth meter is supported experimentally** — with remote keys ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)).
 - **Brymen's BM788BT and BM787BT Bluetooth meters are supported experimentally** ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)).
+- **Brymen's BM869s and BM867s are supported experimentally on the BU-86X cable** — on Linux, reinstall `udev/70-dmm-tools.rules` and replug the cable.
 
 ### GUI
 

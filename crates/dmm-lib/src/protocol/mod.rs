@@ -1,4 +1,5 @@
 pub(crate) mod bm78xbt;
+pub(crate) mod bm86x;
 pub(crate) mod cycle;
 pub(crate) mod eevblog121gw;
 mod expect;
@@ -284,6 +285,8 @@ pub enum DeviceFamily {
     Eevblog121gw,
     /// Brymen BM788BT / BM787BT
     Bm78xbt,
+    /// Brymen BM869s / BM867s, on the BU-86X cable
+    Bm86x,
     /// Simulated device for testing and demos
     Mock,
 }
@@ -302,6 +305,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Zotek => write!(f, "ZOTEK"),
             DeviceFamily::Eevblog121gw => write!(f, "EEVblog 121GW"),
             DeviceFamily::Bm78xbt => write!(f, "Brymen BM78xBT"),
+            DeviceFamily::Bm86x => write!(f, "Brymen BM86x"),
             DeviceFamily::Mock => write!(f, "mock"),
         }
     }

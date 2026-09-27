@@ -23,6 +23,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
+| `transport/bu86x.rs` | Brymen's BU-86X cable, which speaks its meters' request/reply protocol itself rather than relaying UART bytes: a write is one request, a read one input report, and it takes no feature reports; `init` sends nothing and keeps the cable's firmware version |
 | `transport/ble/mod.rs` | Bluetooth LE transport for a UART-over-BLE peer, an adapter or a meter with the radio built in: connects it, picks the GATT profile from its services (ISSC first, then the EEVblog 121GW's own service, then the Brymen BM78xBT's, else FFF0), runs the profile's application login where it has one, subscribes to that profile's notify characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
 | `transport/ble/search.rs` | Finds a Bluetooth peer by its advertised name, or the one an address names |
 | `transport/ble/issc.rs` | The ISSC transparent-UART profile's UUIDs, and the adapter's name prefix and heartbeat frame |
@@ -45,6 +46,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/vc8x0/` | Voltcraft VC-880/VC650BT and VC-890: `Vc8x0Protocol<M>` in `mod.rs` implements `Protocol` and `CycleMeter` once over a `Vc8x0Model`; `vc880.rs` (streaming) and `vc890.rs` (polled) hold each family's tables, dial, frame layout and the drain or ack around its I/O, and name the driver over their model `Vc880Protocol` / `Vc890Protocol` |
 | `protocol/zotek/` | ZOTEK Bluetooth meters (ZOYI, BSIDE, ANENG): `ZotekProtocol` — streaming, one registry entry per packet layout, every packet decoded by its own layout; `frame.rs` finds and descrambles packets in the notification stream, `glyph.rs` reads the seven-segment digits and the words spelled in them, `layout.rs` holds each layout's annunciator table and builds the reading from what is lit, `keys.rs` the remote keys each layout offers and their frames, sent without waiting for a reply (a key whose code follows the display uses the last packet decoded, reading one first if none has arrived), `capture.rs` the capture steps per layout, `sim.rs` the simulated ZT-5B behind `--device mock-zt5b` |
 | `protocol/eevblog121gw/` | EEVblog 121GW: `Eevblog121gwProtocol` in `mod.rs` — streaming, listen-only init, remote keys written without waiting for a reply; `packet.rs` finds packets in the byte stream, `tables.rs` holds the mode and range tables, `decode.rs` builds the reading and its sub-values, `capture.rs` the capture steps |
+| `protocol/bm86x/` | Brymen meters on the BU-86X cable, one entry per series: `Bm86xProtocol` in `mod.rs` — polled, one request per reading and nothing sent at init; `reply.rs` the request and finding the reply, `map.rs` each series' LCD segment map, `glyph.rs` the seven-segment characters and what a row of them shows, `decode.rs` builds the reading and the secondary display's sub-value from what is lit, `capture.rs` the capture steps, `devices.rs` the registry entry |
 | `protocol/bm78xbt/` | Brymen BM788BT/BM787BT, one entry for both: `Bm78xbtProtocol` in `mod.rs` — streaming, listen-only init (the transport has logged in); `packet.rs` the CRC and finding readings in the notification stream, `tables.rs` the function, unit, prefix and display-word tables, `decode.rs` builds the reading, `capture.rs` the capture steps, `devices.rs` the registry entry |
 | `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic), and a `MainLabel` naming the reading when it is one part of what the meter measures; `AuxValue` sub-values, with `AuxValue::export_cells` + `Measurement::export_aux_slots` supplying the cells and slot order `export.rs` lays out (the slot helper keeps a software-appended sub-value in a fixed column as the meter's own count changes) |
 | `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |
@@ -70,8 +72,8 @@ CLI/GUI ──► registry::resolve_device()
                        │
                        └──► SelectableDevice.new_protocol()
                                            │
-USB HID ──► Cp2110, Ch9329 or Ch9325 (Box<dyn Transport>) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
-Bluetooth ──► Ble (Box<dyn Transport>) ──────────────────────┘
+USB HID ──► Cp2110, Ch9329, Ch9325 or Bu86x (Box<dyn Transport>) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
+Bluetooth ──► Ble (Box<dyn Transport>) ─────────────────────────────┘
                                            │
                                            ├── Ut61PlusProtocol            (polled, per-model DeviceTable)
                                            ├── Ut8802Protocol              (streaming)
@@ -83,7 +85,8 @@ Bluetooth ──► Ble (Box<dyn Transport>) ───────────�
                                            ├── Vc8x0Protocol<Vc890Model>   (polled)
                                            ├── ZotekProtocol               (streaming, per-layout LCD image)
                                            ├── Eevblog121gwProtocol        (streaming)
-                                           └── Bm78xbtProtocol             (streaming, after the transport's login)
+                                           ├── Bm78xbtProtocol             (streaming, after the transport's login)
+                                           └── Bm86xProtocol               (polled, LCD segment map)
 ```
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,
@@ -128,7 +131,9 @@ when more than one adapter is plugged in — without it a UT803 selection would 
 CP2110 and time out on every read — and the fallback keeps unusual cable pairings working. The
 fallback reaches only cables that relay the meter's UART bytes: a cable that speaks a meter's
 protocol itself is tried only for `auto`, last, or for an entry that lists it, and an entry
-listing only such cables is tried on exactly those. An
+listing only such cables is tried on exactly those. The same rule holds a link `--adapter` names
+to the entry before its bridge is initialised: a cable it cannot be on, or the radio for an entry
+on such cables alone, fails with `Error::WrongCable`, naming the link. An
 entry that advertises `bluetooth_names`, a meter with the radio built in, is looked for over Bluetooth alone,
 and fails with its own error (`Error::BluetoothOnly`): not in range, or the radio not searched.
 

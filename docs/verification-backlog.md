@@ -27,6 +27,7 @@ Items that need real components or specific setups to verify.
   - [ZOTEK (ZOYI / ANENG / BSIDE): experimental, awaiting a hardware report](#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)
   - [EEVblog 121GW: experimental, awaiting a hardware report](#eevblog-121gw-experimental-awaiting-a-hardware-report)
   - [Brymen BM78xBT: experimental, awaiting a hardware report](#brymen-bm78xbt-experimental-awaiting-a-hardware-report)
+  - [Brymen BU-86X and BM86x: experimental, awaiting a hardware report](#brymen-bu-86x-and-bm86x-experimental-awaiting-a-hardware-report)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
@@ -63,6 +64,7 @@ is probed with, and how well that probe is backed:
 | ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207, ZT-5B / V05B | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
 | EEVblog 121GW | nothing — the meter streams over its built-in Bluetooth | one packet: 18 bytes whose XOR is `F2`, with or without the `F2` before them, a mode and range in the tables, no reserved bit set | Deduced from EEVblog's documents and apps, unverified; both community-captured packets pass (121GW spec §15.5) |
 | Brymen BM788BT, BM787BT | nothing — the meter streams over its built-in Bluetooth once the transport has logged in | one 32-byte reading packet: `FF 02 20 05`, a CRC-16/MODBUS over bytes 2-27, `FF 03`, device type `01` | Deduced from Brymen's protocol document and app, unverified; no packet a meter sent is on record (bm78xbt spec §12) |
+| Brymen BM869s, BM867s | `00 86 66`, the reading request, on the BU-86X alone | a reply whose model bytes 20-23 are four `86` | Deduced from Brymen's sheet and programs, unverified; community captures show the four `86` (bm86x spec §13.3) |
 
 Open questions, each needing a meter:
 
@@ -106,6 +108,9 @@ Open questions, each needing a meter:
   are written to its command characteristic, CDD4, as 6- and 8-byte writes;
   r4 knows only 32-byte commands (bm78xbt spec §5), and what the meter does
   with a short one is unknown.
+- **A BM86x can answer after its one 600 ms window**: at 500000 counts or in
+  capacitance; see
+  [Brymen BU-86X and BM86x](#brymen-bu-86x-and-bm86x-experimental-awaiting-a-hardware-report).
 - **Opening after detection runs the family's `init` again**, so a UT181A
   receives SET_MONITOR twice and a UT171 its connect frame twice per auto
   open. Harmless on paper — both are what the meter was already sent — but
@@ -2028,6 +2033,52 @@ in Ω with the leads open.
   ZOTEK and 121GW rules ran there; after, the BM78xBT's rank-3 rule too,
   sending nothing. It declines AB CD frames, 121GW and ZOTEK packets and
   the adapter heartbeat (tests).
+
+### Brymen BU-86X and BM86x: experimental, awaiting a hardware report
+
+Specified 2026-09-26 from Brymen's protocol sheets, Brymen's two programs and
+the manuals (`docs/research/bm86x/reverse-engineered-protocol.md`, §12 for
+the open questions); the community cross-reference (spec §13) came after and
+narrows several items below without being our verification. Implemented
+2026-09-27 for the BM860s as the `bm86x` family, experimental, one registry
+entry `bm86x` for the BM869s and BM867s, on the new BU-86X transport; its
+verification issue is still to open. Nobody on the project owns one, so each
+item notes the driver's choice. One capture settles the most at once:
+**`RUST_LOG=dmm_lib=trace dmm-cli --device bm86x debug`** for a few seconds
+in DC V with a negative reading (leads reversed on a battery), then in Ω
+with the leads open; the trace carries the cable's report descriptor.
+
+- **Cable enumeration (§2, §12.1-12.2).** The report descriptor, traced at
+  open; the report sizes (a read drops a leading `00` from a 9-byte report
+  only); the strings; whether the serial is printable (left out of the
+  transport info, which goes into capture reports); the release number,
+  shown as the firmware version.
+- **Requests (§3.1, §12.4-12.5).** Whether a BM52x answers `82 66` (D1), and
+  what a meter does with another series' request.
+- **No meter or meter off (§3.4, §12.8).** What the cable sends with no
+  meter, read as a timeout after 4 s; whether linking disables APO (D2).
+- **Detection misses (§3.3, §12.7, §12.9).** A BM86x at 500000 counts (1.25
+  readings a second) against the 600 ms window, and whether a new request
+  cancels a pending one; capacitance slower than 4 s; a BM86x not sending
+  `86` in bytes 20-22, which detection needs and a named read does not.
+- **`auto` and the other cables.** `auto` stops at a BU-86X whose meter is
+  silent and does not reach Bluetooth, and with a CP2110 plugged in too it
+  never probes the BU-86X; setup and detection docs say to name the meter.
+- **Cables for a named meter.** Before, a named meter fell back to every
+  cable; after, to those that relay UART bytes, so a UNI-T or Voltcraft
+  meter never opens a BU-86X and a BM86x only opens one; an `--adapter`
+  naming the wrong kind of cable fails with the cable's name.
+- **Unconfirmed decodes (§5.2, §7.3, §8.2, §9.1, §12.10-12.18).** T1 + T2
+  against T1 − T2: both T bits read as T1-T2, the dash silent; how the meter
+  draws InEr's I (`?nEr` and `1nEr` both read as InEr) and C_Er's `_`; the
+  500000-count digits; the sheet's example without its main V, which reads
+  as an unknown function; what an open thermocouple shows (dashes and the
+  unit letter read as no reading); △ read as REL; the bar scale, ③ and ④,
+  which stay silent.
+- **Not implemented or unmapped.** The BM820s and BM520s (their map is in
+  §6); the BM520s logged-memory download (§10); spec tables, after a first
+  capture; Elma rebrands (§13.8); the BU-82X the BM820s manual names once
+  (§12.6).
 
 ### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
 

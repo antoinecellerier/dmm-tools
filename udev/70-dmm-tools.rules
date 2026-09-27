@@ -1,5 +1,5 @@
-# dmm-tools — non-root access to the USB HID bridges used by UNI-T and
-# Voltcraft meters.
+# dmm-tools — non-root access to the USB HID cables used by UNI-T,
+# Voltcraft and Brymen meters.
 #
 # TAG+="uaccess" hands each device to whoever is logged in at the local
 # seat, through a systemd-logind ACL that is dropped again at logout.
@@ -21,3 +21,6 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e429", TAG+="ua
 
 # UNI-T multimeters — WCH CH9325 HID bridge (UT-D04 cable for UT803, UT804, UT71, etc.)
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e008", TAG+="uaccess"
+
+# Brymen multimeters — BU-86X optical USB cable (BM869s, BM867s)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0820", ATTRS{idProduct}=="0001", TAG+="uaccess"

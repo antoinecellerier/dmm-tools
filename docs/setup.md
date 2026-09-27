@@ -79,11 +79,11 @@ and mouse event on the machine, a far wider grant than one multimeter cable
 
 ### Windows — driver
 
-The CP2110 cable may require a driver from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). After installation, verify the device appears in Device Manager under "Human Interface Devices" or "USB Devices". The CH9329 and CH9325 cables are standard HID devices and need no driver.
+The CP2110 cable may require a driver from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). After installation, verify the device appears in Device Manager under "Human Interface Devices" or "USB Devices". The CH9329, CH9325 and Brymen BU-86X cables are standard HID devices and need no driver.
 
 ### macOS — no driver needed
 
-macOS recognizes all three cable types as standard HID devices — plug the cable in and it appears automatically.
+macOS recognizes every supported cable as a standard HID device — plug the cable in and it appears automatically.
 
 If the device is not detected, check **System Settings > Privacy & Security > Input Monitoring** and ensure your terminal app (or the GUI binary) has permission to access input devices.
 
@@ -147,10 +147,10 @@ The GUI puts the steps for your platform on screen as its [connection
 help](../assets/gui-connection-help.png); the full list is:
 
 - Verify the USB cable is plugged in
-- **Linux:** `lsusb | grep -iE '10c4:ea80|1a86:e429|1a86:e008'` — one of the three cable chips should be listed. If missing, try another port; if listed but still not found, check the udev rule (see above)
+- **Linux:** `lsusb | grep -iE '10c4:ea80|1a86:e429|1a86:e008|0820:0001'` — one of the cables should be listed. If missing, try another port; if listed but still not found, check the udev rule (see above)
 - **Linux, cable listed by `lsusb` but still not found:** `ls -l /dev/hidraw*` — the cable's node should show a trailing `+`, marking the ACL. For the detail, `getfacl /dev/hidrawN` (from the `acl` package) should list your user as `user:<you>:rw-`. If it doesn't, the udev rule isn't installed under a name that sorts before `73-seat-late.rules`, or you're on a headless machine (see above)
-- **Windows:** check Device Manager for the CP2110 device — if missing or showing an error, reinstall the driver
-- **macOS:** `ioreg -p IOUSB -l | grep CP2110` — if missing, try a different USB port or hub. Check System Settings > Privacy & Security > Input Monitoring if the device appears in `ioreg` but the tool can't open it
+- **Windows:** check Device Manager for the cable: the CP2110 under its own name, the other cables as "USB Input Device". If the CP2110 is missing or shows an error, reinstall the driver
+- **macOS:** `ioreg -p IOUSB -l -w0 | grep -E '"idVendor" = (4292|6790|2080)'` — one of the cables should be listed. If missing, try a different USB port or hub. Check System Settings > Privacy & Security > Input Monitoring if the device appears in `ioreg` but the tool can't open it
 - **Bluetooth:** see [Bluetooth adapter not found](#bluetooth-adapter-not-found)
 
 ### "No response from meter"
@@ -159,6 +159,9 @@ The cable is found but the meter isn't sending. The tool lists what each
 meter needs switched on; the same steps are under each family in
 [supported devices](supported-devices.md). If you named a `--device`, check
 it matches the meter.
+
+With several cables plugged in, `auto` probes only one, and a Brymen BU-86X
+only when no other cable is plugged in: name the meter, or pass `--adapter`.
 
 Over Bluetooth, a meter switched off gives the same message; readings resume
 on their own once it transmits again.
@@ -178,7 +181,8 @@ on their own once it transmits again.
   one connection at a time. Disconnect it there first.
 - A USB cable wins over Bluetooth: with a cable plugged in, `auto` uses it even
   when the meter behind it says nothing. Unplug the cable, or pass
-  `--adapter <address>`.
+  `--adapter <address>`. Naming the meter skips a Brymen BU-86X unless the
+  meter is one of its own.
 - Leave out `--no-bluetooth`, and tick **Look for Bluetooth devices** in the
   GUI's settings: with either off, nothing scans.
 

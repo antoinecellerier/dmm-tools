@@ -717,7 +717,7 @@ mod tests {
             bridge_link_name(crate::BLUETOOTH, false),
             "Bluetooth adapter"
         );
-        for bridge in ["CP2110", "CH9329", "CH9325"] {
+        for bridge in ["CP2110", "CH9329", "CH9325", "BU-86X"] {
             assert_eq!(Link::from_bridge(bridge), Some(Link::UsbCable));
             for built_in in [false, true] {
                 assert_eq!(bridge_link_name(bridge, built_in), "USB cable");

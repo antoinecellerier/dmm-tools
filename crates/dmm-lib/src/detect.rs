@@ -973,6 +973,30 @@ mod tests {
         assert_eq!(detected.device.id, "vc890");
     }
 
+    /// The BU-86X's meters answer only a reading request naming their
+    /// series; its reply's model bytes name it (bm86x spec §4.2).
+    #[test]
+    fn a_bm86x_answers_its_reading_request() {
+        const REQUEST: [u8; 3] = [0x00, 0x86, 0x66];
+        // The BM860 sheet's example (bm86x spec §9.1), bytes 20-22 `86`.
+        let reply = vec![
+            0x00, 0x01, 0x11, 0xF8, 0xA0, 0xDA, 0xA9, 0xA0, 0x00, 0x00, 0x7E, 0xBF, 0xA0, 0xA0,
+            0x04, 0x00, 0x86, 0x86, 0x86, 0x86, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let meter = ScriptedMeter::answering(&REQUEST, reply);
+        assert_eq!(detect_device(&meter, "BU-86X").unwrap().device.id, "bm86x");
+        // Nothing answers: the request went out, and nothing else did.
+        let silent = MockTransport::new(Vec::new());
+        assert!(matches!(
+            detect_device(&silent, "BU-86X"),
+            Err(Error::DeviceNotIdentified {
+                bridge: "BU-86X",
+                built_in_radio: false
+            })
+        ));
+        assert_eq!(silent.written.borrow().as_slice(), [REQUEST.to_vec()]);
+    }
+
     /// The CH9325 window sends nothing at all, and the UT80x family is the
     /// only one it can identify.
     #[test]
@@ -1133,6 +1157,12 @@ mod tests {
         );
         for bridge in ["CP2110", "CH9329"] {
             assert!(!families(bridge).contains(&DeviceFamily::Ut80x), "{bridge}");
+        }
+        // The BU-86X carries Brymen's meters that speak its protocol, and
+        // they are on no other link.
+        assert_eq!(families("BU-86X"), vec![DeviceFamily::Bm86x]);
+        for bridge in ["CP2110", "CH9329", "CH9325", crate::BLUETOOTH] {
+            assert!(!families(bridge).contains(&DeviceFamily::Bm86x), "{bridge}");
         }
         assert!(fingerprints_on("no such bridge", &[]).is_empty());
     }

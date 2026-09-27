@@ -3,7 +3,7 @@ name = "dmm-lib"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Library for communicating with digital multimeters via CP2110, CH9329, and CH9325 HID bridges and Bluetooth LE"
+description = "Library for communicating with digital multimeters via CP2110, CH9329 and CH9325 HID bridges, Brymen's BU-86X cable and Bluetooth LE"
 
 [dependencies]
 thiserror = "2"

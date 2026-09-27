@@ -24,7 +24,7 @@ use log::{debug, info, warn};
 use protocol::Protocol;
 use protocol::registry::{self, SelectableDevice, Selection};
 use std::ffi::CString;
-use transport::{BluetoothPeers, Transport, ble, ch9325, ch9329, cp2110};
+use transport::{BluetoothPeers, Transport, ble, bu86x, ch9325, ch9329, cp2110};
 
 /// Top-level handle for communicating with the multimeter.
 pub struct Dmm<T: Transport> {
@@ -339,6 +339,19 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
             Ok(Box::new(ch))
         },
     },
+    // Speaks Brymen's protocol itself, so only the meters that list it, or
+    // `auto`, open it.
+    KnownTransport {
+        vid: bu86x::VID,
+        pid: bu86x::PID,
+        name: bu86x::NAME,
+        relays_uart: false,
+        init: |dev| {
+            let mut cable = bu86x::Bu86x::new(dev);
+            cable.init()?;
+            Ok(Box::new(cable))
+        },
+    },
 ];
 
 /// What a caller asks of the open path besides which meter to open.
@@ -386,8 +399,8 @@ impl Default for OpenOptions<'_> {
 
 /// Open a device by registry ID, automatically selecting the transport.
 ///
-/// Tries the USB bridges in order (CP2110, CH9329, CH9325), then an adapter in
-/// Bluetooth range.
+/// Tries the meter's USB cables, then the others it can be on (CP2110, CH9329,
+/// CH9325, BU-86X, see `usb_candidates`), then an adapter in Bluetooth range.
 /// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
 ///
 /// `id` may be [`registry::AUTO_DEVICE_ID`], in which case the meter is
@@ -418,8 +431,31 @@ pub fn open_device_transport(
     if device.bluetooth_only() {
         return open_bluetooth_only(device, opts);
     }
-    let (transport, _bridge) = open_links(device.links, &bluetooth_peers(Some(device)), opts)?;
+    let peers = bluetooth_peers(Some(device));
+    let (transport, _) = open_links(device.links, &peers, Some(device), opts)?;
     Ok(transport)
+}
+
+/// Refuse a link `device` cannot be reached through, before anything is
+/// sent on it: what `--adapter` opens is not checked against the meter's
+/// links, and a cable that speaks its own meters' protocol carries no other
+/// meter, nor such a meter another cable. The same rule as
+/// [`usb_candidates`]. The radio carries a meter that lists it, or one on a
+/// relaying cable through a UART relay such as the UT-D07B.
+fn check_cable(device: &SelectableDevice, bridge: &'static str) -> Result<()> {
+    let candidates = usb_candidates(KNOWN_TRANSPORTS, device.links);
+    let usable = if bridge == BLUETOOTH {
+        device.links.contains(&BLUETOOTH) || candidates.iter().any(|kt| kt.relays_uart)
+    } else {
+        candidates.iter().any(|kt| kt.name == bridge)
+    };
+    if usable {
+        return Ok(());
+    }
+    Err(Error::WrongCable {
+        cable: bridge,
+        model: device.display_name,
+    })
 }
 
 /// Open the meter on the cable without being told which one it is.
@@ -495,8 +531,8 @@ fn open_bluetooth_only(
 ///
 /// `preferred` orders the links to try, empty when nothing is known about
 /// the meter; on the radio, any adapter or meter we support is taken, since
-/// detection picks the entry afterwards. The returned name
-/// is the bridge's (`"CP2110"`, `"CH9329"`, `"CH9325"`, [`BLUETOOTH`]), which
+/// detection picks the entry afterwards. The returned name is the bridge's
+/// (`"CP2110"`, `"CH9329"`, `"CH9325"`, `"BU-86X"`, [`BLUETOOTH`]), which
 /// [`detect::detect_device`] needs to know which probes are worth sending.
 ///
 /// The USB bus comes first and Bluetooth is the fallback, which has one known
@@ -512,24 +548,29 @@ pub fn open_transport(
     preferred: &[&'static str],
     opts: OpenOptions<'_>,
 ) -> Result<(Box<dyn Transport>, &'static str)> {
-    open_links(preferred, &bluetooth_peers(None), opts)
+    open_links(preferred, &bluetooth_peers(None), None, opts)
 }
 
-/// [`open_transport`], taking only `peers` on the radio.
+/// [`open_transport`], taking only `peers` on the radio, and refusing a
+/// link `meter` cannot be reached through ([`check_cable`]).
 fn open_links(
     preferred: &[&'static str],
     peers: &BluetoothPeers,
+    meter: Option<&SelectableDevice>,
     opts: OpenOptions<'_>,
 ) -> Result<(Box<dyn Transport>, &'static str)> {
     // An address or a peripheral UUID can only be a Bluetooth adapter, so the
     // selector alone says which opener the user meant — and asking for one by
     // name is asking for the radio, whatever the probing setting says.
     if let Some(selector) = opts.adapter.filter(|s| ble::is_bluetooth_selector(s)) {
+        if let Some(meter) = meter {
+            check_cable(meter, BLUETOOTH)?;
+        }
         return Ok((ble::open_selected(selector)?, BLUETOOTH));
     }
 
     let radio_gets_a_turn = bluetooth_is_next(preferred, opts);
-    let hid = open_hid_transport(preferred, opts.adapter);
+    let hid = open_hid_transport(preferred, meter, opts.adapter);
     match hid {
         Ok(opened) => Ok(opened),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
@@ -573,7 +614,8 @@ fn usb_failure_falls_through(err: &Error) -> bool {
 /// Mark a "nothing found" error as having looked at the radio as well.
 fn searched_bluetooth(err: Error) -> Error {
     match err {
-        Error::NoTransportFound { .. } => Error::NoTransportFound {
+        Error::NoTransportFound { cables, .. } => Error::NoTransportFound {
+            cables,
             bluetooth_searched: true,
         },
         other => other,
@@ -581,9 +623,11 @@ fn searched_bluetooth(err: Error) -> Error {
 }
 
 /// Open one of the USB-HID bridges, the path every meter but a Bluetooth one
-/// takes.
+/// takes. A cable `meter` cannot be reached through is refused before its
+/// bridge is initialised.
 fn open_hid_transport(
     preferred: &[&'static str],
+    meter: Option<&SelectableDevice>,
     adapter: Option<&str>,
 ) -> Result<(Box<dyn Transport>, &'static str)> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
@@ -592,6 +636,9 @@ fn open_hid_transport(
         Some(adapter) => open_with_adapter(&api, adapter),
         None => open_first_match(&api, preferred),
     }?;
+    if let Some(meter) = meter {
+        check_cable(meter, kt.name)?;
+    }
     info!(
         "found {} adapter (VID={:#06x} PID={:#06x})",
         kt.name, kt.vid, kt.pid
@@ -691,7 +738,7 @@ fn open_first_match(
         );
     }
 
-    for kt in candidates {
+    for &kt in &candidates {
         if let Ok(device) = api.open(kt.vid, kt.pid) {
             return Ok((device, kt));
         }
@@ -700,11 +747,12 @@ fn open_first_match(
     // The bus alone was looked at here; [`open_transport`] marks the error
     // if it goes on to search the radio.
     Err(Error::NoTransportFound {
+        cables: candidates.iter().map(|kt| kt.name).collect(),
         bluetooth_searched: false,
     })
 }
 
-/// List all connected USB adapters (CP2110, CH9329, CH9325).
+/// List all connected USB adapters (CP2110, CH9329, CH9325, BU-86X).
 ///
 /// USB only, and instant: the Bluetooth adapters and meters in range come from
 /// [`list_bluetooth_devices`], which has to scan for them.
@@ -763,7 +811,7 @@ pub struct DeviceInfo {
     pub path: String,
     pub product: Option<String>,
     pub serial: Option<String>,
-    /// Transport type: "CP2110", "CH9329", "CH9325", or [`BLUETOOTH`].
+    /// Transport type: "CP2110", "CH9329", "CH9325", "BU-86X", or [`BLUETOOTH`].
     pub transport: &'static str,
     /// A Bluetooth adapter the platform knows (paired) that the scan did not
     /// hear: asleep, or missed by the scan. `--adapter` still tries it.
@@ -1223,24 +1271,83 @@ mod tests {
         }
     }
 
-    /// The preferred cable must come first, but the other relaying ones stay
-    /// reachable so an unusual pairing still connects.
-    #[test]
-    fn preference_orders_without_excluding() {
-        let preferred = registry::find_device("ut804").unwrap().links;
-        let ordered: Vec<&str> = usb_candidates(KNOWN_TRANSPORTS, preferred)
+    /// The cables an open tries for `id`'s meter, `auto` for none.
+    fn cables_for(id: &str) -> Vec<&'static str> {
+        let links = match id {
+            "auto" => &[][..],
+            id => registry::find_device(id).unwrap().links,
+        };
+        usb_candidates(KNOWN_TRANSPORTS, links)
             .iter()
             .map(|kt| kt.name)
-            .collect();
+            .collect()
+    }
 
-        assert_eq!(ordered[0], "CH9325", "the UT80x family uses the CH9325");
-        for kt in KNOWN_TRANSPORTS.iter().filter(|kt| kt.relays_uart) {
-            assert!(
-                ordered.contains(&kt.name),
-                "{} must stay reachable as a fallback",
-                kt.name
-            );
+    /// The preferred cable comes first and the other relaying ones stay
+    /// reachable, so an unusual pairing still connects; the BU-86X, which
+    /// speaks Brymen's protocol itself, is tried only for `auto` and its
+    /// own meters.
+    #[test]
+    fn preference_orders_without_excluding() {
+        assert_eq!(
+            cables_for("auto"),
+            ["CP2110", "CH9329", "CH9325", "BU-86X"],
+            "every cable, the one that relays nothing last"
+        );
+        assert_eq!(
+            cables_for("ut804"),
+            ["CH9325", "CP2110", "CH9329"],
+            "the UT80x family uses the CH9325 and keeps its fallbacks"
+        );
+        assert_eq!(cables_for("ut61eplus"), ["CP2110", "CH9329", "CH9325"]);
+        assert_eq!(cables_for("bm86x"), ["BU-86X"]);
+    }
+
+    /// `--adapter` can open any cable: one the named meter cannot be
+    /// reached through is refused, naming it.
+    #[test]
+    fn a_cable_the_meter_cannot_use_is_refused() {
+        let device = |id| registry::find_device(id).unwrap();
+        for (id, cable) in [
+            ("ut61eplus", "BU-86X"),
+            ("ut804", "BU-86X"),
+            ("bm86x", "CP2110"),
+            // No UART relay can carry a meter on a cable of its own.
+            ("bm86x", BLUETOOTH),
+        ] {
+            match check_cable(device(id), cable) {
+                Err(Error::WrongCable {
+                    cable: named,
+                    model,
+                }) => {
+                    assert_eq!((named, model), (cable, device(id).display_name));
+                }
+                other => panic!("{id} on {cable}: {other:?}"),
+            }
         }
+        for (id, cable) in [
+            ("ut61eplus", "CP2110"),
+            ("ut61eplus", "CH9325"),
+            ("ut804", "CP2110"),
+            ("bm86x", "BU-86X"),
+            ("ut61eplus", BLUETOOTH),
+            // A meter on relaying cables alone, through a UART relay.
+            ("ut804", BLUETOOTH),
+            ("ut8802", BLUETOOTH),
+        ] {
+            assert!(check_cable(device(id), cable).is_ok(), "{id} on {cable}");
+        }
+        let refused = |cable| check_cable(device("bm86x"), cable).unwrap_err().to_string();
+        assert!(
+            refused("CP2110").starts_with("--adapter names a CP2110 cable, which cannot carry"),
+            "{}",
+            refused("CP2110")
+        );
+        assert!(
+            refused(BLUETOOTH).starts_with("--adapter names a Bluetooth adapter, which cannot"),
+            "{}",
+            refused(BLUETOOTH)
+        );
     }
 
     /// A table with a cable that does not relay UART bytes between two that
@@ -1252,11 +1359,7 @@ mod tests {
                 pid: 0,
                 name,
                 relays_uart,
-                init: |_| {
-                    Err(Error::NoTransportFound {
-                        bluetooth_searched: false,
-                    })
-                },
+                init: |_| Err(Error::Timeout),
             }
         }
         [cable("A", true), cable("OWN", false), cable("B", true)]
@@ -1459,6 +1562,36 @@ mod tests {
             .map(|d| d.id)
             .collect();
         assert_eq!(on_bridge, ut80x_family);
+    }
+
+    /// The BU-86X carries Brymen's meters that speak its protocol and
+    /// nothing else, and none of them is on another cable: the help it
+    /// prints must not offer a UT61+ setup to a Brymen owner.
+    #[test]
+    fn bu86x_carries_exactly_the_brymen_families() {
+        use protocol::DeviceFamily as F;
+        let on_bridge: Vec<&str> = devices_on_bridge("BU-86X").iter().map(|d| d.id).collect();
+        let brymen: Vec<&str> = registry::DEVICES
+            .iter()
+            .filter(|d| matches!(d.family, F::Bm86x))
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(on_bridge, brymen);
+        assert_eq!(on_bridge, ["bm86x"]);
+        for id in on_bridge {
+            assert_eq!(registry::find_device(id).unwrap().links, ["BU-86X"], "{id}");
+        }
+        let kt = KNOWN_TRANSPORTS
+            .iter()
+            .find(|kt| kt.name == "BU-86X")
+            .unwrap();
+        assert!(!kt.relays_uart);
+        assert!(
+            KNOWN_TRANSPORTS
+                .iter()
+                .filter(|kt| kt.name != "BU-86X")
+                .all(|kt| kt.relays_uart)
+        );
     }
 
     /// A UT61B+ is verified over the CH9329 (issue #19), so the help for a

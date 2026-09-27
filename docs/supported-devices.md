@@ -2,7 +2,7 @@
 
 <!-- Keep this file updated when adding support for new models. -->
 
-Most supported meters talk over a USB HID-to-UART cable; the UT-D07
+Most supported meters talk over a USB cable; the UT-D07
 Bluetooth adapters serve the meters listed for them below, and the UT60BT,
 UT202BT, ZOTEK meters, EEVblog 121GW and Brymen BM788BT/BM787BT have
 Bluetooth built in. The tool works out which link and which meter are
@@ -26,6 +26,7 @@ warning on connect. The per-family research is under
 | UT-D09 | CP2110 | `10C4:EA80` | both ways | UT61+/UT161, UT171, UT8802/UT8803, Voltcraft, older UT181A units | UT61E+ |
 | UT-D09 | CH9329 | `1A86:E429` | both ways | sold for UT181A, UT171, UT243 | UT181A (two units), UT61B+ |
 | UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per UNI-T's accessory page | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
+| BU-86X kit (BC-86X cable) | — | `0820:0001` | both ways | Brymen BM869s, BM867s | — untested |
 | UT-D02 | RS232 level converter | — | both ways | serial port, not USB; not supported | — |
 | UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per UNI-T's page | UT61E+ ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
 | UT-D07A | Bluetooth LE | — | both ways | UT171, UT181 series per UNI-T's page (also UT71, which auto-detection does not look for over Bluetooth yet) | — untested ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
@@ -182,7 +183,7 @@ Not run on a meter yet: the decoding comes from EEVblog's packet-format
 documents, EEVblog's and UEi's apps and the manual, and the remote keys from
 the apps ([backlog](verification-backlog.md#eevblog-121gw-experimental-awaiting-a-hardware-report)).
 
-## Brymen
+## Brymen BM788BT / BM787BT
 
 Handheld. Bluetooth built in, no cable; the meter shows up as "BM78xBT"
 ([setup](setup.md#bluetooth)). Switch on: disconnect any phone app, turn the
@@ -198,6 +199,22 @@ Not run on a meter yet: the decoding comes from Brymen's protocol document,
 Brymen's app and the two manuals. Nothing the meter sends tells the two
 models apart, so both open as one entry, `bm78xbt`
 ([backlog](verification-backlog.md#brymen-bm78xbt-experimental-awaiting-a-hardware-report)).
+
+## Brymen BM869s / BM867s
+
+Handheld. Cable: Brymen's BU-86X kit (BC-86X cable), on the optical PC-Comm
+port at the back of the meter. Switch on: turn the meter on at a voltage
+function.
+
+| Model | Counts | Status | Notes |
+|---|---|---|---|
+| BM869s | 50000 (500000 DC V) | 🧪 Experimental | VFD V and Hz; T1, T2 and T1-T2 temperature |
+| BM867s | 50000 (500000 DC V) | 🧪 Experimental | no VFD or temperature |
+
+Not run on a meter yet: the decoding comes from Brymen's protocol sheet,
+Brymen's program and the manual. Nothing the meter sends tells the two
+models apart, so both open as one entry, `bm86x`
+([backlog](verification-backlog.md#brymen-bu-86x-and-bm86x-experimental-awaiting-a-hardware-report)).
 
 ## Not supported yet
 
