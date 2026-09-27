@@ -9,8 +9,8 @@ use super::report::{
 use crate::recording::{self, SharedRecorder, WireEvent};
 use crate::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
 use console::{Key, style};
-use dmm_lib::measurement::Measurement;
-use dmm_lib::protocol::Need;
+use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::protocol::{Need, ValueExpect};
 use std::time::{Duration, Instant};
 
 /// Cap on wire events recorded per step, so one chatty step can't grow the
@@ -101,6 +101,53 @@ pub(crate) fn capture_samples(
         }
         attempts += 1;
     }
+    samples
+}
+
+/// Readings to wait through for a meter's display to come back after a
+/// change. A UT181A has no reading for about five 100 ms frames after any
+/// range, mode or dial change (its research spec, §5.2), and a capacitance
+/// range with nothing connected never gets one, so the wait is bounded.
+/// Every other meter's first reading ends it.
+const BLANK_READS: usize = 10;
+
+/// Whether the display shows no reading.
+fn is_blank(m: &Measurement) -> bool {
+    matches!(m.value, MeasuredValue::NoReading(_))
+}
+
+/// The first reading that is not a blank display, or the last blank one once
+/// [`BLANK_READS`] have gone by.
+pub(crate) fn read_past_blank(
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+) -> dmm_lib::error::Result<Measurement> {
+    let mut reading = dmm.request_measurement()?;
+    for _ in 1..BLANK_READS {
+        if !is_blank(&reading) {
+            break;
+        }
+        reading = dmm.request_measurement()?;
+    }
+    Ok(reading)
+}
+
+/// `n` samples after a switch the tool made, the first of them once the
+/// display is back.
+pub(crate) fn samples_after_switch(
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    n: usize,
+    errors: &mut ErrorLog,
+) -> Vec<Measurement> {
+    let mut samples = Vec::new();
+    if n > 0 {
+        match read_past_blank(dmm) {
+            Ok(m) => samples.push(m),
+            Err(dmm_lib::error::Error::Timeout) => {}
+            Err(e) => errors.record(&e),
+        }
+    }
+    let rest = n.saturating_sub(samples.len());
+    samples.extend(capture_samples(dmm, rest, errors));
     samples
 }
 
@@ -532,6 +579,12 @@ pub(crate) fn run_capture_step(
         // so a run that waits reads its whole batch afterwards.
         if driver.wait_to_settle() {
             settled = None;
+        }
+        // A display that is blank for a moment after the change is read past,
+        // unless no reading is what the step is there to see.
+        let expects_blank = expect.is_some_and(|e| e.value == Some(ValueExpect::NoReading));
+        if !expects_blank && settled.as_ref().is_none_or(is_blank) {
+            settled = read_past_blank(dmm).ok();
         }
         let mut measurements: Vec<Measurement> = settled.into_iter().collect();
         let wanted = step.samples.saturating_sub(measurements.len());
@@ -1064,6 +1117,89 @@ mod tests {
             "the frame that ended the wait must not be filed: {settled:?}"
         );
         assert_eq!(settled.len(), step.samples, "got {settled:?}");
+    }
+
+    /// A UT181A frame around `payload`: 2-byte LE length, LE checksum.
+    fn ut181a_frame(payload: &str) -> Vec<u8> {
+        let payload: Vec<u8> = payload
+            .split_whitespace()
+            .map(|b| u8::from_str_radix(b, 16).unwrap())
+            .collect();
+        let len = (payload.len() + 2) as u16;
+        let mut f = vec![0xAB, 0xCD];
+        f.extend_from_slice(&len.to_le_bytes());
+        f.extend_from_slice(&payload);
+        let sum = f[2..]
+            .iter()
+            .fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
+        f.extend_from_slice(&sum.to_le_bytes());
+        f
+    }
+
+    /// A UT181A has no reading for about half a second after a change
+    /// (issue #5, 2026-09-27). A step's samples start once its display is
+    /// back, unless no reading is what the step expects.
+    #[test]
+    fn a_step_samples_once_the_display_is_back() {
+        use crate::capture::input::Input;
+        use crate::drive::Driver;
+
+        // Hz blank just after a switch, then 50.05 Hz — both from the capture.
+        let blank = ut181a_frame(
+            "02 08 00 11 71 01 00 00 00 00 33 48 7A 00 00 10 00 00 00 00 00 00 00 \
+             48 7A 00 00 00 00 00 00",
+        );
+        let hz = ut181a_frame(
+            "02 08 01 11 71 01 37 34 48 42 30 48 7A 00 00 20 00 00 00 37 34 48 42 \
+             48 7A 00 00 00 00 CD CC",
+        );
+        let filed = |value: Option<dmm_lib::protocol::ValueExpect>| {
+            let mut responses = vec![blank.clone(); 3];
+            responses.extend(vec![hz.clone(); 5]);
+            let device = dmm_lib::protocol::registry::find_device("ut181a").unwrap();
+            let mut dmm = dmm_lib::Dmm::new(
+                Box::new(QueuedTransport {
+                    responses: Mutex::new(responses.into()),
+                }) as Box<dyn dmm_lib::transport::Transport>,
+                (device.new_protocol)(),
+            )
+            .unwrap();
+            let (_unused, recorder) = crate::recording::RecordingTransport::new(Box::new(
+                dmm_lib::transport::NullTransport,
+            ));
+            let step = CaptureStep {
+                samples: 3,
+                expect: Some(dmm_lib::protocol::Expect {
+                    value,
+                    ..dmm_lib::protocol::Expect::mode("Hz")
+                }),
+                ..cli_step("hz", false, false)
+            };
+            let mut report = CaptureReport::default();
+            run_capture_step(
+                &mut dmm,
+                &recorder,
+                &step,
+                &mut report,
+                false,
+                &Input::piped(),
+                &PrevState::default(),
+                &Trust::new(false, true, &[]),
+                &mut Driver::new(false),
+            )
+            .unwrap();
+            report.steps[0]
+                .samples
+                .iter()
+                .map(|s| s.value.clone())
+                .collect::<Vec<_>>()
+        };
+
+        let values = filed(None);
+        assert_eq!(values.len(), 3);
+        assert!(values.iter().all(|v| v != "----"), "got {values:?}");
+        let values = filed(Some(dmm_lib::protocol::ValueExpect::NoReading));
+        assert_eq!(values.first().map(String::as_str), Some("----"));
     }
 
     /// A UT61E+ frame in `mode` (0x07 continuity, 0x08 diode) reading 0.1.

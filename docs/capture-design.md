@@ -62,6 +62,13 @@ finish on leads with nothing stable across them, and `r` is the operator's guard
 asked for a delay. Evidence: a UT61E+'s top two Ω rungs read 50x high 200 ms after a RANGE
 press and come down over several seconds (2026-09-10).
 
+A display with no reading is not a state worth sampling either: a UT181A sends no value for
+about half a second after any range, mode or dial change. Once a step's wait ends — and
+after every switch the tool makes (D) — the sampler reads past a no-reading frame for up to
+`BLANK_READS` = 10 readings and starts the samples at the first real one; a step that expects
+no reading keeps it. Evidence: every range sub-step of a UT181A run held only that frame
+(issue #5, 2026-09-27).
+
 A step whose first sample is in its expected mode and a later one is not is retaken:
 `the meter left <mode> for <other> while sampling — retaking…`, and the wait runs
 again. Only the mode is compared, so a wandering value such as body resistance never retakes,
@@ -185,7 +192,9 @@ These paths are hardware-unverified on three of the four families, so:
   read-back and stops when the read-back stops moving. No blind repeated
   presses.
 - REL is skipped while the reading is OL: the meter is entitled to refuse it
-  there, and the refusal would spend the failure budget.
+  there, and the refusal would spend the failure budget. So is a display
+  still showing no reading after the wait above: there is nothing to take a
+  reference from.
 
 A step whose `expect.mode` sits on the current dial position's ring — duty from Hz, Hz
 from AC V, continuity, diode and capacitance from Ω on the UT61E+ — is switched to by the

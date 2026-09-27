@@ -8,8 +8,8 @@
 //! already at, which `switch_mode` does before the step is watched.
 
 use crate::capture::{
-    CaptureReport, CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, capture_samples,
-    frames_for_step, needs_attention, save_report, upsert_step,
+    CaptureReport, CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, frames_for_step,
+    needs_attention, read_past_blank, samples_after_switch, save_report, upsert_step,
 };
 use crate::recording::{self, SharedRecorder};
 use console::style;
@@ -99,9 +99,9 @@ impl Driver {
     /// A reading can take seconds to settle after a range switch — the
     /// UT61E+'s top two Ω rungs read 50x high 200 ms after the press and come
     /// down over several seconds — and the sampler is otherwise straight off
-    /// the press, or off the frame that ended a step's wait. Waiting for the
-    /// reading to hold still instead would never finish on leads with nothing
-    /// stable across them.
+    /// the press (past any blank display), or off the frame that ended a
+    /// step's wait. Waiting for the reading to hold still instead would never
+    /// finish on leads with nothing stable across them.
     pub(crate) fn settling(mut self, settle: Duration) -> Self {
         self.settle = settle;
         self
@@ -257,10 +257,21 @@ pub(crate) fn sweep_step(
     for setting in SWEPT {
         // The meter refuses REL while the reading is OL, and that refusal is
         // the meter working: spending the failure budget on it would disable
-        // the sweeps for the rest of the run.
-        if setting == Setting::Rel && matches!(current.value, MeasuredValue::Overload) {
-            eprintln!("    {}", style("\u{21b3} rel skipped: reading is OL").dim());
-            continue;
+        // the sweeps for the rest of the run. A display still blank after the
+        // wait has no reading to take a reference from either.
+        if setting == Setting::Rel {
+            let why = match current.value {
+                MeasuredValue::Overload => Some("reading is OL"),
+                MeasuredValue::NoReading(_) => Some("no reading"),
+                _ => None,
+            };
+            if let Some(why) = why {
+                eprintln!(
+                    "    {}",
+                    style(format!("\u{21b3} rel skipped: {why}")).dim()
+                );
+                continue;
+            }
         }
         let choices = dmm.choices(setting, &current);
         // One entry is the live value alone, which is no offer at all.
@@ -412,8 +423,10 @@ pub(crate) fn switch_mode(
     let selected = dmm.select(Setting::Mode, choice.id);
     // One reading whatever the outcome: after a refusal it is the only record
     // of where the presses left the meter, which a timeout's text never says.
+    // Taken once the display is back, so the step's own samples start there
+    // too.
     let mut errors = ErrorLog::default();
-    let samples: Vec<SampleData> = capture_samples(dmm, 1, &mut errors)
+    let samples: Vec<SampleData> = samples_after_switch(dmm, 1, &mut errors)
         .iter()
         .map(SampleData::from_measurement)
         .collect();
@@ -502,7 +515,7 @@ fn drive_choice(
     let measurements = match &selected {
         Ok(()) => {
             settle.wait_to_settle();
-            capture_samples(dmm, samples_wanted, &mut errors)
+            samples_after_switch(dmm, samples_wanted, &mut errors)
         }
         Err(_) => Vec::new(),
     };
@@ -593,7 +606,7 @@ fn restore(
         Err(dmm_lib::error::Error::UnsupportedCommand(_)) => {
             return Ok(dmm.request_measurement().ok());
         }
-        selected => selected.and_then(|()| dmm.request_measurement()),
+        selected => selected.and_then(|()| read_past_blank(dmm)),
     };
     if let Ok(m) = &reading
         && shows_target(
@@ -1020,12 +1033,17 @@ mod tests {
         /// The meter says no, and the mode it is left in has no such setting
         /// to put back.
         RefusedIntoAnotherMode,
+        /// Every value lands, and the display then has no reading for this
+        /// many reads, as a UT181A's does after a switch.
+        Blanks(usize),
     }
 
     struct Fails {
         inner: dmm_lib::mock::MockProtocol,
         setting: Setting,
         failure: Failure,
+        /// Reads left before the display comes back, under `Blanks`.
+        blank_reads: usize,
     }
 
     impl Fails {
@@ -1038,6 +1056,7 @@ mod tests {
                 inner: dmm_lib::mock::MockProtocol::with_mode(mode),
                 setting,
                 failure,
+                blank_reads: 0,
             })
         }
 
@@ -1057,7 +1076,13 @@ mod tests {
             &mut self,
             t: &dyn dmm_lib::transport::Transport,
         ) -> dmm_lib::error::Result<Measurement> {
-            self.inner.request_measurement(t)
+            let mut reading = self.inner.request_measurement(t)?;
+            if self.blank_reads > 0 {
+                self.blank_reads -= 1;
+                reading.value = MeasuredValue::NoReading("----");
+                reading.display_raw = None;
+            }
+            Ok(reading)
         }
         fn parse_payload(&self, payload: &[u8]) -> dmm_lib::error::Result<Measurement> {
             self.inner.parse_payload(payload)
@@ -1096,6 +1121,11 @@ mod tests {
                 return self.inner.select(t, setting, id);
             }
             match self.failure {
+                Failure::Blanks(reads) => {
+                    self.inner.select(t, setting, id)?;
+                    self.blank_reads = reads;
+                    Ok(())
+                }
                 Failure::Silent => Err(Error::Timeout),
                 Failure::RefusedIntoAnotherMode if id == RESET_ID => {
                     Err(Error::UnsupportedCommand("no such setting here".into()))
@@ -1162,6 +1192,76 @@ mod tests {
             report.steps.iter().any(|s| s.id == "ohm_ol/hold:on"),
             "the rest of the sweep still has to run"
         );
+    }
+
+    /// A driven range is sampled once the meter's display is back, not in
+    /// the moment it has no reading, which was all @diego351's UT181A
+    /// capture filed for its range sub-steps (issue #5).
+    #[test]
+    fn a_driven_setting_is_sampled_once_the_display_is_back() {
+        let mut driver = Driver::new(true);
+        let report = swept_by(
+            Fails::boxed(
+                dmm_lib::mock::MockMode::DcV,
+                Setting::Range,
+                Failure::Blanks(3),
+            ),
+            "dcv",
+            "dmm-cli-test-drive-blank.yaml",
+            &mut driver,
+        );
+        let ranges: Vec<_> = report
+            .steps
+            .iter()
+            .filter(|s| s.id.contains("/range:"))
+            .collect();
+        assert!(!ranges.is_empty());
+        for step in ranges {
+            assert!(
+                step.samples.iter().all(|s| s.value != "----"),
+                "{} sampled the blank display",
+                step.id
+            );
+        }
+        assert!(report.steps.iter().any(|s| s.id.contains("/rel:")));
+    }
+
+    /// A display that stays blank has no reading for REL to take as its
+    /// reference, so REL is skipped the way it is on OL.
+    #[test]
+    fn rel_is_not_swept_while_the_display_stays_blank() {
+        let mut driver = Driver::new(true);
+        let report = swept_by(
+            Fails::boxed(
+                dmm_lib::mock::MockMode::DcV,
+                Setting::Range,
+                Failure::Blanks(1000),
+            ),
+            "dcv",
+            "dmm-cli-test-drive-still-blank.yaml",
+            &mut driver,
+        );
+        assert!(!report.steps.iter().any(|s| s.id.contains("/rel:")));
+        assert!(report.steps.iter().any(|s| s.id == "dcv/hold:on"));
+    }
+
+    /// A switch leaves the step to sample after the blank, so the step's
+    /// own samples are real readings.
+    #[test]
+    fn a_switch_waits_for_the_display_to_come_back() {
+        let mut bench = meter(Fails::boxed(
+            dmm_lib::mock::MockMode::AcV,
+            Setting::Mode,
+            Failure::Blanks(3),
+        ));
+        let mut driver = Driver::new(true);
+        assert!(bench.switch(&mode_step("AC V Hz"), &mut driver));
+        let filed = &bench.report.steps[0];
+        assert_ne!(filed.samples.last().map(|s| s.value.as_str()), Some("----"));
+        assert!(!matches!(
+            bench.dmm.request_measurement().unwrap().value,
+            MeasuredValue::NoReading(_)
+        ));
     }
 
     fn minmax_steps(report: &CaptureReport) -> Vec<&String> {

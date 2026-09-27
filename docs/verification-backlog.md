@@ -1352,8 +1352,9 @@ open items below are closed.
   - ~~A blank value (both overload bits, float 0.0 — spec §5.2) is read as
     OL and reported as unrecognised~~ — **FIXED** 2026-09-27: read as no
     reading, shown `----` until the LCD's own rendering is known. It
-    shows after every switch, so range sub-steps sample only blanks and
-    the REL sweep, which skips an OL reading, never runs after one.
+    shows after every switch, so range sub-steps sampled only blanks and
+    the REL sweep, which skips an OL reading, never ran after one; the
+    capture now reads past it before sampling a switch.
   - ~~Unit strings pass through raw (`~`, `k~`, `M~`, `uF`, `VDC`,
     `mVac+dc`), unlike every other family, and `transform::si_prefix`
     cannot split `~` or `…ac+dc`~~ — **FIXED** 2026-09-27: the parser

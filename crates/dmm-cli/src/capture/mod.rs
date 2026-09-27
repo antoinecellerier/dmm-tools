@@ -12,7 +12,9 @@ pub(crate) use listing::list_steps;
 pub(crate) use report::{
     CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report, upsert_step,
 };
-pub(crate) use step::{CaptureStep, FREEFORM_STEP_ID, capture_samples, frames_for_step};
+pub(crate) use step::{
+    CaptureStep, FREEFORM_STEP_ID, frames_for_step, read_past_blank, samples_after_switch,
+};
 
 use crate::recording::{self, SharedRecorder};
 use console::style;
