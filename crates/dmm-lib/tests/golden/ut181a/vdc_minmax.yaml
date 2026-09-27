@@ -1,0 +1,19 @@
+# V DC in MIN/MAX a second in (maximum set at 0 s, minimum at 1 s), 6V range - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 2F 00 11 31 01 9B 39 51 39 40 01 C4 82 3B 40 00 00 00 00 DF 81 C8 3A 40 01 00 00 00 9B 39 51 39 40 01 00 00 00 56 44 43 00 2B 64 63 00"
+mode: V DC
+value: "0.00019953252922277898"
+unit: V
+range_label: 6V
+flags:
+  min: true
+  max: true
+aux:
+  - label: Max
+    value: "0.0040"
+    unit: V
+  - label: Average
+    value: "0.0015"
+    unit: V
+  - label: Min
+    value: "0.0002"
+    unit: V

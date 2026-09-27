@@ -1,0 +1,16 @@
+# mV AC+DC, the reading the RMS sum of its AC and DC parts, 600mV range - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 06 01 41 21 02 A6 26 09 44 20 6D 56 61 63 2B 64 63 00 D3 08 09 44 20 6D 56 41 43 00 00 00 00 36 DB B4 C1 20 6D 56 44 43 00 00 00 00"
+mode: mV AC AC+DC
+value: "548.6038818359375"
+unit: mV
+range_label: 600mV
+resolution: 0.01mV
+flags:
+  auto_range: true
+aux:
+  - label: AC
+    value: "548.14"
+    unit: mV
+  - label: DC
+    value: "-22.61"
+    unit: mV

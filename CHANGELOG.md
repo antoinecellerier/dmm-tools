@@ -21,17 +21,18 @@
 - **Record no longer drops the graph's readings** — after a Discard, Export… saves them, markers included.
 - **The top bar names the link the meter is on** — `UT61E+ · USB cable` or `UT61E+ · Bluetooth`.
 - **Switching Plot: between series in one unit keeps the graph** — such as T1 and T2, or DC and AC; it restarted empty.
-- **A UT181A's reading is named T1, T2, Relative or Peak Max beside its sub-values** — the graph called it Main.
+- **A UT181A's reading and sub-values are named, such as T1 or AC** — the graph called them Main, Aux1 and Aux2.
 
 ### CLI
 
-- **Text output names a UT181A's reading T1, T2, Relative or Peak Max beside its sub-values**
+- **Text output names a UT181A's reading and sub-values, such as T1 or AC**
 
 ### Bug fixes
 
 - **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; now labelled DC and AC, with AC in `aux1` CSV columns every UT61E+ export gains.
 - **A UT181A no longer shows OL, or warns, after each switch** — it shows `----` until the new reading arrives.
 - **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
+- **A UT181A no longer warns about unrecognised data in AC+DC, dB, T1-T2 or MIN/MAX**
 
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 

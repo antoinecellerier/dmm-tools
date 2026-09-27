@@ -1360,9 +1360,11 @@ open items below are closed.
     reports `Ω`, `µ` and bare `V`/`A`, the mode naming the coupling. The Ω
     range labels changed code point with it (U+2126 → U+03A9), so a
     capture resumed onto a v0.7.0 report sweeps the Ω rungs again.
-  - AC+DC, dBV, dBm and the T1-T2/T2-T1 sub-values keep positional
+  - ~~AC+DC, dBV, dBm and the T1-T2/T2-T1 sub-values keep positional
     Aux1/Aux2 labels and are reported as unrecognised, and so is misc bit
-    0 on every min/max frame.
+    0 on every min/max frame~~ — **FIXED** 2026-09-27: named AC, DC,
+    Voltage, Impedance, T1 and T2 (spec §5.3), misc bit 0 silent in
+    min/max.
   - In a Peak variant the meter answers ER to SET_RANGE 0 and to
     SET_MIN_MAX 1 (spec §4.2, §7), but the tool offers both. In the
     capture, the sweep's restore re-sent the refused Auto on three Peak

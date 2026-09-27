@@ -1,0 +1,15 @@
+# V AC dBm, the voltage and the 600 Ω reference beside it, 6V range - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 0E 01 61 11 01 7B 72 BD C0 20 64 42 6D 00 00 64 63 00 02 9A C8 3E 40 56 41 43 00 00 00 00 00 00 00 16 44 00 7E 00 00 43 00 00 00 00 57 69 CA 3E 56 41 43 00 00 00 00 00"
+mode: V AC dBm
+value: "-5.920224666595459"
+unit: dBm
+range_label: 6V
+flags:
+  auto_range: true
+aux:
+  - label: Voltage
+    value: "0.3918"
+    unit: V
+  - label: Impedance
+    value: "600"
+    unit: Ω

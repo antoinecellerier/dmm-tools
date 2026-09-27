@@ -181,49 +181,57 @@ fn parse_unit_string(bytes: &[u8]) -> String {
 /// Labels for the two aux slots of a normal-format measurement.
 ///
 /// The meter sends each sub-value's own unit but never says what the value
-/// *is*, so the label has to come from the mode word. Two arrangements are
-/// pinned by a real UT181A capture (@diego351, issue #5, 2026-09-02):
-/// `0x4211` puts one thermocouple on the main display and the other in aux1,
-/// and `0x1121` puts the frequency in aux1 with its period in aux2
-/// (1/50.00875 Hz = 19.9965 ms, exactly the aux2 reading in that frame). The
-/// remaining modes follow the same nibble rule with no frame behind them; any
-/// slot whose meaning is unknown keeps its positional label.
+/// *is*, so the label has to come from the mode word. Every arrangement named
+/// here is pinned by a real UT181A capture (@diego351, issue #5; research spec
+/// §5.3's table), the numbers checking out between the slots: the period is
+/// 1/frequency, AC+DC's main reading is the RMS sum of its AC and DC parts,
+/// dBV and dBm are the voltage in aux1 over 1 V and over the reference
+/// impedance in aux2, and a temperature difference is aux1 − aux2 (T1-T2) or
+/// aux2 − aux1 (T2-T1). Any other slot keeps its positional label.
 fn aux_labels(mode: u16) -> (&'static str, &'static str) {
     let n3 = (mode >> 12) & 0xF;
     let n2 = (mode >> 8) & 0xF;
     let n1 = (mode >> 4) & 0xF;
 
-    // Temperature: n1 selects the display arrangement, so the aux slot holds
-    // the other probe. The differential arrangements (n1 = 3/4) put a
-    // difference on the main display and no source says which probe lands in
-    // the aux slot — those stay positional.
-    if n3 == 0x4 && (n2 == 0x2 || n2 == 0x3) {
+    // Temperature: n1 selects the display arrangement. With one probe on the
+    // main display the aux slot holds the other; a difference carries both.
+    if is_temperature(mode) {
         return match n1 {
             0x1 => ("T2", POSITIONAL_AUX.1),
             0x2 => ("T1", POSITIONAL_AUX.1),
+            0x3 | 0x4 => ("T1", "T2"),
             _ => POSITIONAL_AUX,
         };
     }
 
-    // The same n1 = 2 codes `decode_mode_word` suffixes with " Hz": the
-    // frequency display, with the period alongside it.
-    if n1 == 0x2 && matches!((n3, n2), (0x1 | 0x2, _) | (0x8..=0xA, 0x2)) {
-        return ("Frequency", "Period");
+    match (n3, n2, n1) {
+        // The same n1 = 2 codes `decode_mode_word` suffixes with " Hz": the
+        // frequency display, with the period alongside it.
+        (0x1 | 0x2, _, 0x2) | (0x8..=0xA, 0x2, 0x2) => ("Frequency", "Period"),
+        // AC+DC: V DC and the DC currents at n1 = 2, mV AC at n1 = 4.
+        (0x3, _, 0x2) | (0x8..=0xA, 0x1, 0x2) | (0x2, _, 0x4) => ("AC", "DC"),
+        (0x1, _, 0x5) => ("Voltage", POSITIONAL_AUX.1),
+        (0x1, _, 0x6) => ("Voltage", "Impedance"),
+        _ => POSITIONAL_AUX,
     }
+}
 
-    POSITIONAL_AUX
+/// Whether the mode word is one of the two temperature dial positions, °C or
+/// °F, whose nibble 1 is the probe arrangement.
+fn is_temperature(mode: u16) -> bool {
+    mode >> 12 == 0x4 && matches!((mode >> 8) & 0xF, 0x2 | 0x3)
 }
 
 /// What the main display shows, where the sub-values beside it make the
-/// plain "main reading" ambiguous: the other probe of a thermocouple pair
-/// (the one [`aux_labels`] does not give the aux slot), the difference in
-/// relative format, the highest peak in peak format. MIN/MAX shows the live
-/// reading, which "main" already names.
+/// plain "main reading" ambiguous: the probe on the main display of a
+/// thermocouple pair, the difference in relative format, the highest peak in
+/// peak format. MIN/MAX shows the live reading, which "main" already names,
+/// and a temperature difference is what the mode says it is.
 fn main_label(format_type: u8, mode_word: u16) -> Option<MainLabel> {
     match format_type {
-        0x00 => match aux_labels(mode_word).0 {
-            "T2" => Some(MainLabel::T1),
-            "T1" => Some(MainLabel::T2),
+        0x00 if is_temperature(mode_word) => match (mode_word >> 4) & 0xF {
+            0x1 => Some(MainLabel::T1),
+            0x2 => Some(MainLabel::T2),
             _ => None,
         },
         0x01 => Some(MainLabel::Relative),
@@ -237,9 +245,8 @@ const POSITIONAL_AUX: (&str, &str) = ("Aux1", "Aux2");
 
 /// Report a sub-value that went into a slot [`aux_labels`] has no name for.
 ///
-/// Research spec §6 says what the aux slots hold only for the T1/T2
-/// temperature arrangements and the Hz variants, and those are what the
-/// captures carry; a sub-value anywhere else is undocumented.
+/// Research spec §5.3 says what the aux slots hold for every variant a real
+/// meter has filled them on; a sub-value anywhere else is undocumented.
 fn report_positional_aux(label: &str, mode_word: u16) {
     if label == POSITIONAL_AUX.0 || label == POSITIONAL_AUX.1 {
         report_unknown(
@@ -483,8 +490,9 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             format_args!("mode {mode_word:#06x} range {range:#04x}"),
         );
     }
-    // §5.1 defines neither misc bit 0 nor misc2 bits 2, 6 and 7.
-    if misc & 0x01 != 0 || misc2 & 0xC4 != 0 {
+    // §5.1 defines neither misc bit 0, which every MIN/MAX frame sets, nor
+    // misc2 bits 2, 6 and 7.
+    if (misc & 0x01 != 0 && format_type != 0x02) || misc2 & 0xC4 != 0 {
         report_unknown(
             "ut181a",
             "misc bits",
@@ -937,15 +945,15 @@ raw_payload=19"#
         assert_eq!(aux_labels(0x4211).0, "T2");
         assert_eq!(aux_labels(0x4221).0, "T1");
         assert_eq!(aux_labels(0x4311).0, "T2");
-        // Differential arrangements: no source says which probe feeds the aux
-        // slot, so the label stays positional.
-        assert_eq!(aux_labels(0x4231).0, "Aux1");
-        assert_eq!(aux_labels(0x4241).0, "Aux1");
-        // The main display holds the probe the aux slot does not; the
-        // differential arrangements name neither.
+        // The differences carry both probes (issue #5, 2026-09-27).
+        assert_eq!(aux_labels(0x4231), ("T1", "T2"));
+        assert_eq!(aux_labels(0x4341), ("T1", "T2"));
+        // The main display holds the probe the aux slot does not; a
+        // difference is neither probe.
         assert_eq!(main_label(0x00, 0x4211), Some(MainLabel::T1));
         assert_eq!(main_label(0x00, 0x4221), Some(MainLabel::T2));
         assert_eq!(main_label(0x00, 0x4231), None);
+        assert_eq!(main_label(0x00, 0x4341), None);
         assert_eq!(main_label(0x00, 0x3111), None);
         assert_eq!(main_label(0x02, 0x3111), None, "MIN/MAX: the live reading");
         // The modes decode_mode_word suffixes with " Hz" carry the frequency
@@ -953,9 +961,16 @@ raw_payload=19"#
         assert_eq!(aux_labels(0x1121), ("Frequency", "Period"));
         assert_eq!(aux_labels(0x2121), ("Frequency", "Period"));
         assert_eq!(aux_labels(0x8221), ("Frequency", "Period"));
+        assert_eq!(aux_labels(0x9221), ("Frequency", "Period"));
+        // AC+DC's two parts, and the voltage behind a dB reading.
+        for word in [0x2141, 0x3121, 0x8121, 0x9121, 0xA121] {
+            assert_eq!(aux_labels(word), ("AC", "DC"), "{word:#06x}");
+        }
+        assert_eq!(aux_labels(0x1151).0, "Voltage");
+        assert_eq!(aux_labels(0x1161), ("Voltage", "Impedance"));
         // Everything else keeps the positional labels.
         assert_eq!(aux_labels(0x3111), ("Aux1", "Aux2"));
-        assert_eq!(aux_labels(0x8121), ("Aux1", "Aux2"));
+        assert_eq!(aux_labels(0x1141), ("Aux1", "Aux2"));
     }
 
     /// Hex as a capture report writes it in `raw_hex` (spaces optional).
@@ -1755,6 +1770,13 @@ raw_payload=30"#
                 )]
             );
         }
+
+        // Every MIN/MAX frame sets misc bit 0 (issue #5, 2026-09-27).
+        let mut p = minmax_payload(0x3111);
+        p[1] |= 0x07;
+        let (m, reports) = parse_reporting(&p);
+        assert!(m.unwrap().flags.max);
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     /// Formats 0x30, 0x50, 0x60 and 0x70 are read as normal, as before, and
@@ -1824,9 +1846,9 @@ raw_payload=30"#
                 &["Aux1 in mode 0x3111", "Aux2 in mode 0x3111"][..],
             ),
             (
-                frame(0x02, 0x01, 0x4231, 1, &[&t, &t]),
+                frame(0x02, 0x01, 0x1141, 4, &[&v, &v]),
                 &["Aux1"][..],
-                &["Aux1 in mode 0x4231"][..],
+                &["Aux1 in mode 0x1141"][..],
             ),
             (
                 frame(0x06, 0x01, 0x4211, 1, &[&t, &t, &t]),

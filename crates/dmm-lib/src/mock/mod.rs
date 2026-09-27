@@ -1455,21 +1455,23 @@ mod tests {
     /// The arithmetic arrangements must show the real difference of the two
     /// probes `temp2` displays — a separate waveform would read as a
     /// contradiction when switching between the modes — and the reversed
-    /// arrangement must be its negation. Neither carries sub-values: the
-    /// meter's aux layout in these arrangements is unverified, so the mock
-    /// claims nothing.
+    /// arrangement must be its negation. Both carry T1 and T2 beside the
+    /// difference, as a real UT181A does (issue #5, 2026-09-27).
     #[test]
-    fn temperature_differentials_are_opposite_and_single_display() {
+    fn temperature_differentials_are_opposite_and_carry_both_probes() {
+        let labels = |m: &Measurement| -> Vec<String> {
+            m.aux_values.iter().map(|a| a.label.to_string()).collect()
+        };
         let mut dmm = open_mock_mode(MockMode::TempDiff).unwrap();
         let m = dmm.request_measurement().unwrap();
         assert_eq!(m.mode, "Temp \u{00B0}C T1-T2");
         assert_eq!(m.unit, "\u{00B0}C");
-        assert!(m.aux_values.is_empty());
+        assert_eq!(labels(&m), ["T1", "T2"]);
 
         let mut dmm = open_mock_mode(MockMode::TempDiffRev).unwrap();
         let m = dmm.request_measurement().unwrap();
         assert_eq!(m.mode, "Temp \u{00B0}C T2-T1");
-        assert!(m.aux_values.is_empty());
+        assert_eq!(labels(&m), ["T1", "T2"]);
 
         // Sharing the dual scenario's clock is what lets the four readings
         // agree: the same elapsed time must mean the same T1 and T2 in all of
@@ -1544,7 +1546,10 @@ mod tests {
     #[test]
     fn single_display_scenarios_have_no_sub_values() {
         for mode in MockMode::ALL {
-            if matches!(mode, MockMode::AcVHz | MockMode::TempDual) {
+            if matches!(
+                mode,
+                MockMode::AcVHz | MockMode::TempDual | MockMode::TempDiff | MockMode::TempDiffRev
+            ) {
                 continue;
             }
             let mut dmm = open_mock_mode(*mode).unwrap();

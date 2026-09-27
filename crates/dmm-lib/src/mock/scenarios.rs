@@ -276,6 +276,21 @@ const TEMP_DUAL_AUX: &[AuxSpec] = &[AuxSpec {
     value_fn: temp2_value,
 }];
 
+/// A temperature difference carries both probes, T1 then T2, as a real
+/// UT181A sends them (issue #5, 2026-09-27).
+const TEMP_BOTH_AUX: &[AuxSpec] = &[
+    AuxSpec {
+        label: "T1",
+        unit: "\u{00B0}C",
+        value_fn: temp_value,
+    },
+    AuxSpec {
+        label: "T2",
+        unit: "\u{00B0}C",
+        value_fn: temp2_value,
+    },
+];
+
 pub(super) fn scenarios() -> Vec<Scenario> {
     vec![
         Scenario {
@@ -422,13 +437,8 @@ pub(super) fn scenarios() -> Vec<Scenario> {
         // The temperature dial's two arithmetic arrangements, so the mode
         // group has the four entries a real UT181A offers there. They run on
         // the same 8 s clock as `temp` and `temp2` and subtract those very
-        // waveforms, so the four readings agree with each other.
-        //
-        // No sub-values: the meter's aux layout in the differential
-        // arrangements is unverified. `aux_labels` in the UT181A decoder
-        // deliberately falls back to the positional "Aux1"/"Aux2" for 0x4231
-        // and 0x4241 because no source says which probe feeds the slot, so
-        // the mock asserts nothing here either.
+        // waveforms, so the four readings agree with each other, and carry
+        // both probes beside the difference the way the meter does.
         Scenario {
             id: MockMode::TempDiff,
             mode: "Temp \u{00B0}C T1-T2",
@@ -439,7 +449,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             range_max: 400.0,
             duration_secs: 8.0,
             value_fn: temp_diff_value,
-            aux: &[],
+            aux: TEMP_BOTH_AUX,
         },
         Scenario {
             id: MockMode::TempDiffRev,
@@ -451,7 +461,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             range_max: 400.0,
             duration_secs: 8.0,
             value_fn: temp_diff_rev_value,
-            aux: &[],
+            aux: TEMP_BOTH_AUX,
         },
         // Appended last for the reason the block above was: the auto-cycle
         // order of everything before it stays unchanged.

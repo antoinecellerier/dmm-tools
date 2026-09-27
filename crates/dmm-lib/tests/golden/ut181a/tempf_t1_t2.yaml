@@ -1,0 +1,15 @@
+# Temperature °F, T1 - T2 with both thermocouples beside it - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 06 01 31 43 01 00 76 79 3F 10 B0 46 00 43 00 63 00 00 52 99 A3 42 10 B0 46 00 00 00 00 00 00 66 A6 A1 42 10 B0 46 00 00 00 2B 64 63"
+mode: °F T1-T2
+value: "0.974456787109375"
+unit: °F
+range_label: ""
+flags:
+  auto_range: true
+aux:
+  - label: T1
+    value: "81.8"
+    unit: °F
+  - label: T2
+    value: "80.8"
+    unit: °F
