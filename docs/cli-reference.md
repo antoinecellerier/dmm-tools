@@ -208,9 +208,9 @@ dmm-cli read --format csv --count 1
 $ dmm-cli read --format csv --count 1
 # device: UNI-T UT181A
 timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
-2026-09-02T00:00:00+00:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
+2026-09-02T00:00:00+00:00,V AC Hz,239.22,V,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
 
---- 1 samples | Min: 239.2200 VAC | Max: 239.2200 VAC | Avg: 239.2200 VAC
+--- 1 samples | Min: 239.2200 V | Max: 239.2200 V | Avg: 239.2200 V
 ```
 <!-- /snippet -->
 

@@ -1502,7 +1502,7 @@ mod tests {
             }
             assert_eq!(
                 row.label,
-                lookup_range_label(word, range).replace('\u{2126}', "\u{3a9}"),
+                lookup_range_label(word, range),
                 "{word:#06x} range {range}"
             );
         }

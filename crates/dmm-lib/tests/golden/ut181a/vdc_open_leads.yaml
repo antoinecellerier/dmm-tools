@@ -2,7 +2,7 @@
 raw_hex: "02 08 01 11 31 01 AF 73 D1 38 40 56 44 43 00 00 00 00 00 60 A2 23 BC 56 44 43 00 00 00 00 00"
 mode: V DC
 value: "0.00009987444354919717"
-unit: VDC
+unit: V
 range_label: 6V
 resolution: 0.0001V
 flags:

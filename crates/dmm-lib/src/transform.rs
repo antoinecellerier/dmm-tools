@@ -43,9 +43,7 @@ const SI_PREFIXES: &[(char, f64)] = &[
 /// so a unit that merely starts with a prefix letter is left alone: "ms" is
 /// milliseconds, not milli-seconds ("s" is not a base here), and "°C", "°F",
 /// "%", "dBm" and "dBV" carry no prefix at all.
-const BASE_UNITS: &[&str] = &[
-    "V", "A", "Ω", "F", "Hz", "S", "W", "VA", "VAC", "VDC", "AAC", "ADC",
-];
+const BASE_UNITS: &[&str] = &["V", "A", "Ω", "F", "Hz", "S", "W", "VA"];
 
 /// Split a meter unit into its base unit and the multiplier to that base:
 /// "mV" → ("V", 1e-3), "kΩ" → ("Ω", 1e3), "µA" → ("A", 1e-6).
@@ -862,8 +860,6 @@ mod tests {
             ("kHz", "Hz", 1e3),
             ("MHz", "Hz", 1e6),
             ("nS", "S", 1e-9),
-            ("VAC", "VAC", 1.0),
-            ("VDC", "VDC", 1.0),
             ("VA", "VA", 1.0),
             ("mVA", "VA", 1e-3),
             ("µVA", "VA", 1e-6),

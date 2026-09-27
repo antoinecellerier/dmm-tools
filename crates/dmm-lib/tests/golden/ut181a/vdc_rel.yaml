@@ -1,0 +1,15 @@
+# V DC in REL, reference 2.8 mV taken with the meter's own REL key, 6V range - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 1E 00 12 31 01 6F 12 83 BB 40 56 44 43 00 40 00 00 00 67 12 37 3B 40 56 44 43 00 00 9B D7 0F 35 EB 9C BA 40 56 44 43 00 00 2B 64 63 A2 E3 37 BE 56 44 43 00 00 00 00 00"
+mode: V DC REL
+value: "-0.004000000189989805"
+unit: V
+range_label: 6V
+flags:
+  rel: true
+aux:
+  - label: Reference
+    value: "0.0028"
+    unit: V
+  - label: Absolute
+    value: "-0.0012"
+    unit: V

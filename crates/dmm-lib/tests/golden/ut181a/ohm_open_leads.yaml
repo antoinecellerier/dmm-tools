@@ -1,0 +1,9 @@
+# Resistance with the leads open, overload on the 60MΩ range (+OL bit with the out-of-range float) - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 08 01 11 51 06 36 D5 7B 42 31 4D 7E 00 43 00 64 63 00 04 EB 8B 42 4D 7E 00 43 00 00 00 00"
+mode: Ω
+value: OL
+unit: MΩ
+range_label: 60MΩ
+flags:
+  auto_range: true
+aux: []

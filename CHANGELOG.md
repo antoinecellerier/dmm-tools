@@ -31,6 +31,7 @@
 
 - **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; now labelled DC and AC, with AC in `aux1` CSV columns every UT61E+ export gains.
 - **A UT181A no longer shows OL, or warns, after each switch** — it shows `----` until the new reading arrives.
+- **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
 
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 

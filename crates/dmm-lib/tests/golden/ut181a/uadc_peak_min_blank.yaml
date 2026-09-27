@@ -1,0 +1,13 @@
+# µA DC Peak with the peak maximum in and the minimum still blank, 600µA range - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 42 00 31 81 01 95 B4 B3 3F 10 75 41 44 43 00 64 63 00 00 00 00 00 13 75 41 44 43 00 9C B4 33"
+mode: µA DC Peak
+value: "1.403948426246643"
+unit: µA
+range_label: 600µA
+flags:
+  peak_max: true
+  peak_min: true
+aux:
+  - label: Peak Min
+    value: "----"
+    unit: µA

@@ -1,0 +1,15 @@
+# µA AC Hz with no signal: 0.00 Hz and the period overloaded, 600µA range - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 0E 01 21 82 01 89 6F DE 3D 20 75 41 41 43 00 64 63 00 00 00 00 00 20 48 7A 00 00 00 9C B4 33 00 00 00 00 A1 6D 73 00 43 00 00 64 63 00 00 00 00 75 41 41 43 00 00 00 00"
+mode: µA AC Hz
+value: "0.10861117392778397"
+unit: µA
+range_label: 600µA
+flags:
+  auto_range: true
+aux:
+  - label: Frequency
+    value: "0.00"
+    unit: Hz
+  - label: Period
+    value: OL
+    unit: ms

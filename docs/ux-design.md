@@ -213,7 +213,7 @@ Three components stacked vertically:
 - In browse mode (click LIVE to toggle, or click minimap): drag to pan X, Ctrl + scroll wheel (or pinch) over the plot to zoom X (centered on cursor). Y auto-scales to visible data.
 - Dragging or Ctrl + scroll wheel while in LIVE mode exits to browse mode; the plain wheel scrolls the panel and leaves the graph alone
 - Double-click to return to LIVE mode
-- Sub-values sharing the plotted series' unit are drawn as extra dashed/dotted lines (up to four). Different-unit sub-values (Hz, ms beside VAC) are never overlaid — a shared axis would imply a relationship that isn't there — and stay reachable through the **Plot:** selector. Line style, not just colour, distinguishes them.
+- Sub-values sharing the plotted series' unit are drawn as extra dashed/dotted lines (up to four). Different-unit sub-values (Hz, ms beside V AC) are never overlaid — a shared axis would imply a relationship that isn't there — and stay reachable through the **Plot:** selector. Line style, not just colour, distinguishes them.
 - A static key in the plot's top-left names each drawn line with its colour and dash pattern, painted only while something is overlaid. It is a key, not a control: `Plot::reset()` pins the view every frame and clears egui_plot's own legend state, so the show/hide affordance is the toolbar's **Show:** chips instead.
 - Cursors, Mean/Min/Max/Ref, the minimap and the visible-window stats all follow the plotted series; overlays are reference traces only
 - Disconnect gaps shown as dashed red vertical line pairs

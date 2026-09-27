@@ -1354,9 +1354,12 @@ open items below are closed.
     reading, shown `----` until the LCD's own rendering is known. It
     shows after every switch, so range sub-steps sample only blanks and
     the REL sweep, which skips an OL reading, never runs after one.
-  - Unit strings pass through raw (`~`, `k~`, `M~`, `uF`, `VDC`,
+  - ~~Unit strings pass through raw (`~`, `k~`, `M~`, `uF`, `VDC`,
     `mVac+dc`), unlike every other family, and `transform::si_prefix`
-    cannot split `~` or `…ac+dc`.
+    cannot split `~` or `…ac+dc`~~ — **FIXED** 2026-09-27: the parser
+    reports `Ω`, `µ` and bare `V`/`A`, the mode naming the coupling. The Ω
+    range labels changed code point with it (U+2126 → U+03A9), so a
+    capture resumed onto a v0.7.0 report sweeps the Ω rungs again.
   - AC+DC, dBV, dBm and the T1-T2/T2-T1 sub-values keep positional
     Aux1/Aux2 labels and are reported as unrecognised, and so is misc bit
     0 on every min/max frame.

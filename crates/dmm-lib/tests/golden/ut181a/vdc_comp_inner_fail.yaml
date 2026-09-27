@@ -1,0 +1,15 @@
+# V DC in COMP, INNER window 1 V to 3 V, reading outside it (FAIL), 6V range - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 08 10 11 31 01 68 C3 57 3B 40 56 44 43 00 10 00 00 00 82 2F F5 BC 56 44 43 00 00 00 80 FC 00 01 04 00 00 40 40 00 00 80 3F"
+mode: V DC
+value: "0.003292286768555641"
+unit: V
+range_label: 6V
+flags:
+  comp: true
+aux:
+  - label: COMP High
+    value: "3.0000"
+    unit: V
+  - label: COMP Low
+    value: "1.0000"
+    unit: V

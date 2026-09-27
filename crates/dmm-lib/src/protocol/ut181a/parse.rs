@@ -142,17 +142,40 @@ pub(super) fn decode_mode_word(mode: u16) -> Cow<'static, str> {
     }
 }
 
-/// Parse a UT181A unit string from 8 bytes (null-terminated).
+/// Parse a UT181A unit string from 8 bytes (null-terminated), in the form
+/// every other family reports units.
 ///
 /// The meter sends Latin-1, not UTF-8 (spec §8: 0xB0 = degree symbol),
 /// so decode byte-by-byte — `from_utf8_lossy` would mangle °C/°F into
-/// replacement characters.
+/// replacement characters. What it sends is then rewritten:
+///
+/// - `~` is its ohm sign: `k~` → `kΩ` (U+03A9, the sign `transform::si_prefix`
+///   splits);
+/// - a leading `u` is micro: `uF` → `µF`, `uADC` → `µA`;
+/// - volts and amps drop the coupling the mode word already names:
+///   `VDC`, `VAC` → `V`, `mVac+dc` → `mV`, `uAac+dc` → `µA`.
+///
+/// `°C`, `°F`, `Hz`, `ms`, `%`, `nS`, `dBV`, `dBm` and the diode's `V` pass
+/// through.
 fn parse_unit_string(bytes: &[u8]) -> String {
-    bytes
+    let wire: String = bytes
         .iter()
         .take_while(|&&b| b != 0)
         .map(|&b| b as char)
-        .collect()
+        .collect();
+    let unit = wire.replace('~', "\u{3a9}");
+    let unit = match unit.strip_prefix('u') {
+        Some(rest) if !rest.is_empty() => format!("\u{b5}{rest}"),
+        _ => unit,
+    };
+    for coupling in ["ac+dc", "DC", "AC"] {
+        if let Some(base) = unit.strip_suffix(coupling)
+            && matches!(base, "V" | "mV" | "A" | "mA" | "\u{b5}A")
+        {
+            return base.to_string();
+        }
+    }
+    unit
 }
 
 /// Labels for the two aux slots of a normal-format measurement.
@@ -285,12 +308,12 @@ pub(super) fn lookup_range_label(mode_word: u16, range: u8) -> &'static str {
         (0xA, _, _) => "",
 
         // Resistance (0x5, sub 0x1)
-        (0x5, 0x1, 1) => "600\u{2126}",
-        (0x5, 0x1, 2) => "6k\u{2126}",
-        (0x5, 0x1, 3) => "60k\u{2126}",
-        (0x5, 0x1, 4) => "600k\u{2126}",
-        (0x5, 0x1, 5) => "6M\u{2126}",
-        (0x5, 0x1, 6) => "60M\u{2126}",
+        (0x5, 0x1, 1) => "600\u{3a9}",
+        (0x5, 0x1, 2) => "6k\u{3a9}",
+        (0x5, 0x1, 3) => "60k\u{3a9}",
+        (0x5, 0x1, 4) => "600k\u{3a9}",
+        (0x5, 0x1, 5) => "6M\u{3a9}",
+        (0x5, 0x1, 6) => "60M\u{3a9}",
 
         // Continuity (0x5, sub 0x2), Conductance (0x5, sub 0x3): fixed range
         (0x5, _, _) => "",
@@ -761,7 +784,7 @@ pub(crate) mod tests {
 mode_raw=0x3111
 range_raw=0x00
 value=Normal(12.345000267028809)
-unit=VDC
+unit=V
 range_label=Auto
 display_raw=Some("12.3450")
 flags=auto_range
@@ -775,7 +798,7 @@ raw_payload=19"#
         let payload = make_payload(0x1111, 230.5, 0x20, b"VAC\0\0\0\0\0", 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "V AC");
-        assert_eq!(m.unit, "VAC");
+        assert_eq!(m.unit, "V");
     }
 
     #[test]
@@ -783,7 +806,7 @@ raw_payload=19"#
         let payload = make_payload(0x5111, 470.0, 0x20, b"~\0\0\0\0\0\0\0", 0x00, 0x01);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "Ω");
-        assert_eq!(m.unit, "~");
+        assert_eq!(m.unit, "Ω");
     }
 
     /// Precision bit 0 = +OL, and an overload carries no digits of its own.
@@ -797,7 +820,7 @@ raw_payload=19"#
 mode_raw=0x5111
 range_raw=0x00
 value=Overload
-unit=~
+unit=Ω
 range_label=Auto
 display_raw=None
 flags=
@@ -855,6 +878,48 @@ raw_payload=19"#
         assert_eq!(decode_mode_word(0x4231), "°C T1-T2");
         assert_eq!(decode_mode_word(0x4241), "°C T2-T1");
         assert_eq!(decode_mode_word(0x4321), "°F T2");
+    }
+
+    /// Every unit string a real UT181A sent (@diego351, issue #5,
+    /// 2026-09-27), in the form the other families report.
+    #[test]
+    fn unit_strings_read_like_other_meters() {
+        for (wire, unit) in [
+            ("VDC", "V"),
+            ("VAC", "V"),
+            ("Vac+dc", "V"),
+            ("mVDC", "mV"),
+            ("mVAC", "mV"),
+            ("mVac+dc", "mV"),
+            ("uADC", "\u{b5}A"),
+            ("uAAC", "\u{b5}A"),
+            ("uAac+dc", "\u{b5}A"),
+            ("mADC", "mA"),
+            ("mAAC", "mA"),
+            ("mAac+dc", "mA"),
+            ("ADC", "A"),
+            ("AAC", "A"),
+            ("Aac+dc", "A"),
+            ("~", "\u{3a9}"),
+            ("k~", "k\u{3a9}"),
+            ("M~", "M\u{3a9}"),
+            ("nF", "nF"),
+            ("uF", "\u{b5}F"),
+            ("mF", "mF"),
+            ("nS", "nS"),
+            ("Hz", "Hz"),
+            ("kHz", "kHz"),
+            ("MHz", "MHz"),
+            ("ms", "ms"),
+            ("%", "%"),
+            ("dBV", "dBV"),
+            ("dBm", "dBm"),
+            ("V", "V"),
+        ] {
+            let mut bytes = [0u8; 8];
+            bytes[..wire.len()].copy_from_slice(wire.as_bytes());
+            assert_eq!(parse_unit_string(&bytes), unit, "wire {wire:?}");
+        }
     }
 
     #[test]
@@ -973,7 +1038,7 @@ raw_payload=32"#
 mode_raw=0x1121
 range_raw=0x03
 value=Normal(239.22000122070313)
-unit=VAC
+unit=V
 range_label=600V
 display_raw=Some("239.22")
 flags=auto_range,hv_warning
@@ -1000,7 +1065,7 @@ raw_payload=57"#
 mode_raw=0x5111
 range_raw=0x00
 value=Overload
-unit=~
+unit=Ω
 range_label=Auto
 display_raw=None
 flags=
@@ -1072,9 +1137,9 @@ raw_payload=19"#
 
     #[test]
     fn range_label_resistance() {
-        assert_eq!(lookup_range_label(0x5111, 1), "600\u{2126}");
-        assert_eq!(lookup_range_label(0x5111, 3), "60k\u{2126}");
-        assert_eq!(lookup_range_label(0x5111, 6), "60M\u{2126}");
+        assert_eq!(lookup_range_label(0x5111, 1), "600\u{3a9}");
+        assert_eq!(lookup_range_label(0x5111, 3), "60k\u{3a9}");
+        assert_eq!(lookup_range_label(0x5111, 6), "60M\u{3a9}");
     }
 
     #[test]
@@ -1166,14 +1231,14 @@ raw_payload=19"#
 mode_raw=0x3112
 range_raw=0x00
 value=Normal(2.3450000286102295)
-unit=VDC
+unit=V
 range_label=Auto
 display_raw=Some("2.345")
 main_label=Relative
 flags=rel,auto_range
 aux=2
-aux1=Reference value=Normal(10.0) unit=VDC display_raw=Some("10.000") elapsed_secs=None
-aux2=Absolute value=Normal(12.345000267028809) unit=VDC display_raw=Some("12.345") elapsed_secs=None
+aux1=Reference value=Normal(10.0) unit=V display_raw=Some("10.000") elapsed_secs=None
+aux2=Absolute value=Normal(12.345000267028809) unit=V display_raw=Some("12.345") elapsed_secs=None
 raw_payload=45"#
         );
     }
@@ -1226,14 +1291,14 @@ raw_payload=45"#
 mode_raw=0x3111
 range_raw=0x00
 value=Normal(5.0)
-unit=VDC
+unit=V
 range_label=Auto
 display_raw=Some("5.000")
 flags=auto_range,min,max
 aux=3
-aux1=Max value=Normal(10.0) unit=VDC display_raw=Some("10.000") elapsed_secs=Some(120)
-aux2=Average value=Normal(7.5) unit=VDC display_raw=Some("7.500") elapsed_secs=Some(60)
-aux3=Min value=Normal(3.0) unit=VDC display_raw=Some("3.000") elapsed_secs=Some(30)
+aux1=Max value=Normal(10.0) unit=V display_raw=Some("10.000") elapsed_secs=Some(120)
+aux2=Average value=Normal(7.5) unit=V display_raw=Some("7.500") elapsed_secs=Some(60)
+aux3=Min value=Normal(3.0) unit=V display_raw=Some("3.000") elapsed_secs=Some(30)
 raw_payload=46"#
         );
     }
@@ -1268,13 +1333,13 @@ raw_payload=46"#
 mode_raw=0x3131
 range_raw=0x00
 value=Normal(15.0)
-unit=VDC
+unit=V
 range_label=Auto
 display_raw=Some("15.000")
 main_label=Peak Max
 flags=auto_range,peak_max,peak_min
 aux=1
-aux1=Peak Min value=Normal(-3.0) unit=VDC display_raw=Some("-3.000") elapsed_secs=None
+aux1=Peak Min value=Normal(-3.0) unit=V display_raw=Some("-3.000") elapsed_secs=None
 raw_payload=32"#
         );
     }
@@ -1336,13 +1401,13 @@ raw_payload=32"#
 mode_raw=0x3111
 range_raw=0x00
 value=Normal(5.0)
-unit=VDC
+unit=V
 range_label=Auto
 display_raw=Some("5.000")
 flags=auto_range,comp
 aux=2
-aux1=COMP High value=Normal(10.0) unit=VDC display_raw=Some("10") elapsed_secs=None
-aux2=COMP Low value=Normal(1.0) unit=VDC display_raw=Some("1") elapsed_secs=None
+aux1=COMP High value=Normal(10.0) unit=V display_raw=Some("10") elapsed_secs=None
+aux2=COMP Low value=Normal(1.0) unit=V display_raw=Some("1") elapsed_secs=None
 raw_payload=30"#
         );
     }
