@@ -208,7 +208,7 @@ fn advertising_in<'a>(devices: &[&'a SelectableDevice], name: &str) -> Vec<&'a S
 }
 
 /// Returns the default device entry ("ut61eplus").
-pub fn default_device() -> &'static SelectableDevice {
+pub(crate) fn default_device() -> &'static SelectableDevice {
     find_device("ut61eplus").expect("ut61eplus must be in DEVICES")
 }
 

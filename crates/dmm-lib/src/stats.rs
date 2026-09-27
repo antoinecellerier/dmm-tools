@@ -96,14 +96,6 @@ impl Integrator {
         }
     }
 
-    /// Create an integrator with a custom maximum interval threshold.
-    pub fn with_max_dt(max_dt_secs: f64) -> Self {
-        Self {
-            max_dt_secs,
-            ..Self::new()
-        }
-    }
-
     /// Record a normal measurement value, accumulating the trapezoidal area
     /// since the previous sample.
     pub fn push(&mut self, value: f64, timestamp: Instant) {
@@ -132,7 +124,7 @@ impl Integrator {
 
     /// Record an overload reading. Breaks the integration (clears the previous
     /// sample) so the next normal reading starts a fresh interval.
-    pub fn push_overload(&mut self) {
+    pub(crate) fn push_overload(&mut self) {
         self.push_gap();
         self.overload_gaps += 1;
     }
@@ -179,7 +171,7 @@ impl Default for Integrator {
 /// by `divisor` to get the display value.
 ///
 /// Returns `None` for units where integration is not meaningful (Ω, F, Hz, °C, %).
-pub fn integral_unit_info(unit: &str) -> Option<(&'static str, f64)> {
+pub(crate) fn integral_unit_info(unit: &str) -> Option<(&'static str, f64)> {
     match unit {
         "A" => Some(("Ah", 3600.0)),
         "mA" => Some(("mAh", 3600.0)),
@@ -345,7 +337,7 @@ impl SeriesStats {
 
     /// The integral scaled to its display unit, or `None` when this session
     /// does not integrate, no reading has arrived yet, or the current unit has
-    /// no meaningful time-integral (see [`integral_unit_info`]).
+    /// no meaningful time-integral (see [`integral_display`]).
     pub fn integral_display(&self) -> Option<(f64, &'static str)> {
         if !self.integrate {
             return None;
@@ -357,8 +349,7 @@ impl SeriesStats {
 /// Raw unit·seconds integral scaled to its display unit:
 /// `(value / divisor, display_unit)`.
 ///
-/// `None` for units where integration is not meaningful — see
-/// [`integral_unit_info`].
+/// `None` for units where integration is not meaningful (Ω, F, Hz, °C, %).
 pub fn integral_display(raw: f64, unit: &str) -> Option<(f64, &'static str)> {
     integral_unit_info(unit).map(|(display_unit, divisor)| (raw / divisor, display_unit))
 }
@@ -367,6 +358,14 @@ pub fn integral_display(raw: f64, unit: &str) -> Option<(f64, &'static str)> {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    /// An integrator with a custom maximum interval threshold.
+    fn with_max_dt(max_dt_secs: f64) -> Integrator {
+        Integrator {
+            max_dt_secs,
+            ..Integrator::new()
+        }
+    }
 
     #[test]
     fn empty_stats() {
@@ -477,7 +476,7 @@ mod tests {
 
     #[test]
     fn integrator_reset() {
-        let mut i = Integrator::with_max_dt(5.0);
+        let mut i = with_max_dt(5.0);
         let t0 = Instant::now();
         i.push(1.0, t0);
         i.push(1.0, t0 + Duration::from_secs(1));
@@ -516,7 +515,7 @@ mod tests {
 
     #[test]
     fn integrator_max_dt_skip() {
-        let mut i = Integrator::with_max_dt(1.0);
+        let mut i = with_max_dt(1.0);
         let t0 = Instant::now();
         i.push(10.0, t0);
         // Gap of 5 seconds > max_dt of 1 second → skipped
@@ -533,7 +532,7 @@ mod tests {
 
     #[test]
     fn integrator_skipped_intervals_counts_every_oversize_gap() {
-        let mut i = Integrator::with_max_dt(1.0);
+        let mut i = with_max_dt(1.0);
         let t0 = Instant::now();
         i.push(10.0, t0);
         i.push(10.0, t0 + Duration::from_secs(5));

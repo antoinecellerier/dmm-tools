@@ -254,14 +254,6 @@ impl<'a> OpenOptions<'a> {
             bluetooth: true,
         }
     }
-
-    /// The same, pinned to one adapter.
-    pub fn with_adapter(adapter: Option<&'a str>) -> Self {
-        Self {
-            adapter,
-            ..Self::new()
-        }
-    }
 }
 
 impl Default for OpenOptions<'_> {

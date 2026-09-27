@@ -419,7 +419,13 @@ mod tests {
             "a cable-only family"
         );
         assert!(
-            !bluetooth_is_next(&[], OpenOptions::with_adapter(Some("00C5B27A"))),
+            !bluetooth_is_next(
+                &[],
+                OpenOptions {
+                    adapter: Some("00C5B27A"),
+                    ..OpenOptions::new()
+                }
+            ),
             "a named USB adapter"
         );
         assert!(

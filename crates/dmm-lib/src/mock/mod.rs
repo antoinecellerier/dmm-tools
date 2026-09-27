@@ -824,11 +824,6 @@ impl CycleMeter for MockProtocol {
     }
 }
 
-/// Create a mock Dmm instance that auto-cycles through all scenarios.
-pub fn open_mock() -> Result<Dmm<NullTransport>> {
-    open_mock_clocked(None, Clock::real())
-}
-
 /// Create a mock Dmm instance pinned to a specific mode.
 pub fn open_mock_mode(mode: MockMode) -> Result<Dmm<NullTransport>> {
     open_mock_clocked(Some(mode), Clock::real())
@@ -840,7 +835,10 @@ pub fn open_mock_mode(mode: MockMode) -> Result<Dmm<NullTransport>> {
 /// it — the waveform is a function of session time, and the `Dmm` stamps its
 /// readings with the same clock — and the mock is the only device a virtual
 /// clock makes sense for, a real meter being paced by USB.
-pub fn open_mock_clocked(mode: Option<MockMode>, clock: Clock) -> Result<Dmm<NullTransport>> {
+pub(crate) fn open_mock_clocked(
+    mode: Option<MockMode>,
+    clock: Clock,
+) -> Result<Dmm<NullTransport>> {
     let protocol = match mode {
         Some(mode) => MockProtocol::with_mode(mode),
         None => MockProtocol::new(),
@@ -880,6 +878,11 @@ mod tests {
     use scenarios::{
         scenario_duration, temp_diff_rev_value, temp_diff_value, temp_value, temp2_value,
     };
+
+    /// A mock that auto-cycles through all scenarios.
+    fn open_mock() -> Result<Dmm<NullTransport>> {
+        open_mock_clocked(None, Clock::real())
+    }
 
     /// The table is the single source of truth for `ALL`, `label()`,
     /// `description()` and `FromStr`; `info()` looks a mode up there instead of
