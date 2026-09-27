@@ -1022,8 +1022,8 @@ mod tests {
         fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
             self.mock.read_timeout(buf, timeout_ms)
         }
-        fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-            self.mock.send_feature_report(data)
+        fn set_baud(&self, baud: u32) -> Result<()> {
+            self.mock.set_baud(baud)
         }
         fn transport_name(&self) -> &'static str {
             self.name

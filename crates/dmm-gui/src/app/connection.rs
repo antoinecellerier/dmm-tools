@@ -820,9 +820,6 @@ mod tests {
         fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
             Err(dmm_lib::error::Error::LinkLost)
         }
-        fn send_feature_report(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
-            Ok(())
-        }
         fn bluetooth_selector(&self) -> Option<&str> {
             self.1
         }

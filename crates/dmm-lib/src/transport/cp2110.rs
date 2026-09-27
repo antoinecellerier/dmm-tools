@@ -49,6 +49,13 @@ impl Cp2110 {
         Self { device }
     }
 
+    /// Send a HID feature report to the bridge.
+    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
+        trace!("CP2110 feature report: {:02X?}", data);
+        self.device.send_feature_report(data).map_err(Error::Hid)?;
+        Ok(())
+    }
+
     /// Send the three feature reports to initialize the UART bridge:
     /// 1. Enable UART (report 0x41)
     /// 2. Configure 9600 baud, 8N1 (report 0x50)
@@ -190,12 +197,6 @@ impl Transport for Cp2110 {
         buf[..actual].copy_from_slice(&raw[1..1 + actual]);
         trace!("CP2110 RX ({actual} bytes): {:02X?}", &buf[..actual]);
         Ok(actual)
-    }
-
-    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        trace!("CP2110 feature report: {:02X?}", data);
-        self.device.send_feature_report(data).map_err(Error::Hid)?;
-        Ok(())
     }
 
     fn transport_info(&self) -> Result<String> {

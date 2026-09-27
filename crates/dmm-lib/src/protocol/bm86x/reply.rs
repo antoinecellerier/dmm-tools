@@ -213,10 +213,6 @@ pub(super) mod tests {
             buf[..len].copy_from_slice(&report[..len]);
             Ok(len)
         }
-
-        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
-        }
     }
 
     fn example_reply() -> Vec<u8> {

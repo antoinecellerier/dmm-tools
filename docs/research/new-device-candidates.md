@@ -600,9 +600,9 @@ Rigol/Siglent" wording meant that.
   bridges. Any of these meters needs an address-based open (host or device
   path) and identification by `*IDN?`. The `Protocol` trait is poll-based
   (`request_measurement`) and fits SCPI query/response as it is; the
-  `Transport` trait (`crates/dmm-lib/src/transport/mod.rs`) is written
-  around HID reports and requires the HID-only `send_feature_report`, so a
-  network transport has to fit or change that trait. The SCPI text replies
+  `Transport` trait (`crates/dmm-lib/src/transport/mod.rs`) is a byte
+  stream whose one link setting, `set_baud`, is optional, so a network
+  transport fits it as it is. The SCPI text replies
   need a new protocol family; no existing frame parser applies.
 - Transports, cheapest first: (1) **VXI-11 over `std::net`** — portmapper
   plus core channel, a few hundred lines of XDR, std only, cross-platform,

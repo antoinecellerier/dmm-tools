@@ -112,9 +112,13 @@ pub(crate) struct FrameRecord {
     pub at_ms: u64,
     pub dir: FrameDir,
     pub hex: String,
-    /// HID feature report rather than an interrupt write.
+    /// Link set-up rather than a transfer: a baud rate change (`baud`), or
+    /// in older reports a HID feature report (`hex`).
     #[serde(skip_serializing_if = "is_false", default)]
     pub feature: bool,
+    /// The rate the link was set to.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub baud: Option<u32>,
 }
 
 impl From<&crate::recording::WireEvent> for FrameRecord {
@@ -131,7 +135,8 @@ impl From<&crate::recording::WireEvent> for FrameRecord {
                 .map(|b| format!("{b:02X}"))
                 .collect::<Vec<_>>()
                 .join(" "),
-            feature: e.feature,
+            feature: e.baud.is_some(),
+            baud: e.baud,
         }
     }
 }
@@ -1227,10 +1232,35 @@ mod tests {
             dir: FrameDir::Rx,
             hex: "AB CD".to_string(),
             feature: false,
+            baud: None,
         };
         let yaml = serde_yaml_ng::to_string(&record).unwrap();
         assert!(yaml.contains("dir: rx"), "got {yaml}");
         assert!(!yaml.contains("feature"), "got {yaml}");
+        assert!(!yaml.contains("baud"), "got {yaml}");
+    }
+
+    /// A rate change is filed as link set-up carrying its rate, and a
+    /// report from before rate changes were recorded still loads.
+    #[test]
+    fn a_rate_change_is_a_feature_record_with_its_rate() {
+        let event = crate::recording::WireEvent {
+            at_ms: 3,
+            dir: crate::recording::Direction::Tx,
+            step: None,
+            bytes: Vec::new(),
+            baud: Some(19200),
+        };
+        let yaml = serde_yaml_ng::to_string(&FrameRecord::from(&event)).unwrap();
+        assert!(yaml.contains("feature: true"), "got {yaml}");
+        assert!(yaml.contains("baud: 19200"), "got {yaml}");
+
+        let old: FrameRecord = serde_yaml_ng::from_str(
+            "at_ms: 3\ndir: tx\nhex: 00 00 4B 00 00 03 00 00 00 00\nfeature: true\n",
+        )
+        .unwrap();
+        assert!(old.feature);
+        assert_eq!(old.baud, None);
     }
 
     /// Enter at the prompt means the meter agreed with what we read, so the

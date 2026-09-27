@@ -30,8 +30,9 @@ pub(crate) struct WireEvent {
     pub dir: Direction,
     pub step: Option<String>,
     pub bytes: Vec<u8>,
-    /// HID feature report rather than an interrupt write.
-    pub feature: bool,
+    /// The link was set to this rate rather than handed `bytes`, which are
+    /// then empty.
+    pub baud: Option<u32>,
 }
 
 /// Shared with the transport wrapper, which records from wherever it runs.
@@ -84,21 +85,21 @@ impl Recorder {
         self.dropped
     }
 
-    fn push(&mut self, dir: Direction, feature: bool, bytes: &[u8]) {
+    fn push(&mut self, dir: Direction, baud: Option<u32>, bytes: &[u8]) {
         // `checked_duration_since`: a backward clock jump must not panic
         // mid-capture.
         let at_ms = Instant::now()
             .checked_duration_since(self.start)
             .unwrap_or_default()
             .as_millis() as u64;
-        self.push_at(at_ms, dir, feature, bytes);
+        self.push_at(at_ms, dir, baud, bytes);
     }
 
     /// Consecutive reads on the same step within [`RX_COALESCE_GAP_MS`] are
     /// appended to the previous event rather than filed as new ones. Anything
     /// else — a write in between, a step change, a longer gap — splits.
-    fn push_at(&mut self, at_ms: u64, dir: Direction, feature: bool, bytes: &[u8]) {
-        if dir == Direction::Rx && !feature {
+    fn push_at(&mut self, at_ms: u64, dir: Direction, baud: Option<u32>, bytes: &[u8]) {
+        if dir == Direction::Rx && baud.is_none() {
             let within_gap = self
                 .last_rx_ms
                 .is_some_and(|last| at_ms.saturating_sub(last) <= RX_COALESCE_GAP_MS);
@@ -106,7 +107,7 @@ impl Recorder {
             if within_gap
                 && let Some(prev) = self.events.back_mut()
                 && prev.dir == Direction::Rx
-                && !prev.feature
+                && prev.baud.is_none()
                 && prev.step == self.current_step
             {
                 prev.bytes.extend_from_slice(bytes);
@@ -122,7 +123,7 @@ impl Recorder {
             dir,
             step: self.current_step.clone(),
             bytes: bytes.to_vec(),
-            feature,
+            baud,
         });
     }
 }
@@ -155,21 +156,24 @@ impl RecordingTransport {
 
 impl Transport for RecordingTransport {
     fn write(&self, data: &[u8]) -> Result<()> {
-        lock(&self.recorder).push(Direction::Tx, false, data);
+        lock(&self.recorder).push(Direction::Tx, None, data);
         self.inner.write(data)
     }
 
     fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
         let n = self.inner.read_timeout(buf, timeout_ms)?;
         if n > 0 {
-            lock(&self.recorder).push(Direction::Rx, false, &buf[..n]);
+            lock(&self.recorder).push(Direction::Rx, None, &buf[..n]);
         }
         Ok(n)
     }
 
-    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        lock(&self.recorder).push(Direction::Tx, true, data);
-        self.inner.send_feature_report(data)
+    /// Recorded once the link took it: a rate the link refused never
+    /// reached the meter, so it has no place in the capture.
+    fn set_baud(&self, baud: u32) -> Result<()> {
+        self.inner.set_baud(baud)?;
+        lock(&self.recorder).push(Direction::Tx, Some(baud), &[]);
+        Ok(())
     }
 
     fn transport_info(&self) -> Result<String> {
@@ -182,6 +186,10 @@ impl Transport for RecordingTransport {
 
     fn transport_name(&self) -> &'static str {
         self.inner.transport_name()
+    }
+
+    fn bluetooth_selector(&self) -> Option<&str> {
+        self.inner.bluetooth_selector()
     }
 
     fn advertised_name(&self) -> Option<&str> {
@@ -207,10 +215,6 @@ mod tests {
             let n = self.response.len().min(buf.len());
             buf[..n].copy_from_slice(&self.response[..n]);
             Ok(n)
-        }
-
-        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
         }
     }
 
@@ -245,11 +249,11 @@ mod tests {
     fn taking_one_step_leaves_the_others_buffered() {
         let mut r = Recorder::new();
         r.set_step(Some("acv"));
-        r.push_at(0, Direction::Tx, false, &[0x01]);
+        r.push_at(0, Direction::Tx, None, &[0x01]);
         r.set_step(Some("acv/mode:Hz"));
-        r.push_at(10, Direction::Tx, false, &[0x02]);
+        r.push_at(10, Direction::Tx, None, &[0x02]);
         r.set_step(Some("acv"));
-        r.push_at(20, Direction::Tx, false, &[0x03]);
+        r.push_at(20, Direction::Tx, None, &[0x03]);
 
         let taken = r.take_step("acv/mode:Hz");
         assert_eq!(taken.len(), 1);
@@ -268,14 +272,29 @@ mod tests {
         assert!(lock(&rec).drain().is_empty());
     }
 
+    /// A rate change is on the record as the rate, and still reaches the
+    /// link.
     #[test]
-    fn feature_reports_are_marked() {
-        let (t, rec) = recording(vec![]);
-        t.send_feature_report(&[0x41, 0x01]).unwrap();
+    fn a_rate_change_is_recorded_and_forwarded() {
+        let (t, rec) = RecordingTransport::new(Box::new(dmm_lib::transport::NullTransport));
+        t.set_baud(19200).unwrap();
         let events = lock(&rec).drain();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].dir, Direction::Tx);
-        assert!(events[0].feature);
+        assert_eq!(events[0].baud, Some(19200));
+        assert!(events[0].bytes.is_empty());
+    }
+
+    /// A rate the link refused never reached the meter: the error comes
+    /// back and the capture stays clean.
+    #[test]
+    fn a_refused_rate_change_is_not_recorded() {
+        let (t, rec) = recording(vec![]);
+        assert!(
+            t.set_baud(19200).is_err(),
+            "FakeTransport has no rate to set"
+        );
+        assert!(lock(&rec).drain().is_empty());
     }
 
     /// The CP2110 delivers one UART byte per HID report, so a frame arrives
@@ -284,7 +303,7 @@ mod tests {
     fn consecutive_reads_within_the_gap_are_one_event() {
         let mut r = Recorder::new();
         for (i, b) in [0xAB, 0xCD, 0x10].iter().enumerate() {
-            r.push_at(i as u64 * 10, Direction::Rx, false, &[*b]);
+            r.push_at(i as u64 * 10, Direction::Rx, None, &[*b]);
         }
         let events = r.drain();
         assert_eq!(events.len(), 1);
@@ -295,9 +314,9 @@ mod tests {
     #[test]
     fn a_write_between_reads_splits_the_event() {
         let mut r = Recorder::new();
-        r.push_at(0, Direction::Rx, false, &[0xAB]);
-        r.push_at(1, Direction::Tx, false, &[0x01]);
-        r.push_at(2, Direction::Rx, false, &[0xCD]);
+        r.push_at(0, Direction::Rx, None, &[0xAB]);
+        r.push_at(1, Direction::Tx, None, &[0x01]);
+        r.push_at(2, Direction::Rx, None, &[0xCD]);
         let events = r.drain();
         assert_eq!(events.len(), 3);
         assert_eq!(events[2].bytes, vec![0xCD]);
@@ -306,9 +325,9 @@ mod tests {
     #[test]
     fn a_gap_over_the_limit_splits_the_event() {
         let mut r = Recorder::new();
-        r.push_at(0, Direction::Rx, false, &[0xAB]);
-        r.push_at(RX_COALESCE_GAP_MS, Direction::Rx, false, &[0xCD]);
-        r.push_at(RX_COALESCE_GAP_MS * 2 + 1, Direction::Rx, false, &[0xEF]);
+        r.push_at(0, Direction::Rx, None, &[0xAB]);
+        r.push_at(RX_COALESCE_GAP_MS, Direction::Rx, None, &[0xCD]);
+        r.push_at(RX_COALESCE_GAP_MS * 2 + 1, Direction::Rx, None, &[0xEF]);
         let events = r.drain();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].bytes, vec![0xAB, 0xCD]);
@@ -319,9 +338,9 @@ mod tests {
     fn a_step_change_splits_the_event() {
         let mut r = Recorder::new();
         r.set_step(Some("dcv"));
-        r.push_at(0, Direction::Rx, false, &[0xAB]);
+        r.push_at(0, Direction::Rx, None, &[0xAB]);
         r.set_step(Some("acv"));
-        r.push_at(1, Direction::Rx, false, &[0xCD]);
+        r.push_at(1, Direction::Rx, None, &[0xCD]);
         let events = r.drain();
         assert_eq!(events.len(), 2);
         assert_eq!(events[1].step.as_deref(), Some("acv"));

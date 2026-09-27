@@ -118,14 +118,6 @@ impl Transport for Bu86x {
         Ok(len)
     }
 
-    /// Brymen's programs send none, and the cable is not known to take any
-    /// (spec §2).
-    fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-        Err(Error::UnsupportedCommand(format!(
-            "the {NAME} cable takes no feature reports"
-        )))
-    }
-
     /// No serial number: this text goes into capture reports.
     fn transport_info(&self) -> Result<String> {
         Ok(match self.release {

@@ -33,35 +33,20 @@ const HID_REPORT_DATA_SIZE: usize = 8;
 /// Maximum UART payload bytes per HID report (8 bytes minus 1-byte header).
 const MAX_UART_PAYLOAD: usize = 7;
 
-/// Primary init feature report: 2400 baud, config `0x03` (8 data bits).
+/// The feature report that sets the bridge to `baud`, config `0x03` (8
+/// data bits).
 ///
-/// Byte layout: `[report_id=0x00, 0x60, 0x09, 0x00, 0x00, config=0x03,
-///               0x00, 0x00, 0x00, 0x00]` — the baud rate little-endian in
-/// bytes 1-2 (1-4 as 32 bits), as the UT803/UT804 apps send it. The SDK
-/// DLL puts `0x03` in byte 3 instead; which layout the bridge reads is
-/// unverified.
-///
-/// Reference: docs/research/ut803/reverse-engineered-protocol.md §1.2
-const PRIMARY_FEATURE_REPORT: [u8; 10] =
-    [0x00, 0x60, 0x09, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00];
-
-/// Fallback init feature report: 19200 baud, the primary's layout. UT803.exe
-/// sends this one too, and so does the UT803's protocol init.
+/// Byte layout: `[report_id=0x00, baud (4 bytes LE), config=0x03, 0x00,
+/// 0x00, 0x00, 0x00]` — for 2400 and 19200 the rate fits bytes 1-2, as the
+/// UT803/UT804 apps send it. The SDK DLL puts `0x03` in byte 3 instead;
+/// which layout the bridge reads is unverified.
 ///
 /// Reference: docs/research/ut803/reverse-engineered-protocol.md §1.2
-pub(crate) const FALLBACK_FEATURE_REPORT: [u8; 10] =
-    [0x00, 0x00, 0x4B, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00];
-
-/// The baud rate a feature report sets: little-endian in bytes 1-2, where
-/// both the apps' layout and the SDK DLL's put it. `None` for a report too
-/// short to carry one, or a zero rate.
-///
-/// Reference: docs/research/ut803/reverse-engineered-protocol.md §1.2
-fn report_baud(report: &[u8]) -> Option<u32> {
-    match report {
-        [_, lo, hi, ..] => Some(u32::from(u16::from_le_bytes([*lo, *hi]))).filter(|&b| b != 0),
-        _ => None,
-    }
+fn baud_report(baud: u32) -> [u8; 10] {
+    let mut report = [0u8; 10];
+    report[1..5].copy_from_slice(&baud.to_le_bytes());
+    report[5] = 0x03;
+    report
 }
 
 const BRIDGE: &str = "CH9325 HID-to-UART bridge (WCH)";
@@ -97,7 +82,8 @@ pub struct Ch9325 {
     device: HidDevice,
     startup: Option<Startup>,
     /// The rate the last feature report set, which the bridge is left at: a
-    /// protocol's `init` may change the one start-up chose (the UT803's).
+    /// protocol's `init` may change the one start-up chose (the UT803's,
+    /// through `set_baud`).
     baud: Cell<Option<u32>>,
 }
 
@@ -109,18 +95,6 @@ impl Ch9325 {
             startup: None,
             baud: Cell::new(None),
         }
-    }
-
-    /// Send a feature report and record the rate it sets.
-    fn set_feature(&self, report: &[u8]) -> Result<()> {
-        trace!("CH9325 feature report: {:02X?}", report);
-        self.device
-            .send_feature_report(report)
-            .map_err(Error::Hid)?;
-        if let Some(baud) = report_baud(report) {
-            self.baud.set(Some(baud));
-        }
-        Ok(())
     }
 
     /// Wait for one raw report and return how many meter bytes it carried,
@@ -147,7 +121,7 @@ impl Ch9325 {
 
         // Primary init: 2400 baud + 0x5A trigger (§4.3)
         debug!("CH9325: trying primary init (2400 baud + trigger)");
-        self.set_feature(&PRIMARY_FEATURE_REPORT)?;
+        self.set_baud(2400)?;
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Send 0x5A trigger byte (§4.3 step 2)
@@ -173,7 +147,7 @@ impl Ch9325 {
 
         // Fallback init: 19200 baud, no trigger (§4.4)
         debug!("CH9325: primary init failed, trying fallback (19200 baud)");
-        self.set_feature(&FALLBACK_FEATURE_REPORT)?;
+        self.set_baud(19200)?;
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         // Probe again
@@ -270,8 +244,16 @@ impl Transport for Ch9325 {
         Ok(actual)
     }
 
-    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        self.set_feature(data)
+    /// Send the feature report for `baud` and record it as the bridge's
+    /// rate.
+    fn set_baud(&self, baud: u32) -> Result<()> {
+        let report = baud_report(baud);
+        trace!("CH9325 feature report: {:02X?}", report);
+        self.device
+            .send_feature_report(&report)
+            .map_err(Error::Hid)?;
+        self.baud.set(Some(baud));
+        Ok(())
     }
 
     fn transport_info(&self) -> Result<String> {
@@ -323,12 +305,26 @@ mod tests {
 
     #[test]
     fn primary_feature_report_encoding() {
-        assert_report(&PRIMARY_FEATURE_REPORT, 2400);
+        assert_report(&baud_report(2400), 2400);
     }
 
     #[test]
     fn fallback_feature_report_encoding() {
-        assert_report(&FALLBACK_FEATURE_REPORT, 19200);
+        assert_report(&baud_report(19200), 19200);
+    }
+
+    /// The bytes the start-up and the UT803's init sent when they were
+    /// constants, which the UT803/UT804 apps send (spec §1.2).
+    #[test]
+    fn the_reports_match_the_apps_bytes() {
+        assert_eq!(
+            baud_report(2400),
+            [0x00, 0x60, 0x09, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00]
+        );
+        assert_eq!(
+            baud_report(19200),
+            [0x00, 0x00, 0x4B, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00]
+        );
     }
 
     #[test]
@@ -472,20 +468,6 @@ mod tests {
             startup.describe(19200),
             "19200 baud, start-up report carried 1 meter bytes at 2400"
         );
-    }
-
-    /// Both init reports decode to their rate, and so does the SDK DLL's
-    /// layout, which carries `0x03` in byte 3.
-    #[test]
-    fn a_feature_report_decodes_to_the_rate_it_sets() {
-        assert_eq!(report_baud(&PRIMARY_FEATURE_REPORT), Some(2400));
-        assert_eq!(report_baud(&FALLBACK_FEATURE_REPORT), Some(19200));
-        assert_eq!(
-            report_baud(&[0x00, 0x60, 0x09, 0x03, 0x00, 0x00]),
-            Some(2400)
-        );
-        assert_eq!(report_baud(&[0x00, 0x60]), None);
-        assert_eq!(report_baud(&[0x00, 0x00, 0x00, 0x00]), None);
     }
 
     #[test]

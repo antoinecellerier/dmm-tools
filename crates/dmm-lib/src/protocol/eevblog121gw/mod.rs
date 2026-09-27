@@ -329,7 +329,7 @@ mod tests {
         let mock = MockTransport::new(Vec::new());
         proto().init(&mock).unwrap();
         assert!(mock.written.borrow().is_empty());
-        assert!(mock.feature_reports.borrow().is_empty());
+        assert!(mock.bauds.borrow().is_empty());
     }
 
     /// A key is one frame, written without waiting for anything: the mock

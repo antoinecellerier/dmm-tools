@@ -287,8 +287,9 @@ that are not in its list — and the default output file is
 Report level: `device_id`, `init_frames`, `no_response`, `wire_events_dropped` (B); `unverified_only`
 (E); `tier`, `core_semantics`, `gate_failures` (C); `drive` (D); `plan` (H). Per step:
 `frames`, `frames_dropped`, `diagnostics` and `needs_attention` (B); `confirmed`, `lcd` (typed corrections
-only) and `confirmed_by` (F); sub-step ids, mode switches included (D). Frames are raw wire transfers; a rejected
-one is visible as a frame with no matching sample and a line under `diagnostics`. Every
+only) and `confirmed_by` (F); sub-step ids, mode switches included (D). Frames are raw wire transfers, plus
+any change of the link's rate as `feature: true` with its `baud` and no bytes; a rejected transfer is
+visible as a frame with no matching sample and a line under `diagnostics`. Every
 addition is optional on read, so older reports still resume.
 
 ```yaml

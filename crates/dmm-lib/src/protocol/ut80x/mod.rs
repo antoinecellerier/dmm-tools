@@ -54,7 +54,7 @@ use crate::protocol::{
     Stability, unknown_mode,
 };
 use crate::specs::{ModeSpecInfo, ModeSpecs, RangeSpec, SpecInfo, SpecSheetTable};
-use crate::transport::{Transport, ch9325};
+use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
 use std::fmt;
@@ -969,8 +969,8 @@ impl Protocol for Ut80xProtocol {
             // start-up only reaches when nothing answers at 2400 — and the
             // bridge reports even while the meter is silent (spec §2.2).
             Model::Ut803 => {
-                debug!("ut80x: init (UT803, setting the CH9325 to 19200 baud)");
-                transport.send_feature_report(&ch9325::FALLBACK_FEATURE_REPORT)?;
+                debug!("ut80x: init (UT803, setting the link to 19200 baud)");
+                transport.set_baud(19200)?;
                 std::thread::sleep(UT803_RATE_SETTLE);
             }
         }
@@ -1652,15 +1652,12 @@ mod tests {
         ] {
             proto.init(&mock).unwrap();
             let name = proto.profile().model_name;
-            assert!(mock.feature_reports.borrow().is_empty(), "{name}");
+            assert!(mock.bauds.borrow().is_empty(), "{name}");
             assert!(mock.written.borrow().is_empty(), "{name}");
         }
 
         Ut80xProtocol::new_ut803().init(&mock).unwrap();
-        assert_eq!(
-            *mock.feature_reports.borrow(),
-            [ch9325::FALLBACK_FEATURE_REPORT.to_vec()]
-        );
+        assert_eq!(*mock.bauds.borrow(), [19200]);
         assert!(mock.written.borrow().is_empty());
     }
 

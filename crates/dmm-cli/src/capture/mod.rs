@@ -213,7 +213,7 @@ fn save_no_response(
     };
     let rx_bytes = events
         .iter()
-        .filter(|e| e.dir == recording::Direction::Rx && !e.feature)
+        .filter(|e| e.dir == recording::Direction::Rx)
         .map(|e| e.bytes.len())
         .sum();
     report.init_frames = events.iter().map(FrameRecord::from).collect();
@@ -249,10 +249,6 @@ mod tests {
             let chunk = chunks.remove(0);
             buf[..chunk.len()].copy_from_slice(&chunk);
             Ok(chunk.len())
-        }
-
-        fn send_feature_report(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
-            Ok(())
         }
     }
 

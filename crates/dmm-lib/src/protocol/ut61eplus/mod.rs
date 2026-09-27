@@ -1827,8 +1827,8 @@ mod tests {
         fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
             self.0.read_timeout(buf, timeout_ms)
         }
-        fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-            self.0.send_feature_report(data)
+        fn set_baud(&self, baud: u32) -> Result<()> {
+            self.0.set_baud(baud)
         }
         fn transport_name(&self) -> &'static str {
             crate::BLUETOOTH
@@ -1936,8 +1936,8 @@ mod tests {
                 }
                 Ok(n)
             }
-            fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-                self.mock.send_feature_report(data)
+            fn set_baud(&self, baud: u32) -> Result<()> {
+                self.mock.set_baud(baud)
             }
             fn transport_name(&self) -> &'static str {
                 crate::BLUETOOTH
@@ -2387,10 +2387,6 @@ mod tests {
             buf[..len].copy_from_slice(&frame[..len]);
             Ok(len)
         }
-
-        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
-        }
     }
 
     #[test]
@@ -2537,10 +2533,6 @@ mod tests {
             let len = frame.len().min(buf.len());
             buf[..len].copy_from_slice(&frame[..len]);
             Ok(len)
-        }
-
-        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
         }
     }
 
@@ -2804,10 +2796,6 @@ mod tests {
             let len = frame.len().min(buf.len());
             buf[..len].copy_from_slice(&frame[..len]);
             Ok(len)
-        }
-
-        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
         }
     }
 

@@ -19,10 +19,10 @@ The library crate handles all device communication and data parsing. It has no U
 
 | Module | Responsibility |
 |--------|---------------|
-| `transport/mod.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
+| `transport/mod.rs` | `Transport` trait abstracting a link's byte I/O, plus `set_baud` for a meter that talks at another rate than the link set up (unsupported by default; each HID bridge's feature reports stay inside its own transport); `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
 | `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
-| `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
+| `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200), and `set_baud` as the same feature report |
 | `transport/bu86x.rs` | Brymen's BU-86X cable, which speaks its meters' request/reply protocol itself rather than relaying UART bytes: a write is one request, a read one input report, and it takes no feature reports; `init` sends nothing and keeps the cable's firmware version |
 | `transport/ble/mod.rs` | Bluetooth LE transport for a UART-over-BLE peer, an adapter or a meter with the radio built in: connects it, picks the GATT profile from its services (ISSC first, then the EEVblog 121GW's own service, then the Brymen BM78xBT's, else FFF0), runs the profile's application login where it has one, subscribes to that profile's notify characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
 | `transport/ble/search.rs` | Finds a Bluetooth peer by its advertised name, or the one an address names |

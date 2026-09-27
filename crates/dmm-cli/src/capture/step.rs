@@ -697,10 +697,6 @@ mod tests {
             buf[..n].copy_from_slice(&next[..n]);
             Ok(n)
         }
-
-        fn send_feature_report(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
-            Ok(())
-        }
     }
 
     fn dmm_replaying(
@@ -817,7 +813,7 @@ mod tests {
             dir: crate::recording::Direction::Rx,
             step: step.map(str::to_string),
             bytes: vec![0xAB, 0xCD],
-            feature: false,
+            baud: None,
         };
         let mut events: Vec<WireEvent> = (0..MAX_FRAMES_PER_STEP as u64 + 3)
             .map(|at_ms| event(at_ms, Some("dcv")))
@@ -847,7 +843,7 @@ mod tests {
                 dir: crate::recording::Direction::Rx,
                 step: Some("ncv".to_string()),
                 bytes: vec![0xAB, 0xCD],
-                feature: false,
+                baud: None,
             })
             .collect();
 
@@ -1164,8 +1160,8 @@ mod tests {
                 self.queue.read_timeout(buf, timeout_ms)
             }
 
-            fn send_feature_report(&self, data: &[u8]) -> dmm_lib::error::Result<()> {
-                self.queue.send_feature_report(data)
+            fn set_baud(&self, baud: u32) -> dmm_lib::error::Result<()> {
+                self.queue.set_baud(baud)
             }
         }
 

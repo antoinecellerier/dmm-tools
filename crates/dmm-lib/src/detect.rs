@@ -566,10 +566,6 @@ mod tests {
             }
             Ok(len)
         }
-
-        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
-        }
     }
 
     /// A CH9325 whose meter is between packets when the listen starts: each
@@ -600,10 +596,6 @@ mod tests {
                 }
                 None => Ok(0),
             }
-        }
-
-        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
         }
     }
 
@@ -739,8 +731,8 @@ mod tests {
             self.inner.read_timeout(buf, timeout_ms)
         }
 
-        fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-            self.inner.send_feature_report(data)
+        fn set_baud(&self, baud: u32) -> Result<()> {
+            self.inner.set_baud(baud)
         }
 
         fn advertised_name(&self) -> Option<&str> {

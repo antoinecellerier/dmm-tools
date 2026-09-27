@@ -23,8 +23,15 @@ pub trait Transport: Send {
     /// Returns the number of bytes read, or 0 on timeout.
     fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize>;
 
-    /// Send a HID feature report.
-    fn send_feature_report(&self, data: &[u8]) -> Result<()>;
+    /// Move the meter's serial line to `baud`, for a meter that talks at
+    /// another rate than the one the link set up. Default: unsupported, for a
+    /// link that cannot change its rate.
+    fn set_baud(&self, baud: u32) -> Result<()> {
+        Err(crate::error::Error::UnsupportedCommand(format!(
+            "the {} link cannot change its rate to {baud} baud",
+            self.transport_name()
+        )))
+    }
 
     /// Query transport-specific version/identification info.
     /// Returns a human-readable string. Default: not supported.
@@ -114,8 +121,8 @@ impl Transport for Box<dyn Transport> {
         (**self).read_timeout(buf, timeout_ms)
     }
 
-    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        (**self).send_feature_report(data)
+    fn set_baud(&self, baud: u32) -> Result<()> {
+        (**self).set_baud(baud)
     }
 
     fn transport_info(&self) -> Result<String> {
@@ -151,7 +158,7 @@ impl Transport for NullTransport {
         Ok(0)
     }
 
-    fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
+    fn set_baud(&self, _baud: u32) -> Result<()> {
         Ok(())
     }
 }
@@ -166,7 +173,15 @@ mod tests {
         assert!(t.write(&[1, 2, 3]).is_ok());
         let mut buf = [0u8; 64];
         assert_eq!(t.read_timeout(&mut buf, 1000).unwrap(), 0);
-        assert!(t.send_feature_report(&[0x41, 0x01]).is_ok());
+        assert!(t.set_baud(19200).is_ok());
+    }
+
+    /// A wrapper that let the rate fall to the default would fail every
+    /// UT803 open, which sets its rate through the boxed transport.
+    #[test]
+    fn a_boxed_transport_forwards_the_rate() {
+        let t: Box<dyn Transport> = Box::new(NullTransport);
+        assert!(t.set_baud(19200).is_ok());
     }
 }
 
@@ -179,7 +194,8 @@ pub mod mock {
     pub struct MockTransport {
         responses: RefCell<Vec<Vec<u8>>>,
         pub written: RefCell<Vec<Vec<u8>>>,
-        pub feature_reports: RefCell<Vec<Vec<u8>>>,
+        /// The rates `set_baud` was asked for, in order.
+        pub bauds: RefCell<Vec<u32>>,
     }
 
     impl MockTransport {
@@ -192,7 +208,7 @@ pub mod mock {
             Self {
                 responses: RefCell::new(responses),
                 written: RefCell::new(Vec::new()),
-                feature_reports: RefCell::new(Vec::new()),
+                bauds: RefCell::new(Vec::new()),
             }
         }
 
@@ -219,8 +235,8 @@ pub mod mock {
             Ok(len)
         }
 
-        fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-            self.feature_reports.borrow_mut().push(data.to_vec());
+        fn set_baud(&self, baud: u32) -> Result<()> {
+            self.bauds.borrow_mut().push(baud);
             Ok(())
         }
     }

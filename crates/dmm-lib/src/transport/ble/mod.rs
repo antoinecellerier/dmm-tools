@@ -599,10 +599,10 @@ impl Transport for Ble {
         }
     }
 
-    fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-        // HID-only bring-up. The families on this bridge send none, and a
-        // transparent UART has nowhere to put one.
-        debug!("Bluetooth: ignoring a HID feature report");
+    fn set_baud(&self, baud: u32) -> Result<()> {
+        // GATT has no line rate to set: whatever relays a meter's UART over
+        // the radio sets its own.
+        debug!("Bluetooth: ignoring a request for {baud} baud");
         Ok(())
     }
 

@@ -129,12 +129,6 @@ impl Transport for Ch9329 {
         Ok(actual)
     }
 
-    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        trace!("CH9329 feature report: {:02X?}", data);
-        self.device.send_feature_report(data).map_err(Error::Hid)?;
-        Ok(())
-    }
-
     fn transport_info(&self) -> Result<String> {
         Ok("CH9329 HID-to-UART bridge (WCH)".to_string())
     }

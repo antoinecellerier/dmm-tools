@@ -506,10 +506,6 @@ impl Transport for SimulatedMeter {
         pending.drain(..n);
         Ok(n)
     }
-
-    fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
-        Ok(())
-    }
 }
 
 /// The `mock-zt5b` device: the ZT-5B's own driver, reading from and
