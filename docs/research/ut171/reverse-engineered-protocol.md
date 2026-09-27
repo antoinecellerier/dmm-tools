@@ -444,9 +444,9 @@ Comparison with our existing CP2110 implementation:
 |--------|-------------|---------------|
 | Open sequence | Open → GetPartNumber → EnableUART | EnableUART → SetConfig → PurgeRX |
 | Part number check | Yes (must be 0x0A) | No (relies on VID/PID) |
-| UART enable in Open | Yes (automatic) | Explicit in init_uart() |
-| SetUartConfig in Open | No (caller must do) | Done in init_uart() |
-| Purge in Open | No (caller must do) | Done in init_uart() |
+| UART enable in Open | Yes (automatic) | Explicit in `Cp2110::open()` |
+| SetUartConfig in Open | No (caller must do) | Done in `Cp2110::open()` |
+| Purge in Open | No (caller must do) | Done in `Cp2110::open()` |
 | Write chunking | Auto (63-byte reports, max 4096/call) | Single reports |
 | Read buffering | Internal ring buffer | Single report reads |
 | UART status byte order | **Big-endian** FIFO counts | Uses from_le_bytes — **potential bug** |

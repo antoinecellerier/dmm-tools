@@ -1,7 +1,8 @@
 //! Stand-in for [`super::ble`] when the `bluetooth` feature is off.
 //!
-//! Same signatures, so the open and list paths in `lib.rs` carry no `cfg` of
-//! their own: a build without the feature simply never finds an adapter.
+//! Same signatures, so the open and list paths in `transport/open.rs` carry no
+//! `cfg` of their own: a build without the feature simply never finds an
+//! adapter.
 
 use crate::DeviceInfo;
 use crate::error::{Error, Result};

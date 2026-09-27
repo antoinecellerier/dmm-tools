@@ -27,9 +27,14 @@ pub struct Ch9329 {
 }
 
 impl Ch9329 {
-    /// Wrap an already-opened HID device.
-    pub fn new(device: HidDevice) -> Self {
-        Self { device }
+    /// Take an already-opened HID device. Nothing is sent: the CH9329 may
+    /// come pre-configured at 9600 baud by UNI-T. If data doesn't flow, the
+    /// `read_config` / config write sequence may be needed.
+    pub(crate) fn open(device: HidDevice) -> Result<Self> {
+        debug!("CH9329: opening device (VID={VID:#06x} PID={PID:#06x})");
+        debug!("CH9329: skipping config init (assumed pre-configured at 9600 baud)");
+        debug!("CH9329: if data doesn't flow, try RUST_LOG=dmm_lib=trace to see raw HID reports");
+        Ok(Self { device })
     }
 
     /// Read the CH9329 configuration (128 bytes in 4 chunks).
@@ -79,18 +84,6 @@ impl Ch9329 {
 
         debug!("CH9329 config (128 bytes): {:02X?}", config);
         Ok(config)
-    }
-
-    /// Attempt to initialize the CH9329 transport.
-    ///
-    /// Currently a no-op — the CH9329 may come pre-configured at 9600 baud
-    /// by UNI-T. If data doesn't flow, the `read_config` / config write
-    /// sequence may be needed.
-    pub fn init(&self) -> Result<()> {
-        debug!("CH9329: opening device (VID={VID:#06x} PID={PID:#06x})");
-        debug!("CH9329: skipping config init (assumed pre-configured at 9600 baud)");
-        debug!("CH9329: if data doesn't flow, try RUST_LOG=dmm_lib=trace to see raw HID reports");
-        Ok(())
     }
 }
 

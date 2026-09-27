@@ -44,34 +44,31 @@ pub struct Cp2110 {
 }
 
 impl Cp2110 {
-    /// Wrap an already-opened HID device.
-    pub fn new(device: HidDevice) -> Self {
-        Self { device }
+    /// Take an already-opened HID device and set up its UART with three
+    /// feature reports:
+    /// 1. Enable UART (report 0x41)
+    /// 2. Configure 9600 baud, 8N1 (report 0x50)
+    /// 3. Purge receive FIFO (report 0x43)
+    pub(crate) fn open(device: HidDevice) -> Result<Self> {
+        let cp = Self { device };
+        debug!("CP2110: enabling UART");
+        cp.send_feature_report(&[0x41, 0x01])?;
+
+        // Report 0x50 (AN434 §6.3): baud rate (4 bytes BE) + parity + flow ctl + data bits + stop bits
+        debug!("CP2110: configuring 9600/8N1");
+        cp.send_feature_report(&[0x50, 0x00, 0x00, 0x25, 0x80, 0x00, 0x00, 0x03, 0x00])?;
+
+        // 0x02 = purge receive FIFO only (TX is empty at init time)
+        debug!("CP2110: purging RX FIFO");
+        cp.send_feature_report(&[0x43, 0x02])?;
+
+        Ok(cp)
     }
 
     /// Send a HID feature report to the bridge.
     fn send_feature_report(&self, data: &[u8]) -> Result<()> {
         trace!("CP2110 feature report: {:02X?}", data);
         self.device.send_feature_report(data).map_err(Error::Hid)?;
-        Ok(())
-    }
-
-    /// Send the three feature reports to initialize the UART bridge:
-    /// 1. Enable UART (report 0x41)
-    /// 2. Configure 9600 baud, 8N1 (report 0x50)
-    /// 3. Purge receive FIFO (report 0x43)
-    pub fn init_uart(&self) -> Result<()> {
-        debug!("CP2110: enabling UART");
-        self.send_feature_report(&[0x41, 0x01])?;
-
-        // Report 0x50 (AN434 §6.3): baud rate (4 bytes BE) + parity + flow ctl + data bits + stop bits
-        debug!("CP2110: configuring 9600/8N1");
-        self.send_feature_report(&[0x50, 0x00, 0x00, 0x25, 0x80, 0x00, 0x00, 0x03, 0x00])?;
-
-        // 0x02 = purge receive FIFO only (TX is empty at init time)
-        debug!("CP2110: purging RX FIFO");
-        self.send_feature_report(&[0x43, 0x02])?;
-
         Ok(())
     }
 

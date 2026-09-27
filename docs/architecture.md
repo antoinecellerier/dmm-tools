@@ -20,10 +20,11 @@ The library crate handles all device communication and data parsing. It has no U
 | Module | Responsibility |
 |--------|---------------|
 | `transport/mod.rs` | `Transport` trait abstracting a link's byte I/O, plus `set_baud` for a meter that talks at another rate than the link set up (unsupported by default; each HID bridge's feature reports stay inside its own transport) and the required `link()`, the USB cable or Bluetooth link a transport is on (`None` for the mock and a replay), which protocol behaviour keys on — `transport_name()` is the bridge's name for display only; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
+| `transport/open.rs` | Picking the link an open goes through: `KNOWN_TRANSPORTS`, the USB-HID bridges with their VID:PID and whether they relay UART bytes; the order the cables are tried in for an entry's links; opening a named adapter or the first match; the Bluetooth fallback and the peers it takes; listing the USB adapters. The public `open_*` and `list_*` functions in `lib.rs` call in here |
 | `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200), and `set_baud` as the same feature report |
-| `transport/bu86x.rs` | Brymen's BU-86X cable, which speaks its meters' request/reply protocol itself rather than relaying UART bytes: a write is one request, a read one input report, and it takes no feature reports; `init` sends nothing and keeps the cable's firmware version |
+| `transport/bu86x.rs` | Brymen's BU-86X cable, which speaks its meters' request/reply protocol itself rather than relaying UART bytes: a write is one request, a read one input report, and it takes no feature reports; `open` sends nothing and keeps the cable's firmware version |
 | `transport/ble/mod.rs` | Bluetooth LE transport for a UART-over-BLE peer, an adapter or a meter with the radio built in: connects it, picks the GATT profile from its services (ISSC first, then the EEVblog 121GW's own service, then the Brymen BM78xBT's, else FFF0), runs the profile's application login where it has one, subscribes to that profile's notify characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
 | `transport/ble/search.rs` | Finds a Bluetooth peer by its advertised name, or the one an address names |
 | `transport/ble/profile.rs` | What a GATT profile states (the properties its characteristics need, its write type, its bring-up, its minimum MTU), the order profiles are tried in, and picking one from a peer's characteristics |
@@ -64,7 +65,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `error.rs` | `Error` enum via `thiserror` |
 | `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the per-link sections of the "nothing found" help, the "no meter answered" grouping and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
 | `docs_tables.rs` | Renders the `--device` table in `docs/cli-reference.md` from the registry; a `dmm-cli` test keeps the file's `devices:start`/`devices:end` block in sync and rewrites it under `UPDATE_DOCS=1` (see `docs/development.md`) |
-| `lib.rs` | `Dmm` struct: top-level API tying everything together |
+| `lib.rs` | `Dmm` struct: top-level API tying everything together; the public open and list functions and their `OpenOptions` |
 
 **Data flow:**
 
@@ -144,7 +145,7 @@ shaped like a Bluetooth address or peripheral identifier goes straight to `trans
 Otherwise the USB bus is tried first. If nothing answers there, scanning is allowed and the entry
 lists Bluetooth among its links, the transport looks for an adapter or a Bluetooth meter: one
 already connected, else one heard in a short scan, else a paired one by address. The caller names
-the peers it takes, by advertised name (`bluetooth_peers()` in `lib.rs`): an entry behind an
+the peers it takes, by advertised name (`bluetooth_peers()` in `transport/open.rs`): an entry behind an
 adapter takes adapters only, a meter with the radio built in its own `bluetooth_names`, and `"auto"` and
 `list` all of them, so an open for one meter never lands on another unless `--adapter` names an
 address, which opens whatever answers there. Every step has a time limit. When that

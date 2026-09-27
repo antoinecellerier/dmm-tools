@@ -8,6 +8,7 @@ pub(crate) mod bu86x;
 pub(crate) mod ch9325;
 pub(crate) mod ch9329;
 pub(crate) mod cp2110;
+pub(crate) mod open;
 
 use crate::error::Result;
 
@@ -87,8 +88,8 @@ pub trait Transport: Send {
 
 /// The Bluetooth peers an open or a listing takes, by the name they
 /// advertise. The caller picks them from the registry (`bluetooth_peers()` in
-/// `lib.rs`), so an open for one meter never lands on another — unless
-/// `--adapter` names an address, which opens whatever answers there.
+/// `transport/open.rs`), so an open for one meter never lands on another —
+/// unless `--adapter` names an address, which opens whatever answers there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BluetoothPeers {
     /// UNI-T's Bluetooth adapters, which carry a family's meter; the

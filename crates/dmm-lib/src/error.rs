@@ -1,3 +1,4 @@
+use crate::transport::open::KNOWN_TRANSPORTS;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -167,7 +168,7 @@ fn named_link(link: &str) -> String {
 fn looked_for(cables: &[&str]) -> String {
     let ids: Vec<String> = cables
         .iter()
-        .filter_map(|name| crate::KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
+        .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
         .map(|kt| format!("{} {:#06x}:{:#06x}", kt.name, kt.vid, kt.pid))
         .collect();
     if ids.is_empty() {
@@ -318,7 +319,7 @@ mod tests {
     /// `bluetooth_searched` as the open path would have set it.
     fn not_found(bluetooth_searched: bool) -> Error {
         Error::NoTransportFound {
-            cables: crate::KNOWN_TRANSPORTS.iter().map(|kt| kt.name).collect(),
+            cables: KNOWN_TRANSPORTS.iter().map(|kt| kt.name).collect(),
             bluetooth_searched,
         }
     }

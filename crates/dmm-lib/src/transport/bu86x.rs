@@ -71,29 +71,26 @@ pub struct Bu86x {
 }
 
 impl Bu86x {
-    /// Wrap an already-opened HID device.
-    pub fn new(device: HidDevice) -> Self {
-        Self {
+    /// Take an already-opened HID device and read what the cable says about
+    /// itself. Nothing is written: the cable needs no setup (spec §3.3), and
+    /// the first request is the protocol's.
+    pub(crate) fn open(device: HidDevice) -> Result<Self> {
+        let mut cable = Self {
             device,
             release: None,
-        }
-    }
-
-    /// Read what the cable says about itself. Nothing is written: the cable
-    /// needs no setup (spec §3.3), and the first request is the protocol's.
-    pub fn init(&mut self) -> Result<()> {
-        match self.device.get_device_info() {
-            Ok(info) => self.release = Some(info.release_number()),
+        };
+        match cable.device.get_device_info() {
+            Ok(info) => cable.release = Some(info.release_number()),
             Err(e) => debug!("{NAME}: no device info ({e})"),
         }
         // The report descriptor is in no source (spec §12.2): trace it, so a
         // first report carries it.
         let mut descriptor = [0u8; hidapi::MAX_REPORT_DESCRIPTOR_SIZE];
-        match self.device.get_report_descriptor(&mut descriptor) {
+        match cable.device.get_report_descriptor(&mut descriptor) {
             Ok(n) => trace!("{NAME} report descriptor: {:02X?}", &descriptor[..n]),
             Err(e) => debug!("{NAME}: no report descriptor ({e})"),
         }
-        Ok(())
+        Ok(cable)
     }
 }
 

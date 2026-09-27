@@ -88,13 +88,16 @@ pub struct Ch9325 {
 }
 
 impl Ch9325 {
-    /// Wrap an already-opened HID device.
-    pub fn new(device: HidDevice) -> Self {
-        Self {
+    /// Take an already-opened HID device and bring the bridge up
+    /// ([`Ch9325::start_up`]).
+    pub(crate) fn open(device: HidDevice) -> Result<Self> {
+        let mut ch = Self {
             device,
             startup: None,
             baud: Cell::new(None),
-        }
+        };
+        ch.start_up()?;
+        Ok(ch)
     }
 
     /// Wait for one raw report and return how many meter bytes it carried,
@@ -113,10 +116,10 @@ impl Ch9325 {
     ///
     /// Tries primary init (2400 baud + 0x5A trigger) first, then falls back
     /// to 19200 baud if no data is received. Matches the vendor DLL probing
-    /// sequence from FUN_1001ef50.
+    /// sequence (§2.2 step 3).
     ///
     /// Reference: §4.3–4.4
-    pub fn init(&mut self) -> Result<()> {
+    fn start_up(&mut self) -> Result<()> {
         debug!("CH9325: opening device (VID={VID:#06x} PID={PID:#06x})");
 
         // Primary init: 2400 baud + 0x5A trigger (§4.3)

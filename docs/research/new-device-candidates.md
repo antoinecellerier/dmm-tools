@@ -595,8 +595,9 @@ Rigol/Siglent" wording meant that.
 
 **What it would take**, costed by work content:
 
-- dmm-lib's open path is hidapi-only (`open_transport`, `KNOWN_TRANSPORTS`
-  in `crates/dmm-lib/src/lib.rs`) and auto-detection probes over HID
+- dmm-lib's open path is hidapi-only (`open_transport` in
+  `crates/dmm-lib/src/lib.rs`, `KNOWN_TRANSPORTS` in
+  `crates/dmm-lib/src/transport/open.rs`) and auto-detection probes over HID
   bridges. Any of these meters needs an address-based open (host or device
   path) and identification by `*IDN?`. The `Protocol` trait is poll-based
   (`request_measurement`) and fits SCPI query/response as it is; the

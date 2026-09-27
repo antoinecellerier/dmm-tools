@@ -389,7 +389,7 @@ impl Ut61PlusProtocol {
 
 impl Protocol for Ut61PlusProtocol {
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
-        // A cable needs nothing: the CP2110 is set up by `Cp2110::init_uart()`
+        // A cable needs nothing: the CP2110 is set up by `Cp2110::open()`
         // before the protocol exists, and the meter only acknowledges 0x5D.
         // The UT-D07B polls the meter itself once told to, at about three
         // readings a second against under two when each one is a round trip
