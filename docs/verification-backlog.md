@@ -34,6 +34,7 @@ Items that need real components or specific setups to verify.
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
   - [A flat trace labels its y-axis with six decimals](#a-flat-trace-labels-its-y-axis-with-six-decimals)
   - [A meter power cycle surfaces a checksum error](#a-meter-power-cycle-surfaces-a-checksum-error)
+  - [A settings file this build can't parse is replaced by defaults](#a-settings-file-this-build-cant-parse-is-replaced-by-defaults)
   - [GUI accessibility — screen reader walk-through](#gui-accessibility--screen-reader-walk-through)
 - [Completed Verification](#completed-verification)
   - [MIN/MAX and Peak measurement reporting — RESOLVED](#minmax-and-peak-measurement-reporting--resolved)
@@ -2373,6 +2374,18 @@ retry once after the clear. A timeout means 2 s without a single byte
 takes that long to arrive, so keeping a partial frame across one buys
 nothing. Reproducible without hardware: feed `read_frame` a partial frame, a
 transport that returns no bytes once, then a fresh stream.
+
+### A settings file this build can't parse is replaced by defaults
+
+`Settings::load` (`crates/dmm-gui/src/settings.rs`) falls back to
+`Settings::default()` when `settings.json` does not deserialize, and the next
+`save()` — any settings click — writes the defaults over the file. The likely
+trigger is a downgrade: an older build meeting a theme or colour preset
+variant only a newer one knows fails the whole file, not that one key.
+
+Left as it is for now. If it becomes worth fixing: recover key by key —
+parse into a `serde_json::Value`, deserialize each field on its own and keep
+the default only for the fields that fail.
 
 ### GUI accessibility — screen reader walk-through
 

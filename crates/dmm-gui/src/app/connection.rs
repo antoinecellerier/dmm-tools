@@ -370,16 +370,10 @@ where
         );
     }
     let tick = Duration::from_millis(sample_interval_ms.min(MAX_SAMPLE_INTERVAL_MS) as u64);
-    // Let the pacing sleep observe the stop request too. Without it a 2 s
-    // interval keeps the USB handle open for the rest of the tick (plus the
-    // read timeout) after the user clicks Disconnect, while the UI already
-    // shows Disconnected and offers Connect again.
     // The Bluetooth adapter this session is on, which a reconnect goes back
     // to by address rather than scanning for one again.
     let mut reopen_at = bluetooth_selector(&dmm);
-    let sleep_stop = Arc::clone(&stop_flag);
-    let mut stream = MeasurementStream::new(&mut dmm, tick)
-        .with_cancel(move || sleep_stop.load(Ordering::Relaxed));
+    let mut stream = new_stream(&mut dmm, tick, &stop_flag);
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
     let mut last_keys: ListedKeys = Default::default();
@@ -527,7 +521,7 @@ where
                         }
                     }
                 }
-                stream = MeasurementStream::new(&mut dmm, tick);
+                stream = new_stream(&mut dmm, tick, &stop_flag);
                 protocol_errors = 0;
                 // The dial may have moved while the link was down.
                 last_keys = Default::default();
@@ -536,6 +530,21 @@ where
 
         ctx.request_repaint();
     }
+}
+
+/// A stream over `dmm` whose pacing sleep observes the stop request too.
+///
+/// Without it a 2 s interval keeps the USB handle open for the rest of the
+/// tick (plus the read timeout) after the user clicks Disconnect, while the UI
+/// already shows Disconnected and offers Connect again. Every stream the
+/// thread builds, the first and each one after a reconnect, goes through here.
+fn new_stream<'a, T: Transport>(
+    dmm: &'a mut dmm_lib::Dmm<T>,
+    tick: Duration,
+    stop_flag: &Arc<AtomicBool>,
+) -> MeasurementStream<'a, T> {
+    let stop = Arc::clone(stop_flag);
+    MeasurementStream::new(dmm, tick).with_cancel(move || stop.load(Ordering::Relaxed))
 }
 
 /// The address that reopens this session's Bluetooth adapter, `None` on
@@ -794,6 +803,25 @@ mod tests {
             start.elapsed() >= PAUSE_POLL_INTERVAL,
             "must wait rather than spin"
         );
+    }
+
+    /// A stop request cuts the pacing sleep short, on the first stream and on
+    /// every one rebuilt after a reconnect: a reconnect used to rebuild it
+    /// without the check, so Disconnect then waited out the sample interval.
+    #[test]
+    fn a_stream_stops_pacing_when_the_flag_is_set() {
+        let clock = dmm_lib::Clock::manual();
+        let mock = dmm_lib::protocol::registry::find_device("mock").expect("registry");
+        let mut dmm = dmm_lib::mock::open_simulated(mock, None, clock.clone()).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let tick = Duration::from_secs(10);
+        let mut stream = new_stream(&mut dmm, tick, &stop);
+        stream.tick().unwrap(); // the first tick fires immediately
+        stop.store(true, Ordering::Relaxed);
+        let start = clock.now();
+        stream.tick().unwrap();
+        let waited = clock.now().saturating_duration_since(start);
+        assert!(waited < tick, "waited out the interval: {waited:?}");
     }
 
     /// A link that drops on the first read, counting how many are open. With
