@@ -274,9 +274,13 @@ impl Ut181aProtocol {
 /// Turn a type-0x01 reply packet into a result.
 ///
 /// Payload is `[0x01, 'O', 'K']` or `[0x01, 'E', 'R']` (spec §4.1). Anything
-/// else is reported and treated as acceptance: the reply format is
-/// hardware-unverified, so an unrecognised answer is more likely our gap than
-/// a refusal.
+/// else is reported and treated as acceptance: a real meter has only ever
+/// sent those two, so an unrecognised answer is more likely our gap than a
+/// refusal.
+///
+/// The refusal names no cause: the meter refuses a range or MIN/MAX in Peak
+/// with the dial where it belongs (spec §4.2). `dmm-cli set` adds its own
+/// hint.
 fn reply_result(payload: &[u8], what: &str) -> Result<()> {
     match &payload[1..] {
         [b'O', b'K', ..] => {
@@ -284,7 +288,7 @@ fn reply_result(payload: &[u8], what: &str) -> Result<()> {
             Ok(())
         }
         [b'E', b'R', ..] => Err(Error::CommandRejected(format!(
-            "{what} rejected by the meter — check the dial position"
+            "{what} rejected by the meter"
         ))),
         other => {
             report_unknown(
