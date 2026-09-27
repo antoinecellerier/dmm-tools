@@ -2,6 +2,7 @@
 //! answered in `main`.
 
 pub(crate) mod read;
+pub(crate) mod settings;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
