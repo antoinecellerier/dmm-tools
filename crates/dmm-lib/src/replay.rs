@@ -31,7 +31,7 @@ use crate::measurement::Measurement;
 use crate::protocol::registry::{self, SelectableDevice};
 use crate::protocol::{CaptureStep, Choice, DeviceProfile, Protocol, Setting};
 use crate::specs::{ModeSpecInfo, SpecInfo};
-use crate::transport::{NullTransport, Transport};
+use crate::transport::{Link, NullTransport, Transport};
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
@@ -60,6 +60,38 @@ const MIN_CADENCE: Duration = Duration::from_millis(50);
 /// as a steady reading rather than a stutter.
 const LONE_SAMPLE_CADENCE: Duration = Duration::from_millis(500);
 
+/// The `# link:` value for a cable recording. Files carry it, so it is part
+/// of the format: it stays spelled this way whatever the apps call the link.
+const LINK_USB_CABLE: &str = "USB cable";
+
+/// The `# link:` value for a Bluetooth recording; fixed like [`LINK_USB_CABLE`].
+const LINK_BLUETOOTH: &str = "Bluetooth";
+
+/// What a recording with no link recorded is played back as.
+///
+/// Every replay file written before the link was recorded came off a cable,
+/// and a session that says nothing about its link is less use than one that
+/// says the thing all of them had in common.
+const RECORDED_LINK_DEFAULT: Option<Link> = Some(Link::UsbCable);
+
+/// The `# link:` value `link` is written as.
+fn link_token(link: Link) -> &'static str {
+    match link {
+        Link::UsbCable => LINK_USB_CABLE,
+        Link::Bluetooth => LINK_BLUETOOTH,
+    }
+}
+
+/// The link a `# link:` value names.
+///
+/// `None` for anything else, so a recording made by a version that knows a
+/// link this one does not still plays — it just says nothing about the link.
+fn link_from_token(token: &str) -> Option<Link> {
+    [Link::UsbCable, Link::Bluetooth]
+        .into_iter()
+        .find(|link| link_token(*link) == token)
+}
+
 /// A recorded session, parsed and ready to open.
 ///
 /// Cheap to keep around and open more than once: a GUI reconnect re-opens the
@@ -77,7 +109,7 @@ pub struct Replay {
     /// it is on, since the playback itself has no cable or radio. A file with
     /// no `# link:` line is a cable recording; one naming a link this version
     /// does not know says nothing.
-    pub link: Option<crate::binary_help::Link>,
+    pub link: Option<Link>,
     /// Non-empty, offsets non-decreasing — both enforced by the parser.
     samples: Vec<(Duration, Vec<u8>)>,
 }
@@ -89,7 +121,7 @@ impl Replay {
         let mut device: Option<&'static SelectableDevice> = None;
         let mut recorded: Option<String> = None;
         let mut model: Option<String> = None;
-        let mut link = crate::binary_help::RECORDED_LINK_DEFAULT;
+        let mut link = RECORDED_LINK_DEFAULT;
         let mut samples: Vec<(Duration, Vec<u8>)> = Vec::new();
 
         for (index, raw) in text.lines().enumerate() {
@@ -116,7 +148,7 @@ impl Replay {
                 } else if let Some(value) = comment.strip_prefix("link:") {
                     // A link we don't know is not a reason to refuse a
                     // recording: the frames are the file, the link is a label.
-                    link = crate::binary_help::Link::from_short_name(value.trim());
+                    link = link_from_token(value.trim());
                 }
                 // Anything else is a comment: a writer notes where a file came
                 // from, and an unknown key must not strand a whole recording.
@@ -211,16 +243,16 @@ impl Replay {
 
 /// The header lines of a replay file, ending in a newline.
 ///
-/// `link` is the link the readings came over, written by its
-/// [`crate::binary_help::Link::short_name`]; left out, the file plays back as
-/// a cable recording, which every file written before the line existed was.
+/// `link` is the link the readings came over; left out, the file plays back
+/// as a cable recording, which every file written before the line existed
+/// was.
 ///
 /// Callers append [`sample_line`]s to this.
 pub fn header(
     device_id: &str,
     recorded_rfc3339: &str,
     model: Option<&str>,
-    link: Option<crate::binary_help::Link>,
+    link: Option<Link>,
 ) -> String {
     let mut out = format!("{MAGIC}\n# device: {device_id}\n# recorded: {recorded_rfc3339}\n");
     if let Some(model) = model {
@@ -230,7 +262,7 @@ pub fn header(
     }
     if let Some(link) = link {
         out.push_str("# link: ");
-        out.push_str(link.short_name());
+        out.push_str(link_token(link));
         out.push('\n');
     }
     out
@@ -566,7 +598,6 @@ mod tests {
     /// does not know costs the frames nothing.
     #[test]
     fn the_recorded_link_round_trips_and_falls_back_to_the_cable() {
-        use crate::binary_help::Link;
         let mut text = header("ut61eplus", RECORDED, Some("UT61E+"), Some(Link::Bluetooth));
         // The on-disk spelling is what older and newer versions read back.
         assert!(text.contains("\n# link: Bluetooth\n"), "{text}");
@@ -579,6 +610,24 @@ mod tests {
 
         let unknown = text.replace("# link: Bluetooth", "# link: carrier pigeon");
         assert_eq!(parsed(&unknown).link, None);
+    }
+
+    /// The `# link:` values are the file format: files already written carry
+    /// these exact spellings, so the header keeps writing them byte for byte
+    /// and each reads back as its link. The apps' own word for a link — the
+    /// status line's "Bluetooth adapter", say — is not one of them.
+    #[test]
+    fn the_link_tokens_are_fixed() {
+        let head = |link| header("ut61eplus", RECORDED, Some("UT61E+"), Some(link));
+        let lead =
+            format!("{MAGIC}\n# device: ut61eplus\n# recorded: {RECORDED}\n# model: UT61E+\n");
+        assert_eq!(head(Link::UsbCable), format!("{lead}# link: USB cable\n"));
+        assert_eq!(head(Link::Bluetooth), format!("{lead}# link: Bluetooth\n"));
+        for link in [Link::UsbCable, Link::Bluetooth] {
+            assert_eq!(link_from_token(link_token(link)), Some(link));
+        }
+        assert_eq!(link_from_token("Bluetooth adapter"), None);
+        assert_eq!(link_from_token("carrier pigeon"), None);
     }
 
     /// Blank lines and comments a writer or a human left behind are not data.

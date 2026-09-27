@@ -85,8 +85,7 @@ pub fn mock_mode_help(intro: &str, example: &str) -> String {
 pub use crate::transport::Link;
 
 impl Link {
-    /// The name for a status line that already names the meter, and what a
-    /// replay file's `# link:` line records.
+    /// The name for a status line that already names the meter.
     ///
     /// "Bluetooth adapter" doubles the width of a UT61E+ label for a word the
     /// label around it no longer needs.
@@ -109,17 +108,6 @@ impl Link {
             Self::Bluetooth if built_in_radio => BLUETOOTH_BUILT_IN,
             Self::Bluetooth => BLUETOOTH_ADAPTER,
         }
-    }
-
-    /// A link read back from a file by its [`Link::short_name`].
-    ///
-    /// `None` for anything else, so a recording made by a version that knows
-    /// a link this one does not still plays — it just says nothing about the
-    /// link.
-    pub(crate) fn from_short_name(name: &str) -> Option<Self> {
-        [Self::UsbCable, Self::Bluetooth]
-            .into_iter()
-            .find(|link| link.short_name() == name)
     }
 }
 
@@ -169,13 +157,6 @@ const BLUETOOTH_ADAPTER: &str = "Bluetooth adapter";
 
 /// The same, for a meter with the radio built in, which has no adapter.
 const BLUETOOTH_BUILT_IN: &str = "Bluetooth link";
-
-/// What a recording with no link recorded is played back as.
-///
-/// Every replay file written before the link was recorded came off a cable,
-/// and a session that says nothing about its link is less use than one that
-/// says the thing all of them had in common.
-pub(crate) const RECORDED_LINK_DEFAULT: Option<Link> = Some(Link::UsbCable);
 
 /// What the USB label line says to check, whatever the platform.
 const CABLE_CHECK: &str = "check it is plugged in and the meter is powered on.";
@@ -740,17 +721,6 @@ mod tests {
         assert_eq!(Link::Bluetooth.full_name(false), "Bluetooth adapter");
         assert_eq!(Link::UsbCable.short_name(), "USB cable");
         assert_eq!(Link::UsbCable.full_name(false), "USB cable");
-    }
-
-    /// A replay file records the short name, so reading it back must give
-    /// the same link, and a name this version does not write gives none.
-    #[test]
-    fn a_short_name_reads_back_as_its_link() {
-        for link in [Link::UsbCable, Link::Bluetooth] {
-            assert_eq!(Link::from_short_name(link.short_name()), Some(link));
-        }
-        assert_eq!(Link::from_short_name("Bluetooth adapter"), None);
-        assert_eq!(Link::from_short_name("carrier pigeon"), None);
     }
 
     /// The "no meter answered" help lists what to switch on, once per set of
