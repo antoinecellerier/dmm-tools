@@ -34,6 +34,8 @@ enum Shortcut {
     Close,
     TogglePause,
     ToggleHelp,
+    AddMarker,
+    AddMarkerAndNote,
 }
 
 /// The machines a binding applies to.
@@ -156,6 +158,13 @@ const BINDINGS: &[Binding] = &[
         shortcut: Shortcut::ExportRecording,
         os: Os::Any,
     },
+    // Fires inside a note too: from one note, it moves on to the next marker.
+    Binding {
+        modifiers: Modifiers::COMMAND,
+        key: Key::N,
+        shortcut: Shortcut::AddMarkerAndNote,
+        os: Os::Any,
+    },
     // Ctrl++ and Ctrl+= both zoom in: keyboards that need Shift for `+`
     // still report the logical `=`.
     Binding {
@@ -211,6 +220,12 @@ const BINDINGS: &[Binding] = &[
     },
     Binding {
         modifiers: Modifiers::NONE,
+        key: Key::N,
+        shortcut: Shortcut::AddMarker,
+        os: Os::Any,
+    },
+    Binding {
+        modifiers: Modifiers::NONE,
         key: Key::F1,
         shortcut: Shortcut::ToggleHelp,
         os: Os::Any,
@@ -236,6 +251,8 @@ impl Shortcut {
         Self::ClearSession,
         Self::ToggleRecording,
         Self::ExportRecording,
+        Self::AddMarker,
+        Self::AddMarkerAndNote,
         Self::CycleBigMeter,
         Self::ToggleAlwaysOnTop,
         Self::ToggleDecorations,
@@ -290,6 +307,14 @@ impl Shortcut {
                 "Toggle window decorations",
             ),
             Self::ExportRecording => (keys(Modifiers::COMMAND, Key::E), "Export CSV\u{2026}"),
+            Self::AddMarker => (
+                keys(Modifiers::NONE, Key::N),
+                "Add a marker at the reading on screen",
+            ),
+            Self::AddMarkerAndNote => (
+                keys(Modifiers::COMMAND, Key::N),
+                "Add a marker and write its note",
+            ),
             // Two bindings, one per OS — the row shows the one this machine
             // answers to rather than both.
             Self::ToggleFullscreen => (
@@ -350,6 +375,29 @@ fn command_prefix(ctx: &egui::Context) -> String {
     formatted
 }
 
+/// Consume the presses of `modifiers`+`key`, as `consume_key` does, and say
+/// whether one of them was a fresh press rather than the key repeating while
+/// held.
+fn consume_fresh_key(ctx: &egui::Context, modifiers: Modifiers, key: Key) -> bool {
+    ctx.input_mut(|i| {
+        let mut fresh = false;
+        i.events.retain(|event| match event {
+            egui::Event::Key {
+                key: k,
+                pressed: true,
+                repeat,
+                modifiers: held,
+                ..
+            } if *k == key && held.matches_logically(modifiers) => {
+                fresh |= !repeat;
+                false
+            }
+            _ => true,
+        });
+        fresh
+    })
+}
+
 /// The "General" grid of the shortcut help modal, in display order.
 pub(super) fn help_rows(
     ctx: &egui::Context,
@@ -361,6 +409,15 @@ pub(super) fn help_rows(
 }
 
 impl App {
+    /// Whether no modal is up or about to be: egui's modal layer is last
+    /// frame's, so a discard prompt asked for earlier in this frame — Ctrl+R
+    /// and N in one batch of keys — is checked for too.
+    fn no_modal(&self, ctx: &egui::Context) -> bool {
+        ctx.memory(|m| m.top_modal_layer()).is_none()
+            && self.recording_panel_idle()
+            && !self.shortcut_help.open
+    }
+
     pub(super) fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
         // `egui_wants_keyboard_input()` is any focused widget, not just a
         // TextEdit — and that is what we want for the printable keys: Space
@@ -390,9 +447,26 @@ impl App {
                 // from closing — so this is `text_edit_focused()`, not the
                 // any-widget `egui_wants_keyboard_input()`.
                 Shortcut::Close => self.shortcut_help.open || !ctx.text_edit_focused(),
+                // Only a text field would type the letter. A focused button
+                // has no use for it, and blocking N there would swallow the
+                // press after Tab moved on from a note. Neither key reaches
+                // past a modal: a marker placed under the discard prompt
+                // would change what the prompt is asking about.
+                Shortcut::AddMarker => !ctx.text_edit_focused() && self.no_modal(ctx),
+                Shortcut::AddMarkerAndNote => self.no_modal(ctx),
                 _ => true,
             };
-            if !ours || !ctx.input_mut(|i| i.consume_key(binding.modifiers, binding.key)) {
+            if !ours {
+                continue;
+            }
+            let pressed = match binding.shortcut {
+                // A held key repeats; one press places one marker.
+                Shortcut::AddMarker | Shortcut::AddMarkerAndNote => {
+                    consume_fresh_key(ctx, binding.modifiers, binding.key)
+                }
+                _ => ctx.input_mut(|i| i.consume_key(binding.modifiers, binding.key)),
+            };
+            if !pressed {
                 continue;
             }
 
@@ -448,6 +522,8 @@ impl App {
                 Shortcut::ExportRecording => {
                     self.export_recording(super::export::ExportFormat::Csv)
                 }
+                Shortcut::AddMarker => self.add_marker(false),
+                Shortcut::AddMarkerAndNote => self.add_marker(true),
                 // Transient window state, deliberately not saved in settings:
                 // a session that ended fullscreen should not reopen that way.
                 Shortcut::ToggleFullscreen => {
@@ -594,6 +670,8 @@ mod tests {
                 ("Ctrl+L", "Clear graph & statistics"),
                 ("Ctrl+R", "Toggle recording"),
                 ("Ctrl+E", "Export CSV\u{2026}"),
+                ("N", "Add a marker at the reading on screen"),
+                ("Ctrl+N", "Add a marker and write its note"),
                 ("Ctrl+B", "Cycle big meter (off / full / minimal)"),
                 ("Ctrl+T", "Toggle always on top"),
                 ("Ctrl+D", "Toggle window decorations"),

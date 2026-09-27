@@ -1,10 +1,11 @@
+use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
 use chrono::{DateTime, Local, SecondsFormat};
 use dmm_lib::WallClock;
 use dmm_lib::export::{CsvLayout, device_comment};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::replay;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::io::Write;
 use std::time::Instant;
 
@@ -19,11 +20,16 @@ use std::time::Instant;
 /// the slot counts mean. Each row claims only as many of the reserved trailing
 /// groups as its own [`Sample::extra_aux`] says it carries, because a scale
 /// switched on mid-recording leaves the earlier samples without one.
+///
+/// `marked` are the markers on buffered samples, oldest first (see
+/// [`Recording::marked`]), written when `layout` has marker columns.
 pub fn render_csv(
     samples: &VecDeque<Sample>,
+    marked: &[&Marker],
     device_model: &str,
     layout: CsvLayout,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut marks = MarkCursor::new(marked);
     // ~72 bytes covers a typical row (RFC3339 timestamp, mode, value, unit,
     // range, flags) without repeated growth on large buffers; each aux slot
     // adds roughly another 20.
@@ -35,7 +41,8 @@ pub fn render_csv(
         wtr.write_record(layout.header().iter().map(|c| c.as_ref()))?;
         for s in samples {
             let ts = s.wall_time.to_rfc3339();
-            let cells = layout.row(&s.measurement, &ts, None, s.extra_aux, None);
+            let marker = marks.on(s);
+            let cells = layout.row(&s.measurement, &ts, None, s.extra_aux, marker);
             wtr.write_record(cells.iter().map(|c| c.as_ref()))?;
         }
         wtr.flush()?;
@@ -50,11 +57,16 @@ pub fn render_csv(
 /// `dmm-cli read --format json` prints, so a script reading one binary's file
 /// works on the other's. `experimental` marks readings decoded by a protocol
 /// no report has confirmed, as the CLI's does.
+///
+/// `marked` are the markers on buffered samples, oldest first, as for
+/// [`render_csv`].
 pub(crate) fn render_json(
     samples: &VecDeque<Sample>,
+    marked: &[&Marker],
     device_model: &str,
     experimental: bool,
 ) -> String {
+    let mut marks = MarkCursor::new(marked);
     let mut out = dmm_shared::export::metadata_line(device_model);
     out.push('\n');
     // A reading with no sub-values runs to roughly 400 bytes; growing from
@@ -63,12 +75,43 @@ pub(crate) fn render_json(
     for s in samples {
         let ts = s.wall_time.to_rfc3339();
         out.push_str(
-            &dmm_shared::export::measurement_json(&s.measurement, &ts, experimental, None, None)
-                .to_string(),
+            &dmm_shared::export::measurement_json(
+                &s.measurement,
+                &ts,
+                experimental,
+                None,
+                marks.on(s),
+            )
+            .to_string(),
         );
         out.push('\n');
     }
     out
+}
+
+/// Walks the markers alongside the samples as an export writes them out, both
+/// in time order, so matching them costs one pass rather than a search per
+/// sample.
+struct MarkCursor<'a> {
+    marked: std::iter::Peekable<std::slice::Iter<'a, &'a Marker>>,
+}
+
+impl<'a> MarkCursor<'a> {
+    fn new(marked: &'a [&'a Marker]) -> Self {
+        Self {
+            marked: marked.iter().peekable(),
+        }
+    }
+
+    /// The number and note of the marker on `s`, if any.
+    fn on(&mut self, s: &Sample) -> Option<(u32, &'a str)> {
+        let at = s.measurement.timestamp;
+        // Markers on readings before this one were on no sample of this file.
+        while self.marked.next_if(|m| m.at < at).is_some() {}
+        self.marked
+            .next_if(|m| m.at == at)
+            .map(|m| (m.number, m.note.as_str()))
+    }
 }
 
 /// Render samples as a replay file `--replay` can play back, or `None` when
@@ -147,24 +190,6 @@ impl Sample {
             extra_aux,
         }
     }
-
-    /// Display form of the measured value — see
-    /// [`Measurement::value_display_str`], which this delegates to.
-    ///
-    /// Keeps the meter's own spacing for a steady on-screen width. CSV export
-    /// goes through [`Measurement::value_export_str`] instead, where that
-    /// spacing would make the column non-numeric.
-    pub fn value_str(&self) -> String {
-        self.measurement.value_display_str().into_owned()
-    }
-
-    pub fn unit(&self) -> &str {
-        &self.measurement.unit
-    }
-
-    pub fn flags_str(&self) -> String {
-        self.measurement.flags.to_string()
-    }
 }
 
 /// What the sample buffer is holding samples for.
@@ -217,6 +242,19 @@ pub struct Recording {
     /// four-sub-value meter (UT181A) at ~900 bytes per sample, or ~450 MB at
     /// the same bound.
     max_samples: usize,
+    /// The markers the last CSV or JSON export of this filling wrote, each
+    /// as its [`marker_key`]: a marker, or a note, missing from it exists in
+    /// no file. Bounded by the markers, one per sample at most.
+    saved_markers: HashSet<u64>,
+}
+
+/// One marker — its reading, number and note — as a value an export can
+/// keep: a note edited back to what the file has gives the same one.
+fn marker_key(m: &Marker) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (m.at, m.number, &m.note).hash(&mut h);
+    h.finish()
 }
 
 impl Recording {
@@ -230,6 +268,7 @@ impl Recording {
             epoch: 0,
             max_aux_seen: 0,
             max_samples: DEFAULT_MAX_SAMPLES,
+            saved_markers: HashSet::new(),
         }
     }
 
@@ -324,6 +363,45 @@ impl Recording {
         self.exported_count = 0;
         self.epoch += 1;
         self.max_aux_seen = 0;
+        self.saved_markers.clear();
+    }
+
+    /// Whether the buffer holds the reading taken at `at`. Samples arrive in
+    /// time order, so this is a binary search.
+    pub(crate) fn holds(&self, at: Instant) -> bool {
+        self.samples
+            .binary_search_by_key(&at, |s| s.measurement.timestamp)
+            .is_ok()
+    }
+
+    /// The markers of `markers` that sit on buffered samples, oldest first:
+    /// what an export of the buffer writes.
+    pub(crate) fn marked<'a>(&self, markers: impl Iterator<Item = &'a Marker>) -> Vec<&'a Marker> {
+        markers.filter(|m| self.holds(m.at)).collect()
+    }
+
+    /// `marked` — the markers on buffered samples, from
+    /// [`Recording::marked`] — as an export records them: see
+    /// [`Recording::mark_exported`].
+    pub(crate) fn marker_keys(marked: &[&Marker]) -> HashSet<u64> {
+        marked.iter().map(|m| marker_key(m)).collect()
+    }
+
+    /// Whether the recording holds a marker, or a note, that its last CSV
+    /// or JSON export doesn't — a marker deleted since loses nothing. Never
+    /// for the history, which is not asked about.
+    pub(crate) fn has_unsaved_markers(&self, markers: &Markers) -> bool {
+        self.role == BufferRole::Recording
+            && self
+                .marked(markers.iter())
+                .into_iter()
+                .any(|m| !self.saved_markers.contains(&marker_key(m)))
+    }
+
+    /// Whether dropping the buffer would lose something no file holds: the
+    /// check behind the Record and Discard prompt.
+    pub(crate) fn needs_discard_prompt(&self, markers: &Markers) -> bool {
+        self.unexported_count() > 0 || self.has_unsaved_markers(markers)
     }
 
     /// The buffer's current filling — see `epoch`.
@@ -356,9 +434,16 @@ impl Recording {
     /// must still count as unexported. An export of an earlier epoch marks
     /// nothing — the samples it wrote are gone, and the ones in their place
     /// are in no file.
-    pub fn mark_exported(&mut self, epoch: u64, count: usize) {
+    ///
+    /// `markers` is [`Recording::marker_keys`] of what the export wrote, for
+    /// a format that writes markers; `None` for one that doesn't, which saves
+    /// none of them.
+    pub fn mark_exported(&mut self, epoch: u64, count: usize, markers: Option<HashSet<u64>>) {
         if epoch == self.epoch {
             self.exported_count = count.min(self.samples.len());
+            if let Some(keys) = markers {
+                self.saved_markers = keys;
+            }
         }
     }
 
@@ -667,7 +752,7 @@ mod tests {
         }
         assert_eq!(r.unexported_count(), 3);
 
-        r.mark_exported(r.epoch(), 3);
+        r.mark_exported(r.epoch(), 3, None);
         assert_eq!(r.unexported_count(), 0);
 
         r.push(&m, &wc, 0);
@@ -688,7 +773,7 @@ mod tests {
         // Export snapshots 5, two more arrive before it completes.
         r.push(&m, &wc, 0);
         r.push(&m, &wc, 0);
-        r.mark_exported(r.epoch(), 5);
+        r.mark_exported(r.epoch(), 5, None);
         assert_eq!(r.unexported_count(), 2);
     }
 
@@ -699,7 +784,7 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         r.push(&m, &wc, 0);
-        r.mark_exported(r.epoch(), 1);
+        r.mark_exported(r.epoch(), 1, None);
         r.toggle(Instant::now()); // stop
         r.toggle(Instant::now()); // start again — buffer cleared
         assert_eq!(r.unexported_count(), 0);
@@ -726,7 +811,7 @@ mod tests {
         for _ in 0..2 {
             r.push(&m, &wc, 0);
         }
-        r.mark_exported(exporting, 3);
+        r.mark_exported(exporting, 3, None);
         assert_eq!(r.unexported_count(), 2);
     }
 
@@ -738,7 +823,7 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         r.push(&m, &wc, 0);
-        r.mark_exported(r.epoch(), 99);
+        r.mark_exported(r.epoch(), 99, None);
         assert_eq!(r.unexported_count(), 0);
         r.push(&m, &wc, 0);
         assert_eq!(r.unexported_count(), 1);
@@ -825,29 +910,8 @@ mod tests {
         let wc = WallClock::new();
         let s = Sample::from_measurement(&m, &wc, 0);
         assert_eq!(s.measurement.mode, "DC V");
-        assert_eq!(s.value_str(), "5.678");
-        assert_eq!(s.unit(), "V");
-    }
-
-    /// The recording panel and the CSV must never disagree about an overload:
-    /// `value_export_str` has always said "OL", so `value_str` has to as well
-    /// even when the protocol left digits in `display_raw`.
-    #[test]
-    fn sample_value_str_reports_overload_not_digits() {
-        let mut m = make_measurement(b"      0");
-        m.value = MeasuredValue::Overload;
-        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
-        assert_eq!(s.value_str(), "OL");
-        assert_eq!(s.measurement.value_export_str(), "OL");
-    }
-
-    #[test]
-    fn sample_value_str_reports_ncv_not_digits() {
-        let mut m = make_measurement(b"  1.234");
-        m.value = MeasuredValue::NcvLevel(2);
-        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
-        assert_eq!(s.value_str(), "NCV:2");
-        assert_eq!(s.measurement.value_export_str(), "NCV:2");
+        assert_eq!(s.measurement.value_display_str(), "5.678");
+        assert_eq!(s.measurement.unit, "V");
     }
 
     /// The wire bytes are what a replay export writes, so a buffered sample
@@ -871,7 +935,7 @@ mod tests {
             .map(|_| Sample::from_measurement(&m, &wc, 0))
             .collect();
 
-        let bytes = render_csv(&samples, "UNI-T UT61E+", layout(0, 0)).unwrap();
+        let bytes = render_csv(&samples, &[], "UNI-T UT61E+", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -884,7 +948,7 @@ mod tests {
 
     #[test]
     fn render_csv_of_an_empty_buffer_is_just_the_headers() {
-        let bytes = render_csv(&VecDeque::new(), "mock", layout(0, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::new(), &[], "mock", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(text.lines().count(), 2);
     }
@@ -895,7 +959,7 @@ mod tests {
     /// exporter alone breaks a test.
     #[test]
     fn gui_and_cli_single_display_headers_agree() {
-        let bytes = render_csv(&VecDeque::new(), "mock", layout(0, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::new(), &[], "mock", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(
             text.lines().nth(1).unwrap(),
@@ -927,7 +991,7 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&VecDeque::from([s]), "UNI-T UT181A", layout(4, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::from([s]), &[], "UNI-T UT181A", layout(4, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -960,7 +1024,7 @@ mod tests {
         m.aux_values = vec![max];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&VecDeque::from([s]), "UNI-T UT181A", layout(1, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::from([s]), &[], "UNI-T UT181A", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let row = text.lines().nth(2).unwrap();
         assert!(row.ends_with(",Max,5.9010,V"), "got {row:?}");
@@ -977,7 +1041,7 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&VecDeque::from([s]), "mock", layout(1, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::from([s]), &[], "mock", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert!(
@@ -1022,7 +1086,7 @@ mod tests {
             .map(|(m, extra)| Sample::from_measurement(m, &wc, extra))
             .collect();
 
-        let bytes = render_csv(&samples, "UNI-T UT181A", layout(2, 1)).unwrap();
+        let bytes = render_csv(&samples, &[], "UNI-T UT181A", layout(2, 1)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -1178,6 +1242,104 @@ mod tests {
         assert!(render_replay(&VecDeque::new(), "ut61eplus", None, None).is_none());
     }
 
+    /// The layout of a file carrying markers.
+    fn marked_layout() -> CsvLayout {
+        CsvLayout {
+            markers: true,
+            ..layout(0, 0)
+        }
+    }
+
+    /// Markers on samples 2 and 3 of three, numbered 4 and 7.
+    fn marked_samples() -> (VecDeque<Sample>, Vec<Marker>) {
+        let samples = replay_samples();
+        let marker = |i: usize, number, note: &str| Marker {
+            at: samples[i].measurement.timestamp,
+            number,
+            note: note.to_string(),
+            wall_time: samples[i].wall_time,
+            reading: String::new(),
+        };
+        let markers = vec![marker(1, 4, "load on, 2.2 \u{3a9}"), marker(2, 7, "")];
+        (samples, markers)
+    }
+
+    /// The marker columns close the header; a marked row carries its number
+    /// and note (quoted, for the comma), an unmarked one leaves them empty.
+    #[test]
+    fn render_csv_writes_each_marker_on_its_sample() {
+        let (samples, markers) = marked_samples();
+        let marked: Vec<&Marker> = markers.iter().collect();
+        let bytes = render_csv(&samples, &marked, "UNI-T UT61E+", marked_layout()).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines[1],
+            "timestamp,mode,value,unit,range,flags,marker,note"
+        );
+        assert!(lines[2].ends_with(",,"), "{:?}", lines[2]);
+        assert!(
+            lines[3].ends_with(",4,\"load on, 2.2 \u{3a9}\""),
+            "{:?}",
+            lines[3]
+        );
+        assert!(lines[4].ends_with(",7,"), "{:?}", lines[4]);
+        let mut reader = csv::ReaderBuilder::new()
+            .comment(Some(b'#'))
+            .from_reader(text.as_bytes());
+        let width = reader.headers().unwrap().len();
+        for record in reader.records() {
+            assert_eq!(
+                record.unwrap().len(),
+                width,
+                "every row as wide as the header"
+            );
+        }
+    }
+
+    /// A marker on no sample of the file is skipped, not written onto the
+    /// next sample.
+    #[test]
+    fn a_marker_between_samples_lands_on_none() {
+        let (samples, mut markers) = marked_samples();
+        markers[0].at -= std::time::Duration::from_millis(1);
+        let marked: Vec<&Marker> = markers.iter().collect();
+        let bytes = render_csv(&samples, &marked, "UNI-T UT61E+", marked_layout()).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(lines[3].ends_with(",,"), "{:?}", lines[3]);
+        assert!(lines[4].ends_with(",7,"), "{:?}", lines[4]);
+    }
+
+    #[test]
+    fn render_json_writes_each_marker_on_its_sample() {
+        let (samples, markers) = marked_samples();
+        let marked: Vec<&Marker> = markers.iter().collect();
+        let text = render_json(&samples, &marked, "UNI-T UT61E+", false);
+        let lines: Vec<serde_json::Value> = text
+            .lines()
+            .skip(1)
+            .map(|l| serde_json::from_str(l).expect("a JSON object"))
+            .collect();
+        assert!(lines[0].get("marker").is_none());
+        assert_eq!(lines[1]["marker"], 4);
+        assert_eq!(lines[1]["note"], "load on, 2.2 \u{3a9}");
+        assert_eq!(lines[2]["marker"], 7);
+        assert_eq!(lines[2]["note"], "");
+    }
+
+    /// The buffer finds its samples by time, and `marked` keeps only the
+    /// markers on them.
+    #[test]
+    fn marked_keeps_the_markers_on_buffered_samples() {
+        let (samples, mut markers) = marked_samples();
+        let mut r = Recording::new();
+        r.samples = samples;
+        markers[1].at += std::time::Duration::from_secs(9);
+        let marked: Vec<u32> = r.marked(markers.iter()).iter().map(|m| m.number).collect();
+        assert_eq!(marked, [4]);
+    }
+
     /// The export and `dmm-cli read --format json` cannot drift, because both
     /// are these two calls into `dmm_shared::export` — so this checks the
     /// document the GUI builds around them, not the objects themselves.
@@ -1185,7 +1347,7 @@ mod tests {
     fn render_json_is_the_metadata_line_and_one_object_per_sample() {
         let mut samples = replay_samples();
         samples.truncate(2);
-        let text = render_json(&samples, "UNI-T UT61E+", true);
+        let text = render_json(&samples, &[], "UNI-T UT61E+", true);
 
         let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+");
         for s in &samples {

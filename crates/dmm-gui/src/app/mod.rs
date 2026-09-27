@@ -15,6 +15,7 @@ mod controls;
 mod export;
 mod held_reading;
 mod layout;
+mod marker_list;
 mod messages;
 mod meter_fit;
 mod plot_input;
@@ -366,6 +367,10 @@ pub struct App {
     /// current unit has a meaningful one.
     session: SeriesStats,
     recording: Recording,
+    /// Markers the user placed on readings, kept while the graph or the
+    /// sample buffer holds their reading.
+    markers: crate::markers::Markers,
+    marker_list: marker_list::MarkerList,
     /// Session-long `(Instant, SystemTime)` origin pair used to map
     /// `m.timestamp` (monotonic) onto wall-clock timestamps for recording and
     /// export. Captured once at construction so every sample across the
@@ -484,6 +489,8 @@ impl App {
             graph,
             session: SeriesStats::new(true),
             recording,
+            markers: crate::markers::Markers::default(),
+            marker_list: marker_list::MarkerList::default(),
             wall_clock: dmm_lib::WallClock::from_clock(&clock),
             clock,
             replay: None,
@@ -797,7 +804,10 @@ impl eframe::App for App {
         self.apply_zoom(&ctx);
         self.handle_keyboard_shortcuts(&ctx);
         self.handle_shortcut_help_keys(&ctx);
+        // Shortcuts first: `N` marks the reading the user saw, not one that
+        // arrives with this frame.
         self.drain_messages();
+        self.trim_markers();
         self.poll_export_result();
 
         // Auto-reconnect after device selection change

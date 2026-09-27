@@ -288,6 +288,17 @@ mod tests {
     /// As [`run_layout_with`]; `record` says whether the session's samples
     /// are a recording or, with nothing recorded, the graph's history.
     fn run_layout_as(width: f32, height: f32, settings: Settings, record: bool) -> Columns {
+        run_layout_marked(width, height, settings, record, 0)
+    }
+
+    /// As [`run_layout_as`], with `markers` markers in the Markers list.
+    fn run_layout_marked(
+        width: f32,
+        height: f32,
+        settings: Settings,
+        record: bool,
+        markers: u64,
+    ) -> Columns {
         let settings = Settings {
             // No acquisition thread: this is about layout only.
             auto_connect: false,
@@ -316,6 +327,12 @@ mod tests {
                 Some("  1.234"),
             );
             app.recording.push(&m, &app.wall_clock, 0);
+        }
+        for i in 0..markers {
+            let at = m.timestamp + std::time::Duration::from_millis(i);
+            let _ = app
+                .markers
+                .add(at, chrono::Local::now(), "1.234 V".to_string());
         }
         app.last_measurement = Some(m);
 
@@ -383,6 +400,19 @@ mod tests {
             column.inner_rect.height(),
         );
         assert_eq!(column.state.offset, egui::Vec2::ZERO, "{name} is scrolled");
+    }
+
+    /// The Markers list takes only the room the recording panel has, with a
+    /// recording's sample log after it or as the panel's last line.
+    #[test]
+    fn markers_fit_the_recording_panel_without_a_scrollbar() {
+        for record in [false, true] {
+            for (width, name) in [(1000.0, "wide"), (700.0, "narrow")] {
+                let columns = run_layout_marked(width, 640.0, Settings::default(), record, 5);
+                let column = columns.graph.as_ref().unwrap_or(&columns.reading);
+                assert_no_scrollbar(&format!("{name}, record = {record}"), column);
+            }
+        }
     }
 
     /// A window with room for everything looks exactly as it did before the

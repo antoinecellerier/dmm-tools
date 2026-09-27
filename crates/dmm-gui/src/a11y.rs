@@ -240,7 +240,12 @@ pub(crate) fn scroll_to_focus(ui: &Ui) {
     let Some(response) = ctx.read_response(id) else {
         return;
     };
-    if response.gained_focus() && ui.min_rect().contains_rect(response.rect) {
+    // Only when the widget isn't already in view: a scroll that moves
+    // nothing still unsticks a `stick_to_bottom` scroller from its end.
+    if response.gained_focus()
+        && ui.min_rect().contains_rect(response.rect)
+        && !ui.clip_rect().contains_rect(response.rect)
+    {
         response.scroll_to_me(None);
     }
 }

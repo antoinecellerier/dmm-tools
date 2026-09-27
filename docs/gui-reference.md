@@ -244,9 +244,19 @@ A thin strip below the main plot showing the full capture history.
   samples you haven't exported; Export… then saves the graph's readings again
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
-  and any sub-values
+  and any sub-values, with each marker on its reading's row; with nothing
+  recorded, it lists the markers alone
+- **Markers** — `N` marks the reading on screen, `Ctrl+N` marks it and puts
+  the cursor in its note. A marker's row ends with its number, note and `×`
+  to delete it; `Enter` keeps a note, `Esc` puts back what it said before
 - Buffer holds up to the configured [buffer size](#settings). Recording
   auto-stops when the buffer is full and shows a toast notification.
+
+A marker lasts as long as its reading is on the graph or in the recording.
+With nothing recorded, markers go with the readings the graph drops (a mode
+change, Clear); a recording keeps its markers across mode changes. Markers
+placed before Record stay on the graph but are not part of the recording or
+its export. Replay files carry no markers.
 
 **CSV format:**
 
@@ -258,8 +268,10 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
 
 Meters that report sub-values add `auxN_label,auxN_value,auxN_unit` columns,
 and a software [scale](#scale) adds one more such group holding the meter's
-own **Raw** reading. The column layout is the same as `dmm-cli read`'s and
-is described in the [CLI reference](cli-reference.md#dmm-cli-read), as is the
+own **Raw** reading. When an exported reading carries a marker, `marker,note`
+close the header, and the JSON export adds `"marker"` and `"note"` to the
+marked readings; `dmm-cli read` places no markers. Otherwise the column
+layout is the same as `dmm-cli read`'s and is described in the [CLI reference](cli-reference.md#dmm-cli-read), as is the
 JSON export's one-object-per-line shape.
 
 ## Specifications
@@ -444,6 +456,8 @@ shows the macOS spelling.
 | `Ctrl+T` | Toggle always on top (not available on Wayland — right-click the title bar instead) |
 | `Ctrl+D` | Toggle window decorations |
 | `Ctrl+E` | Export CSV… |
+| `N` | Add a marker at the reading on screen |
+| `Ctrl+N` | Add a marker and write its note |
 | `F11` (`Ctrl+Cmd+F` on macOS) | Toggle fullscreen |
 | `Cmd+M` (macOS) | Minimise window |
 | `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
@@ -470,6 +484,7 @@ shows the macOS spelling.
 Graph and `Space` shortcuts are disabled while any widget holds keyboard
 focus — not just text fields but any button reached with `Tab`, since `Space`
 and the arrow keys drive the focused widget. Press `Escape` to release it.
+`N` waits only for a text field, where it types the letter.
 
 ## Command-Line Options
 

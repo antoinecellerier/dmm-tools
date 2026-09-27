@@ -33,8 +33,7 @@ fn export_tooltips(role: BufferRole) -> (&'static str, &'static str) {
 
 /// `n` samples, in words.
 fn sample_count(n: usize) -> String {
-    let noun = if n == 1 { "sample" } else { "samples" };
-    format!("{n} {noun}")
+    format!("{n} {}", noun(n))
 }
 
 /// The line under the Record / Export row while nothing is recorded: what
@@ -46,6 +45,33 @@ fn history_hint(samples: usize) -> String {
          Record to capture across mode changes.",
         sample_count(samples)
     )
+}
+
+/// The discard prompt's heading and text, for `unexported` samples and,
+/// with `markers`, marker changes no file holds.
+fn discard_prompt(action: DiscardFor, unexported: usize, markers: bool) -> (&'static str, String) {
+    const MARKER_CHANGES: &str = "marker changes made since the last export";
+    let lost = match (unexported, markers) {
+        (0, _) => MARKER_CHANGES.to_string(),
+        (n, false) => format!("{n} unexported {}", noun(n)),
+        (n, true) => format!("{n} unexported {} and {MARKER_CHANGES}", noun(n)),
+    };
+    let text = match action {
+        DiscardFor::Record => format!("Starting a new recording will discard {lost}."),
+        DiscardFor::Discard => format!("Discarding the recording will lose {lost}."),
+    };
+    if unexported == 0 {
+        (
+            "Discard unexported markers?",
+            format!("{text} Markers still on the graph stay there, but in no recording."),
+        )
+    } else {
+        ("Discard unexported samples?", text)
+    }
+}
+
+fn noun(n: usize) -> &'static str {
+    if n == 1 { "sample" } else { "samples" }
 }
 
 /// Smallest height the graph + recording split is squeezed into; below it the
@@ -94,6 +120,11 @@ impl Default for RecordingPanel {
 }
 
 impl App {
+    /// Whether no discard prompt is waiting on the user.
+    pub(super) fn recording_panel_idle(&self) -> bool {
+        self.recording_panel.pending_discard.is_none()
+    }
+
     /// Start or stop recording.
     ///
     /// Starting clears the buffer, so if it holds samples that were never
@@ -101,7 +132,7 @@ impl App {
     /// Ctrl+R) used to destroy an unexported capture with no prompt, no
     /// toast, and nothing in the log.
     pub(super) fn toggle_recording(&mut self) {
-        if !self.recording.active && self.recording.unexported_count() > 0 {
+        if !self.recording.active && self.recording.needs_discard_prompt(&self.markers) {
             self.ask_before_discarding(DiscardFor::Record);
             return;
         }
@@ -111,7 +142,7 @@ impl App {
     /// Drop a stopped recording, asking first if it holds samples that were
     /// never exported.
     fn discard_recording(&mut self) {
-        if self.recording.unexported_count() > 0 {
+        if self.recording.needs_discard_prompt(&self.markers) {
             self.ask_before_discarding(DiscardFor::Discard);
             return;
         }
@@ -183,7 +214,8 @@ impl App {
             return;
         };
         let unexported = self.recording.unexported_count();
-        if unexported == 0 {
+        let markers = self.recording.has_unsaved_markers(&self.markers);
+        if unexported == 0 && !markers {
             // An export completed while the prompt was up — nothing left to
             // warn about.
             self.apply_pending_discard(action);
@@ -197,17 +229,10 @@ impl App {
         // keyboard focus inside the dialog.
         let modal = egui::Modal::new(egui::Id::new("confirm_discard_modal")).show(ctx, |ui| {
             ui.set_max_width(380.0);
-            ui.heading("Discard unexported samples?");
+            let (heading, text) = discard_prompt(action, unexported, markers);
+            ui.heading(heading);
             ui.add_space(4.0);
-            let noun = if unexported == 1 { "sample" } else { "samples" };
-            ui.label(match action {
-                DiscardFor::Record => {
-                    format!("Starting a new recording will discard {unexported} unexported {noun}.")
-                }
-                DiscardFor::Discard => {
-                    format!("Discarding the recording will lose {unexported} unexported {noun}.")
-                }
-            });
+            ui.label(text);
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 // Cancel takes focus: Enter and Space then default to the
@@ -281,65 +306,17 @@ impl App {
             }
         });
 
-        if self.recording.role() == BufferRole::History {
-            if !self.recording.samples.is_empty() {
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(history_hint(self.recording.samples.len()))
-                            .small()
-                            .color(ui.visuals().weak_text_color()),
-                    )
-                    .wrap(),
-                );
-            }
-            return;
+        if self.recording.role() == BufferRole::History && !self.recording.samples.is_empty() {
+            ui.add(
+                egui::Label::new(
+                    RichText::new(history_hint(self.recording.samples.len()))
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                )
+                .wrap(),
+            );
         }
-
-        // Scrollable sample log
-        if !self.recording.samples.is_empty() {
-            let max_height = if compact {
-                80.0
-            } else {
-                ui.available_height().max(60.0)
-            };
-            egui::ScrollArea::vertical()
-                .max_height(max_height)
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    let start = self.recording.samples.len().saturating_sub(500);
-                    for s in self.recording.samples.range(start..) {
-                        let time = s.wall_time.format("%H:%M:%S%.3f");
-                        let flags_str = s.flags_str();
-                        let flags = if flags_str.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" [{flags_str}]")
-                        };
-                        // Sub-values trail the flags so the timestamp, value
-                        // and unit columns stay where they are for meters
-                        // that don't report any.
-                        let summary = s.measurement.aux_summary();
-                        let aux = if summary.is_empty() {
-                            String::new()
-                        } else {
-                            format!("  {summary}")
-                        };
-                        // A frame without a main reading has no value for the
-                        // unit to follow; its sub-values carry their own.
-                        let unit = match s.measurement.value {
-                            dmm_lib::measurement::MeasuredValue::Absent => "",
-                            _ => s.unit(),
-                        };
-                        ui.label(
-                            RichText::new(format!(
-                                "{time}  {val:>10} {unit}{flags}{aux}",
-                                val = s.value_str(),
-                            ))
-                            .font(egui::FontId::monospace(11.0)),
-                        );
-                    }
-                });
-        }
+        self.show_log(ui, compact);
     }
 
     /// The Export… split button: the label saves a CSV in one click, the
@@ -606,6 +583,8 @@ mod tests {
                     ..Default::default()
                 },
                 |ui| {
+                    let ctx = ui.ctx().clone();
+                    app.handle_keyboard_shortcuts(&ctx);
                     // The row is drawn inside the page scroller, which reads
                     // the focused widget back to bring it into view — and that
                     // read is what takes the focus off a menu entry the
@@ -942,11 +921,204 @@ mod tests {
     fn discarding_an_exported_recording_does_not_ask() {
         let mut run = run_with_stopped_recording(2);
         let epoch = run.app.recording.epoch();
-        run.app.recording.mark_exported(epoch, 2);
+        run.app.recording.mark_exported(epoch, 2, None);
         run.click(run.node_rect("Discard").center());
         assert!(!run.shows_widget("Discard recording"), "no prompt");
         assert_eq!(run.app.recording.role(), BufferRole::History);
         assert!(run.app.recording.samples.is_empty());
+    }
+
+    /// Mark the newest buffered sample, as `N` does with it on screen.
+    fn mark_newest(run: &mut MenuRun) {
+        run.app.last_measurement = run
+            .app
+            .recording
+            .samples
+            .back()
+            .map(|s| s.measurement.clone());
+        run.app.add_marker(false);
+        run.frame(1.0, vec![]);
+    }
+
+    /// A saved recording whose markers changed since still asks, and says
+    /// that the markers are what it would lose.
+    #[test]
+    fn discarding_unsaved_markers_asks_first() {
+        let mut run = run_with_stopped_recording(2);
+        let epoch = run.app.recording.epoch();
+        run.app.recording.mark_exported(epoch, 2, None);
+        mark_newest(&mut run);
+        run.click(run.node_rect("Discard").center());
+        assert!(run.shows_text("Discard unexported markers?"));
+        assert!(run.shows_text(
+            "Discarding the recording will lose marker changes made since the last export. \
+             Markers still on the graph stay there, but in no recording."
+        ));
+        run.click(run.node_rect("Discard recording").center());
+        assert_eq!(run.app.recording.role(), BufferRole::History);
+    }
+
+    /// The × at the end of a marker's row deletes that marker.
+    #[test]
+    fn the_cross_deletes_a_marker() {
+        let mut run = run_with_stopped_recording(1);
+        mark_newest(&mut run);
+        assert!(run.shows_widget("Note for marker 1"));
+        run.click(run.node_rect("Delete marker 1").center());
+        assert!(run.app.markers.is_empty());
+        assert!(!run.shows_widget("Note for marker 1"));
+    }
+
+    #[test]
+    fn the_prompt_names_samples_and_markers_together() {
+        assert_eq!(
+            discard_prompt(DiscardFor::Record, 94, true),
+            (
+                "Discard unexported samples?",
+                "Starting a new recording will discard 94 unexported samples and marker \
+                 changes made since the last export."
+                    .to_string()
+            )
+        );
+    }
+
+    /// Three minutes of readings a second apart, on the graph and in the
+    /// buffer — a recording with `record` — and a marker on the one at
+    /// `marked` seconds, out of the default one-minute window.
+    fn run_with_a_marker_at(marked: u64, record: bool) -> MenuRun {
+        let mut run = MenuRun::new();
+        if record {
+            run.app.toggle_recording();
+        }
+        let t0 = Instant::now();
+        let wall_clock = run.app.wall_clock;
+        for i in 0..=180 {
+            let mut m = reading();
+            m.timestamp = t0 + std::time::Duration::from_secs(i);
+            run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
+            run.app.recording.push(&m, &wall_clock, 0);
+            if i == marked {
+                run.app.last_measurement = Some(m);
+                run.app.add_marker(false);
+            }
+        }
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        run
+    }
+
+    /// A marked row is as tall as any other: its number, note and × are sized
+    /// to the log's line, so the rows keep one pitch.
+    #[test]
+    fn a_marked_row_keeps_the_log_line_pitch() {
+        let run = run_with_a_marker_at(178, true);
+        let mut tops: Vec<f32> = run
+            .tree
+            .iter()
+            .filter(|(_, n)| n.value().is_some_and(|v| v.contains(" V")))
+            .filter_map(|(_, n)| n.bounds())
+            .map(|b| to_rect(b).top())
+            .collect();
+        tops.sort_by(f32::total_cmp);
+        tops.dedup();
+        assert!(tops.len() > 5, "the log shows rows: {tops:?}");
+        let pitch = tops[1] - tops[0];
+        for pair in tops.windows(2) {
+            assert!(
+                (pair[1] - pair[0] - pitch).abs() < 0.5,
+                "rows {pitch} apart, not {}: {tops:?}",
+                pair[1] - pair[0]
+            );
+        }
+    }
+
+    /// The marker column lines up on every row: a marker placed before
+    /// Record, whose row says so, and one on a recorded sample.
+    #[test]
+    fn the_marker_column_lines_up() {
+        let mut run = MenuRun::new();
+        let t0 = Instant::now();
+        let wall_clock = run.app.wall_clock;
+        let mark = |run: &mut MenuRun, i: u64| {
+            let mut m = reading();
+            m.timestamp = t0 + std::time::Duration::from_secs(i);
+            run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
+            run.app.recording.push(&m, &wall_clock, 0);
+            if i % 4 == 2 {
+                run.app.last_measurement = Some(m);
+                run.app.add_marker(false);
+            }
+        };
+        for i in 0..4 {
+            mark(&mut run, i);
+        }
+        run.app.toggle_recording();
+        for i in 4..8 {
+            mark(&mut run, i);
+        }
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        for what in ["Note for marker {}", "Delete marker {}"] {
+            let [before, recorded] =
+                [1, 2].map(|n| run.node_rect(&what.replace("{}", &n.to_string())));
+            assert!(
+                (before.left() - recorded.left()).abs() < 0.5,
+                "{what}: {before:?} and {recorded:?}"
+            );
+        }
+        assert!(run.shows_text("not in the recording"), "marker 1 says so");
+        // And the × stays clear of the floating scroll bar at the right.
+        let bar = egui::Style::default().spacing.scroll.bar_width;
+        let cross = run.node_rect("Delete marker 1");
+        assert!(cross.right() + bar <= 800.0, "{cross:?}");
+    }
+
+    /// N places no marker under the discard prompt: the prompt would be
+    /// asking about something that changed behind it.
+    #[test]
+    fn n_waits_for_the_discard_prompt() {
+        let mut run = run_with_stopped_recording(2);
+        run.app.last_measurement = run
+            .app
+            .recording
+            .samples
+            .back()
+            .map(|s| s.measurement.clone());
+        run.click(run.node_rect("Discard").center());
+        assert!(run.shows_widget("Discard recording"), "the prompt is up");
+        run.key(Key::N);
+        assert!(run.app.markers.is_empty());
+    }
+
+    /// Ctrl+R and N in one frame: the prompt Ctrl+R asks for is not on
+    /// screen yet, and N still waits for it.
+    #[test]
+    fn n_waits_for_a_prompt_asked_for_in_the_same_frame() {
+        let mut run = run_with_stopped_recording(2);
+        // Ctrl+R only answers while connected.
+        run.app.connection.state = ConnectionState::Connected;
+        run.app.last_measurement = run
+            .app
+            .recording
+            .samples
+            .back()
+            .map(|s| s.measurement.clone());
+        let press = |key, modifiers| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers,
+        };
+        run.frame(
+            1.0,
+            vec![
+                press(Key::R, Modifiers::COMMAND),
+                press(Key::N, Modifiers::NONE),
+            ],
+        );
+        assert!(run.app.recording_panel.pending_discard.is_some());
+        assert!(run.app.markers.is_empty());
     }
 
     /// Record over an unexported recording still asks in its own words.
