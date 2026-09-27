@@ -11,7 +11,7 @@ use eframe::egui;
 use std::hash::{Hash, Hasher};
 
 use super::BigMeterMode;
-use super::messages::NoticeKind;
+use super::connection_issue::NoticeKind;
 use crate::display::{self, ReadingRatios};
 
 /// Initial estimate for non-reading content height in big meter mode.

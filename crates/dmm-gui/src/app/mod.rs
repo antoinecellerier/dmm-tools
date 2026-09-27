@@ -3,6 +3,7 @@
 //!
 //! The concerns live in submodules — [`appearance`] (fonts, theme, zoom),
 //! [`connection`] and [`messages`] (the acquisition thread and its channel),
+//! [`connection_issue`] (why there is nothing to read, as text),
 //! [`capture`] (the reading pipeline and the stores it fills),
 //! [`plot_input`], [`top_bar`], [`toast`], [`controls`], [`layout`] (the
 //! reading column), [`meter_fit`] (the big meter's sizing arithmetic),
@@ -13,6 +14,7 @@
 mod appearance;
 mod capture;
 mod connection;
+mod connection_issue;
 mod controls;
 mod export;
 mod held_reading;
@@ -47,9 +49,9 @@ use crate::settings::{Settings, ThemeMode};
 use appearance::{UiColorKey, font_definitions, install_text_styles};
 use capture::Capture;
 use connection::RemoteCommand;
+use connection_issue::ConnectionIssue;
 use export::ExportOutcome;
 use layout::ContentLayout;
-use messages::ConnectionIssue;
 use meter_fit::{FitInputs, MeterFit, WindowContent};
 use recording_panel::RecordingPanel;
 use toast::Toast;
