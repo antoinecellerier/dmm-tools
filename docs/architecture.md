@@ -269,7 +269,8 @@ methods to it, so no panel owns state of its own.
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
 | `app/whats_new.rs` | The "What's New" release-notes viewport |
 | `graph/` | Scrolling graph: history buffer, view navigation, toolbar, main plot, minimap, visible-slice analysis |
-| `display.rs` | The reading itself in its three sizes, with the mode and range dropdowns and the sub-value rows |
+| `display/mod.rs` | The reading itself in its three sizes, with the mode and range dropdowns and the sub-value rows |
+| `display/text.rs` | The reading as text: stable-width digits, and the screen-reader announcement with the fingerprint that says when to rebuild it |
 | `markers.rs` | The markers on readings, oldest first, one per reading |
 | `recording.rs` | The bounded store of full readings — the graph's history, with a recording as a slice of it — and its CSV, JSON and replay rendering |
 | `settings.rs` | Persisted settings and the colour presets |

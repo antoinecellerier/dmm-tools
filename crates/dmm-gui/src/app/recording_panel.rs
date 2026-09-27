@@ -397,7 +397,7 @@ impl App {
     }
 
     /// The menu under the Export… arrow. Keyboard handling follows the
-    /// readout lists in `display.rs`: focus lands on the first entry as the
+    /// readout lists in `display/mod.rs`: focus lands on the first entry as the
     /// menu opens, the arrows move it, Enter picks, and Tab or Esc leave
     /// with the focus back on the arrow.
     fn show_export_menu(&mut self, ui: &mut Ui, arrow: &egui::Response) {
