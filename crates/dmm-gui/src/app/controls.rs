@@ -750,7 +750,10 @@ impl App {
         });
 
         // Mock mode selector (only shown when mock device is selected)
-        if self.selected_device().is_some_and(|d| d.id == "mock") {
+        if self
+            .selected_device()
+            .is_some_and(|d| d.id == dmm_lib::mock::MOCK.id)
+        {
             ui.horizontal_wrapped(|ui| {
                 let has_override = self.settings.overrides.has_mock_mode();
                 // "Auto" = cycle through all modes, and leads the row.

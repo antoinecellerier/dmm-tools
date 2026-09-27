@@ -222,7 +222,9 @@ fn resolve_device_and_clock(
     let device = match (replay_device, device) {
         (Some(id), _) => Some(id.to_string()),
         (None, d @ Some(_)) => d,
-        (None, None) if mock_mode_given || !clock.is_real() => Some("mock".to_string()),
+        (None, None) if mock_mode_given || !clock.is_real() => {
+            Some(dmm_lib::mock::MOCK.id.to_string())
+        }
         (None, None) => None,
     };
     Ok((device, clock))

@@ -589,7 +589,9 @@ impl App {
     /// desync and is left alone: the GUI cannot learn which scenario the
     /// mock cycled to.
     fn repin_mock(&mut self, id: u16) -> bool {
-        if self.selected_device().is_none_or(|d| d.id != "mock")
+        if self
+            .selected_device()
+            .is_none_or(|d| d.id != dmm_lib::mock::MOCK.id)
             || self.settings.mock_mode.is_empty()
         {
             return false;

@@ -14,6 +14,10 @@ pub(crate) mod devices;
 mod scenarios;
 mod state;
 
+/// The mock's registry entry. The GUI shows its scenario picker, and repins
+/// it, for this entry alone.
+pub use devices::MOCK;
+
 use crate::Dmm;
 use crate::clock::Clock;
 use crate::error::{Error, Result};

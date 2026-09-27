@@ -8,7 +8,7 @@ use crate::protocol::registry::{SelectableDevice, factory};
 
 pub(crate) const ACTIVATION: &str = "No setup required \u{2014} this is a simulated device.";
 
-pub(crate) static MOCK: SelectableDevice = SelectableDevice {
+pub static MOCK: SelectableDevice = SelectableDevice {
     id: "mock",
     display_name: "Mock (simulated)",
     aliases: &[],
