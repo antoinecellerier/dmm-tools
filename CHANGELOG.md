@@ -32,7 +32,8 @@
 - **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; now labelled DC and AC, with AC in `aux1` CSV columns every UT61E+ export gains.
 - **A UT181A no longer shows OL, or warns, after each switch** — it shows `----` until the new reading arrives.
 - **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
-- **A UT181A no longer warns about unrecognised data in AC+DC, dB, T1-T2 or MIN/MAX**
+- **A UT181A in Peak no longer sends Auto range or MIN/MAX** — the meter refused both, and `dmm-cli capture` gave up sweeping after three Peak modes.
+- **A UT181A no longer warns in AC+DC, dB, T1-T2 or MIN/MAX**
 
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 

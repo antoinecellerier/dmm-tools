@@ -1365,11 +1365,11 @@ open items below are closed.
     0 on every min/max frame~~ — **FIXED** 2026-09-27: named AC, DC,
     Voltage, Impedance, T1 and T2 (spec §5.3), misc bit 0 silent in
     min/max.
-  - In a Peak variant the meter answers ER to SET_RANGE 0 and to
-    SET_MIN_MAX 1 (spec §4.2, §7), but the tool offers both. In the
-    capture, the sweep's restore re-sent the refused Auto on three Peak
-    modes, which spent the failure budget and left mA AC, A and
-    temperature unswept.
+  - ~~In a Peak variant the meter answers ER to SET_RANGE 0 and to
+    SET_MIN_MAX 1 (spec §4.2, §7), but the tool offers both~~ — **FIXED**
+    2026-09-27: neither is offered there (`mode::is_peak`). In the capture,
+    the sweep's restore re-sent the refused Auto on three Peak modes, which
+    spent the failure budget and left mA AC, A and temperature unswept.
 - Manual range in a Peak variant — the meter refuses Auto there, and
   whether it takes a manual rung is untested. Needs a meter: in µA DC
   Peak, `dmm-cli --device ut181a set range 6000µA`, then `get range`

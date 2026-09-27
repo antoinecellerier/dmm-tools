@@ -153,10 +153,12 @@ impl Ut181aProtocol {
     /// HOLD is a button press; REL is a mode-word variant and only exists
     /// where the vendor app enables it (`mode::rel_supported`); MIN/MAX is
     /// SET_MIN_MAX's on/off byte, not the MAX/MIN ring the cycling meters
-    /// walk. Peak is a mode variant on this meter, reached through
-    /// [`Setting::Mode`], so it is not offered here.
+    /// walk, and a Peak variant refuses it (`mode::is_peak`). Peak is a mode
+    /// variant on this meter, reached through [`Setting::Mode`], so it is not
+    /// offered here.
     pub(super) fn flag_states(setting: FlagSetting, mode: u16) -> &'static [u16] {
         match setting {
+            FlagSetting::MinMax if mode::is_peak(mode) => &[],
             FlagSetting::Hold | FlagSetting::MinMax => &[0, 1],
             FlagSetting::Rel if mode::rel_supported(mode) => &[0, 1],
             FlagSetting::Rel | FlagSetting::Peak => &[],

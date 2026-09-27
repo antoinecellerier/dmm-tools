@@ -40,8 +40,8 @@ use crate::protocol::cycle::FlagSetting;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol,
-    Setting, Stability, unsupported_setting,
+    AUTO_RANGE_ID, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing,
+    Protocol, Setting, Stability, unsupported_setting,
 };
 use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
@@ -153,11 +153,20 @@ impl Protocol for Ut181aProtocol {
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
+        // A Peak variant answers ER to auto range and to MIN/MAX (spec §4.2),
+        // so neither is sent there, as `choices` offers neither.
+        if matches!(command, "auto" | "minmax")
+            && let Some(current) = self.last_mode_raw.filter(|&m| mode::is_peak(m))
+        {
+            return Err(Error::UnsupportedCommand(format!(
+                "{command} in {} ({current:#06x}): the meter refuses it in Peak",
+                decode_mode_word(current)
+            )));
+        }
         let frame = match command {
-            // 0x12 = button-press command, 0x5A = HOLD button code.
-            // antage (the only reference implementation that transmits
-            // this) sends the two-byte payload; sending bare [0x12] is
-            // untested. Hardware check pending.
+            // 0x12 = button-press command, 0x5A = HOLD button code, the two
+            // bytes the vendor app sends and a real meter toggles HOLD on
+            // (spec §4.2). Bare [0x12] is untested.
             "hold" => build_command(&[0x12, 0x5A]),
             // REL is not its own opcode: it is SET_MODE with nibble 0 flipped
             // between 1 (plain) and 2 (relative), which is also how it turns
@@ -277,9 +286,14 @@ impl Protocol for Ut181aProtocol {
                     )));
                 }
                 let Some(choice) = ladder.iter().find(|c| c.id == id) else {
+                    let rungs = ladder.iter().filter(|c| c.id != AUTO_RANGE_ID).count();
+                    let what = if id == AUTO_RANGE_ID {
+                        "auto range".to_string()
+                    } else {
+                        format!("range {id}")
+                    };
                     return Err(Error::UnsupportedCommand(format!(
-                        "range {id} is not one of the {} {} offers",
-                        ladder.len() - 1,
+                        "{what} is not one of the {rungs} ranges {} offers",
                         decode_mode_word(current)
                     )));
                 };
@@ -913,6 +927,47 @@ mod tests {
             mode::range_choices(0x7311, 0, true).is_empty(),
             "pulse width"
         );
+    }
+
+    /// A real UT181A in Peak answers ER to auto range and to MIN/MAX
+    /// (issue #5, 2026-09-27), so neither is offered, and asking for either
+    /// costs no I/O. The rungs and HOLD stay.
+    #[test]
+    fn a_peak_variant_offers_neither_auto_range_nor_min_max() {
+        let (mut proto, mock) = proto_in(0x8131, 1);
+        let m = parse_measurement(&make_payload(0x8131, 1.0, 0x20, b"uADC\0\0\0\0", 0, 0)).unwrap();
+        let ids =
+            |setting| -> Vec<u16> { proto.choices(setting, &m).iter().map(|c| c.id).collect() };
+        assert_eq!(ids(Setting::Range), [1, 2]);
+        assert!(ids(Setting::MinMax).is_empty());
+        assert_eq!(ids(Setting::Hold), [0, 1]);
+
+        let err = proto.select(&mock, Setting::Range, 0).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("auto range is not one of the 2")),
+            "got {err:?}"
+        );
+        let err = proto.select(&mock, Setting::MinMax, 1).unwrap_err();
+        assert!(matches!(err, Error::UnsupportedCommand(_)), "got {err:?}");
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    /// The commands behind the GUI's AUTO and MIN/MAX buttons are refused in
+    /// Peak without I/O, as the choices are.
+    #[test]
+    fn a_peak_variant_refuses_the_auto_and_min_max_commands() {
+        for command in ["auto", "minmax"] {
+            let (mut proto, mock) = proto_in(0x9131, 1);
+            let err = proto.send_command(&mock, command).unwrap_err();
+            assert!(
+                matches!(&err, Error::UnsupportedCommand(m) if m.contains("refuses it in Peak")),
+                "{command}: got {err:?}"
+            );
+            assert!(mock.written.borrow().is_empty(), "{command}");
+        }
+        let (mut proto, mock) = proto_in(0x9111, 1);
+        proto.send_command(&mock, "auto").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 00 06 00"));
     }
 
     #[test]

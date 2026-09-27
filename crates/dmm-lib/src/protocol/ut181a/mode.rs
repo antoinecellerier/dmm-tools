@@ -5,9 +5,10 @@
 //! manual range ladder. The vendor Windows app never sends a mode word from
 //! another family, and neither do we — the meter would have to be refused it.
 //!
-//! Every word here is traced from the vendor app, not from hardware: see
+//! Every word here is traced from the vendor app: see
 //! `docs/research/ut181/reverse-engineered-protocol.md`
-//! §6.1 Mode switching (SET_MODE) -- [VENDOR].
+//! §6.1 Mode switching (SET_MODE) -- [VENDOR]. A real meter has since sent 58
+//! of them and taken SET_MODE and SET_RANGE within a family (§6, §7).
 
 use super::parse::{decode_mode_word, lookup_range_label};
 use crate::protocol::{AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice};
@@ -302,10 +303,24 @@ pub(crate) fn mode_choices(current_mode_raw: u16) -> Vec<Choice> {
         .collect()
 }
 
+/// Whether `word` is a Peak variant (research spec §6.1's "Peak" captions:
+/// nibble 1 = 3, except mV DC, whose Peak is nibble 1 = 2).
+///
+/// A real UT181A leaves auto-range in Peak and answers ER to SET_RANGE 0 and
+/// to SET_MIN_MAX there (spec §4.2, §7; issue #5, 2026-09-27).
+pub(crate) fn is_peak(word: u16) -> bool {
+    matches!(
+        word & 0xFFF0,
+        0x1130 | 0x2130 | 0x3130 | 0x4120 | 0x8130 | 0x8230 | 0x9130 | 0x9230 | 0xA130 | 0xA230
+    )
+}
+
 /// The ranges reachable in `word`, for `Protocol::choices`.
 ///
 /// Auto first, then the family's manual ladder — which is what SET_RANGE
-/// indexes, so the choice id *is* the byte the command takes. Empty for a
+/// indexes, so the choice id *is* the byte the command takes. No Auto in a
+/// Peak variant, where the meter refuses it (`is_peak`); the rungs stay, as
+/// the vendor app offers them. Empty for a
 /// fixed-range family (A DC/AC, temperature, continuity, conductance, diode),
 /// for a word from no known family, and for a ladder whose rungs have no
 /// label to offer them by: the vendor app lists four items for duty cycle
@@ -319,12 +334,15 @@ pub(crate) fn range_choices(word: u16, range_raw: u8, auto_range: bool) -> Vec<C
     {
         return Vec::new();
     }
-    let mut choices = vec![Choice {
-        id: AUTO_RANGE_ID,
-        label: Cow::Borrowed(AUTO_RANGE_LABEL),
-        // The meter says so twice — the auto-range flag, and range byte 0.
-        current: auto_range || range_raw == 0,
-    }];
+    let mut choices = Vec::new();
+    if !is_peak(word) {
+        choices.push(Choice {
+            id: AUTO_RANGE_ID,
+            label: Cow::Borrowed(AUTO_RANGE_LABEL),
+            // The meter says so twice — the auto-range flag, and range byte 0.
+            current: auto_range || range_raw == 0,
+        });
+    }
     choices.extend((1..=f.manual_ranges).map(|rung| Choice {
         id: u16::from(rung),
         label: Cow::Borrowed(lookup_range_label(word, rung)),
@@ -382,6 +400,17 @@ pub(crate) fn next_manual_range(word: u16, last_range: u8) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every Peak caption of research spec §6.1, and nothing else.
+    #[test]
+    fn peak_variants_are_the_peak_captions() {
+        let peak = [
+            0x1131, 0x2131, 0x3131, 0x4121, 0x8131, 0x8231, 0x9131, 0x9231, 0xA131, 0xA231,
+        ];
+        for word in known_words() {
+            assert_eq!(is_peak(word), peak.contains(&word), "{word:#06x}");
+        }
+    }
 
     /// The table is indexed by `base`, so a duplicate would silently shadow
     /// a family, and a `base` with low bits set could never be matched.
