@@ -5,7 +5,7 @@
 //! an issue does not wait for a release. The maintainer pastes a few steps into
 //! the thread and the reporter runs them with `capture --plan`.
 
-use crate::capture::{CaptureStep, FREEFORM_STEP_ID};
+use super::{CaptureStep, FREEFORM_STEP_ID};
 use dmm_lib::flags::Flag;
 use dmm_lib::protocol::{Expect, Need, RangeExpect, ValueExpect};
 use serde::Deserialize;

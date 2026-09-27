@@ -3,7 +3,7 @@
 
 use super::input::Input;
 use super::step::CaptureStep;
-use crate::watch::Baseline;
+use super::watch::Baseline;
 use console::style;
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::Measurement;
@@ -65,7 +65,7 @@ pub(crate) struct CaptureReport {
     /// Whether the run walked the settings itself after each mode step, so a
     /// report with no sub-steps says why it has none.
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub drive: Option<crate::drive::Drive>,
+    pub drive: Option<super::drive::Drive>,
     pub steps: Vec<StepResult>,
 }
 
@@ -121,13 +121,13 @@ pub(crate) struct FrameRecord {
     pub baud: Option<u32>,
 }
 
-impl From<&crate::recording::WireEvent> for FrameRecord {
-    fn from(e: &crate::recording::WireEvent) -> Self {
+impl From<&super::recording::WireEvent> for FrameRecord {
+    fn from(e: &super::recording::WireEvent) -> Self {
         FrameRecord {
             at_ms: e.at_ms,
             dir: match e.dir {
-                crate::recording::Direction::Tx => FrameDir::Tx,
-                crate::recording::Direction::Rx => FrameDir::Rx,
+                super::recording::Direction::Tx => FrameDir::Tx,
+                super::recording::Direction::Rx => FrameDir::Rx,
             },
             hex: e
                 .bytes
@@ -786,7 +786,7 @@ pub(super) fn captured_count(
 mod tests {
     use super::*;
     use crate::capture::step::cli_step;
-    use crate::watch::{STABLE_FRAMES, StateWatcher, Verdict};
+    use crate::capture::watch::{STABLE_FRAMES, StateWatcher, Verdict};
     use dmm_lib::measurement::MeasuredValue;
     use dmm_lib::protocol::make_test_measurement;
 
@@ -1246,9 +1246,9 @@ mod tests {
     /// report from before rate changes were recorded still loads.
     #[test]
     fn a_rate_change_is_a_feature_record_with_its_rate() {
-        let event = crate::recording::WireEvent {
+        let event = crate::capture::recording::WireEvent {
             at_ms: 3,
-            dir: crate::recording::Direction::Tx,
+            dir: crate::capture::recording::Direction::Tx,
             step: None,
             bytes: Vec::new(),
             baud: Some(19200),

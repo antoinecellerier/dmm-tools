@@ -2,12 +2,12 @@
 //! asks for, and the frames that wait puts on the wire.
 
 use super::input::{ErrorLog, Input};
+use super::recording::{self, SharedRecorder, WireEvent};
 use super::report::{
     CaptureReport, FrameRecord, SampleData, StepResult, StepStatus, Trust, already_captured,
     needs_attention, upsert_step,
 };
-use crate::recording::{self, SharedRecorder, WireEvent};
-use crate::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
+use super::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
 use console::{Key, style};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::ValueExpect;
@@ -419,7 +419,7 @@ pub(crate) fn run_capture_step(
     input: &Input,
     prev: &PrevState,
     trust: &Trust,
-    driver: &mut crate::drive::Driver,
+    driver: &mut super::drive::Driver,
 ) -> Result<StepOutcome, Box<dyn std::error::Error>> {
     // Check if already captured (resume)
     if already_captured(report, step.id) {
@@ -439,7 +439,7 @@ pub(crate) fn run_capture_step(
     // A mode a button on the meter reaches — continuity from Ω, duty
     // from Hz — is the tool's to switch to; only the dial is the operator's.
     if interactive && trust.drives() {
-        crate::drive::switch_mode_from(dmm, recorder, step, prev.last.as_ref(), driver, report)?;
+        super::drive::switch_mode_from(dmm, recorder, step, prev.last.as_ref(), driver, report)?;
     }
 
     // One pass per attempt: `r` at the confirmation prompt drops the samples
@@ -830,7 +830,7 @@ mod tests {
     fn step_frames_are_filtered_and_capped_to_the_newest() {
         let event = |at_ms: u64, step: Option<&str>| WireEvent {
             at_ms,
-            dir: crate::recording::Direction::Rx,
+            dir: crate::capture::recording::Direction::Rx,
             step: step.map(str::to_string),
             bytes: vec![0xAB, 0xCD],
             baud: None,
@@ -860,7 +860,7 @@ mod tests {
         let events: Vec<WireEvent> = (0..MAX_FRAMES_PER_STEP as u64 + 450)
             .map(|at_ms| WireEvent {
                 at_ms,
-                dir: crate::recording::Direction::Rx,
+                dir: crate::capture::recording::Direction::Rx,
                 step: Some("ncv".to_string()),
                 bytes: vec![0xAB, 0xCD],
                 baud: None,
@@ -1013,8 +1013,8 @@ mod tests {
     /// settling run files only what it read after it.
     #[test]
     fn a_settling_step_files_only_what_it_read_after_the_wait() {
+        use crate::capture::drive::Driver;
         use crate::capture::input::Input;
-        use crate::drive::Driver;
 
         // Same reading with HOLD on, as the meter sends it (flag nibbles
         // "201"): a state the baseline has not seen, so the watcher takes it.
@@ -1044,7 +1044,7 @@ mod tests {
             let mut dmm = dmm_replaying(responses);
             // The step's frames are recorded through the transport the
             // recorder wraps; this one only has to exist.
-            let (_unused, recorder) = crate::recording::RecordingTransport::new(Box::new(
+            let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
                 dmm_lib::transport::NullTransport,
             ));
             let mut report = CaptureReport::default();
@@ -1107,8 +1107,8 @@ mod tests {
     /// back, unless no reading is what the step expects.
     #[test]
     fn a_step_samples_once_the_display_is_back() {
+        use crate::capture::drive::Driver;
         use crate::capture::input::Input;
-        use crate::drive::Driver;
 
         // Hz blank just after a switch, then 50.05 Hz — both from the capture.
         let blank = ut181a_frame(
@@ -1130,7 +1130,7 @@ mod tests {
                 (device.new_protocol)(),
             )
             .unwrap();
-            let (_unused, recorder) = crate::recording::RecordingTransport::new(Box::new(
+            let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
                 dmm_lib::transport::NullTransport,
             ));
             let step = CaptureStep {
@@ -1180,8 +1180,8 @@ mod tests {
     /// whose samples leave its mode is retaken and files only its own.
     #[test]
     fn a_step_the_meter_left_while_sampling_is_retaken() {
+        use crate::capture::drive::Driver;
         use crate::capture::input::Input;
-        use crate::drive::Driver;
 
         let (cont, diode) = (mode_frame(0x07), mode_frame(0x08));
         // The wait settles on three frames, then the samples: away, and back.
@@ -1190,8 +1190,9 @@ mod tests {
         // The retake's wait and samples.
         responses.extend(vec![cont; 3 + 4]);
         let mut dmm = dmm_replaying(responses);
-        let (_unused, recorder) =
-            crate::recording::RecordingTransport::new(Box::new(dmm_lib::transport::NullTransport));
+        let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
+            dmm_lib::transport::NullTransport,
+        ));
         let step = CaptureStep {
             expect: Some(dmm_lib::protocol::Expect::mode("Continuity")),
             ..cli_step("cont", false, false)
@@ -1235,7 +1236,7 @@ mod tests {
     /// pressed. A step that waits for Enter files what the meter shows then.
     #[test]
     fn a_step_that_waits_for_enter_ignores_the_states_before_it() {
-        use crate::drive::Driver;
+        use crate::capture::drive::Driver;
 
         /// Presses Enter as it hands out response `at`: the operator reads
         /// the new state off the LCD, then presses the key.
@@ -1308,8 +1309,9 @@ mod tests {
             (device.new_protocol)(),
         )
         .unwrap();
-        let (_unused, recorder) =
-            crate::recording::RecordingTransport::new(Box::new(dmm_lib::transport::NullTransport));
+        let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
+            dmm_lib::transport::NullTransport,
+        ));
         let step = CaptureStep {
             wait_for_enter: true,
             ..cli_step("rel", false, false)

@@ -209,10 +209,10 @@ CLI binary using `clap`. Its modules:
 | `capture/session.rs` | The passes of a run: meter handshake, the device's steps and their equipment, end-of-run review, freeform captures |
 | `capture/input.rs` | Keyboard reader thread polled between readings; per-step log of parse rejections |
 | `capture/listing.rs` | `--list-steps` output (text and issue checklist); validation of `--steps` names |
-| `drive.rs` | Automatic sweeps of driveable settings after a mode step, so every range and flag reaches the report unprompted |
-| `plan.rs` | Maintainer-written step list from YAML, run with `capture --plan` |
-| `recording.rs` | Wire-byte recorder around a transport, including bytes the framing layer rejected |
-| `watch.rs` | Capture step advance logic: when the meter has settled into the state a step asked for, semantic (`expect`) or raw payload diff against the previous step |
+| `capture/drive.rs` | Automatic sweeps of driveable settings after a mode step, so every range and flag reaches the report unprompted |
+| `capture/plan.rs` | Maintainer-written step list from YAML, run with `capture --plan` |
+| `capture/recording.rs` | Wire-byte recorder around a transport, including bytes the framing layer rejected |
+| `capture/watch.rs` | Capture step advance logic: when the meter has settled into the state a step asked for, semantic (`expect`) or raw payload diff against the previous step |
 | `format.rs` | What a run writes per reading: text, CSV, JSON, or the meter's own frames as a replay file |
 | `output.rs` | Where it goes: stdout, `-o FILE`, or a file the run names itself once the first reading has arrived |
 | `test_fixtures.rs` | Tests only: the fake meter and the helpers more than one test module uses |

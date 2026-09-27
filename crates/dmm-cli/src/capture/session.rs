@@ -3,6 +3,7 @@
 
 use super::input::{ErrorLog, Input};
 use super::listing::step_included;
+use super::recording::{self, SharedRecorder};
 use super::report::{
     CaptureReport, SampleData, StepResult, StepStatus, Trust, already_captured,
     baseline_from_report, needs_attention, save_report, upsert_step,
@@ -11,7 +12,6 @@ use super::step::{
     CaptureStep, Confirmed, NO_RESPONSE, PrevState, WHAT_SHOWN, ask_confirmation, capture_samples,
     empty_result, frames_for_step, run_capture_step,
 };
-use crate::recording::{self, SharedRecorder};
 use console::style;
 use dmm_lib::protocol::{Need, Stability};
 
@@ -126,7 +126,7 @@ pub(super) fn run_protocol_capture(
     output_path: &str,
     input: &Input,
     trust: &mut Trust,
-    driver: &mut crate::drive::Driver,
+    driver: &mut super::drive::Driver,
 ) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
     // Keep only what this run selects: the checklist below covers the steps
     // that will actually run.
@@ -194,7 +194,7 @@ pub(super) fn run_protocol_capture(
             && step.command.is_none()
             && let Some(last) = &outcome.last
         {
-            crate::drive::sweep_step(dmm, recorder, step, last, driver, report, output_path)?;
+            super::drive::sweep_step(dmm, recorder, step, last, driver, report, output_path)?;
         }
         prev.last = outcome.last;
         // From the report, so a resumed run gets its baseline from the steps

@@ -2,15 +2,11 @@ mod capture;
 mod choice;
 mod cli;
 mod cmd;
-mod drive;
 mod format;
 mod open;
 mod output;
-mod plan;
-mod recording;
 #[cfg(test)]
 mod test_fixtures;
-mod watch;
 
 use clap::{CommandFactory, FromArgMatches};
 use cli::{Cli, Cmd, build_after_long_help, build_device_help};

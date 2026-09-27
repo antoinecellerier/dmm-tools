@@ -1,7 +1,7 @@
 //! Opening the meter a command runs against — the one named, or the one
 //! detection finds — and the setup help a failed open prints.
 
-use crate::recording;
+use crate::capture::recording;
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_shared::help::{ConnectedAdapters, LinksSearched};

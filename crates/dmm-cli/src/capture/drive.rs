@@ -7,11 +7,11 @@
 //! `select` reaches a mode a button offers on the dial position the step is
 //! already at, which `switch_mode` does before the step is watched.
 
-use crate::capture::{
+use super::recording::{self, SharedRecorder};
+use super::{
     CaptureReport, CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, frames_for_step,
     needs_attention, read_past_blank, samples_after_switch, save_report, upsert_step,
 };
-use crate::recording::{self, SharedRecorder};
 use console::style;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::Setting;
@@ -775,7 +775,7 @@ mod tests {
         use dmm_lib::transport::{NullTransport, Transport};
 
         let (transport, recorder) =
-            crate::recording::RecordingTransport::new(Box::new(NullTransport));
+            crate::capture::recording::RecordingTransport::new(Box::new(NullTransport));
         let mut dmm = dmm_lib::Dmm::new(Box::new(transport) as Box<dyn Transport>, proto).unwrap();
         let last = dmm.request_measurement().unwrap();
 
@@ -888,7 +888,7 @@ mod tests {
     fn meter(proto: Box<dyn dmm_lib::protocol::Protocol>) -> Bench {
         use dmm_lib::transport::{NullTransport, Transport};
         let (transport, recorder) =
-            crate::recording::RecordingTransport::new(Box::new(NullTransport));
+            crate::capture::recording::RecordingTransport::new(Box::new(NullTransport));
         let mut dmm = dmm_lib::Dmm::new(Box::new(transport) as Box<dyn Transport>, proto).unwrap();
         let last = dmm.request_measurement().unwrap();
         Bench {
@@ -1287,7 +1287,7 @@ mod tests {
         use dmm_lib::transport::{NullTransport, Transport};
 
         let (transport, recorder) =
-            crate::recording::RecordingTransport::new(Box::new(NullTransport));
+            crate::capture::recording::RecordingTransport::new(Box::new(NullTransport));
         let mut dmm = dmm_lib::Dmm::new(
             Box::new(transport) as Box<dyn Transport>,
             Fails::boxed(

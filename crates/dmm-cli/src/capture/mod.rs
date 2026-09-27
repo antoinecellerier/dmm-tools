@@ -1,11 +1,15 @@
 //! The `capture` command: the guided run that walks a meter through its
 //! protocol's steps and writes the report a device report is built on.
 
+mod drive;
 mod input;
 mod listing;
+mod plan;
+pub(crate) mod recording;
 mod report;
 mod session;
 mod step;
+mod watch;
 
 pub(crate) use input::{ErrorLog, Input};
 pub(crate) use listing::{StepListFormat, list_steps};
@@ -16,9 +20,9 @@ pub(crate) use step::{
     CaptureStep, FREEFORM_STEP_ID, frames_for_step, read_past_blank, samples_after_switch,
 };
 
-use crate::recording::{self, SharedRecorder};
 use console::style;
 use listing::validate_step_filter;
+use recording::SharedRecorder;
 use report::{
     FrameRecord, Trust, captured_count, load_or_create_report, no_response_path,
     populate_report_metadata,
@@ -42,7 +46,7 @@ pub(crate) fn cmd_capture(
         filter.map(|v| v.into_iter().collect());
     // Before the meter is touched: a plan the tool can't read is the
     // reporter's typo, and they should hear about it straight away.
-    let plan_steps = plan_path.as_deref().map(crate::plan::load).transpose()?;
+    let plan_steps = plan_path.as_deref().map(plan::load).transpose()?;
 
     let (device_name, supported) = match verify_meter(&mut dmm, device) {
         Ok(verified) => verified,
@@ -120,7 +124,7 @@ pub(crate) fn cmd_capture(
         &gate_scope,
     );
     report.tier = Some(trust.tier);
-    let mut driver = crate::drive::Driver::new(!no_drive).settling(settle);
+    let mut driver = drive::Driver::new(!no_drive).settling(settle);
     let pass = run_protocol_capture(
         &mut dmm,
         &recorder,
@@ -133,7 +137,7 @@ pub(crate) fn cmd_capture(
         &mut trust,
         &mut driver,
     )?;
-    report.drive = Some(crate::drive::Drive::merged(report.drive, driver.state()));
+    report.drive = Some(drive::Drive::merged(report.drive, driver.state()));
 
     run_batch_review(&mut report, &pass.to_review, &output_path, &input)?;
 
@@ -284,7 +288,8 @@ mod tests {
 
         let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
         let wire = Chunks(RefCell::new(vec![vec![0x55, 0xAA, 0x01], vec![0x02]]));
-        let (transport, recorder) = crate::recording::RecordingTransport::new(Box::new(wire));
+        let (transport, recorder) =
+            crate::capture::recording::RecordingTransport::new(Box::new(wire));
         let dmm = dmm_lib::Dmm::new(
             Box::new(transport) as Box<dyn Transport>,
             (device.new_protocol)(),
