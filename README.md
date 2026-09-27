@@ -90,9 +90,9 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 <!-- devices:start -->
 | Meter | USB | Bluetooth | Issue |
 |---|---|---|---|
-| UNI-T UT61E+ | ✅ Verified | ✅ Verified (adapter) | — |
-| UNI-T UT61B+ | ✅ Verified | 🧪 Experimental (adapter) | [#19](https://github.com/antoinecellerier/dmm-tools/issues/19) |
-| UNI-T UT61D+, UT161B/D/E | 🧪 Experimental | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
+| UNI-T UT61E+, UT161E | ✅ Verified | ✅ Verified (adapter) | — |
+| UNI-T UT61B+, UT161B | ✅ Verified | 🧪 Experimental (adapter) | [#19](https://github.com/antoinecellerier/dmm-tools/issues/19) |
+| UNI-T UT61D+, UT161D | 🧪 Experimental | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT60BT | — | 🧪 Experimental (built in) | [#26](https://github.com/antoinecellerier/dmm-tools/issues/26) |
 | UNI-T UT202BT | — | 🧪 Experimental (built in) | [#27](https://github.com/antoinecellerier/dmm-tools/issues/27) |
 | UNI-T UT171A/B/C | 🧪 Experimental | 🧪 Experimental (adapter) | [#4](https://github.com/antoinecellerier/dmm-tools/issues/4) |
