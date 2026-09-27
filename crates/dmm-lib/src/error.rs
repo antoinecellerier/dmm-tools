@@ -82,7 +82,7 @@ pub enum Error {
     /// radio built in has no adapter for the message to name.
     #[error(
         "no meter answered over the {}",
-        crate::binary_help::bridge_link_name(.bridge, *.built_in_radio)
+        crate::transport::bridge_link_name(.bridge, *.built_in_radio)
     )]
     DeviceNotIdentified {
         bridge: &'static str,
@@ -139,7 +139,7 @@ pub enum BluetoothOnlyMiss {
 /// The sentence both binaries print for a [`Error::BluetoothOnly`].
 ///
 /// Switched off, it names no remedy: the switch is each binary's own
-/// (`binary_help::cli_bluetooth_off_hint`, `gui_bluetooth_off_hint`).
+/// (`dmm_shared::help::cli_bluetooth_off_hint`, `gui_bluetooth_off_hint`).
 fn bluetooth_only_message(model: &str, miss: &BluetoothOnlyMiss) -> String {
     let why = match miss {
         BluetoothOnlyMiss::NotInRange => return format!("no {model} found in Bluetooth range"),

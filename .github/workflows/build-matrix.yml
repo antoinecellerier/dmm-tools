@@ -140,7 +140,7 @@ jobs:
             echo "::error::dmm-cli --version printed nothing"
             exit 1
           fi
-          # binary_help::version_string only appends the commit on -dev
+          # dmm_shared::help::version_string only appends the commit on -dev
           # versions, so a tagged release legitimately has no hash to check.
           case "$OUT" in
             *-dev*)

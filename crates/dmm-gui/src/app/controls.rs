@@ -1,6 +1,6 @@
-use dmm_lib::binary_help::BLUETOOTH_SETTING;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
+use dmm_shared::help::BLUETOOTH_SETTING;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;

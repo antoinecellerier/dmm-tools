@@ -62,7 +62,7 @@ jobs:
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
           # Between "Release vX" and the following "-dev" bump, main carries a
-          # plain release version, and binary_help::version_string appends no
+          # plain release version, and dmm_shared::help::version_string appends no
           # commit to it. A dev build from that window would be indistinguishable
           # from the release it shadows, so skip the window entirely.
           # Read through cargo rather than the manifest text: every member
@@ -126,7 +126,7 @@ jobs:
           # "latest" excludes prereleases, so this resolves to the newest stable.
           PREV=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
           BUILD_DATE=$(date -u +%Y-%m-%d)
-          # Exactly what binary_help::version_label renders in the GUI, and what
+          # Exactly what dmm_shared::help::version_label renders in the GUI, and what
           # dmm-cli --version prints, so a pasted bug report names a release.
           # The date is left out: GitHub already columns it in the release list.
           echo "RELEASE_NAME=v${VERSION} (${SHORT_SHA})" >> "$GITHUB_ENV"

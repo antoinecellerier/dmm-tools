@@ -2,10 +2,10 @@
 //! the messages the device thread sends, and classifying the reason there is
 //! nothing to show into the help text the reading column renders.
 
-use dmm_lib::binary_help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use dmm_lib::measurement::{MainLabel, Measurement};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::{MeterKeys, registry};
+use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -213,7 +213,7 @@ impl ConnectionIssue {
                 // The remedy is the GUI's own switch; the library's sentence
                 // names none.
                 dmm_lib::error::BluetoothOnlyMiss::SwitchedOff => Self::BluetoothNotSearched {
-                    message: format!("{err}. {}", dmm_lib::binary_help::gui_bluetooth_off_hint()),
+                    message: format!("{err}. {}", dmm_shared::help::gui_bluetooth_off_hint()),
                 },
                 _ => Self::BluetoothNotSearched {
                     message: format!("{err}."),
@@ -241,7 +241,7 @@ fn adapter_not_found_help(selector: &str) -> String {
     if !matches!(adapters, ConnectedAdapters::None) {
         msg.push_str("\n\nRestart with the correct --adapter value.");
     }
-    if let Some(hint) = dmm_lib::binary_help::colonless_address_hint(selector) {
+    if let Some(hint) = dmm_shared::help::colonless_address_hint(selector) {
         msg.push_str("\n\n");
         msg.push_str(&hint);
     }
@@ -252,17 +252,15 @@ fn adapter_not_found_help(selector: &str) -> String {
 /// meter that could have been behind that bridge.
 ///
 /// The meters come grouped by their steps, as the CLI lists them
-/// ([`dmm_lib::binary_help::activation_groups`]).
+/// ([`dmm_shared::help::activation_groups`]).
 fn not_identified_help(bridge: &str, built_in_radio: bool) -> String {
     let mut msg = format!(
         "The {} is connected but no meter identified itself.\n\n\
          Switch on the meter's data transmission, or pick the model in \
          Settings (\u{2699}):\n",
-        dmm_lib::binary_help::bridge_link_name(bridge, built_in_radio)
+        dmm_lib::transport::bridge_link_name(bridge, built_in_radio)
     );
-    for (steps, names) in
-        dmm_lib::binary_help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
-    {
+    for (steps, names) in dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge)) {
         msg.push('\n');
         msg.push_str(&names.join(", "));
         msg.push('\n');
@@ -1155,7 +1153,7 @@ impl App {
                 (
                     format!(
                         "{} Report feedback.",
-                        dmm_lib::binary_help::experimental_warning(
+                        dmm_shared::help::experimental_warning(
                             profile.model_name,
                             profile.stability
                         )
@@ -1765,7 +1763,7 @@ mod tests {
     fn a_quiet_meter_names_its_bluetooth_link() {
         for (id, link) in [("ut61eplus", "adapter"), ("ut60bt", "link")] {
             let mut app = app(id, false);
-            app.connection.link = Some(dmm_lib::binary_help::Link::Bluetooth);
+            app.connection.link = Some(dmm_lib::transport::Link::Bluetooth);
             let n = notice_for(&mut app, ConnectionIssue::Other("timed out".to_string()));
             assert_eq!(n.kind, NoticeKind::NoResponse);
             assert!(

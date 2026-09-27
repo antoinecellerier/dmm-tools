@@ -136,7 +136,7 @@ pub(crate) fn render_replay(
     samples: std::collections::vec_deque::Iter<'_, Sample>,
     device_id: &str,
     model: Option<&str>,
-    link: Option<dmm_lib::binary_help::Link>,
+    link: Option<dmm_lib::transport::Link>,
 ) -> Option<String> {
     let mut rest = samples.peekable();
     let first = *rest.peek()?;
@@ -1534,7 +1534,7 @@ mod tests {
             samples.iter(),
             "ut61eplus",
             Some("UNI-T UT61E+"),
-            Some(dmm_lib::binary_help::Link::Bluetooth),
+            Some(dmm_lib::transport::Link::Bluetooth),
         )
         .expect("frames with wire bytes");
 
@@ -1542,7 +1542,7 @@ mod tests {
         assert_eq!(replay.device.id, "ut61eplus");
         assert_eq!(replay.model.as_deref(), Some("UNI-T UT61E+"));
         // The link the session was on, so playing the file back says so too.
-        assert_eq!(replay.link, Some(dmm_lib::binary_help::Link::Bluetooth));
+        assert_eq!(replay.link, Some(dmm_lib::transport::Link::Bluetooth));
         assert_eq!(replay.duration(), Duration::from_millis(500));
         chrono::DateTime::parse_from_rfc3339(&replay.recorded)
             .expect("`# recorded:` is what --replay parses as a clock origin");

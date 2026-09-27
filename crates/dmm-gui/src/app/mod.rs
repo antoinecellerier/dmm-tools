@@ -188,7 +188,7 @@ struct CaptureLayout {
     /// line. Taken alongside `device_id` and for the same reason: a
     /// disconnect clears the connection's link, and a file exported after
     /// unplugging would then claim the cable every unmarked file is read as.
-    link: Option<dmm_lib::binary_help::Link>,
+    link: Option<dmm_lib::transport::Link>,
     /// Sub-value slots the meter itself can fill in the buffered samples,
     /// taken alongside `device` and for the same reason: the CSV column layout has to describe the meter the
     /// samples came from, not whatever is selected at export time.
@@ -272,7 +272,7 @@ pub(super) struct Connection {
     /// What the meter is answering over — for a replay, what its recording
     /// was made over. `None` while disconnected, and for the mock, which is
     /// on no link at all.
-    pub(super) link: Option<dmm_lib::binary_help::Link>,
+    pub(super) link: Option<dmm_lib::transport::Link>,
     /// Commands supported by the connected protocol.
     pub(super) supported_commands: Vec<String>,
     /// The function and context keys the connected protocol lists, drawn

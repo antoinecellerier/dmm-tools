@@ -213,7 +213,7 @@ impl MockMode {
 
     /// Every label, comma-separated: the list `--mock-mode` help and the
     /// parse error both quote, so the two can't name different modes.
-    pub(crate) fn label_list() -> String {
+    pub fn label_list() -> String {
         MockMode::ALL
             .iter()
             .map(|m| m.label())

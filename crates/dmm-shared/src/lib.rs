@@ -13,7 +13,8 @@
 //! reports and exports are all user data that must survive a crash
 //! mid-write); [`export`], the shape and file name of what the two write
 //! out, so a reading saved from the GUI and one written by the CLI read the
-//! same; and [`logging`], the log levels both start with. The canonical settings location is
+//! same; [`help`], the help and version text both print; and [`logging`],
+//! the log levels both start with. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`).
 //!
@@ -23,6 +24,7 @@
 //! into the same flat JSON on disk via `#[serde(flatten)]`.
 
 pub mod export;
+pub mod help;
 pub mod logging;
 
 use serde::{Deserialize, Serialize};
@@ -83,8 +85,8 @@ pub enum DeviceSource {
 ///
 /// Here rather than in either binary because both apply the same rule to the
 /// same file — the CLI prints a notice when it falls through, the GUI fills the
-/// device picker in. `fallback` is passed in because the registry default lives
-/// in `dmm-lib`, which this crate deliberately doesn't depend on.
+/// device picker in. `fallback` is passed in rather than looked up, so the
+/// settings half of this crate does not reach into `dmm-lib`'s registry.
 pub fn resolve_device_family(
     cli_device: Option<&str>,
     saved: Option<&SharedSettings>,

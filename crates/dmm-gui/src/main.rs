@@ -20,12 +20,12 @@ use std::time::SystemTime;
 pub(crate) const NO_DATA: &str = "---";
 
 fn version_string() -> &'static str {
-    dmm_lib::binary_help::version_string(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
+    dmm_shared::help::version_string(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
 }
 
 /// Version string for the app (shown in top bar, right side).
 pub fn version_label() -> String {
-    dmm_lib::binary_help::version_label(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
+    dmm_shared::help::version_label(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
 }
 
 #[derive(Parser)]
@@ -84,14 +84,14 @@ struct Args {
 
 /// Build long help text for --device from the registry.
 fn build_device_help() -> String {
-    dmm_lib::binary_help::device_help(
+    dmm_shared::help::device_help(
         "Device to connect to. Overrides saved settings for this session.",
     )
 }
 
 /// Build long help text for --mock-mode from the mock's own mode table.
 fn build_mock_mode_help() -> String {
-    dmm_lib::binary_help::mock_mode_help(
+    dmm_shared::help::mock_mode_help(
         "Pin the mock device to a specific measurement mode instead of \
          auto-cycling. Implies --device mock, and overrides the saved Mock \
          mode setting for this session.",
@@ -213,7 +213,7 @@ fn resolve_device_and_clock(
             None => false,
         };
     if !clock.is_real() && hardware {
-        return Err(dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY.to_string());
+        return Err(dmm_shared::help::MOCK_CLOCK_MOCK_ONLY.to_string());
     }
 
     // A replay is the session's device; failing that, --mock-mode and either
@@ -520,11 +520,11 @@ mod tests {
     fn a_hardware_device_refuses_the_clock_flags() {
         assert_eq!(
             resolve(Some("ut61eplus"), None, Some(90.0)).unwrap_err(),
-            dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY
+            dmm_shared::help::MOCK_CLOCK_MOCK_ONLY
         );
         assert_eq!(
             resolve(Some("ut61eplus"), Some(30.0), None).unwrap_err(),
-            dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY
+            dmm_shared::help::MOCK_CLOCK_MOCK_ONLY
         );
         // Without the flags the same device is of course fine.
         assert!(resolve(Some("ut61eplus"), None, None).is_ok());
@@ -537,7 +537,7 @@ mod tests {
     fn auto_detect_is_hardware_for_the_clock_flags() {
         assert_eq!(
             resolve(Some("auto"), None, Some(90.0)).unwrap_err(),
-            dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY
+            dmm_shared::help::MOCK_CLOCK_MOCK_ONLY
         );
         let (device, clock) = resolve(Some("auto"), None, None).expect("no clock flags");
         assert_eq!(device.as_deref(), Some("auto"));

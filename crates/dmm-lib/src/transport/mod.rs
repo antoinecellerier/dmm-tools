@@ -119,11 +119,45 @@ pub(crate) fn name_matches(prefix: &str, name: &str) -> bool {
 /// Never the bridge chip: someone plugged in a USB cable or switched a
 /// Bluetooth adapter on, and has no reason to know which chip is inside it.
 /// The error text, the CLI help and the GUI's connection messages all take
-/// their wording from `binary_help`, so the three cannot drift.
+/// their wording from [`Link::full_name`] (and `dmm_shared::help` for the
+/// shorter status-line form), so the three cannot drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Link {
     UsbCable,
     Bluetooth,
+}
+
+impl Link {
+    /// The name for text with the room to spell it out — an error, or a
+    /// hover where the bar had to shorten or drop it.
+    ///
+    /// `built_in_radio` is a meter with Bluetooth built in on the far end
+    /// (a registry entry that advertises `bluetooth_names`, or a peer
+    /// advertising the name of one): there is no adapter to name.
+    ///
+    /// Here rather than with the apps' other wording because [`Error`]'s
+    /// messages use it.
+    ///
+    /// [`Error`]: crate::error::Error
+    pub const fn full_name(self, built_in_radio: bool) -> &'static str {
+        match self {
+            Self::UsbCable => "USB cable",
+            Self::Bluetooth if built_in_radio => "Bluetooth link",
+            Self::Bluetooth => "Bluetooth adapter",
+        }
+    }
+}
+
+/// The full name of the link a bridge is on, by the bridge's name in an
+/// error: Bluetooth or a USB cable. `built_in_radio` as for
+/// [`Link::full_name`].
+pub fn bridge_link_name(bridge: &str, built_in_radio: bool) -> &'static str {
+    let link = if bridge == crate::BLUETOOTH {
+        Link::Bluetooth
+    } else {
+        Link::UsbCable
+    };
+    link.full_name(built_in_radio)
 }
 
 /// Delegate trait through `Box<dyn Transport>` so `Dmm<Box<dyn Transport>>`
@@ -191,6 +225,28 @@ impl Transport for NullTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The user plugged in a cable or switched an adapter on; either way the
+    /// bridge chip must stay out of what they read.
+    #[test]
+    fn a_link_is_named_cable_or_adapter_never_the_chip() {
+        assert_eq!(
+            bridge_link_name(crate::BLUETOOTH, false),
+            "Bluetooth adapter"
+        );
+        for bridge in ["CP2110", "CH9329", "CH9325", "BU-86X"] {
+            for built_in in [false, true] {
+                assert_eq!(bridge_link_name(bridge, built_in), "USB cable");
+            }
+        }
+    }
+
+    /// A meter with the radio built in has no adapter for the text to name.
+    #[test]
+    fn a_built_in_radio_is_no_adapter() {
+        assert_eq!(bridge_link_name(crate::BLUETOOTH, true), "Bluetooth link");
+        assert_eq!(Link::Bluetooth.full_name(true), "Bluetooth link");
+    }
 
     #[test]
     fn null_transport_all_methods_ok() {

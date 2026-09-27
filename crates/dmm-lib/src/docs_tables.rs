@@ -3,7 +3,7 @@
 //! `<!-- devices:end -->` block against [`cli_reference_table`] and rewrites
 //! it under `UPDATE_DOCS=1`, so the ids, aliases and names cannot drift from
 //! the registry. The README's table stays hand-written (it is editorial) and
-//! is only checked for omissions. Not in [`crate::binary_help`], which is
+//! is only checked for omissions. Not in `dmm_shared::help`, which is
 //! terminal help text, not repository markdown.
 
 use crate::protocol::registry;

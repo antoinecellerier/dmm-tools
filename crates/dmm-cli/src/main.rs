@@ -9,12 +9,12 @@ mod watch;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
-use dmm_lib::binary_help::{ConnectedAdapters, LinksSearched};
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::protocol::{Choice, Setting};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transform::{FactorError, Transform};
+use dmm_shared::help::{ConnectedAdapters, LinksSearched};
 use log::{error, info};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -23,7 +23,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 fn version_string() -> &'static str {
-    dmm_lib::binary_help::version_string(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
+    dmm_shared::help::version_string(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
 }
 
 #[derive(Parser)]
@@ -568,10 +568,7 @@ fn main() {
             } else if bluetooth_switched_off(&*e) {
                 eprintln!(
                     "{}",
-                    style(dmm_lib::binary_help::cli_bluetooth_off_hint(
-                        cli.no_bluetooth
-                    ))
-                    .yellow()
+                    style(dmm_shared::help::cli_bluetooth_off_hint(cli.no_bluetooth)).yellow()
                 );
             }
         }
@@ -624,12 +621,12 @@ fn bluetooth_switched_off(error: &(dyn std::error::Error + 'static)) -> bool {
 
 /// Build long help text for --device from the registry.
 fn build_device_help() -> String {
-    dmm_lib::binary_help::device_help("Device to connect to.")
+    dmm_shared::help::device_help("Device to connect to.")
 }
 
 /// Build long help text for --mock-mode from the mock's own mode table.
 fn build_mock_mode_help() -> String {
-    dmm_lib::binary_help::mock_mode_help(
+    dmm_shared::help::mock_mode_help(
         "Pin the mock device to a specific measurement mode instead of \
          auto-cycling. Only effective with --device mock.",
         "--device mock read --mock-mode dcv",
@@ -936,7 +933,7 @@ fn warn_if_experimental(
         "{}",
         style(format!(
             "WARNING: {}",
-            dmm_lib::binary_help::experimental_warning(profile.model_name, profile.stability)
+            dmm_shared::help::experimental_warning(profile.model_name, profile.stability)
         ))
         .yellow()
         .bold()
@@ -972,7 +969,7 @@ fn print_experimental_note(selection: Selection) {
             "{}",
             style(format!(
                 "{} Report feedback: {}",
-                dmm_lib::binary_help::experimental_warning(profile.model_name, profile.stability),
+                dmm_shared::help::experimental_warning(profile.model_name, profile.stability),
                 profile.feedback_url()
             ))
             .yellow()
@@ -1015,13 +1012,13 @@ fn open_error_help(
                 "{}",
                 style(format!(
                     "No meter answered over the {}.",
-                    dmm_lib::binary_help::bridge_link_name(bridge, built_in_radio)
+                    dmm_lib::transport::bridge_link_name(bridge, built_in_radio)
                 ))
                 .yellow()
                 .bold()
             );
             for (instructions, names) in
-                dmm_lib::binary_help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
+                dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
             {
                 eprintln!("\n{}", style(names.join(", ")).yellow());
                 for line in instructions.lines() {
@@ -1050,7 +1047,7 @@ fn open_error_help(
             // Only a real list is worth setting apart and worth a hint —
             // "nothing is connected" and "couldn't look" are complete on
             // their own.
-            let adapters = dmm_lib::binary_help::connected_adapters();
+            let adapters = dmm_shared::help::connected_adapters();
             let listed = matches!(adapters, ConnectedAdapters::Listed(_));
             if listed {
                 eprintln!();
@@ -1064,7 +1061,7 @@ fn open_error_help(
                     style(format!("Use {ADAPTER_SELECTOR} to select one.")).dim()
                 );
             }
-            if let Some(hint) = dmm_lib::binary_help::colonless_address_hint(detail) {
+            if let Some(hint) = dmm_shared::help::colonless_address_hint(detail) {
                 eprintln!("\n{}", style(hint).yellow());
             }
             "adapter not found".into()
@@ -1461,7 +1458,7 @@ fn refuse_clock_on_hardware(
     clock: &dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if requires_hardware(selection) && !clock.is_real() {
-        return Err(dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY.into());
+        return Err(dmm_shared::help::MOCK_CLOCK_MOCK_ONLY.into());
     }
     Ok(())
 }
@@ -2648,7 +2645,7 @@ mod tests {
         for hardware in [selection("ut61eplus"), selection("auto")] {
             let err = refuse_clock_on_hardware(hardware, &virtual_clock)
                 .expect_err("a hardware device must refuse a virtual clock");
-            assert_eq!(err.to_string(), dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY);
+            assert_eq!(err.to_string(), dmm_shared::help::MOCK_CLOCK_MOCK_ONLY);
             assert!(refuse_clock_on_hardware(hardware, &dmm_lib::Clock::real()).is_ok());
         }
 

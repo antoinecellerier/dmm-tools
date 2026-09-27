@@ -1,4 +1,3 @@
-pub mod binary_help;
 pub mod clock;
 pub mod detect;
 pub mod docs_tables;
@@ -204,7 +203,7 @@ impl<T: Transport> Dmm<T> {
 /// peer no name was heard from.
 ///
 /// Non-empty is what makes the link a meter's own radio rather than an
-/// adapter in front of one (`built_in_radio`, [`binary_help::Link::full_name`]).
+/// adapter in front of one (`built_in_radio`, [`crate::transport::Link::full_name`]).
 /// Kept out of the transport, which reports the name alone: which meters
 /// advertise it is the registry's business, and several may.
 pub(crate) fn built_in_meters(transport: &dyn Transport) -> Vec<&'static SelectableDevice> {

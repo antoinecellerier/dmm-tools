@@ -2,7 +2,7 @@
 //! status landmark in the middle, and the version / Help / shortcuts /
 //! settings group on the right, wrapped to a second row when it doesn't fit.
 
-use dmm_lib::binary_help::Link;
+use dmm_lib::transport::Link;
 use eframe::egui::{self, RichText, Ui};
 
 use super::{App, ConnectionState};
@@ -228,7 +228,7 @@ impl App {
                     )
                     .on_hover_text(format!(
                         "{} Click to report feedback.",
-                        dmm_lib::binary_help::experimental_warning(&model_name, stability)
+                        dmm_shared::help::experimental_warning(&model_name, stability)
                     ));
                 }
             });
@@ -357,7 +357,7 @@ fn connected_status(name: &str, link: Option<Link>, paused: bool) -> String {
 
 /// What the link adds to the status text.
 fn link_suffix(link: Link) -> String {
-    format!(" \u{b7} {}", link.short_name())
+    format!(" \u{b7} {}", dmm_shared::help::short_name(link))
 }
 
 /// What that suffix would add to the row's width, in points.

@@ -1,10 +1,10 @@
-use dmm_lib::binary_help::Link;
 use dmm_lib::detect::Detected;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{Choice, MeterKeys, Setting, Stability};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
+use dmm_lib::transport::Link;
 use dmm_lib::transport::Transport;
 use eframe::egui;
 use log::{error, info, warn};

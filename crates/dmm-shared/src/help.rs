@@ -1,18 +1,21 @@
 //! Help and version text shared by the `dmm-cli` and `dmm-gui` binaries.
 //!
-//! The lists come from the authorities on what exists (the registry for
-//! devices, [`MockMode::ALL`] for mock scenarios), so an addition there
+//! The lists come from the authorities on what exists (`dmm-lib`'s registry
+//! for devices, [`MockMode::ALL`] for mock scenarios), so an addition there
 //! reaches both binaries' `--help`. The prose (setup hint, experimental
-//! warning) is here because the two copies had already drifted apart.
+//! warning) is here because the two copies had already drifted apart. The
+//! long name of a link stays in `dmm-lib` ([`Link::full_name`]), whose error
+//! messages use it.
 //!
 //! The per-crate build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in
 //! rather than read here: `env!` would capture *this* crate's values, not the
 //! binary's.
 
-use crate::list_devices;
-use crate::mock::MockMode;
-use crate::protocol::registry::SelectableDevice;
-use crate::protocol::{Stability, registry};
+use dmm_lib::list_devices;
+use dmm_lib::mock::MockMode;
+use dmm_lib::protocol::registry::SelectableDevice;
+use dmm_lib::protocol::{Stability, registry};
+use dmm_lib::transport::Link;
 
 /// Version text for `--version`, with the git hash appended on dev builds.
 ///
@@ -80,47 +83,17 @@ pub fn mock_mode_help(intro: &str, example: &str) -> String {
     )
 }
 
-/// A transport says which it is on ([`crate::transport::Transport::link`]);
-/// the words for it are here.
-pub use crate::transport::Link;
-
-impl Link {
-    /// The name for a status line that already names the meter.
-    ///
-    /// "Bluetooth adapter" doubles the width of a UT61E+ label for a word the
-    /// label around it no longer needs.
-    pub fn short_name(self) -> &'static str {
-        match self {
-            Self::UsbCable => USB_CABLE,
-            Self::Bluetooth => BLUETOOTH_LINK,
-        }
+/// The name of a transport's link ([`dmm_lib::transport::Transport::link`])
+/// for a status line that already names the meter.
+///
+/// "Bluetooth adapter" doubles the width of a UT61E+ label for a word the
+/// label around it no longer needs. A free function because [`Link`] is
+/// `dmm-lib`'s; the long form is its own [`Link::full_name`].
+pub fn short_name(link: Link) -> &'static str {
+    match link {
+        Link::UsbCable => USB_CABLE,
+        Link::Bluetooth => BLUETOOTH_LINK,
     }
-
-    /// The name for text with the room to spell it out — an error, or a
-    /// hover where the bar had to shorten or drop it.
-    ///
-    /// `built_in_radio` is a meter with Bluetooth built in on the far end
-    /// (a registry entry that advertises `bluetooth_names`, or a peer
-    /// advertising the name of one): there is no adapter to name.
-    pub fn full_name(self, built_in_radio: bool) -> &'static str {
-        match self {
-            Self::UsbCable => USB_CABLE,
-            Self::Bluetooth if built_in_radio => BLUETOOTH_BUILT_IN,
-            Self::Bluetooth => BLUETOOTH_ADAPTER,
-        }
-    }
-}
-
-/// The full name of the link a bridge is on, by the bridge's name in an
-/// error: Bluetooth or a USB cable. `built_in_radio` as for
-/// [`Link::full_name`].
-pub fn bridge_link_name(bridge: &str, built_in_radio: bool) -> &'static str {
-    let link = if bridge == crate::BLUETOOTH {
-        Link::Bluetooth
-    } else {
-        Link::UsbCable
-    };
-    link.full_name(built_in_radio)
 }
 
 /// The meters on a bridge, grouped by the steps that switch their
@@ -147,16 +120,10 @@ pub fn activation_groups(
 }
 
 /// The cable link, in both the long and the short form.
-const USB_CABLE: &str = "USB cable";
+const USB_CABLE: &str = Link::UsbCable.full_name(false);
 
 /// The radio link where the words around it already say what it is.
 const BLUETOOTH_LINK: &str = "Bluetooth";
-
-/// The radio link where they don't.
-const BLUETOOTH_ADAPTER: &str = "Bluetooth adapter";
-
-/// The same, for a meter with the radio built in, which has no adapter.
-const BLUETOOTH_BUILT_IN: &str = "Bluetooth link";
 
 /// What the USB label line says to check, whatever the platform.
 const CABLE_CHECK: &str = "check it is plugged in and the meter is powered on.";
@@ -452,7 +419,7 @@ impl ConnectedAdapters {
 /// so the value is not opened as an address. `None` for any other value, and
 /// in a build without the radio.
 pub fn colonless_address_hint(selector: &str) -> Option<String> {
-    if !cfg!(feature = "bluetooth")
+    if !dmm_lib::BLUETOOTH_SUPPORTED
         || selector.len() != 12
         || !selector.bytes().all(|b| b.is_ascii_hexdigit())
     {
@@ -530,10 +497,13 @@ mod tests {
 
     /// A Bluetooth address typed the way Device Manager shows it gets the
     /// colon form back; anything else that is not twelve hex digits gets
-    /// nothing.
-    #[cfg(feature = "bluetooth")]
+    /// nothing. A build without the radio gets nothing either.
     #[test]
     fn a_colonless_address_is_shown_its_colon_form() {
+        if !dmm_lib::BLUETOOTH_SUPPORTED {
+            assert!(colonless_address_hint("123456789abc").is_none());
+            return;
+        }
         assert_eq!(
             colonless_address_hint("123456789abc").as_deref(),
             Some("If that is a Bluetooth address, write it 12:34:56:78:9A:BC.")
@@ -676,28 +646,6 @@ mod tests {
         }
     }
 
-    /// The user plugged in a cable or switched an adapter on; either way the
-    /// bridge chip must stay out of what they read.
-    #[test]
-    fn a_link_is_named_cable_or_adapter_never_the_chip() {
-        assert_eq!(
-            bridge_link_name(crate::BLUETOOTH, false),
-            "Bluetooth adapter"
-        );
-        for bridge in ["CP2110", "CH9329", "CH9325", "BU-86X"] {
-            for built_in in [false, true] {
-                assert_eq!(bridge_link_name(bridge, built_in), "USB cable");
-            }
-        }
-    }
-
-    /// A meter with the radio built in has no adapter for the text to name.
-    #[test]
-    fn a_built_in_radio_is_no_adapter() {
-        assert_eq!(bridge_link_name(crate::BLUETOOTH, true), "Bluetooth link");
-        assert_eq!(Link::Bluetooth.full_name(true), "Bluetooth link");
-    }
-
     /// Each binary names its own way to turn the search back on, and the
     /// GUI's checkbox by the label it draws.
     #[test]
@@ -717,9 +665,9 @@ mod tests {
     /// full form is the one the errors use.
     #[test]
     fn the_two_forms_of_a_link_name() {
-        assert_eq!(Link::Bluetooth.short_name(), "Bluetooth");
+        assert_eq!(short_name(Link::Bluetooth), "Bluetooth");
         assert_eq!(Link::Bluetooth.full_name(false), "Bluetooth adapter");
-        assert_eq!(Link::UsbCable.short_name(), "USB cable");
+        assert_eq!(short_name(Link::UsbCable), "USB cable");
         assert_eq!(Link::UsbCable.full_name(false), "USB cable");
     }
 
@@ -728,7 +676,7 @@ mod tests {
     /// and the UT8803.
     #[test]
     fn activation_help_lists_each_set_of_steps_once() {
-        let devices = crate::devices_on_bridge("CP2110");
+        let devices = dmm_lib::devices_on_bridge("CP2110");
         assert!(devices.len() > 1, "CP2110 carries several meters");
         let groups = activation_groups(&devices);
         assert!(groups.len() < devices.len(), "nothing was grouped");
