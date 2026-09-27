@@ -2,14 +2,15 @@
 //! (`docs/research/bm78xbt/reverse-engineered-protocol.md`).
 //!
 //! The meter streams only once the host has logged in with its connection
-//! password, which the Bluetooth transport does at bring-up (spec §3;
-//! `transport/ble/brymen.rs`). Then each notification carries an
+//! password, which the Bluetooth transport does at bring-up with the packets
+//! `login.rs` builds (spec §3). Then each notification carries an
 //! information packet and one reading packet, numeric: a signed count, its
 //! decimal point, a metric prefix, a unit and two function IDs (spec §4,
 //! §6). Nothing on the wire tells the two models apart (spec §1), so one
 //! registry entry serves both.
 //!
 //! - `packet.rs`: the CRC, and finding readings in the stream
+//! - `login.rs`: the login's command packets, and judging its reply
 //! - `tables.rs`: the function, unit, prefix and display-word tables
 //! - `decode.rs`: packets → `Measurement`
 //! - `capture.rs`: the capture steps
@@ -18,7 +19,8 @@
 /// The factory reset of the meter's connection password and Bluetooth name,
 /// from the BM788BT manual p.20 (printed 19) (spec §9.2). It is the way out
 /// of a refused password, which is the only one this driver sends (0000). A
-/// macro, so the activation text can `concat!` it.
+/// macro, so the activation text and the refused-login error can `concat!`
+/// it.
 macro_rules! reset_gesture {
     () => {
         "hold the Hz button while turning the dial from OFF to capacitance within 0.6 s: \
@@ -26,14 +28,13 @@ macro_rules! reset_gesture {
          the factory settings"
     };
 }
-// For the transport's refused-login error; the registry entry below uses
-// it in place.
-#[cfg(feature = "bluetooth")]
-pub(crate) use reset_gesture;
 
 mod capture;
 mod decode;
 pub(crate) mod devices;
+// The Bluetooth transport and the tests are its users.
+#[cfg_attr(not(feature = "bluetooth"), allow(dead_code))]
+pub(crate) mod login;
 pub(crate) mod packet;
 mod tables;
 

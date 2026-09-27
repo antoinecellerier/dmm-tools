@@ -25,6 +25,11 @@ const END: [u8; 2] = [0xFF, 0x03];
 pub(super) const READING_LEN: usize = 32;
 /// The information packet (spec §6.1).
 pub(super) const INFO_LEN: usize = 24;
+/// A whole notification: the information packet, the reading packet and
+/// three 32-byte blocks of zeros, 152 bytes (spec §4).
+// The Bluetooth transport's MTU check is its user.
+#[cfg_attr(not(feature = "bluetooth"), allow(dead_code))]
+pub(crate) const NOTIFICATION_LEN: usize = INFO_LEN + 4 * READING_LEN;
 
 /// CRC-16/MODBUS, as r4 prints it in C (spec §4): start at 0xFFFF; XOR in
 /// each byte, then shift right 8 times, XOR-ing 0xA001 whenever bit 0 was
@@ -62,7 +67,7 @@ pub(crate) fn framed(p: &[u8], head: [u8; 4]) -> bool {
 }
 
 /// Write `p`'s CRC, low byte first, and its `FF 03` end (spec §4, §5).
-// The Bluetooth transport's commands and the tests are its users.
+// The login's commands and the tests are its users.
 #[cfg_attr(not(feature = "bluetooth"), allow(dead_code))]
 pub(crate) fn seal(p: &mut [u8]) {
     let crc = computed_crc(p);
