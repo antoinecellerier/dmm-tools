@@ -67,6 +67,9 @@ pub(super) const NO_RESPONSE: &str = "No response from meter \u{2014} check devi
 /// reach the meter promptly instead of queueing until resume.
 const PAUSE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
+/// How long a lost link waits before each attempt to reopen it.
+pub(super) const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
+
 /// Apply pending control messages, blocking while paused.
 ///
 /// Returns `false` when the thread should exit: an explicit `Stop`, or a
@@ -231,6 +234,8 @@ pub(super) struct ThreadContext {
     /// says there is none.
     pub recorded_link: Option<Link>,
     pub sample_interval_ms: u32,
+    /// [`RECONNECT_INTERVAL`] outside the tests, which have no meter to wait for.
+    pub reconnect_interval: Duration,
     pub stop_flag: Arc<AtomicBool>,
 }
 
@@ -328,6 +333,7 @@ where
         query_name,
         recorded_link,
         sample_interval_ms,
+        reconnect_interval,
         stop_flag,
     } = thread_ctx;
 
@@ -470,7 +476,6 @@ where
                 // after the reopen that would cut the link just brought back
                 // up on the same adapter.
                 drop(dmm);
-                let retry_interval = Duration::from_secs(2);
                 let mut attempt: u32 = 0;
                 let mut last_error: Option<String> = None;
                 loop {
@@ -484,7 +489,7 @@ where
                     // Sleep, but wake early on a control message. A pause that
                     // arrives mid-reconnect is recorded and takes effect once
                     // the link is back: there is nothing to halt until then.
-                    match ctrl_rx.recv_timeout(retry_interval) {
+                    match ctrl_rx.recv_timeout(reconnect_interval) {
                         Ok(ThreadControl::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
                             return;
                         }
@@ -837,6 +842,7 @@ mod tests {
             query_name: false,
             recorded_link: None,
             sample_interval_ms: 10,
+            reconnect_interval: Duration::from_millis(10),
             stop_flag: Arc::new(AtomicBool::new(false)),
         }
     }

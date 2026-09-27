@@ -1948,6 +1948,17 @@ fn run_set<T: dmm_lib::transport::Transport>(
     setting: Setting,
     choice: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    run_set_within(dmm, setting, choice, SWITCH_TIMEOUT)
+}
+
+/// [`run_set`], giving up on the switch after `switch_timeout`: a test of a
+/// meter that never switches has no reason to sit out the real deadline.
+fn run_set_within<T: dmm_lib::transport::Transport>(
+    dmm: &mut dmm_lib::Dmm<T>,
+    setting: Setting,
+    choice: Option<String>,
+    switch_timeout: Duration,
+) -> Result<(), Box<dyn std::error::Error>> {
     let model_name = dmm.profile().model_name;
     let reading = dmm.request_measurement()?;
     let choices = dmm.choices(setting, &reading);
@@ -2036,7 +2047,7 @@ fn run_set<T: dmm_lib::transport::Transport>(
             // The frame straddling the switch can be unreadable, and the meter
             // can go quiet across it altogether — the vendor app sleeps 100 ms
             // after every SET_MODE. Neither ends the wait: the next frame
-            // parses, and the 2 s deadline below is what gives up. Anything
+            // parses, and the deadline below is what gives up. Anything
             // else is a real fault.
             Err(e) if matches!(e.kind(), ErrorKind::Protocol | ErrorKind::Timeout) => {
                 log::warn!("waiting for the {setting} switch: {e}");
@@ -2046,7 +2057,7 @@ fn run_set<T: dmm_lib::transport::Transport>(
         if std::time::Instant::now()
             .checked_duration_since(started)
             .unwrap_or_default()
-            >= SWITCH_TIMEOUT
+            >= switch_timeout
         {
             break;
         }
@@ -3564,9 +3575,14 @@ mod tests {
                 ..Default::default()
             },
         );
-        let err = run_set(&mut dmm, Setting::Hold, Some("on".to_string()))
-            .expect_err("never confirmed")
-            .to_string();
+        let err = run_set_within(
+            &mut dmm,
+            Setting::Hold,
+            Some("on".to_string()),
+            Duration::ZERO,
+        )
+        .expect_err("never confirmed")
+        .to_string();
         assert!(err.contains("Meter did not switch (still off)"), "{err}");
         assert!(err.contains(CHECK_DIAL_HINT), "{err}");
         assert_eq!(*selected.lock().expect("poisoned"), [(Setting::Hold, 1)]);

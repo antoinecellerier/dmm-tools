@@ -13,8 +13,8 @@ use std::sync::{Arc, mpsc};
 use std::time::{Instant, SystemTime};
 
 use super::connection::{
-    self, DmmMessage, RemoteCommand, ThreadContext, ThreadControl, handle_thread_panic,
-    run_device_thread,
+    self, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext, ThreadControl,
+    handle_thread_panic, run_device_thread,
 };
 use super::plot_input::{PlotInput, Plotted, resolve_plot_input};
 use super::{App, ConnectionState, named_device};
@@ -473,6 +473,7 @@ impl App {
                             // cadence, and the protocol sleeps until each
                             // frame is due rather than returning at once.
                             sample_interval_ms,
+                            reconnect_interval: RECONNECT_INTERVAL,
                             stop_flag,
                         },
                     );
@@ -527,6 +528,7 @@ impl App {
                             query_name,
                             recorded_link: None,
                             sample_interval_ms: mock_interval,
+                            reconnect_interval: RECONNECT_INTERVAL,
                             stop_flag,
                         },
                     );
@@ -571,6 +573,7 @@ impl App {
                             query_name,
                             recorded_link: None,
                             sample_interval_ms,
+                            reconnect_interval: RECONNECT_INTERVAL,
                             stop_flag,
                         },
                     );

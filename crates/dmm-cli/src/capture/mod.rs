@@ -231,7 +231,9 @@ mod tests {
     use dmm_lib::transport::Transport;
     use std::cell::RefCell;
 
-    /// Hands up `chunks` one read at a time, then nothing.
+    /// Hands up `chunks` one read at a time, then nothing — at once rather
+    /// than after a USB poll, so the framing's empty-read guard ends the wait
+    /// instead of its 2 s deadline.
     struct Chunks(RefCell<Vec<Vec<u8>>>);
 
     impl Transport for Chunks {
@@ -242,7 +244,6 @@ mod tests {
         fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
             let mut chunks = self.0.borrow_mut();
             if chunks.is_empty() {
-                std::thread::sleep(std::time::Duration::from_millis(10));
                 return Ok(0);
             }
             let chunk = chunks.remove(0);
