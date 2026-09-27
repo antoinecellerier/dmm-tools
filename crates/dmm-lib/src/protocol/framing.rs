@@ -1,7 +1,8 @@
-//! Shared frame extraction and read-loop functions for protocols using ABCD headers.
+//! Shared framing: the read loop every framed family uses, and the `AB CD`
+//! extractors and helpers more than one family shares. A frame shape only
+//! one family sends lives in that family.
 
 use crate::error::{Error, Result};
-use crate::protocol::unrecognised::report_unknown;
 use crate::transport::Transport;
 use log::{debug, trace};
 use std::time::{Duration, Instant};
@@ -26,7 +27,7 @@ pub(crate) enum FrameErrorRecovery {
 /// - `label`: protocol label for log messages (e.g. `"ut8803"`).
 /// - `skip_header`: byte pattern to scan for when skipping past a bad frame
 ///   during error recovery. Typically `&HEADER` (`[0xAB, 0xCD]`) for ABCD
-///   protocols, or `&UT8802_HEADER` (`[0xAC]`) for the UT8802.
+///   protocols, or the family's own header for the others.
 ///
 /// Constants match the values used by all protocol implementations:
 /// `READ_TIMEOUT_MS = 2000`, `MAX_ATTEMPTS = 64`. `READ_TIMEOUT_MS` bounds the
@@ -220,7 +221,11 @@ pub(crate) const fn build_abcd_be16<const N: usize>(cmd: u8, data: &[u8]) -> [u8
 ///
 /// `None` covers both "no header yet" and "header found but the frame is still
 /// arriving"; every caller turns it into `Ok(None)`, i.e. "read more".
-fn locate<'a>(buf: &'a [u8], header: &[u8], min_len: usize) -> Option<(usize, &'a [u8])> {
+pub(crate) fn locate<'a>(
+    buf: &'a [u8],
+    header: &[u8],
+    min_len: usize,
+) -> Option<(usize, &'a [u8])> {
     let start = buf.windows(header.len()).position(|w| w == header)?;
     let remaining = &buf[start..];
     (remaining.len() >= min_len).then_some((start, remaining))
@@ -233,7 +238,7 @@ fn locate<'a>(buf: &'a [u8], header: &[u8], min_len: usize) -> Option<(usize, &'
 /// `u16` sum would overflow-panic in debug builds on malformed input. The
 /// be16 and ut8803 frames cannot overflow (a 1-byte length caps the range at
 /// 256 bytes), so wrapping changes nothing there.
-fn sum16(bytes: &[u8]) -> u16 {
+pub(crate) fn sum16(bytes: &[u8]) -> u16 {
     bytes
         .iter()
         .fold(0u16, |acc, &b| acc.wrapping_add(b as u16))
@@ -245,7 +250,7 @@ fn sum16(bytes: &[u8]) -> u16 {
 /// `expected` is the value read off the wire and `actual` the one we computed
 /// — pinned by tests, because swapping them makes every bug report read
 /// backwards.
-fn checksum_ok(label: &str, computed: u16, received: u16, frame: &[u8]) -> Result<()> {
+pub(crate) fn checksum_ok(label: &str, computed: u16, received: u16, frame: &[u8]) -> Result<()> {
     if computed != received {
         trace!(
             "framing: {label} checksum mismatch: computed={computed:#06x}, received={received:#06x}, frame={frame:02X?}"
@@ -302,165 +307,6 @@ pub fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     let consumed = start + frame_len;
 
     trace!("framing: valid frame, payload_len={payload_len}, consumed={consumed}");
-    Ok(Some((payload, consumed)))
-}
-
-/// Expected payload length for a UT61E+ measurement response.
-pub const UT61EPLUS_MEASUREMENT_PAYLOAD_LEN: usize = 14;
-
-/// Extract a frame using UT8803 format: AB CD byte2 0x02 payload chk_hi chk_lo.
-///
-/// Fixed 21-byte frame. Checksum is alternating-byte sum, stored BE at bytes 19-20.
-///
-/// Returns `Ok(Some((payload, consumed)))` where payload is bytes 2..19 (17 bytes),
-/// `Ok(None)` if incomplete.
-pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
-    const FRAME_LEN: usize = 21;
-
-    let Some((start, remaining)) = locate(buf, &HEADER, FRAME_LEN) else {
-        return Ok(None);
-    };
-
-    // Checksum: sum of bytes 0..19, stored BE at bytes 19-20.
-    // The RE spec describes this as an "alternating-byte sum" (even/odd
-    // accumulators), but that's equivalent to a straight sequential sum.
-    let computed = sum16(&remaining[..19]);
-    let received = u16::from_be_bytes([remaining[19], remaining[20]]);
-
-    // Byte 3 must be 0x02 (measurement response type). Error out rather
-    // than returning Ok(None): Ok(None) means "need more data" and never
-    // consumes, so one non-measurement frame at the buffer head would
-    // block extraction until the buffer cap clears everything. The
-    // family's SkipAndRetry recovery drains past this header instead.
-    if remaining[3] != 0x02 {
-        // The spec documents no other type
-        // (docs/research/ut8803/reverse-engineered-protocol.md §2.3). Only a
-        // frame whose checksum holds is the meter's: a false AB CD while
-        // syncing stays silent.
-        if computed == received {
-            report_unknown(
-                "ut8803",
-                "frame type",
-                format_args!("{:#04x}", remaining[3]),
-            );
-        }
-        trace!("framing: ut8803 byte3={:#04x}, expected 0x02", remaining[3]);
-        return Err(Error::invalid_response(
-            format!("ut8803 frame type {:#04x}, expected 0x02", remaining[3]),
-            remaining,
-        ));
-    }
-
-    let frame = &remaining[..FRAME_LEN];
-    trace!("framing: ut8803 raw frame: {:02X?}", frame);
-    checksum_ok("ut8803", computed, received, frame)?;
-
-    // Payload = bytes 2..19 (everything between header and checksum)
-    let payload = frame[2..19].to_vec();
-    let consumed = start + FRAME_LEN;
-
-    trace!("framing: ut8803 valid frame, consumed={consumed}");
-    Ok(Some((payload, consumed)))
-}
-
-/// Header byte for UT8802 frames.
-pub const UT8802_HEADER: [u8; 1] = [0xAC];
-
-/// Fixed frame length for UT8802: header(1) + position(1) + digits(3) + dp_flags(1) + status(1) + sign(1) = 8.
-pub(crate) const UT8802_FRAME_LEN: usize = 8;
-
-/// Valid BCD nibble values: 0x0-0x9 (digits), 0x0A (treated as zero), 0x0C (overload 'L').
-fn is_valid_bcd_nibble(nibble: u8) -> bool {
-    nibble <= 0x0A || nibble == 0x0C
-}
-
-/// Valid position codes for the UT8802 (from programming manual page 10 + Ghidra FUN_1001c7b0).
-/// Gaps: 0x00, 0x02, 0x07, 0x08, 0x0F, 0x15, 0x17, 0x1E, 0x20, 0x21, 0x26, and anything > 0x2D.
-fn is_valid_ut8802_position(pos: u8) -> bool {
-    matches!(
-        pos,
-        0x01 | 0x03..=0x06
-            | 0x09..=0x0E
-            | 0x10..=0x14
-            | 0x16
-            | 0x18..=0x1D
-            | 0x1F
-            | 0x22..=0x25
-            | 0x27..=0x2D
-    )
-}
-
-/// Extract a frame using UT8802 format: `0xAC` header, fixed 8-byte frame, no checksum.
-///
-/// The UT8802 wire protocol has no checksum field (all 8 bytes are data).
-/// To compensate, we validate the position code and BCD nibbles — this is
-/// stricter than the vendor parser, which only checks the header byte.
-///
-/// Returns `Ok(Some((payload, consumed)))` where payload is bytes 1..8 (7 bytes),
-/// `Ok(None)` if incomplete, `Err` on validation failure (invalid position code
-/// or BCD nibble).
-///
-/// See docs/research/uci-bench-family/reverse-engineered-protocol.md section 3.
-pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
-    let Some((start, remaining)) = locate(buf, &UT8802_HEADER, UT8802_FRAME_LEN) else {
-        return Ok(None);
-    };
-
-    let frame = &remaining[..UT8802_FRAME_LEN];
-    trace!("framing: ut8802 raw frame: {:02X?}", frame);
-
-    // Validate position code (byte 1)
-    let position = frame[1];
-    if !is_valid_ut8802_position(position) {
-        trace!(
-            "framing: ut8802 invalid position code {:#04x}, frame={frame:02X?}",
-            position
-        );
-        return Err(Error::invalid_response(
-            format!("ut8802 invalid position code {position:#04x}"),
-            frame,
-        ));
-    }
-
-    // Validate the 5 display nibbles from bytes 2-4. Display order is
-    // MSD = byte 4 low nibble … LSD = byte 2 low nibble (see
-    // ut8802::parse_measurement); the order is irrelevant for validation.
-    let nibbles = [
-        frame[4] & 0x0F, // digit 1 (MSD)
-        frame[3] >> 4,   // digit 2
-        frame[3] & 0x0F, // digit 3
-        frame[2] >> 4,   // digit 4
-        frame[2] & 0x0F, // digit 5 (LSD)
-    ];
-    for (i, &nibble) in nibbles.iter().enumerate() {
-        if !is_valid_bcd_nibble(nibble) {
-            trace!(
-                "framing: ut8802 invalid BCD nibble {:#04x} at digit {}, frame={frame:02X?}",
-                nibble,
-                i + 1
-            );
-            return Err(Error::invalid_response(
-                format!("ut8802 invalid BCD nibble {nibble:#04x} at digit {}", i + 1),
-                frame,
-            ));
-        }
-    }
-
-    // Validate decimal point position (byte 5 low nibble, must be 0-4)
-    let dp_pos = frame[5] & 0x0F;
-    if dp_pos > 4 {
-        trace!("framing: ut8802 invalid decimal point position {dp_pos}, frame={frame:02X?}");
-        return Err(Error::invalid_response(
-            format!("ut8802 invalid decimal point position {dp_pos}"),
-            frame,
-        ));
-    }
-
-    // Payload = bytes 1..8 (everything after the header)
-    let payload = frame[1..UT8802_FRAME_LEN].to_vec();
-    let consumed = start + UT8802_FRAME_LEN;
-
-    trace!("framing: ut8802 valid frame, position={position:#04x}, consumed={consumed}");
     Ok(Some((payload, consumed)))
 }
 
@@ -522,52 +368,6 @@ pub(crate) fn test_frame_le16(payload: &[u8]) -> Vec<u8> {
     let sum = sum16(&frame[2..]);
     frame.extend_from_slice(&sum.to_le_bytes());
     frame
-}
-
-/// Build a valid 21-byte UT8803 frame; `body` becomes bytes 2..19, so
-/// `body[1]` is the frame-type byte the extractor requires to be 0x02.
-#[cfg(test)]
-pub(crate) fn test_frame_ut8803(body: &[u8; 17]) -> Vec<u8> {
-    let mut frame = vec![0xAB, 0xCD];
-    frame.extend_from_slice(body);
-    let sum = sum16(&frame);
-    frame.push((sum >> 8) as u8);
-    frame.push((sum & 0xFF) as u8);
-    frame
-}
-
-/// A UT8803 body whose type byte is set; the rest is filler.
-#[cfg(test)]
-pub(crate) fn test_ut8803_body() -> [u8; 17] {
-    let mut body = [0u8; 17];
-    body[1] = 0x02; // frame type = measurement
-    body[2] = 0x01; // mode
-    body[3] = 0x31; // range
-    body[6..11].copy_from_slice(b"12.34");
-    body
-}
-
-/// Build a valid UT8802 frame from components.
-/// Frame: [0xAC, position, d1d2, d3d4, d5xx, dp_flags, status, sign]
-#[cfg(test)]
-pub(crate) fn test_frame_ut8802(
-    position: u8,
-    digits: [u8; 5],
-    dp_pos: u8,
-    acdc_bits: u8,
-    status: u8,
-    sign_flags: u8,
-) -> Vec<u8> {
-    vec![
-        0xAC,
-        position,
-        (digits[0] << 4) | digits[1],
-        (digits[2] << 4) | digits[3],
-        digits[4], // high nibble unused
-        (acdc_bits << 4) | dp_pos,
-        status,
-        sign_flags,
-    ]
 }
 
 /// Build a valid AB CD BE16 frame (UT61E+ wire format) around `payload`:
@@ -665,42 +465,6 @@ mod tests {
     }
 
     #[test]
-    fn ut8803_non_measurement_frame_errors_for_resync() {
-        // A frame with byte3 != 0x02 must produce Err (so SkipAndRetry
-        // drains past it), not Ok(None) which would pin it at the buffer
-        // head and stall extraction forever.
-        let mut buf = vec![0xAB, 0xCD, 0x00, 0x05];
-        buf.resize(21, 0x00);
-        assert!(extract_frame_ut8803(&buf).is_err());
-    }
-
-    /// A checksummed frame of an undocumented type is reported and still
-    /// errors; with a bad checksum (a false AB CD) it errors silently.
-    #[test]
-    fn ut8803_unknown_frame_type_is_reported_only_when_checksummed() {
-        let mut body = test_ut8803_body();
-        body[1] = 0x05;
-        let mut frame = test_frame_ut8803(&body);
-        let (result, reports) = crate::protocol::capture_reports(|| extract_frame_ut8803(&frame));
-        assert!(result.is_err());
-        assert_eq!(reports, ["ut8803: unrecognised frame type: 0x05"]);
-
-        frame[20] ^= 0xFF;
-        let (result, reports) = crate::protocol::capture_reports(|| extract_frame_ut8803(&frame));
-        assert!(result.is_err());
-        assert!(reports.is_empty(), "{reports:?}");
-    }
-
-    /// A measurement frame passes the extractor without a report.
-    #[test]
-    fn ut8803_measurement_frame_reports_nothing() {
-        let frame = test_frame_ut8803(&test_ut8803_body());
-        let (result, reports) = crate::protocol::capture_reports(|| extract_frame_ut8803(&frame));
-        assert!(matches!(result, Ok(Some((_, 21)))));
-        assert!(reports.is_empty(), "{reports:?}");
-    }
-
-    #[test]
     fn abcd_be16_short_length_errors_for_resync() {
         let buf = vec![0xAB, 0xCD, 0x01, 0x00, 0x00, 0x00];
         assert!(extract_frame_abcd_be16(&buf).is_err());
@@ -722,74 +486,6 @@ mod tests {
         buf.extend(std::iter::repeat_n(0xFFu8, len as usize + 2));
         // Wrong checksum is fine — it must reject, not panic.
         assert!(extract_frame_abcd_2byte_le16(&buf).is_err());
-    }
-
-    #[test]
-    fn ut8803_valid_frame() {
-        // Construct a minimal valid 21-byte UT8803 frame
-        let mut frame = vec![
-            0xAB, 0xCD, // header
-            0x00, // byte 2
-            0x02, // type = measurement
-            0x01, // mode
-            0x31, // range (with 0x30 prefix)
-            0x00, // padding
-            b'1', b'2', b'.', b'3', b'4', // display (5 bytes)
-            0x00, 0x00, // flags0
-            0x00, 0x00, // flags1
-            0x00, 0x00, // flags2
-            0x00, // flags3
-        ];
-        // Compute checksum: sum of bytes 0..19
-        let sum: u16 = frame.iter().map(|&b| b as u16).sum();
-        frame.push((sum >> 8) as u8);
-        frame.push((sum & 0xFF) as u8);
-        assert_eq!(frame.len(), 21);
-
-        let (payload, consumed) = extract_frame_ut8803(&frame).unwrap().unwrap();
-        assert_eq!(consumed, 21);
-        assert_eq!(payload.len(), 17); // bytes 2..19
-    }
-
-    #[test]
-    fn ut8803_incomplete() {
-        let buf = vec![0xAB, 0xCD, 0x00, 0x02, 0x01]; // too short
-        assert!(extract_frame_ut8803(&buf).unwrap().is_none());
-    }
-
-    /// 20 of the 21 bytes: still incomplete, and `consumed` stays 0.
-    #[test]
-    fn ut8803_one_byte_short_is_incomplete() {
-        let frame = test_frame_ut8803(&test_ut8803_body());
-        let truncated = &frame[..frame.len() - 1];
-        assert!(extract_frame_ut8803(truncated).unwrap().is_none());
-    }
-
-    /// The UT8803 header can arrive mid-stream; `consumed` has to cover the
-    /// bytes before it, or the read loop re-scans them forever.
-    #[test]
-    fn ut8803_leading_garbage() {
-        let frame = test_frame_ut8803(&test_ut8803_body());
-        let mut buf = vec![0xFF, 0xFE, 0xFD];
-        buf.extend_from_slice(&frame);
-        let (payload, consumed) = extract_frame_ut8803(&buf).unwrap().unwrap();
-        assert_eq!(consumed, 3 + frame.len());
-        assert_eq!(payload, frame[2..19].to_vec());
-    }
-
-    /// As `extract_bad_checksum`, for the UT8803's own sum.
-    #[test]
-    fn ut8803_bad_checksum() {
-        let mut frame = test_frame_ut8803(&test_ut8803_body());
-        let last = frame.len() - 1;
-        frame[last] ^= 0xFF;
-        assert!(matches!(
-            extract_frame_ut8803(&frame),
-            Err(Error::ChecksumMismatch {
-                expected: 603,
-                actual: 676,
-            })
-        ));
     }
 
     #[test]
@@ -821,7 +517,7 @@ mod tests {
         assert_eq!(consumed, frame.len());
     }
 
-    /// As `ut8803_leading_garbage`, for the 2-byte-length framing.
+    /// As `extract_with_leading_garbage`, for the 2-byte-length framing.
     #[test]
     fn le16_leading_garbage() {
         let payload = vec![0x02, 0x00, 0x11, 0x31];
@@ -1041,144 +737,6 @@ mod tests {
         .unwrap();
         assert_eq!(result, payload);
         assert!(rx_buf.is_empty());
-    }
-
-    // --- UT8802 frame extractor tests ---
-
-    #[test]
-    fn ut8802_valid_frame() {
-        // DC V 200V range, display "12345", decimal pos 1
-        let frame = test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
-        let (payload, consumed) = extract_frame_ut8802(&frame).unwrap().unwrap();
-        assert_eq!(consumed, 8);
-        assert_eq!(payload.len(), 7); // bytes 1..8
-        assert_eq!(payload[0], 0x05); // position code
-    }
-
-    #[test]
-    fn ut8802_leading_garbage() {
-        let mut buf = vec![0xFF, 0xFE, 0xFD];
-        buf.extend_from_slice(&test_frame_ut8802(
-            0x01,
-            [0, 0, 2, 0, 0],
-            3,
-            0x02,
-            0x00,
-            0x00,
-        ));
-        let (payload, consumed) = extract_frame_ut8802(&buf).unwrap().unwrap();
-        assert_eq!(consumed, 3 + 8); // 3 garbage bytes + 8 frame bytes
-        assert_eq!(payload[0], 0x01);
-    }
-
-    #[test]
-    fn ut8802_incomplete() {
-        // Only 5 bytes after header — need 8 total
-        let buf = vec![0xAC, 0x01, 0x12, 0x34, 0x05];
-        assert!(extract_frame_ut8802(&buf).unwrap().is_none());
-    }
-
-    #[test]
-    fn ut8802_no_header() {
-        let buf = vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
-        assert!(extract_frame_ut8802(&buf).unwrap().is_none());
-    }
-
-    #[test]
-    fn ut8802_invalid_position_code() {
-        // 0x02 is a gap in the position code space
-        let frame = test_frame_ut8802(0x02, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
-        assert!(extract_frame_ut8802(&frame).is_err());
-    }
-
-    #[test]
-    fn ut8802_invalid_bcd_nibble() {
-        // 0x0F is not a valid BCD nibble
-        let frame = test_frame_ut8802(0x01, [0x0F, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
-        assert!(extract_frame_ut8802(&frame).is_err());
-    }
-
-    #[test]
-    fn ut8802_invalid_decimal_position() {
-        // Decimal position 5 is out of range (max 4)
-        let frame = test_frame_ut8802(0x01, [1, 2, 3, 4, 5], 5, 0x00, 0x00, 0x00);
-        assert!(extract_frame_ut8802(&frame).is_err());
-    }
-
-    #[test]
-    fn ut8802_overload_nibble_accepted() {
-        // 0x0C is a valid BCD nibble (overload indicator 'L')
-        let frame = test_frame_ut8802(0x01, [0, 0, 0, 0x0C, 0], 0, 0x00, 0x00, 0x00);
-        let result = extract_frame_ut8802(&frame).unwrap();
-        assert!(result.is_some());
-    }
-
-    #[test]
-    fn ut8802_nibble_0a_accepted() {
-        // 0x0A is treated as '0' — should be accepted
-        let frame = test_frame_ut8802(0x01, [0x0A, 0, 0, 0, 0], 0, 0x00, 0x00, 0x00);
-        let result = extract_frame_ut8802(&frame).unwrap();
-        assert!(result.is_some());
-    }
-
-    #[test]
-    fn ut8802_all_valid_positions() {
-        let valid_positions: &[u8] = &[
-            0x01, 0x03, 0x04, 0x05, 0x06, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x10, 0x11, 0x12,
-            0x13, 0x14, 0x16, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1F, 0x22, 0x23, 0x24, 0x25,
-            0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D,
-        ];
-        for &pos in valid_positions {
-            let frame = test_frame_ut8802(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
-            assert!(
-                extract_frame_ut8802(&frame).unwrap().is_some(),
-                "position {pos:#04x} should be valid"
-            );
-        }
-    }
-
-    #[test]
-    fn ut8802_invalid_positions() {
-        let invalid_positions: &[u8] = &[
-            0x00, 0x02, 0x07, 0x08, 0x0F, 0x15, 0x17, 0x1E, 0x20, 0x21, 0x26, 0x2E, 0xFF,
-        ];
-        for &pos in invalid_positions {
-            let frame = test_frame_ut8802(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
-            assert!(
-                extract_frame_ut8802(&frame).is_err(),
-                "position {pos:#04x} should be invalid"
-            );
-        }
-    }
-
-    #[test]
-    fn ut8802_false_header_in_garbage() {
-        // Garbage contains a false 0xAC byte followed by an invalid position code,
-        // then the real frame. The extractor should error on the false header;
-        // read_frame's skip-and-retry should advance past it to the real frame.
-        let false_frame = vec![0xAC, 0x00, 0x12, 0x34, 0x50, 0x01, 0x00, 0x00]; // pos 0x00 = invalid
-        let real_frame = test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
-
-        // First: the extractor should error on the false frame
-        assert!(extract_frame_ut8802(&false_frame).is_err());
-
-        // Second: in a combined buffer, after the false frame the real one is found
-        let mut combined = false_frame.clone();
-        combined.extend_from_slice(&real_frame);
-        let mock = MockTransport::new(vec![combined]);
-        let mut rx_buf = Vec::new();
-
-        let result = read_frame(
-            &mut rx_buf,
-            &mock,
-            extract_frame_ut8802,
-            |_| true,
-            FrameErrorRecovery::SkipAndRetry,
-            "test",
-            &UT8802_HEADER,
-        )
-        .unwrap();
-        assert_eq!(result[0], 0x05); // position code of the real frame
     }
 
     #[test]

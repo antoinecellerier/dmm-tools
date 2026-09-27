@@ -13,6 +13,7 @@
 //! See docs/research/uci-bench-family/reverse-engineered-protocol.md
 
 pub(crate) mod devices;
+mod frame;
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
@@ -139,11 +140,11 @@ impl Protocol for Ut8802Protocol {
         let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
-            framing::extract_frame_ut8802,
+            frame::extract_frame_ut8802,
             |_| true,
             FrameErrorRecovery::SkipAndRetry,
             "ut8802",
-            &framing::UT8802_HEADER,
+            &frame::UT8802_HEADER,
         )?;
         parse_measurement(&payload)
     }
@@ -443,21 +444,21 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 };
 
 fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
-    const FRAME_LEN: usize = framing::UT8802_FRAME_LEN;
+    const FRAME_LEN: usize = frame::UT8802_FRAME_LEN;
     // The extractor searches forward for the next `0xAC`, so a frame it
     // returns is not necessarily the one at the offset asked for: a match
     // consuming exactly one frame is what pins it there, and with it the
     // "consecutive" this rule rests on.
     let frame_at = |at: usize| {
         matches!(
-            framing::extract_frame_ut8802(&buf[at..]),
+            frame::extract_frame_ut8802(&buf[at..]),
             Ok(Some((_, FRAME_LEN)))
         )
     };
     for (start, _) in buf
         .iter()
         .enumerate()
-        .filter(|&(_, &b)| b == framing::UT8802_HEADER[0])
+        .filter(|&(_, &b)| b == frame::UT8802_HEADER[0])
     {
         let next = start + FRAME_LEN;
         if next + FRAME_LEN > buf.len() {
@@ -964,7 +965,7 @@ raw_payload=7"#
     /// frames are what detection asks for.
     #[test]
     fn two_consecutive_frames_identify_the_meter_and_one_does_not() {
-        let frame = framing::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let frame = frame::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
         let mut pair = frame.clone();
         pair.extend_from_slice(&frame);
         let recognise = FINGERPRINT.recognise;
@@ -983,7 +984,7 @@ raw_payload=7"#
     /// second `0xAC` somewhere further along.
     #[test]
     fn two_frames_that_are_not_adjacent_identify_nothing() {
-        let frame = framing::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let frame = frame::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
         let mut spaced = frame.clone();
         spaced.extend_from_slice(&[0x00, 0x00, 0x00]);
         spaced.extend_from_slice(&frame);

@@ -7,7 +7,7 @@ pub mod tables;
 use crate::error::{Error, ErrorKind, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
-use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
+use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::registry;
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
@@ -36,6 +36,9 @@ const UT61EPLUS_COMMANDS: &[&str] = &[
     "peak",
     "exit_peak",
 ];
+
+/// Expected payload length for a UT61E+ measurement response.
+const UT61EPLUS_MEASUREMENT_PAYLOAD_LEN: usize = 14;
 
 /// Protocol implementation for the UT61E+/UT61B+/UT61D+/UT161 family.
 pub struct Ut61PlusProtocol {

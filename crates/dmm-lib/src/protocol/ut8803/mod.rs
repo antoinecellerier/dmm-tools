@@ -10,6 +10,7 @@
 //! See docs/research/ut8803/reverse-engineered-protocol.md
 
 pub(crate) mod devices;
+pub(crate) mod frame;
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
@@ -178,7 +179,7 @@ impl Protocol for Ut8803Protocol {
         let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
-            framing::extract_frame_ut8803,
+            frame::extract_frame_ut8803,
             |_| true,
             FrameErrorRecovery::SkipAndRetry,
             "ut8803",
@@ -456,7 +457,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         if buf.get(start + 3) != Some(&0x02) {
             continue;
         }
-        if matches!(framing::extract_frame_ut8803(&buf[start..]), Ok(Some(_))) {
+        if matches!(frame::extract_frame_ut8803(&buf[start..]), Ok(Some(_))) {
             return Some(Evidence::Model {
                 id: devices::UT8803.id,
                 reported_name: None,
@@ -839,9 +840,9 @@ raw_payload=17"#
     /// another type identifies nothing and reports nothing.
     #[test]
     fn detection_does_not_report_other_frame_types() {
-        let mut body = framing::test_ut8803_body();
+        let mut body = frame::test_ut8803_body();
         body[1] = 0x05;
-        let frame = framing::test_frame_ut8803(&body);
+        let frame = frame::test_frame_ut8803(&body);
         let (evidence, reports) =
             crate::protocol::capture_reports(|| recognise(&frame, &Probing::default()));
         assert_eq!(evidence, None);

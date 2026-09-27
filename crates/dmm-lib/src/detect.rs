@@ -490,12 +490,12 @@ fn pin(id: &'static str) -> &'static SelectableDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::framing::test_ut8803_body;
-    use crate::protocol::framing::{test_frame_be16, test_frame_le16, test_frame_ut8803};
+    use crate::protocol::framing::{test_frame_be16, test_frame_le16};
     use crate::protocol::ut61eplus::command::Command;
     use crate::protocol::ut171::UT171_CMD_CONNECT;
     use crate::protocol::ut181a::parse::tests::{real_frame_temp_dual_probe, real_frame_vac_hz};
     use crate::protocol::ut181a::set_monitor_frame;
+    use crate::protocol::ut8803::frame::{test_frame_ut8803, test_ut8803_body};
     use crate::protocol::vc8x0::vc890::{ACK_FRAME, POLL_FRAME};
     use crate::protocol::vc8x0::{MSG_TYPE_LIVE_DATA, Vc8x0Model, vc890::Vc890Model};
     use crate::transport::mock::MockTransport;
