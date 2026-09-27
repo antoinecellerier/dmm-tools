@@ -47,8 +47,9 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// Every mode, in protocol byte order, for callers that walk the whole
+    /// Every mode, in protocol byte order, for the tests that walk the whole
     /// table rather than decode one byte.
+    #[cfg(test)]
     pub const ALL: &'static [Mode] = &[
         Mode::AcV,
         Mode::AcMv,

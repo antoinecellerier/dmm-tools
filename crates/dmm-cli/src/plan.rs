@@ -340,7 +340,7 @@ steps:
     /// whether a reading off the meter satisfies the step.
     #[test]
     fn expect_checks_a_reading() {
-        use dmm_lib::protocol::ut61eplus::make_test_measurement;
+        use dmm_lib::protocol::make_test_measurement;
 
         let steps = parse("edge.yaml", EDGE).unwrap();
         let expect = steps[0].expect.unwrap();

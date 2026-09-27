@@ -290,7 +290,7 @@ pub(crate) fn enter_only(expect: Option<Expect>, previous: Option<&Measurement>)
 mod tests {
     use super::*;
     use dmm_lib::protocol::ValueExpect;
-    use dmm_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::make_test_measurement;
 
     /// A UT61E+ reading: mode byte, autorange, the digits given.
     fn reading(mode: u8, digits: &[u8; 7]) -> Measurement {

@@ -608,7 +608,7 @@ fn restore(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmm_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::make_test_measurement;
 
     fn sample(flags: (u8, u8, u8)) -> SampleData {
         SampleData::from_measurement(&make_test_measurement(

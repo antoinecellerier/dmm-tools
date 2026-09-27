@@ -143,13 +143,10 @@ pub(super) fn step_included(
 #[cfg(test)]
 mod tests {
     use super::*;
-    // `capture_steps` is a Protocol method; the trait has to be in scope to
-    // call it on a concrete protocol type (not needed for `dyn Protocol`).
-    use dmm_lib::protocol::Protocol;
 
     #[test]
     fn unknown_step_ids_are_rejected() {
-        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let steps = (ut61eplus().new_protocol)().capture_steps();
         let filter: Option<std::collections::HashSet<String>> = Some(
             ["dcv".to_string(), "range_cycle".to_string()]
                 .into_iter()
@@ -167,7 +164,7 @@ mod tests {
 
     #[test]
     fn known_step_ids_and_the_freeform_keyword_pass() {
-        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let steps = (ut61eplus().new_protocol)().capture_steps();
         let filter: Option<std::collections::HashSet<String>> = Some(
             [
                 "dcv".to_string(),
@@ -234,14 +231,14 @@ mod tests {
     /// so `--unverified` must leave it something smaller than the whole run.
     #[test]
     fn unverified_count_is_a_subset_of_the_ut61eplus_steps() {
-        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let steps = (ut61eplus().new_protocol)().capture_steps();
         let unverified = unverified_count(&steps);
         assert!(unverified < steps.len(), "{unverified} of {}", steps.len());
     }
 
     #[test]
     fn no_filter_accepts_everything() {
-        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let steps = (ut61eplus().new_protocol)().capture_steps();
         assert!(validate_step_filter(&None, &steps).is_ok());
     }
 }

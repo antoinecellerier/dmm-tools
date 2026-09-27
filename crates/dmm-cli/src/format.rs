@@ -655,7 +655,7 @@ mod tests {
     /// recording has to come back as the session it was.
     #[test]
     fn a_replay_run_writes_a_file_that_parses_back_as_a_replay() {
-        use dmm_lib::protocol::ut61eplus::make_test_measurement;
+        use dmm_lib::protocol::make_test_measurement;
         use dmm_lib::replay::Replay;
         use std::time::Duration;
 

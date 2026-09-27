@@ -321,20 +321,11 @@ mod tests {
     use crate::settings::Settings;
     use chrono::TimeZone;
     use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
-    use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 
     /// A 1.234 V reading carrying `aux` sub-values of its own.
     fn measurement(aux: usize) -> Measurement {
-        let payload: Vec<u8> = vec![
-            0x02, // mode: DcV
-            0x31, // range: 1
-            b' ', b' ', b'1', b'.', b'2', b'3', b'4', // display
-            0x00, 0x00, // progress
-            0x30, 0x30, 0x30, // flags
-        ];
         let mut m =
-            dmm_lib::protocol::ut61eplus::parse_measurement(&payload, &Ut61ePlusTable::new())
-                .expect("the fixture payload parses");
+            dmm_lib::protocol::make_test_measurement(0x02, 0x01, b"  1.234", (0, 0), (0, 0, 0));
         m.aux_values = (0..aux)
             .map(|i| AuxValue {
                 label: format!("sub{i}").into(),

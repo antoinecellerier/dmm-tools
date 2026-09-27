@@ -657,10 +657,7 @@ pub(super) fn cli_step(id: &'static str, verified: bool, gate: bool) -> CaptureS
 #[cfg(test)]
 mod tests {
     use super::*;
-    // `capture_steps` is a Protocol method; the trait has to be in scope to
-    // call it on a concrete protocol type (not needed for `dyn Protocol`).
-    use dmm_lib::protocol::Protocol;
-    use dmm_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::make_test_measurement;
     use std::sync::Mutex;
 
     /// A UT61E+ frame: AB CD, length, payload, 16-bit BE sum.
@@ -965,7 +962,8 @@ mod tests {
     /// returned the meter to auto — see the Command::Range doc comment.
     #[test]
     fn ut61eplus_sends_range_once_and_restores_auto() {
-        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
+        let steps = (device.new_protocol)().capture_steps();
         let range_steps: Vec<&str> = steps
             .iter()
             .filter(|s| s.command == Some("range"))

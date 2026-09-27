@@ -9,10 +9,8 @@ pub(crate) mod steps;
 pub(crate) mod unrecognised;
 pub(crate) mod ut171;
 pub(crate) mod ut181a;
+pub(crate) mod ut61eplus;
 pub(crate) mod ut80x;
-// `ut61eplus` stays `pub`: the GUI specs panel consumes its tables, the CLI
-// its remote-control commands, and the GUI's export tests its parser.
-pub mod ut61eplus;
 pub(crate) mod ut8802;
 pub(crate) mod ut8803;
 pub(crate) mod vc8x0;
@@ -21,6 +19,9 @@ pub(crate) mod zotek;
 pub use expect::{Expect, RangeExpect, ValueExpect};
 #[doc(hidden)]
 pub use unrecognised::capture_reports;
+/// A parsed UT61E+ reading, for the CLI's and GUI's tests.
+#[cfg(any(test, feature = "test-support"))]
+pub use ut61eplus::make_test_measurement;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;

@@ -418,19 +418,11 @@ impl Default for Recording {
 mod tests {
     use super::*;
     use dmm_lib::measurement::{AuxValue, MeasuredValue};
-    use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
     use std::time::Duration;
 
+    /// A UT61E+ DC V reading on range 1 showing `display`, AUTO on.
     fn make_measurement(display: &[u8; 7]) -> Measurement {
-        let payload: Vec<u8> = vec![
-            0x02, // mode: DcV (raw, no 0x30)
-            0x31, // range: 1 (with 0x30 prefix)
-            display[0], display[1], display[2], display[3], display[4], display[5], display[6],
-            0x00, 0x00, // progress (raw)
-            0x30, 0x30, 0x30, // flags (with 0x30 prefix, all zero = AUTO on)
-        ];
-        let table = Ut61ePlusTable::new();
-        dmm_lib::protocol::ut61eplus::parse_measurement(&payload, &table).unwrap()
+        dmm_lib::protocol::make_test_measurement(0x02, 0x01, display, (0, 0), (0, 0, 0))
     }
 
     /// The GUI's export never integrates — that is a CLI-only run mode.

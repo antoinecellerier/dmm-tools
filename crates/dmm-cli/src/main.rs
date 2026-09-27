@@ -2474,7 +2474,7 @@ fn cmd_debug(
 mod tests {
     use super::*;
     use dmm_lib::measurement::MeasuredValue;
-    use dmm_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::make_test_measurement;
 
     #[test]
     fn clap_parse_list() {

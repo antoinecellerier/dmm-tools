@@ -786,7 +786,7 @@ mod tests {
     use crate::capture::step::cli_step;
     use crate::watch::{STABLE_FRAMES, StateWatcher, Verdict};
     use dmm_lib::measurement::MeasuredValue;
-    use dmm_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::make_test_measurement;
 
     #[test]
     fn sample_data_from_normal_measurement() {
