@@ -43,7 +43,10 @@ const DRIVE_FAILURE_BUDGET: u32 = 3;
 const MAX_DRIVE_SUBSTEPS_PER_STEP: usize = 24;
 
 /// Whether the run drove the meter's settings itself.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+///
+/// Declared from least to most telling, which is the order [`Drive::merged`]
+/// keeps across a resumed run.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Drive {
     /// `--no-drive`, or a family that offers no choice to switch to.
@@ -51,6 +54,16 @@ pub(crate) enum Drive {
     On,
     /// Too many refusals: the sweeps gave up part-way through the run.
     Disabled,
+}
+
+impl Drive {
+    /// What a report says once another run has resumed it: a sweep that gave
+    /// up earlier still explains the steps it left unswept, however the
+    /// later run went (issue #5: a `--steps` re-run overwrote `disabled`
+    /// with `on`).
+    pub(crate) fn merged(earlier: Option<Drive>, this_run: Drive) -> Drive {
+        earlier.map_or(this_run, |earlier| earlier.max(this_run))
+    }
 }
 
 /// The sweep's budget, kept across steps so the run gives up once rather than
@@ -694,6 +707,24 @@ mod tests {
         let mut driven = Driver::new(true);
         driven.offered = true;
         assert_eq!(driven.state(), Drive::On);
+    }
+
+    #[test]
+    fn a_resumed_run_keeps_the_most_telling_drive_state() {
+        assert_eq!(Drive::merged(None, Drive::On), Drive::On);
+        assert_eq!(
+            Drive::merged(Some(Drive::Disabled), Drive::On),
+            Drive::Disabled
+        );
+        assert_eq!(
+            Drive::merged(Some(Drive::Disabled), Drive::Off),
+            Drive::Disabled
+        );
+        assert_eq!(Drive::merged(Some(Drive::On), Drive::Off), Drive::On);
+        assert_eq!(
+            Drive::merged(Some(Drive::On), Drive::Disabled),
+            Drive::Disabled
+        );
     }
 
     #[test]

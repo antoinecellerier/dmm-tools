@@ -127,7 +127,7 @@ pub(crate) fn cmd_capture(
         &mut trust,
         &mut driver,
     )?;
-    report.drive = Some(driver.state());
+    report.drive = Some(crate::drive::Drive::merged(report.drive, driver.state()));
 
     run_batch_review(&mut report, &pass.to_review, &output_path, &input)?;
 

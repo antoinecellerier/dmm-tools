@@ -209,6 +209,8 @@ position reproduces such a bug without the GUI, keeping the dial history a fresh
 reporter.
 The report records `drive: on | off | disabled` — `off` for `--no-drive` and
 for a family that offered no choice at all, `disabled` when the budget ran out.
+A resumed run keeps the most telling of its own state and the report's, so a
+`disabled` still explains the steps an earlier run left unswept.
 
 ## E. Per-step verification status
 
