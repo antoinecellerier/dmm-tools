@@ -2,7 +2,6 @@
 //! the messages the device thread sends, and classifying the reason there is
 //! nothing to show into the help text the reading column renders.
 
-use dmm_lib::measurement::{MainLabel, Measurement};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
@@ -15,10 +14,8 @@ use std::time::SystemTime;
 use super::connection::{
     self, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext, spawn_acquisition,
 };
-use super::plot_input::{PlotInput, Plotted, resolve_plot_input};
 use super::toast::Toast;
 use super::{App, ConnectionState, named_device};
-use crate::graph::PlotSample;
 use crate::settings::format_sample_count;
 
 /// Why the GUI currently has no readings to show.
@@ -372,7 +369,7 @@ impl App {
     /// every sample it took, so quoting the bound would read as if the
     /// difference had been thrown away.
     pub(super) fn buffer_shrunk_toast(&mut self) {
-        let kept = format_sample_count(self.recording.recording_samples().len());
+        let kept = format_sample_count(self.capture.recording.recording_samples().len());
         self.toast = Some(Toast::error(format!(
             "Recording stopped \u{2014} its {kept} samples are kept, Export\u{2026} saves them"
         )));
@@ -557,57 +554,10 @@ impl App {
     /// not touched; Clear has never discarded a capture.
     pub(super) fn clear_session(&mut self) {
         self.graph.clear();
-        self.recording.clear_history();
-        self.session.reset();
+        self.capture.recording.clear_history();
+        self.capture.session.reset();
         self.last_measurement = None;
         self.held.clear();
-    }
-
-    /// Keep a reading: in the graph's history, which Export… saves with
-    /// nothing recorded, cut to what the graph holds — and in a running
-    /// recording.
-    ///
-    /// Runs after the graph has taken the reading, so a mode change the graph
-    /// restarted on already shows as its first point. An empty graph cuts
-    /// nothing: NCV and over-range readings add no point, and are still
-    /// readings to export.
-    fn keep_sample(&mut self, m: &Measurement, extra_aux: usize) {
-        // `detected`, not the selection: a device picked in Settings takes
-        // effect at the next connect, and this reading may still be the old
-        // meter's. A file names one meter, so another one starts another
-        // history.
-        let meter = self.connection.detected().map(|d| d.display_name);
-        if meter != self.history_layout.device {
-            self.recording.clear_history();
-        }
-        if let Some(start) = self.graph.first_point_time() {
-            self.recording.trim_before(start);
-        }
-        if self.recording.history_is_empty() {
-            self.latch_history_layout();
-        }
-        if self.recording.push(m, &self.wall_clock, extra_aux) {
-            self.buffer_full_toast();
-        }
-    }
-
-    /// Take the export's provenance and columns for a history about to start,
-    /// from the connection its first reading arrived on — the history's
-    /// counterpart of what Record latches.
-    fn latch_history_layout(&mut self) {
-        let meter = self.connection.detected();
-        self.history_layout.device = meter.map(|d| d.display_name);
-        // Only a meter's frames can be replayed; the mock has none.
-        self.history_layout.device_id = meter.filter(|d| d.requires_hardware).map(|d| d.id);
-        // A reading only arrives on a live connection, so this stability and
-        // this link are the meter's rather than the defaults a disconnect
-        // leaves behind.
-        self.history_layout.experimental = Some(!self.connection.stability().is_verified());
-        self.history_layout.link = self.connection.link();
-        self.history_layout.aux_slots = self.device_aux_slots;
-        // A scale change clears the history, so the transform in force now is
-        // the one every sample in it went through.
-        self.history_layout.extra_slots = self.transform.extra_aux_count();
     }
 
     pub(super) fn drain_messages(&mut self) {
@@ -636,17 +586,18 @@ impl App {
                 DmmMessage::Connected(meter) => {
                     self.connection.state = ConnectionState::Connected;
                     self.held.clear();
-                    self.device_aux_slots = meter.max_aux_values;
+                    self.capture.device_aux_slots = meter.max_aux_values;
                     // A reconnect mid-recording is the same meter, so the
                     // in-flight capture picks the slot count back up — it was
                     // 0 before the first Connected of the session.
-                    if self.recording.active {
-                        self.recording_layout.aux_slots = meter.max_aux_values;
+                    if self.capture.recording.active {
+                        self.capture.recording_layout.aux_slots = meter.max_aux_values;
                         // The meter Record was pressed ahead of: the first one
                         // to answer during this recording is the one its
                         // samples come from, and the only one the export can
                         // still name once the cable is out.
-                        self.recording_layout
+                        self.capture
+                            .recording_layout
                             .experimental
                             .get_or_insert(!meter.stability.is_verified());
                     }
@@ -709,99 +660,16 @@ impl App {
                         continue;
                     }
 
-                    // The single point a software transform is applied. Every
-                    // consumer below — the session statistics, the graph's
-                    // series list and plot input, the recording buffer and
-                    // `last_measurement` — then sees one already-scaled
-                    // reading, and none of them has to know transforms exist.
-                    // No-op when identity.
-                    let mut m = m;
-                    self.transform.apply(&mut m);
-
-                    // Session stats follow the meter's *main* reading whatever
-                    // the graph plots: they describe the reading, not the view.
-                    // `SeriesStats` resets them on a mode *or* unit change —
-                    // a dial turn, or an auto-range step that moves the unit a
-                    // decade (mV→V) without touching the mode — so the panel
-                    // never labels volt-scale numbers with an ohms unit.
-                    // `Graph::push_sample` clears its history on the same
-                    // condition, and the GUI resets silently, so the returned
-                    // `SeriesChange` is not needed here.
-                    self.session.push(&m);
-
-                    // Offer this frame's sub-values before resolving what to
-                    // plot, so that the frame the graph finally gives the
-                    // selection up on is also the one that plots the main
-                    // reading again, not the one after it. Until then a frame
-                    // of the plotted mode missing the selected sub-value adds
-                    // no point to its trace, only to the ones beside it (see
-                    // `resolve_plot_input`). A sub-value with no value in this
-                    // frame (a scale's Raw beside the UT61E+'s AC+DC V AC
-                    // component) is not offered.
-                    let options: Vec<(&str, &str)> = m
-                        .present_aux()
-                        .map(|aux| (aux.label.as_ref(), aux.unit_or(&m.unit)))
-                        .collect();
-                    self.graph.set_series_options(&options, m.timestamp);
-                    // Owned, so the plot input doesn't hold the graph borrowed
-                    // while it is pushed into. Only while a sub-value is
-                    // selected — the common case allocates nothing.
-                    let selected = self
-                        .graph
-                        .selected_series_offer()
-                        .map(|(label, unit)| (label.to_string(), unit.to_string()));
-                    let plotted_mode = selected
-                        .as_ref()
-                        .and_then(|_| self.graph.plotted_mode().map(str::to_string));
-                    let input = resolve_plot_input(
-                        &m,
-                        selected.as_ref().map(|(l, u)| (l.as_str(), u.as_str())),
-                        plotted_mode.as_deref(),
+                    let (m, filled) = self.capture.ingest(
+                        m,
+                        &self.transform,
+                        &mut self.graph,
+                        &self.connection,
+                        &self.wall_clock,
                     );
-                    if let Some(PlotInput {
-                        plotted,
-                        unit,
-                        display_raw,
-                        series,
-                        overlays,
-                    }) = input
-                    {
-                        let sample = |value| PlotSample {
-                            value,
-                            timestamp: m.timestamp,
-                            mode: &m.mode,
-                            unit,
-                            display_raw,
-                            series,
-                            main_label: m.main_label.map(MainLabel::as_str),
-                            overlays: &overlays,
-                        };
-                        match plotted {
-                            Plotted::Point(v) => self.graph.push_sample(sample(Some(v))),
-                            // A word instead of a reading ("Auto" with the
-                            // probes lifted): a break too, but not an
-                            // over-range one. It never reaches `push_sample`,
-                            // so its mode and unit cannot restart the trace
-                            // either.
-                            Plotted::NoReading => self.graph.push_no_reading(m.timestamp),
-                            // The plotted series is over range: no point, but
-                            // the trace has to break so it isn't drawn
-                            // straight through the excursion. The sub-values
-                            // beside it are not over range and keep theirs.
-                            // The sample goes first: a frame that switches the
-                            // plotted series swaps it in, and the break lands
-                            // on it.
-                            Plotted::OverRange => {
-                                self.graph.push_sample(sample(None));
-                                self.graph.push_break(m.timestamp);
-                            }
-                            Plotted::Absent => self.graph.push_sample(sample(None)),
-                        }
+                    if filled {
+                        self.buffer_full_toast();
                     }
-
-                    // `m` has already been through the transform, so the
-                    // count it appended is what this sample carries.
-                    self.keep_sample(&m, self.transform.extra_aux_count());
 
                     // Specs are attached to each measurement by `Dmm::request_measurement`;
                     // last_measurement.spec / .mode_spec is what render code reads.
@@ -1135,7 +1003,7 @@ mod tests {
     use crate::app::connection::ConnectedMeter;
     use crate::settings::Settings;
     use dmm_lib::flags::StatusFlags;
-    use dmm_lib::measurement::MeasuredValue;
+    use dmm_lib::measurement::{MeasuredValue, Measurement};
     use dmm_lib::protocol::Stability;
     use std::time::{Duration, Instant};
 
@@ -1825,7 +1693,8 @@ mod tests {
     const AC: (&str, MeasuredValue) = ("AC V", MeasuredValue::Normal(1.0));
 
     fn modes(app: &App) -> Vec<&str> {
-        app.recording
+        app.capture
+            .recording
             .export_samples()
             .map(|s| s.measurement.mode.as_ref())
             .collect()
@@ -1847,9 +1716,10 @@ mod tests {
     fn an_over_range_reading_stays_in_the_history() {
         let mut app = connected_app();
         deliver_readings(&mut app, &[DC, ("DC V", MeasuredValue::Overload), DC]);
-        assert_eq!(app.recording.export_samples().len(), 3);
+        assert_eq!(app.capture.recording.export_samples().len(), 3);
         assert_eq!(
-            app.recording
+            app.capture
+                .recording
                 .export_samples()
                 .nth(1)
                 .expect("a sample")
@@ -1873,9 +1743,10 @@ mod tests {
         assert_eq!(modes(&app), ["DC V", "Auto", "DC V"]);
         assert!(first.is_some());
         assert_eq!(app.graph.first_point_time(), first);
-        assert_eq!(app.session.stats.count, 2);
+        assert_eq!(app.capture.session.stats.count, 2);
         assert_eq!(
-            app.recording
+            app.capture
+                .recording
                 .export_samples()
                 .nth(1)
                 .expect("a sample")
@@ -1913,8 +1784,8 @@ mod tests {
         assert_eq!(modes(&app), ["AC+DC V"; 4]);
         assert_eq!(app.graph.overlays_len(), 1, "AC drawn beside DC");
         assert_eq!(app.graph.first_point_time(), Some(t0));
-        assert_eq!(app.session.stats.count, 2);
-        assert_eq!(app.session.stats.min, Some(1.6112));
+        assert_eq!(app.capture.session.stats.count, 2);
+        assert_eq!(app.capture.session.stats.min, Some(1.6112));
     }
 
     /// A UT181A in V AC + Hz: picking Frequency under **Plot:** keeps the
@@ -1987,12 +1858,12 @@ mod tests {
         let mut app = connected_app();
         deliver_readings(&mut app, &[DC, DC]);
         app.clear_session();
-        assert!((app.recording.export_samples().len() == 0));
+        assert!((app.capture.recording.export_samples().len() == 0));
 
         app.toggle_recording();
         deliver_readings(&mut app, &[DC, DC]);
         app.clear_session();
-        assert_eq!(app.recording.export_samples().len(), 2);
+        assert_eq!(app.capture.recording.export_samples().len(), 2);
     }
 
     /// A recording spans the dial turns the graph restarts on.
@@ -2010,7 +1881,7 @@ mod tests {
         let mut app = connected_app();
         app.connection.paused = true;
         deliver_readings(&mut app, &[DC]);
-        assert!((app.recording.export_samples().len() == 0));
+        assert!((app.capture.recording.export_samples().len() == 0));
     }
 
     /// The history's file names the meter it came from, as a recording's
@@ -2022,10 +1893,10 @@ mod tests {
         deliver_readings(&mut app, &[DC]);
 
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
-        assert_eq!(app.history_layout.device, Some(ut181a.display_name));
-        assert_eq!(app.history_layout.device_id, Some("ut181a"));
-        assert_eq!(app.history_layout.experimental, Some(true));
-        assert_eq!(app.history_layout.aux_slots, 4);
+        assert_eq!(app.capture.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(app.capture.history_layout.device_id, Some("ut181a"));
+        assert_eq!(app.capture.history_layout.experimental, Some(true));
+        assert_eq!(app.capture.history_layout.aux_slots, 4);
 
         app.disconnect();
         assert!(app.experimental(), "the samples are still that meter's");
@@ -2038,7 +1909,7 @@ mod tests {
         let mut app = app("mock", false);
         deliver(&mut app, connected("mock", Stability::Verified, 0));
         deliver_readings(&mut app, &[DC]);
-        assert_eq!(app.history_layout.device_id, None);
+        assert_eq!(app.capture.history_layout.device_id, None);
         assert_eq!(app.replay_device_id(), None);
     }
 
@@ -2056,16 +1927,16 @@ mod tests {
         deliver(&mut app, connected("ut61eplus", Stability::Verified, 0));
         deliver_readings(&mut app, &[DC]);
         assert_eq!(
-            app.recording.export_samples().len(),
+            app.capture.recording.export_samples().len(),
             3,
             "the same meter came back"
         );
 
         deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
         deliver_readings(&mut app, &[DC]);
-        assert_eq!(app.recording.export_samples().len(), 1);
+        assert_eq!(app.capture.recording.export_samples().len(), 1);
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
-        assert_eq!(app.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(app.capture.history_layout.device, Some(ut181a.display_name));
     }
 
     /// Another meter answering mid-recording restarts the history under its
@@ -2080,10 +1951,13 @@ mod tests {
 
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
-        assert_eq!(app.recording_layout.device, Some(ut61eplus.display_name));
-        assert_eq!(app.history_layout.device, Some(ut181a.display_name));
-        assert_eq!(app.recording.recording_samples().len(), 2);
-        assert_eq!(app.recording.history_samples().len(), 1);
+        assert_eq!(
+            app.capture.recording_layout.device,
+            Some(ut61eplus.display_name)
+        );
+        assert_eq!(app.capture.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(app.capture.recording.recording_samples().len(), 2);
+        assert_eq!(app.capture.recording.history_samples().len(), 1);
     }
 
     /// A device picked in Settings only takes effect at the next connect;
@@ -2095,9 +1969,12 @@ mod tests {
         app.settings.shared.device_family = "ut181a".to_string();
         deliver_readings(&mut app, &[DC]);
 
-        assert_eq!(app.recording.export_samples().len(), 2);
+        assert_eq!(app.capture.recording.export_samples().len(), 2);
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
-        assert_eq!(app.history_layout.device, Some(ut61eplus.display_name));
+        assert_eq!(
+            app.capture.history_layout.device,
+            Some(ut61eplus.display_name)
+        );
     }
 
     /// With nothing recorded every reading is also kept for export — cut to
@@ -2112,7 +1989,7 @@ mod tests {
             // Bound at exactly what the run holds, so both sizes push into a
             // full buffer, as the graph's own cost test does.
             app.graph.set_max_points(points as usize);
-            app.recording.set_max_samples(points as usize);
+            app.capture.recording.set_max_samples(points as usize);
             let t0 = Instant::now();
             let send = |app: &mut App, range: std::ops::Range<u64>| {
                 let (tx, rx) = mpsc::channel();
@@ -2130,10 +2007,13 @@ mod tests {
                 elapsed
             };
             send(&mut app, 0..points);
-            assert_eq!(app.recording.export_samples().len(), points as usize);
+            assert_eq!(
+                app.capture.recording.export_samples().len(),
+                points as usize
+            );
             let elapsed = send(&mut app, points..points + 1_000);
             assert_eq!(
-                app.recording.export_samples().len(),
+                app.capture.recording.export_samples().len(),
                 points as usize,
                 "still bounded"
             );

@@ -223,7 +223,7 @@ impl App {
     /// the two hold together need not be one stretch of time — a stopped
     /// recording, then a graph restarted long after it.
     pub(super) fn trim_markers(&mut self) {
-        let (graph, recording) = (&self.graph, &self.recording);
+        let (graph, recording) = (&self.graph, &self.capture.recording);
         self.markers.retain(|at| reading_held(graph, recording, at));
     }
 
@@ -248,7 +248,7 @@ impl App {
     /// or gone with a graph restart while the plot's menu was open — gets no
     /// marker: the next frame's trim would take it away unseen.
     fn mark_reading(&mut self, at: Instant, reading: String, write_note: bool) {
-        if !reading_held(&self.graph, &self.recording, at) {
+        if !reading_held(&self.graph, &self.capture.recording, at) {
             self.toast = Some(Toast::info(NO_READING));
             return;
         }
@@ -282,7 +282,7 @@ impl App {
             // The sample's line when the buffer has it; otherwise all the
             // graph knows, its trace's value — without the meter's own
             // digits, its flags or its sub-values.
-            let reading = match self.recording.sample_at(at) {
+            let reading = match self.capture.recording.sample_at(at) {
                 Some(s) => log_line(&s.measurement),
                 None => format!(
                     "{:>10} {}",
@@ -336,8 +336,8 @@ impl App {
             // ends the edit is gone, so the edit ends here.
             self.marker_list.refollow = edit.following;
         }
-        let recording_role = self.recording.role() == BufferRole::Recording;
-        let (samples, recorded) = self.recording.recording_slice();
+        let recording_role = self.capture.recording.role() == BufferRole::Recording;
+        let (samples, recorded) = self.capture.recording.recording_slice();
         if recorded.is_empty() && self.markers.is_empty() {
             return;
         }
@@ -384,7 +384,7 @@ impl App {
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         // The graph's flag colours, a pair its contrast test covers.
         let (color, tag_text) = (tc.graph_marker(), tc.plot_background());
-        let recording = &self.recording;
+        let recording = &self.capture.recording;
         let graph = &self.graph;
         let list = &mut self.marker_list;
         let mut markers: Vec<&mut Marker> = self.markers.iter_mut().collect();
@@ -946,7 +946,7 @@ mod tests {
     fn a_log_frame_costs_the_same_however_long_the_recording() {
         fn measure(samples: u64) -> Duration {
             let mut app = app();
-            app.recording.set_max_samples(samples as usize);
+            app.capture.recording.set_max_samples(samples as usize);
             app.toggle_recording();
             let wall_clock = app.wall_clock;
             let t0 = Instant::now();
@@ -957,7 +957,7 @@ mod tests {
             );
             for i in 0..samples {
                 m.timestamp = t0 + Duration::from_millis(i * 10);
-                app.recording.push(&m, &wall_clock, 0);
+                app.capture.recording.push(&m, &wall_clock, 0);
             }
             let ctx = egui::Context::default();
             let frame = |app: &mut App| {
@@ -1109,15 +1109,15 @@ mod tests {
         send(&mut app, "DC V", t0);
         app.add_marker(false);
         app.toggle_recording();
-        assert!(app.recording.active);
+        assert!(app.capture.recording.active);
         send(&mut app, "DC V", secs(t0, 1));
         assert_eq!(numbers(&app), [1]);
         assert!(
-            app.recording.marked(app.markers.iter()).is_empty(),
+            app.capture.recording.marked(app.markers.iter()).is_empty(),
             "not in the recording, so not in its export"
         );
         assert!(
-            app.recording.unsaved_marker_count(&app.markers) == 0,
+            app.capture.recording.unsaved_marker_count(&app.markers) == 0,
             "a marker outside the recording is not the recording's to lose"
         );
 
@@ -1137,12 +1137,12 @@ mod tests {
         app.add_marker(false);
         send(&mut app, "AC V", secs(t0, 1));
         assert_eq!(numbers(&app), [1]);
-        assert_eq!(app.recording.marked(app.markers.iter()).len(), 1);
+        assert_eq!(app.capture.recording.marked(app.markers.iter()).len(), 1);
 
         // Discard hands the buffer back to the graph, which no longer
         // holds that reading.
-        app.recording.toggle(Instant::now());
-        app.recording.discard();
+        app.capture.recording.toggle(Instant::now());
+        app.capture.recording.discard();
         app.trim_markers();
         assert!(app.markers.is_empty());
     }
@@ -1158,16 +1158,16 @@ mod tests {
         app.add_marker(false); // on the history, before Record
         app.toggle_recording();
         send(&mut app, "DC V", secs(t0, 1));
-        let epoch = app.recording.epoch();
+        let epoch = app.capture.recording.epoch();
         let saved = |app: &App| {
             Some(Recording::marker_keys(
-                &app.recording.marked(app.markers.iter()),
+                &app.capture.recording.marked(app.markers.iter()),
             ))
         };
-        app.recording.mark_exported(epoch, 1, saved(&app));
+        app.capture.recording.mark_exported(epoch, 1, saved(&app));
         let asks = |app: &App| {
-            app.recording.unexported_count() > 0
-                || app.recording.unsaved_marker_count(&app.markers) > 0
+            app.capture.recording.unexported_count() > 0
+                || app.capture.recording.unsaved_marker_count(&app.markers) > 0
         };
         assert!(!asks(&app));
 
@@ -1180,15 +1180,17 @@ mod tests {
         assert!(!asks(&app), "added and deleted: the file has it as it is");
 
         app.add_marker(false);
-        app.recording.mark_exported(epoch, 1, saved(&app));
+        app.capture.recording.mark_exported(epoch, 1, saved(&app));
         app.markers.remove(3);
         assert!(!asks(&app), "deleted since the export: the file has more");
         app.add_marker(false);
-        app.recording.mark_exported(epoch, 1, None);
+        app.capture.recording.mark_exported(epoch, 1, None);
         assert!(asks(&app), "a replay file saves no markers");
-        app.recording.mark_exported(epoch - 1, 1, saved(&app));
+        app.capture
+            .recording
+            .mark_exported(epoch - 1, 1, saved(&app));
         assert!(asks(&app), "a file of an earlier recording saves none");
-        app.recording.mark_exported(epoch, 1, saved(&app));
+        app.capture.recording.mark_exported(epoch, 1, saved(&app));
         assert!(!asks(&app));
     }
 
@@ -1403,7 +1405,7 @@ mod tests {
         assert_eq!(run.note_focused(), Some(1));
         assert!(run.app.marker_list.editing.is_some());
         run.app.graph.clear();
-        run.app.recording.clear_history();
+        run.app.capture.recording.clear_history();
         run.app.trim_markers();
         run.frame(vec![]);
         assert!(run.app.marker_list.editing.is_none());

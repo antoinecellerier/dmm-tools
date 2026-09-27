@@ -176,7 +176,8 @@ impl App {
     fn csv_layout(&self) -> CsvLayout {
         CsvLayout {
             family_slots: self.export_layout().aux_slots.max(
-                self.recording
+                self.capture
+                    .recording
                     .max_aux_seen()
                     .saturating_sub(self.export_layout().extra_slots),
             ),
@@ -196,8 +197,8 @@ impl App {
     pub(super) fn prepare_export(&self, format: ExportFormat) -> Result<PreparedExport, String> {
         // A fresh walk over the samples for each pass that reads them: a
         // borrowed iterator, nothing copied.
-        let samples = || self.recording.export_samples();
-        let role = self.recording.role();
+        let samples = || self.capture.recording.export_samples();
+        let role = self.capture.recording.role();
         let Some(first) = samples().next() else {
             // Returning silently made the button and Ctrl+E look broken:
             // no file dialog, no message, nothing in the log. Say why.
@@ -225,7 +226,7 @@ impl App {
         // first sample is where the file starts.
         let default_name =
             format.default_name(device_model, single_mode(samples()), first.wall_time);
-        let marked = self.recording.marked(self.markers.iter());
+        let marked = self.capture.recording.marked(self.markers.iter());
         let bytes = match format {
             ExportFormat::Csv => {
                 let layout = CsvLayout {
@@ -261,7 +262,7 @@ impl App {
             bytes,
             sample_count: samples().len(),
             mark: (role == BufferRole::Recording).then(|| SavedMark {
-                epoch: self.recording.epoch(),
+                epoch: self.capture.recording.epoch(),
                 markers: (format != ExportFormat::Replay).then(|| Recording::marker_keys(&marked)),
             }),
             drops_markers: format == ExportFormat::Replay && !marked.is_empty(),
@@ -270,10 +271,10 @@ impl App {
 
     /// What the samples Export… saves came from and are laid out as: the
     /// recording's, or with none, the history's.
-    fn export_layout(&self) -> &super::CaptureLayout {
-        match self.recording.role() {
-            BufferRole::Recording => &self.recording_layout,
-            BufferRole::History => &self.history_layout,
+    fn export_layout(&self) -> &super::capture::CaptureLayout {
+        match self.capture.recording.role() {
+            BufferRole::Recording => &self.capture.recording_layout,
+            BufferRole::History => &self.capture.history_layout,
         }
     }
 
@@ -351,7 +352,8 @@ impl App {
                 // Samples that arrived while the export ran are not in that
                 // file, so mark only what was actually written — and only if
                 // the buffer still holds the recording it was written from.
-                self.recording
+                self.capture
+                    .recording
                     .mark_exported(mark.epoch, count, mark.markers);
             }
             self.toast = Some(if outcome.is_error {
@@ -395,11 +397,12 @@ mod tests {
     /// `aux_counts`.
     fn app_holding(aux_slots: usize, extra_slots: usize, aux_counts: &[usize]) -> App {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
-        app.recording_layout.aux_slots = aux_slots;
-        app.recording_layout.extra_slots = extra_slots;
-        app.recording.toggle(std::time::Instant::now());
+        app.capture.recording_layout.aux_slots = aux_slots;
+        app.capture.recording_layout.extra_slots = extra_slots;
+        app.capture.recording.toggle(std::time::Instant::now());
         for &aux in aux_counts {
-            app.recording
+            app.capture
+                .recording
                 .push(&measurement(aux), &app.wall_clock, extra_slots.min(aux));
         }
         app
@@ -412,7 +415,7 @@ mod tests {
             .map(|i| {
                 let mut m = measurement(0);
                 m.timestamp = t0 + std::time::Duration::from_secs(i);
-                app.recording.push(&m, &wall_clock, 0);
+                app.capture.recording.push(&m, &wall_clock, 0);
                 m.timestamp
             })
             .collect()
@@ -428,10 +431,10 @@ mod tests {
         app.markers
             .add(before[1], chrono::Local::now(), "1.234 V".into())
             .expect("a new marker");
-        app.recording.toggle(t0);
+        app.capture.recording.toggle(t0);
         push_at(&mut app, t0, 2..4);
-        app.recording.toggle(t0);
-        app.recording.discard();
+        app.capture.recording.toggle(t0);
+        app.capture.recording.discard();
 
         let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
         assert_eq!(prepared.sample_count, 4);
@@ -449,9 +452,9 @@ mod tests {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         let t0 = Instant::now();
         push_at(&mut app, t0, 0..3);
-        app.recording.toggle(t0);
+        app.capture.recording.toggle(t0);
         push_at(&mut app, t0, 3..5);
-        app.recording.toggle(t0);
+        app.capture.recording.toggle(t0);
         push_at(&mut app, t0, 5..8);
         let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
         assert_eq!(prepared.sample_count, 2);
@@ -460,7 +463,7 @@ mod tests {
     /// The header and every row, as comma-separated cells.
     fn exported(app: &App) -> Vec<Vec<String>> {
         let bytes = render_csv(
-            app.recording.export_samples(),
+            app.capture.recording.export_samples(),
             &[],
             "mock",
             app.csv_layout(),
@@ -559,7 +562,8 @@ mod tests {
     #[test]
     fn the_mode_names_the_file_only_while_the_buffer_holds_one() {
         let app = app_holding(0, 0, &[0, 0]);
-        let mut samples: VecDeque<Sample> = app.recording.export_samples().cloned().collect();
+        let mut samples: VecDeque<Sample> =
+            app.capture.recording.export_samples().cloned().collect();
         assert_eq!(single_mode(samples.iter()), Some("DC V"));
         samples[1].measurement.mode = "AC V".into();
         assert_eq!(single_mode(samples.iter()), None);
@@ -569,7 +573,8 @@ mod tests {
     #[test]
     fn a_no_reading_leaves_the_mode_in_the_name() {
         let app = app_holding(0, 0, &[0, 0, 0]);
-        let mut samples: VecDeque<Sample> = app.recording.export_samples().cloned().collect();
+        let mut samples: VecDeque<Sample> =
+            app.capture.recording.export_samples().cloned().collect();
         let idle = &mut samples[1].measurement;
         idle.mode = "Auto".into();
         idle.value = MeasuredValue::NoReading("Auto");
@@ -592,7 +597,7 @@ mod tests {
 
         app.toggle_recording();
         assert_eq!(
-            app.recording_layout.experimental, None,
+            app.capture.recording_layout.experimental, None,
             "nothing was connected to take a stability from"
         );
 
@@ -607,12 +612,14 @@ mod tests {
         .expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
-        app.recording.push(&measurement(0), &app.wall_clock, 0);
+        app.capture
+            .recording
+            .push(&measurement(0), &app.wall_clock, 0);
 
-        assert_eq!(app.recording_layout.experimental, Some(true));
+        assert_eq!(app.capture.recording_layout.experimental, Some(true));
         assert!(app.experimental(), "the recording ran against that meter");
         let json = render_json(
-            app.recording.export_samples(),
+            app.capture.recording.export_samples(),
             &[],
             "UNI-T UT181A",
             app.experimental(),
@@ -643,7 +650,7 @@ mod tests {
         );
         app.connection.state = ConnectionState::Connected;
         assert_eq!(message(&app), "Nothing to export \u{2014} no readings yet");
-        app.recording.toggle(Instant::now());
+        app.capture.recording.toggle(Instant::now());
         assert_eq!(
             message(&app),
             "Nothing to export \u{2014} the recording has no samples yet"
@@ -657,7 +664,9 @@ mod tests {
     fn a_history_export_saves_the_buffer_and_marks_nothing() {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         for _ in 0..3 {
-            app.recording.push(&measurement(0), &app.wall_clock, 0);
+            app.capture
+                .recording
+                .push(&measurement(0), &app.wall_clock, 0);
         }
         let prepared = app.prepare_export(ExportFormat::Csv).expect("the history");
         assert_eq!(prepared.sample_count, 3);
@@ -665,7 +674,7 @@ mod tests {
         assert_eq!(
             prepared.bytes,
             render_csv(
-                app.recording.export_samples(),
+                app.capture.recording.export_samples(),
                 &[],
                 UNKNOWN_DEVICE,
                 app.csv_layout()
@@ -673,9 +682,11 @@ mod tests {
             .expect("rendering the history")
         );
 
-        app.recording.toggle(Instant::now());
+        app.capture.recording.toggle(Instant::now());
         for _ in 0..3 {
-            app.recording.push(&measurement(0), &app.wall_clock, 0);
+            app.capture
+                .recording
+                .push(&measurement(0), &app.wall_clock, 0);
         }
         let outcome = export_outcome(
             Path::new("out.csv"),
@@ -684,7 +695,7 @@ mod tests {
             prepared.mark,
         );
         deliver_outcome(&mut app, outcome);
-        assert_eq!(app.recording.unexported_count(), 3);
+        assert_eq!(app.capture.recording.unexported_count(), 3);
         assert_eq!(
             app.toast.as_ref().map(|t| t.message.as_str()),
             Some("Exported 3 samples to out.csv"),
@@ -704,9 +715,9 @@ mod tests {
         assert_eq!(
             prepared.mark,
             Some(SavedMark {
-                epoch: app.recording.epoch(),
+                epoch: app.capture.recording.epoch(),
                 markers: Some(Recording::marker_keys(
-                    &app.recording.marked(app.markers.iter())
+                    &app.capture.recording.marked(app.markers.iter())
                 )),
             })
         );
@@ -720,7 +731,7 @@ mod tests {
         );
         assert!(prepared.default_name.ends_with(".csv"));
         let rendered = render_csv(
-            app.recording.export_samples(),
+            app.capture.recording.export_samples(),
             &[],
             UNKNOWN_DEVICE,
             app.csv_layout(),
@@ -734,11 +745,12 @@ mod tests {
     #[test]
     fn a_replay_export_leaves_the_markers_out() {
         let mut app = app_holding(0, 0, &[0, 0]);
-        app.recording_layout.device_id = Some("ut61eplus");
+        app.capture.recording_layout.device_id = Some("ut61eplus");
         let prepared = app.prepare_export(ExportFormat::Replay).expect("frames");
         assert!(!prepared.drops_markers, "no markers to leave out");
 
         app.last_measurement = app
+            .capture
             .recording
             .export_samples()
             .last()
@@ -751,7 +763,7 @@ mod tests {
         assert_eq!(
             prepared.mark.map(|m| m.markers),
             Some(Some(Recording::marker_keys(
-                &app.recording.marked(app.markers.iter())
+                &app.capture.recording.marked(app.markers.iter())
             )))
         );
     }
@@ -776,7 +788,7 @@ mod tests {
             prepared.mark,
         );
         deliver_outcome(&mut app, outcome);
-        assert_eq!(app.recording.unexported_count(), 0);
+        assert_eq!(app.capture.recording.unexported_count(), 0);
         assert_eq!(
             app.toast.as_ref().map(|t| (t.message.as_str(), t.is_error)),
             Some(("Exported 3 samples to out.csv", false))
@@ -790,9 +802,11 @@ mod tests {
     fn a_finished_export_does_not_mark_a_recording_started_after_it() {
         let mut app = app_holding(0, 0, &[0, 0, 0]);
         let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
-        app.recording.toggle(Instant::now()); // stop
-        app.recording.toggle(Instant::now()); // a new recording
-        app.recording.push(&measurement(0), &app.wall_clock, 0);
+        app.capture.recording.toggle(Instant::now()); // stop
+        app.capture.recording.toggle(Instant::now()); // a new recording
+        app.capture
+            .recording
+            .push(&measurement(0), &app.wall_clock, 0);
         let outcome = export_outcome(
             Path::new("out.csv"),
             Ok(()),
@@ -800,7 +814,7 @@ mod tests {
             prepared.mark,
         );
         deliver_outcome(&mut app, outcome);
-        assert_eq!(app.recording.unexported_count(), 1);
+        assert_eq!(app.capture.recording.unexported_count(), 1);
     }
 
     /// A failed write marks nothing and says why.
@@ -815,7 +829,7 @@ mod tests {
             prepared.mark,
         );
         deliver_outcome(&mut app, outcome);
-        assert_eq!(app.recording.unexported_count(), 2);
+        assert_eq!(app.capture.recording.unexported_count(), 2);
         assert_eq!(
             app.toast.as_ref().map(|t| (t.message.as_str(), t.is_error)),
             Some(("Export failed: disk full", true))

@@ -316,7 +316,7 @@ mod tests {
             dmm_lib::flags::StatusFlags::default(),
         );
         if record {
-            app.recording.toggle(app.clock.now());
+            app.capture.recording.toggle(app.clock.now());
         }
         for _ in 0..50 {
             app.graph.push(
@@ -326,7 +326,7 @@ mod tests {
                 "V",
                 Some("  1.234"),
             );
-            app.recording.push(&m, &app.wall_clock, 0);
+            app.capture.recording.push(&m, &app.wall_clock, 0);
         }
         for i in 0..markers {
             let at = m.timestamp + std::time::Duration::from_millis(i);

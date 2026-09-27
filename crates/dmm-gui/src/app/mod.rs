@@ -3,6 +3,7 @@
 //!
 //! The concerns live in submodules — [`appearance`] (fonts, theme, zoom),
 //! [`connection`] and [`messages`] (the acquisition thread and its channel),
+//! [`capture`] (the reading pipeline and the stores it fills),
 //! [`plot_input`], [`top_bar`], [`toast`], [`controls`], [`layout`] (the
 //! reading column), [`meter_fit`] (the big meter's sizing arithmetic),
 //! [`stats_panel`], [`recording_panel`], [`export`], [`transform_ui`],
@@ -10,6 +11,7 @@
 //! methods to the one [`App`] declared here.
 
 mod appearance;
+mod capture;
 mod connection;
 mod controls;
 mod export;
@@ -41,11 +43,10 @@ use std::sync::{Arc, Mutex};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
 use crate::graph::Graph;
-use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
 use appearance::{UiColorKey, font_definitions, install_text_styles};
+use capture::Capture;
 use connection::RemoteCommand;
-use dmm_lib::stats::SeriesStats;
 use export::ExportOutcome;
 use layout::ContentLayout;
 use messages::ConnectionIssue;
@@ -152,52 +153,6 @@ struct AppliedChrome {
     /// Last minimum window size pushed to the windowing system, so the
     /// viewport command is only re-sent when it actually changes.
     min_size: Option<egui::Vec2>,
-}
-
-/// Provenance and column layout the sample buffer is exported with. Taken
-/// when recording starts — or, for the history, from the connection its first
-/// reading arrived on — and kept across disconnect, so a file describes the
-/// meter its samples came from rather than whatever is selected at export
-/// time.
-#[derive(Default)]
-struct CaptureLayout {
-    /// Meter the buffered samples came from. Outlives disconnect so a capture
-    /// can still be exported with the right provenance after the meter is
-    /// unplugged.
-    device: Option<&'static str>,
-    /// Registry id of that meter, for a replay file's `# device:` line, taken
-    /// at the same moment and for the same reason as `device`.
-    ///
-    /// `None` for the mock, whose readings are synthesised rather than decoded
-    /// from frames — there is nothing to play back.
-    device_id: Option<&'static str>,
-    /// Whether that meter's protocol was short of verified, for the JSON
-    /// export's `experimental` field. Taken alongside `device` and for the
-    /// same reason: disconnecting clears the connection's stability, so read
-    /// at export time it would mark an unplugged UT181A's readings verified.
-    ///
-    /// `None` until a meter has been connected during the recording — Record
-    /// works while disconnected, and the stability read then is the default
-    /// the disconnect left behind, not a meter's. The export falls back to the
-    /// live connection, as `device` and `device_id` do.
-    experimental: Option<bool>,
-    /// The link those samples came over, for the replay export's `# link:`
-    /// line. Taken alongside `device_id` and for the same reason: a
-    /// disconnect clears the connection's link, and a file exported after
-    /// unplugging would then claim the cable every unmarked file is read as.
-    link: Option<dmm_lib::transport::Link>,
-    /// Sub-value slots the meter itself can fill in the buffered samples,
-    /// taken alongside `device` and for the same reason: the CSV column layout has to describe the meter the
-    /// samples came from, not whatever is selected at export time.
-    aux_slots: usize,
-    /// Extra sub-value slots the export reserves *after* the meter's own, for
-    /// the ones software appends (a transform's `Raw`). Kept apart from
-    /// `aux_slots` so `Raw` gets a fixed trailing column instead of sliding
-    /// forward whenever the meter sends fewer sub-values. Only ever grows
-    /// during a recording — turning a scale off mid-capture leaves the
-    /// trailing group empty rather than renumbering the columns already
-    /// written into the user's mental model of the file.
-    extra_slots: usize,
 }
 
 /// The choice lists the readout dropdowns draw, one per setting the
@@ -365,11 +320,9 @@ pub struct App {
     transform_editor: TransformEditor,
 
     graph: Graph,
-    /// Min/max/avg and the running integral of the current series. The GUI
-    /// always integrates: the stats panel shows the integral whenever the
-    /// current unit has a meaningful one.
-    session: SeriesStats,
-    recording: Recording,
+    /// The session statistics, the sample buffer and its export layouts:
+    /// what [`capture::Capture::ingest`] fills beside the graph.
+    capture: Capture,
     /// Markers the user placed on readings, kept while the graph or the
     /// sample buffer holds their reading.
     markers: crate::markers::Markers,
@@ -390,14 +343,6 @@ pub struct App {
     /// the settings as an override, so nothing about a playback is saved.
     replay: Option<crate::ReplaySource>,
 
-    /// What the recording's export names and lays out, latched at Record.
-    recording_layout: CaptureLayout,
-    /// The same for the graph's history, latched as it starts.
-    history_layout: CaptureLayout,
-    /// Sub-value slots the connected meter family can report, from its
-    /// profile. 0 until the first `Connected`, and kept on disconnect so a
-    /// capture stays exportable with its full column layout.
-    device_aux_slots: usize,
     /// Profile of the selected device, refreshed only when the selection
     /// changes. Two render paths need it every frame, and building a protocol
     /// to read it allocates — the UT61E+ factory lowercases its model string,
@@ -484,9 +429,7 @@ impl App {
         let mut graph = Graph::new();
         // One setting bounds both stores of the sample stream.
         graph.set_max_points(settings.max_samples);
-        let mut recording = Recording::new();
-        // A fresh buffer holds nothing, so this cannot stop anything.
-        recording.set_max_samples(settings.max_samples);
+        let capture = Capture::new(settings.max_samples);
         let initial_device = named_device(&settings.shared.device_family);
         Self {
             settings,
@@ -497,16 +440,12 @@ impl App {
             transform: Transform::default(),
             transform_editor: TransformEditor::default(),
             graph,
-            session: SeriesStats::new(true),
-            recording,
+            capture,
             markers: crate::markers::Markers::default(),
             marker_list: marker_list::MarkerList::default(),
             wall_clock: dmm_lib::WallClock::from_clock(&clock),
             clock,
             replay: None,
-            recording_layout: CaptureLayout::default(),
-            history_layout: CaptureLayout::default(),
-            device_aux_slots: 0,
             selected_profile: initial_device.map(|d| *(d.new_protocol)().profile()),
             selected_profile_id: initial_device.map_or(registry::AUTO_DEVICE_ID, |d| d.id),
             recording_panel: RecordingPanel::default(),

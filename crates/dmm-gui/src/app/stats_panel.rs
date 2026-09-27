@@ -111,7 +111,7 @@ impl App {
             // own and leaves the series alone, so the figures still belong
             // to the reading before it.
             Some(m) if matches!(m.value, MeasuredValue::NoReading(_)) => {
-                self.session.unit().unwrap_or("")
+                self.capture.session.unit().unwrap_or("")
             }
             Some(m) => &*m.unit,
             None => "",
@@ -119,8 +119,8 @@ impl App {
         // Keyed on the caption unit rather than the session's: `clear_session`
         // drops `last_measurement` but `SeriesStats::reset` keeps its series,
         // and the row should vanish with the reading it describes.
-        let integral_info = stats::integral_display(self.session.integrator.value(), unit)
-            .map(|(value, unit)| (value, unit, self.session.integrator.elapsed_secs()));
+        let integral_info = stats::integral_display(self.capture.session.integrator.value(), unit)
+            .map(|(value, unit)| (value, unit, self.capture.session.integrator.elapsed_secs()));
         // The visible block reports what the graph draws, which is not the
         // main reading's unit when a sub-value is plotted.
         let visible_unit = self.graph.plotted_unit();
@@ -131,7 +131,7 @@ impl App {
             .map(|(value, unit)| (value, unit, self.graph.visible_data_span_secs()));
         let visible_stats = self.graph.visible_stats();
         let formatted = FormattedStats::new(
-            &self.session.stats,
+            &self.capture.session.stats,
             visible_stats.as_ref(),
             unit,
             visible_unit,
@@ -215,7 +215,7 @@ impl App {
             .on_hover_text("Reset Min / Max / Avg / integral counters")
             .clicked()
         {
-            self.session.reset();
+            self.capture.session.reset();
         }
     }
 
@@ -225,14 +225,14 @@ impl App {
     /// text were duplicated character-for-character between them, which
     /// CLAUDE.md warns about precisely because the two copies drift.
     fn show_integral_gap_warning(&self, ui: &mut Ui, font_size: f32) {
-        if self.session.integrator.skipped_intervals == 0 {
+        if self.capture.session.integrator.skipped_intervals == 0 {
             return;
         }
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         ui.label(
             RichText::new(format!(
                 "\u{26A0} {} gaps >2s skipped",
-                self.session.integrator.skipped_intervals
+                self.capture.session.integrator.skipped_intervals
             ))
             .font(egui::FontId::proportional(font_size))
             .color(tc.status_warning()),

@@ -655,7 +655,7 @@ impl App {
                 // to the new bound on the spot, and a recording already past
                 // it stops rather than losing the samples it has.
                 self.graph.set_max_points(n);
-                if self.recording.set_max_samples(n) {
+                if self.capture.recording.set_max_samples(n) {
                     self.buffer_shrunk_toast();
                 }
             }

@@ -6,6 +6,7 @@
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 use log::info;
 
+use super::capture::CaptureLayout;
 use super::export::{ExportFormat, NO_WIRE_FORMAT};
 use super::toast::Toast;
 use super::{App, ConnectionState, DEFAULT_RECORDING_HEIGHT};
@@ -154,7 +155,7 @@ impl App {
     /// Ctrl+R) used to destroy an unexported capture with no prompt, no
     /// toast, and nothing in the log.
     pub(super) fn toggle_recording(&mut self) {
-        if !self.recording.active && self.discard_losses(DiscardFor::Record) != (0, 0) {
+        if !self.capture.recording.active && self.discard_losses(DiscardFor::Record) != (0, 0) {
             self.ask_before_discarding(DiscardFor::Record);
             return;
         }
@@ -175,10 +176,10 @@ impl App {
     fn discard_losses(&self, action: DiscardFor) -> (usize, usize) {
         match action {
             DiscardFor::Record => (
-                self.recording.unexported_count(),
-                self.recording.unsaved_marker_count(&self.markers),
+                self.capture.recording.unexported_count(),
+                self.capture.recording.unsaved_marker_count(&self.markers),
             ),
-            DiscardFor::Discard => self.recording.lost_on_discard(&self.markers),
+            DiscardFor::Discard => self.capture.recording.lost_on_discard(&self.markers),
         }
     }
 
@@ -197,10 +198,10 @@ impl App {
     }
 
     fn apply_discard(&mut self) {
-        let count = self.recording.recording_samples().len();
-        self.recording.discard();
+        let count = self.capture.recording.recording_samples().len();
+        self.capture.recording.discard();
         info!("discarded a recording of {count} samples");
-        let left = self.recording.history_samples().len();
+        let left = self.capture.recording.history_samples().len();
         let message = if left == 0 {
             "Recording discarded".to_string()
         } else {
@@ -221,31 +222,28 @@ impl App {
     /// disconnect clears the samples), so reading it later labelled the file
     /// with whatever meter happened to be picked last.
     fn apply_recording_toggle(&mut self) {
-        self.recording.toggle(self.clock.now());
-        if self.recording.active {
-            // The meter picked, or the one detection found; under Auto-detect
-            // with nothing connected there is no meter to name, and the export
-            // falls back to its own placeholder.
-            self.recording_layout.device = self.active_device().map(|d| d.display_name);
-            // Only a meter's frames can be replayed, so the mock names no
-            // device here and the export offers no replay file for it.
-            self.recording_layout.device_id = self
-                .active_device()
-                .filter(|d| d.requires_hardware)
-                .map(|d| d.id);
-            // Only from a live connection: disconnected, `stability` is the
-            // Verified default `disconnect()` restored, and latching that
-            // marked a UT181A connected after Record as a verified protocol.
-            self.recording_layout.experimental = (self.connection.state
-                != ConnectionState::Disconnected)
-                .then(|| !self.connection.stability().is_verified());
-            // Empty while disconnected for the same reason; the export then
-            // falls back to whatever link answers during the recording.
-            self.recording_layout.link = self.connection.link();
-            self.recording_layout.aux_slots = self.device_aux_slots;
-            // The transform's Raw sub-value needs a fixed column of its own,
-            // after the meter's — see `extra_slots`.
-            self.recording_layout.extra_slots = self.transform.extra_aux_count();
+        self.capture.recording.toggle(self.clock.now());
+        if self.capture.recording.active {
+            self.capture.recording_layout = CaptureLayout::new(
+                // The meter picked, or the one detection found; under
+                // Auto-detect with nothing connected there is no meter to
+                // name, and the export falls back to its own placeholder.
+                self.active_device(),
+                // Only from a live connection: disconnected, `stability` is
+                // the Verified default `disconnect()` restored, and latching
+                // that marked a UT181A connected after Record as a verified
+                // protocol.
+                (self.connection.state != ConnectionState::Disconnected)
+                    .then(|| !self.connection.stability().is_verified()),
+                // Empty while disconnected for the same reason; the export
+                // then falls back to whatever link answers during the
+                // recording.
+                self.connection.link(),
+                self.capture.device_aux_slots,
+                // The transform's Raw sub-value needs a fixed column of its
+                // own, after the meter's — see `extra_slots`.
+                self.transform.extra_aux_count(),
+            );
         }
     }
 
@@ -303,7 +301,7 @@ impl App {
     }
 
     fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {
-        let (btn_label, btn_tooltip) = if self.recording.active {
+        let (btn_label, btn_tooltip) = if self.capture.recording.active {
             ("\u{25A0} Stop", "Stop recording (Ctrl+R)")
         } else {
             (
@@ -317,9 +315,9 @@ impl App {
                 self.toggle_recording();
             }
             self.show_export_button(ui);
-            let count = self.recording.recording_samples().len();
-            let recorded = self.recording.role() == BufferRole::Recording;
-            if recorded && !self.recording.active && count > 0 {
+            let count = self.capture.recording.recording_samples().len();
+            let recorded = self.capture.recording.role() == BufferRole::Recording;
+            if recorded && !self.capture.recording.active && count > 0 {
                 let discard = ui.button("Discard").on_hover_text(
                     "Discard the recording; Export then saves samples from the graph",
                 );
@@ -327,13 +325,13 @@ impl App {
                     self.discard_recording();
                 }
             }
-            if self.recording.active {
+            if self.capture.recording.active {
                 let status = format!(
                     "{} | {:.0}s",
                     sample_count(count),
-                    self.recording.duration_secs(self.clock.now())
+                    self.capture.recording.duration_secs(self.clock.now())
                 );
-                if self.recording.is_full() {
+                if self.capture.recording.is_full() {
                     let warn = self
                         .settings
                         .theme_colors(ui.visuals().dark_mode)
@@ -347,8 +345,8 @@ impl App {
             }
         });
 
-        let history = self.recording.history_samples().len();
-        if self.recording.role() == BufferRole::History && history > 0 {
+        let history = self.capture.recording.history_samples().len();
+        if self.capture.recording.role() == BufferRole::History && history > 0 {
             ui.add(
                 egui::Label::new(
                     RichText::new(history_hint(history))
@@ -366,7 +364,7 @@ impl App {
     /// The format is settled here, before the save dialog opens — see
     /// `ExportFormat` for why the dialog cannot be the one to ask.
     fn show_export_button(&mut self, ui: &mut Ui) {
-        let (label_tooltip, arrow_tooltip) = export_tooltips(self.recording.role());
+        let (label_tooltip, arrow_tooltip) = export_tooltips(self.capture.recording.role());
         ui.scope(|ui| {
             // The two segments touch, and only the outer corners are round,
             // so they read as one button.
@@ -606,7 +604,7 @@ mod tests {
         fn new() -> Self {
             let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
             // A meter's readings, so the Replay… entry is enabled.
-            app.history_layout.device_id = Some("ut61eplus");
+            app.capture.history_layout.device_id = Some("ut61eplus");
             let ctx = egui::Context::default();
             ctx.enable_accesskit();
             Self {
@@ -796,7 +794,7 @@ mod tests {
     #[test]
     fn down_skips_a_disabled_entry() {
         let mut run = MenuRun::new();
-        run.app.history_layout.device_id = None;
+        run.app.capture.history_layout.device_id = None;
         run.frame(1.0, vec![]);
         run.frame(1.0, vec![]);
         let arrow = run.node_rect("Export file type");
@@ -863,7 +861,7 @@ mod tests {
 
         for _ in 0..3 {
             let wall_clock = run.app.wall_clock;
-            run.app.recording.push(&reading(), &wall_clock, 0);
+            run.app.capture.recording.push(&reading(), &wall_clock, 0);
         }
         run.frame(1.0, vec![]);
         assert!(run.shows_text(&history_hint(3)), "{:?}", history_hint(3));
@@ -874,7 +872,7 @@ mod tests {
 
         run.app.toggle_recording();
         let wall_clock = run.app.wall_clock;
-        run.app.recording.push(&reading(), &wall_clock, 0);
+        run.app.capture.recording.push(&reading(), &wall_clock, 0);
         run.app.toggle_recording();
         run.frame(1.0, vec![]);
         assert!(!run.shows_text(&history_hint(1)));
@@ -910,7 +908,7 @@ mod tests {
         run.app.toggle_recording();
         for _ in 0..samples {
             let wall_clock = run.app.wall_clock;
-            run.app.recording.push(&reading(), &wall_clock, 0);
+            run.app.capture.recording.push(&reading(), &wall_clock, 0);
         }
         run.app.toggle_recording();
         run.frame(1.0, vec![]);
@@ -925,12 +923,12 @@ mod tests {
     fn discard_shows_only_for_a_stopped_recording() {
         let mut run = MenuRun::new();
         let wall_clock = run.app.wall_clock;
-        run.app.recording.push(&reading(), &wall_clock, 0);
+        run.app.capture.recording.push(&reading(), &wall_clock, 0);
         run.frame(1.0, vec![]);
         assert!(!run.shows_widget("Discard"), "not for the history");
 
         run.app.toggle_recording();
-        run.app.recording.push(&reading(), &wall_clock, 0);
+        run.app.capture.recording.push(&reading(), &wall_clock, 0);
         run.frame(1.0, vec![]);
         assert!(!run.shows_widget("Discard"), "not while recording");
 
@@ -956,15 +954,15 @@ mod tests {
         run.click(run.node_rect("Cancel").center());
         assert!(!run.shows_widget("Discard recording"), "the prompt closed");
         assert_eq!(
-            run.app.recording.recording_samples().len(),
+            run.app.capture.recording.recording_samples().len(),
             2,
             "Cancel keeps them"
         );
 
         run.click(run.node_rect("Discard").center());
         run.click(run.node_rect("Discard recording").center());
-        assert_eq!(run.app.recording.role(), BufferRole::History);
-        assert_eq!(run.app.recording.export_samples().len(), 0);
+        assert_eq!(run.app.capture.recording.role(), BufferRole::History);
+        assert_eq!(run.app.capture.recording.export_samples().len(), 0);
         assert_eq!(
             run.app.toast.as_ref().map(|t| t.message.as_str()),
             Some("Recording discarded")
@@ -979,8 +977,8 @@ mod tests {
         let mut run = run_with_stopped_recording(2);
         run.click(run.node_rect("Discard").center());
         assert!(!run.shows_widget("Discard recording"), "no prompt");
-        assert_eq!(run.app.recording.role(), BufferRole::History);
-        assert_eq!(run.app.recording.export_samples().len(), 2);
+        assert_eq!(run.app.capture.recording.role(), BufferRole::History);
+        assert_eq!(run.app.capture.recording.export_samples().len(), 2);
         assert_eq!(
             run.app.toast.as_ref().map(|t| t.message.as_str()),
             Some("Recording discarded. Export\u{2026} saves the graph's 2 samples.")
@@ -993,17 +991,18 @@ mod tests {
     fn discarding_an_exported_recording_does_not_ask() {
         let mut run = run_with_stopped_recording(2);
         run.app.clear_session();
-        let epoch = run.app.recording.epoch();
-        run.app.recording.mark_exported(epoch, 2, None);
+        let epoch = run.app.capture.recording.epoch();
+        run.app.capture.recording.mark_exported(epoch, 2, None);
         run.click(run.node_rect("Discard").center());
         assert!(!run.shows_widget("Discard recording"), "no prompt");
-        assert_eq!(run.app.recording.role(), BufferRole::History);
+        assert_eq!(run.app.capture.recording.role(), BufferRole::History);
     }
 
     /// Mark the newest buffered sample, as `N` does with it on screen.
     fn mark_newest(run: &mut MenuRun) {
         run.app.last_measurement = run
             .app
+            .capture
             .recording
             .export_samples()
             .last()
@@ -1018,8 +1017,8 @@ mod tests {
     #[test]
     fn discarding_unsaved_markers_asks_first() {
         let mut run = run_with_stopped_recording(2);
-        let epoch = run.app.recording.epoch();
-        run.app.recording.mark_exported(epoch, 2, None);
+        let epoch = run.app.capture.recording.epoch();
+        run.app.capture.recording.mark_exported(epoch, 2, None);
         mark_newest(&mut run);
         run.app.clear_session();
         run.click(run.node_rect("Discard").center());
@@ -1029,7 +1028,7 @@ mod tests {
              have left the graph."
         ));
         run.click(run.node_rect("Discard recording").center());
-        assert_eq!(run.app.recording.role(), BufferRole::History);
+        assert_eq!(run.app.capture.recording.role(), BufferRole::History);
     }
 
     /// The × at the end of a marker's row deletes that marker.
@@ -1093,13 +1092,18 @@ mod tests {
         m.timestamp = at;
         let wall_clock = run.app.wall_clock;
         run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
-        run.app.recording.push(&m, &wall_clock, 0);
+        run.app.capture.recording.push(&m, &wall_clock, 0);
         run.app.last_measurement = Some(m);
     }
 
     /// Whether the log drew the row of the sample taken at `at`.
     fn shows_sample(run: &MenuRun, at: Instant) -> bool {
-        let sample = run.app.recording.sample_at(at).expect("a buffered sample");
+        let sample = run
+            .app
+            .capture
+            .recording
+            .sample_at(at)
+            .expect("a buffered sample");
         let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
         run.tree
             .iter()
@@ -1123,6 +1127,7 @@ mod tests {
         let mut run = run_with_markers(2_000, &[10], true);
         let t0 = run
             .app
+            .capture
             .recording
             .recording_samples()
             .next()
@@ -1160,6 +1165,7 @@ mod tests {
         let mut run = run_with_markers(300, &[], true);
         let times: Vec<Instant> = run
             .app
+            .capture
             .recording
             .recording_samples()
             .map(|s| s.measurement.timestamp)
@@ -1194,6 +1200,7 @@ mod tests {
         let mut run = run_with_markers(300, &[], true);
         let last = run
             .app
+            .capture
             .recording
             .recording_samples()
             .last()
@@ -1211,6 +1218,7 @@ mod tests {
         assert!(rows < 100, "{rows} rows drawn");
         let newest = run
             .app
+            .capture
             .recording
             .recording_samples()
             .last()
@@ -1292,7 +1300,7 @@ mod tests {
                     elapsed_secs: None,
                 })
                 .collect();
-            run.app.recording.push(&m, &wall_clock, 0);
+            run.app.capture.recording.push(&m, &wall_clock, 0);
         }
         run.width = 300.0;
         run.frame(1.0, vec![]);
@@ -1324,7 +1332,7 @@ mod tests {
             let mut m = reading();
             m.timestamp = t0 + std::time::Duration::from_secs(i);
             run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
-            run.app.recording.push(&m, &wall_clock, 0);
+            run.app.capture.recording.push(&m, &wall_clock, 0);
             if i % 4 == 2 {
                 run.app.last_measurement = Some(m);
                 run.app.add_marker(false);
@@ -1356,7 +1364,12 @@ mod tests {
 
     /// Where the log drew the row of the sample taken at `at`.
     fn sample_rect(run: &MenuRun, at: Instant) -> Rect {
-        let sample = run.app.recording.sample_at(at).expect("a buffered sample");
+        let sample = run
+            .app
+            .capture
+            .recording
+            .sample_at(at)
+            .expect("a buffered sample");
         let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
         run.tree
             .iter()
@@ -1373,6 +1386,7 @@ mod tests {
         let mut run = run_with_markers(300, &[], true);
         let sample = run
             .app
+            .capture
             .recording
             .recording_samples()
             .nth(295)
@@ -1397,6 +1411,7 @@ mod tests {
         let mut run = run_with_markers(300, &[295], true);
         let sample = run
             .app
+            .capture
             .recording
             .recording_samples()
             .nth(295)
@@ -1420,6 +1435,7 @@ mod tests {
         run.app.clear_session();
         run.app.last_measurement = run
             .app
+            .capture
             .recording
             .export_samples()
             .last()
@@ -1483,6 +1499,7 @@ mod tests {
         run.app.connection.state = ConnectionState::Connected;
         run.app.last_measurement = run
             .app
+            .capture
             .recording
             .export_samples()
             .last()
@@ -1530,7 +1547,7 @@ mod tests {
         run.click(run.node_rect("\u{25CF} Record").center());
         assert!(run.shows_text("Starting a new recording will discard 1 unexported sample."));
         run.click(run.node_rect("Discard and record").center());
-        assert!(run.app.recording.active);
-        assert_eq!(run.app.recording.recording_samples().len(), 0);
+        assert!(run.app.capture.recording.active);
+        assert_eq!(run.app.capture.recording.recording_samples().len(), 0);
     }
 }

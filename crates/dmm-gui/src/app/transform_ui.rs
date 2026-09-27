@@ -207,7 +207,7 @@ impl App {
     /// Install a transform, resetting everything derived from the old scale.
     ///
     /// A relabel moves `m.unit`, which the mode/unit check in
-    /// `drain_messages` and `Graph::push_sample` both already answer by
+    /// `Capture::ingest` and `Graph::push_sample` both already answer by
     /// clearing. A pure scale or offset change does not, so the reset has to
     /// be explicit here — otherwise volt-scale statistics would carry into
     /// amp-scale readings. A recording is left alone, exactly as the Clear
@@ -231,12 +231,13 @@ impl App {
         }
         self.transform = new;
         self.clear_session();
-        if self.recording.active {
+        if self.capture.recording.active {
             message.push_str(" \u{2014} recording continues with scaled values");
             // A scale switched on mid-capture still needs its trailing CSV
             // column. Only grows: switching back off leaves the group empty
             // rather than shifting every column the file already promised.
-            self.recording_layout.extra_slots = self
+            self.capture.recording_layout.extra_slots = self
+                .capture
                 .recording_layout
                 .extra_slots
                 .max(self.transform.extra_aux_count());
@@ -398,22 +399,26 @@ mod tests {
                 dmm_lib::flags::StatusFlags::default(),
             )
         };
-        app.recording.push(&reading(), &app.wall_clock, 0);
+        app.capture.recording.push(&reading(), &app.wall_clock, 0);
 
         app.set_transform(Transform::linear(2.0, 0.0, None));
-        assert_eq!(app.recording.export_samples().len(), 0);
+        assert_eq!(app.capture.recording.export_samples().len(), 0);
 
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(DmmMessage::Measurement(reading()))
             .expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
-        assert_eq!(app.recording.export_samples().len(), 1);
+        assert_eq!(app.capture.recording.export_samples().len(), 1);
         assert_eq!(
-            app.recording.export_samples().next().map(|s| s.extra_aux),
+            app.capture
+                .recording
+                .export_samples()
+                .next()
+                .map(|s| s.extra_aux),
             Some(1)
         );
-        assert_eq!(app.history_layout.extra_slots, 1);
+        assert_eq!(app.capture.history_layout.extra_slots, 1);
     }
 
     /// A negative scale is a legitimate probe polarity flip, not an error.
