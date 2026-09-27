@@ -174,6 +174,9 @@ Three components stacked vertically: toolbar, main plot, and minimap.
   vertical line pairs
 - Overloads shown as a filled band in the error colour, drawn at their true
   duration; the crosshair reports `overload` inside one
+- [Markers](#recording) shown as dotted vertical lines, each with a flag at
+  the bottom carrying its number and as much of its note as fits; click a
+  flag to write its note
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range
@@ -208,6 +211,7 @@ it, and several dropouts between the same two readings collapse into one gap.
 A thin strip below the main plot showing the full capture history.
 
 - Bracket markers ([ ]) indicate the current viewport
+- Markers show as small points along the bottom edge
 - Overload bands mirror the main plot, widened to a pixel when narrower
 - Spikes stay visible however long the session runs
 - Click or drag the interior to jump to a specific time
@@ -247,8 +251,10 @@ A thin strip below the main plot showing the full capture history.
   and any sub-values, with each marker on its reading's row; with nothing
   recorded, it lists the markers alone
 - **Markers** — `N` marks the reading on screen, `Ctrl+N` marks it and puts
-  the cursor in its note. A marker's row ends with its number, note and `×`
-  to delete it; `Enter` keeps a note, `Esc` puts back what it said before
+  the cursor in its note, and clicking a marker's flag on the graph opens its
+  note. A marker's row ends with its number, note and `×` to delete it;
+  `Enter` keeps a note, `Esc` puts back what it said before. Pressing the
+  number, or clicking or typing in the note, scrolls the graph to the marker
 - Buffer holds up to the configured [buffer size](#settings). Recording
   auto-stops when the buffer is full and shows a toast notification.
 
@@ -565,7 +571,7 @@ Colors can be edited directly in `settings.json` using hex strings
 Available color fields:
 
 - **UI chrome:** `background`, `text`, `weak_text`, `button`, `border`, `accent`
-- **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`
+- **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`, `graph_marker`
 - **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`
 - **Minimap:** `minimap_viewport`
 

@@ -10,6 +10,7 @@ use std::time::Instant;
 
 use super::time::format_time_axis_label;
 use super::{GapKind, Graph, OverlaySeries, SegmentsAndGaps};
+use crate::markers::Markers;
 use crate::theme::ThemeColors;
 
 /// One sub-value trace ready to draw: (overlay index, name, segments).
@@ -78,6 +79,101 @@ pub(super) fn quantize_for_hash(v: f64) -> i64 {
     } else {
         (v * 1000.0).round() as i64
     }
+}
+
+/// Widest a marker's flag grows, its note included.
+const FLAG_MAX_WIDTH: f32 = 170.0;
+/// Room left between a flag and its neighbours' lines.
+const FLAG_AIR: f32 = 4.0;
+/// Space between a flag's edge and its text.
+const FLAG_PAD: f32 = 5.0;
+/// Half the width of a flag's point, and its height.
+const FLAG_TIP: egui::Vec2 = egui::vec2(5.0, 6.0);
+
+/// One marker's flag on the plot: the line it points at, where its tag is
+/// drawn, and what the tag says.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct Flag {
+    pub(super) number: u32,
+    pub(super) x: f32,
+    pub(super) rect: egui::Rect,
+    pub(super) label: String,
+}
+
+/// The flags of the markers at screen `x` (ascending), each labelled with
+/// its number and note, along the bottom of `plot`.
+///
+/// A flag is centred on its line. Its note gets no more than the gap to the
+/// nearer neighbouring line, so notes are cut before they cover a neighbour;
+/// the number always stays. A flag that would still touch the one before it
+/// slides right, and one that would slide off its own line is left out — its
+/// line still shows. Near a plot edge a flag slides inward, its point staying
+/// on the line. `width_of` measures a label.
+pub(super) fn layout_marker_flags(
+    markers: &[(f32, u32, &str)],
+    plot: egui::Rect,
+    height: f32,
+    width_of: impl Fn(&str) -> f32,
+) -> Vec<Flag> {
+    let mut flags: Vec<Flag> = Vec::new();
+    for (i, &(x, number, note)) in markers.iter().enumerate() {
+        let before = i.checked_sub(1).map_or(f32::INFINITY, |j| x - markers[j].0);
+        let after = markers.get(i + 1).map_or(f32::INFINITY, |next| next.0 - x);
+        let room = FLAG_MAX_WIDTH.min(before - FLAG_AIR).min(after - FLAG_AIR);
+        let label = fit_flag_label(number, note, room - 2.0 * FLAG_PAD, &width_of);
+        let width = width_of(&label) + 2.0 * FLAG_PAD;
+        let mut left = (x - width / 2.0).min(plot.right() - width).max(plot.left());
+        if let Some(prev) = flags.last() {
+            left = left.max(prev.rect.right() + FLAG_AIR);
+        }
+        // The point has to leave from the tag.
+        if x < left || x > left + width || left + width > plot.right() {
+            continue;
+        }
+        let bottom = plot.bottom() - 3.0;
+        let rect = egui::Rect::from_min_max(
+            egui::pos2(left, bottom - height),
+            egui::pos2(left + width, bottom),
+        );
+        flags.push(Flag {
+            number,
+            x,
+            rect,
+            label,
+        });
+    }
+    flags
+}
+
+/// The longest of "3 note" and "3 no…" that fits `room`, else "3".
+fn fit_flag_label(number: u32, note: &str, room: f32, width_of: &impl Fn(&str) -> f32) -> String {
+    let number = number.to_string();
+    let note = note.trim();
+    if note.is_empty() {
+        return number;
+    }
+    // The top bar's separator, so a numeric note stays apart from the number.
+    let full = format!("{number} \u{00B7} {note}");
+    if width_of(&full) <= room {
+        return full;
+    }
+    // Widths grow with the characters kept, so search for the most that fit
+    // rather than measuring every length.
+    let chars: Vec<char> = note.chars().collect();
+    let cut = |k: usize| {
+        let kept: String = chars[..k].iter().collect();
+        format!("{number} \u{00B7} {}\u{2026}", kept.trim_end())
+    };
+    let (mut lo, mut hi) = (0, chars.len());
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        if width_of(&cut(mid)) <= room {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    if lo > 0 { cut(lo) } else { number }
 }
 
 /// How far a cursor's readout stands off its point: clear of the vertical
@@ -397,8 +493,10 @@ impl Graph {
     }
 
     /// Render the main graph.
-    pub fn show_main(&mut self, ui: &mut Ui, tc: &ThemeColors) {
+    pub fn show_main(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
         let (view_min, view_max) = self.view_bounds();
+        let marker_color = tc.graph_marker();
+        let in_view = self.markers_between(markers, view_min, view_max);
 
         // Build segments and gaps for the visible slice only, plus one
         // point on each side so line segments at the view edges render
@@ -624,6 +722,17 @@ impl Graph {
                 );
             }
 
+            // Markers: dotted, apart from the dashed data-loss edges and the
+            // solid cursors; each flag below carries its number.
+            for &(x, _) in &in_view {
+                plot_ui.vline(
+                    VLine::new("", x)
+                        .color(marker_color)
+                        .width(1.5)
+                        .style(egui_plot::LineStyle::dotted_dense()),
+                );
+            }
+
             // Mean line overlay
             if show_mean && let Some(avg) = mean_value {
                 plot_ui.hline(
@@ -700,8 +809,16 @@ impl Graph {
         // Top-left, where `paint_overlay_labels` never draws — the Mean/Ref
         // and cursor labels are anchored to the right edge.
         Self::paint_plot_key(ui, response.response.rect, &key_entries, tc);
+        self.clicked_marker = Self::paint_marker_flags(
+            ui,
+            &response.transform,
+            response.response.rect,
+            &in_view,
+            marker_color,
+            tc.plot_background(),
+        );
         self.handle_interaction(ui, &response.response, &response.transform);
-        self.update_plot_a11y_label(ui, response.response.id, y_min, y_max);
+        self.update_plot_a11y_label(ui, response.response.id, y_min, y_max, in_view.len());
         // Draw a focus ring on the main plot body when it's keyboard-focused.
         // Note: egui_plot also allocates separate focusable responses for the
         // X and Y axes — those receive Tab but don't draw a focus indicator.
@@ -712,7 +829,14 @@ impl Graph {
     /// Set an AccessKit label on the plot that summarizes current state so
     /// screen readers have a text alternative to the pixels. Throttled: the
     /// label is only re-formatted when the underlying state changes.
-    fn update_plot_a11y_label(&mut self, ui: &Ui, plot_id: egui::Id, y_min: f64, y_max: f64) {
+    fn update_plot_a11y_label(
+        &mut self,
+        ui: &Ui,
+        plot_id: egui::Id,
+        y_min: f64,
+        y_max: f64,
+        markers_in_view: usize,
+    ) {
         use std::hash::{Hash, Hasher};
         let last_value = self.history.back().map(|p| p.value);
         // Only the traces actually drawn are spoken: a sub-value the user
@@ -748,6 +872,7 @@ impl Graph {
             // The over-range state is announced below, so it has to bust the
             // cache — otherwise the band appears with no spoken counterpart.
             self.pending_break.is_some().hash(&mut h);
+            markers_in_view.hash(&mut h);
             h.finish()
         };
         if sig != self.a11y_label_sig {
@@ -787,8 +912,13 @@ impl Graph {
                 Some(label) => format!(" of {label}"),
                 None => String::new(),
             };
+            let markers = match markers_in_view {
+                0 => String::new(),
+                1 => " 1 marker in view.".to_string(),
+                n => format!(" {n} markers in view."),
+            };
             self.a11y_label = format!(
-                "Measurement plot{of_series}. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples.{also} {}. {}.",
+                "Measurement plot{of_series}. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples.{also}{markers} {}. {}.",
                 self.time_window_secs,
                 y_min,
                 y_max,
@@ -798,6 +928,82 @@ impl Graph {
             );
         }
         crate::a11y::set_accessible_label(ui, plot_id, &self.a11y_label);
+    }
+
+    /// Each marker's flag at the bottom of the plot: a tag in the marker
+    /// colour pointing up at its line, with the number and as much of the
+    /// note as fits, in the plot background's colour. Returns the number of
+    /// the marker whose flag was clicked.
+    ///
+    /// A flag takes clicks but not the keyboard focus: the plot would gain a
+    /// Tab stop per marker, and the Recording panel's log already has one.
+    fn paint_marker_flags(
+        ui: &Ui,
+        transform: &PlotTransform,
+        plot_rect: egui::Rect,
+        in_view: &[(f64, &crate::markers::Marker)],
+        color: egui::Color32,
+        text_color: egui::Color32,
+    ) -> Option<u32> {
+        if in_view.is_empty() {
+            return None;
+        }
+        let mut clicked = None;
+        let painter = ui.painter();
+        let font = egui::FontId::proportional(12.0);
+        let height = painter.fonts_mut(|f| f.row_height(&font)) + 4.0;
+        let at: Vec<(f32, u32, &str)> = in_view
+            .iter()
+            .map(|&(x, m)| {
+                let px = transform
+                    .position_from_point(&egui_plot::PlotPoint::new(x, 0.0))
+                    .x;
+                (px, m.number, m.note.as_str())
+            })
+            .collect();
+        let width_of = |s: &str| {
+            painter
+                .layout_no_wrap(s.to_string(), font.clone(), text_color)
+                .size()
+                .x
+        };
+        for flag in layout_marker_flags(&at, plot_rect, height, width_of) {
+            let top = flag.rect.top();
+            // The point's base stays on the tag, even for one slid to an edge.
+            let base = |dx: f32| (flag.x + dx).clamp(flag.rect.left(), flag.rect.right());
+            painter.add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(base(-FLAG_TIP.x), top),
+                    egui::pos2(flag.x, top - FLAG_TIP.y),
+                    egui::pos2(base(FLAG_TIP.x), top),
+                ],
+                color,
+                egui::Stroke::NONE,
+            ));
+            painter.rect_filled(flag.rect, 3.0, color);
+            painter.text(
+                flag.rect.center(),
+                egui::Align2::CENTER_CENTER,
+                &flag.label,
+                font.clone(),
+                text_color,
+            );
+            let edit = format!("Write marker {}'s note", flag.number);
+            let response = ui
+                .interact(
+                    flag.rect,
+                    ui.id().with(("marker_flag", flag.number)),
+                    egui::Sense::CLICK,
+                )
+                .on_hover_text(&edit)
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
+            response
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &edit));
+            if response.clicked() {
+                clicked = Some(flag.number);
+            }
+        }
+        clicked
     }
 
     /// Paint text labels for overlays (mean, reference lines, cursors) using the

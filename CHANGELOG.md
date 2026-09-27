@@ -15,7 +15,7 @@
 
 ### GUI
 
-- **Mark moments with `N` or `Ctrl+N` and write notes on them** — markers and notes go into CSV and JSON exports.
+- **Mark moments with `N` or `Ctrl+N` and write notes on them** — drawn on the graph and minimap, and included in CSV and JSON exports.
 - **The top bar names the link the meter is on** — `UT61E+ · USB cable` or `UT61E+ · Bluetooth`.
 - **Switching Plot: between series in one unit keeps the graph** — such as T1 and T2, or DC and AC; it restarted empty.
 - **A UT181A's reading is named T1, T2, Relative or Peak Max beside its sub-values** — the graph called it Main.

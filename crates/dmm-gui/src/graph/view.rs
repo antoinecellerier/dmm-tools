@@ -106,19 +106,22 @@ impl Graph {
     /// Scroll the view by a fraction of the current window width.
     pub(super) fn scroll_view(&mut self, fraction: f64) {
         let delta = self.time_window_secs * fraction;
+        let (_, data_max) = self.data_time_range();
+        let from = if self.live {
+            data_max - self.time_window_secs / 2.0
+        } else {
+            self.view_center
+        };
+        self.center_view_on(from + delta);
+    }
+
+    /// Centre the window on `center` seconds, kept from starting before the
+    /// data; a window that reaches the newest data is live again.
+    pub(super) fn center_view_on(&mut self, center: f64) {
         let (data_min, data_max) = self.data_time_range();
         let half = self.time_window_secs / 2.0;
-
-        if self.live {
-            self.view_center = data_max - half;
-            self.live = false;
-        }
-
-        self.view_center = (self.view_center + delta).max(data_min + half);
-
-        if self.view_center + half >= data_max {
-            self.live = true;
-        }
+        self.view_center = center.max(data_min + half);
+        self.live = self.view_center + half >= data_max;
     }
 
     /// Jump view to the start of recorded data.

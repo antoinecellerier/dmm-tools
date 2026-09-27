@@ -25,6 +25,7 @@ use eframe::egui::{self, Ui};
 use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
+use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
 use crate::theme::ThemeColors;
 use field::{NumberField, NumberListField};
@@ -323,6 +324,9 @@ pub struct Graph {
     a11y_label: String,
     /// Signature of the state used to build `a11y_label`, for change detection.
     a11y_label_sig: u64,
+    /// The marker whose flag was clicked this frame, for the app to open its
+    /// note — see [`Graph::take_clicked_marker`].
+    clicked_marker: Option<u32>,
 }
 
 impl Graph {
@@ -377,6 +381,7 @@ impl Graph {
             bbox_zoom_current_px: None,
             a11y_label: String::new(),
             a11y_label_sig: 0,
+            clicked_marker: None,
         }
     }
 
@@ -1159,17 +1164,63 @@ impl Graph {
         }
     }
 
-    /// Combined render: toolbar + main graph + minimap.
-    pub fn show(&mut self, ui: &mut Ui, tc: &ThemeColors) {
+    /// Combined render: toolbar + main graph + minimap, with `markers` on
+    /// both.
+    pub fn show(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
         self.handle_keyboard(ui.ctx());
         self.show_toolbar(ui, tc);
         let minimap_reserve = MINIMAP_HEIGHT + 30.0;
         let main_height = (ui.available_height() - minimap_reserve).max(60.0);
         ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
-            self.show_main(ui, tc);
+            self.show_main(ui, tc, markers);
         });
         ui.add_space(4.0);
-        self.show_minimap(ui, tc);
+        self.show_minimap(ui, tc, markers);
+    }
+
+    /// The markers on readings between `x_min` and `x_max` seconds from the
+    /// origin, with where they sit. None before the origin: a marker from
+    /// before the graph restarted is on a trace it no longer shows.
+    pub(crate) fn markers_between<'a>(
+        &self,
+        markers: &'a Markers,
+        x_min: f64,
+        x_max: f64,
+    ) -> Vec<(f64, &'a Marker)> {
+        let Some(origin) = self.origin else {
+            return Vec::new();
+        };
+        let at = |secs: f64| origin + std::time::Duration::from_secs_f64(secs.max(0.0));
+        markers
+            .between(at(x_min), at(x_max.max(x_min)))
+            .map(|m| (self.elapsed_secs(m.at), m))
+            .collect()
+    }
+
+    /// The number of the marker whose flag was clicked since the last call.
+    pub(crate) fn take_clicked_marker(&mut self) -> Option<u32> {
+        self.clicked_marker.take()
+    }
+
+    /// Whether the graph still shows the reading taken at `at`.
+    pub(crate) fn holds(&self, at: Instant) -> bool {
+        self.origin.is_some_and(|origin| at >= origin)
+            && self.first_point_time().is_some_and(|first| at >= first)
+    }
+
+    /// Bring the reading taken at `at` into view, centred, keeping the
+    /// window's width, when it is out of view. Returns to live if that is
+    /// where it lands, as scrolling there would.
+    pub(crate) fn reveal(&mut self, at: Instant) {
+        if !self.holds(at) {
+            return;
+        }
+        let x = self.elapsed_secs(at);
+        let (view_min, view_max) = self.view_bounds();
+        if (view_min..=view_max).contains(&x) {
+            return;
+        }
+        self.center_view_on(x);
     }
 
     /// Full-history segments, through the same builder the minimap caches.

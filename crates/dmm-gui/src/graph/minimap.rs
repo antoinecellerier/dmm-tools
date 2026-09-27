@@ -8,6 +8,7 @@ use super::time::{format_time_label, nice_time_interval};
 use super::view::pad_range;
 use super::{GapKind, Graph};
 use crate::a11y::ResponseA11yExt;
+use crate::markers::Markers;
 use crate::theme::ThemeColors;
 
 /// Minimap height in logical pixels.
@@ -386,7 +387,7 @@ pub(super) fn pan(
 
 impl Graph {
     /// Render the minimap showing full history with viewport indicator.
-    pub fn show_minimap(&mut self, ui: &mut Ui, tc: &ThemeColors) {
+    pub fn show_minimap(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
         if self.history.len() < 2 {
             ui.allocate_space(egui::vec2(ui.available_width(), MINIMAP_HEIGHT));
             return;
@@ -511,6 +512,28 @@ impl Graph {
                     egui::Stroke::new(1.5_f32, line_color),
                 ));
             }
+        }
+
+        // A marker is a small upward point on the bottom edge — its flag's
+        // point on the main plot. One per pixel at most: a burst of markers
+        // would otherwise paint the same spot over and over.
+        let marker_color = tc.graph_marker();
+        let mut last_x = f32::NEG_INFINITY;
+        for (x, _) in self.markers_between(markers, data_min, data_max) {
+            let x = scale.x_of(x);
+            if x - last_x < 1.0 {
+                continue;
+            }
+            last_x = x;
+            painter.add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(x - 4.5, rect.bottom()),
+                    egui::pos2(x, rect.bottom() - 7.0),
+                    egui::pos2(x + 4.5, rect.bottom()),
+                ],
+                marker_color,
+                egui::Stroke::NONE,
+            ));
         }
 
         // Draw viewport indicator as [ ] bracket markers

@@ -489,8 +489,11 @@ impl App {
             let graph_height = (total - self.recording_panel.height).max(80.0);
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                self.graph.show(ui, &tc);
+                self.graph.show(ui, &tc, &self.markers);
             });
+            if let Some(number) = self.graph.take_clicked_marker() {
+                self.open_marker_note(number);
+            }
 
             let sep = ui.separator();
             let sep_id = ui.id().with("rec_resize");
@@ -526,7 +529,10 @@ impl App {
 
             self.show_recording_section(ui, compact);
         } else if self.settings.show_graph {
-            self.graph.show(ui, &tc);
+            self.graph.show(ui, &tc, &self.markers);
+            if let Some(number) = self.graph.take_clicked_marker() {
+                self.open_marker_note(number);
+            }
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
         }
@@ -1090,6 +1096,50 @@ mod tests {
         assert!(run.app.markers.is_empty());
     }
 
+    /// The marker's number is a button: pressing it brings the marker into
+    /// view.
+    #[test]
+    fn the_number_shows_its_marker_on_the_graph() {
+        let mut run = run_with_a_marker_at(20, false);
+        assert!(!run.app.graph.is_view_zoomed(), "live");
+        run.click(run.node_rect("Show marker 1 on the graph").center());
+        assert!(run.app.graph.is_view_zoomed(), "scrolled back to it");
+    }
+
+    /// Tab walks through a row, the number and the note included, without
+    /// moving the graph.
+    #[test]
+    fn tabbing_through_a_row_leaves_the_graph_alone() {
+        let mut run = run_with_a_marker_at(20, false);
+        let number = run.node_rect("Show marker 1 on the graph");
+        let note = run.node_rect("Note for marker 1");
+        let mut stops = Vec::new();
+        for _ in 0..6 {
+            run.key(Key::Tab);
+            if let Some(r) = run.focused_rect() {
+                stops.push(r.center());
+            }
+        }
+        assert!(stops.iter().any(|p| (*p - number.center()).length() < 1.0));
+        assert!(stops.iter().any(|p| (*p - note.center()).length() < 1.0));
+        assert!(!run.app.graph.is_view_zoomed(), "tabbing moves nothing");
+    }
+
+    /// Clicking into a note brings its marker into view; the keystrokes
+    /// after leave the view to the user.
+    #[test]
+    fn clicking_a_note_shows_its_marker_once() {
+        let mut run = run_with_a_marker_at(20, false);
+        run.click(run.node_rect("Note for marker 1").center());
+        assert!(run.app.graph.is_view_zoomed());
+        run.app.graph.reset_view();
+        run.frame(1.0, vec![egui::Event::Text("fan".into())]);
+        assert!(
+            !run.app.graph.is_view_zoomed(),
+            "back in live, and left there"
+        );
+    }
+
     /// Ctrl+R and N in one frame: the prompt Ctrl+R asks for is not on
     /// screen yet, and N still waits for it.
     #[test]
@@ -1119,6 +1169,24 @@ mod tests {
         );
         assert!(run.app.recording_panel.pending_discard.is_some());
         assert!(run.app.markers.is_empty());
+    }
+
+    /// A recording keeps a marker the graph has dropped: its row says so, and
+    /// its number, with nothing to show, is greyed.
+    #[test]
+    fn a_marker_off_the_graph_says_so() {
+        let mut run = run_with_a_marker_at(20, true);
+        assert!(!run.shows_text("not on the graph"));
+        run.app.graph.clear();
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        assert!(run.shows_text("not on the graph"));
+        let show = run
+            .tree
+            .iter()
+            .find(|(_, n)| n.label() == Some("Show marker 1 on the graph"))
+            .map(|(_, n)| n.is_disabled());
+        assert_eq!(show, Some(true), "nowhere left to show it");
     }
 
     /// Record over an unexported recording still asks in its own words.

@@ -101,6 +101,15 @@ impl Markers {
     pub(crate) fn is_empty(&self) -> bool {
         self.list.is_empty()
     }
+
+    /// The markers on readings taken between `start` and `end`, both
+    /// included, found by binary search: the per-frame graph code asks for
+    /// the ones in view.
+    pub(crate) fn between(&self, start: Instant, end: Instant) -> impl Iterator<Item = &Marker> {
+        let from = self.list.partition_point(|m| m.at < start);
+        let to = self.list.partition_point(|m| m.at <= end);
+        self.list.range(from..to.max(from))
+    }
 }
 
 #[cfg(test)]
@@ -165,5 +174,24 @@ mod tests {
         add(&mut m, t).unwrap();
         let at: Vec<Instant> = m.iter().map(|k| k.at).collect();
         assert_eq!(at, [t, t + Duration::from_secs(2)]);
+    }
+
+    #[test]
+    fn between_includes_both_ends() {
+        let mut m = Markers::default();
+        let t = Instant::now();
+        for i in 0..5 {
+            add(&mut m, t + Duration::from_secs(i)).unwrap();
+        }
+        let numbers: Vec<u32> = m
+            .between(t + Duration::from_secs(1), t + Duration::from_secs(3))
+            .map(|k| k.number)
+            .collect();
+        assert_eq!(numbers, [2, 3, 4]);
+        assert_eq!(
+            m.between(t + Duration::from_secs(9), t + Duration::from_secs(10))
+                .count(),
+            0
+        );
     }
 }

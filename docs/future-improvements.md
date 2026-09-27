@@ -252,13 +252,11 @@ Use cases: test reports, lab notebooks, sharing results.
 
 ## Graph Enhancements
 
-### User annotations / event markers
+### Markers in the CLI and replay files
 
-**Complexity:** Medium
+**Complexity:** Small
 
-Drop timestamped markers on the graph with optional text labels (e.g., "applied 10A load", "switched to battery"). Markers appear as vertical lines and are included in recording exports.
-
-Use cases: correlating measurement changes with physical events, making captured data meaningful after the fact.
+The GUI marks readings (`N`, `Ctrl+N`) and exports the markers as `marker,note` CSV columns and JSON keys; `dmm-cli read` cannot place any yet. Pressing Enter, with optional typed text, would mark the latest reading through the same shared writers. Replay files drop markers: `# marker:` comment lines would keep them, once `--replay` reads them back.
 
 ### Rendering the meter's other reported conditions
 

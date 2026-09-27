@@ -27,6 +27,11 @@ const MIN_NOTE_WIDTH: f32 = 120.0;
 /// Samples the log shows, newest last.
 const LOG_ROWS: usize = 500;
 
+/// Space between a marker tag's edge and its number.
+const TAG_PAD: f32 = 3.0;
+/// How far a marker tag's point reaches out towards its reading.
+const TAG_TIP: f32 = 5.0;
+
 /// The log's font: monospace, so the time, value and unit columns line up.
 fn log_font() -> egui::FontId {
     egui::FontId::monospace(11.0)
@@ -52,6 +57,8 @@ struct NoteEdit {
     number: u32,
     /// The note when editing began: what Esc puts back.
     before: String,
+    /// Whether this edit has brought the marker into view yet.
+    revealed: bool,
     /// Whether the log was following its newest row when editing began. The
     /// text field keeps its cursor in view while typing, which stops the log
     /// following; once the edit ends, it follows again.
@@ -117,14 +124,13 @@ fn log_rows<'a>(samples: impl Iterator<Item = &'a Sample>, markers: &[Instant]) 
 }
 
 /// Whether the graph or the sample buffer still holds the reading taken at
-/// `at`: the graph everything since its first point, the buffer the samples
-/// it has.
+/// `at`.
 fn reading_held(
     graph: &crate::graph::Graph,
     recording: &crate::recording::Recording,
     at: Instant,
 ) -> bool {
-    graph.first_point_time().is_some_and(|first| at >= first) || recording.holds(at)
+    graph.holds(at) || recording.holds(at)
 }
 
 impl App {
@@ -178,6 +184,15 @@ impl App {
                     Instant::now(),
                 ));
             }
+        }
+    }
+
+    /// A marker's flag was clicked on the graph: put the cursor in its note,
+    /// or say how to bring back the panel it is written in.
+    pub(super) fn open_marker_note(&mut self, number: u32) {
+        match self.where_notes_are_written() {
+            None => self.marker_list.focus = Some(number),
+            Some(how) => self.toast = Some((how.to_string(), false, Instant::now())),
         }
     }
 
@@ -248,14 +263,18 @@ impl App {
         }
 
         let weak = ui.visuals().weak_text_color();
+        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
+        // The graph's flag colours, a pair its contrast test covers.
+        let (color, tag_text) = (tc.graph_marker(), tc.plot_background());
         let recording = &self.recording;
+        let graph = &self.graph;
         let list = &mut self.marker_list;
         let mut markers: Vec<&mut Marker> = self.markers.iter_mut().collect();
         let times: Vec<Instant> = markers.iter().map(|m| m.at).collect();
         let rows = log_rows(shown.into_iter(), &times);
         let recording_role = recording.role() == BufferRole::Recording;
         // Each marker row's reading, and what the row says of a reading the
-        // recording doesn't hold.
+        // graph or the recording has dropped.
         let labels: Vec<(String, Option<&'static str>)> = rows
             .iter()
             .filter_map(|row| match *row {
@@ -269,7 +288,9 @@ impl App {
                     Some(s) => log_line(&s.measurement),
                     None => m.reading.clone(),
                 };
-                let tag = if recording_role && !recording.holds(m.at) {
+                let tag = if !graph.holds(m.at) {
+                    Some("not on the graph")
+                } else if recording_role && !recording.holds(m.at) {
                     Some("not in the recording")
                 } else {
                     None
@@ -307,6 +328,7 @@ impl App {
                 .fold(0.0, f32::max)
         });
         let mut labels = labels.into_iter();
+        let mut reveal = None;
         let mut delete = None;
 
         let mut area = egui::ScrollArea::vertical()
@@ -327,7 +349,9 @@ impl App {
             ui.spacing_mut().interact_size.y = line;
             ui.spacing_mut().button_padding.y = 0.0;
             let narrow = ui.available_width() < NARROW_ROW_WIDTH;
-            let number_width = 3.0 * ui.fonts_mut(|f| f.glyph_width(&log_font(), '0'));
+            // A tag with room for three digits, so the notes line up.
+            let number_width =
+                TAG_TIP + 2.0 * TAG_PAD + 3.0 * ui.fonts_mut(|f| f.glyph_width(&log_font(), '0'));
             for row in rows {
                 let i = match row {
                     Row::Sample(s) => {
@@ -350,6 +374,7 @@ impl App {
                 // over once the list empties, and a new marker must not
                 // inherit an old note's undo history.
                 let id = egui::Id::new(("marker_note", at));
+                let on_graph = graph.holds(at);
                 // One per marker row, and every marker row is drawn, in order.
                 let Some((text, tag)) = labels.next() else {
                     continue;
@@ -380,6 +405,69 @@ impl App {
                         ui.label(tag);
                     }
                 };
+                // The number is a button, so Tab stops on it: pressing
+                // it brings the marker into view, where tabbing past it
+                // moves nothing. Drawn as the graph's flag, pointing at its
+                // reading, and greyed once the graph has dropped the
+                // reading, with nowhere left to show it.
+                let number_button = |ui: &mut Ui| {
+                    let show = format!("Show marker {number} on the graph");
+                    let tag = |ui: &mut Ui| {
+                        let (slot, _) = ui.allocate_exact_size(
+                            egui::vec2(number_width, line),
+                            egui::Sense::hover(),
+                        );
+                        let fill = if ui.is_enabled() { color } else { weak };
+                        let galley =
+                            ui.painter()
+                                .layout_no_wrap(number.to_string(), log_font(), tag_text);
+                        let body = egui::Rect::from_min_max(
+                            egui::pos2(slot.right() - galley.size().x - 2.0 * TAG_PAD, slot.top()),
+                            slot.right_bottom(),
+                        );
+                        let tip = egui::pos2(body.left() - TAG_TIP, body.center().y);
+                        let response = ui.interact(
+                            egui::Rect::from_min_max(egui::pos2(tip.x, body.top()), body.max),
+                            egui::Id::new(("marker_tag", at)),
+                            egui::Sense::click(),
+                        );
+                        let painter = ui.painter();
+                        painter.add(egui::Shape::convex_polygon(
+                            vec![body.left_top(), tip, body.left_bottom()],
+                            fill,
+                            egui::Stroke::NONE,
+                        ));
+                        painter.rect_filled(
+                            body,
+                            egui::CornerRadius {
+                                nw: 0,
+                                ne: 3,
+                                sw: 0,
+                                se: 3,
+                            },
+                            fill,
+                        );
+                        painter.galley(body.center() - galley.size() / 2.0, galley, tag_text);
+                        response.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::WidgetType::Button,
+                                ui.is_enabled(),
+                                &show,
+                            )
+                        });
+                        response
+                    };
+                    let button = ui
+                        .add_enabled(on_graph, tag)
+                        .on_hover_text(&show)
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .on_disabled_hover_text(format!(
+                            "Marker {number}'s reading is no longer on the graph"
+                        ))
+                        .a11y_label(&show);
+                    crate::a11y::paint_focus_ring(ui, &button);
+                    button.clicked()
+                };
                 let delete_button = |ui: &mut Ui| {
                     let label = format!("Delete marker {number}");
                     ui.add_sized(
@@ -402,13 +490,11 @@ impl App {
                     )
                     .a11y_label(&format!("Note for marker {number}"))
                 };
-                // number, note, ×.
+                // number, note, ×, in that order for Tab.
                 let mut marker_column = |ui: &mut Ui, note_width: f32| {
-                    ui.label(
-                        RichText::new(format!("{number:>2}"))
-                            .font(log_font())
-                            .strong(),
-                    );
+                    if number_button(ui) {
+                        reveal = Some(at);
+                    }
                     let response = note(ui, note_width, &mut m.note);
                     if delete_button(ui) {
                         delete = Some(number);
@@ -458,8 +544,22 @@ impl App {
                     list.editing = Some(NoteEdit {
                         number,
                         before: m.note.clone(),
+                        revealed: false,
                         following: list.following,
                     });
+                }
+                // Acting on a note brings its marker into view: a click,
+                // or the first keystroke of an edit. Tabbing through the
+                // list does not, and neither do the keystrokes after —
+                // by then the view is the user's, live or not.
+                let edit = list.editing.as_mut().filter(|e| e.number == number);
+                if let Some(edit) = edit
+                    && (response.clicked() || response.changed() && !edit.revealed)
+                {
+                    edit.revealed = true;
+                    reveal = Some(at);
+                } else if response.clicked() {
+                    reveal = Some(at);
                 }
                 if response.lost_focus()
                     && let Some(edit) = list.editing.take_if(|e| e.number == number)
@@ -477,6 +577,9 @@ impl App {
         list.following =
             output.state.offset.y + output.inner_rect.height() >= output.content_size.y - 1.0;
 
+        if let Some(at) = reveal {
+            self.graph.reveal(at);
+        }
         if let Some(number) = delete {
             self.markers.remove(number);
         }
@@ -760,6 +863,26 @@ mod tests {
 
         app.add_marker(false);
         assert_eq!(numbers(&app), [1], "the new reading, on the graph");
+    }
+
+    /// A click on a marker's flag opens its note, or says how to bring back
+    /// the panel notes are written in.
+    #[test]
+    fn a_flag_click_opens_the_note() {
+        let mut app = app();
+        send(&mut app, "DC V", Instant::now());
+        app.add_marker(false);
+        app.open_marker_note(1);
+        assert_eq!(app.marker_list.focus, Some(1));
+
+        app.marker_list.focus = None;
+        app.settings.show_recording = false;
+        app.open_marker_note(1);
+        assert_eq!(app.marker_list.focus, None);
+        assert_eq!(
+            toast(&app),
+            Some("Turn on Recording in Settings to add a note.")
+        );
     }
 
     /// Ctrl+N on a reading already marked opens that marker's note; with

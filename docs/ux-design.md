@@ -47,8 +47,8 @@ choice. See [`gui-reference.md`](gui-reference.md#command-line-options) for the 
 ### Color Palette
 
 - Three curated presets: Default (warm), High Contrast (bold), Colorblind-safe (blue/orange/purple)
-- All 23 base colors customizable per-theme via UI color pickers or JSON overrides
-- Colors are split: UI chrome (6), graph (12), status indicators (4), minimap (1)
+- All 24 base colors customizable per-theme via UI color pickers or JSON overrides
+- Colors are split: UI chrome (6), graph (13), status indicators (4), minimap (1)
 - Derived colors auto-track their base (cursor dim/delta, minimap line, recording warning, button hover/active)
 - UI chrome colors (background, text, weak text, button, border, accent) modify egui Visuals — plot grid and axis labels follow automatically
 - Text and Accent reach what egui paints itself (captions, headings, selected fills, focus rings) only once customized, so the stock presets stay egui-native; the heading emphasis lift is small enough that a saturated color keeps its hue

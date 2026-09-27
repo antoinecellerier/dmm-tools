@@ -180,6 +180,8 @@ pub struct PaletteOverrides {
     pub plot_background: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub graph_crosshair: Option<HexColor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_marker: Option<HexColor>,
     // -- Status indicators --
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status_ok: Option<HexColor>,

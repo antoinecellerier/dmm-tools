@@ -31,6 +31,7 @@ pub(crate) enum PaletteField {
     GraphOverlay3,
     PlotBackground,
     GraphCrosshair,
+    GraphMarker,
     StatusOk,
     StatusWarning,
     StatusError,
@@ -59,6 +60,7 @@ impl PaletteField {
         PaletteField::GraphOverlay3,
         PaletteField::PlotBackground,
         PaletteField::GraphCrosshair,
+        PaletteField::GraphMarker,
         PaletteField::StatusOk,
         PaletteField::StatusWarning,
         PaletteField::StatusError,
@@ -87,6 +89,7 @@ impl PaletteField {
             Self::GraphOverlay3 => "Overlay 3",
             Self::PlotBackground => "Plot bg",
             Self::GraphCrosshair => "Crosshair",
+            Self::GraphMarker => "Marker",
             Self::StatusOk => "Connected",
             Self::StatusWarning => "Warning",
             Self::StatusError => "Error",
@@ -122,6 +125,7 @@ impl PaletteField {
             }
             Self::PlotBackground => "Graph plot area background color",
             Self::GraphCrosshair => "Hover crosshair color on the graph",
+            Self::GraphMarker => "Marker lines, flags and numbers",
             Self::StatusOk => "\"Connected\" status color",
             Self::StatusWarning => "Warning status color",
             Self::StatusError => "Error status color",
@@ -150,7 +154,8 @@ impl PaletteField {
             | Self::GraphOverlay2
             | Self::GraphOverlay3
             | Self::PlotBackground
-            | Self::GraphCrosshair => PaletteGroup::Graph,
+            | Self::GraphCrosshair
+            | Self::GraphMarker => PaletteGroup::Graph,
             Self::StatusOk | Self::StatusWarning | Self::StatusError | Self::StatusInactive => {
                 PaletteGroup::Status
             }
@@ -182,6 +187,7 @@ impl PaletteField {
             Self::GraphOverlay3 => &mut o.graph_overlay_3,
             Self::PlotBackground => &mut o.plot_background,
             Self::GraphCrosshair => &mut o.graph_crosshair,
+            Self::GraphMarker => &mut o.graph_marker,
             Self::StatusOk => &mut o.status_ok,
             Self::StatusWarning => &mut o.status_warning,
             Self::StatusError => &mut o.status_error,
@@ -278,6 +284,7 @@ struct PresetColors {
     graph_overlay_3: ColorPair,
     plot_background: ColorPair,
     graph_crosshair: ColorPair,
+    graph_marker: ColorPair,
     // -- Minimap --
     minimap_viewport: ColorPair,
 }
@@ -377,6 +384,14 @@ const PRESET_DEFAULT: PresetColors = PresetColors {
     // egui extreme_bg_color defaults: dark=10, light=255
     plot_background: ColorPair::new(Color32::from_gray(10), Color32::from_gray(255)),
     graph_crosshair: ColorPair::new(Color32::from_gray(200), Color32::from_gray(60)),
+    // A hue no other graph colour uses. Text on the plot, the panel and a
+    // text field (the list's numbers, the flags' labels): 6.94:1 on gray(10),
+    // 5.71:1 on the faint fill gray(32) / 7.05:1 on white, 6.63:1 on
+    // gray(248).
+    graph_marker: ColorPair::new(
+        Color32::from_rgb(240, 100, 200),
+        Color32::from_rgb(170, 0, 120),
+    ),
     minimap_viewport: ColorPair::new(
         Color32::from_rgb(100, 150, 255),
         Color32::from_rgb(0, 70, 200),
@@ -448,6 +463,12 @@ const PRESET_HIGH_CONTRAST: PresetColors = PresetColors {
     ),
     plot_background: ColorPair::new(Color32::from_gray(0), Color32::from_gray(255)),
     graph_crosshair: ColorPair::new(Color32::from_gray(240), Color32::from_gray(20)),
+    // Rose, beside the magenta trigger-crossing diamonds, which differ in
+    // shape: 9.19:1 on gray(0), 7.35:1 on gray(255).
+    graph_marker: ColorPair::new(
+        Color32::from_rgb(255, 130, 190),
+        Color32::from_rgb(170, 0, 90),
+    ),
     minimap_viewport: ColorPair::new(
         Color32::from_rgb(100, 160, 255),
         Color32::from_rgb(0, 60, 200),
@@ -524,6 +545,13 @@ const PRESET_COLORBLIND_SAFE: PresetColors = PresetColors {
     ),
     plot_background: ColorPair::new(Color32::from_gray(10), Color32::from_gray(255)),
     graph_crosshair: ColorPair::new(Color32::from_gray(200), Color32::from_gray(60)),
+    // Okabe–Ito's reddish purple, the eight hues being taken: the Ref lines
+    // share it, but they are horizontal and markers are vertical, dotted
+    // and numbered. 5.32:1 on the faint fill gray(32) / 6.71:1 on gray(248).
+    graph_marker: ColorPair::new(
+        Color32::from_rgb(204, 121, 167),
+        Color32::from_rgb(140, 60, 100),
+    ),
     minimap_viewport: ColorPair::new(
         Color32::from_rgb(86, 150, 233),
         Color32::from_rgb(0, 70, 180),
@@ -827,6 +855,12 @@ impl ThemeColors {
         self.resolve(self.overrides.graph_crosshair, &self.preset.graph_crosshair)
     }
 
+    /// Markers: their lines and flags on the graph, ticks on the minimap,
+    /// and numbers in the Markers list.
+    pub(crate) fn graph_marker(&self) -> Color32 {
+        self.resolve(self.overrides.graph_marker, &self.preset.graph_marker)
+    }
+
     /// Min/max envelope lines.
     pub(crate) fn graph_envelope(&self) -> Color32 {
         self.resolve(self.overrides.graph_envelope, &self.preset.graph_envelope)
@@ -917,6 +951,7 @@ impl ThemeColors {
             PaletteField::GraphOverlay3 => self.graph_overlay(2),
             PaletteField::PlotBackground => self.plot_background(),
             PaletteField::GraphCrosshair => self.graph_crosshair(),
+            PaletteField::GraphMarker => self.graph_marker(),
             PaletteField::StatusOk => self.status_ok(),
             PaletteField::StatusWarning => self.status_warning(),
             PaletteField::StatusError => self.status_error(),
@@ -958,7 +993,7 @@ mod tests {
         }
         // Bumping this is the reminder to check the new colour landed under
         // the heading it should — see `groups_partition_all_in_panel_order`.
-        assert_eq!(seen.len(), 23);
+        assert_eq!(seen.len(), 24);
     }
 
     /// The panel renders group by group, so the concatenated groups have to
@@ -1158,6 +1193,44 @@ mod tests {
                         "overlay {k} {c:?} on plot background {bg:?} is {ratio:.2}:1, below 3:1 ({preset:?}, dark={dark})"
                     );
                 }
+            }
+        }
+    }
+
+    /// A marker's number is text — in its flag on the plot and minimap
+    /// background, and in the list on the panel, its faint frame fill and a
+    /// text field — so it needs AA's 4.5:1 on each. The flag's label is the
+    /// plot background on the marker colour, the same pair.
+    #[test]
+    fn marker_color_meets_text_contrast_wherever_it_is_drawn() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for dark in [true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let bg = tc.background();
+                let faint = Color32::from_rgb(
+                    bg.r().saturating_add(5),
+                    bg.g().saturating_add(5),
+                    bg.b().saturating_add(5),
+                );
+                let fg = tc.graph_marker();
+                for (name, ground) in [
+                    ("panel background", bg),
+                    ("faint frame fill", faint),
+                    ("plot / text-edit background", tc.plot_background()),
+                ] {
+                    let ratio = contrast(fg, ground);
+                    assert!(
+                        ratio >= 4.5,
+                        "{preset:?} dark={dark}: marker {fg:?} on {name} {ground:?} is {ratio:.2}:1"
+                    );
+                }
+                assert_ne!(fg, tc.graph_cursor(), "{preset:?} dark={dark}");
+                assert_ne!(fg, tc.graph_gap(), "{preset:?} dark={dark}");
+                assert_ne!(fg, tc.graph_line(), "{preset:?} dark={dark}");
             }
         }
     }

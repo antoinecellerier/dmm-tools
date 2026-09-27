@@ -1,4 +1,6 @@
-use super::render::{KeyStyle, cursor_label_rect, quantize_for_hash, segment_hits_rect};
+use super::render::{
+    KeyStyle, cursor_label_rect, layout_marker_flags, quantize_for_hash, segment_hits_rect,
+};
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
 use super::*;
@@ -2919,7 +2921,9 @@ fn gesture_frame(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events
     };
     input.events.push(egui::Event::PointerMoved(pointer));
     input.events.extend_from_slice(events);
-    let mut output = ctx.run_ui(input, |ui| g.show_main(ui, &tc));
+    let mut output = ctx.run_ui(input, |ui| {
+        g.show_main(ui, &tc, &crate::markers::Markers::default())
+    });
     // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
     output.textures_delta.clear();
 }
@@ -3033,7 +3037,7 @@ fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
             events,
             ..Default::default()
         },
-        |ui| g.show(ui, &tc),
+        |ui| g.show(ui, &tc, &crate::markers::Markers::default()),
     );
     // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
     output.textures_delta.clear();
@@ -3152,4 +3156,190 @@ fn first_point_time_follows_the_oldest_point() {
 
     g.clear();
     assert_eq!(g.first_point_time(), None);
+}
+
+/// A reading a second for `secs` seconds on a 10 s window, and when it began.
+fn graph_over(secs: u64) -> (Graph, Instant) {
+    let mut g = Graph::new();
+    g.time_window_secs = 10.0;
+    let t0 = Instant::now();
+    for i in 0..=secs {
+        g.push(1.0, t0 + Duration::from_secs(i), "DC V", "V", None);
+    }
+    (g, t0)
+}
+
+fn marked(times: &[Instant]) -> crate::markers::Markers {
+    let mut markers = crate::markers::Markers::default();
+    for &at in times {
+        markers
+            .add(at, chrono::Local::now(), String::new())
+            .expect("one marker per reading");
+    }
+    markers
+}
+
+/// Markers sit at their reading's time from the origin, and only those in
+/// the window are asked for.
+#[test]
+fn markers_sit_at_their_readings_time() {
+    let (g, t0) = graph_over(30);
+    let markers = marked(&[t0 + Duration::from_secs(5), t0 + Duration::from_secs(20)]);
+    let at = |x_min, x_max| -> Vec<(f64, u32)> {
+        g.markers_between(&markers, x_min, x_max)
+            .into_iter()
+            .map(|(x, m)| (x, m.number))
+            .collect()
+    };
+    assert_eq!(at(0.0, 30.0), [(5.0, 1), (20.0, 2)]);
+    assert_eq!(at(10.0, 30.0), [(20.0, 2)]);
+}
+
+/// A restart moves the origin past the old trace: a marker on it is no
+/// longer the graph's to draw, and after Clear nothing is.
+#[test]
+fn a_restarted_graph_shows_no_marker_from_before() {
+    let (mut g, t0) = graph_over(10);
+    let markers = marked(&[t0 + Duration::from_secs(5)]);
+    assert!(g.holds(t0 + Duration::from_secs(5)));
+    g.push(100.0, t0 + Duration::from_secs(11), "Ohm", "Ω", None);
+    assert!(!g.holds(t0 + Duration::from_secs(5)));
+    assert!(g.markers_between(&markers, 0.0, 1e6).is_empty());
+    g.clear();
+    assert!(g.markers_between(&markers, 0.0, 1e6).is_empty());
+}
+
+/// A marker out of view is brought to the middle of the window, which keeps
+/// its width; one in view leaves the view alone; one at the newest reading
+/// lands back in live.
+#[test]
+fn reveal_centres_a_marker_out_of_view() {
+    let (mut g, t0) = graph_over(60);
+    assert!(g.live);
+    g.reveal(t0 + Duration::from_secs(55));
+    assert!(g.live, "already in view");
+
+    g.reveal(t0 + Duration::from_secs(20));
+    assert!(!g.live);
+    let (lo, hi) = g.view_bounds();
+    assert_eq!((lo, hi), (15.0, 25.0));
+
+    g.reveal(t0 + Duration::from_secs(22));
+    assert_eq!(g.view_bounds(), (15.0, 25.0), "in view: nothing moves");
+
+    g.reveal(t0 + Duration::from_secs(60));
+    assert!(g.live, "the newest reading is the live edge");
+}
+
+/// A graph that no longer holds a reading has nowhere to show it.
+#[test]
+fn reveal_ignores_a_reading_the_graph_dropped() {
+    let (mut g, t0) = graph_over(10);
+    g.push(100.0, t0 + Duration::from_secs(11), "Ohm", "Ω", None);
+    let before = (g.live, g.view_center);
+    g.reveal(t0 + Duration::from_secs(5));
+    assert_eq!((g.live, g.view_center), before);
+}
+
+/// Flags as a 7 px-per-character font would lay them out in a 1000 px plot.
+fn flags(markers: &[(f32, u32, &str)]) -> Vec<(f32, egui::Rect, String)> {
+    let plot = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1000.0, 300.0));
+    layout_marker_flags(markers, plot, 19.0, |s| s.chars().count() as f32 * 7.0)
+        .into_iter()
+        .map(|f| (f.x, f.rect, f.label))
+        .collect()
+}
+
+#[test]
+fn a_flag_is_centred_on_its_line_and_cut_to_its_cap() {
+    let long = "load on: 2.2 ohm across the output, supply set to 12.07 V";
+    let laid = flags(&[(500.0, 3, long)]);
+    let (x, rect, label) = &laid[0];
+    assert_eq!(*x, 500.0);
+    assert!((rect.center().x - 500.0).abs() < 0.01, "centred");
+    assert!(rect.width() <= 170.0, "{rect:?}");
+    assert!(
+        label.starts_with("3 \u{00B7} load on") && label.ends_with('\u{2026}'),
+        "{label}"
+    );
+    assert_eq!(rect.bottom(), 297.0, "along the bottom of the plot");
+}
+
+/// Close neighbours keep their numbers and lose their notes; closer ones
+/// slide apart, and a flag pushed off its own line is left out.
+#[test]
+fn close_flags_keep_their_numbers() {
+    let laid = flags(&[(400.0, 4, "fan on"), (430.0, 5, "load off")]);
+    let labels: Vec<&str> = laid.iter().map(|(_, _, l)| l.as_str()).collect();
+    assert_eq!(labels, ["4", "5"]);
+    assert!(laid[0].1.right() < laid[1].1.left(), "no overlap");
+
+    // 18 px apart, as two markers 1.2 s apart on a one-minute window: the
+    // second slides right, its point still on its tag.
+    let laid = flags(&[(400.0, 3, ""), (418.0, 4, "")]);
+    assert_eq!(laid.len(), 2, "{laid:?}");
+    assert!(laid[0].1.right() + 4.0 <= laid[1].1.left());
+    assert!(laid[1].1.left() + 5.0 <= 418.0);
+
+    let laid = flags(&[(400.0, 4, ""), (402.0, 5, "")]);
+    let labels: Vec<&str> = laid.iter().map(|(_, _, l)| l.as_str()).collect();
+    assert_eq!(labels, ["4"], "the second would leave its line");
+}
+
+/// At the plot's edge a flag slides inward, its line still under it, and a
+/// neighbour it reaches moves over.
+#[test]
+fn an_edge_flag_slides_in_and_its_neighbour_moves_over() {
+    let laid = flags(&[(3.0, 1, "supply warm-up done and settled"), (150.0, 2, "")]);
+    assert_eq!(laid.len(), 2, "{laid:?}");
+    let (x, rect, _) = &laid[0];
+    assert_eq!(rect.left(), 0.0);
+    assert!(rect.left() <= *x && *x <= rect.right());
+    assert!(laid[0].1.right() + 4.0 <= laid[1].1.left());
+    assert!(laid[1].1.left() <= 150.0 && 150.0 <= laid[1].1.right());
+}
+
+/// A marker's flag takes a click, and the graph reports whose it was.
+#[test]
+fn clicking_a_flag_reports_its_marker() {
+    let (mut g, t0) = graph_over(30);
+    let markers = marked(&[t0 + Duration::from_secs(25)]);
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    // One frame; where the flag labelled for marker 1 was drawn.
+    let frame = |g: &mut Graph, events: Vec<egui::Event>| {
+        let input = egui::RawInput {
+            screen_rect: Some(gesture_screen()),
+            events,
+            ..Default::default()
+        };
+        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers));
+        out.textures_delta.clear();
+        out.platform_output.accesskit_update.and_then(|update| {
+            update
+                .nodes
+                .iter()
+                .find(|(_, n)| n.label() == Some("Write marker 1's note"))
+                .and_then(|(_, n)| n.bounds())
+                .map(|b| egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32))
+        })
+    };
+    // The axes settle on the first frame, and the flag with them.
+    frame(&mut g, vec![]);
+    let at = frame(&mut g, vec![]).expect("the flag is drawn and labelled");
+    let button = |pressed| egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    frame(&mut g, vec![egui::Event::PointerMoved(at)]);
+    frame(&mut g, vec![egui::Event::PointerMoved(at), button(true)]);
+    frame(&mut g, vec![egui::Event::PointerMoved(at), button(false)]);
+    assert_eq!(g.take_clicked_marker(), Some(1));
+    assert!(
+        g.cursor_a.is_none(),
+        "the click is the flag's, not the plot's"
+    );
 }
