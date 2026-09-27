@@ -1,0 +1,8 @@
+# Hz with no reading yet, the frame after a range switch (both overload bits over 0.0) - captured from a real UT181A (issue #5, @diego351, 2026-09-27)
+raw_hex: "02 08 00 11 71 01 00 00 00 00 33 48 7A 00 00 10 00 00 00 00 00 00 00 48 7A 00 00 00 00 00 00"
+mode: Hz
+value: "----"
+unit: Hz
+range_label: 60Hz
+flags: {}
+aux: []

@@ -13,6 +13,7 @@
 //! - Numeric: `"5.678"`, `"-12.345"`
 //! - Overload: `"OL"`
 //! - NCV: `"NCV:3"`
+//! - No reading, as the parser words it: `"----"`
 //! - No main reading in this frame, only sub-values: `""`
 //!
 //! `aux`, when present, lists the sub-values the reading must carry — no more,

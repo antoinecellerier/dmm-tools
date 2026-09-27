@@ -1349,10 +1349,11 @@ open items below are closed.
   2026-09-27 by @diego351: every `hold:on`, `rel:on` and `minmax:on`
   sub-step the meter accepted read the flag back.
 - **Found by the 2026-09-27 capture, to fix in our code:**
-  - A blank value (both overload bits, float 0.0 — spec §5.2) is read as
-    OL and reported as unrecognised. It shows after every switch, so
-    range sub-steps sample only blanks and the REL sweep, which skips an
-    OL reading, never runs after one.
+  - ~~A blank value (both overload bits, float 0.0 — spec §5.2) is read as
+    OL and reported as unrecognised~~ — **FIXED** 2026-09-27: read as no
+    reading, shown `----` until the LCD's own rendering is known. It
+    shows after every switch, so range sub-steps sample only blanks and
+    the REL sweep, which skips an OL reading, never runs after one.
   - Unit strings pass through raw (`~`, `k~`, `M~`, `uF`, `VDC`,
     `mVac+dc`), unlike every other family, and `transform::si_prefix`
     cannot split `~` or `…ac+dc`.

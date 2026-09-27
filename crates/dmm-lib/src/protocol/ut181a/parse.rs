@@ -231,8 +231,9 @@ fn report_positional_aux(label: &str, mode_word: u16) {
 /// is read the same either way.
 fn report_unrecognised_value(float: f32, precision: u8) {
     // Bits 0 and 1 are +OL and -OL and bits 4-7 the decimals: bits 2-3 are
-    // undefined, and nothing says both overloads can be set at once.
-    if precision & 0x0C != 0 || precision & 0x03 == 0x03 {
+    // undefined, and both overloads at once only ever come with a 0.0 float,
+    // the blank value.
+    if precision & 0x0C != 0 || (precision & 0x03 == 0x03 && float != 0.0) {
         report_unknown("ut181a", "precision byte", format_args!("{precision:#04x}"));
     }
     // An overload is signalled by those bits; NaN and infinity are never
@@ -351,18 +352,9 @@ fn parse_full_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>, Strin
         )));
     }
     let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-    let precision = data[4];
     let unit = parse_unit_string(&data[5..13]);
-    report_unrecognised_value(float, precision);
-    let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
-    let dp = ((precision >> 4) & 0x0F) as usize;
-
-    if is_overload || float.is_nan() || float.is_infinite() {
-        Ok((MeasuredValue::Overload, None, unit))
-    } else {
-        let v = float as f64;
-        Ok((MeasuredValue::Normal(v), Some(format!("{v:.dp$}")), unit))
-    }
+    let (value, display) = read_value(float, data[4]);
+    Ok((value, display, unit))
 }
 
 /// Parse a 5-byte "short value": float32(4) + precision(1).
@@ -374,16 +366,29 @@ fn parse_short_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>)> {
         )));
     }
     let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-    let precision = data[4];
+    Ok(read_value(float, data[4]))
+}
+
+/// What a UT181A shows while it has no value to give: research spec §5.2's
+/// blank value, both overload bits over a float of 0.0. The wire says nothing
+/// about the LCD, so this is the dashes other meters show for no reading.
+const BLANK: &str = "----";
+
+/// A float and its precision byte as a reading and its display digits.
+fn read_value(float: f32, precision: u8) -> (MeasuredValue, Option<String>) {
     report_unrecognised_value(float, precision);
-    let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
+    // §5.2: after every switch, and in a MIN/MAX or Peak slot not yet filled.
+    if precision & 0x03 == 0x03 && float == 0.0 {
+        return (MeasuredValue::NoReading(BLANK), None);
+    }
+    let is_overload = precision & 0x03 != 0;
     let dp = ((precision >> 4) & 0x0F) as usize;
 
     if is_overload || float.is_nan() || float.is_infinite() {
-        Ok((MeasuredValue::Overload, None))
+        (MeasuredValue::Overload, None)
     } else {
         let v = float as f64;
-        Ok((MeasuredValue::Normal(v), Some(format!("{v:.dp$}"))))
+        (MeasuredValue::Normal(v), Some(format!("{v:.dp$}")))
     }
 }
 
@@ -1621,6 +1626,50 @@ raw_payload=30"#
         let (m, reports) = parse_reporting(&p);
         assert_eq!(m.unwrap().display_raw.as_deref(), Some("5.000"));
         assert_eq!(reports, ["ut181a: unrecognised precision byte: 0x3c"]);
+    }
+
+    /// §5.2's blank value — both overload bits over 0.0 — is no reading, in
+    /// every slot, and nothing to report. Frames from @diego351's UT181A
+    /// (issue #5, 2026-09-27): Hz just after a range switch, and µA DC AC+DC
+    /// as the meter entered Peak.
+    #[test]
+    fn a_blank_value_is_no_reading() {
+        let (m, reports) = parse_reporting(&hex(
+            "02 08 00 11 71 01 00 00 00 00 33 48 7A 00 00 10 00 00 00 00 00 00 00 \
+             48 7A 00 00 00 00 00 00",
+        ));
+        let m = m.unwrap();
+        assert!(matches!(m.value, MeasuredValue::NoReading("----")));
+        assert_eq!(m.display_raw, None);
+        assert!(reports.is_empty(), "{reports:?}");
+
+        let (m, reports) = parse_reporting(&hex(
+            "02 06 01 21 81 01 00 00 00 00 13 75 41 61 63 2B 64 63 00 00 00 00 00 \
+             13 75 41 41 43 00 00 00 00 00 00 00 00 13 75 41 44 43 00 2B 64 63",
+        ));
+        let m = m.unwrap();
+        assert!(matches!(m.value, MeasuredValue::NoReading("----")));
+        assert!(
+            m.aux_values
+                .iter()
+                .all(|a| matches!(a.value, MeasuredValue::NoReading("----")))
+        );
+        assert!(
+            !reports.iter().any(|r| r.contains("precision")),
+            "{reports:?}"
+        );
+
+        // A MIN/MAX slot before its first reading.
+        let mut p = minmax_payload(0x3111);
+        p[11..15].copy_from_slice(&0.0f32.to_le_bytes());
+        p[15] = 0x13;
+        let (m, reports) = parse_reporting(&p);
+        let m = m.unwrap();
+        assert!(matches!(
+            m.aux_values[0].value,
+            MeasuredValue::NoReading("----")
+        ));
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     /// misc bit 0 and misc2 bits 2, 6 and 7 are undefined (§5.1); the flags
