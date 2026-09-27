@@ -192,11 +192,15 @@ CLI binary using `clap`. Its modules:
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | Command dispatch, `list`/`info`/`command`/`debug`/`completions` subcommands |
+| `main.rs` | Entry point: resolves the device (flag, settings file, then detection), dispatches the subcommand, answers `completions` itself, and prints the help that fits a failed run |
 | `cli.rs` | The clap types, the value parsers behind `--scale`/`--offset`, and the help text built at run time (`--device`'s registry table, the settings path) |
 | `cmd/mod.rs` | The subcommand modules, and the Ctrl+C flag the looping ones stop on |
+| `cmd/list.rs` | `list`: USB cables, and Bluetooth adapters and meters in range, with the setup help when nothing is found |
+| `cmd/info.rs` | `info`: the meter's name, what detection found, and the transport it answered on |
 | `cmd/read.rs` | `read`: live or replayed readings through `format.rs` and `output.rs`, with the closing min/max/avg and integral summary |
 | `cmd/settings.rs` | `get` and `set`: the settings a meter can switch to from where it sits, as a listing or JSON, and a switch confirmed from the readings that follow |
+| `cmd/command.rs` | `command`: a button press, or the list of the ones the family implements |
+| `cmd/debug.rs` | `debug`: raw frames beside what they decoded to |
 | `open.rs` | Opening the meter a command runs against, named or detected (with or without the capture recorder), the mock for the commands that take one, and the setup help a failed open or a silent meter prints |
 | `choice.rs` | What `set` takes as a choice: a label or a unique fragment of one, typed without the meter's symbols, and the shortest fragment a listing shows |
 | `capture/mod.rs` | The `capture` command: opens the report, runs the passes, prints the coverage epilogue |
