@@ -1041,6 +1041,10 @@ CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
   - A UT803 is not auto-detected: the CH9325 starts at 2400 and the
     UT803 talks at 19200, so it has to be named. Its packets are
     unconfirmed on hardware
+  - The UT804 parser takes AC or AC+DC coupling on the mV position (mode
+    0x3) without a report, though the manual lists no AC mV function; a
+    capture of that position with SELECT pressed would say whether the
+    meter ever sends it
 - See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.
 - UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
@@ -1631,6 +1635,15 @@ Left over from the 2026-09-19 re-verification against the UT61+ manual:
     or the measurable span; the row says 0.1%~99.9%.
   - UT61D+ temperature: "should be less than 230°C/446°F", while the table
     runs to 1000°C/1832°F; the manual does not tie the limit to the probe.
+- **The same kind of unclear notes in the UT181A and UT803 spec data**, left
+  as printed:
+  - UT181A continuity: one set of remarks is read as covering both the
+    short alarm (0x5211) and the open alarm (0x5212); the manual does not
+    say so outright.
+  - UT181A current: "20A: 30s on, then 10min off; not specified above 10A"
+    leaves open what the 10–20A readings are worth.
+  - UT803 hFE: "bo ≈10µA" is kept as printed; the manual does not define
+    `bo`.
 
 ### UT61E+ auto power-off while polled over USB
 
@@ -1936,7 +1949,9 @@ boot.
   and ASCII (spec §12). The driver never reads it as a packet (byte 13's
   top bits), and a read that times out on it says to update the firmware
   from the SD card (manual p.72). Which firmware first sent the binary
-  packet is open (spec §14.4).
+  packet is open (spec §14.4). Detection never recognises such a meter, so
+  under `auto` the update hint does not show: only a read with
+  `--device 121gw` gets it.
 - **Advertised name.** "121GW", seen on a meter (spec §15.4). EEVblog's app
   also accepts "Bluegiga", which no meter was seen to send; the driver does
   not look for it.
@@ -2289,6 +2304,11 @@ the following needs someone's hardware.
     reads both. Such a meter splits them: which consumers mean "own radio"
     (the peer names, the "built-in radio" wording in both binaries) and
     which mean "no cable" (the open path never trying USB).
+- **Link drops beside a streaming headset.** On our BlueZ machine
+  (2026-09-26, UT-D07B + UT61E+), "Bluetooth link lost" drops happened with
+  old and new builds alike while a WH-1000XM6 headset streamed on the same
+  controller, and none in three runs after it was disconnected. Whether
+  shared-controller load explains them, and on which adapters, is open.
 - **The UT202S registry entry.** UNI-T's UT61+ protocol deck specifies the
   UT202S clamp meter with a full range table, and it is a Bluetooth meter —
   now reachable. Adding it means a `SelectableDevice` entry with its own
