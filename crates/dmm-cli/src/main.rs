@@ -182,38 +182,17 @@ fn main() {
             mock_mode,
         } => cmd_set(selection, opts, setting, choice, mock_mode),
         Cmd::Debug { count, interval_ms } => cmd_debug(selection, opts, count, interval_ms),
-        Cmd::Capture {
-            output,
-            steps,
-            unverified,
-            plan,
-            sniff,
-            no_drive,
-            settle,
-            list_steps,
-            format,
-        } => {
-            if list_steps {
+        Cmd::Capture(args) => {
+            if args.list_steps {
                 // Device-scoped: the steps come from the selected device's
                 // protocol, so what's listed is what `--steps` will match.
                 // With nothing selected, that means asking the cable first.
                 device_for_listing(selection, opts).map(|device| {
-                    capture::list_steps(device, format);
+                    capture::list_steps(device, args.format);
                 })
             } else {
                 open_recording_with_help(selection, opts).and_then(|(dmm, recorder, device)| {
-                    capture::cmd_capture(
-                        output,
-                        steps,
-                        unverified,
-                        sniff,
-                        no_drive,
-                        std::time::Duration::from_millis(settle),
-                        plan,
-                        dmm,
-                        recorder,
-                        device,
-                    )
+                    capture::cmd_capture(args, dmm, recorder, device)
                 })
             }
         }

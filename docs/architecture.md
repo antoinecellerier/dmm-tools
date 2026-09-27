@@ -193,7 +193,7 @@ CLI binary using `clap`. Its modules:
 | Module | Responsibility |
 |--------|---------------|
 | `main.rs` | Entry point: resolves the device (flag, settings file, then detection), dispatches the subcommand, answers `completions` itself, and prints the help that fits a failed run |
-| `cli.rs` | The clap types, the value parsers behind `--scale`/`--offset`, and the help text built at run time (`--device`'s registry table, the settings path) |
+| `cli.rs` | The clap types (`capture`'s flags as one `CaptureArgs`), the value parsers behind `--scale`/`--offset`, and the help text built at run time (`--device`'s registry table, the settings path) |
 | `cmd/mod.rs` | The subcommand modules, and the Ctrl+C flag the looping ones stop on |
 | `cmd/list.rs` | `list`: USB cables, and Bluetooth adapters and meters in range, with the setup help when nothing is found |
 | `cmd/info.rs` | `info`: the meter's name, what detection found, and the transport it answered on |

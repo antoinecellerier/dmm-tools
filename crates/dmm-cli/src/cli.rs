@@ -147,35 +147,39 @@ Install completions for your shell:
         shell: Option<Shell>,
     },
     /// Guided protocol capture for bug reports and verification
-    Capture {
-        /// Output file (default: capture-<device>.yaml). Overrides auto-naming.
-        #[arg(short, long)]
-        output: Option<String>,
-        /// Only run specific steps (comma-separated IDs, e.g. "dcmv,temp,duty")
-        #[arg(long, value_delimiter = ',')]
-        steps: Option<Vec<String>>,
-        /// Only run steps not yet confirmed on real hardware, plus the freeform pass
-        #[arg(long)]
-        unverified: bool,
-        /// Run the steps in a maintainer's plan file instead of the device's own list
-        #[arg(long, value_name = "FILE", conflicts_with_all = ["steps", "unverified", "list_steps"])]
-        plan: Option<String>,
-        /// Trust nothing the parser says: detect steps by raw byte changes and confirm each one
-        #[arg(long)]
-        sniff: bool,
-        /// Don't let the tool set ranges and flags itself after each mode step
-        #[arg(long)]
-        no_drive: bool,
-        /// Wait MS before sampling any step, for readings that settle slowly
-        #[arg(long, value_name = "MS", default_value_t = 0)]
-        settle: u64,
-        /// List all available step IDs and exit
-        #[arg(long)]
-        list_steps: bool,
-        /// How --list-steps prints the list (md is the issue checklist)
-        #[arg(long, value_enum, default_value = "text", requires = "list_steps")]
-        format: StepListFormat,
-    },
+    Capture(CaptureArgs),
+}
+
+/// The `capture` flags, handed to [`crate::capture::cmd_capture`] whole.
+#[derive(clap::Args)]
+pub(crate) struct CaptureArgs {
+    /// Output file (default: capture-<device>.yaml). Overrides auto-naming.
+    #[arg(short, long)]
+    pub(crate) output: Option<String>,
+    /// Only run specific steps (comma-separated IDs, e.g. "dcmv,temp,duty")
+    #[arg(long, value_delimiter = ',')]
+    pub(crate) steps: Option<Vec<String>>,
+    /// Only run steps not yet confirmed on real hardware, plus the freeform pass
+    #[arg(long)]
+    pub(crate) unverified: bool,
+    /// Run the steps in a maintainer's plan file instead of the device's own list
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["steps", "unverified", "list_steps"])]
+    pub(crate) plan: Option<String>,
+    /// Trust nothing the parser says: detect steps by raw byte changes and confirm each one
+    #[arg(long)]
+    pub(crate) sniff: bool,
+    /// Don't let the tool set ranges and flags itself after each mode step
+    #[arg(long)]
+    pub(crate) no_drive: bool,
+    /// Wait MS before sampling any step, for readings that settle slowly
+    #[arg(long, value_name = "MS", default_value_t = 0)]
+    pub(crate) settle: u64,
+    /// List all available step IDs and exit
+    #[arg(long)]
+    pub(crate) list_steps: bool,
+    /// How --list-steps prints the list (md is the issue checklist)
+    #[arg(long, value_enum, default_value = "text", requires = "list_steps")]
+    pub(crate) format: StepListFormat,
 }
 
 /// The `read` flags that build a software [`Transform`].

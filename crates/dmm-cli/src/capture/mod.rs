@@ -20,6 +20,7 @@ pub(crate) use step::{
     CaptureStep, FREEFORM_STEP_ID, frames_for_step, read_past_blank, samples_after_switch,
 };
 
+use crate::cli::CaptureArgs;
 use console::style;
 use listing::validate_step_filter;
 use recording::SharedRecorder;
@@ -29,19 +30,25 @@ use report::{
 };
 use session::{run_batch_review, run_freeform_captures, run_protocol_capture, verify_meter};
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn cmd_capture(
-    output_override: Option<String>,
-    filter: Option<Vec<String>>,
-    unverified_only: bool,
-    sniff: bool,
-    no_drive: bool,
-    settle: std::time::Duration,
-    plan_path: Option<String>,
+    args: CaptureArgs,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // `--list-steps` and `--format` never get here: `main` answers them
+    // without opening the meter.
+    let CaptureArgs {
+        output: output_override,
+        steps: filter,
+        unverified: unverified_only,
+        plan: plan_path,
+        sniff,
+        no_drive,
+        settle,
+        ..
+    } = args;
+    let settle = std::time::Duration::from_millis(settle);
     let step_filter: Option<std::collections::HashSet<String>> =
         filter.map(|v| v.into_iter().collect());
     // Before the meter is touched: a plan the tool can't read is the
@@ -296,18 +303,18 @@ mod tests {
         )
         .unwrap();
 
-        let result = cmd_capture(
-            Some(output.to_string_lossy().into_owned()),
-            None,
-            false,
-            false,
-            false,
-            std::time::Duration::ZERO,
-            None,
-            dmm,
-            recorder,
-            device,
-        );
+        let args = CaptureArgs {
+            output: Some(output.to_string_lossy().into_owned()),
+            steps: None,
+            unverified: false,
+            plan: None,
+            sniff: false,
+            no_drive: false,
+            settle: 0,
+            list_steps: false,
+            format: StepListFormat::Text,
+        };
+        let result = cmd_capture(args, dmm, recorder, device);
         assert_eq!(result.unwrap_err().to_string(), "meter not responding");
 
         assert_eq!(std::fs::read_to_string(&output).unwrap(), "steps: []\n");
