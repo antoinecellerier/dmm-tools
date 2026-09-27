@@ -111,9 +111,9 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | ZOTEK ZT-5B (ANENG V05B) | — | 🧪 Experimental (built in) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
 | EEVblog 121GW | — | 🧪 Experimental (built in) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
 | Brymen BM788BT/BM787BT | — | 🧪 Experimental (built in) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
-| Brymen BM869s/BM867s | 🧪 Experimental | — | — |
-| Brymen BM829s/BM827s/BM822s/BM821s | 🧪 Experimental | — | — |
-| Brymen BM525s/BM521s | 🧪 Experimental | — | — |
+| Brymen BM869s/BM867s | 🧪 Experimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
+| Brymen BM829s/BM827s/BM822s/BM821s | 🧪 Experimental | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
+| Brymen BM525s/BM521s | 🧪 Experimental | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
 <!-- devices:end -->
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.

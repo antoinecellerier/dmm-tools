@@ -2044,8 +2044,8 @@ the open questions); the community cross-reference (spec §13) came after and
 narrows several items below without being our verification. Implemented
 2026-09-27 as three families on the new BU-86X transport, experimental, one
 registry entry per series: `bm86x` (BM869s, BM867s), `bm82x` (BM829s,
-BM827s, BM822s, BM821s) and `bm52x` (BM525s, BM521s); their verification
-issues are still to open. Nobody on the project owns one, so each item notes
+BM827s, BM822s, BM821s) and `bm52x` (BM525s, BM521s), with verification
+issues [#34](https://github.com/antoinecellerier/dmm-tools/issues/34), [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) and [#36](https://github.com/antoinecellerier/dmm-tools/issues/36). Nobody on the project owns one, so each item notes
 the driver's choice. One capture settles the most at once:
 **`RUST_LOG=dmm_lib=trace dmm-cli --device <id> debug`** for a few seconds
 in DC V with a negative reading (leads reversed on a battery), then in Ω

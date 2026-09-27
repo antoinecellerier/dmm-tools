@@ -72,6 +72,15 @@ impl Series {
         }
     }
 
+    /// The series' verification issue on GitHub.
+    const fn verification_issue(self) -> u16 {
+        match self {
+            Series::Bm86x => 34,
+            Series::Bm82x => 35,
+            Series::Bm52x => 36,
+        }
+    }
+
     const fn family_name(self) -> &'static str {
         match self {
             Series::Bm86x => "BM86x",
@@ -116,7 +125,7 @@ impl Bm86xProtocol {
                 supported_commands: &[],
                 // The secondary display (spec §5.2, §6.2).
                 max_aux_values: 1,
-                verification_issue: None,
+                verification_issue: Some(series.verification_issue()),
                 meter_keys: MeterKeys::NONE,
             },
         }
@@ -271,6 +280,18 @@ mod tests {
             assert!(proto.send_command(&cable, command).is_err(), "{command}");
         }
         assert!(cable.written.borrow().is_empty());
+    }
+
+    #[test]
+    fn each_series_links_its_verification_issue() {
+        for (series, issue) in [
+            (Series::Bm86x, 34),
+            (Series::Bm82x, 35),
+            (Series::Bm52x, 36),
+        ] {
+            let proto = Bm86xProtocol::new(series, "test");
+            assert_eq!(proto.profile().verification_issue, Some(issue));
+        }
     }
 
     #[test]

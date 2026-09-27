@@ -208,14 +208,14 @@ function.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| BM869s | 50000 (500000 DC V) | 🧪 Experimental | VFD V and Hz; T1, T2 and T1-T2 temperature |
-| BM867s | 50000 (500000 DC V) | 🧪 Experimental | no VFD or temperature |
-| BM829s | 9999 (6000 in some functions) | 🧪 Experimental | AutoCheck, dBm, EF; T1, T2 and T1-T2 temperature |
-| BM827s | 9999 (6000 in some functions) | 🧪 Experimental | EF and T1; no AutoCheck or dBm |
-| BM822s | 9999 (6000 in some functions) | 🧪 Experimental | no REC, CREST, nS, EF or temperature |
-| BM821s | 9999 (6000 in some functions) | 🧪 Experimental | as the BM822s, with average-sensing AC |
-| BM525s | 9999 (6000 in some functions) | 🧪 Experimental | data logging, up to 87000 readings; T1, T2 and T1-T2 temperature |
-| BM521s | 9999 (6000 in some functions) | 🧪 Experimental | data logging, up to 10800 readings; T1 only |
+| BM869s | 50000 (500000 DC V) | 🧪 Experimental ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)) | VFD V and Hz; T1, T2 and T1-T2 temperature |
+| BM867s | 50000 (500000 DC V) | 🧪 Experimental ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)) | no VFD or temperature |
+| BM829s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | AutoCheck, dBm, EF; T1, T2 and T1-T2 temperature |
+| BM827s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | EF and T1; no AutoCheck or dBm |
+| BM822s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | no REC, CREST, nS, EF or temperature |
+| BM821s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | as the BM822s, with average-sensing AC |
+| BM525s | 9999 (6000 in some functions) | 🧪 Experimental ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) | data logging, up to 87000 readings; T1, T2 and T1-T2 temperature |
+| BM521s | 9999 (6000 in some functions) | 🧪 Experimental ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) | data logging, up to 10800 readings; T1 only |
 
 Not run on a meter yet: the decoding comes from Brymen's protocol sheets,
 programs and manuals; the tool reads live readings, not the logged memory.
