@@ -14,10 +14,10 @@
 
 use dmm_lib::transform::{FactorError, RAW_LABEL, Transform};
 use eframe::egui::{self, RichText, Ui};
-use std::time::Instant;
 
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
+use super::toast::Toast;
 
 /// Draft text for the three fields, kept apart from the applied
 /// [`Transform`]: the row commits on Apply or Enter only, so a half-typed
@@ -199,7 +199,7 @@ impl App {
                 Ok(new) => self.set_transform(new),
                 // Nothing is applied — the previous transform (identity or
                 // not) keeps running, and the toast names the field to fix.
-                Err(message) => self.toast = Some((message, true, Instant::now())),
+                Err(message) => self.toast = Some(Toast::error(message)),
             }
         }
     }
@@ -241,7 +241,7 @@ impl App {
                 .extra_slots
                 .max(self.transform.extra_aux_count());
         }
-        self.toast = Some((message, false, Instant::now()));
+        self.toast = Some(Toast::info(message));
     }
 }
 

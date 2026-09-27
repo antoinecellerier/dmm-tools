@@ -5,9 +5,9 @@
 
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 use log::info;
-use std::time::Instant;
 
 use super::export::{ExportFormat, NO_WIRE_FORMAT};
+use super::toast::Toast;
 use super::{App, ConnectionState, DEFAULT_RECORDING_HEIGHT};
 use crate::a11y::ResponseA11yExt;
 use crate::recording::BufferRole;
@@ -209,7 +209,7 @@ impl App {
                 sample_count(left)
             )
         };
-        self.toast = Some((message, false, Instant::now()));
+        self.toast = Some(Toast::info(message));
     }
 
     /// Flip the recording state, remembering which meter the samples came
@@ -582,6 +582,7 @@ mod tests {
     use super::*;
     use crate::settings::Settings;
     use eframe::egui::{Pos2, Rect, vec2};
+    use std::time::Instant;
 
     /// The recording row in a headless window, driven a frame at a time.
     struct MenuRun {
@@ -965,7 +966,7 @@ mod tests {
         assert_eq!(run.app.recording.role(), BufferRole::History);
         assert_eq!(run.app.recording.export_samples().len(), 0);
         assert_eq!(
-            run.app.toast.as_ref().map(|(text, _, _)| text.as_str()),
+            run.app.toast.as_ref().map(|t| t.message.as_str()),
             Some("Recording discarded")
         );
         assert!(!run.shows_widget("Discard"), "nothing left to discard");
@@ -981,7 +982,7 @@ mod tests {
         assert_eq!(run.app.recording.role(), BufferRole::History);
         assert_eq!(run.app.recording.export_samples().len(), 2);
         assert_eq!(
-            run.app.toast.as_ref().map(|(text, _, _)| text.as_str()),
+            run.app.toast.as_ref().map(|t| t.message.as_str()),
             Some("Recording discarded. Export\u{2026} saves the graph's 2 samples.")
         );
     }

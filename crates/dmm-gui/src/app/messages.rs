@@ -10,13 +10,14 @@ use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
-use std::time::{Instant, SystemTime};
+use std::time::SystemTime;
 
 use super::connection::{
     self, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext, ThreadControl,
     handle_thread_panic, run_device_thread,
 };
 use super::plot_input::{PlotInput, Plotted, resolve_plot_input};
+use super::toast::Toast;
 use super::{App, ConnectionState, named_device};
 use crate::graph::PlotSample;
 use crate::settings::format_sample_count;
@@ -358,11 +359,11 @@ impl App {
             self.settings.shared.device_family = id.to_string();
             self.settings.save();
         }
-        self.toast = Some((
-            detected_toast(device.display_name, reported, to_save.is_some()),
-            false,
-            Instant::now(),
-        ));
+        self.toast = Some(Toast::info(detected_toast(
+            device.display_name,
+            reported,
+            to_save.is_some(),
+        )));
     }
 
     /// Say that lowering Buffer size ended the capture that was running.
@@ -373,26 +374,18 @@ impl App {
     /// difference had been thrown away.
     pub(super) fn buffer_shrunk_toast(&mut self) {
         let kept = format_sample_count(self.recording.recording_samples().len());
-        self.toast = Some((
-            format!(
-                "Recording stopped \u{2014} its {kept} samples are kept, Export\u{2026} saves them"
-            ),
-            true,
-            Instant::now(),
-        ));
+        self.toast = Some(Toast::error(format!(
+            "Recording stopped \u{2014} its {kept} samples are kept, Export\u{2026} saves them"
+        )));
     }
 
     /// Say that the recording stopped because it filled the buffer, at the
     /// size the user configured.
     pub(super) fn buffer_full_toast(&mut self) {
-        self.toast = Some((
-            format!(
-                "Recording stopped \u{2014} buffer full ({} samples)",
-                format_sample_count(self.settings.max_samples)
-            ),
-            true,
-            Instant::now(),
-        ));
+        self.toast = Some(Toast::error(format!(
+            "Recording stopped \u{2014} buffer full ({} samples)",
+            format_sample_count(self.settings.max_samples)
+        )));
     }
 
     /// Make this Connect the session's zero, the first time a recording is
@@ -490,7 +483,7 @@ impl App {
                     Err(message) => {
                         warn!("{message}");
                         let headline = message.lines().next().unwrap_or_default().to_string();
-                        self.toast = Some((headline, true, Instant::now()));
+                        self.toast = Some(Toast::error(headline));
                         None
                     }
                 }
@@ -925,7 +918,7 @@ impl App {
                     }
                 }
                 DmmMessage::CommandFailed(msg) => {
-                    self.toast = Some((msg, true, Instant::now()));
+                    self.toast = Some(Toast::error(msg));
                 }
                 DmmMessage::Choices(setting, choices) => {
                     self.connection.choices.set(setting, choices);
@@ -1222,7 +1215,7 @@ mod tests {
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::MeasuredValue;
     use dmm_lib::protocol::Stability;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     /// An app whose settings name `family`, with `overridden` saying whether
     /// that came from `--device` rather than the file.
@@ -1239,7 +1232,7 @@ mod tests {
     }
 
     fn toast_text(app: &App) -> Option<&str> {
-        app.toast.as_ref().map(|(msg, _, _)| msg.as_str())
+        app.toast.as_ref().map(|t| t.message.as_str())
     }
 
     /// The notice the app would draw, with `issue` as the failure on record.

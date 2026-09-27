@@ -37,7 +37,6 @@ use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
 use crate::a11y::ResponseA11yExt;
 use crate::display;
@@ -52,10 +51,8 @@ use layout::ContentLayout;
 use messages::ConnectionIssue;
 use meter_fit::{FitInputs, MeterFit, WindowContent};
 use recording_panel::RecordingPanel;
+use toast::Toast;
 use transform_ui::TransformEditor;
-
-/// How long a toast message stays visible (seconds).
-const TOAST_DURATION_SECS: u64 = 8;
 
 /// Default height of the recording panel (logical pixels).
 const DEFAULT_RECORDING_HEIGHT: f32 = 120.0;
@@ -410,8 +407,8 @@ pub struct App {
     /// `WindowLevel` commands and "Always on top" cannot work.
     on_wayland: bool,
     applied: AppliedChrome,
-    /// Transient status toast (message, is_error, timestamp).
-    toast: Option<(String, bool, Instant)>,
+    /// Transient status toast.
+    toast: Option<Toast>,
     /// One-shot receiver for CSV export result.
     export_result_rx: Option<mpsc::Receiver<ExportOutcome>>,
     meter_fit: MeterFit,
@@ -824,9 +821,7 @@ impl eframe::App for App {
         }
 
         // Expire the toast, unless the user closed it first
-        if let Some((_, _, when)) = &self.toast
-            && when.elapsed().as_secs() >= TOAST_DURATION_SECS
-        {
+        if self.toast.as_ref().is_some_and(Toast::expired) {
             self.toast = None;
         }
 

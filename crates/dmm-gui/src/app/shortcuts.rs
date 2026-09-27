@@ -13,6 +13,7 @@
 use eframe::egui::{self, Key, Modifiers};
 
 use super::appearance::ALWAYS_ON_TOP_WAYLAND_HINT;
+use super::toast::Toast;
 use super::{App, ConnectionState};
 
 /// What a key press does, independent of the keys bound to it.
@@ -503,11 +504,7 @@ impl App {
                     if self.on_wayland {
                         // Flipping the setting there moved a checkbox and
                         // nothing else; say so instead.
-                        self.toast = Some((
-                            ALWAYS_ON_TOP_WAYLAND_HINT.to_string(),
-                            false,
-                            std::time::Instant::now(),
-                        ));
+                        self.toast = Some(Toast::info(ALWAYS_ON_TOP_WAYLAND_HINT));
                     } else {
                         self.settings.always_on_top = !self.settings.always_on_top;
                         self.apply_always_on_top(ctx);

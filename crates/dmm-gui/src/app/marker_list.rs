@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 use std::ops::Range;
 use std::time::Instant;
 
+use super::toast::Toast;
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
 use crate::markers::{Marker, NOTE_MAX_CHARS};
@@ -232,7 +233,7 @@ impl App {
     /// or disconnected, that reading is the moment the user is looking at.
     pub(super) fn add_marker(&mut self, write_note: bool) {
         let Some(m) = self.last_measurement.as_ref() else {
-            self.toast = Some((NO_READING.to_string(), false, Instant::now()));
+            self.toast = Some(Toast::info(NO_READING));
             return;
         };
         let (at, reading) = (m.timestamp, log_line(m));
@@ -248,7 +249,7 @@ impl App {
     /// marker: the next frame's trim would take it away unseen.
     fn mark_reading(&mut self, at: Instant, reading: String, write_note: bool) {
         if !reading_held(&self.graph, &self.recording, at) {
-            self.toast = Some((NO_READING.to_string(), false, Instant::now()));
+            self.toast = Some(Toast::info(NO_READING));
             return;
         }
         let wall_time = self.wall_clock.wall_time_for(at).into();
@@ -257,11 +258,7 @@ impl App {
             // Ctrl+N opens the note already there.
             Err(number) if write_note => (number, false),
             Err(number) => {
-                self.toast = Some((
-                    format!("Marker {number} {ALREADY_MARKED}"),
-                    false,
-                    Instant::now(),
-                ));
+                self.toast = Some(Toast::info(format!("Marker {number} {ALREADY_MARKED}")));
                 return;
             }
         };
@@ -270,11 +267,7 @@ impl App {
             None => {}
             Some(how) => {
                 let what = if added { "added" } else { ALREADY_MARKED };
-                self.toast = Some((
-                    format!("Marker {number} {what}. {how}"),
-                    false,
-                    Instant::now(),
-                ));
+                self.toast = Some(Toast::info(format!("Marker {number} {what}. {how}")));
             }
         }
     }
@@ -306,7 +299,7 @@ impl App {
     fn open_marker_note(&mut self, number: u32) {
         match self.where_notes_are_written() {
             None => self.marker_list.focus = Some(number),
-            Some(how) => self.toast = Some((how.to_string(), false, Instant::now())),
+            Some(how) => self.toast = Some(Toast::info(how)),
         }
     }
 
@@ -383,11 +376,9 @@ impl App {
         if max_height < line
             && let Some(n) = self.marker_list.focus.take()
         {
-            self.toast = Some((
-                format!("Make the Recording panel taller to write marker {n}'s note."),
-                false,
-                Instant::now(),
-            ));
+            self.toast = Some(Toast::info(format!(
+                "Make the Recording panel taller to write marker {n}'s note."
+            )));
         }
 
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
@@ -1020,7 +1011,7 @@ mod tests {
     }
 
     fn toast(app: &App) -> Option<&str> {
-        app.toast.as_ref().map(|(text, _, _)| text.as_str())
+        app.toast.as_ref().map(|t| t.message.as_str())
     }
 
     fn secs(t0: Instant, s: u64) -> Instant {

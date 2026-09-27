@@ -8,10 +8,13 @@
 //! was up. An overlay [`egui::Area`] shows the same message in every layout.
 
 use eframe::egui::{self, RichText};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use super::{App, TOAST_DURATION_SECS};
+use super::App;
 use crate::a11y::{ResponseA11yExt, UiA11yExt};
+
+/// How long a toast stays up unless the user closes it first.
+const TOAST_DURATION: Duration = Duration::from_secs(8);
 
 /// Widest a toast box gets (logical points). Long export paths would
 /// otherwise stretch it across the whole window.
@@ -42,6 +45,45 @@ const ERROR_GLYPH: &str = "\u{26A0}";
 /// already repaints at while connected.
 const TOAST_REPAINT_INTERVAL: Duration = Duration::from_millis(100);
 
+/// A transient status message: what it says, whether it is bad news, and
+/// when it went up. Timed on real time, not the session clock — it is UI
+/// cadence, and a scaled mock clock must not hold one on screen for hours.
+pub(super) struct Toast {
+    pub(super) message: String,
+    pub(super) is_error: bool,
+    shown_at: Instant,
+}
+
+impl Toast {
+    /// Good or neutral news, shown from now.
+    pub(super) fn info(message: impl Into<String>) -> Self {
+        Self::new(message.into(), false)
+    }
+
+    /// A failure, shown from now.
+    pub(super) fn error(message: impl Into<String>) -> Self {
+        Self::new(message.into(), true)
+    }
+
+    fn new(message: String, is_error: bool) -> Self {
+        Self {
+            message,
+            is_error,
+            shown_at: Instant::now(),
+        }
+    }
+
+    /// How long it has left on screen.
+    fn remaining(&self) -> Duration {
+        TOAST_DURATION.saturating_sub(self.shown_at.elapsed())
+    }
+
+    /// Whether it has been up its full time.
+    pub(super) fn expired(&self) -> bool {
+        self.remaining().is_zero()
+    }
+}
+
 impl App {
     /// Draw the toast, if there is one, right-aligned `anchor_top` points
     /// down the window: under the top bar where one is drawn, at the window's
@@ -50,7 +92,7 @@ impl App {
     /// Call after the panels — [`egui::Order::Foreground`] keeps it above
     /// them. A modal drawn later still covers it, which is what we want.
     pub(super) fn show_toast(&mut self, ctx: &egui::Context, anchor_top: f32) {
-        let Some((message, is_error, shown_at)) = &self.toast else {
+        let Some(toast) = &self.toast else {
             return;
         };
 
@@ -59,9 +101,7 @@ impl App {
         // next input instead of expiring; the same repaint also lets a
         // replaced message correct its box position (an `Area` anchors from
         // the previous frame's size) before anyone sees it.
-        let remaining = Duration::from_secs(TOAST_DURATION_SECS)
-            .saturating_sub(shown_at.elapsed())
-            .min(TOAST_REPAINT_INTERVAL);
+        let remaining = toast.remaining().min(TOAST_REPAINT_INTERVAL);
         ctx.request_repaint_after(remaining);
 
         let content = ctx.content_rect();
@@ -80,7 +120,7 @@ impl App {
                 // otherwise wrap to whatever the last message needed.
                 ui.set_max_width(max_width);
                 let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                let (color, glyph) = if *is_error {
+                let (color, glyph) = if toast.is_error {
                     (tc.status_error(), ERROR_GLYPH)
                 } else {
                     (tc.status_ok(), OK_GLYPH)
@@ -110,8 +150,10 @@ impl App {
                                     |ui| {
                                         ui.label(RichText::new(glyph).color(color));
                                         ui.add(
-                                            egui::Label::new(RichText::new(message).color(color))
-                                                .wrap(),
+                                            egui::Label::new(
+                                                RichText::new(&toast.message).color(color),
+                                            )
+                                            .wrap(),
                                         );
                                     },
                                 );
@@ -132,7 +174,6 @@ mod tests {
     use crate::settings::Settings;
     use eframe::egui::accesskit::{Node, NodeId, Role};
     use eframe::egui::{Id, Pos2, Rect, vec2};
-    use std::time::Instant;
 
     /// A message long enough to need wrapping in any window this app opens,
     /// and long enough that appending it to the top bar's status row would
@@ -219,7 +260,7 @@ mod tests {
         }
 
         fn show_toast(&mut self, message: &str) {
-            self.app.toast = Some((message.to_string(), true, Instant::now()));
+            self.app.toast = Some(Toast::error(message));
         }
 
         /// The width the bar's left group reported last frame — the number
@@ -396,6 +437,24 @@ mod tests {
             run.toast_rect(),
             run.screen
         );
+    }
+
+    /// A toast is up for its whole duration and gone after it, whatever
+    /// its kind.
+    #[test]
+    fn a_toast_expires_after_its_duration() {
+        let fresh = Toast::info("Exported 1234 samples");
+        assert!(!fresh.expired());
+        assert!(fresh.remaining() > TOAST_DURATION - Duration::from_secs(1));
+        let Some(long_ago) = Instant::now().checked_sub(TOAST_DURATION) else {
+            return; // the monotonic clock started less than that ago
+        };
+        let old = Toast {
+            shown_at: long_ago,
+            ..Toast::error("Export failed")
+        };
+        assert!(old.expired());
+        assert_eq!(old.remaining(), Duration::ZERO);
     }
 
     /// Eight seconds is long enough to read a buffer-full warning and too

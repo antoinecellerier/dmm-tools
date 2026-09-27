@@ -9,8 +9,8 @@ use dmm_shared::export::CsvLayout;
 use log::{error, info, warn};
 use std::collections::HashSet;
 use std::path::Path;
-use std::time::Instant;
 
+use super::toast::Toast;
 use super::{App, ConnectionState};
 use crate::recording::{BufferRole, Recording, Sample, render_csv, render_json, render_replay};
 
@@ -292,7 +292,7 @@ impl App {
         let prepared = match self.prepare_export(format) {
             Ok(prepared) => prepared,
             Err(message) => {
-                self.toast = Some((message, true, Instant::now()));
+                self.toast = Some(Toast::error(message));
                 return;
             }
         };
@@ -354,7 +354,11 @@ impl App {
                 self.recording
                     .mark_exported(mark.epoch, count, mark.markers);
             }
-            self.toast = Some((outcome.message, outcome.is_error, Instant::now()));
+            self.toast = Some(if outcome.is_error {
+                Toast::error(outcome.message)
+            } else {
+                Toast::info(outcome.message)
+            });
             self.export_result_rx = None;
         }
     }
@@ -367,6 +371,7 @@ mod tests {
     use chrono::TimeZone;
     use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
     use std::collections::VecDeque;
+    use std::time::Instant;
 
     /// A 1.234 V reading carrying `aux` sub-values of its own.
     fn measurement(aux: usize) -> Measurement {
@@ -685,7 +690,7 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.recording.unexported_count(), 3);
         assert_eq!(
-            app.toast.as_ref().map(|(text, _, _)| text.as_str()),
+            app.toast.as_ref().map(|t| t.message.as_str()),
             Some("Exported 3 samples to out.csv"),
             "the user still hears the file was written"
         );
@@ -777,9 +782,7 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.recording.unexported_count(), 0);
         assert_eq!(
-            app.toast
-                .as_ref()
-                .map(|(text, is_error, _)| (text.as_str(), *is_error)),
+            app.toast.as_ref().map(|t| (t.message.as_str(), t.is_error)),
             Some(("Exported 3 samples to out.csv", false))
         );
     }
@@ -818,9 +821,7 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.recording.unexported_count(), 2);
         assert_eq!(
-            app.toast
-                .as_ref()
-                .map(|(text, is_error, _)| (text.as_str(), *is_error)),
+            app.toast.as_ref().map(|t| (t.message.as_str(), t.is_error)),
             Some(("Export failed: disk full", true))
         );
     }
