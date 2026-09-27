@@ -4,7 +4,7 @@
 
 use std::borrow::Cow;
 
-use crate::measurement::{AUX_EXPORT_COLUMNS, Measurement};
+use dmm_lib::measurement::{AuxValue, Measurement};
 
 /// The columns every exported row starts with, whatever the meter or the
 /// options.
@@ -22,6 +22,60 @@ pub const CSV_INTEGRAL_COLUMNS: [&str; 2] = ["integral", "integral_unit"];
 /// Last, after the sub-value groups, so a file with markers keeps every
 /// other column where a file without them has it.
 pub(crate) const CSV_MARKER_COLUMNS: [&str; 2] = ["marker", "note"];
+
+/// The columns one sub-value slot contributes, as header suffixes:
+/// `aux1_label,aux1_value,aux1_unit`.
+///
+/// [`aux_cells`] returns an array exactly this long, so a column cannot be
+/// added here without the row builder failing to compile.
+pub(crate) const AUX_EXPORT_COLUMNS: [&str; 3] = ["label", "value", "unit"];
+
+/// The cells one exported slot writes, in [`AUX_EXPORT_COLUMNS`] order.
+///
+/// `main_unit` is the parent reading's unit, used when the sub-value leaves
+/// its own empty (see [`AuxValue::unit_or`]).
+fn aux_cells<'a>(
+    aux: &'a AuxValue,
+    main_unit: &'a str,
+) -> [Cow<'a, str>; AUX_EXPORT_COLUMNS.len()] {
+    [
+        Cow::Borrowed(aux.label.as_ref()),
+        aux.value_export_str(),
+        Cow::Borrowed(aux.unit_or(main_unit)),
+    ]
+}
+
+/// Lay the sub-values of `m` out for a fixed-column export.
+///
+/// The first `family_slots` entries hold the meter's own sub-values in
+/// order, padded with `None`; the following `extra_slots` entries hold the
+/// last `extra_slots` sub-values — the ones software appended after the
+/// meter's (a transform's `Raw`), so they keep a fixed column whatever the
+/// meter sent that frame. Always returns exactly
+/// `family_slots + extra_slots` entries; surplus meter sub-values are
+/// truncated rather than shifting later columns.
+///
+/// Without the split, a UT181A run crossing from DC V (no sub-values) to
+/// AC V (frequency and period) would move `Raw` from `aux1_*` to `aux3_*`
+/// mid-file, mixing three quantities into one column.
+fn aux_slots(m: &Measurement, family_slots: usize, extra_slots: usize) -> Vec<Option<&AuxValue>> {
+    let n = m.aux_values.len();
+    // A frame carrying fewer sub-values than `extra_slots` promises is one
+    // where the meter sent none of its own: take what is there as the
+    // appended ones and leave the meter's slots empty.
+    let extra = extra_slots.min(n);
+    let mut slots = Vec::with_capacity(family_slots + extra_slots);
+    slots.extend(
+        m.aux_values[..n - extra]
+            .iter()
+            .take(family_slots)
+            .map(Some),
+    );
+    slots.resize(family_slots, None);
+    slots.extend(m.aux_values[n - extra..].iter().map(Some));
+    slots.resize(family_slots + extra_slots, None);
+    slots
+}
 
 /// Provenance comment written before the header: `# device: {model}`.
 ///
@@ -132,13 +186,13 @@ impl CsvLayout {
         // anyway would read its last meter sub-value as the appended one —
         // filing Frequency under the `Raw` column.
         let extra = extra_aux.min(self.extra_slots);
-        // Which sub-value lands in which slot is `export_aux_slots`' business:
+        // Which sub-value lands in which slot is `aux_slots`' business:
         // it pads the meter's own groups, pins the appended ones to the
         // trailing groups, and truncates a surplus rather than desyncing every
         // later column from the header.
-        for slot in m.export_aux_slots(self.family_slots, extra) {
+        for slot in aux_slots(m, self.family_slots, extra) {
             match slot {
-                Some(aux) => cells.extend(aux.export_cells(&m.unit)),
+                Some(aux) => cells.extend(aux_cells(aux, &m.unit)),
                 None => cells.extend(std::iter::repeat_n(
                     Cow::Borrowed(""),
                     AUX_EXPORT_COLUMNS.len(),
@@ -170,8 +224,8 @@ impl CsvLayout {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::flags::StatusFlags;
-    use crate::measurement::{AuxValue, MeasuredValue};
+    use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::MeasuredValue;
 
     fn layout(family_slots: usize, extra_slots: usize, integral: bool) -> CsvLayout {
         CsvLayout {
@@ -354,5 +408,128 @@ mod tests {
         let row = l.row(&m, "ts", None, 0, None);
         assert_eq!(row[6], "");
         assert_eq!(row[7], "");
+    }
+
+    /// A sub-value as a meter sends it: parsed value and display digits.
+    fn shown(label: &'static str, display: &str, unit: &'static str) -> AuxValue {
+        AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(display.trim().parse().unwrap_or(0.0)),
+            unit: unit.into(),
+            display_raw: Some(display.to_string()),
+            elapsed_secs: None,
+        }
+    }
+
+    #[test]
+    fn an_aux_no_reading_exports_an_empty_value() {
+        let mut a = shown("Max", "9.999", "");
+        a.value = MeasuredValue::NoReading("Auto");
+        assert_eq!(aux_cells(&a, "V"), ["Max", "", "V"]);
+    }
+
+    /// Labels of an export layout, `""` for an empty slot.
+    fn slot_labels<'a>(slots: &[Option<&'a AuxValue>]) -> Vec<&'a str> {
+        slots
+            .iter()
+            .map(|slot| slot.map_or("", |aux| aux.label.as_ref()))
+            .collect()
+    }
+
+    #[test]
+    fn export_slots_pad_a_reading_without_sub_values() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        let slots = aux_slots(&m, 2, 0);
+        assert_eq!(slots.len(), 2);
+        assert!(slots.iter().all(Option::is_none));
+    }
+
+    /// With nothing appended by software the layout is the plain
+    /// "first `family_slots` sub-values, then padding" it always was.
+    #[test]
+    fn export_slots_without_extras_keep_the_meter_order() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![
+            shown("Frequency", "50.01", "Hz"),
+            shown("Period", "20.00", "ms"),
+        ];
+        assert_eq!(
+            slot_labels(&aux_slots(&m, 4, 0)),
+            ["Frequency", "Period", "", ""]
+        );
+    }
+
+    /// A UT181A AC V frame (4 meter slots) with a transform's `Raw` appended:
+    /// the meter's two sub-values keep the first columns and `Raw` takes the
+    /// fifth.
+    #[test]
+    fn an_appended_sub_value_takes_the_extra_slot() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![
+            shown("Frequency", "50.01", "Hz"),
+            shown("Period", "20.00", "ms"),
+            shown("Raw", "230.0", "V"),
+        ];
+        let slots = aux_slots(&m, 4, 1);
+        assert_eq!(slot_labels(&slots), ["Frequency", "Period", "", "", "Raw"]);
+        assert_eq!(slots[4].map(|aux| aux.unit.as_ref()), Some("V"));
+    }
+
+    /// The next frame of that same run, after the dial moved to DC V: the
+    /// meter sends no sub-values, and `Raw` must not slide into `aux1_*`.
+    #[test]
+    fn an_appended_sub_value_holds_its_column_when_the_meter_sends_none() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![shown("Raw", "230.0", "V")];
+        assert_eq!(slot_labels(&aux_slots(&m, 4, 1)), ["", "", "", "", "Raw"]);
+    }
+
+    /// A reading with more sub-values than the family profile promised is cut
+    /// short — the appended one still gets its own column.
+    #[test]
+    fn surplus_meter_sub_values_are_truncated_not_shifted() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![
+            shown("Max", "5.01", ""),
+            shown("Average", "4.99", ""),
+            shown("Min", "4.96", ""),
+            shown("Raw", "230.0", "V"),
+        ];
+        assert_eq!(slot_labels(&aux_slots(&m, 2, 1)), ["Max", "Average", "Raw"]);
+    }
+
+    /// A transform is on, but this frame carries nothing at all: every slot,
+    /// the extra one included, stays empty rather than borrowing a neighbour.
+    #[test]
+    fn an_empty_frame_leaves_the_extra_slot_empty() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        let slots = aux_slots(&m, 4, 1);
+        assert_eq!(slots.len(), 5);
+        assert!(slots.iter().all(Option::is_none));
+    }
+
+    /// A UT61E+ AC+DC V frame carrying only the AC component, scaled: the Raw
+    /// the transform appends has no value either, and still keeps the
+    /// trailing slot instead of sliding into the meter's own.
+    #[test]
+    fn a_raw_on_a_frame_without_a_main_reading_keeps_its_slot() {
+        let t = dmm_lib::transform::Transform::linear(10.0, 0.0, None);
+        let mut m = Measurement::test_fixture(MeasuredValue::Absent, "V", StatusFlags::default());
+        m.display_raw = None;
+        m.aux_values.push(shown("AC", " 0.1234", ""));
+        t.apply(&mut m);
+
+        let slots = aux_slots(&m, 1, t.extra_aux_count());
+        assert_eq!(slots[0].map(|a| a.label.as_ref()), Some("AC"));
+        assert_eq!(
+            slots[1].map(|a| a.label.as_ref()),
+            Some(dmm_lib::transform::RAW_LABEL)
+        );
     }
 }

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
-use dmm_lib::export::CsvLayout;
 use dmm_lib::measurement::Measurement;
+use dmm_shared::export::CsvLayout;
 use std::io::Write;
 use std::time::Instant;
 
@@ -74,7 +74,7 @@ impl Output {
             Self::Text => None,
             Self::Csv(layout) => Some(format!(
                 "{}\n{}\n",
-                dmm_lib::export::device_comment(model_name),
+                dmm_shared::export::device_comment(model_name),
                 layout.header().join(","),
             )),
             Self::Json { .. } => Some(format!(

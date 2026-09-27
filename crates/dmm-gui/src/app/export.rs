@@ -4,8 +4,8 @@
 //! folding the outcome back into a toast.
 
 use chrono::{DateTime, Local};
-use dmm_lib::export::CsvLayout;
 use dmm_lib::measurement::MeasuredValue;
+use dmm_shared::export::CsvLayout;
 use log::{error, info, warn};
 use std::collections::HashSet;
 use std::path::Path;

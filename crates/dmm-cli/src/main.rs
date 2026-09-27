@@ -1291,7 +1291,7 @@ fn read_output<T: dmm_lib::transport::Transport>(
     // one more group, kept trailing, for the meter's own reading — so `Raw`
     // stays in the same columns whether or not the meter sent sub-values of
     // its own that frame.
-    let layout = dmm_lib::export::CsvLayout {
+    let layout = dmm_shared::export::CsvLayout {
         family_slots: dmm.profile().max_aux_values,
         extra_slots: transform.extra_aux_count(),
         integral: integrate,
@@ -3750,7 +3750,7 @@ mod tests {
 
     fn csv_of(m: &dmm_lib::measurement::Measurement) -> String {
         rendered(
-            format::Output::Csv(dmm_lib::export::CsvLayout::default()),
+            format::Output::Csv(dmm_shared::export::CsvLayout::default()),
             m,
         )
     }
@@ -3793,7 +3793,7 @@ mod tests {
             display_raw: Some("50.01".to_string()),
             elapsed_secs: None,
         }];
-        let layout = dmm_lib::export::CsvLayout {
+        let layout = dmm_shared::export::CsvLayout {
             family_slots: 2,
             ..Default::default()
         };

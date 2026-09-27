@@ -1,9 +1,13 @@
-//! What an export is called and what its JSON holds, wherever it is written
-//! from.
+//! What an export is called and what its CSV columns and JSON hold, wherever
+//! it is written from.
 //!
 //! `dmm-gui`'s Export… and `dmm-cli read` write the same objects under the
 //! same names because both come through here: a script reading one file works
 //! on the other, and a field added to a reading reaches both binaries at once.
+
+mod csv_layout;
+
+pub use csv_layout::{CsvLayout, device_comment};
 
 use chrono::{DateTime, Local};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
