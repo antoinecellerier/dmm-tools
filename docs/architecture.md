@@ -194,6 +194,7 @@ CLI binary using `clap`. Its modules:
 |--------|---------------|
 | `main.rs` | Command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug`/`completions` subcommands |
 | `cli.rs` | The clap types, the value parsers behind `--scale`/`--offset`, and the help text built at run time (`--device`'s registry table, the settings path) |
+| `open.rs` | Opening the meter a command runs against, named or detected (with or without the capture recorder), the mock for the commands that take one, and the setup help a failed open or a silent meter prints |
 | `choice.rs` | What `set` takes as a choice: a label or a unique fragment of one, typed without the meter's symbols, and the shortest fragment a listing shows |
 | `capture/mod.rs` | The `capture` command: opens the report, runs the passes, prints the coverage epilogue |
 | `capture/report.rs` | Report schema and serde (`CaptureReport`, `StepResult`, `SampleData`), trust tiers, report file read/write |
