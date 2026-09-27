@@ -1,6 +1,5 @@
 pub mod clock;
 pub mod detect;
-pub mod docs_tables;
 pub mod error;
 pub mod flags;
 pub mod measurement;

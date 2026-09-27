@@ -10,17 +10,54 @@
 //!
 //! `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites the generated block; a plain
 //! run fails with a diff. This lives in `dmm-cli` because that is the binary
-//! whose `--help` and reference the tables describe.
+//! whose `--help` and reference the tables describe. The table is repository
+//! markdown, not terminal help, so it is rendered here rather than in
+//! `dmm_shared::help`; the tags come from there, shared with `--help`.
 
 mod common;
 
 use common::{repo_root, unified_diff};
-use dmm_lib::docs_tables;
 use dmm_lib::protocol::{DeviceFamily, registry};
 use std::path::PathBuf;
 
 const START: &str = "<!-- devices:start -->";
 const END: &str = "<!-- devices:end -->";
+
+/// The CLI reference's `--device` table: one row per selectable device.
+///
+/// The Description column is the device name plus the same tag `--help`
+/// appends ([`dmm_shared::help::device_tag`]), so the two cannot disagree
+/// about which devices are experimental. Counts, form factor and which models
+/// share a protocol table stay in `docs/supported-devices.md`, which the
+/// reference links to.
+fn cli_reference_table() -> String {
+    let mut table = String::from("| Value | Aliases | Description |\n|---|---|---|");
+    // Auto leads the table and carries the default tag: it is what `--device`
+    // does when nothing names a meter, and the one value that is not a
+    // registry entry. Its description links to the design the way the rows
+    // below send a reader to `supported-devices.md`.
+    table.push_str(&format!(
+        "\n| `{}` |  | [Detect the connected meter](detection-design.md) (default) |",
+        registry::AUTO_DEVICE_ID
+    ));
+    for device in registry::DEVICES {
+        let aliases: Vec<String> = device.aliases.iter().map(|a| format!("`{a}`")).collect();
+        let tag = dmm_shared::help::device_tag(device, true).expect("every row is tagged");
+        // A display name that already ends in a parenthetical — the mock's
+        // "Mock (simulated)" — takes the tag inside it instead of growing a
+        // second bracketed group.
+        let description = match device.display_name.strip_suffix(')') {
+            Some(head) => format!("{head}, {tag})"),
+            None => format!("{} ({tag})", device.display_name),
+        };
+        table.push_str(&format!(
+            "\n| `{}` | {} | {description} |",
+            device.id,
+            aliases.join(", ")
+        ));
+    }
+    table
+}
 
 /// A doc's full text and the byte range its marked block spans.
 ///
@@ -60,7 +97,7 @@ fn hardware_families() -> Vec<(&'static str, Vec<&'static str>)> {
 #[test]
 fn cli_reference_device_table_matches_the_registry() {
     let relative = "docs/cli-reference.md";
-    let rendered = docs_tables::cli_reference_table();
+    let rendered = cli_reference_table();
     let (path, text, block) = marked_block(relative);
     let wanted = format!("\n{rendered}\n");
     if text[block.clone()] == wanted {
@@ -114,4 +151,49 @@ fn readme_device_table_names_every_family_and_issue() {
             "README device table row links more than one issue: {row}"
         );
     }
+}
+
+#[test]
+fn cli_reference_table_lists_every_id_and_alias() {
+    let table = cli_reference_table();
+    // Pasted into markdown verbatim, so a stray leading or trailing
+    // newline would move the `<!-- devices:end -->` marker.
+    assert!(
+        !table.starts_with('\n') && !table.ends_with('\n'),
+        "{table}"
+    );
+    for line in table.lines() {
+        assert!(line.starts_with("| ") && line.ends_with(" |") || line == "|---|---|---|");
+        assert_eq!(line.matches('|').count(), 4, "{line}");
+    }
+    for device in registry::DEVICES {
+        assert!(table.contains(&format!("`{}`", device.id)), "{}", device.id);
+        for alias in device.aliases {
+            assert!(table.contains(&format!("`{alias}`")), "{alias}");
+        }
+    }
+}
+
+/// `--help` and the reference table tag devices the same way; a mismatch
+/// would have a user reading "verified" in the docs and a yellow warning
+/// on the terminal. The mock also checks the tags land inside a display
+/// name that already carries a parenthetical.
+#[test]
+fn cli_reference_tags_default_experimental_and_mock() {
+    let table = cli_reference_table();
+    // The default is detection, not a model: `auto` carries the tag and
+    // leads the table, and no meter claims it.
+    let first_row = table.lines().nth(2).expect("a first device row");
+    assert_eq!(
+        first_row,
+        "| `auto` |  | [Detect the connected meter](detection-design.md) (default) |"
+    );
+    assert!(table.contains("| UT61E+ (verified) |"), "{table}");
+    assert_eq!(table.matches("default").count(), 1, "{table}");
+    assert!(table.contains("| UT171A/B/C (experimental) |"), "{table}");
+    assert!(table.contains("| UT181A (partly verified) |"), "{table}");
+    assert!(
+        table.contains("| Mock (simulated, no hardware required) |"),
+        "{table}"
+    );
 }

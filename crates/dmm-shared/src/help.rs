@@ -53,14 +53,7 @@ pub fn device_help(intro: &str) -> String {
         registry::AUTO_DEVICE_ID
     ));
     for d in registry::DEVICES {
-        let stability = (d.new_protocol)().profile().stability;
-        let tag = if !d.requires_hardware {
-            " (no hardware required)".to_string()
-        } else if stability.is_verified() {
-            String::new()
-        } else {
-            format!(" ({})", stability.label())
-        };
+        let tag = device_tag(d, false).map_or(String::new(), |t| format!(" ({t})"));
         help.push_str(&format!("  {:<12} {}{}\n", d.id, d.display_name, tag));
     }
     help.push_str(
@@ -68,6 +61,20 @@ pub fn device_help(intro: &str) -> String {
          Quote names with special characters: --device 'ut61e+'",
     );
     help
+}
+
+/// What a device listing says beside a device's name: that it needs no
+/// hardware, or how far its support is verified.
+///
+/// `--help` leaves a verified meter untagged and `docs/cli-reference.md`'s
+/// table tags every row, so `verified_too` asks for that meter's tag too.
+/// Shared so the two cannot disagree about which devices are experimental.
+pub fn device_tag(device: &SelectableDevice, verified_too: bool) -> Option<&'static str> {
+    if !device.requires_hardware {
+        return Some("no hardware required");
+    }
+    let stability = (device.new_protocol)().profile().stability;
+    (verified_too || !stability.is_verified()).then(|| stability.label())
 }
 
 /// Long help for a `--mock-mode` flag: `intro`, the mode list, then `example`.
