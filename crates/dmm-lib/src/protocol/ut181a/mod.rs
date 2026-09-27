@@ -313,17 +313,19 @@ impl Protocol for Ut181aProtocol {
         use crate::protocol::steps::{self, Ohms, Volts};
         use crate::protocol::{CaptureStep, Expect, Need, RangeExpect};
 
-        // Only V DC, V AC and °C have been seen on real hardware (issue #5),
-        // so the mark sits on the V DC step alone, not on the whole gate.
+        // A real meter has run every step (issue #5, 2026-09-27) but
+        // `manual_range` and `auto`, which changed form since and wait for a
+        // run of their own.
         let [vdc, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
             Volts::VDc,
-            CaptureStep::basic("vdc", "Set meter to V DC").verified(),
+            CaptureStep::basic("vdc", "Set meter to V DC"),
             Ohms::Word,
             CaptureStep::basic(
                 "ohm",
                 "Set meter to Resistance. Leave leads open (should show OL).",
             ),
-        );
+        )
+        .map(CaptureStep::verified);
 
         // Core UT181A modes. The gate closes before any other step, so every
         // step after it gets swept.
@@ -350,70 +352,128 @@ impl Protocol for Ut181aProtocol {
             // because SET_MODE only ever moves inside the family the dial is
             // already on.
             CaptureStep::basic("vdc_acdc", "Set meter to V DC AC+DC")
+                .verified()
                 .expect(Expect::mode("V DC AC+DC")),
             CaptureStep::basic("vdc_peak", "Set meter to V DC Peak")
+                .verified()
                 .expect(Expect::mode("V DC Peak")),
             CaptureStep::basic("vac", "Set meter to V AC")
                 .verified()
                 .expect(Expect::mode("V AC")),
-            CaptureStep::basic("vac_hz", "Set meter to V AC Hz").expect(Expect::mode("V AC Hz")),
-            CaptureStep::basic("vac_lpf", "Set meter to V AC LPF").expect(Expect::mode("V AC LPF")),
-            CaptureStep::basic("vac_dbv", "Set meter to V AC dBV").expect(Expect::mode("V AC dBV")),
-            CaptureStep::basic("vac_dbm", "Set meter to V AC dBm").expect(Expect::mode("V AC dBm")),
-            CaptureStep::basic("mvdc", "Set meter to mV DC").expect(Expect::mode("mV DC")),
+            CaptureStep::basic("vac_hz", "Set meter to V AC Hz")
+                .verified()
+                .expect(Expect::mode("V AC Hz")),
+            CaptureStep::basic("vac_lpf", "Set meter to V AC LPF")
+                .verified()
+                .expect(Expect::mode("V AC LPF")),
+            CaptureStep::basic("vac_dbv", "Set meter to V AC dBV")
+                .verified()
+                .expect(Expect::mode("V AC dBV")),
+            CaptureStep::basic("vac_dbm", "Set meter to V AC dBm")
+                .verified()
+                .expect(Expect::mode("V AC dBm")),
+            CaptureStep::basic("mvdc", "Set meter to mV DC")
+                .verified()
+                .expect(Expect::mode("mV DC")),
             CaptureStep::basic("mvdc_peak", "Set meter to mV DC Peak")
+                .verified()
                 .expect(Expect::mode("mV DC Peak")),
-            CaptureStep::basic("mvac", "Set meter to mV AC").expect(Expect::mode("mV AC")),
-            CaptureStep::basic("mvac_hz", "Set meter to mV AC Hz").expect(Expect::mode("mV AC Hz")),
+            CaptureStep::basic("mvac", "Set meter to mV AC")
+                .verified()
+                .expect(Expect::mode("mV AC")),
+            CaptureStep::basic("mvac_hz", "Set meter to mV AC Hz")
+                .verified()
+                .expect(Expect::mode("mV AC Hz")),
             CaptureStep::basic("mvac_peak", "Set meter to mV AC Peak")
+                .verified()
                 .expect(Expect::mode("mV AC Peak")),
             // The vendor UI offers this one though its own decoder has no
             // label for it (spec §6.1 "Caveats"); a real meter reports it.
             CaptureStep::basic("mvac_acdc", "Set meter to mV AC AC+DC")
+                .verified()
                 .expect(Expect::mode("mV AC AC+DC")),
             CaptureStep::basic("cont", "Set meter to Continuity")
+                .verified()
                 .expect(Expect::mode("Continuity")),
             // Nibble 0 = 2 is a second function on these two families, not
             // REL: the open-circuit beeper and the diode alarm (spec §6.1).
             CaptureStep::basic("cont_open", "Continuity: switch to the open-circuit beeper")
+                .verified()
                 .expect(Expect::mode("Continuity (open)")),
-            CaptureStep::basic("ns", "Set meter to Conductance (nS)").expect(Expect::mode("nS")),
-            CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
+            CaptureStep::basic("ns", "Set meter to Conductance (nS)")
+                .verified()
+                .expect(Expect::mode("nS")),
+            CaptureStep::basic("diode", "Set meter to Diode")
+                .verified()
+                .expect(Expect::mode("Diode")),
             CaptureStep::basic("diode_alarm", "Diode: switch to the alarm function")
+                .verified()
                 .expect(Expect::mode("Diode Alarm")),
             CaptureStep::basic("cap", "Set meter to Capacitance")
+                .verified()
                 .expect(Expect::mode("Capacitance")),
-            CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Hz")),
+            CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
+                .verified()
+                .expect(Expect::mode("Hz")),
             CaptureStep::basic("duty", "Set meter to Duty Cycle (%)")
+                .verified()
                 .expect(Expect::mode("Duty %")),
             CaptureStep::basic("pulse", "Set meter to Pulse Width (ms)")
+                .verified()
                 .expect(Expect::mode("Pulse Width")),
-            CaptureStep::basic("uadc", "Set meter to µA DC").expect(Expect::mode("µA DC")),
+            CaptureStep::basic("uadc", "Set meter to µA DC")
+                .verified()
+                .expect(Expect::mode("µA DC")),
             CaptureStep::basic("uadc_acdc", "Set meter to µA DC AC+DC")
+                .verified()
                 .expect(Expect::mode("µA DC AC+DC")),
             CaptureStep::basic("uadc_peak", "Set meter to µA DC Peak")
+                .verified()
                 .expect(Expect::mode("µA DC Peak")),
-            CaptureStep::basic("uaac", "Set meter to µA AC").expect(Expect::mode("µA AC")),
-            CaptureStep::basic("uaac_hz", "Set meter to µA AC Hz").expect(Expect::mode("µA AC Hz")),
+            CaptureStep::basic("uaac", "Set meter to µA AC")
+                .verified()
+                .expect(Expect::mode("µA AC")),
+            CaptureStep::basic("uaac_hz", "Set meter to µA AC Hz")
+                .verified()
+                .expect(Expect::mode("µA AC Hz")),
             CaptureStep::basic("uaac_peak", "Set meter to µA AC Peak")
+                .verified()
                 .expect(Expect::mode("µA AC Peak")),
-            CaptureStep::basic("madc", "Set meter to mA DC").expect(Expect::mode("mA DC")),
+            CaptureStep::basic("madc", "Set meter to mA DC")
+                .verified()
+                .expect(Expect::mode("mA DC")),
             CaptureStep::basic("madc_acdc", "Set meter to mA DC AC+DC")
+                .verified()
                 .expect(Expect::mode("mA DC AC+DC")),
             CaptureStep::basic("madc_peak", "Set meter to mA DC Peak")
+                .verified()
                 .expect(Expect::mode("mA DC Peak")),
-            CaptureStep::basic("maac", "Set meter to mA AC").expect(Expect::mode("mA AC")),
-            CaptureStep::basic("maac_hz", "Set meter to mA AC Hz").expect(Expect::mode("mA AC Hz")),
+            CaptureStep::basic("maac", "Set meter to mA AC")
+                .verified()
+                .expect(Expect::mode("mA AC")),
+            CaptureStep::basic("maac_hz", "Set meter to mA AC Hz")
+                .verified()
+                .expect(Expect::mode("mA AC Hz")),
             CaptureStep::basic("maac_peak", "Set meter to mA AC Peak")
+                .verified()
                 .expect(Expect::mode("mA AC Peak")),
-            CaptureStep::basic("adc", "Set meter to A DC").expect(Expect::mode("A DC")),
+            CaptureStep::basic("adc", "Set meter to A DC")
+                .verified()
+                .expect(Expect::mode("A DC")),
             CaptureStep::basic("adc_acdc", "Set meter to A DC AC+DC")
+                .verified()
                 .expect(Expect::mode("A DC AC+DC")),
             CaptureStep::basic("adc_peak", "Set meter to A DC Peak")
+                .verified()
                 .expect(Expect::mode("A DC Peak")),
-            CaptureStep::basic("aac", "Set meter to A AC").expect(Expect::mode("A AC")),
-            CaptureStep::basic("aac_hz", "Set meter to A AC Hz").expect(Expect::mode("A AC Hz")),
+            CaptureStep::basic("aac", "Set meter to A AC")
+                .verified()
+                .expect(Expect::mode("A AC")),
+            CaptureStep::basic("aac_hz", "Set meter to A AC Hz")
+                .verified()
+                .expect(Expect::mode("A AC Hz")),
             CaptureStep::basic("aac_peak", "Set meter to A AC Peak")
+                .verified()
                 .expect(Expect::mode("A AC Peak")),
             CaptureStep::basic("tempc", "Set meter to Temperature C")
                 .verified()
@@ -425,39 +485,46 @@ impl Protocol for Ut181aProtocol {
                 "tempc_t2",
                 "Temperature C: switch the main display to T2 (second thermocouple in T2)",
             )
+            .verified()
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("°C T2")),
             CaptureStep::basic(
                 "tempc_t1_t2",
                 "Temperature C: switch to the T1-T2 difference (two thermocouples)",
             )
+            .verified()
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("°C T1-T2")),
             CaptureStep::basic(
                 "tempc_t2_t1",
                 "Temperature C: switch to the T2-T1 difference (two thermocouples)",
             )
+            .verified()
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("°C T2-T1")),
             CaptureStep::basic("tempf", "Set meter to Temperature F")
+                .verified()
                 .needs(&[Need::Thermocouple])
                 .expect(Expect::mode("°F")),
             CaptureStep::basic(
                 "tempf_t2",
                 "Temperature F: switch the main display to T2 (second thermocouple in T2)",
             )
+            .verified()
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("°F T2")),
             CaptureStep::basic(
                 "tempf_t1_t2",
                 "Temperature F: switch to the T1-T2 difference (two thermocouples)",
             )
+            .verified()
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("°F T1-T2")),
             CaptureStep::basic(
                 "tempf_t2_t1",
                 "Temperature F: switch to the T2-T1 difference (two thermocouples)",
             )
+            .verified()
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("°F T2-T1")),
             // Format and command steps, all on V DC: the REL key by hand, then
@@ -470,8 +537,10 @@ impl Protocol for Ut181aProtocol {
                               The report should list Reference and Absolute \
                               sub-values under each sample.",
             )
+            .verified()
             .expect(Expect::new().flags(&[(Flag::Rel, true)])),
             CaptureStep::basic("rel_off", "Long-press REL again to disable relative mode.")
+                .verified()
                 .samples(3)
                 .expect(Expect::new().flags(&[(Flag::Rel, false)])),
             CaptureStep::with_command(
@@ -484,6 +553,7 @@ impl Protocol for Ut181aProtocol {
             CaptureStep::with_command("auto", "We will set auto-range.", "auto", 3)
                 .expect(Expect::new().range(RangeExpect::Auto)),
             CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", "hold", 3)
+                .verified()
                 .expect(Expect::new().flags(&[(Flag::Hold, true)])),
             CaptureStep::with_command(
                 "hold_off",
@@ -491,10 +561,13 @@ impl Protocol for Ut181aProtocol {
                 "hold",
                 3,
             )
+            .verified()
             .expect(Expect::new().flags(&[(Flag::Hold, false)])),
             CaptureStep::with_command("minmax", "We will enable MIN/MAX.", "minmax", 3)
+                .verified()
                 .expect(Expect::new().flags(&[(Flag::Min, true), (Flag::Max, true)])),
             CaptureStep::with_command("minmax_off", "We will disable MIN/MAX.", "exit_minmax", 3)
+                .verified()
                 .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
             CaptureStep::basic(
                 "peak",
@@ -502,8 +575,10 @@ impl Protocol for Ut181aProtocol {
                               The report should list a Peak Min sub-value \
                               under each sample.",
             )
+            .verified()
             .expect(Expect::new().flags(&[(Flag::PeakMax, true), (Flag::PeakMin, true)])),
             CaptureStep::basic("peak_off", "Disable Peak mode.")
+                .verified()
                 .samples(3)
                 .expect(Expect::new().flags(&[(Flag::PeakMax, false), (Flag::PeakMin, false)])),
         ]
