@@ -332,6 +332,19 @@ Zoomed out on a noisy sub-value, its dashes merge into a solid band, so only col
 
 Use cases: mains voltage and its frequency over a day; a dBm reading beside the voltage behind it.
 
+### Sampling in step with streaming meters
+
+**Complexity:** Medium
+
+A meter that streams on its own (UT181A, UT171, UT803/UT804, VC880, ZOTEK, 121GW, BM78xBT) meets a sample interval it can't follow two ways:
+
+- **At 0 ms every frame is recorded, repeats included.** A UT181A sends a frame every 100 ms but changes its reading every 500 ms, so each reading lands about five times; a repeated frame and a new reading of the same value arrive as identical bytes, so nothing can drop the repeats afterwards.
+- **A longer interval reads stale frames.** Each tick takes the oldest queued frame (`framing::read_frame`) and stamps it with the time it was read, so the readings fall further behind the meter while the queue fills — over USB until the OS's HID queue drops reports, over Bluetooth without a bound. Only the UT-D07B path takes the newest frame (`newest_streamed`); a GUI pause backs the queue up the same way.
+
+A design should sample once per meter update by default — a UT181A's changes land on fixed 500 ms boundaries once one is seen — and, for a longer interval the user picks, keep the newest reading per interval (or an average of it) and drop the rest. Irregular updates (the UT181A's temperature dial: every 700–900 ms), the graph's gap detector and the **Buffer size** estimate all assume the tick is the rate today.
+
+Use cases: a long recording at 1 s per sample that stays live; a CSV whose rows are the meter's readings, not its frames. Raised by @diego351's UT181A at 2 Sa/s ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
+
 ### Measurement rate display
 
 **Complexity:** Low
