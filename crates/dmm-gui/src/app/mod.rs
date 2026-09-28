@@ -50,7 +50,7 @@ use appearance::{UiColorKey, font_definitions, install_text_styles};
 use capture::Capture;
 use connection::RemoteCommand;
 use connection_issue::ConnectionIssue;
-use export::ExportOutcome;
+use export::PendingExport;
 use layout::ContentLayout;
 use meter_fit::{FitInputs, MeterFit, WindowContent};
 use recording_panel::RecordingPanel;
@@ -377,8 +377,8 @@ pub struct App {
     applied: AppliedChrome,
     /// Transient status toast.
     toast: Option<Toast>,
-    /// One-shot receiver for CSV export result.
-    export_result_rx: Option<mpsc::Receiver<ExportOutcome>>,
+    /// The export waiting on its save dialog or its write, if any.
+    export: Option<PendingExport>,
     meter_fit: MeterFit,
     /// Transient big meter mode (not persisted to settings).
     big_meter_mode: BigMeterMode,
@@ -468,7 +468,7 @@ impl App {
             on_wayland: false,
             applied: AppliedChrome::default(),
             toast: None,
-            export_result_rx: None,
+            export: None,
             meter_fit: MeterFit::new(),
             big_meter_mode: BigMeterMode::Off,
             shortcut_help: ShortcutHelp::default(),
@@ -775,7 +775,7 @@ impl eframe::App for App {
         // arrives with this frame.
         self.drain_messages();
         self.trim_markers();
-        self.poll_export_result();
+        self.poll_export(&ctx);
 
         // Auto-reconnect after device selection change
         if self.connection.needs_reconnect {

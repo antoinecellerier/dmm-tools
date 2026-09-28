@@ -248,11 +248,11 @@ Export the current graph view as PNG or SVG for reports and documentation.
 
 Use cases: test reports, lab notebooks, sharing results.
 
-### Export without holding the file
+### Export without freezing the window
 
 **Complexity:** Medium
 
-The GUI renders an export before its save dialog opens and holds the bytes until the dialog closes: a CSV file is about a third of the samples' memory, a JSON document about 1.2×. Rendering after the dialog instead would stop the hold, but the file would hold what the buffer has at save time rather than at the click: readings that arrived meanwhile, and none that were evicted or cleared.
+The GUI renders an export on the UI thread once its save dialog returns, so the window stops for as long as the render takes: a fraction of a second at the default Buffer size, seconds at a few million samples. Moving the render off the UI thread needs the pinned samples shared with that thread rather than borrowed from the store.
 
 ---
 

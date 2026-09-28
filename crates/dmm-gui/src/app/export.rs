@@ -1,18 +1,24 @@
-//! Export: rendering the sample buffer — the recording, or with nothing
-//! recorded the samples the graph holds — as a CSV, a JSON document or a
-//! replay file, running the save dialog and the write off the UI thread, and
-//! folding the outcome back into a toast.
+//! Export: the sample buffer — the recording, or with nothing recorded the
+//! samples the graph holds — as a CSV, a JSON document or a replay file. The
+//! save dialog runs off the UI thread; the render runs once it returns, from
+//! the samples pinned at the click; the write runs off the UI thread again,
+//! and its outcome comes back as a toast.
 
 use chrono::{DateTime, Local};
 use dmm_lib::measurement::MeasuredValue;
+use dmm_lib::transport::Link;
 use dmm_shared::export::CsvLayout;
 use eframe::egui;
 use log::{error, info, warn};
 use std::collections::HashSet;
-use std::path::Path;
+use std::collections::vec_deque;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
+use super::connection::panic_text;
 use super::toast::Toast;
 use super::{App, ConnectionState};
+use crate::markers::Marker;
 use crate::recording::{BufferRole, Recording, Sample, render_csv, render_json, render_replay};
 
 /// What the CSV's `# device:` comment says when nothing ever identified the
@@ -27,6 +33,10 @@ const REPLAY_EXTENSION: &str = "replay";
 /// is disabled for the mock, so this only guards the call itself.
 pub(super) const NO_WIRE_FORMAT: &str =
     "The mock has no wire format to export; connect a real meter";
+
+/// Why Export… does nothing while an earlier export waits on its dialog or
+/// its write. Not about the dialog alone: a write has none to point at.
+const EXPORT_IN_PROGRESS: &str = "An export is already in progress \u{2014} finish it first";
 
 /// Which file the export writes. Settled before the dialog opens — by the
 /// Export… label (a CSV) or the menu on its arrow — because the dialog hands
@@ -97,13 +107,15 @@ pub(super) struct ExportOutcome {
     exported: Option<(SavedMark, usize)>,
 }
 
-/// An export rendered and waiting for its save dialog: everything the writer
-/// thread needs, none of it borrowed from the buffer.
-pub(super) struct PreparedExport {
+/// An export as the click asked for it, waiting on its save dialog:
+/// everything its render reads besides the samples, frozen then — which
+/// meter, the columns, the markers — since all of it can change while the
+/// dialog is open. The samples themselves are pinned in the
+/// [`Recording`].
+pub(super) struct ExportRequest {
     format: ExportFormat,
     /// The name the dialog opens on.
     default_name: String,
-    bytes: Vec<u8>,
     sample_count: usize,
     /// What to mark saved once the file is written; `None` for the history,
     /// which nothing asks about before dropping.
@@ -111,6 +123,58 @@ pub(super) struct PreparedExport {
     /// A replay file of a buffer with markers, which it leaves out: the
     /// toast says so.
     drops_markers: bool,
+    device_model: &'static str,
+    /// The CSV's columns, marker ones included when there are markers.
+    csv_layout: CsvLayout,
+    experimental: bool,
+    /// A replay file's `# device:` id and link; `None` for any other format.
+    replay: Option<(&'static str, Option<Link>)>,
+    /// The markers on the exported samples, oldest first, as they were at
+    /// the click.
+    marked: Vec<Marker>,
+}
+
+impl ExportRequest {
+    /// The file's bytes, from `samples`: the ones pinned at the click.
+    fn render(&self, samples: vec_deque::Iter<'_, Sample>) -> Result<Vec<u8>, String> {
+        let marked: Vec<&Marker> = self.marked.iter().collect();
+        match self.format {
+            ExportFormat::Csv => render_csv(samples, &marked, self.device_model, self.csv_layout)
+                .map_err(|e| {
+                    error!("CSV export failed: {e}");
+                    format!("Export failed: {e}")
+                }),
+            ExportFormat::Json => {
+                render_json(samples, &marked, self.device_model, self.experimental).map_err(|e| {
+                    error!("JSON export failed: {e}");
+                    format!("Export failed: {e}")
+                })
+            }
+            ExportFormat::Replay => self
+                .replay
+                .and_then(|(id, link)| render_replay(samples, id, Some(self.device_model), link))
+                .map(String::into_bytes)
+                .ok_or_else(|| {
+                    warn!("replay export refused: the buffered samples carry no meter frames");
+                    NO_WIRE_FORMAT.to_string()
+                }),
+        }
+    }
+}
+
+/// What the save dialog answered: the path picked, `None` when dismissed,
+/// or the text of a panic in the dialog thread.
+type DialogResult = Result<Option<PathBuf>, String>;
+
+/// An export under way: at most one at a time.
+pub(super) enum PendingExport {
+    /// Its save dialog is open.
+    Choosing {
+        request: ExportRequest,
+        rx: mpsc::Receiver<DialogResult>,
+    },
+    /// Rendered and being written.
+    Writing(mpsc::Receiver<ExportOutcome>),
 }
 
 /// Write one export to the path the user chose and say how it went.
@@ -190,12 +254,12 @@ impl App {
         }
     }
 
-    /// Render the buffer as `format` for the save dialog, or the toast that
-    /// says why there is nothing to save.
+    /// What an export of the buffer as `format` needs besides the samples,
+    /// or the toast that says why there is nothing to save.
     ///
     /// Kept apart from the dialog so what an export writes can be checked
     /// without opening one.
-    pub(super) fn prepare_export(&self, format: ExportFormat) -> Result<PreparedExport, String> {
+    pub(super) fn prepare_export(&self, format: ExportFormat) -> Result<ExportRequest, String> {
         // A fresh walk over the samples for each pass that reads them: a
         // borrowed iterator, nothing copied.
         let samples = || self.capture.recording.export_samples();
@@ -215,62 +279,52 @@ impl App {
             .device
             .or_else(|| self.active_device().map(|d| d.display_name))
             .unwrap_or(UNKNOWN_DEVICE);
+        // A replay is refused now rather than after the user picked a path:
+        // the mock synthesises its readings, so a sample of it has no frame.
+        let replay = match format {
+            ExportFormat::Replay => {
+                let id = self
+                    .replay_device_id()
+                    .filter(|_| samples().all(|s| !s.measurement.raw_payload.is_empty()));
+                let Some(id) = id else {
+                    warn!("replay export refused: the buffered samples carry no meter frames");
+                    return Err(NO_WIRE_FORMAT.to_string());
+                };
+                // What the samples came over, latched with the rest of the
+                // provenance; the live link only where a recording started
+                // before a meter answered.
+                Some((id, self.export_layout().link.or(self.connection.link())))
+            }
+            _ => None,
+        };
 
-        // Render here and hand the bytes to the writer thread. Cloning the
-        // sample buffer instead — which is what this used to do so the dialog
-        // and write could run off the UI thread — duplicated every Sample,
-        // each with its own heap string, roughly doubling peak memory at the
-        // 500K cap. A CSV file is a fraction of that size; a JSON document is
-        // about the size of the buffer, but held as one allocation rather
-        // than 500K cloned samples.
+        // The file is rendered only once the dialog returns a path, from the
+        // samples pinned now: nothing is held while the dialog is open, and
+        // the file still holds what the buffer held at the click, whatever
+        // arrives, is dropped or discarded meanwhile.
         //
-        // The name is built here too, rather than in the dialog thread: the
+        // The name is built here, rather than in the dialog thread: the
         // first sample is where the file starts.
         let default_name =
             format.default_name(device_model, single_mode(samples()), first.wall_time);
         let marked = self.capture.recording.marked(self.markers.iter());
-        let bytes = match format {
-            ExportFormat::Csv => {
-                let layout = CsvLayout {
-                    markers: !marked.is_empty(),
-                    ..self.csv_layout()
-                };
-                render_csv(samples(), &marked, device_model, layout).map_err(|e| {
-                    error!("CSV export failed: {e}");
-                    format!("Export failed: {e}")
-                })?
-            }
-            ExportFormat::Json => {
-                render_json(samples(), &marked, device_model, self.experimental()).map_err(|e| {
-                    error!("JSON export failed: {e}");
-                    format!("Export failed: {e}")
-                })?
-            }
-            ExportFormat::Replay => self
-                .replay_device_id()
-                .and_then(|id| {
-                    // What the samples came over, latched with the rest of
-                    // the provenance; the live link only where a recording
-                    // started before a meter answered.
-                    let link = self.export_layout().link.or(self.connection.link());
-                    render_replay(samples(), id, Some(device_model), link)
-                })
-                .ok_or_else(|| {
-                    warn!("replay export refused: the buffered samples carry no meter frames");
-                    NO_WIRE_FORMAT.to_string()
-                })?
-                .into_bytes(),
-        };
-        Ok(PreparedExport {
+        Ok(ExportRequest {
             format,
             default_name,
-            bytes,
             sample_count: samples().len(),
             mark: (role == BufferRole::Recording).then(|| SavedMark {
                 epoch: self.capture.recording.epoch(),
                 markers: (format != ExportFormat::Replay).then(|| Recording::marker_keys(&marked)),
             }),
             drops_markers: format == ExportFormat::Replay && !marked.is_empty(),
+            device_model,
+            csv_layout: CsvLayout {
+                markers: !marked.is_empty(),
+                ..self.csv_layout()
+            },
+            experimental: self.experimental(),
+            replay,
+            marked: marked.into_iter().cloned().collect(),
         })
     }
 
@@ -294,42 +348,55 @@ impl App {
         }
     }
 
+    /// Take the click: pin the samples, and hand back the channel the save
+    /// dialog answers on and the name it opens with. Refused while an
+    /// earlier export is under way, or with nothing to save.
+    ///
+    /// Opens no dialog, so tests drive the answer by hand.
+    fn begin_export(
+        &mut self,
+        format: ExportFormat,
+    ) -> Result<(mpsc::Sender<DialogResult>, String), String> {
+        if self.export.is_some() {
+            return Err(EXPORT_IN_PROGRESS.to_string());
+        }
+        let request = self.prepare_export(format)?;
+        let pinned = self.capture.recording.pin_export();
+        debug_assert_eq!(pinned, request.sample_count);
+        let (tx, rx) = mpsc::channel();
+        info!(
+            "export of {} samples: waiting for the save dialog",
+            request.sample_count
+        );
+        let name = request.default_name.clone();
+        // Stored here, with the pin, so the two cannot come apart.
+        self.export = Some(PendingExport::Choosing { request, rx });
+        Ok((tx, name))
+    }
+
     pub(super) fn export_recording(&mut self, ctx: &egui::Context, format: ExportFormat) {
-        let prepared = match self.prepare_export(format) {
-            Ok(prepared) => prepared,
+        let (tx, default_name) = match self.begin_export(format) {
+            Ok(begun) => begun,
             Err(message) => {
                 self.toast = Some(Toast::error(message));
                 return;
             }
         };
-        let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let PreparedExport {
-                format,
-                default_name,
-                bytes,
-                sample_count,
-                mark,
-                drops_markers,
-            } = prepared;
             let (label, extension) = format.filter();
-            let Some(path) = rfd::FileDialog::new()
-                .set_file_name(default_name)
-                .add_filter(label, &[extension])
-                .save_file()
-            else {
-                return;
-            };
-            let mut outcome = write_export(&path, &bytes, sample_count, mark);
-            if drops_markers && !outcome.is_error {
-                outcome.message.push_str(REPLAY_DROPS_MARKERS);
-            }
-            let _ = tx.send(outcome);
-            // The result is polled from `ui`; nothing else may be drawing.
+            let answer = std::panic::catch_unwind(|| {
+                rfd::FileDialog::new()
+                    .set_file_name(default_name)
+                    .add_filter(label, &[extension])
+                    .save_file()
+            })
+            .map_err(|panic| panic_text(panic.as_ref()));
+            let _ = tx.send(answer);
+            // The answer is polled from `ui`; a paused app draws nothing
+            // until asked.
             ctx.request_repaint();
         });
-        self.export_result_rx = Some(rx);
     }
 
     /// Whether the exported readings came off a protocol short of verified:
@@ -352,25 +419,132 @@ impl App {
         })
     }
 
-    pub(super) fn poll_export_result(&mut self) {
-        if let Some(rx) = &self.export_result_rx
-            && let Ok(outcome) = rx.try_recv()
-        {
-            if let Some((mark, count)) = outcome.exported {
-                // Samples that arrived while the export ran are not in that
-                // file, so mark only what was actually written — and only if
-                // the buffer still holds the recording it was written from.
-                self.capture
-                    .recording
-                    .mark_exported(mark.epoch, count, mark.markers);
+    /// Fold in whatever the pending export's dialog or writer answered.
+    pub(super) fn poll_export(&mut self, ctx: &egui::Context) {
+        match &self.export {
+            None => {}
+            Some(PendingExport::Choosing { rx, .. }) => {
+                let answer = match rx.try_recv() {
+                    Err(mpsc::TryRecvError::Empty) => return,
+                    Ok(answer) => answer,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        Err("the save dialog closed without an answer".to_string())
+                    }
+                };
+                let Some(PendingExport::Choosing { request, .. }) = self.export.take() else {
+                    return;
+                };
+                match answer {
+                    Ok(Some(path)) => match self.render_pinned(&request) {
+                        Ok(bytes) => self.spawn_write(ctx, path, bytes, request),
+                        Err(message) => self.toast = Some(Toast::error(message)),
+                    },
+                    Ok(None) => {
+                        self.capture.recording.unpin_export();
+                        info!("export cancelled");
+                    }
+                    Err(message) => {
+                        self.capture.recording.unpin_export();
+                        error!("export failed: {message}");
+                        self.toast = Some(Toast::error(format!("Export failed: {message}")));
+                    }
+                }
             }
-            self.toast = Some(if outcome.is_error {
-                Toast::error(outcome.message)
-            } else {
-                Toast::info(outcome.message)
-            });
-            self.export_result_rx = None;
+            Some(PendingExport::Writing(rx)) => {
+                let outcome = match rx.try_recv() {
+                    Err(mpsc::TryRecvError::Empty) => return,
+                    Ok(outcome) => outcome,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        // The pin went with the render; releasing it again
+                        // is a no-op, but this arm must not leave the next
+                        // Export… refused as one in progress.
+                        self.capture.recording.unpin_export();
+                        let message = "the writer stopped without an answer";
+                        error!("export failed: {message}");
+                        ExportOutcome {
+                            message: format!("Export failed: {message}"),
+                            is_error: true,
+                            exported: None,
+                        }
+                    }
+                };
+                if let Some((mark, count)) = outcome.exported {
+                    // Samples that arrived while the export ran are not in
+                    // that file, so mark only what was actually written — and
+                    // only if the buffer still holds the recording it was
+                    // written from.
+                    self.capture
+                        .recording
+                        .mark_exported(mark.epoch, count, mark.markers);
+                }
+                self.toast = Some(if outcome.is_error {
+                    Toast::error(outcome.message)
+                } else {
+                    Toast::info(outcome.message)
+                });
+                self.export = None;
+            }
         }
+    }
+
+    /// Render `request` from the samples pinned at its click, then let them
+    /// go, whatever the result.
+    fn render_pinned(&mut self, request: &ExportRequest) -> Result<Vec<u8>, String> {
+        let samples = self.capture.recording.pinned_samples();
+        let result = if samples.len() == request.sample_count {
+            request.render(samples)
+        } else {
+            // Never a short file under a toast claiming the full count.
+            error!(
+                "export failed: {} of {} pinned samples left",
+                samples.len(),
+                request.sample_count
+            );
+            Err("Export failed: the samples changed while the save dialog was open".to_string())
+        };
+        self.capture.recording.unpin_export();
+        result
+    }
+
+    /// Write `bytes` to `path` off the UI thread; [`App::poll_export`]
+    /// picks up the outcome.
+    fn spawn_write(
+        &mut self,
+        ctx: &egui::Context,
+        path: PathBuf,
+        bytes: Vec<u8>,
+        request: ExportRequest,
+    ) {
+        let (tx, rx) = mpsc::channel::<ExportOutcome>();
+        let ctx = ctx.clone();
+        let ExportRequest {
+            sample_count,
+            mark,
+            drops_markers,
+            ..
+        } = request;
+        std::thread::spawn(move || {
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut outcome = write_export(&path, &bytes, sample_count, mark);
+                if drops_markers && !outcome.is_error {
+                    outcome.message.push_str(REPLAY_DROPS_MARKERS);
+                }
+                outcome
+            }))
+            .unwrap_or_else(|panic| {
+                let message = panic_text(panic.as_ref());
+                error!("export failed: {message}");
+                ExportOutcome {
+                    message: format!("Export failed: {message}"),
+                    is_error: true,
+                    exported: None,
+                }
+            });
+            let _ = tx.send(outcome);
+            // The result is polled from `ui`; nothing else may be drawing.
+            ctx.request_repaint();
+        });
+        self.export = Some(PendingExport::Writing(rx));
     }
 }
 
@@ -447,7 +621,10 @@ mod tests {
         let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
         assert_eq!(prepared.sample_count, 4);
         assert!(prepared.mark.is_none(), "the history marks nothing saved");
-        let text = String::from_utf8(prepared.bytes).expect("CSV is UTF-8");
+        let bytes = prepared
+            .render(app.capture.recording.export_samples())
+            .expect("rendering the history");
+        let text = String::from_utf8(bytes).expect("CSV is UTF-8");
         let mut lines = text.lines().skip(1);
         assert!(lines.next().expect("a header").ends_with(",marker,note"));
         assert_eq!(lines.filter(|l| l.ends_with(",1,")).count(), 1, "{text}");
@@ -684,7 +861,9 @@ mod tests {
         assert_eq!(prepared.sample_count, 3);
         assert_eq!(prepared.mark, None);
         assert_eq!(
-            prepared.bytes,
+            prepared
+                .render(app.capture.recording.export_samples())
+                .expect("rendering the history"),
             render_csv(
                 app.capture.recording.export_samples(),
                 &[],
@@ -718,7 +897,7 @@ mod tests {
     /// The prepared file is the buffer as the renderer writes it, named after
     /// its first sample.
     #[test]
-    fn a_prepared_export_holds_the_rendered_buffer() {
+    fn a_prepared_export_renders_the_buffer() {
         let app = app_holding(0, 0, &[0, 0, 0]);
         let prepared = app
             .prepare_export(ExportFormat::Csv)
@@ -749,7 +928,10 @@ mod tests {
             app.csv_layout(),
         )
         .expect("rendering the fixture buffer");
-        assert_eq!(prepared.bytes, rendered);
+        assert_eq!(
+            prepared.render(app.capture.recording.export_samples()),
+            Ok(rendered)
+        );
     }
 
     /// A replay file has nowhere to put markers: it saves none of them, and
@@ -784,8 +966,160 @@ mod tests {
     fn deliver_outcome(app: &mut App, outcome: ExportOutcome) {
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(outcome).expect("the channel is open");
-        app.export_result_rx = Some(rx);
-        app.poll_export_result();
+        app.export = Some(PendingExport::Writing(rx));
+        app.poll_export(&egui::Context::default());
+    }
+
+    /// The request of the export waiting on its dialog, taken out of the
+    /// app as `poll_export` does when a path comes back.
+    fn take_request(app: &mut App) -> ExportRequest {
+        match app.export.take() {
+            Some(PendingExport::Choosing { request, .. }) => request,
+            _ => panic!("no export waiting on its dialog"),
+        }
+    }
+
+    /// The file holds the samples and markers of the click, whatever the
+    /// buffer went through while the dialog was open.
+    #[test]
+    fn an_export_writes_the_samples_at_the_click() {
+        let mut app = app_holding(0, 0, &[0, 0, 0]);
+        let expected = render_csv(
+            app.capture.recording.export_samples(),
+            &[],
+            UNKNOWN_DEVICE,
+            app.csv_layout(),
+        )
+        .expect("rendering the fixture buffer");
+        app.begin_export(ExportFormat::Csv).expect("three samples");
+        assert!(app.capture.recording.is_pinned());
+
+        let t0 = Instant::now();
+        push_at(&mut app, t0, 10..12);
+        app.last_measurement = app
+            .capture
+            .recording
+            .export_samples()
+            .last()
+            .map(|s| s.measurement.clone());
+        app.add_marker(false);
+        app.capture.recording.toggle(Instant::now()); // stop
+        app.capture.recording.discard();
+
+        let request = take_request(&mut app);
+        assert_eq!(app.render_pinned(&request), Ok(expected));
+        assert!(!app.capture.recording.is_pinned());
+        assert_ne!(
+            request.mark.map(|m| m.epoch),
+            Some(app.capture.recording.epoch()),
+            "the discarded recording's export marks nothing"
+        );
+
+        // A marker placed before the click keeps the note it had then.
+        let mut app = app_holding(0, 0, &[0, 0]);
+        app.last_measurement = app
+            .capture
+            .recording
+            .export_samples()
+            .last()
+            .map(|s| s.measurement.clone());
+        app.add_marker(false);
+        let marked = app.capture.recording.marked(app.markers.iter());
+        let expected = render_json(
+            app.capture.recording.export_samples(),
+            &marked,
+            UNKNOWN_DEVICE,
+            app.experimental(),
+        )
+        .expect("rendering the fixture buffer");
+        app.begin_export(ExportFormat::Json).expect("two samples");
+        for m in app.markers.iter_mut() {
+            m.note = "written after the click".into();
+        }
+        let request = take_request(&mut app);
+        let bytes = app.render_pinned(&request).expect("the pinned samples");
+        assert_eq!(bytes, expected);
+        assert!(
+            !String::from_utf8(bytes)
+                .unwrap()
+                .contains("after the click")
+        );
+    }
+
+    /// A second Export… while one waits on its dialog is refused, and the
+    /// first keeps its samples.
+    #[test]
+    fn a_second_export_waits_for_the_first() {
+        let mut app = app_holding(0, 0, &[0, 0]);
+        app.begin_export(ExportFormat::Csv).expect("two samples");
+        assert_eq!(
+            app.begin_export(ExportFormat::Json).map(|_| ()),
+            Err(EXPORT_IN_PROGRESS.to_string())
+        );
+        assert!(matches!(app.export, Some(PendingExport::Choosing { .. })));
+        assert!(app.capture.recording.is_pinned());
+    }
+
+    /// A dialog dismissed, panicked or gone lets the samples go, so the
+    /// next Export… opens one.
+    #[test]
+    fn a_dismissed_or_failed_dialog_releases_the_pin() {
+        let mut app = app_holding(0, 0, &[0, 0]);
+        let ctx = egui::Context::default();
+
+        let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
+        tx.send(Ok(None)).expect("the app listens");
+        app.poll_export(&ctx);
+        assert!(!app.capture.recording.is_pinned());
+        assert!(app.export.is_none());
+        assert!(app.toast.is_none(), "a cancel needs no toast");
+
+        let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
+        tx.send(Err("boom".into())).expect("the app listens");
+        app.poll_export(&ctx);
+        assert!(!app.capture.recording.is_pinned());
+        assert_eq!(
+            app.toast.take().map(|t| (t.message, t.is_error)),
+            Some(("Export failed: boom".to_string(), true))
+        );
+
+        let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
+        drop(tx);
+        app.poll_export(&ctx);
+        assert!(!app.capture.recording.is_pinned());
+        assert!(app.export.is_none());
+        assert!(app.toast.is_some_and(|t| t.is_error));
+    }
+
+    /// A writer gone without an answer ends the export with an error, so
+    /// the next Export… is not refused as one still in progress.
+    #[test]
+    fn a_writer_gone_without_an_answer_ends_the_export() {
+        let mut app = app_holding(0, 0, &[0, 0]);
+        let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
+        drop(tx);
+        app.export = Some(PendingExport::Writing(rx));
+        app.poll_export(&egui::Context::default());
+        assert!(app.export.is_none());
+        assert!(app.toast.take().is_some_and(|t| t.is_error));
+        assert!(app.begin_export(ExportFormat::Csv).is_ok());
+    }
+
+    /// A replay of samples with no meter frame is refused at the click, not
+    /// after the user picked a path.
+    #[test]
+    fn a_replay_of_frameless_samples_is_refused_at_the_click() {
+        let mut app = app_holding(0, 0, &[0]);
+        app.capture.recording_layout.device_id = Some("ut61eplus");
+        let mut frameless = measurement(0);
+        frameless.raw_payload.clear();
+        app.capture.recording.push(&frameless, &app.wall_clock, 0);
+        assert_eq!(
+            app.prepare_export(ExportFormat::Replay).map(|_| ()),
+            Err(NO_WIRE_FORMAT.to_string())
+        );
+        assert!(app.begin_export(ExportFormat::Replay).is_err());
+        assert!(!app.capture.recording.is_pinned());
     }
 
     /// A written file marks what it holds, so Record doesn't ask about it.

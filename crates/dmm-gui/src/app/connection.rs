@@ -582,18 +582,23 @@ where
     });
 }
 
-fn handle_thread_panic(
-    panic: Box<dyn std::any::Any + Send>,
-    tx: &mpsc::Sender<DmmMessage>,
-    ctx: &egui::Context,
-) {
-    let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+/// A caught panic's message, for the log and the user.
+pub(super) fn panic_text(panic: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = panic.downcast_ref::<&str>() {
         s.to_string()
     } else if let Some(s) = panic.downcast_ref::<String>() {
         s.clone()
     } else {
         "unknown panic".to_string()
-    };
+    }
+}
+
+fn handle_thread_panic(
+    panic: Box<dyn std::any::Any + Send>,
+    tx: &mpsc::Sender<DmmMessage>,
+    ctx: &egui::Context,
+) {
+    let msg = panic_text(panic.as_ref());
     error!("background thread panicked: {msg}");
     let _ = tx.send(DmmMessage::ErrorText(format!("internal error: {msg}")));
     ctx.request_repaint();

@@ -215,6 +215,22 @@ enum Span {
     Detached(VecDeque<Sample>),
 }
 
+/// The samples an export waiting on its save dialog will write, as they were
+/// at the click.
+#[derive(Debug)]
+enum ExportPin {
+    /// The current recording's first `len` samples, wherever the span keeps
+    /// them.
+    Recording { len: usize },
+    /// Samples in the store, by sequence number: the history at the click,
+    /// or a recording dropped since while its samples were still in the
+    /// store.
+    Store(Range<u64>),
+    /// Moved out of the store: the history passed them, or a recording left
+    /// behind was dropped.
+    Owned(VecDeque<Sample>),
+}
+
 /// The full readings: the graph's history, and a recording as a slice of
 /// the same store.
 ///
@@ -225,7 +241,8 @@ enum Span {
 /// runs, both end at the newest reading and the store is the longer of the
 /// two. Once stopped and passed by the history — the graph restarted, or
 /// dropped its oldest — it moves out into a buffer of its own, so memory is
-/// at most the recording plus the history.
+/// at most the recording plus the history, and while a save dialog is open,
+/// the samples its export pinned (see [`Recording::pin_export`]).
 #[derive(Debug)]
 pub struct Recording {
     pub active: bool,
@@ -239,6 +256,8 @@ pub struct Recording {
     /// Clear or a new meter.
     history_start: Option<u64>,
     span: Option<Span>,
+    /// What an export waiting on its save dialog will write; at most one.
+    pin: Option<ExportPin>,
     /// Session time the current recording started at, from the caller's
     /// [`Clock`](dmm_lib::Clock). Session time rather than wall time so a
     /// mock run on a bent clock shows a duration its samples agree with.
@@ -305,6 +324,7 @@ impl Recording {
             front_seq: 0,
             history_start: None,
             span: None,
+            pin: None,
             start_time: None,
             exported_count: 0,
             epoch: 0,
@@ -382,6 +402,71 @@ impl Recording {
         self.recording_slice().1.len()
     }
 
+    /// Keep the samples Export… saves as they are now, for an export whose
+    /// save dialog is opening: whatever happens to the recording or the
+    /// history meanwhile, [`Recording::pinned_samples`] hands them back until
+    /// [`Recording::unpin_export`]. Returns how many there are.
+    ///
+    /// Nothing is copied: a pinned recording keeps its samples anyway, and a
+    /// pinned history keeps them in the store until the history drops them,
+    /// when they move out.
+    pub(crate) fn pin_export(&mut self) -> usize {
+        debug_assert!(self.pin.is_none(), "one export at a time");
+        let pin = match self.role() {
+            BufferRole::Recording => ExportPin::Recording {
+                len: self.recording_len(),
+            },
+            BufferRole::History => {
+                let range = self.history_slice().1;
+                let first = self.front_seq + range.start as u64;
+                ExportPin::Store(first..first + range.len() as u64)
+            }
+        };
+        self.pin = Some(pin);
+        self.pinned_samples().len()
+    }
+
+    /// The samples [`Recording::pin_export`] kept, oldest first; none
+    /// without a pin.
+    pub(crate) fn pinned_samples(&self) -> std::collections::vec_deque::Iter<'_, Sample> {
+        let (samples, range) = self.pinned();
+        samples.range(range)
+    }
+
+    /// Where the pinned samples are, as [`Recording::recording_slice`].
+    fn pinned(&self) -> (&VecDeque<Sample>, Range<usize>) {
+        match &self.pin {
+            None => (&self.store, 0..0),
+            Some(ExportPin::Recording { len }) => {
+                let (samples, range) = self.recording_slice();
+                (samples, range.start..range.start + (*len).min(range.len()))
+            }
+            Some(ExportPin::Store(seqs)) => {
+                // `index` clamps, which would hide a lost sample.
+                debug_assert!(seqs.start >= self.front_seq, "pinned samples were dropped");
+                (&self.store, self.index(seqs.start)..self.index(seqs.end))
+            }
+            Some(ExportPin::Owned(samples)) => (samples, 0..samples.len()),
+        }
+    }
+
+    /// Let the pinned samples go: the export has what it needs, or was
+    /// cancelled. What nothing else holds is dropped and its memory given
+    /// back.
+    pub(crate) fn unpin_export(&mut self) {
+        self.pin = None;
+        let held = self.store.len();
+        self.settle();
+        if self.store.len() < held {
+            self.store.shrink_to_fit();
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_pinned(&self) -> bool {
+        self.pin.is_some()
+    }
+
     /// Change the sample bound. Returns `true` if an active recording was
     /// stopped because it already held at least `n` samples.
     ///
@@ -414,6 +499,8 @@ impl Recording {
         if self.active {
             self.stop();
             if self.recording_len() == 0 {
+                // An export never pins an empty slice.
+                debug_assert!(!matches!(self.pin, Some(ExportPin::Recording { .. })));
                 self.span = None;
             }
         } else {
@@ -440,8 +527,24 @@ impl Recording {
     }
 
     /// Put `span` in place of the recording, with nothing of it exported.
+    ///
+    /// An export pinned on the recording being replaced takes its samples
+    /// over, as far as the click saw them.
     fn start_new(&mut self, span: Option<Span>) {
-        self.span = span;
+        let old = std::mem::replace(&mut self.span, span);
+        if let Some(ExportPin::Recording { len }) = self.pin {
+            self.pin = Some(match old {
+                Some(Span::InStore { start, .. }) => ExportPin::Store(start..start + len as u64),
+                Some(Span::Detached(mut samples)) => {
+                    samples.truncate(len);
+                    ExportPin::Owned(samples)
+                }
+                None => {
+                    debug_assert!(false, "a recording pin with no recording");
+                    ExportPin::Owned(VecDeque::new())
+                }
+            });
+        }
         self.exported_count = 0;
         self.epoch += 1;
         self.saved_markers.clear();
@@ -487,36 +590,58 @@ impl Recording {
         self.history_slice().1.is_empty()
     }
 
-    /// Hold the history to its bound, drop what neither the history nor the
-    /// recording holds, and move a stopped recording the history has left
-    /// behind out of the store.
+    /// Hold the history to its bound, drop what neither the history, the
+    /// recording nor a pinned export holds, and move a stopped recording or
+    /// pinned samples the history has left behind out of the store.
     fn settle(&mut self) {
         let next = self.next_seq();
         if let Some(start) = &mut self.history_start {
             *start = (*start).max(next.saturating_sub(self.max_samples as u64));
         }
         let history_from = self.history_start.unwrap_or(next);
+        // Before the recording: its move-out drains everything up to its
+        // end, and pinned samples in the store always come before it — a
+        // history pin predates any recording in the store, and a recording
+        // handed to its export was replaced by one starting later.
+        if let Some(ExportPin::Store(pinned)) = &self.pin
+            && pinned.end <= history_from
+        {
+            let (start, end) = (pinned.start, pinned.end);
+            let pinned = self.move_out(start, end);
+            self.pin = Some(ExportPin::Owned(pinned));
+        }
         if let Some(Span::InStore {
             start,
             end: Some(end),
         }) = self.span
             && end <= history_from
         {
-            let from = self.index(start);
-            let to = self.index(end);
-            let recorded: VecDeque<Sample> = self.store.drain(..to).skip(from).collect();
-            self.front_seq += to as u64;
+            let recorded = self.move_out(start, end);
             self.span = Some(Span::Detached(recorded));
-            // The store grew to hold both; it holds the history alone now.
-            self.store.shrink_to_fit();
         }
-        let keep_from = match self.span {
+        let mut keep_from = match self.span {
             Some(Span::InStore { start, .. }) => start.min(history_from),
             _ => history_from,
         };
+        if let Some(ExportPin::Store(pinned)) = &self.pin {
+            keep_from = keep_from.min(pinned.start);
+        }
         let drop = self.index(keep_from);
         self.store.drain(..drop);
         self.front_seq += drop as u64;
+    }
+
+    /// The samples `from..to` as a buffer of their own, with everything in
+    /// the store before them dropped: nothing else holds them.
+    fn move_out(&mut self, from: u64, to: u64) -> VecDeque<Sample> {
+        debug_assert!(from >= self.front_seq, "samples to move out were dropped");
+        let from = self.index(from);
+        let to = self.index(to);
+        let moved: VecDeque<Sample> = self.store.drain(..to).skip(from).collect();
+        self.front_seq += to as u64;
+        // The store grew to hold both; it holds the rest alone now.
+        self.store.shrink_to_fit();
+        moved
     }
 
     /// Whether the history or the recording holds the reading taken at `at`.
@@ -1043,6 +1168,159 @@ mod tests {
         push_at(&mut r, base, 3, 2);
         r.mark_exported(exporting, 3, None);
         assert_eq!(r.unexported_count(), 2);
+    }
+
+    /// The pinned samples' timestamps, as milliseconds after `base`.
+    fn pinned_ms(r: &Recording, base: Instant) -> Vec<u64> {
+        r.pinned_samples()
+            .map(|s| (s.measurement.timestamp - base).as_millis() as u64)
+            .collect()
+    }
+
+    /// A pinned history keeps its samples past the bound, moved out of the
+    /// store rather than holding the store open.
+    #[test]
+    fn a_pinned_history_outlives_the_bound() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.set_max_samples(3);
+        push_at(&mut r, base, 0, 3);
+        assert_eq!(r.pin_export(), 3);
+        push_at(&mut r, base, 3, 100);
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+        assert!(matches!(r.pin, Some(ExportPin::Owned(_))));
+        assert_eq!(r.store.len(), 3, "the store holds the history alone");
+    }
+
+    /// Clear restarts the history, not the export already asked for.
+    #[test]
+    fn a_pinned_history_survives_clear() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        push_at(&mut r, base, 0, 3);
+        r.pin_export();
+        r.clear_history();
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+        r.unpin_export();
+        assert!(r.store.is_empty());
+    }
+
+    /// A new meter restarts the history past the pinned samples; they move
+    /// out and stay whole.
+    #[test]
+    fn a_pinned_history_survives_a_new_meter() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        push_at(&mut r, base, 0, 3);
+        r.pin_export();
+        push_at(&mut r, base, 3, 2);
+        r.trim_before(base + Duration::from_millis(4));
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+        assert!(matches!(r.pin, Some(ExportPin::Owned(_))));
+        assert_eq!(r.store.len(), 1);
+    }
+
+    /// A recording started after a history pin moves out without taking the
+    /// pinned samples with it.
+    #[test]
+    fn a_history_pin_survives_a_recording_moving_out() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        push_at(&mut r, base, 0, 3);
+        r.pin_export();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 3, 2);
+        r.toggle(Instant::now()); // stop
+        r.clear_history();
+        assert!(matches!(r.span, Some(Span::Detached(_))));
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+        let recorded: Vec<u64> = r
+            .recording_samples()
+            .map(|s| (s.measurement.timestamp - base).as_millis() as u64)
+            .collect();
+        assert_eq!(recorded, [3, 4]);
+    }
+
+    /// Discard hands a pinned recording to its export, in the store or
+    /// moved out, and leaves the history as it was.
+    #[test]
+    fn discard_hands_a_pinned_recording_to_the_export() {
+        // In the store: the history still holds it.
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 3);
+        r.toggle(Instant::now()); // stop
+        r.pin_export();
+        r.discard();
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+        assert_eq!(r.history_samples().len(), 3);
+        r.unpin_export();
+        assert_eq!(r.store.len(), 3, "the history's, still");
+
+        // Moved out, as the history left it behind.
+        let mut r = Recording::new();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 3);
+        r.toggle(Instant::now()); // stop
+        push_at(&mut r, base, 3, 3);
+        r.trim_before(base + Duration::from_millis(4));
+        assert!(matches!(r.span, Some(Span::Detached(_))));
+        r.pin_export();
+        r.discard();
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+        assert_eq!(r.history_samples().len(), 2);
+        r.unpin_export();
+        assert_eq!(r.store.len(), 2);
+    }
+
+    /// A recording that ran on after the click is handed over as long as
+    /// it was then.
+    #[test]
+    fn a_detached_recording_is_handed_over_at_its_click_length() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 3);
+        r.pin_export();
+        push_at(&mut r, base, 3, 2);
+        r.toggle(Instant::now()); // stop
+        push_at(&mut r, base, 5, 1);
+        r.trim_before(base + Duration::from_millis(5));
+        assert!(matches!(r.span, Some(Span::Detached(_))));
+        r.discard();
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+    }
+
+    /// Record again replaces the recording, not what the export pinned.
+    #[test]
+    fn record_again_keeps_the_click_time_recording() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 3);
+        r.pin_export();
+        push_at(&mut r, base, 3, 2);
+        r.toggle(Instant::now()); // stop
+        r.toggle(Instant::now()); // a new recording
+        assert_eq!(pinned_ms(&r, base), [0, 1, 2]);
+        assert_eq!(r.recording_samples().len(), 0);
+    }
+
+    /// Unpinning gives back what only the export held.
+    #[test]
+    fn unpinning_drops_what_nobody_holds() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        push_at(&mut r, base, 0, 3);
+        r.pin_export();
+        push_at(&mut r, base, 3, 2);
+        r.trim_before(base + Duration::from_millis(2));
+        assert_eq!(r.store.len(), 5, "the pinned samples are still in it");
+        r.unpin_export();
+        assert!(!r.is_pinned());
+        assert_eq!(r.store.len(), r.history_samples().len());
+        assert_eq!(r.store.len(), 3);
     }
 
     #[test]
