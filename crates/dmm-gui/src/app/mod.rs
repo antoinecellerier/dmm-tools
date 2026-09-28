@@ -245,6 +245,9 @@ pub(super) struct Connection {
     pub(super) cmd_tx: Option<mpsc::Sender<RemoteCommand>>,
     /// Reconnect on next frame (device selection changed while connected).
     pub(super) needs_reconnect: bool,
+    /// The replay handed out its last frame; nothing more will come until
+    /// the next connect.
+    pub(super) ended: bool,
 }
 
 impl Default for Connection {
@@ -263,6 +266,7 @@ impl Default for Connection {
             stop_flag: None,
             cmd_tx: None,
             needs_reconnect: false,
+            ended: false,
         }
     }
 }

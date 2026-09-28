@@ -187,6 +187,9 @@ pub(crate) enum DmmMessage {
     /// reaching [`dmm_lib::stream::NO_RESPONSE_TIMEOUTS`] is what the UI
     /// calls no response.
     WaitingForMeter(u32),
+    /// A replay handed out its last frame: nothing more will come, and the
+    /// thread only waits to be stopped.
+    Ended,
 }
 
 /// Extract profile info from a newly opened device, optionally query its name,
@@ -445,6 +448,13 @@ where
                     ctx.request_repaint_after(READING_REPAINT_DELAY);
                 }
             }
+            Ok(StreamEvent::Ended) => {
+                info!("background thread: the recording has ended");
+                let _ = msg_tx.send(DmmMessage::Ended);
+                ctx.request_repaint();
+                wait_to_be_stopped(&ctrl_rx, &stop_flag);
+                return;
+            }
             Ok(StreamEvent::Timeout { consecutive }) => {
                 warn!("background thread: measurement timeout ({consecutive})");
                 let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive));
@@ -540,6 +550,17 @@ where
                 // The dial may have moved while the link was down.
                 last_keys = Default::default();
             }
+        }
+    }
+}
+
+/// Block until the UI stops the thread: its stop flag, or its control
+/// channel hung up.
+fn wait_to_be_stopped(ctrl_rx: &mpsc::Receiver<ThreadControl>, stop_flag: &AtomicBool) {
+    while !stop_flag.load(Ordering::Relaxed) {
+        if let Err(mpsc::RecvTimeoutError::Disconnected) = ctrl_rx.recv_timeout(PAUSE_POLL_INTERVAL)
+        {
+            return;
         }
     }
 }

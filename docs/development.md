@@ -200,7 +200,7 @@ meter and palette pictures; `ohm.replay` is 23 s of a flat 4.649 kΩ on AUTO,
 behind the README's JSON block. `dcmv-hold-rel.replay` is 39 s of DC mV with
 HOLD from 10.4 s and REL from 26 s, for the reading controls.
 `ut181a-vac-hz.replay` is a single frame rebuilt from a UT181A golden fixture,
-behind the CSV block in `docs/cli-reference.md` and the big meter picture.
+repeated for 70 s, behind the CSV block in `docs/cli-reference.md` and the big meter picture.
 `dcv-steps.replay` (61 s of a bench supply stepped and ramped 2.9–9.3 V),
 `dcma-boot-refresh-autorange.replay` (the same thermometer cycle with AUTO
 ranging — 22 ↔ 220 mA hops and an OL blip at each boot and refresh) and

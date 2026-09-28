@@ -182,11 +182,17 @@ impl App {
             .map(|source| (Arc::clone(&source.replay), source.recorded));
         if let Some((replay, recorded)) = source {
             self.pin_replay_origin(recorded);
+            // The graph expects a frame no more often than the file has them:
+            // judged by the viewer's interval alone, a recording spaced
+            // wider than it broke at every point.
+            let cadence_ms = u32::try_from(replay.cadence().as_millis()).unwrap_or(u32::MAX);
+            self.graph
+                .set_sample_interval_ms(sample_interval_ms.max(cadence_ms));
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
-            // No interval floor: the recording's own spacing is the cadence,
-            // and the protocol sleeps until each frame is due rather than
-            // returning at once.
+            // No interval floor: the protocol sleeps until each frame is due,
+            // and the Sample interval keeps one frame per tick of the file's
+            // as it does a live meter's.
             thread_ctx.selected = Some(replay.device);
             let clock = self.clock.clone();
             spawn_acquisition(
@@ -284,6 +290,7 @@ impl App {
         // be one — a meter that went quiet before the user disconnected left
         // "Waiting for meter…" on screen for the whole disconnected session.
         self.connection.waiting_timeouts = 0;
+        self.connection.ended = false;
     }
 
     /// Drop everything derived from the sample stream: graph history and
@@ -362,6 +369,9 @@ impl App {
                             meter.model_name, meter.name
                         );
                     }
+                }
+                DmmMessage::Ended => {
+                    self.connection.ended = true;
                 }
                 DmmMessage::WaitingForMeter(count) => {
                     self.connection.waiting_timeouts = count;
@@ -489,7 +499,7 @@ impl App {
         // The two transient notices sit closer to the reading than an error
         // does, as they always have: they replace themselves within seconds.
         ui.add_space(match notice.kind {
-            NoticeKind::Detecting | NoticeKind::Waiting => 4.0,
+            NoticeKind::Detecting | NoticeKind::Waiting | NoticeKind::Ended => 4.0,
             _ => 8.0,
         });
         ui.label(RichText::new(&notice.title).color(warn_color));
@@ -566,6 +576,27 @@ mod tests {
         tx.send(msg).expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
+    }
+
+    /// A replay that played to its end says so, and keeps its last reading;
+    /// a Disconnect clears it for the next Connect.
+    #[test]
+    fn a_replay_that_ended_says_so() {
+        let mut app = app("ut61eplus", false);
+        app.replay = Some(crate::ReplaySource::fixture());
+        let reading = Measurement::test_fixture(
+            MeasuredValue::Normal(1.0),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        );
+        app.last_measurement = Some(reading);
+        deliver(&mut app, DmmMessage::Ended);
+        let n = app.connection_notice().expect("a notice");
+        assert_eq!(n.kind, NoticeKind::Ended);
+        assert_eq!(n.title, "The recording has ended");
+        assert!(app.last_measurement.is_some(), "the last reading stays");
+        app.disconnect();
+        assert!(app.connection_notice().is_none());
     }
 
     /// A gap in a recording plays back as timeouts, and they are not a quiet

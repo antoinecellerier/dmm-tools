@@ -71,6 +71,8 @@ pub(crate) enum ConnectionIssue {
 pub(super) enum NoticeKind {
     Detecting,
     Waiting,
+    /// A replay played to its last frame.
+    Ended,
     /// Nothing on the USB bus, which is the only link that was searched.
     UsbNotFound,
     /// Nothing on either link.
@@ -290,6 +292,17 @@ impl App {
             return Some(notice(
                 NoticeKind::Detecting,
                 "Detecting the meter\u{2026}".to_string(),
+                String::new(),
+            ));
+        }
+
+        // The reading on screen is the recording's last, and stays: nothing
+        // more is coming, which a trace that just stops would not say. Worded
+        // for a Connect after the end too, which ends again at once.
+        if self.connection.ended {
+            return Some(notice(
+                NoticeKind::Ended,
+                "The recording has ended".to_string(),
                 String::new(),
             ));
         }

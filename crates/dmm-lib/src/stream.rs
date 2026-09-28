@@ -49,6 +49,9 @@ pub enum StreamEvent {
     /// No response within the protocol's read timeout. `consecutive` is the
     /// new counter value (1 on the first timeout after a successful read).
     Timeout { consecutive: u32 },
+    /// Nothing more will come: a replay has handed out its last frame. Every
+    /// later tick says so again.
+    Ended,
 }
 
 /// Paced acquisition wrapper around a [`Dmm`].
@@ -168,15 +171,19 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// which this type deliberately does not implement — iterators can't
     /// return errors without the caller explicitly handling the `Result`.
     pub fn tick(&mut self) -> Result<StreamEvent> {
+        if self.dmm.ended() {
+            return Ok(StreamEvent::Ended);
+        }
         let result = match self.dmm.delivery() {
             Delivery::Polled => {
                 self.sleep_until_tick();
-                self.dmm.request_measurement()
+                self.dmm.request_measurement().map(Some)
             }
             Delivery::Streamed => self.next_streamed(),
         };
         match result {
-            Ok(m) => {
+            Ok(None) => Ok(StreamEvent::Ended),
+            Ok(Some(m)) => {
                 self.consecutive_timeouts = 0;
                 Ok(StreamEvent::Measurement(m))
             }
@@ -210,22 +217,27 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// Read a streaming meter's frames until one is due, keeping none of the
     /// others. A protocol error in between is dropped as the frames are: it
     /// stands for the interval only if nothing good arrives by the tick.
-    fn next_streamed(&mut self) -> Result<Measurement> {
+    /// `None` once the source has ended with nothing left to hand over; the
+    /// last frame of a replay is kept whatever the tick.
+    fn next_streamed(&mut self) -> Result<Option<Measurement>> {
         let mut dropped: Option<Measurement> = None;
         let mut skipped = 0u32;
         loop {
+            if self.dmm.ended() {
+                return Ok(dropped);
+            }
             if self.cancelled()
                 && let Some(m) = dropped.take()
             {
                 self.keep(m.timestamp);
-                return Ok(m);
+                return Ok(Some(m));
             }
             match self.dmm.request_measurement() {
                 Ok(m) => {
                     self.spacing.observe(m.timestamp);
                     if self.keep(m.timestamp) {
                         trace!("stream: kept a reading, {skipped} frames since the last");
-                        return Ok(m);
+                        return Ok(Some(m));
                     }
                     skipped += 1;
                     dropped = Some(m);

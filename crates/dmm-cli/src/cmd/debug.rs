@@ -69,6 +69,8 @@ pub(crate) fn cmd_debug(
                     println!("    {} {}", style("sub-values:").dim(), m.aux_summary());
                 }
             }
+            // Only a replay ends, and `debug` reads a meter.
+            Ok(StreamEvent::Ended) => break,
             Ok(StreamEvent::Timeout { .. }) => {
                 eprintln!(
                     "{} {}",

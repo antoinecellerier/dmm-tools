@@ -713,6 +713,12 @@ pub trait Protocol: Send {
     /// a simulation) would otherwise drop nothing and look as if it had.
     fn discard_input(&mut self, transport: &dyn Transport) -> Result<()>;
 
+    /// Whether there is nothing more to read: a replay past its last frame.
+    /// A meter never ends; it goes quiet, which is a timeout.
+    fn ended(&self) -> bool {
+        false
+    }
+
     /// Parse one measurement payload off the wire, with no I/O.
     ///
     /// `payload` is exactly what [`Measurement::raw_payload`] carries for this

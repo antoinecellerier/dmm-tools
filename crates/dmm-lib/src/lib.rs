@@ -138,6 +138,11 @@ impl<T: Transport> Dmm<T> {
         &self.transport
     }
 
+    /// Whether the session has nothing more to read: a replay past its end.
+    pub fn ended(&self) -> bool {
+        self.protocol.ended()
+    }
+
     /// Whether this meter answers requests or sends readings on its own.
     pub fn delivery(&self) -> protocol::Delivery {
         self.protocol.delivery()
