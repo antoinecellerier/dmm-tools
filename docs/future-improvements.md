@@ -383,6 +383,12 @@ The UT181A has built-in recording and saved measurement features (protocol comma
 
 Use cases: retrieving field measurements logged by the meter itself, longer recording sessions than USB-tethered capture allows.
 
+### Bluetooth notifications read in the background
+
+**Complexity:** Medium
+
+The Bluetooth transport runs the stack only inside its own calls, with no background thread (architecture decision 18), so a streaming meter's notifications wait unseen in the platform's queue until the next read. The driver can then only take the newest queued frame and stamp it when it is read: a reading is as late as the time since it arrived, and after a pause, or at a long sample interval, nothing but the platform bounds the queue. If a meter shows readings stamped late enough to matter, or a queue that grows, revisit the decision: a task that stamps each notification on arrival and keeps a bounded buffer would date every frame correctly, at the cost of the thread and channel the decision avoids.
+
 ---
 
 ## Usability
