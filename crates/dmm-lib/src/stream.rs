@@ -1,21 +1,34 @@
 //! Paced measurement stream.
 //!
-//! Wraps a [`Dmm`] with absolute-tick pacing and consecutive-timeout counting,
-//! so the CLI `read`/`debug` loop and the GUI background thread can share the
-//! same acquisition logic.
+//! Wraps a [`Dmm`] with the sample interval and consecutive-timeout
+//! counting, so the CLI `read`/`debug` loop and the GUI background thread
+//! share the same acquisition logic. The interval means one thing for every
+//! meter — at most one reading per interval, a zero interval every reading
+//! the meter produces — and is met two ways, by the meter's
+//! [`Delivery`](crate::protocol::Delivery):
+//!
+//! - **Polled**: the stream sleeps to each tick, then asks for a reading.
+//! - **Streamed**: the stream reads every frame as it arrives, so none waits
+//!   in a queue and each is stamped when it came, and keeps the one nearest
+//!   each tick. Reading only when a reading is wanted would leave the meter's
+//!   frames queuing in between, handed out later stamped as new.
 //!
 //! The stream intentionally does not own cancellation — the CLI uses an
 //! `AtomicBool` driven by the Ctrl-C handler while the GUI uses an `mpsc`
 //! stop channel, and neither fits naturally inside the other. Callers check
 //! their own stop signal around each [`MeasurementStream::tick`] call, and
 //! can hand the stream a predicate via [`MeasurementStream::with_cancel`] so
-//! the pacing sleep gives up on that same signal instead of running to term.
+//! the wait for a reading gives up on that same signal instead of running
+//! to term.
 
 use crate::Dmm;
 use crate::clock::Clock;
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorKind, Result};
 use crate::measurement::Measurement;
+use crate::protocol::Delivery;
 use crate::transport::Transport;
+use log::trace;
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 /// Consecutive read timeouts after which both binaries treat the meter as not
@@ -41,14 +54,13 @@ pub enum StreamEvent {
 /// Paced acquisition wrapper around a [`Dmm`].
 ///
 /// Construct with [`MeasurementStream::new`] and drive by calling
-/// [`tick`](Self::tick) repeatedly. Each call sleeps until the next
-/// scheduled tick boundary (if any) and then requests one measurement.
+/// [`tick`](Self::tick) repeatedly; each call returns one reading (or a
+/// timeout), paced to the interval as the module doc describes.
 ///
 /// The stream borrows the `Dmm` mutably so callers can keep control over
-/// ownership (e.g. to call `send_command` between ticks). Absolute-tick
-/// pacing means the Nth tick lands at `start + N*tick` regardless of how
-/// long the previous request took, so measurement cadence does not drift
-/// when `request_measurement` is occasionally slow.
+/// ownership (e.g. to call `send_command` between ticks). Ticks are
+/// absolute — the Nth lands at `start + N*tick` regardless of how long a
+/// request took — so the cadence does not drift.
 pub struct MeasurementStream<'a, T: Transport> {
     dmm: &'a mut Dmm<T>,
     /// The session clock, cloned from the `Dmm` so pacing and the timestamps
@@ -56,6 +68,11 @@ pub struct MeasurementStream<'a, T: Transport> {
     clock: Clock,
     tick: Duration,
     next_tick: Option<Instant>,
+    /// Where a streaming meter's grid of ticks starts: the first reading
+    /// kept.
+    anchor: Option<Instant>,
+    /// The streaming meter's recent frame spacings, for [`Self::tolerance`].
+    spacing: Spacing,
     consecutive_timeouts: u32,
     /// `'static` rather than `'a`: a borrowed predicate would make the struct
     /// invariant in `'a`, which stops callers shortening the `&mut Dmm` borrow
@@ -71,39 +88,77 @@ pub struct MeasurementStream<'a, T: Transport> {
 /// sample interval doesn't spin.
 const CANCEL_POLL_SLICE: Duration = Duration::from_millis(50);
 
+/// Frame spacings the tolerance is worked out from.
+const SPACINGS_KEPT: usize = 16;
+
+/// Spacings needed before there is a tolerance at all: fewer say too little
+/// about the meter's rate.
+const SPACINGS_NEEDED: usize = 3;
+
+/// The time between a streaming meter's recent frames, whose median is its
+/// frame period.
+#[derive(Default)]
+struct Spacing {
+    last: Option<Instant>,
+    recent: VecDeque<Duration>,
+}
+
+impl Spacing {
+    fn observe(&mut self, at: Instant) {
+        if let Some(gap) = self.last.and_then(|last| at.checked_duration_since(last)) {
+            if self.recent.len() == SPACINGS_KEPT {
+                self.recent.pop_front();
+            }
+            self.recent.push_back(gap);
+        }
+        self.last = Some(at);
+    }
+
+    fn period(&self) -> Option<Duration> {
+        if self.recent.len() < SPACINGS_NEEDED {
+            return None;
+        }
+        let mut sorted: Vec<Duration> = self.recent.iter().copied().collect();
+        sorted.sort_unstable();
+        Some(sorted[sorted.len() / 2])
+    }
+}
+
 impl<'a, T: Transport> MeasurementStream<'a, T> {
-    /// Build a stream around `dmm` targeting one measurement per `tick`.
-    /// A zero tick disables pacing — requests fire as fast as the protocol
-    /// allows, useful for `count`-limited bulk reads.
+    /// Build a stream around `dmm` keeping at most one reading per `tick`.
+    /// A zero tick keeps every reading the meter produces, as fast as it
+    /// produces them.
     pub fn new(dmm: &'a mut Dmm<T>, tick: Duration) -> Self {
         Self {
             clock: dmm.clock().clone(),
             dmm,
             tick,
             next_tick: None,
+            anchor: None,
+            spacing: Spacing::default(),
             consecutive_timeouts: 0,
             cancel: None,
         }
     }
 
-    /// Poll `cancel` during the pacing sleep and cut it short when it returns
-    /// true.
+    /// Poll `cancel` while waiting for a reading, and cut the wait short
+    /// when it returns true.
     ///
-    /// Without this the sleep runs for the whole sample interval no matter
+    /// Without this the wait runs for the whole sample interval no matter
     /// what: at a 2 s interval a shutdown request isn't noticed until the tick
     /// elapses (plus the read timeout that follows), so the caller keeps the
     /// device open long after the user asked it to stop. A hand-edited
     /// interval of minutes wedges it entirely.
     ///
-    /// The predicate only shortens the wait — it does not cancel the
-    /// measurement request that follows, so `tick` still returns an event and
-    /// the caller decides what to do next.
+    /// The predicate only shortens the wait — `tick` still returns an event:
+    /// a polled meter is asked once more, and a streaming one hands over the
+    /// newest frame it read, or the next one to arrive.
     pub fn with_cancel(mut self, cancel: impl Fn() -> bool + Send + 'static) -> Self {
         self.cancel = Some(Box::new(cancel));
         self
     }
 
-    /// Read one measurement, pacing to the tick schedule first.
+    /// Read one measurement, paced to the tick schedule.
     ///
     /// Returns `Ok(Measurement)` or `Ok(Timeout)`. Non-timeout transport
     /// errors bubble up as `Err(_)` and leave the counter unchanged; the
@@ -113,8 +168,14 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// which this type deliberately does not implement — iterators can't
     /// return errors without the caller explicitly handling the `Result`.
     pub fn tick(&mut self) -> Result<StreamEvent> {
-        self.sleep_until_tick();
-        match self.dmm.request_measurement() {
+        let result = match self.dmm.delivery() {
+            Delivery::Polled => {
+                self.sleep_until_tick();
+                self.dmm.request_measurement()
+            }
+            Delivery::Streamed => self.next_streamed(),
+        };
+        match result {
             Ok(m) => {
                 self.consecutive_timeouts = 0;
                 Ok(StreamEvent::Measurement(m))
@@ -144,6 +205,88 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// or reading transport info between ticks.
     pub fn dmm_mut(&mut self) -> &mut Dmm<T> {
         self.dmm
+    }
+
+    /// Read a streaming meter's frames until one is due, keeping none of the
+    /// others. A protocol error in between is dropped as the frames are: it
+    /// stands for the interval only if nothing good arrives by the tick.
+    fn next_streamed(&mut self) -> Result<Measurement> {
+        let mut dropped: Option<Measurement> = None;
+        let mut skipped = 0u32;
+        loop {
+            if self.cancelled()
+                && let Some(m) = dropped.take()
+            {
+                self.keep(m.timestamp);
+                return Ok(m);
+            }
+            match self.dmm.request_measurement() {
+                Ok(m) => {
+                    self.spacing.observe(m.timestamp);
+                    if self.keep(m.timestamp) {
+                        trace!("stream: kept a reading, {skipped} frames since the last");
+                        return Ok(m);
+                    }
+                    skipped += 1;
+                    dropped = Some(m);
+                }
+                Err(e) if e.kind() == ErrorKind::Protocol && !self.due(self.clock.now()) => {
+                    skipped += 1;
+                }
+                Err(e) => {
+                    if e.kind() == ErrorKind::Protocol {
+                        self.keep(self.clock.now());
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    /// Whether a frame at `at` is the one to keep for the next tick, moving
+    /// the tick on when it is.
+    ///
+    /// The frame nearest each tick, not the first one after it: a meter's
+    /// frames wander by a few milliseconds, and with an interval a whole
+    /// multiple of its frame period they sit right on the ticks, so taking
+    /// the first after each would jitter by a whole period, dropping frames
+    /// an interval equal to the period should keep.
+    fn keep(&mut self, at: Instant) -> bool {
+        if self.tick.is_zero() {
+            return true;
+        }
+        if !self.due(at) {
+            return false;
+        }
+        let anchor = *self.anchor.get_or_insert(at);
+        let past = (at + self.tolerance())
+            .checked_duration_since(anchor)
+            .unwrap_or_default();
+        let ticks = past.as_nanos() / self.tick.as_nanos() + 1;
+        let ticks = u32::try_from(ticks).unwrap_or(u32::MAX);
+        self.next_tick = Some(anchor + self.tick * ticks);
+        true
+    }
+
+    /// Whether `at` is within the tolerance of the next tick, or past it.
+    fn due(&self, at: Instant) -> bool {
+        self.next_tick
+            .is_none_or(|next| at + self.tolerance() >= next)
+    }
+
+    /// How early a frame may come and still count for the next tick: half
+    /// the meter's frame period, so each tick takes the frame nearest it,
+    /// and at most half the interval, so no two frames count for one tick.
+    /// None until the period is known, when the first frame at or after the
+    /// tick counts.
+    fn tolerance(&self) -> Duration {
+        self.spacing
+            .period()
+            .map_or(Duration::ZERO, |period| (period / 2).min(self.tick / 2))
+    }
+
+    fn cancelled(&self) -> bool {
+        self.cancel.as_ref().is_some_and(|cancel| cancel())
     }
 
     fn sleep_until_tick(&mut self) {
@@ -339,5 +482,219 @@ mod tests {
         let _ = stream.tick().unwrap();
         // Nothing waited, so nothing advanced the session clock.
         assert_eq!(clock.now().saturating_duration_since(start), Duration::ZERO);
+    }
+
+    /// A streaming meter on the session clock: frame `k` is sent at
+    /// `offsets[k]` and read at once, its payload the frame's index, or a
+    /// corrupt frame where `corrupt` says so.
+    struct TimedMeter {
+        clock: Clock,
+        start: Instant,
+        offsets: Vec<Duration>,
+        corrupt: Vec<usize>,
+        next: usize,
+    }
+
+    const TIMED_METER: crate::protocol::DeviceProfile = crate::protocol::DeviceProfile {
+        family_name: "test",
+        model_name: "timed meter",
+        stability: crate::protocol::Stability::Verified,
+        supported_commands: &[],
+        max_aux_values: 0,
+        verification_issue: None,
+        meter_keys: crate::protocol::MeterKeys::NONE,
+    };
+
+    impl crate::protocol::Protocol for TimedMeter {
+        fn init(&mut self, _t: &dyn Transport) -> Result<()> {
+            Ok(())
+        }
+        fn request_measurement(&mut self, _t: &dyn Transport) -> Result<Measurement> {
+            let k = self.next;
+            let due = self.start + self.offsets[k];
+            if let Some(wait) = due.checked_duration_since(self.clock.now()) {
+                self.clock.sleep(wait);
+            }
+            self.next += 1;
+            if self.corrupt.contains(&k) {
+                return Err(Error::invalid_response_msg("corrupt frame"));
+            }
+            Ok(Measurement::from_payload(&(k as u32).to_le_bytes()))
+        }
+        fn delivery(&self) -> Delivery {
+            Delivery::Streamed
+        }
+        fn discard_input(&mut self, _t: &dyn Transport) -> Result<()> {
+            Ok(())
+        }
+        fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+            Ok(Measurement::from_payload(payload))
+        }
+        fn profile(&self) -> &crate::protocol::DeviceProfile {
+            &TIMED_METER
+        }
+    }
+
+    /// A meter sending every `period`, each frame off by up to ±5 ms, in a
+    /// fixed pseudo-random pattern.
+    fn jittered(period_ms: u64, frames: usize) -> Vec<Duration> {
+        const WANDER_US: [i64; 7] = [4_000, -3_000, 1_000, -5_000, 2_000, 5_000, -2_000];
+        (0..frames)
+            .map(|k| {
+                let us = (k as u64 * period_ms * 1000) as i64 + WANDER_US[k % WANDER_US.len()];
+                Duration::from_micros(us.max(0) as u64)
+            })
+            .collect()
+    }
+
+    fn timed_dmm(
+        offsets: Vec<Duration>,
+        corrupt: Vec<usize>,
+    ) -> (Dmm<crate::transport::NullTransport>, Clock) {
+        let clock = Clock::manual();
+        let meter = TimedMeter {
+            start: clock.now(),
+            clock: clock.clone(),
+            offsets,
+            corrupt,
+            next: 0,
+        };
+        let dmm = Dmm::new(crate::transport::NullTransport, Box::new(meter))
+            .unwrap()
+            .with_clock(clock.clone());
+        (dmm, clock)
+    }
+
+    /// The frame index and session time of each of `n` readings kept at
+    /// `tick`.
+    fn kept(
+        dmm: &mut Dmm<crate::transport::NullTransport>,
+        tick: Duration,
+        n: usize,
+    ) -> Vec<(u32, Instant)> {
+        let mut stream = MeasurementStream::new(dmm, tick);
+        (0..n)
+            .map(|_| match stream.tick().unwrap() {
+                StreamEvent::Measurement(m) => {
+                    let k = u32::from_le_bytes(m.raw_payload[..4].try_into().unwrap());
+                    (k, m.timestamp)
+                }
+                other => panic!("expected a reading, got {other:?}"),
+            })
+            .collect()
+    }
+
+    fn spacings_ms(readings: &[(u32, Instant)]) -> Vec<u128> {
+        readings
+            .windows(2)
+            .map(|w| (w[1].1 - w[0].1).as_millis())
+            .collect()
+    }
+
+    #[test]
+    fn a_zero_interval_keeps_every_frame_at_its_own_time() {
+        let offsets = jittered(100, 20);
+        let (mut dmm, clock) = timed_dmm(offsets.clone(), vec![]);
+        let start = clock.now();
+        let readings = kept(&mut dmm, Duration::ZERO, 20);
+        for (k, (index, at)) in readings.iter().enumerate() {
+            assert_eq!(*index as usize, k);
+            assert_eq!(*at, start + offsets[k]);
+        }
+    }
+
+    #[test]
+    fn a_long_interval_keeps_the_frame_just_sent() {
+        // A ZOTEK's 385 ms frames at a 2 s interval: each reading kept is
+        // the frame nearest its tick, never one from further back.
+        let (mut dmm, clock) = timed_dmm(jittered(385, 200), vec![]);
+        let start = clock.now();
+        let readings = kept(&mut dmm, Duration::from_secs(2), 30);
+        for (k, (_, at)) in readings.iter().enumerate().skip(1) {
+            let tick = start + Duration::from_secs(2 * k as u64);
+            let off = if *at > tick { *at - tick } else { tick - *at };
+            assert!(
+                off <= Duration::from_millis(200),
+                "reading {k} is {off:?} off its tick"
+            );
+        }
+    }
+
+    #[test]
+    fn an_interval_a_multiple_of_the_frame_period_keeps_a_steady_spacing() {
+        // 1 s over a 2 Hz meter whose frames wander: without the tolerance
+        // the spacings jump between 0.5, 1 and 1.5 s.
+        let (mut dmm, _clock) = timed_dmm(jittered(500, 200), vec![]);
+        let readings = kept(&mut dmm, Duration::from_secs(1), 40);
+        for gap in &spacings_ms(&readings)[4..] {
+            assert!((990..=1010).contains(gap), "spacing {gap} ms");
+        }
+    }
+
+    #[test]
+    fn an_interval_equal_to_the_frame_period_drops_nothing() {
+        let (mut dmm, _clock) = timed_dmm(jittered(385, 200), vec![]);
+        let readings = kept(&mut dmm, Duration::from_millis(385), 60);
+        for w in readings[4..].windows(2) {
+            assert_eq!(w[1].0, w[0].0 + 1, "a frame was dropped after {}", w[0].0);
+        }
+    }
+
+    #[test]
+    fn any_other_interval_keeps_one_reading_per_interval_on_average() {
+        let (mut dmm, _clock) = timed_dmm(jittered(385, 400), vec![]);
+        let readings = kept(&mut dmm, Duration::from_secs(1), 100);
+        let span = readings[99].1 - readings[0].1;
+        let mean = span / 99;
+        assert!(
+            mean.abs_diff(Duration::from_secs(1)) < Duration::from_millis(10),
+            "mean spacing {mean:?}"
+        );
+    }
+
+    #[test]
+    fn a_cold_start_still_keeps_one_reading_per_tick() {
+        // Before three spacings are known there is no tolerance: the first
+        // frame at or after each tick counts.
+        let (mut dmm, _clock) = timed_dmm(jittered(100, 100), vec![]);
+        let readings = kept(&mut dmm, Duration::from_millis(450), 4);
+        for gap in spacings_ms(&readings) {
+            assert!((350..=550).contains(&gap), "spacing {gap} ms");
+        }
+    }
+
+    #[test]
+    fn a_corrupt_frame_between_ticks_is_dropped() {
+        let (mut dmm, _clock) = timed_dmm(jittered(100, 100), vec![3, 4, 12]);
+        let readings = kept(&mut dmm, Duration::from_secs(1), 5);
+        assert_eq!(readings.len(), 5);
+    }
+
+    #[test]
+    fn a_tick_with_only_corrupt_frames_reports_the_error() {
+        // Frames 1 to 12 are all corrupt: nothing good comes between the
+        // first reading and the tick at 1 s, nor just after it.
+        let (mut dmm, _clock) = timed_dmm(jittered(100, 40), (1..=12).collect());
+        let mut stream = MeasurementStream::new(&mut dmm, Duration::from_secs(1));
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+        let err = stream.tick().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Protocol);
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+    }
+
+    #[test]
+    fn a_cancelled_wait_hands_over_the_newest_frame_read() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let (mut dmm, clock) = timed_dmm(jittered(100, 100), vec![]);
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&stop);
+        let mut stream = MeasurementStream::new(&mut dmm, Duration::from_secs(60))
+            .with_cancel(move || flag.load(Ordering::Relaxed));
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+        stop.store(true, Ordering::Relaxed);
+        let start = clock.now();
+        assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+        assert!(clock.now() - start < Duration::from_secs(1));
     }
 }

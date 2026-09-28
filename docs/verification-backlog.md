@@ -2299,13 +2299,14 @@ HID-only streaming families (UT8802, UT8803, UT80x, VC-880) read oldest
 first. Checked offline only (simulated meters on a manual clock, and
 `mock-zt5b`, which sends at a ZOTEK meter's rate).
 
-- **Linux HID drops the newest.** hidraw keeps 64 reports per reader and,
-  as we recall `hidraw_report_event` (not checked against the kernel
-  source), a full ring drops the newest report. At a byte per CP2110
-  report the ring then holds the oldest ~64 bytes, which a drain cannot get
-  past, so a HID streaming meter's reading can be up to one sample interval
-  old on Linux. Discarding the queue and waiting for a fresh frame fixes it,
-  at up to a meter period per request, if a report shows it matters.
+- **Linux HID drops the newest.** Confirmed in the kernel source
+  (2026-09-28, `drivers/hid/hidraw.c` `hidraw_report_event`: a report that
+  would fill the 64-slot ring is skipped). A HID streaming meter left unread
+  therefore queued the oldest reports, not the newest. Since 2026-09-28 the
+  stream reads a streaming meter continuously and `Dmm` drops the queue
+  after 250 ms unread, so this only matters if a check shows readings behind
+  the LCD: run a UT8803 or UT8802 at `--interval-ms 2000` on Linux and
+  compare each reading with the LCD.
 - **A paused Bluetooth session.** Where its notifications wait while nothing
   reads, and whether anything bounds them. Checkable on our UT-D07B: pause
   the GUI for 10 minutes, resume, and see that the first reading is current
