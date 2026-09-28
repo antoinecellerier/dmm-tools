@@ -267,7 +267,8 @@ fn plot(graph: &mut Graph, m: &Measurement) {
         // break so it isn't drawn straight through the excursion. The
         // sub-values beside it are not over range and keep theirs. The
         // sample goes first: a frame that switches the plotted series swaps
-        // it in, and the break lands on it.
+        // it in, or one in a new mode restarts the trace, and the break lands
+        // on it.
         Plotted::OverRange => {
             graph.push_sample(sample(None));
             graph.push_break(m.timestamp);

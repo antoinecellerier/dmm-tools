@@ -150,6 +150,58 @@ fn an_unfinished_overload_still_marks_where_the_trace_stopped() {
     assert_eq!(g.visible_gaps().len(), 1);
 }
 
+/// An over-range frame as `Capture::ingest` hands it over: no value and no
+/// sub-values, then the break.
+fn push_overload(g: &mut Graph, t: Instant, mode: &str, unit: &str) {
+    g.push_sample(PlotSample {
+        value: None,
+        timestamp: t,
+        mode,
+        unit,
+        display_raw: None,
+        series: None,
+        main_label: None,
+        overlays: &[],
+    });
+    g.push_break(t);
+}
+
+/// Turning the dial from mV to Ω with the leads open gives only OL: the old
+/// mode's trace must not carry on with an over-range band after it.
+#[test]
+fn an_overload_in_a_new_mode_restarts_the_trace() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(3.9, t0, "DC mV", "mV", None);
+    g.push(3.9, t0 + Duration::from_millis(100), "DC mV", "mV", None);
+    push_overload(&mut g, t0 + Duration::from_millis(200), "Ω", "MΩ");
+
+    assert!(g.is_empty(), "the mV trace is gone");
+    assert_eq!(g.current_mode.as_deref(), Some("Ω"));
+    assert_eq!(g.pending_overload_span(), None, "no trace to band after");
+
+    // The first reading starts the Ω trace with no break before it.
+    g.push(1.0, t0 + Duration::from_millis(300), "Ω", "kΩ", None);
+    assert_eq!(g.all_segments().len(), 1);
+    assert!(g.visible_gaps().is_empty());
+}
+
+/// Lifting the leads off a resistor sends OL on the top range (kΩ to MΩ) in
+/// the same mode: that is an excursion to band, not a new trace.
+#[test]
+fn an_overload_on_another_range_of_the_same_mode_keeps_the_trace() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "Ω", "kΩ", None);
+    g.push(1.1, t0 + Duration::from_millis(100), "Ω", "kΩ", None);
+    push_overload(&mut g, t0 + Duration::from_millis(200), "Ω", "MΩ");
+    assert!(g.pending_overload_span().is_some());
+
+    g.push(1.0, t0 + Duration::from_millis(300), "Ω", "kΩ", None);
+    assert_eq!(g.all_segments().len(), 2, "the overload splits one trace");
+    assert_eq!(g.visible_gaps().len(), 1);
+}
+
 /// The two kinds must be distinguishable by the renderer: an overload is
 /// the meter reporting a condition, a time gap is the absence of any
 /// report. They are drawn differently, so the builder has to say which.

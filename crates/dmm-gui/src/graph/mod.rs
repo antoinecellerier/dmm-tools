@@ -525,7 +525,8 @@ impl Graph {
     /// A sample without a value (a frame carrying only sub-values) records
     /// its overlay points and switches or restarts the trace on a change of
     /// mode, unit or series like any other, but leaves the history, the
-    /// minimap, an open break and the spoken last reading alone.
+    /// minimap, an open break and the spoken last reading alone. A sample
+    /// with neither (an over-range reading) restarts on a new mode only.
     pub fn push_sample(&mut self, sample: PlotSample<'_>) {
         let (value, timestamp, mode, unit, display_raw) = (
             sample.value,
@@ -536,6 +537,14 @@ impl Graph {
         );
         let now = timestamp;
         if value.is_none() && sample.overlays.is_empty() {
+            // An over-range reading after a dial turn (mV to Ω with the leads
+            // open) belongs to the new mode, not at the end of the old one's
+            // trace. Only the mode counts: auto-range lifts an open Ω reading
+            // to its top range (kΩ to MΩ), and restarting on that unit would
+            // drop the trace each time the leads lift.
+            if self.current_mode.as_deref() != Some(mode) {
+                self.restart_trace(now, mode, unit, sample.series);
+            }
             return;
         }
 
@@ -563,31 +572,7 @@ impl Graph {
         let series_changed = self.current_series.as_deref() != sample.series;
         let swapped = same_mode && series_changed && self.swap_plotted_series(sample.series, unit);
         if !swapped && (!same_mode || self.current_unit != unit || series_changed) {
-            self.history.clear();
-            self.overlays.clear();
-            self.current_mode = Some(mode.to_string());
-            self.current_unit = unit.to_string();
-            self.current_series = sample.series.map(str::to_owned);
-            self.origin = Some(now);
-            self.live = true;
-            self.view_center = 0.0;
-            // Drop any pinned Y range too: it was chosen for the previous
-            // mode's scale, and keeping it would plot ohms against volt bounds
-            // — the trace lands far outside the plot and the graph just looks
-            // empty, with the old numbers still on the axis. `clear()` and
-            // `reset_view()` both release these for the same reason.
-            self.y_axis_fixed = false;
-            self.y_user_set = false;
-            self.cursor_a = None;
-            self.cursor_b = None;
-            self.cursor_next_is_b = false;
-            self.bbox_zoom_start_px = None;
-            self.bbox_zoom_current_px = None;
-            self.minimap_level = None;
-            self.pushed_total = 0;
-            self.last_display_raw = None;
-            self.silences.clear();
-            self.main_missing_frames = 0;
+            self.restart_trace(now, mode, unit, sample.series);
         }
         self.heard(now);
         self.register_overlays(sample.overlays);
@@ -784,6 +769,42 @@ impl Graph {
         for &(label, unit, _) in overlays {
             self.restart_on_unit_change(label, unit);
         }
+    }
+
+    /// Start a new trace for `mode`, `unit` and `series` at `now`.
+    fn restart_trace(&mut self, now: Instant, mode: &str, unit: &str, series: Option<&str>) {
+        self.history.clear();
+        self.overlays.clear();
+        self.current_mode = Some(mode.to_string());
+        self.current_unit = unit.to_string();
+        self.current_series = series.map(str::to_owned);
+        self.origin = Some(now);
+        self.live = true;
+        self.view_center = 0.0;
+        // Drop any pinned Y range too: it was chosen for the previous
+        // mode's scale, and keeping it would plot ohms against volt bounds
+        // — the trace lands far outside the plot and the graph just looks
+        // empty, with the old numbers still on the axis. `clear()` and
+        // `reset_view()` both release these for the same reason.
+        self.y_axis_fixed = false;
+        self.y_user_set = false;
+        self.cursor_a = None;
+        self.cursor_b = None;
+        self.cursor_next_is_b = false;
+        self.bbox_zoom_start_px = None;
+        self.bbox_zoom_current_px = None;
+        self.minimap_level = None;
+        self.pushed_total = 0;
+        self.last_display_raw = None;
+        self.silences.clear();
+        self.main_missing_frames = 0;
+        // A break still open belongs to the trace that ended: the new one
+        // has no point before its first to break from.
+        self.pending_break = None;
+        self.pending_data_loss = false;
+        self.pending_break_since = None;
+        self.pending_heard_until = None;
+        self.pending_band_from = None;
     }
 
     /// Restart the kept trace `label` if its unit is no longer `unit`.
