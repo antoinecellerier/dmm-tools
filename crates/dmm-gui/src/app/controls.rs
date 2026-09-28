@@ -138,6 +138,28 @@ fn chip_row<T>(ui: &mut Ui, caption: &str, chips: impl IntoIterator<Item = Chip<
     picked
 }
 
+/// A **Sample interval** chip's label: what a 0 ms interval means, and whole
+/// seconds as seconds, as the **Buffer size** row beside it keeps its
+/// labels short.
+fn interval_label(ms: u32) -> String {
+    match ms {
+        0 => "Every reading".to_string(),
+        ms if ms >= 1000 && ms % 1000 == 0 => format!("{}s", ms / 1000),
+        ms => format!("{ms}ms"),
+    }
+}
+
+/// What a **Sample interval** chip keeps, for its tooltip.
+fn interval_tooltip(ms: u32) -> String {
+    let every = match ms {
+        0 => return "Keep every reading the meter produces, at its own pace".to_string(),
+        1000 => "a second".to_string(),
+        ms if ms % 1000 == 0 => format!("every {} s", ms / 1000),
+        ms => format!("every {ms} ms"),
+    };
+    format!("At most one reading {every}: the one nearest each tick")
+}
+
 /// What a bound of `n` samples costs, as the **Buffer size** row states it:
 /// the memory the graph and the sample buffer take, and how long the bound
 /// lasts at the current sample interval.
@@ -603,13 +625,8 @@ impl App {
                 .map(|ms| Chip {
                     value: ms,
                     selected: self.settings.sample_interval_ms == ms,
-                    label: format!("{ms}ms"),
-                    tooltip: if ms == 0 {
-                        "No rate limit — read as fast as the meter reports (requires reconnect)"
-                            .to_string()
-                    } else {
-                        format!("Wait {ms} ms between samples (requires reconnect)")
-                    },
+                    label: interval_label(ms),
+                    tooltip: format!("{} (requires reconnect)", interval_tooltip(ms)),
                 });
             if let Some(ms) = chip_row(ui, "Sample interval:", chips) {
                 self.settings.sample_interval_ms = ms;
@@ -636,14 +653,21 @@ impl App {
                 .into_iter()
                 .map(|n| {
                     let (memory, span) = buffer_cost(n, overlays, aux, interval_ms);
+                    // Every reading comes at the meter's own pace, which the
+                    // estimate cannot know: it says what it assumed.
+                    let pace = if interval_ms == 0 {
+                        "at 10 readings a second"
+                    } else {
+                        "at the current sample interval"
+                    };
                     Chip {
                         value: n,
                         selected: self.settings.max_samples == n,
                         label: format_sample_count(n),
                         tooltip: format!(
                             "Keep up to {} samples in the graph and for export \u{2014} {memory}, \
-                             about {span} at the current sample interval. A stopped recording \
-                             kept beside them can take as much again",
+                             about {span} {pace}. A stopped recording kept beside them can \
+                             take as much again",
                             format_sample_count(n)
                         ),
                     }
@@ -1286,6 +1310,30 @@ mod tests {
                 modifiers: egui::Modifiers::NONE,
             })
             .collect()
+    }
+
+    #[test]
+    fn interval_chips_name_what_they_keep() {
+        assert_eq!(interval_label(0), "Every reading");
+        assert_eq!(interval_label(300), "300ms");
+        assert_eq!(interval_label(1000), "1s");
+        assert_eq!(interval_label(2000), "2s");
+        assert_eq!(
+            interval_tooltip(0),
+            "Keep every reading the meter produces, at its own pace"
+        );
+        assert_eq!(
+            interval_tooltip(1000),
+            "At most one reading a second: the one nearest each tick"
+        );
+        assert_eq!(
+            interval_tooltip(2000),
+            "At most one reading every 2 s: the one nearest each tick"
+        );
+        assert_eq!(
+            interval_tooltip(100),
+            "At most one reading every 100 ms: the one nearest each tick"
+        );
     }
 
     #[test]

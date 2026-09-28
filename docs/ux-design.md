@@ -71,7 +71,7 @@ Toggled by the gear icon. Contains:
 - **Panels:** Show/hide Graph, Statistics, Recording, Specifications
 - **Auto-connect on start:** default on
 - **Show device name on connect (beeps):** default on — queries device name via protocol, which causes the meter to beep
-- **Sample interval:** 0ms (fastest, ~10 Hz), 100ms, 200ms, 300ms, 500ms, 1000ms, 2000ms. Requires reconnect to take effect.
+- **Sample interval:** Every reading (0 ms: each reading the meter produces, at its pace), 100ms, 200ms, 300ms, 500ms, 1s, 2s — at most one reading per interval, the one nearest each tick, so a streaming meter's frames are read as they come and the interval chooses among them rather than pacing the reads. Requires reconnect to take effect.
 - **Zoom:** UI scale selector (30%-300%, Firefox-style non-linear levels) + keyboard shortcuts (Ctrl+/-, Ctrl+0 to reset). 100% = OS default scale. Persists across sessions.
 
 The rows are height-capped and scroll when the window is too short to hold them all; the top bar row above them stays where it is.

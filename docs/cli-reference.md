@@ -169,7 +169,7 @@ dmm-cli read [OPTIONS]
 
 | Option | Default | Description |
 |---|---|---|
-| `--interval-ms <MS>` | `0` | Interval between readings in milliseconds. 0 = as fast as the link delivers (on a UT61E+, about 10 a second over USB, 3 over Bluetooth). |
+| `--interval-ms <MS>` | `0` | At most one reading per interval, in milliseconds: the one nearest each tick, at the time the meter sent it. 0 = every reading the meter produces, at its own pace (on a UT61E+, about 10 a second over USB, 3 over Bluetooth). |
 | `--format <FORMAT>` | `text`, or what `-o`'s extension names | Output format: `text`, `csv`, `json` or `replay`. |
 | `-o, --output [<FILE>]` | stdout | Write to FILE; with no FILE, to `measurements-<meter>-<mode>-<start>.<ext>`. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited: Ctrl+C stops it, or the end of a `--replay` file. |
@@ -543,7 +543,7 @@ dmm-cli debug [OPTIONS]
 | Option | Default | Description |
 |---|---|---|
 | `--count <N>` | `1` | Number of requests to send. 0 = unlimited. |
-| `--interval-ms <MS>` | `500` | Interval between requests in milliseconds. |
+| `--interval-ms <MS>` | `500` | At most one reading per interval, in milliseconds. 0 = every reading. |
 
 For full wire-level tracing, combine with the `RUST_LOG` environment variable:
 

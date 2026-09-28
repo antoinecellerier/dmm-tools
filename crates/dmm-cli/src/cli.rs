@@ -78,7 +78,7 @@ pub(crate) enum Cmd {
     Info,
     /// Continuously read measurements
     Read {
-        /// Interval between readings in milliseconds (0 = fastest, ~10 Hz)
+        /// Keep at most one reading per interval, in milliseconds (0 = every reading the meter produces)
         #[arg(long, default_value = "0")]
         interval_ms: u64,
         /// Output format [default: text, or what -o's extension names]
@@ -152,7 +152,7 @@ pub(crate) enum Cmd {
         /// Number of requests to send (0 = unlimited)
         #[arg(long, default_value = "1")]
         count: usize,
-        /// Interval between requests in milliseconds
+        /// Keep at most one reading per interval, in milliseconds (0 = every reading)
         #[arg(long, default_value = "500")]
         interval_ms: u64,
     },

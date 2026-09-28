@@ -342,7 +342,7 @@ Use cases: mains voltage and its frequency over a day; a dBm reading beside the 
 
 **Complexity:** Medium
 
-A meter that streams on its own (UT181A, UT171, UT803/UT804, VC880, ZOTEK, 121GW, BM78xBT) is read continuously, and a sample interval keeps the frame nearest each tick. At a 0 ms interval each frame is kept, repeats included: a UT181A sends a frame every 100 ms but changes its reading every 500 ms, so each reading lands about five times; a repeated frame and a new reading of the same value arrive as identical bytes, so nothing can drop the repeats afterwards.
+A meter that streams on its own (UT181A, UT171, UT8802, UT8803, UT803/UT804, VC880, ZOTEK, 121GW, BM78xBT, and the UT61+ over Bluetooth) is read continuously, and a sample interval keeps the frame nearest each tick. At **Every reading** (0 ms) each frame is kept, repeats included: a UT181A sends a frame every 100 ms but changes its reading every 500 ms, so each reading lands about five times; a repeated frame and a new reading of the same value arrive as identical bytes, so nothing can drop the repeats afterwards.
 
 A design should sample once per meter update by default — a UT181A's changes land on fixed 500 ms boundaries once one is seen. Irregular updates (the UT181A's temperature dial: every 700–900 ms), the graph's gap detector and the **Buffer size** estimate all assume the frame rate is the rate today.
 
