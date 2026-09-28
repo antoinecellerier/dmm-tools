@@ -102,6 +102,17 @@ protocol whose `name_before_init()` says the meter wants its name first gets it 
 same cache before `init()`, so a meter detection already asked is not asked again. The binaries
 call these and carry no name of their own.
 
+`Dmm` also drops what the meter sent that nobody read, through `Protocol::discard_input()`,
+before a read, `send_command()` or `select()` that must see the meter as it is now. A streaming
+meter queues frames the whole time it goes unread, so after 250 ms without a read (a pause, a
+reconnect, detection, a stalled caller) the queue is dropped rather than read from the front;
+the 250 ms are real time, which a queue fills in, except on a manual clock that tests move by
+hand. A polled meter queues only a reply that came after its request timed out, so
+after a timeout the next request starts from an empty queue instead of taking that late reply
+for its own answer. `framing::discard_queued()` empties the link: on HID it reads until more
+empty reports in a row come back than the OS queue holds, since some bridges queue empty
+reports between packets; over Bluetooth until a short wait brings nothing.
+
 Remote control has two paths. `send_command()` sends a named button press and reads nothing
 back. `choices(Setting, &Measurement)` lists the values a setting (`Mode`, `Range`, `Hold`,
 `Rel`, `MinMax`, `Peak`) can take from where the meter sits, each a `Choice { id, label,

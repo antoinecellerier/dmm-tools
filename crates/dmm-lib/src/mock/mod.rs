@@ -554,6 +554,11 @@ impl Protocol for MockProtocol {
         crate::protocol::Delivery::Polled
     }
 
+    // The waveform is a function of session time: nothing queues.
+    fn discard_input(&mut self, _transport: &dyn Transport) -> Result<()> {
+        Ok(())
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         Ok(())
     }

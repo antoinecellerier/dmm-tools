@@ -91,6 +91,14 @@ impl dmm_lib::protocol::Protocol for FakeMeter {
         dmm_lib::protocol::Delivery::Polled
     }
 
+    // Nothing queues: each reading is built when asked for.
+    fn discard_input(
+        &mut self,
+        _t: &dyn dmm_lib::transport::Transport,
+    ) -> dmm_lib::error::Result<()> {
+        Ok(())
+    }
+
     fn init(&mut self, _t: &dyn dmm_lib::transport::Transport) -> dmm_lib::error::Result<()> {
         Ok(())
     }

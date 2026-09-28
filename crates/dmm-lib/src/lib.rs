@@ -20,6 +20,7 @@ use error::{Error, Result};
 use log::{debug, info};
 use protocol::Protocol;
 use protocol::registry::{self, SelectableDevice, Selection};
+use std::time::{Duration, Instant};
 use transport::{Transport, ble, open};
 
 /// Top-level handle for communicating with the multimeter.
@@ -38,7 +39,22 @@ pub struct Dmm<T: Transport> {
     /// of it, for every family: asking again costs a round trip, and a UT61+
     /// beeps at every ask.
     name: Option<String>,
+    /// When the last read returned (or the session opened), on
+    /// [`Clock::queue_now`]: how long a streaming meter's frames have been
+    /// queuing unread.
+    last_read: Instant,
+    /// The last read timed out, so a polled meter's late reply may still
+    /// arrive and be taken for the next request's.
+    timed_out: bool,
 }
+
+/// How long a streaming meter can go unread before what it queued meanwhile
+/// is dropped. A loop reading continuously never gets near it; Pause, a
+/// reconnect, detection or a stalled caller do. Measured in real time, which
+/// a queue fills in: on a fast mock clock, session time would count a
+/// millisecond's stall as seconds away and drop a replay's frames. A manual
+/// clock is the exception, see [`Clock::queue_now`].
+const RESYNC_AFTER: Duration = Duration::from_millis(250);
 
 impl<T: Transport> Dmm<T> {
     /// Create a new Dmm with the given transport and protocol.
@@ -60,10 +76,13 @@ impl<T: Transport> Dmm<T> {
             "connected to {} ({})",
             profile.model_name, profile.family_name
         );
+        let clock = Clock::real();
         let mut dmm = Self {
             transport,
             protocol,
-            clock: Clock::real(),
+            last_read: clock.queue_now(),
+            timed_out: false,
+            clock,
             protocol_stamps: false,
             name,
         };
@@ -91,6 +110,7 @@ impl<T: Transport> Dmm<T> {
     /// mock and replay ones, opened through [`mock::open_mock_clocked`] and
     /// [`replay::Replay::open`].
     pub(crate) fn with_clock(mut self, clock: Clock) -> Self {
+        self.last_read = clock.queue_now();
         self.clock = clock;
         self
     }
@@ -132,7 +152,10 @@ impl<T: Transport> Dmm<T> {
     /// resolution/accuracy/impedance without knowing which protocol family
     /// they're talking to.
     pub fn request_measurement(&mut self) -> Result<measurement::Measurement> {
-        let mut m = self.protocol.request_measurement(&self.transport)?;
+        self.drop_stale_input()?;
+        let result = self.protocol.request_measurement(&self.transport);
+        self.mark_read(&result);
+        let mut m = result?;
         m.spec = self.protocol.spec_info(&m);
         m.mode_spec = self.protocol.mode_spec_info(&m);
         // Session time is stamped here and nowhere else: the parsers set
@@ -148,7 +171,10 @@ impl<T: Transport> Dmm<T> {
 
     /// Send a named command to the meter (e.g. "hold", "range", "auto").
     pub fn send_command(&mut self, command: &str) -> Result<()> {
-        self.protocol.send_command(&self.transport, command)
+        self.drop_stale_input()?;
+        let result = self.protocol.send_command(&self.transport, command);
+        self.mark_read(&result);
+        result
     }
 
     /// Values `setting` can be switched to from where the meter sits now.
@@ -166,7 +192,37 @@ impl<T: Transport> Dmm<T> {
 
     /// Switch `setting` to one of the values [`Dmm::choices`] listed.
     pub fn select(&mut self, setting: protocol::Setting, id: u16) -> Result<()> {
-        self.protocol.select(&self.transport, setting, id)
+        self.drop_stale_input()?;
+        let result = self.protocol.select(&self.transport, setting, id);
+        self.mark_read(&result);
+        result
+    }
+
+    /// Drop what the meter sent that nobody read, before a read or command
+    /// that must see the meter as it is now. A streaming meter queues frames
+    /// all the while it is not read, so after [`RESYNC_AFTER`] away the next
+    /// frame in line is an old one; a polled meter queues only a reply that
+    /// came after its request timed out, which the next request would
+    /// otherwise take for its own answer.
+    fn drop_stale_input(&mut self) -> Result<()> {
+        let stale = match self.protocol.delivery() {
+            protocol::Delivery::Streamed => self
+                .clock
+                .queue_now()
+                .checked_duration_since(self.last_read)
+                .is_some_and(|away| away > RESYNC_AFTER),
+            protocol::Delivery::Polled => self.timed_out,
+        };
+        if stale {
+            debug!("dropping what the meter queued while nobody read it");
+            self.protocol.discard_input(&self.transport)?;
+        }
+        Ok(())
+    }
+
+    fn mark_read<R>(&mut self, result: &Result<R>) {
+        self.last_read = self.clock.queue_now();
+        self.timed_out = matches!(result, Err(Error::Timeout));
     }
 
     /// The meter's name for itself: the one it already gave on this link,
@@ -453,6 +509,148 @@ mod tests {
     use crate::protocol::ut61eplus::Ut61PlusProtocol;
     use crate::transport::mock::MockTransport;
     use crate::transport::open::KNOWN_TRANSPORTS;
+
+    /// A meter whose every reading is one byte off the transport, streamed
+    /// or polled; the polled one writes a request byte first.
+    struct ByteMeter(protocol::Delivery);
+
+    const BYTE_METER: protocol::DeviceProfile = protocol::DeviceProfile {
+        family_name: "test",
+        model_name: "byte meter",
+        stability: protocol::Stability::Verified,
+        supported_commands: &[],
+        max_aux_values: 0,
+        verification_issue: None,
+        meter_keys: protocol::MeterKeys::NONE,
+    };
+
+    impl Protocol for ByteMeter {
+        fn init(&mut self, _t: &dyn Transport) -> Result<()> {
+            Ok(())
+        }
+        fn request_measurement(&mut self, t: &dyn Transport) -> Result<measurement::Measurement> {
+            if self.0 == protocol::Delivery::Polled {
+                t.write(&[0x5E])?;
+            }
+            let mut buf = [0u8; 1];
+            match t.read_timeout(&mut buf, 0)? {
+                0 => Err(Error::Timeout),
+                _ => Ok(measurement::Measurement::from_payload(&buf)),
+            }
+        }
+        fn delivery(&self) -> protocol::Delivery {
+            self.0
+        }
+        fn discard_input(&mut self, t: &dyn Transport) -> Result<()> {
+            protocol::framing::discard_queued(t)
+        }
+        fn parse_payload(&self, payload: &[u8]) -> Result<measurement::Measurement> {
+            Ok(measurement::Measurement::from_payload(payload))
+        }
+        fn profile(&self) -> &protocol::DeviceProfile {
+            &BYTE_METER
+        }
+    }
+
+    fn byte_meter(delivery: protocol::Delivery, queued: &[u8]) -> (Dmm<MockTransport>, Clock) {
+        let clock = Clock::manual();
+        let transport = MockTransport::new(queued.iter().map(|&b| vec![b]).collect());
+        let dmm = Dmm::new(transport, Box::new(ByteMeter(delivery)))
+            .unwrap()
+            .with_clock(clock.clone());
+        (dmm, clock)
+    }
+
+    fn byte(dmm: &mut Dmm<MockTransport>) -> Result<u8> {
+        dmm.request_measurement().map(|m| m.raw_payload[0])
+    }
+
+    #[test]
+    fn a_streaming_meter_left_unread_drops_what_it_queued() {
+        let (mut dmm, clock) = byte_meter(protocol::Delivery::Streamed, &[1, 2, 3]);
+        assert_eq!(byte(&mut dmm).unwrap(), 1);
+        clock.advance(RESYNC_AFTER + Duration::from_millis(1));
+        // 2 and 3 were sent while nobody read: gone, and nothing fresh yet.
+        assert!(matches!(byte(&mut dmm), Err(Error::Timeout)));
+        dmm.transport().push_response(vec![4]);
+        assert_eq!(byte(&mut dmm).unwrap(), 4);
+    }
+
+    #[test]
+    fn a_streaming_meter_read_in_time_keeps_its_frames() {
+        let (mut dmm, clock) = byte_meter(protocol::Delivery::Streamed, &[1, 2, 3]);
+        assert_eq!(byte(&mut dmm).unwrap(), 1);
+        clock.advance(RESYNC_AFTER);
+        assert_eq!(byte(&mut dmm).unwrap(), 2);
+    }
+
+    /// A fast mock clock runs session time far ahead of the real time a
+    /// stall takes: a millisecond between reads is no pause.
+    #[test]
+    fn a_fast_clock_does_not_count_a_short_stall_as_away() {
+        let clock = Clock::scaled(1000.0);
+        let transport = MockTransport::new(vec![vec![1], vec![2]]);
+        let mut dmm = Dmm::new(transport, Box::new(ByteMeter(protocol::Delivery::Streamed)))
+            .unwrap()
+            .with_clock(clock);
+        assert_eq!(byte(&mut dmm).unwrap(), 1);
+        std::thread::sleep(Duration::from_millis(1));
+        assert_eq!(byte(&mut dmm).unwrap(), 2);
+    }
+
+    #[test]
+    fn a_command_after_a_pause_starts_from_a_fresh_frame() {
+        let (mut dmm, clock) = byte_meter(protocol::Delivery::Streamed, &[1, 2, 3]);
+        assert_eq!(byte(&mut dmm).unwrap(), 1);
+        clock.advance(Duration::from_secs(60));
+        // The byte meter takes no commands; the stale frames go all the same.
+        assert!(dmm.send_command("hold").is_err());
+        dmm.transport().push_response(vec![4]);
+        assert_eq!(byte(&mut dmm).unwrap(), 4);
+    }
+
+    #[test]
+    fn a_reply_late_for_a_timed_out_poll_is_not_the_next_answer() {
+        let (mut dmm, clock) = byte_meter(protocol::Delivery::Polled, &[]);
+        assert!(matches!(byte(&mut dmm), Err(Error::Timeout)));
+        // The first request's reply turns up late, before the next request;
+        // the next request's own reply follows its write.
+        dmm.transport().push_response(vec![7]);
+        dmm.transport().push_reply(vec![8]);
+        clock.advance(Duration::from_secs(1));
+        assert_eq!(byte(&mut dmm).unwrap(), 8);
+    }
+
+    #[test]
+    fn a_polled_meter_that_answered_keeps_what_is_queued() {
+        // Nothing timed out, so nothing can be late: the queue is left alone.
+        let (mut dmm, clock) = byte_meter(protocol::Delivery::Polled, &[1, 2]);
+        assert_eq!(byte(&mut dmm).unwrap(), 1);
+        clock.advance(Duration::from_secs(60));
+        assert_eq!(byte(&mut dmm).unwrap(), 2);
+    }
+
+    #[test]
+    fn a_lost_link_during_the_discard_is_the_answer() {
+        struct Lost;
+        impl Transport for Lost {
+            fn write(&self, _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+                Err(Error::LinkLost)
+            }
+            fn link(&self) -> Option<transport::Link> {
+                None
+            }
+        }
+        let clock = Clock::manual();
+        let mut dmm = Dmm::new(Lost, Box::new(ByteMeter(protocol::Delivery::Streamed)))
+            .unwrap()
+            .with_clock(clock.clone());
+        clock.advance(Duration::from_secs(1));
+        assert!(matches!(dmm.request_measurement(), Err(Error::LinkLost)));
+    }
 
     /// Build a complete response frame (header + length + payload + checksum)
     /// for a measurement with the given parameters.

@@ -263,11 +263,11 @@ mod tests {
         let _ = stream.tick();
         assert_eq!(stream.consecutive_timeouts(), 1);
 
-        // The meter answers again on the same stream.
+        // The meter answers the next request on the same stream.
         stream
             .dmm
             .transport()
-            .push_response(build_response(b"  3.000"));
+            .push_reply(build_response(b"  3.000"));
         let _ = stream.tick();
         assert_eq!(stream.consecutive_timeouts(), 0);
     }

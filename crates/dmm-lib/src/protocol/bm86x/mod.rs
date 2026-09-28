@@ -137,6 +137,10 @@ impl Protocol for Bm86xProtocol {
         crate::protocol::Delivery::Polled
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // Nothing to set up: the cable answers each request (spec §3.3).
         debug!("{}: init (polled, nothing to send)", self.series.id());

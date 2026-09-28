@@ -90,6 +90,11 @@ impl Protocol for Bm78xbtProtocol {
         crate::protocol::Delivery::Streamed
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.rx_buf.clear();
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // The transport logged in before this runs (spec §3.1), and the
         // meter streams from then on; nothing is written here. The app's

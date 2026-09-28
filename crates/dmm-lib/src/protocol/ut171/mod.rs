@@ -208,6 +208,11 @@ impl Protocol for Ut171Protocol {
         crate::protocol::Delivery::Streamed
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.rx_buf.clear();
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // Send connect command to start streaming.
         // User must also enable "Communication ON" on the meter.

@@ -704,6 +704,15 @@ pub trait Protocol: Send {
     /// only when asked, and hand back frames that queued in between.
     fn delivery(&self) -> Delivery;
 
+    /// Drop what the meter sent that nobody read yet: the link's queue and
+    /// anything the protocol holds from it (a partial frame, a display part
+    /// kept for the next reading). [`crate::Dmm`] calls it before a read
+    /// that must see the meter as it is now.
+    ///
+    /// Required: a family whose meter is not behind `transport` (a replay,
+    /// a simulation) would otherwise drop nothing and look as if it had.
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()>;
+
     /// Parse one measurement payload off the wire, with no I/O.
     ///
     /// `payload` is exactly what [`Measurement::raw_payload`] carries for this

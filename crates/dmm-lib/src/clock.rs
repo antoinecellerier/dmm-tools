@@ -177,6 +177,16 @@ impl Clock {
         }
     }
 
+    /// Now on the time base a physical queue fills in: real time, except on
+    /// a manual clock, which tests and `--mock-clock-scale max` move by hand
+    /// and whose simulated meters queue as it moves.
+    pub(crate) fn queue_now(&self) -> Instant {
+        match &self.inner {
+            Inner::Manual(now) => *lock(now),
+            Inner::Real | Inner::Scaled(_) => Instant::now(),
+        }
+    }
+
     /// Whether this is the wall clock. Binaries refuse the clock flags on a
     /// hardware device, where virtual time would stamp readings the meter
     /// never produced at those instants.

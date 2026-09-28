@@ -329,6 +329,8 @@ pub mod mock {
     /// A mock transport that replays pre-recorded responses.
     pub struct MockTransport {
         responses: RefCell<Vec<Vec<u8>>>,
+        /// Held back until the next write, as a polled meter's answer is.
+        replies: RefCell<Vec<Vec<u8>>>,
         pub written: RefCell<Vec<Vec<u8>>>,
         /// The rates `set_baud` was asked for, in order.
         pub bauds: RefCell<Vec<u32>>,
@@ -343,6 +345,7 @@ pub mod mock {
         pub fn new(responses: Vec<Vec<u8>>) -> Self {
             Self {
                 responses: RefCell::new(responses),
+                replies: RefCell::new(Vec::new()),
                 written: RefCell::new(Vec::new()),
                 bauds: RefCell::new(Vec::new()),
             }
@@ -352,11 +355,20 @@ pub mod mock {
         pub fn push_response(&self, response: Vec<u8>) {
             self.responses.borrow_mut().push(response);
         }
+
+        /// Queue a response that arrives only once something is next
+        /// written: a polled meter's answer to the next request, rather than
+        /// a reply already waiting.
+        pub fn push_reply(&self, response: Vec<u8>) {
+            self.replies.borrow_mut().push(response);
+        }
     }
 
     impl Transport for MockTransport {
         fn write(&self, data: &[u8]) -> Result<()> {
             self.written.borrow_mut().push(data.to_vec());
+            let replies = std::mem::take(&mut *self.replies.borrow_mut());
+            self.responses.borrow_mut().extend(replies);
             Ok(())
         }
 

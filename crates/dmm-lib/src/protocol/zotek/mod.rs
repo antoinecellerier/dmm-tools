@@ -119,6 +119,11 @@ impl Protocol for ZotekProtocol {
         crate::protocol::Delivery::Streamed
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.rx_buf.clear();
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // The meter streams once connected; no app writes anything first
         // (spec §3).

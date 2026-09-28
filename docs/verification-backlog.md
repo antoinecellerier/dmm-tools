@@ -2310,6 +2310,16 @@ first. Checked offline only (simulated meters on a manual clock, and
   reads, and whether anything bounds them. Checkable on our UT-D07B: pause
   the GUI for 10 minutes, resume, and see that the first reading is current
   and memory stayed flat.
+- **A polled reply that comes late.** Since 2026-09-28 a request after a
+  timeout starts from an empty queue, so a reply that lands after the 2 s
+  deadline is dropped rather than taken for the next request's answer
+  (UT61+ on its cable, VC-890; the BM86x always did). Not seen on a meter:
+  does a UT61E+ reply ever take over 2 s, capacitance included?
+- **A CH9329 reading held across opens.** The UT61+ name query budgets a
+  read for a CH9329 that had a reading buffered; if the CLI's `read` (which
+  asks no name) starts on one, every polled reading may be one behind.
+  Checkable on a CH9329 + UT61+: kill a `read` mid-poll, start it again and
+  compare readings with the LCD. Nothing is dropped at open until then.
 
 ### Vendor sources not yet read
 

@@ -121,6 +121,11 @@ impl Protocol for Ut181aProtocol {
         crate::protocol::Delivery::Streamed
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.rx_buf.clear();
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // User must enable "Communication ON" on the meter; SET_MONITOR
         // starts the measurement stream.

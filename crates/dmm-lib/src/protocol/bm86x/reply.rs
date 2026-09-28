@@ -29,9 +29,6 @@ pub(super) const fn request(code: u8) -> [u8; 3] {
 /// report (spec §3.3).
 const REPLY_WAIT: Duration = Duration::from_millis(4000);
 
-/// The most reports a drain drops before a request.
-const MAX_DRAIN: usize = 16;
-
 /// The receive buffer's bound: two replies.
 const MAX_BUF: usize = 2 * REPLY_LEN;
 
@@ -95,23 +92,11 @@ pub(super) fn model_run_at(buf: &[u8], series: Series) -> Option<usize> {
     buf.windows(run.len()).position(|w| w == run)
 }
 
-/// Drop what arrived before the request: a late reply to an earlier one
-/// would otherwise be taken for this one's.
-fn drain(transport: &dyn Transport) -> Result<()> {
-    let mut chunk = [0u8; 64];
-    for _ in 0..MAX_DRAIN {
-        let n = transport.read_timeout(&mut chunk, 0)?;
-        if n == 0 {
-            break;
-        }
-        debug!("bm86x: dropped a stale report {:02X?}", &chunk[..n]);
-    }
-    Ok(())
-}
-
 /// Ask `series`' meter for a reading and read its reply.
 pub(super) fn read(transport: &dyn Transport, series: Series) -> Result<[u8; REPLY_LEN]> {
-    drain(transport)?;
+    // A late reply to an earlier request would otherwise be taken for
+    // this one's.
+    framing::discard_queued(transport)?;
     transport.write(&request(series.code()))?;
     let deadline = Instant::now() + REPLY_WAIT;
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_BUF + 64);

@@ -137,6 +137,11 @@ impl Protocol for Eevblog121gwProtocol {
         crate::protocol::Delivery::Streamed
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.rx_buf.clear();
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // The meter streams once subscribed; nothing is written first
         // (spec §3). UEi's app sends a clock set, which would change the

@@ -396,6 +396,14 @@ impl Protocol for Ut61PlusProtocol {
         }
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.rx_buf.clear();
+        // A secondary display held from before would be attached to the
+        // first reading after, from another moment.
+        self.secondary = None;
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // A cable needs nothing: the CP2110 is set up by `Cp2110::open()`
         // before the protocol exists, and the meter only acknowledges 0x5D.

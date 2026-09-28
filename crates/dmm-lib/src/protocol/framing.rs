@@ -3,7 +3,7 @@
 //! one family sends lives in that family.
 
 use crate::error::{Error, ErrorKind, Result};
-use crate::transport::Transport;
+use crate::transport::{Link, Transport};
 use log::{debug, trace};
 use std::time::{Duration, Instant};
 
@@ -50,6 +50,53 @@ const MAX_RX_BUF: usize = 4096;
 /// gives it no turn to. Anything arriving within it counts as already
 /// queued.
 pub(crate) const DRAIN_WAIT_MS: i32 = 10;
+
+/// Input reports a HID queue keeps for a reader that is not reading: the
+/// hidraw ring on Linux, hidapi's buffer on Windows. More empty reads in a
+/// row than this cannot all have come from the queue.
+const HID_QUEUE_REPORTS: usize = 64;
+
+/// Longest [`discard_queued`] runs, real time: a stream arriving faster than
+/// it is read off ends here rather than never.
+const DISCARD_CAP: Duration = Duration::from_secs(1);
+
+/// Read off and drop what the link queued while nobody read it.
+///
+/// Over HID a queued report comes back at once, so the reads don't wait,
+/// and the queue is empty once more reads in a row come back empty than it
+/// holds: a CH9325 or CH9329 queues empty reports between packets, so a
+/// single empty read proves nothing. Over Bluetooth notifications only move
+/// while a read waits ([`DRAIN_WAIT_MS`]), and one wait that brings nothing
+/// ends it.
+pub(crate) fn discard_queued(transport: &dyn Transport) -> Result<()> {
+    let (wait_ms, quiet_reads) = if transport.link() == Some(Link::Bluetooth) {
+        (DRAIN_WAIT_MS, 1)
+    } else {
+        (0, HID_QUEUE_REPORTS + 1)
+    };
+    let deadline = Instant::now() + DISCARD_CAP;
+    let mut chunk = [0u8; 64];
+    let mut dropped = 0usize;
+    let mut empty = 0;
+    while empty < quiet_reads {
+        if Instant::now() >= deadline {
+            debug!("discard: still receiving after {DISCARD_CAP:?}, reading on");
+            break;
+        }
+        match transport.read_timeout(&mut chunk, wait_ms)? {
+            0 => empty += 1,
+            n => {
+                trace!("discard: dropped {:02X?}", &chunk[..n]);
+                dropped += n;
+                empty = 0;
+            }
+        }
+    }
+    if dropped > 0 {
+        debug!("discard: dropped {dropped} bytes queued while nobody read");
+    }
+    Ok(())
+}
 
 /// Most queued frames [`read_newest_frame`] takes off in one request: about
 /// twenty minutes of a UT181A's 10 frames a second. A longer backlog — a
@@ -553,6 +600,22 @@ pub(crate) fn test_frame_be16(payload: &[u8]) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::transport::mock::MockTransport;
+
+    #[test]
+    fn a_discard_reads_past_empty_reports_to_the_end_of_the_queue() {
+        // A CH9325 queues empty reports between packets: a run of them in
+        // the middle of the queue does not end the discard.
+        let mut queued = vec![vec![0x11]];
+        queued.extend(std::iter::repeat_n(Vec::new(), HID_QUEUE_REPORTS));
+        queued.push(vec![0x22, 0x33]);
+        let mock = MockTransport::new(queued);
+        discard_queued(&mock).unwrap();
+        let mut buf = [0u8; 8];
+        assert_eq!(mock.read_timeout(&mut buf, 0).unwrap(), 0);
+        mock.push_response(vec![0x44]);
+        assert_eq!(mock.read_timeout(&mut buf, 0).unwrap(), 1);
+        assert_eq!(buf[0], 0x44);
+    }
 
     #[test]
     fn extract_valid_frame() {

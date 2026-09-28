@@ -595,6 +595,11 @@ impl Protocol for MockZt5b {
         crate::protocol::Delivery::Streamed
     }
 
+    // The simulated meter, not the session's transport, holds the queue.
+    fn discard_input(&mut self, _transport: &dyn Transport) -> Result<()> {
+        self.driver.discard_input(&self.meter)
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         self.driver.init(&self.meter)
     }
@@ -633,6 +638,18 @@ mod tests {
         let (m, reports) = capture_reports(|| mock.request_measurement(&NullTransport));
         assert!(reports.is_empty(), "{reports:?}");
         m.unwrap()
+    }
+
+    #[test]
+    fn a_discard_drops_the_packets_queued_while_unread() {
+        let (mut mock, clock) = mock();
+        read(&mut mock);
+        clock.advance(Duration::from_secs(10));
+        mock.discard_input(&NullTransport).unwrap();
+        let before = clock.now();
+        read(&mut mock);
+        // Every packet sent by then went: the reading waited for the next.
+        assert!(clock.now() > before);
     }
 
     fn press(mock: &mut MockZt5b, command: &str) {

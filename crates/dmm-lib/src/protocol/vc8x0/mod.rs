@@ -593,6 +593,11 @@ impl<M: Vc8x0Model> Protocol for Vc8x0Protocol<M> {
         M::DELIVERY
     }
 
+    fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.rx_buf.clear();
+        crate::protocol::framing::discard_queued(transport)
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // Neither meter needs a trigger: the VC-880 streams once the user
         // presses the PC button, and the VC-890 answers one request at a

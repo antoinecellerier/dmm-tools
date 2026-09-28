@@ -1082,6 +1082,12 @@ mod tests {
         fn delivery(&self) -> dmm_lib::protocol::Delivery {
             self.inner.delivery()
         }
+        fn discard_input(
+            &mut self,
+            t: &dyn dmm_lib::transport::Transport,
+        ) -> dmm_lib::error::Result<()> {
+            self.inner.discard_input(t)
+        }
         fn init(&mut self, t: &dyn dmm_lib::transport::Transport) -> dmm_lib::error::Result<()> {
             self.inner.init(t)
         }

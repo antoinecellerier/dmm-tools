@@ -464,6 +464,16 @@ struct ReplayProtocol {
 }
 
 impl ReplayProtocol {
+    fn skip_to_newest_due(&mut self, now: Duration) {
+        while self
+            .samples
+            .get(self.next.saturating_add(1))
+            .is_some_and(|(offset, _)| *offset <= now)
+        {
+            self.next += 1;
+        }
+    }
+
     /// Let session time reach `due`, or report the quiet meter.
     ///
     /// A recording gap *was* a meter that stopped answering, so it plays back
@@ -494,18 +504,20 @@ impl Protocol for ReplayProtocol {
         Ok(())
     }
 
+    /// Skip every sample already due but the newest: what a meter nobody
+    /// read meanwhile still has on the wire.
+    fn discard_input(&mut self, _transport: &dyn Transport) -> Result<()> {
+        let now = self.clock.now().saturating_duration_since(self.start);
+        self.skip_to_newest_due(now);
+        Ok(())
+    }
+
     fn request_measurement(&mut self, _transport: &dyn Transport) -> Result<Measurement> {
         let now = self.clock.now().saturating_duration_since(self.start);
         // Of the samples already due, only the newest is still on the wire: a
         // meter that was not polled for a second does not hand over the
         // second's worth of frames it sent meanwhile.
-        while self
-            .samples
-            .get(self.next.saturating_add(1))
-            .is_some_and(|(offset, _)| *offset <= now)
-        {
-            self.next += 1;
-        }
+        self.skip_to_newest_due(now);
         // Past the end the last frame is held, one per cadence: the trace goes
         // flat and the meter stays "on", which is also what makes a one-frame
         // file usable as a steady reading.
