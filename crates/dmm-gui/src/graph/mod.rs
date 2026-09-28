@@ -249,16 +249,22 @@ pub struct Graph {
     view_center: f64,
     /// Gap detection threshold in seconds.
     gap_threshold_secs: f64,
-    /// Stretches longer than [`GAP_MINIMUM_SECS`] in which no frame of any
-    /// kind arrived, oldest first, as (last frame before, first frame after).
+    /// The threshold the silence since the last frame is judged by: the
+    /// largest in force since that frame, so the stretch across a change to a
+    /// shorter interval, which began at the slower one, is no gap.
+    silence_threshold_secs: f64,
+    /// Stretches in which no frame of any kind arrived for longer than the gap
+    /// threshold in force at the time, oldest first, as (last frame before,
+    /// first frame after).
     ///
-    /// A trace breaks for want of data only across one of these longer than
-    /// the gap threshold — not merely because two of its own points are far
-    /// apart. A meter that sends a reading's parts in turn (the UT61E+'s
-    /// AC+DC V, answering every 0.67 s) spaces each part's points wider than
-    /// the threshold while it never goes quiet at all. Kept down to the
-    /// minimum threshold so a threshold change is only a new question asked of
-    /// them; there are only as many as the meter had real silences.
+    /// A trace breaks for want of data only across one of these — not merely
+    /// because two of its own points are far apart. A meter that sends a
+    /// reading's parts in turn (the UT61E+'s AC+DC V, answering every 0.67 s)
+    /// spaces each part's points wider than the threshold while it never goes
+    /// quiet at all. Judged when the silence ends, against the interval the
+    /// readings were taken at: a sample interval changed later does not turn
+    /// the spacing of a slower stretch into gaps after the fact. There are
+    /// only as many as the meter had real silences.
     silences: VecDeque<(Instant, Instant)>,
     /// Timestamp of the newest frame of any kind: a point, a frame of
     /// sub-values only, an overload or a word shown instead of a reading.
@@ -376,6 +382,7 @@ impl Graph {
             live: true,
             view_center: 0.0,
             gap_threshold_secs: GAP_MINIMUM_SECS,
+            silence_threshold_secs: GAP_MINIMUM_SECS,
             silences: VecDeque::new(),
             last_heard: None,
             main_missing_frames: 0,
@@ -417,13 +424,10 @@ impl Graph {
     pub fn set_sample_interval_ms(&mut self, ms: u32) {
         let interval_secs = (ms as f64 / 1000.0).max(0.1); // 0ms → use ~100ms wire time
         let threshold = (interval_secs * GAP_MULTIPLIER).max(GAP_MINIMUM_SECS);
-        if threshold != self.gap_threshold_secs {
-            self.gap_threshold_secs = threshold;
-            // Called on every connect, and history survives a reconnect — but
-            // where the trace breaks was decided against the old threshold, so
-            // the level's segments no longer match what the main plot draws.
-            self.minimap_level = None;
-        }
+        // The history keeps its breaks: each was decided when its silence
+        // ended, against the threshold then in force.
+        self.gap_threshold_secs = threshold;
+        self.silence_threshold_secs = self.silence_threshold_secs.max(threshold);
     }
 
     /// Change how many points the history keeps, dropping the oldest at once
@@ -650,7 +654,7 @@ impl Graph {
     fn heard(&mut self, t: Instant) {
         if let Some(last) = self.last_heard
             && t.checked_duration_since(last)
-                .is_some_and(|d| d.as_secs_f64() > GAP_MINIMUM_SECS)
+                .is_some_and(|d| d.as_secs_f64() > self.silence_threshold_secs)
         {
             // A stream that never grows the history is never evicted from;
             // the bound keeps it from growing without limit all the same.
@@ -660,19 +664,18 @@ impl Graph {
             self.silences.push_back((last, t));
         }
         self.last_heard = Some(t);
+        self.silence_threshold_secs = self.gap_threshold_secs;
     }
 
-    /// Whether no frame at all arrived for longer than the gap threshold
-    /// somewhere between the frames at `from` and `to`.
+    /// Whether a silence (see `silences`) falls between the frames at `from`
+    /// and `to`.
     fn silent_between(&self, from: Instant, to: Instant) -> bool {
         let first = self.silences.partition_point(|&(start, _)| start < from);
         self.silences
             .range(first..)
             .take_while(|&&(_, end)| end <= to)
-            .any(|&(start, end)| {
-                end.checked_duration_since(start)
-                    .is_some_and(|d| d.as_secs_f64() > self.gap_threshold_secs)
-            })
+            .next()
+            .is_some()
     }
 
     /// What the main reading goes by: the meter's name for it, or

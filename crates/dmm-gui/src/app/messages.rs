@@ -140,6 +140,27 @@ impl App {
     /// past the recording's length found nothing left but the held last frame.
     /// A later Disconnect/Connect keeps the origin, so the recording resumes
     /// where the session has got to.
+    /// The interval the graph judges its gaps by for a sample interval of
+    /// `ms`: a replay's frames come no more often than its file has them,
+    /// and judged by the viewer's interval alone a recording spaced wider
+    /// than it broke at every point.
+    fn gap_interval_ms(&self, ms: u32) -> u32 {
+        self.replay.as_ref().map_or(ms, |source| {
+            let cadence = u32::try_from(source.replay.cadence().as_millis()).unwrap_or(u32::MAX);
+            ms.max(cadence)
+        })
+    }
+
+    /// Put the **Sample interval** in Settings into effect: the graph's gap
+    /// threshold, and a running session's acquisition, at once.
+    pub(super) fn apply_sample_interval(&mut self) {
+        let ms = self.settings.sample_interval_ms;
+        self.graph.set_sample_interval_ms(self.gap_interval_ms(ms));
+        if let Some(tx) = &self.connection.ctrl_tx {
+            let _ = tx.send(connection::ThreadControl::SetInterval(ms));
+        }
+    }
+
     fn pin_replay_origin(&mut self, recorded: SystemTime) {
         if self.clock.wall_origin().is_some() {
             return;
@@ -162,7 +183,8 @@ impl App {
         // `None` = Auto-detect: nothing names the meter, so the opener works
         // it out from the bytes it sends.
         let device_entry = self.selected_device();
-        self.graph.set_sample_interval_ms(sample_interval_ms);
+        self.graph
+            .set_sample_interval_ms(self.gap_interval_ms(sample_interval_ms));
         let mut thread_ctx = ThreadContext {
             msg_tx,
             ctrl_rx,
@@ -182,12 +204,6 @@ impl App {
             .map(|source| (Arc::clone(&source.replay), source.recorded));
         if let Some((replay, recorded)) = source {
             self.pin_replay_origin(recorded);
-            // The graph expects a frame no more often than the file has them:
-            // judged by the viewer's interval alone, a recording spaced
-            // wider than it broke at every point.
-            let cadence_ms = u32::try_from(replay.cadence().as_millis()).unwrap_or(u32::MAX);
-            self.graph
-                .set_sample_interval_ms(sample_interval_ms.max(cadence_ms));
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
             // No interval floor: the protocol sleeps until each frame is due,
@@ -576,6 +592,21 @@ mod tests {
         tx.send(msg).expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
+    }
+
+    /// A Sample interval picked while connected goes to the running session
+    /// at once, with no reconnect.
+    #[test]
+    fn a_new_sample_interval_reaches_the_session() {
+        let mut app = app("ut61eplus", false);
+        let (tx, rx) = mpsc::channel();
+        app.connection.ctrl_tx = Some(tx);
+        app.settings.sample_interval_ms = 1000;
+        app.apply_sample_interval();
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(connection::ThreadControl::SetInterval(1000))
+        ));
     }
 
     /// A replay that played to its end says so, and keeps its last reading;

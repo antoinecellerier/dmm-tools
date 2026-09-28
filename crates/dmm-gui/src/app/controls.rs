@@ -626,17 +626,13 @@ impl App {
                     value: ms,
                     selected: self.settings.sample_interval_ms == ms,
                     label: interval_label(ms),
-                    tooltip: format!("{} (requires reconnect)", interval_tooltip(ms)),
+                    tooltip: interval_tooltip(ms),
                 });
             if let Some(ms) = chip_row(ui, "Sample interval:", chips) {
                 self.settings.sample_interval_ms = ms;
                 self.settings.save();
+                self.apply_sample_interval();
             }
-            ui.label(
-                RichText::new("(requires reconnect)")
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
         });
 
         ui.horizontal_wrapped(|ui| {

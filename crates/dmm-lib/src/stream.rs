@@ -197,6 +197,15 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         }
     }
 
+    /// Keep at most one reading per `tick` from now on, a zero tick every
+    /// reading. The schedule starts afresh at the next reading, as it did
+    /// when the stream was built.
+    pub fn set_tick(&mut self, tick: Duration) {
+        self.tick = tick;
+        self.next_tick = None;
+        self.anchor = None;
+    }
+
     /// Number of consecutive timeouts since the last successful measurement.
     pub fn consecutive_timeouts(&self) -> u32 {
         self.consecutive_timeouts
@@ -662,6 +671,35 @@ mod tests {
             mean.abs_diff(Duration::from_secs(1)) < Duration::from_millis(10),
             "mean spacing {mean:?}"
         );
+    }
+
+    /// A new interval takes over at the next reading: kept at once, then
+    /// one per new tick.
+    #[test]
+    fn a_new_tick_starts_its_schedule_at_the_next_reading() {
+        let (mut dmm, _clock) = timed_dmm(jittered(100, 200), vec![]);
+        let mut stream = MeasurementStream::new(&mut dmm, Duration::from_secs(10));
+        let first = match stream.tick().unwrap() {
+            StreamEvent::Measurement(m) => m.timestamp,
+            other => panic!("{other:?}"),
+        };
+        stream.set_tick(Duration::from_millis(500));
+        let mut stamps = vec![first];
+        for _ in 0..4 {
+            match stream.tick().unwrap() {
+                StreamEvent::Measurement(m) => stamps.push(m.timestamp),
+                other => panic!("{other:?}"),
+            }
+        }
+        // The frame right after the first, not ten seconds on.
+        assert!(stamps[1] - stamps[0] < Duration::from_millis(150));
+        for w in stamps[1..].windows(2) {
+            let gap = w[1] - w[0];
+            assert!(
+                gap.abs_diff(Duration::from_millis(500)) <= Duration::from_millis(10),
+                "{gap:?}"
+            );
+        }
     }
 
     #[test]

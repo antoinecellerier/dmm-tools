@@ -22,6 +22,9 @@ pub(crate) enum ThreadControl {
     /// Halt (`true`) or resume (`false`) acquisition. Halting stops the meter
     /// being polled at all — it is not a display-side freeze.
     SetPaused(bool),
+    /// Keep at most one reading per this many milliseconds from now on,
+    /// the **Sample interval** picked while connected.
+    SetInterval(u32),
 }
 
 /// A command the UI asks the acquisition thread to send to the meter.
@@ -75,6 +78,15 @@ pub(super) const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 /// delay, so 50 ms puts frames about 33 ms apart: roughly 30 fps at most.
 const READING_REPAINT_DELAY: Duration = Duration::from_millis(50);
 
+/// The tick for a sample interval of `ms`, clamped to
+/// [`MAX_SAMPLE_INTERVAL_MS`].
+fn interval_tick(ms: u32) -> Duration {
+    if ms > MAX_SAMPLE_INTERVAL_MS {
+        warn!("sample_interval_ms {ms} exceeds the {MAX_SAMPLE_INTERVAL_MS} ms maximum, clamping");
+    }
+    Duration::from_millis(u64::from(ms.min(MAX_SAMPLE_INTERVAL_MS)))
+}
+
 /// Apply pending control messages, blocking while paused.
 ///
 /// Returns `false` when the thread should exit: the channel hung up. That is
@@ -82,7 +94,11 @@ const READING_REPAINT_DELAY: Duration = Duration::from_millis(50);
 /// channel, or a panic on the UI thread all drop the sender — and it used to
 /// be indistinguishable from "no messages", so the thread kept the USB handle
 /// open and polled the meter forever.
-fn handle_control(ctrl_rx: &mpsc::Receiver<ThreadControl>, paused: &mut bool) -> bool {
+fn handle_control(
+    ctrl_rx: &mpsc::Receiver<ThreadControl>,
+    paused: &mut bool,
+    tick: &mut Duration,
+) -> bool {
     loop {
         let msg = if *paused {
             match ctrl_rx.recv_timeout(PAUSE_POLL_INTERVAL) {
@@ -99,6 +115,7 @@ fn handle_control(ctrl_rx: &mpsc::Receiver<ThreadControl>, paused: &mut bool) ->
         };
         match msg {
             ThreadControl::SetPaused(p) => *paused = p,
+            ThreadControl::SetInterval(ms) => *tick = interval_tick(ms),
         }
     }
 }
@@ -382,13 +399,7 @@ where
     // unparseable state doesn't flood the channel.
     const PROTOCOL_ERROR_REPORT_INTERVAL: u32 = 20;
 
-    if sample_interval_ms > MAX_SAMPLE_INTERVAL_MS {
-        warn!(
-            "sample_interval_ms {sample_interval_ms} exceeds the {MAX_SAMPLE_INTERVAL_MS} ms \
-             maximum, clamping"
-        );
-    }
-    let tick = Duration::from_millis(sample_interval_ms.min(MAX_SAMPLE_INTERVAL_MS) as u64);
+    let mut tick = interval_tick(sample_interval_ms);
     // The Bluetooth adapter this session is on, which a reconnect goes back
     // to by address rather than scanning for one again.
     let mut reopen_at = bluetooth_selector(&dmm);
@@ -397,9 +408,14 @@ where
     let mut paused = false;
     let mut last_keys: ListedKeys = Default::default();
     loop {
-        if stop_flag.load(Ordering::Relaxed) || !handle_control(&ctrl_rx, &mut paused) {
+        let asked = tick;
+        if stop_flag.load(Ordering::Relaxed) || !handle_control(&ctrl_rx, &mut paused, &mut tick) {
             info!("background thread: stopping");
             break;
+        }
+        if tick != asked {
+            let applied = session_tick(stream.dmm(), tick, simulated);
+            stream.set_tick(applied);
         }
 
         // Process any pending remote commands. Goes through the stream's
@@ -518,6 +534,7 @@ where
                     match ctrl_rx.recv_timeout(reconnect_interval) {
                         Err(mpsc::RecvTimeoutError::Disconnected) => return,
                         Ok(ThreadControl::SetPaused(p)) => paused = p,
+                        Ok(ThreadControl::SetInterval(ms)) => tick = interval_tick(ms),
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
 
@@ -565,6 +582,18 @@ fn wait_to_be_stopped(ctrl_rx: &mpsc::Receiver<ThreadControl>, stop_flag: &Atomi
     }
 }
 
+/// The tick a stream over `dmm` runs at for an interval of `tick`: floored
+/// for a simulated meter that answers at once. Session time on a mock, which
+/// is what lets a preseed burst hand out tick-spaced history without waiting
+/// for it.
+fn session_tick<T: Transport>(dmm: &dmm_lib::Dmm<T>, tick: Duration, simulated: bool) -> Duration {
+    if simulated {
+        dmm_lib::mock::simulated_tick(dmm.delivery(), tick)
+    } else {
+        tick
+    }
+}
+
 /// A stream over `dmm` whose pacing sleep observes the stop request too.
 ///
 /// Without it a 2 s interval keeps the USB handle open for the rest of the
@@ -577,13 +606,7 @@ fn new_stream<'a, T: Transport>(
     simulated: bool,
     stop_flag: &Arc<AtomicBool>,
 ) -> MeasurementStream<'a, T> {
-    // Session time on a mock, which is what lets a preseed burst hand out
-    // tick-spaced history without waiting for it.
-    let tick = if simulated {
-        dmm_lib::mock::simulated_tick(dmm.delivery(), tick)
-    } else {
-        tick
-    };
+    let tick = session_tick(dmm, tick, simulated);
     let stop = Arc::clone(stop_flag);
     MeasurementStream::new(dmm, tick).with_cancel(move || stop.load(Ordering::Relaxed))
 }
@@ -647,7 +670,8 @@ mod tests {
     fn no_messages_keeps_running() {
         let (_tx, rx) = mpsc::channel::<ThreadControl>();
         let mut paused = false;
-        assert!(handle_control(&rx, &mut paused));
+        let mut tick = Duration::ZERO;
+        assert!(handle_control(&rx, &mut paused, &mut tick));
         assert!(!paused);
     }
 
@@ -659,19 +683,39 @@ mod tests {
         let (tx, rx) = mpsc::channel::<ThreadControl>();
         drop(tx);
         let mut paused = false;
-        assert!(!handle_control(&rx, &mut paused));
+        let mut tick = Duration::ZERO;
+        assert!(!handle_control(&rx, &mut paused, &mut tick));
+    }
+
+    /// A Sample interval picked while connected reaches the thread, clamped
+    /// as the one it started with is.
+    #[test]
+    fn an_interval_picked_while_connected_is_applied() {
+        let (tx, rx) = mpsc::channel();
+        let mut paused = false;
+        let mut tick = Duration::ZERO;
+        tx.send(ThreadControl::SetInterval(1000)).unwrap();
+        assert!(handle_control(&rx, &mut paused, &mut tick));
+        assert_eq!(tick, Duration::from_secs(1));
+        tx.send(ThreadControl::SetInterval(u32::MAX)).unwrap();
+        assert!(handle_control(&rx, &mut paused, &mut tick));
+        assert_eq!(
+            tick,
+            Duration::from_millis(u64::from(MAX_SAMPLE_INTERVAL_MS))
+        );
     }
 
     #[test]
     fn pause_is_recorded_and_resume_returns_immediately() {
         let (tx, rx) = mpsc::channel();
         let mut paused = false;
+        let mut tick = Duration::ZERO;
 
         tx.send(ThreadControl::SetPaused(true)).unwrap();
         // Queue the resume too, so the paused branch has a message waiting
         // and the test doesn't sit through the poll interval.
         tx.send(ThreadControl::SetPaused(false)).unwrap();
-        assert!(handle_control(&rx, &mut paused));
+        assert!(handle_control(&rx, &mut paused, &mut tick));
         assert!(!paused, "resume must clear the pause");
     }
 
@@ -682,7 +726,8 @@ mod tests {
         let (tx, rx) = mpsc::channel::<ThreadControl>();
         drop(tx);
         let mut paused = true;
-        assert!(!handle_control(&rx, &mut paused));
+        let mut tick = Duration::ZERO;
+        assert!(!handle_control(&rx, &mut paused, &mut tick));
     }
 
     fn reading(mode_raw: u16, mode: &'static str) -> Measurement {
@@ -847,8 +892,9 @@ mod tests {
     fn paused_thread_wakes_periodically_and_stays_paused() {
         let (_tx, rx) = mpsc::channel::<ThreadControl>();
         let mut paused = true;
+        let mut tick = Duration::ZERO;
         let start = std::time::Instant::now();
-        assert!(handle_control(&rx, &mut paused));
+        assert!(handle_control(&rx, &mut paused, &mut tick));
         assert!(paused);
         assert!(
             start.elapsed() >= PAUSE_POLL_INTERVAL,

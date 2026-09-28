@@ -3100,23 +3100,31 @@ fn clear_and_mode_change_drop_the_level() {
     assert_eq!(g.pushed_total, 1, "and the sequence numbers with it");
 }
 
-/// Where the trace breaks was decided against the old threshold, so the
-/// level's runs would no longer match what the main plot draws.
+/// A stretch read at a slow interval keeps its line when a faster one is
+/// picked: its spacing was judged against the interval it was read at. A
+/// silence after the change is judged against the new one.
 #[test]
-fn a_threshold_change_drops_the_level() {
+fn a_shorter_interval_keeps_the_history_unbroken() {
     let mut g = Graph::new();
     let t0 = Instant::now();
-    g.push(1.0, t0, "DC V", "V", None);
-    g.set_sample_interval_ms(100);
+    g.set_sample_interval_ms(2_000);
+    for i in 0..5 {
+        g.push(1.0, t0 + Duration::from_secs(2 * i), "DC V", "V", None);
+    }
     g.ensure_level(0.01);
-
     g.set_sample_interval_ms(100);
-    assert!(
-        g.minimap_level.is_some(),
-        "the same interval leaves the threshold where it was"
+    assert!(g.visible_gaps().is_empty(), "{:?}", g.visible_gaps());
+    assert!(g.minimap_level.is_some(), "the level's runs still hold");
+
+    // The stretch across the change began at 2 s, and is judged by it.
+    g.push(1.0, t0 + Duration::from_secs(10), "DC V", "V", None);
+    assert!(g.visible_gaps().is_empty(), "{:?}", g.visible_gaps());
+    g.push(1.0, t0 + Duration::from_secs(12), "DC V", "V", None);
+    assert_eq!(
+        g.visible_gaps().len(),
+        1,
+        "2 s of silence at 100 ms is a gap"
     );
-    g.set_sample_interval_ms(1_000);
-    assert!(g.minimap_level.is_none());
 }
 
 /// The point of the level: neither a push nor a frame may cost more because
