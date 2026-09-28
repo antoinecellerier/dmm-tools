@@ -1,6 +1,6 @@
 use super::render::{
     KeyStyle, cursor_label_rect, layout_marker_flags, quantize_for_hash, segment_hits_rect,
-    thin_for_drawing,
+    stepped, thin_for_drawing, whole_number_marks,
 };
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
@@ -161,6 +161,7 @@ fn push_overload(g: &mut Graph, t: Instant, mode: &str, unit: &str) {
         display_raw: None,
         series: None,
         main_label: None,
+        levels: false,
         overlays: &[],
     });
     g.push_break(t);
@@ -1187,6 +1188,81 @@ fn time_axis_label_hour_keeps_whole_seconds() {
     assert_eq!(format_time_axis_label(86400.0, 10.0), "24h 0m");
 }
 
+/// Push an NCV level as `Capture::ingest` hands it over.
+fn push_level(g: &mut Graph, level: u8, t: Instant) {
+    g.push_sample(PlotSample {
+        value: Some(f64::from(level)),
+        timestamp: t,
+        mode: "NCV",
+        unit: "",
+        display_raw: None,
+        series: None,
+        main_label: None,
+        levels: true,
+        overlays: &[],
+    });
+}
+
+/// A level's grid steps by whole numbers however tall the plot, and the
+/// axis formatter then writes them with no decimals.
+#[test]
+fn an_ncv_grid_marks_whole_numbers_only() {
+    for base_step_size in [0.001, 0.03, 0.4, 1.0] {
+        let marks = whole_number_marks(egui_plot::GridInput {
+            bounds: (-0.4, 4.4),
+            base_step_size,
+        });
+        let values: Vec<f64> = marks.iter().map(|m| m.value).collect();
+        assert_eq!(values, [0.0, 1.0, 2.0, 3.0, 4.0], "at {base_step_size}");
+        assert!(marks.iter().all(|m| m.step_size >= 1.0), "{marks:?}");
+    }
+}
+
+/// A level holds until the next reading, then rises or falls at once.
+#[test]
+fn an_ncv_trace_is_drawn_as_steps() {
+    assert_eq!(
+        stepped(&[[0.0, 1.0], [0.1, 1.0], [0.2, 3.0], [0.3, 2.0]]),
+        [
+            [0.0, 1.0],
+            [0.1, 1.0],
+            [0.2, 1.0],
+            [0.2, 3.0],
+            [0.3, 3.0],
+            [0.3, 2.0]
+        ]
+    );
+    assert!(stepped(&[]).is_empty());
+}
+
+/// A steady 0 still gets an axis from 0 to 1, and a trace of levels always
+/// takes 0 in; the readouts drop the decimals for a point, keep one for a
+/// mean, and go back to four once the dial leaves NCV.
+#[test]
+fn an_ncv_trace_reads_as_whole_numbers_from_zero() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..3 {
+        push_level(&mut g, 0, t0 + Duration::from_millis(i * 100));
+    }
+    assert_eq!(
+        g.y_min_max_padded(0.0, 1.0, true),
+        Some(pad_range(0.0, 1.0))
+    );
+    for i in 3..6 {
+        push_level(&mut g, 3, t0 + Duration::from_millis(i * 100));
+    }
+    assert_eq!(
+        g.y_min_max_padded(0.3, 1.0, true),
+        Some(pad_range(0.0, 3.0))
+    );
+    assert_eq!((g.decimals(true), g.decimals(false)), (0, 1));
+
+    g.push(1.5, t0 + Duration::from_secs(1), "DC V", "V", None);
+    assert_eq!(g.len(), 1, "the dial turn restarts the trace");
+    assert_eq!((g.decimals(true), g.decimals(false)), (4, 4));
+}
+
 #[test]
 fn time_axis_label_hour_subsecond_step() {
     // Unlikely in practice but the formatter should not drop the
@@ -1300,6 +1376,7 @@ fn push_aux(
         display_raw: None,
         series,
         main_label: None,
+        levels: false,
         overlays: &overlays,
     });
 }
@@ -1316,6 +1393,7 @@ fn push_acdc(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
         display_raw: None,
         series: None,
         main_label: Some("DC"),
+        levels: false,
         overlays: if ac.is_some() { &overlays } else { &[] },
     });
 }
@@ -1332,6 +1410,7 @@ fn push_acdc_plotting_ac(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<
         display_raw: None,
         series: Some("AC"),
         main_label: Some("DC"),
+        levels: false,
         overlays: if dc.is_some() { &overlays } else { &[] },
     });
 }
@@ -1447,6 +1526,7 @@ fn a_swap_keeps_the_breaks_of_both_traces() {
         display_raw: None,
         series: None,
         main_label: Some("DC"),
+        levels: false,
         overlays: &[("AC", "V", None)],
     });
     push_acdc(&mut g, at(900), None, Some(0.2));
@@ -1766,6 +1846,7 @@ fn push_vac_hz(g: &mut Graph, t: Instant, series: Option<&str>, v: f64, hz: (f64
         display_raw: None,
         series,
         main_label: None,
+        levels: false,
         overlays: &overlays,
     });
 }
@@ -1895,6 +1976,7 @@ fn a_drawn_sub_value_takes_the_slot_of_an_undrawn_one() {
         display_raw: None,
         series: None,
         main_label: None,
+        levels: false,
         overlays: &[
             ("Max", "V", Some(231.0)),
             ("Average", "V", Some(230.0)),
@@ -1923,6 +2005,7 @@ fn the_overlay_palette_counts_drawn_traces_only() {
         display_raw: None,
         series: None,
         main_label: None,
+        levels: false,
         overlays: &[("Max", "V", Some(231.0))],
     });
     let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);

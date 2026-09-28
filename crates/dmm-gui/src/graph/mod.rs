@@ -178,6 +178,10 @@ pub struct PlotSample<'a> {
     /// The meter's name for its main reading ("DC" beside an "AC" part), or
     /// `None` for [`MAIN_SERIES`].
     pub main_label: Option<&'static str>,
+    /// The plotted series is a level — an NCV reading's bars — rather than a
+    /// quantity: its axis steps in whole numbers and its readouts drop the
+    /// decimals.
+    pub levels: bool,
     /// The frame's other series, as (label, unit, value). Those in `unit`
     /// are drawn beside the plotted series; the rest are kept for **Plot:**
     /// to switch to. `None` for an over-range sub-value — it breaks that
@@ -210,6 +214,9 @@ pub struct Graph {
     /// The meter's name for its main reading, from the latest sample; `None`
     /// for [`MAIN_SERIES`].
     main_label: Option<&'static str>,
+    /// The plotted series is a level, from the latest point: see
+    /// [`PlotSample::levels`].
+    levels: bool,
     /// Label of the series `history` was recorded from; `None` for the main
     /// reading. Distinct from `selected_series`: this one only moves when a
     /// sample actually arrives for the new choice.
@@ -359,6 +366,7 @@ impl Graph {
             current_unit: String::new(),
             current_series: None,
             main_label: None,
+            levels: false,
             selected_series: None,
             hidden_overlays: HashSet::new(),
             series_options: Vec::new(),
@@ -516,6 +524,7 @@ impl Graph {
             display_raw,
             series: None,
             main_label: None,
+            levels: false,
             overlays: &[],
         });
     }
@@ -578,6 +587,7 @@ impl Graph {
         self.register_overlays(sample.overlays);
         match value {
             Some(value) => {
+                self.levels = sample.levels;
                 let last = self.history.back().map(|p| p.time);
                 if self.stopped_for(self.main_missing_frames, last, now)
                     && self.pending_break.is_none()
@@ -778,6 +788,7 @@ impl Graph {
         self.current_mode = Some(mode.to_string());
         self.current_unit = unit.to_string();
         self.current_series = series.map(str::to_owned);
+        self.levels = false;
         self.origin = Some(now);
         self.live = true;
         self.view_center = 0.0;
@@ -973,6 +984,18 @@ impl Graph {
         &self.current_unit
     }
 
+    /// Decimals a figure of the plotted series is written with: four, or
+    /// none for one of a level's own points, which is a whole number. A
+    /// figure of a level's that isn't one of its points — a mean, a typed
+    /// reference line, a height on the axis — gets one.
+    pub fn decimals(&self, point: bool) -> usize {
+        match (self.levels, point) {
+            (false, _) => 4,
+            (true, true) => 0,
+            (true, false) => 1,
+        }
+    }
+
     /// Record that the series was interrupted — the meter reported a value
     /// that can't be plotted (an overload), so the next point starts a new
     /// segment.
@@ -1076,6 +1099,7 @@ impl Graph {
         self.main_missing_frames = 0;
         self.current_mode = None;
         self.current_unit.clear();
+        self.levels = false;
         self.last_display_raw = None;
         self.origin = None;
         self.live = true;

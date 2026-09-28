@@ -948,13 +948,19 @@ mod tests {
         assert_eq!(app.graph.first_point_time(), Some(t0));
     }
 
-    /// NCV readings are never plotted: an empty graph cuts nothing.
+    /// Turning the dial to NCV restarts the graph on the levels, as any
+    /// other mode does — the amps before it are not left on screen — and the
+    /// history with it.
     #[test]
-    fn ncv_readings_are_kept_with_nothing_plotted() {
+    fn turning_to_ncv_restarts_the_graph_on_its_levels() {
         let mut app = connected_app();
-        let ncv = ("NCV", MeasuredValue::NcvLevel(2));
-        deliver_readings(&mut app, &[ncv.clone(), ncv.clone(), ncv]);
-        assert_eq!(app.graph.first_point_time(), None);
+        deliver_readings(&mut app, &[DC, DC]);
+        assert_eq!(app.graph.decimals(true), 4);
+        let ncv = |l| ("NCV", MeasuredValue::NcvLevel(l));
+        deliver_readings(&mut app, &[ncv(0), ncv(2), ncv(3)]);
+        assert_eq!(app.graph.plotted_mode(), Some("NCV"));
+        assert_eq!(app.graph.len(), 3);
+        assert_eq!(app.graph.decimals(true), 0, "written as the level it is");
         assert_eq!(modes(&app), ["NCV"; 3]);
     }
 

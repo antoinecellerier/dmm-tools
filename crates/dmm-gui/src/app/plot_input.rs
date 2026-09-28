@@ -26,6 +26,8 @@ pub(super) enum Plotted {
 /// selected series and the ones kept beside it are picked out.
 pub(super) struct PlotInput<'a> {
     pub plotted: Plotted,
+    /// The plotted series is an NCV level rather than a quantity.
+    pub levels: bool,
     /// Unit of the plotted series — the meter's, or the sub-value's own.
     pub unit: &'a str,
     pub display_raw: Option<&'a str>,
@@ -36,18 +38,24 @@ pub(super) struct PlotInput<'a> {
     pub overlays: Vec<(&'a str, &'a str, Option<f64>)>,
 }
 
-/// What a measured value contributes to the plotted series, or `None` for
-/// something with no place on a value axis.
-fn plotted_value(v: &MeasuredValue) -> Option<Plotted> {
+/// What a measured value contributes to the plotted series.
+fn plotted_value(v: &MeasuredValue) -> Plotted {
     match v {
-        MeasuredValue::Normal(v) => Some(Plotted::Point(*v)),
-        MeasuredValue::Overload => Some(Plotted::OverRange),
-        MeasuredValue::NoReading(_) => Some(Plotted::NoReading),
-        MeasuredValue::Absent => Some(Plotted::Absent),
-        // NCV is a bar-graph level, not a quantity — plotting it against a
-        // volt axis would be meaningless.
-        MeasuredValue::NcvLevel(_) => None,
+        MeasuredValue::Normal(v) => Plotted::Point(*v),
+        // The bars lit, on an axis of their own: NCV is a mode, so the graph
+        // restarts on entering it.
+        MeasuredValue::NcvLevel(l) => Plotted::Point(f64::from(*l)),
+        MeasuredValue::Overload => Plotted::OverRange,
+        MeasuredValue::NoReading(_) => Plotted::NoReading,
+        MeasuredValue::Absent => Plotted::Absent,
     }
+}
+
+/// Whether a value is an NCV level: plotted as the whole number it is, and
+/// spoken as that number rather than the meter's display text, which is the
+/// bars ("- -").
+fn is_level(v: &MeasuredValue) -> bool {
+    matches!(v, MeasuredValue::NcvLevel(_))
 }
 
 /// What a measured value contributes to a trace drawn beside the plotted
@@ -76,12 +84,13 @@ pub(super) fn resolve_plot_input<'a>(
     plotted_mode: Option<&str>,
 ) -> Option<PlotInput<'a>> {
     let main_unit: &str = &m.unit;
-    let (plotted, unit, display_raw, series) = match selected {
+    let (plotted, levels, unit, display_raw, series) = match selected {
         Some((sel, sel_unit)) => match m.aux_values.iter().find(|a| a.label.as_ref() == sel) {
             Some(aux) => (
-                plotted_value(&aux.value)?,
+                plotted_value(&aux.value),
+                is_level(&aux.value),
                 aux.unit_or(main_unit),
-                aux.display_raw.as_deref(),
+                aux.display_raw.as_deref().filter(|_| !is_level(&aux.value)),
                 // Borrowed from the aux, the one borrow that is surely
                 // `'a`; `sel` is the same label.
                 Some(aux.label.as_ref()),
@@ -91,7 +100,7 @@ pub(super) fn resolve_plot_input<'a>(
             // AC component is plotted, or a UT181A frame short of T2. Nothing
             // for the plotted series, then, and the trace is left alone.
             None if plotted_mode == Some(m.mode.as_ref()) => {
-                (Plotted::Absent, sel_unit, None, Some(sel))
+                (Plotted::Absent, false, sel_unit, None, Some(sel))
             }
             // Another mode's frame is skipped rather than plotted: plotting
             // the main reading would hand `push_sample` a `series` of `None`,
@@ -102,9 +111,10 @@ pub(super) fn resolve_plot_input<'a>(
             None => return None,
         },
         None => (
-            plotted_value(&m.value)?,
+            plotted_value(&m.value),
+            is_level(&m.value),
             main_unit,
-            m.display_raw.as_deref(),
+            m.display_raw.as_deref().filter(|_| !is_level(&m.value)),
             None,
         ),
     };
@@ -140,6 +150,7 @@ pub(super) fn resolve_plot_input<'a>(
     }
     Some(PlotInput {
         plotted,
+        levels,
         unit,
         display_raw,
         series,
@@ -462,10 +473,19 @@ mod tests {
         );
     }
 
-    /// NCV is a bar-graph level, not a quantity on a value axis.
+    /// An NCV reading plots its level, as a level: the graph writes it as
+    /// the whole number it is, and speaks it rather than the bars' text.
     #[test]
-    fn an_ncv_reading_is_not_plotted() {
-        let m = Measurement::test_fixture(MeasuredValue::NcvLevel(3), "", StatusFlags::default());
-        assert!(resolve(&m, None).is_none());
+    fn an_ncv_reading_plots_its_level() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::NcvLevel(3), "", StatusFlags::default());
+        m.display_raw = Some("---".into());
+        let plot = resolve(&m, None).expect("plottable");
+        assert_eq!(plot.plotted, Plotted::Point(3.0));
+        assert!(plot.levels);
+        assert_eq!(plot.display_raw, None);
+
+        let volts = meter(4.9, "V", vec![]);
+        assert!(!resolve(&volts, None).expect("plottable").levels);
     }
 }

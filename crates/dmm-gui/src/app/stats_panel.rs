@@ -34,17 +34,24 @@ impl FormattedStats {
     ///
     /// The integrals arrive already scaled to their display unit (see
     /// [`stats::integral_display`]) as `(value, display_unit, elapsed_secs)`.
+    ///
+    /// `visible_decimals` is what the graph writes the plotted series with,
+    /// as ([`Graph::decimals`] of a point, of a mean): an NCV level's Min and
+    /// Max are whole numbers.
+    ///
+    /// [`Graph::decimals`]: crate::graph::Graph::decimals
     fn new(
         stats: &RunningStats,
         visible: Option<&RunningStats>,
         unit: &str,
         visible_unit: &str,
+        visible_decimals: (usize, usize),
         integral: Option<(f64, &str, Option<f64>)>,
         visible_integral: Option<(f64, &str, Option<f64>)>,
     ) -> Self {
-        let fmt_in = |unit: &str, v: Option<f64>| -> String {
+        let fmt_in = |unit: &str, v: Option<f64>, decimals: usize| -> String {
             match v {
-                Some(val) => format!("{val:>10.4} {unit}"),
+                Some(val) => format!("{val:>10.decimals$} {unit}"),
                 None => format!("{:>10} {unit}", crate::NO_DATA),
             }
         };
@@ -56,18 +63,21 @@ impl FormattedStats {
         };
         // One accumulator type on both sides, so the two groups cannot drift
         // apart in how an absent figure is rendered.
-        let group = |unit: &str, s: &RunningStats, integral: Option<(f64, &str, Option<f64>)>| {
+        let group = |unit: &str,
+                     s: &RunningStats,
+                     (point, mean): (usize, usize),
+                     integral: Option<(f64, &str, Option<f64>)>| {
             FormattedStatsGroup {
-                min: fmt_in(unit, s.min),
-                max: fmt_in(unit, s.max),
-                avg: fmt_in(unit, s.avg()),
+                min: fmt_in(unit, s.min, point),
+                max: fmt_in(unit, s.max, point),
+                avg: fmt_in(unit, s.avg(), mean),
                 count: s.count,
                 integral: fmt_integral(integral),
             }
         };
         Self {
-            session: group(unit, stats, integral),
-            visible: visible.map(|v| group(visible_unit, v, visible_integral)),
+            session: group(unit, stats, (4, 4), integral),
+            visible: visible.map(|v| group(visible_unit, v, visible_decimals, visible_integral)),
         }
     }
 }
@@ -135,6 +145,7 @@ impl App {
             visible_stats.as_ref(),
             unit,
             visible_unit,
+            (self.graph.decimals(true), self.graph.decimals(false)),
             integral_info,
             visible_integral,
         );
@@ -241,5 +252,39 @@ impl App {
             "Intervals between samples longer than 2 s are not integrated. \
              Lower the sample interval or expect a partial integral.",
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// NCV levels in view: Min and Max as the whole numbers they are, the
+    /// average to one decimal, and no integral for a level.
+    #[test]
+    fn visible_levels_read_as_whole_numbers() {
+        let mut levels = RunningStats::new();
+        for l in [0.0, 2.0, 3.0] {
+            levels.push(l);
+        }
+        let formatted = FormattedStats::new(
+            &RunningStats::new(),
+            Some(&levels),
+            "",
+            "",
+            (0, 1),
+            None,
+            None,
+        );
+        let vis = formatted.visible.expect("levels in view");
+        let figures = [&vis.min, &vis.max, &vis.avg].map(|s| s.trim().to_string());
+        assert_eq!(figures, ["0", "3", "1.7"]);
+        assert_eq!(
+            vis.min.len(),
+            formatted.session.min.len(),
+            "columns line up"
+        );
+        // A level has no unit, so the panel finds no integral to show.
+        assert_eq!(stats::integral_display(6.0, ""), None);
     }
 }

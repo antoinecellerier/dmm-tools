@@ -350,7 +350,9 @@ impl Graph {
                     let va = self.nearest_point(ta).map(|(_, v)| v);
                     let vb = self.nearest_point(tb).map(|(_, v)| v);
                     let dv = match (va, vb) {
-                        (Some(a), Some(b)) => format!("{:.4}", (b - a).abs()),
+                        (Some(a), Some(b)) => {
+                            format!("{:.prec$}", (b - a).abs(), prec = self.decimals(true))
+                        }
                         _ => crate::NO_DATA.to_string(),
                     };
                     let unit = &self.current_unit;

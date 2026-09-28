@@ -167,8 +167,8 @@ impl Capture {
     ///
     /// Runs after the graph has taken the reading, so a mode change the graph
     /// restarted on already shows as its first point. An empty graph cuts
-    /// nothing: NCV and over-range readings add no point, and are still
-    /// readings to export.
+    /// nothing: over-range readings add no point, and are still readings to
+    /// export.
     fn keep_sample(
         &mut self,
         m: &Measurement,
@@ -238,6 +238,7 @@ fn plot(graph: &mut Graph, m: &Measurement) {
     );
     let Some(PlotInput {
         plotted,
+        levels,
         unit,
         display_raw,
         series,
@@ -254,6 +255,7 @@ fn plot(graph: &mut Graph, m: &Measurement) {
         display_raw,
         series,
         main_label: m.main_label.map(MainLabel::as_str),
+        levels,
         overlays: &overlays,
     };
     match plotted {

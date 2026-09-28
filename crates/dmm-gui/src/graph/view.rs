@@ -213,6 +213,12 @@ impl Graph {
         if y_min.is_infinite() {
             return None;
         }
+        // A level's axis starts at none and reaches at least one, so that a
+        // steady 0 still draws two whole-number ticks rather than a sliver.
+        if self.levels {
+            y_min = y_min.min(0.0);
+            y_max = y_max.max(1.0);
+        }
         Some(pad_range(y_min, y_max))
     }
 

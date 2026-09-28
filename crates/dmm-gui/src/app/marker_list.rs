@@ -286,7 +286,7 @@ impl App {
                 Some(s) => log_line(&s.measurement),
                 None => format!(
                     "{:>10} {}",
-                    format!("{value:.4}"),
+                    format!("{value:.prec$}", prec = self.graph.decimals(true)),
                     self.graph.plotted_unit()
                 ),
             };

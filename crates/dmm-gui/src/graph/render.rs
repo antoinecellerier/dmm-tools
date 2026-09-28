@@ -3,8 +3,8 @@
 
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
-    AxisHints, HLine, HoverPosition, Line, Plot, PlotBounds, PlotPoints, PlotTransform, Points,
-    Span, VLine,
+    AxisHints, GridInput, GridMark, HLine, HoverPosition, Line, Plot, PlotBounds, PlotPoints,
+    PlotTransform, Points, Span, VLine,
 };
 use std::time::Instant;
 
@@ -286,6 +286,32 @@ pub(super) fn thin_for_drawing(points: &[[f64; 2]], bucket_secs: f64) -> Vec<[f6
     out
 }
 
+/// The Y grid of a level's axis: egui_plot's decade steps, the finest of
+/// them never under one — a level is a whole number, and a tick at 0.5 of
+/// one names a reading the meter cannot give.
+pub(super) fn whole_number_marks(input: GridInput) -> Vec<GridMark> {
+    egui_plot::uniform_grid_spacer(|input| {
+        let step = 10f64.powf(input.base_step_size.max(1.0).log10().ceil());
+        [step, step * 10.0, step * 100.0]
+    })(input)
+}
+
+/// A trace of levels drawn as steps: each level held until the next reading,
+/// then a riser. A slope between two readings would draw levels in between
+/// that the meter never showed.
+pub(super) fn stepped(points: &[[f64; 2]]) -> Vec<[f64; 2]> {
+    let mut out: Vec<[f64; 2]> = Vec::with_capacity(points.len() * 2);
+    for p in points {
+        if let Some(&[_, held]) = out.last()
+            && held != p[1]
+        {
+            out.push([p[0], held]);
+        }
+        out.push(*p);
+    }
+    out
+}
+
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
 /// for mean, reference, and cursor overlays after the plot has been rendered.
 struct OverlayLabelData {
@@ -302,6 +328,10 @@ struct OverlayLabelData {
     /// keep off.
     trace: Vec<Vec<[f64; 2]>>,
     overlay_unit: String,
+    /// [`Graph::decimals`] for the cursors' values, which are points, and
+    /// for the mean and the reference lines, which aren't.
+    point_decimals: usize,
+    other_decimals: usize,
     view_max: f64,
     mean_color: egui::Color32,
     ref_color: egui::Color32,
@@ -651,12 +681,14 @@ impl Graph {
         let mean_value = self.visible_stats().and_then(|s| s.avg());
 
         let cursor_unit = self.current_unit.clone();
+        let (point_decimals, other_decimals) = (self.decimals(true), self.decimals(false));
+        let levels = self.levels;
         // Moved into the label_formatter closure, which is rebuilt each frame.
         let tooltip_spans = overload_spans.clone();
         // The readout under the pointer would cover the menu's entry, which
         // opens where the pointer is.
         let menu_open = egui::Popup::is_id_open(ui.ctx(), plot_menu_id());
-        let plot = Plot::new("main_plot")
+        let mut plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
             .allow_drag(Vec2b::new(allow_plot_x_drag, false))
             // handle_interaction owns the Ctrl+wheel zoom: it reads the same
@@ -708,17 +740,30 @@ impl Graph {
                 if tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b) {
                     return Some(format!("{time_label}\noverload"));
                 }
+                // Only a named item is a trace, so only its y is a point; a
+                // helper's, or the pointer's own, is a height on the axis.
+                let decimals = if name.is_empty() {
+                    other_decimals
+                } else {
+                    point_decimals
+                };
                 // With several traces on the same axes the number alone is
                 // ambiguous, so name the one being hovered. Helper items carry
                 // an empty name and fall through to the plain form.
                 if multi_series && !name.is_empty() {
                     return Some(format!(
-                        "{time_label}\n{name}: {:.4} {cursor_unit}",
+                        "{time_label}\n{name}: {:.decimals$} {cursor_unit}",
                         point.y
                     ));
                 }
-                Some(format!("{time_label}\n{:.4} {}", point.y, cursor_unit))
+                Some(format!(
+                    "{time_label}\n{:.decimals$} {cursor_unit}",
+                    point.y
+                ))
             });
+        if levels {
+            plot = plot.y_grid_spacer(whole_number_marks);
+        }
         let response = plot.show(ui, |plot_ui| {
             // Set exact bounds: our X view range + computed Y range
             plot_ui.set_plot_bounds(PlotBounds::from_min_max(
@@ -774,8 +819,10 @@ impl Graph {
                 }
             }
 
-            let drawn_trace: Vec<Vec<[f64; 2]>> =
-                visible_segments.iter().map(|s| thin(s)).collect();
+            let drawn_trace: Vec<Vec<[f64; 2]>> = visible_segments
+                .iter()
+                .map(|s| if levels { stepped(&thin(s)) } else { thin(s) })
+                .collect();
             for seg in &drawn_trace {
                 plot_ui.line(
                     Line::new(main_name.clone(), PlotPoints::new(seg.clone())).color(line_color),
@@ -879,6 +926,8 @@ impl Graph {
             cursor_vb,
             trace: response.inner,
             overlay_unit: self.current_unit.clone(),
+            point_decimals,
+            other_decimals,
             view_max,
             mean_color,
             ref_color,
@@ -1045,7 +1094,9 @@ impl Graph {
                     "currently over range".to_string()
                 }
                 (Some(raw), _) => format!("last reading {} {unit}", raw.trim()),
-                (None, Some(v)) => format!("last reading {v:.4} {unit}"),
+                (None, Some(v)) => {
+                    format!("last reading {v:.prec$} {unit}", prec = self.decimals(true))
+                }
                 (None, None) => "no data".to_string(),
             };
             // The plot draws several traces at once for a multi-display
@@ -1172,7 +1223,11 @@ impl Graph {
             painter.text(
                 egui::pos2(plot_rect.right() - 4.0, y_pos - 2.0),
                 egui::Align2::RIGHT_BOTTOM,
-                format!("Mean: {avg:.4} {}", data.overlay_unit),
+                format!(
+                    "Mean: {avg:.prec$} {}",
+                    data.overlay_unit,
+                    prec = data.other_decimals
+                ),
                 label_font.clone(),
                 data.mean_color,
             );
@@ -1188,7 +1243,11 @@ impl Graph {
                 painter.text(
                     egui::pos2(plot_rect.right() - 4.0, y_pos - 2.0),
                     egui::Align2::RIGHT_BOTTOM,
-                    format!("{v:.4} {}", data.overlay_unit),
+                    format!(
+                        "{v:.prec$} {}",
+                        data.overlay_unit,
+                        prec = data.other_decimals
+                    ),
                     label_font.clone(),
                     data.ref_color,
                 );
@@ -1205,7 +1264,11 @@ impl Graph {
                 let y_val = value.unwrap_or(0.0);
                 let pos = transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
                 let galley = painter.layout_no_wrap(
-                    format!("{name}: {t:.2} s / {y_val:.4} {}", data.overlay_unit),
+                    format!(
+                        "{name}: {t:.2} s / {y_val:.prec$} {}",
+                        data.overlay_unit,
+                        prec = data.point_decimals
+                    ),
                     label_font.clone(),
                     data.cursor_color,
                 );
