@@ -126,10 +126,11 @@ impl Protocol for ZotekProtocol {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used, and it only cuts packets of the four
         // types, each with a layout. About 2.6 packets a second arrive
-        // (spec §11.4), well inside read_frame's 2 s. A packet with no digit
-        // lit on the main display has no reading, so it is reported and
-        // skipped for the next one.
-        let packet = framing::read_frame(
+        // (spec §11.4), well inside read_frame's 2 s; the newest queued one
+        // is what the meter shows. A packet with no digit lit on the main
+        // display has no reading, so it is reported and skipped for the
+        // next one.
+        let packet = framing::read_newest_frame(
             &mut self.rx_buf,
             transport,
             frame::extract_packet,
@@ -245,7 +246,7 @@ mod tests {
     #[test]
     fn another_layout_is_decoded_and_named_once() {
         let (raw, plain) = EXAMPLES[3];
-        let mock = MockTransport::new(vec![raw.to_vec(), raw.to_vec()]);
+        let mock = MockTransport::new(vec![raw.to_vec()]);
         let mut proto = ZotekProtocol::new_zt300ab();
         assert!(proto.other_layout(3).is_none());
         let m = proto.request_measurement(&mock).unwrap();
@@ -253,6 +254,7 @@ mod tests {
         assert_eq!(m.aux_values.len(), 1, "decoded as type 4");
         assert!(proto.warned_layout);
         assert!(proto.other_layout(4).is_none(), "warned once");
+        mock.push_response(raw.to_vec());
         assert!(proto.request_measurement(&mock).is_ok());
 
         let mut fresh = ZotekProtocol::new_zt300ab();
@@ -394,21 +396,27 @@ mod tests {
     }
 
     /// Notifications arrive in pieces and back to back; each read returns
-    /// the next whole packet, descrambled.
+    /// the newest whole packet queued, descrambled.
     #[test]
     fn request_measurement_reads_packets_across_reads() {
         let (raw, plain) = EXAMPLES[0];
         let mut stream = raw[4..].to_vec();
         stream.extend_from_slice(raw);
-        stream.extend_from_slice(raw);
-        let reports: Vec<Vec<u8>> = stream.chunks(3).map(<[u8]>::to_vec).collect();
-        let mock = MockTransport::new(reports);
+        let pieces =
+            |bytes: &[u8]| -> Vec<Vec<u8>> { bytes.chunks(3).map(<[u8]>::to_vec).collect() };
+        let mock = MockTransport::new(pieces(&stream));
         let mut proto = ZotekProtocol::new_zt300ab();
         for _ in 0..2 {
             let m = proto.request_measurement(&mock).unwrap();
             assert_eq!(m.raw_payload, plain);
             assert_eq!(m.display_raw.as_deref(), Some("-12.34"));
+            // The next packet the meter sends.
+            for piece in pieces(raw) {
+                mock.push_response(piece);
+            }
         }
+        // The packet queued last is read; then nothing is queued.
+        proto.request_measurement(&mock).unwrap();
         assert!(proto.request_measurement(&mock).is_err());
     }
 

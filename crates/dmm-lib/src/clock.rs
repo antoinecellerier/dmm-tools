@@ -238,6 +238,21 @@ impl Clock {
         }
     }
 
+    /// How long [`sleep`](Clock::sleep)ing `d` would block in real time: `d`
+    /// on the wall clock, what the burst does not cover over the factor on a
+    /// scaled clock, nothing on a manual one. For a simulated transport,
+    /// whose read timeouts are real time.
+    pub(crate) fn real_wait(&self, d: Duration) -> Duration {
+        match &self.inner {
+            Inner::Real => d,
+            Inner::Scaled(s) => {
+                let remaining = lock(&s.state).remaining;
+                scale_duration(d.saturating_sub(remaining), 1.0 / s.factor)
+            }
+            Inner::Manual(_) => Duration::ZERO,
+        }
+    }
+
     /// Move a manual clock forward by `d`.
     ///
     /// Real and scaled clocks move on their own, so asking them to advance is
@@ -398,6 +413,18 @@ mod tests {
             clock.now().saturating_duration_since(start) >= Duration::from_millis(50),
             "the whole sleep is session time, burst or not"
         );
+    }
+
+    /// A sleep's real cost is what the burst leaves of it, over the factor.
+    #[test]
+    fn real_wait_is_what_a_sleep_blocks_for() {
+        let second = Duration::from_secs(1);
+        assert_eq!(Clock::real().real_wait(second), second);
+        assert_eq!(Clock::manual().real_wait(second), Duration::ZERO);
+        let slowed = Clock::scaled(0.01).real_wait(second);
+        assert!(slowed.abs_diff(Duration::from_secs(100)) < Duration::from_millis(1));
+        let preseeded = Clock::scaled(2.0).with_preseed(0.5).real_wait(second);
+        assert!(preseeded.abs_diff(Duration::from_millis(250)) < Duration::from_millis(1));
     }
 
     #[test]

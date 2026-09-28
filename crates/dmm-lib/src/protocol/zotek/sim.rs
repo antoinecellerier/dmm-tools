@@ -30,7 +30,7 @@ use crate::protocol::registry::{SelectableDevice, factory};
 use crate::protocol::{DeviceFamily, DeviceProfile, Protocol, Stability};
 use crate::transport::{Link, Transport};
 use log::debug;
-use std::cell::RefCell;
+use std::cell::{Cell as StdCell, RefCell};
 use std::f64::consts::TAU;
 use std::time::{Duration, Instant};
 
@@ -456,28 +456,43 @@ fn key_code(data: &[u8]) -> Result<u8> {
     Ok(key)
 }
 
-/// The simulated meter as a transport: each read hands out the next
-/// packet, scrambled as it goes on air; each write is a key press.
+/// How often the simulated meter sends a packet, in session time: "around
+/// 2.6 measurements per second", as an AN9002 was seen to (spec §11).
+const PERIOD: Duration = Duration::from_millis(385);
+
+/// Most packets the simulated meter keeps waiting for a reader: the sim's
+/// own queue bound, so a fast session clock draws a bounded backlog. Not a
+/// claim about what a platform's Bluetooth stack keeps.
+const QUEUED_PACKETS: u32 = 64;
+
+/// The simulated meter as a transport: it sends a packet every [`PERIOD`]
+/// of session time, which waits for the next read, scrambled as it goes on
+/// air; each write is a key press.
 pub(crate) struct SimulatedMeter {
     clock: Clock,
     meter: RefCell<Meter>,
     /// What of the last packet no read has taken yet.
     pending: RefCell<Vec<u8>>,
+    /// When the oldest packet not yet read was, or will be, sent.
+    next_due: StdCell<Instant>,
 }
 
 impl SimulatedMeter {
     fn new(clock: Clock) -> Self {
-        let meter = Meter::new(clock.now());
+        let now = clock.now();
         Self {
             clock,
-            meter: RefCell::new(meter),
+            meter: RefCell::new(Meter::new(now)),
             pending: RefCell::new(Vec::new()),
+            next_due: StdCell::new(now),
         }
     }
 
-    /// The next packet, descrambled.
-    fn packet(&self) -> Result<Vec<u8>> {
-        let display = self.meter.borrow().display(self.clock.now());
+    /// The packet sent at `at`, descrambled. It shows the meter as keyed
+    /// now, which differs from how it was keyed at `at` only for a packet
+    /// queued across a key press: a shortcut, as a read follows every press.
+    fn packet(&self, at: Instant) -> Result<Vec<u8>> {
+        let display = self.meter.borrow().display(at);
         let packet = display.and_then(|d| {
             let mut packet = ZT5B.draw(&d.cells, d.negative, &d.lit)?;
             packet[BLUETOOTH_ICON.0] |= BLUETOOTH_ICON.1;
@@ -495,11 +510,34 @@ impl Transport for SimulatedMeter {
         Ok(())
     }
 
-    fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+    /// The oldest packet waiting, else the next one if it is sent within
+    /// `timeout_ms` both of session time and of the real time the wait
+    /// blocks for, else nothing. The real bound is the transport's own: on
+    /// a slowed clock a packet a period away can be minutes off. The session
+    /// bound keeps a drain's short reads short where a sleep costs little
+    /// real time, and nothing costs no session time: on a manual clock,
+    /// sleeping out each empty read would send more packets and a reader
+    /// taking the newest would never find the queue empty.
+    fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
         let mut pending = self.pending.borrow_mut();
         if pending.is_empty() {
-            *pending = self.packet()?;
+            let now = self.clock.now();
+            let mut due = self.next_due.get();
+            if let Some(oldest) = now.checked_sub(PERIOD * QUEUED_PACKETS) {
+                due = due.max(oldest);
+            }
+            if let Some(wait) = due.checked_duration_since(now)
+                && !wait.is_zero()
+            {
+                let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
+                if wait > timeout || self.clock.real_wait(wait) > timeout {
+                    return Ok(0);
+                }
+                self.clock.sleep(wait);
+            }
+            *pending = self.packet(due)?;
             frame::xor_key(&mut pending);
+            self.next_due.set(due + PERIOD);
         }
         let n = buf.len().min(pending.len());
         buf[..n].copy_from_slice(&pending[..n]);
@@ -605,6 +643,82 @@ mod tests {
 
     fn secs(s: f64) -> Duration {
         Duration::from_secs_f64(s)
+    }
+
+    /// The meter sends a packet every 385 ms of session time, about 2.6 a
+    /// second, whoever reads them.
+    #[test]
+    fn the_sim_sends_about_2_6_packets_a_second() {
+        let clock = Clock::manual();
+        let meter = SimulatedMeter::new(clock.clone());
+        let start = clock.now();
+        let mut buf = [0u8; 64];
+        let mut sent = 0;
+        loop {
+            assert!(meter.read_timeout(&mut buf, 1000).unwrap() > 0);
+            if clock.now() - start >= secs(10.0) {
+                break;
+            }
+            sent += 1;
+        }
+        assert_eq!(sent, 26);
+    }
+
+    /// On a slowed clock the next packet is further off in real time than a
+    /// read's timeout, so the read comes back empty instead of blocking past
+    /// it.
+    #[test]
+    fn a_slowed_clock_never_blocks_past_the_timeout() {
+        let clock = Clock::scaled(0.01);
+        let meter = SimulatedMeter::new(clock);
+        let mut buf = [0u8; 64];
+        assert!(
+            meter.read_timeout(&mut buf, 2000).unwrap() > 0,
+            "sent at once"
+        );
+        let real_start = std::time::Instant::now();
+        // The next is 385 ms of session time away: 38.5 s of real time.
+        assert_eq!(meter.read_timeout(&mut buf, 2000).unwrap(), 0);
+        assert!(real_start.elapsed() < secs(2.0));
+    }
+
+    /// Nobody reading for a minute leaves the sim's own bound of packets
+    /// waiting, not a minute's worth.
+    #[test]
+    fn a_long_pause_leaves_a_bounded_queue() {
+        let clock = Clock::manual();
+        let meter = SimulatedMeter::new(clock.clone());
+        clock.advance(secs(60.0));
+        let mut buf = [0u8; 64];
+        let mut queued = 0;
+        while meter.read_timeout(&mut buf, 0).unwrap() > 0 {
+            queued += 1;
+        }
+        // The bound, and the packet being sent now.
+        assert_eq!(queued, QUEUED_PACKETS + 1);
+    }
+
+    /// A reader every 2 s gets the packet the meter sent last, not one that
+    /// falls further behind with every read.
+    #[test]
+    fn a_two_second_interval_reads_the_packet_just_sent() {
+        let clock = Clock::manual();
+        let start = clock.now();
+        // The same meter, untouched, to draw what each packet was.
+        let reference = SimulatedMeter::new(clock.clone());
+        let mut dmm = crate::Dmm::new(NullTransport, Box::new(MockZt5b::new(clock.clone())))
+            .unwrap()
+            .with_clock(clock.clone());
+        let mut stream = crate::stream::MeasurementStream::new(&mut dmm, secs(2.0));
+        for _ in 0..10 {
+            let crate::stream::StreamEvent::Measurement(m) = stream.tick().unwrap() else {
+                panic!("a reading");
+            };
+            let sent = ((clock.now() - start).as_millis() / PERIOD.as_millis()) as u32;
+            let last = reference.packet(start + PERIOD * sent).unwrap();
+            assert_eq!(m.raw_payload, last, "at {:?}", clock.now() - start);
+        }
+        assert!(clock.now() - start >= secs(18.0), "the stream paced itself");
     }
 
     /// Every function, HOLD and ZERO included, over two of its cycles:
@@ -735,13 +849,15 @@ mod tests {
         assert_eq!(read(&mut mock).unit, "°C");
     }
 
-    /// NCV climbs from EF through the four levels and back.
+    /// NCV climbs from EF through the four levels and back. Read twice a
+    /// second: a reading is the packet sent last, up to a packet period
+    /// before the read, and each level lasts a second.
     #[test]
     fn ncv_moves_through_its_levels() {
         let (mut mock, clock) = mock();
         press(&mut mock, "ncv");
         let mut levels = Vec::new();
-        for _ in 0..12 {
+        for _ in 0..24 {
             let m = read(&mut mock);
             assert_eq!(m.mode, "NCV");
             let MeasuredValue::NcvLevel(level) = m.value else {
@@ -750,7 +866,7 @@ mod tests {
             if levels.last() != Some(&level) {
                 levels.push(level);
             }
-            clock.advance(secs(1.0));
+            clock.advance(secs(0.5));
         }
         assert_eq!(levels, [0, 1, 2, 3, 4, 3, 2, 1]);
     }

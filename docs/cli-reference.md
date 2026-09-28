@@ -96,8 +96,9 @@ through the scenarios listed under [Mock modes](#mock-modes); `--mock-mode`
 pins one. It supports `read`, `command`, `get` and `set`.
 
 The `mock-zt5b` device simulates a ZT-5B / V05B, to try the ZOTEK remote keys
-without a meter. It supports `read` and `command`, and starts on the `Auto`
-word each run; [ZOTEK mock](#zotek-mock) lists what its keys do.
+without a meter. It supports `read` and `command`, sends about 2.6 readings a
+second, and starts on the `Auto` word each run; [ZOTEK mock](#zotek-mock)
+lists what its keys do.
 
 **Examples:**
 

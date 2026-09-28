@@ -2293,10 +2293,11 @@ the following needs someone's hardware.
 ### Streaming meters: newest queued frame
 
 Since 2026-09-28 the streaming families with a Bluetooth link (UT171,
-UT181A, 121GW, BM78xBT) answer each request with the newest frame
+UT181A, 121GW, BM78xBT, ZOTEK) answer each request with the newest frame
 already queued, as the UT61+ over the UT-D07B has since it landed; the
 HID-only streaming families (UT8802, UT8803, UT80x, VC-880) read oldest
-first. Checked offline only (a simulated meter on a manual clock).
+first. Checked offline only (simulated meters on a manual clock, and
+`mock-zt5b`, which sends at a ZOTEK meter's rate).
 
 - **Linux HID drops the newest.** hidraw keeps 64 reports per reader and,
   as we recall `hidraw_report_event` (not checked against the kernel
