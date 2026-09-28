@@ -312,6 +312,12 @@ The mean line and the reference line place their labels at a fixed spot on the r
 
 Use cases: the documentation's overlays picture had to be composed to keep the labels apart; a user reading a power-cycle graph with mean, reference, triggers and cursors on wants all four numbers at a glance.
 
+### Steadier dense traces in live view
+
+**Complexity:** Medium
+
+Zoomed out to many samples per pixel, a noisy trace's edges shimmer slightly as live view scrolls: each new reading moves the view by a fraction of a pixel and changes which samples land in each column. The every-sample drawing did it too. Thinning at half-pixel spans of session time changed neither how much nor how often the edges move, and spans cut on the screen's own pixel columns measured worse. It shows most at 100 % display scale and less at 166 %. Candidates: advance the live view in whole-pixel steps rather than by each reading's fraction, or cut the drawn line down to the minimap's per-bucket extents, which don't move within a bucket.
+
 ### Measurement rate display
 
 **Complexity:** Low

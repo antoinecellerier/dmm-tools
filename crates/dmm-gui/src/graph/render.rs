@@ -8,6 +8,7 @@ use egui_plot::{
 };
 use std::time::Instant;
 
+use super::minimap::bucket_secs;
 use super::time::format_time_axis_label;
 use super::{GapKind, Graph, OverlaySeries, SegmentsAndGaps};
 use crate::markers::Markers;
@@ -242,6 +243,49 @@ pub(super) fn segment_hits_rect(a: egui::Pos2, b: egui::Pos2, rect: egui::Rect) 
     true
 }
 
+/// The points of one line worth drawing: each `bucket_secs` span of session
+/// time keeps its first, lowest, highest and last point, in time order.
+///
+/// A zoomed-out window holds tens of samples per pixel, and past a few all
+/// that shows is how far the line reaches in each column, so the points
+/// drawn follow the plot's width rather than the window's. A span holding
+/// one sample keeps it, so a sparse window draws exactly as before.
+///
+/// Buckets are cut from the graph origin, as the minimap's are, never from
+/// the view's edge: in live view that edge moves with every sample, and
+/// screen-column buckets would change members each frame and flicker.
+///
+/// Input is in time order, as the segment builders produce it.
+pub(super) fn thin_for_drawing(points: &[[f64; 2]], bucket_secs: f64) -> Vec<[f64; 2]> {
+    let bucket = |x: f64| (x / bucket_secs).floor();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < points.len() {
+        let key = bucket(points[i][0]);
+        let first = i;
+        let (mut lo, mut hi) = (i, i);
+        while i < points.len() && bucket(points[i][0]) == key {
+            if points[i][1] < points[lo][1] {
+                lo = i;
+            }
+            if points[i][1] > points[hi][1] {
+                hi = i;
+            }
+            i += 1;
+        }
+        let mut kept = [first, lo, hi, i - 1];
+        kept.sort_unstable();
+        let mut last = None;
+        for k in kept {
+            if last != Some(k) {
+                out.push(points[k]);
+                last = Some(k);
+            }
+        }
+    }
+    out
+}
+
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
 /// for mean, reference, and cursor overlays after the plot has been rendered.
 struct OverlayLabelData {
@@ -254,7 +298,8 @@ struct OverlayLabelData {
     cursor_b: Option<f64>,
     cursor_va: Option<f64>,
     cursor_vb: Option<f64>,
-    /// The plotted series' visible segments, which cursor readouts keep off.
+    /// The plotted series' visible segments as drawn, which cursor readouts
+    /// keep off.
     trace: Vec<Vec<[f64; 2]>>,
     overlay_unit: String,
     view_max: f64,
@@ -514,6 +559,17 @@ impl Graph {
         let ext_start = vis_start.saturating_sub(1);
         let ext_end = (vis_end + 1).min(self.history.len());
         let (visible_segments, visible_gaps) = self.build_segments_for_range(ext_start, ext_end);
+        // Drawn lines are thinned to a few points per bucket about half a
+        // pixel wide; everything that answers with a value (statistics,
+        // cursors, crossings, the Y range) still reads the full slice. At a
+        // whole pixel, a column could fall between two buckets' vertical
+        // strokes and a dense band drew with dark streaks through it. The
+        // width is taken before the plot, axis included, so it errs finer.
+        let bucket = bucket_secs(
+            (view_max - view_min)
+                / f64::from(2.0 * ui.available_width() * ui.ctx().pixels_per_point()),
+        );
+        let thin = |points: &[[f64; 2]]| thin_for_drawing(points, bucket);
         // Overload spans, including one still in progress. Used both to draw
         // the bands and to answer the crosshair tooltip, which is the only
         // non-visual cue available — `Span` is never a hover target.
@@ -623,7 +679,9 @@ impl Graph {
                 // 0.37 replaced the `(name, point)` pair with `HoverPosition`.
                 // A hover that isn't near a data point used to arrive as an
                 // empty name, so map it back to one and keep the branches below
-                // unchanged.
+                // unchanged. The data points are the drawn ones: zoomed out, a
+                // pixel column keeps its first, last and extremes, and the
+                // pointer between them reads as Elsewhere.
                 let (name, point) = match pos {
                     HoverPosition::NearDataPoint {
                         plot_name,
@@ -693,12 +751,12 @@ impl Graph {
             // Min/max envelope (drawn first so it's behind the data line)
             if show_envelope && !env_min.is_empty() {
                 plot_ui.line(
-                    Line::new("", PlotPoints::new(env_max.clone()))
+                    Line::new("", PlotPoints::new(thin(&env_max)))
                         .color(env_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
                 plot_ui.line(
-                    Line::new("", PlotPoints::new(env_min.clone()))
+                    Line::new("", PlotPoints::new(thin(&env_min)))
                         .color(env_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
@@ -709,14 +767,16 @@ impl Graph {
                 let (color, style) = Self::overlay_color_and_style(tc, *k);
                 for seg in segments {
                     plot_ui.line(
-                        Line::new(label.clone(), PlotPoints::new(seg.clone()))
+                        Line::new(label.clone(), PlotPoints::new(thin(seg)))
                             .color(color)
                             .style(style),
                     );
                 }
             }
 
-            for seg in &visible_segments {
+            let drawn_trace: Vec<Vec<[f64; 2]>> =
+                visible_segments.iter().map(|s| thin(s)).collect();
+            for seg in &drawn_trace {
                 plot_ui.line(
                     Line::new(main_name.clone(), PlotPoints::new(seg.clone())).color(line_color),
                 );
@@ -803,6 +863,8 @@ impl Graph {
                     );
                 }
             }
+
+            drawn_trace
         });
 
         let overlay = OverlayLabelData {
@@ -815,7 +877,7 @@ impl Graph {
             cursor_b,
             cursor_va,
             cursor_vb,
-            trace: visible_segments,
+            trace: response.inner,
             overlay_unit: self.current_unit.clone(),
             view_max,
             mean_color,

@@ -1,5 +1,6 @@
 use super::render::{
     KeyStyle, cursor_label_rect, layout_marker_flags, quantize_for_hash, segment_hits_rect,
+    thin_for_drawing,
 };
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
@@ -3656,4 +3657,130 @@ fn esc_closes_the_menu_and_leaves_no_focus() {
         "nothing keeps the focus"
     );
     assert!(g.take_mark_request().is_none());
+}
+
+/// A noisy line with samples every `step` seconds, from a fixed seed.
+fn noisy_line(n: usize, step: f64) -> Vec<[f64; 2]> {
+    let mut seed = 12345_u64;
+    (0..n)
+        .map(|i| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let x = i as f64 * step;
+            [x, (x * 0.01).sin() * 5.0 + (seed % 1000) as f64 / 300.0]
+        })
+        .collect()
+}
+
+#[test]
+fn thinning_leaves_a_sparse_line_alone() {
+    assert!(thin_for_drawing(&[], 0.5).is_empty());
+    // One sample per bucket at most: nothing to drop.
+    let sparse = noisy_line(200, 0.7);
+    assert_eq!(thin_for_drawing(&sparse, 0.5), sparse);
+}
+
+/// Each bucket keeps its first, last, lowest and highest point, in time
+/// order, and nothing else.
+#[test]
+fn thinning_keeps_each_buckets_ends_and_extremes() {
+    let line = noisy_line(5000, 0.1);
+    let bucket = 3.0;
+    let thinned = thin_for_drawing(&line, bucket);
+
+    assert!(
+        thinned.windows(2).all(|w| w[0][0] < w[1][0]),
+        "out of time order"
+    );
+    let key = |p: &[f64; 2]| (p[0] / bucket).floor() as i64;
+    let buckets = line.last().map_or(0, |p| key(p) + 1) as usize;
+    assert!(
+        thinned.len() <= 4 * buckets,
+        "{} points for {buckets} buckets",
+        thinned.len()
+    );
+
+    for b in 0..buckets as i64 {
+        let all: Vec<_> = line.iter().filter(|p| key(p) == b).copied().collect();
+        let kept: Vec<_> = thinned.iter().filter(|p| key(p) == b).copied().collect();
+        let lowest = all
+            .iter()
+            .copied()
+            .reduce(|a, p| if p[1] < a[1] { p } else { a });
+        let highest = all
+            .iter()
+            .copied()
+            .reduce(|a, p| if p[1] > a[1] { p } else { a });
+        for want in [all.first().copied(), all.last().copied(), lowest, highest] {
+            let want = want.expect("every bucket holds samples");
+            assert!(kept.contains(&want), "bucket {b} lost {want:?}");
+        }
+        assert!(kept.iter().all(|p| all.contains(p)));
+    }
+}
+
+/// Buckets are fixed in session time, so a view sliding along the data, as
+/// live view does with each sample, draws the buckets it fully covers the
+/// same way every frame: nothing shimmers.
+#[test]
+fn thinning_does_not_change_as_the_view_slides() {
+    let line = noisy_line(5000, 0.1);
+    let bucket = 3.0;
+    let whole = thin_for_drawing(&line, bucket);
+    for start in [1, 17, 29, 30, 31, 444] {
+        let slid = thin_for_drawing(&line[start..], bucket);
+        // The slice's first bucket is only partly covered.
+        let covered = ((line[start][0] / bucket).floor() + 1.0) * bucket;
+        let after = |v: &[[f64; 2]]| -> Vec<[f64; 2]> {
+            v.iter().filter(|p| p[0] >= covered).copied().collect()
+        };
+        assert_eq!(
+            after(&slid),
+            after(&whole),
+            "view starting at sample {start}"
+        );
+    }
+}
+
+/// Zoomed out to an hour, the main graph draws about what its width holds,
+/// not every sample: sixty times the samples of a one-minute view, but far
+/// fewer times its vertices.
+#[test]
+fn a_wide_window_draws_about_as_much_as_a_narrow_one() {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for [x, v] in noisy_line(36_000, 0.1) {
+        g.push(v, t0 + Duration::from_secs_f64(x), "DC V", "V", None);
+    }
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960.0, 500.0));
+    let mut vertices = |window: f64| {
+        g.time_window_secs = window;
+        let ctx = egui::Context::default();
+        let mut count = 0;
+        // The axes settle on the first frame.
+        for _ in 0..2 {
+            let input = egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers));
+            out.textures_delta.clear();
+            count = ctx
+                .tessellate(out.shapes, out.pixels_per_point)
+                .iter()
+                .map(|p| match &p.primitive {
+                    egui::epaint::Primitive::Mesh(m) => m.vertices.len(),
+                    egui::epaint::Primitive::Callback(_) => 0,
+                })
+                .sum::<usize>();
+        }
+        count
+    };
+    let narrow = vertices(60.0);
+    let wide = vertices(3600.0);
+    // About 10 times as many; every sample drawn made it about 47.
+    assert!(wide < 20 * narrow, "1 h: {wide} vertices, 1 min: {narrow}");
 }
