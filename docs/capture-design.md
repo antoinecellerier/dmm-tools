@@ -63,11 +63,12 @@ asked for a delay. Evidence: a UT61E+'s top two Ω rungs read 50x high 200 ms af
 press and come down over several seconds (2026-09-10).
 
 A display with no reading is not a state worth sampling either: a UT181A sends no value for
-about half a second after any range, mode or dial change. Once a step's wait ends — and
-after every switch the tool makes (D) — the sampler reads past a no-reading frame for up to
-`BLANK_READS` = 10 readings and starts the samples at the first real one; a step that expects
-no reading keeps it. Evidence: every range sub-step of a UT181A run held only that frame
-(issue #5, 2026-09-27).
+600–700 ms after any range, mode or dial change, and for up to 2 s on some positions. Once a
+step's wait ends — and after every switch the tool makes (D) — the sampler reads past a
+no-reading frame for up to `BLANK_READS` = 25 readings and starts the samples at the first
+real one; a step that expects no reading keeps it. Evidence: every range sub-step of a UT181A
+run held only that frame (issue #5, 2026-09-27), and at 10 readings the rerun still filed
+blank samples on mV AC, mA DC and A AC+DC (2026-09-28).
 
 A step whose first sample is in its expected mode and a later one is not is retaken:
 `the meter left <mode> for <other> while sampling — retaking…`, and the wait runs

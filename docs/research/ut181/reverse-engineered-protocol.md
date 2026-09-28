@@ -259,11 +259,13 @@ Hardware-confirmed 2026-09-27 (issue #5):
   on Ω read `0x31` with 62.96 MΩ, an overloaded mV AC input `0x21` with
   690.13 mV, a Peak minimum `0x12` with -959.36 mV.
 - **Both bits set, with a float of 0.0, is a blank value** — the meter
-  has no reading to give. Every value slot goes blank for about five
-  frames after a range, mode or dial change, a capacitance range with
-  nothing connected stays blank, and the min/max and Peak slots are
-  blank until their first reading lands. The capture never showed both
-  bits with any other float.
+  has no reading to give. Every value slot goes blank for six or seven
+  frames after a range, mode or dial change, and for up to 20 (2 s) on
+  Ω, mV AC, the current dials and the AC+DC and Peak variants
+  (2026-09-28 capture). A capacitance range with nothing connected
+  stays blank, and the min/max and Peak slots are blank until their
+  first reading lands. The capture never showed both bits with any
+  other float.
 
 ### 5.3 Measurement Variants
 

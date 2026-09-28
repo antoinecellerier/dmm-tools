@@ -1378,6 +1378,9 @@ open items below are closed.
     failed on `ohm`~~ — **FIXED** 2026-09-28: it shows `OL` (or `----`).
     The run then drove nothing: it sent the earlier run's words again and
     swept no REL or range.
+  - ~~The capture waited 1 s for a blank display to end, but blanks lasted
+    up to 2 s (spec §5.2), so mV AC, mA DC and A AC+DC filed `----`
+    samples~~ — **FIXED** 2026-09-28: it waits 2.5 s.
 - Manual range in a Peak variant — the meter refuses Auto there, and
   whether it takes a manual rung is untested. Needs a meter: in µA DC
   Peak, `dmm-cli --device ut181a set range 6000µA`, then `get range`
