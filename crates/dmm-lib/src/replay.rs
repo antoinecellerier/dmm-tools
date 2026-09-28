@@ -35,6 +35,7 @@ use crate::transport::{Link, Transport};
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 /// The first non-blank line of every replay file. The trailing digit is the
@@ -95,7 +96,8 @@ fn link_from_token(token: &str) -> Option<Link> {
 /// A recorded session, parsed and ready to open.
 ///
 /// Cheap to keep around and open more than once: a GUI reconnect re-opens the
-/// same `Replay` rather than re-reading the file.
+/// same `Replay` rather than re-reading the file, and every open shares the
+/// same frames rather than copying them.
 pub struct Replay {
     /// The meter the recording was made from, resolved against the registry.
     pub device: &'static SelectableDevice,
@@ -111,7 +113,13 @@ pub struct Replay {
     /// does not know says nothing.
     pub link: Option<Link>,
     /// Non-empty, offsets non-decreasing — both enforced by the parser.
-    samples: Vec<(Duration, Vec<u8>)>,
+    ///
+    /// An `Arc<Vec>` rather than an `Arc<[_]>`: converting to a slice copies
+    /// every slot while the file text is still alive, raising the load peak.
+    samples: Arc<Vec<(Duration, Vec<u8>)>>,
+    /// The tail's [`cadence`], worked out on the first open rather than in
+    /// `parse`, where its gap list would sit on top of the file text.
+    cadence: OnceLock<Duration>,
 }
 
 impl Replay {
@@ -170,12 +178,15 @@ impl Replay {
         if samples.is_empty() {
             return Err(Error::Replay("no samples".to_string()));
         }
+        // Kept for the session: the growth slack would be kept with it.
+        samples.shrink_to_fit();
         Ok(Self {
             device,
             recorded,
             model,
             link,
-            samples,
+            samples: Arc::new(samples),
+            cadence: OnceLock::new(),
         })
     }
 
@@ -218,9 +229,9 @@ impl Replay {
         };
         let protocol = ReplayProtocol {
             inner: (self.device.new_protocol)(),
-            samples: self.samples.clone(),
+            samples: Arc::clone(&self.samples),
             model: self.model.clone(),
-            cadence: cadence(&self.samples),
+            cadence: *self.cadence.get_or_init(|| cadence(&self.samples)),
             clock: clock.clone(),
             start,
             next,
@@ -393,11 +404,9 @@ fn cadence(samples: &[(Duration, Vec<u8>)]) -> Duration {
     if gaps.is_empty() {
         return LONE_SAMPLE_CADENCE;
     }
-    gaps.sort_unstable();
-    gaps.get(gaps.len() / 2)
-        .copied()
-        .unwrap_or(LONE_SAMPLE_CADENCE)
-        .max(MIN_CADENCE)
+    // The element a sort would put in the middle, without the sort.
+    let middle = gaps.len() / 2;
+    (*gaps.select_nth_unstable(middle).1).max(MIN_CADENCE)
 }
 
 /// The refusal every command path answers with, in one place so the two
@@ -413,7 +422,8 @@ fn takes_no_commands(what: impl std::fmt::Display) -> Error {
 /// meter; only I/O and the device name are answered from the file.
 struct ReplayProtocol {
     inner: Box<dyn Protocol>,
-    samples: Vec<(Duration, Vec<u8>)>,
+    /// The [`Replay`]'s own frames, shared.
+    samples: Arc<Vec<(Duration, Vec<u8>)>>,
     model: Option<String>,
     cadence: Duration,
     clock: Clock,
@@ -612,7 +622,7 @@ mod tests {
         assert_eq!(replay.model.as_deref(), Some("UT61E+"));
         assert_eq!(replay.duration(), Duration::from_millis(300));
         assert_eq!(
-            replay.samples,
+            *replay.samples,
             vec![
                 (Duration::ZERO, payload(DCV_BATTERY)),
                 (Duration::from_millis(100), payload(DCV_NEGATIVE)),
@@ -962,6 +972,49 @@ mod tests {
         let m = dmm.request_measurement().expect("the newest frame due");
         assert_eq!(m.value_export_str(), "-0.5137");
         assert_eq!(m.timestamp, start + Duration::from_millis(100));
+    }
+
+    /// Every open shares the parsed frames: a session holds them while it
+    /// runs, and lets them go when it ends.
+    #[test]
+    fn a_reopen_shares_the_frames() {
+        let clock = Clock::manual().with_wall_origin(SystemTime::now());
+        let replay = parsed(&three_frames());
+        assert_eq!(Arc::strong_count(&replay.samples), 1);
+        let dmm = replay.open(clock.clone()).expect("the replay opens");
+        assert_eq!(Arc::strong_count(&replay.samples), 2);
+        drop(dmm);
+        assert_eq!(Arc::strong_count(&replay.samples), 1);
+    }
+
+    /// The tail's cadence is the median gap, odd or even in number, and the
+    /// same element a sort would pick.
+    #[test]
+    fn the_cadence_is_the_median_gap() {
+        let at = |ms: &[u64]| -> Vec<(Duration, Vec<u8>)> {
+            ms.iter()
+                .map(|&ms| (Duration::from_millis(ms), Vec::new()))
+                .collect()
+        };
+        let sorted_median = |samples: &[(Duration, Vec<u8>)]| {
+            let mut gaps: Vec<Duration> = samples
+                .windows(2)
+                .map(|w| w[1].0.saturating_sub(w[0].0))
+                .collect();
+            gaps.sort_unstable();
+            gaps[gaps.len() / 2].max(MIN_CADENCE)
+        };
+        // Gaps 300, 100, 200: odd count.
+        let odd = at(&[0, 300, 400, 600]);
+        assert_eq!(cadence(&odd), Duration::from_millis(200));
+        assert_eq!(cadence(&odd), sorted_median(&odd));
+        // Gaps 400, 100, 300, 200: even count, the upper middle.
+        let even = at(&[0, 400, 500, 800, 1000]);
+        assert_eq!(cadence(&even), Duration::from_millis(300));
+        assert_eq!(cadence(&even), sorted_median(&even));
+        // A dense recording is floored.
+        assert_eq!(cadence(&at(&[0, 1, 2, 3])), MIN_CADENCE);
+        assert_eq!(cadence(&at(&[0])), LONE_SAMPLE_CADENCE);
     }
 
     /// A file with nothing to derive a cadence from still plays as a steady
