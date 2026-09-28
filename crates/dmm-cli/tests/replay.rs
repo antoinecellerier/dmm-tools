@@ -15,6 +15,7 @@ mod common;
 
 use chrono::{DateTime, Local, TimeDelta, Utc};
 use common::dmm_cli;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 /// The `# recorded:` line every recording below carries.
@@ -89,11 +90,32 @@ fn auto_name_start() -> String {
 
 /// An empty directory of this test's own: what it runs in, so a file the run
 /// names itself lands here.
-fn dir_for(name: &str) -> PathBuf {
+fn dir_for(name: &str) -> TestDir {
     let dir = std::env::temp_dir().join(format!("dmm-cli-replay-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create temp dir");
-    dir
+    TestDir(dir)
+}
+
+/// A test's directory, removed when the test ends — unless it failed, so the
+/// files it was asserting on are still there to look at. Named per process,
+/// so every run would otherwise leave one per test behind.
+struct TestDir(PathBuf);
+
+impl Deref for TestDir {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TestDir {
+    fn drop(&mut self) {
+        if !std::thread::panicking() {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
 }
 
 /// `text` written into `dir` as the recording to play back.
@@ -148,7 +170,8 @@ fn read_csv(path: &Path, extra: &[&str]) -> (String, String, bool) {
 
 #[test]
 fn replay_exports_the_times_the_frames_were_recorded_at() {
-    let path = recording_in(&dir_for("timestamps"));
+    let dir = dir_for("timestamps");
+    let path = recording_in(&dir);
     let (stdout, _, ok) = read_csv(&path, &[]);
     assert!(ok, "replay failed: {stdout}");
 
@@ -168,7 +191,8 @@ fn replay_exports_the_times_the_frames_were_recorded_at() {
 
 #[test]
 fn replaying_twice_prints_the_same_bytes() {
-    let path = recording_in(&dir_for("deterministic"));
+    let dir = dir_for("deterministic");
+    let path = recording_in(&dir);
     let (first, _, _) = read_csv(&path, &[]);
     let (second, _, _) = read_csv(&path, &[]);
     assert_eq!(first, second);
@@ -178,7 +202,8 @@ fn replaying_twice_prints_the_same_bytes() {
 /// preseed spends the recording's sleeps at once without moving a timestamp.
 #[test]
 fn replay_takes_the_clock_flags() {
-    let path = recording_in(&dir_for("preseed"));
+    let dir = dir_for("preseed");
+    let path = recording_in(&dir);
     let (plain, _, _) = read_csv(&path, &[]);
     let (preseeded, _, ok) = read_csv(&path, &["--mock-clock-preseed", "10"]);
     assert!(ok, "preseeded replay failed: {preseeded}");
@@ -189,7 +214,8 @@ fn replay_takes_the_clock_flags() {
 /// does, without the wait.
 #[test]
 fn a_max_speed_replay_prints_what_a_paced_one_does() {
-    let path = recording_in(&dir_for("max"));
+    let dir = dir_for("max");
+    let path = recording_in(&dir);
     let (paced, paced_err, _) = read_csv(&path, &[]);
     let (max, max_err, ok) = read_csv(&path, &["--mock-clock-scale", "max"]);
     assert!(ok, "max-speed replay failed: {max_err}");
@@ -201,7 +227,8 @@ fn a_max_speed_replay_prints_what_a_paced_one_does() {
 /// take.
 #[test]
 fn a_max_speed_replay_refuses_a_preseed() {
-    let path = recording_in(&dir_for("max-preseed"));
+    let dir = dir_for("max-preseed");
+    let path = recording_in(&dir);
     let (_, stderr, ok) = read_csv(
         &path,
         &["--mock-clock-scale", "max", "--mock-clock-preseed", "10"],
@@ -242,7 +269,8 @@ fn a_paced_replay_into_a_file_says_how_not_to_wait() {
 /// run still ends with the file.
 #[test]
 fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
-    let path = recording_of(&dir_for("gap"), RECORDING_WITH_A_GAP);
+    let dir = dir_for("gap");
+    let path = recording_of(&dir, RECORDING_WITH_A_GAP);
     let (stdout, stderr, ok) = run(&[
         "read",
         "--replay",
@@ -389,7 +417,8 @@ fn a_run_that_changes_mode_drops_the_mode_from_the_name() {
     );
     assert!(dir.join(&name).exists(), "no file at {name}");
     // Nothing is left behind under the mode the run started in.
-    let strays: Vec<String> = std::fs::read_dir(&dir)
+    let strays: Vec<String> = dir
+        .read_dir()
         .expect("read the run's directory")
         .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
         .filter(|n| n.starts_with(AUTO_NAME_STEM) && *n != name)
@@ -456,7 +485,8 @@ fn a_bare_output_with_no_readings_says_no_file_was_written() {
         stderr.contains("No readings arrived, so no file was written"),
         "got {stderr}"
     );
-    let files: Vec<String> = std::fs::read_dir(&dir)
+    let files: Vec<String> = dir
+        .read_dir()
         .expect("read the run's directory")
         .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
         .filter(|n| n.starts_with("measurements-"))
@@ -468,7 +498,8 @@ fn a_bare_output_with_no_readings_says_no_file_was_written() {
 /// last frame there is nothing the meter sent.
 #[test]
 fn a_replay_ends_with_its_recording() {
-    let path = recording_in(&dir_for("ends"));
+    let dir = dir_for("ends");
+    let path = recording_in(&dir);
     let (stdout, stderr, ok) = run(&[
         "read",
         "--replay",
@@ -544,7 +575,8 @@ fn a_format_that_disagrees_with_the_file_name_is_noted() {
 /// choice for the run that plays them back.
 #[test]
 fn a_replay_run_refuses_the_flags_that_change_the_reading() {
-    let path = recording_in(&dir_for("refusals"));
+    let dir = dir_for("refusals");
+    let path = recording_in(&dir);
     for (flag, value) in [
         ("--scale", Some("100")),
         ("--offset", Some("1")),
@@ -622,7 +654,8 @@ fn the_old_record_flag_is_gone() {
 /// redundant or a contradiction.
 #[test]
 fn naming_a_device_alongside_a_replay_is_refused() {
-    let path = recording_in(&dir_for("device"));
+    let dir = dir_for("device");
+    let path = recording_in(&dir);
     let (_, stderr, ok) = run(&[
         "--device",
         "ut61eplus",
@@ -668,8 +701,9 @@ fn the_bundled_recordings_play_without_a_warning() {
 /// report it — not once per frame.
 #[test]
 fn unrecognised_data_warns_once_by_default() {
+    let dir = dir_for("unrecognised");
     let path = recording_of(
-        &dir_for("unrecognised"),
+        &dir,
         "\
 # dmm-replay 1
 # device: ut61eplus
