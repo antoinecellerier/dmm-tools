@@ -22,6 +22,7 @@
 - **The top bar names the link the meter is on** — `UT61E+ · USB cable` or `UT61E+ · Bluetooth`.
 - **Switching Plot: keeps the graph** — such as T1 and T2, or a UT181A's voltage and its frequency; it restarted empty.
 - **A UT181A's reading and sub-values are named, such as T1 or AC** — the graph called them Main, Aux1 and Aux2.
+- **The GUI uses less CPU while connected and none while paused** — it redrew up to three times per reading, and ten times a second while paused.
 
 ### CLI
 

@@ -55,6 +55,9 @@ impl App {
             if close_requested {
                 closed.store(true, Ordering::Relaxed);
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                // Only the root reads `closed`, and with no reading coming in
+                // (paused, disconnected) it would wait for the next input.
+                ctx.request_repaint_of(egui::ViewportId::ROOT);
             }
             egui::CentralPanel::default().show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {

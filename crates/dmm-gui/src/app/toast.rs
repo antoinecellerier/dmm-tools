@@ -97,8 +97,8 @@ impl App {
         };
 
         // Keep repainting while it is up. Nothing else repaints when
-        // disconnected, so without this the toast would sit there until the
-        // next input instead of expiring; the same repaint also lets a
+        // disconnected or paused, so without this the toast would sit there
+        // until the next input instead of expiring; the same repaint also lets a
         // replaced message correct its box position (an `Area` anchors from
         // the previous frame's size) before anyone sees it.
         let remaining = toast.remaining().min(TOAST_REPAINT_INTERVAL);

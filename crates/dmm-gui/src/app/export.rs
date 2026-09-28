@@ -6,6 +6,7 @@
 use chrono::{DateTime, Local};
 use dmm_lib::measurement::MeasuredValue;
 use dmm_shared::export::CsvLayout;
+use eframe::egui;
 use log::{error, info, warn};
 use std::collections::HashSet;
 use std::path::Path;
@@ -289,7 +290,7 @@ impl App {
         }
     }
 
-    pub(super) fn export_recording(&mut self, format: ExportFormat) {
+    pub(super) fn export_recording(&mut self, ctx: &egui::Context, format: ExportFormat) {
         let prepared = match self.prepare_export(format) {
             Ok(prepared) => prepared,
             Err(message) => {
@@ -298,6 +299,7 @@ impl App {
             }
         };
         let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
+        let ctx = ctx.clone();
         std::thread::spawn(move || {
             let PreparedExport {
                 format,
@@ -320,6 +322,8 @@ impl App {
                 outcome.message.push_str(REPLAY_DROPS_MARKERS);
             }
             let _ = tx.send(outcome);
+            // The result is polled from `ui`; nothing else may be drawing.
+            ctx.request_repaint();
         });
         self.export_result_rx = Some(rx);
     }

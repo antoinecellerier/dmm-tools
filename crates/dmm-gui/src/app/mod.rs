@@ -67,6 +67,12 @@ const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
 const SIDE_PANEL_MIN_WIDTH: f32 = 180.0;
 const SIDE_PANEL_MAX_WIDTH: f32 = 400.0;
 
+/// How often a recording redraws for its elapsed-time label when nothing else
+/// does (paused, or a silent meter). Real time, not the session clock: the
+/// label rounds to whole seconds, and a quarter-second tick keeps it at most
+/// that late whatever the clock's scale.
+const RECORDING_LABEL_TICK: std::time::Duration = std::time::Duration::from_millis(250);
+
 use connection::{ConnectedMeter, DmmMessage, ThreadControl};
 
 /// Big meter display mode.
@@ -930,8 +936,11 @@ impl eframe::App for App {
         self.show_discard_confirmation(&ctx);
         self.show_whats_new(&ctx);
 
-        if self.connection.state == ConnectionState::Connected {
-            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        // The recording's elapsed time is the only thing on screen that moves
+        // with time alone. Readings, connection notices and export results
+        // each ask for their frame; toasts schedule their own.
+        if self.capture.recording.active {
+            ctx.request_repaint_after(RECORDING_LABEL_TICK);
         }
     }
 }

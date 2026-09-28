@@ -380,7 +380,7 @@ impl App {
                 )
                 .on_hover_text(label_tooltip);
             if main.clicked() {
-                self.export_recording(ExportFormat::Csv);
+                self.export_recording(ui.ctx(), ExportFormat::Csv);
             }
             let arrow = ui
                 .add(
@@ -473,7 +473,7 @@ impl App {
             // Enter and Space "click" without a pointer click, which is the
             // only thing a menu popup closes on by itself.
             egui::Popup::close_id(&ctx, popup_id);
-            self.export_recording(format);
+            self.export_recording(&ctx, format);
         }
         let is_open = egui::Popup::is_id_open(&ctx, popup_id);
         // Opened this frame: ask for the focus again next frame.

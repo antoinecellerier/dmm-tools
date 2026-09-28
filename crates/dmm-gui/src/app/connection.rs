@@ -67,6 +67,14 @@ const PAUSE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 /// How long a lost link waits before each attempt to reopen it.
 pub(super) const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 
+/// How soon a new reading is drawn.
+///
+/// Non-zero on purpose: egui answers a zero-delay request with two frames,
+/// and pending requests collapse to the earliest, so readings arriving faster
+/// than this share one frame. egui takes `predicted_dt` (1/60 s) off every
+/// delay, so 50 ms puts frames about 33 ms apart: roughly 30 fps at most.
+const READING_REPAINT_DELAY: Duration = Duration::from_millis(50);
+
 /// Apply pending control messages, blocking while paused.
 ///
 /// Returns `false` when the thread should exit: the channel hung up. That is
@@ -298,6 +306,7 @@ fn choices_stale(last: Option<&ChoiceKey>, setting: Setting, m: &Measurement) ->
 }
 
 /// Send the lists whose key moved with this reading, and record the new keys.
+/// Returns whether any did: the mode or range moved.
 ///
 /// Split out of the acquisition loop so it can be driven from a test without
 /// a device on the other end.
@@ -306,14 +315,17 @@ fn send_stale_choices<T: Transport>(
     m: &Measurement,
     keys: &mut ListedKeys,
     msg_tx: &mpsc::Sender<DmmMessage>,
-) {
+) -> bool {
+    let mut sent = false;
     for (slot, setting) in keys.iter_mut().zip(LISTED_SETTINGS) {
         if !choices_stale(slot.as_ref(), setting, m) {
             continue;
         }
         *slot = Some(ChoiceKey::of(setting, m));
         let _ = msg_tx.send(DmmMessage::Choices(setting, dmm.choices(setting, m)));
+        sent = true;
     }
+    sent
 }
 
 /// Forget the key of a setting the user just changed, so the next reading
@@ -415,9 +427,18 @@ where
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
                 protocol_errors = 0;
-                send_stale_choices(stream.dmm(), &m, &mut last_keys, &msg_tx);
+                let relisted = send_stale_choices(stream.dmm(), &m, &mut last_keys, &msg_tx);
                 if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
                     break;
+                }
+                // A new mode or range can change the reading's width, the one
+                // layout change that arrives without input: give it egui's
+                // second pass so what sizes from the last frame settles even
+                // when no reading follows (paused, a long sample interval).
+                if relisted {
+                    ctx.request_repaint();
+                } else {
+                    ctx.request_repaint_after(READING_REPAINT_DELAY);
                 }
             }
             Ok(StreamEvent::Timeout { consecutive }) => {
@@ -516,8 +537,6 @@ where
                 last_keys = Default::default();
             }
         }
-
-        ctx.request_repaint();
     }
 }
 

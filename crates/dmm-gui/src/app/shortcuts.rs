@@ -517,7 +517,7 @@ impl App {
                     self.settings.save();
                 }
                 Shortcut::ExportRecording => {
-                    self.export_recording(super::export::ExportFormat::Csv)
+                    self.export_recording(ctx, super::export::ExportFormat::Csv)
                 }
                 Shortcut::AddMarker => self.add_marker(false),
                 Shortcut::AddMarkerAndNote => self.add_marker(true),
