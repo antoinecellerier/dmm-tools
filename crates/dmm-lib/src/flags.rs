@@ -162,10 +162,10 @@ impl StatusFlags {
     /// Names are snake_case and are part of those output formats; renaming one
     /// is a breaking change for downstream consumers.
     ///
-    /// The element order is [`Flag::ALL`]'s, not the struct field order, and no
-    /// consumer observes it: the CLI's JSON arm collects the pairs into a
-    /// `serde_json::Map` (a `BTreeMap`, which re-sorts by key), and the tests
-    /// only check that names are present.
+    /// The element order is [`Flag::ALL`]'s, not the struct field order, and
+    /// the JSON export writes its flags object in that order: reordering
+    /// [`Flag::ALL`] changes the exported bytes, which `dmm-shared`'s export
+    /// goldens pin.
     pub fn as_pairs(&self) -> [(&'static str, bool); Self::COUNT] {
         Flag::ALL.map(|flag| (flag.name(), self.get(flag)))
     }

@@ -138,6 +138,7 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
     use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::AuxValue;
 
     fn start() -> DateTime<Local> {
         Local
@@ -156,6 +157,400 @@ mod tests {
         assert_eq!(
             default_name("UT61E+", None, start(), "replay"),
             "measurements-UT61E+-2026-09-15_14-30-05.replay"
+        );
+    }
+
+    /// One reading's export line, as both binaries write it.
+    fn line(
+        m: &Measurement,
+        ts: &str,
+        experimental: bool,
+        integral: Option<(f64, &str)>,
+        marker: Option<(u32, &str)>,
+    ) -> String {
+        measurement_json(m, ts, experimental, integral, marker).to_string()
+    }
+
+    /// A "Max" sub-value.
+    fn aux(value: MeasuredValue, unit: &'static str, display_raw: Option<&str>) -> AuxValue {
+        AuxValue {
+            label: "Max".into(),
+            value,
+            unit: unit.into(),
+            display_raw: display_raw.map(str::to_string),
+            elapsed_secs: None,
+        }
+    }
+
+    /// A DC V reading of `value`, flags clear.
+    fn reading(value: MeasuredValue) -> Measurement {
+        Measurement::test_fixture(value, "V", StatusFlags::default())
+    }
+
+    /// One row of [`every_reading_shape_exports_byte_for_byte`].
+    struct Shape {
+        label: &'static str,
+        m: Measurement,
+        experimental: bool,
+        integral: Option<(f64, &'static str)>,
+        marker: Option<(u32, &'static str)>,
+        expected: &'static str,
+    }
+
+    impl Shape {
+        fn new(label: &'static str, m: Measurement, expected: &'static str) -> Self {
+            Shape {
+                label,
+                m,
+                experimental: false,
+                integral: None,
+                marker: None,
+                expected,
+            }
+        }
+    }
+
+    /// Every shape a reading's line takes, with the whole line it exports
+    /// as: key order, nulls, number formatting and string escapes. The flags
+    /// object is in `Flag::ALL` order, so reordering that changes the
+    /// exported bytes. The expected lines were printed by the `Value`-tree
+    /// writer, not written by hand.
+    #[test]
+    fn every_reading_shape_exports_byte_for_byte() {
+        const TS: &str = "2026-09-15T14:30:05.123456789+02:00";
+        let mut rows = vec![
+            Shape::new(
+                "overload",
+                reading(MeasuredValue::Overload),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":\"OL\",\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            ),
+            Shape::new(
+                "ncv",
+                reading(MeasuredValue::NcvLevel(3)),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":{\"ncv_level\":3},\"unit\":\"V\",\
+                \"range\":\"22V\",\"display_raw\":\"  5.678\",\"progress\":0,\
+                \"experimental\":false,\"flags\":{\"hold\":false,\"rel\":false,\
+                \"auto_range\":false,\"min\":false,\"max\":false,\"avg\":false,\
+                \"low_battery\":false,\"hv_warning\":false,\"peak_max\":false,\
+                \"peak_min\":false,\"lead_error\":false,\"comp\":false,\"record\":false,\
+                \"loz\":false,\"void\":false,\"dc\":false}}",
+            ),
+            Shape::new(
+                "no reading",
+                reading(MeasuredValue::NoReading("Auto")),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":null,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            ),
+            Shape::new(
+                "absent",
+                reading(MeasuredValue::Absent),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":null,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            ),
+        ];
+
+        let mut m = reading(MeasuredValue::Normal(1.5));
+        m.display_raw = None;
+        m.progress = None;
+        rows.push(Shape::new(
+            "no display_raw, no progress",
+            m,
+            "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+            \"mode\":\"DC V\",\"value\":1.5,\"unit\":\"V\",\"range\":\"22V\",\
+            \"display_raw\":null,\"progress\":null,\"experimental\":false,\
+            \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+            \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+            \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+            \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+            \"void\":false,\"dc\":false}}",
+        ));
+
+        let every_flag = StatusFlags {
+            hold: true,
+            rel: true,
+            min: true,
+            max: true,
+            avg: true,
+            auto_range: true,
+            low_battery: true,
+            hv_warning: true,
+            dc: true,
+            peak_max: true,
+            peak_min: true,
+            lead_error: true,
+            comp: true,
+            record: true,
+            loz: true,
+            void: true,
+        };
+        rows.push(Shape::new(
+            "every flag",
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", every_flag),
+            "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+            \"mode\":\"DC V\",\"value\":5.678,\"unit\":\"V\",\"range\":\"22V\",\
+            \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+            \"flags\":{\"hold\":true,\"rel\":true,\"auto_range\":true,\"min\":true,\
+            \"max\":true,\"avg\":true,\"low_battery\":true,\"hv_warning\":true,\
+            \"peak_max\":true,\"peak_min\":true,\"lead_error\":true,\"comp\":true,\
+            \"record\":true,\"loz\":true,\"void\":true,\"dc\":true}}",
+        ));
+
+        rows.push(Shape {
+            experimental: true,
+            ..Shape::new(
+                "experimental",
+                reading(MeasuredValue::Normal(5.678)),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":5.678,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":true,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            )
+        });
+
+        // Unit falling back to the main one, elapsed seconds, OL, NCV, a
+        // float without digits, digits with a space after the sign, none.
+        let mut m = reading(MeasuredValue::Normal(5.678));
+        m.aux_values = vec![
+            aux(MeasuredValue::Normal(5.7), "", Some(" 5.700")),
+            AuxValue {
+                elapsed_secs: Some(12),
+                ..aux(MeasuredValue::Normal(0.25), "Hz", Some("0.250"))
+            },
+            aux(MeasuredValue::Overload, "", Some(" 9.999")),
+            aux(MeasuredValue::NcvLevel(2), "", None),
+            aux(MeasuredValue::Normal(0.1), "mV", None),
+            aux(MeasuredValue::Normal(-1.2), "", Some("- 1.2")),
+            aux(MeasuredValue::Absent, "", None),
+        ];
+        rows.push(Shape::new(
+            "sub-values",
+            m,
+            "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+            \"mode\":\"DC V\",\"value\":5.678,\"unit\":\"V\",\"range\":\"22V\",\
+            \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+            \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+            \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+            \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+            \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+            \"void\":false,\"dc\":false},\"aux\":[{\"label\":\"Max\",\
+            \"value\":\"5.700\",\"unit\":\"V\",\
+            \"elapsed_secs\":null},{\"label\":\"Max\",\"value\":\"0.250\",\
+            \"unit\":\"Hz\",\"elapsed_secs\":12},{\"label\":\"Max\",\
+            \"value\":\"OL\",\"unit\":\"V\",\
+            \"elapsed_secs\":null},{\"label\":\"Max\",\"value\":\"NCV:2\",\
+            \"unit\":\"V\",\"elapsed_secs\":null},{\"label\":\"Max\",\
+            \"value\":\"0.1\",\"unit\":\"mV\",\
+            \"elapsed_secs\":null},{\"label\":\"Max\",\"value\":\"-1.2\",\
+            \"unit\":\"V\",\"elapsed_secs\":null},{\"label\":\"Max\",\"value\":null,\
+            \"unit\":\"V\",\"elapsed_secs\":null}]}",
+        ));
+
+        rows.push(Shape {
+            integral: Some((1.5e-7, "C")),
+            ..Shape::new(
+                "integral",
+                reading(MeasuredValue::Normal(5.678)),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":5.678,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false},\"integral\":1.5e-7,\
+                \"integral_unit\":\"C\"}",
+            )
+        });
+        // The key stays, its value null.
+        rows.push(Shape {
+            integral: Some((f64::NAN, "V·s")),
+            ..Shape::new(
+                "NaN integral",
+                reading(MeasuredValue::Normal(5.678)),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":5.678,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false},\"integral\":null,\
+                \"integral_unit\":\"V·s\"}",
+            )
+        });
+        rows.push(Shape {
+            marker: Some((7, "say \"hi\" \\ then\nnext\u{1}\u{2028}Ω")),
+            ..Shape::new(
+                "escaped note",
+                reading(MeasuredValue::Normal(5.678)),
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":5.678,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false},\"marker\":7,\
+                \"note\":\"say \\\"hi\\\" \\\\ then\\nnext\\u0001\u{2028}Ω\"}",
+            )
+        });
+
+        let mut m = reading(MeasuredValue::Normal(5.678));
+        m.aux_values = vec![aux(MeasuredValue::Normal(5.7), "", Some(" 5.700"))];
+        rows.push(Shape {
+            integral: Some((2.5, "V·s")),
+            marker: Some((1, "a")),
+            ..Shape::new(
+                "aux, integral and marker",
+                m,
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":5.678,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false},\"aux\":[{\"label\":\"Max\",\
+                \"value\":\"5.700\",\"unit\":\"V\",\"elapsed_secs\":null}],\
+                \"integral\":2.5,\"integral_unit\":\"V·s\",\"marker\":1,\"note\":\"a\"}",
+            )
+        });
+
+        for (label, v, expected) in [
+            (
+                "-0.0",
+                -0.0,
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":-0.0,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":null,\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            ),
+            (
+                "0.1 + 0.2",
+                0.1 + 0.2,
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":0.30000000000000004,\"unit\":\"V\",\
+                \"range\":\"22V\",\"display_raw\":null,\"progress\":0,\
+                \"experimental\":false,\"flags\":{\"hold\":false,\"rel\":false,\
+                \"auto_range\":false,\"min\":false,\"max\":false,\"avg\":false,\
+                \"low_battery\":false,\"hv_warning\":false,\"peak_max\":false,\
+                \"peak_min\":false,\"lead_error\":false,\"comp\":false,\"record\":false,\
+                \"loz\":false,\"void\":false,\"dc\":false}}",
+            ),
+            (
+                "1e21",
+                1e21,
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":1e+21,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":null,\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            ),
+            (
+                "5e-324",
+                5e-324,
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":5e-324,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":null,\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            ),
+            (
+                "infinity",
+                f64::INFINITY,
+                "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+                \"mode\":\"DC V\",\"value\":null,\"unit\":\"V\",\"range\":\"22V\",\
+                \"display_raw\":null,\"progress\":0,\"experimental\":false,\
+                \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+                \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+                \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+                \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+                \"void\":false,\"dc\":false}}",
+            ),
+        ] {
+            let mut m = reading(MeasuredValue::Normal(v));
+            m.display_raw = None;
+            rows.push(Shape::new(label, m, expected));
+        }
+
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(21.5), "°C", StatusFlags::default());
+        m.mode = "Temp °C".into();
+        m.range_label = "".into();
+        m.aux_values = vec![aux(MeasuredValue::Normal(3.3), "µA", Some("3.3"))];
+        rows.push(Shape::new(
+            "°C and µA",
+            m,
+            "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
+            \"mode\":\"Temp °C\",\"value\":21.5,\"unit\":\"°C\",\"range\":\"\",\
+            \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+            \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+            \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+            \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+            \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+            \"void\":false,\"dc\":false},\"aux\":[{\"label\":\"Max\",\
+            \"value\":\"3.3\",\"unit\":\"µA\",\"elapsed_secs\":null}]}",
+        ));
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.234), "kΩ", StatusFlags::default());
+        m.mode = "Ω".into();
+        m.range_label = "2.2kΩ".into();
+        rows.push(Shape::new(
+            "Ω",
+            m,
+            "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\"mode\":\"Ω\",\
+            \"value\":1.234,\"unit\":\"kΩ\",\"range\":\"2.2kΩ\",\
+            \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+            \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
+            \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
+            \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
+            \"lead_error\":false,\"comp\":false,\"record\":false,\"loz\":false,\
+            \"void\":false,\"dc\":false}}",
+        ));
+
+        for row in &rows {
+            let got = line(&row.m, TS, row.experimental, row.integral, row.marker);
+            assert_eq!(got, row.expected, "{}", row.label);
+        }
+
+        let got = metadata_line("Say \"UT\" \\ 61");
+        assert_eq!(
+            got,
+            "{\"_metadata\":{\"device\":\"Say \\\"UT\\\" \\\\ 61\"}}"
         );
     }
 
