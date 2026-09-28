@@ -64,7 +64,7 @@ impl App {
                     let mut cache = cache
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    crate::changelog::show_changelog(ui, &mut cache);
+                    crate::changelog::show_changelog(ui, &mut cache, version);
                 });
             });
         });

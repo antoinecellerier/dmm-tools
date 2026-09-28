@@ -277,7 +277,7 @@ methods to it, so no panel owns state of its own.
 | `specs.rs` | Per-range specification rendering |
 | `theme.rs` | Theme colour tables (WCAG-checked in both modes) |
 | `a11y.rs` | AccessKit label/role extension traits, focus rings, arrow-key resize |
-| `changelog.rs` | The embedded `CHANGELOG.md` shown in the What's New viewport |
+| `changelog.rs` | The embedded `CHANGELOG.md` shown in the What's New viewport, one folding section per release |
 
 ## Key Design Decisions
 

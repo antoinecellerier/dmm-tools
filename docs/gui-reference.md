@@ -74,8 +74,9 @@ The top bar contains:
   reconnecting/paused, gray = disconnected) with the device name and the link
   it is on: `UT61E+ · USB cable` or `UT61E+ · Bluetooth`. A window too narrow
   for the link drops it; hovering the status names it in full either way
-- **Version** (right side) — click it to open the "What's New" changelog
-  popup. On release upgrades, this popup opens automatically on first launch.
+- **Version** (right side) — click it to open the "What's New" changelog,
+  this release expanded and earlier ones folded. On release upgrades, it opens
+  automatically on first launch.
 - **Help / GitHub** link — opens the project page
 - **?** button — opens the [keyboard shortcuts](#keyboard-shortcuts) help
 - **Settings gear** — opens the settings panel
