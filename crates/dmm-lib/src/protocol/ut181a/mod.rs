@@ -127,7 +127,7 @@ impl Protocol for Ut181aProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        let payload = framing::read_frame(
+        let payload = framing::read_newest_frame(
             &mut self.rx_buf,
             transport,
             framing::extract_frame_abcd_2byte_le16,
@@ -674,6 +674,8 @@ mod tests {
     // we chose to send, not behaviour anyone has observed.
 
     use crate::transport::mock::MockTransport;
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
 
     /// A protocol that has already parsed one measurement, so the
     /// mode-relative commands have a dial position to work from.
@@ -689,8 +691,8 @@ mod tests {
     }
 
     /// The single frame a command wrote.
-    fn only_write(mock: &MockTransport) -> Vec<u8> {
-        let written = mock.written.borrow();
+    fn only_write(written: &RefCell<Vec<Vec<u8>>>) -> Vec<u8> {
+        let written = written.borrow();
         assert_eq!(
             written.len(),
             1,
@@ -706,7 +708,7 @@ mod tests {
         // AB CD | len 05 00 | 01 (SET_MODE) 21 11 (0x1121 LE) | checksum
         // 05+00+01+21+11 = 0x38.
         assert_eq!(
-            only_write(&mock),
+            only_write(&mock.written),
             hex("AB CD 05 00 01 21 11 38 00"),
             "SET_MODE 0x1121"
         );
@@ -744,12 +746,12 @@ mod tests {
         let (mut proto, mock) = proto_in(0x1111, 0);
         proto.send_command(&mock, "rel").unwrap();
         // 05+00+01+12+11 = 0x29.
-        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 12 11 29 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 05 00 01 12 11 29 00"));
 
         let (mut proto, mock) = proto_in(0x1112, 0);
         proto.send_command(&mock, "rel").unwrap();
         // 05+00+01+11+11 = 0x28.
-        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 11 11 28 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 05 00 01 11 11 28 00"));
     }
 
     /// A fresh process has never read the stream — opening the device only
@@ -772,7 +774,7 @@ mod tests {
 
         // 0x1111 -> 0x1112. A fresh protocol has no other source for that
         // word than the queued frame, so the read landed before the write.
-        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 12 11 29 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 05 00 01 12 11 29 00"));
         assert_eq!(proto.last_mode_raw, Some(0x1111));
     }
 
@@ -794,12 +796,12 @@ mod tests {
         // V AC LowPass 0x1141 -> 0x1142. 05+00+01+42+11 = 0x59.
         let (mut proto, mock) = proto_in(0x1141, 0);
         proto.send_command(&mock, "rel").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 42 11 59 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 05 00 01 42 11 59 00"));
 
         // V DC AC+DC 0x3121 -> 0x3122. 05+00+01+22+31 = 0x59.
         let (mut proto, mock) = proto_in(0x3121, 0);
         proto.send_command(&mock, "rel").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 22 31 59 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 05 00 01 22 31 59 00"));
     }
 
     /// ...and is withheld on every Hz and Peak variant, on the differential
@@ -833,17 +835,17 @@ mod tests {
         // V DC has four manual ranges; auto (0) steps to the first.
         let (mut proto, mock) = proto_in(0x3111, 0);
         proto.send_command(&mock, "range").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 01 07 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 02 01 07 00"));
 
         // The top of the ladder wraps back to 1, not to auto.
         let (mut proto, mock) = proto_in(0x3111, 4);
         proto.send_command(&mock, "range").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 01 07 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 02 01 07 00"));
 
         // Mid-ladder: 1 -> 2.
         let (mut proto, mock) = proto_in(0x3111, 1);
         proto.send_command(&mock, "range").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 02 08 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 02 02 08 00"));
     }
 
     #[test]
@@ -862,11 +864,11 @@ mod tests {
     fn minmax_sends_a_single_argument_byte() {
         let (mut proto, mock) = proto_in(0x3111, 0);
         proto.send_command(&mock, "minmax").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 04 01 09 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 04 01 09 00"));
 
         let (mut proto, mock) = proto_in(0x3111, 0);
         proto.send_command(&mock, "exit_minmax").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 04 00 08 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 04 00 08 00"));
     }
 
     #[test]
@@ -1052,7 +1054,7 @@ mod tests {
         }
         let (mut proto, mock) = proto_in(0x9111, 1);
         proto.send_command(&mock, "auto").unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 00 06 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 02 00 06 00"));
     }
 
     #[test]
@@ -1060,14 +1062,14 @@ mod tests {
         let (mut proto, mock) = proto_in(0x1111, 1);
         proto.select(&mock, Setting::Range, 3).unwrap();
         // AB CD | len 04 00 | 02 (SET_RANGE) 03 | checksum 04+00+02+03 = 0x09.
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 03 09 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 02 03 09 00"));
     }
 
     #[test]
     fn selecting_auto_sends_set_range_zero() {
         let (mut proto, mock) = proto_in(0x1111, 2);
         proto.select(&mock, Setting::Range, 0).unwrap();
-        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 00 06 00"));
+        assert_eq!(only_write(&mock.written), hex("AB CD 04 00 02 00 06 00"));
     }
 
     #[test]
@@ -1112,6 +1114,53 @@ mod tests {
 
     fn er_reply() -> Vec<u8> {
         build_command(&[0x01, b'E', b'R'])
+    }
+
+    /// A meter that answers a command only once it is written: `stream` is
+    /// queued before it, and the write queues `answer`, the reply and the
+    /// frames after it. A mock with everything queued up front hands the
+    /// read before the command the reply and the new state at once, which
+    /// no meter does, and a driver reading the newest frame takes them all.
+    struct AnswersAfterWrite {
+        queued: RefCell<VecDeque<Vec<u8>>>,
+        answer: RefCell<Vec<Vec<u8>>>,
+        written: RefCell<Vec<Vec<u8>>>,
+    }
+
+    impl AnswersAfterWrite {
+        fn new(stream: Vec<Vec<u8>>, answer: Vec<Vec<u8>>) -> Self {
+            Self {
+                queued: RefCell::new(stream.into()),
+                answer: RefCell::new(answer),
+                written: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl Transport for AnswersAfterWrite {
+        fn write(&self, data: &[u8]) -> Result<()> {
+            self.written.borrow_mut().push(data.to_vec());
+            let answer = std::mem::take(&mut *self.answer.borrow_mut());
+            self.queued.borrow_mut().extend(answer);
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            let Some(report) = self.queued.borrow_mut().pop_front() else {
+                return Ok(0);
+            };
+            let n = report.len().min(buf.len());
+            buf[..n].copy_from_slice(&report[..n]);
+            Ok(n)
+        }
+
+        fn set_baud(&self, _baud: u32) -> Result<()> {
+            Ok(())
+        }
+
+        fn link(&self) -> Option<crate::transport::Link> {
+            None
+        }
     }
 
     /// A plain V DC frame, with `misc` carrying the HOLD bit when set.
@@ -1176,50 +1225,70 @@ mod tests {
 
     #[test]
     fn selecting_minmax_sends_the_single_argument_byte() {
-        let mock = MockTransport::new(vec![
-            plain_frame(0x3111, 0x00),
-            ok_reply(),
-            build_command(&minmax_payload(0x3111)),
-        ]);
+        let meter = AnswersAfterWrite::new(
+            vec![plain_frame(0x3111, 0x00)],
+            vec![ok_reply(), build_command(&minmax_payload(0x3111))],
+        );
         let mut proto = Ut181aProtocol::new();
-        proto.select(&mock, Setting::MinMax, 1).expect("recording");
+        proto.select(&meter, Setting::MinMax, 1).expect("recording");
         // AB CD | len 04 00 | 04 (SET_MIN_MAX) 01 | checksum 04+00+04+01 = 0x09.
         assert_eq!(
-            only_write(&mock),
+            only_write(&meter.written),
             vec![0xAB, 0xCD, 0x04, 0x00, 0x04, 0x01, 0x09, 0x00]
         );
     }
 
     #[test]
     fn selecting_hold_sends_the_button_press() {
-        let mock = MockTransport::new(vec![
-            plain_frame(0x3111, 0x00),
-            ok_reply(),
-            plain_frame(0x3111, 0x80),
-        ]);
+        let meter = AnswersAfterWrite::new(
+            vec![plain_frame(0x3111, 0x00)],
+            vec![ok_reply(), plain_frame(0x3111, 0x80)],
+        );
         let mut proto = Ut181aProtocol::new();
-        proto.select(&mock, Setting::Hold, 1).expect("held");
+        proto.select(&meter, Setting::Hold, 1).expect("held");
         assert_eq!(
-            only_write(&mock),
+            only_write(&meter.written),
             vec![0xAB, 0xCD, 0x04, 0x00, 0x12, 0x5A, 0x70, 0x00]
         );
     }
 
     #[test]
     fn selecting_rel_flips_nibble_zero_of_the_mode_word() {
-        let mock = MockTransport::new(vec![
-            plain_frame(0x1111, 0x00),
-            ok_reply(),
-            // The REL frame format (misc format_type 1) is what lights REL.
-            build_command(&make_relative_payload(0x1112, 2.0, 10.0, 12.0)),
-        ]);
+        let meter = AnswersAfterWrite::new(
+            vec![plain_frame(0x1111, 0x00)],
+            vec![
+                ok_reply(),
+                // The REL frame format (misc format_type 1) is what lights REL.
+                build_command(&make_relative_payload(0x1112, 2.0, 10.0, 12.0)),
+            ],
+        );
         let mut proto = Ut181aProtocol::new();
-        proto.select(&mock, Setting::Rel, 1).expect("relative");
+        proto.select(&meter, Setting::Rel, 1).expect("relative");
         // SET_MODE 0x1112, the REL companion of 0x1111.
         assert_eq!(
-            only_write(&mock),
+            only_write(&meter.written),
             vec![0xAB, 0xCD, 0x05, 0x00, 0x01, 0x12, 0x11, 0x29, 0x00]
         );
+    }
+
+    /// A reader slower than the meter's 10 frames a second gets the frame
+    /// the meter sent last, not the oldest one queued: command replies and
+    /// frames split by a mid-stream join are passed over on the way.
+    #[test]
+    fn a_slow_reader_gets_the_newest_reading() {
+        let newest = plain_frame(0x3111, 0x80);
+        let mut stream = plain_frame(0x1111, 0x00)[3..].to_vec(); // joined mid-frame
+        stream.extend(plain_frame(0x1111, 0x00));
+        stream.extend(ok_reply());
+        stream.extend(plain_frame(0x3111, 0x00));
+        stream.extend(&newest[..10]);
+        let mock = MockTransport::new(stream.chunks(20).map(<[u8]>::to_vec).collect());
+        mock.push_response(newest[10..].to_vec());
+        let mut proto = Ut181aProtocol::new();
+        let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.mode_raw, 0x3111);
+        assert!(m.flags.hold, "the newest frame, not the first whole one");
+        assert!(proto.rx_buf.is_empty());
     }
 
     #[test]
@@ -1232,9 +1301,9 @@ mod tests {
 
     #[test]
     fn an_er_reply_rejects_a_hold() {
-        let mock = MockTransport::new(vec![plain_frame(0x3111, 0x00), er_reply()]);
+        let meter = AnswersAfterWrite::new(vec![plain_frame(0x3111, 0x00)], vec![er_reply()]);
         let mut proto = Ut181aProtocol::new();
-        let err = proto.select(&mock, Setting::Hold, 1).unwrap_err();
+        let err = proto.select(&meter, Setting::Hold, 1).unwrap_err();
         assert!(matches!(err, Error::CommandRejected(_)), "{err}");
     }
 

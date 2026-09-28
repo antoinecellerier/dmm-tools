@@ -7,7 +7,7 @@ pub mod tables;
 use crate::error::{Error, ErrorKind, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
-use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::framing::{self, DRAIN_WAIT_MS, FrameErrorRecovery};
 use crate::protocol::registry::{DEVICES, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
@@ -963,11 +963,6 @@ const BLUETOOTH_PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(2500);
 /// three a second (adapter spec §3). A longer backlog — a pause left on for
 /// an hour — drains over the next few requests.
 const MAX_DRAIN_READS: usize = 4096;
-
-/// How long each of those reads waits. Not zero: the Bluetooth transport's
-/// runtime only moves notifications from the platform's socket onto its
-/// queue while a read is waiting, and a zero wait gives it no turn to.
-const DRAIN_WAIT_MS: i32 = 10;
 
 /// Most bytes of an unfinished frame kept between those reads; a frame is
 /// 19 bytes.

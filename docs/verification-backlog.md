@@ -29,6 +29,7 @@ Items that need real components or specific setups to verify.
   - [Brymen BM78xBT: experimental, awaiting a hardware report](#brymen-bm78xbt-experimental-awaiting-a-hardware-report)
   - [Brymen BU-86X, BM86x, BM82x and BM52x: experimental, awaiting a hardware report](#brymen-bu-86x-bm86x-bm82x-and-bm52x-experimental-awaiting-a-hardware-report)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
+  - [Streaming meters: newest queued frame](#streaming-meters-newest-queued-frame)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
@@ -1890,6 +1891,12 @@ boot.
   on the 10 A ranges 2-3 of AC/DC VA (spec §15.4), and EEVblog's app would
   show the voltage in mV when the main range is m or µ (spec §7.1); a
   capture in each VA range settles it.
+- **VA operands at a slow sample interval.** Each request takes the newest
+  packet queued, so at an interval longer than the meter's a reading
+  carries whichever operand the last packet showed. Whether the display
+  flips on every packet or on a slower clock of its own is not known
+  (spec §15.4); a VA capture at `--interval-ms 2000` shows whether the
+  readings alias.
 - **Temperature without a unit bit.** Firmware before 1.21 sets neither
   byte 6 bit 5 (°C) nor bit 4 (°F) (spec §1, §6.4); the driver then reads °C,
   as UEi's app does. Both bits set is reported.
@@ -2282,6 +2289,26 @@ the following needs someone's hardware.
   now reachable. Adding it means a `SelectableDevice` entry with its own
   range table and the two-display handling the deck describes for AC, LPF and
   temperature, and a hardware report to go with it.
+
+### Streaming meters: newest queued frame
+
+Since 2026-09-28 the streaming families with a Bluetooth link (UT171,
+UT181A, 121GW, BM78xBT) answer each request with the newest frame
+already queued, as the UT61+ over the UT-D07B has since it landed; the
+HID-only streaming families (UT8802, UT8803, UT80x, VC-880) read oldest
+first. Checked offline only (a simulated meter on a manual clock).
+
+- **Linux HID drops the newest.** hidraw keeps 64 reports per reader and,
+  as we recall `hidraw_report_event` (not checked against the kernel
+  source), a full ring drops the newest report. At a byte per CP2110
+  report the ring then holds the oldest ~64 bytes, which a drain cannot get
+  past, so a HID streaming meter's reading can be up to one sample interval
+  old on Linux. Discarding the queue and waiting for a fresh frame fixes it,
+  at up to a meter period per request, if a report shows it matters.
+- **A paused Bluetooth session.** Where its notifications wait while nothing
+  reads, and whether anything bounds them. Checkable on our UT-D07B: pause
+  the GUI for 10 minutes, resume, and see that the first reading is current
+  and memory stayed flat.
 
 ### Vendor sources not yet read
 

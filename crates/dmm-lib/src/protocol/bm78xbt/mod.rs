@@ -98,7 +98,7 @@ impl Protocol for Bm78xbtProtocol {
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used.
-        let payload = framing::read_frame(
+        let payload = framing::read_newest_frame(
             &mut self.rx_buf,
             transport,
             packet::extract,
@@ -178,22 +178,35 @@ mod tests {
         .concat()
     }
 
+    /// `bytes` in reads of `size`.
+    fn pieces(bytes: &[u8], size: usize) -> Vec<Vec<u8>> {
+        bytes.chunks(size).map(<[u8]>::to_vec).collect()
+    }
+
     /// Whole notifications, and the same split into 5-, 20- and 64-byte
-    /// pieces (a small MTU, the transport's reads), give both readings.
+    /// pieces (a small MTU, the transport's reads), give their readings;
+    /// with both already queued, a request answers with the newer one.
     #[test]
     fn notifications_in_any_pieces_give_their_readings() {
+        let later = notification(&example_info(), &second_reading());
         for size in [152, 5, 20, 64] {
-            let reads: Vec<Vec<u8>> = stream().chunks(size).map(<[u8]>::to_vec).collect();
-            let mock = MockTransport::new(reads);
+            let mock = MockTransport::new(pieces(&example_notification(), size));
             let mut proto = proto();
             let (first, reports) = capture_reports(|| proto.request_measurement(&mock));
             assert!(reports.is_empty(), "{reports:?}");
             let first = first.unwrap();
             assert_eq!(first.display_raw.as_deref(), Some("-1.2345"), "{size}");
             assert_eq!(first.raw_payload.len(), 56, "{size}");
+            for piece in pieces(&later, size) {
+                mock.push_response(piece);
+            }
             let second = proto.request_measurement(&mock).unwrap();
             assert_eq!(second.display_raw.as_deref(), Some("12.345"), "{size}");
             assert_eq!(second.raw_payload.len(), 56, "{size}");
+
+            let mock = MockTransport::new(pieces(&stream(), size));
+            let newest = self::proto().request_measurement(&mock).unwrap();
+            assert_eq!(newest.display_raw.as_deref(), Some("12.345"), "{size}");
         }
     }
 
@@ -201,15 +214,22 @@ mod tests {
     /// reading comes alone, silently; the next has its information packet.
     #[test]
     fn joining_mid_stream_reads_the_next_whole_reading() {
+        let stream = stream();
+        let whole = example_notification().len();
         for skip in [3, 30, 60] {
-            let reads: Vec<Vec<u8>> = stream()[skip..].chunks(20).map(<[u8]>::to_vec).collect();
-            let mock = MockTransport::new(reads);
+            // What is queued when the read comes: the rest of the first
+            // notification, and while it holds no reading, the next one too.
+            let queued = if skip < 24 { whole } else { stream.len() };
+            let mock = MockTransport::new(pieces(&stream[skip..queued], 20));
             let mut proto = proto();
             let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
             assert!(reports.is_empty(), "{reports:?}");
             let m = m.unwrap();
             if skip < 24 {
                 assert_eq!(m.raw_payload, example_reading(), "{skip}");
+                for piece in pieces(&stream[whole..], 20) {
+                    mock.push_response(piece);
+                }
                 let next = proto.request_measurement(&mock).unwrap();
                 assert_eq!(next.raw_payload[24..], second_reading(), "{skip}");
             } else {

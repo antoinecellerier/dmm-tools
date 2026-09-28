@@ -213,7 +213,7 @@ impl Protocol for Ut171Protocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        let payload = framing::read_frame(
+        let payload = framing::read_newest_frame(
             &mut self.rx_buf,
             transport,
             // UT171 framing is identical to UT181A: 2-byte LE length =
@@ -1131,9 +1131,6 @@ raw_payload=15"#
         frames.push(framing::test_frame_le16(&make_payload(
             0x02, 0x01, 12.345, 0x00,
         )));
-        frames.push(framing::test_frame_le16(&make_extended_payload(
-            0x03, 230.0, 0x00, 230.1,
-        )));
         let mock = MockTransport::new(frames);
         let (first, reports) = capture_reports(|| {
             proto.init(&mock).unwrap();
@@ -1141,6 +1138,9 @@ raw_payload=15"#
         });
         assert_eq!(first.unwrap().mode, "V DC");
         assert!(reports.is_empty(), "{reports:?}");
+        mock.push_response(framing::test_frame_le16(&make_extended_payload(
+            0x03, 230.0, 0x00, 230.1,
+        )));
         let (second, reports) = capture_reports(|| proto.request_measurement(&mock));
         assert_eq!(second.unwrap().mode, "V AC");
         assert!(reports.is_empty(), "{reports:?}");

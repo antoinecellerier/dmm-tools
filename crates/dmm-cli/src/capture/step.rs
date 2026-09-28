@@ -720,6 +720,56 @@ mod tests {
         }
     }
 
+    /// A meter streaming `frames` one per [`StreamingTransport::PERIOD`] of
+    /// real time, as a UT181A streams, rather than all queued at once: a
+    /// streaming driver answers with the newest frame queued, and would take
+    /// a whole queue in one read.
+    struct StreamingTransport {
+        frames: Mutex<std::collections::VecDeque<Vec<u8>>>,
+        next_due: Mutex<Instant>,
+    }
+
+    impl StreamingTransport {
+        /// Well past the driver's 10 ms wait for a queued frame.
+        const PERIOD: Duration = Duration::from_millis(50);
+
+        fn new(frames: Vec<Vec<u8>>) -> Self {
+            Self {
+                frames: Mutex::new(frames.into()),
+                next_due: Mutex::new(Instant::now()),
+            }
+        }
+    }
+
+    impl dmm_lib::transport::Transport for StreamingTransport {
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            None
+        }
+
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            let mut next_due = self.next_due.lock().unwrap();
+            let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
+            if let Some(wait) = next_due.checked_duration_since(Instant::now()) {
+                if wait > timeout {
+                    std::thread::sleep(timeout);
+                    return Ok(0);
+                }
+                std::thread::sleep(wait);
+            }
+            let Some(next) = self.frames.lock().unwrap().pop_front() else {
+                return Ok(0);
+            };
+            *next_due = Instant::now() + Self::PERIOD;
+            let n = next.len().min(buf.len());
+            buf[..n].copy_from_slice(&next[..n]);
+            Ok(n)
+        }
+    }
+
     fn dmm_replaying(
         responses: Vec<Vec<u8>>,
     ) -> dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>> {
@@ -1125,9 +1175,8 @@ mod tests {
             responses.extend(vec![hz.clone(); 5]);
             let device = dmm_lib::protocol::registry::find_device("ut181a").unwrap();
             let mut dmm = dmm_lib::Dmm::new(
-                Box::new(QueuedTransport {
-                    responses: Mutex::new(responses.into()),
-                }) as Box<dyn dmm_lib::transport::Transport>,
+                Box::new(StreamingTransport::new(responses))
+                    as Box<dyn dmm_lib::transport::Transport>,
                 (device.new_protocol)(),
             )
             .unwrap();

@@ -145,7 +145,7 @@ impl Protocol for Eevblog121gwProtocol {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used. About 2 packets a second arrive (spec
         // §15.4), several inside read_frame's 2 s.
-        let read = framing::read_frame(
+        let read = framing::read_newest_frame(
             &mut self.rx_buf,
             transport,
             packet::extract_packet,
@@ -228,31 +228,31 @@ mod tests {
 
     #[test]
     fn f2_then_the_body_as_two_values_gives_two_readings() {
-        let mut reads = Vec::new();
-        for p in [EXAMPLES[0], EXAMPLES[3]] {
-            reads.push(vec![packet::START]);
-            reads.push(p[1..].to_vec());
-        }
-        let mock = MockTransport::new(reads);
+        let mock = MockTransport::new(Vec::new());
         let mut proto = proto();
-        assert_eq!(
-            proto.request_measurement(&mock).unwrap().raw_payload,
-            EXAMPLES[0]
-        );
-        assert_eq!(
-            proto.request_measurement(&mock).unwrap().raw_payload,
-            EXAMPLES[3]
-        );
+        for p in [EXAMPLES[0], EXAMPLES[3]] {
+            mock.push_response(vec![packet::START]);
+            mock.push_response(p[1..].to_vec());
+            assert_eq!(proto.request_measurement(&mock).unwrap().raw_payload, p);
+        }
+    }
+
+    /// A reader slower than the meter gets the packet it sent last.
+    #[test]
+    fn a_slow_reader_gets_the_newest_packet() {
+        let mock = MockTransport::new(EXAMPLES.iter().map(|p| p.to_vec()).collect());
+        let m = proto().request_measurement(&mock).unwrap();
+        assert_eq!(m.raw_payload, EXAMPLES[EXAMPLES.len() - 1]);
     }
 
     /// The shape community clients saw on a meter (spec §15.4): 18-byte
     /// values, no `F2`.
     #[test]
     fn eighteen_byte_values_without_f2_give_readings() {
-        let reads: Vec<Vec<u8>> = all_packets().iter().map(|p| p[1..].to_vec()).collect();
-        let mock = MockTransport::new(reads);
+        let mock = MockTransport::new(Vec::new());
         let mut proto = proto();
         for p in all_packets() {
+            mock.push_response(p[1..].to_vec());
             let m = proto.request_measurement(&mock).unwrap();
             assert_eq!(m.raw_payload, p, "stored with F2 first");
         }
@@ -262,13 +262,14 @@ mod tests {
     fn joining_mid_packet_reads_the_next_whole_one() {
         let mut stream = EXAMPLES[1][7..].to_vec();
         stream.extend_from_slice(&EXAMPLES[2]);
-        stream.extend_from_slice(&EXAMPLES[0][1..]);
-        let reads: Vec<Vec<u8>> = stream.chunks(5).map(<[u8]>::to_vec).collect();
-        let mock = MockTransport::new(reads);
+        let mock = MockTransport::new(stream.chunks(5).map(<[u8]>::to_vec).collect());
         let mut proto = proto();
         let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
         assert_eq!(m.unwrap().raw_payload, EXAMPLES[2]);
         assert!(reports.is_empty(), "{reports:?}");
+        for piece in EXAMPLES[0][1..].chunks(5) {
+            mock.push_response(piece.to_vec());
+        }
         assert_eq!(
             proto.request_measurement(&mock).unwrap().raw_payload,
             EXAMPLES[0]
@@ -295,6 +296,10 @@ mod tests {
                 reports.iter().any(|r| r.contains("unrecognised mode code")),
                 "{reports:?}"
             );
+            // The next packet the meter sends.
+            for piece in odd.chunks(5) {
+                mock.push_response(piece.to_vec());
+            }
         }
     }
 
