@@ -91,6 +91,11 @@ pub struct MeasurementStream<'a, T: Transport> {
 /// sample interval doesn't spin.
 const CANCEL_POLL_SLICE: Duration = Duration::from_millis(50);
 
+/// The longest tick a stream runs at. Anything longer is a mistyped
+/// interval (the GUI already clamps to a minute), and a bound keeps the tick
+/// arithmetic on `Instant` clear of overflow.
+const MAX_TICK: Duration = Duration::from_secs(24 * 3600);
+
 /// Frame spacings the tolerance is worked out from.
 const SPACINGS_KEPT: usize = 16;
 
@@ -135,7 +140,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         Self {
             clock: dmm.clock().clone(),
             dmm,
-            tick,
+            tick: tick.min(MAX_TICK),
             next_tick: None,
             anchor: None,
             spacing: Spacing::default(),
@@ -201,7 +206,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// reading. The schedule starts afresh at the next reading, as it did
     /// when the stream was built.
     pub fn set_tick(&mut self, tick: Duration) {
-        self.tick = tick;
+        self.tick = tick.min(MAX_TICK);
         self.next_tick = None;
         self.anchor = None;
     }
@@ -255,8 +260,13 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
                     skipped += 1;
                 }
                 Err(e) => {
-                    if e.kind() == ErrorKind::Protocol {
-                        self.keep(self.clock.now());
+                    if e.kind() == ErrorKind::Protocol && !self.tick.is_zero() {
+                        // The tick has come with only an error in hand: a
+                        // good frame from this window stands for it instead.
+                        self.advance(self.clock.now());
+                        if let Some(m) = dropped {
+                            return Ok(Some(m));
+                        }
                     }
                     return Err(e);
                 }
@@ -279,14 +289,28 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         if !self.due(at) {
             return false;
         }
+        self.advance(at);
+        true
+    }
+
+    /// Move the next tick to the first point of the grid after a reading at
+    /// `at`, starting the grid there if there is none yet.
+    fn advance(&mut self, at: Instant) {
         let anchor = *self.anchor.get_or_insert(at);
         let past = (at + self.tolerance())
             .checked_duration_since(anchor)
             .unwrap_or_default();
-        let ticks = past.as_nanos() / self.tick.as_nanos() + 1;
-        let ticks = u32::try_from(ticks).unwrap_or(u32::MAX);
-        self.next_tick = Some(anchor + self.tick * ticks);
-        true
+        let tick_ns = self.tick.as_nanos();
+        let offset_ns = (past.as_nanos() / tick_ns + 1).saturating_mul(tick_ns);
+        let offset = Duration::new(
+            u64::try_from(offset_ns / 1_000_000_000).unwrap_or(u64::MAX),
+            (offset_ns % 1_000_000_000) as u32,
+        );
+        // Unreachable within a clamped tick of any real session; the old
+        // tick stands rather than a panic.
+        if let Some(next) = anchor.checked_add(offset) {
+            self.next_tick = Some(next);
+        }
     }
 
     /// Whether `at` is within the tolerance of the next tick, or past it.
@@ -718,6 +742,16 @@ mod tests {
         let (mut dmm, _clock) = timed_dmm(jittered(100, 100), vec![3, 4, 12]);
         let readings = kept(&mut dmm, Duration::from_secs(1), 5);
         assert_eq!(readings.len(), 5);
+    }
+
+    /// A corrupt frame at the tick loses to a good one read before it in
+    /// the same window.
+    #[test]
+    fn a_good_frame_before_a_corrupt_one_stands_for_the_tick() {
+        // Frame 10 lands on the 1 s tick, corrupt; frame 9 came 100 ms before.
+        let (mut dmm, _clock) = timed_dmm(jittered(100, 40), vec![10]);
+        let readings = kept(&mut dmm, Duration::from_secs(1), 2);
+        assert_eq!(readings[1].0, 9, "{readings:?}");
     }
 
     #[test]
