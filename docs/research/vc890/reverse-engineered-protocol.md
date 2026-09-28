@@ -7,7 +7,8 @@ in the same DLL.
 See `docs/research/vc880/reverse-engineering-approach.md` for methodology.
 
 Confidence levels: **[VENDOR]** = from Voltsoft decompilation,
-**[MANUAL]** = from the VC-890 user manual.
+**[MANUAL]** = from the VC-890 user manual, **[VENDOR-DOC]** = from
+Conrad's VC890 Protocol Rev 1.3 (2013-1-4, `references/vc890/protocol/`).
 
 ---
 
@@ -79,6 +80,19 @@ is used on an HID read error path at line 3941. The meter still
 receiving / initiating vs. requiring the ack is [UNVERIFIED], but the
 vendor's double bracketing is strong enough evidence to ship the
 sequence on both sides of a measurement.
+
+**[VENDOR-DOC]** The protocol document defines `0xFF` Result both as a
+DMM→PC message (§3.7) and as a PC→DMM command (§4.6), laid out
+`AB CD <len> FF <result> <checksum>`, carrying "the data transmission
+result of the message that required handshaking": `0x00` Successful,
+`0x01` Error-Resend-Previous-Message, `0x02` Error-Do-Nothing. Voltsoft's
+ack frame above is that command with `0x00` Successful. The document does
+not say which messages require handshaking; the fourth column of its
+command table is whether a command carries data.
+
+**[VENDOR-DOC]** The document gives no timing: no gap between frames, no
+deadline for a reply or a Result, nothing matching Voltsoft's 100 ms
+between acks.
 
 ## Live Data Frame (66 bytes) -- [VENDOR]
 

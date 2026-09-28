@@ -2328,6 +2328,9 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
   `references/vc880/protocol/` and `references/vc890/protocol/` with a
   SOURCE.txt each. The vc880 and vc890 specs were built from Voltsoft alone.
   The VC880 document's text layer is broken: read it from rendered pages.
+  The VC890 document's handshake was read 2026-09-28 (its Result message
+  and codes, no timing given) into the vc890 spec as [VENDOR-DOC]; its
+  frame layouts (pp. 3-8) and the whole VC880 document are still to read.
 - **UNI-T's general-purpose PC software** ("优利德上位机软件", `1.10.zip`
   2025-05-26 and `Setup.zip` 2026-09-09, about 150 MB each), in the bench
   download centre's UT80 and UT88 results. Unopened; it may drive several
