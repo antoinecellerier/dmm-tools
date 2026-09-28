@@ -60,34 +60,33 @@ pub fn render_csv(
 /// no report has confirmed, as the CLI's does.
 ///
 /// `marked` are the markers on buffered samples, oldest first, as for
-/// [`render_csv`].
+/// [`render_csv`]. Returns the file's bytes, as [`render_csv`] does.
 pub(crate) fn render_json(
     samples: std::collections::vec_deque::Iter<'_, Sample>,
     marked: &[&Marker],
     device_model: &str,
     experimental: bool,
-) -> String {
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut marks = MarkCursor::new(marked);
-    let mut out = dmm_shared::export::metadata_line(device_model);
-    out.push('\n');
+    let metadata = dmm_shared::export::metadata_line(device_model);
     // A reading with no sub-values runs to roughly 400 bytes; growing from
     // there beats growing from nothing on a half-million-sample buffer.
-    out.reserve(samples.len() * 400);
+    let mut out: Vec<u8> = Vec::with_capacity(metadata.len() + 1 + samples.len() * 400);
+    out.extend_from_slice(metadata.as_bytes());
+    out.push(b'\n');
     for s in samples {
         let ts = s.wall_time.to_rfc3339();
-        out.push_str(
-            &dmm_shared::export::measurement_json(
-                &s.measurement,
-                &ts,
-                experimental,
-                None,
-                marks.on(s),
-            )
-            .to_string(),
-        );
-        out.push('\n');
+        dmm_shared::export::write_measurement_json(
+            &mut out,
+            &s.measurement,
+            &ts,
+            experimental,
+            None,
+            marks.on(s),
+        )?;
+        out.push(b'\n');
     }
-    out
+    Ok(out)
 }
 
 /// Walks the markers alongside the samples as an export writes them out, both
@@ -1657,7 +1656,8 @@ mod tests {
     fn render_json_writes_each_marker_on_its_sample() {
         let (samples, markers) = marked_samples();
         let marked: Vec<&Marker> = markers.iter().collect();
-        let text = render_json(samples.iter(), &marked, "UNI-T UT61E+", false);
+        let bytes = render_json(samples.iter(), &marked, "UNI-T UT61E+", false).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<serde_json::Value> = text
             .lines()
             .skip(1)
@@ -1690,24 +1690,24 @@ mod tests {
     fn render_json_is_the_metadata_line_and_one_object_per_sample() {
         let mut samples = replay_samples();
         samples.truncate(2);
-        let text = render_json(samples.iter(), &[], "UNI-T UT61E+", true);
+        let bytes = render_json(samples.iter(), &[], "UNI-T UT61E+", true).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
 
-        let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+");
+        let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+").into_bytes();
         for s in &samples {
-            expected.push('\n');
-            expected.push_str(
-                &dmm_shared::export::measurement_json(
-                    &s.measurement,
-                    &s.wall_time.to_rfc3339(),
-                    true,
-                    None,
-                    None,
-                )
-                .to_string(),
-            );
+            expected.push(b'\n');
+            dmm_shared::export::write_measurement_json(
+                &mut expected,
+                &s.measurement,
+                &s.wall_time.to_rfc3339(),
+                true,
+                None,
+                None,
+            )
+            .unwrap();
         }
-        expected.push('\n');
-        assert_eq!(text, expected);
+        expected.push(b'\n');
+        assert_eq!(text.as_bytes(), expected);
 
         // And every line of it is a JSON object, as a script reading it
         // line by line expects.
@@ -1718,6 +1718,38 @@ mod tests {
             assert!(v.is_object(), "{line}");
         }
         assert!(lines_hold_the_reading(&text), "{text}");
+    }
+
+    /// A JSON export of a long buffer is rendered on the UI thread, as a CSV
+    /// one is, so it must cost about what a CSV one does — building a `Value`
+    /// tree per reading made it over ten times as slow.
+    #[test]
+    #[ignore = "timing-sensitive; run with --release"]
+    fn a_json_export_costs_about_what_a_csv_one_does() {
+        let wc = WallClock::new();
+        let base = Instant::now();
+        let samples: VecDeque<Sample> = (0..200_000u64)
+            .map(|i| {
+                let mut m = make_measurement(b"  1.234");
+                m.timestamp = base + Duration::from_millis(100 * i);
+                Sample::from_measurement(&m, &wc, 0)
+            })
+            .collect();
+
+        let start = Instant::now();
+        let csv = render_csv(samples.iter(), &[], "UNI-T UT61E+", layout(0, 0)).unwrap();
+        let csv_time = start.elapsed();
+        let start = Instant::now();
+        let json = render_json(samples.iter(), &[], "UNI-T UT61E+", false).unwrap();
+        let json_time = start.elapsed();
+
+        let ratio = json_time.as_secs_f64() / csv_time.as_secs_f64().max(1e-9);
+        println!(
+            "200K samples: CSV {csv_time:?} ({} B), JSON {json_time:?} ({} B), ratio {ratio:.2}x",
+            csv.len(),
+            json.len()
+        );
+        assert!(ratio < 3.0, "a JSON export costs {ratio:.1}x a CSV one");
     }
 
     /// The fields a reader of the GUI's JSON would look for, on the line the

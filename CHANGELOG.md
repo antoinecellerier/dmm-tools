@@ -23,6 +23,7 @@
 - **Switching Plot: keeps the graph** — such as T1 and T2, or a UT181A's voltage and its frequency; it restarted empty.
 - **A UT181A's reading and sub-values are named, such as T1 or AC** — the graph called them Main, Aux1 and Aux2.
 - **The GUI uses less CPU while connected or zoomed out, and none while paused** — it redrew up to three times per reading, ten times a second while paused, and drew every sample of a zoomed-out graph.
+- **Exporting a long recording as JSON no longer freezes the GUI for seconds**
 
 ### CLI
 

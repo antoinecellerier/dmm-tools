@@ -9,9 +9,7 @@ description = "What dmm-cli and dmm-gui share and dmm-lib must not carry: settin
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
 serde.workspace = true
-# The field order of an exported reading is part of what both binaries write,
-# so it must not depend on which of them is in the build.
-serde_json = { workspace = true, features = ["preserve_order"] }
+serde_json.workspace = true
 directories.workspace = true
 chrono.workspace = true
 env_logger.workspace = true

@@ -220,8 +220,9 @@ impl App {
         // sample buffer instead — which is what this used to do so the dialog
         // and write could run off the UI thread — duplicated every Sample,
         // each with its own heap string, roughly doubling peak memory at the
-        // 500K cap. The rendered file is a fraction of that size, and building
-        // it is cheaper than 500K allocations.
+        // 500K cap. A CSV file is a fraction of that size; a JSON document is
+        // about the size of the buffer, but held as one allocation rather
+        // than 500K cloned samples.
         //
         // The name is built here too, rather than in the dialog thread: the
         // first sample is where the file starts.
@@ -240,7 +241,10 @@ impl App {
                 })?
             }
             ExportFormat::Json => {
-                render_json(samples(), &marked, device_model, self.experimental()).into_bytes()
+                render_json(samples(), &marked, device_model, self.experimental()).map_err(|e| {
+                    error!("JSON export failed: {e}");
+                    format!("Export failed: {e}")
+                })?
             }
             ExportFormat::Replay => self
                 .replay_device_id()
@@ -622,12 +626,16 @@ mod tests {
 
         assert_eq!(app.capture.recording_layout.experimental, Some(true));
         assert!(app.experimental(), "the recording ran against that meter");
-        let json = render_json(
-            app.capture.recording.export_samples(),
-            &[],
-            "UNI-T UT181A",
-            app.experimental(),
-        );
+        let json = String::from_utf8(
+            render_json(
+                app.capture.recording.export_samples(),
+                &[],
+                "UNI-T UT181A",
+                app.experimental(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         let readings: Vec<&str> = json.lines().skip(1).collect();
         assert!(!readings.is_empty(), "got {json}");
         assert!(

@@ -233,8 +233,11 @@ fn format_csv(
     wtr.flush()
 }
 
-/// One reading as a JSON object, through the builder the GUI's JSON export
+/// One reading as a JSON object, through the writer the GUI's JSON export
 /// also calls — the two cannot drift, because there is only one of them.
+///
+/// Rendered whole, then written once: stdout's line buffering would otherwise
+/// flush the object and its newline separately.
 fn format_json(
     w: &mut dyn Write,
     m: &Measurement,
@@ -242,14 +245,17 @@ fn format_json(
     experimental: bool,
     integral: Option<(f64, &str)>,
 ) -> std::io::Result<()> {
-    let obj = dmm_shared::export::measurement_json(
+    let mut line = Vec::with_capacity(512);
+    dmm_shared::export::write_measurement_json(
+        &mut line,
         m,
         &timestamp_rfc3339(m, wall_clock),
         experimental,
         integral,
         None,
-    );
-    writeln!(w, "{obj}")
+    )?;
+    line.push(b'\n');
+    w.write_all(&line)
 }
 
 #[cfg(test)]

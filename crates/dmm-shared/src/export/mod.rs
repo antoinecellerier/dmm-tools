@@ -10,8 +10,11 @@ mod csv_layout;
 pub use csv_layout::{CsvLayout, device_comment};
 
 use chrono::{DateTime, Local};
+use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
+use serde::Serialize;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 
 /// The `_metadata` object a JSON export opens with, as its line — without the
 /// newline that ends it.
@@ -19,21 +22,26 @@ pub fn metadata_line(device_model: &str) -> String {
     json!({"_metadata": {"device": device_model}}).to_string()
 }
 
-/// One reading, as a JSON export writes it.
+/// Write one reading to `w` as a JSON export line, without the newline that
+/// ends it.
 ///
 /// `timestamp_rfc3339` is the wall time the reading was taken at, which only
 /// the caller can work out: the CLI derives it from the session's clock
 /// origin, the GUI stamped it onto the sample as it arrived. `marker` is the
 /// number and note of the marker the user placed on this reading, if any.
-pub fn measurement_json(
+///
+/// Serialized straight from borrowed fields: a `Value` tree per reading cost
+/// dozens of allocations, and a long recording's export froze the GUI.
+pub fn write_measurement_json<W: std::io::Write + ?Sized>(
+    w: &mut W,
     m: &Measurement,
     timestamp_rfc3339: &str,
     experimental: bool,
     integral: Option<(f64, &str)>,
     marker: Option<(u32, &str)>,
-) -> Value {
+) -> std::io::Result<()> {
     let value = match &m.value {
-        MeasuredValue::Normal(v) => json!(v),
+        MeasuredValue::Normal(v) => Value::from(*v),
         MeasuredValue::Overload => json!("OL"),
         MeasuredValue::NcvLevel(l) => json!({"ncv_level": l}),
         // Null rather than a missing key or the word: every line keeps its
@@ -42,60 +50,88 @@ pub fn measurement_json(
         // a main reading has its sub-values in "aux".
         MeasuredValue::NoReading(_) | MeasuredValue::Absent => Value::Null,
     };
-    // Built from StatusFlags::as_pairs rather than a hand-written list: the
-    // old list had drifted and was missing `loz` and `void`, so a VC-890
-    // reading the meter had marked invalid was indistinguishable from a good
-    // one in JSON — while the text and CSV formats reported it.
-    let flags: serde_json::Map<String, Value> = m
-        .flags
-        .as_pairs()
-        .into_iter()
-        .map(|(name, set)| (name.to_string(), json!(set)))
-        .collect();
-    let mut obj = json!({
-        "timestamp": timestamp_rfc3339,
-        "mode": m.mode,
-        "value": value,
-        "unit": m.unit,
-        "range": m.range_label,
-        "display_raw": m.display_raw,
-        "progress": m.progress,
-        "experimental": experimental,
-        "flags": flags,
-    });
-    // Omitted entirely when there are none, so output for the families that
-    // never produce sub-values is unchanged.
-    if !m.aux_values.is_empty() {
-        obj["aux"] = json!(
-            m.aux_values
-                .iter()
-                .map(|aux| {
-                    let unit = aux.unit_or(&m.unit);
-                    // Null for a no-reading word, as for the main value.
-                    let value = match aux.value {
-                        MeasuredValue::NoReading(_) | MeasuredValue::Absent => Value::Null,
-                        _ => json!(aux.value_export_str()),
-                    };
-                    json!({
-                        "label": aux.label,
-                        "value": value,
-                        "unit": unit,
-                        "elapsed_secs": aux.elapsed_secs,
-                    })
-                })
-                .collect::<Vec<_>>()
-        );
+    let reading = JsonReading {
+        timestamp: timestamp_rfc3339,
+        mode: &m.mode,
+        value,
+        unit: &m.unit,
+        range: &m.range_label,
+        display_raw: m.display_raw.as_deref(),
+        progress: m.progress,
+        experimental,
+        flags: JsonFlags(&m.flags),
+        aux: m
+            .aux_values
+            .iter()
+            .map(|aux| JsonAuxValue {
+                label: &aux.label,
+                // Null for a no-reading word, as for the main value.
+                value: match aux.value {
+                    MeasuredValue::NoReading(_) | MeasuredValue::Absent => None,
+                    _ => Some(aux.value_export_str()),
+                },
+                unit: aux.unit_or(&m.unit),
+                elapsed_secs: aux.elapsed_secs,
+            })
+            .collect(),
+        integral: integral.map(|(v, _)| v),
+        integral_unit: integral.map(|(_, u)| u),
+        marker: marker.map(|(n, _)| n),
+        note: marker.map(|(_, n)| n),
+    };
+    serde_json::to_writer(w, &reading).map_err(std::io::Error::from)
+}
+
+/// One JSON export line. The field order is the line's key order, which is
+/// part of what both binaries write: a field added in the wrong place
+/// reorders every export (the goldens in the tests catch it).
+#[derive(Serialize)]
+struct JsonReading<'a> {
+    timestamp: &'a str,
+    mode: &'a str,
+    /// A number allocates nothing; "OL" and NCV are rare.
+    value: Value,
+    unit: &'a str,
+    range: &'a str,
+    display_raw: Option<&'a str>,
+    progress: Option<u16>,
+    experimental: bool,
+    flags: JsonFlags<'a>,
+    /// Omitted entirely when there are none, so output for the families
+    /// that never produce sub-values has no "aux" key.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    aux: Vec<JsonAuxValue<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    integral: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    integral_unit: Option<&'a str>,
+    /// Only on the marked readings, so an unmarked line is what it was.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    marker: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<&'a str>,
+}
+
+/// The flags object, from [`StatusFlags::as_pairs`] rather than a
+/// hand-written list: the old list had drifted and was missing `loz` and
+/// `void`, so a VC-890 reading the meter had marked invalid was
+/// indistinguishable from a good one in JSON — while the text and CSV formats
+/// reported it.
+struct JsonFlags<'a>(&'a StatusFlags);
+
+impl Serialize for JsonFlags<'_> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_map(self.0.as_pairs())
     }
-    if let Some((val, unit)) = integral {
-        obj["integral"] = json!(val);
-        obj["integral_unit"] = json!(unit);
-    }
-    // Only on the marked readings, so an unmarked line is what it was.
-    if let Some((number, note)) = marker {
-        obj["marker"] = json!(number);
-        obj["note"] = json!(note);
-    }
-    obj
+}
+
+/// One sub-value in "aux". A missing value or elapsed time stays as null.
+#[derive(Serialize)]
+struct JsonAuxValue<'a> {
+    label: &'a str,
+    value: Option<Cow<'a, str>>,
+    unit: &'a str,
+    elapsed_secs: Option<u32>,
 }
 
 /// The name an export opens with: the meter, the mode it stayed in and the
@@ -137,7 +173,6 @@ pub fn file_safe(name: &str) -> String {
 mod tests {
     use super::*;
     use chrono::TimeZone;
-    use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::AuxValue;
 
     fn start() -> DateTime<Local> {
@@ -168,7 +203,15 @@ mod tests {
         integral: Option<(f64, &str)>,
         marker: Option<(u32, &str)>,
     ) -> String {
-        measurement_json(m, ts, experimental, integral, marker).to_string()
+        let mut out = Vec::new();
+        write_measurement_json(&mut out, m, ts, experimental, integral, marker)
+            .expect("a Vec takes every write");
+        String::from_utf8(out).expect("JSON is UTF-8")
+    }
+
+    /// The line parsed back, for tests that look at one key.
+    fn parsed(line: &str) -> Value {
+        serde_json::from_str(line).expect("valid JSON")
     }
 
     /// A "Max" sub-value.
@@ -566,7 +609,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let line = measurement_json(&m, "2026-09-15T14:30:05+02:00", false, None, None).to_string();
+        let line = line(&m, "2026-09-15T14:30:05+02:00", false, None, None);
         assert_eq!(
             line,
             "{\"timestamp\":\"2026-09-15T14:30:05+02:00\",\"mode\":\"DC V\",\"value\":5.678,\
@@ -597,7 +640,7 @@ mod tests {
             display_raw: None,
             elapsed_secs: None,
         }];
-        let line = measurement_json(&m, "2026-09-15T14:30:05+02:00", false, None, None).to_string();
+        let line = line(&m, "2026-09-15T14:30:05+02:00", false, None, None);
         assert!(
             line.starts_with(
                 "{\"timestamp\":\"2026-09-15T14:30:05+02:00\",\"mode\":\"Auto\",\
@@ -605,7 +648,7 @@ mod tests {
             ),
             "got {line}"
         );
-        let v: Value = serde_json::from_str(&line).expect("valid JSON");
+        let v = parsed(&line);
         assert_eq!(v["aux"][0]["value"], Value::Null);
         assert_eq!(v["aux"][0]["label"], json!("Raw"));
     }
@@ -634,7 +677,7 @@ mod tests {
                 elapsed_secs: None,
             },
         ];
-        let v = measurement_json(&m, "2026-09-26T14:35:03+02:00", false, None, None);
+        let v = parsed(&line(&m, "2026-09-26T14:35:03+02:00", false, None, None));
         assert_eq!(v["value"], Value::Null);
         assert_eq!(v["aux"][0]["label"], json!("AC"));
         assert_eq!(v["aux"][0]["value"], json!("0.0123"));
@@ -648,12 +691,12 @@ mod tests {
     fn a_marked_reading_carries_its_marker_last() {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
-        let line = measurement_json(&m, "ts", false, None, Some((3, "load on"))).to_string();
+        let marked = line(&m, "ts", false, None, Some((3, "load on")));
         assert!(
-            line.ends_with(",\"marker\":3,\"note\":\"load on\"}"),
-            "got {line}"
+            marked.ends_with(",\"marker\":3,\"note\":\"load on\"}"),
+            "got {marked}"
         );
-        let v = measurement_json(&m, "ts", false, None, None);
+        let v = parsed(&line(&m, "ts", false, None, None));
         assert!(v.get("marker").is_none() && v.get("note").is_none(), "{v}");
     }
 
