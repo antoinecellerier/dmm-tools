@@ -240,18 +240,19 @@ impl App {
             return;
         }
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
+        let limit = self.capture.session.integrator.max_dt_secs();
         ui.label(
             RichText::new(format!(
-                "\u{26A0} {} gaps >2s skipped",
+                "\u{26A0} {} gaps >{limit}s skipped",
                 self.capture.session.integrator.skipped_intervals
             ))
             .font(egui::FontId::proportional(font_size))
             .color(tc.status_warning()),
         )
-        .on_hover_text(
-            "Intervals between samples longer than 2 s are not integrated. \
-             Lower the sample interval or expect a partial integral.",
-        );
+        .on_hover_text(format!(
+            "Stretches of more than {limit} s without a reading are not integrated: \
+             5 sample intervals, and at least 2 s. The integral is partial."
+        ));
     }
 }
 

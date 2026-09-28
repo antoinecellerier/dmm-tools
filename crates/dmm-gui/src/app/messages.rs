@@ -131,15 +131,6 @@ impl App {
         )));
     }
 
-    /// Make this Connect the session's zero, the first time a recording is
-    /// opened.
-    ///
-    /// Playback measures every frame's offset from the origin, so pinning it
-    /// while the arguments were parsed dropped whatever fell due while the
-    /// window and the GPU were starting — and with auto-connect off, a Connect
-    /// past the recording's length found nothing left but the held last frame.
-    /// A later Disconnect/Connect keeps the origin, so the recording resumes
-    /// where the session has got to.
     /// The interval the graph judges its gaps by for a sample interval of
     /// `ms`: a replay's frames come no more often than its file has them,
     /// and judged by the viewer's interval alone a recording spaced wider
@@ -151,16 +142,43 @@ impl App {
         })
     }
 
+    /// Tell the graph and the session integral how far apart readings come
+    /// at a sample interval of `ms`, so both judge a gap alike.
+    fn set_gap_interval(&mut self, ms: u32) {
+        let gap_ms = self.gap_interval_ms(ms);
+        self.graph.set_sample_interval_ms(gap_ms);
+        self.capture
+            .session
+            .integrator
+            .set_sample_interval(std::time::Duration::from_millis(u64::from(gap_ms)));
+    }
+
+    /// Readings stopped (a pause, a lost link, a meter gone quiet): the graph
+    /// marks the gap, and the session integral does not bridge it.
+    pub(super) fn mark_data_loss(&mut self) {
+        self.graph.push_data_loss();
+        self.capture.session.integrator.push_gap();
+    }
+
     /// Put the **Sample interval** in Settings into effect: the graph's gap
     /// threshold, and a running session's acquisition, at once.
     pub(super) fn apply_sample_interval(&mut self) {
         let ms = self.settings.sample_interval_ms;
-        self.graph.set_sample_interval_ms(self.gap_interval_ms(ms));
+        self.set_gap_interval(ms);
         if let Some(tx) = &self.connection.ctrl_tx {
             let _ = tx.send(connection::ThreadControl::SetInterval(ms));
         }
     }
 
+    /// Make this Connect the session's zero, the first time a recording is
+    /// opened.
+    ///
+    /// Playback measures every frame's offset from the origin, so pinning it
+    /// while the arguments were parsed dropped whatever fell due while the
+    /// window and the GPU were starting — and with auto-connect off, a Connect
+    /// past the recording's length found it already ended. A later
+    /// Disconnect/Connect keeps the origin, so the recording resumes where the
+    /// session has got to.
     fn pin_replay_origin(&mut self, recorded: SystemTime) {
         if self.clock.wall_origin().is_some() {
             return;
@@ -183,8 +201,7 @@ impl App {
         // `None` = Auto-detect: nothing names the meter, so the opener works
         // it out from the bytes it sends.
         let device_entry = self.selected_device();
-        self.graph
-            .set_sample_interval_ms(self.gap_interval_ms(sample_interval_ms));
+        self.set_gap_interval(sample_interval_ms);
         let mut thread_ctx = ThreadContext {
             msg_tx,
             ctrl_rx,
@@ -284,7 +301,7 @@ impl App {
     pub(super) fn disconnect(&mut self) {
         // Data stops here. The graph keeps its history across a reconnect, so
         // the resulting hole needs marking as a genuine gap.
-        self.graph.push_data_loss();
+        self.mark_data_loss();
         // Raise the flag, then hang up: the thread may be mid-sleep, and the
         // flag is what cuts that short; dropping the control sender ends any
         // wait on the channel and the loop itself.
@@ -397,8 +414,11 @@ impl App {
                     // an outage during an overload would be drawn as one long
                     // band, claiming over-range for a stretch nothing was
                     // heard in. Same threshold the "no response" notice uses.
+                    // No reading for a read timeout: nothing to integrate
+                    // across, whatever the interval.
+                    self.capture.session.integrator.push_gap();
                     if count >= dmm_lib::stream::NO_RESPONSE_TIMEOUTS {
-                        self.graph.push_data_loss();
+                        self.mark_data_loss();
                     }
                     // Crossing the threshold is a failure, recorded once. A
                     // gap in a recording plays back as timeouts and reaches
@@ -450,7 +470,7 @@ impl App {
                     // infer that from timestamps — the meter goes quiet for
                     // over a second while auto-ranging, which looks the same
                     // as an unplugged cable.
-                    self.graph.push_data_loss();
+                    self.mark_data_loss();
                 }
                 DmmMessage::Error(e) => {
                     error!("UI: error: {e}");

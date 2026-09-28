@@ -55,8 +55,9 @@ pub(crate) const MAIN_SERIES: &str = "Main";
 /// consecutive frames without the label is.
 const SERIES_DROP_FRAMES: u32 = 3;
 
-/// Default gap threshold multiplier: gap = max(interval * multiplier, minimum).
-const GAP_MULTIPLIER: f64 = 5.0;
+/// Gap threshold multiplier: gap = max(interval * multiplier, minimum), the
+/// same multiple the session integral bridges.
+const GAP_MULTIPLIER: f64 = dmm_lib::stats::GAP_INTERVALS;
 const GAP_MINIMUM_SECS: f64 = 1.0;
 
 /// Why the trace is interrupted over a stretch of time.

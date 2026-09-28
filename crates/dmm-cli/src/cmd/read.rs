@@ -380,6 +380,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // and unit; `SeriesStats` resets both whenever either moves, so the
     // closing summary only ever covers one comparable series.
     let mut session = dmm_lib::stats::SeriesStats::new(integrate);
+    session.integrator.set_sample_interval(tick);
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
     // The failure that ended the run, reported once the readings it did get
@@ -434,6 +435,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             Ok(StreamEvent::Ended) => break,
             Ok(StreamEvent::Timeout { consecutive }) => {
                 log::warn!("measurement timeout, retrying");
+                // Nothing was read for a read timeout: no interval to bridge.
+                session.integrator.push_gap();
                 if consecutive == NO_RESPONSE_TIMEOUTS
                     && let Some(d) = device
                 {
@@ -511,9 +514,10 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             );
             if session.integrator.skipped_intervals > 0 {
                 eprintln!(
-                    "    {} {} intervals skipped (sample spacing exceeds the 2 s integrator limit \u{2014} lower --interval-ms for more frequent samples or expect a partial integral)",
+                    "    {} {} intervals skipped (no reading for more than {} s, 5 sample intervals and at least 2 s \u{2014} the integral is partial)",
                     style("Note:").yellow(),
                     session.integrator.skipped_intervals,
+                    session.integrator.max_dt_secs(),
                 );
             }
         }

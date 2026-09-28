@@ -499,7 +499,7 @@ impl App {
             // Acquisition stops, so the samples that would have covered this
             // stretch never exist — a data gap the graph should show even if
             // the pause is shorter than its elapsed-time threshold.
-            self.graph.push_data_loss();
+            self.mark_data_loss();
             self.held.clear();
         }
         if let Some(tx) = &self.connection.ctrl_tx {

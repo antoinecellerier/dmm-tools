@@ -1,6 +1,6 @@
 use crate::measurement::{MeasuredValue, Measurement};
 use log::debug;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Tracks min/max/avg statistics for a series of measurements.
 ///
@@ -55,8 +55,14 @@ impl Default for RunningStats {
 
 /// Default maximum interval (seconds) for the integrator to bridge.
 /// Intervals larger than this are treated as gaps (pause, disconnect).
-/// ~20× the typical 10 Hz sample interval.
+/// ~20× the typical 10 Hz sample interval, and the floor under
+/// [`Integrator::set_sample_interval`].
 const DEFAULT_MAX_DT_SECS: f64 = 2.0;
+
+/// How many sample intervals without a reading make a gap: where the GUI's
+/// graph breaks its trace, and where the integral stops bridging, so the
+/// two agree on what is continuous.
+pub const GAP_INTERVALS: f64 = 5.0;
 
 /// Tracks the time-integral of a measurement series using the trapezoidal rule.
 ///
@@ -78,6 +84,9 @@ pub struct Integrator {
     /// (longer than `max_dt_secs`) or after a pause/disconnect.
     pub skipped_intervals: u64,
     max_dt_secs: f64,
+    /// A larger limit in force since the last reading, which the interval in
+    /// progress is still judged by: it began at the slower sample interval.
+    carried_max_dt_secs: f64,
     first_time: Option<Instant>,
     last_time: Option<Instant>,
 }
@@ -91,9 +100,24 @@ impl Integrator {
             overload_gaps: 0,
             skipped_intervals: 0,
             max_dt_secs: DEFAULT_MAX_DT_SECS,
+            carried_max_dt_secs: 0.0,
             first_time: None,
             last_time: None,
         }
+    }
+
+    /// Bridge up to [`GAP_INTERVALS`] sample intervals between readings, and
+    /// never less than the 2 s default: at a sample interval of its own, a
+    /// streaming meter's readings come a frame early or late, so a fixed
+    /// limit near the interval skipped half of them.
+    pub fn set_sample_interval(&mut self, interval: Duration) {
+        self.carried_max_dt_secs = self.carried_max_dt_secs.max(self.max_dt_secs);
+        self.max_dt_secs = (interval.as_secs_f64() * GAP_INTERVALS).max(DEFAULT_MAX_DT_SECS);
+    }
+
+    /// The longest interval between readings that is integrated, in seconds.
+    pub fn max_dt_secs(&self) -> f64 {
+        self.max_dt_secs
     }
 
     /// Record a normal measurement value, accumulating the trapezoidal area
@@ -103,7 +127,7 @@ impl Integrator {
             && let Some(dt) = timestamp.checked_duration_since(prev_time)
         {
             let dt_secs = dt.as_secs_f64();
-            if dt_secs <= self.max_dt_secs {
+            if dt_secs <= self.max_dt_secs.max(self.carried_max_dt_secs) {
                 self.integral += (prev_val + value) / 2.0 * dt_secs;
             } else {
                 // The binaries show the skip count; this only says which gap.
@@ -119,6 +143,7 @@ impl Integrator {
         }
         self.last_time = Some(timestamp);
         self.prev = Some((value, timestamp));
+        self.carried_max_dt_secs = 0.0;
         self.count += 1;
     }
 
@@ -131,8 +156,9 @@ impl Integrator {
 
     /// Break the integration without counting an overload: the next normal
     /// reading starts a fresh interval instead of bridging this one with a
-    /// trapezoid, which would integrate a value nobody measured.
-    pub(crate) fn push_gap(&mut self) {
+    /// trapezoid, which would integrate a value nobody measured. The binaries
+    /// call it at a pause, a disconnect and a timeout.
+    pub fn push_gap(&mut self) {
         self.prev = None;
     }
 
@@ -511,6 +537,27 @@ mod tests {
         // Added: (1 + 1) / 2 * 1 = 1.0
         assert!((i.value() - 2.0).abs() < 1e-9);
         assert_eq!(i.count, 4); // 4 normal pushes total
+    }
+
+    /// The limit follows the sample interval, never below 2 s, and a
+    /// shorter interval leaves the interval in progress to the longer one.
+    #[test]
+    fn the_limit_follows_the_sample_interval() {
+        let t0 = Instant::now();
+        let at = |s: f64| t0 + Duration::from_secs_f64(s);
+        let mut i = Integrator::new();
+        i.set_sample_interval(Duration::from_millis(100));
+        assert_eq!(i.max_dt_secs(), 2.0);
+        i.set_sample_interval(Duration::from_secs(2));
+        assert_eq!(i.max_dt_secs(), 10.0);
+        i.push(1.0, at(0.0));
+        i.push(1.0, at(2.3));
+        assert_eq!(i.skipped_intervals, 0, "a frame late at 2 s is no gap");
+        i.set_sample_interval(Duration::from_millis(100));
+        i.push(1.0, at(4.5));
+        assert_eq!(i.skipped_intervals, 0, "the stretch across the change");
+        i.push(1.0, at(7.0));
+        assert_eq!(i.skipped_intervals, 1, "2.5 s at 100 ms is a gap");
     }
 
     #[test]
