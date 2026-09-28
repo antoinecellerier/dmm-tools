@@ -436,13 +436,18 @@ impl Graph {
             }
         });
 
-        // The switch takes effect at the next sample: `push_sample` sees the
-        // new series and swaps it with the trace kept under that name, or
-        // restarts the graph when none is kept.
+        // A series kept beside the plotted one changes places with it now, so
+        // the switch shows with no reading coming (paused, a replay that has
+        // ended). One not kept yet takes over at its next sample:
+        // `push_sample` restarts the graph on it.
         match choice {
             Some(None) => self.selected_series = None,
             Some(Some(i)) => self.selected_series = Some(self.series_options[i].label.clone()),
             None => {}
+        }
+        if choice.is_some() {
+            self.swap_to_selected();
+            ui.ctx().request_repaint();
         }
 
         ui.add_space(6.0);

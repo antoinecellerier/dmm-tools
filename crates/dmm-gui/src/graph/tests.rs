@@ -1819,6 +1819,31 @@ fn a_same_unit_series_change_swaps_the_traces() {
     );
 }
 
+/// With no reading coming (paused, a replay that has ended), a **Plot:**
+/// choice kept beside the plotted series takes over at once, and the next
+/// sample goes on from it; back to the main reading swaps back the same way.
+#[test]
+fn a_kept_series_is_plotted_at_the_click() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    push_acdc(&mut g, t0, Some(1.61), Some(0.02));
+    push_acdc(&mut g, t0 + Duration::from_secs(1), Some(1.60), Some(0.03));
+
+    g.selected_series = Some("AC".to_string());
+    assert!(g.swap_to_selected());
+    assert_eq!(g.current_series.as_deref(), Some("AC"));
+    assert_eq!(g.len(), 2, "AC's own points, with nothing pushed");
+    assert_eq!(g.overlay_labels(), vec!["DC"]);
+
+    g.selected_series = None;
+    assert!(g.swap_to_selected());
+    assert_eq!(g.current_series, None);
+    assert!(!g.swap_to_selected(), "already plotted");
+
+    g.selected_series = Some("T2".to_string());
+    assert!(!g.swap_to_selected(), "nothing kept to swap in");
+}
+
 /// A UT181A V AC + Hz frame as the App hands it over: the voltage plotted
 /// with the frequency and period kept beside it in their own units, or,
 /// with `series` Frequency, the frequency plotted and the voltage kept.

@@ -695,6 +695,26 @@ impl Graph {
     /// old unit's scale. A break in a sub-value's trace carries no reason, so
     /// on becoming the plotted series it is drawn as a gap, an over-range
     /// stretch included.
+    /// Make the **Plot:** choice the plotted series now, where its trace is
+    /// kept beside the plotted one; `false` when it is not, and the next
+    /// sample restarts the graph on it.
+    pub(crate) fn swap_to_selected(&mut self) -> bool {
+        let series = self.selected_series.clone();
+        if self.current_series == series {
+            return false;
+        }
+        let name = series.as_deref().unwrap_or(self.main_name());
+        let Some(unit) = self
+            .overlays
+            .iter()
+            .find(|o| o.label == name)
+            .map(|o| o.unit.clone())
+        else {
+            return false;
+        };
+        self.swap_plotted_series(series.as_deref(), &unit)
+    }
+
     fn swap_plotted_series(&mut self, series: Option<&str>, unit: &str) -> bool {
         let incoming_name = series.unwrap_or(self.main_name());
         let Some(i) = self
