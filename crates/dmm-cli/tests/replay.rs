@@ -68,7 +68,6 @@ const RECORDING_ACROSS_MODES: &str = "\
 
 /// A recording whose only frame is truncated: it parses as a file, but the
 /// family refuses every frame in it, so a run of it never gets a reading.
-#[cfg(unix)]
 const RECORDING_ALL_CORRUPT: &str = "\
 # dmm-replay 1
 # device: ut61eplus
@@ -385,56 +384,27 @@ fn a_rename_onto_an_existing_name_steps_aside() {
 
 /// A bare `-o` promises the path it wrote, so a run that never got a reading
 /// has to say there is no file rather than ending in silence.
-///
-/// Unix-only: nothing else ends a run with no readings to count, so the test
-/// interrupts it the way a user would.
-#[cfg(unix)]
 #[test]
 fn a_bare_output_with_no_readings_says_no_file_was_written() {
-    use std::io::BufRead;
-
     let dir = dir_for("no-readings");
     let path = recording_of(&dir, RECORDING_ALL_CORRUPT);
-    let mut child = dmm_cli()
-        .args([
+    // The file's one frame is refused, and the run ends with the file.
+    let (_, stderr, ok) = run_in(
+        &dir,
+        &[
             "read",
             "--replay",
             path.to_str().expect("utf-8 path"),
-            "--count",
-            "1",
             "--format",
             "csv",
             "-o",
-        ])
-        .current_dir(&dir)
-        .env("NO_COLOR", "1")
-        .env_remove("RUST_LOG")
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .expect("run dmm-cli");
-
-    // Interrupt it once the frame has been refused, so the run is past the
-    // point where a file would have been named.
-    let mut lines = std::io::BufReader::new(child.stderr.take().expect("piped stderr")).lines();
-    let first = lines.next().expect("a line").expect("utf-8 stderr");
-    assert!(first.contains("invalid response"), "got {first}");
-    let killed = std::process::Command::new("kill")
-        .args(["-INT", &child.id().to_string()])
-        .status()
-        .expect("send an interrupt");
-    assert!(killed.success(), "could not interrupt the run");
-
-    let rest: Vec<String> = lines.map_while(Result::ok).collect();
-    let status = child.wait().expect("the run ends");
-    assert!(
-        status.success(),
-        "an interrupted run ends cleanly: {rest:?}"
+        ],
     );
+    assert!(ok, "a run with no readings ends cleanly: {stderr}");
+    assert!(stderr.contains("1 readings skipped"), "got {stderr}");
     assert!(
-        rest.iter()
-            .any(|l| l.contains("No readings arrived, so no file was written")),
-        "got {rest:?}"
+        stderr.contains("No readings arrived, so no file was written"),
+        "got {stderr}"
     );
     let files: Vec<String> = std::fs::read_dir(&dir)
         .expect("read the run's directory")
@@ -442,6 +412,23 @@ fn a_bare_output_with_no_readings_says_no_file_was_written() {
         .filter(|n| n.starts_with("measurements-"))
         .collect();
     assert!(files.is_empty(), "left behind {files:?}");
+}
+
+/// A replay ends with its recording, with no `--count` to stop it: past the
+/// last frame there is nothing the meter sent.
+#[test]
+fn a_replay_ends_with_its_recording() {
+    let path = recording_in(&dir_for("ends"));
+    let (stdout, stderr, ok) = run(&[
+        "read",
+        "--replay",
+        path.to_str().expect("utf-8 path"),
+        "--format",
+        "csv",
+    ]);
+    assert!(ok, "replay failed: {stderr}");
+    assert_eq!(stdout.lines().skip(2).count(), 3, "got {stdout}");
+    assert!(stderr.contains("--- 3 samples"), "got {stderr}");
 }
 
 /// With no `--format`, the file name says what to write.

@@ -28,6 +28,7 @@
 ### CLI
 
 - **Text output names a UT181A's reading and sub-values, such as T1 or AC**
+- **`read --replay` ends with the recording** — it repeated the last reading until Ctrl+C.
 
 ### Bug fixes
 

@@ -68,7 +68,7 @@ pub(crate) enum Cmd {
         /// file is named after the meter, its mode and the run's start.
         #[arg(short, long, value_name = "FILE", num_args(0..=1))]
         output: Option<Option<String>>,
-        /// Number of readings (0 = unlimited, Ctrl+C to stop)
+        /// Number of readings (0 = unlimited: Ctrl+C stops it, or the end of a --replay file)
         #[arg(long, default_value = "0")]
         count: usize,
         /// Show cumulative time-integral (charge for current modes, V·s for voltage)
@@ -80,7 +80,7 @@ pub(crate) enum Cmd {
         /// Without this, mock cycles through all modes automatically.
         #[arg(long, long_help = build_mock_mode_help())]
         mock_mode: Option<String>,
-        /// Play back a file written by --format replay instead of opening a meter
+        /// Play back a file written by --format replay instead of opening a meter; ends with the file
         #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
         replay: Option<PathBuf>,
         /// Run session time at this multiple of real time (mock only).

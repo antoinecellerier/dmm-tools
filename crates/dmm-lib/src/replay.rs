@@ -35,6 +35,7 @@ use crate::transport::{Link, Transport};
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -227,6 +228,9 @@ impl Replay {
                 .partition_point(|(offset, _)| *offset <= elapsed)
                 .saturating_sub(1)
         };
+        // Not set here even when the session opens into the tail: the first
+        // tail poll plays the frame the file ended on, and sets it then.
+        let played_out = Arc::new(AtomicBool::new(false));
         let protocol = ReplayProtocol {
             inner: (self.device.new_protocol)(),
             samples: Arc::clone(&self.samples),
@@ -240,8 +244,13 @@ impl Replay {
             // in `request_measurement` then steps it to the newest grid point.
             next_due: self.duration(),
             last_parsed: None,
+            played_out: Arc::clone(&played_out),
         };
-        let dmm = Dmm::new(ReplayTransport { link: self.link }, Box::new(protocol))?;
+        let transport = ReplayTransport {
+            link: self.link,
+            played_out,
+        };
+        let dmm = Dmm::new(transport, Box::new(protocol))?;
         Ok(dmm.with_clock(clock).with_protocol_timestamps())
     }
 
@@ -260,6 +269,17 @@ impl Replay {
 /// reports its own.
 pub struct ReplayTransport {
     link: Option<Link>,
+    /// Shared with the session's protocol, which sets it.
+    played_out: Arc<AtomicBool>,
+}
+
+impl ReplayTransport {
+    /// Whether every recorded frame has been handed out or refused: what the
+    /// session reads from here on is the held last reading. A run converting
+    /// the file stops here; a GUI session keeps the reading on screen.
+    pub fn played_out(&self) -> bool {
+        self.played_out.load(Ordering::Relaxed)
+    }
 }
 
 impl Transport for ReplayTransport {
@@ -438,6 +458,9 @@ struct ReplayProtocol {
     /// holds. `None` until one parses: a file whose frames are all refused has
     /// no reading to hold, so the tail keeps reporting the refusal.
     last_parsed: Option<usize>,
+    /// Set once the step past a frame reaches the end of the file; see
+    /// [`ReplayTransport::played_out`].
+    played_out: Arc<AtomicBool>,
 }
 
 impl ReplayProtocol {
@@ -492,8 +515,9 @@ impl Protocol for ReplayProtocol {
                     self.next_due = self.next_due.saturating_add(self.cadence);
                 }
                 // The newest frame the family accepted, not simply the last one
-                // in the file: holding a frame that does not parse fails every
-                // poll for ever, so a `--count` is never reached.
+                // in the file: the tail keeps a GUI session's reading on
+                // screen, and holding a frame that does not parse would fail
+                // every poll there for ever.
                 let held = self
                     .last_parsed
                     .unwrap_or_else(|| self.samples.len().saturating_sub(1));
@@ -508,6 +532,11 @@ impl Protocol for ReplayProtocol {
         // asks — and for ever, if it is the last frame in the file.
         self.next = self.next.saturating_add(1);
         self.next_due = due.saturating_add(self.cadence);
+        // Before the parse: a last frame the family refuses ends the file
+        // as surely as one it accepts.
+        if self.next >= self.samples.len() {
+            self.played_out.store(true, Ordering::Relaxed);
+        }
         let Some((_, payload)) = self.samples.get(index) else {
             return Err(Error::Replay("no samples".to_string()));
         };
@@ -850,6 +879,52 @@ mod tests {
         }
     }
 
+    /// The session says when the file has played out: after the last
+    /// recorded frame, and from then on through the tail.
+    #[test]
+    fn the_session_says_when_the_recording_has_played_out() {
+        let (mut dmm, _clock, _start) = open_manual();
+        for _ in 0..2 {
+            dmm.request_measurement().expect("a recorded frame");
+            assert!(!dmm.transport().played_out());
+        }
+        dmm.request_measurement().expect("the last frame");
+        assert!(dmm.transport().played_out());
+        dmm.request_measurement().expect("the held frame");
+        assert!(dmm.transport().played_out());
+    }
+
+    /// A last frame the family refuses ends the file too.
+    #[test]
+    fn a_refused_last_frame_plays_the_recording_out() {
+        let clock = Clock::manual();
+        let mut dmm = parsed(&file(&[(0, DCV_BATTERY), (100, "02 30 20")]))
+            .open(clock.clone())
+            .expect("the replay opens");
+        dmm.request_measurement().expect("the first frame");
+        assert!(!dmm.transport().played_out());
+        dmm.request_measurement()
+            .expect_err("a truncated frame does not parse");
+        assert!(dmm.transport().played_out());
+    }
+
+    /// A one-frame file opened on a clock already past its only offset opens
+    /// into the tail, and still plays that frame before it is played out.
+    #[test]
+    fn a_one_frame_file_opened_late_plays_its_frame_first() {
+        // The origin pinned before the open, as `read --replay` pins it; the
+        // few moments between put the session past the file's only offset.
+        let clock = Clock::manual().with_wall_origin(SystemTime::now());
+        clock.advance(Duration::from_millis(5));
+        let mut dmm = parsed(&file(&[(0, DCV_BATTERY)]))
+            .open(clock.clone())
+            .expect("the replay opens");
+        assert!(!dmm.transport().played_out());
+        let m = dmm.request_measurement().expect("the frame");
+        assert_eq!(m.value_export_str(), "1.6109");
+        assert!(dmm.transport().played_out());
+    }
+
     /// A caller polling slower than the cadence — a GUI sample interval above
     /// the file's, or a session resumed after a pause — is handed the newest
     /// repeat, not the run of them it was away for.
@@ -898,8 +973,8 @@ mod tests {
     }
 
     /// A last frame the family refuses cannot be the one the tail holds:
-    /// every poll would fail once a cadence for ever, so a `--count` would
-    /// never be reached.
+    /// every poll of a GUI session would fail once a cadence for ever, and
+    /// its reading would never come back.
     #[test]
     fn the_tail_holds_the_last_frame_that_parsed() {
         let clock = Clock::manual();

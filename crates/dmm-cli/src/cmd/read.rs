@@ -75,6 +75,7 @@ pub(crate) fn cmd_read(
             Some(device),
             integrate,
             transform,
+            |_| false,
         )
     } else {
         let mut dmm = open_mock_device(selection, mock_mode, clock)?;
@@ -101,6 +102,7 @@ pub(crate) fn cmd_read(
             None,
             integrate,
             transform,
+            |_| false,
         )
     }
 }
@@ -275,6 +277,9 @@ fn read_replay(
         None,
         integrate,
         transform,
+        // The run ends with the file: past it the session only repeats the
+        // last reading, which is for a GUI to keep on screen.
+        dmm_lib::replay::ReplayTransport::played_out,
     )
 }
 
@@ -312,6 +317,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // Applied to every reading before anything else sees it; the identity
     // transform (no --scale/--offset/--unit) is a no-op.
     transform: &Transform,
+    // Whether the source has nothing more to give: a replay's end.
+    played_out: impl Fn(&T) -> bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
@@ -356,7 +363,10 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let mut stream =
         MeasurementStream::new(dmm, tick).with_cancel(move || !cancel.load(Ordering::SeqCst));
 
-    while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
+    while running.load(Ordering::SeqCst)
+        && (count == 0 || i < count)
+        && !played_out(stream.dmm().transport())
+    {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
                 // Before everything else: the unit-change check, the stats,
