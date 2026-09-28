@@ -38,6 +38,7 @@
 - **Disconnect after a reconnect releases the meter at once** — with a sample interval set, it held the link until the next sample.
 - **A UT181A no longer warns in AC+DC, dB, T1-T2 or MIN/MAX**
 - **`dmm-cli capture` shows OL for an over-range reading** — the line to confirm showed only the unit, so a correct "no" stopped the run driving the meter.
+- **A VC-890 on its USB cable reads without timing out**
 
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 

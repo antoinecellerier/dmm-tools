@@ -16,6 +16,15 @@ pub(crate) enum FrameErrorRecovery {
     SkipAndRetry,
 }
 
+/// Reads that hand up bytes but no frame before [`read_frame`] gives up,
+/// counted again from each frame examined. A little over two of the longest
+/// frames read here at a byte per report, as a CP2110 hands them up — a
+/// VC-890's live frame is 66 bytes, the longest UT181A reading seen 63 — so
+/// a frame joined just after its start still completes. A stream that never
+/// frames (a wrong baud rate, an unsupported meter) ends after as many
+/// reads, not at the deadline.
+const MAX_READS_PER_FRAME: usize = 160;
+
 /// Shared read loop: extract frames from `rx_buf`, reading more data from
 /// `transport` when needed.
 ///
@@ -30,9 +39,13 @@ pub(crate) enum FrameErrorRecovery {
 ///   protocols, or the family's own header for the others.
 ///
 /// Constants match the values used by all protocol implementations:
-/// `READ_TIMEOUT_MS = 2000`, `MAX_ATTEMPTS = 64`. `READ_TIMEOUT_MS` bounds the
-/// total time spent waiting for bytes, not each individual read — see
-/// [`read_uart_bytes`] for why a single read can come back empty.
+/// `READ_TIMEOUT_MS = 2000`, `MAX_FRAMES_EXAMINED = 64`. `READ_TIMEOUT_MS`
+/// bounds the total time spent waiting for bytes, not each individual read —
+/// see [`read_uart_bytes`] for why a single read can come back empty.
+/// `MAX_FRAMES_EXAMINED` counts frames extracted or rejected, not reads: a
+/// CP2110 hands up about a byte per report, so a long frame takes more reads
+/// than any fixed read cap would allow. Reads are bounded by
+/// [`MAX_READS_PER_FRAME`], the deadline and `MAX_RX_BUF`.
 pub(crate) fn read_frame<F, A>(
     rx_buf: &mut Vec<u8>,
     transport: &dyn Transport,
@@ -47,7 +60,9 @@ where
     A: Fn(&[u8]) -> bool,
 {
     const READ_TIMEOUT_MS: i32 = 2000;
-    const MAX_ATTEMPTS: usize = 64;
+    // Guards against an extractor that consumes nothing and against a
+    // stream of refused or corrupt frames.
+    const MAX_FRAMES_EXAMINED: usize = 64;
     // Bounded growth: the largest legitimate frame we handle is ~21 bytes
     // (UT8803), and we drain on successful extraction or on SkipAndRetry.
     // Cap at 4 KiB so a misbehaving / unsupported protocol family that
@@ -58,9 +73,13 @@ where
     // takes as long as it takes whatever session time is doing.
     let deadline = Instant::now() + Duration::from_millis(READ_TIMEOUT_MS as u64);
 
-    for _ in 0..MAX_ATTEMPTS {
+    let mut examined = 0;
+    let mut reads = 0;
+    while examined < MAX_FRAMES_EXAMINED {
         match extract_fn(rx_buf) {
             Ok(Some((payload, consumed))) => {
+                examined += 1;
+                reads = 0;
                 rx_buf.drain(..consumed);
                 if accept_fn(&payload) {
                     return Ok(payload);
@@ -81,11 +100,16 @@ where
                     rx_buf.clear();
                     return Err(Error::Timeout);
                 }
+                if reads >= MAX_READS_PER_FRAME {
+                    debug!("{label}: {reads} reads without a valid frame, giving up");
+                    return Err(Error::Timeout);
+                }
                 let mut tmp = [0u8; 64];
                 let n = read_uart_bytes(transport, &mut tmp, deadline)?;
                 if n == 0 {
                     return Err(Error::Timeout);
                 }
+                reads += 1;
                 rx_buf.extend_from_slice(&tmp[..n]);
             }
             Err(e) => match recovery {
@@ -101,6 +125,8 @@ where
                 FrameErrorRecovery::SkipAndRetry => {
                     // Per bad frame, e.g. joining a stream mid-frame; a
                     // stream of nothing else ends in a reported timeout.
+                    examined += 1;
+                    reads = 0;
                     debug!("{label}: frame error: {e}, skipping");
                     if let Some(pos) = rx_buf
                         .windows(skip_header.len())
@@ -599,6 +625,117 @@ mod tests {
         assert_eq!(result, payload);
     }
 
+    /// A CP2110 hands up about a byte per report, so a VC-890's 66-byte live
+    /// frame (61-byte payload) takes 66 reads. The cap counts frames, not
+    /// reads, or the frame would time out a few bytes short.
+    #[test]
+    fn read_frame_takes_a_long_frame_a_byte_at_a_time() {
+        let payload: Vec<u8> = (0..61).collect();
+        let frame = test_frame_be16(&payload);
+        let mock = MockTransport::new(frame.iter().map(|&b| vec![b]).collect());
+        let mut rx_buf = Vec::new();
+
+        let result = read_frame(
+            &mut rx_buf,
+            &mock,
+            extract_frame_abcd_be16,
+            |_| true,
+            FrameErrorRecovery::SkipAndRetry,
+            "test",
+            &HEADER,
+        )
+        .unwrap();
+        assert_eq!(result, payload);
+    }
+
+    /// A frame joined just after its start, a byte per report, completes:
+    /// the rest of the one in flight, then a whole one.
+    #[test]
+    fn read_frame_takes_a_long_frame_joined_mid_way_a_byte_at_a_time() {
+        let payload: Vec<u8> = (0..61).collect();
+        let frame = test_frame_be16(&payload);
+        let mut stream = frame[1..].to_vec();
+        stream.extend(&frame);
+        let mock = MockTransport::new(stream.iter().map(|&b| vec![b]).collect());
+        let mut rx_buf = Vec::new();
+
+        let result = read_frame(
+            &mut rx_buf,
+            &mock,
+            extract_frame_abcd_be16,
+            |_| true,
+            FrameErrorRecovery::SkipAndRetry,
+            "test",
+            &HEADER,
+        );
+        assert_eq!(result.unwrap(), payload);
+    }
+
+    /// A byte per report that never frames — a wrong baud rate, an
+    /// unsupported meter — ends after [`MAX_READS_PER_FRAME`] reads, not at
+    /// the deadline or the buffer cap.
+    #[test]
+    fn read_frame_gives_up_on_noise_after_a_bounded_number_of_reads() {
+        struct Noise(std::cell::Cell<usize>);
+        impl Transport for Noise {
+            fn write(&self, _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+                self.0.set(self.0.get() + 1);
+                buf[0] = 0x55;
+                Ok(1)
+            }
+            fn link(&self) -> Option<crate::transport::Link> {
+                None
+            }
+        }
+        let noise = Noise(std::cell::Cell::new(0));
+        let mut rx_buf = Vec::new();
+        let start = Instant::now();
+
+        let result = read_frame(
+            &mut rx_buf,
+            &noise,
+            extract_frame_abcd_be16,
+            |_| true,
+            FrameErrorRecovery::Propagate,
+            "test",
+            &HEADER,
+        );
+        assert!(matches!(result, Err(Error::Timeout)));
+        assert_eq!(noise.0.get(), MAX_READS_PER_FRAME);
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "ended before the deadline"
+        );
+    }
+
+    /// The cap still ends a stream of frames the filter refuses, after 64 of
+    /// them, while more are queued.
+    #[test]
+    fn read_frame_gives_up_on_a_stream_of_refused_frames() {
+        let frames = (0..70).map(|i| test_frame_be16(&[0x01, i])).collect();
+        let mock = MockTransport::new(frames);
+        let mut rx_buf = Vec::new();
+        let refused = std::cell::Cell::new(0);
+
+        let result = read_frame(
+            &mut rx_buf,
+            &mock,
+            extract_frame_abcd_be16,
+            |_| {
+                refused.set(refused.get() + 1);
+                false
+            },
+            FrameErrorRecovery::SkipAndRetry,
+            "test",
+            &HEADER,
+        );
+        assert!(matches!(result, Err(Error::Timeout)));
+        assert_eq!(refused.get(), 64);
+    }
+
     /// HID bridges answer a poll with an empty payload whenever the meter has
     /// sent nothing since the last one. Those must not end the frame read —
     /// a UT804 sends about 50 empty reports between its packets (issue #16).
@@ -759,7 +896,7 @@ mod tests {
             &HEADER,
         );
         assert!(matches!(result, Err(Error::Timeout)));
-        // Cap path clears rx_buf; the MAX_ATTEMPTS exit path does not.
+        // Cap path clears rx_buf; the MAX_FRAMES_EXAMINED exit path does not.
         assert!(
             rx_buf.is_empty(),
             "rx_buf should have been cleared by the 4 KiB cap (got {} bytes)",

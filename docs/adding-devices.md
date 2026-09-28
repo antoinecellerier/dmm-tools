@@ -225,7 +225,7 @@ These are real bugs we discovered only through device testing — expect similar
 - **Mode byte encoding** — may be raw or have a prefix byte (e.g., 0x30) depending on the device
 - **Flag bit positions** — bit assignments in vendor software may not match community documentation
 - **Inverted flag logic** — some flags use inverted logic (bit clear = feature ON)
-- **Bridge byte-at-a-time delivery** — USB HID bridges like CP2110 may deliver UART data one byte per interrupt report; frame assembly needs enough retries (we use 64 attempts)
+- **Bridge byte-at-a-time delivery** — USB HID bridges like CP2110 may deliver UART data one byte per interrupt report; frame assembly must keep reading until the frame completes (`read_frame` caps reads per frame, not per request)
 - **Command ACK frames** — device may send short ACK responses that must be drained before the next measurement read
 - **Display string encoding** — internal spaces for alignment (e.g., `"- 55.79"` for -55.79), trailing spaces, or device-specific overload strings
 

@@ -765,6 +765,21 @@ mod tests {
         assert_eq!(writes[3][3], 0x00, "fourth write should be GetDeviceID");
     }
 
+    /// A live frame handed up a byte per report, as a CP2110 does, is read
+    /// whole: 66 reads for one frame.
+    #[test]
+    fn a_live_frame_a_byte_per_report_is_read() {
+        let payload = make_payload(0x02, 0x31, b" 12.345", zero_status());
+        let frame = framing::test_frame_be16(&payload);
+        let transport = MockTransport::new(frame.iter().map(|&b| vec![b]).collect());
+        let mut proto = Vc890Protocol::new();
+
+        let m = proto
+            .request_measurement(&transport)
+            .expect("the frame is read");
+        assert_eq!(m.mode, "DC V");
+    }
+
     #[test]
     fn send_ack_sequence_writes_three_copies() {
         let transport = MockTransport::new(vec![]);

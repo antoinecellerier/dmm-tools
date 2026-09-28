@@ -176,7 +176,7 @@ impl Transport for Cp2110 {
         // Stack, not heap: this is the measurement hot path.
         // `framing::read_uart_bytes` can call it up to MAX_EMPTY_READS (256)
         // times per frame while polling an idle bridge, and `read_frame`
-        // retries up to MAX_ATTEMPTS (64) times, so a single measurement was
+        // reads again until a frame completes, so a single measurement was
         // allocating and freeing thousands of short-lived buffers.
         //
         // One interrupt IN report is a length byte plus at most
