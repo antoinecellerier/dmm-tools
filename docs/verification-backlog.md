@@ -1372,6 +1372,12 @@ open items below are closed.
     2026-09-27: neither is offered there (`mode::is_peak`). In the capture,
     the sweep's restore re-sent the refused Auto on three Peak modes, which
     spent the failure budget and left mA AC, A and temperature unswept.
+- **Found by the 2026-09-28 rerun (dev-e3819f4), to fix in our code:**
+  - ~~The capture's confirmation line showed a bare unit for an OL
+    reading (` MΩ [AUTO]`), so @diego351 rightly refused it and the gate
+    failed on `ohm`~~ — **FIXED** 2026-09-28: it shows `OL` (or `----`).
+    The run then drove nothing: it sent the earlier run's words again and
+    swept no REL or range.
 - Manual range in a Peak variant — the meter refuses Auto there, and
   whether it takes a manual rung is untested. Needs a meter: in µA DC
   Peak, `dmm-cli --device ut181a set range 6000µA`, then `get range`

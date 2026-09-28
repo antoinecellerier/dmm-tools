@@ -37,6 +37,7 @@
 - **A UT181A in Peak no longer sends Auto range or MIN/MAX** — the meter refused both, and `dmm-cli capture` gave up sweeping after three Peak modes.
 - **Disconnect after a reconnect releases the meter at once** — with a sample interval set, it held the link until the next sample.
 - **A UT181A no longer warns in AC+DC, dB, T1-T2 or MIN/MAX**
+- **`dmm-cli capture` shows OL for an over-range reading** — the line to confirm showed only the unit, so a correct "no" stopped the run driving the meter.
 
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 

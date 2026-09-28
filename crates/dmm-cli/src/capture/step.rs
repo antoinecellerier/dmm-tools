@@ -584,7 +584,7 @@ pub(crate) fn run_capture_step(
                 s.mode_byte,
                 s.mode,
                 s.range_label,
-                s.display_raw
+                s.shown()
             );
         }
 

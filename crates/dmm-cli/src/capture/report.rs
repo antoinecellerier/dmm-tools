@@ -423,6 +423,18 @@ impl SampleData {
         }
     }
 
+    /// The main reading as the meter's screen shows it: the meter's own
+    /// digits, or the value's rendering (`OL`, `----`) where the protocol
+    /// sends none. A UT181A overload carries no digits, and its confirmation
+    /// line read ` MΩ [AUTO]`, which the operator rightly refused against an
+    /// LCD showing OL — failing the gate (issue #5).
+    pub(crate) fn shown(&self) -> &str {
+        match self.display_raw.trim() {
+            "" => &self.value,
+            digits => digits,
+        }
+    }
+
     /// The one-line rendering the operator is asked to compare against the
     /// meter's screen.
     ///
@@ -458,10 +470,7 @@ impl SampleData {
                     .as_deref()
                     .map(|l| format!("{l} "))
                     .unwrap_or_default();
-                (
-                    format!("{name}{} {}", self.display_raw.trim(), self.unit),
-                    aux,
-                )
+                (format!("{name}{} {}", self.shown(), self.unit), aux)
             }
         };
         if !flags.is_empty() {
@@ -1059,6 +1068,30 @@ mod tests {
     fn summary_without_sub_values_is_unchanged() {
         let m = make_test_measurement(0x02, 0x01, b"  1.000", (0x00, 0x00), (0x00, 0x00, 0x00));
         assert_eq!(SampleData::from_measurement(&m).summary(), "1.000 V [AUTO]");
+    }
+
+    /// A reading without digits of its own — the UT181A's overload and its
+    /// blank after a switch — confirms against what the meter shows instead
+    /// of a lone unit: @diego351 refused ` MΩ [AUTO]` against an LCD showing
+    /// OL, which failed the gate and left the whole run undriven (issue #5).
+    #[test]
+    fn summary_shows_a_reading_without_digits() {
+        use dmm_lib::measurement::MeasuredValue;
+
+        let auto = StatusFlags {
+            auto_range: true,
+            ..Default::default()
+        };
+        for (value, expected) in [
+            (MeasuredValue::Overload, "OL MΩ [AUTO]"),
+            (MeasuredValue::NoReading("----"), "---- MΩ [AUTO]"),
+        ] {
+            let mut m = Measurement::test_fixture(value, "MΩ", auto);
+            m.display_raw = None;
+            let sample = SampleData::from_measurement(&m);
+            assert_eq!(sample.summary(), expected);
+            assert_eq!(sample.display_raw, "", "the report keeps the raw field");
+        }
     }
 
     /// Resuming an interrupted capture reloads the report, so sub-values have
