@@ -227,6 +227,8 @@ turning to mV DC; which LCD warning, if any, goes with it is
 
 The meter sends a measurement frame every 100 ms; the main reading
 changes at most every 500 ms (2 Sa/s), the frames in between repeat it.
+On the temperature dial the reading changed every 700–900 ms instead,
+both thermocouples at once (2026-09-28 capture).
 
 ### 5.2 Value Encoding
 
@@ -501,6 +503,12 @@ variant, every Peak variant and the two differential-temperature
 variants (`T1-T2`, `T2-T1`). Families with a single primary radio
 (Ohm, Beeper, ns, Diode, Cap, Hz, Duty, ms-Pulse) have no such handler;
 their secondary group is what the form resource declares.
+
+The meter's own keys agree, per a reporter's map of which functions
+take REL and MIN/MAX (issue #5, firmware 2.06, 2026-09-28): REL on
+every variant this column allows and on Ω, nS, Cap, Hz, Duty and
+Pulse, none on continuity or diode; MIN/MAX on every variant except
+Peak.
 
 #### Caveats and vendor quirks
 

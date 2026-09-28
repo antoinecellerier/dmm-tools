@@ -324,6 +324,14 @@ Zoomed out to many samples per pixel, a noisy trace's edges shimmer slightly as 
 
 Zoomed out on a noisy sub-value, its dashes merge into a solid band, so only colour tells it from the plotted series — against the rule that colour is never the only cue. Laying the dashes along time instead of along the line keeps a visible pattern and costs less to draw, but was rejected (2026-09-28, compared side by side): a one-sample spike or a vertical Min/Max step that falls in a gap is not drawn at all, and on sparse data the dashes cut steep strokes unevenly. A fix must keep every extreme visible — for instance a lighter fill or an outline for a dense band.
 
+### Several units on one chart
+
+**Complexity:** Medium
+
+**Show:** draws only the sub-values in the plotted series' unit; the rest are kept but wait for **Plot:** to switch to them. A second and third Y axis would draw them side by side. Three is enough: a UT181A never shows more than three units at once (V AC Hz: V, Hz, ms; dBm: dBm, V, Ω), as @diego351 pointed out against an eight-axis battery-charger chart ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
+
+Use cases: mains voltage and its frequency over a day; a dBm reading beside the voltage behind it.
+
 ### Measurement rate display
 
 **Complexity:** Low

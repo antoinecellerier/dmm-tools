@@ -1381,22 +1381,25 @@ open items below are closed.
   - ~~The capture waited 1 s for a blank display to end, but blanks lasted
     up to 2 s (spec §5.2), so mV AC, mA DC and A AC+DC filed `----`
     samples~~ — **FIXED** 2026-09-28: it waits 2.5 s.
-- Manual range in a Peak variant — the meter refuses Auto there, and
-  whether it takes a manual rung is untested. Needs a meter: in µA DC
-  Peak, `dmm-cli --device ut181a set range 6000µA`, then `get range`
+- Manual range in a Peak variant — the meter refuses Auto there. On
+  2026-09-28 @diego351's `set range 6000µA` printed `Meter now in 6000µA
+  (manual range)`, which `set` prints only once the meter reports the
+  range; that it ran in µA DC Peak, as asked, is to be confirmed
 - The 21 REL words no meter has sent: `0x1112`, `0x1142`, `0x1152`,
   `0x1162`, `0x2112`, `0x2142`, `0x4112`, `0x4212`, `0x4222`, `0x4312`,
   `0x4322`, `0x5112`, `0x6212`, `0x7112`, `0x8112`, `0x8212`, `0x9112`,
   `0x9212`, `0xA112`, `0xA122`, `0xA212`. A capture that sweeps REL on
   the V AC, mV, Ω, Cap, Hz, current and temperature positions closes
-  them. Also open: whether the meter's own REL button is dead in
-  continuity and diode, where the tool refuses `command rel`
+  them. @diego351's map of the meter's own keys (2026-09-28) offers REL
+  on all of those positions and none on continuity, diode, the Hz and
+  Peak variants or T1-T2/T2-T1, as the tool does (spec §6.1)
 - What the LCD shows while the meter sends a blank value (spec §5.2) —
   dashes, nothing, or the previous reading. Answered by looking at the
   meter right after a range change
 - misc2 bit 3 ("lead error") — seen set for a few frames on the V DC,
   µA DC and A DC dials (spec §5.1); which LCD warning goes with it, if
-  any, is unknown
+  any, is unknown. On 2026-09-28 it stayed set through every A DC sample
+  (misc2 `0x09`), and @diego351 confirmed a line reading `LEAD ERR`
 - COMP modes OUTER, BELOW and ABOVE, and a PASS result — only INNER/FAIL
   has come from a meter
 - misc2 bit 5 (record) — never seen set; needs a recording started on the
