@@ -171,6 +171,34 @@ pub(super) fn grow_to_fit(screen: egui::Vec2, min_size: egui::Vec2) -> Option<eg
         .then(|| egui::vec2(screen.x.max(min_size.x), screen.y.max(min_size.y)))
 }
 
+/// The grow request to send this frame, if any: on the frame the window
+/// first falls short of its minimum, and again only when the size it should
+/// grow to or the window's own size moves. A window manager that won't
+/// resize a tiled window would otherwise get the request — and the app a
+/// repaint — every frame. Cleared once the window fits, so the next shrink
+/// asks again.
+pub(super) fn grow_request(
+    screen: egui::Vec2,
+    min_size: egui::Vec2,
+    last: &mut Option<(egui::Vec2, egui::Vec2)>,
+) -> Option<egui::Vec2> {
+    let Some(target) = grow_to_fit(screen, min_size) else {
+        *last = None;
+        return None;
+    };
+    if last.is_some_and(|(s, t)| !size_moved(s, screen) && !size_moved(t, target)) {
+        return None;
+    }
+    *last = Some((screen, target));
+    Some(target)
+}
+
+/// Half a pixel of tolerance: sub-pixel jitter in the cached top-bar widths
+/// is not a change.
+pub(super) fn size_moved(a: egui::Vec2, b: egui::Vec2) -> bool {
+    (a - b).abs().max_elem() > 0.5
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +307,45 @@ mod tests {
         assert_eq!(
             grow_to_fit(egui::vec2(200.0, 100.0), min),
             Some(egui::vec2(400.0, 300.0))
+        );
+    }
+
+    /// A window a tiling window manager holds below its minimum is asked to
+    /// grow once, not every frame; a new target, a new window size or a
+    /// fresh shrink asks again.
+    #[test]
+    fn a_window_below_its_minimum_is_asked_to_grow_once() {
+        let min = egui::vec2(400.0, 300.0);
+        let small = egui::vec2(300.0, 200.0);
+        let mut last = None;
+        assert_eq!(grow_request(small, min, &mut last), Some(min), "too small");
+        assert_eq!(grow_request(small, min, &mut last), None, "next frame");
+        assert_eq!(
+            grow_request(small, min + egui::vec2(0.3, 0.0), &mut last),
+            None,
+            "sub-pixel jitter in the minimum"
+        );
+        let bigger = min + egui::vec2(20.0, 0.0);
+        assert_eq!(
+            grow_request(small, bigger, &mut last),
+            Some(bigger),
+            "the minimum grew (leaving minimal mode)"
+        );
+        assert_eq!(
+            grow_request(egui::vec2(250.0, 180.0), bigger, &mut last),
+            Some(bigger),
+            "the window moved, still short on both axes"
+        );
+        assert_eq!(
+            grow_request(egui::vec2(800.0, 600.0), bigger, &mut last),
+            None,
+            "fits"
+        );
+        assert_eq!(last, None, "fitting clears the last request");
+        assert_eq!(
+            grow_request(small, min, &mut last),
+            Some(min),
+            "too small again at the first size"
         );
     }
 

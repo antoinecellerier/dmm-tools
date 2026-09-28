@@ -161,6 +161,9 @@ struct AppliedChrome {
     /// Last minimum window size pushed to the windowing system, so the
     /// viewport command is only re-sent when it actually changes.
     min_size: Option<egui::Vec2>,
+    /// Window size and grow target of the last request sent while the window
+    /// was below its minimum.
+    grow_request: Option<(egui::Vec2, egui::Vec2)>,
 }
 
 /// The choice lists the readout dropdowns draw, one per setting the
@@ -851,14 +854,20 @@ impl eframe::App for App {
         if self
             .applied
             .min_size
-            .is_none_or(|prev| (prev - min_size).abs().max_elem() > 0.5)
+            .is_none_or(|prev| meter_fit::size_moved(prev, min_size))
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min_size));
             self.applied.min_size = Some(min_size);
         }
         // If the window is smaller than the new minimum (e.g. after exiting
-        // minimal mode), grow it to fit.
-        if let Some(grown) = meter_fit::grow_to_fit(ctx.content_rect().size(), min_size) {
+        // minimal mode), grow it to fit. Once per change: a tiling window
+        // manager may refuse, and every viewport command asks for another
+        // frame, so an unguarded request redraws at the refresh rate.
+        if let Some(grown) = meter_fit::grow_request(
+            ctx.content_rect().size(),
+            min_size,
+            &mut self.applied.grow_request,
+        ) {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(grown));
         }
 
