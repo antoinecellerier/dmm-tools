@@ -266,9 +266,8 @@ pub(crate) fn is_known_range(word: u16, range: u8) -> bool {
     }
 }
 
-/// Every word [`is_known_word`] accepts, variants first, for the tests that
-/// walk them all.
-#[cfg(test)]
+/// Every word [`is_known_word`] accepts, variants first: what the parser's
+/// name table is built from, and what the tests walk.
 pub(crate) fn known_words() -> Vec<u16> {
     let variants = FAMILIES.iter().flat_map(|f| f.variants.iter().copied());
     let rel = FAMILIES.iter().flat_map(|f| {

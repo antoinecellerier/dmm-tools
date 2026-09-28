@@ -9,6 +9,7 @@ use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{check_len, unknown_mode16};
 use log::debug;
 use std::borrow::Cow;
+use std::sync::OnceLock;
 
 /// Response type of a live measurement frame, the only one that carries a
 /// reading: `0x01` is the OK/ER reply to a command
@@ -24,9 +25,28 @@ pub(super) const EXCLUSIVE_PAYLOAD_MIN: usize = 31;
 
 /// Decode a UT181A mode word (uint16 LE) into a human-readable string.
 ///
+/// A word research spec §6 lists is named from a table built once from
+/// [`compose_mode_name`], so a reading in one costs no allocation; any other
+/// is composed afresh.
+pub(super) fn decode_mode_word(mode: u16) -> Cow<'static, str> {
+    static NAMES: OnceLock<Vec<(u16, String)>> = OnceLock::new();
+    let names = NAMES.get_or_init(|| {
+        mode::known_words()
+            .into_iter()
+            .map(|word| (word, compose_mode_name(word).into_owned()))
+            .collect()
+    });
+    match names.iter().find(|(word, _)| *word == mode) {
+        Some((_, name)) => Cow::Borrowed(name.as_str()),
+        None => compose_mode_name(mode),
+    }
+}
+
+/// A mode word's name, from its nibbles.
+///
 /// Nibble encoding: N3 N2 N1 N0
 /// N3 = measurement family, N2 = sub-function, N1 = variant, N0 = 1=std/2=REL
-pub(super) fn decode_mode_word(mode: u16) -> Cow<'static, str> {
+fn compose_mode_name(mode: u16) -> Cow<'static, str> {
     let n3 = (mode >> 12) & 0xF;
     let n2 = (mode >> 8) & 0xF;
     let n1 = (mode >> 4) & 0xF;
@@ -157,12 +177,59 @@ pub(super) fn decode_mode_word(mode: u16) -> Cow<'static, str> {
 ///
 /// `°C`, `°F`, `Hz`, `ms`, `%`, `nS`, `dBV`, `dBm` and the diode's `V` pass
 /// through.
-fn parse_unit_string(bytes: &[u8]) -> String {
-    let wire: String = bytes
-        .iter()
-        .take_while(|&&b| b != 0)
-        .map(|&b| b as char)
-        .collect();
+///
+/// A string research spec §8 lists comes from [`SPEC_UNITS`] without
+/// allocating; any other is rewritten afresh.
+fn parse_unit_string(bytes: &[u8]) -> Cow<'static, str> {
+    let wire = bytes.split(|&b| b == 0).next().unwrap_or(bytes);
+    match SPEC_UNITS.iter().find(|(known, _)| *known == wire) {
+        Some((_, unit)) => Cow::Borrowed(unit),
+        None => Cow::Owned(rewrite_unit(wire)),
+    }
+}
+
+/// Research spec §8's unit strings — every one sent by a real meter on
+/// issue #5 — and how they read: what [`rewrite_unit`] makes of each, which
+/// `every_spec_unit_is_static_and_matches_the_rewrite` keeps in step.
+const SPEC_UNITS: &[(&[u8], &str)] = &[
+    (b"mVDC", "mV"),
+    (b"VDC", "V"),
+    (b"mVAC", "mV"),
+    (b"VAC", "V"),
+    (b"mVac+dc", "mV"),
+    (b"Vac+dc", "V"),
+    (b"uADC", "\u{b5}A"),
+    (b"mADC", "mA"),
+    (b"ADC", "A"),
+    (b"uAAC", "\u{b5}A"),
+    (b"mAAC", "mA"),
+    (b"AAC", "A"),
+    (b"uAac+dc", "\u{b5}A"),
+    (b"mAac+dc", "mA"),
+    (b"Aac+dc", "A"),
+    (b"~", "\u{3a9}"),
+    (b"k~", "k\u{3a9}"),
+    (b"M~", "M\u{3a9}"),
+    (b"nS", "nS"),
+    (b"nF", "nF"),
+    (b"uF", "\u{b5}F"),
+    (b"mF", "mF"),
+    (b"Hz", "Hz"),
+    (b"kHz", "kHz"),
+    (b"MHz", "MHz"),
+    (b"%", "%"),
+    (b"ms", "ms"),
+    (b"dBV", "dBV"),
+    (b"dBm", "dBm"),
+    (b"\xB0C", "\u{b0}C"),
+    (b"\xB0F", "\u{b0}F"),
+    (b"V", "V"),
+];
+
+/// A unit string's bytes, up to its NUL, rewritten as [`parse_unit_string`]
+/// describes.
+fn rewrite_unit(wire: &[u8]) -> String {
+    let wire: String = wire.iter().map(|&b| b as char).collect();
     let unit = wire.replace('~', "\u{3a9}");
     let unit = match unit.strip_prefix('u') {
         Some(rest) if !rest.is_empty() => format!("\u{b5}{rest}"),
@@ -374,7 +441,7 @@ pub(super) fn lookup_range_label(mode_word: u16, range: u8) -> &'static str {
 /// Full value = 13 bytes: float32(4) + precision(1) + unit_string(8)
 /// Short value = 5 bytes: float32(4) + precision(1)
 /// Parse a 13-byte "full value": float32(4) + precision(1) + unit_string(8).
-fn parse_full_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>, String)> {
+fn parse_full_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>, Cow<'static, str>)> {
     if data.len() < 13 {
         return Err(Error::invalid_response_msg(format!(
             "ut181a full value too short: {} bytes, need 13",
@@ -426,14 +493,14 @@ fn read_value(float: f32, precision: u8) -> (MeasuredValue, Option<String>) {
 fn make_aux(
     label: &'static str,
     value: MeasuredValue,
-    unit: &str,
+    unit: Cow<'static, str>,
     display_raw: Option<String>,
     elapsed_secs: Option<u32>,
 ) -> AuxValue {
     AuxValue {
         label: Cow::Borrowed(label),
         value,
-        unit: Cow::Owned(unit.to_string()),
+        unit,
         display_raw,
         elapsed_secs,
     }
@@ -519,14 +586,14 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             if misc & 0x02 != 0 && data.len() >= offset + 13 {
                 let (av, ad, au) = parse_full_value(&data[offset..])?;
                 report_positional_aux(aux1_label, mode_word);
-                aux.push(make_aux(aux1_label, av, &au, ad, None));
+                aux.push(make_aux(aux1_label, av, au, ad, None));
                 offset += 13;
             }
             // Aux2 (optional, misc bit 2)
             if misc & 0x04 != 0 && data.len() >= offset + 13 {
                 let (av, ad, au) = parse_full_value(&data[offset..])?;
                 report_positional_aux(aux2_label, mode_word);
-                aux.push(make_aux(aux2_label, av, &au, ad, None));
+                aux.push(make_aux(aux2_label, av, au, ad, None));
                 offset += 13;
             }
             // Bargraph (optional, misc bit 3) — skip for now, just advance offset
@@ -587,7 +654,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                 aux.push(make_aux(
                     "COMP High",
                     MeasuredValue::Normal(high_v),
-                    &unit,
+                    unit.clone(),
                     Some(format!("{high_v:.dp$}")),
                     None,
                 ));
@@ -597,7 +664,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                     aux.push(make_aux(
                         "COMP Low",
                         MeasuredValue::Normal(low_v),
-                        &unit,
+                        unit.clone(),
                         Some(format!("{low_v:.dp$}")),
                         None,
                     ));
@@ -626,8 +693,8 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             let (abs_val, abs_disp, abs_unit) = parse_full_value(&data[26..])?;
 
             let aux = vec![
-                make_aux("Reference", ref_val, &ref_unit, ref_disp, None),
-                make_aux("Absolute", abs_val, &abs_unit, abs_disp, None),
+                make_aux("Reference", ref_val, ref_unit, ref_disp, None),
+                make_aux("Absolute", abs_val, abs_unit, abs_disp, None),
             ];
             // Main value = delta (matches meter display)
             (rel_val, rel_disp, rel_unit, aux)
@@ -659,9 +726,9 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             let unit = parse_unit_string(&data[32..40]);
 
             let aux = vec![
-                make_aux("Max", max_val, &unit, max_disp, Some(max_ts)),
-                make_aux("Average", avg_val, &unit, avg_disp, Some(avg_ts)),
-                make_aux("Min", min_val, &unit, min_disp, Some(min_ts)),
+                make_aux("Max", max_val, unit.clone(), max_disp, Some(max_ts)),
+                make_aux("Average", avg_val, unit.clone(), avg_disp, Some(avg_ts)),
+                make_aux("Min", min_val, unit.clone(), min_disp, Some(min_ts)),
             ];
             (cur_val, cur_disp, unit, aux)
         }
@@ -681,7 +748,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             let (pmax_val, pmax_disp, pmax_unit) = parse_full_value(data)?;
             let (pmin_val, pmin_disp, pmin_unit) = parse_full_value(&data[13..])?;
 
-            let aux = vec![make_aux("Peak Min", pmin_val, &pmin_unit, pmin_disp, None)];
+            let aux = vec![make_aux("Peak Min", pmin_val, pmin_unit, pmin_disp, None)];
             (pmax_val, pmax_disp, pmax_unit, aux)
         }
 
@@ -726,7 +793,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         mode_raw: mode_word,
         range_raw: range,
         value,
-        unit: Cow::Owned(unit),
+        unit,
         range_label: Cow::Borrowed(lookup_range_label(mode_word, range)),
         display_raw,
         flags,
@@ -889,45 +956,45 @@ raw_payload=19"#
     }
 
     /// Every unit string a real UT181A sent (@diego351, issue #5,
-    /// 2026-09-27), in the form the other families report.
+    /// 2026-09-27) comes from the table without allocating, and reads as
+    /// the rewrite would make it: the table cannot drift from the rule.
     #[test]
-    fn unit_strings_read_like_other_meters() {
-        for (wire, unit) in [
-            ("VDC", "V"),
-            ("VAC", "V"),
-            ("Vac+dc", "V"),
-            ("mVDC", "mV"),
-            ("mVAC", "mV"),
-            ("mVac+dc", "mV"),
-            ("uADC", "\u{b5}A"),
-            ("uAAC", "\u{b5}A"),
-            ("uAac+dc", "\u{b5}A"),
-            ("mADC", "mA"),
-            ("mAAC", "mA"),
-            ("mAac+dc", "mA"),
-            ("ADC", "A"),
-            ("AAC", "A"),
-            ("Aac+dc", "A"),
-            ("~", "\u{3a9}"),
-            ("k~", "k\u{3a9}"),
-            ("M~", "M\u{3a9}"),
-            ("nF", "nF"),
-            ("uF", "\u{b5}F"),
-            ("mF", "mF"),
-            ("nS", "nS"),
-            ("Hz", "Hz"),
-            ("kHz", "kHz"),
-            ("MHz", "MHz"),
-            ("ms", "ms"),
-            ("%", "%"),
-            ("dBV", "dBV"),
-            ("dBm", "dBm"),
-            ("V", "V"),
-        ] {
+    fn every_spec_unit_is_static_and_matches_the_rewrite() {
+        for (wire, unit) in SPEC_UNITS {
             let mut bytes = [0u8; 8];
-            bytes[..wire.len()].copy_from_slice(wire.as_bytes());
-            assert_eq!(parse_unit_string(&bytes), unit, "wire {wire:?}");
+            bytes[..wire.len()].copy_from_slice(wire);
+            let parsed = parse_unit_string(&bytes);
+            assert!(matches!(parsed, Cow::Borrowed(_)), "wire {wire:?}");
+            assert_eq!(parsed, *unit, "wire {wire:?}");
+            assert_eq!(rewrite_unit(wire), *unit, "wire {wire:?}");
         }
+        // A unit read like other meters', spot-checked by hand.
+        assert_eq!(parse_unit_string(b"uAac+dc\0"), "\u{b5}A");
+        assert_eq!(parse_unit_string(b"k~\0\0\0\0\0\0"), "k\u{3a9}");
+    }
+
+    /// A unit the spec doesn't list still decodes, by the rule.
+    #[test]
+    fn an_unlisted_unit_is_rewritten() {
+        let parsed = parse_unit_string(b"uV\0\0\0\0\0\0");
+        assert!(matches!(parsed, Cow::Owned(_)));
+        assert_eq!(parsed, "\u{b5}V");
+    }
+
+    /// Every mode word the spec lists is named from the table, as the
+    /// nibble rule names it; an unlisted one is still composed.
+    #[test]
+    fn every_known_mode_word_is_named_without_allocating() {
+        let words = mode::known_words();
+        assert_eq!(words.len(), 79, "research spec §6");
+        for word in words {
+            let name = decode_mode_word(word);
+            assert!(matches!(name, Cow::Borrowed(_)), "{word:#06x}");
+            assert_eq!(name, compose_mode_name(word), "{word:#06x}");
+        }
+        let unknown = decode_mode_word(0xFFFF);
+        assert!(matches!(unknown, Cow::Owned(_)));
+        assert_eq!(unknown, compose_mode_name(0xFFFF));
     }
 
     #[test]
