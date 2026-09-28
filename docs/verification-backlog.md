@@ -1648,7 +1648,8 @@ Open:
 - **UT-D07B, and any sample interval.** Every streamed frame is read, but a
   sample interval keeps one frame per tick, so an interval may see one
   component far more often than the other, as a slow CP2110 poll does. At
-  0 ms both come through. Not yet run with the adapter.
+  0 ms both come through, checked with the adapter on 2026-09-28 (a reading
+  about every 630 ms in AC+DC, against about 315 ms in AC mV).
 - **Components on different rungs.** Both sat on the 2.2V rung here; a DC
   offset with an AC signal on top would show whether autorange can put them
   on different ones. The display keeps the DC frame's range either way.
@@ -2298,11 +2299,14 @@ Since 2026-09-28 the stream reads every streaming meter (UT171, UT181A,
 UT8802, UT8803, UT80x, VC-880, ZOTEK, 121GW, BM78xBT, and the UT61+ over
 Bluetooth) frame by frame as it arrives, and a sample interval keeps the
 frame nearest each tick; `Dmm` drops what queued after 250 ms unread.
-Checked offline only (simulated meters on a manual clock, and `mock-zt5b`,
-which sends at a ZOTEK meter's rate). To check on a meter: the UT61E+ over
-the UT-D07B at `--interval-ms 1000` against the LCD, and after a 10-minute
-GUI Pause, whose first reading should be current; a UT181A in #5 for a
-regression read and `set hold`/`set rel` after a Pause.
+Checked on our UT61E+ over the UT-D07B (Linux, 2026-09-28): 1 s reads
+spaced three or four adapter frames apart as expected; AC+DC V at 0 ms, every
+notification a reading, DC and AC alternating with none dropped; after a
+10-minute GUI Pause the first reading was current and the process's memory
+flat; HOLD sent after a pause landed at once; the Sample interval changed
+live. Over its CP2110 cable, 0 ms and 1 s reads were unchanged, also after a
+replug. Still open: a UT181A in #5 for a regression read and `set hold`/`set
+rel` after a Pause, and a HID streaming meter (below).
 
 - **Linux HID drops the newest.** Confirmed in the kernel source
   (2026-09-28, `drivers/hid/hidraw.c` `hidraw_report_event`: a report that
