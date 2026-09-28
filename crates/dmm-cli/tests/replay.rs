@@ -185,9 +185,61 @@ fn replay_takes_the_clock_flags() {
     assert_eq!(plain, preseeded);
 }
 
+/// `--mock-clock-scale max` plays the file exactly as the recorded pace
+/// does, without the wait.
+#[test]
+fn a_max_speed_replay_prints_what_a_paced_one_does() {
+    let path = recording_in(&dir_for("max"));
+    let (paced, paced_err, _) = read_csv(&path, &[]);
+    let (max, max_err, ok) = read_csv(&path, &["--mock-clock-scale", "max"]);
+    assert!(ok, "max-speed replay failed: {max_err}");
+    assert_eq!(paced, max);
+    assert_eq!(paced_err, max_err);
+}
+
+/// `max` already plays every frame without waiting, so it has no burst to
+/// take.
+#[test]
+fn a_max_speed_replay_refuses_a_preseed() {
+    let path = recording_in(&dir_for("max-preseed"));
+    let (_, stderr, ok) = read_csv(
+        &path,
+        &["--mock-clock-scale", "max", "--mock-clock-preseed", "10"],
+    );
+    assert!(!ok, "a preseed alongside max was taken");
+    assert!(stderr.contains("'max' takes no preseed"), "got {stderr}");
+}
+
+/// A replay played at its recorded pace into a file says once how not to
+/// wait; one on screen, or at max speed, says nothing.
+#[test]
+fn a_paced_replay_into_a_file_says_how_not_to_wait() {
+    let dir = dir_for("hint");
+    let path = recording_in(&dir);
+    let hint = "add --mock-clock-scale max to convert without waiting";
+    let paced = dir.join("paced.csv");
+    let (_, stderr, ok) = read_csv(&path, &["-o", paced.to_str().expect("utf-8 path")]);
+    assert!(ok, "the run failed: {stderr}");
+    assert_eq!(stderr.matches(hint).count(), 1, "got {stderr}");
+    let (_, stderr, _) = read_csv(&path, &[]);
+    assert!(!stderr.contains(hint), "on screen: {stderr}");
+    let max = dir.join("max.csv");
+    let (_, stderr, _) = read_csv(
+        &path,
+        &[
+            "-o",
+            max.to_str().expect("utf-8 path"),
+            "--mock-clock-scale",
+            "max",
+        ],
+    );
+    assert!(!stderr.contains(hint), "at max speed: {stderr}");
+}
+
 /// A gap plays back as the timeouts it was, and they are not a quiet meter:
 /// there is no `--device` to check and nothing on the cable to switch a USB
-/// mode on. The preseed spends the six seconds of silence without waiting.
+/// mode on. At max speed the six seconds of silence pass at once, and the
+/// run still ends with the file.
 #[test]
 fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
     let path = recording_of(&dir_for("gap"), RECORDING_WITH_A_GAP);
@@ -195,12 +247,10 @@ fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
         "read",
         "--replay",
         path.to_str().expect("utf-8 path"),
-        "--count",
-        "2",
         "--format",
         "csv",
-        "--mock-clock-preseed",
-        "10",
+        "--mock-clock-scale",
+        "max",
     ]);
     assert!(ok, "replay failed: {stderr}");
     assert!(

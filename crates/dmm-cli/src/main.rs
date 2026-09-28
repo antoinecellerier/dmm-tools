@@ -121,7 +121,11 @@ fn main() {
         } => {
             // `from_flags` names the offending value, not the flag it came
             // from, so that both binaries can reuse the sentence.
-            let clock = match dmm_lib::Clock::from_flags(mock_clock_scale, mock_clock_preseed) {
+            let clock = match cmd::read::session_clock(
+                mock_clock_scale,
+                mock_clock_preseed,
+                replay.is_some(),
+            ) {
                 Ok(clock) => clock,
                 Err(msg) => {
                     eprintln!(

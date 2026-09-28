@@ -9,6 +9,26 @@ use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
 use std::path::PathBuf;
 
+/// `--mock-clock-scale`: a multiple of real time, or `max`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum ClockScale {
+    Factor(f64),
+    /// Session time moves only as the run waits on it, so a replay plays
+    /// every frame at its recorded time as fast as it decodes. A large
+    /// factor cannot: the real time spent decoding is scaled into session
+    /// time too, and polls then skip frames.
+    Max,
+}
+
+fn parse_clock_scale(s: &str) -> Result<ClockScale, String> {
+    if s == "max" {
+        return Ok(ClockScale::Max);
+    }
+    s.parse()
+        .map(ClockScale::Factor)
+        .map_err(|_| format!("expected a number or 'max', got '{s}'"))
+}
+
 fn version_string() -> &'static str {
     dmm_shared::help::version_string(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
 }
@@ -83,10 +103,12 @@ pub(crate) enum Cmd {
         /// Play back a file written by --format replay instead of opening a meter; ends with the file
         #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
         replay: Option<PathBuf>,
-        /// Run session time at this multiple of real time (mock only).
-        /// Hidden: a contributor tool for fast runs, not a user-facing knob.
-        #[arg(long, hide = true)]
-        mock_clock_scale: Option<f64>,
+        /// Run session time at this multiple of real time (mock only), or
+        /// `max`: with --replay, every frame at its recorded time, as fast as
+        /// it decodes. Hidden: a contributor tool for fast runs, not a
+        /// user-facing knob.
+        #[arg(long, hide = true, value_parser = parse_clock_scale)]
+        mock_clock_scale: Option<ClockScale>,
         /// Start the run with this many seconds of readings already behind it,
         /// produced as fast as the mock answers (mock only). Hidden, as above.
         #[arg(long, hide = true)]
@@ -460,11 +482,29 @@ mod tests {
                 mock_clock_preseed,
                 ..
             } => {
-                assert_eq!(mock_clock_scale, Some(20.0));
+                assert_eq!(mock_clock_scale, Some(ClockScale::Factor(20.0)));
                 assert_eq!(mock_clock_preseed, Some(90.0));
             }
             _ => panic!("expected Read"),
         }
+    }
+
+    /// `max` is a scale of its own, and anything else must be a number.
+    #[test]
+    fn clap_parse_the_max_clock_scale() {
+        let scale = |value: &str| {
+            Cli::try_parse_from(["dmm-cli", "read", "--mock-clock-scale", value])
+                .ok()
+                .and_then(|cli| match cli.command {
+                    Cmd::Read {
+                        mock_clock_scale, ..
+                    } => mock_clock_scale,
+                    _ => None,
+                })
+        };
+        assert_eq!(scale("max"), Some(ClockScale::Max));
+        assert_eq!(scale("0.5"), Some(ClockScale::Factor(0.5)));
+        assert_eq!(scale("fast"), None);
     }
 
     #[test]

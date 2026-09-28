@@ -2,7 +2,7 @@
 //! text, CSV, JSON or the meter's own frames, with the closing summary.
 
 use super::setup_ctrlc;
-use crate::cli::TransformArgs;
+use crate::cli::{ClockScale, TransformArgs};
 use crate::format::{self, OutputFormat};
 use crate::open::{
     open_mock_device, open_with_help, opened_device, print_no_response_help, requires_hardware,
@@ -232,6 +232,10 @@ fn read_replay(
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let replay = dmm_lib::replay::Replay::load(path)?;
+    // On screen the pace is the point; into a file it is only a wait.
+    if clock.is_real() && !matches!(destination, output::Destination::Stdout) {
+        eprintln!("{}", style(PACED_REPLAY_HINT).dim());
+    }
     // dmm-lib has no date library, so the header line comes back as text.
     let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).map_err(|e| {
         format!(
@@ -282,6 +286,36 @@ fn read_replay(
         dmm_lib::replay::ReplayTransport::played_out,
     )
 }
+
+/// The session clock the `--mock-clock-*` flags ask for, or why they can't
+/// be honoured, naming the value rather than the flag.
+pub(crate) fn session_clock(
+    scale: Option<ClockScale>,
+    preseed: Option<f64>,
+    replay: bool,
+) -> Result<dmm_lib::Clock, String> {
+    match scale {
+        // A manual clock moves only when the run sleeps on it: a replay's
+        // waits and the stream's pacing advance it by exactly the recorded
+        // gaps, so every reading keeps its timestamp and nothing waits.
+        Some(ClockScale::Max) if preseed.is_some() => {
+            Err("'max' takes no preseed: every frame already plays without waiting".to_string())
+        }
+        // Only a replay ends: a live mock at `max` would print readings as
+        // fast as the CPU goes until Ctrl+C, and grow a file without limit.
+        Some(ClockScale::Max) if !replay => {
+            Err("'max' needs --replay: only a recording ends on its own".to_string())
+        }
+        Some(ClockScale::Max) => Ok(dmm_lib::Clock::manual()),
+        Some(ClockScale::Factor(f)) => dmm_lib::Clock::from_flags(Some(f), preseed),
+        None => dmm_lib::Clock::from_flags(None, preseed),
+    }
+}
+
+/// What a replay played at its recorded pace into a file says once: the run
+/// takes as long as the recording did.
+const PACED_REPLAY_HINT: &str =
+    "Note: playing at the recorded pace; add --mock-clock-scale max to convert without waiting";
 
 /// Refuse a bent session clock on a device that is paced by USB.
 ///
@@ -519,6 +553,28 @@ mod tests {
     use crate::test_fixtures::selection;
     use clap::Parser;
     use dmm_lib::protocol::registry;
+
+    /// `max` is a clock that waits for nothing: an hour slept is an hour of
+    /// session time at once. It hands out no burst, so a preseed is refused.
+    #[test]
+    fn the_max_scale_waits_for_nothing() {
+        let clock = session_clock(Some(ClockScale::Max), None, true).expect("max alone");
+        let before = clock.now();
+        clock.sleep(Duration::from_secs(3600));
+        assert_eq!(clock.now(), before + Duration::from_secs(3600));
+        assert!(!clock.is_real(), "refused on hardware like the other flags");
+        let err = session_clock(Some(ClockScale::Max), Some(10.0), true).expect_err("no burst");
+        assert!(err.contains("preseed"), "{err}");
+    }
+
+    /// A live mock never ends, so at `max` it would print as fast as the CPU
+    /// goes until Ctrl+C: `max` takes a replay, and a factor does not need one.
+    #[test]
+    fn the_max_scale_needs_a_replay() {
+        let err = session_clock(Some(ClockScale::Max), None, false).expect_err("no replay");
+        assert!(err.contains("'max'") && err.contains("--replay"), "{err}");
+        assert!(session_clock(Some(ClockScale::Factor(20.0)), None, false).is_ok());
+    }
 
     /// A bent clock on a USB-paced meter would stamp readings with instants
     /// the meter never produced, so `read` refuses before it opens anything.

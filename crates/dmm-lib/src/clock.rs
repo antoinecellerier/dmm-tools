@@ -3,7 +3,9 @@
 //! Production runs on [`Clock::real`], where session time *is* wall time. Two
 //! other variants let session time be produced instead of waited for:
 //! [`Clock::scaled`] runs it at a chosen multiple of real time, and
-//! [`Clock::manual`] only moves when a test [`advance`](Clock::advance)s it.
+//! [`Clock::manual`] only moves when slept on or [`advance`](Clock::advance)d:
+//! tests, and `dmm-cli read --replay --mock-clock-scale max`, which converts a
+//! recording without waiting.
 //! A scaled clock can also carry a burst — [`with_preseed`](Clock::with_preseed)
 //! — that hands out its first seconds instantly, so a session can start with
 //! minutes of history already behind it.
@@ -91,7 +93,9 @@ impl Clock {
         Self::scaled_with_burst(factor, Duration::ZERO)
     }
 
-    /// Session time that only moves when [`Clock::advance`] says so. For tests.
+    /// Session time that only moves when slept on or [advanced](Clock::advance):
+    /// tests, and `dmm-cli read --replay --mock-clock-scale max`, which
+    /// converts a recording without waiting.
     pub fn manual() -> Self {
         Self {
             inner: Inner::Manual(Arc::new(Mutex::new(Instant::now()))),

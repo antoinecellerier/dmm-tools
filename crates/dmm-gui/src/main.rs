@@ -72,7 +72,7 @@ struct Args {
     /// Run session time at FACTOR times real time (mock only, implies
     /// --device mock). Hidden: a contributor tool for screenshots and
     /// performance runs, documented in docs/development.md.
-    #[arg(long, hide = true, value_name = "FACTOR")]
+    #[arg(long, hide = true, value_name = "FACTOR", value_parser = parse_clock_scale)]
     mock_clock_scale: Option<f64>,
 
     /// Start the session with SECS of history, produced instantly (mock
@@ -80,6 +80,19 @@ struct Args {
     /// --mock-clock-scale.
     #[arg(long, hide = true, value_name = "SECS")]
     mock_clock_preseed: Option<f64>,
+}
+
+/// `--mock-clock-scale`'s factor. `max`, which `dmm-cli read` takes, is
+/// refused by name rather than as a bad number: it would race a replay
+/// through to its end before the window drew.
+fn parse_clock_scale(s: &str) -> Result<f64, String> {
+    if s == "max" {
+        return Err("'max' is for converting a replay with dmm-cli read; \
+                    the GUI would play the whole file at once, so give a factor"
+            .to_string());
+    }
+    s.parse()
+        .map_err(|_| format!("expected a number, got '{s}'"))
 }
 
 /// Build long help text for --device from the registry.
@@ -583,6 +596,17 @@ mod tests {
                 "{err}"
             );
         }
+    }
+
+    /// `max` converts a replay in `dmm-cli read`; the GUI says so rather
+    /// than calling it a bad number.
+    #[test]
+    fn the_max_clock_scale_is_refused_by_name() {
+        let err = Args::try_parse_from(["dmm-gui", "--mock-clock-scale", "max"])
+            .err()
+            .expect("the GUI takes a factor");
+        assert!(err.to_string().contains("dmm-cli read"), "{err}");
+        assert!(Args::try_parse_from(["dmm-gui", "--mock-clock-scale", "20"]).is_ok());
     }
 
     /// The message clap prints has to say which flag was wrong; the value
