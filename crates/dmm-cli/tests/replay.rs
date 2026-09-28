@@ -647,18 +647,15 @@ fn the_bundled_recordings_play_without_a_warning() {
         if path.extension().is_none_or(|e| e != "replay") {
             continue;
         }
-        let text = std::fs::read_to_string(&path).expect("read recording");
-        let frames = text.lines().filter(|l| !l.starts_with('#')).count();
+        // Every frame, and the run ends with the file.
         let (_, stderr, ok) = run(&[
             "read",
             "--replay",
             path.to_str().expect("utf-8 path"),
-            "--count",
-            &frames.to_string(),
             "--format",
             "csv",
-            "--mock-clock-preseed",
-            "3600",
+            "--mock-clock-scale",
+            "max",
         ]);
         assert!(ok, "{}: {stderr}", path.display());
         assert!(!stderr.contains("WARN"), "{}: {stderr}", path.display());

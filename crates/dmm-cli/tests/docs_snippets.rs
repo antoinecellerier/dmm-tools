@@ -131,16 +131,14 @@ fn output_of(command: &str, via: &Via, where_: &str) -> String {
             }
         }
         // A replay is paced by the clock, and on real time a slow runner's
-        // late wake-up lands a poll on a later frame. The burst covers every
-        // sleep and the scale shrinks a stall to a sliver of session time, so
-        // each poll falls on its tick whatever the machine is doing.
+        // late wake-up lands a poll on a later frame. At `max` session time
+        // moves only as the run sleeps, so each poll falls exactly on its
+        // tick whatever the machine is doing.
         Via::Replay(path) => args.extend([
             "--replay".to_string(),
             path.to_str().expect("utf-8 path").to_string(),
             "--mock-clock-scale".to_string(),
-            "0.001".to_string(),
-            "--mock-clock-preseed".to_string(),
-            "86400".to_string(),
+            "max".to_string(),
         ]),
     }
 
