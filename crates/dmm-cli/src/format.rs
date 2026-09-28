@@ -190,26 +190,37 @@ fn format_text(
     m: &Measurement,
     integral: Option<(f64, &str)>,
 ) -> std::io::Result<()> {
-    if let Some((val, unit)) = integral {
-        writeln!(w, "{m} [\u{222b} {val:.4} {unit}]")?;
-    } else {
-        writeln!(w, "{m}")?;
-    }
     // Sub-values, indented under the reading they belong to. The UT181A
     // produces these in REL (Reference/Absolute), MIN/MAX (Max/Average/Min
     // with timestamps) and peak modes, and the UT171 for the AC frequency
     // aux; before this they were parsed and discarded. A frame without a main
-    // reading already printed its sub-values in the value's place.
-    if !m.has_main_reading() {
-        return Ok(());
-    }
-    let label_w = m
-        .aux_values
+    // reading already prints its sub-values in the value's place.
+    let aux: &[_] = if m.has_main_reading() {
+        &m.aux_values
+    } else {
+        &[]
+    };
+    let mut label_w = aux
         .iter()
         .map(|a| a.label.chars().count())
         .max()
         .unwrap_or(0);
-    for aux in &m.aux_values {
+    let mut line = m.to_string();
+    // A named reading's value starts in its sub-values' value column, so the
+    // numbers read down one column: `T1    20.000 °C` over `  T2  23.000 °C`.
+    if let Some(name) = m.main_label.filter(|_| !aux.is_empty()).map(|l| l.as_str())
+        && let Some(rest) = line.strip_prefix(name).and_then(|r| r.strip_prefix(' '))
+    {
+        let col = (label_w + 4).max(name.chars().count() + 2);
+        label_w = col - 4;
+        line = format!("{name:<col$}{rest}");
+    }
+    if let Some((val, unit)) = integral {
+        writeln!(w, "{line} [\u{222b} {val:.4} {unit}]")?;
+    } else {
+        writeln!(w, "{line}")?;
+    }
+    for aux in aux {
         let unit = aux.unit_or(&m.unit);
         let elapsed = aux
             .elapsed_secs
@@ -281,7 +292,7 @@ fn format_json(
 mod tests {
     use super::*;
     use dmm_lib::flags::StatusFlags;
-    use dmm_lib::measurement::{AuxValue, MeasuredValue};
+    use dmm_lib::measurement::{AuxValue, MainLabel, MeasuredValue};
     use dmm_lib::protocol::make_test_measurement;
 
     /// One reading, as `output` writes it.
@@ -390,6 +401,27 @@ mod tests {
             elapsed_secs: None,
         }];
         assert_eq!(text_for(&m), "AC 0.0000 V [AUTO]\n");
+    }
+
+    /// A named reading's value lines up with its sub-values', whichever
+    /// label is the longer.
+    #[test]
+    fn a_named_reading_shares_its_sub_values_column() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        m.main_label = Some(MainLabel::T1);
+        m.aux_values = vec![AuxValue {
+            label: "T2".into(),
+            value: MeasuredValue::Normal(23.0),
+            unit: "".into(),
+            display_raw: Some("23.000".to_string()),
+            elapsed_secs: None,
+        }];
+        assert_eq!(text_for(&m), "T1    5.678 V\n  T2  23.000 V\n");
+
+        m.main_label = Some(MainLabel::Relative);
+        m.aux_values[0].label = "AC".into();
+        assert_eq!(text_for(&m), "Relative  5.678 V\n  AC      23.000 V\n");
     }
 
     /// UT181A REL/MIN-MAX sub-values were parsed and then discarded by every
