@@ -588,6 +588,7 @@ impl Protocol for MockProtocol {
             value,
             flags: self.state.flags(),
             aux_values,
+            main_label: scenario.main_label,
             // The mock has no wire bytes to report.
             ..Measurement::from_payload(&[])
         };
@@ -902,6 +903,7 @@ pub fn open_simulated(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::measurement::MainLabel;
     use scenarios::{
         scenario_duration, temp_diff_rev_value, temp_diff_value, temp_value, temp2_value,
     };
@@ -1479,6 +1481,7 @@ mod tests {
         let m = dmm.request_measurement().unwrap();
         assert_eq!(m.mode, "Temp \u{00B0}C T1 (T2)");
         assert_eq!(m.unit, "\u{00B0}C");
+        assert_eq!(m.main_label, Some(MainLabel::T1));
         assert_eq!(m.aux_values.len(), 1);
         assert_eq!(m.aux_values[0].label, "T2");
         assert_eq!(m.aux_values[0].unit, "\u{00B0}C");
@@ -1519,11 +1522,13 @@ mod tests {
         assert_eq!(m.mode, "Temp \u{00B0}C T1-T2");
         assert_eq!(m.unit, "\u{00B0}C");
         assert_eq!(labels(&m), ["T1", "T2"]);
+        assert_eq!(m.main_label, None, "a difference is neither probe");
 
         let mut dmm = open_mock_mode(MockMode::TempDiffRev).unwrap();
         let m = dmm.request_measurement().unwrap();
         assert_eq!(m.mode, "Temp \u{00B0}C T2-T1");
         assert_eq!(labels(&m), ["T1", "T2"]);
+        assert_eq!(m.main_label, None, "a difference is neither probe");
 
         // Sharing the dual scenario's clock is what lets the four readings
         // agree: the same elapsed time must mean the same T1 and T2 in all of

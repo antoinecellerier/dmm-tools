@@ -7,7 +7,7 @@
 use std::f64::consts::TAU;
 
 use super::MockMode;
-use crate::measurement::MeasuredValue;
+use crate::measurement::{MainLabel, MeasuredValue};
 
 /// A scenario defines a measurement mode with a time-varying value pattern.
 ///
@@ -36,6 +36,9 @@ pub(super) struct Scenario {
     /// Secondary readings emitted with every measurement. Empty for the
     /// single-display scenarios.
     pub(super) aux: &'static [AuxSpec],
+    /// What the main reading is, where the sub-values beside it make "main"
+    /// ambiguous — as the UT181A decoder names it for the same arrangement.
+    pub(super) main_label: Option<MainLabel>,
 }
 
 impl Scenario {
@@ -304,6 +307,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 10.0,
             value_fn: dcv_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::AcV,
@@ -316,6 +320,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 10.0,
             value_fn: acv_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::Ohm,
@@ -328,6 +333,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 10.0,
             value_fn: ohm_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::Capacitance,
@@ -340,6 +346,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 10.0,
             value_fn: cap_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::Hz,
@@ -352,6 +359,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 8.0,
             value_fn: hz_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::Temp,
@@ -364,6 +372,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 8.0,
             value_fn: temp_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::DcMa,
@@ -376,6 +385,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 8.0,
             value_fn: dcma_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::OhmOl,
@@ -388,6 +398,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 2.0,
             value_fn: ohm_ol_value,
             aux: &[],
+            main_label: None,
         },
         Scenario {
             id: MockMode::Ncv,
@@ -400,6 +411,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 4.0,
             value_fn: ncv_value,
             aux: &[],
+            main_label: None,
         },
         // Multi-display scenarios, appended so the auto-cycle order of the
         // single-display ones above is unchanged. They exercise the
@@ -421,6 +433,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 10.0,
             value_fn: acv_value,
             aux: ACV_HZ_AUX,
+            main_label: None,
         },
         Scenario {
             id: MockMode::TempDual,
@@ -433,6 +446,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 8.0,
             value_fn: temp_value,
             aux: TEMP_DUAL_AUX,
+            main_label: Some(MainLabel::T1),
         },
         // The temperature dial's two arithmetic arrangements, so the mode
         // group has the four entries a real UT181A offers there. They run on
@@ -450,6 +464,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 8.0,
             value_fn: temp_diff_value,
             aux: TEMP_BOTH_AUX,
+            main_label: None,
         },
         Scenario {
             id: MockMode::TempDiffRev,
@@ -462,6 +477,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 8.0,
             value_fn: temp_diff_rev_value,
             aux: TEMP_BOTH_AUX,
+            main_label: None,
         },
         // Appended last for the reason the block above was: the auto-cycle
         // order of everything before it stays unchanged.
@@ -480,6 +496,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             duration_secs: 60.0,
             value_fn: noise_value,
             aux: &[],
+            main_label: None,
         },
     ]
 }
