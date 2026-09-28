@@ -45,7 +45,7 @@ use std::sync::{Arc, Mutex};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
 use crate::graph::Graph;
-use crate::settings::{Settings, ThemeMode};
+use crate::settings::{DeferredSave, SaveDue, Settings, ThemeMode};
 use appearance::{UiColorKey, font_definitions, install_text_styles};
 use capture::Capture;
 use connection::RemoteCommand;
@@ -317,6 +317,8 @@ impl Connection {
 pub struct App {
     pub(super) settings: Settings,
     pub(super) settings_open: bool,
+    /// A settings write waiting for a control to stop moving (colour edits).
+    settings_save: DeferredSave,
 
     pub(super) connection: Connection,
     pub(super) last_measurement: Option<Measurement>,
@@ -445,6 +447,7 @@ impl App {
         Self {
             settings,
             settings_open: false,
+            settings_save: DeferredSave::default(),
             connection: Connection::default(),
             last_measurement: None,
             held: held_reading::HeldReading::default(),
@@ -950,6 +953,22 @@ impl eframe::App for App {
         // each ask for their frame; toasts schedule their own.
         if self.capture.recording.active {
             ctx.request_repaint_after(RECORDING_LABEL_TICK);
+        }
+        // Last, so a change made this frame is seen this frame. A paused or
+        // disconnected app draws nothing by itself, so a pending save asks
+        // for the frame it is due in.
+        match self.settings_save.poll(std::time::Instant::now()) {
+            SaveDue::Idle => {}
+            SaveDue::Wait(delay) => ctx.request_repaint_after(delay),
+            SaveDue::Now => self.settings.save(),
+        }
+    }
+
+    /// Quitting inside a deferred save's delay still saves. Not `Drop`: tests
+    /// build and drop `App`s, and must never write the real settings file.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.settings_save.take_pending() {
+            self.settings.save();
         }
     }
 }

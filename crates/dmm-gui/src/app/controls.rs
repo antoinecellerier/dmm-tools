@@ -914,7 +914,9 @@ impl App {
 
                 if changed {
                     self.applied.ui_colors = None; // force reapply
-                    self.settings.save();
+                    // Deferred: a drag or a held arrow key changes the
+                    // colour every frame, and each save is an fsync.
+                    self.settings_save.schedule(std::time::Instant::now());
                 }
             });
         // Paint an explicit focus ring on the header when Tab-focused —

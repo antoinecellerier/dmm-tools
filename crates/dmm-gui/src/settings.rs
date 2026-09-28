@@ -3,6 +3,7 @@ use dmm_shared::SharedSettings;
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 /// Samples the graph history and the sample buffer each keep by default: ~14
 /// hours at 10 Hz, which is as long as most bench sessions run.
@@ -414,6 +415,9 @@ impl Settings {
         self.max_samples = self.max_samples.clamp(MIN_MAX_SAMPLES, MAX_MAX_SAMPLES);
     }
 
+    /// Write the settings to the user's config file. Nothing isolates that
+    /// path in tests, so a test must never reach this: it would overwrite the
+    /// developer's own settings.
     pub fn save(&self) {
         if let Some(path) = Self::config_path() {
             // Restore original values for CLI-overridden fields before saving.
@@ -441,9 +445,84 @@ impl Settings {
     }
 }
 
+/// How long a deferred save waits after the last change.
+const SAVE_DELAY: Duration = Duration::from_millis(500);
+
+/// A settings write held back while a control is still moving — a colour
+/// drag changes the value every frame, and each write is an fsync.
+///
+/// Real time, not the session clock: this is UI cadence.
+#[derive(Default)]
+pub(crate) struct DeferredSave {
+    due: Option<Instant>,
+}
+
+/// What [`DeferredSave::poll`] asks of the caller this frame.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum SaveDue {
+    /// Nothing is owed.
+    Idle,
+    /// A save is owed in this long; ask for a frame then.
+    Wait(Duration),
+    /// Save now.
+    Now,
+}
+
+impl DeferredSave {
+    /// A change was made: save [`SAVE_DELAY`] after the last one.
+    pub(crate) fn schedule(&mut self, now: Instant) {
+        self.due = Some(now + SAVE_DELAY);
+    }
+
+    /// `Now` once, when the delay has run out; the caller saves.
+    pub(crate) fn poll(&mut self, now: Instant) -> SaveDue {
+        match self.due {
+            None => SaveDue::Idle,
+            Some(due) if due <= now => {
+                self.due = None;
+                SaveDue::Now
+            }
+            // `checked_duration_since`: a backward clock jump must not panic.
+            Some(due) => SaveDue::Wait(due.checked_duration_since(now).unwrap_or_default()),
+        }
+    }
+
+    /// Whether a save is still owed (quit before the delay ran out).
+    pub(crate) fn take_pending(&mut self) -> bool {
+        self.due.take().is_some()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A drag that keeps changing the colour saves once, half a second
+    /// after it stops. Explicit instants: nothing here touches the real
+    /// settings file.
+    #[test]
+    fn a_colour_drag_saves_once_after_it_settles() {
+        let ms = Duration::from_millis;
+        let t0 = Instant::now();
+        let mut save = DeferredSave::default();
+        assert_eq!(save.poll(t0), SaveDue::Idle);
+        save.schedule(t0);
+        assert_eq!(save.poll(t0 + ms(200)), SaveDue::Wait(ms(300)));
+        save.schedule(t0 + ms(400));
+        assert_eq!(save.poll(t0 + ms(600)), SaveDue::Wait(ms(300)));
+        assert_eq!(save.poll(t0 + ms(900)), SaveDue::Now, "exactly due");
+        assert_eq!(save.poll(t0 + ms(1000)), SaveDue::Idle);
+    }
+
+    /// Quitting mid-delay still owes the save, once.
+    #[test]
+    fn a_pending_save_is_taken_once() {
+        let mut save = DeferredSave::default();
+        assert!(!save.take_pending());
+        save.schedule(Instant::now());
+        assert!(save.take_pending());
+        assert!(!save.take_pending());
+    }
 
     /// Every field is on unless the user turned it off, including one a
     /// later release adds to the panel.
