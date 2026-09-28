@@ -2316,6 +2316,11 @@ regression read and `set hold`/`set rel` after a Pause.
   reads, and whether anything bounds them. Checkable on our UT-D07B: pause
   the GUI for 10 minutes, resume, and see that the first reading is current
   and memory stayed flat.
+- **Wall times across a suspend.** Since 2026-09-28 each reading's wall
+  time is the system time it was taken at, not a mapping from the session's
+  start, whose monotonic clock stops during a suspend on Linux. Checkable:
+  suspend the laptop mid-session with the mock and with our UT61E+, then
+  compare the exported rows after resume with the wall clock.
 - **A polled reply that comes late.** Since 2026-09-28 a request after a
   timeout starts from an empty queue, so a reply that lands after the 2 s
   deadline is dropped rather than taken for the next request's answer

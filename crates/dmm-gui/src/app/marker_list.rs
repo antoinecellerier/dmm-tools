@@ -252,7 +252,14 @@ impl App {
             self.toast = Some(Toast::info(NO_READING));
             return;
         }
-        let wall_time = self.wall_clock.wall_time_for(at).into();
+        // The reading's own wall time where the buffer holds it; a point
+        // only the graph still has maps through the session clock.
+        let wall_time = self
+            .capture
+            .recording
+            .sample_at(at)
+            .map(|s| s.wall_time)
+            .unwrap_or_else(|| self.clock.wall_time_for(at).into());
         let (number, added) = match self.markers.add(at, wall_time, reading) {
             Ok(number) => (number, true),
             // Ctrl+N opens the note already there.
@@ -833,7 +840,6 @@ mod tests {
 
     /// Samples at `seconds` after `t0`.
     fn samples_at(t0: Instant, seconds: impl Iterator<Item = u64>) -> VecDeque<Sample> {
-        let wc = dmm_lib::WallClock::new();
         seconds
             .map(|i| {
                 let mut m = Measurement::test_fixture(
@@ -842,7 +848,7 @@ mod tests {
                     StatusFlags::default(),
                 );
                 m.timestamp = secs(t0, i);
-                Sample::from_measurement(&m, &wc, 0)
+                Sample::from_measurement(&m, 0)
             })
             .collect()
     }
@@ -948,7 +954,6 @@ mod tests {
             let mut app = app();
             app.capture.recording.set_max_samples(samples as usize);
             app.toggle_recording();
-            let wall_clock = app.wall_clock;
             let t0 = Instant::now();
             let mut m = Measurement::test_fixture(
                 MeasuredValue::Normal(1.234),
@@ -957,7 +962,7 @@ mod tests {
             );
             for i in 0..samples {
                 m.timestamp = t0 + Duration::from_millis(i * 10);
-                app.capture.recording.push(&m, &wall_clock, 0);
+                app.capture.recording.push(&m, 0);
             }
             let ctx = egui::Context::default();
             let frame = |app: &mut App| {

@@ -326,7 +326,7 @@ mod tests {
                 "V",
                 Some("  1.234"),
             );
-            app.capture.recording.push(&m, &app.wall_clock, 0);
+            app.capture.recording.push(&m, 0);
         }
         for i in 0..markers {
             let at = m.timestamp + std::time::Duration::from_millis(i);

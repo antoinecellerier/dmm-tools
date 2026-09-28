@@ -340,11 +340,6 @@ pub struct App {
     /// sample buffer holds their reading.
     markers: crate::markers::Markers,
     marker_list: marker_list::MarkerList,
-    /// Session-long `(Instant, SystemTime)` origin pair used to map
-    /// `m.timestamp` (monotonic) onto wall-clock timestamps for recording and
-    /// export. Captured once at construction so every sample across the
-    /// session is translated against the same origin.
-    wall_clock: dmm_lib::WallClock,
     /// Time base the session's readings are stamped with — real unless a
     /// `--mock-clock-*` flag was given. Cloned into the acquisition thread so
     /// the mock's waveform, the pacing loop and anything here that measures
@@ -457,7 +452,6 @@ impl App {
             capture,
             markers: crate::markers::Markers::default(),
             marker_list: marker_list::MarkerList::default(),
-            wall_clock: dmm_lib::WallClock::from_clock(&clock),
             clock,
             replay: None,
             selected_profile: initial_device.map(|d| *(d.new_protocol)().profile()),

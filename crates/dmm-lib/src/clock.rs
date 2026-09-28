@@ -38,6 +38,11 @@ pub struct Clock {
     /// `Inner` on purpose: it is decided once, before the clones are handed
     /// out, and unlike the burst there is nothing to spend.
     wall_origin: Option<(Instant, SystemTime)>,
+    /// A virtual clock's session instant at construction and the wall time
+    /// it stands for, backdated by a burst: what [`Clock::wall_time_for`]
+    /// maps from when no origin is pinned. `None` on the real clock, which
+    /// reads the system clock for each reading instead.
+    anchor: Option<(Instant, SystemTime)>,
 }
 
 #[derive(Clone, Debug)]
@@ -77,6 +82,7 @@ impl Clock {
         Self {
             inner: Inner::Real,
             wall_origin: None,
+            anchor: None,
         }
     }
 
@@ -97,9 +103,11 @@ impl Clock {
     /// tests, and `dmm-cli read --replay --mock-clock-scale max`, which
     /// converts a recording without waiting.
     pub fn manual() -> Self {
+        let now = Instant::now();
         Self {
-            inner: Inner::Manual(Arc::new(Mutex::new(Instant::now()))),
+            inner: Inner::Manual(Arc::new(Mutex::new(now))),
             wall_origin: None,
+            anchor: Some((now, SystemTime::now())),
         }
     }
 
@@ -134,14 +142,35 @@ impl Clock {
 
     /// Pin this session's *current* time to the wall time `at`.
     ///
-    /// A replay's session zero is the moment its recording was made, so a
-    /// [`WallClock`](crate::WallClock) built from this clock maps readings to
-    /// the times the meter produced them rather than to the run playing them
-    /// back. Nothing else pins an origin: a live or mock session's zero is
+    /// A replay's session zero is the moment its recording was made, so
+    /// [`Clock::wall_time_for`] maps readings to the times the meter produced
+    /// them rather than to the run playing them back. Nothing else pins an origin: a live or mock session's zero is
     /// simply when it started.
     pub fn with_wall_origin(mut self, at: SystemTime) -> Self {
         self.wall_origin = Some((self.now(), at));
         self
+    }
+
+    /// The wall time session instant `at` stands for.
+    ///
+    /// On the real clock with no pinned origin: the system clock now, less
+    /// how long ago `at` was. A reading stamped as it arrives gets the wall
+    /// time of that moment, so a suspend or a clock step since the session
+    /// began is followed rather than carried as an offset. A pinned origin (a
+    /// replay) or a virtual clock maps from its origin pair instead, which a
+    /// burst backdates so the burst's readings are not all stamped with the
+    /// launch time.
+    pub fn wall_time_for(&self, at: Instant) -> SystemTime {
+        let (instant, system) = self
+            .wall_origin
+            .or(self.anchor)
+            .unwrap_or_else(|| (Instant::now(), SystemTime::now()));
+        match at.checked_duration_since(instant) {
+            Some(later) => system.checked_add(later).unwrap_or(system),
+            None => system
+                .checked_sub(instant.saturating_duration_since(at))
+                .unwrap_or(system),
+        }
     }
 
     /// The pinned origin: the session instant and the wall time it stands
@@ -196,8 +225,8 @@ impl Clock {
 
     /// The burst this clock was configured with; zero unless preseeded.
     ///
-    /// [`WallClock`](crate::WallClock) backdates its system origin by this, so
-    /// readings from the burst export the wall time they stand for.
+    /// [`Clock::wall_time_for`] backdates its origin by this, so readings
+    /// from the burst export the wall time they stand for.
     pub fn preseed(&self) -> Duration {
         match &self.inner {
             Inner::Scaled(s) => s.preseed,
@@ -284,10 +313,13 @@ impl Clock {
         } else {
             1.0
         };
+        let origin = Instant::now();
+        let now = SystemTime::now();
         Self {
             wall_origin: None,
+            anchor: Some((origin, now.checked_sub(burst).unwrap_or(now))),
             inner: Inner::Scaled(Arc::new(Scaled {
-                origin: Instant::now(),
+                origin,
                 factor,
                 preseed: burst,
                 state: Mutex::new(ScaledState {
@@ -325,6 +357,76 @@ fn scale_duration(d: Duration, factor: f64) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The real clock reads the system clock for each reading: a reading
+    /// just taken carries the wall time of now, however long the session.
+    #[test]
+    fn the_real_clock_stamps_the_system_time_of_the_reading() {
+        let clock = Clock::real();
+        let at = clock.now();
+        let wall = clock.wall_time_for(at);
+        let skew = SystemTime::now().duration_since(wall).unwrap_or_default();
+        assert!(skew < Duration::from_secs(1), "{skew:?}");
+        let earlier = at.checked_sub(Duration::from_secs(5)).unwrap_or(at);
+        let back = wall.duration_since(clock.wall_time_for(earlier)).unwrap();
+        assert!(
+            back.abs_diff(at - earlier) < Duration::from_millis(50),
+            "{back:?}"
+        );
+    }
+
+    #[test]
+    fn a_virtual_clock_maps_from_its_start() {
+        let clock = Clock::manual();
+        let start = clock.now();
+        let wall = clock.wall_time_for(start);
+        clock.advance(Duration::from_millis(250));
+        let later = clock.wall_time_for(clock.now());
+        assert_eq!(
+            later.duration_since(wall).unwrap(),
+            Duration::from_millis(250)
+        );
+    }
+
+    /// A preseeded session hands out its first readings instantly. They must
+    /// still export the wall time they stand for, a burst before the live
+    /// readings that follow.
+    #[test]
+    fn preseed_backdates_the_wall_origin() {
+        let clock = Clock::real().with_preseed(90.0);
+        let first = clock.now();
+        // The pacing loop spends the burst; 90 s of session time, no waiting.
+        clock.sleep(Duration::from_secs(90));
+        let live = clock.now();
+        let span = clock
+            .wall_time_for(live)
+            .duration_since(clock.wall_time_for(first))
+            .expect("the live reading is later than the burst");
+        assert!(span >= Duration::from_secs(90), "burst spanned {span:?}");
+        // And the reading taken once the burst is spent carries true wall time.
+        let skew = SystemTime::now()
+            .duration_since(clock.wall_time_for(live))
+            .expect("the live reading is not in the future");
+        assert!(
+            skew < Duration::from_secs(1),
+            "live reading is {skew:?} old"
+        );
+    }
+
+    /// A replay's session zero *is* the moment its recording was made, so the
+    /// burst that fills its history must not backdate anything on top: a
+    /// reading 60 s in exports 60 s past the recording's own time.
+    #[test]
+    fn a_wall_origin_pins_session_zero_to_it() {
+        let recorded = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let clock = Clock::real().with_preseed(60.0).with_wall_origin(recorded);
+        let (origin, _) = clock.wall_origin().expect("the origin was just pinned");
+        assert_eq!(clock.wall_time_for(origin), recorded);
+        assert_eq!(
+            clock.wall_time_for(origin + Duration::from_secs(60)),
+            recorded + Duration::from_secs(60)
+        );
+    }
 
     /// The acquisition thread holds a clone while the UI thread holds the
     /// original, so a `Clock` that stopped being shareable would break the GUI

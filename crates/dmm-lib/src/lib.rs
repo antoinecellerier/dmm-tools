@@ -11,10 +11,8 @@ pub mod stats;
 pub mod stream;
 pub mod transform;
 pub mod transport;
-pub mod wall_clock;
 
 pub use clock::Clock;
-pub use wall_clock::WallClock;
 
 use error::{Error, Result};
 use log::{debug, info};
@@ -128,8 +126,8 @@ impl<T: Transport> Dmm<T> {
 
     /// The clock this session's readings are stamped with.
     ///
-    /// Callers that need session time — the pacing loop, a [`WallClock`] for
-    /// export — take it from here rather than reading `Instant::now()`, so a
+    /// Callers that need session time — the pacing loop, the wall time of a
+    /// moment with no reading ([`Clock::wall_time_for`]) — take it from here rather than reading `Instant::now()`, so a
     /// scaled or preseeded session stays consistent with its own timestamps.
     pub fn clock(&self) -> &Clock {
         &self.clock
@@ -166,6 +164,7 @@ impl<T: Transport> Dmm<T> {
         if !self.protocol_stamps {
             m.timestamp = self.clock.now();
         }
+        m.wall_time = self.clock.wall_time_for(m.timestamp);
         Ok(m)
     }
 

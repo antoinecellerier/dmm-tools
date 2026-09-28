@@ -1,7 +1,7 @@
 use crate::flags::StatusFlags;
 use crate::specs::{ModeSpecInfo, SpecInfo};
 use std::borrow::Cow;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 /// Represents a parsed measurement value.
 #[derive(Debug, Clone)]
@@ -213,7 +213,13 @@ impl MainLabel {
 /// produce owned strings (`Cow::Owned`).
 #[derive(Debug, Clone)]
 pub struct Measurement {
+    /// Session time the reading was taken, stamped by [`crate::Dmm`].
     pub timestamp: Instant,
+    /// The wall time it was taken, stamped with `timestamp`: what exports
+    /// write. Read from the system clock per reading on the real clock (see
+    /// [`crate::Clock::wall_time_for`]), so a computer that slept in between
+    /// does not shift it.
+    pub wall_time: SystemTime,
     /// Human-readable mode string (e.g. "DC V", "AC mV", "Unknown(0x05)").
     pub mode: Cow<'static, str>,
     /// Raw protocol-level mode value (for debugging and spec lookup).
@@ -273,6 +279,7 @@ impl Measurement {
     pub(crate) fn from_payload(payload: &[u8]) -> Self {
         Measurement {
             timestamp: Instant::now(),
+            wall_time: SystemTime::now(),
             mode: Cow::Borrowed(""),
             mode_raw: 0,
             range_raw: 0,
@@ -374,6 +381,7 @@ impl Measurement {
     ) -> Measurement {
         Measurement {
             timestamp: Instant::now(),
+            wall_time: SystemTime::now(),
             mode: "DC V".into(),
             mode_raw: 0x02,
             range_raw: 1,

@@ -860,8 +860,7 @@ mod tests {
         );
 
         for _ in 0..3 {
-            let wall_clock = run.app.wall_clock;
-            run.app.capture.recording.push(&reading(), &wall_clock, 0);
+            run.app.capture.recording.push(&reading(), 0);
         }
         run.frame(1.0, vec![]);
         assert!(run.shows_text(&history_hint(3)), "{:?}", history_hint(3));
@@ -871,8 +870,7 @@ mod tests {
         );
 
         run.app.toggle_recording();
-        let wall_clock = run.app.wall_clock;
-        run.app.capture.recording.push(&reading(), &wall_clock, 0);
+        run.app.capture.recording.push(&reading(), 0);
         run.app.toggle_recording();
         run.frame(1.0, vec![]);
         assert!(!run.shows_text(&history_hint(1)));
@@ -907,8 +905,7 @@ mod tests {
         let mut run = MenuRun::new();
         run.app.toggle_recording();
         for _ in 0..samples {
-            let wall_clock = run.app.wall_clock;
-            run.app.capture.recording.push(&reading(), &wall_clock, 0);
+            run.app.capture.recording.push(&reading(), 0);
         }
         run.app.toggle_recording();
         run.frame(1.0, vec![]);
@@ -922,13 +919,12 @@ mod tests {
     #[test]
     fn discard_shows_only_for_a_stopped_recording() {
         let mut run = MenuRun::new();
-        let wall_clock = run.app.wall_clock;
-        run.app.capture.recording.push(&reading(), &wall_clock, 0);
+        run.app.capture.recording.push(&reading(), 0);
         run.frame(1.0, vec![]);
         assert!(!run.shows_widget("Discard"), "not for the history");
 
         run.app.toggle_recording();
-        run.app.capture.recording.push(&reading(), &wall_clock, 0);
+        run.app.capture.recording.push(&reading(), 0);
         run.frame(1.0, vec![]);
         assert!(!run.shows_widget("Discard"), "not while recording");
 
@@ -1090,9 +1086,9 @@ mod tests {
     fn push_reading(run: &mut MenuRun, at: Instant) {
         let mut m = reading();
         m.timestamp = at;
-        let wall_clock = run.app.wall_clock;
+        m.wall_time = run.app.clock.wall_time_for(at);
         run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
-        run.app.capture.recording.push(&m, &wall_clock, 0);
+        run.app.capture.recording.push(&m, 0);
         run.app.last_measurement = Some(m);
     }
 
@@ -1284,11 +1280,11 @@ mod tests {
     fn a_narrow_log_keeps_one_line_per_row() {
         let mut run = MenuRun::new();
         run.app.toggle_recording();
-        let wall_clock = run.app.wall_clock;
         let t0 = Instant::now();
         for i in 0..50 {
             let mut m = reading();
             m.timestamp = t0 + std::time::Duration::from_secs(i);
+            m.wall_time = run.app.clock.wall_time_for(m.timestamp);
             // Sub-values long enough to need three lines at this width.
             m.aux_values = ["Max", "Min", "Average", "Peak Max", "Peak Min"]
                 .into_iter()
@@ -1300,7 +1296,7 @@ mod tests {
                     elapsed_secs: None,
                 })
                 .collect();
-            run.app.capture.recording.push(&m, &wall_clock, 0);
+            run.app.capture.recording.push(&m, 0);
         }
         run.width = 300.0;
         run.frame(1.0, vec![]);
@@ -1327,12 +1323,12 @@ mod tests {
     fn the_marker_column_lines_up() {
         let mut run = MenuRun::new();
         let t0 = Instant::now();
-        let wall_clock = run.app.wall_clock;
         let mark = |run: &mut MenuRun, i: u64| {
             let mut m = reading();
             m.timestamp = t0 + std::time::Duration::from_secs(i);
+            m.wall_time = run.app.clock.wall_time_for(m.timestamp);
             run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
-            run.app.capture.recording.push(&m, &wall_clock, 0);
+            run.app.capture.recording.push(&m, 0);
             if i % 4 == 2 {
                 run.app.last_measurement = Some(m);
                 run.app.add_marker(false);

@@ -399,7 +399,7 @@ mod tests {
                 dmm_lib::flags::StatusFlags::default(),
             )
         };
-        app.capture.recording.push(&reading(), &app.wall_clock, 0);
+        app.capture.recording.push(&reading(), 0);
 
         app.set_transform(Transform::linear(2.0, 0.0, None));
         assert_eq!(app.capture.recording.export_samples().len(), 0);

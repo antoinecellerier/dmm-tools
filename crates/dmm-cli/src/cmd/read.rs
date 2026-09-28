@@ -62,7 +62,11 @@ pub(crate) fn cmd_read(
         // the file says what it was recorded on rather than nothing.
         let link = dmm.transport().link();
         let out = read_output(format, &dmm, transform, integrate, || {
-            dmm_lib::replay::header(device.id, &recorded_now(), model.as_deref(), link)
+            format::ReplayHeader {
+                device: device.id.to_string(),
+                model,
+                link,
+            }
         });
         info!("connected, starting measurement loop");
         run_read_loop(
@@ -86,7 +90,11 @@ pub(crate) fn cmd_read(
         // `--format replay` is refused for a device that synthesises its
         // readings, so the header below is never built.
         let out = read_output(format, &dmm, transform, integrate, || {
-            dmm_lib::replay::header(selection_id(selection), &recorded_now(), None, None)
+            format::ReplayHeader {
+                device: selection_id(selection).to_string(),
+                model: None,
+                link: None,
+            }
         });
         // Not hardware, so the selection names a registry entry — `auto` is a
         // cable to open and never lands here.
@@ -116,7 +124,7 @@ fn read_output<T: dmm_lib::transport::Transport>(
     dmm: &dmm_lib::Dmm<T>,
     transform: &Transform,
     integrate: bool,
-    replay_header: impl FnOnce() -> String,
+    replay_header: impl FnOnce() -> format::ReplayHeader,
 ) -> format::Output {
     // Fixed for the whole run: the CSV column layout is per meter family, so
     // a mode that reports fewer sub-values than the family can leaves its own
@@ -133,11 +141,6 @@ fn read_output<T: dmm_lib::transport::Transport>(
     };
     let experimental = !dmm.profile().stability.is_verified();
     format::Output::new(format, layout, experimental, replay_header)
-}
-
-/// When a recording being written now was made, for its header.
-fn recorded_now() -> String {
-    chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, false)
 }
 
 /// The format a run writes and the note it earns: `--format` when given, else
@@ -246,17 +249,17 @@ fn read_replay(
         )
     })?;
     let mut dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
-    // A copy keeps the session it came from, so the frames it holds export at
-    // the times they were measured at whichever file they are played from.
+    // A copy is dated from its first frame, whose wall time the pinned
+    // origin maps to when it was measured, so a copy that starts partway
+    // through keeps the times of the session it came from.
     let out = read_output(format, &dmm, transform, integrate, || {
-        // The link the file recorded: re-exporting a recording must not turn
-        // a Bluetooth session into a cable one.
-        dmm_lib::replay::header(
-            replay.device.id,
-            &replay.recorded,
-            replay.model.as_deref(),
-            replay.link,
-        )
+        format::ReplayHeader {
+            device: replay.device.id.to_string(),
+            model: replay.model.clone(),
+            // The link the file recorded: re-exporting a recording must not turn
+            // a Bluetooth session into a cable one.
+            link: replay.link,
+        }
     });
     // A log line, not a banner: a replay's output is what the meter's was,
     // and a note on stderr would land in every doc snippet taken from one.
@@ -380,9 +383,6 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     }
 
     let tick = Duration::from_millis(interval_ms);
-    // Session time, not wall time, is what the readings carry: a preseeded
-    // run's first readings are minutes old and must export as such.
-    let wall_clock = dmm_lib::WallClock::from_clock(dmm.clock());
     // Min/Max/Avg and the integral are only meaningful within a single mode
     // and unit; `SeriesStats` resets both whenever either moves, so the
     // closing summary only ever covers one comparable series.
@@ -435,8 +435,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                     dmm_lib::measurement::MeasuredValue::NoReading(_) => None,
                     _ => Some(m.mode.as_ref()),
                 };
-                writer.saw(mode, wall_clock.wall_time_for(m.timestamp).into())?;
-                out.write(&mut writer, &m, &wall_clock, integral_display)?;
+                writer.saw(mode, m.wall_time.into())?;
+                out.write(&mut writer, &m, integral_display)?;
                 writer.flush()?;
                 i += 1;
             }

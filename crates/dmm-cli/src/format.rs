@@ -1,18 +1,15 @@
 use chrono::{DateTime, Local};
 use clap::ValueEnum;
-use dmm_lib::WallClock;
 use dmm_lib::measurement::Measurement;
+use dmm_lib::transport::Link;
 use dmm_shared::export::CsvLayout;
 use std::io::Write;
 use std::time::Instant;
 
-/// Derive a wall-clock RFC3339 string from the measurement's monotonic
-/// timestamp using the session's `WallClock` origin. Keeps exported
-/// timestamps aligned with when the device produced the reading rather than
-/// when the formatter ran.
-fn timestamp_rfc3339(m: &Measurement, wall_clock: &WallClock) -> String {
-    let sys_time = wall_clock.wall_time_for(m.timestamp);
-    let dt: DateTime<Local> = sys_time.into();
+/// The reading's wall time as RFC3339: when it was taken, not when the
+/// formatter ran.
+fn timestamp_rfc3339(m: &Measurement) -> String {
+    let dt: DateTime<Local> = m.wall_time.into();
     dt.to_rfc3339()
 }
 
@@ -76,13 +73,24 @@ pub enum Output {
         experimental: bool,
     },
     /// The meter's own frames, under the header naming the meter they came
-    /// from — only the caller knows which meter that is.
+    /// from — only the caller knows which meter that is. The header goes out
+    /// with the first frame, dated from it.
     Replay {
-        header: String,
+        header: ReplayHeader,
         /// When the first frame arrived. Offsets are measured from it, so a
         /// recording starts at zero however long the meter took to answer.
         first: Option<Instant>,
     },
+}
+
+/// What a replay file's header names besides when it was recorded, which is
+/// the first frame's wall time, known once it arrives: the offsets count from
+/// that frame, so the header and the offsets agree however long the meter
+/// took to answer, and a copy of a replay keeps the times it was measured at.
+pub struct ReplayHeader {
+    pub device: String,
+    pub model: Option<String>,
+    pub link: Option<Link>,
 }
 
 impl Output {
@@ -94,7 +102,7 @@ impl Output {
         format: OutputFormat,
         layout: CsvLayout,
         experimental: bool,
-        replay_header: impl FnOnce() -> String,
+        replay_header: impl FnOnce() -> ReplayHeader,
     ) -> Self {
         match format {
             OutputFormat::Text => Self::Text,
@@ -107,8 +115,9 @@ impl Output {
         }
     }
 
-    /// What opens the file, for the formats that have a header. `model_name`
-    /// is the meter's, as the CSV comment and the JSON metadata name it.
+    /// What opens the file, for the formats with a header known up front.
+    /// `model_name` is the meter's, as the CSV comment and the JSON metadata
+    /// name it. A replay's header goes out with its first frame.
     pub fn header(&self, model_name: &str) -> Option<String> {
         match self {
             Self::Text => None,
@@ -121,7 +130,7 @@ impl Output {
                 "{}\n",
                 dmm_shared::export::metadata_line(model_name)
             )),
-            Self::Replay { header, .. } => Some(header.clone()),
+            Self::Replay { .. } => None,
         }
     }
 
@@ -130,19 +139,13 @@ impl Output {
         &mut self,
         w: &mut dyn Write,
         m: &Measurement,
-        wall_clock: &WallClock,
         integral: Option<(f64, &str)>,
     ) -> std::io::Result<()> {
         match self {
             Self::Text => format_text(w, m, integral),
-            Self::Csv(layout) => format_csv(w, m, wall_clock, integral, *layout),
-            Self::Json { experimental } => format_json(w, m, wall_clock, *experimental, integral),
-            Self::Replay { first, .. } => {
-                let first = *first.get_or_insert(m.timestamp);
-                let offset = m
-                    .timestamp
-                    .checked_duration_since(first)
-                    .unwrap_or_default();
+            Self::Csv(layout) => format_csv(w, m, integral, *layout),
+            Self::Json { experimental } => format_json(w, m, *experimental, integral),
+            Self::Replay { header, first } => {
                 // The payload as the meter sent it: a `--scale` is a choice
                 // the run that plays the file back makes for itself, and this
                 // is one of the reasons it is refused alongside this format.
@@ -158,6 +161,24 @@ impl Output {
                         format!("a {} reading carries no meter frame to record", m.mode),
                     ));
                 }
+                if first.is_none() {
+                    let recorded: DateTime<Local> = m.wall_time.into();
+                    let recorded = recorded.to_rfc3339_opts(chrono::SecondsFormat::Millis, false);
+                    w.write_all(
+                        dmm_lib::replay::header(
+                            &header.device,
+                            &recorded,
+                            header.model.as_deref(),
+                            header.link,
+                        )
+                        .as_bytes(),
+                    )?;
+                }
+                let first = *first.get_or_insert(m.timestamp);
+                let offset = m
+                    .timestamp
+                    .checked_duration_since(first)
+                    .unwrap_or_default();
                 w.write_all(dmm_lib::replay::sample_line(offset, &m.raw_payload).as_bytes())
             }
         }
@@ -207,7 +228,6 @@ fn format_text(
 fn format_csv(
     w: &mut dyn Write,
     m: &Measurement,
-    wall_clock: &WallClock,
     integral: Option<(f64, &str)>,
     layout: CsvLayout,
 ) -> std::io::Result<()> {
@@ -217,7 +237,7 @@ fn format_csv(
     // to chars with no character-set validation, and an unrecognised mode byte
     // becomes `Unknown(0x..)`. One comma or quote in there and every
     // downstream column shifts.
-    let ts = timestamp_rfc3339(m, wall_clock);
+    let ts = timestamp_rfc3339(m);
     // Cells resolved ahead of the writer so the borrowed ones outlive the
     // record. `--scale` is fixed for the run, so every row carries the full
     // extra count the layout reserves.
@@ -241,7 +261,6 @@ fn format_csv(
 fn format_json(
     w: &mut dyn Write,
     m: &Measurement,
-    wall_clock: &WallClock,
     experimental: bool,
     integral: Option<(f64, &str)>,
 ) -> std::io::Result<()> {
@@ -249,7 +268,7 @@ fn format_json(
     dmm_shared::export::write_measurement_json(
         &mut line,
         m,
-        &timestamp_rfc3339(m, wall_clock),
+        &timestamp_rfc3339(m),
         experimental,
         integral,
         None,
@@ -268,9 +287,7 @@ mod tests {
     /// One reading, as `output` writes it.
     fn rendered(mut output: Output, m: &Measurement, integral: Option<(f64, &str)>) -> String {
         let mut buf = Vec::new();
-        output
-            .write(&mut buf, m, &WallClock::new(), integral)
-            .unwrap();
+        output.write(&mut buf, m, integral).unwrap();
         String::from_utf8(buf).unwrap()
     }
 
@@ -712,25 +729,22 @@ mod tests {
         // The `dcv_battery` golden frame, 1.6109 V on the 2.2V range.
         let mut m = make_test_measurement(0x02, 0x30, b" 1.6109", (0x03, 0x02), (0x30, 0x30, 0x30));
         let first = m.timestamp;
+        let recorded = std::time::SystemTime::UNIX_EPOCH + Duration::from_millis(1_790_000_000_123);
+        m.wall_time = recorded;
         let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
-            dmm_lib::replay::header(
-                "ut61eplus",
-                "2026-09-16T10:22:31.123+02:00",
-                Some("UT61E+"),
-                Some(dmm_lib::transport::Link::Bluetooth),
-            )
+            ReplayHeader {
+                device: "ut61eplus".to_string(),
+                model: Some("UT61E+".to_string()),
+                link: Some(Link::Bluetooth),
+            }
         });
+        // Nothing up front: the header is dated from the first frame.
+        assert!(output.header("UNI-T UT61E+").is_none());
 
         let mut file = Vec::new();
-        let header = output.header("UNI-T UT61E+").expect("a header");
-        file.extend_from_slice(header.as_bytes());
-        output
-            .write(&mut file, &m, &WallClock::new(), None)
-            .unwrap();
+        output.write(&mut file, &m, None).unwrap();
         m.timestamp = first + Duration::from_millis(250);
-        output
-            .write(&mut file, &m, &WallClock::new(), None)
-            .unwrap();
+        output.write(&mut file, &m, None).unwrap();
 
         let text = String::from_utf8(file).expect("a replay file is UTF-8");
         let replay = Replay::parse(&text).expect("parses as a replay");
@@ -740,6 +754,9 @@ mod tests {
         assert_eq!(replay.link, Some(dmm_lib::transport::Link::Bluetooth));
         // Offsets run from the first frame, not from wherever the session was.
         assert_eq!(replay.duration(), Duration::from_millis(250));
+        // And the header is that frame's wall time.
+        let dated = chrono::DateTime::parse_from_rfc3339(&replay.recorded).unwrap();
+        assert_eq!(std::time::SystemTime::from(dated), recorded);
     }
 
     /// A reading with no frame behind it would go out as a bare offset, which
@@ -753,12 +770,16 @@ mod tests {
         // from.
         let m = Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
         let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
-            dmm_lib::replay::header("ut61eplus", "2026-09-16T10:22:31.123+02:00", None, None)
+            ReplayHeader {
+                device: "ut61eplus".to_string(),
+                model: None,
+                link: None,
+            }
         });
 
         let mut file = Vec::new();
         let e = output
-            .write(&mut file, &m, &WallClock::new(), None)
+            .write(&mut file, &m, None)
             .expect_err("a frameless reading has nothing to record");
         assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
         assert!(e.to_string().contains("DC V"), "got {e}");

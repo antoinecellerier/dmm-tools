@@ -1,7 +1,6 @@
 use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
 use chrono::{DateTime, Local, SecondsFormat};
-use dmm_lib::WallClock;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::replay;
 use dmm_shared::export::{CsvLayout, device_comment};
@@ -184,9 +183,9 @@ pub struct Sample {
 }
 
 impl Sample {
-    pub fn from_measurement(m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> Self {
+    pub fn from_measurement(m: &Measurement, extra_aux: usize) -> Self {
         Self {
-            wall_time: wall_clock.wall_time_for(m.timestamp).into(),
+            wall_time: m.wall_time.into(),
             measurement: m.clone(),
             extra_aux,
         }
@@ -781,11 +780,10 @@ impl Recording {
     ///
     /// `extra_aux` is the caller's current [`Sample::extra_aux`]: how many of
     /// this reading's trailing sub-values software appended.
-    pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> bool {
+    pub fn push(&mut self, m: &Measurement, extra_aux: usize) -> bool {
         let seq = self.next_seq();
         self.history_start.get_or_insert(seq);
-        self.store
-            .push_back(Sample::from_measurement(m, wall_clock, extra_aux));
+        self.store.push_back(Sample::from_measurement(m, extra_aux));
         let full = self.active && self.recording_len() >= self.max_samples;
         if full {
             self.stop();
@@ -874,11 +872,10 @@ mod tests {
     #[test]
     fn record_keeps_the_history() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         assert_eq!(r.role(), BufferRole::History);
-        r.push(&m, &wc, 0);
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
+        r.push(&m, 0);
         assert_eq!(r.history_samples().len(), 2);
         assert_eq!(r.unexported_count(), 0, "the history never prompts");
 
@@ -886,7 +883,7 @@ mod tests {
         assert_eq!(r.role(), BufferRole::Recording);
         assert_eq!(r.recording_samples().len(), 0);
         assert_eq!(r.history_samples().len(), 2, "the graph's, still");
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         assert_eq!(r.recording_samples().len(), 1);
         assert_eq!(r.history_samples().len(), 3);
     }
@@ -896,13 +893,12 @@ mod tests {
     #[test]
     fn a_stopped_recording_takes_no_samples() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now()); // start
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         r.toggle(Instant::now()); // stop
         assert_eq!(r.role(), BufferRole::Recording);
-        assert!(!r.push(&m, &wc, 0));
+        assert!(!r.push(&m, 0));
         assert_eq!(r.recording_samples().len(), 1);
         assert_eq!(r.history_samples().len(), 2, "the history takes it");
     }
@@ -912,12 +908,11 @@ mod tests {
     #[test]
     fn an_empty_recording_hands_the_buffer_back_to_the_history() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now()); // start
         r.toggle(Instant::now()); // stop, nothing captured
         assert_eq!(r.role(), BufferRole::History);
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         assert_eq!(r.export_samples().len(), 1);
     }
 
@@ -926,13 +921,12 @@ mod tests {
     #[test]
     fn the_history_drops_its_oldest_sample_at_the_bound() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         r.set_max_samples(3);
         let base = Instant::now();
         for i in 0..5 {
             let mut m = make_measurement(b"  1.234");
             m.timestamp = base + Duration::from_millis(i);
-            assert!(!r.push(&m, &wc, 0), "the history never fills up");
+            assert!(!r.push(&m, 0), "the history never fills up");
         }
         let kept: Vec<Instant> = r
             .history_samples()
@@ -949,10 +943,9 @@ mod tests {
     #[test]
     fn lowering_the_bound_trims_the_history_now() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         for _ in 0..10 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         assert!(!r.set_max_samples(4), "no recording to stop");
         assert_eq!(r.history_samples().len(), 4);
@@ -970,7 +963,6 @@ mod tests {
     #[test]
     fn trimming_keeps_the_reading_the_graph_restarted_on() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let base = Instant::now();
         let mut wide = make_measurement(b"  1.234");
         wide.aux_values = vec![aux("Frequency", "50.01", "Hz")];
@@ -981,7 +973,7 @@ mod tests {
                 make_measurement(b"  1.234")
             };
             m.timestamp = base + Duration::from_millis(i);
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         assert_eq!(r.max_aux_seen(), 1);
         r.trim_before(base + Duration::from_millis(2));
@@ -1001,10 +993,9 @@ mod tests {
     #[test]
     fn discarding_a_recording_keeps_its_readings_in_the_history() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         r.toggle(Instant::now()); // stop, one unexported sample kept
         let epoch = r.epoch();
 
@@ -1014,7 +1005,7 @@ mod tests {
         assert_eq!(r.export_samples().len(), 1, "the graph's, still");
         assert_eq!(r.unexported_count(), 0);
         assert_ne!(r.epoch(), epoch, "an export of it marks nothing now");
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         assert_eq!(r.export_samples().len(), 2);
     }
 
@@ -1022,10 +1013,9 @@ mod tests {
     #[test]
     fn trimming_and_clearing_leave_a_recording_alone() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         r.trim_before(m.timestamp + Duration::from_secs(1));
         r.clear_history();
         assert_eq!(r.recording_samples().len(), 1);
@@ -1042,10 +1032,9 @@ mod tests {
     #[test]
     fn clearing_the_history_empties_it() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let mut wide = make_measurement(b"  1.234");
         wide.aux_values = vec![aux("Frequency", "50.01", "Hz")];
-        r.push(&wide, &wc, 0);
+        r.push(&wide, 0);
         r.clear_history();
         assert_eq!(r.history_samples().len(), 0);
         assert!(r.store.is_empty());
@@ -1054,11 +1043,10 @@ mod tests {
 
     /// `n` readings a millisecond apart from `base`, pushed.
     fn push_at(r: &mut Recording, base: Instant, from: u64, n: u64) {
-        let wc = WallClock::new();
         for i in from..from + n {
             let mut m = make_measurement(b"  1.234");
             m.timestamp = base + Duration::from_millis(i);
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
     }
 
@@ -1326,11 +1314,10 @@ mod tests {
     #[test]
     fn recording_toggle_clears_previous() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         r.toggle(Instant::now());
         let m = make_measurement(b"  1.234");
-        r.push(&m, &wc, 0);
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
+        r.push(&m, 0);
         assert_eq!(r.recording_samples().len(), 2);
 
         r.toggle(Instant::now()); // stop
@@ -1344,21 +1331,20 @@ mod tests {
     #[test]
     fn unexported_count_tracks_samples_since_the_last_export() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
 
         assert_eq!(r.unexported_count(), 0, "empty buffer has nothing to lose");
 
         r.toggle(Instant::now());
         for _ in 0..3 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         assert_eq!(r.unexported_count(), 3);
 
         r.mark_exported(r.epoch(), 3, None);
         assert_eq!(r.unexported_count(), 0);
 
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         assert_eq!(r.unexported_count(), 1, "samples after an export count");
     }
 
@@ -1367,15 +1353,14 @@ mod tests {
     #[test]
     fn samples_arriving_during_an_export_stay_unexported() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         for _ in 0..5 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         // Export snapshots 5, two more arrive before it completes.
-        r.push(&m, &wc, 0);
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
+        r.push(&m, 0);
         r.mark_exported(r.epoch(), 5, None);
         assert_eq!(r.unexported_count(), 2);
     }
@@ -1383,15 +1368,14 @@ mod tests {
     #[test]
     fn starting_a_new_recording_resets_the_export_mark() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         r.mark_exported(r.epoch(), 1, None);
         r.toggle(Instant::now()); // stop
         r.toggle(Instant::now()); // start again — buffer cleared
         assert_eq!(r.unexported_count(), 0);
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         assert_eq!(r.unexported_count(), 1, "new samples are unexported again");
     }
 
@@ -1401,18 +1385,17 @@ mod tests {
     #[test]
     fn an_export_of_an_earlier_recording_marks_nothing() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         for _ in 0..3 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         let exporting = r.epoch();
         r.toggle(Instant::now()); // stop
         r.toggle(Instant::now()); // start again while the dialog is open
         assert_ne!(r.epoch(), exporting, "a new recording is a new epoch");
         for _ in 0..2 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         r.mark_exported(exporting, 3, None);
         assert_eq!(r.unexported_count(), 2);
@@ -1422,20 +1405,18 @@ mod tests {
     #[test]
     fn export_mark_cannot_exceed_the_buffer() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         r.mark_exported(r.epoch(), 99, None);
         assert_eq!(r.unexported_count(), 0);
-        r.push(&m, &wc, 0);
+        r.push(&m, 0);
         assert_eq!(r.unexported_count(), 1);
     }
 
     #[test]
     fn recording_auto_stops_when_full() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         r.toggle(Instant::now());
         // A bound of its own, so the test doesn't buffer half a million
         // samples to prove the stop.
@@ -1443,11 +1424,11 @@ mod tests {
         let m = make_measurement(b"  1.234");
         // Fill to one below capacity
         for _ in 0..99 {
-            assert!(!r.push(&m, &wc, 0));
+            assert!(!r.push(&m, 0));
             assert!(r.active);
         }
         // The push that hits capacity should auto-stop and return true
-        assert!(r.push(&m, &wc, 0));
+        assert!(r.push(&m, 0));
         assert!(!r.active);
         assert_eq!(r.recording_samples().len(), 100);
         assert!(r.is_full());
@@ -1456,16 +1437,15 @@ mod tests {
     #[test]
     fn recording_push_after_auto_stop_is_noop() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         r.toggle(Instant::now());
         r.set_max_samples(100);
         let m = make_measurement(b"  1.234");
         for _ in 0..100 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         assert!(!r.active);
         // Further pushes should be no-ops
-        assert!(!r.push(&m, &wc, 0));
+        assert!(!r.push(&m, 0));
         assert_eq!(r.recording_samples().len(), 100);
     }
 
@@ -1475,11 +1455,10 @@ mod tests {
     #[test]
     fn recording_lowering_the_cap_below_the_buffer_auto_stops() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         r.toggle(Instant::now());
         let m = make_measurement(b"  1.234");
         for _ in 0..50 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         assert!(
             r.set_max_samples(20),
@@ -1497,25 +1476,23 @@ mod tests {
     #[test]
     fn recording_raising_the_cap_keeps_it_running() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         r.toggle(Instant::now());
         r.set_max_samples(100);
         let m = make_measurement(b"  1.234");
         for _ in 0..50 {
-            r.push(&m, &wc, 0);
+            r.push(&m, 0);
         }
         assert!(!r.set_max_samples(1_000));
         assert!(r.active);
         assert!(!r.is_full());
-        assert!(!r.push(&m, &wc, 0));
+        assert!(!r.push(&m, 0));
         assert_eq!(r.recording_samples().len(), 51);
     }
 
     #[test]
     fn sample_from_measurement() {
         let m = make_measurement(b"  5.678");
-        let wc = WallClock::new();
-        let s = Sample::from_measurement(&m, &wc, 0);
+        let s = Sample::from_measurement(&m, 0);
         assert_eq!(s.measurement.mode, "DC V");
         assert_eq!(s.measurement.value_display_str(), "5.678");
         assert_eq!(s.measurement.unit, "V");
@@ -1530,17 +1507,14 @@ mod tests {
             !m.raw_payload.is_empty(),
             "fixture should carry wire bytes to begin with"
         );
-        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
+        let s = Sample::from_measurement(&m, 0);
         assert_eq!(s.measurement.raw_payload, m.raw_payload);
     }
 
     #[test]
     fn render_csv_has_header_and_one_row_per_sample() {
-        let wc = WallClock::new();
         let m = make_measurement(b"  5.678");
-        let samples: VecDeque<Sample> = (0..3)
-            .map(|_| Sample::from_measurement(&m, &wc, 0))
-            .collect();
+        let samples: VecDeque<Sample> = (0..3).map(|_| Sample::from_measurement(&m, 0)).collect();
 
         let bytes = render_csv(samples.iter(), &[], "UNI-T UT61E+", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
@@ -1596,7 +1570,7 @@ mod tests {
             aux("Frequency", "50.01", "Hz"),
             aux("Period", "20.00", "ms"),
         ];
-        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
+        let s = Sample::from_measurement(&m, 0);
 
         let bytes = render_csv(
             VecDeque::from([s]).iter(),
@@ -1635,7 +1609,7 @@ mod tests {
         let mut max = aux("Max", "5.9010", "");
         max.elapsed_secs = Some(12);
         m.aux_values = vec![max];
-        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
+        let s = Sample::from_measurement(&m, 0);
 
         let bytes = render_csv(
             VecDeque::from([s]).iter(),
@@ -1658,7 +1632,7 @@ mod tests {
             aux("Frequency", "50.01", "Hz"),
             aux("Period", "20.00", "ms"),
         ];
-        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
+        let s = Sample::from_measurement(&m, 0);
 
         let bytes = render_csv(VecDeque::from([s]).iter(), &[], "mock", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
@@ -1682,8 +1656,6 @@ mod tests {
     /// the `Raw` column.
     #[test]
     fn render_csv_pins_appended_sub_values_to_the_trailing_group() {
-        let wc = WallClock::new();
-
         // Recorded before the scale: the meter's Frequency, no Raw.
         let mut before = make_measurement(b"  5.678");
         before.aux_values = vec![aux("Frequency", "50.01", "Hz")];
@@ -1702,7 +1674,7 @@ mod tests {
 
         let samples: VecDeque<Sample> = [(&before, 0), (&bare, 1), (&wide, 1)]
             .into_iter()
-            .map(|(m, extra)| Sample::from_measurement(m, &wc, extra))
+            .map(|(m, extra)| Sample::from_measurement(m, extra))
             .collect();
 
         let bytes = render_csv(samples.iter(), &[], "UNI-T UT181A", layout(2, 1)).unwrap();
@@ -1745,7 +1717,6 @@ mod tests {
     #[test]
     fn max_aux_seen_tracks_the_widest_sample_and_resets_on_start() {
         let mut r = Recording::new();
-        let wc = WallClock::new();
         let plain = make_measurement(b"  1.234");
         let mut wide = make_measurement(b"  1.234");
         wide.aux_values = vec![
@@ -1755,11 +1726,11 @@ mod tests {
 
         assert_eq!(r.max_aux_seen(), 0);
         r.toggle(Instant::now());
-        r.push(&plain, &wc, 0);
+        r.push(&plain, 0);
         assert_eq!(r.max_aux_seen(), 0);
-        r.push(&wide, &wc, 0);
+        r.push(&wide, 0);
         assert_eq!(r.max_aux_seen(), 2);
-        r.push(&plain, &wc, 0);
+        r.push(&plain, 0);
         assert_eq!(r.max_aux_seen(), 2, "the widest sample wins, not the last");
 
         r.toggle(Instant::now()); // stop
@@ -1769,34 +1740,23 @@ mod tests {
     }
 
     #[test]
-    fn sample_wall_time_derived_from_measurement_timestamp() {
-        // Build a WallClock whose origin is "now", then construct two
-        // measurements with Instants 500ms apart. The first Sample's wall_time
-        // should equal the WallClock's system origin; the second should be
-        // exactly 500ms later, regardless of when `from_measurement` is
-        // actually called.
-        let wc = WallClock::new();
-        let mut m1 = make_measurement(b"  1.000");
-        let mut m2 = make_measurement(b"  2.000");
-        m1.timestamp = std::time::Instant::now();
-        m2.timestamp = m1.timestamp + Duration::from_millis(500);
-
-        let s1 = Sample::from_measurement(&m1, &wc, 0);
-        let s2 = Sample::from_measurement(&m2, &wc, 0);
-
-        let delta = s2.wall_time.signed_duration_since(s1.wall_time);
-        assert_eq!(delta.num_milliseconds(), 500);
+    fn a_sample_keeps_the_readings_wall_time() {
+        let mut m = make_measurement(b"  1.000");
+        m.wall_time = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_790_000_000);
+        let s = Sample::from_measurement(&m, 0);
+        assert_eq!(std::time::SystemTime::from(s.wall_time), m.wall_time);
     }
 
     /// Three frames 250 ms apart, as the buffer would hold them.
     fn replay_samples() -> VecDeque<Sample> {
-        let wc = WallClock::new();
         let base = Instant::now();
+        let wall = std::time::SystemTime::now();
         (0..3)
             .map(|i| {
                 let mut m = make_measurement(b"  1.234");
                 m.timestamp = base + Duration::from_millis(250 * i);
-                Sample::from_measurement(&m, &wc, 0)
+                m.wall_time = wall + Duration::from_millis(250 * i);
+                Sample::from_measurement(&m, 0)
             })
             .collect()
     }
@@ -2004,13 +1964,12 @@ mod tests {
     #[test]
     #[ignore = "timing-sensitive; run with --release"]
     fn a_json_export_costs_about_what_a_csv_one_does() {
-        let wc = WallClock::new();
         let base = Instant::now();
         let samples: VecDeque<Sample> = (0..200_000u64)
             .map(|i| {
                 let mut m = make_measurement(b"  1.234");
                 m.timestamp = base + Duration::from_millis(100 * i);
-                Sample::from_measurement(&m, &wc, 0)
+                Sample::from_measurement(&m, 0)
             })
             .collect();
 

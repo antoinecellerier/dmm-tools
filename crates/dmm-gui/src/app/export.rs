@@ -585,19 +585,18 @@ mod tests {
         for &aux in aux_counts {
             app.capture
                 .recording
-                .push(&measurement(aux), &app.wall_clock, extra_slots.min(aux));
+                .push(&measurement(aux), extra_slots.min(aux));
         }
         app
     }
 
     /// Readings `i` seconds after `t0`, pushed as a frame drains them.
     fn push_at(app: &mut App, t0: Instant, seconds: std::ops::Range<u64>) -> Vec<Instant> {
-        let wall_clock = app.wall_clock;
         seconds
             .map(|i| {
                 let mut m = measurement(0);
                 m.timestamp = t0 + std::time::Duration::from_secs(i);
-                app.capture.recording.push(&m, &wall_clock, 0);
+                app.capture.recording.push(&m, 0);
                 m.timestamp
             })
             .collect()
@@ -797,9 +796,7 @@ mod tests {
         .expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
-        app.capture
-            .recording
-            .push(&measurement(0), &app.wall_clock, 0);
+        app.capture.recording.push(&measurement(0), 0);
 
         assert_eq!(app.capture.recording_layout.experimental, Some(true));
         assert!(app.experimental(), "the recording ran against that meter");
@@ -853,9 +850,7 @@ mod tests {
     fn a_history_export_saves_the_buffer_and_marks_nothing() {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         for _ in 0..3 {
-            app.capture
-                .recording
-                .push(&measurement(0), &app.wall_clock, 0);
+            app.capture.recording.push(&measurement(0), 0);
         }
         let prepared = app.prepare_export(ExportFormat::Csv).expect("the history");
         assert_eq!(prepared.sample_count, 3);
@@ -875,9 +870,7 @@ mod tests {
 
         app.capture.recording.toggle(Instant::now());
         for _ in 0..3 {
-            app.capture
-                .recording
-                .push(&measurement(0), &app.wall_clock, 0);
+            app.capture.recording.push(&measurement(0), 0);
         }
         let outcome = export_outcome(
             Path::new("out.csv"),
@@ -1113,7 +1106,7 @@ mod tests {
         app.capture.recording_layout.device_id = Some("ut61eplus");
         let mut frameless = measurement(0);
         frameless.raw_payload.clear();
-        app.capture.recording.push(&frameless, &app.wall_clock, 0);
+        app.capture.recording.push(&frameless, 0);
         assert_eq!(
             app.prepare_export(ExportFormat::Replay).map(|_| ()),
             Err(NO_WIRE_FORMAT.to_string())
@@ -1150,9 +1143,7 @@ mod tests {
         let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
         app.capture.recording.toggle(Instant::now()); // stop
         app.capture.recording.toggle(Instant::now()); // a new recording
-        app.capture
-            .recording
-            .push(&measurement(0), &app.wall_clock, 0);
+        app.capture.recording.push(&measurement(0), 0);
         let outcome = export_outcome(
             Path::new("out.csv"),
             Ok(()),

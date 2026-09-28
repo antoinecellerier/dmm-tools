@@ -128,7 +128,6 @@ impl Capture {
         transform: &Transform,
         graph: &mut Graph,
         connection: &Connection,
-        wall_clock: &dmm_lib::WallClock,
     ) -> (Measurement, bool) {
         // The single point a software transform is applied. Every consumer
         // below — the session statistics, the graph's series list and plot
@@ -151,13 +150,7 @@ impl Capture {
 
         // `m` has already been through the transform, so the count it
         // appended is what this sample carries.
-        let filled = self.keep_sample(
-            &m,
-            transform.extra_aux_count(),
-            graph,
-            connection,
-            wall_clock,
-        );
+        let filled = self.keep_sample(&m, transform.extra_aux_count(), graph, connection);
         (m, filled)
     }
 
@@ -175,7 +168,6 @@ impl Capture {
         extra_aux: usize,
         graph: &Graph,
         connection: &Connection,
-        wall_clock: &dmm_lib::WallClock,
     ) -> bool {
         // `detected`, not the selection: a device picked in Settings takes
         // effect at the next connect, and this reading may still be the old
@@ -203,7 +195,7 @@ impl Capture {
                 extra_aux,
             );
         }
-        self.recording.push(m, wall_clock, extra_aux)
+        self.recording.push(m, extra_aux)
     }
 }
 
@@ -291,7 +283,6 @@ mod tests {
     #[test]
     fn every_store_sees_the_transformed_reading() {
         let clock = dmm_lib::Clock::real();
-        let wall_clock = dmm_lib::WallClock::from_clock(&clock);
         let transform = Transform::linear(2.0, 0.0, Some("A".to_string()));
         let mut capture = Capture::new(100);
         let mut graph = Graph::new();
@@ -300,13 +291,8 @@ mod tests {
             ..Measurement::test_fixture(MeasuredValue::Normal(1.5), "V", StatusFlags::default())
         };
 
-        let (shown, filled) = capture.ingest(
-            reading,
-            &transform,
-            &mut graph,
-            &Connection::default(),
-            &wall_clock,
-        );
+        let (shown, filled) =
+            capture.ingest(reading, &transform, &mut graph, &Connection::default());
 
         assert!(!filled, "nothing is recording");
         let scaled = |v: &MeasuredValue| matches!(v, MeasuredValue::Normal(x) if *x == 3.0);

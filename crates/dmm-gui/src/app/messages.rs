@@ -145,9 +145,6 @@ impl App {
             return;
         }
         self.clock = self.clock.clone().with_wall_origin(recorded);
-        // The pair the recording and its exports date their samples by was
-        // captured before there was an origin to take.
-        self.wall_clock = dmm_lib::WallClock::from_clock(&self.clock);
     }
 
     pub(super) fn connect(&mut self, ctx: &egui::Context) {
@@ -405,13 +402,9 @@ impl App {
                         continue;
                     }
 
-                    let (m, filled) = self.capture.ingest(
-                        m,
-                        &self.transform,
-                        &mut self.graph,
-                        &self.connection,
-                        &self.wall_clock,
-                    );
+                    let (m, filled) =
+                        self.capture
+                            .ingest(m, &self.transform, &mut self.graph, &self.connection);
                     if filled {
                         self.buffer_full_toast();
                     }
@@ -634,8 +627,8 @@ mod tests {
             origin >= connected_at,
             "the recording starts at the Connect"
         );
-        // The pair the recording and its exports date samples by sees it too.
-        assert_eq!(app.wall_clock.wall_time_for(origin), recorded);
+        // The wall time of a moment with no reading, a marker's, maps from it too.
+        assert_eq!(app.clock.wall_time_for(origin), recorded);
 
         // A Disconnect/Connect keeps the origin, so the recording resumes
         // where the session has got to rather than starting again.

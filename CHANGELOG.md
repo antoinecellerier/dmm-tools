@@ -36,6 +36,8 @@
 
 - **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; now labelled DC and AC, with AC in `aux1` CSV columns every UT61E+ export gains.
 - **Readings stay current at a sample interval and after Pause** — on Linux, a UT181A, UT171, UT8802, UT8803, UT803/UT804 or VC-880 on USB showed old readings stamped as new.
+- **Exported times stay right after the computer sleeps** — every later CSV and JSON time was early by the sleep's length.
+- **`read --format replay` dates the file from its first reading** — it was dated from the start of the run, so converted times came out early.
 - **A UT181A no longer shows OL, or warns, after each switch** — it shows `----` until the new reading arrives.
 - **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
 - **The graph restarts when the dial turns to a mode showing OL** — it carried on the previous mode's trace.
