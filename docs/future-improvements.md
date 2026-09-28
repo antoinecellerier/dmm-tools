@@ -425,3 +425,9 @@ Use cases: matching a bench's colour conventions, high-contrast setups, colour-v
 A `--note "Battery discharge test, cell #47"` option that embeds user-provided context in CSV/JSON file headers.
 
 Use cases: organizing and identifying captures, adding test context without external documentation.
+
+### A newer release's notes in the app
+
+**Complexity:** Low-medium
+
+The top bar links to a newer release's page on GitHub. The What's New window could show that release's notes instead, from the same response the update check already reads — at the cost of rendering Markdown fetched from the network.

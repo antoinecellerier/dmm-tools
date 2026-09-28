@@ -77,6 +77,9 @@ The top bar contains:
 - **Version** (right side) — click it to open the "What's New" changelog,
   this release expanded and earlier ones folded. On release upgrades, it opens
   automatically on first launch.
+- **Newer version** link — shown when a newer release is out, such as
+  `v0.8.0 available ↗`, or `Newer dev build ↗` on a dev build; opens its
+  release page. See [Update checks](#update-checks)
 - **Help / GitHub** link — opens the project page
 - **?** button — opens the [keyboard shortcuts](#keyboard-shortcuts) help
 - **Settings gear** — opens the settings panel
@@ -428,6 +431,11 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 | **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
+| **Check for new versions** | on | Only in downloaded builds. See [Update checks](#update-checks). |
+
+### Update checks
+
+A downloaded build asks GitHub's public releases API once a day whether a newer release is out, and the top bar links to it. A release hears of later releases; a dev build hears of later dev builds too, and of the release that replaces it. The request carries no information about you or your meter, but GitHub sees your IP address. Untick **Check for new versions** to stop it. Builds from source never check.
 
 ### Color Customization
 

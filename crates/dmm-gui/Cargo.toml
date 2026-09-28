@@ -21,6 +21,14 @@ log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 directories.workspace = true
+ureq = { version = "3", default-features = false, features = ["platform-verifier", "rustls-no-provider"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+
+[features]
+default = ["update-check"]
+# The daily request for a newer release, the GUI's only network access. Without
+# it no HTTP or TLS code is built in and the Settings row never shows.
+update-check = ["dep:ureq", "dep:rustls"]
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }

@@ -254,6 +254,15 @@ remote control buttons, UI zoom (Ctrl+/-), CSV recording/export with scrollable
 sample log (exporting the graph's samples when nothing was recorded),
 markers with notes on readings, persistent settings.
 
+The update check is the only network access in the workspace. A binary the
+release or dev-build workflow publishes (`DMM_PUBLISHED_BUILD=1` at compile
+time) asks GitHub's releases API once a day on a thread of its own, through
+`ureq` with rustls and the operating system's trust store, and caches the
+answer in `update-check.json` beside `settings.json`. Only a validated tag
+name is kept from the response; the link is built from the repository URL.
+The request sits behind dmm-gui's default `update-check` feature: without it,
+no HTTP or TLS crate is built in.
+
 `App` is declared once in `app/mod.rs`; every module under `app/` adds `impl App`
 methods to it, so no panel owns state of its own.
 
@@ -267,7 +276,7 @@ methods to it, so no panel owns state of its own.
 | `app/capture.rs` | The reading pipeline — software transform, session statistics, graph, history and recording, in that order — and the export layouts that Record and a history's first reading latch |
 | `app/plot_input.rs` | Reducing one measurement to what the graph plots — series, unit, and the other series kept beside it, each with its unit |
 | `app/held_reading.rs` | Keeping the reading on screen whole when a meter sends its parts in frames of their own: the last main reading and sub-values stand in for the ones a frame lacks, for the display only |
-| `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/Help/shortcuts/settings group |
+| `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/update/Help/shortcuts/settings group |
 | `app/toast.rs` | The transient status message — its text, kind and time on screen — floated over the window's top-right corner in every layout |
 | `app/controls.rs` | The settings panel and the meter's remote-command buttons |
 | `app/layout.rs` | The reading column shared by the wide and narrow layouts, the specs sections, and the big meter toggle |
@@ -280,6 +289,7 @@ methods to it, so no panel owns state of its own.
 | `app/shortcuts.rs` | The keyboard binding table, its dispatcher, and the rows the help modal shows |
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
 | `app/whats_new.rs` | The "What's New" release-notes viewport |
+| `app/update_check.rs` | Whether a newer release is on GitHub: the daily request, which release a build may move to, and the cached answer |
 | `graph/` | Scrolling graph: history buffer, view navigation, toolbar, main plot, minimap, visible-slice analysis |
 | `display/mod.rs` | The reading itself in its three sizes, with the mode and range dropdowns and the sub-value rows |
 | `display/text.rs` | The reading as text: stable-width digits, and the screen-reader announcement with the fingerprint that says when to rebuild it |

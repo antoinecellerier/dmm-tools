@@ -4,7 +4,7 @@ You need a [supported multimeter](supported-devices.md) and its USB cable, or on
 
 ## Install from pre-built binaries
 
-Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform. Extract and run — no build tools needed.
+Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform. Extract and run — no build tools needed. The GUI links to newer versions as they come out ([update checks](gui-reference.md#update-checks)).
 
 To build it yourself instead, see [Build from source](#build-from-source).
 

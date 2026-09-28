@@ -105,6 +105,7 @@ jobs:
     uses: ./.github/workflows/build-matrix.yml
     with:
       archive-prefix: dmm-tools-dev-${{ needs.check.outputs.short_sha }}
+      published: true
 
   publish:
     name: Publish dev release

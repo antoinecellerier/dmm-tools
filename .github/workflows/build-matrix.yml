@@ -24,6 +24,10 @@ on:
         description: "Restore and save Swatinem/rust-cache; on for CI, off for unattended builds"
         type: boolean
         default: false
+      published:
+        description: "Mark the binaries as a published build, so dmm-gui checks GitHub for newer ones; only for binaries that become a release or dev release"
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -116,7 +120,11 @@ jobs:
           libudev-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev
           libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libdbus-1-dev
 
+      # A build whose commit matches no release would read every nightly as
+      # newer, so only binaries that are published ask; see docs/development.md.
       - name: Build
+        env:
+          DMM_PUBLISHED_BUILD: ${{ inputs.published && '1' || '' }}
         run: cargo build --workspace --release --target ${{ matrix.target }}
 
       # build.rs only re-runs when .git/HEAD changes, so a bad incremental state

@@ -27,6 +27,12 @@ fn default_max_samples() -> usize {
     DEFAULT_MAX_SAMPLES
 }
 
+/// Update checks are on unless the user turns them off, also for a config
+/// file written before they existed.
+fn default_check_for_updates() -> bool {
+    true
+}
+
 /// Bytes one point costs in the graph's history: a `DataPoint` plus the
 /// `VecDeque` slack it sits in.
 const GRAPH_BYTES_PER_POINT: usize = 48;
@@ -334,6 +340,10 @@ pub struct Settings {
     /// `None` means the user has never dismissed it (new install or pre-feature upgrade).
     #[serde(default)]
     pub last_seen_version: Option<String>,
+    /// Ask GitHub once a day whether a newer release is out. Only downloaded
+    /// builds ask; see `app::update_check`.
+    #[serde(default = "default_check_for_updates")]
+    pub check_for_updates: bool,
     /// CLI overrides (not serialized).
     #[serde(skip)]
     pub overrides: Overrides,
@@ -366,6 +376,7 @@ impl Default for Settings {
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
             last_seen_version: None,
+            check_for_updates: default_check_for_updates(),
             overrides: Overrides::default(),
         }
     }
@@ -633,6 +644,7 @@ mod tests {
             color_preset: ColorPreset::HighContrast,
             color_overrides: ColorOverrides::default(),
             last_seen_version: Some("0.3.0".to_string()),
+            check_for_updates: false,
             overrides: Overrides::default(),
         };
         let json = serde_json::to_string(&s).unwrap();
@@ -653,6 +665,7 @@ mod tests {
         assert_eq!(deserialized.color_preset, ColorPreset::HighContrast);
         assert_eq!(deserialized.shared.device_family, "ut8803");
         assert!(!deserialized.shared.bluetooth);
+        assert!(!deserialized.check_for_updates);
     }
 
     #[test]
@@ -678,6 +691,9 @@ mod tests {
         assert_eq!(s.color_overrides, ColorOverrides::default());
         // New optional fields default to None
         assert!(s.last_seen_version.is_none());
+        // A config file written before update checks existed has them on,
+        // as a fresh install does.
+        assert!(s.check_for_updates);
     }
 
     /// The settings row only offers sane sizes, but the file is editable by

@@ -1,5 +1,18 @@
 # Dependency policy, enforced by `cargo deny check` in ci.yml.
 
+[graph]
+# The six targets build-matrix.yml ships. A crate only another platform pulls
+# in never reaches a user: rustls-platform-verifier's CA list for wasm32, which
+# has no trust store to ask, is the case in point.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+]
+
 [advisories]
 # RustSec advisories fail the check. Tolerating one means listing its id here
 # with a reason saying why and what unblocks removing it again.

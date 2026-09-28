@@ -80,6 +80,16 @@ struct Args {
     /// --mock-clock-scale.
     #[arg(long, hide = true, value_name = "SECS")]
     mock_clock_preseed: Option<f64>,
+
+    /// Show the update notice for TAG (`v0.8.0` or `dev-<hash>`) without
+    /// asking GitHub or saving anything. Hidden: a contributor tool for
+    /// screenshots, documented in docs/development.md.
+    #[arg(long, hide = true, value_name = "TAG", value_parser = parse_update_notice)]
+    update_notice: Option<app::update_check::Tag>,
+}
+
+fn parse_update_notice(s: &str) -> Result<app::update_check::Tag, String> {
+    app::update_check::Tag::parse(s).ok_or_else(|| "expected vX.Y.Z or dev-<hash>".to_string())
 }
 
 /// `--mock-clock-scale`'s factor. `max`, which `dmm-cli read` takes, is
@@ -128,6 +138,9 @@ pub struct CliOverrides {
     pub clock: dmm_lib::Clock,
     /// The recording this session plays instead of opening a meter.
     pub replay: Option<ReplaySource>,
+    /// `--update-notice`: the release the top bar links to, in place of
+    /// asking GitHub.
+    pub(crate) update_notice: Option<app::update_check::Tag>,
 }
 
 /// A recording to play back, and the file it came from.
@@ -333,6 +346,7 @@ fn parse_args() -> CliOverrides {
         no_bluetooth: args.no_bluetooth,
         clock,
         replay,
+        update_notice: args.update_notice,
     }
 }
 

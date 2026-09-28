@@ -58,7 +58,15 @@ impl App {
         // whether or not the bar has room for it.
         let show_link = fits_with_link(cached_left, cached_link, available);
         let link_shown_w = if show_link { cached_link } else { 0.0 };
-        let one_row = cached_left + link_shown_w + cached_right + spacing < available;
+        // The update notice in full: the right group moves to a row of its
+        // own rather than drop it, and shortens it only where even that row
+        // is too narrow. Left out of the group's cached width, so it never
+        // raises the window's minimum.
+        let notice_w = self
+            .update_check
+            .notice(self.settings.check_for_updates)
+            .map_or(0.0, |tag| text_width(ui, &tag.label()) + spacing);
+        let one_row = cached_left + link_shown_w + cached_right + notice_w + spacing < available;
 
         // Row 1: device label, action buttons, status indicator
         ui.horizontal(|ui| {
@@ -266,8 +274,9 @@ impl App {
         }
     }
 
-    /// Right side of the top bar: version label, Help/GitHub link, keyboard
-    /// shortcut help button, and settings button.
+    /// Right side of the top bar: version label, the link to a newer release
+    /// when one is out, Help/GitHub link, keyboard shortcut help button, and
+    /// settings button.
     ///
     /// Items are added left-to-right so that egui's Tab order matches the
     /// visual reading direction. A cached-width spacer right-aligns the
@@ -275,8 +284,29 @@ impl App {
     /// tab order). The cached width comes from the previous frame and
     /// self-corrects in one frame.
     fn show_top_bar_right(&mut self, ui: &mut Ui, cache_id: egui::Id) {
+        // The group's width without the update notice, which is what the
+        // window's minimum comes from: the notice takes whatever room is
+        // left, in full, shortened, or not at all, and never asks for more.
         let cached_width: f32 = ui.data(|d| d.get_temp(cache_id)).unwrap_or(200.0);
-        let spacer = (ui.available_width() - cached_width).max(0.0);
+        let notice = self
+            .update_check
+            .notice(self.settings.check_for_updates)
+            .cloned();
+        let spacing = ui.spacing().item_spacing.x;
+        let room = ui.available_width() - cached_width;
+        let notice_text = notice.as_ref().and_then(|tag| {
+            [tag.label(), tag.short_label()]
+                .into_iter()
+                .map(|text| {
+                    let width = text_width(ui, &text) + spacing;
+                    (text, width)
+                })
+                .find(|(_, width)| *width <= room)
+        });
+        let notice_w = notice_text.as_ref().map_or(0.0, |(_, width)| *width);
+        // A notice the bar has no room for: the version button carries it.
+        let hidden_notice = notice.as_ref().filter(|_| notice_text.is_none());
+        let spacer = (room - notice_w).max(0.0);
         ui.add_space(spacer);
         let before = ui.cursor().left();
 
@@ -287,16 +317,20 @@ impl App {
         // "Show release notes". `frame_when_inactive(false)` keeps the
         // resting visual identical to a label while still painting hover and
         // focus backgrounds when the user mouses over or Tab-focuses it.
-        let version_resp = ui
-            .add(
-                egui::Button::new(
-                    RichText::new(crate::version_label())
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
-                )
-                .frame_when_inactive(false),
+        let version_resp = ui.add(
+            egui::Button::new(
+                RichText::new(crate::version_label())
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
             )
-            .a11y_label("Show release notes");
+            .frame_when_inactive(false),
+        );
+        let version_resp = match hidden_notice {
+            None => version_resp.a11y_label("Show release notes"),
+            Some(tag) => {
+                version_resp.a11y_label(&format!("Show release notes. {} is available", tag.name()))
+            }
+        };
         if version_resp.clicked() {
             if self.whats_new.open {
                 self.whats_new.open = false;
@@ -305,9 +339,20 @@ impl App {
                 self.open_whats_new();
             }
         }
-        version_resp
-            .on_hover_text("Show What's New — release notes for this version")
-            .on_hover_cursor(egui::CursorIcon::PointingHand);
+        const VERSION_HOVER: &str = "Show What's New — release notes for this version";
+        let version_resp = match hidden_notice {
+            None => version_resp.on_hover_text(VERSION_HOVER),
+            Some(tag) => version_resp.on_hover_text(format!(
+                "{VERSION_HOVER}\n{} is available — widen the window for its link",
+                tag.name()
+            )),
+        };
+        version_resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+        if let (Some(tag), Some((text, _))) = (&notice, &notice_text) {
+            ui.hyperlink_to(RichText::new(text).small(), tag.url())
+                .on_hover_text(format!("Open the {} release page on GitHub", tag.name()))
+                .a11y_label(&format!("{} available — open its release page", tag.name()));
+        }
         ui.hyperlink_to(
             "Help / GitHub",
             "https://github.com/antoinecellerier/dmm-tools",
@@ -334,9 +379,24 @@ impl App {
             self.settings_open = !self.settings_open;
         }
 
-        let actual_width = ui.min_rect().right() - before;
+        let actual_width = ui.min_rect().right() - before - notice_w;
         ui.data_mut(|d| d.insert_temp(cache_id, actual_width));
     }
+}
+
+/// The width `text` takes at the small size the bar's secondary text uses,
+/// laid out rather than read off the bar so it is known before the widget is
+/// placed.
+fn text_width(ui: &Ui, text: &str) -> f32 {
+    egui::WidgetText::from(RichText::new(text).small())
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Small,
+        )
+        .size()
+        .x
 }
 
 /// The text beside the status dot while a meter is connected: the meter, the
@@ -370,18 +430,7 @@ fn link_suffix(link: Link) -> String {
 /// then stays what it was before the link existed, and with it the narrowest
 /// the window may be made.
 fn link_suffix_width(ui: &Ui, link: Option<Link>) -> f32 {
-    let Some(link) = link else {
-        return 0.0;
-    };
-    egui::WidgetText::from(RichText::new(link_suffix(link)).small())
-        .into_galley(
-            ui,
-            Some(egui::TextWrapMode::Extend),
-            f32::INFINITY,
-            egui::TextStyle::Small,
-        )
-        .size()
-        .x
+    link.map_or(0.0, |link| text_width(ui, &link_suffix(link)))
 }
 
 /// Whether the status row has room for the link as well.

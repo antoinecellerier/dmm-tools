@@ -884,6 +884,22 @@ impl App {
                     .color(ui.visuals().weak_text_color()),
             );
         });
+
+        // Only downloaded builds ask, so only they have the row. Last, so the
+        // rows above keep the places the doc screenshots click.
+        if self.update_check.applies() {
+            ui.horizontal_wrapped(|ui| {
+                if setting_checkbox(
+                    ui,
+                    &mut self.settings.check_for_updates,
+                    "Check for new versions",
+                    "Once a day, ask GitHub whether a newer release is out. \
+                     GitHub sees your IP address; nothing about your meter is sent.",
+                ) {
+                    self.settings.save();
+                }
+            });
+        }
     }
 
     /// Show the collapsible color customization section.
@@ -1180,6 +1196,7 @@ fn color_edit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::update_check::{Tag, UpdateCheck};
     use crate::settings::Settings;
     use eframe::egui::scroll_area::ScrollAreaOutput;
     use eframe::egui::{Id, Pos2, Rect, vec2};
@@ -1210,6 +1227,9 @@ mod tests {
         fn new(w: f32, h: f32) -> Self {
             let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
             app.settings_open = true;
+            // As a downloaded build, which has one row more, and with its
+            // notice on the bar — forced, so nothing is fetched or saved.
+            app.update_check = UpdateCheck::new(Tag::parse("v9.9.9"));
             Self {
                 app,
                 ctx: egui::Context::default(),

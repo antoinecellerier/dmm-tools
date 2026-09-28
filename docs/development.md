@@ -10,7 +10,7 @@ git config core.hooksPath git-hooks
 
 `pre-commit` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` before each commit. `commit-msg` rejects a `Claude-Session:` trailer in the message; `Co-Authored-By` trailers are fine.
 
-On Linux the build needs `libudev-dev` for hidapi and `libdbus-1-dev` for the Bluetooth transport (`systemd-devel` and `dbus-devel` on Fedora); see [`setup.md`](setup.md) for the full list. `cargo check -p dmm-lib --no-default-features` builds the library without Bluetooth, which CI also runs.
+On Linux the build needs `libudev-dev` for hidapi and `libdbus-1-dev` for the Bluetooth transport (`systemd-devel` and `dbus-devel` on Fedora); see [`setup.md`](setup.md) for the full list. `cargo check -p dmm-lib --no-default-features` builds the library without Bluetooth, and `cargo check -p dmm-gui --no-default-features` the GUI without its update check; CI runs both.
 
 ## Running Tests
 
@@ -273,6 +273,8 @@ cargo deny check
 The allow-list holds exactly the SPDX ids the graph needs today, so a new
 dependency on an unlisted licence fails the check — read the licence, decide
 whether it belongs in a GPL-3.0-or-later binary, and only then add the id.
+The check covers the six targets the release ships; a new target in
+`build-matrix.yml` goes into `deny.toml`'s `[graph]` list too.
 
 `.github/dependabot.yml` opens weekly update pull requests for the Cargo and
 Actions dependencies, with minor and patch bumps grouped into one PR per
@@ -287,6 +289,13 @@ cannot drift from the ones a release ships. CI passes `subset: ci` for the
 cheaper three-target build, leaves `upload-artifacts` off, and is the only
 caller setting `cache: true`: the 10 GB repository cache is worth more to
 pull-request turnaround than to the unattended release and nightly builds.
+
+`dev-build.yml` and a tagged `release.yml` run pass `published: true`, which
+builds with `DMM_PUBLISHED_BUILD=1`: only those binaries check GitHub for a
+newer release. Any other build's commit matches no published one, so a check
+there would read every nightly as newer. To try the real request locally, build
+with `DMM_PUBLISHED_BUILD=1`; it caches its answer in `update-check.json` beside
+`settings.json`, so delete that file to ask again within the day.
 
 The archives carry only the user docs, as Markdown and as HTML, with LICENSE and
 the images they show. `scripts/package-docs.py` assembles them once per run for
@@ -407,3 +416,11 @@ dmm-cli read --replay bench.replay --mock-clock-scale max -o bench.csv
 
 `max` refuses `--mock-clock-preseed`, which it has no use for, and the GUI
 refuses it, since a session would race through the whole file.
+
+Update notice: a local build never checks GitHub (see [Shared build
+matrix](#shared-build-matrix)), so the hidden `--update-notice <TAG>` shows the
+top bar's link and the **Check for new versions** row for a tag such as
+`v0.8.0` or `dev-f5ff045`, without a request and without writing the cache.
+The link follows that row, which is saved to the real `settings.json` like any
+other setting: untick it and the link goes, in this build and in a downloaded
+one reading the same file.

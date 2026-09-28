@@ -30,6 +30,7 @@ mod stats_panel;
 mod toast;
 mod top_bar;
 mod transform_ui;
+pub(crate) mod update_check;
 mod whats_new;
 
 use dmm_lib::measurement::Measurement;
@@ -383,6 +384,8 @@ pub struct App {
     big_meter_mode: BigMeterMode,
     shortcut_help: ShortcutHelp,
     whats_new: WhatsNew,
+    /// Whether a newer release is out; off unless [`App::new`] turns it on.
+    update_check: update_check::UpdateCheck,
 }
 
 impl App {
@@ -395,8 +398,12 @@ impl App {
         let on_wayland = cc
             .display_handle()
             .is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)));
+        let update_notice = cli.update_notice.clone();
         let mut app = Self::from_cli(Settings::load(), cli);
         app.on_wayland = on_wayland;
+        // Here and not in `from_settings`, so a test build can never reach
+        // the network or the cache file.
+        app.update_check = update_check::UpdateCheck::new(update_notice);
         app
     }
 
@@ -471,6 +478,7 @@ impl App {
             big_meter_mode: BigMeterMode::Off,
             shortcut_help: ShortcutHelp::default(),
             whats_new: WhatsNew::default(),
+            update_check: update_check::UpdateCheck::default(),
         }
     }
 
@@ -774,6 +782,10 @@ impl eframe::App for App {
         self.drain_messages();
         self.trim_markers();
         self.poll_export(&ctx);
+        // From a frame, not from `App::new`: the wgpu-to-glow fallback builds
+        // the App twice, and only the one that draws should ask.
+        self.update_check
+            .poll(&ctx, self.settings.check_for_updates);
 
         // Auto-reconnect after device selection change
         if self.connection.needs_reconnect {
@@ -1035,6 +1047,7 @@ mod tests {
                 no_bluetooth: true,
                 clock: dmm_lib::Clock::real(),
                 replay: None,
+                update_notice: None,
             },
         );
         assert!(!app.settings.shared.bluetooth, "this session skips it");
@@ -1085,6 +1098,7 @@ mod tests {
                     path: std::path::PathBuf::from("dcv-steps.replay"),
                     recorded: std::time::SystemTime::UNIX_EPOCH,
                 }),
+                update_notice: None,
             },
         );
 
