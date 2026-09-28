@@ -286,11 +286,15 @@ mod tests {
     use super::*;
     use crate::clock::Clock;
     use crate::measurement::Measurement;
-    use crate::protocol::Protocol;
     use crate::protocol::zotek::layout::{LAYOUTS, ZT5B, ZT300AB};
-    use crate::protocol::zotek::sim::MockZt5b;
+    use crate::protocol::zotek::sim::MOCK_ZT5B;
     use crate::transport::NullTransport;
     use std::time::Duration;
+
+    /// The simulated ZT-5B, opened as the binaries open it.
+    fn sim(clock: &Clock) -> crate::Dmm<NullTransport> {
+        crate::mock::open_simulated(&MOCK_ZT5B, None, clock.clone()).unwrap()
+    }
 
     fn showing(unit: Option<Unit>, function: Function, coupling: Coupling) -> Showing {
         Showing {
@@ -535,15 +539,15 @@ mod tests {
         ];
         for &(presses, marked, mode) in cases {
             let clock = Clock::manual();
-            let mut mock = MockZt5b::new(clock.clone());
+            let mut mock = sim(&clock);
             for key in presses {
                 // A read first, as the stream does, for the keys whose code
                 // follows the display.
-                mock.request_measurement(&NullTransport).unwrap();
-                mock.send_command(&NullTransport, key).unwrap();
+                mock.request_measurement().unwrap();
+                mock.send_command(key).unwrap();
             }
             clock.advance(Duration::from_millis(500));
-            let m = mock.request_measurement(&NullTransport).unwrap();
+            let m = mock.request_measurement().unwrap();
             assert!(m.mode.contains(mode), "{presses:?}: {}", m.mode);
             assert_eq!(applying(&m), [marked], "{presses:?}: {}", m.mode);
             assert_eq!(
@@ -560,12 +564,12 @@ mod tests {
     #[test]
     fn auto_function_applies_to_the_auto_word_only() {
         let clock = Clock::manual();
-        let mut mock = MockZt5b::new(clock.clone());
-        let m = mock.request_measurement(&NullTransport).unwrap();
+        let mut mock = sim(&clock);
+        let m = mock.request_measurement().unwrap();
         assert_eq!(m.mode, "Auto");
         assert_eq!(applying(&m), ["auto_function"]);
         clock.advance(Duration::from_secs(8));
-        let m = mock.request_measurement(&NullTransport).unwrap();
+        let m = mock.request_measurement().unwrap();
         assert_eq!(m.mode, "DC V");
         assert_eq!(applying(&m), ["volts"]);
     }

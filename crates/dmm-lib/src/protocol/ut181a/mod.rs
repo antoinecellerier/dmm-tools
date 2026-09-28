@@ -136,7 +136,7 @@ impl Protocol for Ut181aProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        let payload = framing::read_newest_frame(
+        let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
             framing::extract_frame_abcd_2byte_le16,
@@ -1129,7 +1129,7 @@ mod tests {
     /// queued before it, and the write queues `answer`, the reply and the
     /// frames after it. A mock with everything queued up front hands the
     /// read before the command the reply and the new state at once, which
-    /// no meter does, and a driver reading the newest frame takes them all.
+    /// no meter does.
     struct AnswersAfterWrite {
         queued: RefCell<VecDeque<Vec<u8>>>,
         answer: RefCell<Vec<Vec<u8>>>,
@@ -1280,11 +1280,10 @@ mod tests {
         );
     }
 
-    /// A reader slower than the meter's 10 frames a second gets the frame
-    /// the meter sent last, not the oldest one queued: command replies and
-    /// frames split by a mid-stream join are passed over on the way.
+    /// Queued frames come out in order, command replies and a frame split
+    /// by a mid-stream join passed over on the way.
     #[test]
-    fn a_slow_reader_gets_the_newest_reading() {
+    fn queued_frames_come_in_order() {
         let newest = plain_frame(0x3111, 0x80);
         let mut stream = plain_frame(0x1111, 0x00)[3..].to_vec(); // joined mid-frame
         stream.extend(plain_frame(0x1111, 0x00));
@@ -1295,8 +1294,12 @@ mod tests {
         mock.push_response(newest[10..].to_vec());
         let mut proto = Ut181aProtocol::new();
         let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.mode_raw, 0x1111);
+        let m = proto.request_measurement(&mock).unwrap();
         assert_eq!(m.mode_raw, 0x3111);
-        assert!(m.flags.hold, "the newest frame, not the first whole one");
+        assert!(!m.flags.hold);
+        let m = proto.request_measurement(&mock).unwrap();
+        assert!(m.flags.hold, "the newest frame");
         assert!(proto.rx_buf.is_empty());
     }
 

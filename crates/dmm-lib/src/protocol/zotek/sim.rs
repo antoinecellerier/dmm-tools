@@ -628,14 +628,17 @@ mod tests {
     use crate::protocol::capture_reports;
     use crate::transport::NullTransport;
 
-    fn mock() -> (MockZt5b, Clock) {
+    /// The simulated meter opened as the binaries open it: through a `Dmm`,
+    /// which drops what the meter queued while a test advanced the clock.
+    fn mock() -> (crate::Dmm<NullTransport>, Clock) {
         let clock = Clock::manual();
-        (MockZt5b::new(clock.clone()), clock)
+        let dmm = crate::mock::open_simulated(&MOCK_ZT5B, None, clock.clone()).unwrap();
+        (dmm, clock)
     }
 
     /// Read one reading, asserting the decoder reported nothing.
-    fn read(mock: &mut MockZt5b) -> Measurement {
-        let (m, reports) = capture_reports(|| mock.request_measurement(&NullTransport));
+    fn read(mock: &mut crate::Dmm<NullTransport>) -> Measurement {
+        let (m, reports) = capture_reports(|| mock.request_measurement());
         assert!(reports.is_empty(), "{reports:?}");
         m.unwrap()
     }
@@ -645,15 +648,14 @@ mod tests {
         let (mut mock, clock) = mock();
         read(&mut mock);
         clock.advance(Duration::from_secs(10));
-        mock.discard_input(&NullTransport).unwrap();
         let before = clock.now();
         read(&mut mock);
         // Every packet sent by then went: the reading waited for the next.
         assert!(clock.now() > before);
     }
 
-    fn press(mock: &mut MockZt5b, command: &str) {
-        mock.send_command(&NullTransport, command).unwrap();
+    fn press(mock: &mut crate::Dmm<NullTransport>, command: &str) {
+        mock.send_command(command).unwrap();
     }
 
     fn value(m: &Measurement) -> f64 {
@@ -871,15 +873,16 @@ mod tests {
         assert_eq!(read(&mut mock).unit, "°C");
     }
 
-    /// NCV climbs from EF through the four levels and back. Read twice a
-    /// second: a reading is the packet sent last, up to a packet period
-    /// before the read, and each level lasts a second.
+    /// NCV climbs from EF through the four levels and back, over the 12 s a
+    /// read every half second covered when each took the packet sent last;
+    /// each level lasts a second.
     #[test]
     fn ncv_moves_through_its_levels() {
         let (mut mock, clock) = mock();
+        let start = clock.now();
         press(&mut mock, "ncv");
         let mut levels = Vec::new();
-        for _ in 0..24 {
+        while clock.now() - start < secs(12.0) {
             let m = read(&mut mock);
             assert_eq!(m.mode, "NCV");
             let MeasuredValue::NcvLevel(level) = m.value else {
@@ -917,7 +920,7 @@ mod tests {
     #[test]
     fn zero_clears_the_stray_capacitance() {
         let (mut mock, clock) = mock();
-        let err = mock.send_command(&NullTransport, "zero").unwrap_err();
+        let err = mock.send_command("zero").unwrap_err();
         assert!(matches!(err, Error::CommandRejected(_)), "{err:?}");
 
         press(&mut mock, "capacitance");
@@ -940,7 +943,7 @@ mod tests {
     fn minmax_is_not_offered() {
         let (mut mock, _) = mock();
         assert!(!mock.profile().supported_commands.contains(&"minmax"));
-        let err = mock.send_command(&NullTransport, "minmax").unwrap_err();
+        let err = mock.send_command("minmax").unwrap_err();
         assert!(matches!(err, Error::UnsupportedCommand(_)), "{err}");
     }
 

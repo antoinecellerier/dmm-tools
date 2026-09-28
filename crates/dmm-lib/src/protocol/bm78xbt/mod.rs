@@ -107,7 +107,7 @@ impl Protocol for Bm78xbtProtocol {
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used.
-        let payload = framing::read_newest_frame(
+        let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
             packet::extract,
@@ -193,8 +193,8 @@ mod tests {
     }
 
     /// Whole notifications, and the same split into 5-, 20- and 64-byte
-    /// pieces (a small MTU, the transport's reads), give their readings;
-    /// with both already queued, a request answers with the newer one.
+    /// pieces (a small MTU, the transport's reads), give their readings,
+    /// in the order they were queued.
     #[test]
     fn notifications_in_any_pieces_give_their_readings() {
         let later = notification(&example_info(), &second_reading());
@@ -214,8 +214,11 @@ mod tests {
             assert_eq!(second.raw_payload.len(), 56, "{size}");
 
             let mock = MockTransport::new(pieces(&stream(), size));
-            let newest = self::proto().request_measurement(&mock).unwrap();
-            assert_eq!(newest.display_raw.as_deref(), Some("12.345"), "{size}");
+            let mut proto = self::proto();
+            let first = proto.request_measurement(&mock).unwrap();
+            assert_eq!(first.display_raw.as_deref(), Some("-1.2345"), "{size}");
+            let second = proto.request_measurement(&mock).unwrap();
+            assert_eq!(second.display_raw.as_deref(), Some("12.345"), "{size}");
         }
     }
 

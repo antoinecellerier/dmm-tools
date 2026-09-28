@@ -4,10 +4,10 @@ pub mod mode;
 pub(crate) mod specs;
 pub mod tables;
 
-use crate::error::{Error, ErrorKind, Result};
+use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
-use crate::protocol::framing::{self, DRAIN_WAIT_MS, FrameErrorRecovery};
+use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::registry::{DEVICES, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
@@ -264,67 +264,6 @@ impl Ut61PlusProtocol {
         )
     }
 
-    /// The newest reading the adapter has already delivered, `first` being
-    /// the oldest.
-    ///
-    /// The adapter streams about three readings a second whoever is reading
-    /// (adapter spec §3), so a caller that reads slower — a one-second
-    /// interval, or a pause — would otherwise be handed ever-older readings
-    /// stamped with the time they were read. Everything already queued is
-    /// taken off with zero-wait reads, and the newest checksummed reading
-    /// frame decides the answer, parse error included: that is what the
-    /// meter shows now. A frame that fails its checksum is dropped.
-    /// "Already queued" is anything that arrives within [`DRAIN_WAIT_MS`] of
-    /// the last frame taken off.
-    fn newest_streamed(
-        &mut self,
-        transport: &dyn Transport,
-        first: Result<Measurement>,
-    ) -> Result<Measurement> {
-        // A dead link or a silent adapter is the answer; only a frame, good
-        // or not, can be superseded by a newer one.
-        if let Err(e) = &first
-            && e.kind() != ErrorKind::Protocol
-        {
-            return first;
-        }
-        let mut newest = first;
-        let mut tmp = [0u8; 64];
-        for _ in 0..MAX_DRAIN_READS {
-            loop {
-                match framing::extract_frame_abcd_be16(&self.rx_buf) {
-                    Ok(Some((payload, consumed))) => {
-                        self.rx_buf.drain(..consumed);
-                        if payload.len() >= UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
-                            if let Some(reading) = self.take_reading(&payload) {
-                                newest = reading;
-                            }
-                        } else {
-                            report_unknown_frame(&payload);
-                        }
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        debug!("dropping a corrupt queued frame: {e}");
-                        self.rx_buf.clear();
-                        break;
-                    }
-                }
-            }
-            // Only partial frames are left here, but a stream that never
-            // frames must not grow the buffer either.
-            if self.rx_buf.len() > MAX_DRAIN_BUF {
-                self.rx_buf.clear();
-            }
-            let n = transport.read_timeout(&mut tmp, DRAIN_WAIT_MS)?;
-            if n == 0 {
-                break;
-            }
-            self.rx_buf.extend_from_slice(&tmp[..n]);
-        }
-        newest
-    }
-
     /// Write one command frame and wait for the meter's ack before returning.
     ///
     /// Whatever arrives up to and including the ack is discarded: leaving it
@@ -422,18 +361,17 @@ impl Protocol for Ut61PlusProtocol {
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         let m = if self.streaming {
-            let first = match self.read_measurement(transport) {
+            match self.read_measurement(transport) {
                 // A start command can be lost on the adapter, so a silent
                 // stream is started again — and polled, because an adapter
                 // that ignores 0x5D (none seen yet) still answers a poll.
                 Err(Error::Timeout) => {
                     debug!("no streamed reading: restarting the stream and polling");
                     transport.write(&Command::StartStream.encode())?;
-                    self.poll_measurement(transport)
+                    self.poll_measurement(transport)?
                 }
-                other => other,
-            };
-            self.newest_streamed(transport, first)?
+                other => other?,
+            }
         } else {
             self.poll_measurement(transport)?
         };
@@ -973,16 +911,6 @@ const PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(1000);
 /// The same wait over the UT-D07B, whose ack came 1.26 s after the command on
 /// a fresh link (adapter spec §5).
 const BLUETOOTH_PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(2500);
-
-/// Most zero-wait reads one streamed request takes off the queue: one
-/// notification each, so about twenty minutes of readings at the adapter's
-/// three a second (adapter spec §3). A longer backlog — a pause left on for
-/// an hour — drains over the next few requests.
-const MAX_DRAIN_READS: usize = 4096;
-
-/// Most bytes of an unfinished frame kept between those reads; a frame is
-/// 19 bytes.
-const MAX_DRAIN_BUF: usize = 256;
 
 /// How long to leave the meter alone after it acks a button press before
 /// asking it what mode it is in.
@@ -2017,50 +1945,29 @@ mod tests {
         (mock, p)
     }
 
-    /// The adapter streams whoever reads, so a reader slower than it finds
-    /// a backlog; it gets the newest reading, not the oldest, and the next
-    /// request starts from what arrives after it.
+    /// Streamed readings come in the order the adapter sent them, with no
+    /// poll written; the stream above picks among them.
     #[test]
-    fn a_slow_reader_gets_the_newest_streamed_reading() {
+    fn streamed_readings_come_in_order() {
         let (mock, mut p) = streaming(vec![frame_in(0x02), frame_in(0x04), frame_in(0x05)]);
-        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
-        mock.0.push_response(frame_in(0x02));
         assert_eq!(p.request_measurement(&mock).unwrap().mode, "DC V");
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Hz");
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
         assert_eq!(mock.0.written.borrow().len(), 1, "no poll went out");
     }
 
-    /// A frame split across notifications, or two in one, still drains to
-    /// the newest whole one; the unfinished tail waits for its next read.
+    /// A frame split across notifications, or two in one, is read whole;
+    /// the unfinished tail waits for its next read.
     #[test]
-    fn the_drain_follows_frames_across_reads() {
-        let newest = frame_in(0x05);
-        let (head, tail) = newest.split_at(7);
+    fn frames_are_read_across_notifications() {
+        let last = frame_in(0x05);
+        let (head, tail) = last.split_at(7);
         let mut two = frame_in(0x02);
         two.extend(frame_in(0x04));
         let (mock, mut p) = streaming(vec![two, head.to_vec()]);
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "DC V");
         assert_eq!(p.request_measurement(&mock).unwrap().mode, "Hz");
         mock.0.push_response(tail.to_vec());
-        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
-    }
-
-    /// A queued frame that fails its checksum is dropped, not reported:
-    /// a good reading behind it is newer.
-    #[test]
-    fn a_corrupt_queued_frame_is_dropped() {
-        let mut corrupt = frame_in(0x04);
-        *corrupt.last_mut().unwrap() ^= 0xFF;
-        let (mock, mut p) = streaming(vec![frame_in(0x02), corrupt, frame_in(0x05)]);
-        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
-    }
-
-    /// A backlog longer than one request drains is caught up over the next
-    /// ones, so a long pause costs a few stale readings, not minutes of them.
-    #[test]
-    fn a_long_backlog_drains_over_a_few_requests() {
-        let mut frames = vec![frame_in(0x02); MAX_DRAIN_READS + 10];
-        frames.push(frame_in(0x05));
-        let (mock, mut p) = streaming(frames);
-        assert_eq!(p.request_measurement(&mock).unwrap().mode, "DC V");
         assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
     }
 

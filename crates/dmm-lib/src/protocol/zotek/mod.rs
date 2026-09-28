@@ -135,11 +135,10 @@ impl Protocol for ZotekProtocol {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used, and it only cuts packets of the four
         // types, each with a layout. About 2.6 packets a second arrive
-        // (spec §11.4), well inside read_frame's 2 s; the newest queued one
-        // is what the meter shows. A packet with no digit lit on the main
+        // (spec §11.4), well inside read_frame's 2 s. A packet with no digit lit on the main
         // display has no reading, so it is reported and skipped for the
         // next one.
-        let packet = framing::read_newest_frame(
+        let packet = framing::read_frame(
             &mut self.rx_buf,
             transport,
             frame::extract_packet,

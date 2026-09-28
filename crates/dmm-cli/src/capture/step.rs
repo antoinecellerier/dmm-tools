@@ -721,16 +721,14 @@ mod tests {
     }
 
     /// A meter streaming `frames` one per [`StreamingTransport::PERIOD`] of
-    /// real time, as a UT181A streams, rather than all queued at once: a
-    /// streaming driver answers with the newest frame queued, and would take
-    /// a whole queue in one read.
+    /// real time, as a UT181A streams, rather than all queued at once.
     struct StreamingTransport {
         frames: Mutex<std::collections::VecDeque<Vec<u8>>>,
         next_due: Mutex<Instant>,
     }
 
     impl StreamingTransport {
-        /// Well past the driver's 10 ms wait for a queued frame.
+        /// Quick enough for a test, apart enough to arrive one by one.
         const PERIOD: Duration = Duration::from_millis(50);
 
         fn new(frames: Vec<Vec<u8>>) -> Self {

@@ -2,7 +2,7 @@
 //! extractors and helpers more than one family shares. A frame shape only
 //! one family sends lives in that family.
 
-use crate::error::{Error, ErrorKind, Result};
+use crate::error::{Error, Result};
 use crate::transport::{Link, Transport};
 use log::{debug, trace};
 use std::time::{Duration, Instant};
@@ -38,9 +38,9 @@ const MAX_FRAMES_EXAMINED: usize = 64;
 /// reads, not at the deadline.
 const MAX_READS_PER_FRAME: usize = 160;
 
-/// Bounded growth: the largest legitimate frame we handle is ~21 bytes
-/// (UT8803), and we drain on successful extraction or on SkipAndRetry. Cap
-/// at 4 KiB so a misbehaving / unsupported protocol family that speaks a
+/// Bounded growth: the largest legitimate frame we handle is a 152-byte
+/// BM78xBT notification, and we drain on successful extraction or on
+/// SkipAndRetry. Cap at 4 KiB so a misbehaving / unsupported protocol family that speaks a
 /// stream we can't parse doesn't grow `rx_buf` without bound.
 const MAX_RX_BUF: usize = 4096;
 
@@ -98,21 +98,6 @@ pub(crate) fn discard_queued(transport: &dyn Transport) -> Result<()> {
     Ok(())
 }
 
-/// Most queued frames [`read_newest_frame`] takes off in one request: about
-/// twenty minutes of a UT181A's 10 frames a second. A longer backlog — a
-/// pause left on for an hour — drains over the next few requests.
-const MAX_DRAIN_FRAMES: usize = 4096;
-
-/// Everything [`read_frame`]'s loop needs besides the buffer, the transport
-/// and the deadline.
-struct FrameRead<'a, F, A> {
-    extract: F,
-    accept: A,
-    recovery: FrameErrorRecovery,
-    label: &'a str,
-    skip_header: &'a [u8],
-}
-
 /// Shared read loop: extract frames from `rx_buf`, reading more data from
 /// `transport` when needed.
 ///
@@ -127,9 +112,9 @@ struct FrameRead<'a, F, A> {
 ///   protocols, or the family's own header for the others.
 ///
 /// Waits up to [`READ_TIMEOUT`] and examines up to [`MAX_FRAMES_EXAMINED`]
-/// frames. The first accepted frame is the answer, oldest first: right for a
-/// polled meter, whose one reply is the reading; a streaming meter on a
-/// radio link reads with [`read_newest_frame`].
+/// frames. The first accepted frame is the answer, oldest first: a polled
+/// meter's reply, or a streaming meter's next frame — the stream reads a
+/// streaming meter continuously, so none waits long in a queue.
 pub(crate) fn read_frame<F, A>(
     rx_buf: &mut Vec<u8>,
     transport: &dyn Transport,
@@ -143,122 +128,18 @@ where
     F: Fn(&[u8]) -> Result<Option<(Vec<u8>, usize)>>,
     A: Fn(&[u8]) -> bool,
 {
-    let spec = FrameRead {
-        extract: extract_fn,
-        accept: accept_fn,
-        recovery,
-        label,
-        skip_header,
-    };
     // Real time, not the session clock: this bounds a USB read, and the wire
     // takes as long as it takes whatever session time is doing.
-    read_frame_by(
-        &spec,
-        rx_buf,
-        transport,
-        Instant::now() + READ_TIMEOUT,
-        Discard::Buffer,
-    )
-}
-
-/// The newest frame already queued behind the next one: what the meter shows
-/// now, for a streaming meter whose frames wait in a queue while nobody reads
-/// — a sample interval longer than the meter's, or a paused session.
-///
-/// The first frame is read as [`read_frame`] reads it; then every frame that
-/// arrives within [`DRAIN_WAIT_MS`] of the last one is taken off too, and
-/// the last accepted one is the answer. A partial frame still in transit
-/// stays in `rx_buf` for the next request. A corrupt queued frame is dropped,
-/// and a transport error during the drain ends it with the frame in hand:
-/// the error comes back on the next request's read.
-pub(crate) fn read_newest_frame<F, A>(
-    rx_buf: &mut Vec<u8>,
-    transport: &dyn Transport,
-    extract_fn: F,
-    accept_fn: A,
-    recovery: FrameErrorRecovery,
-    label: &str,
-    skip_header: &[u8],
-) -> Result<Vec<u8>>
-where
-    F: Fn(&[u8]) -> Result<Option<(Vec<u8>, usize)>>,
-    A: Fn(&[u8]) -> bool,
-{
-    let spec = FrameRead {
-        extract: extract_fn,
-        accept: accept_fn,
-        recovery,
-        label,
-        skip_header,
-    };
-    // Real time, as for every hardware wait.
-    let mut newest = read_frame_by(
-        &spec,
-        rx_buf,
-        transport,
-        Instant::now() + READ_TIMEOUT,
-        Discard::Buffer,
-    )?;
-    let drain_wait = Duration::from_millis(DRAIN_WAIT_MS as u64);
-    for _ in 0..MAX_DRAIN_FRAMES {
-        match read_frame_by(
-            &spec,
-            rx_buf,
-            transport,
-            Instant::now() + drain_wait,
-            Discard::Frame,
-        ) {
-            Ok(frame) => newest = frame,
-            // Nothing more queued; a partial frame stays in `rx_buf`.
-            Err(Error::Timeout) => break,
-            // A corrupt queued frame, which Propagate has skipped in
-            // `rx_buf`: drop it and go on to the next.
-            Err(e) if e.kind() == ErrorKind::Protocol => {
-                debug!("{label}: dropping a corrupt queued frame: {e}");
-            }
-            // A lost link fails the next read too; the frame in hand is
-            // this request's answer.
-            Err(e) => {
-                debug!("{label}: draining stopped: {e}");
-                break;
-            }
-        }
-    }
-    Ok(newest)
-}
-
-/// What a [`FrameErrorRecovery::Propagate`] error leaves of `rx_buf`.
-#[derive(Clone, Copy)]
-enum Discard {
-    /// Everything: the request's own frame was corrupt.
-    Buffer,
-    /// The corrupt frame: a drain's, where the start of the frame behind it
-    /// may have come in the same read.
-    Frame,
-}
-
-/// [`read_frame`]'s loop, up to `deadline`.
-fn read_frame_by<F, A>(
-    spec: &FrameRead<'_, F, A>,
-    rx_buf: &mut Vec<u8>,
-    transport: &dyn Transport,
-    deadline: Instant,
-    discard: Discard,
-) -> Result<Vec<u8>>
-where
-    F: Fn(&[u8]) -> Result<Option<(Vec<u8>, usize)>>,
-    A: Fn(&[u8]) -> bool,
-{
-    let label = spec.label;
+    let deadline = Instant::now() + READ_TIMEOUT;
     let mut examined = 0;
     let mut reads = 0;
     while examined < MAX_FRAMES_EXAMINED {
-        match (spec.extract)(rx_buf) {
+        match extract_fn(rx_buf) {
             Ok(Some((payload, consumed))) => {
                 examined += 1;
                 reads = 0;
                 rx_buf.drain(..consumed);
-                if (spec.accept)(&payload) {
+                if accept_fn(&payload) {
                     return Ok(payload);
                 }
                 debug!(
@@ -289,18 +170,14 @@ where
                 reads += 1;
                 rx_buf.extend_from_slice(&tmp[..n]);
             }
-            Err(e) => match spec.recovery {
+            Err(e) => match recovery {
                 FrameErrorRecovery::Propagate => {
                     // Discard the corrupt data so the next request starts
                     // clean — matching the vendor parser's "discard and
                     // clear buffer" on a bad frame (UT61E+ spec §2.1).
                     // Leaving it in place would re-extract the same
-                    // corrupt frame on every subsequent request. A drain
-                    // skips only the corrupt frame's header, as below.
-                    match discard {
-                        Discard::Buffer => rx_buf.clear(),
-                        Discard::Frame => skip_past_header(rx_buf, spec.skip_header),
-                    }
+                    // corrupt frame on every subsequent request.
+                    rx_buf.clear();
                     return Err(e);
                 }
                 FrameErrorRecovery::SkipAndRetry => {
@@ -309,7 +186,7 @@ where
                     examined += 1;
                     reads = 0;
                     debug!("{label}: frame error: {e}, skipping");
-                    skip_past_header(rx_buf, spec.skip_header);
+                    skip_past_header(rx_buf, skip_header);
                 }
             },
         }
@@ -1102,233 +979,5 @@ mod tests {
             "rx_buf should have been cleared by the 4 KiB cap (got {} bytes)",
             rx_buf.len()
         );
-    }
-
-    // --- read_newest_frame tests ---
-
-    /// Read with `read_newest_frame` as a streaming family does, taking every
-    /// frame and refusing those whose payload starts with 0xFF.
-    fn newest(rx_buf: &mut Vec<u8>, transport: &dyn Transport) -> Result<Vec<u8>> {
-        read_newest_frame(
-            rx_buf,
-            transport,
-            extract_frame_abcd_be16,
-            |p| p.first() != Some(&0xFF),
-            FrameErrorRecovery::SkipAndRetry,
-            "test",
-            &HEADER,
-        )
-    }
-
-    fn frame(k: u8) -> Vec<u8> {
-        test_frame_be16(&[k])
-    }
-
-    /// A reader slower than the meter gets the frame sent last, and the
-    /// next request waits for the one after it.
-    #[test]
-    fn a_slow_reader_gets_the_newest_queued_frame() {
-        let mock = MockTransport::new(vec![frame(1), frame(2), frame(3)]);
-        let mut rx_buf = Vec::new();
-        assert_eq!(newest(&mut rx_buf, &mock).unwrap(), [3]);
-        mock.push_response(frame(4));
-        assert_eq!(newest(&mut rx_buf, &mock).unwrap(), [4]);
-    }
-
-    /// Frames split across reads drain like whole ones, and a frame still
-    /// in transit is left for the next request.
-    #[test]
-    fn the_drain_follows_frames_split_across_reads() {
-        let stream = [frame(1), frame(2), frame(3)].concat();
-        let (queued, in_transit) = stream.split_at(stream.len() - 2);
-        let mock = MockTransport::new(queued.chunks(3).map(<[u8]>::to_vec).collect());
-        let mut rx_buf = Vec::new();
-        assert_eq!(newest(&mut rx_buf, &mock).unwrap(), [2]);
-        assert_eq!(rx_buf.len(), frame(3).len() - 2, "the partial frame stays");
-        mock.push_response(in_transit.to_vec());
-        assert_eq!(newest(&mut rx_buf, &mock).unwrap(), [3]);
-    }
-
-    /// A corrupt frame in the queue is dropped on the way to the newest,
-    /// whichever way the family recovers from one.
-    #[test]
-    fn a_corrupt_queued_frame_is_dropped() {
-        let mut corrupt = frame(2);
-        let last = corrupt.len() - 1;
-        corrupt[last] ^= 0xFF;
-        for recovery in [
-            FrameErrorRecovery::SkipAndRetry,
-            FrameErrorRecovery::Propagate,
-        ] {
-            let mock = MockTransport::new(vec![frame(1), corrupt.clone(), frame(3)]);
-            let mut rx_buf = Vec::new();
-            let got = read_newest_frame(
-                &mut rx_buf,
-                &mock,
-                extract_frame_abcd_be16,
-                |_| true,
-                recovery,
-                "test",
-                &HEADER,
-            );
-            assert_eq!(got.unwrap(), [3], "{recovery:?}");
-        }
-    }
-
-    /// A corrupt queued frame that came in one read with the frame behind it
-    /// takes only itself out of the buffer: the frame behind it is the
-    /// newest.
-    #[test]
-    fn a_corrupt_queued_frame_leaves_the_one_behind_it() {
-        let mut corrupt = frame(2);
-        let last = corrupt.len() - 1;
-        corrupt[last] ^= 0xFF;
-        let mock = MockTransport::new(vec![frame(1), [corrupt, frame(3)].concat()]);
-        let mut rx_buf = Vec::new();
-        let got = read_newest_frame(
-            &mut rx_buf,
-            &mock,
-            extract_frame_abcd_be16,
-            |_| true,
-            FrameErrorRecovery::Propagate,
-            "test",
-            &HEADER,
-        );
-        assert_eq!(got.unwrap(), [3]);
-    }
-
-    /// A transport error while draining ends the drain, not the request:
-    /// the frame already taken is the answer.
-    #[test]
-    fn a_transport_error_while_draining_keeps_the_frame_in_hand() {
-        struct LostAfterOne(std::cell::Cell<bool>);
-        impl Transport for LostAfterOne {
-            fn write(&self, _data: &[u8]) -> Result<()> {
-                Ok(())
-            }
-            fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
-                if self.0.replace(true) {
-                    return Err(Error::LinkLost);
-                }
-                let bytes = frame(1);
-                buf[..bytes.len()].copy_from_slice(&bytes);
-                Ok(bytes.len())
-            }
-            fn link(&self) -> Option<crate::transport::Link> {
-                None
-            }
-        }
-        let meter = LostAfterOne(std::cell::Cell::new(false));
-        let mut rx_buf = Vec::new();
-        assert_eq!(newest(&mut rx_buf, &meter).unwrap(), [1]);
-        assert!(matches!(newest(&mut rx_buf, &meter), Err(Error::LinkLost)));
-    }
-
-    /// A refused frame is no newer reading: the last accepted one stands.
-    #[test]
-    fn refused_frames_are_not_newer() {
-        let mock = MockTransport::new(vec![frame(1), frame(0xFF)]);
-        let mut rx_buf = Vec::new();
-        assert_eq!(newest(&mut rx_buf, &mock).unwrap(), [1]);
-    }
-
-    /// A backlog longer than one drain takes is worked off over the next
-    /// requests, each answering with the newest it reached.
-    #[test]
-    fn a_long_backlog_drains_over_a_few_requests() {
-        let total = 2 * MAX_DRAIN_FRAMES + 10;
-        let frames: Vec<Vec<u8>> = (0..total)
-            .map(|i| test_frame_be16(&(i as u32).to_be_bytes()))
-            .collect();
-        let mock = MockTransport::new(frames);
-        let mut rx_buf = Vec::new();
-        let index = |p: Vec<u8>| u32::from_be_bytes(p.try_into().unwrap()) as usize;
-        assert_eq!(index(newest(&mut rx_buf, &mock).unwrap()), MAX_DRAIN_FRAMES);
-        assert_eq!(
-            index(newest(&mut rx_buf, &mock).unwrap()),
-            2 * MAX_DRAIN_FRAMES + 1
-        );
-        assert_eq!(index(newest(&mut rx_buf, &mock).unwrap()), total - 1);
-    }
-
-    /// With nothing queued and nothing arriving, the read still times out.
-    #[test]
-    fn silence_still_times_out() {
-        let mock = MockTransport::new(vec![]);
-        let mut rx_buf = Vec::new();
-        assert!(matches!(newest(&mut rx_buf, &mock), Err(Error::Timeout)));
-    }
-
-    /// A meter streaming a frame every 385 ms on session time: frame `k`
-    /// carries the byte `k` and is due at `k` periods. A read hands out the
-    /// oldest frame due, waits for the next one if it is due within the
-    /// read's timeout, and otherwise finds nothing — the queue of a radio
-    /// link that nobody reads between requests.
-    struct TimedStream {
-        clock: crate::Clock,
-        start: Instant,
-        next: std::cell::Cell<u32>,
-    }
-
-    impl TimedStream {
-        const PERIOD: Duration = Duration::from_millis(385);
-
-        fn new(clock: &crate::Clock) -> Self {
-            Self {
-                clock: clock.clone(),
-                start: clock.now(),
-                next: std::cell::Cell::new(0),
-            }
-        }
-    }
-
-    impl Transport for TimedStream {
-        fn write(&self, _data: &[u8]) -> Result<()> {
-            Ok(())
-        }
-
-        fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
-            let k = self.next.get();
-            let due = Self::PERIOD * k;
-            let now = self.clock.now() - self.start;
-            if let Some(wait) = due.checked_sub(now) {
-                if wait > Duration::from_millis(timeout_ms as u64) {
-                    return Ok(0);
-                }
-                self.clock.advance(wait);
-            }
-            let bytes = test_frame_be16(&[k as u8]);
-            buf[..bytes.len()].copy_from_slice(&bytes);
-            self.next.set(k + 1);
-            Ok(bytes.len())
-        }
-
-        fn set_baud(&self, _baud: u32) -> Result<()> {
-            Ok(())
-        }
-
-        fn link(&self) -> Option<crate::transport::Link> {
-            None
-        }
-    }
-
-    /// The point of the drain: a reader every 2 s of a meter sending every
-    /// 385 ms reads what the meter sent last, not a reading that falls
-    /// further behind with every request — and after a minute's pause, the
-    /// current one.
-    #[test]
-    fn a_slow_reader_keeps_up_with_a_streaming_meter() {
-        let clock = crate::Clock::manual();
-        let meter = TimedStream::new(&clock);
-        let mut rx_buf = Vec::new();
-        let sent_last = |clock: &crate::Clock| {
-            ((clock.now() - meter.start).as_millis() / TimedStream::PERIOD.as_millis()) as u8
-        };
-        for _ in 0..10 {
-            clock.advance(Duration::from_secs(2));
-            assert_eq!(newest(&mut rx_buf, &meter).unwrap(), [sent_last(&clock)]);
-        }
-        clock.advance(Duration::from_secs(60));
-        assert_eq!(newest(&mut rx_buf, &meter).unwrap(), [sent_last(&clock)]);
     }
 }

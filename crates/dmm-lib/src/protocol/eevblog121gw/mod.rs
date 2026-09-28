@@ -154,7 +154,7 @@ impl Protocol for Eevblog121gwProtocol {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used. About 2 packets a second arrive (spec
         // §15.4), several inside read_frame's 2 s.
-        let read = framing::read_newest_frame(
+        let read = framing::read_frame(
             &mut self.rx_buf,
             transport,
             packet::extract_packet,
@@ -246,12 +246,14 @@ mod tests {
         }
     }
 
-    /// A reader slower than the meter gets the packet it sent last.
+    /// Queued packets come out in the order the meter sent them.
     #[test]
-    fn a_slow_reader_gets_the_newest_packet() {
+    fn queued_packets_come_in_order() {
         let mock = MockTransport::new(EXAMPLES.iter().map(|p| p.to_vec()).collect());
-        let m = proto().request_measurement(&mock).unwrap();
-        assert_eq!(m.raw_payload, EXAMPLES[EXAMPLES.len() - 1]);
+        let mut proto = proto();
+        for p in EXAMPLES {
+            assert_eq!(proto.request_measurement(&mock).unwrap().raw_payload, p);
+        }
     }
 
     /// The shape community clients saw on a meter (spec §15.4): 18-byte

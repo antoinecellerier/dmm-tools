@@ -222,7 +222,7 @@ impl Protocol for Ut171Protocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        let payload = framing::read_newest_frame(
+        let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
             // UT171 framing is identical to UT181A: 2-byte LE length =

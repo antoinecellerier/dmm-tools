@@ -29,7 +29,7 @@ Items that need real components or specific setups to verify.
   - [Brymen BM78xBT: experimental, awaiting a hardware report](#brymen-bm78xbt-experimental-awaiting-a-hardware-report)
   - [Brymen BU-86X, BM86x, BM82x and BM52x: experimental, awaiting a hardware report](#brymen-bu-86x-bm86x-bm82x-and-bm52x-experimental-awaiting-a-hardware-report)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
-  - [Streaming meters: newest queued frame](#streaming-meters-newest-queued-frame)
+  - [Streaming meters: read continuously](#streaming-meters-read-continuously)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
@@ -1645,9 +1645,10 @@ timing, HOLD and MIN/MAX are in the ut61eplus spec §2.7 (flag3 bit 3).
 
 Open:
 
-- **UT-D07B.** `newest_streamed` keeps only the newest frame, so a reader
-  slower than the stream may see one component far more often than the other,
-  as a slow CP2110 poll does. Not yet run with the adapter.
+- **UT-D07B, and any sample interval.** Every streamed frame is read, but a
+  sample interval keeps one frame per tick, so an interval may see one
+  component far more often than the other, as a slow CP2110 poll does. At
+  0 ms both come through. Not yet run with the adapter.
 - **Components on different rungs.** Both sat on the 2.2V rung here; a DC
   offset with an AC signal on top would show whether autorange can put them
   on different ones. The display keeps the DC frame's range either way.
@@ -1891,9 +1892,9 @@ boot.
   on the 10 A ranges 2-3 of AC/DC VA (spec §15.4), and EEVblog's app would
   show the voltage in mV when the main range is m or µ (spec §7.1); a
   capture in each VA range settles it.
-- **VA operands at a slow sample interval.** Each request takes the newest
-  packet queued, so at an interval longer than the meter's a reading
-  carries whichever operand the last packet showed. Whether the display
+- **VA operands at a slow sample interval.** A sample interval keeps the
+  packet nearest each tick, so at an interval longer than the meter's a
+  reading carries whichever operand that packet showed. Whether the display
   flips on every packet or on a slower clock of its own is not known
   (spec §15.4); a VA capture at `--interval-ms 2000` shows whether the
   readings alias.
@@ -2162,9 +2163,10 @@ the following needs someone's hardware.
   is documented but unconfirmed. It needs someone else's hardware.
 - **Streamed rate under Windows.** 2.88 and 2.93 readings/s against 3.23 on
   Linux, the adapter's cadence unchanged: Windows now and then delivers two
-  notifications back to back, and `newest_streamed` keeps the newer of two
-  it finds queued (66 notifications, 60 readings in a traced run). By design
-  for a slow reader; whether `--interval-ms 0` should keep both is open.
+  notifications back to back, and the driver then kept only the newer of two
+  it found queued (66 notifications, 60 readings in a traced run). Since
+  2026-09-28 every streamed frame is read, so at `--interval-ms 0` both
+  should come through: re-run the traced count under Windows.
 - **The first connect after power-on.** Under Windows, an adapter heard
   seconds after being switched on refused the connect that followed (WinRT
   "not connected" after ~8 s) and took the next one. The open reports that as
@@ -2226,7 +2228,7 @@ the following needs someone's hardware.
   interleaved scan misses an awake adapter (UT-D07B spec §4); on 2026-09-22
   `info` connected on all three runs (11-13 s, two through the paired
   fallback) and `list` showed the awake adapter as not heard. And a streamed
-  reading is the newest one queued, not the oldest. With our adapter: take it
+  reading is current, not one queued earlier. With our adapter: take it
   out of range mid-session and bring it back; run `dmm-cli list` and `info`
   with it in standby (the fallback should end in "No meter found" after about
   15 s); and check that `dmm-cli read --interval-ms 1000`, and a GUI pause and
@@ -2290,14 +2292,17 @@ the following needs someone's hardware.
   range table and the two-display handling the deck describes for AC, LPF and
   temperature, and a hardware report to go with it.
 
-### Streaming meters: newest queued frame
+### Streaming meters: read continuously
 
-Since 2026-09-28 the streaming families with a Bluetooth link (UT171,
-UT181A, 121GW, BM78xBT, ZOTEK) answer each request with the newest frame
-already queued, as the UT61+ over the UT-D07B has since it landed; the
-HID-only streaming families (UT8802, UT8803, UT80x, VC-880) read oldest
-first. Checked offline only (simulated meters on a manual clock, and
-`mock-zt5b`, which sends at a ZOTEK meter's rate).
+Since 2026-09-28 the stream reads every streaming meter (UT171, UT181A,
+UT8802, UT8803, UT80x, VC-880, ZOTEK, 121GW, BM78xBT, and the UT61+ over
+Bluetooth) frame by frame as it arrives, and a sample interval keeps the
+frame nearest each tick; `Dmm` drops what queued after 250 ms unread.
+Checked offline only (simulated meters on a manual clock, and `mock-zt5b`,
+which sends at a ZOTEK meter's rate). To check on a meter: the UT61E+ over
+the UT-D07B at `--interval-ms 1000` against the LCD, and after a 10-minute
+GUI Pause, whose first reading should be current; a UT181A in #5 for a
+regression read and `set hold`/`set rel` after a Pause.
 
 - **Linux HID drops the newest.** Confirmed in the kernel source
   (2026-09-28, `drivers/hid/hidraw.c` `hidraw_report_event`: a report that

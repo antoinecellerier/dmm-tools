@@ -23,10 +23,9 @@
 //! after its connect frame (the UT171 and UT181A do) keeps sending, and its
 //! notifications queue in the platform's socket the way HID reports queue in
 //! hidraw, to be taken off at the next read. The framing layer resyncs on the
-//! next header, so no pump task is needed. A streaming driver takes
-//! everything queued at each request and answers with the newest frame
-//! (`framing::read_newest_frame`), so a reader slower than the meter gets the
-//! current reading, not an ever-older one.
+//! next header, so no pump task is needed. The stream reads a streaming meter
+//! continuously, so its notifications don't wait long there, and `Dmm` drops
+//! what queued while nobody read (a pause, a reconnect).
 
 mod brymen;
 mod eevblog121gw;
