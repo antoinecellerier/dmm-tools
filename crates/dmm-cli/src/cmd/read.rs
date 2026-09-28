@@ -80,8 +80,9 @@ pub(crate) fn cmd_read(
     } else {
         let mut dmm = open_mock_device(selection, mock_mode, clock)?;
         info!("mock device connected, starting measurement loop");
-        // Mock returns instantly — use 100ms floor to simulate ~10 Hz
-        let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
+        let interval_ms =
+            dmm_lib::mock::simulated_tick(dmm.delivery(), Duration::from_millis(interval_ms))
+                .as_millis() as u64;
         // `--format replay` is refused for a device that synthesises its
         // readings, so the header below is never built.
         let out = read_output(format, &dmm, transform, integrate, || {

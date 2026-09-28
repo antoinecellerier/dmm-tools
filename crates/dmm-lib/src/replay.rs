@@ -482,6 +482,12 @@ impl ReplayProtocol {
 }
 
 impl Protocol for ReplayProtocol {
+    // Hands out the newest frame due at each request, like a polled
+    // meter; it steps its own frames rather than streaming them.
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Polled
+    }
+
     /// Nothing to bring up: the inner protocol's `init` would write a
     /// streaming trigger to a transport that answers nobody.
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {

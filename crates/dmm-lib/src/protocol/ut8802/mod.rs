@@ -126,6 +126,10 @@ impl Ut8802Protocol {
 }
 
 impl Protocol for Ut8802Protocol {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Streamed
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // No trigger byte: the vendor's CP2110 init path (uci.dll
         // FUN_1001d460) never writes to the UART; the 0x5A trigger we

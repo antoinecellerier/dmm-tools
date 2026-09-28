@@ -115,6 +115,10 @@ impl ZotekProtocol {
 }
 
 impl Protocol for ZotekProtocol {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Streamed
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // The meter streams once connected; no app writes anything first
         // (spec §3).

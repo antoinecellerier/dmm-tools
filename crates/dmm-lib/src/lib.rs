@@ -120,6 +120,11 @@ impl<T: Transport> Dmm<T> {
         &self.transport
     }
 
+    /// Whether this meter answers requests or sends readings on its own.
+    pub fn delivery(&self) -> protocol::Delivery {
+        self.protocol.delivery()
+    }
+
     /// Request a single measurement from the meter.
     ///
     /// Enriches the parsed measurement with the protocol's per-range and

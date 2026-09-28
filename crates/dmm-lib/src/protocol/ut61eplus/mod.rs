@@ -388,6 +388,14 @@ impl Ut61PlusProtocol {
 }
 
 impl Protocol for Ut61PlusProtocol {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        if self.streaming {
+            crate::protocol::Delivery::Streamed
+        } else {
+            crate::protocol::Delivery::Polled
+        }
+    }
+
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // A cable needs nothing: the CP2110 is set up by `Cp2110::open()`
         // before the protocol exists, and the meter only acknowledges 0x5D.

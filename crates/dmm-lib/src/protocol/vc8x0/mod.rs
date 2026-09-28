@@ -462,6 +462,10 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     /// `--device vc650bt` carries the other name, with the same tables.
     const DETECTED_ID: &'static str;
 
+    /// The VC-880 streams once its PC button is pressed; the VC-890 answers
+    /// one request at a time.
+    const DELIVERY: crate::protocol::Delivery;
+
     /// Length of a live-data payload — everything the frame extractor hands
     /// back, between the length byte and the checksum.
     const PAYLOAD_LEN: usize;
@@ -585,6 +589,10 @@ impl<M: Vc8x0Model> Vc8x0Protocol<M> {
 }
 
 impl<M: Vc8x0Model> Protocol for Vc8x0Protocol<M> {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        M::DELIVERY
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // Neither meter needs a trigger: the VC-880 streams once the user
         // presses the PC button, and the VC-890 answers one request at a

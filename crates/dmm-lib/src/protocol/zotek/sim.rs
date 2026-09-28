@@ -590,6 +590,11 @@ impl Default for MockZt5b {
 }
 
 impl Protocol for MockZt5b {
+    // The simulated meter streams, as the ZT-5B does.
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Streamed
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         self.driver.init(&self.meter)
     }

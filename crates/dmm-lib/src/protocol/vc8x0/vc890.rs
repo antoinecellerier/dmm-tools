@@ -307,6 +307,7 @@ impl Vc8x0Model for Vc890Model {
     const LOG: &'static str = "vc890";
     const NAME: &'static str = "VC-890";
     const DETECTED_ID: &'static str = super::devices::VC890.id;
+    const DELIVERY: crate::protocol::Delivery = crate::protocol::Delivery::Polled;
     const PAYLOAD_LEN: usize = LIVE_DATA_PAYLOAD_LEN;
     const STATUS_AT: usize = 53;
     const DIAL: &'static [DialPosition] = DIAL;

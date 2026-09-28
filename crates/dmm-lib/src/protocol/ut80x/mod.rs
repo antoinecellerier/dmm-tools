@@ -950,6 +950,10 @@ impl Ut80xProtocol {
 }
 
 impl Protocol for Ut80xProtocol {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Streamed
+    }
+
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // The meter streams once its SEND or RS232 button is on (spec
         // §4.2); nothing is sent to it. [UNVERIFIED] whether the CH9325

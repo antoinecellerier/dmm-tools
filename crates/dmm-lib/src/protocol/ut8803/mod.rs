@@ -164,6 +164,10 @@ impl Ut8803Protocol {
 }
 
 impl Protocol for Ut8803Protocol {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Streamed
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // No trigger byte: the vendor's CP2110 init path (uci.dll
         // FUN_1001d460, uci_dll_decompiled.txt:24031-24085) configures the

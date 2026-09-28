@@ -86,6 +86,11 @@ impl FakeMeter {
 }
 
 impl dmm_lib::protocol::Protocol for FakeMeter {
+    // Answers each request at once.
+    fn delivery(&self) -> dmm_lib::protocol::Delivery {
+        dmm_lib::protocol::Delivery::Polled
+    }
+
     fn init(&mut self, _t: &dyn dmm_lib::transport::Transport) -> dmm_lib::error::Result<()> {
         Ok(())
     }

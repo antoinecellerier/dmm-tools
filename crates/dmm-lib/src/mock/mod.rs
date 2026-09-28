@@ -549,6 +549,11 @@ impl Default for MockProtocol {
 }
 
 impl Protocol for MockProtocol {
+    // Answers each request at once, like the UT61E+ on its cable.
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Polled
+    }
+
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         Ok(())
     }
@@ -847,6 +852,23 @@ pub(crate) fn open_mock_clocked(
     Ok(dmm.with_clock(clock))
 }
 
+/// Shortest tick a simulated meter that answers requests is read at.
+///
+/// The mock UT61E+ answers a request at once, so a 0 ms interval would spin
+/// the loop; 100 ms is about how fast a real one answers on its USB cable.
+const POLLED_TICK_FLOOR: Duration = Duration::from_millis(100);
+
+/// The tick to read a simulated meter at, for an interval of `tick`: floored
+/// at [`POLLED_TICK_FLOOR`] for one that answers requests, as given for one
+/// that streams at its own pace. Asked after open, where the delivery is
+/// known; both binaries go through here so a mock runs alike in each.
+pub fn simulated_tick(delivery: crate::protocol::Delivery, tick: Duration) -> Duration {
+    match delivery {
+        crate::protocol::Delivery::Polled => tick.max(POLLED_TICK_FLOOR),
+        crate::protocol::Delivery::Streamed => tick,
+    }
+}
+
 /// Open the simulated registry entry `device` on `clock`: the UT61E+ mock,
 /// pinned to `mode` when one is given, or the ZT-5B one, which has no
 /// scenarios and ignores `mode`, as `--mock-mode` documents for every
@@ -917,6 +939,24 @@ mod tests {
 
     /// Each entry that needs no hardware opens as the device it names, on
     /// the clock it is given.
+    #[test]
+    fn only_a_polled_mock_is_floored() {
+        use crate::protocol::Delivery;
+        let ms = Duration::from_millis;
+        assert_eq!(simulated_tick(Delivery::Polled, ms(0)), ms(100));
+        assert_eq!(simulated_tick(Delivery::Polled, ms(500)), ms(500));
+        assert_eq!(simulated_tick(Delivery::Streamed, ms(0)), ms(0));
+        let clock = Clock::manual();
+        let delivery = |id| {
+            let device = crate::protocol::registry::find_device(id).unwrap();
+            open_simulated(device, None, clock.clone())
+                .unwrap()
+                .delivery()
+        };
+        assert_eq!(delivery("mock"), Delivery::Polled);
+        assert_eq!(delivery(zotek::sim::MOCK_ZT5B.id), Delivery::Streamed);
+    }
+
     #[test]
     fn open_simulated_opens_each_mock_by_its_entry() {
         use crate::protocol::registry;

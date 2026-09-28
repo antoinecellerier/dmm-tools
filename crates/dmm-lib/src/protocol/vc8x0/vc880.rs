@@ -272,6 +272,7 @@ pub(crate) struct Vc880Model;
 impl Vc8x0Model for Vc880Model {
     const LOG: &'static str = "vc880";
     const NAME: &'static str = "VC-880";
+    const DELIVERY: crate::protocol::Delivery = crate::protocol::Delivery::Streamed;
     // The VC650BT speaks the same protocol and shares this id; see
     // `Vc8x0Model::DETECTED_ID`.
     const DETECTED_ID: &'static str = super::devices::VC880.id;

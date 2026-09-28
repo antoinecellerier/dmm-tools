@@ -251,6 +251,9 @@ pub(super) struct ThreadContext {
     pub selected: Option<&'static SelectableDevice>,
     pub query_name: bool,
     pub sample_interval_ms: u32,
+    /// A simulated meter, whose interval takes the floor
+    /// [`dmm_lib::mock::simulated_tick`] gives it once open.
+    pub simulated: bool,
     /// [`RECONNECT_INTERVAL`] outside the tests, which have no meter to wait for.
     pub reconnect_interval: Duration,
     pub stop_flag: Arc<AtomicBool>,
@@ -353,6 +356,7 @@ where
         selected,
         query_name,
         sample_interval_ms,
+        simulated,
         reconnect_interval,
         stop_flag,
     } = thread_ctx;
@@ -385,7 +389,7 @@ where
     // The Bluetooth adapter this session is on, which a reconnect goes back
     // to by address rather than scanning for one again.
     let mut reopen_at = bluetooth_selector(&dmm);
-    let mut stream = new_stream(&mut dmm, tick, &stop_flag);
+    let mut stream = new_stream(&mut dmm, tick, simulated, &stop_flag);
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
     let mut last_keys: ListedKeys = Default::default();
@@ -531,7 +535,7 @@ where
                         }
                     }
                 }
-                stream = new_stream(&mut dmm, tick, &stop_flag);
+                stream = new_stream(&mut dmm, tick, simulated, &stop_flag);
                 protocol_errors = 0;
                 // The dial may have moved while the link was down.
                 last_keys = Default::default();
@@ -549,8 +553,16 @@ where
 fn new_stream<'a, T: Transport>(
     dmm: &'a mut dmm_lib::Dmm<T>,
     tick: Duration,
+    simulated: bool,
     stop_flag: &Arc<AtomicBool>,
 ) -> MeasurementStream<'a, T> {
+    // Session time on a mock, which is what lets a preseed burst hand out
+    // tick-spaced history without waiting for it.
+    let tick = if simulated {
+        dmm_lib::mock::simulated_tick(dmm.delivery(), tick)
+    } else {
+        tick
+    };
     let stop = Arc::clone(stop_flag);
     MeasurementStream::new(dmm, tick).with_cancel(move || stop.load(Ordering::Relaxed))
 }
@@ -833,7 +845,7 @@ mod tests {
         let mut dmm = dmm_lib::mock::open_simulated(mock, None, clock.clone()).unwrap();
         let stop = Arc::new(AtomicBool::new(false));
         let tick = Duration::from_secs(10);
-        let mut stream = new_stream(&mut dmm, tick, &stop);
+        let mut stream = new_stream(&mut dmm, tick, false, &stop);
         stream.tick().unwrap(); // the first tick fires immediately
         stop.store(true, Ordering::Relaxed);
         let start = clock.now();
@@ -888,6 +900,7 @@ mod tests {
             selected: None,
             query_name: false,
             sample_interval_ms: 10,
+            simulated: false,
             reconnect_interval: Duration::from_millis(10),
             stop_flag: Arc::new(AtomicBool::new(false)),
         }

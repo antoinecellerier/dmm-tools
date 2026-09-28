@@ -90,8 +90,10 @@ Bluetooth ──► Ble (Box<dyn Transport>) ───────────�
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,
 `request_measurement()`, `parse_payload()`, `send_command()`, `choices()`/`select()`,
-`get_name()`, `profile()`, and `capture_steps()`. Each family implements its own framing,
-parsing, and command encoding internally, but all produce the same `Measurement` struct.
+`get_name()`, `profile()`, `capture_steps()`, and `delivery()`: whether the meter answers
+requests (`Delivery::Polled`) or sends readings on its own (`Delivery::Streamed`), decided at
+`init` where the link matters. Each family implements its own framing, parsing, and command
+encoding internally, but all produce the same `Measurement` struct.
 
 `Dmm` keeps the meter's name, the one copy for every family: `Dmm::get_name()` returns the
 name the meter already gave on this link, else asks and keeps the answer, and

@@ -204,6 +204,10 @@ impl Ut171Protocol {
 }
 
 impl Protocol for Ut171Protocol {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Streamed
+    }
+
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // Send connect command to start streaming.
         // User must also enable "Communication ON" on the meter.

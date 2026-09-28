@@ -183,6 +183,20 @@ impl Stability {
     }
 }
 
+/// How readings leave the meter: asked for one at a time, or sent on its own.
+///
+/// [`crate::stream::MeasurementStream`] paces a polled meter's requests to
+/// the sample interval, and reads a streaming one continuously, keeping one
+/// reading per interval; [`crate::Dmm`] drops what a streaming meter queued
+/// while nobody read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delivery {
+    /// The meter answers a request and sends nothing unasked.
+    Polled,
+    /// The meter sends frames on its own clock, whether or not anyone reads.
+    Streamed,
+}
+
 /// Static profile information about a device.
 ///
 /// `Copy` so consumers can cache one without holding the protocol instance
@@ -681,6 +695,14 @@ pub trait Protocol: Send {
     /// For polled protocols: sends request + reads response.
     /// For streaming protocols: reads the next frame from the stream.
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement>;
+
+    /// Whether the meter answers requests or sends on its own. Decided by
+    /// `init` where the link matters (the UT61+ polls on a cable and streams
+    /// over Bluetooth), so it is asked after it.
+    ///
+    /// Required: a streaming family left on a polled default would be read
+    /// only when asked, and hand back frames that queued in between.
+    fn delivery(&self) -> Delivery;
 
     /// Parse one measurement payload off the wire, with no I/O.
     ///

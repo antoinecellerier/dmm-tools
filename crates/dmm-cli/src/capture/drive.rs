@@ -1079,6 +1079,9 @@ mod tests {
     }
 
     impl dmm_lib::protocol::Protocol for Fails {
+        fn delivery(&self) -> dmm_lib::protocol::Delivery {
+            self.inner.delivery()
+        }
         fn init(&mut self, t: &dyn dmm_lib::transport::Transport) -> dmm_lib::error::Result<()> {
             self.inner.init(t)
         }

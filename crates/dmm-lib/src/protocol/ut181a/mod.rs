@@ -117,6 +117,10 @@ impl Ut181aProtocol {
 }
 
 impl Protocol for Ut181aProtocol {
+    fn delivery(&self) -> crate::protocol::Delivery {
+        crate::protocol::Delivery::Streamed
+    }
+
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // User must enable "Communication ON" on the meter; SET_MONITOR
         // starts the measurement stream.

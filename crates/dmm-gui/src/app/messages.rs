@@ -174,6 +174,7 @@ impl App {
             selected: device_entry,
             query_name: self.settings.query_device_name,
             sample_interval_ms,
+            simulated: false,
             reconnect_interval: RECONNECT_INTERVAL,
             stop_flag,
         };
@@ -220,10 +221,7 @@ impl App {
                     }
                 }
             };
-            // Mock returns instantly — enforce a floor to avoid busy-looping.
-            // This is session time now, which is what lets a preseed burst
-            // hand out tick-spaced history without waiting for it.
-            thread_ctx.sample_interval_ms = sample_interval_ms.max(100);
+            thread_ctx.simulated = true;
             let clock = self.clock.clone();
             spawn_acquisition(
                 // Cloned inside: this closure is re-run on every reconnect,
