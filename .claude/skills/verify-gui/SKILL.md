@@ -27,7 +27,7 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/gui-display.sh *)
 1. `start` — bring up the private display.
 2. `run [dmm-gui args…]` — build and launch; prints `WID=<window id>` and the log path.
 3. `key <chord>` / `click <x> <y> [left|right]` / `wheel <x> <y> [up|down] [ctrl]` — drive the window; `resize <width> <height>` to check a layout at another size.
-4. `shot <out.png>` — capture the private display.
+4. `shot <out.png>` — capture the app's window; `shot <out.png> --root` captures the whole private display.
 5. View the PNG with the Read tool, or sample pixels with python3 + PIL to compute contrast numerically. Write screenshots to the session scratchpad directory.
 6. `stop` — kill dmm-gui and the display.
 
@@ -52,7 +52,7 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh stop
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 ```
 
-`run` defaults to `--device mock`, takes the other simulated meters (`--device mock-zt5b`), refuses any other `--device` unless the user has approved real hardware (`VERIFY_GUI_ALLOW_HW=1`; with it and no `--device`, the app opens what `settings.json` names), uses a private `XDG_CONFIG_HOME` and `XDG_DATA_HOME` so the user's `settings.json` and desktop entries are untouched, and waits for the window plus the first frames. `resize` reshapes the window for small-window checks: there is no window manager on the private display, so the app's `MinInnerSize` hint is not enforced, but the app re-grows a window below its own computed minimum — the command prints the size it settled on. `VERIFY_GUI_GEOMETRY=WxHxDEPTH` (default `1600x1000x24`) sets the root window; `start` reuses a running Xvfb, so `stop` before changing it, and note that an env-var prefix falls outside this skill's allowed-tools pattern and will prompt. `shot` writes plain `.png` paths only. Every subcommand exits non-zero with a message naming the log when something fails — a missing window means the app died or drew elsewhere, so read the log before retrying.
+`run` defaults to `--device mock`, takes the other simulated meters (`--device mock-zt5b`), refuses any other `--device` unless the user has approved real hardware (`VERIFY_GUI_ALLOW_HW=1`; with it and no `--device`, the app opens what `settings.json` names), uses a private `XDG_CONFIG_HOME` and `XDG_DATA_HOME` so the user's `settings.json` and desktop entries are untouched, and waits for the window plus the first frames. `resize` reshapes the window for small-window checks: there is no window manager on the private display, so the app's `MinInnerSize` hint is not enforced, but the app re-grows a window below its own computed minimum — the command prints the size it settled on. `VERIFY_GUI_GEOMETRY=WxHxDEPTH` (default `1600x1000x24`) sets the root window; `start` reuses a running Xvfb, so `stop` before changing it, and note that an env-var prefix falls outside this skill's allowed-tools pattern and will prompt. `shot` writes plain `.png` paths only, cropped to the app's window (dialogs drawn over it included); pass `--root` for anything outside it, such as the What's New viewport or a save dialog placed beside the app. Every subcommand exits non-zero with a message naming the log when something fails — a missing window means the app died or drew elsewhere, so read the log before retrying.
 
 ## Input behaviour
 

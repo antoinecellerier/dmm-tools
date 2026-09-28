@@ -367,7 +367,7 @@ keyboard/click tests never touch your live desktop session or your
 
 It needs `xvfb`, `xdotool` and `imagemagick` (plus `python3-pil` for pixel
 measurement). `start`, `run`, `key`, `click`, `wheel`, `resize`, `shot`, `status`
-and `stop` are the individual steps; always finish with `stop`.
+and `stop` are the individual steps; always finish with `stop`. `shot` crops to the app's window; `shot <out.png> --root` keeps the whole display.
 
 `wheel <x> <y> [up|down] [ctrl]` sends one wheel tick at window-relative
 coordinates, and `resize <width> <height>` reshapes the window for small-window

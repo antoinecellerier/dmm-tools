@@ -199,19 +199,37 @@ cmd_run() {
 }
 
 cmd_shot() {
-	require import
-	local out="${1:-}" size
-	[ -n "$out" ] || die "usage: shot <out.png>"
+	require import convert
+	local out="${1:-}" root="${2:-}" size w geom X Y WIDTH HEIGHT
+	[ -n "$out" ] || die "usage: shot <out.png> [--root]"
 	# A plain .png path only: ImageMagick would take "txt:/path" or a ".json"
-	# suffix as a coder and write any file the user can, with no prompt.
+	# suffix as a coder and write any file the user can, with no prompt, and
+	# the crop reads the file back, where "@list", globs and "%d" expand.
+	[[ "$out" =~ ^[A-Za-z0-9_./][A-Za-z0-9_./-]*$ ]] || die "shot needs a plain .png path"
 	case "$out" in
-	-* | *:*) die "shot needs a plain .png path" ;;
 	*.png) ;;
 	*) die "shot writes .png only" ;;
 	esac
+	case "$root" in "" | --root) ;; *) die "usage: shot <out.png> [--root]" ;; esac
 	[ ! -L "$out" ] || die "refusing symlink $out"
 	onx import -window root "$out" || die "import failed — is the private display up?"
 	[ -f "$out" ] || die "no screenshot written to $out"
+	# Cropped to the app's window unless --root: the rest of the display is
+	# black. The crop is of the root capture, not the window alone, so a
+	# dialog drawn over the app stays in; --root keeps what lies outside it,
+	# such as a second viewport. With no app running, the whole display.
+	w="$(state_get wid)"
+	if [ -z "$root" ] && [[ "$w" =~ ^[0-9]+$ ]] && alive_as "$(state_get gui.pid)" dmm-gui; then
+		geom="$(onx xdotool getwindowgeometry --shell "$w" 2>/dev/null)" || geom=""
+		X="$(sed -n 's/^X=\([0-9]\{1,\}\)$/\1/p;T;q' <<<"$geom")"
+		Y="$(sed -n 's/^Y=\([0-9]\{1,\}\)$/\1/p;T;q' <<<"$geom")"
+		WIDTH="$(sed -n 's/^WIDTH=\([0-9]\{1,\}\)$/\1/p;T;q' <<<"$geom")"
+		HEIGHT="$(sed -n 's/^HEIGHT=\([0-9]\{1,\}\)$/\1/p;T;q' <<<"$geom")"
+		if [ -n "$X" ] && [ -n "$Y" ] && [ -n "$WIDTH" ] && [ -n "$HEIGHT" ]; then
+			convert "$out" -crop "${WIDTH}x${HEIGHT}+${X}+${Y}" +repage "$out" ||
+				die "cropping $out to the window failed"
+		fi
+	fi
 	size="$(stat -c %s "$out")"
 	[ "$size" -ge "$MIN_PNG_BYTES" ] ||
 		die "screenshot $out is ${size}B (< ${MIN_PNG_BYTES}B) — capture failed"
@@ -339,7 +357,7 @@ cmd_status() {
 }
 
 cmd_selftest() {
-	require Xvfb xdotool import
+	require Xvfb xdotool import convert
 	local png="$STATE/selftest.png" colors rc=0
 	cmd_start
 	cmd_run --device mock
@@ -360,5 +378,5 @@ sub="${1:-}"
 shift || true
 case "$sub" in
 start | run | shot | key | click | wheel | resize | stop | status | selftest) "cmd_$sub" "$@" ;;
-*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png>|key <chord>|click <x> <y> [left|right]|wheel <x> <y> [up|down] [ctrl]|resize <width> <height>|stop|status|selftest}" ;;
+*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png> [--root]|key <chord>|click <x> <y> [left|right]|wheel <x> <y> [up|down] [ctrl]|resize <width> <height>|stop|status|selftest}" ;;
 esac
