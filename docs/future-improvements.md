@@ -318,6 +318,12 @@ Use cases: the documentation's overlays picture had to be composed to keep the l
 
 Zoomed out to many samples per pixel, a noisy trace's edges shimmer slightly as live view scrolls: each new reading moves the view by a fraction of a pixel and changes which samples land in each column. The every-sample drawing did it too. Thinning at half-pixel spans of session time changed neither how much nor how often the edges move, and spans cut on the screen's own pixel columns measured worse. It shows most at 100 % display scale and less at 166 %. Candidates: advance the live view in whole-pixel steps rather than by each reading's fraction, or cut the drawn line down to the minimap's per-bucket extents, which don't move within a bucket.
 
+### A sub-value's line style at wide zoom
+
+**Complexity:** Medium
+
+Zoomed out on a noisy sub-value, its dashes merge into a solid band, so only colour tells it from the plotted series — against the rule that colour is never the only cue. Laying the dashes along time instead of along the line keeps a visible pattern and costs less to draw, but was rejected (2026-09-28, compared side by side): a one-sample spike or a vertical Min/Max step that falls in a gap is not drawn at all, and on sparse data the dashes cut steep strokes unevenly. A fix must keep every extreme visible — for instance a lighter fill or an outline for a dense band.
+
 ### Measurement rate display
 
 **Complexity:** Low
