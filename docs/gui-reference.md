@@ -243,6 +243,12 @@ A thin strip below the main plot showing the full capture history.
 
 ## Recording
 
+- **Import…** button (`Ctrl+I`) — opens an exported CSV, JSON or replay file
+  as a session of its own, with its markers: the top bar names the file, and
+  the markers, notes, cursors and view can be changed and exported again. It
+  replaces the session, asking first about unexported samples and markers;
+  Connect leaves it for a meter. A file longer than the
+  [buffer size](#settings) keeps its first readings
 - **Record (●) / Stop (■)** toggle button — starting replaces the previous
   recording, asking first if it holds samples you haven't exported; the
   graph's readings are kept
@@ -482,6 +488,7 @@ shows the macOS spelling.
 | `Ctrl+T` | Toggle always on top (not available on Wayland — right-click the title bar instead) |
 | `Ctrl+D` | Toggle window decorations |
 | `Ctrl+E` | Export CSV… |
+| `Ctrl+I` | Import a file… |
 | `N` | Add a marker at the reading on screen |
 | `Ctrl+N` | Add a marker and write its note |
 | `F11` (`Ctrl+Cmd+F` on macOS) | Toggle fullscreen |

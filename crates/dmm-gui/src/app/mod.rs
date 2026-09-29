@@ -358,6 +358,8 @@ pub struct App {
     import_cadence_ms: Option<u32>,
     /// `--import`'s file, imported on the first frame.
     pending_import: Option<std::path::PathBuf>,
+    /// Import…'s open dialog, answering on its own thread.
+    import_dialog: Option<mpsc::Receiver<Option<std::path::PathBuf>>>,
     marker_list: marker_list::MarkerList,
     /// Time base the session's readings are stamped with — real unless a
     /// `--mock-clock-*` flag was given. Cloned into the acquisition thread so
@@ -482,6 +484,7 @@ impl App {
             imported: None,
             import_cadence_ms: None,
             pending_import: None,
+            import_dialog: None,
             marker_list: marker_list::MarkerList::default(),
             clock,
             replay: None,
@@ -800,6 +803,7 @@ impl eframe::App for App {
         // Shortcuts first: `N` marks the reading the user saw, not one that
         // arrives with this frame.
         self.drain_messages();
+        self.poll_import_dialog();
         self.step_import(&ctx);
         self.trim_markers();
         self.poll_export(&ctx);
@@ -809,9 +813,13 @@ impl eframe::App for App {
             .poll(&ctx, self.settings.check_for_updates);
 
         // Auto-reconnect after device selection change
+        // Not over an imported session: a device picked in Settings
+        // applies at the next Connect, which asks about unsaved markers.
         if self.connection.needs_reconnect {
             self.connection.needs_reconnect = false;
-            self.connect(&ctx);
+            if self.imported.is_none() && self.import_job.is_none() {
+                self.connect(&ctx);
+            }
         }
 
         // Expire the toast, unless the user closed it first

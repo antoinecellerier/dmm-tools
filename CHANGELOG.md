@@ -17,6 +17,7 @@
 ### GUI
 
 - **Mark moments with `N`, `Ctrl+N`, a log row's `+` or the graph's right-click menu, and write notes on them** — drawn on the graph and minimap, and included in CSV, JSON and replay exports.
+- **Import… opens an exported CSV, JSON or replay file, with its markers** — `Ctrl+I`, or `--import FILE` at launch.
 - **The top bar links to a newer release when one is out** — downloaded builds check GitHub once a day; Settings turns it off ([#37](https://github.com/antoinecellerier/dmm-tools/issues/37)).
 - **The graph plots NCV levels** — turning to NCV left the previous mode's trace on screen.
 - **The recording log scrolls back through the whole recording** — it showed only the last 500 samples.

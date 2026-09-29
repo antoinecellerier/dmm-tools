@@ -27,6 +27,7 @@ enum Shortcut {
     ToggleAlwaysOnTop,
     ToggleDecorations,
     ExportRecording,
+    ImportFile,
     ToggleFullscreen,
     Minimize,
     ZoomIn,
@@ -159,6 +160,12 @@ const BINDINGS: &[Binding] = &[
         shortcut: Shortcut::ExportRecording,
         os: Os::Any,
     },
+    Binding {
+        modifiers: Modifiers::COMMAND,
+        key: Key::I,
+        shortcut: Shortcut::ImportFile,
+        os: Os::Any,
+    },
     // Fires inside a note too: from one note, it moves on to the next marker.
     Binding {
         modifiers: Modifiers::COMMAND,
@@ -252,6 +259,7 @@ impl Shortcut {
         Self::ClearSession,
         Self::ToggleRecording,
         Self::ExportRecording,
+        Self::ImportFile,
         Self::AddMarker,
         Self::AddMarkerAndNote,
         Self::CycleBigMeter,
@@ -308,6 +316,7 @@ impl Shortcut {
                 "Toggle window decorations",
             ),
             Self::ExportRecording => (keys(Modifiers::COMMAND, Key::E), "Export CSV\u{2026}"),
+            Self::ImportFile => (keys(Modifiers::COMMAND, Key::I), "Import a file\u{2026}"),
             Self::AddMarker => (
                 keys(Modifiers::NONE, Key::N),
                 "Add a marker at the reading on screen",
@@ -477,7 +486,7 @@ impl App {
 
             match binding.shortcut {
                 Shortcut::ConnectToggle => match self.connection.state {
-                    ConnectionState::Disconnected => self.connect(ctx),
+                    ConnectionState::Disconnected => self.request_connect(ctx),
                     // Reconnecting cancels the retry loop, matching the
                     // Disconnect button shown in that state.
                     ConnectionState::Connected | ConnectionState::Reconnecting => self.disconnect(),
@@ -519,6 +528,7 @@ impl App {
                 Shortcut::ExportRecording => {
                     self.export_recording(ctx, super::export::ExportFormat::Csv)
                 }
+                Shortcut::ImportFile => self.begin_import(),
                 Shortcut::AddMarker => self.add_marker(false),
                 Shortcut::AddMarkerAndNote => self.add_marker(true),
                 // Transient window state, deliberately not saved in settings:
@@ -667,6 +677,7 @@ mod tests {
                 ("Ctrl+L", "Clear graph & statistics"),
                 ("Ctrl+R", "Toggle recording"),
                 ("Ctrl+E", "Export CSV\u{2026}"),
+                ("Ctrl+I", "Import a file\u{2026}"),
                 ("N", "Add a marker at the reading on screen"),
                 ("Ctrl+N", "Add a marker and write its note"),
                 ("Ctrl+B", "Cycle big meter (off / full / minimal)"),

@@ -229,16 +229,21 @@ Use cases: Home Assistant, Node-RED, InfluxDB/Grafana pipelines, multi-meter agg
 
 ## Data Replay & Export
 
-### CSV import / offline analysis
+### Summarising an export without a GUI
+
+**Complexity:** Small
+
+Import… opens a CSV or JSON export in the GUI; the CLI has no counterpart yet. `dmm-cli read --import FILE` would print its readings and closing statistics, or convert it to another format, through the read loop's own writers.
+
+Use cases: a summary of a session someone else exported, converting a CSV to JSON for a script.
+
+### Compare against an imported run
 
 **Complexity:** Medium
 
-A `.replay` file already opens as a device in both binaries (`--replay`), but it holds the meter's frames. Open: loading an exported CSV back into the GUI — graph, statistics, cursors on historical data — and summarising a file without a GUI.
+An import replaces the session. Overlaying a saved run on the live graph instead — a reference boot sequence against today's, say — needs a second trace with its own time alignment (start, a marker, a threshold crossing) and its own entry in the plot key, and leaves the live session's statistics and recording alone.
 
-- GUI: open a CSV export as a read-only session
-- CLI: `dmm-cli analyze capture.csv --stats`
-
-Use cases: analysing a session that was only exported as CSV, sharing captures with colleagues, comparing measurements from different sessions.
+Use cases: checking a board's power-up against a known-good capture; regression testing a firmware change.
 
 ### Graph image export
 

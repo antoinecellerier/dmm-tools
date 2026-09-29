@@ -37,6 +37,15 @@ fn sample_count(n: usize) -> String {
     format!("{n} {}", noun(n))
 }
 
+/// What the panel says under an imported session's buttons.
+fn imported_hint(from: &super::import::ImportedFrom) -> String {
+    format!(
+        "Imported {} from {}. Export\u{2026} saves them with your markers.",
+        super::import::readings_noun(from.readings),
+        super::import::file_name(&from.path)
+    )
+}
+
 /// The line under the Record / Export row while nothing is recorded: what
 /// Export saves, and what Record is for — the graph's samples go with its
 /// restarts, a recording does not.
@@ -73,6 +82,22 @@ fn discard_prompt(action: DiscardFor, samples: usize, markers: usize) -> (&'stat
                 ""
             };
             format!("Starting a new recording will discard {lost}.{stay}")
+        }
+        DiscardFor::Import => {
+            let lost = match (samples, markers) {
+                (0, _) => changes,
+                (n, 0) => format!("{n} unexported {samples_noun}"),
+                (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
+            };
+            format!("Importing replaces this session and will discard {lost}.")
+        }
+        DiscardFor::Connect => {
+            let lost = match (samples, markers) {
+                (0, _) => changes,
+                (n, 0) => format!("{n} unexported {samples_noun}"),
+                (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
+            };
+            format!("Connecting ends the imported session and will discard {lost}.")
         }
         DiscardFor::Discard => {
             let lost = match (samples, markers) {
@@ -115,6 +140,11 @@ enum DiscardFor {
     Record,
     /// Discard was pressed: the buffer goes back to following the graph.
     Discard,
+    /// A file was picked to import: it replaces the session.
+    Import,
+    /// Connect was pressed in an imported session: a meter's session
+    /// replaces it.
+    Connect,
 }
 
 /// The recording panel's own state: how tall the user dragged it, and the
@@ -125,6 +155,8 @@ pub(super) struct RecordingPanel {
     /// Record or Discard was pressed while the recording held unexported
     /// samples; waiting for the user to confirm losing them.
     pending_discard: Option<DiscardFor>,
+    /// The file an import asked about is waiting to replace the session.
+    pending_import: Option<std::path::PathBuf>,
     confirm_discard_focus_pending: bool,
     /// The Export… menu opened this frame; its first entry still has to be
     /// given the focus — see `show_export_menu`.
@@ -136,6 +168,7 @@ impl Default for RecordingPanel {
         Self {
             height: DEFAULT_RECORDING_HEIGHT,
             pending_discard: None,
+            pending_import: None,
             confirm_discard_focus_pending: false,
             export_menu_focus_pending: false,
         }
@@ -172,10 +205,34 @@ impl App {
         self.apply_discard();
     }
 
+    /// Ask before an import of `path` replaces a session holding samples or
+    /// markers no file does; `true` when it asked, and the import waits.
+    pub(super) fn ask_before_importing(&mut self, path: std::path::PathBuf) -> bool {
+        if self.discard_losses(DiscardFor::Import) == (0, 0) {
+            return false;
+        }
+        self.recording_panel.pending_import = Some(path);
+        self.ask_before_discarding(DiscardFor::Import);
+        true
+    }
+
+    /// Connect, or `Ctrl+O`: an imported session gives way to a meter, so
+    /// markers or notes added to it since the import are asked about first,
+    /// as Record and Import ask.
+    pub(super) fn request_connect(&mut self, ctx: &egui::Context) {
+        if (self.imported.is_some() || self.import_job.is_some())
+            && self.discard_losses(DiscardFor::Connect) != (0, 0)
+        {
+            self.ask_before_discarding(DiscardFor::Connect);
+            return;
+        }
+        self.connect(ctx);
+    }
+
     /// The samples and markers no file holds that `action` would lose.
     fn discard_losses(&self, action: DiscardFor) -> (usize, usize) {
         match action {
-            DiscardFor::Record => (
+            DiscardFor::Record | DiscardFor::Import | DiscardFor::Connect => (
                 self.capture.recording.unexported_count(),
                 self.capture.recording.unsaved_marker_count(&self.markers),
             ),
@@ -189,11 +246,17 @@ impl App {
     }
 
     /// Go ahead with what the prompt was asked about.
-    fn apply_pending_discard(&mut self, action: DiscardFor) {
+    fn apply_pending_discard(&mut self, action: DiscardFor, ctx: &egui::Context) {
         self.recording_panel.pending_discard = None;
         match action {
+            DiscardFor::Connect => self.connect(ctx),
             DiscardFor::Record => self.apply_recording_toggle(),
             DiscardFor::Discard => self.apply_discard(),
+            DiscardFor::Import => {
+                if let Some(path) = self.recording_panel.pending_import.take() {
+                    self.import_file(path);
+                }
+            }
         }
     }
 
@@ -257,7 +320,7 @@ impl App {
         if unexported == 0 && markers == 0 {
             // An export completed while the prompt was up — nothing left to
             // warn about.
-            self.apply_pending_discard(action);
+            self.apply_pending_discard(action, ctx);
             return;
         }
 
@@ -286,6 +349,8 @@ impl App {
                 let confirm = match action {
                     DiscardFor::Record => "Discard and record",
                     DiscardFor::Discard => "Discard recording",
+                    DiscardFor::Import => "Discard and import",
+                    DiscardFor::Connect => "Discard and connect",
                 };
                 if ui.button(confirm).clicked() {
                     discard = true;
@@ -294,9 +359,10 @@ impl App {
         });
 
         if discard {
-            self.apply_pending_discard(action);
+            self.apply_pending_discard(action, ctx);
         } else if cancel || modal.should_close() {
             self.recording_panel.pending_discard = None;
+            self.recording_panel.pending_import = None;
         }
     }
 
@@ -310,14 +376,28 @@ impl App {
             )
         };
 
+        // An import under way counts: its recording is filling.
+        let imported = self.imported.is_some() || self.import_job.is_some();
         ui.horizontal(|ui| {
-            if ui.button(btn_label).on_hover_text(btn_tooltip).clicked() {
+            // First, apart from the recording's own controls: an import
+            // replaces the session, where the rest act on the recording and
+            // Export… sits next to the count it saves.
+            if ui
+                .button("Import\u{2026}")
+                .on_hover_text("Open an exported CSV, JSON or replay file (Ctrl+I)")
+                .clicked()
+            {
+                self.begin_import();
+            }
+            // An imported session takes no readings: nothing to record, and
+            // its recording is the file, which Discard would only lose.
+            if !imported && ui.button(btn_label).on_hover_text(btn_tooltip).clicked() {
                 self.toggle_recording();
             }
             self.show_export_button(ui);
             let count = self.capture.recording.recording_samples().len();
             let recorded = self.capture.recording.role() == BufferRole::Recording;
-            if recorded && !self.capture.recording.active && count > 0 {
+            if recorded && !imported && !self.capture.recording.active && count > 0 {
                 let discard = ui.button("Discard").on_hover_text(
                     "Discard the recording; Export then saves samples from the graph",
                 );
@@ -346,10 +426,15 @@ impl App {
         });
 
         let history = self.capture.recording.history_samples().len();
-        if self.capture.recording.role() == BufferRole::History && history > 0 {
+        let caption = match &self.imported {
+            Some(from) => Some(imported_hint(from)),
+            None => (self.capture.recording.role() == BufferRole::History && history > 0)
+                .then(|| history_hint(history)),
+        };
+        if let Some(caption) = caption {
             ui.add(
                 egui::Label::new(
-                    RichText::new(history_hint(history))
+                    RichText::new(caption)
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 )
@@ -769,8 +854,8 @@ mod tests {
         run.frame(1.0, vec![]);
         let arrow = run.node_rect("Export file type");
 
-        // Record, Export… and then the arrow.
-        for _ in 0..3 {
+        // Import…, Record, Export… and then the arrow.
+        for _ in 0..4 {
             run.key(Key::Tab);
         }
         let focused = run.focused_rect().expect("Tab reached the arrow");

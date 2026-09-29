@@ -241,6 +241,7 @@ Three components stacked vertically:
 
 - Record/Stop toggle button
 - Discard button beside Export… once a recording has stopped: drops it, and Export… saves the graph's readings, the recording's among them while the graph holds them. It asks only about unexported samples and markers the graph has dropped; with nothing lost the toast says what Export… now saves. Record over a kept recording asks about all of its unexported samples, since Export… saves the recording while there is one
+- Import… button first in the recording row, before Record (open dialog on a separate thread, as Export's), so Record, Export…, Discard and the sample count stay together as the recording's controls: an import replaces the session, so it goes through the discard prompt Record uses; the file's readings go into a stopped recording counted as saved, without the software transform, and the top bar names the file with a ring in place of the status dot — shape as well as colour saying no meter is attached
 - Export… split button (file dialog on a separate thread — no UI freeze; the label saves a CSV, the arrow's menu picks CSV, JSON or replay: the format is settled before the dialog opens because rfd returns the path but not the file type picked, and the GTK chooser keeps the name's extension when its filter changes)
 - Shows sample count and duration while recording
 - Records to in-memory buffer, exported on demand

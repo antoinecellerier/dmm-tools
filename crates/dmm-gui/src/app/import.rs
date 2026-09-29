@@ -237,7 +237,58 @@ fn median_spacing(offsets: &[Duration]) -> Duration {
     *gaps.select_nth_unstable(mid).1
 }
 
+/// The file types Import… offers, as Export… writes them.
+const IMPORT_EXTENSIONS: [&str; 3] = ["csv", "json", "replay"];
+
 impl App {
+    /// Import… or `Ctrl+I`: pick a file in the system's open dialog, on a
+    /// thread of its own as Export…'s save dialog is, answered next frame.
+    pub(super) fn begin_import(&mut self) {
+        if self.import_dialog.is_some() {
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let picked = std::panic::catch_unwind(|| {
+                rfd::FileDialog::new()
+                    .add_filter("Exported readings", &IMPORT_EXTENSIONS)
+                    .pick_file()
+            })
+            .unwrap_or_else(|_| {
+                warn!("the open dialog failed");
+                None
+            });
+            let _ = tx.send(picked);
+        });
+        self.import_dialog = Some(rx);
+    }
+
+    /// The file the open dialog answered with, once it has.
+    pub(super) fn poll_import_dialog(&mut self) {
+        let Some(rx) = &self.import_dialog else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(picked) => {
+                self.import_dialog = None;
+                if let Some(path) = picked {
+                    self.request_import(path);
+                }
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => self.import_dialog = None,
+        }
+    }
+
+    /// Import `path`, asking first if the session holds samples or markers
+    /// no file does: the import replaces it.
+    pub(super) fn request_import(&mut self, path: PathBuf) {
+        if self.ask_before_importing(path.clone()) {
+            return;
+        }
+        self.import_file(path);
+    }
+
     /// Import `path`: a fresh session, the meter disconnected, the file read
     /// on a thread of its own and taken in over the next frames.
     pub(super) fn import_file(&mut self, path: PathBuf) {
@@ -646,4 +697,76 @@ timestamp,mode,value,unit,range,flags,marker,note
         assert!(app.imported.is_none());
         let _ = std::fs::remove_file(path);
     }
+}
+
+#[cfg(test)]
+mod prompt_tests {
+    use super::*;
+    use crate::settings::Settings;
+    use dmm_lib::measurement::MeasuredValue;
+
+    /// An import replaces the session: with unexported samples it asks
+    /// first and waits, with nothing to lose it goes straight ahead.
+    #[test]
+    fn an_import_over_unexported_samples_asks_first() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let path =
+            std::env::temp_dir().join(format!("dmm-gui-import-{}-ask.csv", std::process::id()));
+        std::fs::write(&path, super::tests_support::CSV).expect("write");
+
+        app.request_import(path.clone());
+        assert!(
+            app.import_job.is_some(),
+            "nothing to lose: imported at once"
+        );
+        app.import_job = None;
+
+        app.capture.recording.toggle(Instant::now());
+        let m = Measurement::test_fixture(
+            MeasuredValue::Normal(1.0),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        );
+        app.capture.recording.push(&m, 0);
+        app.request_import(path.clone());
+        assert!(app.import_job.is_none(), "waits for the answer");
+        assert!(!app.recording_panel_idle(), "the prompt is up");
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[cfg(test)]
+mod connect_tests {
+    use super::*;
+    use crate::settings::Settings;
+
+    /// Connect after an import asks first once markers were added to the
+    /// imported session, and goes straight ahead when nothing changed.
+    #[test]
+    fn a_connect_over_new_markers_asks_first() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let path =
+            std::env::temp_dir().join(format!("dmm-gui-import-{}-connect.csv", std::process::id()));
+        std::fs::write(&path, super::tests_support::CSV).expect("write");
+        let ctx = egui::Context::default();
+        app.import_file(path.clone());
+        while app.import_job.is_some() {
+            app.step_import(&ctx);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        app.add_marker(false);
+        app.request_connect(&ctx);
+        assert!(!app.recording_panel_idle(), "the prompt is up");
+        assert!(app.imported.is_some(), "the session waits for the answer");
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[cfg(test)]
+mod tests_support {
+    /// A small CSV export, for tests outside `tests`.
+    pub(super) const CSV: &str = "\
+timestamp,mode,value,unit,range,flags
+2026-09-02T10:00:00+00:00,DC V,1.6109,V,2.2V,AUTO
+";
 }

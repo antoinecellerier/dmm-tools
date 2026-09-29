@@ -76,9 +76,22 @@ impl App {
             // one detection found. Under Auto-detect with nothing connected
             // there is no meter to name yet — the label says what will happen
             // instead, and is replaced by the model as soon as one answers.
-            let device_label = self
-                .active_device()
-                .map_or("Auto-detect", |d| d.display_name);
+            //
+            // An imported session is the file's meter's, whatever Settings
+            // names.
+            let imported_meter: Option<String> = self.imported.as_ref().map(|_| {
+                self.capture
+                    .recording_layout
+                    .device
+                    .as_deref()
+                    .unwrap_or("Imported file")
+                    .to_string()
+            });
+            let device_label = imported_meter.clone().unwrap_or_else(|| {
+                self.active_device()
+                    .map_or("Auto-detect", |d| d.display_name)
+                    .to_string()
+            });
             ui.label(RichText::new(device_label).strong());
             ui.separator();
 
@@ -89,7 +102,7 @@ impl App {
                         .on_hover_text("Open USB connection to the selected meter (Ctrl+O)")
                         .clicked()
                     {
-                        self.connect(ctx);
+                        self.request_connect(ctx);
                     }
                 }
                 ConnectionState::Connected => {
@@ -168,7 +181,19 @@ impl App {
                         (green, text)
                     }
                 }
-                ConnectionState::Disconnected => (gray, "Disconnected".to_string()),
+                ConnectionState::Disconnected => match (&self.imported, imported_meter) {
+                    // The file stands where a link would: what the session
+                    // is on, dropped first when the bar runs out of room.
+                    (Some(from), Some(meter)) => {
+                        link_drawn = show_link;
+                        let mut text = meter;
+                        if show_link {
+                            text.push_str(&file_suffix(&from.path));
+                        }
+                        (gray, text)
+                    }
+                    _ => (gray, "Disconnected".to_string()),
+                },
                 ConnectionState::Reconnecting => {
                     let label = self.reconnecting_label();
                     (orange, label)
@@ -216,7 +241,17 @@ impl App {
                 // the middle of the status.
                 let (rect, dot) =
                     ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                ui.painter().circle_filled(rect.center(), 5.0, dot_color);
+                if self.imported.is_some() {
+                    // A ring, not a dot: no meter is on the other end, and a
+                    // shape says so where a colour alone would not.
+                    ui.painter().circle_stroke(
+                        rect.center(),
+                        4.5,
+                        egui::Stroke::new(1.5, ui.visuals().text_color()),
+                    );
+                } else {
+                    ui.painter().circle_filled(rect.center(), 5.0, dot_color);
+                }
                 let status = ui.label(RichText::new(&status_text).small());
                 if !hover.is_empty() {
                     dot.on_hover_text(&hover);
@@ -227,7 +262,10 @@ impl App {
                 // the connected one where there is one — under Auto-detect
                 // that is the only thing that names a meter at all — and from
                 // the selected entry's profile otherwise.
-                let badge = if self.connection.state == ConnectionState::Connected {
+                let badge = if self.imported.is_some() {
+                    // No protocol is decoding anything.
+                    None
+                } else if self.connection.state == ConnectionState::Connected {
                     self.connection
                         .meter
                         .as_ref()
@@ -257,6 +295,8 @@ impl App {
             // would add. Only the first reaches the window's minimum size.
             let link_w = if self.connection.state == ConnectionState::Connected {
                 link_suffix_width(ui, self.connection.link())
+            } else if let Some(from) = &self.imported {
+                text_width(ui, &file_suffix(&from.path))
             } else {
                 0.0
             };
@@ -428,6 +468,12 @@ fn connected_status(name: &str, link: Option<Link>, paused: bool) -> String {
 /// What the link adds to the status text.
 fn link_suffix(link: Link) -> String {
     format!(" \u{b7} {}", dmm_shared::help::short_name(link))
+}
+
+/// What an imported file adds to the status text: its name, where a live
+/// session names its link.
+fn file_suffix(path: &std::path::Path) -> String {
+    format!(" \u{b7} {}", super::import::file_name(path))
 }
 
 /// What that suffix would add to the row's width, in points.
