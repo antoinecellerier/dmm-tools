@@ -178,8 +178,9 @@ Three components stacked vertically: toolbar, main plot, and minimap.
   vertical line pairs
 - Overloads shown as a filled band in the error colour, drawn at their true
   duration; the crosshair reports `overload` inside one
-- [Markers](#recording) shown as dotted vertical lines, each with a flag at
-  the bottom carrying its number and as much of its note as fits; click a
+- [Markers](#recording) shown as dotted vertical lines, each with a flag in
+  the time axis's row carrying its number and as much of its note as fits,
+  in place of any time label it covers; click a
   flag to write its note. Right-click the plot and pick **Add marker here** to
   mark the reading nearest the click
 - Timeline is continuous across reconnects (data is not cleared)

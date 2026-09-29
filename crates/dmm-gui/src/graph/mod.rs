@@ -303,6 +303,9 @@ pub struct Graph {
     y_max: NumberField,
     /// Whether the user has manually set Y-axis values this session.
     y_user_set: bool,
+    /// The main plot's area at the last frame, where the marker flags are
+    /// placed while the time labels they cover are chosen.
+    plot_rect: Option<egui::Rect>,
     /// Show mean line overlay.
     pub show_mean: bool,
     /// Show min/max envelope band.
@@ -396,6 +399,7 @@ impl Graph {
             y_min: NumberField::new("-1", -1.0),
             y_max: NumberField::new("1", 1.0),
             y_user_set: false,
+            plot_rect: None,
             show_mean: false,
             show_envelope: false,
             envelope_window: NumberField::new("1", 1.0),

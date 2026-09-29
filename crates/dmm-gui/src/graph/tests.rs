@@ -3825,7 +3825,7 @@ fn a_flag_is_centred_on_its_line_and_cut_to_its_cap() {
         label.starts_with("3 \u{00B7} load on") && label.ends_with('\u{2026}'),
         "{label}"
     );
-    assert_eq!(rect.bottom(), 297.0, "along the bottom of the plot");
+    assert_eq!(rect.top(), 300.0, "hanging under the plot");
 }
 
 /// Close neighbours keep their numbers and lose their notes; closer ones

@@ -91,6 +91,31 @@ const FLAG_PAD: f32 = 5.0;
 /// Half the width of a flag's point, and its height.
 const FLAG_TIP: egui::Vec2 = egui::vec2(5.0, 6.0);
 
+/// A marker flag's text.
+fn flag_font() -> egui::FontId {
+    egui::FontId::proportional(12.0)
+}
+
+/// A marker flag's height, its point left out: the time labels' row, which
+/// it shares, or its own text's if that is taller.
+fn flag_height(ui: &Ui) -> f32 {
+    let tick_font = egui::TextStyle::Body.resolve(ui.style());
+    ui.fonts_mut(|f| f.row_height(&tick_font).max(f.row_height(&flag_font())))
+}
+
+/// The flags of the markers at screen `x` (ascending) under `plot`, laid
+/// out with [`layout_marker_flags`] in the flags' font.
+fn marker_flags(ui: &Ui, markers: &[(f32, u32, &str)], plot: egui::Rect) -> Vec<Flag> {
+    let width_of = |s: &str| {
+        ui.fonts_mut(|f| {
+            f.layout_no_wrap(s.to_string(), flag_font(), egui::Color32::PLACEHOLDER)
+                .size()
+                .x
+        })
+    };
+    layout_marker_flags(markers, plot, flag_height(ui), width_of)
+}
+
 /// The plot's right-click menu. One plot, so one id, known before the plot
 /// is drawn.
 fn plot_menu_id() -> egui::Id {
@@ -108,7 +133,8 @@ pub(super) struct Flag {
 }
 
 /// The flags of the markers at screen `x` (ascending), each labelled with
-/// its number and note, along the bottom of `plot`.
+/// its number and note, hanging under `plot` in the time axis's row, their
+/// points up at their lines.
 ///
 /// A flag is centred on its line. Its note gets no more than the gap to the
 /// nearer neighbouring line, so notes are cut before they cover a neighbour;
@@ -137,11 +163,8 @@ pub(super) fn layout_marker_flags(
         if x < left || x > left + width || left + width > plot.right() {
             continue;
         }
-        let bottom = plot.bottom() - 3.0;
-        let rect = egui::Rect::from_min_max(
-            egui::pos2(left, bottom - height),
-            egui::pos2(left + width, bottom),
-        );
+        let rect =
+            egui::Rect::from_min_size(egui::pos2(left, plot.bottom()), egui::vec2(width, height));
         flags.push(Flag {
             number,
             x,
@@ -901,8 +924,56 @@ impl Graph {
             }
         });
 
-        let x_axis = AxisHints::new_x()
-            .formatter(|mark, _range| format_time_axis_label(mark.value, mark.step_size));
+        // The marker flags hang in the time axis's row, so the time labels
+        // they would cover are left out. The formatter runs before this
+        // frame's plot exists, so the flags are placed on last frame's.
+        let flag_spans: Vec<egui::Rangef> = match self.plot_rect {
+            Some(plot) if !in_view.is_empty() && view_max > view_min => {
+                let at: Vec<(f32, u32, &str)> = in_view
+                    .iter()
+                    .map(|&(t, m)| {
+                        let share = ((t - view_min) / (view_max - view_min)) as f32;
+                        (
+                            plot.left() + share * plot.width(),
+                            m.number,
+                            m.note.as_str(),
+                        )
+                    })
+                    .collect();
+                marker_flags(ui, &at, plot)
+                    .iter()
+                    .map(|f| f.rect.x_range().expand(FLAG_AIR))
+                    .collect()
+            }
+            _ => Vec::new(),
+        };
+        let x_of = {
+            let plot = self.plot_rect.unwrap_or(egui::Rect::NOTHING);
+            move |t: f64| {
+                let share = ((t - view_min) / (view_max - view_min).max(f64::EPSILON)) as f32;
+                plot.left() + share * plot.width()
+            }
+        };
+        let tick_font = egui::TextStyle::Body.resolve(ui.style());
+        let ctx = ui.ctx().clone();
+        let x_axis = AxisHints::new_x().formatter(move |mark, _range| {
+            let text = format_time_axis_label(mark.value, mark.step_size);
+            if flag_spans.is_empty() {
+                return text;
+            }
+            let width = ctx.fonts_mut(|f| {
+                f.layout_no_wrap(text.clone(), tick_font.clone(), egui::Color32::PLACEHOLDER)
+                    .size()
+                    .x
+            });
+            let x = x_of(mark.value);
+            let label = egui::Rangef::new(x - width / 2.0, x + width / 2.0);
+            if flag_spans.iter().any(|f| f.intersects(label)) {
+                String::new()
+            } else {
+                text
+            }
+        });
 
         let show_envelope = self.show_envelope;
         let (env_min, env_max) = if show_envelope {
@@ -1160,6 +1231,8 @@ impl Graph {
             drawn_trace
         });
 
+        self.plot_rect = Some(response.response.rect);
+
         let overlay = OverlayLabelData {
             show_mean,
             mean_value,
@@ -1386,8 +1459,8 @@ impl Graph {
     /// Each marker's flag at the bottom of the plot: a tag in the marker
     /// colour pointing up at its line, with the number and as much of the
     /// note as fits, in the plot background's colour. Returns the number of
-    /// the marker whose flag was clicked, and each flag's rect with its
-    /// point, which the overlay labels keep off.
+    /// the marker whose flag was clicked, and each flag's point, the part in
+    /// the plot, which the overlay labels keep off.
     ///
     /// A flag takes clicks but not the keyboard focus: the plot would gain a
     /// Tab stop per marker, and the Recording panel's log already has one.
@@ -1405,8 +1478,6 @@ impl Graph {
         let mut clicked = None;
         let mut rects = Vec::new();
         let painter = ui.painter();
-        let font = egui::FontId::proportional(12.0);
-        let height = painter.fonts_mut(|f| f.row_height(&font)) + 4.0;
         let at: Vec<(f32, u32, &str)> = in_view
             .iter()
             .map(|&(x, m)| {
@@ -1416,13 +1487,7 @@ impl Graph {
                 (px, m.number, m.note.as_str())
             })
             .collect();
-        let width_of = |s: &str| {
-            painter
-                .layout_no_wrap(s.to_string(), font.clone(), text_color)
-                .size()
-                .x
-        };
-        for flag in layout_marker_flags(&at, plot_rect, height, width_of) {
+        for flag in marker_flags(ui, &at, plot_rect) {
             let top = flag.rect.top();
             // The point's base stays on the tag, even for one slid to an edge.
             let base = |dx: f32| (flag.x + dx).clamp(flag.rect.left(), flag.rect.right());
@@ -1440,7 +1505,7 @@ impl Graph {
                 flag.rect.center(),
                 egui::Align2::CENTER_CENTER,
                 &flag.label,
-                font.clone(),
+                flag_font(),
                 text_color,
             );
             let edit = format!("Write marker {}'s note", flag.number);
@@ -1457,7 +1522,11 @@ impl Graph {
             if response.clicked() {
                 clicked = Some(flag.number);
             }
-            rects.push(flag.rect.with_min_y(top - FLAG_TIP.y));
+            // Only the point reaches into the plot.
+            rects.push(egui::Rect::from_min_max(
+                egui::pos2(flag.x - FLAG_TIP.x, top - FLAG_TIP.y),
+                egui::pos2(flag.x + FLAG_TIP.x, top),
+            ));
         }
         (clicked, rects)
     }
