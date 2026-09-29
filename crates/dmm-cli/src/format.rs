@@ -134,17 +134,20 @@ impl Output {
         }
     }
 
-    /// Write one reading.
+    /// Write one reading, with the number and note of the marker on it, if
+    /// any: CSV and JSON carry it in their marker fields and a replay file in
+    /// a `# marker:` line after the frame. Text leaves it out.
     pub fn write(
         &mut self,
         w: &mut dyn Write,
         m: &Measurement,
         integral: Option<(f64, &str)>,
+        marker: Option<(u32, &str)>,
     ) -> std::io::Result<()> {
         match self {
             Self::Text => format_text(w, m, integral),
-            Self::Csv(layout) => format_csv(w, m, integral, *layout),
-            Self::Json { experimental } => format_json(w, m, *experimental, integral),
+            Self::Csv(layout) => format_csv(w, m, integral, *layout, marker),
+            Self::Json { experimental } => format_json(w, m, *experimental, integral, marker),
             Self::Replay { header, first } => {
                 // The payload as the meter sent it: a `--scale` is a choice
                 // the run that plays the file back makes for itself, and this
@@ -179,7 +182,13 @@ impl Output {
                     .timestamp
                     .checked_duration_since(first)
                     .unwrap_or_default();
-                w.write_all(dmm_lib::replay::sample_line(offset, &m.raw_payload).as_bytes())
+                w.write_all(dmm_lib::replay::sample_line(offset, &m.raw_payload).as_bytes())?;
+                match marker {
+                    Some((number, note)) => {
+                        w.write_all(dmm_lib::replay::marker_line(offset, number, note).as_bytes())
+                    }
+                    None => Ok(()),
+                }
             }
         }
     }
@@ -241,6 +250,7 @@ fn format_csv(
     m: &Measurement,
     integral: Option<(f64, &str)>,
     layout: CsvLayout,
+    marker: Option<(u32, &str)>,
 ) -> std::io::Result<()> {
     // Through the csv crate rather than hand-joined with commas, as the GUI
     // export already does. Several of these fields carry device-derived text:
@@ -252,8 +262,7 @@ fn format_csv(
     // Cells resolved ahead of the writer so the borrowed ones outlive the
     // record. `--scale` is fixed for the run, so every row carries the full
     // extra count the layout reserves.
-    // The CLI places no markers.
-    let cells = layout.row(m, &ts, integral, layout.extra_slots, None);
+    let cells = layout.row(m, &ts, integral, layout.extra_slots, marker);
     let mut wtr = csv::WriterBuilder::new()
         // One row per call, so the default 8 KiB buffer is dead weight — a row
         // is well under this.
@@ -274,6 +283,7 @@ fn format_json(
     m: &Measurement,
     experimental: bool,
     integral: Option<(f64, &str)>,
+    marker: Option<(u32, &str)>,
 ) -> std::io::Result<()> {
     let mut line = Vec::with_capacity(512);
     dmm_shared::export::write_measurement_json(
@@ -282,7 +292,7 @@ fn format_json(
         &timestamp_rfc3339(m),
         experimental,
         integral,
-        None,
+        marker,
     )?;
     line.push(b'\n');
     w.write_all(&line)
@@ -298,7 +308,7 @@ mod tests {
     /// One reading, as `output` writes it.
     fn rendered(mut output: Output, m: &Measurement, integral: Option<(f64, &str)>) -> String {
         let mut buf = Vec::new();
-        output.write(&mut buf, m, integral).unwrap();
+        output.write(&mut buf, m, integral, None).unwrap();
         String::from_utf8(buf).unwrap()
     }
 
@@ -774,9 +784,9 @@ mod tests {
         assert!(output.header("UNI-T UT61E+").is_none());
 
         let mut file = Vec::new();
-        output.write(&mut file, &m, None).unwrap();
+        output.write(&mut file, &m, None, None).unwrap();
         m.timestamp = first + Duration::from_millis(250);
-        output.write(&mut file, &m, None).unwrap();
+        output.write(&mut file, &m, None, None).unwrap();
 
         let text = String::from_utf8(file).expect("a replay file is UTF-8");
         let replay = Replay::parse(&text).expect("parses as a replay");
@@ -811,7 +821,7 @@ mod tests {
 
         let mut file = Vec::new();
         let e = output
-            .write(&mut file, &m, None)
+            .write(&mut file, &m, None, None)
             .expect_err("a frameless reading has nothing to record");
         assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
         assert!(e.to_string().contains("DC V"), "got {e}");

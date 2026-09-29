@@ -87,14 +87,9 @@ fn single_mode(samples: std::collections::vec_deque::Iter<'_, Sample>) -> Option
 pub(super) struct SavedMark {
     /// The buffer epoch written from.
     epoch: u64,
-    /// The recording's markers as rendered, for a format that writes
-    /// markers; `None` for a replay file, which saves none.
-    markers: Option<HashSet<u64>>,
+    /// The recording's markers as rendered.
+    markers: HashSet<u64>,
 }
-
-/// What the replay export's toast adds when the buffer had markers.
-const REPLAY_DROPS_MARKERS: &str =
-    ". Replay files don't keep markers: export CSV or JSON to keep them.";
 
 /// Result of an export, sent from the writer thread to the UI.
 pub(super) struct ExportOutcome {
@@ -120,9 +115,6 @@ pub(super) struct ExportRequest {
     /// What to mark saved once the file is written; `None` for the history,
     /// which nothing asks about before dropping.
     mark: Option<SavedMark>,
-    /// A replay file of a buffer with markers, which it leaves out: the
-    /// toast says so.
-    drops_markers: bool,
     device_model: &'static str,
     /// The CSV's columns, marker ones included when there are markers.
     csv_layout: CsvLayout,
@@ -152,7 +144,9 @@ impl ExportRequest {
             }
             ExportFormat::Replay => self
                 .replay
-                .and_then(|(id, link)| render_replay(samples, id, Some(self.device_model), link))
+                .and_then(|(id, link)| {
+                    render_replay(samples, &marked, id, Some(self.device_model), link)
+                })
                 .map(String::into_bytes)
                 .ok_or_else(|| {
                     warn!("replay export refused: the buffered samples carry no meter frames");
@@ -314,9 +308,8 @@ impl App {
             sample_count: samples().len(),
             mark: (role == BufferRole::Recording).then(|| SavedMark {
                 epoch: self.capture.recording.epoch(),
-                markers: (format != ExportFormat::Replay).then(|| Recording::marker_keys(&marked)),
+                markers: Recording::marker_keys(&marked),
             }),
-            drops_markers: format == ExportFormat::Replay && !marked.is_empty(),
             device_model,
             csv_layout: CsvLayout {
                 markers: !marked.is_empty(),
@@ -518,18 +511,11 @@ impl App {
         let (tx, rx) = mpsc::channel::<ExportOutcome>();
         let ctx = ctx.clone();
         let ExportRequest {
-            sample_count,
-            mark,
-            drops_markers,
-            ..
+            sample_count, mark, ..
         } = request;
         std::thread::spawn(move || {
             let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let mut outcome = write_export(&path, &bytes, sample_count, mark);
-                if drops_markers && !outcome.is_error {
-                    outcome.message.push_str(REPLAY_DROPS_MARKERS);
-                }
-                outcome
+                write_export(&path, &bytes, sample_count, mark)
             }))
             .unwrap_or_else(|panic| {
                 let message = panic_text(panic.as_ref());
@@ -900,9 +886,7 @@ mod tests {
             prepared.mark,
             Some(SavedMark {
                 epoch: app.capture.recording.epoch(),
-                markers: Some(Recording::marker_keys(
-                    &app.capture.recording.marked(app.markers.iter())
-                )),
+                markers: Recording::marker_keys(&app.capture.recording.marked(app.markers.iter())),
             })
         );
         // Nothing named a meter, so the file says so.
@@ -927,15 +911,11 @@ mod tests {
         );
     }
 
-    /// A replay file has nowhere to put markers: it saves none of them, and
-    /// its toast says so.
+    /// A replay file saves the markers as CSV and JSON do, and writes them.
     #[test]
-    fn a_replay_export_leaves_the_markers_out() {
+    fn a_replay_export_keeps_the_markers() {
         let mut app = app_holding(0, 0, &[0, 0]);
         app.capture.recording_layout.device_id = Some("ut61eplus");
-        let prepared = app.prepare_export(ExportFormat::Replay).expect("frames");
-        assert!(!prepared.drops_markers, "no markers to leave out");
-
         app.last_measurement = app
             .capture
             .recording
@@ -944,15 +924,21 @@ mod tests {
             .map(|s| s.measurement.clone());
         app.add_marker(false);
         let prepared = app.prepare_export(ExportFormat::Replay).expect("frames");
-        assert!(prepared.drops_markers);
-        assert_eq!(prepared.mark.map(|m| m.markers), Some(None));
-        let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
         assert_eq!(
-            prepared.mark.map(|m| m.markers),
-            Some(Some(Recording::marker_keys(
+            prepared.mark.clone().map(|m| m.markers),
+            Some(Recording::marker_keys(
                 &app.capture.recording.marked(app.markers.iter())
-            )))
+            ))
         );
+        let text = String::from_utf8(
+            prepared
+                .render(app.capture.recording.export_samples())
+                .expect("a replay"),
+        )
+        .expect("text");
+        let replay = dmm_lib::replay::Replay::parse(&text).expect("a replay file");
+        assert_eq!(replay.markers.len(), 1);
+        assert_eq!(replay.markers[0].number, 1);
     }
 
     /// Hand `outcome` to the app the way the writer thread does.

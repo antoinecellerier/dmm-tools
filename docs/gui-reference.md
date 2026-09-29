@@ -276,7 +276,8 @@ With nothing recorded, markers go with the readings the graph drops (a mode
 change, Clear); a recording keeps its markers across mode changes. Markers
 placed before Record stay on the graph but are not part of the recording or
 its export; Export… saves them with the graph's readings once the recording
-is discarded. Replay files carry no markers.
+is discarded. A replay file keeps its markers: `--replay` puts each one back
+on its reading as the playback reaches it.
 
 **CSV format:**
 

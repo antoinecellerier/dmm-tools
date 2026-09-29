@@ -191,7 +191,10 @@ back; to document what each mode shows instead, use
 `--unit` and `--integrate`; pass those when playing the file back. Writing one
 asks the meter its name unless detection already has it (a UT61+/UT161 beeps
 once). `--replay` takes the meter
-and its link from the file and refuses `--device` and `--mock-mode`.
+and its link from the file and refuses `--device` and `--mock-mode`. A
+recording's markers (a GUI export keeps them) come through in the CSV and
+JSON marker fields and a replay copy, each on the first reading played at or
+after it.
 
 Meters with more than one display (the UT181A's thermocouples, frequency and
 period, AC and DC parts, dB's voltage, REL, MIN/MAX and Peak; the UT171's

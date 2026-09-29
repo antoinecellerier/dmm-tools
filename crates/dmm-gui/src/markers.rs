@@ -76,6 +76,40 @@ impl Markers {
         Ok(number)
     }
 
+    /// Put back a marker a file was saved with, under its own number, on the
+    /// reading taken at `at`. `false` when that reading already has one.
+    ///
+    /// Later markers are numbered past it, so a note saying "see 3" keeps
+    /// pointing at the marker the file called 3.
+    pub(crate) fn insert(
+        &mut self,
+        at: Instant,
+        number: u32,
+        note: String,
+        wall_time: DateTime<Local>,
+        reading: String,
+    ) -> bool {
+        let i = self.list.partition_point(|m| m.at < at);
+        if self.list.get(i).is_some_and(|m| m.at == at) {
+            return false;
+        }
+        if self.list.is_empty() {
+            self.next_number = 1;
+        }
+        self.next_number = self.next_number.max(number.saturating_add(1));
+        self.list.insert(
+            i,
+            Marker {
+                at,
+                number,
+                note,
+                wall_time,
+                reading,
+            },
+        );
+        true
+    }
+
     /// Keep the markers whose reading `held` says is still somewhere.
     pub(crate) fn retain(&mut self, held: impl Fn(Instant) -> bool) {
         self.list.retain(|m| held(m.at));

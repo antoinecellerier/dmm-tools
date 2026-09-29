@@ -988,7 +988,10 @@ mod tests {
         let mut run = run_with_stopped_recording(2);
         run.app.clear_session();
         let epoch = run.app.capture.recording.epoch();
-        run.app.capture.recording.mark_exported(epoch, 2, None);
+        run.app
+            .capture
+            .recording
+            .mark_exported(epoch, 2, Default::default());
         run.click(run.node_rect("Discard").center());
         assert!(!run.shows_widget("Discard recording"), "no prompt");
         assert_eq!(run.app.capture.recording.role(), BufferRole::History);
@@ -1014,7 +1017,10 @@ mod tests {
     fn discarding_unsaved_markers_asks_first() {
         let mut run = run_with_stopped_recording(2);
         let epoch = run.app.capture.recording.epoch();
-        run.app.capture.recording.mark_exported(epoch, 2, None);
+        run.app
+            .capture
+            .recording
+            .mark_exported(epoch, 2, Default::default());
         mark_newest(&mut run);
         run.app.clear_session();
         run.click(run.node_rect("Discard").center());

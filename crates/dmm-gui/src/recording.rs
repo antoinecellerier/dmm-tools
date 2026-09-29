@@ -126,16 +126,20 @@ impl<'a> MarkCursor<'a> {
 /// first sample's wall time, which is what pins playback to a clock origin.
 ///
 /// `link` is what the samples arrived over, so a session played back from the
-/// file is on the link the meter was.
+/// file is on the link the meter was. `marked` are the markers on buffered
+/// samples, oldest first, as for [`render_csv`]; each is written after its
+/// sample.
 ///
 /// `None` when any sample has an empty payload: the mock synthesises its
 /// readings, so there is no frame to hand a parser.
 pub(crate) fn render_replay(
     samples: std::collections::vec_deque::Iter<'_, Sample>,
+    marked: &[&Marker],
     device_id: &str,
     model: Option<&str>,
     link: Option<dmm_lib::transport::Link>,
 ) -> Option<String> {
+    let mut marks = MarkCursor::new(marked);
     let mut rest = samples.peekable();
     let first = *rest.peek()?;
     let recorded = first
@@ -154,6 +158,9 @@ pub(crate) fn render_replay(
             .timestamp
             .saturating_duration_since(first.measurement.timestamp);
         out.push_str(&replay::sample_line(offset, &s.measurement.raw_payload));
+        if let Some((number, note)) = marks.on(s) {
+            out.push_str(&replay::marker_line(offset, number, note));
+        }
     }
     Some(out)
 }
@@ -760,15 +767,11 @@ impl Recording {
     /// nothing — the samples it wrote are gone, and the ones in their place
     /// are in no file.
     ///
-    /// `markers` is [`Recording::marker_keys`] of what the export wrote, for
-    /// a format that writes markers; `None` for one that doesn't, which saves
-    /// none of them.
-    pub fn mark_exported(&mut self, epoch: u64, count: usize, markers: Option<HashSet<u64>>) {
+    /// `markers` is [`Recording::marker_keys`] of what the export wrote.
+    pub fn mark_exported(&mut self, epoch: u64, count: usize, markers: HashSet<u64>) {
         if epoch == self.epoch {
             self.exported_count = count.min(self.recording_len());
-            if let Some(keys) = markers {
-                self.saved_markers = keys;
-            }
+            self.saved_markers = markers;
         }
     }
 
@@ -1117,7 +1120,7 @@ mod tests {
         assert_eq!(r.unexported_count(), 5, "starting over would still ask");
         r.trim_before(base + Duration::from_millis(2));
         assert_eq!(r.lost_on_discard(&markers), (2, 0));
-        r.mark_exported(r.epoch(), 1, None);
+        r.mark_exported(r.epoch(), 1, Default::default());
         assert_eq!(
             r.lost_on_discard(&markers),
             (1, 0),
@@ -1154,7 +1157,7 @@ mod tests {
         r.discard();
         r.toggle(Instant::now());
         push_at(&mut r, base, 3, 2);
-        r.mark_exported(exporting, 3, None);
+        r.mark_exported(exporting, 3, Default::default());
         assert_eq!(r.unexported_count(), 2);
     }
 
@@ -1341,7 +1344,7 @@ mod tests {
         }
         assert_eq!(r.unexported_count(), 3);
 
-        r.mark_exported(r.epoch(), 3, None);
+        r.mark_exported(r.epoch(), 3, Default::default());
         assert_eq!(r.unexported_count(), 0);
 
         r.push(&m, 0);
@@ -1361,7 +1364,7 @@ mod tests {
         // Export snapshots 5, two more arrive before it completes.
         r.push(&m, 0);
         r.push(&m, 0);
-        r.mark_exported(r.epoch(), 5, None);
+        r.mark_exported(r.epoch(), 5, Default::default());
         assert_eq!(r.unexported_count(), 2);
     }
 
@@ -1371,7 +1374,7 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         r.push(&m, 0);
-        r.mark_exported(r.epoch(), 1, None);
+        r.mark_exported(r.epoch(), 1, Default::default());
         r.toggle(Instant::now()); // stop
         r.toggle(Instant::now()); // start again — buffer cleared
         assert_eq!(r.unexported_count(), 0);
@@ -1397,7 +1400,7 @@ mod tests {
         for _ in 0..2 {
             r.push(&m, 0);
         }
-        r.mark_exported(exporting, 3, None);
+        r.mark_exported(exporting, 3, Default::default());
         assert_eq!(r.unexported_count(), 2);
     }
 
@@ -1408,7 +1411,7 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         r.push(&m, 0);
-        r.mark_exported(r.epoch(), 99, None);
+        r.mark_exported(r.epoch(), 99, Default::default());
         assert_eq!(r.unexported_count(), 0);
         r.push(&m, 0);
         assert_eq!(r.unexported_count(), 1);
@@ -1769,6 +1772,7 @@ mod tests {
         let samples = replay_samples();
         let text = render_replay(
             samples.iter(),
+            &[],
             "ut61eplus",
             Some("UNI-T UT61E+"),
             Some(dmm_lib::transport::Link::Bluetooth),
@@ -1801,7 +1805,8 @@ mod tests {
     /// must not produce an empty one the parser would have to skip.
     #[test]
     fn render_replay_leaves_out_an_unknown_model() {
-        let text = render_replay(replay_samples().iter(), "ut61eplus", None, None).expect("frames");
+        let text =
+            render_replay(replay_samples().iter(), &[], "ut61eplus", None, None).expect("frames");
         assert!(!text.contains("# model:"), "{text}");
         assert!(!text.contains("# link:"), "{text}");
         assert_eq!(
@@ -1817,8 +1822,24 @@ mod tests {
     fn render_replay_refuses_a_sample_without_a_frame() {
         let mut samples = replay_samples();
         samples[1].measurement.raw_payload = Vec::new();
-        assert!(render_replay(samples.iter(), "ut61eplus", None, None).is_none());
-        assert!(render_replay(VecDeque::new().iter(), "ut61eplus", None, None).is_none());
+        assert!(render_replay(samples.iter(), &[], "ut61eplus", None, None).is_none());
+        assert!(render_replay(VecDeque::new().iter(), &[], "ut61eplus", None, None).is_none());
+    }
+
+    /// A replay file writes each marker after its sample, at that sample's
+    /// offset, and reads them back.
+    #[test]
+    fn render_replay_keeps_the_markers() {
+        let (samples, markers) = marked_samples();
+        let marked: Vec<&Marker> = markers.iter().collect();
+        let text = render_replay(samples.iter(), &marked, "ut61eplus", None, None).expect("frames");
+        let replay = dmm_lib::replay::Replay::parse(&text).expect("parses");
+        let saved: Vec<(u128, u32, &str)> = replay
+            .markers
+            .iter()
+            .map(|m| (m.offset.as_millis(), m.number, m.note.as_str()))
+            .collect();
+        assert_eq!(saved, [(250, 4, "load on, 2.2 \u{3a9}"), (500, 7, "")]);
     }
 
     /// The layout of a file carrying markers.

@@ -258,11 +258,11 @@ The GUI renders an export on the UI thread once its save dialog returns, so the 
 
 ## Graph Enhancements
 
-### Markers in the CLI and replay files
+### Placing markers in the CLI
 
 **Complexity:** Small
 
-The GUI marks readings (`N`, `Ctrl+N`) and exports the markers as `marker,note` CSV columns and JSON keys; `dmm-cli read` cannot place any yet. Pressing Enter, with optional typed text, would mark the latest reading through the same shared writers. Replay files drop markers: `# marker:` comment lines would keep them, once `--replay` reads them back.
+The GUI marks readings (`N`, `Ctrl+N`) and exports the markers as `marker,note` CSV columns and JSON keys; `dmm-cli read` cannot place any yet. Pressing Enter, with optional typed text, would mark the latest reading through the same shared writers.
 
 ### The graph's readings in the recording log
 

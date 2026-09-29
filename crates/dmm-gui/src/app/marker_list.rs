@@ -227,6 +227,43 @@ impl App {
         self.markers.retain(|at| reading_held(graph, recording, at));
     }
 
+    /// Put the `--replay` file's next marker on `m` when `m` is the first
+    /// reading played at or after the marker's offset, so a frame the
+    /// playback skipped passes its marker to the next one. One per reading:
+    /// a second marker due by now waits for the next reading rather than
+    /// losing its place to the first.
+    pub(super) fn place_replay_marker(&mut self, m: &dmm_lib::measurement::Measurement) {
+        let Some((start, _)) = self.clock.wall_origin() else {
+            return;
+        };
+        let due = |offset| {
+            start
+                .checked_add(offset)
+                .is_some_and(|at| at <= m.timestamp)
+        };
+        if !self
+            .replay_markers
+            .front()
+            .is_some_and(|next| due(next.offset))
+        {
+            return;
+        }
+        let Some(next) = self.replay_markers.pop_front() else {
+            return;
+        };
+        let wall_time = m.wall_time.into();
+        if !self.markers.insert(
+            m.timestamp,
+            next.number,
+            next.note.clone(),
+            wall_time,
+            log_line(m),
+        ) {
+            // A marker the user put on this reading first: this one waits.
+            self.replay_markers.push_front(next);
+        }
+    }
+
     /// `N`, or with `write_note` `Ctrl+N`: mark the reading on screen.
     ///
     /// The reading on screen rather than the moment of the key press: paused
@@ -1164,11 +1201,8 @@ mod tests {
         app.toggle_recording();
         send(&mut app, "DC V", secs(t0, 1));
         let epoch = app.capture.recording.epoch();
-        let saved = |app: &App| {
-            Some(Recording::marker_keys(
-                &app.capture.recording.marked(app.markers.iter()),
-            ))
-        };
+        let saved =
+            |app: &App| Recording::marker_keys(&app.capture.recording.marked(app.markers.iter()));
         app.capture.recording.mark_exported(epoch, 1, saved(&app));
         let asks = |app: &App| {
             app.capture.recording.unexported_count() > 0
@@ -1189,8 +1223,7 @@ mod tests {
         app.markers.remove(3);
         assert!(!asks(&app), "deleted since the export: the file has more");
         app.add_marker(false);
-        app.capture.recording.mark_exported(epoch, 1, None);
-        assert!(asks(&app), "a replay file saves no markers");
+        assert!(asks(&app), "a marker added since the export");
         app.capture
             .recording
             .mark_exported(epoch - 1, 1, saved(&app));

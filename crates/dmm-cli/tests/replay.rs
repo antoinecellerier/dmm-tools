@@ -732,3 +732,55 @@ fn unrecognised_data_warns_once_by_default() {
         "got {stderr}"
     );
 }
+
+/// The three-frame recording with markers on its second frame and between
+/// its second and third.
+fn marked_recording() -> String {
+    format!("{RECORDING}# marker: 100 2 load on, 2.2 ohm\n# marker: 150 5 \n")
+}
+
+/// A recording's markers come through a conversion: in the marker columns
+/// of a CSV, the marker keys of JSON, and the `# marker:` lines of a replay.
+/// A marker between frames goes on the next one.
+#[test]
+fn replay_keeps_its_markers() {
+    let dir = dir_for("markers");
+    let path = recording_of(&dir, &marked_recording());
+    let path = path.to_str().expect("utf-8 path");
+
+    let (csv, _, ok) = read_csv(Path::new(path), &[]);
+    assert!(ok, "replay failed: {csv}");
+    let lines: Vec<&str> = csv.lines().collect();
+    assert!(lines[1].ends_with(",marker,note"), "got {}", lines[1]);
+    assert!(lines[2].ends_with(",,"), "unmarked: {}", lines[2]);
+    assert!(
+        lines[3].ends_with(",2,\"load on, 2.2 ohm\""),
+        "got {}",
+        lines[3]
+    );
+    assert!(lines[4].ends_with(",5,"), "the next frame: {}", lines[4]);
+
+    let (json, _, ok) = run(&["read", "--replay", path, "--count", "3", "--format", "json"]);
+    assert!(ok, "replay failed: {json}");
+    let rows: Vec<serde_json::Value> = json
+        .lines()
+        .skip(1)
+        .map(|l| serde_json::from_str(l).expect("a JSON line"))
+        .collect();
+    assert_eq!(rows[0].get("marker"), None);
+    assert_eq!(rows[1]["marker"], 2);
+    assert_eq!(rows[1]["note"], "load on, 2.2 ohm");
+    assert_eq!(rows[2]["marker"], 5);
+
+    let (copy, _, ok) = run(&[
+        "read", "--replay", path, "--count", "3", "--format", "replay",
+    ]);
+    assert!(ok, "replay failed: {copy}");
+    assert!(
+        copy.contains(
+            "\n100 02 30 2D 30 2E 35 31 33 37 01 00 30 30 31\n# marker: 100 2 load on, 2.2 ohm\n"
+        ),
+        "got {copy}"
+    );
+    assert!(copy.contains("\n# marker: 200 5 \n"), "got {copy}");
+}

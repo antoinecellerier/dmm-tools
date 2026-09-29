@@ -61,7 +61,7 @@ pub(crate) fn cmd_read(
         // The link these readings come over, so a session played back from
         // the file says what it was recorded on rather than nothing.
         let link = dmm.transport().link();
-        let out = read_output(format, &dmm, transform, integrate, || {
+        let out = read_output(format, &dmm, transform, integrate, false, || {
             format::ReplayHeader {
                 device: device.id.to_string(),
                 model,
@@ -79,6 +79,7 @@ pub(crate) fn cmd_read(
             Some(device),
             integrate,
             transform,
+            Vec::new(),
         )
     } else {
         let mut dmm = open_mock_device(selection, mock_mode, clock)?;
@@ -88,7 +89,7 @@ pub(crate) fn cmd_read(
                 .as_millis() as u64;
         // `--format replay` is refused for a device that synthesises its
         // readings, so the header below is never built.
-        let out = read_output(format, &dmm, transform, integrate, || {
+        let out = read_output(format, &dmm, transform, integrate, false, || {
             format::ReplayHeader {
                 device: selection_id(selection).to_string(),
                 model: None,
@@ -110,6 +111,7 @@ pub(crate) fn cmd_read(
             None,
             integrate,
             transform,
+            Vec::new(),
         )
     }
 }
@@ -122,6 +124,8 @@ fn read_output<T: dmm_lib::transport::Transport>(
     dmm: &dmm_lib::Dmm<T>,
     transform: &Transform,
     integrate: bool,
+    // Whether the run writes markers: a recording saved with some.
+    markers: bool,
     replay_header: impl FnOnce() -> format::ReplayHeader,
 ) -> format::Output {
     // Fixed for the whole run: the CSV column layout is per meter family, so
@@ -134,8 +138,7 @@ fn read_output<T: dmm_lib::transport::Transport>(
         family_slots: dmm.profile().max_aux_values,
         extra_slots: transform.extra_aux_count(),
         integral: integrate,
-        // The CLI places no markers.
-        markers: false,
+        markers,
     };
     let experimental = !dmm.profile().stability.is_verified();
     format::Output::new(format, layout, experimental, replay_header)
@@ -250,15 +253,22 @@ fn read_replay(
     // A copy is dated from its first frame, whose wall time the pinned
     // origin maps to when it was measured, so a copy that starts partway
     // through keeps the times of the session it came from.
-    let out = read_output(format, &dmm, transform, integrate, || {
-        format::ReplayHeader {
-            device: replay.device.id.to_string(),
-            model: replay.model.clone(),
-            // The link the file recorded: re-exporting a recording must not turn
-            // a Bluetooth session into a cable one.
-            link: replay.link,
-        }
-    });
+    let out = read_output(
+        format,
+        &dmm,
+        transform,
+        integrate,
+        !replay.markers.is_empty(),
+        || {
+            format::ReplayHeader {
+                device: replay.device.id.to_string(),
+                model: replay.model.clone(),
+                // The link the file recorded: re-exporting a recording must not turn
+                // a Bluetooth session into a cable one.
+                link: replay.link,
+            }
+        },
+    );
     // A log line, not a banner: a replay's output is what the meter's was,
     // and a note on stderr would land in every doc snippet taken from one.
     info!(
@@ -283,6 +293,7 @@ fn read_replay(
         None,
         integrate,
         transform,
+        replay.markers.clone(),
     )
 }
 
@@ -350,8 +361,19 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // Applied to every reading before anything else sees it; the identity
     // transform (no --scale/--offset/--unit) is a no-op.
     transform: &Transform,
+    // A recording's markers, in file order; none for a meter.
+    markers: Vec<dmm_lib::replay::ReplayMarker>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
+    // Each marker goes on the first reading played at or after its offset,
+    // one per reading, so a frame `--interval-ms` or `--count` skips passes
+    // its marker on rather than losing it — the rule the GUI plays by.
+    let start = dmm.clock().wall_origin().map(|(start, _)| start);
+    let mut markers: std::collections::VecDeque<_> = {
+        let mut markers = markers;
+        markers.sort_by_key(|m| m.offset);
+        markers.into()
+    };
 
     // The profile's name, which the CSV comment and the JSON metadata carry,
     // is the family's — `meter_name` is what this meter answers to.
@@ -427,7 +449,14 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                     _ => Some(m.mode.as_ref()),
                 };
                 writer.saw(mode, m.wall_time.into())?;
-                out.write(&mut writer, &m, integral_display)?;
+                let due = markers.front().zip(start).is_some_and(|(next, start)| {
+                    start
+                        .checked_add(next.offset)
+                        .is_some_and(|at| at <= m.timestamp)
+                });
+                let marker = if due { markers.pop_front() } else { None };
+                let marker = marker.as_ref().map(|k| (k.number, k.note.as_str()));
+                out.write(&mut writer, &m, integral_display, marker)?;
                 writer.flush()?;
                 i += 1;
             }

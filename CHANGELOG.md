@@ -16,7 +16,7 @@
 
 ### GUI
 
-- **Mark moments with `N`, `Ctrl+N`, a log row's `+` or the graph's right-click menu, and write notes on them** — drawn on the graph and minimap, and included in CSV and JSON exports.
+- **Mark moments with `N`, `Ctrl+N`, a log row's `+` or the graph's right-click menu, and write notes on them** — drawn on the graph and minimap, and included in CSV, JSON and replay exports.
 - **The top bar links to a newer release when one is out** — downloaded builds check GitHub once a day; Settings turns it off ([#37](https://github.com/antoinecellerier/dmm-tools/issues/37)).
 - **The graph plots NCV levels** — turning to NCV left the previous mode's trace on screen.
 - **The recording log scrolls back through the whole recording** — it showed only the last 500 samples.
@@ -32,6 +32,7 @@
 
 ### CLI
 
+- **`read --replay` keeps a recording's markers** — in its CSV, JSON and replay output.
 - **Text output names a UT181A's reading and sub-values, such as T1 or AC**
 
 ### Bug fixes

@@ -18,11 +18,18 @@
 //! # model: UT61E+
 //! # link: USB cable
 //! 0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30
+//! # marker: 0 1 probes on
 //! 101 02 30 2D 30 2E 35 31 33 37 01 00 30 30 31
 //! ```
 //!
-//! [`header`] and [`sample_line`] write what [`Replay::parse`] reads, so a
-//! writer in another crate cannot drift from this parser.
+//! A `# marker:` line — offset in milliseconds, number, note — marks the
+//! first reading played at or after its offset, wherever the line sits: a
+//! playback that skips the marked frame puts the marker on the next one
+//! rather than losing it.
+//!
+//! [`header`], [`sample_line`] and [`marker_line`] write what
+//! [`Replay::parse`] reads, so a writer in another crate cannot drift from
+//! this parser.
 
 use crate::Dmm;
 use crate::clock::Clock;
@@ -112,6 +119,8 @@ pub struct Replay {
     /// no `# link:` line is a cable recording; one naming a link this version
     /// does not know says nothing.
     pub link: Option<Link>,
+    /// The markers the recording was saved with, in file order.
+    pub markers: Vec<ReplayMarker>,
     /// Non-empty, offsets non-decreasing — both enforced by the parser.
     ///
     /// An `Arc<Vec>` rather than an `Arc<[_]>`: converting to a slice copies
@@ -120,6 +129,17 @@ pub struct Replay {
     /// The [`cadence`], worked out when first asked rather than in `parse`,
     /// where its gap list would sit on top of the file text.
     cadence: OnceLock<Duration>,
+}
+
+/// A marker saved in a replay file: a `# marker:` line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplayMarker {
+    /// How far into the session the marked reading was recorded.
+    pub offset: Duration,
+    /// The number the marker was shown and exported with.
+    pub number: u32,
+    /// Its note, possibly empty.
+    pub note: String,
 }
 
 impl Replay {
@@ -131,6 +151,7 @@ impl Replay {
         let mut model: Option<String> = None;
         let mut link = RECORDED_LINK_DEFAULT;
         let mut samples: Vec<(Duration, Vec<u8>)> = Vec::new();
+        let mut markers: Vec<ReplayMarker> = Vec::new();
 
         for (index, raw) in text.lines().enumerate() {
             let line_no = index + 1;
@@ -157,6 +178,9 @@ impl Replay {
                     // A link we don't know is not a reason to refuse a
                     // recording: the frames are the file, the link is a label.
                     link = link_from_token(value.trim());
+                } else if comment.starts_with("marker:") {
+                    // From the untrimmed line: a note keeps its own spaces.
+                    markers.push(parse_marker(line_no, raw)?);
                 }
                 // Anything else is a comment: a writer notes where a file came
                 // from, and an unknown key must not strand a whole recording.
@@ -185,6 +209,7 @@ impl Replay {
             recorded,
             model,
             link,
+            markers,
             samples: Arc::new(samples),
             cadence: OnceLock::new(),
         })
@@ -312,6 +337,18 @@ pub fn header(
     out
 }
 
+/// One marker line: the marked reading's offset in milliseconds, the
+/// marker's number and its note, which the line break would end — a line
+/// break in it is written as a space.
+pub fn marker_line(offset: Duration, number: u32, note: &str) -> String {
+    let ms = u64::try_from(offset.as_millis()).unwrap_or(u64::MAX);
+    let note: String = note
+        .chars()
+        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
+        .collect();
+    format!("# marker: {ms} {number} {note}\n")
+}
+
 /// One sample line: the offset in milliseconds, then the payload as
 /// uppercase hex bytes.
 pub fn sample_line(offset: Duration, payload: &[u8]) -> String {
@@ -351,6 +388,33 @@ fn resolve_device(line_no: usize, id: &str) -> Result<&'static SelectableDevice>
         ));
     }
     Ok(device)
+}
+
+/// A `# marker:` line, from the line as written so the note keeps its own
+/// spaces: `# marker: <offset ms> <number> <note>`, the note running to the
+/// end of the line.
+fn parse_marker(line_no: usize, raw: &str) -> Result<ReplayMarker> {
+    let raw = raw.strip_suffix('\r').unwrap_or(raw);
+    let rest = raw
+        .split_once("marker:")
+        .map_or("", |(_, rest)| rest)
+        .trim_start();
+    let (ms, rest) = rest.split_once(' ').unwrap_or((rest, ""));
+    let (number, note) = rest.split_once(' ').unwrap_or((rest, ""));
+    let Ok(ms) = u64::from_str(ms) else {
+        return Err(at(
+            line_no,
+            format!("`{ms}` is not a marker's millisecond offset"),
+        ));
+    };
+    let Ok(number) = u32::from_str(number) else {
+        return Err(at(line_no, format!("`{number}` is not a marker number")));
+    };
+    Ok(ReplayMarker {
+        offset: Duration::from_millis(ms),
+        number,
+        note: note.to_string(),
+    })
 }
 
 /// Parse one `<ms> <HH HH …>` line, given the sample before it.
@@ -685,6 +749,54 @@ mod tests {
         let replay = parsed(&text);
         assert_eq!(replay.model, None);
         assert_eq!(replay.samples.len(), 1);
+    }
+
+    /// A marker line reads back as written, wherever it sits and whatever
+    /// its note holds; a line break in the note is written as a space.
+    #[test]
+    fn marker_lines_round_trip() {
+        let notes = ["probes on", "", "  # 3.3 V rail, see #2  ", "two\r\nlines"];
+        let mut text = format!("{MAGIC}\n# device: ut61eplus\n# recorded: {RECORDED}\n");
+        text.push_str(&marker_line(Duration::from_millis(250), 2, notes[1]));
+        text.push_str(&format!("0 {DCV_BATTERY}\n"));
+        text.push_str(&marker_line(Duration::ZERO, 1, notes[0]));
+        text.push_str(&format!("500 {DCV_BATTERY}\n"));
+        text.push_str(&marker_line(Duration::from_millis(500), 7, notes[2]));
+        text.push_str(&marker_line(Duration::from_millis(500), 8, notes[3]));
+        let replay = parsed(&text);
+        let marker = |ms, number, note: &str| ReplayMarker {
+            offset: Duration::from_millis(ms),
+            number,
+            note: note.to_string(),
+        };
+        assert_eq!(
+            replay.markers,
+            [
+                marker(250, 2, ""),
+                marker(0, 1, "probes on"),
+                marker(500, 7, "  # 3.3 V rail, see #2  "),
+                marker(500, 8, "two  lines"),
+            ]
+        );
+        // A file written with Windows line ends reads the same.
+        assert_eq!(parsed(&text.replace('\n', "\r\n")).markers, replay.markers);
+        // A marker line trimmed of its trailing space still has an empty note.
+        let bare = text.replace("# marker: 250 2 \n", "# marker: 250 2\n");
+        assert_eq!(parsed(&bare).markers[0], marker(250, 2, ""));
+    }
+
+    #[test]
+    fn a_malformed_marker_line_names_its_line() {
+        let text = format!(
+            "{MAGIC}\n# device: ut61eplus\n# recorded: {RECORDED}\n# marker: soon 1 x\n0 {DCV_BATTERY}\n"
+        );
+        let message = rejects(&text);
+        assert!(
+            message.contains("line 4") && message.contains("soon"),
+            "got {message}"
+        );
+        let text = text.replace("soon 1", "10 first");
+        assert!(rejects(&text).contains("`first` is not a marker number"));
     }
 
     #[test]

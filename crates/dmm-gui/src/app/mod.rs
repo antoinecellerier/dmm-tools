@@ -344,6 +344,10 @@ pub struct App {
     /// Markers the user placed on readings, kept while the graph or the
     /// sample buffer holds their reading.
     markers: crate::markers::Markers,
+    /// The `--replay` file's markers still waiting for their reading, in
+    /// offset order: each goes on the first reading played at or after its
+    /// offset (see `place_replay_marker`).
+    replay_markers: std::collections::VecDeque<dmm_lib::replay::ReplayMarker>,
     marker_list: marker_list::MarkerList,
     /// Time base the session's readings are stamped with — real unless a
     /// `--mock-clock-*` flag was given. Cloned into the acquisition thread so
@@ -462,6 +466,7 @@ impl App {
             graph,
             capture,
             markers: crate::markers::Markers::default(),
+            replay_markers: std::collections::VecDeque::new(),
             marker_list: marker_list::MarkerList::default(),
             clock,
             replay: None,

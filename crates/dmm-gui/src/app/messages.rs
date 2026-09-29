@@ -179,11 +179,14 @@ impl App {
     /// past the recording's length found it already ended. A later
     /// Disconnect/Connect keeps the origin, so the recording resumes where the
     /// session has got to.
-    fn pin_replay_origin(&mut self, recorded: SystemTime) {
+    ///
+    /// `true` when this call pinned it: the recording starts from the top.
+    fn pin_replay_origin(&mut self, recorded: SystemTime) -> bool {
         if self.clock.wall_origin().is_some() {
-            return;
+            return false;
         }
         self.clock = self.clock.clone().with_wall_origin(recorded);
+        true
     }
 
     pub(super) fn connect(&mut self, ctx: &egui::Context) {
@@ -220,7 +223,13 @@ impl App {
             .as_ref()
             .map(|source| (Arc::clone(&source.replay), source.recorded));
         if let Some((replay, recorded)) = source {
-            self.pin_replay_origin(recorded);
+            if self.pin_replay_origin(recorded) {
+                // Once per session: a later Connect resumes the playback, and
+                // the markers already played are on their readings.
+                let mut markers = replay.markers.clone();
+                markers.sort_by_key(|m| m.offset);
+                self.replay_markers = markers.into();
+            }
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
             // No interval floor: the protocol sleeps until each frame is due,
@@ -459,6 +468,7 @@ impl App {
                     // last_measurement.spec / .mode_spec is what render code reads.
                     // Filled in from the frames before it when the meter sends
                     // a reading's parts in frames of their own.
+                    self.place_replay_marker(&m);
                     let shown = self.held.fill_in(self.last_measurement.as_ref(), m);
                     self.last_measurement = Some(shown);
                 }
@@ -718,6 +728,71 @@ mod tests {
         app.connect(&egui::Context::default());
         assert_eq!(app.clock.wall_origin().expect("still pinned").0, origin);
         app.disconnect();
+    }
+
+    /// A replay's markers go back on their readings as playback reaches
+    /// them, under their own numbers: each on the first reading played at or
+    /// after its offset, one per reading, so a marker whose frame never plays
+    /// lands on the next one. The first Connect queues them; a later one
+    /// resumes the playback and queues nothing again.
+    #[test]
+    fn a_replays_markers_go_on_their_readings() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut source = crate::ReplaySource::fixture();
+        source.replay = Arc::new(
+            dmm_lib::replay::Replay::parse(
+                "# dmm-replay 1\n\
+                 # device: ut61eplus\n\
+                 # recorded: 2026-09-02T10:00:00Z\n\
+                 0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n\
+                 # marker: 0 3 probes on\n\
+                 # marker: 150 5 skipped\n\
+                 # marker: 200 6 \n",
+            )
+            .expect("a well-formed recording"),
+        );
+        app.replay = Some(source);
+        let ctx = egui::Context::default();
+        app.connect(&ctx);
+        app.disconnect();
+        assert_eq!(app.replay_markers.len(), 3);
+
+        let (start, _) = app.clock.wall_origin().expect("the Connect pins it");
+        let play = |app: &mut App, ms| {
+            let mut m = Measurement::test_fixture(
+                MeasuredValue::Normal(1.0),
+                "V",
+                dmm_lib::flags::StatusFlags::default(),
+            );
+            m.timestamp = start + Duration::from_millis(ms);
+            deliver(app, DmmMessage::Measurement(m));
+        };
+        for ms in [0, 100, 250, 300] {
+            play(&mut app, ms);
+        }
+        let placed: Vec<(u128, u32, &str)> = app
+            .markers
+            .iter()
+            .map(|m| {
+                (
+                    m.at.duration_since(start).as_millis(),
+                    m.number,
+                    m.note.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            placed,
+            [(0, 3, "probes on"), (250, 5, "skipped"), (300, 6, "")]
+        );
+
+        app.connect(&ctx);
+        app.disconnect();
+        assert!(app.replay_markers.is_empty(), "queued once per session");
+        // A marker placed by hand numbers on past the file's.
+        play(&mut app, 400);
+        app.add_marker(false);
+        assert_eq!(app.markers.iter().last().map(|m| m.number), Some(7));
     }
 
     /// The mitigation itself: the meter that answered the probe is saved, so
