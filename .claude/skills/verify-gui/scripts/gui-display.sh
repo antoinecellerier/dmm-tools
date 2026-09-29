@@ -24,7 +24,10 @@ DISPLAY_MIN=99          # :0 and :1 belong to the user's real session
 DISPLAY_MAX=110         # give up rather than wander into unknown displays
 XVFB_TRIES=50           # x 0.1s = 5s for the X server to accept clients
 WINDOW_TIMEOUT=20       # seconds for the window to map (cold debug start)
-FIRST_FRAMES=3          # seconds for the mock device to connect and draw samples
+FIRST_FRAMES=3          # seconds, at most, for the device to connect or fail
+FIRST_SAMPLES=0.5       # seconds after the connect for the first samples to draw
+SETTLE_POLL=0.2         # seconds between the captures settle compares
+INPUT_TIMEOUT=10        # seconds any one xdotool key or type chain may take
 CHORD_HOLD=0.3          # seconds: longer than one egui frame, shorter than key repeat
 RESIZE_TIMEOUT=5        # seconds: --sync hangs if the app resizes back before the first poll
 GUI_EXIT_TRIES=30       # x 0.1s = 3s to exit on SIGTERM before SIGKILL
@@ -192,7 +195,13 @@ cmd_run() {
 		die "no window on $disp within ${WINDOW_TIMEOUT}s — dmm-gui died or drew elsewhere; log: $LOG"
 	fi
 	echo "$wid" >"$STATE/wid"
-	sleep "$FIRST_FRAMES"
+	# Until the app logs the connect or the failure, FIRST_FRAMES at most (a
+	# settings-only session logs neither), then a moment for samples to draw.
+	for ((i = 0; i < FIRST_FRAMES * 10; i++)); do
+		grep -qF -e 'UI: connected to' -e 'UI: error:' "$LOG" 2>/dev/null && break
+		sleep 0.1
+	done
+	sleep "$FIRST_SAMPLES"
 	echo "launched dmm-gui ${args[*]} on $disp (pid $pid)"
 	echo "WID=$wid"
 	echo "log: $LOG"
@@ -245,6 +254,13 @@ cmd_key() {
 	local parts=() mods=() cmd=()
 	IFS='+' read -r -a parts <<<"$chord"
 	key="${parts[-1]}"
+	# xdotool reads a word it knows as a command, which ends the key chain:
+	# `key exec` would run a program, `key selectwindow` wait for ever.
+	case "${key,,}" in
+	exec | type | sleep | key | keydown | keyup | search | selectwindow | behave | behave_screen_edge | \
+		click | set_* | get* | window* | mouse* | set_desktop* | *desktop*)
+		die "'$key' is an xdotool command, not a key" ;;
+	esac
 	for m in "${parts[@]:0:${#parts[@]}-1}"; do
 		case "${m,,}" in
 		ctrl | control) mods+=(ctrl) ;;
@@ -257,12 +273,79 @@ cmd_key() {
 	onx xdotool windowactivate --sync "$wid" >/dev/null 2>&1 || true # no WM on Xvfb; focus is what matters
 	onx xdotool windowfocus --sync "$wid" || die "could not focus window $wid"
 	# Hold the modifiers across a frame: egui reads its modifier snapshot when the
-	# frame runs, so a chord released within a millisecond can arrive bare.
+	# frame runs, so a chord released within a millisecond can arrive bare. A bare
+	# key needs no hold: egui reads the press from the event itself.
 	for m in ${mods[@]+"${mods[@]}"}; do cmd+=(keydown "$m"); done
-	cmd+=(key "$key" sleep "$CHORD_HOLD")
+	cmd+=(key "$key")
+	((${#mods[@]} == 0)) || cmd+=(sleep "$CHORD_HOLD")
 	for ((i = ${#mods[@]} - 1; i >= 0; i--)); do cmd+=(keyup "${mods[i]}"); done
-	onx xdotool "${cmd[@]}" || die "xdotool failed to send '$chord'"
+	onx timeout "$INPUT_TIMEOUT" xdotool "${cmd[@]}" || {
+		# A chain that failed mid-way can leave a modifier held, turning every
+		# later key and typed note on this display into shortcuts.
+		onx xdotool keyup ctrl shift alt super >/dev/null 2>&1 || true
+		die "xdotool failed to send '$chord'"
+	}
 	echo "sent $chord to window $wid"
+}
+
+cmd_type() {
+	require xdotool
+	local text="${1:-}" wid
+	# Plain text only, as keystrokes into the app: no newline (it would press
+	# Return), no leading '-' (xdotool would read an option), no '/' (a path is
+	# never a note, and a save dialog would take one), and bounded.
+	local re='^[A-Za-z0-9 .,:;()%+=_-]{1,200}$'
+	[ $# -eq 1 ] || die "usage: type <text>   (one quoted argument)"
+	[[ "$text" =~ $re ]] || die "type takes 1-200 letters, digits, spaces and .,:;()%+=_-"
+	[[ "$text" != -* ]] || die "type text must not start with '-'"
+	wid="$(need_wid)"
+	onx xdotool windowactivate --sync "$wid" >/dev/null 2>&1 || true # no WM on Xvfb; focus is what matters
+	onx xdotool windowfocus --sync "$wid" || die "could not focus window $wid"
+	onx timeout "$INPUT_TIMEOUT" xdotool type --clearmodifiers --delay 20 -- "$text" ||
+		die "xdotool failed to type into window $wid"
+	echo "typed ${#text} characters into window $wid"
+}
+
+# Capture the display until two captures in a row are identical, `seconds` at
+# most: a key, click or resize has been drawn once nothing moves any more.
+cmd_settle() {
+	require import compare
+	local limit="${1:-5}" prev="$STATE/settle-$$-a.png" cur="$STATE/settle-$$-b.png" i delta
+	[[ "$limit" =~ ^[1-9][0-9]?$ ]] || die "usage: settle [seconds]   (1-99, default 5)"
+	need_display >/dev/null
+	# Removed first: import writes through a link planted at either name.
+	rm -f "$prev" "$cur"
+	onx import -window root "$prev" || die "import failed — is the private display up?"
+	for ((i = 0; i < limit * 5; i++)); do
+		sleep "$SETTLE_POLL"
+		onx import -window root "$cur" || die "import failed — is the private display up?"
+		delta="$(compare -metric AE "$prev" "$cur" null: 2>&1 || true)"
+		if [ "${delta%%[^0-9]*}" = 0 ]; then
+			rm -f "$prev" "$cur"
+			echo "settled"
+			return 0
+		fi
+		mv "$cur" "$prev"
+	done
+	rm -f "$prev" "$cur"
+	die "still changing after ${limit}s — a live device redraws every sample; shoot without settling"
+}
+
+# Wait for `text` to appear in the app's log, `seconds` at most.
+cmd_wait_log() {
+	local text="${1:-}" limit="${2:-30}" i
+	local re='^[A-Za-z0-9 .,:;()_-]{1,80}$'
+	[[ "$text" =~ $re ]] && [[ "$limit" =~ ^[1-9][0-9]?$ ]] ||
+		die "usage: wait-log <text> [seconds]   (letters, digits, spaces and .,:;()_-; 1-99 s)"
+	for ((i = 0; i < limit * 10; i++)); do
+		if grep -qF -- "$text" "$LOG" 2>/dev/null; then
+			echo "found '$text' in the log"
+			return 0
+		fi
+		alive_as "$(state_get gui.pid)" dmm-gui || die "dmm-gui exited before '$text' reached the log: $LOG"
+		sleep 0.1
+	done
+	die "no '$text' in $LOG within ${limit}s"
 }
 
 cmd_click() {
@@ -377,6 +460,7 @@ cmd_selftest() {
 sub="${1:-}"
 shift || true
 case "$sub" in
-start | run | shot | key | click | wheel | resize | stop | status | selftest) "cmd_$sub" "$@" ;;
-*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png> [--root]|key <chord>|click <x> <y> [left|right]|wheel <x> <y> [up|down] [ctrl]|resize <width> <height>|stop|status|selftest}" ;;
+start | run | shot | key | type | click | wheel | resize | settle | stop | status | selftest) "cmd_$sub" "$@" ;;
+wait-log) cmd_wait_log "$@" ;;
+*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png> [--root]|key <chord>|type <text>|click <x> <y> [left|right]|wheel <x> <y> [up|down] [ctrl]|resize <width> <height>|settle [seconds]|wait-log <text> [seconds]|stop|status|selftest}" ;;
 esac

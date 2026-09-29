@@ -26,8 +26,8 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/gui-display.sh *)
 
 1. `start` — bring up the private display.
 2. `run [dmm-gui args…]` — build and launch; prints `WID=<window id>` and the log path.
-3. `key <chord>` / `click <x> <y> [left|right]` / `wheel <x> <y> [up|down] [ctrl]` — drive the window; `resize <width> <height>` to check a layout at another size.
-4. `shot <out.png>` — capture the app's window; `shot <out.png> --root` captures the whole private display.
+3. `key <chord>` / `type <text>` / `click <x> <y> [left|right]` / `wheel <x> <y> [up|down] [ctrl]` — drive the window; `resize <width> <height>` to check a layout at another size.
+4. `settle`, then `shot <out.png>` — capture the app's window once it has stopped changing; `shot <out.png> --root` captures the whole private display.
 5. View the PNG with the Read tool, or sample pixels with python3 + PIL to compute contrast numerically. Write screenshots to the session scratchpad directory.
 6. `stop` — kill dmm-gui and the display.
 
@@ -42,22 +42,26 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --mock-mode ohms
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --mock-mode dcv --mock-clock-preseed 90
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --replay <repo>/assets/replays/<file>.replay --mock-clock-preseed 120
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh key ctrl+o
+${CLAUDE_SKILL_DIR}/scripts/gui-display.sh type "wifi off"
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh click 125 12
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh wheel 400 300 down
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh wheel 400 300 up ctrl
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh resize 420 300
+${CLAUDE_SKILL_DIR}/scripts/gui-display.sh settle
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh shot <dir>/before.png
+${CLAUDE_SKILL_DIR}/scripts/gui-display.sh wait-log "UI: error:" 60
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh status
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh stop
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 ```
 
-`run` defaults to `--device mock`, takes the other simulated meters (`--device mock-zt5b`), refuses any other `--device` unless the user has approved real hardware (`VERIFY_GUI_ALLOW_HW=1`; with it and no `--device`, the app opens what `settings.json` names), uses a private `XDG_CONFIG_HOME` and `XDG_DATA_HOME` so the user's `settings.json` and desktop entries are untouched, and waits for the window plus the first frames. `resize` reshapes the window for small-window checks: there is no window manager on the private display, so the app's `MinInnerSize` hint is not enforced, but the app re-grows a window below its own computed minimum — the command prints the size it settled on. `VERIFY_GUI_GEOMETRY=WxHxDEPTH` (default `1600x1000x24`) sets the root window; `start` reuses a running Xvfb, so `stop` before changing it, and note that an env-var prefix falls outside this skill's allowed-tools pattern and will prompt. `shot` writes plain `.png` paths only, cropped to the app's window (dialogs drawn over it included); pass `--root` for anything outside it, such as the What's New viewport or a save dialog placed beside the app. Every subcommand exits non-zero with a message naming the log when something fails — a missing window means the app died or drew elsewhere, so read the log before retrying.
+`run` defaults to `--device mock`, takes the other simulated meters (`--device mock-zt5b`), refuses any other `--device` unless the user has approved real hardware (`VERIFY_GUI_ALLOW_HW=1`; with it and no `--device`, the app opens what `settings.json` names), uses a private `XDG_CONFIG_HOME` and `XDG_DATA_HOME` so the user's `settings.json` and desktop entries are untouched, and waits for the window, then for the log's connect or error line (3 s at most) and half a second of samples. `settle` captures the display until two captures in a row match (5 s at most, or `settle <seconds>`), so a shot after it shows the last key or click drawn; it fails on a screen that keeps changing, such as a live mock redrawing every sample. `wait-log <text> [seconds]` waits for a line in the app's log, such as `UI: connected to` or `UI: error:`. `resize` reshapes the window for small-window checks: there is no window manager on the private display, so the app's `MinInnerSize` hint is not enforced, but the app re-grows a window below its own computed minimum — the command prints the size it settled on. `VERIFY_GUI_GEOMETRY=WxHxDEPTH` (default `1600x1000x24`) sets the root window; `start` reuses a running Xvfb, so `stop` before changing it, and note that an env-var prefix falls outside this skill's allowed-tools pattern and will prompt. `shot` writes plain `.png` paths only, cropped to the app's window (dialogs drawn over it included); pass `--root` for anything outside it, such as the What's New viewport or a save dialog placed beside the app. Every subcommand exits non-zero with a message naming the log when something fails — a missing window means the app died or drew elsewhere, so read the log before retrying.
 
 ## Input behaviour
 
 - `key` takes xdotool keysym names joined by `+`: `ctrl+o`, `space`, `question`, `bracketleft`, `Home`. `click` and `wheel` coordinates are window-relative pixels at 1×.
-- `key` holds each modifier down across a frame and releases it after: egui reads its modifier snapshot when the frame runs, so a chord released within a millisecond can arrive with no modifiers.
+- `key` holds each modifier down across a frame and releases it after; a bare key is sent at once: egui reads its modifier snapshot when the frame runs, so a chord released within a millisecond can arrive with no modifiers.
+- `type <text>` types one quoted argument into the window: 1–200 letters, digits, spaces and `.,:;()%+=_-`, not starting with `-`. Use it for a note or a field value; `key` for everything else.
 - `click` holds the button down across a frame too: a press and release inside one frame count as a click but never as a held button, which is what the graph minimap pans on.
 - `wheel <x> <y> [up|down] [ctrl]` sends one wheel tick at that point (default `down`): plain wheel scrolls the panels, `ctrl` zooms the graph. With `ctrl` it holds Ctrl across a frame the same way `key` does.
 - The zoom-in chord is `key ctrl+equal`, not `ctrl+plus`: xdotool's `plus` keysym needs Shift, and the app binds `Key::Equals` alongside `Plus`.

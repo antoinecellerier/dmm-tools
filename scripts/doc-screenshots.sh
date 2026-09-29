@@ -135,6 +135,11 @@ SCENES=(
 	"gui-connection-help.png scene_connection_help"
 )
 
+# A frame at the pictures' size under software GL, with room to spare.
+FRAME_GAP=0.1
+# `dmm-cli list`'s answer, taken once per run by no_meter_or_skip.
+METER_LISTING=""
+
 die() { echo "doc-screenshots: $*" >&2; exit 1; }
 
 require() {
@@ -217,7 +222,10 @@ launch_without_meter() {
 # the app would still try it, so it must be switched off for these scenes.
 no_meter_or_skip() {
 	local listing
-	listing="$(cd "$ROOT" && cargo run -q -p dmm-cli -- list 2>&1 || true)"
+	# Once per run: the answer cannot change between scenes, and a list can
+	# spend seconds on a Bluetooth scan.
+	[ -n "$METER_LISTING" ] || METER_LISTING="$(cd "$ROOT" && cargo run -q -p dmm-cli -- list 2>&1 || true)"
+	listing="$METER_LISTING"
 	if printf '%s\n' "$listing" | grep -qx 'No devices heard in range.'; then
 		echo "$1: a paired Bluetooth adapter is listed — make sure it is switched off"
 	elif ! printf '%s\n' "$listing" | grep -qx 'No devices found.'; then
@@ -229,37 +237,32 @@ no_meter_or_skip() {
 
 # Two keystrokes sent back to back can land in the same egui frame; a Return
 # that closes a text field also needs a frame before the next key is read.
+# FRAME_GAP is a frame with room to spare at this size under software GL.
 key() {
 	"$GUI" key "$1" >/dev/null
-	sleep 0.5
+	sleep "$FRAME_GAP"
 }
 
-click() { "$GUI" click "$1" "$2" >/dev/null; sleep 0.5; }
+click() { "$GUI" click "$1" "$2" >/dev/null; sleep "$FRAME_GAP"; }
 
 park() { click "$PARK_X" "$PARK_Y"; }
 
 # mark <x> <y> <note> — right-click the plot, pick "Add marker here", which
-# takes the focus as the menu opens, and write the note: one key per
-# character, so letters, digits, spaces and `-` only.
+# takes the focus as the menu opens, and type the note (the characters
+# gui-display's `type` accepts).
 mark() {
 	"$GUI" click "$1" "$2" right >/dev/null
-	sleep 0.5
+	sleep "$FRAME_GAP"
 	key Return
-	local i c
-	for ((i = 0; i < ${#3}; i++)); do
-		c="${3:i:1}"
-		case "$c" in
-		" ") c=space ;;
-		-) c=minus ;;
-		esac
-		key "$c"
-	done
+	"$GUI" type "$3" >/dev/null
+	sleep "$FRAME_GAP"
 	key Return
 }
 
-# shot <out.png> [crop]
+# shot <out.png> [crop] — once the screen has stopped changing.
 shot() {
 	local out="$1" crop="${2:-}"
+	"$GUI" settle >/dev/null
 	if [ -n "$crop" ]; then
 		"$GUI" shot "$TMP/full.png" >/dev/null
 		convert "$TMP/full.png" -crop "$crop" +repage "$out"
@@ -289,7 +292,6 @@ fit() {
 	local geometry
 	geometry="$("$GUI" resize "$1" "$2" | sed -n 's/^window [0-9]* is \([0-9]*x[0-9]*\).*/\1/p')"
 	[ -n "$geometry" ] || die "resize did not report a window size"
-	sleep 1
 	echo "$geometry"
 }
 
@@ -347,7 +349,6 @@ scene_narrow() {
 	write_settings
 	launch dcma-boot-refresh 160.5
 	"$GUI" resize 1000 1280
-	sleep 1
 	key bracketleft
 	click "$NARROW_MINIMAP_X" "$NARROW_MINIMAP_Y"
 	key m
@@ -505,8 +506,8 @@ scene_connection_help() {
 	# once the bus has nothing, and an adapter that answers the scan but not
 	# the connect takes the transport's connect timeout on top. The help only
 	# goes up once that has run out — before it, the column says "Detecting
-	# the meter…".
-	sleep 20
+	# the meter…" — and the app logs it as an error.
+	"$GUI" wait-log "UI: error:" 60 >/dev/null
 	park
 	capture gui-connection-help.png "$HELP_CROP"
 }
