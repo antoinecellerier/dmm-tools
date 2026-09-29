@@ -123,15 +123,15 @@ impl Graph {
             Some(YRange { min, max }) if min.is_finite() && max.is_finite() && min < max => {
                 self.y_axis_fixed = true;
                 self.y_user_set = true;
-                self.y_min.set(min);
-                self.y_max.set(max);
+                self.y_min.restore(min);
+                self.y_max.restore(max);
             }
             _ => self.y_axis_fixed = false,
         }
         self.show_mean = view.mean;
         self.show_envelope = view.envelope.is_some_and(|w| usable(&w));
         if let Some(window) = view.envelope.filter(usable) {
-            self.envelope_window.set(window);
+            self.envelope_window.restore(window);
         }
         let references: Vec<f64> = view
             .references
@@ -246,5 +246,58 @@ mod tests {
         assert!(g.cursors_active);
         assert_eq!(g.cursor_a, None, "a cursor past the readings is dropped");
         assert!(g.live, "no start: the view follows the newest reading");
+    }
+}
+
+#[cfg(test)]
+mod screenshot_views {
+    use super::*;
+
+    /// Every key `ViewState` writes, and so reads back.
+    fn known_keys() -> Vec<String> {
+        let full = ViewState {
+            window: Some(1.0),
+            start: Some(0.0),
+            y: Some(YRange { min: 0.0, max: 1.0 }),
+            mean: true,
+            envelope: Some(1.0),
+            references: vec![1.0],
+            references_shown: true,
+            triggers: Some(true),
+            cursors: Some(Cursors {
+                a: Some(0.0),
+                b: Some(0.0),
+            }),
+        };
+        match serde_json::to_value(full).expect("serialises") {
+            serde_json::Value::Object(map) => map.keys().cloned().collect(),
+            _ => unreachable!("a struct serialises as an object"),
+        }
+    }
+
+    /// The views the doc screenshots load are typed by hand into the script,
+    /// and a view skips what it doesn't know: a misspelt key would quietly
+    /// leave a picture with the default view. Every key must be one the app
+    /// reads, and every value must read.
+    #[test]
+    fn the_screenshot_views_are_all_read() {
+        let script = include_str!("../../../../scripts/doc-screenshots.sh");
+        let known = known_keys();
+        let views: Vec<&str> = script
+            .lines()
+            .filter_map(|l| l.split_once("_VIEW='# view: "))
+            .map(|(_, rest)| rest.trim_end_matches('\''))
+            .collect();
+        assert!(views.len() >= 5, "found {views:?}");
+        for view in views {
+            let value: serde_json::Value = serde_json::from_str(view).expect(view);
+            let serde_json::Value::Object(map) = &value else {
+                panic!("not an object: {view}")
+            };
+            for key in map.keys() {
+                assert!(known.contains(key), "`{key}` in {view} is not a view field");
+            }
+            let _: ViewState = serde_json::from_value(value).expect(view);
+        }
     }
 }

@@ -68,6 +68,13 @@ impl NumberField {
         self.value = value;
         self.text = format!("{value:.SET_PRECISION$}");
     }
+
+    /// Put back a value a user typed and a file saved: shown as short as it
+    /// reads, `60` rather than `60.0000`.
+    pub(super) fn restore(&mut self, value: f64) {
+        self.value = value;
+        self.text = value.to_string();
+    }
 }
 
 /// A list of numbers the user types, separated by commas, semicolons or

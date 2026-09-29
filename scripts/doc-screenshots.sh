@@ -75,13 +75,6 @@ CUSTOMIZE_X=150; CUSTOMIZE_Y=166    # the "Customize colors" collapsing header
 # The Graph row's last swatch, Crosshair: its picker opens against the right
 # edge instead of over the rows beside it.
 CROSSHAIR_SWATCH_X=1578; CROSSHAIR_SWATCH_Y=281
-# Where the refresh's two 1 mA crossings sit in the 30 s window ending at
-# 178 s. A click snaps to the nearest sample and the samples are 100 ms apart,
-# about 4 px here, so each x is nudged off the crossing onto the sample the
-# picture wants: A onto the rising edge's first reading above 1 mA (149.18 s)
-# and B onto the first idle reading after the fall (170.07 s), far enough from
-# the plot's right edge for its readout to fit.
-CURSOR_A_X=668; CURSOR_B_X=1565; CURSOR_Y=741
 # Empty left-column space, below the statistics and below the narrow layout's
 # recording hint: clicking here moves the pointer off the plot without
 # activating anything, so no crosshair tooltip lands in the picture.
@@ -92,28 +85,33 @@ PARK_X=240; PARK_Y=1240
 BIG_METER_W=900; BIG_METER_H=640
 MINIMAL_WIDE_W=1200; MINIMAL_WIDE_H=200
 MINIMAL_NARROW_W=420; MINIMAL_NARROW_H=240
-# The seconds field right of the Min/Max chip, which the envelope averages
-# over. A whole-window 60 s band shows the boot's peak and floor; the 1 s
+# Each graph scene's state, as the `# view:` line `staged` appends: times in
+# seconds from the recording's first frame, which is where the app puts them
+# back. The markers' offsets are in the scenes themselves.
+#
+# The hero: the 30 s window over the boot, the mean, and cursors on the idle
+# floor either side of it so both level lines lie on 0 mA rather than across
+# the plot — A on the last reading before the rise (2.376 s), B on the first
+# after the fall (29.995 s). Its markers name the boot's stages: its first
+# reading above 0 mA, the dip after the plateau as the radio goes off, and the
+# fall to the draw of the e-Paper display refreshing.
+HERO_VIEW='# view: {"window":30.0,"start":1.62,"mean":true,"cursors":{"a":2.376,"b":29.995}}'
+# The hero's session and window in a window too narrow for two columns, the
+# mean without the cursors.
+NARROW_VIEW='# view: {"window":30.0,"start":1.06,"mean":true}'
+# The last refresh cycle off the live view: the mean, and cursors on the
+# refresh's two 1 mA crossings — A on the rising edge's first reading above
+# 1 mA (149.182 s), B on an idle reading after the fall (170.071 s), far
+# enough from the plot's right edge for its readout to fit.
+OVERLAYS_VIEW='# view: {"window":30.0,"mean":true,"cursors":{"a":149.182,"b":170.071}}'
+# The boot picked out of the session's history: the 1m window at its start,
+# a reference line at 1 mA — whose trigger markers are on by default — and a
+# whole-window 60 s envelope showing the boot's peak and floor, where the 1 s
 # default just shadows the trace.
-ENVELOPE_FIELD_X=732; ENVELOPE_FIELD_Y=123
-# The hero's view is picked off the minimap: a click at 16.5 s of the 160 s
-# session (the strip starts at x 505, about 8.66 px/s) centres the 30s window
-# on the boot, so it runs from 1.6 s to 31.6 s with the 30s chip still lit.
-HERO_MINIMAP_X=648; HERO_MINIMAP_Y=925
-# Its cursors sit on the idle floor either side of the boot, so both level
-# lines lie on 0 mA rather than across the plot: A on the last reading before
-# the rise (2.376 s) and B on the first after the fall (29.995 s). A sample is
-# about 4 px wide in this window.
-HERO_CURSOR_A_X=649; HERO_CURSOR_B_X=1834; HERO_CURSOR_Y=700
-# Its markers, each placed from the plot's right-click menu on the sample
-# nearest the click: the first reading of the boot above 0 mA (about 2.5 s,
-# beside cursor A), the dip after the plateau as the radio goes off (about
-# 8.1 s), and the fall to the draw of the e-Paper display refreshing (about
-# 9.9 s). Any height inside the plot does, clear of the cursor and mean labels.
-HERO_BOOT_X=656; HERO_WIFI_X=897; HERO_REFRESH_X=966; HERO_MARK_Y=450
-# The same click in the narrow window's minimap, which starts at x 20 and
-# packs the session into about 5.98 px/s.
-NARROW_MINIMAP_X=119; NARROW_MINIMAP_Y=925
+TRIGGERS_VIEW='# view: {"window":60.0,"start":0.0,"envelope":60.0,"references":[1.0],"references_shown":true}'
+# One per colour preset, live: the palette on a trace, a mean line, a
+# reference line and its trigger markers.
+THEMES_VIEW='# view: {"window":30.0,"mean":true,"references":[1.0],"references_shown":true}'
 
 # asset written -> the function that stages it.
 SCENES=(
@@ -196,8 +194,32 @@ launch() {
 	local replay="$1" preseed="$2"
 	shift 2
 	[ -f "$REPLAYS/$replay.replay" ] || die "no recording $REPLAYS/$replay.replay"
-	"$GUI" run --replay "$REPLAYS/$replay.replay" \
+	launch_file "$REPLAYS/$replay.replay" "$preseed" "$@"
+}
+
+# launch_file <replay path> <preseed secs> [extra dmm-gui args...] — as
+# launch, for a recording `staged` wrote.
+launch_file() {
+	local path="$1" preseed="$2"
+	shift 2
+	"$GUI" run --replay "$path" \
 		--mock-clock-preseed "$preseed" --mock-clock-scale "$CLOCK_SCALE" "$@" >/dev/null
+}
+
+# staged <replay basename> <line>... — a copy of the recording with `# view:`
+# and `# marker:` lines appended, printing its path. The app puts the view
+# back once the preseed burst has played the moments it shows, and each
+# marker on the first reading at or after its offset, so a scene loads its
+# state instead of clicking it in. Times are seconds (view) and milliseconds
+# (markers) from the recording's first frame.
+staged() {
+	local replay="$1" out
+	shift
+	[ -f "$REPLAYS/$replay.replay" ] || die "no recording $REPLAYS/$replay.replay"
+	out="$TMP/$replay-$RANDOM.replay"
+	cp "$REPLAYS/$replay.replay" "$out"
+	printf '%s\n' "$@" >>"$out"
+	echo "$out"
 }
 
 # The app on Auto-detect with nothing to detect, for the pictures that must
@@ -246,18 +268,6 @@ key() {
 click() { "$GUI" click "$1" "$2" >/dev/null; sleep "$FRAME_GAP"; }
 
 park() { click "$PARK_X" "$PARK_Y"; }
-
-# mark <x> <y> <note> — right-click the plot, pick "Add marker here", which
-# takes the focus as the menu opens, and type the note (the characters
-# gui-display's `type` accepts).
-mark() {
-	"$GUI" click "$1" "$2" right >/dev/null
-	sleep "$FRAME_GAP"
-	key Return
-	"$GUI" type "$3" >/dev/null
-	sleep "$FRAME_GAP"
-	key Return
-}
 
 # shot <out.png> [crop] — once the screen has stopped changing.
 shot() {
@@ -323,21 +333,15 @@ report() {
 # The hero: wide layout over the thermometer's boot, looked back on from its
 # first refresh cycle. The preseed stops the session inside that cycle, so the
 # reading shows its draw (4.69 mA) and the minimap holds the whole session.
-# [ picks the 30s preset and the minimap click moves the window back onto the
-# boot; M adds the window's mean and C the cursors that span the boot. Three
-# markers with notes name the boot's stages, on the graph and in the log.
+# HERO_VIEW puts the 30s window back on the boot with the mean and the cursors
+# that span it; three markers with notes name the boot's stages, on the graph
+# and in the log.
 scene_wide() {
 	write_settings
-	launch dcma-boot-refresh 160.5
-	key bracketleft
-	click "$HERO_MINIMAP_X" "$HERO_MINIMAP_Y"
-	key m
-	key c
-	click "$HERO_CURSOR_A_X" "$HERO_CURSOR_Y"
-	click "$HERO_CURSOR_B_X" "$HERO_CURSOR_Y"
-	mark "$HERO_BOOT_X" "$HERO_MARK_Y" "boot"
-	mark "$HERO_WIFI_X" "$HERO_MARK_Y" "wifi off"
-	mark "$HERO_REFRESH_X" "$HERO_MARK_Y" "e-Paper display refreshing"
+	launch_file "$(staged dcma-boot-refresh "$HERO_VIEW" \
+		'# marker: 2475 1 boot' \
+		'# marker: 8018 2 wifi off' \
+		'# marker: 9998 3 e-Paper display refreshing')" 160.5
 	park
 	capture gui-wide-layout.png
 }
@@ -347,11 +351,8 @@ scene_wide() {
 # to find a corner off the trace.
 scene_narrow() {
 	write_settings
-	launch dcma-boot-refresh 160.5
-	"$GUI" resize 1000 1280
-	key bracketleft
-	click "$NARROW_MINIMAP_X" "$NARROW_MINIMAP_Y"
-	key m
+	launch_file "$(staged dcma-boot-refresh "$NARROW_VIEW")" 160.5
+	"$GUI" resize 1000 1280 >/dev/null
 	park
 	capture gui-narrow-layout.png "1000x1280+0+0"
 }
@@ -367,44 +368,19 @@ scene_reading_controls() {
 	capture gui-reading-controls.png "$READING_CROP"
 }
 
-# Two graph pictures from one launch: the overlays that read the last refresh
+# Two graph pictures of one session: the overlays that read the last refresh
 # cycle off the live view, then the ones that mark the boot sequence, picked
 # out of the session's history. They are separate because triggers and cursors
 # land on the same two crossings, and because only one of them can be live.
-#
-# [ steps the window from 1m down to 30s, M draws the mean and C arms the
-# cursors. Then the same keys take those off and raise the second picture's:
-# R turns the reference lines on and puts the caret in their field, Escape
-# gives the keyboard back to the graph, X adds the envelope over the window
-# its field is set to, ] steps back to 1m and Home jumps to the start of the
-# session, which leaves live mode and puts the minimap's brackets over the
-# boot. The trigger markers are on by default and show as soon as there is a
-# reference line to cross.
+# Each loads its state (OVERLAYS_VIEW, TRIGGERS_VIEW) into a launch of its own.
 scene_overlays() {
 	write_settings
-	launch dcma-boot-refresh 178
-	key bracketleft
-	key m
-	key c
-	click "$CURSOR_A_X" "$CURSOR_Y"
-	click "$CURSOR_B_X" "$CURSOR_Y"
+	launch_file "$(staged dcma-boot-refresh "$OVERLAYS_VIEW")" 178
 	park
 	capture gui-graph-overlays.png "$GRAPH_CROP"
-	key c # off, which drops both cursors
-	key m
-	key r
-	key 1
-	key Return
-	key Escape
-	key x
-	click "$ENVELOPE_FIELD_X" "$ENVELOPE_FIELD_Y"
-	key ctrl+a
-	key 6
-	key 0
-	key Return
-	key Escape
-	key bracketright
-	key Home
+	"$GUI" stop >/dev/null
+	launch_file "$(staged dcma-boot-refresh "$TRIGGERS_VIEW")" 178
+	park
 	capture gui-graph-triggers.png "$GRAPH_CROP"
 }
 
@@ -461,9 +437,9 @@ scene_settings() {
 	capture gui-settings.png "$SETTINGS_CROP"
 }
 
-# One graph picture per colour preset. Same keys as the overlays scene minus
-# the cursors, so each shows the palette on a trace, a mean line, a reference
-# line and its trigger markers.
+# One graph picture per colour preset, with THEMES_VIEW's mean and reference
+# line, so each shows the palette on a trace, a mean line, a reference line
+# and its trigger markers.
 scene_themes() {
 	local entry asset preset
 	for entry in \
@@ -474,13 +450,7 @@ scene_themes() {
 		asset="${entry%% *}"
 		preset="${entry#* }"
 		write_settings "$preset"
-		launch dcma-boot-refresh 175
-		key bracketleft
-		key m
-		key r
-		key 1
-		key Return
-		key Escape
+		launch_file "$(staged dcma-boot-refresh "$THEMES_VIEW")" 175
 		park
 		capture "$asset" "$THEME_CROP"
 	done
