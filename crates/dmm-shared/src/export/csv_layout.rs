@@ -81,6 +81,12 @@ fn aux_slots(m: &Measurement, family_slots: usize, extra_slots: usize) -> Vec<Op
 ///
 /// Without the terminating newline — callers `writeln!` it.
 pub fn device_comment(model: &str) -> String {
+    // One line whatever the name holds: an imported file's name is the
+    // file's to choose, and a line break would start rows of its own.
+    let model: String = model
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
     format!("# device: {model}")
 }
 

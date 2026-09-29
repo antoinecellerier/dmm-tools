@@ -103,6 +103,14 @@ pub(crate) enum Cmd {
         /// Play back a file written by --format replay instead of opening a meter; ends with the file
         #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
         replay: Option<PathBuf>,
+        /// Read an exported CSV, JSON or replay file instead of opening a
+        /// meter, without waiting: to convert it or print its summary
+        #[arg(
+            long,
+            value_name = "FILE",
+            conflicts_with_all = ["mock_mode", "replay", "mock_clock_scale", "mock_clock_preseed"]
+        )]
+        import: Option<PathBuf>,
         /// Run session time at this multiple of real time (mock only), or
         /// `max`: with --replay, every frame at its recorded time, as fast as
         /// it decodes. Hidden: a contributor tool for fast runs, not a
@@ -391,6 +399,7 @@ mod tests {
                 transform,
                 mock_mode,
                 replay,
+                import,
                 mock_clock_scale,
                 mock_clock_preseed,
             } => {
@@ -407,6 +416,7 @@ mod tests {
                 assert!(mock_mode.is_none());
                 // Nothing to play back: `read` opens the meter.
                 assert!(replay.is_none());
+                assert!(import.is_none());
                 // No flag means the wall clock, so `read` paces as it always did.
                 assert!(mock_clock_scale.is_none());
                 assert!(mock_clock_preseed.is_none());
@@ -534,6 +544,7 @@ mod tests {
                 replay: _,
                 mock_clock_scale: _,
                 mock_clock_preseed: _,
+                import: _,
             } => {
                 assert_eq!(interval_ms, 100);
                 assert_eq!(format, Some(OutputFormat::Csv));

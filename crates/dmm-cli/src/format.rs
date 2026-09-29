@@ -71,6 +71,8 @@ pub enum Output {
     /// confirmed, so a script can tell them apart.
     Json {
         experimental: bool,
+        /// A graph view the readings were saved with, passed through.
+        view: Option<String>,
     },
     /// The meter's own frames, under the header naming the meter they came
     /// from — only the caller knows which meter that is. The header goes out
@@ -80,6 +82,8 @@ pub enum Output {
         /// When the first frame arrived. Offsets are measured from it, so a
         /// recording starts at zero however long the meter took to answer.
         first: Option<Instant>,
+        /// A graph view the recording was saved with, passed through.
+        view: Option<String>,
     },
 }
 
@@ -107,12 +111,26 @@ impl Output {
         match format {
             OutputFormat::Text => Self::Text,
             OutputFormat::Csv => Self::Csv(layout),
-            OutputFormat::Json => Self::Json { experimental },
+            OutputFormat::Json => Self::Json {
+                experimental,
+                view: None,
+            },
             OutputFormat::Replay => Self::Replay {
                 header: replay_header(),
                 first: None,
+                view: None,
             },
         }
+    }
+
+    /// Pass `view` — the graph view a file was saved with, which this binary
+    /// never reads — through to the formats that keep one: JSON and replay.
+    pub fn with_view(mut self, view: Option<String>) -> Self {
+        match &mut self {
+            Self::Json { view: v, .. } | Self::Replay { view: v, .. } => *v = view,
+            Self::Text | Self::Csv(_) => {}
+        }
+        self
     }
 
     /// What opens the file, for the formats with a header known up front.
@@ -126,9 +144,9 @@ impl Output {
                 dmm_shared::export::device_comment(model_name),
                 layout.header().join(","),
             )),
-            Self::Json { .. } => Some(format!(
+            Self::Json { view, .. } => Some(format!(
                 "{}\n",
-                dmm_shared::export::metadata_line(model_name, None)
+                dmm_shared::export::metadata_line(model_name, view.as_deref())
             )),
             Self::Replay { .. } => None,
         }
@@ -147,8 +165,12 @@ impl Output {
         match self {
             Self::Text => format_text(w, m, integral),
             Self::Csv(layout) => format_csv(w, m, integral, *layout, marker),
-            Self::Json { experimental } => format_json(w, m, *experimental, integral, marker),
-            Self::Replay { header, first } => {
+            Self::Json { experimental, .. } => format_json(w, m, *experimental, integral, marker),
+            Self::Replay {
+                header,
+                first,
+                view,
+            } => {
                 // The payload as the meter sent it: a `--scale` is a choice
                 // the run that plays the file back makes for itself, and this
                 // is one of the reasons it is refused alongside this format.
@@ -176,6 +198,9 @@ impl Output {
                         )
                         .as_bytes(),
                     )?;
+                    if let Some(view) = view {
+                        w.write_all(dmm_lib::replay::view_line(view).as_bytes())?;
+                    }
                 }
                 let first = *first.get_or_insert(m.timestamp);
                 let offset = m
@@ -214,7 +239,9 @@ fn format_text(
         .map(|a| a.label.chars().count())
         .max()
         .unwrap_or(0);
-    let mut line = m.to_string();
+    // Control characters escaped: an imported file's units and labels are
+    // the file's to choose, and a raw escape would act on the terminal.
+    let mut line = dmm_shared::export::escape_controls(&m.to_string()).into_owned();
     // A named reading's value starts in its sub-values' value column, so the
     // numbers read down one column: `T1    20.000 °C` over `  T2  23.000 °C`.
     if let Some(name) = m.main_label.filter(|_| !aux.is_empty()).map(|l| l.as_str())
@@ -237,9 +264,10 @@ fn format_text(
             .unwrap_or_default();
         writeln!(
             w,
-            "  {:<label_w$}  {} {unit}{elapsed}",
-            aux.label,
-            aux.value_str()
+            "  {:<label_w$}  {} {}{elapsed}",
+            dmm_shared::export::escape_controls(&aux.label),
+            dmm_shared::export::escape_controls(&aux.value_str()),
+            dmm_shared::export::escape_controls(unit),
         )?;
     }
     Ok(())
@@ -321,6 +349,7 @@ mod tests {
         serde_json::from_str(&rendered(
             Output::Json {
                 experimental: false,
+                view: None,
             },
             &m,
             None,
@@ -459,6 +488,7 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&rendered(
             Output::Json {
                 experimental: false,
+                view: None,
             },
             &m,
             None,
@@ -833,7 +863,15 @@ mod tests {
     }
 
     fn json_of(m: &dmm_lib::measurement::Measurement, experimental: bool) -> serde_json::Value {
-        serde_json::from_str(&rendered(Output::Json { experimental }, m, None)).unwrap()
+        serde_json::from_str(&rendered(
+            Output::Json {
+                experimental,
+                view: None,
+            },
+            m,
+            None,
+        ))
+        .unwrap()
     }
 
     #[test]

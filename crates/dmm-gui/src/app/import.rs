@@ -58,6 +58,8 @@ pub(super) struct Loaded {
     aux_slots: usize,
     /// The graph view the file was saved with, as its JSON text.
     view: Option<String>,
+    /// Readings past the limit the file was read with, left out.
+    left_out: usize,
 }
 
 /// An import under way.
@@ -78,67 +80,52 @@ pub(super) struct Ingest {
     view: Option<String>,
     /// The file's first reading, which the view's times count from.
     first: Option<Instant>,
+    /// Readings the loader left out, past the limit it read the file with.
+    left_out: usize,
 }
 
 /// Parse `path` and stamp its readings from `base`.
 ///
 /// The format is the extension's, or for a file without one the content's:
 /// a replay's magic line, a JSON object, or else CSV.
-pub(super) fn load(path: &Path, base: Instant) -> Result<Loaded, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let extension = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase);
-    let head = text.trim_start();
-    let is_replay = extension.as_deref() == Some("replay")
-        || (extension.is_none() && head.starts_with("# dmm-replay"));
-    let is_json =
-        extension.as_deref() == Some("json") || (extension.is_none() && head.starts_with('{'));
-    let loaded = if is_replay {
-        load_replay(&text, base)
-    } else {
-        let imported = if is_json {
-            dmm_shared::export::read_json(&text)
-        } else {
-            dmm_shared::export::read_csv(&text)
-        }?;
-        Ok(from_export(imported, base))
+pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, String> {
+    use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
+    let fail = |e: String| format!("{}: {e}", path.display());
+    let kind = ExportKind::of_file(path).map_err(|e| fail(e.to_string()))?;
+    // CSV and JSON are read through, keeping no more than the session can
+    // hold; a replay is parsed whole, as `--replay` parses it.
+    let open = || {
+        std::fs::File::open(path)
+            .map(std::io::BufReader::new)
+            .map_err(|e| e.to_string())
+    };
+    let loaded = match kind {
+        ExportKind::Replay => std::fs::read_to_string(path)
+            .map_err(|e| e.to_string())
+            .and_then(|text| load_replay(&text, base, limit)),
+        ExportKind::Json => read_json_from(open()?, Some(limit)).map(|i| from_export(i, base)),
+        ExportKind::Csv => read_csv_from(open()?, Some(limit)).map(|i| from_export(i, base)),
     };
     loaded
         .map(|mut l| {
             l.path = path.to_path_buf();
             l
         })
-        .map_err(|e| format!("{}: {e}", path.display()))
+        .map_err(fail)
 }
 
 /// A CSV or JSON export, stamped by its wall times: each reading at `base`
 /// plus how long after the first it was taken, never earlier than the one
 /// before — a clock set back mid-file must not send time backwards.
 fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded {
-    let first = imported.readings.first().map(|r| r.wall_time);
     let experimental = imported.readings.iter().any(|r| r.experimental);
-    let aux_slots = imported
-        .readings
-        .iter()
-        .map(|r| r.aux.len())
-        .max()
-        .unwrap_or(0);
-    let mut last = Duration::ZERO;
-    let mut offsets = Vec::with_capacity(imported.readings.len());
+    let aux_slots = imported.aux_slots;
+    let offsets = imported.offsets();
     let readings = imported
         .readings
         .into_iter()
-        .map(|r| {
-            let offset = first
-                .and_then(|first| r.wall_time.duration_since(first).ok())
-                .unwrap_or(Duration::ZERO)
-                .max(last);
-            last = offset;
-            offsets.push(offset);
-            r.into_measurement(base.checked_add(offset).unwrap_or(base))
-        })
+        .zip(&offsets)
+        .map(|(r, &offset)| r.into_measurement(base.checked_add(offset).unwrap_or(base)))
         .collect();
     Loaded {
         path: PathBuf::new(),
@@ -152,16 +139,17 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
             .into_iter()
             .map(|m| (m.reading, m.number, m.note))
             .collect(),
-        cadence: median_spacing(&offsets),
+        cadence: dmm_shared::export::median_spacing(&offsets),
         aux_slots,
         view: imported.view,
+        left_out: imported.left_out,
     }
 }
 
 /// A replay, decoded frame by frame through its family's parser on a clock
 /// of its own that moves only as the playback sleeps on it — as fast as the
 /// frames decode, with the recording's own timestamps — never the session's.
-fn load_replay(text: &str, base: Instant) -> Result<Loaded, String> {
+fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, String> {
     use dmm_lib::stream::{MeasurementStream, StreamEvent};
     let replay = dmm_lib::replay::Replay::parse(text).map_err(|e| e.to_string())?;
     let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).map_err(|e| {
@@ -179,10 +167,13 @@ fn load_replay(text: &str, base: Instant) -> Result<Loaded, String> {
     let aux_slots = dmm.profile().max_aux_values;
     let mut readings = Vec::new();
     let mut offsets = Vec::new();
+    let mut left_out = 0;
     {
         let mut stream = MeasurementStream::new(&mut dmm, Duration::ZERO);
         loop {
             match stream.tick() {
+                // Past the limit a frame is counted, not kept.
+                Ok(StreamEvent::Measurement(_)) if readings.len() >= limit => left_out += 1,
                 Ok(StreamEvent::Measurement(mut m)) => {
                     let offset = m.timestamp.saturating_duration_since(start);
                     m.timestamp = base.checked_add(offset).unwrap_or(base);
@@ -223,25 +214,10 @@ fn load_replay(text: &str, base: Instant) -> Result<Loaded, String> {
         experimental,
         readings,
         markers,
-        cadence: median_spacing(&offsets),
+        cadence: dmm_shared::export::median_spacing(&offsets),
         aux_slots,
+        left_out,
     })
-}
-
-/// The median gap between consecutive offsets, a second when there is none
-/// to measure: the spacing a file's readings came at, which a single slow
-/// stretch doesn't move.
-fn median_spacing(offsets: &[Duration]) -> Duration {
-    let mut gaps: Vec<Duration> = offsets
-        .windows(2)
-        .map(|w| w[1].saturating_sub(w[0]))
-        .filter(|g| !g.is_zero())
-        .collect();
-    if gaps.is_empty() {
-        return Duration::from_secs(1);
-    }
-    let mid = gaps.len() / 2;
-    *gaps.select_nth_unstable(mid).1
 }
 
 /// The file types Import… offers, as Export… writes them.
@@ -303,9 +279,11 @@ impl App {
         self.reset_session_for_import();
         info!("importing {}", path.display());
         let base = self.clock.now();
+        // No more than the recording it goes into can hold.
+        let limit = self.settings.max_samples;
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
-            let loaded = std::panic::catch_unwind(|| load(&path, base))
+            let loaded = std::panic::catch_unwind(|| load(&path, base, limit))
                 .unwrap_or_else(|_| Err(format!("{}: the import failed", path.display())));
             let _ = tx.send(loaded);
         });
@@ -370,6 +348,7 @@ impl App {
             cadence,
             aux_slots,
             view,
+            left_out,
         } = loaded;
         if readings.is_empty() {
             self.toast = Some(Toast::info(format!(
@@ -401,6 +380,7 @@ impl App {
             markers: markers.into(),
             view,
             first,
+            left_out,
         }))
     }
 
@@ -458,7 +438,7 @@ impl App {
             (Some(view), Some(first)) => self.graph.apply_view_state(&view, first),
             _ => self.graph.show_all(),
         }
-        let left_out = ingest.total - ingest.taken;
+        let left_out = ingest.total - ingest.taken + ingest.left_out;
         let name = file_name(&ingest.path);
         info!(
             "imported {} readings from {} ({left_out} left out)",
@@ -641,6 +621,27 @@ timestamp,mode,value,unit,range,flags,marker,note
             toast.contains("first 2 readings") && toast.contains("1 reading past"),
             "{toast}"
         );
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// The loader keeps no more of a file than the Buffer size, however
+    /// long the file, and counts what it left out.
+    #[test]
+    fn the_loader_keeps_no_more_than_the_buffer() {
+        let mut app = app();
+        app.settings.max_samples = 2;
+        app.capture.recording.set_max_samples(2);
+        let path = file("bounded.csv", CSV);
+        import(&mut app, path.clone());
+        assert_eq!(app.capture.recording.export_samples().len(), 2);
+        let toast = app
+            .toast
+            .as_ref()
+            .map(|t| t.message.clone())
+            .unwrap_or_default();
+        assert!(toast.contains("1 reading past"), "{toast}");
+        let loaded = load(&path, Instant::now(), 2).expect("loads");
+        assert_eq!((loaded.readings.len(), loaded.left_out), (2, 1));
         let _ = std::fs::remove_file(path);
     }
 

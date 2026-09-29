@@ -173,7 +173,8 @@ dmm-cli read [OPTIONS]
 | `--format <FORMAT>` | `text`, or what `-o`'s extension names | Output format: `text`, `csv`, `json` or `replay`. |
 | `-o, --output [<FILE>]` | stdout | Write to FILE; with no FILE, to `measurements-<meter>-<mode>-<start>.<ext>`. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited: Ctrl+C stops it, or the end of a `--replay` file. |
-| `--replay <FILE>` | | Play back a `--format replay` file at its recorded pace instead of opening a meter; the run ends with the file, or sooner with `--count` or Ctrl+C. To convert one without waiting, see [Converting a recording](development.md#headless-gui-checks). |
+| `--replay <FILE>` | | Play back a `--format replay` file at its recorded pace instead of opening a meter; the run ends with the file, or sooner with `--count` or Ctrl+C. |
+| `--import <FILE>` | | Read an exported CSV, JSON or replay file instead of opening a meter, without waiting: to convert it (`--format`, `-o`) or print its summary. Its markers come through; a CSV or JSON file refuses `--format replay` and `--interval-ms`. |
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |

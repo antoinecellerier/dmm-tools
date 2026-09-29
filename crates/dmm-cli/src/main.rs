@@ -116,9 +116,22 @@ fn main() {
             transform,
             mock_mode,
             replay,
+            import,
             mock_clock_scale,
             mock_clock_preseed,
         } => {
+            // An import names its own meter, as a replay does; a replay file
+            // imported is a replay played without waiting.
+            // Detected as the GUI detects it: an extensionless replay file is
+            // still a replay.
+            let import_replay = import.as_ref().is_some_and(|p| {
+                dmm_shared::export::ExportKind::of_file(p)
+                    .is_ok_and(|kind| kind == dmm_shared::export::ExportKind::Replay)
+            });
+            let (replay, import, mock_clock_scale) = match import {
+                Some(path) if import_replay => (Some(path), None, Some(cli::ClockScale::Max)),
+                other => (replay, other, mock_clock_scale),
+            };
             // `from_flags` names the offending value, not the flag it came
             // from, so that both binaries can reuse the sentence.
             let clock = match cmd::read::session_clock(
@@ -150,27 +163,59 @@ fn main() {
             // Settled before anything opens, so a run that cannot write what
             // it was asked for fails with no meter attached.
             let (format, destination, note) = resolve_output(&format, output);
-            match refuse_replay_format(format, selection, replay.is_some(), &transform, integrate) {
-                Some(message) => Err(message.into()),
-                None => {
-                    // After the refusals: a note about where output goes reads
-                    // as a run that started, and this one may not.
-                    if let Some(note) = note {
-                        eprintln!("{} {note}", style("Note:").yellow());
+            if let Some(path) = import {
+                if device_named {
+                    eprintln!(
+                        "{} --import names its own meter in the file; drop --device",
+                        style("Error:").red().bold(),
+                    );
+                    std::process::exit(1);
+                }
+                match cmd::read::refuse_for_import(format, interval_ms) {
+                    Some(message) => Err(message.into()),
+                    None => {
+                        if let Some(note) = note {
+                            eprintln!("{} {note}", style("Note:").yellow());
+                        }
+                        cmd::read::read_import(
+                            &path,
+                            format,
+                            destination,
+                            count,
+                            integrate,
+                            &transform.to_transform(),
+                        )
                     }
-                    cmd_read(
-                        selection,
-                        opts,
-                        interval_ms,
-                        format,
-                        destination,
-                        count,
-                        integrate,
-                        &transform.to_transform(),
-                        mock_mode,
-                        replay,
-                        clock,
-                    )
+                }
+            } else {
+                match refuse_replay_format(
+                    format,
+                    selection,
+                    replay.is_some(),
+                    &transform,
+                    integrate,
+                ) {
+                    Some(message) => Err(message.into()),
+                    None => {
+                        // After the refusals: a note about where output goes reads
+                        // as a run that started, and this one may not.
+                        if let Some(note) = note {
+                            eprintln!("{} {note}", style("Note:").yellow());
+                        }
+                        cmd_read(
+                            selection,
+                            opts,
+                            interval_ms,
+                            format,
+                            destination,
+                            count,
+                            integrate,
+                            &transform.to_transform(),
+                            mock_mode,
+                            replay,
+                            clock,
+                        )
+                    }
                 }
             }
         }

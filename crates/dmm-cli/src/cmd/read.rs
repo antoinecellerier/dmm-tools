@@ -268,7 +268,8 @@ fn read_replay(
                 link: replay.link,
             }
         },
-    );
+    )
+    .with_view(replay.view.clone());
     // A log line, not a banner: a replay's output is what the meter's was,
     // and a note on stderr would land in every doc snippet taken from one.
     info!(
@@ -342,17 +343,193 @@ fn refuse_clock_on_hardware(
     Ok(())
 }
 
+/// One `read` run's output side, whatever the readings come from: the file
+/// or stream they are written to, the statistics behind the closing summary,
+/// and the transform every reading goes through first.
+struct Run<'a> {
+    writer: output::Writer,
+    out: format::Output,
+    session: dmm_lib::stats::SeriesStats,
+    transform: &'a Transform,
+    integrate: bool,
+}
+
+impl<'a> Run<'a> {
+    /// Open the output and write its header. `meter_name` is what a file the
+    /// run names itself is named after: the registry's name for the meter, so
+    /// one meter's exports all sort together, the rule the GUI's Export…
+    /// names its files by. `model_name` is what the CSV comment and the JSON
+    /// metadata carry, `view` the saved graph view passed through to JSON.
+    fn open(
+        destination: output::Destination,
+        meter_name: &str,
+        model_name: &str,
+        out: format::Output,
+        transform: &'a Transform,
+        integrate: bool,
+        tick: Duration,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut writer = output::Writer::new(destination, meter_name)?;
+        if !transform.is_identity() {
+            // On stderr so a redirected CSV or JSON stream stays
+            // machine-readable, but visible: nothing in the output itself says
+            // the numbers are not what the meter displayed.
+            eprintln!(
+                "{}",
+                style(format!(
+                    "Note: readings scaled in software ({})",
+                    transform.describe()
+                ))
+                .dim()
+            );
+        }
+        if let Some(header) = out.header(model_name) {
+            write!(writer, "{header}")?;
+        }
+        // Min/Max/Avg and the integral are only meaningful within a single
+        // mode and unit; `SeriesStats` resets both whenever either moves, so
+        // the closing summary only ever covers one comparable series.
+        let mut session = dmm_lib::stats::SeriesStats::new(integrate);
+        session.integrator.set_sample_interval(tick);
+        Ok(Self {
+            writer,
+            out,
+            session,
+            transform,
+            integrate,
+        })
+    }
+
+    /// Write one reading, with the marker on it if any.
+    fn take(
+        &mut self,
+        mut m: dmm_lib::measurement::Measurement,
+        marker: Option<(u32, &str)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Before everything else: the unit-change check, the stats, the
+        // integrator and the formatter must all see the same series, and after
+        // a transform that series is the scaled one. (`--integrate` on a
+        // relabelled clamp reading therefore integrates amps, not the
+        // millivolts the meter sent.)
+        self.transform.apply(&mut m);
+        // Min/Max/Avg and the integral are only meaningful within a single
+        // mode and unit, and neither check subsumes the other — see
+        // `SeriesStats`, which resets both accumulators and reports the change.
+        if let Some(change) = self.session.push(&m) {
+            let what = if self.integrate {
+                "statistics and integral"
+            } else {
+                "statistics"
+            };
+            eprintln!("{} {change}, {what} reset", style("Note:").yellow());
+        }
+        // Already `None` unless --integrate was given.
+        let integral_display = self.session.integral_display();
+        // Before the write: a file the run names itself is named after the
+        // first reading, and later readings say whether the mode in that name
+        // still describes the run.
+        let mode = match m.value {
+            dmm_lib::measurement::MeasuredValue::NoReading(_) => None,
+            _ => Some(m.mode.as_ref()),
+        };
+        self.writer.saw(mode, m.wall_time.into())?;
+        self.out
+            .write(&mut self.writer, &m, integral_display, marker)?;
+        self.writer.flush()?;
+        Ok(())
+    }
+
+    /// A gap: nothing was read, so the integral does not bridge it.
+    fn gap(&mut self) {
+        self.session.integrator.push_gap();
+    }
+
+    /// Settle the output and print the closing summary; `fatal` is the
+    /// failure that ended the run, reported once the readings it did get have
+    /// been summarised and their file settled and named.
+    fn close(
+        mut self,
+        protocol_errors: usize,
+        fatal: Option<dmm_lib::error::Error>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        info!("shutting down");
+        self.writer.flush()?;
+        if protocol_errors > 0 {
+            eprintln!(
+                "\n{} {protocol_errors} readings skipped (unreadable frames)",
+                style("Note:").yellow(),
+            );
+        }
+        let session = &self.session;
+        if let (Some(min), Some(max), Some(avg)) =
+            (session.stats.min, session.stats.max, session.stats.avg())
+        {
+            // Name the unit the figures are in. They reset whenever the mode or
+            // the unit moves, so this is the unit every sample behind them was
+            // measured in.
+            let unit_suffix = session
+                .unit()
+                .filter(|u| !u.is_empty())
+                .map(|u| format!(" {u}"))
+                .unwrap_or_default();
+            eprintln!(
+                "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Avg: {}{unit_suffix}",
+                style("---").dim(),
+                session.stats.count,
+                style(format!("{min:.4}")).cyan(),
+                style(format!("{max:.4}")).cyan(),
+                style(format!("{avg:.4}")).cyan(),
+            );
+            if let Some((value, disp_unit)) = session.integral_display() {
+                let dt_str = session
+                    .integrator
+                    .elapsed_secs()
+                    .map(|s| format!(" ({}s)", style(format!("{s:.1}")).cyan()))
+                    .unwrap_or_default();
+                eprintln!(
+                    "    Integral: {} {disp_unit}{dt_str}",
+                    style(format!("{value:.4}")).cyan(),
+                );
+                if session.integrator.skipped_intervals > 0 {
+                    eprintln!(
+                        "    {} {} intervals skipped (no reading for more than {} s, 5 sample intervals and at least 2 s \u{2014} the integral is partial)",
+                        style("Note:").yellow(),
+                        session.integrator.skipped_intervals,
+                        session.integrator.max_dt_secs(),
+                    );
+                }
+            }
+        }
+        // Only a file the run named itself is worth a line, either way: every
+        // other destination is in the command the user typed.
+        match self.writer.finish()? {
+            output::Wrote::Named(path) => {
+                eprintln!("{}", style(format!("Written to {}", path.display())).dim());
+            }
+            // The reference promises `-o` prints the path it wrote, so a run
+            // with no reading to name a file after has to say that instead of
+            // nothing.
+            output::Wrote::Nothing => eprintln!(
+                "{}",
+                style("No readings arrived, so no file was written").dim()
+            ),
+            output::Wrote::AsAsked => {}
+        }
+        match fatal {
+            Some(e) => Err(e.into()),
+            None => Ok(()),
+        }
+    }
+}
+
 /// Shared measurement loop for both real and mock devices.
 #[allow(clippy::too_many_arguments)]
 fn run_read_loop<T: dmm_lib::transport::Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     interval_ms: u64,
-    mut out: format::Output,
+    out: format::Output,
     destination: output::Destination,
-    // The meter a file the run has to name is named after: the registry's
-    // name for it, whatever the meter reports and whatever format is being
-    // written, so one meter's exports all sort together. The same rule the
-    // GUI's Export… names its files by.
+    // The meter a file the run has to name is named after; see `Run::open`.
     meter_name: &str,
     count: usize,
     // When set, timeout warnings include device-specific activation instructions.
@@ -374,39 +551,22 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         markers.sort_by_key(|m| m.offset);
         markers.into()
     };
-
     // The profile's name, which the CSV comment and the JSON metadata carry,
     // is the family's — `meter_name` is what this meter answers to.
     let model_name = dmm.profile().model_name;
-    let mut writer = output::Writer::new(destination, meter_name)?;
-
-    if !transform.is_identity() {
-        // On stderr so a redirected CSV or JSON stream stays machine-readable,
-        // but visible: nothing in the output itself says the numbers are not
-        // what the meter displayed.
-        eprintln!(
-            "{}",
-            style(format!(
-                "Note: readings scaled in software ({})",
-                transform.describe()
-            ))
-            .dim()
-        );
-    }
-    if let Some(header) = out.header(model_name) {
-        write!(writer, "{header}")?;
-    }
-
     let tick = Duration::from_millis(interval_ms);
-    // Min/Max/Avg and the integral are only meaningful within a single mode
-    // and unit; `SeriesStats` resets both whenever either moves, so the
-    // closing summary only ever covers one comparable series.
-    let mut session = dmm_lib::stats::SeriesStats::new(integrate);
-    session.integrator.set_sample_interval(tick);
+    let mut run = Run::open(
+        destination,
+        meter_name,
+        model_name,
+        out,
+        transform,
+        integrate,
+        tick,
+    )?;
+
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
-    // The failure that ended the run, reported once the readings it did get
-    // have been summarised and their file settled and named.
     let mut fatal = None;
     // Give the pacing sleep the same Ctrl-C flag the loop checks, so a long
     // --interval doesn't swallow the interrupt for a whole tick.
@@ -417,47 +577,13 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
-                // Before everything else: the unit-change check, the stats,
-                // the integrator and the formatter must all see the same
-                // series, and after a transform that series is the scaled one.
-                // (`--integrate` on a relabelled clamp reading therefore
-                // integrates amps, not the millivolts the meter sent.)
-                let mut m = m;
-                transform.apply(&mut m);
-
-                // Min/Max/Avg and the integral are only meaningful within a
-                // single mode and unit, and neither check subsumes the other —
-                // see `SeriesStats`, which resets both accumulators and reports
-                // the change.
-                if let Some(change) = session.push(&m) {
-                    let what = if integrate {
-                        "statistics and integral"
-                    } else {
-                        "statistics"
-                    };
-                    eprintln!("{} {change}, {what} reset", style("Note:").yellow());
-                }
-
-                // Already `None` unless --integrate was given.
-                let integral_display = session.integral_display();
-
-                // Before the write: a file the run names itself is named after
-                // the first reading, and later readings say whether the mode
-                // in that name still describes the run.
-                let mode = match m.value {
-                    dmm_lib::measurement::MeasuredValue::NoReading(_) => None,
-                    _ => Some(m.mode.as_ref()),
-                };
-                writer.saw(mode, m.wall_time.into())?;
                 let due = markers.front().zip(start).is_some_and(|(next, start)| {
                     start
                         .checked_add(next.offset)
                         .is_some_and(|at| at <= m.timestamp)
                 });
                 let marker = if due { markers.pop_front() } else { None };
-                let marker = marker.as_ref().map(|k| (k.number, k.note.as_str()));
-                out.write(&mut writer, &m, integral_display, marker)?;
-                writer.flush()?;
+                run.take(m, marker.as_ref().map(|k| (k.number, k.note.as_str())))?;
                 i += 1;
             }
             // A replay's last frame is behind us: the run ends with the file.
@@ -465,7 +591,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             Ok(StreamEvent::Timeout { consecutive }) => {
                 log::warn!("measurement timeout, retrying");
                 // Nothing was read for a read timeout: no interval to bridge.
-                session.integrator.push_gap();
+                run.gap();
                 if consecutive == NO_RESPONSE_TIMEOUTS
                     && let Some(d) = device
                 {
@@ -501,74 +627,92 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             }
         }
     }
+    run.close(protocol_errors, fatal)
+}
 
-    info!("shutting down");
-    writer.flush()?;
-
-    if protocol_errors > 0 {
-        eprintln!(
-            "\n{} {protocol_errors} readings skipped (unreadable frames)",
-            style("Note:").yellow(),
+/// Why `--import` refuses a flag alongside a CSV or JSON file: the readings
+/// are already taken, and the file holds no frames to copy.
+pub(crate) fn refuse_for_import(format: OutputFormat, interval_ms: u64) -> Option<&'static str> {
+    if format == OutputFormat::Replay {
+        return Some(
+            "a CSV or JSON file holds no meter frames to write as a replay; --import a replay file for that",
         );
     }
+    (interval_ms != 0).then_some(
+        "--interval-ms keeps readings as a meter sends them; a file's readings are all there is",
+    )
+}
 
-    if let (Some(min), Some(max), Some(avg)) =
-        (session.stats.min, session.stats.max, session.stats.avg())
-    {
-        // Name the unit the figures are in. They reset whenever the mode or
-        // the unit moves, so this is the unit every sample behind them was
-        // measured in.
-        let unit_suffix = session
-            .unit()
-            .filter(|u| !u.is_empty())
-            .map(|u| format!(" {u}"))
-            .unwrap_or_default();
-        eprintln!(
-            "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Avg: {}{unit_suffix}",
-            style("---").dim(),
-            session.stats.count,
-            style(format!("{min:.4}")).cyan(),
-            style(format!("{max:.4}")).cyan(),
-            style(format!("{avg:.4}")).cyan(),
-        );
-        if let Some((value, disp_unit)) = session.integral_display() {
-            let dt_str = session
-                .integrator
-                .elapsed_secs()
-                .map(|s| format!(" ({}s)", style(format!("{s:.1}")).cyan()))
-                .unwrap_or_default();
-            eprintln!(
-                "    Integral: {} {disp_unit}{dt_str}",
-                style(format!("{value:.4}")).cyan(),
-            );
-            if session.integrator.skipped_intervals > 0 {
-                eprintln!(
-                    "    {} {} intervals skipped (no reading for more than {} s, 5 sample intervals and at least 2 s \u{2014} the integral is partial)",
-                    style("Note:").yellow(),
-                    session.integrator.skipped_intervals,
-                    session.integrator.max_dt_secs(),
-                );
-            }
-        }
+/// `read --import`: a CSV or JSON export read back and written out again, in
+/// any format but a replay, with its markers and — into JSON — its view,
+/// and the closing summary. The readings are the file's, so nothing waits.
+pub(crate) fn read_import(
+    path: &Path,
+    format: OutputFormat,
+    destination: output::Destination,
+    count: usize,
+    integrate: bool,
+    transform: &Transform,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
+    let fail = |e: String| format!("{}: {e}", path.display());
+    let input = std::fs::File::open(path)
+        .map(std::io::BufReader::new)
+        .map_err(|e| fail(e.to_string()))?;
+    let imported = match ExportKind::of_file(path).map_err(|e| fail(e.to_string()))? {
+        ExportKind::Json => read_json_from(input, None),
+        // A replay never reaches here: it plays as `--replay` does.
+        ExportKind::Csv | ExportKind::Replay => read_csv_from(input, None),
     }
+    .map_err(fail)?;
+    let device = imported
+        .device
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+    let layout = dmm_shared::export::CsvLayout {
+        family_slots: imported.aux_slots,
+        extra_slots: transform.extra_aux_count(),
+        integral: integrate,
+        markers: !imported.markers.is_empty(),
+    };
+    let experimental = imported.readings.iter().any(|r| r.experimental);
+    let out = format::Output::new(format, layout, experimental, unreachable_replay_header)
+        .with_view(imported.view.clone());
+    // The readings' gaps are the file's: judged by its median spacing, as
+    // the GUI's import does, so a slow file does not break at every point.
+    let offsets = imported.offsets();
+    let tick = dmm_shared::export::median_spacing(&offsets);
+    let mut run = Run::open(
+        destination,
+        &device,
+        &device,
+        out,
+        transform,
+        integrate,
+        tick,
+    )?;
+    let base = std::time::Instant::now();
+    let mut markers = imported.markers.iter().peekable();
+    for (i, (reading, offset)) in imported.readings.into_iter().zip(offsets).enumerate() {
+        if count != 0 && i >= count {
+            break;
+        }
+        let marker = markers.next_if(|m| m.reading == i);
+        run.take(
+            reading.into_measurement(base + offset),
+            marker.map(|m| (m.number, m.note.as_str())),
+        )?;
+    }
+    run.close(0, None)
+}
 
-    // Only a file the run named itself is worth a line, either way: every
-    // other destination is in the command the user typed.
-    match writer.finish()? {
-        output::Wrote::Named(path) => {
-            eprintln!("{}", style(format!("Written to {}", path.display())).dim());
-        }
-        // The reference promises `-o` prints the path it wrote, so a run with
-        // no reading to name a file after has to say that instead of nothing.
-        output::Wrote::Nothing => eprintln!(
-            "{}",
-            style("No readings arrived, so no file was written").dim()
-        ),
-        output::Wrote::AsAsked => {}
-    }
-    match fatal {
-        Some(e) => Err(e.into()),
-        None => Ok(()),
+/// `--format replay` is refused for a CSV or JSON import before the output
+/// is built, so its header is never asked for.
+fn unreachable_replay_header() -> format::ReplayHeader {
+    format::ReplayHeader {
+        device: String::new(),
+        model: None,
+        link: None,
     }
 }
 

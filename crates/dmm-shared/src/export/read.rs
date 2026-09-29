@@ -14,7 +14,9 @@ use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::time::{Instant, SystemTime};
+use std::io::{BufRead, Read};
+use std::path::Path;
+use std::time::{Duration, Instant, SystemTime};
 
 /// An export, read back.
 #[derive(Debug, Clone)]
@@ -28,6 +30,112 @@ pub struct Imported {
     pub readings: Vec<ImportedReading>,
     /// The markers, in file order.
     pub markers: Vec<ImportedMarker>,
+    /// Sub-value groups the file lays out: a CSV's `auxN_*` column groups,
+    /// empty ones included, or the most any JSON reading carries — what a
+    /// CSV written from it keeps.
+    pub aux_slots: usize,
+    /// Readings past the limit the file was read with, counted but not kept.
+    pub left_out: usize,
+}
+
+/// Which kind of export a file is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportKind {
+    Csv,
+    Json,
+    Replay,
+}
+
+impl ExportKind {
+    /// The kind `path`'s extension names, or for a file without a known one,
+    /// the kind its first bytes `head` say: a replay's magic line, a JSON
+    /// object, else CSV. Both binaries import by this, so they read the same
+    /// files.
+    pub fn detect(path: &Path, head: &str) -> Self {
+        let extension = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase);
+        match extension.as_deref() {
+            Some("csv") => return Self::Csv,
+            Some("json") => return Self::Json,
+            Some("replay") => return Self::Replay,
+            _ => {}
+        }
+        let head = head.trim_start_matches('\u{feff}').trim_start();
+        if head.starts_with("# dmm-replay") {
+            Self::Replay
+        } else if head.starts_with('{') {
+            Self::Json
+        } else {
+            Self::Csv
+        }
+    }
+
+    /// The kind of the file at `path`, from its name and first bytes.
+    pub fn of_file(path: &Path) -> std::io::Result<Self> {
+        let mut head = Vec::with_capacity(256);
+        std::fs::File::open(path)?
+            .take(256)
+            .read_to_end(&mut head)?;
+        Ok(Self::detect(path, &String::from_utf8_lossy(&head)))
+    }
+}
+
+impl Imported {
+    /// How long after the first reading each was taken, never going back —
+    /// a clock set back mid-file must not send a session's time backwards.
+    pub fn offsets(&self) -> Vec<Duration> {
+        let first = self.readings.first().map(|r| r.wall_time);
+        let mut last = Duration::ZERO;
+        self.readings
+            .iter()
+            .map(|r| {
+                let offset = first
+                    .and_then(|first| r.wall_time.duration_since(first).ok())
+                    .unwrap_or_default()
+                    .max(last);
+                last = offset;
+                offset
+            })
+            .collect()
+    }
+}
+
+/// The median gap between consecutive `offsets`, a second when there is
+/// none to measure: the spacing a file's readings came at, which a single
+/// slow stretch doesn't move.
+pub fn median_spacing(offsets: &[Duration]) -> Duration {
+    let mut gaps: Vec<Duration> = offsets
+        .windows(2)
+        .map(|w| w[1].saturating_sub(w[0]))
+        .filter(|g| !g.is_zero())
+        .collect();
+    if gaps.is_empty() {
+        return Duration::from_secs(1);
+    }
+    let mid = gaps.len() / 2;
+    *gaps.select_nth_unstable(mid).1
+}
+
+/// `text` with every control character written as its escape: file text
+/// headed for a terminal or a single line, where a raw one would act.
+pub fn escape_controls(text: &str) -> Cow<'_, str> {
+    if text.chars().any(char::is_control) {
+        Cow::Owned(
+            text.chars()
+                .map(|c| {
+                    if c.is_control() {
+                        c.escape_debug().to_string()
+                    } else {
+                        c.to_string()
+                    }
+                })
+                .collect(),
+        )
+    } else {
+        Cow::Borrowed(text)
+    }
 }
 
 /// A marker an export carried on one of its readings.
@@ -104,7 +212,17 @@ impl ImportedReading {
 
 /// Why a file would not read, with the line it stopped at.
 fn at(line: usize, message: impl std::fmt::Display) -> String {
-    format!("line {line}: {message}")
+    // Messages quote the file, and are printed.
+    format!("line {line}: {}", escape_controls(&message.to_string()))
+}
+
+/// A meter's name from a file, on one line whatever the file put in it.
+fn device_name(name: &str) -> Option<String> {
+    let name: String = name
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    Some(name.trim().to_string()).filter(|n| !n.is_empty())
 }
 
 /// A timestamp cell or key: RFC 3339, as both binaries write it.
@@ -178,23 +296,38 @@ fn flags_cell(line: usize, cell: &str) -> Result<StatusFlags, String> {
 /// any number of sub-value groups, reads the same way. The integral is left
 /// out: it is worked out again from the readings by whatever reads them.
 pub fn read_csv(text: &str) -> Result<Imported, String> {
+    read_csv_from(text.as_bytes(), None)
+}
+
+/// [`read_csv`], from a stream, keeping at most `limit` readings and
+/// counting the rest in [`Imported::left_out`]: a file far larger than the
+/// session can hold is read through without being held.
+pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Imported, String> {
     let mut device = None;
-    let mut body_start = 0;
-    let mut first_row_line = 1;
-    for line in text.split_inclusive('\n') {
+    let mut first_row_line = 0;
+    let mut header = String::new();
+    loop {
+        let mut line = String::new();
+        if input.read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+            break;
+        }
+        first_row_line += 1;
+        if first_row_line == 1 {
+            // A spreadsheet saving as UTF-8 puts a byte-order mark first.
+            line = line.trim_start_matches('\u{feff}').to_string();
+        }
         let Some(comment) = line.trim_end().strip_prefix('#') else {
+            header = line;
             break;
         };
         if let Some(model) = comment.trim().strip_prefix("device:") {
-            device = Some(model.trim().to_string()).filter(|d| !d.is_empty());
+            device = device_name(model);
         }
-        body_start += line.len();
-        first_row_line += 1;
     }
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(false)
-        .from_reader(&text.as_bytes()[body_start..]);
+        .from_reader(std::io::Cursor::new(header.into_bytes()).chain(input));
     let header = reader
         .headers()
         .map_err(|e| at(first_row_line, format!("no header row ({e})")))?
@@ -233,10 +366,16 @@ pub fn read_csv(text: &str) -> Result<Imported, String> {
         view: None,
         readings: Vec::new(),
         markers: Vec::new(),
+        aux_slots: aux_groups.len(),
+        left_out: 0,
     };
     for (i, row) in reader.records().enumerate() {
         let line = first_row_line + 1 + i;
         let row = row.map_err(|e| at(line, e))?;
+        if limit.is_some_and(|limit| imported.readings.len() >= limit) {
+            imported.left_out += 1;
+            continue;
+        }
         let cell = |i: usize| row.get(i).unwrap_or("");
         let mut aux = Vec::new();
         for &(_, label, value, unit) in &aux_groups {
@@ -332,24 +471,39 @@ struct JsonAuxIn {
 
 /// Read a JSON export: the `_metadata` line, then one reading per line.
 pub fn read_json(text: &str) -> Result<Imported, String> {
-    let mut lines = text
+    read_json_from(text.as_bytes(), None)
+}
+
+/// [`read_json`], from a stream, keeping at most `limit` readings and
+/// counting the rest in [`Imported::left_out`].
+pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Imported, String> {
+    let mut lines = input
         .lines()
         .enumerate()
-        .filter(|(_, l)| !l.trim().is_empty());
+        .map(|(i, l)| l.map(|l| (i, l)).map_err(|e| e.to_string()))
+        .filter(|l| l.as_ref().map_or(true, |(_, l)| !l.trim().is_empty()));
     let (_, first) = lines
         .next()
-        .ok_or_else(|| "the file is empty".to_string())?;
+        .ok_or_else(|| "the file is empty".to_string())??;
+    let first = first.trim_start_matches('\u{feff}');
     let metadata: JsonMetadataLine =
         serde_json::from_str(first).map_err(|e| at(1, format!("no `_metadata` line ({e})")))?;
     let mut imported = Imported {
-        device: metadata.metadata.device,
+        device: metadata.metadata.device.as_deref().and_then(device_name),
         view: metadata.metadata.view.map(|v| v.get().to_string()),
         readings: Vec::new(),
         markers: Vec::new(),
+        aux_slots: 0,
+        left_out: 0,
     };
-    for (i, text) in lines {
+    for next in lines {
+        let (i, text) = next?;
         let line = i + 1;
-        let r: JsonReadingIn = serde_json::from_str(text).map_err(|e| at(line, e))?;
+        if limit.is_some_and(|limit| imported.readings.len() >= limit) {
+            imported.left_out += 1;
+            continue;
+        }
+        let r: JsonReadingIn = serde_json::from_str(&text).map_err(|e| at(line, e))?;
         let mut aux = Vec::with_capacity(r.aux.len());
         for a in r.aux {
             let (value, display_raw) = value_text(line, a.value.as_deref().unwrap_or(""))?;
@@ -400,6 +554,12 @@ pub fn read_json(text: &str) -> Result<Imported, String> {
             });
         }
     }
+    imported.aux_slots = imported
+        .readings
+        .iter()
+        .map(|r| r.aux.len())
+        .max()
+        .unwrap_or(0);
     Ok(imported)
 }
 
@@ -408,6 +568,7 @@ mod tests {
     use super::*;
     use crate::export::{CsvLayout, device_comment, metadata_line, write_measurement_json};
     use chrono::{DateTime, Local};
+    use std::path::Path;
     use std::time::Duration;
 
     /// Each reading's marker, as the writers take it.
@@ -579,6 +740,71 @@ mod tests {
             metadata_line("UT61E+", Some("not json")),
             metadata_line("UT61E+", None)
         );
+    }
+
+    /// A CSV a spreadsheet saved as UTF-8 opens with a byte-order mark; it
+    /// reads the same.
+    #[test]
+    fn a_byte_order_mark_is_skipped() {
+        let (readings, marks) = shapes();
+        let text = format!("\u{feff}{}", csv_of(&readings, &marks));
+        assert_eq!(
+            read_csv(&text).expect("reads").device.as_deref(),
+            Some("UT61E+")
+        );
+        let text = format!("\u{feff}{}", json_of(&readings, &marks));
+        assert_eq!(read_json(&text).expect("reads").readings.len(), 6);
+    }
+
+    /// A limit keeps the first readings and counts the rest; the markers on
+    /// readings left out go with them.
+    #[test]
+    fn a_limit_keeps_the_first_readings() {
+        let (readings, marks) = shapes();
+        let csv = csv_of(&readings, &marks);
+        let imported = read_csv_from(csv.as_bytes(), Some(4)).expect("reads");
+        assert_eq!((imported.readings.len(), imported.left_out), (4, 2));
+        assert_eq!(
+            imported.markers.len(),
+            1,
+            "the marker on the sixth is left out"
+        );
+        let json = json_of(&readings, &marks);
+        let imported = read_json_from(json.as_bytes(), Some(4)).expect("reads");
+        assert_eq!((imported.readings.len(), imported.left_out), (4, 2));
+    }
+
+    /// A meter's name read from a file stays on one line, and file text
+    /// quoted in a message cannot act on the terminal it is printed to.
+    #[test]
+    fn file_text_stays_inert() {
+        let line = "{\"_metadata\":{\"device\":\"UT\\n61E+\"}}\n";
+        assert_eq!(
+            read_json(line).expect("reads").device.as_deref(),
+            Some("UT 61E+")
+        );
+        assert_eq!(device_comment("UT\n61E+"), "# device: UT 61E+");
+        let (readings, marks) = shapes();
+        let text = csv_of(&readings, &marks).replace("1.6109", "\u{1b}[2J");
+        let message = read_csv(&text).expect_err("not a value");
+        assert!(
+            !message.contains('\u{1b}') && message.contains("\\u{1b}"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn the_kind_comes_from_the_name_then_the_content() {
+        let kind = |name: &str, head: &str| ExportKind::detect(Path::new(name), head);
+        assert_eq!(kind("a.CSV", "{"), ExportKind::Csv);
+        assert_eq!(kind("a.json", ""), ExportKind::Json);
+        assert_eq!(kind("a.replay", ""), ExportKind::Replay);
+        assert_eq!(kind("recording", "# dmm-replay 1\n"), ExportKind::Replay);
+        assert_eq!(
+            kind("recording", "\u{feff}{\"_metadata\""),
+            ExportKind::Json
+        );
+        assert_eq!(kind("recording", "# device: UT61E+\n"), ExportKind::Csv);
     }
 
     #[test]

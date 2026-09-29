@@ -406,12 +406,13 @@ same two flags, with `--device mock` spelled out, and `run --replay <FILE>`
 takes them in place of `--mock-mode`, opening a recorded session at the instant
 the preseed names.
 
-Converting a recording: `dmm-cli read` also takes `--mock-clock-scale max`,
-which plays a replay's every frame at its recorded timestamp as fast as it
-decodes and ends with the file — a day-long recording converts in seconds.
+Converting a recording: `dmm-cli read --import` plays a replay's every frame
+at its recorded timestamp as fast as it decodes and ends with the file — a
+day-long recording converts in seconds. It is `--replay` with the hidden
+`--mock-clock-scale max`, which takes the same shortcut.
 
 ```sh
-dmm-cli read --replay bench.replay --mock-clock-scale max -o bench.csv
+dmm-cli read --import bench.replay -o bench.csv
 ```
 
 `max` refuses `--mock-clock-preseed`, which it has no use for, and the GUI

@@ -229,14 +229,6 @@ Use cases: Home Assistant, Node-RED, InfluxDB/Grafana pipelines, multi-meter agg
 
 ## Data Replay & Export
 
-### Summarising an export without a GUI
-
-**Complexity:** Small
-
-Import… opens a CSV or JSON export in the GUI; the CLI has no counterpart yet. `dmm-cli read --import FILE` would print its readings and closing statistics, or convert it to another format, through the read loop's own writers.
-
-Use cases: a summary of a session someone else exported, converting a CSV to JSON for a script.
-
 ### Compare against an imported run
 
 **Complexity:** Medium

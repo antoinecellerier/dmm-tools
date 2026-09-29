@@ -33,6 +33,7 @@
 
 ### CLI
 
+- **`read --import` converts or summarises an exported CSV, JSON or replay file without waiting** — with its markers.
 - **`read --replay` keeps a recording's markers** — in its CSV, JSON and replay output.
 - **Text output names a UT181A's reading and sub-values, such as T1 or AC**
 

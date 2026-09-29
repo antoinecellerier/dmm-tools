@@ -9,7 +9,10 @@ mod csv_layout;
 mod read;
 
 pub use csv_layout::{CsvLayout, device_comment};
-pub use read::{Imported, ImportedAux, ImportedMarker, ImportedReading, read_csv, read_json};
+pub use read::{
+    ExportKind, Imported, ImportedAux, ImportedMarker, ImportedReading, escape_controls,
+    median_spacing, read_csv, read_csv_from, read_json, read_json_from,
+};
 
 use chrono::{DateTime, Local};
 use dmm_lib::flags::StatusFlags;
