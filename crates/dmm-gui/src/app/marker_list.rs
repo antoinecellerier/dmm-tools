@@ -264,6 +264,45 @@ impl App {
         }
     }
 
+    /// Drop the queued `--replay` markers the playback has passed: a Connect
+    /// resumes at the newest frame due, and the frames before it never play,
+    /// so their markers would pile onto the first readings after it, far
+    /// from their own moment. `cadence` spares the frame playback resumes
+    /// on.
+    pub(super) fn drop_replay_markers_passed(&mut self, cadence: std::time::Duration) {
+        let Some((start, _)) = self.clock.wall_origin() else {
+            return;
+        };
+        let resume = self
+            .clock
+            .now()
+            .saturating_duration_since(start)
+            .saturating_sub(cadence);
+        let before = self.replay_markers.len();
+        self.replay_markers.retain(|m| m.offset >= resume);
+        let dropped = before - self.replay_markers.len();
+        if dropped > 0 {
+            log::info!("replay resumed past {dropped} markers; they are left out");
+        }
+    }
+
+    /// Put the `--replay` file's saved view in place once `m` is at or past
+    /// the furthest moment it shows, so its window and cursors land on
+    /// readings the graph already holds.
+    pub(super) fn apply_replay_view(&mut self, m: &dmm_lib::measurement::Measurement) {
+        let Some((start, _)) = self.clock.wall_origin() else {
+            return;
+        };
+        let due = self.replay_view.as_ref().is_some_and(|(_, reach)| {
+            start
+                .checked_add(*reach)
+                .is_some_and(|at| at <= m.timestamp)
+        });
+        if due && let Some((view, _)) = self.replay_view.take() {
+            self.graph.apply_view_state(&view, start);
+        }
+    }
+
     /// `N`, or with `write_note` `Ctrl+N`: mark the reading on screen.
     ///
     /// The reading on screen rather than the moment of the key press: paused

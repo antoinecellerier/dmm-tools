@@ -128,7 +128,7 @@ impl Output {
             )),
             Self::Json { .. } => Some(format!(
                 "{}\n",
-                dmm_shared::export::metadata_line(model_name)
+                dmm_shared::export::metadata_line(model_name, None)
             )),
             Self::Replay { .. } => None,
         }

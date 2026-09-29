@@ -17,6 +17,9 @@ mod render;
 mod time;
 mod toolbar;
 mod view;
+mod view_state;
+
+pub(crate) use view_state::ViewState;
 
 #[cfg(test)]
 mod tests;

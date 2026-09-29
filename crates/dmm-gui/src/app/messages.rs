@@ -230,13 +230,23 @@ impl App {
             .as_ref()
             .map(|source| (Arc::clone(&source.replay), source.recorded));
         if let Some((replay, recorded)) = source {
-            if self.pin_replay_origin(recorded) {
-                // Once per session: a later Connect resumes the playback, and
-                // the markers already played are on their readings.
+            // Queued at the first Connect, and again after an import cleared
+            // the session; a plain Disconnect/Connect resumes the playback,
+            // and the markers already played are on their readings.
+            if self.pin_replay_origin(recorded) || std::mem::take(&mut self.requeue_replay) {
                 let mut markers = replay.markers.clone();
                 markers.sort_by_key(|m| m.offset);
                 self.replay_markers = markers.into();
+                self.replay_view = replay
+                    .view
+                    .as_deref()
+                    .and_then(super::import::parse_view)
+                    .map(|view| {
+                        let reach = super::import::view_reach(&view);
+                        (view, reach)
+                    });
             }
+            self.drop_replay_markers_passed(replay.cadence());
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
             // No interval floor: the protocol sleeps until each frame is due,
@@ -476,6 +486,7 @@ impl App {
                     // Filled in from the frames before it when the meter sends
                     // a reading's parts in frames of their own.
                     self.place_replay_marker(&m);
+                    self.apply_replay_view(&m);
                     let shown = self.held.fill_in(self.last_measurement.as_ref(), m);
                     self.last_measurement = Some(shown);
                 }
@@ -800,6 +811,86 @@ mod tests {
         play(&mut app, 400);
         app.add_marker(false);
         assert_eq!(app.markers.iter().last().map(|m| m.number), Some(7));
+    }
+
+    /// A Connect that resumes a playback drops the markers the playback has
+    /// passed, rather than piling them onto its next readings; after an
+    /// import cleared the session, the next Connect queues the recording's
+    /// markers and view again, less the ones passed.
+    #[test]
+    fn a_resumed_replay_drops_the_markers_it_passed() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::manual());
+        let mut source = crate::ReplaySource::fixture();
+        source.replay = Arc::new(
+            dmm_lib::replay::Replay::parse(
+                "# dmm-replay 1\n\
+                 # device: ut61eplus\n\
+                 # recorded: 2026-09-02T10:00:00Z\n\
+                 # view: {\"mean\":true}\n\
+                 0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n\
+                 # marker: 1000 1 early\n\
+                 # marker: 90000 2 passed\n\
+                 # marker: 120000 3 ahead\n",
+            )
+            .expect("a well-formed recording"),
+        );
+        app.replay = Some(source);
+        let ctx = egui::Context::default();
+        app.connect(&ctx);
+        app.disconnect();
+        assert_eq!(app.replay_markers.len(), 3);
+
+        app.clock.sleep(Duration::from_secs(100));
+        app.connect(&ctx);
+        app.disconnect();
+        let left: Vec<u32> = app.replay_markers.iter().map(|m| m.number).collect();
+        assert_eq!(left, [3], "the playback resumed past the first two");
+
+        app.reset_session_for_import();
+        assert!(app.replay_markers.is_empty() && app.replay_view.is_none());
+        app.connect(&ctx);
+        app.disconnect();
+        let left: Vec<u32> = app.replay_markers.iter().map(|m| m.number).collect();
+        assert_eq!(left, [3], "queued again, less the ones passed");
+        assert!(app.replay_view.is_some(), "the view is queued again");
+    }
+
+    /// A replay's saved view waits until the playback reaches the furthest
+    /// moment it shows, then goes in once.
+    #[test]
+    fn a_replays_view_waits_for_its_readings() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut source = crate::ReplaySource::fixture();
+        source.replay = Arc::new(
+            dmm_lib::replay::Replay::parse(
+                "# dmm-replay 1\n\
+                 # device: ut61eplus\n\
+                 # recorded: 2026-09-02T10:00:00Z\n\
+                 # view: {\"mean\":true,\"cursors\":{\"a\":0.1}}\n\
+                 0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n",
+            )
+            .expect("a well-formed recording"),
+        );
+        app.replay = Some(source);
+        let ctx = egui::Context::default();
+        app.connect(&ctx);
+        app.disconnect();
+        let (start, _) = app.clock.wall_origin().expect("the Connect pins it");
+        let play = |app: &mut App, ms| {
+            let mut m = Measurement::test_fixture(
+                MeasuredValue::Normal(1.0),
+                "V",
+                dmm_lib::flags::StatusFlags::default(),
+            );
+            m.timestamp = start + Duration::from_millis(ms);
+            deliver(app, DmmMessage::Measurement(m));
+        };
+        play(&mut app, 0);
+        assert!(!app.graph.show_mean, "the cursor's reading has not played");
+        play(&mut app, 100);
+        assert!(app.graph.show_mean);
+        assert!(app.graph.cursors_active);
+        assert!(app.replay_view.is_none(), "applied once");
     }
 
     /// The mitigation itself: the meter that answered the probe is saved, so

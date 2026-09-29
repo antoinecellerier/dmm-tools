@@ -349,6 +349,12 @@ pub struct App {
     /// offset order: each goes on the first reading played at or after its
     /// offset (see `place_replay_marker`).
     replay_markers: std::collections::VecDeque<dmm_lib::replay::ReplayMarker>,
+    /// The `--replay` file's saved view, waiting until the playback reaches
+    /// the furthest moment it shows (see `import::view_reach`).
+    replay_view: Option<(crate::graph::ViewState, std::time::Duration)>,
+    /// An import cleared a `--replay` session: its next Connect queues the
+    /// recording's markers and view again.
+    requeue_replay: bool,
     /// An Import… under way: the file parsing, or its readings going in.
     import_job: Option<import::ImportJob>,
     /// The file the session was imported from, once it is in.
@@ -480,6 +486,8 @@ impl App {
             capture,
             markers: crate::markers::Markers::default(),
             replay_markers: std::collections::VecDeque::new(),
+            replay_view: None,
+            requeue_replay: false,
             import_job: None,
             imported: None,
             import_cadence_ms: None,

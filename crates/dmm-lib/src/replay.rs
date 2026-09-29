@@ -17,6 +17,7 @@
 //! # recorded: 2026-09-16T10:22:31.123+02:00
 //! # model: UT61E+
 //! # link: USB cable
+//! # view: {"window":30.0,"mean":true}
 //! 0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30
 //! # marker: 0 1 probes on
 //! 101 02 30 2D 30 2E 35 31 33 37 01 00 30 30 31
@@ -27,7 +28,10 @@
 //! playback that skips the marked frame puts the marker on the next one
 //! rather than losing it.
 //!
-//! [`header`], [`sample_line`] and [`marker_line`] write what
+//! A `# view:` line carries the viewer's view of the recording as text this
+//! crate keeps but does not read.
+//!
+//! [`header`], [`sample_line`], [`marker_line`] and [`view_line`] write what
 //! [`Replay::parse`] reads, so a writer in another crate cannot drift from
 //! this parser.
 
@@ -121,6 +125,9 @@ pub struct Replay {
     pub link: Option<Link>,
     /// The markers the recording was saved with, in file order.
     pub markers: Vec<ReplayMarker>,
+    /// The graph view the recording was saved with, as the `# view:` line's
+    /// text: its fields are the viewer's business, not this crate's.
+    pub view: Option<String>,
     /// Non-empty, offsets non-decreasing — both enforced by the parser.
     ///
     /// An `Arc<Vec>` rather than an `Arc<[_]>`: converting to a slice copies
@@ -152,6 +159,7 @@ impl Replay {
         let mut link = RECORDED_LINK_DEFAULT;
         let mut samples: Vec<(Duration, Vec<u8>)> = Vec::new();
         let mut markers: Vec<ReplayMarker> = Vec::new();
+        let mut view: Option<String> = None;
 
         for (index, raw) in text.lines().enumerate() {
             let line_no = index + 1;
@@ -178,6 +186,8 @@ impl Replay {
                     // A link we don't know is not a reason to refuse a
                     // recording: the frames are the file, the link is a label.
                     link = link_from_token(value.trim());
+                } else if let Some(value) = comment.strip_prefix("view:") {
+                    view = Some(value.trim().to_string()).filter(|v| !v.is_empty());
                 } else if comment.starts_with("marker:") {
                     // From the untrimmed line: a note keeps its own spaces.
                     markers.push(parse_marker(line_no, raw)?);
@@ -210,6 +220,7 @@ impl Replay {
             model,
             link,
             markers,
+            view,
             samples: Arc::new(samples),
             cadence: OnceLock::new(),
         })
@@ -347,6 +358,16 @@ pub fn marker_line(offset: Duration, number: u32, note: &str) -> String {
         .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
         .collect();
     format!("# marker: {ms} {number} {note}\n")
+}
+
+/// The line saving the viewer's view of the recording, `view` being its
+/// one-line text; a line break in it is written as a space.
+pub fn view_line(view: &str) -> String {
+    let view: String = view
+        .chars()
+        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
+        .collect();
+    format!("# view: {view}\n")
 }
 
 /// One sample line: the offset in milliseconds, then the payload as
@@ -783,6 +804,19 @@ mod tests {
         // A marker line trimmed of its trailing space still has an empty note.
         let bare = text.replace("# marker: 250 2 \n", "# marker: 250 2\n");
         assert_eq!(parsed(&bare).markers[0], marker(250, 2, ""));
+    }
+
+    /// The view line is kept as written, for the viewer to read.
+    #[test]
+    fn the_view_line_is_kept_as_text() {
+        let mut text = format!("{MAGIC}\n# device: ut61eplus\n# recorded: {RECORDED}\n");
+        text.push_str(&view_line("{\"window\":30.0,\n\"mean\":true}"));
+        text.push_str(&format!("0 {DCV_BATTERY}\n"));
+        assert_eq!(
+            parsed(&text).view.as_deref(),
+            Some("{\"window\":30.0, \"mean\":true}")
+        );
+        assert_eq!(parsed(&three_frames()).view, None);
     }
 
     #[test]

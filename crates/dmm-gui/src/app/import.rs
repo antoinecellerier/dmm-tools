@@ -56,6 +56,8 @@ pub(super) struct Loaded {
     cadence: Duration,
     /// The most sub-values any reading carries: the CSV columns to keep.
     aux_slots: usize,
+    /// The graph view the file was saved with, as its JSON text.
+    view: Option<String>,
 }
 
 /// An import under way.
@@ -73,6 +75,9 @@ pub(super) struct Ingest {
     /// Readings taken so far.
     taken: usize,
     markers: std::collections::VecDeque<(usize, u32, String)>,
+    view: Option<String>,
+    /// The file's first reading, which the view's times count from.
+    first: Option<Instant>,
 }
 
 /// Parse `path` and stamp its readings from `base`.
@@ -149,6 +154,7 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
             .collect(),
         cadence: median_spacing(&offsets),
         aux_slots,
+        view: imported.view,
     }
 }
 
@@ -209,6 +215,7 @@ fn load_replay(text: &str, base: Instant) -> Result<Loaded, String> {
         }
     }
     Ok(Loaded {
+        view: replay.view.clone(),
         path: PathBuf::new(),
         device: Some(replay.device.display_name.to_string()),
         device_id: Some(replay.device.id),
@@ -314,6 +321,10 @@ impl App {
         self.markers.clear();
         self.replay_markers.clear();
         self.import_cadence_ms = None;
+        self.replay_view = None;
+        // A `--replay` session's markers and view go back in with its next
+        // Connect.
+        self.requeue_replay = self.replay.is_some();
         self.imported = None;
         self.import_job = None;
     }
@@ -358,6 +369,7 @@ impl App {
             markers,
             cadence,
             aux_slots,
+            view,
         } = loaded;
         if readings.is_empty() {
             self.toast = Some(Toast::info(format!(
@@ -379,6 +391,7 @@ impl App {
         self.import_cadence_ms = Some(ms);
         self.set_gap_interval(self.settings.sample_interval_ms);
         let total = readings.len();
+        let first = readings.first().map(|m| m.timestamp);
         self.capture.recording.toggle(self.clock.now());
         Some(ImportJob::Ingesting(Ingest {
             path,
@@ -386,6 +399,8 @@ impl App {
             total,
             taken: 0,
             markers: markers.into(),
+            view,
+            first,
         }))
     }
 
@@ -438,7 +453,11 @@ impl App {
         self.capture
             .recording
             .mark_exported(epoch, usize::MAX, Recording::marker_keys(&marked));
-        self.graph.show_all();
+        let view = ingest.view.as_deref().and_then(parse_view);
+        match (view, ingest.first) {
+            (Some(view), Some(first)) => self.graph.apply_view_state(&view, first),
+            _ => self.graph.show_all(),
+        }
         let left_out = ingest.total - ingest.taken;
         let name = file_name(&ingest.path);
         info!(
@@ -460,6 +479,28 @@ impl App {
             readings: ingest.taken,
         });
     }
+}
+
+/// A saved view's JSON text, or `None` — with a log line — for text this
+/// version cannot read: the readings still import, under the default view.
+pub(super) fn parse_view(json: &str) -> Option<crate::graph::ViewState> {
+    serde_json::from_str(json)
+        .inspect_err(|e| warn!("the saved view does not read and is left out: {e}"))
+        .ok()
+}
+
+/// How far into a recording `view` reaches: the end of its window, or its
+/// furthest cursor — what a playback has to have played before the view has
+/// anything to show.
+pub(super) fn view_reach(view: &crate::graph::ViewState) -> Duration {
+    let window_end = view.start.map(|s| s + view.window.unwrap_or(0.0));
+    let cursors = view.cursors.map_or([None, None], |c| [c.a, c.b]);
+    let reach = std::iter::once(window_end)
+        .chain(cursors)
+        .flatten()
+        .filter(|t| t.is_finite())
+        .fold(0.0_f64, f64::max);
+    Duration::try_from_secs_f64(reach).unwrap_or(Duration::ZERO)
 }
 
 /// `n readings`, singular for one.
@@ -663,6 +704,23 @@ timestamp,mode,value,unit,range,flags,marker,note
             marker.at, second.measurement.timestamp,
             "at or after its offset"
         );
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// A saved view is put back once the readings are in: its window,
+    /// overlays and cursors, times counted from the file's first reading.
+    #[test]
+    fn an_import_puts_the_saved_view_back() {
+        let mut app = app();
+        let json = "{\"_metadata\":{\"device\":\"UT61E+\",\"view\":{\"window\":0.1,\"start\":0.05,\"mean\":true,\"cursors\":{\"a\":0.1}}}}\n\
+            {\"timestamp\":\"2026-09-02T10:00:00+00:00\",\"mode\":\"DC V\",\"value\":1.0,\"unit\":\"V\",\"range\":\"2.2V\",\"flags\":{}}\n\
+            {\"timestamp\":\"2026-09-02T10:00:00.100+00:00\",\"mode\":\"DC V\",\"value\":2.0,\"unit\":\"V\",\"range\":\"2.2V\",\"flags\":{}}\n\
+            {\"timestamp\":\"2026-09-02T10:00:00.200+00:00\",\"mode\":\"DC V\",\"value\":3.0,\"unit\":\"V\",\"range\":\"2.2V\",\"flags\":{}}\n";
+        let path = file("viewed.json", json);
+        import(&mut app, path.clone());
+        assert!(app.graph.show_mean);
+        assert!(!app.graph.live);
+        assert!((app.graph.time_window_secs - 0.1).abs() < 1e-9);
         let _ = std::fs::remove_file(path);
     }
 

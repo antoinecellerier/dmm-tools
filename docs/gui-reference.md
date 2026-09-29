@@ -256,7 +256,9 @@ A thin strip below the main plot showing the full capture history.
   the mode it stayed in and the recording's start time; with nothing
   recorded, it saves the readings the graph holds. The arrow beside it
   offers JSON instead, or a replay file that
-  [`--replay`](#command-line-options) plays back
+  [`--replay`](#command-line-options) plays back. A JSON or replay file also
+  keeps the graph's view — time window, Y axis, mean, envelope, reference
+  lines and cursors — which Import… and `--replay` put back
 - **Discard** button — drops a stopped recording; Export… then saves the
   graph's readings, the recording's among them while the graph still holds
   them. It asks first only for unexported samples and markers the graph has

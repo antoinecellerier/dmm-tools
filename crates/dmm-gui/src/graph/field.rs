@@ -88,6 +88,16 @@ impl NumberListField {
         &self.values
     }
 
+    /// Write `values` into both halves, as the graph shows them.
+    pub(super) fn set(&mut self, values: &[f64]) {
+        self.values = values.to_vec();
+        self.text = values
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+    }
+
     /// Re-read the draft after an edit. Entries that don't parse are dropped
     /// rather than held, so a trailing separator or a half-typed number just
     /// doesn't draw a line yet.

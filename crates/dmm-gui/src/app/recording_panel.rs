@@ -40,7 +40,7 @@ fn sample_count(n: usize) -> String {
 /// What the panel says under an imported session's buttons.
 fn imported_hint(from: &super::import::ImportedFrom) -> String {
     format!(
-        "Imported {} from {}. Export\u{2026} saves them with your markers.",
+        "Imported {} from {}. Export\u{2026} saves them with your markers and view.",
         super::import::readings_noun(from.readings),
         super::import::file_name(&from.path)
     )

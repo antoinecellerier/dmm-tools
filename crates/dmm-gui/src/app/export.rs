@@ -119,6 +119,8 @@ pub(super) struct ExportRequest {
     /// The CSV's columns, marker ones included when there are markers.
     csv_layout: CsvLayout,
     experimental: bool,
+    /// The graph's view, saved in a JSON or replay file, as JSON text.
+    view: Option<String>,
     /// A replay file's `# device:` id and link; `None` for any other format.
     replay: Option<(&'static str, Option<Link>)>,
     /// The markers on the exported samples, oldest first, as they were at
@@ -136,16 +138,28 @@ impl ExportRequest {
                     error!("CSV export failed: {e}");
                     format!("Export failed: {e}")
                 }),
-            ExportFormat::Json => {
-                render_json(samples, &marked, &self.device_model, self.experimental).map_err(|e| {
-                    error!("JSON export failed: {e}");
-                    format!("Export failed: {e}")
-                })
-            }
+            ExportFormat::Json => render_json(
+                samples,
+                &marked,
+                &self.device_model,
+                self.experimental,
+                self.view.as_deref(),
+            )
+            .map_err(|e| {
+                error!("JSON export failed: {e}");
+                format!("Export failed: {e}")
+            }),
             ExportFormat::Replay => self
                 .replay
                 .and_then(|(id, link)| {
-                    render_replay(samples, &marked, id, Some(&self.device_model), link)
+                    render_replay(
+                        samples,
+                        &marked,
+                        id,
+                        Some(&self.device_model),
+                        link,
+                        self.view.as_deref(),
+                    )
                 })
                 .map(String::into_bytes)
                 .ok_or_else(|| {
@@ -164,7 +178,9 @@ type DialogResult = Result<Option<PathBuf>, String>;
 pub(super) enum PendingExport {
     /// Its save dialog is open.
     Choosing {
-        request: ExportRequest,
+        /// Boxed: it holds the rendered view text and the markers, far
+        /// larger than the other state's receiver.
+        request: Box<ExportRequest>,
         rx: mpsc::Receiver<DialogResult>,
     },
     /// Rendered and being written.
@@ -317,6 +333,9 @@ impl App {
                 ..self.csv_layout()
             },
             experimental: self.experimental(),
+            // Offsets from the file's own first reading, so the view lands
+            // where it was in whatever session opens the file.
+            view: serde_json::to_string(&self.graph.view_state(first.measurement.timestamp)).ok(),
             replay,
             marked: marked.into_iter().cloned().collect(),
         })
@@ -364,7 +383,10 @@ impl App {
         );
         let name = request.default_name.clone();
         // Stored here, with the pin, so the two cannot come apart.
-        self.export = Some(PendingExport::Choosing { request, rx });
+        self.export = Some(PendingExport::Choosing {
+            request: Box::new(request),
+            rx,
+        });
         Ok((tx, name))
     }
 
@@ -430,7 +452,7 @@ impl App {
                 };
                 match answer {
                     Ok(Some(path)) => match self.render_pinned(&request) {
-                        Ok(bytes) => self.spawn_write(ctx, path, bytes, request),
+                        Ok(bytes) => self.spawn_write(ctx, path, bytes, *request),
                         Err(message) => self.toast = Some(Toast::error(message)),
                     },
                     Ok(None) => {
@@ -793,6 +815,7 @@ mod tests {
                 &[],
                 "UNI-T UT181A",
                 app.experimental(),
+                None,
             )
             .unwrap(),
         )
@@ -954,7 +977,7 @@ mod tests {
     /// app as `poll_export` does when a path comes back.
     fn take_request(app: &mut App) -> ExportRequest {
         match app.export.take() {
-            Some(PendingExport::Choosing { request, .. }) => request,
+            Some(PendingExport::Choosing { request, .. }) => *request,
             _ => panic!("no export waiting on its dialog"),
         }
     }
@@ -1005,11 +1028,19 @@ mod tests {
             .map(|s| s.measurement.clone());
         app.add_marker(false);
         let marked = app.capture.recording.marked(app.markers.iter());
+        let first = app
+            .capture
+            .recording
+            .export_samples()
+            .next()
+            .expect("a sample");
+        let view = serde_json::to_string(&app.graph.view_state(first.measurement.timestamp)).ok();
         let expected = render_json(
             app.capture.recording.export_samples(),
             &marked,
             UNKNOWN_DEVICE,
             app.experimental(),
+            view.as_deref(),
         )
         .expect("rendering the fixture buffer");
         app.begin_export(ExportFormat::Json).expect("two samples");

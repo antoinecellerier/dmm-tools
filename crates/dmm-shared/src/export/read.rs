@@ -294,7 +294,7 @@ struct JsonMetadata {
     device: Option<String>,
     /// Kept as written: its fields are the GUI's.
     #[serde(default)]
-    view: Option<serde_json::Value>,
+    view: Option<Box<serde_json::value::RawValue>>,
 }
 
 /// One reading line of a JSON export, as `write_measurement_json` writes it.
@@ -343,7 +343,7 @@ pub fn read_json(text: &str) -> Result<Imported, String> {
         serde_json::from_str(first).map_err(|e| at(1, format!("no `_metadata` line ({e})")))?;
     let mut imported = Imported {
         device: metadata.metadata.device,
-        view: metadata.metadata.view.map(|v| v.to_string()),
+        view: metadata.metadata.view.map(|v| v.get().to_string()),
         readings: Vec::new(),
         markers: Vec::new(),
     };
@@ -490,7 +490,7 @@ mod tests {
     }
 
     fn json_of(readings: &[Measurement], marks: &[Option<(u32, &str)>]) -> String {
-        let mut out = format!("{}\n", metadata_line("UT61E+")).into_bytes();
+        let mut out = format!("{}\n", metadata_line("UT61E+", None)).into_bytes();
         for (m, mark) in readings.iter().zip(marks) {
             write_measurement_json(&mut out, m, &ts(m), false, None, *mark).expect("a line");
             out.push(b'\n');
@@ -553,6 +553,32 @@ mod tests {
         assert_eq!(imported.readings[0].progress, Some(40));
         let (again, marks_again) = rebuilt(&imported);
         assert_eq!(json_of(&again, &marks_again), text);
+    }
+
+    /// The view goes into the metadata as an object and comes back as its
+    /// text; text that is not JSON is left out rather than written.
+    #[test]
+    fn a_json_export_carries_the_view() {
+        let line = metadata_line("UT61E+", Some(r#"{"window":30.0,"mean":true}"#));
+        // As written, whatever key order a JSON value would give it.
+        assert_eq!(
+            line,
+            r#"{"_metadata":{"device":"UT61E+","view":{"window":30.0,"mean":true}}}"#
+        );
+        let imported = read_json(&format!("{line}\n")).expect("reads");
+        assert_eq!(
+            imported.view.as_deref(),
+            Some(r#"{"window":30.0,"mean":true}"#)
+        );
+        assert_eq!(
+            metadata_line("UT61E+", Some("[1, 2]")),
+            metadata_line("UT61E+", None),
+            "an array is no view"
+        );
+        assert_eq!(
+            metadata_line("UT61E+", Some("not json")),
+            metadata_line("UT61E+", None)
+        );
     }
 
     #[test]

@@ -20,8 +20,28 @@ use std::borrow::Cow;
 
 /// The `_metadata` object a JSON export opens with, as its line — without the
 /// newline that ends it.
-pub fn metadata_line(device_model: &str) -> String {
-    json!({"_metadata": {"device": device_model}}).to_string()
+///
+/// `view` is the viewer's view of the readings, as JSON text the GUI writes
+/// and reads back. It goes in as an object, written as it came — not re-keyed
+/// by a JSON value, whose key order depends on how the binary was built — and
+/// text that is not a one-line JSON object is left out rather than written as
+/// a string nothing could read back.
+pub fn metadata_line(device_model: &str, view: Option<&str>) -> String {
+    let view = view.filter(|v| {
+        let object = !v.contains(['\n', '\r'])
+            && matches!(serde_json::from_str::<Value>(v), Ok(Value::Object(_)));
+        if !object {
+            log::warn!("export: the view is not a one-line JSON object and is left out");
+        }
+        object
+    });
+    match view {
+        Some(view) => format!(
+            "{{\"_metadata\":{{\"device\":{},\"view\":{view}}}}}",
+            Value::from(device_model)
+        ),
+        None => json!({"_metadata": {"device": device_model}}).to_string(),
+    }
 }
 
 /// Write one reading to `w` as a JSON export line, without the newline that
@@ -592,7 +612,7 @@ mod tests {
             assert_eq!(got, row.expected, "{}", row.label);
         }
 
-        let got = metadata_line("Say \"UT\" \\ 61");
+        let got = metadata_line("Say \"UT\" \\ 61", None);
         assert_eq!(
             got,
             "{\"_metadata\":{\"device\":\"Say \\\"UT\\\" \\\\ 61\"}}"
@@ -622,7 +642,7 @@ mod tests {
              \"record\":false,\"loz\":false,\"void\":false,\"dc\":false}}"
         );
         assert_eq!(
-            metadata_line("UNI-T UT61E+"),
+            metadata_line("UNI-T UT61E+", None),
             "{\"_metadata\":{\"device\":\"UNI-T UT61E+\"}}"
         );
     }

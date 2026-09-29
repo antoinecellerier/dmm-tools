@@ -59,15 +59,17 @@ pub fn render_csv(
 /// no report has confirmed, as the CLI's does.
 ///
 /// `marked` are the markers on buffered samples, oldest first, as for
-/// [`render_csv`]. Returns the file's bytes, as [`render_csv`] does.
+/// [`render_csv`]; `view` is the graph's view, saved in the metadata line.
+/// Returns the file's bytes, as [`render_csv`] does.
 pub(crate) fn render_json(
     samples: std::collections::vec_deque::Iter<'_, Sample>,
     marked: &[&Marker],
     device_model: &str,
     experimental: bool,
+    view: Option<&str>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut marks = MarkCursor::new(marked);
-    let metadata = dmm_shared::export::metadata_line(device_model);
+    let metadata = dmm_shared::export::metadata_line(device_model, view);
     // A reading with no sub-values runs to roughly 400 bytes; growing from
     // there beats growing from nothing on a half-million-sample buffer.
     let mut out: Vec<u8> = Vec::with_capacity(metadata.len() + 1 + samples.len() * 400);
@@ -128,7 +130,7 @@ impl<'a> MarkCursor<'a> {
 /// `link` is what the samples arrived over, so a session played back from the
 /// file is on the link the meter was. `marked` are the markers on buffered
 /// samples, oldest first, as for [`render_csv`]; each is written after its
-/// sample.
+/// sample. `view` is the graph's view, saved in a `# view:` line.
 ///
 /// `None` when any sample has an empty payload: the mock synthesises its
 /// readings, so there is no frame to hand a parser.
@@ -138,6 +140,7 @@ pub(crate) fn render_replay(
     device_id: &str,
     model: Option<&str>,
     link: Option<dmm_lib::transport::Link>,
+    view: Option<&str>,
 ) -> Option<String> {
     let mut marks = MarkCursor::new(marked);
     let mut rest = samples.peekable();
@@ -146,6 +149,9 @@ pub(crate) fn render_replay(
         .wall_time
         .to_rfc3339_opts(SecondsFormat::Millis, false);
     let mut out = replay::header(device_id, &recorded, model, link);
+    if let Some(view) = view {
+        out.push_str(&replay::view_line(view));
+    }
     // Offset digits and a newline, plus three characters per payload byte.
     // Frame length is fixed per family, so the first sample sizes the rest.
     out.reserve(rest.len() * (10 + 3 * first.measurement.raw_payload.len()));
@@ -1776,6 +1782,7 @@ mod tests {
             "ut61eplus",
             Some("UNI-T UT61E+"),
             Some(dmm_lib::transport::Link::Bluetooth),
+            None,
         )
         .expect("frames with wire bytes");
 
@@ -1805,8 +1812,8 @@ mod tests {
     /// must not produce an empty one the parser would have to skip.
     #[test]
     fn render_replay_leaves_out_an_unknown_model() {
-        let text =
-            render_replay(replay_samples().iter(), &[], "ut61eplus", None, None).expect("frames");
+        let text = render_replay(replay_samples().iter(), &[], "ut61eplus", None, None, None)
+            .expect("frames");
         assert!(!text.contains("# model:"), "{text}");
         assert!(!text.contains("# link:"), "{text}");
         assert_eq!(
@@ -1822,8 +1829,10 @@ mod tests {
     fn render_replay_refuses_a_sample_without_a_frame() {
         let mut samples = replay_samples();
         samples[1].measurement.raw_payload = Vec::new();
-        assert!(render_replay(samples.iter(), &[], "ut61eplus", None, None).is_none());
-        assert!(render_replay(VecDeque::new().iter(), &[], "ut61eplus", None, None).is_none());
+        assert!(render_replay(samples.iter(), &[], "ut61eplus", None, None, None).is_none());
+        assert!(
+            render_replay(VecDeque::new().iter(), &[], "ut61eplus", None, None, None).is_none()
+        );
     }
 
     /// A replay file writes each marker after its sample, at that sample's
@@ -1832,7 +1841,8 @@ mod tests {
     fn render_replay_keeps_the_markers() {
         let (samples, markers) = marked_samples();
         let marked: Vec<&Marker> = markers.iter().collect();
-        let text = render_replay(samples.iter(), &marked, "ut61eplus", None, None).expect("frames");
+        let text =
+            render_replay(samples.iter(), &marked, "ut61eplus", None, None, None).expect("frames");
         let replay = dmm_lib::replay::Replay::parse(&text).expect("parses");
         let saved: Vec<(u128, u32, &str)> = replay
             .markers
@@ -1915,7 +1925,7 @@ mod tests {
     fn render_json_writes_each_marker_on_its_sample() {
         let (samples, markers) = marked_samples();
         let marked: Vec<&Marker> = markers.iter().collect();
-        let bytes = render_json(samples.iter(), &marked, "UNI-T UT61E+", false).unwrap();
+        let bytes = render_json(samples.iter(), &marked, "UNI-T UT61E+", false, None).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<serde_json::Value> = text
             .lines()
@@ -1949,10 +1959,10 @@ mod tests {
     fn render_json_is_the_metadata_line_and_one_object_per_sample() {
         let mut samples = replay_samples();
         samples.truncate(2);
-        let bytes = render_json(samples.iter(), &[], "UNI-T UT61E+", true).unwrap();
+        let bytes = render_json(samples.iter(), &[], "UNI-T UT61E+", true, None).unwrap();
         let text = String::from_utf8(bytes).unwrap();
 
-        let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+").into_bytes();
+        let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+", None).into_bytes();
         for s in &samples {
             expected.push(b'\n');
             dmm_shared::export::write_measurement_json(
@@ -1998,7 +2008,7 @@ mod tests {
         let csv = render_csv(samples.iter(), &[], "UNI-T UT61E+", layout(0, 0)).unwrap();
         let csv_time = start.elapsed();
         let start = Instant::now();
-        let json = render_json(samples.iter(), &[], "UNI-T UT61E+", false).unwrap();
+        let json = render_json(samples.iter(), &[], "UNI-T UT61E+", false, None).unwrap();
         let json_time = start.elapsed();
 
         let ratio = json_time.as_secs_f64() / csv_time.as_secs_f64().max(1e-9);
