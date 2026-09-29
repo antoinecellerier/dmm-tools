@@ -110,6 +110,11 @@ impl Markers {
         true
     }
 
+    /// Drop every marker: a new session starts from none.
+    pub(crate) fn clear(&mut self) {
+        self.list.clear();
+    }
+
     /// Keep the markers whose reading `held` says is still somewhere.
     pub(crate) fn retain(&mut self, held: impl Fn(Instant) -> bool) {
         self.list.retain(|m| held(m.at));

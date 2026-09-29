@@ -132,19 +132,21 @@ impl App {
     }
 
     /// The interval the graph judges its gaps by for a sample interval of
-    /// `ms`: a replay's frames come no more often than its file has them,
-    /// and judged by the viewer's interval alone a recording spaced wider
-    /// than it broke at every point.
-    fn gap_interval_ms(&self, ms: u32) -> u32 {
-        self.replay.as_ref().map_or(ms, |source| {
-            let cadence = u32::try_from(source.replay.cadence().as_millis()).unwrap_or(u32::MAX);
-            ms.max(cadence)
-        })
+    /// `ms`: an imported file's or a replay's readings come no more often
+    /// than the file has them, and judged by the viewer's interval alone a
+    /// recording spaced wider than it broke at every point.
+    pub(super) fn gap_interval_ms(&self, ms: u32) -> u32 {
+        let file = self.import_cadence_ms.or_else(|| {
+            self.replay.as_ref().map(|source| {
+                u32::try_from(source.replay.cadence().as_millis()).unwrap_or(u32::MAX)
+            })
+        });
+        file.map_or(ms, |cadence| ms.max(cadence))
     }
 
     /// Tell the graph and the session integral how far apart readings come
     /// at a sample interval of `ms`, so both judge a gap alike.
-    fn set_gap_interval(&mut self, ms: u32) {
+    pub(super) fn set_gap_interval(&mut self, ms: u32) {
         let gap_ms = self.gap_interval_ms(ms);
         self.graph.set_sample_interval_ms(gap_ms);
         self.capture
@@ -191,6 +193,11 @@ impl App {
 
     pub(super) fn connect(&mut self, ctx: &egui::Context) {
         self.disconnect();
+        // An imported session's readings are the file's, stamped on a time
+        // base of their own: a meter's never join them.
+        if self.imported.is_some() || self.import_job.is_some() {
+            self.reset_session_for_import();
+        }
 
         let (msg_tx, msg_rx) = mpsc::channel();
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
@@ -1153,7 +1160,10 @@ mod tests {
         deliver_readings(&mut app, &[DC]);
 
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
-        assert_eq!(app.capture.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(
+            app.capture.history_layout.device.as_deref(),
+            Some(ut181a.display_name)
+        );
         assert_eq!(app.capture.history_layout.device_id, Some("ut181a"));
         assert_eq!(app.capture.history_layout.experimental, Some(true));
         assert_eq!(app.capture.history_layout.aux_slots, 4);
@@ -1196,7 +1206,10 @@ mod tests {
         deliver_readings(&mut app, &[DC]);
         assert_eq!(app.capture.recording.export_samples().len(), 1);
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
-        assert_eq!(app.capture.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(
+            app.capture.history_layout.device.as_deref(),
+            Some(ut181a.display_name)
+        );
     }
 
     /// Another meter answering mid-recording restarts the history under its
@@ -1212,10 +1225,13 @@ mod tests {
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
         assert_eq!(
-            app.capture.recording_layout.device,
+            app.capture.recording_layout.device.as_deref(),
             Some(ut61eplus.display_name)
         );
-        assert_eq!(app.capture.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(
+            app.capture.history_layout.device.as_deref(),
+            Some(ut181a.display_name)
+        );
         assert_eq!(app.capture.recording.recording_samples().len(), 2);
         assert_eq!(app.capture.recording.history_samples().len(), 1);
     }
@@ -1232,7 +1248,7 @@ mod tests {
         assert_eq!(app.capture.recording.export_samples().len(), 2);
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
         assert_eq!(
-            app.capture.history_layout.device,
+            app.capture.history_layout.device.as_deref(),
             Some(ut61eplus.display_name)
         );
     }

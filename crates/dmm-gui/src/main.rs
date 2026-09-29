@@ -69,6 +69,11 @@ struct Args {
     #[arg(long, value_name = "FILE", conflicts_with_all = ["device", "mock_mode"])]
     replay: Option<PathBuf>,
 
+    /// Open an exported CSV, JSON or replay file, with its markers, instead
+    /// of connecting to a meter
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["device", "mock_mode", "replay"])]
+    import: Option<PathBuf>,
+
     /// Run session time at FACTOR times real time (mock only, implies
     /// --device mock). Hidden: a contributor tool for screenshots and
     /// performance runs, documented in docs/development.md.
@@ -138,6 +143,8 @@ pub struct CliOverrides {
     pub clock: dmm_lib::Clock,
     /// The recording this session plays instead of opening a meter.
     pub replay: Option<ReplaySource>,
+    /// `--import`: the file this session opens instead of a meter.
+    pub import: Option<PathBuf>,
     /// `--update-notice`: the release the top bar links to, in place of
     /// asking GitHub.
     pub(crate) update_notice: Option<app::update_check::Tag>,
@@ -346,6 +353,7 @@ fn parse_args() -> CliOverrides {
         no_bluetooth: args.no_bluetooth,
         clock,
         replay,
+        import: args.import,
         update_notice: args.update_notice,
     }
 }

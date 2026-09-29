@@ -151,8 +151,9 @@ cmd_run() {
 		--device) dev="${args[i + 1]:-}" ;;
 		--device=*) dev="${args[i]#--device=}" ;;
 		# A recording names its own meter and opens no cable, so it neither
-		# takes the --device mock default nor counts as hardware.
-		--replay | --replay=*) replay=1 ;;
+		# takes the --device mock default nor counts as hardware; nor does an
+		# imported file, which opens no meter at all.
+		--replay | --replay=* | --import | --import=*) replay=1 ;;
 		esac
 	done
 	# With the hardware grant and no --device, the app opens what settings.json

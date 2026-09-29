@@ -115,7 +115,7 @@ pub(super) struct ExportRequest {
     /// What to mark saved once the file is written; `None` for the history,
     /// which nothing asks about before dropping.
     mark: Option<SavedMark>,
-    device_model: &'static str,
+    device_model: std::borrow::Cow<'static, str>,
     /// The CSV's columns, marker ones included when there are markers.
     csv_layout: CsvLayout,
     experimental: bool,
@@ -131,13 +131,13 @@ impl ExportRequest {
     fn render(&self, samples: vec_deque::Iter<'_, Sample>) -> Result<Vec<u8>, String> {
         let marked: Vec<&Marker> = self.marked.iter().collect();
         match self.format {
-            ExportFormat::Csv => render_csv(samples, &marked, self.device_model, self.csv_layout)
+            ExportFormat::Csv => render_csv(samples, &marked, &self.device_model, self.csv_layout)
                 .map_err(|e| {
                     error!("CSV export failed: {e}");
                     format!("Export failed: {e}")
                 }),
             ExportFormat::Json => {
-                render_json(samples, &marked, self.device_model, self.experimental).map_err(|e| {
+                render_json(samples, &marked, &self.device_model, self.experimental).map_err(|e| {
                     error!("JSON export failed: {e}");
                     format!("Export failed: {e}")
                 })
@@ -145,7 +145,7 @@ impl ExportRequest {
             ExportFormat::Replay => self
                 .replay
                 .and_then(|(id, link)| {
-                    render_replay(samples, &marked, id, Some(self.device_model), link)
+                    render_replay(samples, &marked, id, Some(&self.device_model), link)
                 })
                 .map(String::into_bytes)
                 .ok_or_else(|| {
@@ -271,8 +271,9 @@ impl App {
         let device_model = self
             .export_layout()
             .device
-            .or_else(|| self.active_device().map(|d| d.display_name))
-            .unwrap_or(UNKNOWN_DEVICE);
+            .clone()
+            .or_else(|| self.active_device().map(|d| d.display_name.into()))
+            .unwrap_or(UNKNOWN_DEVICE.into());
         // A replay is refused now rather than after the user picked a path:
         // the mock synthesises its readings, so a sample of it has no frame.
         let replay = match format {
@@ -300,7 +301,7 @@ impl App {
         // The name is built here, rather than in the dialog thread: the
         // first sample is where the file starts.
         let default_name =
-            format.default_name(device_model, single_mode(samples()), first.wall_time);
+            format.default_name(&device_model, single_mode(samples()), first.wall_time);
         let marked = self.capture.recording.marked(self.markers.iter());
         Ok(ExportRequest {
             format,

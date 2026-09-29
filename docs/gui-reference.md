@@ -524,6 +524,7 @@ do not modify the persisted `settings.json`.
 | `--no-bluetooth` | Turn off Bluetooth scanning for this session, whatever **Look for Bluetooth devices** is set to. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
 | `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --format replay` — instead of connecting to a meter. The last reading stays on screen once the recording has ended. |
+| `--import <FILE>` | Open an exported CSV, JSON or replay file, with its markers, instead of connecting to a meter. Connect leaves it for a meter. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
 | `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
 | `-V`, `--version` | Print version and exit. |

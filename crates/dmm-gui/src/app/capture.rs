@@ -22,8 +22,9 @@ use crate::recording::Recording;
 pub(super) struct CaptureLayout {
     /// Meter the buffered samples came from. Outlives disconnect so a capture
     /// can still be exported with the right provenance after the meter is
-    /// unplugged.
-    pub(super) device: Option<&'static str>,
+    /// unplugged. Owned for an imported file, which may name a meter the
+    /// registry doesn't.
+    pub(super) device: Option<std::borrow::Cow<'static, str>>,
     /// Registry id of that meter, for a replay file's `# device:` line, taken
     /// at the same moment and for the same reason as `device`.
     ///
@@ -70,7 +71,7 @@ impl CaptureLayout {
         extra_slots: usize,
     ) -> Self {
         Self {
-            device: meter.map(|d| d.display_name),
+            device: meter.map(|d| d.display_name.into()),
             // Only a meter's frames can be replayed, so the mock names no
             // device here and the export offers no replay file for it.
             device_id: meter.filter(|d| d.requires_hardware).map(|d| d.id),
@@ -154,6 +155,20 @@ impl Capture {
         (m, filled)
     }
 
+    /// Take one reading of an imported file through the pipeline: as
+    /// [`Capture::ingest`], less the software transform — the file holds the
+    /// readings as they were shown, scaled or not — and less the meter the
+    /// connection names: the recording the import runs was latched from the
+    /// file. Returns whether it filled the recording.
+    pub(super) fn ingest_imported(&mut self, m: &Measurement, graph: &mut Graph) -> bool {
+        self.session.push(m);
+        plot(graph, m);
+        if let Some(start) = graph.first_point_time() {
+            self.recording.trim_before(start);
+        }
+        self.recording.push(m, 0)
+    }
+
     /// Keep a reading: in the graph's history, which Export… saves with
     /// nothing recorded, cut to what the graph holds — and in a running
     /// recording. Returns whether it filled the recording.
@@ -174,7 +189,7 @@ impl Capture {
         // meter's. A file names one meter, so another one starts another
         // history.
         let meter = connection.detected();
-        if meter.map(|d| d.display_name) != self.history_layout.device {
+        if meter.map(|d| d.display_name) != self.history_layout.device.as_deref() {
             self.recording.clear_history();
         }
         if let Some(start) = graph.first_point_time() {

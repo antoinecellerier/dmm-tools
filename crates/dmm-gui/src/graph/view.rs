@@ -124,6 +124,15 @@ impl Graph {
         self.live = self.view_center + half >= data_max;
     }
 
+    /// Show every reading the graph holds at once, not live: a file
+    /// imported whole is looked at whole.
+    pub(crate) fn show_all(&mut self) {
+        let (data_min, data_max) = self.data_time_range();
+        self.time_window_secs = (data_max - data_min).max(1.0);
+        self.view_center = data_min + self.time_window_secs / 2.0;
+        self.live = false;
+    }
+
     /// Jump view to the start of recorded data.
     pub(super) fn jump_to_start(&mut self) {
         let (data_min, _) = self.data_time_range();

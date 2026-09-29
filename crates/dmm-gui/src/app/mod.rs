@@ -18,6 +18,7 @@ mod connection_issue;
 mod controls;
 mod export;
 mod held_reading;
+mod import;
 mod layout;
 mod marker_list;
 mod messages;
@@ -348,6 +349,15 @@ pub struct App {
     /// offset order: each goes on the first reading played at or after its
     /// offset (see `place_replay_marker`).
     replay_markers: std::collections::VecDeque<dmm_lib::replay::ReplayMarker>,
+    /// An Import… under way: the file parsing, or its readings going in.
+    import_job: Option<import::ImportJob>,
+    /// The file the session was imported from, once it is in.
+    imported: Option<import::ImportedFrom>,
+    /// How far apart the imported file's readings are, in milliseconds:
+    /// what the graph judges its gaps by while the session is that file's.
+    import_cadence_ms: Option<u32>,
+    /// `--import`'s file, imported on the first frame.
+    pending_import: Option<std::path::PathBuf>,
     marker_list: marker_list::MarkerList,
     /// Time base the session's readings are stamped with — real unless a
     /// `--mock-clock-*` flag was given. Cloned into the acquisition thread so
@@ -443,6 +453,7 @@ impl App {
         settings.overrides.adapter = cli.adapter;
         let mut app = Self::from_settings(settings, cli.clock);
         app.replay = cli.replay;
+        app.pending_import = cli.import;
         app
     }
 
@@ -467,6 +478,10 @@ impl App {
             capture,
             markers: crate::markers::Markers::default(),
             replay_markers: std::collections::VecDeque::new(),
+            import_job: None,
+            imported: None,
+            import_cadence_ms: None,
+            pending_import: None,
             marker_list: marker_list::MarkerList::default(),
             clock,
             replay: None,
@@ -785,6 +800,7 @@ impl eframe::App for App {
         // Shortcuts first: `N` marks the reading the user saw, not one that
         // arrives with this frame.
         self.drain_messages();
+        self.step_import(&ctx);
         self.trim_markers();
         self.poll_export(&ctx);
         // From a frame, not from `App::new`: the wgpu-to-glow fallback builds
@@ -812,7 +828,10 @@ impl eframe::App for App {
             if self.settings.hide_decorations {
                 self.apply_decorations(&ctx);
             }
-            if self.settings.auto_connect {
+            if let Some(path) = self.pending_import.take() {
+                // The file is the session: no meter is opened beside it.
+                self.import_file(path);
+            } else if self.settings.auto_connect {
                 self.connect(&ctx);
             }
             // Show "What's New" on first launch after a release upgrade.
@@ -1052,6 +1071,7 @@ mod tests {
                 no_bluetooth: true,
                 clock: dmm_lib::Clock::real(),
                 replay: None,
+                import: None,
                 update_notice: None,
             },
         );
@@ -1103,6 +1123,7 @@ mod tests {
                     path: std::path::PathBuf::from("dcv-steps.replay"),
                     recorded: std::time::SystemTime::UNIX_EPOCH,
                 }),
+                import: None,
                 update_notice: None,
             },
         );

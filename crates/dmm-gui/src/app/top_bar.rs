@@ -202,6 +202,13 @@ impl App {
                 if let Some(source) = &self.replay {
                     hover.push(format!("Replaying {}", source.path.display()));
                 }
+                if let Some(from) = &self.imported {
+                    hover.push(format!(
+                        "{} imported from {}",
+                        super::import::readings_noun(from.readings),
+                        from.path.display()
+                    ));
+                }
                 let hover = hover.join("\n");
 
                 // Status dot — decorative, so not focusable, but it hovers

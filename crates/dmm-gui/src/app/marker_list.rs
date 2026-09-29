@@ -87,7 +87,7 @@ struct NoteEdit {
 ///
 /// A marker keeps its reading's line, so a marker without a sample in the log
 /// reads like one.
-fn log_line(m: &Measurement) -> String {
+pub(super) fn log_line(m: &Measurement) -> String {
     let flags = m.flags.to_string();
     let flags = if flags.is_empty() {
         String::new()
