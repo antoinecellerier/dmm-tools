@@ -28,6 +28,7 @@
 - **A new Sample interval takes effect at once** — it waited for a reconnect.
 - **Exporting a long recording as JSON no longer freezes the GUI for seconds**
 - **What's New opens on this release, with earlier ones folded**
+- **The graph's mean, reference and cursor labels stay readable when crowded** — they drew over each other, the plot key and marker flags.
 
 ### CLI
 

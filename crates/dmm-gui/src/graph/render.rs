@@ -187,29 +187,266 @@ fn fit_flag_label(number: u32, note: &str, room: f32, width_of: &impl Fn(&str) -
 /// line and of the dashed level line.
 const CURSOR_LABEL_OFFSET: egui::Vec2 = egui::vec2(4.0, 2.0);
 
+/// Whether `rect` keeps a label's gap from every `taken` one, so two labels
+/// never sit flush.
+fn is_clear(taken: &[egui::Rect], rect: egui::Rect) -> bool {
+    let gap = LEVEL_LABEL_GAP;
+    taken.iter().all(|t| {
+        rect.left() >= t.right() + gap
+            || rect.right() + gap <= t.left()
+            || rect.top() >= t.bottom() + gap
+            || rect.bottom() + gap <= t.top()
+    })
+}
+
+/// Rows a cursor's readout may move further from its point when all four
+/// corners next to it are taken.
+const CURSOR_LABEL_ROWS: usize = 2;
+
 /// Where a cursor's readout goes around its point: the first of right-above,
-/// left-above, right-below and left-below that stays inside the plot and off
-/// the trace. When none is clear, the first that stays inside the plot; in a
-/// plot too small for any, right-above.
+/// left-above, right-below and left-below that stays inside the plot, clear
+/// of the `taken` labels and off the trace, then the first inside and clear
+/// of `taken`. When all four are taken — the other readout, a marker's
+/// flag — the same corners a row further out, up to [`CURSOR_LABEL_ROWS`].
+/// Failing all of those, None: a readout on top of another label is no
+/// easier to read than none.
 pub(super) fn cursor_label_rect(
     point: egui::Pos2,
     size: egui::Vec2,
     plot: egui::Rect,
+    taken: &[egui::Rect],
     hits_trace: impl Fn(egui::Rect) -> bool,
-) -> egui::Rect {
+) -> Option<egui::Rect> {
     use egui::{Align2, vec2};
     let (dx, dy) = (CURSOR_LABEL_OFFSET.x, CURSOR_LABEL_OFFSET.y);
-    let corners = [
-        Align2::LEFT_BOTTOM.anchor_size(point + vec2(dx, -dy), size),
-        Align2::RIGHT_BOTTOM.anchor_size(point + vec2(-dx, -dy), size),
-        Align2::LEFT_TOP.anchor_size(point + vec2(dx, dy), size),
-        Align2::RIGHT_TOP.anchor_size(point + vec2(-dx, dy), size),
-    ];
-    let inside = || corners.iter().copied().filter(|r| plot.contains_rect(*r));
-    inside()
-        .find(|r| !hits_trace(*r))
-        .or_else(|| inside().next())
-        .unwrap_or(corners[0])
+    let corners = |away: f32| {
+        [
+            Align2::LEFT_BOTTOM.anchor_size(point + vec2(dx, -dy - away), size),
+            Align2::RIGHT_BOTTOM.anchor_size(point + vec2(-dx, -dy - away), size),
+            Align2::LEFT_TOP.anchor_size(point + vec2(dx, dy + away), size),
+            Align2::RIGHT_TOP.anchor_size(point + vec2(-dx, dy + away), size),
+        ]
+    };
+    let clear = |r: &egui::Rect| is_clear(taken, *r);
+    for row in 0..=CURSOR_LABEL_ROWS {
+        let row = corners(row as f32 * (size.y + dy));
+        let inside = || row.iter().copied().filter(|r| plot.contains_rect(*r));
+        // `clear` first: it is cheap, and the trace walk isn't.
+        let found = inside()
+            .filter(clear)
+            .find(|r| !hits_trace(*r))
+            .or_else(|| inside().find(clear));
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
+/// Where an overlay label's rim is drawn around its text: a pixel out on
+/// every side, so the lines under it stop short of the letters.
+const LABEL_HALO: [(f32, f32); 8] = [
+    (-1.0, -1.0),
+    (0.0, -1.0),
+    (1.0, -1.0),
+    (-1.0, 0.0),
+    (1.0, 0.0),
+    (-1.0, 1.0),
+    (0.0, 1.0),
+    (1.0, 1.0),
+];
+
+/// Space between a mean or reference label and its line, and between two
+/// labels stacked in a column.
+const LEVEL_LABEL_GAP: f32 = 2.0;
+/// How far a mean or reference label ends short of the plot's right edge,
+/// or of a cursor or marker line it steps left of.
+const LEVEL_LABEL_INSET: f32 = 4.0;
+
+/// Where the labels of the mean and reference lines at screen `ys` go, given
+/// the labels already placed (`taken`) and the vertical cursor and marker
+/// lines at `line_xs`. `ys` runs top to bottom, and `sizes` matches it.
+///
+/// The labels form one column at the plot's right edge, in their lines'
+/// order. Each sits just above its line — below it when there is no room
+/// above — unless the label before it is in the way; then it goes right under
+/// that one. A label never has a mean or reference line through its text:
+/// it moves past the line instead, so lines closer together than a label is
+/// tall get one label above them and the rest stacked below them. A label
+/// steps left past the cursor and marker lines that would cross it, giving
+/// up at the plot's left edge, and moves past a taken spot. The column is built top down and bottom up, with the
+/// labels above their lines and then below them; the first of those clear of
+/// the trace wins, else the first that fits. When no column fits, the lines
+/// may cross the text; when none fits even so, each label goes where it
+/// can and the rest are left out (None). A line above or below the view is
+/// labelled at that edge.
+///
+/// In live view a cursor or marker line scrolling left through a label takes
+/// it along until it has passed, then the label springs back to the edge,
+/// and crowded labels can hop between columns as the trace moves under
+/// them.
+pub(super) fn level_label_rects(
+    ys: &[f32],
+    sizes: &[egui::Vec2],
+    plot: egui::Rect,
+    taken: &[egui::Rect],
+    line_xs: &[f32],
+    hits_trace: impl Fn(egui::Rect) -> bool,
+) -> Vec<Option<egui::Rect>> {
+    let gap = LEVEL_LABEL_GAP;
+    // The lines drawn, which no label's text may cross.
+    let drawn: Vec<f32> = ys
+        .iter()
+        .copied()
+        .filter(|&y| plot.y_range().contains(y))
+        .collect();
+    let ys: Vec<f32> = ys
+        .iter()
+        .map(|y| y.max(plot.top()).min(plot.bottom()))
+        .collect();
+    // Above the line, or below it when asked or when above has no room.
+    let usual_top = |y: f32, h: f32, below: bool| {
+        let (above, under) = (y - gap - h, y + gap);
+        if (below && under + h <= plot.bottom()) || above < plot.top() {
+            under
+        } else {
+            above
+        }
+    };
+
+    // Each label at its usual spot, or past the one before it: top down,
+    // or bottom up. `level_ys` are the lines kept out of the text.
+    let column = |down: bool, below: bool, level_ys: &[f32]| {
+        let mut rects: Vec<egui::Rect> = Vec::with_capacity(ys.len());
+        let order: Vec<usize> = if down {
+            (0..ys.len()).collect()
+        } else {
+            (0..ys.len()).rev().collect()
+        };
+        for i in order {
+            let (y, size) = (ys[i], sizes[i]);
+            let top = match rects.last() {
+                None => usual_top(y, size.y, below),
+                Some(r) if down => usual_top(y, size.y, below).max(r.bottom() + gap),
+                Some(r) => usual_top(y, size.y, below).min(r.top() - gap - size.y),
+            };
+            let rect = fit_level_label(top, size, down, plot, taken, level_ys, line_xs)?;
+            rects.push(rect);
+        }
+        if !down {
+            rects.reverse();
+        }
+        Some(rects)
+    };
+    // The first of: above the lines top down, bottom up, then below them
+    // top down, bottom up — the first clear of the trace, if one is. Only
+    // a clear column counts: a noisy trace crosses every column by a count
+    // that changes each frame, and chasing the least would move the labels
+    // with it. Lines too close for any column to keep out of the text may
+    // cross it.
+    for level_ys in [&drawn[..], &[]] {
+        let columns: Vec<Vec<egui::Rect>> =
+            [(true, false), (false, false), (true, true), (false, true)]
+                .into_iter()
+                .filter_map(|(down, below)| column(down, below, level_ys))
+                .collect();
+        if let Some(rects) = columns
+            .iter()
+            .find(|rects| !rects.iter().any(|r| hits_trace(*r)))
+            .or(columns.first())
+        {
+            return rects.iter().copied().map(Some).collect();
+        }
+    }
+
+    // No room for them all: each in turn where it fits, and none for the
+    // rest rather than a pile no one can read.
+    let mut placed: Vec<egui::Rect> = taken.to_vec();
+    ys.iter()
+        .zip(sizes)
+        .map(|(&y, &size)| {
+            let top = usual_top(y, size.y, false);
+            let rect = fit_level_label(top, size, true, plot, &placed, &[], line_xs)
+                .or_else(|| fit_level_label(top, size, false, plot, &placed, &[], line_xs))?;
+            placed.push(rect);
+            Some(rect)
+        })
+        .collect()
+}
+
+/// The first spot for a mean or reference label at or past `top`, moving
+/// down or up: clear of the `level_ys` lines and of `taken`, stepped left
+/// past the `line_xs` that would cross it. None once it leaves the plot.
+fn fit_level_label(
+    mut top: f32,
+    size: egui::Vec2,
+    down: bool,
+    plot: egui::Rect,
+    taken: &[egui::Rect],
+    level_ys: &[f32],
+    line_xs: &[f32],
+) -> Option<egui::Rect> {
+    let (gap, h) = (LEVEL_LABEL_GAP, size.y);
+    let at =
+        |top: f32, right: f32| egui::Rect::from_min_size(egui::pos2(right - size.x, top), size);
+    let edge = plot.right() - LEVEL_LABEL_INSET;
+    // Every pass moves past a line or a taken spot, so it ends.
+    for _ in 0..=level_ys.len() + taken.len() {
+        if top < plot.top() || top + h > plot.bottom() {
+            return None;
+        }
+        // A mean or reference line through the text: past it.
+        let through = level_ys
+            .iter()
+            .copied()
+            .filter(|&y| top - gap < y && y < top + h + gap);
+        if let Some(y) = if down {
+            through.reduce(f32::max)
+        } else {
+            through.reduce(f32::min)
+        } {
+            top = if down { y + gap } else { y - gap - h };
+            continue;
+        }
+        // Along the edge, then left of each line crossing it.
+        let mut right = edge;
+        let mut first_clear = None;
+        // Each step passes at least one line.
+        for _ in 0..=line_xs.len() {
+            let rect = at(top, right);
+            if !plot.contains_rect(rect) {
+                break;
+            }
+            let clear = is_clear(taken, rect);
+            let crossing = line_xs
+                .iter()
+                .copied()
+                .filter(|&x| rect.left() < x && x < rect.right())
+                .reduce(f32::min);
+            match crossing {
+                None if clear => return Some(rect),
+                None => break,
+                Some(x) => {
+                    if clear && first_clear.is_none() {
+                        first_clear = Some(rect);
+                    }
+                    right = x - LEVEL_LABEL_INSET;
+                }
+            }
+        }
+        if first_clear.is_some() {
+            return first_clear;
+        }
+        // Taken at the edge: past whatever is there.
+        let rect = at(top, edge);
+        let blockers = taken.iter().filter(|t| !is_clear(&[**t], rect));
+        top = if down {
+            blockers.map(|t| t.bottom()).reduce(f32::max)? + gap
+        } else {
+            blockers.map(|t| t.top()).reduce(f32::min)? - gap - h
+        };
+    }
+    None
 }
 
 /// Whether the straight segment from `a` to `b` passes through `rect`
@@ -327,6 +564,9 @@ struct OverlayLabelData {
     /// The plotted series' visible segments as drawn, which cursor readouts
     /// keep off.
     trace: Vec<Vec<[f64; 2]>>,
+    /// The times of the markers in view, whose lines the mean and reference
+    /// labels step aside from.
+    marker_times: Vec<f64>,
     overlay_unit: String,
     /// [`Graph::decimals`] for the cursors' values, which are points, and
     /// for the mean and the reference lines, which aren't.
@@ -336,6 +576,9 @@ struct OverlayLabelData {
     mean_color: egui::Color32,
     ref_color: egui::Color32,
     cursor_color: egui::Color32,
+    /// The plot's background, which rims each label so grid lines, the
+    /// trace and other lines stop short of its letters.
+    halo_color: egui::Color32,
 }
 
 impl Graph {
@@ -511,14 +754,16 @@ impl Graph {
     /// keeping pointer events — also clears the plot's `hidden_items`, so a
     /// click on one had no effect past the frame it happened in. The **Show:**
     /// chips in the toolbar are the control instead.
+    ///
+    /// Returns the key's rect, which the overlay labels keep off.
     fn paint_plot_key(
         ui: &Ui,
         plot_rect: egui::Rect,
         entries: &[(String, KeyStyle)],
         tc: &ThemeColors,
-    ) {
+    ) -> Option<egui::Rect> {
         if entries.is_empty() {
-            return;
+            return None;
         }
         let mut font = egui::TextStyle::Body.resolve(ui.style());
         font.size = font.size.max(MIN_KEY_FONT_SIZE);
@@ -574,6 +819,7 @@ impl Graph {
                 text_color,
             );
         }
+        Some(rect)
     }
 
     /// Render the main graph.
@@ -925,6 +1171,7 @@ impl Graph {
             cursor_va,
             cursor_vb,
             trace: response.inner,
+            marker_times: in_view.iter().map(|&(t, _)| t).collect(),
             overlay_unit: self.current_unit.clone(),
             point_decimals,
             other_decimals,
@@ -932,18 +1179,30 @@ impl Graph {
             mean_color,
             ref_color,
             cursor_color,
+            halo_color: tc.plot_background(),
         };
-        Self::paint_overlay_labels(ui, &response.response, &response.transform, &overlay);
-        // Top-left, where `paint_overlay_labels` never draws — the Mean/Ref
-        // and cursor labels are anchored to the right edge.
-        Self::paint_plot_key(ui, response.response.rect, &key_entries, tc);
-        self.clicked_marker = Self::paint_marker_flags(
+        // The key and the flags first: the labels lay themselves out around
+        // them.
+        let mut taken: Vec<egui::Rect> =
+            Self::paint_plot_key(ui, response.response.rect, &key_entries, tc)
+                .into_iter()
+                .collect();
+        let (clicked_marker, flags) = Self::paint_marker_flags(
             ui,
             &response.transform,
             response.response.rect,
             &in_view,
             marker_color,
             tc.plot_background(),
+        );
+        self.clicked_marker = clicked_marker;
+        taken.extend(flags);
+        Self::paint_overlay_labels(
+            ui,
+            response.response.rect,
+            &response.transform,
+            &overlay,
+            taken,
         );
         self.handle_interaction(ui, &response.response, &response.transform);
         self.show_context_menu(&response.response, &response.transform);
@@ -1127,7 +1386,8 @@ impl Graph {
     /// Each marker's flag at the bottom of the plot: a tag in the marker
     /// colour pointing up at its line, with the number and as much of the
     /// note as fits, in the plot background's colour. Returns the number of
-    /// the marker whose flag was clicked.
+    /// the marker whose flag was clicked, and each flag's rect with its
+    /// point, which the overlay labels keep off.
     ///
     /// A flag takes clicks but not the keyboard focus: the plot would gain a
     /// Tab stop per marker, and the Recording panel's log already has one.
@@ -1138,11 +1398,12 @@ impl Graph {
         in_view: &[(f64, &crate::markers::Marker)],
         color: egui::Color32,
         text_color: egui::Color32,
-    ) -> Option<u32> {
+    ) -> (Option<u32>, Vec<egui::Rect>) {
         if in_view.is_empty() {
-            return None;
+            return (None, Vec::new());
         }
         let mut clicked = None;
+        let mut rects = Vec::new();
         let painter = ui.painter();
         let font = egui::FontId::proportional(12.0);
         let height = painter.fonts_mut(|f| f.row_height(&font)) + 4.0;
@@ -1196,64 +1457,81 @@ impl Graph {
             if response.clicked() {
                 clicked = Some(flag.number);
             }
+            rects.push(flag.rect.with_min_y(top - FLAG_TIP.y));
         }
-        clicked
+        (clicked, rects)
     }
 
     /// Paint text labels for overlays (mean, reference lines, cursors) using the
     /// UI painter so they render outside the plot's clip rect.
+    ///
+    /// Each label keeps off `taken` — the key and the marker flags — and off
+    /// the labels placed before it. The cursor readouts go first, as they
+    /// have only four corners to choose from; the mean and reference labels
+    /// then form one column around them (see [`level_label_rects`]).
     fn paint_overlay_labels(
         ui: &Ui,
-        plot_response: &egui::Response,
+        plot_rect: egui::Rect,
         transform: &PlotTransform,
         data: &OverlayLabelData,
+        mut taken: Vec<egui::Rect>,
     ) {
         let painter = ui.painter();
         let label_font = egui::FontId::proportional(12.0);
-        let plot_rect = plot_response.rect;
-
-        // Mean line label — anchored to right edge of plot rect
-        if data.show_mean
-            && let Some(avg) = data.mean_value
-        {
-            let y_pos = transform
-                .position_from_point(&egui_plot::PlotPoint::new(data.view_max, avg))
-                .y
-                .clamp(plot_rect.top() + 12.0, plot_rect.bottom() - 2.0);
-            painter.text(
-                egui::pos2(plot_rect.right() - 4.0, y_pos - 2.0),
-                egui::Align2::RIGHT_BOTTOM,
-                format!(
-                    "Mean: {avg:.prec$} {}",
-                    data.overlay_unit,
-                    prec = data.other_decimals
-                ),
-                label_font.clone(),
-                data.mean_color,
-            );
-        }
-
-        // Reference line labels
-        if data.show_ref {
-            for &v in &data.ref_values {
-                let y_pos = transform
-                    .position_from_point(&egui_plot::PlotPoint::new(data.view_max, v))
-                    .y
-                    .clamp(plot_rect.top() + 12.0, plot_rect.bottom() - 2.0);
-                painter.text(
-                    egui::pos2(plot_rect.right() - 4.0, y_pos - 2.0),
-                    egui::Align2::RIGHT_BOTTOM,
-                    format!(
-                        "{v:.prec$} {}",
-                        data.overlay_unit,
-                        prec = data.other_decimals
-                    ),
-                    label_font.clone(),
-                    data.ref_color,
-                );
+        let screen =
+            |t: f64, v: f64| transform.position_from_point(&egui_plot::PlotPoint::new(t, v));
+        let layout = |text: String, color: egui::Color32| {
+            painter.layout_no_wrap(text, label_font.clone(), color)
+        };
+        let paint = |rect: egui::Rect, galley: std::sync::Arc<egui::Galley>, color| {
+            for (dx, dy) in LABEL_HALO {
+                let at = rect.min + egui::vec2(dx, dy);
+                painter.galley_with_override_text_color(at, galley.clone(), data.halo_color);
             }
-        }
+            painter.galley(rect.min, galley, color);
+        };
 
+        // The vertical lines a mean or reference label steps aside from.
+        let cursor_times = [data.cursor_a, data.cursor_b];
+        let line_xs: Vec<f32> = data
+            .marker_times
+            .iter()
+            .copied()
+            .chain(
+                cursor_times
+                    .into_iter()
+                    .flatten()
+                    .filter(|_| data.cursors_active),
+            )
+            .map(|t| screen(t, 0.0).x)
+            .filter(|&x| plot_rect.x_range().contains(x))
+            .collect();
+
+        // Whether the trace runs through a label. Only the stretch under the
+        // label's time span can touch it.
+        let hits_trace = |rect: egui::Rect| {
+            let t_lo = transform.value_from_position(rect.left_top()).x;
+            let t_hi = transform.value_from_position(rect.right_top()).x;
+            data.trace.iter().any(|segment| {
+                segment.windows(2).any(|w| {
+                    w[1][0] >= t_lo
+                        && w[0][0] <= t_hi
+                        && segment_hits_rect(
+                            screen(w[0][0], w[0][1]),
+                            screen(w[1][0], w[1][1]),
+                            rect,
+                        )
+                })
+            })
+        };
+
+        let level_text = |v: f64| {
+            format!(
+                "{v:.prec$} {}",
+                data.overlay_unit,
+                prec = data.other_decimals
+            )
+        };
         // Cursor labels
         if data.cursors_active {
             for (name, t, value) in [
@@ -1262,33 +1540,56 @@ impl Graph {
             ] {
                 let Some(t) = t else { continue };
                 let y_val = value.unwrap_or(0.0);
-                let pos = transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
-                let galley = painter.layout_no_wrap(
+                let pos = screen(t, y_val);
+                // Scrolled out of view: no line to label. A reading above or
+                // below the Y axis still has its line in view, so its readout
+                // goes against that edge.
+                if !plot_rect.x_range().contains(pos.x) {
+                    continue;
+                }
+                let pos = egui::pos2(pos.x, pos.y.max(plot_rect.top()).min(plot_rect.bottom()));
+                let galley = layout(
                     format!(
                         "{name}: {t:.2} s / {y_val:.prec$} {}",
                         data.overlay_unit,
                         prec = data.point_decimals
                     ),
-                    label_font.clone(),
                     data.cursor_color,
                 );
-                let rect = cursor_label_rect(pos, galley.size(), plot_rect, |rect| {
-                    // Only the stretch of trace under the rect's time span can
-                    // touch it.
-                    let t_lo = transform.value_from_position(rect.left_top()).x;
-                    let t_hi = transform.value_from_position(rect.right_top()).x;
-                    let screen = |p: [f64; 2]| {
-                        transform.position_from_point(&egui_plot::PlotPoint::new(p[0], p[1]))
-                    };
-                    data.trace.iter().any(|segment| {
-                        segment.windows(2).any(|w| {
-                            w[1][0] >= t_lo
-                                && w[0][0] <= t_hi
-                                && segment_hits_rect(screen(w[0]), screen(w[1]), rect)
-                        })
-                    })
-                });
-                painter.galley(rect.min, galley, data.cursor_color);
+                if let Some(rect) =
+                    cursor_label_rect(pos, galley.size(), plot_rect, &taken, hits_trace)
+                {
+                    paint(rect, galley, data.cursor_color);
+                    taken.push(rect);
+                }
+            }
+        }
+
+        // The mean and reference labels, one column in their lines' order:
+        // the mean first among equals, one label for a value entered twice.
+        let mut levels: Vec<(f64, String, egui::Color32)> = Vec::new();
+        if data.show_mean
+            && let Some(avg) = data.mean_value
+        {
+            levels.push((avg, format!("Mean: {}", level_text(avg)), data.mean_color));
+        }
+        if data.show_ref {
+            let mut refs = data.ref_values.clone();
+            refs.sort_by(|a, b| b.total_cmp(a));
+            refs.dedup();
+            levels.extend(refs.into_iter().map(|v| (v, level_text(v), data.ref_color)));
+        }
+        let mut levels: Vec<_> = levels
+            .into_iter()
+            .map(|(v, text, color)| (screen(data.view_max, v).y, layout(text, color), color))
+            .collect();
+        levels.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let ys: Vec<f32> = levels.iter().map(|l| l.0).collect();
+        let sizes: Vec<egui::Vec2> = levels.iter().map(|l| l.1.size()).collect();
+        let rects = level_label_rects(&ys, &sizes, plot_rect, &taken, &line_xs, hits_trace);
+        for ((_, galley, color), rect) in levels.into_iter().zip(rects) {
+            if let Some(rect) = rect {
+                paint(rect, galley, color);
             }
         }
     }

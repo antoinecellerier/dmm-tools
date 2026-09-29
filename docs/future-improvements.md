@@ -310,13 +310,13 @@ so it means hand-painting stripes with screen-space spacing via
 Use cases: telling "the meter said something unusual" apart from "the meter
 said nothing", without having to cross-check the recording.
 
-### Overlay labels that avoid each other
+### Cursor readouts clear of lines and the trace
 
 **Complexity:** Low
 
-The mean line and the reference line place their labels at a fixed spot on the right edge, and a cursor readout picks its corner against the plot edge and the trace only, so with several overlays on a busy graph the texts pile up — a mean near the reference value puts "Mean: 3.4379 mA" on top of "1.0000 mA", and a cursor near the right edge runs its line through both. Labels should be laid out against each other: nudge a colliding label up or down, or to the other side of its line, so every overlay stays readable at once.
+A cursor readout stays next to its point when it can: it takes the first free corner around the point even when the trace runs through it or a marker's or the other cursor's line crosses it, and moves a row further out only when every corner there is taken. Next to a marker at a step in the trace, the readout sits on the step with the marker's line through it. Weighing a row further out against a corner the trace or a line crosses — and stepping along the row past the lines, as the mean and reference labels do — would keep it clear.
 
-Use cases: the documentation's overlays picture had to be composed to keep the labels apart; a user reading a power-cycle graph with mean, reference, triggers and cursors on wants all four numbers at a glance.
+Use cases: reading a cursor at a marked event.
 
 ### Steadier dense traces in live view
 

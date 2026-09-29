@@ -1,6 +1,6 @@
 use super::render::{
-    KeyStyle, cursor_label_rect, layout_marker_flags, quantize_for_hash, segment_hits_rect,
-    stepped, thin_for_drawing, whole_number_marks,
+    KeyStyle, cursor_label_rect, layout_marker_flags, level_label_rects, quantize_for_hash,
+    segment_hits_rect, stepped, thin_for_drawing, whole_number_marks,
 };
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
@@ -1285,11 +1285,20 @@ fn readout_corners() -> [egui::Rect; 4] {
 }
 
 fn readout_rect(plot_right: f32, hits: impl Fn(egui::Rect) -> bool) -> egui::Rect {
+    readout_rect_around(plot_right, &[], hits).expect("a corner inside the plot")
+}
+
+fn readout_rect_around(
+    plot_right: f32,
+    taken: &[egui::Rect],
+    hits: impl Fn(egui::Rect) -> bool,
+) -> Option<egui::Rect> {
     let plot = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(plot_right, 400.0));
     cursor_label_rect(
         egui::pos2(300.0, 200.0),
         egui::vec2(100.0, 20.0),
         plot,
+        taken,
         hits,
     )
 }
@@ -1314,18 +1323,234 @@ fn cursor_readout_takes_the_first_clear_corner_inside_the_plot() {
 
 #[test]
 fn cursor_readout_falls_back_when_no_corner_is_clear() {
-    let [right_above, left_above, ..] = readout_corners();
+    let [_, left_above, ..] = readout_corners();
     // The trace everywhere: the first corner inside the plot.
     assert_eq!(readout_rect(400.0, |_| true), left_above);
-    // A plot narrower than the readout: right-above.
+    // A plot narrower than the readout: no readout.
     let narrow = egui::Rect::from_min_max(egui::pos2(250.0, 0.0), egui::pos2(350.0, 400.0));
     let rect = cursor_label_rect(
         egui::pos2(300.0, 200.0),
         egui::vec2(100.0, 20.0),
         narrow,
+        &[],
         |_| false,
     );
-    assert_eq!(rect, right_above);
+    assert_eq!(rect, None);
+}
+
+#[test]
+fn cursor_readout_keeps_off_labels_placed_before_it() {
+    let [right_above, left_above, right_below, left_below] = readout_corners();
+    // The other readout, a mean label or the key over right-above: left-above.
+    let other = right_above.translate(egui::vec2(30.0, -5.0));
+    assert_eq!(
+        readout_rect_around(500.0, &[other], |_| false),
+        Some(left_above)
+    );
+    // A flag under both below corners changes nothing above.
+    let flag = right_below.union(left_below);
+    assert_eq!(
+        readout_rect_around(500.0, &[flag], |_| false),
+        Some(right_above)
+    );
+    // A label counts before the trace: left-above is taken, so the corner on
+    // the trace (left-below) wins over it.
+    assert_eq!(
+        readout_rect_around(400.0, &[left_above], |r| r == left_below),
+        Some(left_below)
+    );
+    // All four taken, as by the other readout and a flag: the same corners a
+    // row further out, above first.
+    let near = right_above.union(left_below);
+    let row = egui::vec2(0.0, 22.0);
+    assert_eq!(
+        readout_rect_around(400.0, &[near], |_| false),
+        Some(left_above.translate(-row))
+    );
+    // Every row taken: no readout rather than one on top of another label.
+    let all = near.expand2(egui::vec2(0.0, 3.0 * 22.0));
+    assert_eq!(readout_rect_around(400.0, &[all], |_| false), None);
+}
+
+/// A 500x400 plot, and a 100x14 label, for the mean and reference labels.
+const LEVEL_PLOT: egui::Rect =
+    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(500.0, 400.0));
+const LEVEL_SIZE: egui::Vec2 = egui::vec2(100.0, 14.0);
+
+/// A 100x14 label ending at `right` and `bottom`; the usual right edge is 496.
+fn level_at(right: f32, bottom: f32) -> egui::Rect {
+    egui::Rect::from_min_max(
+        egui::pos2(right - 100.0, bottom - 14.0),
+        egui::pos2(right, bottom),
+    )
+}
+
+/// The column for lines at `ys`, top to bottom.
+fn column(
+    ys: &[f32],
+    taken: &[egui::Rect],
+    line_xs: &[f32],
+    hits_trace: impl Fn(egui::Rect) -> bool,
+) -> Vec<egui::Rect> {
+    let sizes = vec![LEVEL_SIZE; ys.len()];
+    level_label_rects(ys, &sizes, LEVEL_PLOT, taken, line_xs, hits_trace)
+        .into_iter()
+        .map(|r| r.expect("every label placed"))
+        .collect()
+}
+
+fn plain_column(ys: &[f32]) -> Vec<egui::Rect> {
+    column(ys, &[], &[], |_| false)
+}
+
+/// Whether the labels run top to bottom without touching.
+fn stacked(rects: &[egui::Rect]) -> bool {
+    rects.windows(2).all(|w| w[0].bottom() < w[1].top())
+}
+
+#[test]
+fn level_labels_sit_above_their_lines_at_the_right_edge() {
+    assert_eq!(plain_column(&[200.0]), [level_at(496.0, 198.0)]);
+    // Lines well apart don't disturb each other.
+    assert_eq!(
+        plain_column(&[100.0, 200.0, 300.0]),
+        [
+            level_at(496.0, 98.0),
+            level_at(496.0, 198.0),
+            level_at(496.0, 298.0)
+        ]
+    );
+}
+
+#[test]
+fn close_lines_get_one_label_above_them_and_the_rest_below() {
+    // Four lines within 7 px, as a mean among three close references.
+    let ys = [337.0, 338.0, 343.0, 344.0];
+    assert_eq!(
+        plain_column(&ys),
+        [
+            level_at(496.0, 335.0),
+            level_at(496.0, 360.0),
+            level_at(496.0, 376.0),
+            level_at(496.0, 392.0)
+        ]
+    );
+}
+
+#[test]
+fn the_column_keeps_off_the_trace() {
+    let ys = [337.0, 338.0, 343.0, 344.0];
+    // The trace runs under the lines: the column goes above them, bottom up.
+    let rects = column(&ys, &[], &[], |r| r.bottom() > 340.0);
+    assert!(stacked(&rects), "{rects:?}");
+    assert_eq!(rects[3], level_at(496.0, 335.0));
+    // A noisy trace through every column: the first, as with no trace, not
+    // whichever it crosses least this frame.
+    let crossed_less_above = |r: egui::Rect| r.top() > 300.0;
+    assert_eq!(column(&ys, &[], &[], crossed_less_above), plain_column(&ys));
+    // A lone label with the trace through its spot goes below its line.
+    assert_eq!(
+        column(&[200.0], &[], &[], |r| r == level_at(496.0, 198.0)),
+        [level_at(496.0, 216.0)]
+    );
+}
+
+#[test]
+fn level_labels_at_the_plots_edges() {
+    // No room above: below the line.
+    assert_eq!(plain_column(&[10.0]), [level_at(496.0, 26.0)]);
+    // Lines above the view are labelled under the top edge, stacked.
+    assert_eq!(
+        plain_column(&[-50.0, -40.0, -30.0]),
+        [
+            level_at(496.0, 16.0),
+            level_at(496.0, 32.0),
+            level_at(496.0, 48.0)
+        ]
+    );
+    // Close lines at the bottom: no room below them, so the column is built
+    // bottom up, all above them.
+    let rects = plain_column(&[390.0, 392.0, 394.0]);
+    assert!(stacked(&rects), "{rects:?}");
+    assert_eq!(rects[2], level_at(496.0, 388.0));
+}
+
+#[test]
+fn lines_too_close_to_keep_out_of_the_text_may_cross_it() {
+    // Sixteen lines 4 px apart: a column clear of them all needs more room
+    // than the plot has, so the labels stack through them, still in order.
+    let ys: Vec<f32> = (0..16).map(|i| 230.0 + 4.0 * i as f32).collect();
+    let rects = plain_column(&ys);
+    assert!(stacked(&rects), "{rects:?}");
+    let crossed = |r: &egui::Rect| ys.iter().any(|&y| r.top() < y && y < r.bottom());
+    assert!(rects.iter().any(crossed));
+}
+
+#[test]
+fn labels_with_no_room_are_left_out_rather_than_piled() {
+    // Thirty labels, room for about twenty-four: the rest are dropped, and
+    // those drawn don't touch.
+    let sizes = vec![LEVEL_SIZE; 30];
+    let rects = level_label_rects(&[200.0; 30], &sizes, LEVEL_PLOT, &[], &[], |_| false);
+    let drawn: Vec<egui::Rect> = rects.iter().flatten().copied().collect();
+    assert!(drawn.len() > 20 && drawn.len() < 30, "{}", drawn.len());
+    for (i, a) in drawn.iter().enumerate() {
+        for b in &drawn[i + 1..] {
+            assert!(!a.intersects(*b), "{a:?} overlaps {b:?}");
+        }
+    }
+    // A plot shorter than a label has room for none.
+    let short = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(500.0, 10.0));
+    let rects = level_label_rects(&[5.0], &[LEVEL_SIZE], short, &[], &[], |_| false);
+    assert_eq!(rects, [None]);
+}
+
+#[test]
+fn a_level_label_steps_left_of_the_lines_through_it() {
+    // One line through the usual spot: just left of it, on its own line.
+    assert_eq!(
+        column(&[200.0], &[], &[450.0], |_| false),
+        [level_at(446.0, 198.0)]
+    );
+    // Two lines close together: left of both, not between them.
+    assert_eq!(
+        column(&[200.0], &[], &[450.0, 420.0], |_| false),
+        [level_at(416.0, 198.0)]
+    );
+    // A line clear of the label changes nothing.
+    assert_eq!(
+        column(&[200.0], &[], &[300.0], |_| false),
+        [level_at(496.0, 198.0)]
+    );
+    // Four lines 90 px apart: each step lands on the next one, until the
+    // label is left of them all.
+    assert_eq!(
+        column(&[200.0], &[], &[470.0, 380.0, 290.0, 200.0], |_| false),
+        [level_at(196.0, 198.0)]
+    );
+    // Lines all the way across: it would leave the plot, so it stays at the
+    // edge.
+    let across: Vec<f32> = (0..6).map(|i| 470.0 - 90.0 * i as f32).collect();
+    assert_eq!(
+        column(&[200.0], &[], &across, |_| false),
+        [level_at(496.0, 198.0)]
+    );
+}
+
+#[test]
+fn a_level_label_moves_past_a_readout_on_its_spot() {
+    // A readout on the spot above the line: below the line instead.
+    let readout = level_at(496.0, 198.0);
+    assert_eq!(
+        column(&[200.0], &[readout], &[], |_| false),
+        [level_at(496.0, 216.0)]
+    );
+    // One ending a pixel short of the spot still counts: labels keep a gap.
+    let flush = readout.translate(egui::vec2(-101.0, 0.0));
+    assert_eq!(
+        column(&[200.0], &[flush], &[], |_| false),
+        [level_at(496.0, 216.0)]
+    );
 }
 
 #[test]
