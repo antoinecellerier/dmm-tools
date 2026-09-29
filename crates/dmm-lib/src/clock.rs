@@ -404,9 +404,20 @@ mod tests {
             .expect("the live reading is later than the burst");
         assert!(span >= Duration::from_secs(90), "burst spanned {span:?}");
         // And the reading taken once the burst is spent carries true wall time.
-        let skew = SystemTime::now()
-            .duration_since(clock.wall_time_for(live))
-            .expect("the live reading is not in the future");
+        // The mapping counts on the monotonic clock; SystemTime reads coarser
+        // (µs on macOS) or slews apart from it, so it can land just ahead.
+        let wall = clock.wall_time_for(live);
+        let skew = match SystemTime::now().duration_since(wall) {
+            Ok(old) => old,
+            Err(e) => {
+                let ahead = e.duration();
+                assert!(
+                    ahead < Duration::from_millis(1),
+                    "live reading is {ahead:?} ahead"
+                );
+                Duration::ZERO
+            }
+        };
         assert!(
             skew < Duration::from_secs(1),
             "live reading is {skew:?} old"
