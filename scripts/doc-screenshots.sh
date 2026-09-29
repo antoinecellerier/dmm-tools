@@ -403,6 +403,10 @@ scene_big_meter() {
 	write_settings '{"device_family": "ut181a"}'
 	launch ut181a-vac-hz 60
 	key ctrl+b
+	# The big meter sizes its reading over a few frames, starting from where
+	# the last fit ended: resizing before this one settles would start the
+	# next from a different point, and a different picture.
+	"$GUI" settle >/dev/null
 	geometry="$(fit "$BIG_METER_W" "$BIG_METER_H")"
 	capture gui-big-meter.png "$geometry+0+0"
 }
@@ -416,8 +420,12 @@ scene_minimal_meter() {
 	export VERIFY_GUI_GEOMETRY="$METER_GEOMETRY"
 	write_settings
 	launch dcma-boot-refresh 166
+	# Settled after each press, as in scene_big_meter; a fit draws frames
+	# back to back, and a second press landing in one of them is lost.
 	key ctrl+b
+	"$GUI" settle >/dev/null
 	key ctrl+b
+	"$GUI" settle >/dev/null
 	geometry="$(fit "$MINIMAL_WIDE_W" "$MINIMAL_WIDE_H")"
 	capture gui-minimal-meter-wide.png "$geometry+0+0"
 	geometry="$(fit "$MINIMAL_NARROW_W" "$MINIMAL_NARROW_H")"

@@ -48,7 +48,10 @@ pub(super) struct MeterFit {
     pub(super) reading_ratios: ReadingRatios,
     /// Key of the inputs the cache was built from.
     cache_key: u64,
-    /// Number of recalculation passes since the last cache key change.
+    /// Key of the inputs being re-measured, whose passes `recalc_passes`
+    /// counts.
+    pass_key: u64,
+    /// Number of recalculation passes for `pass_key`.
     recalc_passes: u8,
 }
 
@@ -58,6 +61,7 @@ impl MeterFit {
             content_height: DEFAULT_METER_CONTENT_HEIGHT,
             reading_ratios: ReadingRatios::default(),
             cache_key: 0,
+            pass_key: 0,
             recalc_passes: 0,
         }
     }
@@ -69,27 +73,40 @@ impl MeterFit {
 
     /// Fold one re-measured pass into the cache.
     ///
-    /// The content below the reading is measured at the scale it was drawn
-    /// at, which the measurement itself then changes, so it takes a second
-    /// pass to settle. Once it does — or the cap is reached — the larger of
-    /// the two heights wins, so everything still fits.
+    /// The content below the reading and the reading's own ratios are
+    /// measured at the scale they were drawn at, which the measurement then
+    /// changes, so it takes more passes to settle. It has settled when a
+    /// pass measures what it was drawn with: the content height alone is not
+    /// enough, as a pass drawn with other ratios can match it by chance, and
+    /// the next frame's larger font then wraps the buttons off the bottom.
+    /// Once settled, or at the cap, the larger of each wins, so everything
+    /// still fits.
+    ///
+    /// The cap counts passes for one set of inputs: a resize in the middle
+    /// of a fit starts a new count rather than inheriting the old one's.
     pub(super) fn record_pass(
         &mut self,
         inputs: &FitInputs,
         measured_content_height: f32,
         measured_ratios: ReadingRatios,
     ) {
-        if (self.content_height - measured_content_height).abs() < 1.0
-            || self.recalc_passes >= MAX_RECALC_PASSES
-        {
+        let key = inputs.key();
+        if key != self.pass_key {
+            self.pass_key = key;
+            self.recalc_passes = 0;
+        }
+        let settled = (self.content_height - measured_content_height).abs() < 1.0
+            && self.reading_ratios.settled(&measured_ratios);
+        if settled || self.recalc_passes >= MAX_RECALC_PASSES {
             self.content_height = self.content_height.max(measured_content_height);
-            self.cache_key = inputs.key();
+            self.reading_ratios = self.reading_ratios.max(&measured_ratios);
+            self.cache_key = key;
             self.recalc_passes = 0;
         } else {
             self.content_height = measured_content_height;
+            self.reading_ratios = measured_ratios;
             self.recalc_passes += 1;
         }
-        self.reading_ratios = measured_ratios;
     }
 
     /// Smallest window that still fits the reading, derived from the cached
@@ -403,6 +420,52 @@ mod tests {
         fit.record_pass(&inputs, 100.0, ReadingRatios::default());
         assert!(!fit.needs_recalc(&inputs));
         assert_eq!(fit.content_height, 400.0, "the larger height has to win");
+    }
+
+    /// Ratios as a pass measured them, `w` wide: the reading's width per
+    /// point of font.
+    fn ratios(w: f32) -> ReadingRatios {
+        ReadingRatios {
+            w,
+            ..ReadingRatios::default()
+        }
+    }
+
+    /// A pass drawn with other ratios can measure the content height the
+    /// cache holds by chance; the next frame, drawn with the new ratios,
+    /// then wraps the buttons off the bottom. The fit stays open until the
+    /// ratios settle too.
+    #[test]
+    fn a_pass_with_moving_ratios_keeps_the_fit_open() {
+        let mut fit = MeterFit::new();
+        let inputs = inputs();
+        fit.record_pass(&inputs, 16.0, ratios(8.0));
+        fit.record_pass(&inputs, 16.5, ratios(5.8));
+        assert!(fit.needs_recalc(&inputs), "the ratios moved by a quarter");
+        fit.record_pass(&inputs, 33.0, ratios(5.7));
+        fit.record_pass(&inputs, 32.6, ratios(5.69));
+        assert!(!fit.needs_recalc(&inputs));
+        assert_eq!(fit.content_height, 33.0);
+        assert_eq!(fit.reading_ratios.w, 5.7, "the larger ratio wins");
+    }
+
+    /// A resize in the middle of a fit starts a new count: carrying the old
+    /// one over closed the fit at the new size after a single pass.
+    #[test]
+    fn a_resize_mid_fit_gets_its_own_passes() {
+        let mut fit = MeterFit::new();
+        let before = inputs();
+        for i in 0..MAX_RECALC_PASSES {
+            let alternating = if i % 2 == 0 { 100.0 } else { 400.0 };
+            fit.record_pass(&before, alternating, ReadingRatios::default());
+        }
+        let resized = FitInputs {
+            width: 450,
+            height: 320,
+            ..inputs()
+        };
+        fit.record_pass(&resized, 30.0, ReadingRatios::default());
+        assert!(fit.needs_recalc(&resized), "closed on the old size's count");
     }
 
     /// Every input is one the reading's size depends on, so none may be

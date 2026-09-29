@@ -1018,6 +1018,28 @@ pub struct ReadingRatios {
     pub inline_h: f32,
 }
 
+impl ReadingRatios {
+    /// Whether a re-measure agrees with these within 2%: text snaps to
+    /// pixels, so the ratios never repeat exactly.
+    pub(crate) fn settled(&self, measured: &Self) -> bool {
+        let near = |a: f32, b: f32| (a - b).abs() <= 0.02 * a.abs().max(b.abs());
+        near(self.w, measured.w)
+            && near(self.h, measured.h)
+            && near(self.inline_w, measured.inline_w)
+            && near(self.inline_h, measured.inline_h)
+    }
+
+    /// The larger of each ratio: a reading that size fits both measures.
+    pub(crate) fn max(&self, other: &Self) -> Self {
+        Self {
+            w: self.w.max(other.w),
+            h: self.h.max(other.h),
+            inline_w: self.inline_w.max(other.inline_w),
+            inline_h: self.inline_h.max(other.inline_h),
+        }
+    }
+}
+
 impl Default for ReadingRatios {
     fn default() -> Self {
         Self {

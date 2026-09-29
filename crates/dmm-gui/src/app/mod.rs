@@ -753,9 +753,10 @@ impl App {
                         }
                     }
 
-                    // Update cached dimensions on window resize. Run twice
-                    // (by not closing the cache the first time) so the
-                    // second pass uses the measured values from the first.
+                    // Re-measure until the fit settles, a pass a frame, each
+                    // drawn with what the one before measured. Each asks for
+                    // the next frame: a paused meter sends no readings to
+                    // draw one, and a fit left halfway can clip the buttons.
                     if needs_recalc && scale > 0.0 {
                         let total_below_reading = ui.cursor().top() - after_reading;
                         self.meter_fit.record_pass(
@@ -763,6 +764,9 @@ impl App {
                             total_below_reading / scale,
                             measured_ratios,
                         );
+                        if self.meter_fit.needs_recalc(&fit_inputs) {
+                            ui.ctx().request_repaint();
+                        }
                     }
                 });
             };
