@@ -23,6 +23,23 @@ pub(crate) const MIN_MAX_SAMPLES: usize = 1_000;
 /// that fills memory until the process is killed.
 pub(crate) const MAX_MAX_SAMPLES: usize = 50_000_000;
 
+/// The window's inner size, in OS logical points, until the user resizes it.
+pub(crate) const DEFAULT_WINDOW_SIZE: [f32; 2] = [960.0, 640.0];
+
+/// The smallest window the OS may give us, whatever the content asks for.
+pub(crate) const MIN_WINDOW_SIZE: [f32; 2] = [200.0, 150.0];
+
+/// The reading panel's width in the wide layout (points): its default and
+/// the range its drag handle allows.
+pub(crate) const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
+pub(crate) const SIDE_PANEL_MIN_WIDTH: f32 = 180.0;
+pub(crate) const SIDE_PANEL_MAX_WIDTH: f32 = 400.0;
+
+/// The recording panel's height under the graph (points): its default and
+/// the floor its divider stops at.
+pub(crate) const DEFAULT_RECORDING_HEIGHT: f32 = 120.0;
+pub(crate) const MIN_RECORDING_HEIGHT: f32 = 40.0;
+
 fn default_max_samples() -> usize {
     DEFAULT_MAX_SAMPLES
 }
@@ -348,6 +365,19 @@ pub struct Settings {
     /// there. `None` until one does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_folder: Option<PathBuf>,
+    /// The window's inner size when last resized, in OS logical points (so
+    /// the UI zoom doesn't change it). Not while maximized, fullscreen or in
+    /// big meter mode. `None` until the user resizes the window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_size: Option<[f32; 2]>,
+    /// Whether the window was maximized; it reopens maximized.
+    #[serde(default)]
+    pub window_maximized: bool,
+    /// The reading panel's width in the wide layout.
+    pub reading_panel_width: f32,
+    /// The recording panel's height under the graph, as dragged. The layout
+    /// fits it to the window without changing it.
+    pub recording_height: f32,
     /// CLI overrides (not serialized).
     #[serde(skip)]
     pub overrides: Overrides,
@@ -382,6 +412,10 @@ impl Default for Settings {
             last_seen_version: None,
             check_for_updates: default_check_for_updates(),
             last_folder: None,
+            window_size: None,
+            window_maximized: false,
+            reading_panel_width: SIDE_PANEL_DEFAULT_WIDTH,
+            recording_height: DEFAULT_RECORDING_HEIGHT,
             overrides: Overrides::default(),
         }
     }
@@ -429,6 +463,15 @@ impl Settings {
     /// disk, and so every future clamp has one place to live.
     fn sanitize(&mut self) {
         self.max_samples = self.max_samples.clamp(MIN_MAX_SAMPLES, MAX_MAX_SAMPLES);
+        // No ceiling on the window: eframe clamps it to the largest monitor.
+        // JSON has no NaN, so these need no finiteness check.
+        self.window_size = self
+            .window_size
+            .filter(|&[w, h]| w >= MIN_WINDOW_SIZE[0] && h >= MIN_WINDOW_SIZE[1]);
+        self.reading_panel_width = self
+            .reading_panel_width
+            .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
+        self.recording_height = self.recording_height.max(MIN_RECORDING_HEIGHT);
     }
 
     /// Write the settings to the user's config file. Nothing isolates that
@@ -651,6 +694,10 @@ mod tests {
             last_seen_version: Some("0.3.0".to_string()),
             check_for_updates: false,
             last_folder: Some(PathBuf::from("/data/bench")),
+            window_size: Some([1300.0, 900.0]),
+            window_maximized: true,
+            reading_panel_width: 300.0,
+            recording_height: 200.0,
             overrides: Overrides::default(),
         };
         let json = serde_json::to_string(&s).unwrap();
@@ -676,6 +723,10 @@ mod tests {
             deserialized.last_folder.as_deref(),
             Some(std::path::Path::new("/data/bench"))
         );
+        assert_eq!(deserialized.window_size, Some([1300.0, 900.0]));
+        assert!(deserialized.window_maximized);
+        assert_eq!(deserialized.reading_panel_width, 300.0);
+        assert_eq!(deserialized.recording_height, 200.0);
     }
 
     #[test]
@@ -705,6 +756,31 @@ mod tests {
         // A config file written before update checks existed has them on,
         // as a fresh install does.
         assert!(s.check_for_updates);
+        // A config file written before the layout was kept opens at the
+        // default layout, not at zero-sized panels.
+        assert_eq!(s.window_size, None);
+        assert!(!s.window_maximized);
+        assert_eq!(s.reading_panel_width, SIDE_PANEL_DEFAULT_WIDTH);
+        assert_eq!(s.recording_height, DEFAULT_RECORDING_HEIGHT);
+    }
+
+    /// A hand-edited layout lands on sizes the window and panels can take.
+    #[test]
+    fn a_hand_edited_layout_is_pulled_back_in() {
+        let mut s: Settings = serde_json::from_str(
+            r#"{"window_size":[50,40],"reading_panel_width":9000,"recording_height":-5}"#,
+        )
+        .unwrap();
+        s.sanitize();
+        assert_eq!(s.window_size, None, "below the smallest window");
+        assert_eq!(s.reading_panel_width, SIDE_PANEL_MAX_WIDTH);
+        assert_eq!(s.recording_height, MIN_RECORDING_HEIGHT);
+        let mut s: Settings =
+            serde_json::from_str(r#"{"window_size":[5000,3000],"reading_panel_width":10}"#)
+                .unwrap();
+        s.sanitize();
+        assert_eq!(s.window_size, Some([5000.0, 3000.0]), "eframe clamps it");
+        assert_eq!(s.reading_panel_width, SIDE_PANEL_MIN_WIDTH);
     }
 
     /// The settings row only offers sane sizes, but the file is editable by

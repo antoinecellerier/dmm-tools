@@ -1,6 +1,7 @@
 //! The reading column shared by the wide and narrow layouts — reading,
-//! remote controls, specs and stats — plus the specs section variants and the
-//! big meter toggle that cycles the reading to full screen and back.
+//! remote controls, specs and stats — plus the specs section variants, the
+//! big meter toggle that cycles the reading to full screen and back, and the
+//! window and panel sizes kept for the next launch.
 
 use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, RichText, Ui};
@@ -9,7 +10,9 @@ use super::recording_panel::MIN_SPLIT_HEIGHT;
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
+use crate::settings::DEFAULT_WINDOW_SIZE;
 use crate::specs;
+use std::time::Instant;
 
 /// Which of the two multi-panel layouts the reading column is rendered in.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -170,6 +173,62 @@ impl App {
         });
     }
 
+    /// Keep the window's size and maximized state and the reading panel's
+    /// width in the settings, for the next launch to open with. The
+    /// recording panel's height is kept where it is dragged.
+    ///
+    /// The size is taken from `content_rect`, not the viewport's
+    /// `inner_rect`: that is always `None` on Wayland, and computed with the
+    /// old zoom on the frame a zoom is applied. Times `zoom_factor`, it is in
+    /// the OS logical points the window is built with, so a UI zoom doesn't
+    /// resize the next launch's window.
+    ///
+    /// Not kept:
+    /// - the size while maximized or fullscreen, so un-maximizing goes back to
+    ///   the size the user picked;
+    /// - anything while minimized, where some platforms report a maximized
+    ///   window as not maximized;
+    /// - the size in big meter mode: the mode isn't kept, and a small readout
+    ///   window would cramp the next launch's full layout;
+    /// - the maximized state on macOS after launch, which winit only reports
+    ///   when the window is created.
+    pub(super) fn track_layout(&mut self, ctx: &egui::Context) {
+        let (maximized, fullscreen, minimized) = ctx.input(|i| {
+            let v = i.viewport();
+            (v.maximized, v.fullscreen, v.minimized)
+        });
+        let mut changed = false;
+        if fullscreen != Some(true) && minimized != Some(true) {
+            if let Some(maximized) = maximized
+                && maximized != self.settings.window_maximized
+            {
+                self.settings.window_maximized = maximized;
+                changed = true;
+            }
+            let size = (ctx.content_rect().size() * ctx.zoom_factor()).round();
+            let kept = self.settings.window_size.unwrap_or(DEFAULT_WINDOW_SIZE);
+            if maximized != Some(true)
+                && self.big_meter_mode == BigMeterMode::Off
+                && size.is_finite()
+                && size != egui::Vec2::from(kept)
+            {
+                self.settings.window_size = Some(size.into());
+                changed = true;
+            }
+        }
+        // egui stores the panel's state when a drag ends, not during it.
+        if let Some(panel) = egui::PanelState::load(ctx, egui::Id::new("reading_panel")) {
+            let width = panel.outer_rect.width().round();
+            if width.is_finite() && width != self.settings.reading_panel_width {
+                self.settings.reading_panel_width = width;
+                changed = true;
+            }
+        }
+        if changed {
+            self.settings_save.schedule(Instant::now());
+        }
+    }
+
     pub(super) fn cycle_big_meter(&mut self) {
         match self.big_meter_mode {
             BigMeterMode::Off => {
@@ -259,9 +318,11 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{SIDE_PANEL_DEFAULT_WIDTH, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH};
     use super::*;
-    use crate::settings::Settings;
+    use crate::settings::{
+        SIDE_PANEL_DEFAULT_WIDTH, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, Settings,
+    };
+    use eframe::egui::ViewportInfo;
     use eframe::egui::scroll_area::ScrollAreaOutput;
 
     /// The page scrollers one multi-panel layout ends up with: the wide
@@ -482,5 +543,98 @@ mod tests {
             columns.reading.content_size.y,
             columns.reading.inner_rect.height(),
         );
+    }
+
+    /// One frame of [`App::track_layout`] in a `size` window (OS logical
+    /// points) at `zoom`, with the viewport state the backend reports. The
+    /// screen is in egui points, as egui-winit passes it: `size / zoom`.
+    fn track(app: &mut App, ctx: &egui::Context, size: [f32; 2], zoom: f32, info: ViewportInfo) {
+        ctx.set_zoom_factor(zoom);
+        // Twice: a zoom set between passes applies from the next one.
+        for _ in 0..2 {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::Vec2::from(size) / zoom,
+                )),
+                viewports: std::iter::once((egui::ViewportId::ROOT, info.clone())).collect(),
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(raw, |ui| app.track_layout(ui.ctx()));
+            out.textures_delta.clear();
+        }
+    }
+
+    fn normal() -> ViewportInfo {
+        ViewportInfo {
+            maximized: Some(false),
+            fullscreen: Some(false),
+            minimized: Some(false),
+            ..Default::default()
+        }
+    }
+
+    /// A resized window is kept in OS logical points whatever the UI zoom;
+    /// the default size, the same size again, and a maximized, fullscreen,
+    /// minimized or big-meter window change nothing but the maximized flag.
+    #[test]
+    fn the_window_size_is_kept_only_when_the_user_picked_it() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let ctx = egui::Context::default();
+
+        track(
+            &mut app,
+            &ctx,
+            crate::settings::DEFAULT_WINDOW_SIZE,
+            1.0,
+            normal(),
+        );
+        assert_eq!(app.settings.window_size, None);
+        assert!(!app.settings_save.take_pending(), "the default size");
+
+        track(&mut app, &ctx, [1300.0, 900.0], 1.5, normal());
+        assert_eq!(
+            app.settings.window_size,
+            Some([1300.0, 900.0]),
+            "zoom undone"
+        );
+        assert!(app.settings_save.take_pending(), "resized");
+        track(&mut app, &ctx, [1300.0, 900.0], 1.0, normal());
+        assert!(!app.settings_save.take_pending(), "a zoom change alone");
+
+        let maximized = ViewportInfo {
+            maximized: Some(true),
+            ..normal()
+        };
+        track(&mut app, &ctx, [1920.0, 1080.0], 1.0, maximized);
+        assert_eq!(app.settings.window_size, Some([1300.0, 900.0]));
+        assert!(app.settings.window_maximized);
+        assert!(app.settings_save.take_pending(), "maximized");
+
+        for info in [
+            ViewportInfo {
+                fullscreen: Some(true),
+                ..normal()
+            },
+            // Some platforms report a minimized maximized window as not
+            // maximized.
+            ViewportInfo {
+                minimized: Some(true),
+                ..normal()
+            },
+        ] {
+            track(&mut app, &ctx, [640.0, 480.0], 1.0, info);
+            assert_eq!(app.settings.window_size, Some([1300.0, 900.0]));
+            assert!(app.settings.window_maximized);
+            assert!(!app.settings_save.take_pending());
+        }
+
+        track(&mut app, &ctx, [1300.0, 900.0], 1.0, normal());
+        assert!(!app.settings.window_maximized, "un-maximized");
+        app.settings_save.take_pending();
+        app.big_meter_mode = BigMeterMode::Minimal;
+        track(&mut app, &ctx, [300.0, 200.0], 1.0, normal());
+        assert_eq!(app.settings.window_size, Some([1300.0, 900.0]));
+        assert!(!app.settings_save.take_pending(), "a big meter readout");
     }
 }

@@ -9,9 +9,10 @@ use log::info;
 use super::capture::CaptureLayout;
 use super::export::{ExportFormat, NO_WIRE_FORMAT};
 use super::toast::Toast;
-use super::{App, ConnectionState, DEFAULT_RECORDING_HEIGHT};
+use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
 use crate::recording::BufferRole;
+use crate::settings::MIN_RECORDING_HEIGHT;
 
 /// The arrow segment of the Export… split button (U+23F7, in egui's icon
 /// font like the `⏵` its submenus use).
@@ -147,11 +148,10 @@ enum DiscardFor {
     Connect,
 }
 
-/// The recording panel's own state: how tall the user dragged it, and the
-/// discard prompt that guards an unexported capture.
+/// The recording panel's own state: the discard prompt that guards an
+/// unexported capture. How tall the user dragged it is kept in the settings.
+#[derive(Default)]
 pub(super) struct RecordingPanel {
-    /// User-resizable recording panel height.
-    height: f32,
     /// Record or Discard was pressed while the recording held unexported
     /// samples; waiting for the user to confirm losing them.
     pending_discard: Option<DiscardFor>,
@@ -161,18 +161,6 @@ pub(super) struct RecordingPanel {
     /// The Export… menu opened this frame; its first entry still has to be
     /// given the focus — see `show_export_menu`.
     export_menu_focus_pending: bool,
-}
-
-impl Default for RecordingPanel {
-    fn default() -> Self {
-        Self {
-            height: DEFAULT_RECORDING_HEIGHT,
-            pending_discard: None,
-            pending_import: None,
-            confirm_discard_focus_pending: false,
-            export_menu_focus_pending: false,
-        }
-    }
 }
 
 impl App {
@@ -611,7 +599,7 @@ impl App {
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         if self.settings.show_graph && self.settings.show_recording {
             let total = ui.available_height();
-            let graph_height = (total - self.recording_panel.height).max(80.0);
+            let graph_height = (total - self.settings.recording_height).max(80.0);
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                 self.graph.show(ui, &tc, &self.markers);
@@ -627,10 +615,15 @@ impl App {
                     egui::Sense::drag(),
                 )
                 .a11y_label("Resize recording panel (Up/Down to adjust)");
+            let fit = |height: f32| {
+                height.clamp(
+                    MIN_RECORDING_HEIGHT,
+                    (total - 80.0).max(MIN_RECORDING_HEIGHT),
+                )
+            };
+            let before = self.settings.recording_height;
             if sep_response.dragged() {
-                self.recording_panel.height = (self.recording_panel.height
-                    - sep_response.drag_delta().y)
-                    .clamp(40.0, (total - 80.0).max(40.0));
+                self.settings.recording_height = fit(before - sep_response.drag_delta().y);
             }
             // Keyboard resize when focused: Up moves the divider up
             // (grows the recording panel), Down moves it down. Matches
@@ -642,8 +635,10 @@ impl App {
                 20.0,
             );
             if delta != 0.0 {
-                self.recording_panel.height =
-                    (self.recording_panel.height + delta).clamp(40.0, (total - 80.0).max(40.0));
+                self.settings.recording_height = fit(self.settings.recording_height + delta);
+            }
+            if self.settings.recording_height != before {
+                self.settings_save.schedule(std::time::Instant::now());
             }
             crate::a11y::paint_focus_ring(ui, &sep_response);
             if sep_response.hovered() || sep_response.dragged() {

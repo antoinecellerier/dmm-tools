@@ -469,11 +469,24 @@ fn main() -> eframe::Result<()> {
     let explicit_renderer = overrides.renderer.is_some();
     let renderer = overrides.renderer.unwrap_or(eframe::Renderer::Wgpu);
 
+    // Loaded here, not in `App::new`: the window is built from them first.
+    let settings = settings::Settings::load();
+    // eframe clamps the size to the largest monitor. The title bar is
+    // hidden here rather than by the first frame's command, which on
+    // Windows keeps the outer size and so grows the kept inner size on every
+    // launch.
     let viewport = eframe::egui::ViewportBuilder::default()
         .with_app_id("dmm-tools")
         .with_icon(std::sync::Arc::new(icon))
-        .with_inner_size([960.0, 640.0])
-        .with_min_inner_size([200.0, 150.0]);
+        .with_inner_size(
+            settings
+                .window_size
+                .unwrap_or(settings::DEFAULT_WINDOW_SIZE),
+        )
+        .with_min_inner_size(settings::MIN_WINDOW_SIZE)
+        .with_maximized(settings.window_maximized)
+        .with_decorations(!settings.hide_decorations);
+    let fallback_settings = settings.clone();
 
     let options = eframe::NativeOptions {
         viewport: viewport.clone(),
@@ -484,7 +497,7 @@ fn main() -> eframe::Result<()> {
     let result = eframe::run_native(
         "dmm-tools",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, overrides)))),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, settings, overrides)))),
     );
 
     // If wgpu failed and wasn't explicitly requested, retry with glow
@@ -499,7 +512,13 @@ fn main() -> eframe::Result<()> {
         return eframe::run_native(
             "dmm-tools",
             fallback_options,
-            Box::new(move |cc| Ok(Box::new(app::App::new(cc, fallback_overrides)))),
+            Box::new(move |cc| {
+                Ok(Box::new(app::App::new(
+                    cc,
+                    fallback_settings,
+                    fallback_overrides,
+                )))
+            }),
         );
     }
 

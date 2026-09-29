@@ -29,6 +29,7 @@
 - **A new Sample interval takes effect at once** — it waited for a reconnect.
 - **Exporting a long recording as JSON no longer freezes the GUI for seconds**
 - **Import… and Export… open in the folder last used** — or in Documents, the first time.
+- **The window and its panels reopen at the size they were left**
 - **What's New opens on this release, with earlier ones folded**
 - **The graph's mean, reference and cursor labels stay readable when crowded** — they drew over each other, the plot key and marker flags.
 

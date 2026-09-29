@@ -47,7 +47,9 @@ use std::sync::{Arc, Mutex};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
 use crate::graph::Graph;
-use crate::settings::{DeferredSave, SaveDue, Settings, ThemeMode};
+use crate::settings::{
+    DeferredSave, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, SaveDue, Settings, ThemeMode,
+};
 use appearance::{UiColorKey, font_definitions, install_text_styles};
 use capture::Capture;
 use connection::RemoteCommand;
@@ -58,16 +60,6 @@ use meter_fit::{FitInputs, MeterFit, WindowContent};
 use recording_panel::RecordingPanel;
 use toast::Toast;
 use transform_ui::TransformEditor;
-
-/// Default height of the recording panel (logical pixels).
-const DEFAULT_RECORDING_HEIGHT: f32 = 120.0;
-
-/// Default width for the side panel in wide layout (logical pixels).
-const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
-
-/// Allowed range for the resizable side panel.
-const SIDE_PANEL_MIN_WIDTH: f32 = 180.0;
-const SIDE_PANEL_MAX_WIDTH: f32 = 400.0;
 
 /// How often a recording redraws for its elapsed-time label when nothing else
 /// does (paused, or a silent meter). Real time, not the session clock: the
@@ -411,7 +403,13 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>, cli: crate::CliOverrides) -> Self {
+    /// `settings` are loaded by `main`, which sizes the window from them
+    /// before this runs.
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        settings: Settings,
+        cli: crate::CliOverrides,
+    ) -> Self {
         install_text_styles(&cc.egui_ctx);
         cc.egui_ctx.set_fonts(font_definitions());
         // Asked once, here: the display handle says which backend the window
@@ -421,7 +419,7 @@ impl App {
             .display_handle()
             .is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)));
         let update_notice = cli.update_notice.clone();
-        let mut app = Self::from_cli(Settings::load(), cli);
+        let mut app = Self::from_cli(settings, cli);
         app.on_wayland = on_wayland;
         // Here and not in `from_settings`, so a test build can never reach
         // the network or the cache file.
@@ -841,8 +839,12 @@ impl eframe::App for App {
             if self.settings.always_on_top && !self.on_wayland {
                 self.apply_always_on_top(&ctx);
             }
-            if self.settings.hide_decorations {
-                self.apply_decorations(&ctx);
+            // `main` builds the window without its title bar and maximized.
+            // Maximize again all the same: eframe creates the window hidden,
+            // and X11 window managers ignore a maximize request made before
+            // the window is shown.
+            if self.settings.window_maximized {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
             }
             if let Some(path) = self.pending_import.take() {
                 // The file is the session: no meter is opened beside it.
@@ -929,7 +931,7 @@ impl eframe::App for App {
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
             let reading_panel = egui::Panel::left("reading_panel")
-                .default_size(SIDE_PANEL_DEFAULT_WIDTH)
+                .default_size(self.settings.reading_panel_width)
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
                 .show(ui, |ui| {
@@ -1004,6 +1006,7 @@ impl eframe::App for App {
         if self.capture.recording.active {
             ctx.request_repaint_after(RECORDING_LABEL_TICK);
         }
+        self.track_layout(&ctx);
         // Last, so a change made this frame is seen this frame. A paused or
         // disconnected app draws nothing by itself, so a pending save asks
         // for the frame it is due in.

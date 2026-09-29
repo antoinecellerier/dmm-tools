@@ -99,6 +99,13 @@ cropping it, the graph area keeping a minimum height. The top bar is outside
 the scrollers and stays pinned. The shortcut help caps itself to the window
 and scrolls inside its own frame rather than being clipped by it.
 
+The window size, maximized state, sidebar width and graph/recording split
+persist in `settings.json`. The position is left to the OS: Wayland ignores
+it, and a monitor unplugged since would leave the window off-screen.
+Fullscreen is not restored, being a mode the user steps into. A size set in
+big meter mode is not kept: the mode itself isn't, and a small readout
+window would cramp the next launch's full layout.
+
 **Big meter mode (graph + recording both hidden):** Single centered display.
 - Reading, buttons, specs (inline), and stats scale to fill available space
 - Font size computed from both available width and height using cached measured text ratios

@@ -380,6 +380,13 @@ small for its content, the panels scroll rather than being cut off, and the
 top bar stays in place. The mouse wheel scrolls; `Ctrl` + wheel zooms the
 graph.
 
+The window reopens at the size it was left, maximized if it was, and the
+sidebar and the graph/recording divider where they were dragged. A size set
+in big meter mode or fullscreen is not kept. To start from the default
+layout again, remove `window_size`, `window_maximized`,
+`reading_panel_width` and `recording_height` from
+[`settings.json`](#settings).
+
 ### Wide Layout (≥ 900px)
 
 Two-column layout with a resizable left sidebar (180–400px):
