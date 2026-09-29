@@ -1,12 +1,12 @@
 # dmm-tools
 
-USB and Bluetooth multimeter logger and remote control for UNI-T, Voltcraft, ZOTEK (ZOYI, BSIDE, ANENG), EEVblog and Brymen digital multimeters, on Linux, macOS and Windows.
+Open-source logging, graphing and remote-control software for UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), Brymen, EEVblog and Voltcraft multimeters and clamp meters, over USB and Bluetooth, on Linux, Windows, macOS and Raspberry Pi.
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT60BT, UT202BT, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803, the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960, the ZOTEK ZT-300AB, ZT-5566SE, ZT-5BQ and ZT-5B (ANENG AN9002, AN999S, ST207, V05B), the EEVblog 121GW, and the Brymen BM788BT, BM787BT, BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM525s and BM521s — see [supported devices](#supported-devices).
+Read, record and remote-control a digital multimeter from a desktop app, over its USB cable or wirelessly over Bluetooth. Supports the UNI-T UT61E+ (UT61E Plus), UT181A, UT161, UT71, UT60BT, UT61D+, UT61B+, UT803, UT804, UT8802, UT8803, UT171 and UT202BT, the ANENG AN9002, AN999S, ST207 and V05B (ZOTEK ZT-300AB, ZT-5566SE, ZT-5BQ, ZT-5B), the Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM788BT, BM787BT, BM525s and BM521s, the EEVblog 121GW, and the Voltcraft VC-890, VC-880, VC650BT, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
