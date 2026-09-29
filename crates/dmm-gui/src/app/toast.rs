@@ -39,7 +39,16 @@ const TOAST_STROKE_WIDTH: f32 = 1.5;
 /// glyph for the light one and draw a box — `the_glyphs_have_fonts` below
 /// keeps it that way.
 const OK_GLYPH: &str = "\u{2714}";
-const ERROR_GLYPH: &str = "\u{26A0}";
+pub(super) const ERROR_GLYPH: &str = "\u{26A0}";
+
+/// The × that closes a notice, a toast or one drawn in a panel: whether it
+/// was clicked this frame.
+pub(super) fn dismiss_button(ui: &mut egui::Ui) -> bool {
+    ui.add(egui::Button::new(RichText::new("\u{00D7}").small()).frame_when_inactive(false))
+        .on_hover_text("Dismiss")
+        .a11y_label("Dismiss notification")
+        .clicked()
+}
 
 /// How often a visible toast asks for a repaint. Also the cadence the app
 /// already repaints at while connected.
@@ -137,14 +146,7 @@ impl App {
                             // so the text wraps in what is left rather than
                             // pushing the button out of the box.
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                                let close = ui
-                                    .add(
-                                        egui::Button::new(RichText::new("\u{00D7}").small())
-                                            .frame_when_inactive(false),
-                                    )
-                                    .on_hover_text("Dismiss")
-                                    .a11y_label("Dismiss notification");
-                                dismissed = close.clicked();
+                                dismissed = dismiss_button(ui);
                                 ui.with_layout(
                                     egui::Layout::left_to_right(egui::Align::TOP),
                                     |ui| {

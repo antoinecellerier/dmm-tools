@@ -14,7 +14,7 @@ use super::connection::{
     self, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext, spawn_acquisition,
 };
 use super::connection_issue::{ConnectionIssue, NoticeKind};
-use super::toast::Toast;
+use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
 use super::{App, ConnectionState, named_device};
 use crate::settings::format_sample_count;
 
@@ -350,6 +350,7 @@ impl App {
         // "Waiting for meter…" on screen for the whole disconnected session.
         self.connection.waiting_timeouts = 0;
         self.connection.ended = false;
+        self.connection.late_readings = None;
     }
 
     /// Drop everything derived from the sample stream: graph history and
@@ -394,6 +395,8 @@ impl App {
                 DmmMessage::Connected(meter) => {
                     self.connection.state = ConnectionState::Connected;
                     self.held.clear();
+                    // A new link: it says again if its readings come in pairs.
+                    self.connection.late_readings = None;
                     self.capture.device_aux_slots = meter.max_aux_values;
                     // A reconnect mid-recording is the same meter, so the
                     // in-flight capture picks the slot count back up — it was
@@ -494,6 +497,8 @@ impl App {
                     info!("UI: disconnected: {err} ({:?})", err.kind());
                     self.connection.state = ConnectionState::Reconnecting;
                     self.held.clear();
+                    // Its command names a link that is gone.
+                    self.connection.late_readings = None;
                     // Tell the graph this was a real loss of data. It can't
                     // infer that from timestamps — the meter goes quiet for
                     // over a second while auto-ranging, which looks the same
@@ -524,6 +529,9 @@ impl App {
                 DmmMessage::Choices(setting, choices) => {
                     self.connection.choices.set(setting, choices);
                 }
+                DmmMessage::LateReadings(notice) => {
+                    self.connection.late_readings = Some(notice);
+                }
             }
         }
 
@@ -544,6 +552,71 @@ impl App {
         if clear_channel {
             // Disconnect properly: send stop signal so the background thread exits
             self.disconnect();
+        }
+    }
+
+    /// Draw the notice for readings arriving two at a time under the
+    /// reading, until dismissed: the title, what happens and, where there
+    /// is one, the command that fixes the link, with a button to copy it.
+    ///
+    /// Not drawn in the big-meter modes, as the connection help is not.
+    pub(super) fn show_late_readings(&mut self, ui: &mut Ui) {
+        let Some(notice) = &self.connection.late_readings else {
+            return;
+        };
+        let warn_color = self
+            .settings
+            .theme_colors(ui.visuals().dark_mode)
+            .status_warning();
+        let mut dismissed = false;
+        let mut copied = false;
+        ui.add_space(8.0);
+        // The close button goes in first, from the right, so the title wraps
+        // in what is left, as in a toast; inset by a scrollbar's width, as
+        // the column's bar floats over its right edge when it scrolls.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+            let scroll = &ui.spacing().scroll;
+            ui.add_space(scroll.bar_width + scroll.bar_outer_margin);
+            dismissed = dismiss_button(ui);
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(format!(
+                            "{ERROR_GLYPH} {}",
+                            dmm_lib::transport::LateReadings::TITLE
+                        ))
+                        .color(warn_color),
+                    )
+                    .wrap(),
+                );
+            });
+        });
+        ui.add(egui::Label::new(RichText::new(notice.advice()).small()).wrap());
+        if let Some(command) = &notice.command {
+            ui.add_space(4.0);
+            // Copy follows the command's last word, on that line when there
+            // is room for it.
+            ui.horizontal_wrapped(|ui| {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(command)
+                            .small()
+                            .family(egui::FontFamily::Monospace),
+                    )
+                    .wrap()
+                    .selectable(true),
+                );
+                copied = ui.small_button("Copy").clicked();
+            });
+            if copied {
+                ui.ctx().copy_text(command.clone());
+            }
+        }
+        if dismissed {
+            self.connection.late_readings = None;
+        }
+        if copied {
+            self.toast = Some(Toast::info("Command copied"));
         }
     }
 
@@ -640,6 +713,27 @@ mod tests {
         tx.send(msg).expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
+    }
+
+    /// The notice for readings arriving in pairs stays until the link goes:
+    /// its command names that link, and a new link says so again itself.
+    #[test]
+    fn the_late_readings_notice_lasts_as_long_as_its_link() {
+        let notice = || dmm_lib::transport::LateReadings {
+            command: Some("sudo hcitool lecup --handle 2048".to_string()),
+        };
+        let mut app = app("ut61eplus", false);
+        deliver(&mut app, DmmMessage::LateReadings(notice()));
+        assert_eq!(app.connection.late_readings, Some(notice()));
+        deliver(
+            &mut app,
+            DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost),
+        );
+        assert_eq!(app.connection.late_readings, None, "the link went");
+
+        deliver(&mut app, DmmMessage::LateReadings(notice()));
+        app.disconnect();
+        assert_eq!(app.connection.late_readings, None, "disconnected");
     }
 
     /// A Sample interval picked while connected goes to the running session

@@ -81,6 +81,7 @@ impl App {
         self.show_big_meter_toggle_at(ui, toggle_rect);
         self.show_transform_editor(ui, 1.0);
         self.show_connection_help(ui);
+        self.show_late_readings(ui);
 
         match layout {
             ContentLayout::Wide => {

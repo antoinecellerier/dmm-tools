@@ -86,6 +86,52 @@ pub trait Transport: Send {
     fn advertised_name(&self) -> Option<&str> {
         None
     }
+
+    /// The notice to give when this link's readings are seen arriving two
+    /// at a time ([`LateReadings`]), for a link known to bunch them. `None`
+    /// for every other link: pairs there are logged, not shown.
+    fn late_readings(&self) -> Option<LateReadings> {
+        None
+    }
+}
+
+/// What to tell the user when a link hands over readings two at a time: a
+/// Bluetooth link slower than the meter carries one reading late, together
+/// with the next. [`MeasurementStream`](crate::stream::MeasurementStream)
+/// logs it as a warning and hands it to the GUI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LateReadings {
+    /// A command that shortens the link's interval for this connection,
+    /// where there is one to run (Linux; `hcitool`, as root).
+    pub command: Option<String>,
+}
+
+impl LateReadings {
+    pub const TITLE: &'static str = "Some Bluetooth readings arrive late";
+
+    /// What happens and, with a [`Self::command`], what to do about it.
+    pub fn advice(&self) -> &'static str {
+        if self.command.is_some() {
+            "On this adapter, a reading sometimes arrives grouped with the next \
+             one. None are lost. For accurate timestamps until the meter \
+             disconnects, run:"
+        } else {
+            "On this adapter, a reading sometimes arrives grouped with the next \
+             one. None are lost."
+        }
+    }
+}
+
+/// The title, the advice and the command, on one line: the command last, so
+/// it copies clean out of a log line.
+impl std::fmt::Display for LateReadings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}. {}", Self::TITLE, self.advice())?;
+        if let Some(command) = &self.command {
+            write!(f, " {command}")?;
+        }
+        Ok(())
+    }
 }
 
 /// The Bluetooth peers an open or a listing takes, by the name they
@@ -199,6 +245,10 @@ impl Transport for Box<dyn Transport> {
 
     fn advertised_name(&self) -> Option<&str> {
         (**self).advertised_name()
+    }
+
+    fn late_readings(&self) -> Option<LateReadings> {
+        (**self).late_readings()
     }
 }
 
@@ -318,6 +368,49 @@ mod tests {
         }
         let t: Box<dyn Transport> = Box::new(Radio);
         assert_eq!(t.link(), Some(Link::Bluetooth));
+    }
+
+    /// Both binaries read a boxed transport: a box that fell back on the
+    /// default would never give the notice.
+    #[test]
+    fn a_boxed_transport_forwards_the_late_readings_notice() {
+        struct Radio;
+        impl Transport for Radio {
+            fn write(&self, _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+                Ok(0)
+            }
+            fn link(&self) -> Option<Link> {
+                Some(Link::Bluetooth)
+            }
+            fn late_readings(&self) -> Option<LateReadings> {
+                Some(LateReadings { command: None })
+            }
+        }
+        let t: Box<dyn Transport> = Box::new(Radio);
+        assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
+    }
+
+    #[test]
+    fn the_late_readings_command_ends_the_line() {
+        let notice = LateReadings {
+            command: Some("sudo fix".to_string()),
+        };
+        let text = notice.to_string();
+        assert!(
+            text.starts_with("Some Bluetooth readings arrive late. On this adapter, "),
+            "{text}"
+        );
+        assert!(
+            text.ends_with("until the meter disconnects, run: sudo fix"),
+            "{text}"
+        );
+        assert!(!text.contains('\n'), "{text}");
+        let plain = LateReadings { command: None }.to_string();
+        assert!(!plain.contains('\n'));
+        assert!(plain.ends_with("None are lost."));
     }
 }
 

@@ -242,6 +242,9 @@ pub(super) struct Connection {
     /// The replay handed out its last frame; nothing more will come until
     /// the next connect.
     pub(super) ended: bool,
+    /// What to tell the user about readings arriving two at a time, until
+    /// dismissed or the link goes ([`App::show_late_readings`]).
+    pub(super) late_readings: Option<dmm_lib::transport::LateReadings>,
 }
 
 impl Default for Connection {
@@ -261,6 +264,7 @@ impl Default for Connection {
             cmd_tx: None,
             needs_reconnect: false,
             ended: false,
+            late_readings: None,
         }
     }
 }
@@ -744,6 +748,7 @@ impl App {
                         // already in the readout, and the help drawn under a
                         // window-filling reading would land off-screen.
                         self.show_connection_help(ui);
+                        self.show_late_readings(ui);
                         self.show_specs_section_inline(ui, scale);
 
                         if self.settings.show_stats {

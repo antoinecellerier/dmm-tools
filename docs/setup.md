@@ -191,6 +191,18 @@ carries a different service layout — please report it on
 [#25](https://github.com/antoinecellerier/dmm-tools/issues/25) with
 the output of `bluetoothctl info <address>`.
 
+### "Some Bluetooth readings arrive late"
+
+Over the UT-D07B, a reading sometimes arrives late, grouped with the next
+one. None are lost; only their timestamps are off.
+
+- **Linux:** the message ends with a command. Run it as printed while the
+  meter is connected; it lasts until the meter disconnects. It comes from
+  BlueZ's `hcitool`, in the `bluez` package on Debian and Ubuntu; without it
+  the message has none.
+- **Windows 11:** the tool shortens the link itself.
+- **Any system:** a USB cable gives on-time readings.
+
 ### GUI shows a black screen or won't render
 
 On devices with older GPUs (e.g. Raspberry Pi 3B+, OpenGL 2.1), the default wgpu renderer may fail. The GUI automatically falls back to the glow (OpenGL) renderer, but you can also force it explicitly:

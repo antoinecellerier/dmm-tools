@@ -2207,6 +2207,17 @@ the following needs someone's hardware.
   10, which has no such call, and the adapter's battery cost at 60 ms. The
   UT60BT and UT202BT, on the same profile, are left alone until someone sees
   what interval their radios ask for (#26, #27).
+- **Readings in pairs on Linux and macOS.** Neither lets an app ask for a
+  shorter interval, so the stream warns once per connection when the adapter
+  hands readings over two at a time, and on Linux prints the `hcitool lecup`
+  line that fixes the link by hand. Seen on our UT61E+ on 2026-09-29: the
+  warning came within the first minute, and the command's handle lookup
+  found the link. Remote commands sent on a fixed link count no pairs (four
+  presses, 2026-09-29). Open: whether macOS takes the adapter's 315 ms at all
+  (its accessory guidelines reject a 280 ms minimum and a 5 s timeout; a
+  PacketLogger trace settles it), and a UT-D07A in front of a meter faster
+  than its interval, which would bunch so often that the detection, which
+  needs most readings on time, stays silent.
 - **The adapter's heartbeat.** `AB CD 06 AA AA 6E 67 03 A7` comes from the
   adapter once per link and once a second while the meter is silent; the
   transport drops it. UNI-T's own app reads it as "no meter data" and answers

@@ -38,7 +38,7 @@ mod winrt;
 
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
-use crate::transport::{BluetoothPeers, Link, Transport};
+use crate::transport::{BluetoothPeers, LateReadings, Link, Transport};
 use btleplug::api::{
     Central, CentralState, Characteristic, Manager as _, Peripheral as _, ValueNotification,
 };
@@ -85,6 +85,9 @@ const DISCOVERY_POLL: Duration = Duration::from_millis(500);
 /// ([`request_short_interval`]); past it the link keeps what the peer set.
 #[cfg(target_os = "windows")]
 const INTERVAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+/// How long `hcitool con` may take to list the links ([`connection_handle`]).
+#[cfg(target_os = "linux")]
+const HANDLE_LOOKUP_TIMEOUT: Duration = Duration::from_secs(1);
 /// How long taking a link down may take, after a failed open or on drop.
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -117,6 +120,9 @@ pub(crate) struct Ble {
     /// The short-interval request, kept for as long as the link is open:
     /// dropping it withdraws it ([`request_short_interval`]).
     _short_interval: Option<ShortInterval>,
+    /// For an adapter on Linux, the command that shortens this link's
+    /// interval by hand ([`interval_command`]), for [`Transport::late_readings`].
+    interval_command: Option<String>,
     /// Drives every btleplug call. Last, so it outlives every field whose
     /// destructor reaches into the stack.
     rt: tokio::runtime::Runtime,
@@ -194,6 +200,17 @@ struct Opened {
 fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
     let rt = runtime()?;
     let opened = rt.block_on(connect(target))?;
+    // Looked up now, while the link is new, rather than from the reading
+    // loop when the notice is due.
+    #[cfg(target_os = "linux")]
+    let interval_command = if issc::is_adapter(opened.advertised_name.as_deref()) {
+        connection_handle(&opened.selector)
+            .and_then(|handle| interval_command(&opened.selector, handle))
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
+    let interval_command = None;
     Ok(Box::new(Ble {
         rt,
         _manager: opened.manager,
@@ -208,6 +225,7 @@ fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
         selector: opened.selector,
         advertised_name: opened.advertised_name,
         _short_interval: opened.short_interval,
+        interval_command,
     }))
 }
 
@@ -416,6 +434,69 @@ async fn request_short_interval(peripheral: &Peripheral) -> Option<ShortInterval
 async fn request_short_interval(_peripheral: &Peripheral) -> Option<ShortInterval> {
     debug!("Bluetooth: this platform cannot ask for a shorter connection interval");
     None
+}
+
+/// The command that moves the link with this `handle` to the peer at
+/// `address` to a 30–50 ms interval until it disconnects: BlueZ's
+/// `hcitool`, run as root.
+///
+/// `None` for anything but a Bluetooth address, which is what makes it safe
+/// to put in a line run as root.
+#[cfg(any(target_os = "linux", test))]
+fn interval_command(address: &str, handle: u16) -> Option<String> {
+    is_bd_addr(address).then(|| {
+        format!("sudo hcitool lecup --handle {handle} --min 24 --max 40 --latency 0 --timeout 500")
+    })
+}
+
+/// The handle BlueZ gave the connection to `address`, from `hcitool con`,
+/// which needs no root. `None` without `hcitool`, with no such link, or when
+/// it has not answered within [`HANDLE_LOOKUP_TIMEOUT`].
+#[cfg(target_os = "linux")]
+fn connection_handle(address: &str) -> Option<u16> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+
+    let mut child = Command::new("hcitool")
+        .arg("con")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + HANDLE_LOOKUP_TIMEOUT;
+    // Its few lines fit the pipe, so it can run to the end before the read.
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                debug!("Bluetooth: hcitool con did not answer");
+                return None;
+            }
+        }
+    }
+    let mut connections = String::new();
+    child.stdout.take()?.read_to_string(&mut connections).ok()?;
+    handle_in(&connections, address)
+}
+
+/// The handle on the line of `hcitool con`'s output that names `address`:
+/// `< LE 12:34:56:78:9A:BC handle 2048 state 1 lm CENTRAL`.
+#[cfg(any(target_os = "linux", test))]
+fn handle_in(connections: &str, address: &str) -> Option<u16> {
+    connections.lines().find_map(|line| {
+        let mut words = line.split_whitespace();
+        words.find(|word| word.eq_ignore_ascii_case(address))?;
+        if words.next()? != "handle" {
+            return None;
+        }
+        words.next()?.parse().ok()
+    })
 }
 
 /// Find a profile on a connected peer, log in where the profile has a login,
@@ -724,6 +805,15 @@ impl Transport for Ble {
     fn advertised_name(&self) -> Option<&str> {
         self.advertised_name.as_deref()
     }
+
+    /// The adapters, which set a long interval: where the open could not
+    /// ask for a short one, their readings arrive in pairs. Linux gets the
+    /// command that shortens it by hand.
+    fn late_readings(&self) -> Option<LateReadings> {
+        issc::is_adapter(self.advertised_name.as_deref()).then(|| LateReadings {
+            command: self.interval_command.clone(),
+        })
+    }
 }
 
 impl Drop for Ble {
@@ -743,6 +833,31 @@ impl Drop for Ble {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_interval_command_names_the_peer_and_nothing_else() {
+        assert_eq!(
+            interval_command("12:34:56:78:9a:bc", 2048).as_deref(),
+            Some("sudo hcitool lecup --handle 2048 --min 24 --max 40 --latency 0 --timeout 500")
+        );
+        // A CoreBluetooth id, or anything else, never reaches a root shell.
+        assert_eq!(
+            interval_command("1ca4b9a3-9e6f-4f1e-8b0c-2d1f3a4b5c6d", 1),
+            None
+        );
+        assert_eq!(interval_command("12:34:56:78:9A:BC; rm -rf ~", 1), None);
+    }
+
+    #[test]
+    fn the_handle_is_read_off_the_line_naming_the_peer() {
+        // As `hcitool con` printed it with headphones linked too.
+        let connections = "Connections:\n\
+                           \t> ACL AA:BB:CC:DD:EE:FF handle 3 state 1 lm PERIPHERAL AUTH ENCRYPT\n\
+                           \t< LE 12:34:56:78:9A:BC handle 2048 state 1 lm CENTRAL \n";
+        assert_eq!(handle_in(connections, "12:34:56:78:9a:bc"), Some(2048));
+        assert_eq!(handle_in(connections, "11:22:33:44:55:66"), None);
+        assert_eq!(handle_in("", "12:34:56:78:9A:BC"), None);
+    }
 
     /// The open path tells a Bluetooth selector from a HID one by shape
     /// alone: a HID serial or path must never be routed to the BLE opener.

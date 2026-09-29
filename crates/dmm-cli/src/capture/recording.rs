@@ -4,7 +4,7 @@
 //! layer rejected, so a step that decoded nothing still carries evidence.
 
 use dmm_lib::error::Result;
-use dmm_lib::transport::{Link, Transport};
+use dmm_lib::transport::{LateReadings, Link, Transport};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
@@ -199,6 +199,10 @@ impl Transport for RecordingTransport {
     fn advertised_name(&self) -> Option<&str> {
         self.inner.advertised_name()
     }
+
+    fn late_readings(&self) -> Option<LateReadings> {
+        self.inner.late_readings()
+    }
 }
 
 #[cfg(test)]
@@ -257,6 +261,10 @@ mod tests {
         fn advertised_name(&self) -> Option<&str> {
             Some("UT60BT")
         }
+
+        fn late_readings(&self) -> Option<LateReadings> {
+            Some(LateReadings { command: None })
+        }
     }
 
     /// What the open path and detection ask of the link reaches it through
@@ -270,6 +278,7 @@ mod tests {
         assert_eq!(t.transport_name(), "Bluetooth");
         assert_eq!(t.bluetooth_selector(), Some("12:34:56:78:9A:BC"));
         assert_eq!(t.advertised_name(), Some("UT60BT"));
+        assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
     }
 
     #[test]

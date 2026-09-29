@@ -26,8 +26,8 @@ use crate::clock::Clock;
 use crate::error::{Error, ErrorKind, Result};
 use crate::measurement::Measurement;
 use crate::protocol::Delivery;
-use crate::transport::Transport;
-use log::trace;
+use crate::transport::{LateReadings, Transport};
+use log::{debug, trace, warn};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -76,6 +76,8 @@ pub struct MeasurementStream<'a, T: Transport> {
     anchor: Option<Instant>,
     /// The streaming meter's recent frame spacings, for [`Self::tolerance`].
     spacing: Spacing,
+    /// Readings seen arriving two at a time, for [`Self::take_late_readings`].
+    pairs: Pairs,
     consecutive_timeouts: u32,
     /// `'static` rather than `'a`: a borrowed predicate would make the struct
     /// invariant in `'a`, which stops callers shortening the `&mut Dmm` borrow
@@ -103,6 +105,24 @@ const SPACINGS_KEPT: usize = 16;
 /// about the meter's rate.
 const SPACINGS_NEEDED: usize = 3;
 
+/// Readings that must arrive close behind the one before, each well apart
+/// from the last, before the link counts as handing them over two at a time.
+const PAIRS_FOR_NOTICE: u32 = 3;
+
+/// Readings arriving two at a time: a link slower than the meter carries
+/// one late, together with the next, which comes with a gap as long again
+/// before or after it.
+#[derive(Default)]
+struct Pairs {
+    counted: u32,
+    /// When the last one counted came: the rest of a backlog handed over
+    /// at once, after a stall, is one burst and counts once.
+    last: Option<Instant>,
+    /// The count is reached and the link asked; nothing more is watched.
+    settled: bool,
+    notice: Option<LateReadings>,
+}
+
 /// The time between a streaming meter's recent frames, whose median is its
 /// frame period.
 #[derive(Default)]
@@ -112,14 +132,17 @@ struct Spacing {
 }
 
 impl Spacing {
-    fn observe(&mut self, at: Instant) {
-        if let Some(gap) = self.last.and_then(|last| at.checked_duration_since(last)) {
+    /// Take in a frame at `at`, handing back its gap from the one before.
+    fn observe(&mut self, at: Instant) -> Option<Duration> {
+        let gap = self.last.and_then(|last| at.checked_duration_since(last));
+        if let Some(gap) = gap {
             if self.recent.len() == SPACINGS_KEPT {
                 self.recent.pop_front();
             }
             self.recent.push_back(gap);
         }
         self.last = Some(at);
+        gap
     }
 
     fn period(&self) -> Option<Duration> {
@@ -144,6 +167,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
             next_tick: None,
             anchor: None,
             spacing: Spacing::default(),
+            pairs: Pairs::default(),
             consecutive_timeouts: 0,
             cancel: None,
         }
@@ -211,6 +235,14 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         self.anchor = None;
     }
 
+    /// The notice for readings arriving two at a time, once, when a
+    /// streaming meter's link has been seen handing them over that way and
+    /// knows what to say about it ([`Transport::late_readings`]). The stream
+    /// has logged it as a warning already.
+    pub fn take_late_readings(&mut self) -> Option<LateReadings> {
+        self.pairs.notice.take()
+    }
+
     /// Number of consecutive timeouts since the last successful measurement.
     pub fn consecutive_timeouts(&self) -> u32 {
         self.consecutive_timeouts
@@ -248,7 +280,8 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
             }
             match self.dmm.request_measurement() {
                 Ok(m) => {
-                    self.spacing.observe(m.timestamp);
+                    let gap = self.spacing.observe(m.timestamp);
+                    self.watch_pairs(m.timestamp, gap);
                     if self.keep(m.timestamp) {
                         trace!("stream: kept a reading, {skipped} frames since the last");
                         return Ok(Some(m));
@@ -271,6 +304,51 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
                     return Err(e);
                 }
             }
+        }
+    }
+
+    /// Count a frame at `at` that came `gap` after the one before it if it
+    /// came with that one, well under the frame period after it; at
+    /// [`PAIRS_FOR_NOTICE`], ask the link what to say.
+    ///
+    /// Only one per two frame periods counts, so a backlog handed over at
+    /// once counts once; a link that bunches does it again and again, a
+    /// reading at a time.
+    fn watch_pairs(&mut self, at: Instant, gap: Option<Duration>) {
+        if self.pairs.settled {
+            return;
+        }
+        let (Some(gap), Some(period)) = (gap, self.spacing.period()) else {
+            return;
+        };
+        // Strict, so a meter bunched so often that the median itself is
+        // nothing never counts.
+        if gap >= period / 4 {
+            return;
+        }
+        if let Some(last) = self.pairs.last
+            && at
+                .checked_duration_since(last)
+                .is_none_or(|d| d < period * 2)
+        {
+            return;
+        }
+        self.pairs.last = Some(at);
+        self.pairs.counted += 1;
+        if self.pairs.counted < PAIRS_FOR_NOTICE {
+            return;
+        }
+        self.pairs.settled = true;
+        match self.dmm.transport().late_readings() {
+            Some(notice) => {
+                warn!("{notice}");
+                debug!(
+                    "stream: readings in pairs, frame period {period:?}; link: {:?}",
+                    self.dmm.transport().transport_status()
+                );
+                self.pairs.notice = Some(notice);
+            }
+            None => debug!("stream: readings in pairs, frame period {period:?}"),
         }
     }
 
@@ -596,6 +674,14 @@ mod tests {
         offsets: Vec<Duration>,
         corrupt: Vec<usize>,
     ) -> (Dmm<crate::transport::NullTransport>, Clock) {
+        timed_dmm_on(crate::transport::NullTransport, offsets, corrupt)
+    }
+
+    fn timed_dmm_on<T: Transport>(
+        transport: T,
+        offsets: Vec<Duration>,
+        corrupt: Vec<usize>,
+    ) -> (Dmm<T>, Clock) {
         let clock = Clock::manual();
         let meter = TimedMeter {
             start: clock.now(),
@@ -604,7 +690,7 @@ mod tests {
             corrupt,
             next: 0,
         };
-        let dmm = Dmm::new(crate::transport::NullTransport, Box::new(meter))
+        let dmm = Dmm::new(transport, Box::new(meter))
             .unwrap()
             .with_clock(clock.clone());
         (dmm, clock)
@@ -612,11 +698,7 @@ mod tests {
 
     /// The frame index and session time of each of `n` readings kept at
     /// `tick`.
-    fn kept(
-        dmm: &mut Dmm<crate::transport::NullTransport>,
-        tick: Duration,
-        n: usize,
-    ) -> Vec<(u32, Instant)> {
+    fn kept<T: Transport>(dmm: &mut Dmm<T>, tick: Duration, n: usize) -> Vec<(u32, Instant)> {
         let mut stream = MeasurementStream::new(dmm, tick);
         (0..n)
             .map(|_| match stream.tick().unwrap() {
@@ -780,5 +862,98 @@ mod tests {
         let start = clock.now();
         assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
         assert!(clock.now() - start < Duration::from_secs(1));
+    }
+
+    /// A Bluetooth link that hands readings over two at a time when it is
+    /// slower than the meter, as the UT-D07B's does.
+    struct SlowLink;
+
+    impl Transport for SlowLink {
+        fn write(&self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            Ok(0)
+        }
+        fn link(&self) -> Option<crate::transport::Link> {
+            Some(crate::transport::Link::Bluetooth)
+        }
+        fn late_readings(&self) -> Option<LateReadings> {
+            Some(LateReadings { command: None })
+        }
+    }
+
+    /// The UT-D07B's meter: a frame every 310.15 ms, each off by up to ±5 ms
+    /// (adapter spec §5).
+    fn adapter_meter(frames: usize) -> Vec<Duration> {
+        const WANDER_US: [i64; 7] = [4_000, -3_000, 1_000, -5_000, 2_000, 5_000, -2_000];
+        (0..frames)
+            .map(|k| {
+                let us = k as i64 * 310_150 + WANDER_US[k % WANDER_US.len()];
+                Duration::from_micros(us.max(0) as u64)
+            })
+            .collect()
+    }
+
+    /// Frames sent at `offsets`, each carried at the first connection event
+    /// of a link at `interval` at or after it.
+    fn on_events(offsets: Vec<Duration>, interval: Duration) -> Vec<Duration> {
+        let step = interval.as_nanos();
+        offsets
+            .into_iter()
+            .map(|o| Duration::from_nanos((o.as_nanos().div_ceil(step) * step) as u64))
+            .collect()
+    }
+
+    /// How many notices a stream at `tick` hands out over `ticks` ticks.
+    fn notices<T: Transport>(dmm: &mut Dmm<T>, tick: Duration, ticks: usize) -> usize {
+        let mut stream = MeasurementStream::new(dmm, tick);
+        let mut notices = 0;
+        for _ in 0..ticks {
+            assert!(matches!(stream.tick(), Ok(StreamEvent::Measurement(_))));
+            notices += usize::from(stream.take_late_readings().is_some());
+        }
+        notices
+    }
+
+    #[test]
+    fn a_link_slower_than_the_meter_gives_the_notice_once() {
+        let frames = on_events(adapter_meter(400), Duration::from_millis(315));
+        let (mut dmm, _clock) = timed_dmm_on(SlowLink, frames.clone(), vec![]);
+        assert_eq!(notices(&mut dmm, Duration::ZERO, 400), 1);
+        // At any interval: the stream sees every frame either way.
+        let (mut dmm, _clock) = timed_dmm_on(SlowLink, frames.clone(), vec![]);
+        assert_eq!(notices(&mut dmm, Duration::from_secs(1), 100), 1);
+        // A link with nothing to say about it stays quiet.
+        let (mut dmm, _clock) = timed_dmm(frames, vec![]);
+        assert_eq!(notices(&mut dmm, Duration::ZERO, 400), 0);
+    }
+
+    #[test]
+    fn a_short_interval_gives_no_notice() {
+        let frames = on_events(adapter_meter(400), Duration::from_millis(45));
+        let (mut dmm, _clock) = timed_dmm_on(SlowLink, frames, vec![]);
+        assert_eq!(notices(&mut dmm, Duration::ZERO, 400), 0);
+    }
+
+    /// A backlog handed over at once after the host stalled is one burst,
+    /// not a link that bunches.
+    #[test]
+    fn one_backlog_burst_gives_no_notice() {
+        let mut frames = jittered(310, 100);
+        for k in 51..54 {
+            frames[k] = frames[50];
+        }
+        let (mut dmm, _clock) = timed_dmm_on(SlowLink, frames, vec![]);
+        assert_eq!(notices(&mut dmm, Duration::ZERO, 100), 0);
+    }
+
+    #[test]
+    fn two_pairs_give_no_notice() {
+        let mut frames = jittered(310, 200);
+        frames[60] = frames[59] + Duration::from_millis(1);
+        frames[140] = frames[139] + Duration::from_millis(1);
+        let (mut dmm, _clock) = timed_dmm_on(SlowLink, frames, vec![]);
+        assert_eq!(notices(&mut dmm, Duration::ZERO, 200), 0);
     }
 }

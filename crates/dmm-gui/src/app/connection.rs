@@ -207,6 +207,9 @@ pub(crate) enum DmmMessage {
     /// A replay handed out its last frame: nothing more will come, and the
     /// thread only waits to be stopped.
     Ended,
+    /// The link hands readings over two at a time: what to tell the user,
+    /// once per connection.
+    LateReadings(dmm_lib::transport::LateReadings),
 }
 
 /// Extract profile info from a newly opened device, optionally query its name,
@@ -453,6 +456,9 @@ where
                 let relisted = send_stale_choices(stream.dmm(), &m, &mut last_keys, &msg_tx);
                 if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
                     break;
+                }
+                if let Some(notice) = stream.take_late_readings() {
+                    let _ = msg_tx.send(DmmMessage::LateReadings(notice));
                 }
                 // A new mode or range can change the reading's width, the one
                 // layout change that arrives without input: give it egui's
