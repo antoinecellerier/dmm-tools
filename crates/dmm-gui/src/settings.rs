@@ -344,6 +344,10 @@ pub struct Settings {
     /// builds ask; see `app::update_check`.
     #[serde(default = "default_check_for_updates")]
     pub check_for_updates: bool,
+    /// The folder Import… or Export… last picked a file in; both dialogs open
+    /// there. `None` until one does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_folder: Option<PathBuf>,
     /// CLI overrides (not serialized).
     #[serde(skip)]
     pub overrides: Overrides,
@@ -377,6 +381,7 @@ impl Default for Settings {
             color_overrides: ColorOverrides::default(),
             last_seen_version: None,
             check_for_updates: default_check_for_updates(),
+            last_folder: None,
             overrides: Overrides::default(),
         }
     }
@@ -645,6 +650,7 @@ mod tests {
             color_overrides: ColorOverrides::default(),
             last_seen_version: Some("0.3.0".to_string()),
             check_for_updates: false,
+            last_folder: Some(PathBuf::from("/data/bench")),
             overrides: Overrides::default(),
         };
         let json = serde_json::to_string(&s).unwrap();
@@ -666,6 +672,10 @@ mod tests {
         assert_eq!(deserialized.shared.device_family, "ut8803");
         assert!(!deserialized.shared.bluetooth);
         assert!(!deserialized.check_for_updates);
+        assert_eq!(
+            deserialized.last_folder.as_deref(),
+            Some(std::path::Path::new("/data/bench"))
+        );
     }
 
     #[test]
@@ -691,6 +701,7 @@ mod tests {
         assert_eq!(s.color_overrides, ColorOverrides::default());
         // New optional fields default to None
         assert!(s.last_seen_version.is_none());
+        assert!(s.last_folder.is_none());
         // A config file written before update checks existed has them on,
         // as a fresh install does.
         assert!(s.check_for_updates);

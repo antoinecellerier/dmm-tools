@@ -399,13 +399,17 @@ impl App {
             }
         };
         let ctx = ctx.clone();
+        let last = self.settings.last_folder.clone();
         std::thread::spawn(move || {
             let (label, extension) = format.filter();
             let answer = std::panic::catch_unwind(|| {
-                rfd::FileDialog::new()
+                let mut dialog = rfd::FileDialog::new()
                     .set_file_name(default_name)
-                    .add_filter(label, &[extension])
-                    .save_file()
+                    .add_filter(label, &[extension]);
+                if let Some(dir) = super::import::dialog_folder(last.as_deref()) {
+                    dialog = dialog.set_directory(dir);
+                }
+                dialog.save_file()
             })
             .map_err(|panic| panic_text(panic.as_ref()));
             let _ = tx.send(answer);
@@ -451,10 +455,13 @@ impl App {
                     return;
                 };
                 match answer {
-                    Ok(Some(path)) => match self.render_pinned(&request) {
-                        Ok(bytes) => self.spawn_write(ctx, path, bytes, *request),
-                        Err(message) => self.toast = Some(Toast::error(message)),
-                    },
+                    Ok(Some(path)) => {
+                        self.remember_folder(&path);
+                        match self.render_pinned(&request) {
+                            Ok(bytes) => self.spawn_write(ctx, path, bytes, *request),
+                            Err(message) => self.toast = Some(Toast::error(message)),
+                        }
+                    }
                     Ok(None) => {
                         self.capture.recording.unpin_export();
                         info!("export cancelled");
@@ -1084,6 +1091,10 @@ mod tests {
         assert!(!app.capture.recording.is_pinned());
         assert!(app.export.is_none());
         assert!(app.toast.is_none(), "a cancel needs no toast");
+        assert!(
+            app.settings.last_folder.is_none(),
+            "a cancel picks no folder"
+        );
 
         let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
         tx.send(Err("boom".into())).expect("the app listens");

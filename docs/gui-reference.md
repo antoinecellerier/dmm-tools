@@ -279,6 +279,9 @@ A thin strip below the main plot showing the full capture history.
   [buffer size](#settings). Recording auto-stops when it is full and shows a
   toast notification.
 
+Import… and Export… open in the folder either last picked a file in, kept
+across restarts; the first time, in Documents.
+
 A marker lasts as long as its reading is on the graph or in the recording.
 With nothing recorded, markers go with the readings the graph drops (a mode
 change, Clear); a recording keeps its markers across mode changes. Markers

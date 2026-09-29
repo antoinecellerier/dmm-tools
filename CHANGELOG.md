@@ -28,6 +28,7 @@
 - **The GUI uses less CPU while connected or zoomed out, and none while paused** — it redrew up to three times per reading, ten times a second while paused, and drew every sample of a zoomed-out graph.
 - **A new Sample interval takes effect at once** — it waited for a reconnect.
 - **Exporting a long recording as JSON no longer freezes the GUI for seconds**
+- **Import… and Export… open in the folder last used** — or in Documents, the first time.
 - **What's New opens on this release, with earlier ones folded**
 - **The graph's mean, reference and cursor labels stay readable when crowded** — they drew over each other, the plot key and marker flags.
 

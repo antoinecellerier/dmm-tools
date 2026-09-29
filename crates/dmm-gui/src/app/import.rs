@@ -223,6 +223,18 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, String
 /// The file types Import… offers, as Export… writes them.
 const IMPORT_EXTENSIONS: [&str; 3] = ["csv", "json", "replay"];
 
+/// Where Import… and Export… open: the folder either last picked a file in,
+/// else the user's Documents, else wherever the system's dialog starts. On
+/// the dialog's thread: a stale network mount can block `is_dir`.
+pub(super) fn dialog_folder(last: Option<&Path>) -> Option<PathBuf> {
+    if let Some(last) = last.filter(|p| p.is_absolute() && p.is_dir()) {
+        return Some(last.to_path_buf());
+    }
+    directories::UserDirs::new()
+        .and_then(|dirs| dirs.document_dir().map(Path::to_path_buf))
+        .filter(|dir| dir.is_dir())
+}
+
 impl App {
     /// Import… or `Ctrl+I`: pick a file in the system's open dialog, on a
     /// thread of its own as Export…'s save dialog is, answered next frame.
@@ -231,11 +243,15 @@ impl App {
             return;
         }
         let (tx, rx) = mpsc::channel();
+        let last = self.settings.last_folder.clone();
         std::thread::spawn(move || {
             let picked = std::panic::catch_unwind(|| {
-                rfd::FileDialog::new()
-                    .add_filter("Exported readings", &IMPORT_EXTENSIONS)
-                    .pick_file()
+                let mut dialog =
+                    rfd::FileDialog::new().add_filter("Exported readings", &IMPORT_EXTENSIONS);
+                if let Some(dir) = dialog_folder(last.as_deref()) {
+                    dialog = dialog.set_directory(dir);
+                }
+                dialog.pick_file()
             })
             .unwrap_or_else(|_| {
                 warn!("the open dialog failed");
@@ -255,12 +271,26 @@ impl App {
             Ok(picked) => {
                 self.import_dialog = None;
                 if let Some(path) = picked {
+                    self.remember_folder(&path);
                     self.request_import(path);
                 }
             }
             Err(mpsc::TryRecvError::Empty) => {}
             Err(mpsc::TryRecvError::Disconnected) => self.import_dialog = None,
         }
+    }
+
+    /// Keep the folder of a file Import… or Export… picked for the next
+    /// dialog to open in.
+    pub(super) fn remember_folder(&mut self, file: &Path) {
+        let Some(folder) = file.parent().filter(|p| !p.as_os_str().is_empty()) else {
+            return;
+        };
+        if self.settings.last_folder.as_deref() == Some(folder) {
+            return;
+        }
+        self.settings.last_folder = Some(folder.to_path_buf());
+        self.settings_save.schedule(Instant::now());
     }
 
     /// Import `path`, asking first if the session holds samples or markers
@@ -755,6 +785,65 @@ timestamp,mode,value,unit,range,flags,marker,note
         assert!(toast.starts_with("Import failed:"), "{toast}");
         assert!(app.imported.is_none());
         let _ = std::fs::remove_file(path);
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::*;
+    use crate::settings::Settings;
+
+    fn app() -> App {
+        App::from_settings(Settings::default(), dmm_lib::Clock::real())
+    }
+
+    /// The remembered folder wins while it is there; a missing or relative
+    /// one falls back to Documents, or to the system's own choice.
+    #[test]
+    fn a_dialog_opens_in_the_last_folder_else_documents() {
+        let here = std::env::temp_dir();
+        assert_eq!(dialog_folder(Some(&here)), Some(here.clone()));
+        let documents = directories::UserDirs::new()
+            .and_then(|d| d.document_dir().map(Path::to_path_buf))
+            .filter(|d| d.is_dir());
+        assert_eq!(dialog_folder(None), documents);
+        let gone = here.join(format!("dmm-gui-gone-{}", std::process::id()));
+        assert_eq!(dialog_folder(Some(&gone)), documents);
+        assert_eq!(dialog_folder(Some(Path::new("."))), documents);
+    }
+
+    /// A picked file's folder is kept and saved; the same folder again
+    /// asks for no save.
+    #[test]
+    fn a_picked_file_s_folder_is_remembered() {
+        let mut app = app();
+        app.remember_folder(Path::new("/data/bench/a.csv"));
+        assert_eq!(
+            app.settings.last_folder.as_deref(),
+            Some(Path::new("/data/bench"))
+        );
+        assert!(app.settings_save.take_pending(), "saved");
+        app.remember_folder(Path::new("/data/bench/b.json"));
+        assert!(!app.settings_save.take_pending(), "unchanged");
+        app.remember_folder(Path::new("bare.csv"));
+        assert_eq!(
+            app.settings.last_folder.as_deref(),
+            Some(Path::new("/data/bench"))
+        );
+    }
+
+    /// The open dialog's answer moves the folder, whatever the import
+    /// makes of the file.
+    #[test]
+    fn the_open_dialog_s_answer_is_remembered() {
+        let mut app = app();
+        let dir = std::env::temp_dir().join(format!("dmm-gui-folder-{}", std::process::id()));
+        let (tx, rx) = mpsc::channel();
+        tx.send(Some(dir.join("x.json"))).expect("the app listens");
+        app.import_dialog = Some(rx);
+        app.poll_import_dialog();
+        assert_eq!(app.settings.last_folder, Some(dir));
+        app.import_job = None;
     }
 }
 
