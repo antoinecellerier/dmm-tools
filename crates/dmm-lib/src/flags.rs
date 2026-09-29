@@ -146,6 +146,30 @@ impl StatusFlags {
         }
     }
 
+    /// Set a single flag. Exhaustive like [`StatusFlags::get`], for readers
+    /// that rebuild the flags from an export's names or labels.
+    pub fn set(&mut self, flag: Flag, on: bool) {
+        let field = match flag {
+            Flag::Hold => &mut self.hold,
+            Flag::Rel => &mut self.rel,
+            Flag::AutoRange => &mut self.auto_range,
+            Flag::Min => &mut self.min,
+            Flag::Max => &mut self.max,
+            Flag::Avg => &mut self.avg,
+            Flag::LowBattery => &mut self.low_battery,
+            Flag::HvWarning => &mut self.hv_warning,
+            Flag::PeakMax => &mut self.peak_max,
+            Flag::PeakMin => &mut self.peak_min,
+            Flag::LeadError => &mut self.lead_error,
+            Flag::Comp => &mut self.comp,
+            Flag::Record => &mut self.record,
+            Flag::LoZ => &mut self.loz,
+            Flag::Void => &mut self.void,
+            Flag::Dc => &mut self.dc,
+        };
+        *field = on;
+    }
+
     /// The flags that are currently set, in [`Flag::ALL`] order.
     pub fn active(&self) -> impl Iterator<Item = Flag> + '_ {
         Flag::ALL.into_iter().filter(|&flag| self.get(flag))
@@ -188,6 +212,21 @@ impl std::fmt::Display for StatusFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every flag set through `set` reads back through `get`, and no other.
+    #[test]
+    fn set_reaches_every_flag() {
+        for flag in Flag::ALL {
+            let mut flags = StatusFlags::default();
+            flags.set(flag, true);
+            assert!(
+                Flag::ALL.iter().all(|&f| flags.get(f) == (f == flag)),
+                "{flag:?}"
+            );
+            flags.set(flag, false);
+            assert_eq!(flags, StatusFlags::default());
+        }
+    }
 
     /// Every field set, spelled out as a full struct literal so that adding a
     /// field to `StatusFlags` breaks this helper until the flag is wired up.

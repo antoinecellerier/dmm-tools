@@ -6,8 +6,10 @@
 //! on the other, and a field added to a reading reaches both binaries at once.
 
 mod csv_layout;
+mod read;
 
 pub use csv_layout::{CsvLayout, device_comment};
+pub use read::{Imported, ImportedAux, ImportedMarker, ImportedReading, read_csv, read_json};
 
 use chrono::{DateTime, Local};
 use dmm_lib::flags::StatusFlags;
