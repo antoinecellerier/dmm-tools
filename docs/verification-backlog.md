@@ -2197,7 +2197,16 @@ the following needs someone's hardware.
   (`hcitool lecup`) left the readings 315-330 ms apart, so ~315 ms is the
   adapter's own cadence and not a radio limit: streamed 3.23 Hz, polled
   1.44 Hz (median gap 0.632 s), and 3.2 Hz polled once the interval was
-  forced down. Details in the adapter spec §5.
+  forced down. Details in the adapter spec §5. HCI timestamps on 2026-09-29
+  put the cadence at 310.1 ms, a hair faster than the 315 ms link, which is
+  why streamed readings come two to one connection event every ~20 s.
+- ~~**A short interval on Windows.**~~ — **VERIFIED** 2026-09-29 on Windows 11
+  (10.0.26200): the open's held Balanced request moves the adapter's 315 ms
+  to 60 ms and it stays there; no pairs in 1950 readings at 0 ms interval,
+  nor across three reconnects in one process (adapter spec §5). Open: Windows
+  10, which has no such call, and the adapter's battery cost at 60 ms. The
+  UT60BT and UT202BT, on the same profile, are left alone until someone sees
+  what interval their radios ask for (#26, #27).
 - **The adapter's heartbeat.** `AB CD 06 AA AA 6E 67 03 A7` comes from the
   adapter once per link and once a second while the meter is silent; the
   transport drops it. UNI-T's own app reads it as "no meter data" and answers

@@ -202,21 +202,25 @@ BlueZ 5.87 on kernel HCI [HARDWARE].
 | Value | Reading | Confidence |
 |---|---|---|
 | ATT MTU | 247 bytes, as negotiated with BlueZ 5.87 | [HARDWARE] |
-| Connection interval | the adapter sets it. Right after every connect it sends an L2CAP Connection Parameter Update Request for min 224 / max 255 (× 1.25 ms = 280-318.75 ms), latency 0, timeout 500 (5 s); the host accepts and the link runs at 315 ms. BlueZ stores the parameters, so the next connect is created at 315 ms directly | [HARDWARE] |
+| Connection interval | the adapter sets it. Right after every connect it sends an L2CAP Connection Parameter Update Request for min 224 / max 255 (× 1.25 ms = 280-318.75 ms), latency 0, timeout 500 (5 s); the host accepts and the link runs at 315 ms. On 2026-09-22 BlueZ stored the parameters and created the next connect at 315 ms directly; on 2026-09-29, unpaired, every connect was created at 45 ms and moved to 315 ms on the request | [HARDWARE] |
 | The PPCP characteristic (`0x2A04`) | rejected by BlueZ (§2) and it changes nothing — the L2CAP request above is what moves the link | [HARDWARE] |
-| A host-forced interval | an LE Connection Update from the host (`hcitool lecup --min 8 --max 16`, root) is accepted and the link moves to 15 ms; the adapter does not ask for its 315 ms back for the rest of the connection | [HARDWARE] |
-| Notification cadence | about 315 ms between readings, whatever the radio does: at the forced 15 ms interval they were still 315-330 ms apart | [HARDWARE] |
+| A host-forced interval | an LE Connection Update from the host (`hcitool lecup --min 8 --max 16`, root) is accepted and the link moves to 15 ms; the adapter does not ask for its 315 ms back for the rest of the connection. The same held at 45 ms (`--min 24 --max 40`) for two minutes on 2026-09-29, every frame still relayed | [HARDWARE] |
+| Notification cadence | 310.1 ms between streamed readings on average, whatever the interval: 310.15 ms over 260 notifications at 315 ms and 310.10 ms over 368 at 45 ms, by the HCI timestamps (2026-09-29). The adapter's 315 ms interval is the slower of the two | [HARDWARE] |
+| Readings two to one connection event | at the 315 ms interval the adapter's readings gain a whole event every ~64 events (~20 s), and that reading goes out in the same event as the next: two notifications with the same host-controller timestamp, then a ~630 ms step. Around each crossing, jitter adds more such pairs and steps, netting one extra reading per ~20 s cluster; 12 zero steps, six ~630 ms steps and one 944 ms step in 80 s on 2026-09-29. At 45 ms none; readings arrive on the 45 ms event grid, one or two events late now and then (steps 219-365 ms) | [HARDWARE] |
 | Streamed readings (after the start command, §3) | 3.23 Hz — 60 readings in 18.3 s, one 19-byte frame per notification; the same 3.2 Hz over two minutes | [HARDWARE] |
 | Polled readings (one 0x5E each) | 1.44 Hz sustained, median gap 0.632 s, with an unacknowledged write; an acknowledged write measured 0.8 s a poll. At the forced 15 ms interval the same poll loop ran at 3.2 Hz, median gap 0.328 s (1.6 Hz before the update in that session) | [HARDWARE] |
 | The same poll over USB | about 0.1 s | [HARDWARE] |
 | First seconds of a fresh link | polls take up to 2 s while bluetoothd reads the Device Information characteristics (model, serial, firmware strings) | [HARDWARE] |
-| Under Windows 11 (WinRT), unpaired | MTU 247. The interval WinRT reported right after the connect was 15 ms in two sessions and 315 ms in a third; whether the adapter's update request had landed when it was read is not known | [HARDWARE]; the timing [UNVERIFIED] |
-| Streamed readings under Windows 11 | the same ~315 ms cadence (the gaps that are not doubled average 315 ms), but now and then two notifications arrive back to back: one run received 66 reading notifications while a reader that keeps the newer of two queued readings produced 60 | [HARDWARE] |
+| Under Windows 11 (WinRT), unpaired | MTU 247. The link starts at 60 ms, moves to 15 ms at ~1.65 s and, when the adapter's update request is answered at ~3.5 s, to 315 ms. With an app's `RequestPreferredConnectionParameters(Balanced)` in force, Windows answers that request with 60 ms instead (timeout 4 s), and the link stayed there for a 10-minute run; the adapter did not ask again. Released, the link went to 315 ms about 3 s later (Windows 11 10.0.26200, 2026-09-29) | [HARDWARE] |
+| Streamed readings under Windows 11 | the same pairs as under BlueZ: both notifications of a pair carry the same WinRT `GattValueChangedEventArgs` timestamp, and the steps between the others sit at ~315 ms, as the link runs at the adapter's 315 ms there too (row above). With the link held at 60 ms, no pairs showed up in 1950 readings over ten minutes (2026-09-29) | [HARDWARE] |
 
 A 19-byte UT61+ reading arrives as one notification on this MTU. The
-~315 ms cadence is the adapter's own for this family: dropping the
-connection interval by a factor of twenty left it where it was. What the
-interval costs is the second trip a poll needs — at 315 ms a poll pays two
+~310 ms cadence is the adapter's own for this family: dropping the
+connection interval by a factor of seven or twenty left it where it was.
+Its own 315 ms interval is a hair slower, so at that interval the host
+sees readings on the link's clock, two to an event now and then, not on
+the adapter's. What the interval costs is the second trip a poll needs — at
+315 ms a poll pays two
 of them and a streamed reading one, which is why the start command alone
 doubles the rate and why at 15 ms a polled link catches up with a streamed
 one. The cadence, not the radio, is the ceiling, and the start command

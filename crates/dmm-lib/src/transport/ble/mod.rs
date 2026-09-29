@@ -33,6 +33,8 @@ mod fff0;
 mod issc;
 mod profile;
 mod search;
+#[cfg(target_os = "windows")]
+mod winrt;
 
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
@@ -50,6 +52,13 @@ use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::time::Duration;
+#[cfg(target_os = "windows")]
+use winrt::ShortInterval;
+
+/// What a short-interval request leaves to keep alive: nothing where the
+/// platform takes no request ([`request_short_interval`]).
+#[cfg(not(target_os = "windows"))]
+type ShortInterval = std::convert::Infallible;
 
 /// How long to scan before giving up on finding a peer.
 ///
@@ -72,6 +81,10 @@ const LOGIN_TIMEOUT: Duration = Duration::from_secs(8);
 const SETUP_RETRY_PAUSE: Duration = Duration::from_millis(500);
 /// How often to look again while the service tree is still filling in.
 const DISCOVERY_POLL: Duration = Duration::from_millis(500);
+/// How long asking for a short connection interval may take
+/// ([`request_short_interval`]); past it the link keeps what the peer set.
+#[cfg(target_os = "windows")]
+const INTERVAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 /// How long taking a link down may take, after a failed open or on drop.
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -101,6 +114,9 @@ pub(crate) struct Ble {
     /// The name the peer goes by, as the search found it; `None` for one
     /// opened by address with no name heard.
     advertised_name: Option<String>,
+    /// The short-interval request, kept for as long as the link is open:
+    /// dropping it withdraws it ([`request_short_interval`]).
+    _short_interval: Option<ShortInterval>,
     /// Drives every btleplug call. Last, so it outlives every field whose
     /// destructor reaches into the stack.
     rt: tokio::runtime::Runtime,
@@ -171,6 +187,7 @@ struct Opened {
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     selector: String,
     advertised_name: Option<String>,
+    short_interval: Option<ShortInterval>,
 }
 
 /// Open a peer and subscribe to its notifications.
@@ -190,6 +207,7 @@ fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
         heartbeats: Cell::new(0),
         selector: opened.selector,
         advertised_name: opened.advertised_name,
+        _short_interval: opened.short_interval,
     }))
 }
 
@@ -321,6 +339,11 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         Some(_) => debug!("Bluetooth: MTU {mtu}"),
         None => {}
     }
+    let short_interval = if issc::is_adapter(candidate.taken_by.as_deref()) {
+        request_short_interval(&peripheral).await
+    } else {
+        None
+    };
 
     let selector = candidate.selector();
     info!(
@@ -337,6 +360,7 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         notifications,
         selector,
         advertised_name: candidate.taken_by,
+        short_interval,
     })
 }
 
@@ -357,6 +381,41 @@ fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
             None
         }
     }
+}
+
+/// Ask the host stack for a short connection interval, for a peer that sets
+/// a long one ([`issc::is_adapter`]), handing back what has to stay alive
+/// for the request to hold.
+///
+/// Only WinRT takes such a request from an app (`winrt.rs`); BlueZ and
+/// CoreBluetooth have no call for it, and the link keeps the interval the
+/// peer asked for. Best-effort either way: the readings still come, only
+/// bunched.
+#[cfg(target_os = "windows")]
+async fn request_short_interval(peripheral: &Peripheral) -> Option<ShortInterval> {
+    let request = winrt::request_short_interval(peripheral.address());
+    match tokio::time::timeout(INTERVAL_REQUEST_TIMEOUT, request)
+        .await
+        .unwrap_or_else(|_| Err("no answer".to_string()))
+    {
+        Ok(held) => {
+            // Not the interval itself: it moves a second or two later, when
+            // the peer's own update request is answered (research doc §5).
+            debug!("Bluetooth: asked for a shorter connection interval");
+            Some(held)
+        }
+        Err(e) => {
+            debug!("Bluetooth: asking for a shorter connection interval failed: {e}");
+            None
+        }
+    }
+}
+
+/// See the Windows version: this platform takes no request.
+#[cfg(not(target_os = "windows"))]
+async fn request_short_interval(_peripheral: &Peripheral) -> Option<ShortInterval> {
+    debug!("Bluetooth: this platform cannot ask for a shorter connection interval");
+    None
 }
 
 /// Find a profile on a connected peer, log in where the profile has a login,

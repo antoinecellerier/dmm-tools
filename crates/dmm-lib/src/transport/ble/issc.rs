@@ -38,6 +38,18 @@ const UART_RX_CHARACTERISTIC: &str = "49535343-8841-43f4-a8d4-ecbe34729bb3";
 /// ([`crate::transport::BluetoothPeers::meters`]).
 pub(super) const ADAPTER_NAME_PREFIX: &str = "UT-D07";
 
+/// Whether the peer going by `name` is one of UNI-T's adapters.
+///
+/// The UT-D07B asks for a ~315 ms connection interval right after the
+/// connect, a little slower than the ~310 ms it polls the meter at, so every
+/// ~20 s two readings share one connection event and reach the host
+/// together (research doc §5). A short interval, which it keeps, delivers
+/// each on its own. What the meters with the radio built in ask for is not
+/// known, so they are left alone.
+pub(super) fn is_adapter(name: Option<&str>) -> bool {
+    name.is_some_and(|name| crate::transport::name_matches(ADAPTER_NAME_PREFIX, name))
+}
+
 /// The frame the adapter itself puts on the stream: once when a link comes
 /// up and about once a second while the meter is silent (research doc §3).
 /// It is the adapter's, not the meter's, so it never reaches a parser. A

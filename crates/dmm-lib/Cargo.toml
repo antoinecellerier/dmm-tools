@@ -14,6 +14,12 @@ btleplug = { version = "0.13", optional = true }
 tokio = { version = "1", features = ["rt", "time"], optional = true }
 futures = { version = "0.3", optional = true }
 
+# Windows only: the connection-parameter request btleplug makes but does not
+# keep (transport/ble/winrt.rs). The version btleplug already uses, so it adds
+# no build; move it when btleplug moves.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = ["Devices_Bluetooth", "Foundation"], optional = true }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "2.6", features = ["linux-static-hidraw"] }
 
@@ -22,7 +28,7 @@ hidapi = { version = "2.6" }
 
 [features]
 default = ["bluetooth"]
-bluetooth = ["dep:btleplug", "dep:tokio", "dep:futures"]
+bluetooth = ["dep:btleplug", "dep:tokio", "dep:futures", "dep:windows"]
 test-support = []
 
 [dev-dependencies]
