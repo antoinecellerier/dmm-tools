@@ -124,7 +124,7 @@ Cables, Bluetooth adapters, what to switch on and what each model has confirmed 
 
 ## Quick start
 
-1. Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform and extract it.
+1. Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform and extract it. The first launch shows a security warning on [Windows](docs/setup.md#windows-protected-your-pc) and [macOS](docs/setup.md#macos-wont-open-dmm-cli-or-dmm-gui).
 2. Give the tool access to the cable, or turn Bluetooth on:
    - Linux: install the udev rule, then re-plug the cable.
      ```sh

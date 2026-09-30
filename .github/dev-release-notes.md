@@ -11,7 +11,7 @@ Please include the output of `dmm-cli --version` — on this build it ends with 
 
 ## Before you run it
 
-- **macOS** — the binaries are unsigned, so Gatekeeper blocks the first launch. Right-click the binary and choose *Open*, or run `xattr -d com.apple.quarantine dmm-cli dmm-gui`.
+- **macOS** — the binaries are unsigned, so Gatekeeper blocks the first launch. Choose *Open Anyway* under System Settings > Privacy & Security, or run `xattr -d com.apple.quarantine dmm-cli dmm-gui`.
 - **Windows** — SmartScreen warns about unsigned binaries. Choose *More info*, then *Run anyway*.
 - **Linux** — built on current Ubuntu, linking GTK3 and libxkbcommon dynamically. On an older distribution `dmm-gui` may refuse to start; build from source there.
 

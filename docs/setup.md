@@ -4,7 +4,7 @@ You need a [supported multimeter](supported-devices.md) and its USB cable, or on
 
 ## Install from pre-built binaries
 
-Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform. Extract and run — no build tools needed. The GUI links to newer versions as they come out ([update checks](gui-reference.md#update-checks)).
+Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform. Extract and run — no build tools needed. The first launch shows a security warning on [Windows](#windows-protected-your-pc) and [macOS](#macos-wont-open-dmm-cli-or-dmm-gui). The GUI links to newer versions as they come out ([update checks](gui-reference.md#update-checks)).
 
 To build it yourself instead, see [Build from source](#build-from-source).
 
@@ -14,7 +14,7 @@ Once it runs, the [CLI reference](cli-reference.md) and [GUI reference](gui-refe
 
 To try unreleased changes without installing a Rust toolchain, use a dev build — built nightly from `main`.
 
-Find them in the [dev build listing](https://github.com/antoinecellerier/dmm-tools/releases?q=prerelease%3Atrue), newest first. Archives are named `dmm-tools-dev-<commit>-<platform>`.
+Find them in the [dev build listing](https://github.com/antoinecellerier/dmm-tools/releases?q=prerelease%3Atrue), newest first. Archives are named `dmm-tools-dev-<commit>-<platform>`. Their first launch shows the same security warning on [Windows](#windows-protected-your-pc) and [macOS](#macos-wont-open-dmm-cli-or-dmm-gui).
 
 Dev builds may be broken, and only the newest seven are kept. When reporting a problem, include the version you're running, from `dmm-cli --version`.
 
@@ -140,6 +140,22 @@ first connection asks you to allow Bluetooth for your terminal app (or the
 GUI binary).
 
 ## Troubleshooting
+
+### "Windows protected your PC"
+
+SmartScreen shows this on the first launch. Click **More info**, then
+**Run anyway**.
+
+### macOS won't open dmm-cli or dmm-gui
+
+macOS blocks the first launch of each binary. Close the dialog, open
+**System Settings > Privacy & Security**, click **Open Anyway** and confirm.
+
+To allow both binaries at once, run this in the extracted folder instead:
+
+```sh
+xattr -dr com.apple.quarantine .
+```
 
 ### "No meter found over USB or Bluetooth"
 
