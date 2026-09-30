@@ -19,8 +19,6 @@ Items that need real components or specific setups to verify.
   - [Range tables](#range-tables)
   - [UT61+ Hz and Duty % off the Hz/% position take its specs](#ut61-hz-and-duty--off-the-hz-position-take-its-specs)
   - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
-  - [UT61E+ auto power-off while polled over USB](#ut61e-auto-power-off-while-polled-over-usb)
-  - [UT61E+ AC+DC V: the components as separate readings](#ut61e-acdc-v-the-components-as-separate-readings)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [Bluetooth search and detection with built-in meters](#bluetooth-search-and-detection-with-built-in-meters)
   - [macOS bridges other than the CH9329](#macos-bridges-other-than-the-ch9329)
@@ -34,9 +32,7 @@ Items that need real components or specific setups to verify.
   - [A settings file this build can't parse is replaced by defaults](#a-settings-file-this-build-cant-parse-is-replaced-by-defaults)
   - [GUI accessibility — screen reader walk-through](#gui-accessibility--screen-reader-walk-through)
 - [Completed Verification](#completed-verification)
-  - [MIN/MAX and Peak measurement reporting — RESOLVED](#minmax-and-peak-measurement-reporting--resolved)
   - [UT61E+ RANGE command (0x46) — RESOLVED](#ut61e-range-command-0x46--resolved)
-  - [Mode byte collisions — RESOLVED](#mode-byte-collisions--resolved)
 
 ## Device auto-detection
 
@@ -876,50 +872,6 @@ Left over from the 2026-09-19 re-verification against the UT61+ manual:
 - The UT803's unclear hFE note is in its
   [verification list](research/ut803/verification.md#spec-data).
 
-### UT61E+ auto power-off while polled over USB
-
-Seen on our UT61E+ (2026-09-19, `dmm-cli debug --count 0`, CP2110, AC+DC V):
-the meter stayed on for more than 30 minutes of continuous polling, where the
-manual gives 15 minutes for APO. Flag byte 15 bit 3 (APO, ut61eplus spec §2.7)
-stayed clear, and the LCD showed no APO symbol that day.
-
-Not yet known which of three it is: USB traffic turns APO off, each request
-resets the APO timer, or APO was off on the meter before polling started. A
-run that tells them apart, one step at a time on the meter:
-
-1. Power the meter on with nothing reading it; note whether the LCD shows the
-   APO symbol.
-2. Start `dmm-cli debug`; note whether the symbol goes out.
-3. Stop the reader with the cable still in and wait past 15 minutes; note
-   whether the meter powers off.
-
-A frame taken while the symbol is lit would also confirm bit 3 (the spec's
-"Must Verify" item 1).
-
-### UT61E+ AC+DC V: the components as separate readings
-
-Landed 2026-09-26: a DC frame is the reading, an AC frame carries its component
-as the `AC` sub-value with no main reading (`MeasuredValue::Absent`), so each
-keeps its own time. Checked on our UT61E+ over the CP2110 against a 1.6 V cell
-(`assets/replays/acdcv-cell.replay`, one lead lifted twice): CLI text, CSV and
-JSON, and the GUI's two traces, steady reading and **Plot:** AC. Component
-timing, HOLD and MIN/MAX are in the ut61eplus spec §2.7 (flag3 bit 3).
-
-Open:
-
-- **Components on different rungs.** Both sat on the 2.2V rung here; a DC
-  offset with an AC signal on top would show whether autorange can put them
-  on different ones. The display keeps the DC frame's range either way.
-- **HOLD on the AC component** sends AC frames only: the reading shows blank
-  digits beside the AC row, and the Main view's minimap, cursors and
-  statistics stay empty. **Plot:** AC draws it.
-- **Slow intervals.** At `--interval-ms` 1000 or more the DC readings can be
-  over 2 s apart, past the CLI integrator's limit, so `--integrate` skips them.
-- **Graph span.** The graph bounds DC points and AC points separately, so it
-  can reach back about twice as far as the History buffer before either drops.
-- **A software offset** is applied to the AC component as to any same-unit
-  sub-value, which means nothing for an RMS value.
-
 ### UT216XD: the UT61+ deck specifies a clamp meter we do not list
 
 Read from the archived deck 2026-09-21 (ut61-family approach doc, source 6).
@@ -1056,6 +1008,18 @@ Bugs a reader can reproduce, with the cause and fix where known.
   coupling 3, the BM86x and BM78xBT clear it, ZOTEK sets it from its DC
   annunciator, the UT61E+ within its AC+DC modes. Fix: define it in
   `flags.rs` and align the families.
+- **HOLD on the AC component of AC+DC V blanks the reading.** Held there,
+  a UT61E+ sends only AC frames (ut61eplus spec §2.7), which carry no main
+  reading: the reading shows blank digits beside its AC row, and the Main
+  view's minimap, cursors and statistics stay empty. **Plot:** AC draws it.
+  Fix, untried: show the held component as the reading.
+- **`--integrate` skips AC+DC V's DC readings at slow intervals.** At
+  `--interval-ms` 1000 or more the DC readings can be over 2 s apart, past
+  the integrator's gap limit (`Integrator::max_dt_secs`), so they are
+  dropped. Fix, untried: scale the limit to the interval.
+- **A software offset shifts the AC component of AC+DC V.** It applies to
+  the AC sub-value like any same-unit sub-value, which means nothing for an
+  RMS value. Fix, untried: exempt AC sub-values from offsets.
 
 ### Entering NCV leaves the previous mode's trace on the graph
 
@@ -1252,29 +1216,6 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Paced-read loop (cancellable sleep) | — | Verified 2026-07-29: pacing intact over 50 reads; Ctrl-C responsiveness still untested |
 | Idle HID report handling | — | Verified 2026-07-29 on CP2110: no false timeouts over 50 reads |
 
-### MIN/MAX and Peak measurement reporting — RESOLVED
-
-Verified 2026-03-21 on real UT61E+ with bench PSU (DC V, 3.1V→5V ramp)
-and AC mV (open leads, ~8.7 mV noise).
-
-- **MIN/MAX sends the stored value, not the live reading.** With MIN/MAX
-  active during a 3.1V→5V ramp: MAX state reported 5.004V (frozen),
-  MIN state reported 3.102V (frozen). The display value field contains
-  the stored min or max, not the live measurement.
-- **MIN and MAX flag bits cycle independently.** The meter cycles
-  MAX (byte 11 bit 3 only) → MIN (byte 11 bit 2 only) → MAX → ...
-  as a 2-state cycle. The bits are never both set simultaneously.
-  No AVG state is reported over USB (AVG may be LCD-only or absent on UT61E+).
-- **AUTO flag is cleared during MIN/MAX** (byte 12 bit 2 set = manual range).
-  The meter locks the range when MIN/MAX recording is active.
-- **Peak mode works the same way.** Peak command (0x4D) activates on AC mV
-  (context-dependent — does not activate on DC V). Reports stored
-  instantaneous peak values (not RMS): P-MAX=19.33mV, P-MIN=-290.25mV.
-  Cycles P-MAX (byte 13 bit 2 only) → P-MIN (byte 13 bit 1 only).
-- **Exit Peak (0x4E) works.** Clears peak flags, returns to live readings.
-- **Mock updated** to match: independent flag cycling, stored values,
-  AUTO cleared during MIN/MAX.
-
 ### UT61E+ RANGE command (0x46) — RESOLVED
 
 Resolved 2026-09-07 on our UT61E+ (CP2110 cable, `RUST_LOG=dmm_lib=debug`)
@@ -1318,9 +1259,3 @@ sweeping.
 `Note: UNI-T UT61E+ has no switchable ranges in DC mV — use the dial.`),
 in DC A and in AC A (both table entries read `20A`). AC mV joined them the
 same day — see [Range tables](#range-tables).
-
-### Mode byte collisions — RESOLVED
-Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
-were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
-Confirmed by real device captures and independently by vendor software
-decompilation (see `docs/research/ut61eplus/protocol-comparison.md`).

@@ -95,6 +95,9 @@ SLABHIDtoUART wrapper:
 3. **Purge RX FIFO:** `[0x43, 0x02]` (0x01=TX, 0x02=RX, 0x03=both — RX only
    since TX is empty at init)
 
+**[VERIFIED]** Our UT61E+'s CP2110 takes the 0x50 report at exactly these
+nine bytes; the meter answers normally after it.
+
 ### 1.5 CP2110 Diagnostic Reports — [KNOWN]
 
 These are CP2110 HID feature reports (not meter protocol), documented in
@@ -119,6 +122,10 @@ AN434. They're useful for troubleshooting the UART bridge itself.
 Reading this report clears the error flags. Useful for detecting overrun
 errors that would otherwise only manifest as checksum failures in the meter
 protocol.
+
+**[VERIFIED]** on our UT61E+'s CP2110: report 0x46 answers part number 0x0A,
+firmware version 1, and report 0x42 reads both FIFOs empty and no errors
+while the link is idle.
 
 **Set Reset Device (report 0x40)** — Set (host → device), payload `[0x40, 0x00]`.
 Resets the CP2110 and re-enumerates on USB. All UART config is lost — must
@@ -245,14 +252,9 @@ The length byte is always 0x03 (1 byte command + 2 bytes checksum).
 | 0x4A | `J` | Hold | `QByteArray::append('J')` in FUN_10002170 |
 | 0x46 | `F` | Range | `QByteArray::append('F')` in FUN_100021f0 — see note below |
 
-**Note on 0x46 (Range)** — the wire byte is confirmed, its *effect* is not.
-A first press engages manual ranging (the AUTO flag clears), but six
-consecutive presses on DC V neither stepped the range table monotonically
-nor returned the meter to auto, and the mode byte changed DC V -> AC+DC V on
-two of them — the cycle this table attributes to SELECT (0x4C). This is the
-only entry here without a hardware-verified behaviour note. See the UT61E+
-section of docs/verification-backlog.md for the capture and the experiment
-that would settle it.
+**Note on 0x46 (Range)** — what a press does on the meter, manual ranging on
+the rung showing and then one rung up per press with the mode byte never
+moving, is **[VERIFIED]** in the family spec §6.1.
 
 **Further commands** — first inferred from DMM.exe UI action names (not
 seen in decompiled code; the DMM.exe decompilation was incomplete), now
@@ -270,7 +272,7 @@ protocol deck's command table (命令表一) with the same meaning.
 | 0x4C | Select (orange) | `actionSelect` | **[VERIFIED]** (cycles sub-modes, e.g. DC V → AC+DC V) — rings per dial position: `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1 |
 | 0x4D | PeakMinMax | `actionPeak` | **[VERIFIED]** (AC modes only; beeps but no visible effect on DC V) |
 | 0x4E | ExitPeak | `actionExitPeak` | **[VERIFIED]** (clears peak flags, returns to live) |
-| 0x5F | GetName | (device discovery) | **[VERIFIED]** — two-frame response (FF 00 ack, then ASCII name); see verification backlog |
+| 0x5F | GetName | (device discovery) | **[VERIFIED]** — two-frame response (FF 00 ack, then ASCII name) |
 
 Hardware verification: commands issued against a real UT61E+ via `dmm-cli`
 command tools; effects observed on the meter LCD and subsequent response
@@ -323,6 +325,9 @@ length byte 0x10 (16), making the total frame 19 bytes:
 AB CD 10 <mode> <range> <display×7> <bar×2> <flags×3> <chk_hi> <chk_lo>
 ```
 
+**[VERIFIED]** Every measurement frame from our UT61E+ is 19 bytes, its
+length byte counting the checksum.
+
 **Byte layout** (offsets from start of frame):
 
 | Offset | Size | Field | Description |
@@ -361,7 +366,8 @@ reading), `"-12.345"` (negative value), `"    OL "` (overload).
 the detected field grows, so the level is the dash count.
 **[VERIFIED]** `"   EF  "` (no field) and `"     - "` (level 1, meter
 beeping at a mains cable) on 2026-09-07; **[MANUAL]** §13 for the further
-segments, not yet observed. The decompilation's `-` check for
+segments, not yet observed on the E+; a UT61B+ sent four (#19, ut61-family
+spec). The decompilation's `-` check for
 `cVar1 == '\x14'` (§2.5) is the same display.
 
 **Overload detection** (from `FUN_100026a0`):
@@ -409,6 +415,10 @@ The mode byte reflects the *active* measurement unit, not the dial
 position — e.g. on DC V dial with auto-range, the meter reports 0x02 (DCV)
 even when showing mV-scale values. The range byte determines the actual
 scale.
+
+**DC A, hFE and NCV have bytes of their own** — **[VERIFIED]** and
+**[VENDOR]**: DC A (0x10), hFE (0x12) and NCV (0x14) share nothing with AC V
+(0x00), DC V (0x02) or Hz (0x04).
 
 **0x16 and 0x17 — the software and the deck disagree.** V2.02's display
 names make 0x16 a second "LozV" and 0x17 "LPF". The protocol deck, whose
@@ -467,7 +477,8 @@ the table starts at 0x30:
 - etc.
 
 To extract the range index: `range_index = range_byte & 0x0F` (or
-equivalently `range_byte - 0x30`).
+equivalently `range_byte - 0x30`). **[VERIFIED]** Our UT61E+ sends the range
+byte with this prefix.
 
 **Mode bytes are raw** (no prefix). Mode values 0x00-0x0A are stored
 directly in the table with no transformation.
@@ -530,9 +541,9 @@ Flags2 bit 2 `Manu_flag` ("AUTO" shown when clear), as the table has it.
 | 3 | 0x08 | MAX | **[VERIFIED]** | `(bVar3 & 8) → "MAX"` |
 
 **[VERIFIED] MIN/MAX cycle:** MAX only → MIN only → MAX (2-state, bits
-never both set). When MIN or MAX is set, the `display` field contains
-the *stored* extremum, not the live reading. The AUTO flag is cleared
-(range locked) for the duration of MIN/MAX mode.
+never both set); no AVG state is sent. When MIN or MAX is set, the
+`display` field contains the *stored* extremum, not the live reading. The
+AUTO flag is cleared (range locked) for the duration of MIN/MAX mode.
 
 **Byte 15 (offset 0x0F) — Flags2:**
 
@@ -541,7 +552,14 @@ the *stored* extremum, not the live reading. The AUTO flag is cleared
 | 0 | 0x01 | **HV warning** | **[VERIFIED]** | Set at 31V on DC V (manual: >30V). DmmData offset 0x3d — stored but not displayed by PC UI. |
 | 1 | 0x02 | **Low battery** | **[VERIFIED]** | Intermittent on real device. DmmData offset 0x3c — passed to a UI indicator widget. |
 | 2 | 0x04 | **!AUTO** (inverted) | **[VERIFIED]** | DmmData offset 0x3b. Bit CLEAR = auto-range ON. DMM.exe hides "AUTO" label when set. |
-| 3 | 0x08 | **APO** (auto power-off) | **[VENDOR-DOC]** | The deck names it `APO_flag`. Stored at DmmData offset 0x3a; never read by PC UI. No capture has set it, although the manual has APO on by default; the meter may drop APO while it talks over USB [UNVERIFIED]. On 2026-09-19 the LCD showed no APO symbol while the bit was clear. |
+| 3 | 0x08 | **APO** (auto power-off) | **[VENDOR-DOC]** | The deck names it `APO_flag`. Stored at DmmData offset 0x3a; never read by PC UI. Never seen set (below). |
+
+**APO while polled:** no capture has set bit 3, although the manual has APO
+on by default. **[VERIFIED]** On 2026-09-19 our UT61E+, polled without a
+break over the CP2110 in AC+DC V (`dmm-cli debug`), stayed on for more than
+30 minutes, past the 15 the manual gives, with the bit clear and no APO
+symbol on the LCD. Whether talking over USB turns APO off, each request
+restarts its timer, or APO was off before polling began is [UNVERIFIED].
 
 **AUTO flag confirmed inverted** (from DMM.exe UI code at line 2128-2131):
 ```c
@@ -647,62 +665,14 @@ Configuration is stored in `options.xml`:
 
 ## 5. Verification Status
 
-### Resolved by deeper decompilation analysis
-
-- **AUTO flag**: CONFIRMED inverted at byte 15 bit 2 (bit set = manual,
-  bit clear = auto). The DMM.exe UI code explicitly hides the "AUTO"
-  label when this bit is set.
-- **Mode byte masking**: NOT NEEDED. Mode byte is used raw (0x00-0x19)
-  in both CustomDmm.dll and DMM.exe — no `& 0x0F` anywhere.
-- **Range byte masking**: The vendor software applies NO masking to the
-  range byte. It's passed directly to the table lookup.
-- **Flag byte 15 partial**: bit2 = !AUTO (confirmed). bit1 = passed to a
-  non-text UI widget (later verified as Low Battery indicator). bits 0
-  and 3 are stored but never displayed by the PC software.
-
-### Resolved by hardware verification against real UT61E+
-
-- **Range byte 0x30 prefix**: CONFIRMED — the meter does send 0x30-prefixed
-  range bytes; mask with `& 0x0F` (or subtract 0x30) to get the index.
-- **Flag byte 14 bits 0-3**: REL, HOLD, MIN, MAX — all confirmed, plus
-  MAX → MIN → MAX 2-state cycle and stored-value display semantics.
-- **Flag byte 15 bit 0**: HV warning — set at 31V on DC V (manual: >30V).
-- **Flag byte 15 bit 1**: Low Battery — confirmed (intermittent).
-- **Flag byte 16 bits 0-2**: bar_pol, P-MIN, P-MAX — all confirmed, plus
-  P-MAX → P-MIN → P-MAX 2-state cycle and stored-value display semantics.
-- **Bar graph encoding**: `byte12 * 10 + byte13` (raw decimal digits,
-  no 0x30 prefix). Negative values store magnitude in the bar graph and
-  set bar_pol; OL reads 44 segments.
-- **Additional commands**: 0x41/0x42/0x47/0x48/0x49/0x4B/0x4C/0x4D/0x4E
-  all exercised via the CLI and observed to produce the expected effect
-  on the meter. 0x49 (Hz/Duty) and 0x4D (Peak) are silently context-
-  dependent — they beep but produce no visible effect on DC V.
-- **Timing**: ~100 ms round-trip per request/response at 9600 baud.
-  Maximum sustained rate ~10 Hz. 19200/115200 baud both tested — meter
-  does not respond.
-- **Mode table (most entries)**: see §2.5 for per-mode verification status.
-
-### Must Verify Against Real Hardware
-
-1. **Flag byte 15 bit 3**: APO per the deck, never seen set; clear with no
-   APO symbol on the LCD (2026-09-19). A frame taken with the symbol lit
-   would confirm it marks APO on. The same day, polled without a break by
-   `dmm-cli debug` in AC+DC V, the meter stayed on for more than 30
-   minutes, past the 15 the manual gives for APO, and the bit stayed clear
-   throughout.
-3. **Mode bytes 0x03, 0x0D, 0x0F**: not exercised with a signal (DC mV,
-   AC µA, AC mA). 0x0A/0x0B (temperature) are UT61D+ only; 0x13 (Live) is
-   on no UT61+ dial.
-4. **Mode bytes 0x16, 0x17, 0x1A-0x1E**: the deck's clamp and current
-   variants (§2.5), not yet observed from any device.
-5. **Edge cases**: NCV two-or-more `-` segments (§2.4: EF and one dash
-   verified), hFE display format, temperature handling on UT61D+, OL in
-   different modes.
-6. **CH9329 transport**: has not been exercised against a real UT61E+.
+The open checks are in [verification.md](verification.md); what our UT61E+
+has confirmed is tagged **[VERIFIED]** where §1-2 state it.
 
 ---
 
 ## 6. Summary of Confidence Levels
+
+What is still open is in [verification.md](verification.md), not here.
 
 | Aspect | Status | Source |
 |--------|--------|--------|
@@ -750,7 +720,7 @@ Configuration is stored in `options.xml`:
 | Sampling rate ~10 Hz at 9600 baud | **VERIFIED** | Measured throughput, 19200/115200 unresponsive |
 | MIN/MAX and Peak 2-state cycles | **VERIFIED** | MAX → MIN → MAX, P-MAX → P-MIN → P-MAX |
 | Range byte 0x30 prefix sent by meter | **VERIFIED** | Real device observation |
-| CH9329 alternate transport | **VERIFIED** | Streams and takes the start command on a real UT181A (issue #5); no UT61+ report yet |
+| CH9329 alternate transport | **VERIFIED** | A UT181A (issue #5) and a UT61B+ (issue #19) over it (§1.6) |
 
 ---
 

@@ -466,28 +466,8 @@ grep -n -C 3 'FUN_0040d3a0' DMM_decompiled.txt
 
 ### What Still Requires Real Device Verification
 
-1. **Flag byte 15 bit 0 and bit 3 names** — Likely HV and reserved.
-   The vendor software stores these values but never reads them back
-   for display. Only real device testing or a protocol capture can
-   confirm the semantics.
-
-2. **Bar graph position encoding (bytes 12-13)** — The vendor software
-   does not parse these bytes at all. The bar graph full-scale range
-   comes from the mode/range table, but the actual position value
-   encoding is unknown.
-
-3. **Commands beyond 0x5E/0x4A/0x46** — The vendor software V2.02 only
-   implements GetMeasurement, Hold, and Range. All other commands
-   (MinMax, ExitMinMax, Rel, Auto, Light, Select, Peak, ExitPeak,
-   GetName) are not present in any of the four decompiled binaries.
-   These must be discovered empirically or from a different software
-   version.
-
-4. **Timing** — Actual response latency, maximum sustainable polling
-   rate.
-
-5. **Edge cases** — NCV display format, hFE display format, temperature
-   handling, OL behavior in different modes.
+The open checks are in [verification.md](verification.md); what hardware
+settled is tagged **[VERIFIED]** in the [spec](reverse-engineered-protocol.md).
 
 ## File Inventory
 

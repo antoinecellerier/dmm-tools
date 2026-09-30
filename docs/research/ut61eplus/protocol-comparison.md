@@ -2,7 +2,8 @@
 
 Comparison between the clean-room reverse-engineered protocol
 (`references/reverse-engineered-protocol.md`) and the existing protocol
-documentation (`docs/protocol.md` + `docs/verification-backlog.md`).
+documentation (`docs/protocol.md` and the device results now tagged
+[VERIFIED] in the [spec](reverse-engineered-protocol.md)).
 
 Verified against live device on 2026-03-19.
 
@@ -47,14 +48,15 @@ The repo's "Known Quirks" section claims:
 
 **These collisions do not exist.** The repo's own mode table AND the
 vendor software both assign unique bytes: NCV=0x14, hFE=0x12, DCA=0x10.
-The verification backlog confirms these were individually verified
-against the real device.
+The spec's mode table records each as verified against the real device
+([§2.5](reverse-engineered-protocol.md#25-mode-byte-values--vendor)).
 
 The quirks section contradicts the mode table and the verification data.
 These three quirks should be removed.
 
-**Action:** Delete the three collision quirks from `docs/protocol.md`
-and the "Mode byte collisions" section from `docs/verification-backlog.md`.
+**Action (done):** the three collision quirks are gone from
+`docs/protocol.md`; each mode's own byte is stated in the spec's
+[§2.5](reverse-engineered-protocol.md#25-mode-byte-values--vendor).
 
 ### 2. Modes 0x15-0x19 — minor naming differences
 

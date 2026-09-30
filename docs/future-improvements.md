@@ -313,6 +313,12 @@ A cursor readout prefers a corner around its point that the trace doesn't cross,
 
 Use cases: reading a cursor at a marked event.
 
+### One bound for AC+DC V's two traces
+
+**Complexity:** Low
+
+In AC+DC V the graph bounds DC points and AC points separately, so it can reach back about twice as far as the History buffer before either drops, bending the one shared `max_samples` bound. Counting both components against one bound keeps the graph and History in step.
+
 ### Steadier dense traces in live view
 
 **Complexity:** Medium
