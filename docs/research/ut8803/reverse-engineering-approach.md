@@ -345,12 +345,12 @@ Key functions identified:
 - `FUN_1001ca90`, `FUN_1001c880`, `FUN_1001cdc0`, `FUN_1001cff0` — mode/range/unit lookup functions
 - `FUN_1001d170` — unit type name lookup
 - `FUN_1001cec0` — unit magnitude prefix lookup
-- `FUN_1001d460` — CP2110 HID initialization (UART enable, config, trigger)
+- `FUN_1001d460` — CP2110 HID initialization (UART enable and config; no UART write, spec §1.3)
 - `FUN_1001fce0` — buffer append function (display byte accumulation)
 - `FUN_1001f170` — frame read loop (HID read + frame reassembly + parser dispatch)
 - `FUN_1002a380` — HID read with timeout accumulation
 - `FUN_1002a500` — HID write (WriteFile wrapper)
-- `FUN_1002a4d0` — single-byte UART write (used for 0x5A trigger)
+- `FUN_1002a4d0` — single-byte UART write (sends 0x5A only on the CH9325 init path, `FUN_1001d360`: spec §1.3)
 
 ### 5. SDK source code analysis
 
@@ -396,7 +396,9 @@ called immediately after UART configuration. Traced `FUN_1002a4d0` to
 `FUN_1002a500` which calls `WriteFile` — this is a HID write sending
 byte 0x5A over UART. The frame read loop `FUN_1001f170` only calls
 read functions (`FUN_1002a380`), never write functions, confirming
-the meter streams continuously after the 0x5A trigger.
+the meter streams continuously after the 0x5A trigger. (Retracted: spec
+§1.3 — that call is in the CH9325 init `FUN_1001d360`; the CP2110 path
+writes nothing, and the read-only loop stands.)
 
 **Display byte encoding**: Analyzed `FUN_1001fce0` (10 call sites in
 decompilation). The function signature is
@@ -479,9 +481,9 @@ defines the programming interface:
 | Inductance test freq field: 0=100Hz, 1=1kHz | **[VENDOR]** | Parser: mode 0x0B-0x10 branch |
 | Status word matches programming manual layout | **[VENDOR]** | Format string: `ACDC,dotpos,fun,isauto,ismax,ismin,ishold,isrel,isOL` |
 | Baud rate: 9600 (from feature report 0x50) | **[VENDOR]** | `FUN_1001d460`: `local_20 = 0x25000050` → 0x00002580 = 9600 |
-| CP2110 init: 0x41 enable + 0x50 config + 0x5A trigger | **[VENDOR]** | `FUN_1001d460`: three-step initialization |
-| Trigger command: single byte 0x5A | **[VENDOR]** | `FUN_1002a4d0(param_2, 0x5a, 1000)` |
-| Streaming model: continuous after 0x5A trigger | **[VENDOR]** | `FUN_1001f170`: read loop with no write ops |
+| CP2110 init: 0x41 enable + 0x50 config, no UART write | **[VENDOR]** | `FUN_1001d460` (0x5A trigger retracted: spec §1.3) |
+| Trigger command: none on the CP2110 path | **[VENDOR]** | `FUN_1002a4d0(param_2, 0x5a, 1000)` is in the CH9325 init `FUN_1001d360` (spec §1.3) |
+| Streaming model: continuous, unprompted | **[VENDOR]** | `FUN_1001f170`: read loop with no write ops |
 | Display bytes: raw passthrough (no 0x30 mask) | **[VENDOR]** | `FUN_1001fce0`: buffer append function, not transform |
 | Byte 6: not accessed by parser (reserved) | **[VENDOR]** | Parser: no reference to byte offset 6 |
 | Bytes 12-13: not read; inductance flags come from byte 17 | **[VENDOR]** | Parser: `*(byte*)((int)param_2 + 0x11)` bit extraction |
@@ -490,48 +492,8 @@ defines the programming interface:
 
 ### What still requires device verification
 
-1. **Byte 2 in frame**: This byte is part of the `param_2[1]` short
-   word (bytes 2-3), where byte 3 is verified as 0x02. Byte 2 itself
-   is not independently consumed by the parser but is included in the
-   checksum. Its actual value on the wire is unknown — could be a
-   length byte, sequence number, or always zero. [UNVERIFIED]
-
-2. **Maximum sampling rate**: The user manual says 2-3 Hz refresh.
-   Whether the streaming rate is exactly 2 Hz, 3 Hz, or variable has
-   not been measured. [UNVERIFIED]
-
-3. **0x5A trigger semantics**: The byte 0x5A is sent once after UART
-   init. Whether it is a "start streaming" command, a device wake
-   signal, or serves another purpose is not clear from the decompilation
-   alone. Whether the meter can be stopped/restarted with different
-   commands is unknown. [UNVERIFIED]
-
-**Previously unverified, now resolved:**
-
-4. ~~**Baud rate**~~: **Confirmed 9600** from feature report 0x50
-   construction in `FUN_1001d460`. [VENDOR]
-
-5. ~~**Command format**~~: **Confirmed** as single 0x5A trigger byte,
-   followed by continuous streaming. No SCPI text commands. [VENDOR]
-
-6. ~~**Streaming vs polling**~~: **Confirmed streaming** — the read
-   loop in `FUN_1001f170` only reads, never writes. [VENDOR]
-
-7. ~~**Display byte encoding**~~: **Confirmed raw passthrough** —
-   `FUN_1001fce0` is a buffer append function, not a byte
-   transformation. [VENDOR]
-
-8. ~~**Flag bit positions**~~: **Confirmed** matching the programming
-   manual layout via the format string and bit shift analysis. [VENDOR]
-
-9. ~~**Byte 6**~~: **Confirmed unused** — the parser does not access
-   byte offset 6. It is included in the checksum but otherwise
-   reserved/padding. [VENDOR]
-
-10. ~~**Bytes 12-13**~~: **Confirmed unused** (corrected 2026-09-17;
-    first recorded as the inductance flag source) — the parser does not
-    access them. The inductance test frequency and serial/parallel bits
-    are in byte 17. [VENDOR]
+Open checks are in [verification.md](verification.md); what the vendor
+analysis settled is in the [spec](reverse-engineered-protocol.md), §1.3-§2.5.
 
 ## USB Bridge Whitelist (from UCI SDK)
 
@@ -559,9 +521,9 @@ than the UT61E+:
 | Aspect | UT61E+ | UT8803 |
 |--------|--------|--------|
 | Protocol layer | Raw byte protocol | UCI SDK abstraction over binary protocol |
-| Command format | Binary: `AB CD 03 cmd chk_hi chk_lo` | Single 0x5A trigger byte |
+| Command format | Binary: `AB CD 03 cmd chk_hi chk_lo` | None: the host sends nothing (spec §1.3) |
 | Response format | Binary: 19 bytes with mode/range/flags | Binary: 21 bytes with AB CD framing |
-| Communication model | Polled (1 request per measurement) | Streaming (continuous after trigger) |
+| Communication model | Polled (1 request per measurement) | Streaming (continuous, unprompted) |
 | USB bridge | CP2110 (VID 0x10C4, PID 0xEA80) | CP2110 (same VID/PID) |
 | VID/PID | Silicon Labs defaults | Silicon Labs defaults |
 | Software | Custom Qt app with CustomDmm.dll plugin | UCI SDK-based application |
@@ -597,7 +559,7 @@ Consulted after the vendor analysis above, for validation only.
 | 9600 baud | Ghidra (feature report 0x50) | 9600 in code | N/A | ✓ |
 | AB CD frame header | Ghidra parser | Same | Same | ✓ |
 | 21-byte frames | Ghidra (min frame size 0x15) | "19 byte data frame" | N/A | ~¹ |
-| Streaming model | Ghidra (0x5A trigger, read-only loop) | Continuous read | N/A | ✓ |
+| Streaming model | Ghidra (read-only loop, no trigger: spec §1.3) | Continuous read | N/A | ✓ |
 | Alternating-byte checksum | Ghidra | "Weighted checksum" | N/A | To verify² |
 | Mode/range tables | Programming manual + Ghidra | Empirical tables | N/A | To verify |
 | UT8802 different format | Ghidra (0xAC header, 8-byte) | N/A | N/A | — |

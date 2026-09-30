@@ -201,7 +201,8 @@ fully specifies the wire protocol:
   word; its low byte contributes to `(byte)param_2[2]` which is byte
   offset 4 (the mode byte). The actual role of byte 2 itself is not
   directly consumed in parsing -- it is included in the checksum but
-  its value is not independently validated. [VENDOR]
+  its value is not independently validated. [VENDOR] Its value on the
+  wire is unknown [UNVERIFIED].
 - **Byte 3**: Response type `0x02` (measurement data) [VENDOR]
 - **Minimum frame size**: 0x15 = 21 bytes [VENDOR]
 - **Checksum**: At bytes 19-20 (offsets 0x13-0x14) [VENDOR]
@@ -357,9 +358,9 @@ frequencies. [VENDOR]
 ### 2.4 Command Encoding (Host → Meter) -- [VENDOR]
 
 The Ghidra decompilation reveals that the UT8803 does **not** use
-text-based SCPI commands on the wire. The UCI library translates the
-text API commands (`data?;`, `disp?;`) into a binary polling
-mechanism:
+text-based SCPI commands on the wire. The UCI library answers the
+text API commands (`data?;`, `disp?;`) from the binary stream it
+reads:
 
 **No initialization trigger** (corrected, 2026-06 review): the
 `FUN_1002a4d0(handle, 0x5a, 1000)` call previously described here is in
@@ -410,7 +411,7 @@ The UT8803 uses a **streaming** model, not a polled model:
 This differs from the UT61E+ polled model where each measurement
 requires a request command (`AB CD 03 5E 01 D9`). The UT8803 streams
 at approximately 2-3 Hz (matching the user manual's stated refresh
-rate).
+rate) [UNVERIFIED].
 
 ---
 
@@ -835,7 +836,7 @@ D24-D27 = 0x2 = Decimal point position 2
 Instead:
 - The host sends nothing (the 0x5A trigger previously documented here
   belongs to the CH9325 init path — §1.3)
-- The meter sends 21-byte binary frames at ~2-3 Hz
+- The meter sends 21-byte binary frames at ~2-3 Hz [UNVERIFIED]
 - The UCI library reads these frames in a loop; `uci_ReadX("data?;")`
   and `uci_ReadX("disp?;")` return the most recent parsed measurement
 - There is no SCPI text protocol for DMMs — the `:DISPlay:DATA?`

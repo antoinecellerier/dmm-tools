@@ -432,9 +432,14 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     Ok(Measurement {
         mode,
         mode_raw: mode_byte as u16,
+        // Unmasked (0x31 for range 1), like vc8x0's; nothing reads it as an
+        // index until a UT8803 spec table does.
         range_raw,
         value,
         unit: Cow::Borrowed(unit),
+        // The meter's own digits: the sign bit reaches `value` only, since
+        // whether the field spells the minus too is open
+        // (docs/research/ut8803/verification.md, "Display").
         display_raw: Some(display_str),
         flags,
         // `range_label` keeps the default empty string: labelling a UT8803
@@ -523,8 +528,7 @@ mod tests {
     }
 
     /// The one payload whose every parsed field is pinned, `range_raw`
-    /// included: this family stores it unmasked (0x31 for range 1) where
-    /// every other masks the 0x30 prefix off (docs/verification-backlog.md).
+    /// included: this family stores it unmasked (0x31 for range 1).
     #[test]
     fn parse_dcv() {
         let payload = make_payload(0x01, 0x01, b"12.34", 0x00, 0x00, 0x00);
@@ -676,7 +680,7 @@ raw_payload=17"#
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v + 12.34).abs() < 1e-6));
         // The sign reaches the float only; whether the meter also spells it
-        // in the display field is unsettled (docs/verification-backlog.md).
+        // in the display field is open (docs/research/ut8803/verification.md).
         assert_eq!(m.display_raw.as_deref(), Some("12.34"));
     }
 
