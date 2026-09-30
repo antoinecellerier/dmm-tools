@@ -369,7 +369,7 @@ mod tests {
     use super::*;
 
     /// Every function the table holds has a step that expects it, but LoZ
-    /// Ω, the app's code no manual function matches (spec §6.5, §11.12).
+    /// Ω, the app's code no manual function matches (spec §6.5, §9.5).
     #[test]
     fn every_mode_is_reached() {
         let steps = steps();

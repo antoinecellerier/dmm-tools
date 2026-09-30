@@ -16,8 +16,8 @@ low byte first, the command code low byte first, the firmware version as
 Arg2.Arg1.Arg0, the prefix as a signed byte. The app also sends three
 commands r4 does not list on every connect (0x0101, 0x0106, 0x0021), reads
 bits r4 marks "don't care", contradicts r4 in five places and uses two
-password digit orders where r4 states none; each is left open in the spec
-(§11 there).
+password digit orders where r4 states none; each is left open, and
+`verification.md` lists the check.
 
 ## Sources Used
 
@@ -194,7 +194,7 @@ above.
    found in the repositories' files), and re-read the vendor source
    for each disputed point: r4 p.1, p.7, p.10 and p.15 and the app. No
    verdict in §1-11 changed; eleven open questions were narrowed and two
-   added (spec §11).
+   added (now in `verification.md`).
 7. **§12 check.** A fresh reader checked the §12 changes against the same
    commits and the vendor sources. Each item was re-read in the source before
    it was applied: chiefly exact quotes and cites, evidence labels ("author"
@@ -220,13 +220,13 @@ Resolved disagreements:
 6. **Prefix encoding**: a signed byte, from the app; r4 gives only the values.
 7. **Response channel**: the app reads CDD4; r4's flowchart order fits it.
    Whether the meter also notifies responses stays open.
-8. **Left open, both sides cited** (spec §11): the five contradictions —
-   AutoCheck sub `02` OHM (app) against `03` AUTO (r4); unit `4F` (r4)
-   missing from the app; name length 12 (r4) against 11 (app); [13] always
-   `01` (r4) against `00` in four app commands; line frequency as main `23`
-   (r4) against sub `03` "HZ", which r4 strikes (app). Separately, the
-   password digit order: reversed in the app's 0x0151 and in order in its
-   0x0140, with r4 silent.
+8. **Left open, both sides cited** (`verification.md`): the five
+   contradictions — AutoCheck sub `02` OHM (app) against `03` AUTO (r4);
+   unit `4F` (r4) missing from the app; name length 12 (r4) against 11
+   (app); [13] always `01` (r4) against `00` in four app commands; line
+   frequency as main `23` (r4) against sub `03` "HZ", which r4 strikes
+   (app). Separately, the password digit order: reversed in the app's
+   0x0151 and in order in its 0x0140, with r4 silent.
 9. **Manuals**: the BM787BT has T1 only and no %4-20mA (BM787BT manual p.12,
    p.15); the other differences from the BM780(BT) manual (continuity
    threshold, REC AC rate, accessories, radio certification) may be edition

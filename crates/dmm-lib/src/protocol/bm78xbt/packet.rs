@@ -89,8 +89,9 @@ pub(super) fn is_info(p: &[u8]) -> bool {
 /// The first reading packet in `buf` whose CRC holds: its offset.
 ///
 /// A head and an end in place around a CRC that fails is logged at DEBUG:
-/// a stream of those is the sign of a wrong CRC rule (spec §11.1). A head
-/// without its end is a chance match in other bytes, and passes silently.
+/// a stream of those is the sign of a wrong CRC rule (spec §4;
+/// `docs/research/bm78xbt/verification.md`). A head without its end is a
+/// chance match in other bytes, and passes silently.
 fn first_reading(buf: &[u8]) -> Option<usize> {
     buf.windows(READING_HEAD.len())
         .enumerate()

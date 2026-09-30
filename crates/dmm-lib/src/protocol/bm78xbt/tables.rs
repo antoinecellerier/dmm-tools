@@ -30,8 +30,9 @@ pub(super) const AUTO_CHECK: u8 = 0x02;
 pub(super) const EF: u8 = 0x22;
 
 /// "Hz of …" sub `03`, struck through in r4 and red in r2, which added main
-/// 0x23 for it; which the meter sends is open (spec §6.5, §11.13), so both
-/// read as line frequency.
+/// 0x23 for it; which the meter sends is open (spec §6.5;
+/// `docs/research/bm78xbt/verification.md`), so both read as line
+/// frequency.
 const STRUCK_LINE_HZ: Function = f("Line Hz");
 
 /// A main function ID and its sub-functions, by sub ID (spec §6.5).
@@ -41,14 +42,14 @@ struct Main {
 }
 
 /// r4 p.14 (spec §6.5), with two additions that stay silent: the struck
-/// `03` subs, and the app's AutoCheck sub `02` (spec §11.12).
+/// `03` subs, and the app's AutoCheck sub `02` (spec §6.5).
 static MAINS: [Main; 17] = [
     Main {
         id: AUTO_CHECK,
         subs: &[
             (0x00, f("LoZ AC V")),
             (0x01, dc("LoZ DC V")),
-            // The app's OHM; r4 has no sub 02 (spec §6.5, §11.12).
+            // The app's OHM; r4 has no sub 02 (spec §6.5).
             (0x02, f("LoZ Ω")),
             // r4's AUTO: AutoV with no input, showing "Auto" (spec §6.7).
             (0x03, f("Auto V")),
@@ -69,6 +70,8 @@ static MAINS: [Main; 17] = [
     },
     Main {
         id: 0x04,
+        // No sub 03: the app's "HZ" here is in no r4 row, so it is reported
+        // (spec §6.5).
         subs: &[
             (0x00, f("AC mV")),
             (0x01, dc("DC mV")),
@@ -208,7 +211,7 @@ const UNITS: [(u8, [&str; 7]); 10] = [
     (0x0A, prefixed!("%")),
     (0x14, prefixed!("°C")),
     (0x15, prefixed!("°F")),
-    // r4's "%4~20mA": the reading is a percentage (spec §6.4, §11.11).
+    // r4's "%4~20mA": the reading is a percentage (spec §6.4).
     (0x4F, prefixed!("%")),
 ];
 
@@ -229,7 +232,7 @@ pub(super) fn unit(code: u8, prefix: Option<usize>) -> Option<&'static str> {
 /// What an ASCII reading's count shows (spec §6.7), when Flag0 bit 2 is set.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Shown {
-    /// `0`: OL, in the app's table only (spec §11.15).
+    /// `0`: OL, in the app's table only (spec §6.7).
     Overload,
     /// A word r4 prints: "Auto", "InEr", the dash runs.
     Word(&'static str),
@@ -242,7 +245,7 @@ pub(super) enum Shown {
     /// `0A`, `0B` outside EF detection, where no source puts them: the
     /// words r4 gives them.
     OutsideEf(&'static str),
-    /// A word only the app's table has (spec §6.7, §11.15).
+    /// A word only the app's table has (spec §6.7).
     AppWord(&'static str),
     /// A code no source lists.
     Unknown,

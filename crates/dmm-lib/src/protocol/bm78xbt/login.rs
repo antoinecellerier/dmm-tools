@@ -27,7 +27,8 @@ const VERIFY_PASSWORD: u16 = 0x0151;
 /// Every refusal's code (§8).
 const FAILURE: u16 = 0x8001;
 /// The default password 0000, as binary digits (§7.2). Its digit order is
-/// open for any other password (§11.5), so no other is offered.
+/// open for any other password (§7.2;
+/// `docs/research/bm78xbt/verification.md`), so no other is offered.
 const PASSWORD: [u8; 4] = [0; 4];
 
 /// The meter's address in the order the wire carries it, least significant

@@ -48,7 +48,8 @@ pub(super) const BRYMEN: GattProfile = GattProfile {
 pub(super) const SETTLE: Duration = Duration::from_millis(500);
 
 /// The smallest ATT MTU whose notifications carry the meter's 152-byte
-/// output whole: 152 bytes and the 3-byte notification header (§4).
+/// output whole: 152 bytes and the 3-byte notification header (§4). r4
+/// asks for 185 (§2); none is requested, and the open warns under this.
 const WHOLE_OUTPUT_MTU: u16 = NOTIFICATION_LEN as u16 + 3;
 
 /// `address` in the wire's order: btleplug's is most significant octet
@@ -68,7 +69,8 @@ fn wire_mac(address: BDAddr) -> Mac {
 /// reads it (§3.2), and [`judge`]d.
 ///
 /// Every write is acknowledged and whole, as the app sends them (§2): the
-/// platform splits a packet over a small MTU, never this code.
+/// platform splits a packet over a small MTU, never this code. Of the
+/// app's commands outside r4 (§7.3), only GetBLEAddress goes out.
 pub(super) async fn log_in(
     peripheral: &Peripheral,
     commands: &Characteristic,

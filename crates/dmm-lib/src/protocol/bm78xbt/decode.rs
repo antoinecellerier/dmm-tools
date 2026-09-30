@@ -158,6 +158,7 @@ fn decode_reading(r: &[u8]) -> Result<Measurement> {
         (MeasuredValue::Normal(value), Some(digits), false)
     };
 
+    // The packet names no range (spec §6.2), so the range label stays empty.
     Ok(Measurement {
         mode,
         mode_raw,
@@ -220,9 +221,10 @@ fn count(r: &[u8]) -> i32 {
 /// the meter's decimal point.
 ///
 /// Negative when Flag1's sign bit is set or the count is below zero: r4
-/// defines both, and which the meter uses is open (spec §6.3, §11.9). A
-/// negative count with the sign bit clear is the one case r4's two
-/// definitions contradict, so it is reported.
+/// defines both, and which the meter uses is open (spec §6.3;
+/// `docs/research/bm78xbt/verification.md`). A negative count with the sign
+/// bit clear is the one case r4's two definitions contradict, so it is
+/// reported.
 fn number(r: &[u8], flag1: u8, decimals: u32) -> (f64, String) {
     let count = count(r);
     let flagged = flag1 & SIGN != 0;
@@ -580,7 +582,7 @@ mod tests {
     #[test]
     fn every_ascii_code() {
         let value = |p: &[u8]| quiet(p).value;
-        // 0 is the app's OL alone (spec §11.15).
+        // 0 is the app's OL alone (spec §6.7).
         assert!(matches!(
             reported(&ascii(0x0D, 0x00, 0), "display word").value,
             MeasuredValue::Overload

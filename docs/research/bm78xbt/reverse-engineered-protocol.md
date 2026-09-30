@@ -62,7 +62,7 @@ Confidence levels:
 - **[VENDOR]** — read from Brymen's app, cited by file and lines
 - **[INFERRED]** — deduction from the above, reason given
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
-  real meter (all in §11)
+  real meter ([verification.md](verification.md) lists the checks)
 - **[HARDWARE]** — seen on a real meter: none yet
 - **[COMMUNITY]** — stated in or implied by a community source, §12 only
   (opened 2026-09-26); not a vendor fact
@@ -121,7 +121,7 @@ flags      name "BM78xBT"               manufacturer data
 |---|---|---|---|
 | Flags | `06`, "General discoverable mode"; remark "Don't care" | r4 p.1 | [KNOWN]; LE General Discoverable with BR/EDR not supported [INFERRED from the Bluetooth Core Specification's AD format] |
 | Name | `BM78xBT`, lower-case `x` (0x78), AD type `09`. "Remote Changeable"; 1-12 ASCII characters, length byte `02`-`0D`; set by 0x0142 (§7.1), restored by the factory reset (§9.2) | r4 p.1, p.5-6 | [KNOWN] |
-| Name, app | the app refuses a new name longer than 11 characters (`ble_set_new_name.dart:64-69`) | app | [VENDOR]; r4 allows 12 (§11) |
+| Name, app | the app refuses a new name longer than 11 characters (`ble_set_new_name.dart:64-69`) | app | [VENDOR]; r4 allows 12 (§7.1) |
 | Manufacturer data | length `07`, type `FF`, then `31 01` ("Manufacturer Specific Data-1/-2"), `42 4D` ('B' 'M'), `0B` ("Model Series ID"), `00` ("Status"); "Fixed", except the type byte [13], "Don't care" | r4 p.1 | [KNOWN]; `31 01` is company identifier 0x0131, low byte first [INFERRED from the AD format; the GATT UUIDs also end `0131`] |
 | Status byte | `00` is the only value printed; its meaning is not stated in r4 | r4 p.1 | [KNOWN] |
 | Scan response | not stated in r4 | — | — |
@@ -805,7 +805,7 @@ What the wire requires of any decoder:
 - [24] is the number of integer digits, not of decimals; the prefix [25] is
   a further power of ten on top of it.
 - r4 defines the sign both in the count and in Flag1 bit 6; which the meter
-  uses is open (§11). Under OL (Flag1 bit 5) the count carries nothing;
+  uses is open (§6.3). Under OL (Flag1 bit 5) the count carries nothing;
   under Flag0 bit 2 it is a text code.
 - AC, DC and AC+DC are sub-function IDs, not flags.
 - Low battery is only in the information packet.
@@ -815,86 +815,7 @@ What the wire requires of any decoder:
 
 ## 11. Open questions — [UNVERIFIED]
 
-Each item says whether the community sources (§12) narrow it or leave it
-open. Data a meter sent: none found in their files, 2026-09-26; they rest on
-one author's code and statements, so none of them closes an item.
-
-1. **CRC byte order** on the meter: low byte first in the app; r4 and r2
-   silent, with no complete frame (§4). **Narrowed**: a community SDK's
-   commands, CRC low byte first, are accepted (if the meter checks the CRC,
-   §12.2).
-2. **Reading HeadByte1**: `02`, labelled "SOH" in both revisions (§4).
-   **Narrowed**: a community SDK takes reading packets only with `02`
-   (§12.2).
-3. **Response channel**: the app reads CDD4; r4 silent; whether the meter
-   also notifies responses on CDD5 (§3.2). **Narrowed**: reading CDD4 right
-   after the write returns the reply (§12.2); on notified replies, none
-   found in the repositories' files, 2026-09-26.
-4. **Order and necessity of the bring-up**: r4 enables notifications after
-   0x0151, the app in GATT order; whether the meter streams with
-   notifications enabled first, or without 0x0151 (§3). **Narrowed**: r4's
-   order streams with no command outside r4 and no MTU request (§12.2); a
-   result with another order: none found in the repositories' files,
-   2026-09-26.
-5. **Password encoding and digit order**: ASCII or binary; the app reverses
-   the digits in 0x0151 and keeps them in order in 0x0140 (§7.2).
-   **Narrowed**: binary "0000" works (§12.2). The digit order stays open:
-   a community SDK sends the digits in order in 0x0151; a result with a
-   non-zero password: none found in the repositories' files, 2026-09-26
-   (§12.3 D3).
-6. **MAC bytes in commands**: their order, what the meter expects before any
-   response, whether it checks them (§5). **Narrowed**: low byte first, in a
-   0x0151 sent before any response (§12.2); whether the meter checks them
-   stays open.
-7. **Password Identification [13]**: `01` in r4, `00` in four of the app's
-   commands (§5). **Narrowed**: `01` works (§12.2); a result with `00`:
-   none found in the repositories' files, 2026-09-26.
-8. **Commands outside r4**: whether and how the meter answers 0x0101, 0x0106,
-   0x0021 and 0x0005, and 0x8000 (§7.3, §8). **Narrowed**: none is needed
-   for streaming (§12.2).
-9. **Sign**: negative count, magnitude plus flag, or both (§6.3). **Open**
-   (§12.3 D2).
-10. **Scaling fields per range**: [27], [24] and [25] for each range;
-    decimal points for 3 and 6 digits; the prefix byte encoding (§6.3).
-    **Open**.
-11. **%4~20mA unit**: `4F` in r4, absent in the app (§6.4). **Open**.
-12. **AutoCheck sub**: `03` AUTO in r4, `02` OHM in the app (§6.5). **Open**.
-13. **Line frequency**: main `23` or the struck `03` subs (§6.5). **Open**.
-14. **Bits r4 marks "x"**: Flag0 bits 0-1, Flag1 bits 0 and 7 (the app's
-    TestLead), Flag2 (§6.6). **Open**.
-15. **ASCII codes outside r4**: 0, 8, 9, `0C`-`0F` (§6.7). **Open**.
-16. **Information packet fields**: battery values other than `02`, the Power
-    Source Flag, [16..18] as one count, [19] (§6.1, §6.9). **Open**.
-17. **Advertising**: the Status byte, the scan response, the OTA-mode
-    advertisement, advertising while connected (§2). **Narrowed**: one
-    connection at a time is reported (§12.4); a service UUID in the
-    advertisement is claimed without evidence (§12.3 D4).
-18. **RTC**: hour 1-23 or 0-23; its content before the first 0x0010 and
-    across power-off; binary or BCD in 0x0010 (§6.8, §7.1). **Narrowed**:
-    the author's SDK sends 0x0010 in binary (§12.2); the clock is reported to reset on
-    power-off (§12.4); the hour range stays open.
-19. **Device name**: 12 characters (r4) or 11 (app); padding (§2, §7.1).
-    **Open**.
-20. **Rate**: notifications per second against the display rates (§3.2,
-    §9.4). **Narrowed**: about 5 a second is reported; no measurement
-    recorded (§12.4).
-21. **Write without response** on CDD4 (§2). **Open**.
-22. **APO**: 30 or 15 minutes; the effect of a connection; whether Bluetooth
-    stays on after power-off; the Δ long press in AutoV (§9.1, §9.3).
-    **Open**.
-23. **BM787BT defaults**: 0000 and BM78xBT are not printed in its manual
-    (§9.2). **Open**.
-24. **Error codes**: 3 and 4 both "invalid password" in r4, connection and
-    administrator in the app; codes above 6 (§8). **Open**.
-25. **Model identity**: nothing on the wire tells the BM788BT from the
-    BM787BT (§1). **Open**.
-26. **MTU below 185**: r4 requires 185 and the app requests it; a community
-    SDK streams without requesting any (§12.3 D1). What the meter does when
-    the negotiated MTU cannot carry 152 bytes in one notification (§2, §4).
-    **Open**.
-27. **Pause on a function or range change**: notifications are reported to
-    stop while the function or range is switched, the link staying up
-    (§12.4); how long the pause lasts (§9.4). **Open**.
+The open checks are in [verification.md](verification.md).
 
 ---
 
@@ -944,8 +865,8 @@ How the sources were made matters more than how many agree:
 |---|---|---|
 | §2 GATT | CDD0, CDD4 and CDD5 with Brymen's base (`brymenble/src/brymenble/transport.py:17-18`, `scanner.py:20`) | SDK |
 | §2 pairing | the SDK connects with no pairing call (none found in `src/`, 2026-09-26); "Linux and Windows are supported" (`brymenble/README.md:28`) | SDK; author (platforms) |
-| §3.1 bring-up order | connect; 0x0151 written to CDD4 with response and its reply read from CDD4; optionally 0x0010; 0.5 s; CDD5 notifications on (`brymenble/src/brymenble/transport.py:222-251`). The capture tool writes 0x0151, waits 0.5 s and subscribes (`brymenble/tools/capture.py:79-85`). Neither sends 0x0101, 0x0106 or 0x0021, or requests an MTU | SDK |
-| §3.2 response channel | the reply is read from CDD4 right after the write (`transport.py:328-332`); the connect fails unless it starts `FF 01 20 02 01` (`parsers.py:550-561`, `transport.py:357-361`). The probe tool exists partly for "confirming the read-after-write response delivery" (`tools/probe.py:6-7`) | SDK; author |
+| §3.1 bring-up order | connect; 0x0151 written to CDD4 with response and its reply read from CDD4; optionally 0x0010; 0.5 s; CDD5 notifications on (`brymenble/src/brymenble/transport.py:222-251`). The capture tool writes 0x0151, waits 0.5 s and subscribes (`brymenble/tools/capture.py:79-85`). Neither sends 0x0101, 0x0106 or 0x0021, or requests an MTU. A result with another order: none found in the repositories' files, 2026-09-26 | SDK |
+| §3.2 response channel | the reply is read from CDD4 right after the write (`transport.py:328-332`); the connect fails unless it starts `FF 01 20 02 01` (`parsers.py:550-561`, `transport.py:357-361`). The probe tool exists partly for "confirming the read-after-write response delivery" (`tools/probe.py:6-7`). A reply notified on CDD5: none found in the repositories' files, 2026-09-26 | SDK; author |
 | §4 CRC | r4's routine; commands carry it low byte first (`commands.py:51`), and received packets are checked low byte first (`parsers.py:383-385`) | SDK (commands), below |
 | §4 reading head | a reading packet is taken only with [1] = `02` (`parsers.py:375`) | SDK |
 | §5 MAC order | commands carry the address reversed (`commands.py:46`), 0x0151 first with no earlier response; "The meter sends the MAC byte-reversed on the wire" in the information packet (`parsers.py:318-319`) | SDK; author |
@@ -963,9 +884,9 @@ fail [INFERRED]. The SDK does not drop a packet whose CRC fails; it flags it
 | # | Spec § | Community | Brymen source | Verdict |
 |---|---|---|---|---|
 | D1 | §2 MTU | the SDK requests no MTU and accepts a stream frame only as one whole 152-byte notification (`parsers.py:495`; `tools/capture.py:93`) | r4 p.7, p.15: "must be set to 185"; the app requests 185 | if the SDK works as reported, a 185 request was not needed on the author's hosts, and the MTU the OS negotiated let 152 bytes through in one notification (at least 155 [INFERRED from the 3-byte ATT header]); no value recorded; below that, open |
-| D2 | §6.3 sign | the count is read signed, then `abs()`; the sign comes from Flag1 bit 6 only, "the protocol encodes it in exactly one place" (`parsers.py:410-414`; `docs/SDK_DATA_REFERENCE.md:40-42`) | r4 p.10: the count is signed, with a negative example | a design choice, not an observation; open (§11.9) |
-| D3 | §7.2 digit order | 0x0151 and 0x0140 both send the digits in order (`commands.py:56-62`) | the app reverses them in 0x0151 only | a result with a non-zero password: none found in the repositories' files, 2026-09-26; open (§11.5) |
-| D4 | §2 advertisement | the scanner accepts the service UUID in the advertisement, "advertised by some meters" (`scanner.py:19`, `:64-65`), or manufacturer data `42 4D 0B` after company 0x0131 (`:66-72`) | r4 p.1's advertisement carries no service UUID | no evidence for the UUID; open (§11.17). The manufacturer-data test also checks the series byte, which the app does not |
+| D2 | §6.3 sign | the count is read signed, then `abs()`; the sign comes from Flag1 bit 6 only, "the protocol encodes it in exactly one place" (`parsers.py:410-414`; `docs/SDK_DATA_REFERENCE.md:40-42`) | r4 p.10: the count is signed, with a negative example | a design choice, not an observation; open ([verification.md](verification.md)) |
+| D3 | §7.2 digit order | 0x0151 and 0x0140 both send the digits in order (`commands.py:56-62`) | the app reverses them in 0x0151 only | a result with a non-zero password: none found in the repositories' files, 2026-09-26; open ([verification.md](verification.md)) |
+| D4 | §2 advertisement | the scanner accepts the service UUID in the advertisement, "advertised by some meters" (`scanner.py:19`, `:64-65`), or manufacturer data `42 4D 0B` after company 0x0131 (`:66-72`) | r4 p.1's advertisement carries no service UUID | no evidence for the UUID; open ([verification.md](verification.md)). The manufacturer-data test also checks the series byte, which the app does not |
 
 ### 12.4 New
 
@@ -979,7 +900,10 @@ fail [INFERRED]. The SDK does not drop a packet whose CRC fails; it flags it
 | Connections (§2) | "a BM78xBT accepts a single connection" (`brymenble/README.md:106-110`). "The BM78xBT only advertises while NOT connected (protocol design flowchart)" (`scanner.py:22-30`) is a reading of r4 p.15, whose flowchart states no such rule [KNOWN, r4 p.15] | author |
 | Function selection | "The meter's function **cannot be switched over BLE/TestController.**" (`brymenble-tc-bridge/README.md:121`); r4's command table has no such command | author |
 
-Not answered by the community sources: §11.9-16, §11.19, §11.21-25, and
-the rate and gap figures above as measurements. The SDK's function, unit and
-ASCII tables restate the document, so they settle none of §11.11-13 or
-§11.15.
+Not answered by the community sources: the sign, the scaling fields, the
+unit, function and display-word questions, the "x" bits, the information
+packet, the device name, write without response, APO, the BM787BT defaults,
+the error codes and the model identity, and the rate and gap figures above as
+measurements. The SDK's function, unit and ASCII tables restate the document,
+so they settle none of the %4~20mA unit, the AutoCheck sub, line frequency or
+the ASCII codes outside r4.

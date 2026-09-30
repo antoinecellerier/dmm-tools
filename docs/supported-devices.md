@@ -199,7 +199,7 @@ dial to any function but Auto V/LoZ, and hold Δ for one second or more until
 Not run on a meter yet: the decoding comes from Brymen's protocol document,
 Brymen's app and the two manuals. Nothing the meter sends tells the two
 models apart, so both open as one entry, `bm78xbt`
-([backlog](verification-backlog.md#brymen-bm78xbt-experimental-awaiting-a-hardware-report)).
+([open checks](research/bm78xbt/verification.md)).
 
 ## Brymen BM860s / BM820s / BM520s
 
