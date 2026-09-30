@@ -415,6 +415,12 @@ The UT61+ protocol sends the UT-D07B's start command on every Bluetooth link, ad
 
 With no meter named, the Bluetooth search falls back to peers the platform knows (paired or cached) when the scan misses. It tries whichever the platform lists first, so a cached built-in meter that is asleep costs a ~10 s connect and "not found" before a known UT-D07B is tried. Trying known adapters ahead of known built-in meters fixes that, once a report shows it matters.
 
+### Cables described by head and line settings
+
+**Complexity:** Medium
+
+A named meter falls back to any cable that relays UART bytes ([Opening a meter](architecture.md#opening-a-meter)), but relaying is not enough: the cable's head must fit the meter's optical port, and its bridge must run the meter's line settings, where our init sets the CP2110 to 9600 baud and the CH9325 to 2400, then 19200. A fallback that cannot fit costs an open and a timeout, not a wrong reading. Describing each cable by chip, head and line settings, and each entry by the heads it fits, would let the fallback and detection skip those cables, once the time matters.
+
 ### Bluetooth notifications read in the background
 
 **Complexity:** Medium

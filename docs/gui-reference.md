@@ -573,7 +573,7 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 
 ### Screen reader
 
-Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md). Reports of what does and doesn't come through as expected are welcome.
+Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md#gui-accessibility). Reports of what does and doesn't come through as expected are welcome.
 
 - Every button, toggle, text field, and custom widget has a spoken name; icon-only buttons, color swatches, the graph minimap and the resize bars announce what they do instead of their glyph or color.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button and **Scale** announce whether they are currently on or off — you don't have to rely on the color change.

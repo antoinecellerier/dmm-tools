@@ -957,7 +957,7 @@ impl Protocol for Ut80xProtocol {
     fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
         // The CH9325 carries one meter byte per report, and a HID queue left
         // unread drops reports: #16's Windows captures kept the newest, and
-        // Linux's hidraw is expected to keep the oldest. Old bytes left here
+        // Linux's hidraw keeps the oldest (`RESYNC_AFTER`). Old bytes left here
         // or in the queue could splice two packets into one that passes
         // `is_packet`, so both go together.
         self.rx_buf.clear();

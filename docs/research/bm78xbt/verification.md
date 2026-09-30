@@ -118,6 +118,6 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 
 ## Detection
 
-- What the UT61+, UT181A and UT171 probes do to a BM78xBT, a cached BM78xBT
-  against a known UT-D07B, and the BM78xBT detection row: in the
-  [verification backlog](../../verification-backlog.md#device-auto-detection).
+- What the UT61+, UT181A and UT171 probes do to a BM78xBT and the BM78xBT
+  detection row: [Device auto-detection](../../verification-backlog.md#device-auto-detection);
+  a cached BM78xBT against a known UT-D07B: [Bluetooth](../../verification-backlog.md#bluetooth).

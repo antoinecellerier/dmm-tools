@@ -50,6 +50,12 @@ checks that span families are in the [verification backlog](../../verification-b
   — only `12 5A` has been sent; settles the HOLD row. Needs a hidapi script or
   dev build. (#5)
 
+## Capture
+
+- Whether a sweep after an operator step that sets `rel` or `peak` clears the
+  flag, so the next `rel_off` / `peak_off` step asks for what is done — decides
+  a capture-tool fix, not the meter's. Needs `capture --steps rel,rel_off`. (#5)
+
 ## Cables
 
 - The CP2110 cable on a UT181A — both reports used the CH9329 (UT-D09); one

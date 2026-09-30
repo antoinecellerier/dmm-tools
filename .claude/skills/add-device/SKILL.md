@@ -11,7 +11,7 @@ description: Runs the work of adding a new multimeter model, over USB or Bluetoo
 
 1. **Clean room** (CLAUDE.md): community sources stay closed until phase 4 opens them.
 2. **Physical steps need confirmation**, one setup at a time. Say early which phases will need the meter so it can stay off meanwhile (the UT-D07B adapter sleeps after 5 minutes idle; a paired adapter that blinks but never connects: `docs/setup.md`, "Bluetooth adapter not found").
-3. **Hardware decides "done"** (`.claude/rules/protocol.md`). Without a real-device run the model ships `Experimental`, with backlog lines for what waits.
+3. **Hardware decides "done"** (`.claude/rules/protocol.md`). Without a real-device run the model ships `Experimental`, with `docs/research/<family>/verification.md` listing what waits.
 4. **Side effects stay on the new model.** Every change that runs for an already-supported meter is listed with its before and after, and needs a reason that spans devices.
 5. **No invented issue numbers** — the `ISSUE_TO_OPEN` pattern in `docs/adding-devices.md`, Phase 4.
 
@@ -76,11 +76,11 @@ Run these without being asked, and don't wait on the issues for them:
 
 ### 8. Docs and verification issues (ask the user)
 
-Work through `docs/adding-devices.md` Phase 7. Draft the issues per `verification-issue.md` (beside this file) and show them. On the user's word, post them, then link them in one commit: the profiles' `verification_issue`, the README row, the catalog Status, the changelog and the backlog, deleting `ISSUE_TO_OPEN`.
+Work through `docs/adding-devices.md` Phase 7. Draft the issues per `verification-issue.md` (beside this file) and show them. On the user's word, post them, then link them in one commit: the profiles' `verification_issue`, the README row, the catalog Status, the changelog and the family's `verification.md`, deleting `ISSUE_TO_OPEN`.
 
 ### 9. Push and wrap-up (ask the user)
 
 - Leak check before asking to push: `git log -p origin/main..` for `([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}` (Bluetooth addresses) and `/home/`.
 - Ask for the push (CLAUDE.md, Commit discipline). The issues point at the newest nightly dev build, which won't carry the device until the next night; offer `gh workflow run dev-build.yml` if the user wants it sooner.
-- Backlog lines for what waits on reporters, including the spec tables.
+- `docs/research/<family>/verification.md` lists what waits on reporters, including the spec tables.
 - `du -sh ~/.cache/dmm-* 2>/dev/null`; delete the dirs no agent is still building in.

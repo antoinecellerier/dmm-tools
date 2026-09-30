@@ -61,11 +61,11 @@ spec, [`../ut8803/`](../ut8803/reverse-engineered-protocol.md).
 
 - The UT8802 detection row, and whether a streaming meter on Linux HID reads
   behind the LCD: in the verification backlog's [detection](../../verification-backlog.md#device-auto-detection)
-  and [streaming](../../verification-backlog.md#streaming-meters-read-continuously) sections.
+  and [streaming](../../verification-backlog.md#reading-and-streaming) sections.
 
 ## Vendor sources
 
-- Whether UNI-T's general-purpose PC software ([backlog](../../verification-backlog.md#vendor-sources-not-yet-read)),
+- Whether UNI-T's general-purpose PC software ([backlog](../../verification-backlog.md#vendor-sources)),
   listed among the UT88 results, drives a UT8802 and how it decodes it —
   could settle several items before a capture. Needs the download unpacked;
   no meter. (#12)

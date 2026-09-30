@@ -57,7 +57,7 @@ read yet: everything below comes from UNI-T's uci.dll and manuals.
 
 - The UT8803 detection row, and the Linux HID check at `--interval-ms 2000`:
   in the [backlog](../../verification-backlog.md#device-auto-detection) and
-  its [streaming section](../../verification-backlog.md#streaming-meters-read-continuously).
+  its [streaming section](../../verification-backlog.md#reading-and-streaming).
 
 ## Vendor sources
 

@@ -31,6 +31,13 @@ in the [verification backlog](../../verification-backlog.md).
   from the meter; decides whether `parse_measurement` reads the display as a
   plain number. Needs step `hfe`, a transistor in the socket.
 
+## Power cycle
+
+- The meter switched off and on at another dial position mid-session — the
+  checksum error the [backlog's defect](../../verification-backlog.md#connection)
+  records should be gone since `Dmm` drops input after a timeout; a rerun under
+  `dmm-gui` on the CP2110 cable decides whether it closes.
+
 [s24]: reverse-engineered-protocol.md#24-measurement-response-format--vendor
 [s25]: reverse-engineered-protocol.md#25-mode-byte-values--vendor
 [s27]: reverse-engineered-protocol.md#27-flag-bytes--vendor

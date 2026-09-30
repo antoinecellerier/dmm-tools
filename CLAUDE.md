@@ -31,7 +31,7 @@ A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite 
 - Default to the simplest approach that meets the requirement. No speculative abstractions or "just in case" configurability.
 - When told "keep it simple", revert anything that adds complexity without clear value.
 - When a request is ambiguous about scope, ask before implementing.
-- For multi-step work, persist progress in durable files (e.g. `docs/verification-backlog.md`) — sessions can run out of context.
+- For multi-step work, persist progress in durable files (an untracked `<NAME>_PROGRESS.md`, excluded via `.git/info/exclude`) — sessions can run out of context.
 
 ### Plans and background agents
 - Before presenting a plan, have a subagent critique it and fold in the fixes.
@@ -90,10 +90,10 @@ Documentation is part of the deliverable — update affected docs in the same co
 - `docs/setup.md`, `docs/development.md`, `docs/cli-reference.md`, `docs/gui-reference.md` — user and contributor references; update when their subject changes. `docs/ux-design.md` holds the design principles and the reasons behind UX decisions.
 - `docs/adding-devices.md` — end-to-end guide for new device support. **Read this before starting work on any new device.**
 - `docs/research/<family>/` — per-family RE methodology and wire-protocol spec.
-- `docs/verification-backlog.md` — update whenever items are verified or new unknowns surface. Critical for preserving state across sessions.
+- `docs/research/<family>/verification.md` — each family's open hardware checks; `docs/verification-backlog.md` — checks that span families, and known defects. Update them whenever items are verified or new unknowns surface: a verified item leaves the list and its result goes to the spec or the code (`.claude/rules/verification-docs.md`).
 - For new device support, use the `/add-device` skill (`.claude/skills/add-device/SKILL.md`) — it carries the gates, the user checkpoints, the subagent briefs, the standing reviews and the verification-issue pattern.
 - For spec data (resolution, accuracy, notes from a manual), use the `/spec-data` skill (`.claude/skills/spec-data/SKILL.md`) — it carries the transcription workflow, the user checkpoints and the verification steps.
-- For issue and PR replies, use the `/issue-replies` skill (`.claude/skills/issue-replies/SKILL.md`) — it carries the reply structure, the assertion bar, the standard device-report asks, and the backlog write-back rule.
+- For issue and PR replies, use the `/issue-replies` skill (`.claude/skills/issue-replies/SKILL.md`) — it carries the reply structure, the assertion bar, the standard device-report asks, and the write-back rule for verified results.
 - For GUI screenshots and visual or interaction checks, use the `/verify-gui` skill (`.claude/skills/verify-gui/SKILL.md`) — it carries the private-display script, the input commands and the scenario flags.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 - Anything GitHub renders (release bodies, issue/PR comments) is GFM, not plain text: bare `@name` mentions a real account, and a single newline becomes `<br>`, so keep each paragraph on one line. Check the render, not the source: `jq -n --rawfile t F.md '{text:$t,mode:"gfm"}' | gh api /markdown --input -`.

@@ -48,7 +48,10 @@ impl std::fmt::Debug for Detected {
 ///
 /// Real time, not the session clock: this paces physical USB. The UT61+ name
 /// frame has been seen 144–191 ms after the request on both bridges and the
-/// UT8803 streams at 2–3 Hz, so 600 ms clears both. A step that sends nothing
+/// UT8803 streams at 2–3 Hz, so 600 ms clears both. Through the detector, the
+/// `init_frames` of a capture on our UT61E+ stamp the ack at 85 ms and the name
+/// frame at 193 ms (CP2110, #9), and with the meter off the CP2110 cascade
+/// ended in 2.7 s. A step that sends nothing
 /// listens for [`LISTEN_ONLY_WINDOW`] instead.
 const WINDOW: Duration = Duration::from_millis(600);
 

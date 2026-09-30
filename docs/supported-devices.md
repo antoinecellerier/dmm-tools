@@ -16,8 +16,8 @@ confirmed and the rest is still to verify. **🧪 Experimental** means the
 protocol was reverse-engineered from vendor software and manuals. Short of
 verified, the linked issue collects hardware reports and the tool prints a
 warning on connect. The per-family research is under
-[docs/research/](research/); what remains to verify is in the
-[verification backlog](verification-backlog.md).
+[docs/research/](research/); what remains to verify is in each family's
+list, indexed in the [verification backlog](verification-backlog.md).
 
 ## Cables and adapters
 

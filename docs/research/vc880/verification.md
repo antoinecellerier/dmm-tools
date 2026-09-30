@@ -112,7 +112,7 @@ has been read yet: every item waits on a first report.
 - What detection's `0x5F` probe does to a VC-880, and the VC-880 detection
   row: [Device auto-detection](../../verification-backlog.md#device-auto-detection).
 - The VC-880 capture list's gate steps, still split by other steps:
-  [Capture: gate steps placed after other steps](../../verification-backlog.md#capture-gate-steps-placed-after-other-steps).
+  [Capture tool](../../verification-backlog.md#capture-tool).
 
 ## Vendor sources
 

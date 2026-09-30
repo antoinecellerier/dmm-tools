@@ -30,6 +30,6 @@ its start-up sends one 0x5A trigger byte, whose effect on a UT632 is unknown.
 
 ## Vendor sources
 
-- Whether UNI-T's general-purpose PC software ([backlog](../../verification-backlog.md#vendor-sources-not-yet-read))
+- Whether UNI-T's general-purpose PC software ([backlog](../../verification-backlog.md#vendor-sources))
   drives a UT632 and how it decodes it — could settle the payload before a
   capture.

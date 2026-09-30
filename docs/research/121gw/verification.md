@@ -120,6 +120,6 @@ that ASCII-era firmware; each still wants a current meter.
 
 ## Detection
 
-- What the UT61+, UT181A and UT171 probes do to a 121GW, the 121GW detection
-  row, and the Bluetooth search and detection it shares with the UT-D07B: in
-  the [verification backlog](../../verification-backlog.md).
+- What the UT61+, UT181A and UT171 probes do to a 121GW and the 121GW detection
+  row: [Device auto-detection](../../verification-backlog.md#device-auto-detection);
+  the Bluetooth search it shares with the UT-D07B: [Bluetooth](../../verification-backlog.md#bluetooth).

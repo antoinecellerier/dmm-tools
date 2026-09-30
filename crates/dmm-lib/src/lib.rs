@@ -53,8 +53,11 @@ pub struct Dmm<T: Transport> {
 /// a queue fills in: on a fast mock clock, session time would count a
 /// millisecond's stall as seconds away and drop a replay's frames. A manual
 /// clock is the exception, see [`Clock::queue_now`]. On our UT61E+ behind a
-/// UT-D07B, the first reading after a 10-minute GUI Pause was current and
-/// memory stayed flat (2026-09-28, #25).
+/// UT-D07B, the first reading after a 10-minute GUI Pause was current, memory
+/// stayed flat and a HOLD sent then landed at once (2026-09-28, #25). What a
+/// HID meter queued is old, not recent: Linux's hidraw skips a report that
+/// would fill its 64-slot ring (`hidraw_report_event`), so it keeps the oldest
+/// (kernel source; not yet seen on a meter).
 const RESYNC_AFTER: Duration = Duration::from_millis(250);
 
 impl<T: Transport> Dmm<T> {

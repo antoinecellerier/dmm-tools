@@ -13,6 +13,11 @@
 //!   each tick. Reading only when a reading is wanted would leave the meter's
 //!   frames queuing in between, handed out later stamped as new.
 //!
+//! On our UT61E+ behind a UT-D07B (#25), readings at a 1 s interval came
+//! three or four adapter frames apart, and at a zero interval in AC+DC V every
+//! notification was a reading, DC and AC alternating, none dropped; over its
+//! CP2110 cable both intervals read as before, also after a replug.
+//!
 //! The stream intentionally does not own cancellation — the CLI uses an
 //! `AtomicBool` driven by the Ctrl-C handler while the GUI uses an `mpsc`
 //! stop channel, and neither fits naturally inside the other. Callers check
@@ -90,7 +95,8 @@ pub struct MeasurementStream<'a, T: Transport> {
 ///
 /// The wait is split into slices so the cancel predicate is polled about this
 /// often. Small enough that shutdown feels immediate, large enough that a slow
-/// sample interval doesn't spin.
+/// sample interval doesn't spin. Over 50 paced reads on our UT61E+ the sliced
+/// wait kept its pacing.
 const CANCEL_POLL_SLICE: Duration = Duration::from_millis(50);
 
 /// The longest tick a stream runs at. Anything longer is a mistyped
@@ -230,7 +236,8 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
 
     /// Keep at most one reading per `tick` from now on, a zero tick every
     /// reading. The schedule starts afresh at the next reading, as it did
-    /// when the stream was built.
+    /// when the stream was built: on our UT61E+ behind a UT-D07B the GUI's
+    /// Sample interval changed live (#25).
     pub fn set_tick(&mut self, tick: Duration) {
         self.tick = tick.min(MAX_TICK);
         self.next_tick = None;

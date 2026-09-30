@@ -152,5 +152,5 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 
 ## Detection
 
-- `auto` with the BU-86X beside other cables, and the Brymen detection rows:
-  in the [verification backlog](../../verification-backlog.md).
+- The Brymen detection rows: [Device auto-detection](../../verification-backlog.md#device-auto-detection);
+  `auto` with the BU-86X beside other cables: [Known defects](../../verification-backlog.md#known-defects).

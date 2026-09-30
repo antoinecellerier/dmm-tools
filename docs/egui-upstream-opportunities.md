@@ -78,6 +78,7 @@ shipped in egui 0.35, so nothing is gated on it any more.
 | 16 | `Modal::should_close` Escape carve-out | — | Not started | Issue-first (B) |
 | 8b | Rename `egui_wants_keyboard_input` | — | Not started | Issue-first (B) |
 | 14 | `top_modal_layer` one-frame staleness | — | Not started | Issue-first (B) |
+| 20 | Hover text as AccessKit description | — | Not started | Issue-first (B) |
 | 4b | `accesskit_only` `widget_info` variant | — | Not started | Issue-first (D) |
 | 5 | Public landmark helper | — | Not started | Issue-first (D) |
 | 6b | Persistent AccessKit label API | — | Not started | Issue-first (D) |
@@ -86,7 +87,7 @@ shipped in egui 0.35, so nothing is gated on it any more.
 | 18 | Color-slider keyboard support | — | Not started | Issue-first (D) |
 | 19 | `Panel` resize handle a11y | — | Not started | Issue-first (D) |
 
-_Last updated: 2026-09-08._
+_Last updated: 2026-09-30._
 
 ## Table of contents
 
@@ -115,6 +116,8 @@ _Last updated: 2026-09-08._
   - [18. `color_slider_1d` / `color_slider_2d` are private and mouse-only](#18-color_slider_1d--color_slider_2d-are-private-and-mouse-only)
 - [Resize handles](#resize-handles)
   - [19. `Panel` resize handles are silent and have no public id](#19-panel-resize-handles-are-silent-and-have-no-public-id)
+- [Tooltips](#tooltips)
+  - [20. Hover text never reaches AccessKit](#20-hover-text-never-reaches-accesskit)
 
 ---
 
@@ -779,3 +782,37 @@ silently.
   visible focus indicator AND an AccessKit label, OR
 - include the handle id in what `Panel::show` returns, alongside the inner
   content.
+
+---
+
+## Tooltips
+
+### 20. Hover text never reaches AccessKit
+
+**Status:** Not started — Issue-first (B). Every tooltip would start being
+spoken, which changes what screen-reader users hear across every egui app;
+confirm the maintainers want it before a PR. Found 2026-09-30 against the
+versions above.
+
+**Where:** `response.rs:727-735` (`on_hover_text` shows a `Label` in a
+tooltip and nothing else), `response.rs:926` (`fill_accesskit_node_from_widget_info`
+sets role, label and value, never a description); AccessKit 0.24.1 has
+`Node::set_description` (`accesskit` `lib.rs:1917`). No call to it exists
+under `egui-0.36.2/src/`.
+
+**Symptom.** `on_hover_text` reaches sighted users only: a control whose
+meaning lives in its tooltip is unexplained to a screen reader. Our graph
+toolbar's **Plot:** and **Show:** chips would announce identically ("T2,
+button") if their group lived only in the hover text.
+
+**Workaround we used.** Fold the distinction into the accessible name:
+`series_chip_label` and `overlay_chip_label` in
+`crates/dmm-gui/src/graph/toolbar.rs` name the chips "Plot \<name\>" and
+"Show \<name\> trace". A local `a11y_description` helper in
+`ResponseA11yExt`, mirroring `on_hover_text`, could set the description
+through `accesskit_node_builder` wherever the tooltip carries real
+information.
+
+**Suggested fix.** Have `on_hover_text` (and `on_disabled_hover_text`) also
+set the node's AccessKit description from the text, or add an opt-in
+`Response::on_hover_text_described(text)` that does both.

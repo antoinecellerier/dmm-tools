@@ -67,7 +67,7 @@ every capture step; no UT803 has been read.
   that covers it. Needs a UT804 on Linux, `capture` under a trace. (#16)
 - A CH9325 on macOS, open for every bridge but the CP2110
   ([#2](https://github.com/antoinecellerier/dmm-tools/issues/2)): in the
-  [verification backlog](../../verification-backlog.md#macos-bridges-other-than-the-ch9329).
+  [verification backlog](../../verification-backlog.md#usb-bridges).
 
 ## Spec data
 

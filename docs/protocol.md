@@ -92,8 +92,9 @@ CH9329 in the [UT61E+ spec](research/ut61eplus/reverse-engineered-protocol.md)
 For how the library works out which family is on the wire from the bytes
 it sends, see [detection-design.md](detection-design.md).
 
-For verification status and the outstanding hardware-testing backlog,
-see [verification-backlog.md](verification-backlog.md).
+Each family's open hardware checks are in the `verification.md` beside its
+spec; the checks that span families are in
+[verification-backlog.md](verification-backlog.md).
 
 ## External reference implementations
 

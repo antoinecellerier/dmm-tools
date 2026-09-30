@@ -112,4 +112,4 @@ families are in the [verification backlog](../../verification-backlog.md).
   with B101 decides whether the UT8806 images cover the E's current release.
   Needs a fetch from UNI-T HQ's SharePoint.
 - UNI-T's general-purpose PC software, which may drive several bench meters:
-  in the [verification backlog](../../verification-backlog.md#vendor-sources-not-yet-read).
+  in the [verification backlog](../../verification-backlog.md#vendor-sources).

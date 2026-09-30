@@ -176,8 +176,9 @@ Each `CaptureStep` says whether hardware has confirmed it (`verified`), beside `
 - Tests keep the flags honest: a family short of Verified declares at least one unverified step,
   and every gate step has an `expect`.
 
-`docs/verification-backlog.md` keeps the *why*; verified step ids are struck through and
-credited there, and the code flag flips in the same commit. Unknowns that are not modes
+The family's `docs/research/<family>/verification.md` lists what a step would settle; once a
+report settles it, the item goes, its result becomes a spec fact crediting the reporter (or a
+code comment, for what the driver does), and the code flag flips in the same commit. Unknowns that are not modes
 (VC-890 battery nibble, UT8802 byte 6) follow the "one step whose typed answer resolves it"
 pattern, so the step stays the right unit of verification.
 

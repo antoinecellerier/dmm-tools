@@ -485,7 +485,7 @@ Comparison with our existing CP2110 implementation:
 SLABHIDtoUART.dll reads report 0x42's TX/RX FIFO counts big-endian
 (`CONCAT11(byte[1], byte[2])`); our `Cp2110::uart_status` reads them
 little-endian — an open check in the
-[verification backlog](../../verification-backlog.md#cp2110-fifo-counts) (CP2110 is shared).
+[verification backlog](../../verification-backlog.md#usb-bridges) (CP2110 is shared).
 
 ---
 

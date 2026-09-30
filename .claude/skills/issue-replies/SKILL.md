@@ -4,8 +4,8 @@ description: >-
   Triages GitHub issues and PR comments in this repo and drafts the replies:
   structure and tone, self-checkable asks, what may be asserted vs framed as a
   hypothesis, citation rules, the standard device-report asks, dev builds for
-  reporter testing, and writing verified results back to the backlog and the
-  issue. Use when starting to look at an issue ("check issue #NN", a newly
+  reporter testing, and writing verified results back to the family's docs and
+  the issue. Use when starting to look at an issue ("check issue #NN", a newly
   opened issue, a reporter's comment, a bug or device report) — including in
   plan mode — and again before drafting any reply or running
   `gh issue comment` / `gh pr comment`.
@@ -37,7 +37,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
 - Read the whole thread and any linked PR. Supersede stale commands quoted earlier in the thread (e.g. the `ut61eplus` → `dmm-cli` rename) in a footnote instead of repeating them.
 - Treat the reporter's observed evidence (their `lsusb`/`system_profiler` paste, the meter's beep, the LCD) as authoritative over any decompile- or manual-derived inference (PR #8: our "Communication ON is sufficient" inference was wrong; the reporter's trace proved SET_MONITOR is required).
 - Note which build the reporter ran (`--version`, the archive's folder name) and check that every flag, step id and quoted string exists at the commit of the build you point them at (`git grep '<string>' <sha>`).
-- Check `docs/verification-backlog.md` and the cable/bridge table in `docs/supported-devices.md` before asking for anything — never ask for what is already verified. Check what a doc's "confirmed" rests on before treating a report as re-confirmation (setup.md's macOS line once rested on a single CH9329 cable, so a CP2110-on-macOS report was a new data point).
+- Check the family's `docs/research/<family>/verification.md` (what is open), its spec's `[HARDWARE]`/`[VERIFIED]` facts (what is confirmed), `docs/verification-backlog.md` for cross-family checks, and the cable/bridge table in `docs/supported-devices.md` before asking for anything — never ask for what is already verified. Check what a doc's "confirmed" rests on before treating a report as re-confirmation (setup.md's macOS line once rested on a single CH9329 cable, so a CP2110-on-macOS report was a new data point).
 - Read the meter's manual in `references/<device>/` before theorising about its cable, modes or ranges — a lookup you perform, not an ask you send.
 - Cite community implementations (sigrok, antage, pylablib…) only for families whose spec already cross-references them (clean-room rule).
 - Verify issue and PR numbers with `gh issue list` / `gh pr list` before citing them.
@@ -111,11 +111,11 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 
 ## Write results back (same commit as the change)
 
-- Reporter-verified item → strike and credit in `docs/verification-backlog.md`: `~~item~~ — **VERIFIED** YYYY-MM-DD by @user on real <meter> (<cable>). <evidence>. See PR #N.` Community-sourced but unrun → `per <source>`, no VERIFIED.
+- Reporter-verified item → delete it from the family's `verification.md` and record the result per `.claude/rules/verification-docs.md`: what the meter does as a spec fact tagged `[HARDWARE]` (`[VERIFIED]` in the UT61 specs) with the issue, the cable and `@user`; what our driver does as a code comment with the issue. Community-sourced but unrun → `per <source>`, no tag.
 - Verification issue body → updated in the same round as the reply: regenerate the checklist (`dmm-cli --device <id> capture --list-steps --format md`, never hand-edited — a verified item flips the step's `.verified()` in the code), and update the summary, and the dev-build line where it names a `dev-<sha>`. Show it, then `gh issue edit` on a go-ahead.
 - A `CHANGELOG.md` entry saying a model works or is verified, with credit, lands in the commit that records the reporter's confirmation, not before; a targeted fix with credible evidence gets its entry with the fix (`.claude/rules/changelog.md`).
 - Family fully verified → follow the sign-off in `docs/adding-devices.md` (Stability flip, golden tests, `docs/supported-devices.md`).
-- New unknown from the thread → backlog. Doc gap the reporter hit → fix it in the same commit and link it from the reply.
+- New unknown from the thread → the family's `verification.md`, or `docs/verification-backlog.md` when it spans families. Doc gap the reporter hit → fix it in the same commit and link it from the reply.
 - Two to three weeks of silence on an ask → one polite nudge.
 
 ## Reply shapes

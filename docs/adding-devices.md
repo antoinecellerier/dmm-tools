@@ -191,7 +191,7 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 
 ### Specification data
 
-Add spec tables once a first hardware capture has confirmed the model; until then the Specifications panel shows the manual link, and `docs/verification-backlog.md` carries the task. If the device manual includes accuracy/resolution tables per mode and range:
+Add spec tables once a first hardware capture has confirmed the model; until then the Specifications panel shows the manual link, and the family's `verification.md` carries the task. If the device manual includes accuracy/resolution tables per mode and range:
 1. Add the spec tables in the family module, following `ut61eplus/specs/`, `ut80x/specs_ut804.rs` or `ut181a/specs.rs`. How a manual table maps onto rows is in `crates/dmm-lib/src/specs.rs` and those files' module docs.
 2. **Never fabricate values.** If a cell in the manual is ambiguous or you can't read it, give the row an empty accuracy list or omit the entry. Wrong specs are worse than missing specs.
 3. Watch for common manual pitfalls:
@@ -217,7 +217,7 @@ Add spec tables once a first hardware capture has confirmed the model; until the
 **Goal:** Confirm the implementation against actual hardware. This is mandatory for removing the `Experimental` flag.
 
 ### Preparation
-- Update `docs/verification-backlog.md` with items to verify for this device
+- List what to verify for this device in `docs/research/<family>/verification.md`
 - Ensure `RUST_LOG=dmm_lib=trace` logging captures raw bytes
 
 ### Testing protocol (needs someone with the meter)
@@ -250,7 +250,7 @@ These are real bugs we discovered only through device testing — expect similar
 ### Verification sign-off
 Once verified:
 1. Change `Stability::Experimental` to `Stability::Verified` in the device profile (`Stability::PartlyVerified` once connection and the main modes are confirmed but formats or commands remain; it behaves as Experimental and only changes the label)
-2. Update `docs/verification-backlog.md` — mark items as completed with date, and in the same commit mark the capture steps they cover `.verified()` so `--unverified` stops asking for them
+2. Delete each confirmed item from the family's `verification.md` and record its result: a spec fact tagged `[HARDWARE]` (`[VERIFIED]` in the UT61 specs) with the issue, the cable and the reporter, or a code comment for what the driver does. In the same commit mark the capture steps they cover `.verified()` so `--unverified` stops asking for them
 3. Add golden files from the capture report ([Golden file tests](development.md#golden-file-tests))
 4. Update `docs/supported-devices.md` with verification status
 
@@ -264,7 +264,7 @@ Update these in the same commit as the code:
 - `docs/supported-devices.md` — add or update the device entry. Counts, form factor, cable and VID:PID live here; the generated `--device` table links here rather than repeating them
 - `docs/protocol.md` — index entry pointing at the new family's spec
 - `docs/detection-design.md` — a row in the cascade table for the probe the family answers to, or in its unprompted line if the meter streams by itself
-- `docs/verification-backlog.md` — add pending verification items (or mark as complete), including a line under "Device auto-detection" for what detection sends this family and what it expects back
+- `docs/research/<family>/verification.md` — the open checks, in the shape `.claude/rules/verification-docs.md` gives; and a row in `docs/verification-backlog.md`'s family index and its "Device auto-detection" table, for what detection sends this family and what it expects back
 - `docs/gui-reference.md` — if the device adds new GUI behavior
 - `docs/architecture.md` — for a new transport or GATT profile (its module map), or a new concept
 - `docs/setup.md` — if the meter needs a new link or activation step (a Bluetooth adapter, a pairing quirk)
@@ -283,5 +283,5 @@ Update these in the same commit as the code:
 | Device registry entry | `crates/dmm-lib/src/protocol/<family>/devices.rs`, ordered in `protocol/registry.rs` |
 | Detection fingerprint | the family module, referenced from its registry entry |
 | Golden test files | `crates/dmm-lib/tests/golden/<device id>/` |
-| Verification status | `docs/verification-backlog.md` |
+| Open checks | `docs/research/<family>/verification.md`; cross-family ones in `docs/verification-backlog.md` |
 | Device catalog | `docs/supported-devices.md` |

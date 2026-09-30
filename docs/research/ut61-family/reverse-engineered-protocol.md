@@ -651,9 +651,11 @@ positions):
 **MIN/MAX and Peak rings — [VERIFIED]** on the same meter: MinMax (0x41)
 walks off → MAX → MIN, one press per step; the ring never comes back to off
 (2-state cycle, section 4 notes and 2026-03-21 device testing), so
-ExitMinMax (0x42) is what leaves. PeakMinMax (0x4D) walks P-MAX → P-MIN the
-same way in AC V, and ExitPeak (0x4E) leaves. Hold (0x4A) and Rel (0x48)
-each toggle on one press.
+ExitMinMax (0x42) is what leaves. MIN/MAX locks the range, as recording
+does, and ExitMinMax leaves it locked: a 2026-09-10 `ohm_ranges` capture on
+our UT61E+ entered MIN/MAX on auto and ended manually ranged. PeakMinMax
+(0x4D) walks P-MAX → P-MIN the same way in AC V, and ExitPeak (0x4E) leaves.
+Hold (0x4A) and Rel (0x48) each toggle on one press.
 
 ### 6.2 Which modes take which command — [VERIFIED] (UT61E+ and UT61B+)
 
