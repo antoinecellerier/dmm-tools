@@ -859,8 +859,9 @@ impl Graph {
         let ext_end = (vis_end + 1).min(self.history.len());
         let (visible_segments, visible_gaps) = self.build_segments_for_range(ext_start, ext_end);
         // Drawn lines are thinned to a few points per bucket about half a
-        // pixel wide; everything that answers with a value (statistics,
-        // cursors, crossings, the Y range) still reads the full slice. At a
+        // pixel wide, and the crosshair snaps to those drawn points;
+        // everything that answers with a value (statistics, cursors,
+        // crossings, the Y range) still reads the full slice. At a
         // whole pixel, a column could fall between two buckets' vertical
         // strokes and a dense band drew with dark streaks through it. The
         // width is taken before the plot, axis included, so it errs finer.

@@ -156,7 +156,8 @@ impl Clock {
     /// On the real clock with no pinned origin: the system clock now, less
     /// how long ago `at` was. A reading stamped as it arrives gets the wall
     /// time of that moment, so a suspend or a clock step since the session
-    /// began is followed rather than carried as an offset. A pinned origin (a
+    /// began is followed rather than carried as an offset: on some platforms
+    /// `Instant` stops while the computer sleeps. A pinned origin (a
     /// replay) or a virtual clock maps from its origin pair instead, which a
     /// burst backdates so the burst's readings are not all stamped with the
     /// launch time.

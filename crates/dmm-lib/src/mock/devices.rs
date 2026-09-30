@@ -8,6 +8,8 @@ use crate::protocol::registry::{SelectableDevice, factory};
 
 pub(crate) const ACTIVATION: &str = "No setup required \u{2014} this is a simulated device.";
 
+/// Public, unlike the other entries, because the GUI singles the mock out by
+/// its id: the scenario picker shows only while this entry is selected.
 pub static MOCK: SelectableDevice = SelectableDevice {
     id: "mock",
     display_name: "Mock (simulated)",

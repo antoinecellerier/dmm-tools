@@ -34,8 +34,9 @@ pub struct Dmm<T: Transport> {
     /// The name the meter gave on this link, once it has: to detection
     /// ([`Dmm::from_detected`]), to the ask ahead of `init`
     /// ([`Protocol::name_before_init`]) or to [`Dmm::get_name`]. The one copy
-    /// of it, for every family: asking again costs a round trip, and a UT61+
-    /// beeps at every ask.
+    /// of it, for every family; the binaries take it from here rather than
+    /// asking the meter: asking again costs a round trip, and a UT61+ beeps
+    /// at every ask.
     name: Option<String>,
     /// When the last read returned (or the session opened), on
     /// [`Clock::queue_now`]: how long a streaming meter's frames have been

@@ -310,8 +310,8 @@ impl Overrides {
 #[serde(default)]
 pub struct Settings {
     /// Schema shared with `dmm-cli` via the `dmm-shared` crate.
-    /// Flattened so fields (currently just `device_family`) appear at the
-    /// top level of the JSON file, preserving the existing on-disk shape.
+    /// Flattened so the shared fields appear at the top level of the JSON
+    /// file, preserving the existing on-disk shape.
     #[serde(flatten)]
     pub shared: SharedSettings,
     pub theme: ThemeMode,

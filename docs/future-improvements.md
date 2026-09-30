@@ -381,7 +381,7 @@ Use cases: retrieving field measurements logged by the meter itself, longer reco
 
 **Complexity:** Medium
 
-The Bluetooth transport runs the stack only inside its own calls, with no background thread (architecture decision 18). The stream reads a streaming meter continuously, so a notification is read and stamped as it arrives, except while the caller does something else between two reads — a remote-control walk, a slow terminal. If a reading ever shows a stamp late enough to matter for that reason, revisit the decision: a task that stamps each notification on arrival and keeps a bounded buffer would date every frame correctly, at the cost of the thread and channel the decision avoids.
+The Bluetooth transport runs the stack only inside its own calls, with no background thread (`architecture.md`, **Bluetooth runs only inside its own calls**). The stream reads a streaming meter continuously, so a notification is read and stamped as it arrives, except while the caller does something else between two reads — a remote-control walk, a slow terminal. If a reading ever shows a stamp late enough to matter for that reason, revisit the decision: a task that stamps each notification on arrival and keeps a bounded buffer would date every frame correctly, at the cost of the thread and channel the decision avoids.
 
 ---
 

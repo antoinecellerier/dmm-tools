@@ -1,324 +1,401 @@
 # Architecture
 
-## Crate Layout
+How the crates fit together and why. Each section names the files to open next; the mechanism,
+edge cases and constants live in their doc comments.
 
+## Overview
+
+The layering is `dmm-lib` ← `dmm-shared` ← `dmm-cli`, `dmm-gui`: each crate depends only on the
+ones to its left.
+
+**`dmm-lib`** talks to meters. It owns the transports, the protocol families, the device registry,
+detection, the acquisition loop and the session clock. It has no UI code and no opinion about
+config files or export names. It stays self-contained: only `hidapi`, `thiserror`, `log`, and,
+behind the `bluetooth` feature, `btleplug` with the `tokio` and `futures` its API needs, plus on
+Windows the `windows` crate for the one WinRT call btleplug cannot make. No external utility crates.
+Protocol internals are `pub(crate)`: consumers use `Dmm` and the registry.
+
+**`dmm-shared`** holds what the two binaries must agree on and `dmm-lib` must not carry: the
+settings file, durable writes, what an export holds and is called, the help text and the default
+log levels. Device, protocol and transport code stays in `dmm-lib`. Anything one binary alone needs
+stays in that binary.
+
+**`dmm-cli`** is a `clap` binary, and **`dmm-gui`** an `eframe`/`egui` one. Neither holds protocol
+logic or knows a device by name, except the mock: both get their devices from the registry.
+
+## Core concepts
+
+- **Transport and link.** `Transport` is a link's byte I/O: a USB-HID bridge, a Bluetooth LE peer,
+  or a mock. `Transport::link()` says what the meter is on (`Link::UsbCable`, `Link::Bluetooth`).
+  Behaviour and user-facing wording key on the link, never on the bridge chip.
+- **Protocol and delivery.** `Protocol` is one family's framing, parsing and commands. Every family
+  produces the same `Measurement`. `Protocol::delivery()` says whether the meter answers requests
+  (`Delivery::Polled`) or sends readings on its own (`Delivery::Streamed`).
+- **Measurement.** One reading, protocol-agnostic: mode, value, unit, range, flags, and sub-values
+  (`AuxValue`) for meters with more than one display. When a meter sends the parts of one reading
+  in separate frames, they are not paired up: a frame without the main reading carries
+  `MeasuredValue::Absent` and its part as a sub-value, so every frame keeps its own timestamp and
+  wire bytes: a replay stays complete, and an export row is one frame.
+- **Registry entry.** A `SelectableDevice`: one selectable model with its id, names, activation
+  help, links, protocol factory and fingerprint. Each family keeps its entries in its `devices.rs`,
+  and `DEVICES` orders them.
+- **Fingerprint.** A family's part in auto-detection: the probe it sends, the families whose probes
+  must go out first, and the rule that recognises its frames, built from the constants it already
+  puts on the wire.
+- **`Dmm`.** The handle a binary holds: a transport and a `Box<dyn Protocol>`. Every reading,
+  command and name request goes through it ([Acquisition and timing](#acquisition-and-timing)).
+- **`MeasurementStream`.** The acquisition loop around a `Dmm`: the sample interval and the count of
+  consecutive timeouts. The CLI and the GUI share it.
+- **`Clock`.** The session's time base: real, scaled (optionally with an instant pre-seed burst), or
+  manual for tests.
+
+## Data flow
+
+Connecting, from what the user picked to an initialised meter:
+
+```mermaid
+flowchart TD
+    pick["--device, settings or picker"] --> resolve["registry::resolve_selection()"]
+    resolve --> named["Selection::Device"]
+    resolve --> auto["Selection::Auto"]
+    named --> openNamed["open_device_transport()"]
+    openNamed --> radio["built-in radio"]
+    openNamed --> usb["USB cables"]
+    usb --> adapter["Bluetooth adapter"]
+    radio --> new["Dmm::new()"]
+    usb --> new
+    adapter --> new
+    auto --> openAny["open_transport()"]
+    openAny --> anyUsb["any USB cable"]
+    anyUsb --> anyPeer["any Bluetooth peer"]
+    anyUsb --> detect["detect::detect_device()"]
+    anyPeer --> detect
+    detect --> fromdet["Dmm::from_detected()"]
+    new --> init["Protocol::init()"]
+    fromdet --> init
 ```
-dmm-tools/
-├── crates/
-│   ├── dmm-lib/       # Core library
-│   ├── dmm-shared/    # App-only shared code (CLI ↔ GUI)
-│   ├── dmm-cli/       # CLI binary
-│   └── dmm-gui/       # GUI binary
+
+A named meter is opened on its own links; `auto` takes the first cable, or else any adapter or meter
+in range, and detection picks the entry (see [Opening a meter](#opening-a-meter)). Either way `Dmm`
+asks the meter's name first when the protocol wants it, then runs `Protocol::init`. The binaries
+enter through `open_device_by_id_auto()` and `open_auto()`, or through `open_transport()` and
+`open_device_transport()` when they wrap the transport first.
+
+Reading, from one tick to every output:
+
+```mermaid
+flowchart TD
+    tick["MeasurementStream::tick()"] --> request["Dmm::request_measurement()"]
+    subgraph CLI["dmm-cli read loop"]
+        cliT["Transform::apply()"] --> cliS["SeriesStats"] --> cliOut["format.rs, output.rs"]
+    end
+    subgraph GUI["dmm-gui"]
+        chan["channel from the acquisition thread"]
+        subgraph ingest["Capture::ingest()"]
+            guiT["Transform::apply()"] --> guiS["SeriesStats"] --> plot["the graph's points"] --> store["sample store"]
+        end
+        chan --> guiT
+        store --> export["Export"]
+        ingest --> held["held reading"] --> display["reading display"]
+    end
+    request --> cliT
+    request --> chan
 ```
+
+Three things the diagram does not show. A streaming meter's every frame is read, and the one
+nearest the tick is kept. Stamping and spec data happen in one place, `Dmm::request_measurement`
+([Acquisition and timing](#acquisition-and-timing)). In the GUI the display comes last: it shows
+the reading `Capture::ingest` returns, after the graph and the store have taken it.
+
+## Subsystems
+
+### Opening a meter
+
+`OpenOptions` carries the `--adapter` selector and whether Bluetooth may be scanned. An open for a
+named entry tries the cables listed in its `links` first, then falls back to the other bridges, so an
+unusual cable pairing still connects. The fallback reaches only cables that relay the meter's UART
+bytes. A cable that speaks its meters' protocol itself is opened only for an entry that lists it,
+or last for `auto`. The same rule vets an `--adapter` link before its bridge is initialised: a
+link the entry cannot be on fails with `Error::WrongCable`.
+
+USB comes first. If nothing answers there, the radio gets a turn, provided the entry lists
+Bluetooth and scanning is allowed. The caller names the peers it takes by advertised name: an entry
+behind an adapter takes adapters; a meter with a built-in radio takes the peers its
+`bluetooth_names` match; `auto` and `list` take all of them. So an open for one meter never lands on
+another. An entry with `bluetooth_names` is looked for over Bluetooth alone, and says why it was
+not found with `Error::BluetoothOnly`. `list_devices()` stays instant because it backs a GUI control;
+`list_bluetooth_devices()` scans.
+
+For `auto`, the opener takes the first bridge that answers and `detect.rs` identifies the meter on
+it. Each family exports a `Fingerprint`, and `detect.rs` is the engine that runs them. Which ones
+run comes from the registry entries that list that link. On a Bluetooth peer whose advertised name
+(`Transport::advertised_name()`) belongs to registry entries, only those entries' fingerprints run:
+the transport reports the name and knows no model. The cascade and its failure modes are in
+[detection-design.md](detection-design.md).
+
+Code: `transport/open.rs`, the open and list functions in `lib.rs`, `protocol/registry.rs`,
+`transport/ble/`, `detect.rs`.
+
+### Remote control
+
+There are two paths. `send_command()` sends a named button press and reads nothing back.
+`choices(Setting, &Measurement)` lists the values a setting can take from where the meter sits, and
+`select(Setting, id)` switches to one and confirms it from the stream. A family whose meter takes an
+absolute command sends it. A family that can only press buttons goes through the cycle driver
+(`protocol/cycle.rs`), which presses and reads back until the target shows. The mock does too, so a
+choice list that works on it works on hardware. `choices` and `select` default to unsupported, and
+the CLI and GUI hide a setting whose list has fewer than two entries.
+
+A profile can also list keys for a GUI to draw by data rather than by command name
+(`DeviceProfile::meter_keys`): function keys that pick a function, and context keys offered while
+they apply to the reading. Each is one of the profile's commands, sent through `send_command()`.
+
+Code: `protocol/mod.rs` (`Setting`, `Choice`, `MeterKeys`), `protocol/cycle.rs`.
+
+### Acquisition and timing
+
+`MeasurementStream` is the loop the CLI's `read` and `debug` and the GUI's thread share. It asks a
+polled meter on absolute ticks. It reads a streaming meter continuously and keeps the frame nearest
+each tick, so every frame is read, and stamped, as it arrives. It also spots a link that hands a
+streaming meter's readings over two at a time, and passes on the link's own notice about it
+(`Transport::late_readings`) for the binary to show. Cancellation stays with the caller.
+
+`Dmm::request_measurement` stamps every reading with the session `Clock` and its `wall_time`, and
+attaches the spec data. Stamping in one place means the statistics, the graph, the recording and
+the exports follow the clock without knowing it exists. Hardware timeouts, settle delays and
+bring-up sleeps stay on real time: they pace physical USB.
+
+Before a read, a command or a switch that must see the meter as it is now, `Dmm` drops what the
+meter sent that nobody read (`Protocol::discard_input()`). A streaming meter queues frames the whole
+time it goes unread: a pause, a reconnect, detection. A polled meter queues only a reply that came
+after its request timed out.
+
+Code: `stream.rs`, `clock.rs`, `Dmm` in `lib.rs`, `discard_queued()` in `protocol/framing.rs`.
+
+### Replay and mock
+
+A `Replay` is a recorded session opened as a device. It plays each payload back through the
+family's own `Protocol::parse_payload`, as a streaming meter would send it, so a replayed reading
+decodes exactly as the live one did. Read-only calls delegate to the family's protocol, and commands
+are refused. The clock's wall origin is pinned to the recording's time and each reading keeps the
+session time it was recorded at, so exports of a replay carry the recording's own timestamps. Past
+the last payload the session has ended (`Protocol::ended`, `StreamEvent::Ended`). The file writer
+lives beside the parser, so a recorder cannot drift from it.
+
+`MockProtocol` is the hardware-free meter the GUI, the CLI demos and the screenshots run against. It
+reaches its settings through the same cycle driver as the button-cycling families. A simulated
+meter wraps the family's unchanged driver around an in-memory transport that streams the family's
+own packets and takes the key frames the driver writes. `mock::open_simulated` opens either by its
+registry entry.
+
+Code: `replay.rs`, `mock/`.
+
+### Exports and settings
+
+`dmm-shared` holds one builder and one reader per export format, and the default file name that
+the GUI's Export… and `dmm-cli read -o` given no file name both use. So the two binaries write the
+same files, and a field added to a reading reaches both at once. The settings file is shared the
+same way (see **One settings type for both binaries**).
+
+Code: `crates/dmm-shared/src/lib.rs`, `export/`.
+
+### CLI
+
+One module per subcommand under `cmd/`, except `capture`, which has a module of its own,
+`capture/`. All of them open the meter through `open.rs`. `read` formats
+each reading (`format.rs`) and writes it where the run says (`output.rs`). `capture` is the guided
+run that walks a meter through its protocol's steps and writes a YAML report with the raw bytes; its
+design is in [capture-design.md](capture-design.md). User-facing behaviour is in
+[cli-reference.md](cli-reference.md).
+
+### GUI
+
+Device I/O runs on a background `std::thread`. Three `mpsc` channels connect it to the UI: messages
+out (readings, connection events), `ThreadControl` in (pause, sample interval), and remote commands
+in. The UI stops the thread by dropping its sender. Pause halts acquisition in the thread; it is
+not a display freeze.
+
+`App` is declared once in `app/mod.rs`. Every module under `app/` adds `impl App` methods to it, so
+no panel owns state of its own. Each reading goes through `Capture::ingest()`, then the reading
+display.
+
+The graph draws in two tiers (see **Graph two-tier rendering** below). Behind the graph's points,
+the full readings live in one sample store (`Recording`); a recording is a slice of it. Markers are
+kept apart from the graph and the store, pinned to a reading: the graph restarts on a mode change
+while a recording carries on, so neither outlives the other.
+
+The daily update check is the only network access in the workspace. It runs only in published
+builds, and sits behind the default `update-check` feature: without it no HTTP or TLS crate is
+built in. User-facing behaviour is in [gui-reference.md](gui-reference.md).
+
+Code: `app/connection.rs` and `app/messages.rs` (thread and channel), `app/capture.rs`,
+`recording.rs`, `markers.rs`, `graph/`, `app/update_check.rs`.
+
+## Design decisions
+
+**Sync, not async.** A session drives one meter over a slow, byte-paced link, and blocking calls
+keep the stack simple. Bluetooth's async stack is kept inside its transport (see below).
+
+**Direct hidapi, no `cp211x_uart`.** That crate has been unmaintained since 2017, and the CP2110
+layer we need is small.
+
+**hidapi's hidraw backend on Linux.** It talks through the kernel's HID driver instead of detaching
+it, and the udev rule in [setup.md](setup.md) grants access to the `/dev/hidraw` node.
+
+**Traits at the two seams.** `Transport` lets tests run on `MockTransport` without hardware.
+`Protocol` is object-safe and `Send`, so `Dmm` dispatches through `Box<dyn Protocol>` and no caller
+knows the family at compile time.
+
+**The registry is the only device list.** Names, aliases, activation help, links, manual URLs and
+protocol factories live in `SelectableDevice` entries beside each family's code. The binaries
+consume the registry and match on no family, so a new device needs no app code.
+
+**One settings type for both binaries.** `SharedSettings` is one Rust type: the GUI flattens it into
+its own `Settings`, so the file stays flat, and the CLI reads the same file into it and ignores the
+GUI's fields. Renaming or retyping a shared field breaks both builds at once, rather than one
+binary silently losing the setting.
+
+**Per-model tables behind a trait.** Where a family's models share one driver, what differs sits
+behind a per-model trait (`ModeTables`, `Vc8x0Model`), so a model is one implementation plus its
+spec tables.
+
+**No parser combinators.** Frames are short and positional, so direct indexing reads more clearly
+than `nom`, and `dmm-lib` stays within its dependency rule.
+
+**Static strings in readings.** `mode`, `unit` and `range_label` are `Cow<'static, str>`: a live
+reading borrows table data and allocates nothing for them.
+
+**Static spec data.** Resolution, accuracy and per-mode notes are `&'static` tables in each family,
+transcribed from the manuals. `Protocol::spec_info` takes the whole reading, so a family can pick
+the table by more than mode and range.
+
+**Derived series model.** A frame is named series (`Main` and each sub-value); a derived series is a
+(label, unit, op) triple over them, and a re-expression replaces `Main`, keeping the meter's value
+as `Raw`. Transforms run at one point per binary, before any fan-out, so every output agrees.
+
+**Name the target, confirm from the stream.** `select()` never trusts a press: only the meter's
+reading confirms it. An undrivable setting fails before any I/O, an unperformed switch after it;
+both are configuration errors, so the GUI reports them and keeps streaming.
+
+**Session clock.** One `Clock` is shared by `Dmm`, the mock's waveform and the pacing loop. So a
+scaled, pre-seeded or manual session stays consistent with its own timestamps, and screenshots and
+tests need not wait.
+
+**Unrecognised data asks for a report, once.** Data outside a parser's spec goes through
+`report_unknown()`, which warns on its first call of the process and logs later calls at DEBUG. A
+meter parked on an unknown value would otherwise repeat it every frame.
+
+**Bluetooth runs only inside its own calls.** Behind the default-on `bluetooth` feature, the
+transport runs each `btleplug` call in `block_on` on the caller's thread: no thread, no channel, as
+with HID. So the stream reads streaming meters continuously, and `Dmm` drops what queued unread.
+
+**Graph two-tier rendering.** The minimap keeps an incremental min/max level in session-time
+buckets, so its cost follows its width rather than the history. The main plot and every per-frame
+helper work on the visible slice only, so frame cost does not grow with the session.
+
+**Bounded buffers.** The graph's points, the sample store and a recording share one user-set bound
+(`max_samples`). The GUI's measurement channel is an unbounded `mpsc`, which is safe because the UI
+drains it every frame.
+
+## Module map
+
+Protocol families are in [protocol.md](protocol.md); each family's internals are its `mod.rs` docs.
 
 ### dmm-lib
 
-The library crate handles all device communication and data parsing. It has no UI dependencies.
-
-**Module responsibilities:**
-
 | Module | Responsibility |
-|--------|---------------|
-| `transport/mod.rs` | `Transport` trait abstracting a link's byte I/O, plus `set_baud` for a meter that talks at another rate than the link set up (unsupported by default; each HID bridge's feature reports stay inside its own transport) and the required `link()`, the USB cable or Bluetooth link a transport is on (`None` for the mock; a replay's reports the link its file was recorded over), which protocol behaviour keys on, with `Link::full_name` and `bridge_link_name()`, the link's words in errors and connection messages (here because `Error`'s messages use them) — `transport_name()` is the bridge's name for display only; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
-| `transport/open.rs` | Picking the link an open goes through: `KNOWN_TRANSPORTS`, the USB-HID bridges with their VID:PID and whether they relay UART bytes; the order the cables are tried in for an entry's links; opening a named adapter or the first match; the Bluetooth fallback and the peers it takes; listing the USB adapters. The public `open_*` and `list_*` functions in `lib.rs` call in here |
-| `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
-| `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
-| `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200), and `set_baud` as the same feature report |
-| `transport/bu86x.rs` | Brymen's BU-86X cable, which speaks its meters' request/reply protocol itself rather than relaying UART bytes: a write is one request, a read one input report, and it takes no feature reports; `open` sends nothing and keeps the cable's firmware version |
-| `transport/ble/mod.rs` | Bluetooth LE transport for a UART-over-BLE peer, an adapter or a meter with the radio built in: connects it, picks the GATT profile from its services (ISSC first, then the EEVblog 121GW's own service, then the Brymen BM78xBT's, else FFF0), runs the profile's application login where it has one, subscribes to that profile's notify characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
-| `transport/ble/search.rs` | Finds a Bluetooth peer by its advertised name, or the one an address names |
-| `transport/ble/profile.rs` | What a GATT profile states (the properties its characteristics need, its write type, its bring-up, its minimum MTU), the order profiles are tried in, and picking one from a peer's characteristics |
-| `transport/ble/issc.rs` | The ISSC transparent-UART profile's UUIDs, and the adapter's name prefix and heartbeat frame |
-| `transport/ble/fff0.rs` | The FFF0 profile's UUIDs: one characteristic, FFF4, carries both directions |
-| `transport/ble/eevblog121gw.rs` | The EEVblog 121GW profile's UUIDs: one characteristic in the meter's own service carries both directions ([spec §2](research/121gw/reverse-engineered-protocol.md#2-advertising-and-gatt)) |
-| `transport/ble/brymen.rs` | The Brymen BM78xBT profile's UUIDs, and the GATT steps of the password login the meter needs before it streams ([spec §3](research/bm78xbt/reverse-engineered-protocol.md#3-bring-up)); the packets come from `protocol/bm78xbt/login.rs` |
-| `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection, `MeterKeys`/`MeterKey` for key menus |
-| `protocol/registry.rs` | Device registry: `SelectableDevice`, the `DEVICES` index that orders the entries each family keeps in its `devices.rs`, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
-| `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |
-| `protocol/unrecognised.rs` | `report_unknown()`, what every parser calls on data its spec doesn't cover: the first call of the process warns and says how to report it, every call logs at DEBUG; `capture_reports()` lets tests (the golden fixtures among them) check that known data reports nothing |
-| `protocol/framing.rs` | Message framing: the read loop every family shares, and for each `AB CD` frame shape more than one family sends an extractor that finds the header, cuts the payload and validates its checksum; builds the command frame the UT61+ and Voltcraft families send. A shape only one family sends has its extractor in that family |
-| `protocol/expect.rs` | `Expect`: what a correctly parsed reading looks like once a capture step's instruction is carried out (mode, range, value, flags), so a capture run tests the parser instead of collecting samples to read by eye |
-| `protocol/steps.rs` | `gate_steps()`: the six DC-volts and resistance steps every family's capture run starts with, worded once |
-| `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `ModeTables` impls — one match per mode returning its ranges — behind the `DeviceTable` trait), `specs/` (the manual's spec tables per model, which `SpecModel` looks a reading up in) |
-| `protocol/ut8802/` | UT8802 family: `Ut8802Protocol` — streaming, read-only; `frame.rs` finds frames in the stream and, as they carry no checksum, validates their byte positions |
-| `protocol/ut8803/` | UT8803 family: `Ut8803Protocol` — streaming, read-only; `frame.rs` finds frames in the stream |
-| `protocol/ut80x/` | UT803/UT804, and the UT71A–E and Voltcraft VC920/VC940/VC960 that send the UT804's packets: `Ut80xProtocol` — streaming over the CH9325 cable, one payload parser per bench model, the handhelds reusing the UT804's over their own range labels; `specs_ut803.rs`/`specs_ut804.rs` hold the spec tables |
-| `protocol/ut171/` | UT171 family: `Ut171Protocol` — streaming once the user turns communication on at the meter |
-| `protocol/ut181a/` | UT181A: `Ut181aProtocol` in `mod.rs` (streaming driver); `parse.rs` decodes the normal, REL, MIN/MAX, Peak and COMP payloads and rewrites the meter's unit strings into the common form, `command.rs` builds the AB CD command frames and reads the OK/ER reply, `mode.rs` holds the dial families SET_MODE and SET_RANGE move within |
-| `protocol/vc8x0/` | Voltcraft VC-880/VC650BT and VC-890: `Vc8x0Protocol<M>` in `mod.rs` implements `Protocol` and `CycleMeter` once over a `Vc8x0Model`; `vc880.rs` (streaming) and `vc890.rs` (polled) hold each family's tables, dial, frame layout and the drain or ack around its I/O, and name the driver over their model `Vc880Protocol` / `Vc890Protocol` |
-| `protocol/zotek/` | ZOTEK Bluetooth meters (ZOYI, BSIDE, ANENG): `ZotekProtocol` — streaming, one registry entry per packet layout, every packet decoded by its own layout; `frame.rs` finds and descrambles packets in the notification stream, `glyph.rs` reads the seven-segment digits and the words spelled in them, `layout.rs` holds each layout's annunciator table and builds the reading from what is lit, `keys.rs` the remote keys each layout offers and their frames, sent without waiting for a reply (a key whose code follows the display uses the last packet decoded, reading one first if none has arrived), `capture.rs` the capture steps per layout, `sim.rs` the simulated ZT-5B behind `--device mock-zt5b` |
-| `protocol/eevblog121gw/` | EEVblog 121GW: `Eevblog121gwProtocol` in `mod.rs` — streaming, listen-only init, remote keys written without waiting for a reply; `packet.rs` finds packets in the byte stream, `tables.rs` holds the mode and range tables, `decode.rs` builds the reading and its sub-values, `capture.rs` the capture steps |
-| `protocol/bm86x/` | Brymen meters on the BU-86X cable, one entry per series: `Bm86xProtocol` in `mod.rs` — polled, one request per reading and nothing sent at init; `reply.rs` the request and finding the reply, `map.rs` each series' LCD segment map, `glyph.rs` the seven-segment characters and what a row of them shows, `decode.rs` builds the reading and the secondary display's sub-value from what is lit, `capture.rs` the capture steps, `devices.rs` the registry entries |
-| `protocol/bm78xbt/` | Brymen BM788BT/BM787BT, one entry for both: `Bm78xbtProtocol` in `mod.rs` — streaming, listen-only init (the transport has logged in); `packet.rs` the CRC and finding readings in the notification stream, `login.rs` the login's command packets and what its reply says, `tables.rs` the function, unit, prefix and display-word tables, `decode.rs` builds the reading, `capture.rs` the capture steps, `devices.rs` the registry entry |
-| `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic), and a `MainLabel` naming the reading when it is one part of what the meter measures; `AuxValue` sub-values |
-| `transform.rs` | `Transform`: opt-in software scale/offset/unit-relabel over the main reading (shunt and clamp factors, °C→°F). `si_prefix()` converts to the base SI unit first so a factor survives auto-ranging; the meter's own reading is kept as the `Raw` sub-value |
-| `stats.rs` | `RunningStats` (min/max/avg), `Integrator` (trapezoidal time-integral with gap handling), and `SeriesStats` — the mode/unit-keyed session both the CLI read loop and the GUI drain accumulate into, so the two agree on what starts a new series |
-| `mock/` | `MockProtocol`, the hardware-free meter the GUI, CLI demos and screenshots run against: `scenarios.rs` (one waveform-driven scenario per `MockMode`), `state.rs` (HOLD/REL/range/MIN-MAX/Peak and how they filter a reading), `mod.rs` (the `Protocol` impl), `devices.rs` (`MOCK`, its registry entry, public so the GUI can single it out for the scenario picker). It stands in for a UT61E+ — same mode and range bytes, same spec table — and reaches its settings through `protocol/cycle.rs`, so a choice list that works here works on hardware. The second mock, `protocol/zotek/sim.rs`, is a transport that streams a family's own packets and takes its key frames under the family's unchanged driver; `open_simulated` opens either by its registry entry |
-| `replay.rs` | `Replay`: a recorded session opened as a device. Parses the `# dmm-replay` file (device id, recording time, the link it was recorded over, one payload per sample, and `# marker:` lines, each marking the first reading played at or after its offset so a skipped frame passes its marker on; a `# view:` line is kept as text for the viewer, whose fields this crate never reads) and plays the payloads back through the family's own `Protocol::parse_payload`, each when it falls due on the session clock, as a streaming meter would send them; past the last one it has ended (`Protocol::ended`, which the stream reports as `StreamEvent::Ended`); the writer half lives here too, so a recorder cannot drift from the parser. Read-only calls delegate to the family's protocol, commands are refused — nothing is on the far end of the cable; the session's `ReplayTransport` reads nothing and reports the recorded link |
-| `specs.rs` | Spec metadata types: `SpecInfo` (a range's resolution and `AccuracyBand`s), `ModeSpecInfo` (per-mode impedance, protection, notes), the keyed `ModeSpecs` rows the families' tables are written in, and `SpecSheetTable` for dumping a whole sheet |
-| `clock.rs` | `Clock`: the session time base every reading is stamped with — real, scaled with an instant pre-seed burst, or manual for tests (decision 16) |
-| `stream.rs` | `MeasurementStream`: the sample interval and consecutive-timeout counting around a `Dmm` — a polled meter asked on absolute ticks, a streaming one read continuously with the frame nearest each tick kept — the acquisition loop the CLI `read`/`debug` commands and the GUI thread share, and `NO_RESPONSE_TIMEOUTS`, the run of timeouts after which both call the meter unresponsive, and the notice when a link hands readings over two at a time; cancellation stays with the caller |
-| `detect.rs` | `detect_device()`: the probe cascade behind `"auto"` — runs the families' `Fingerprint`s on an opened transport and ranks what answers (see below and `docs/detection-design.md`) |
-| `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
-| `error.rs` | `Error` enum via `thiserror` |
-| `lib.rs` | `Dmm` struct: top-level API tying everything together; the public open and list functions and their `OpenOptions` |
-
-**Data flow:**
-
-```
-CLI/GUI ──► registry::resolve_device()
-                       │
-                       └──► SelectableDevice.new_protocol()
-                                           │
-USB HID ──► Cp2110, Ch9329, Ch9325 or Bu86x (Box<dyn Transport>) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
-Bluetooth ──► Ble (Box<dyn Transport>) ─────────────────────────────┘
-                                           │
-                                           ├── Ut61PlusProtocol            (polled, per-model DeviceTable)
-                                           ├── Ut8802Protocol              (streaming)
-                                           ├── Ut8803Protocol              (streaming)
-                                           ├── Ut80xProtocol               (streaming, per-model parser)
-                                           ├── Ut171Protocol               (streaming)
-                                           ├── Ut181aProtocol              (streaming, device-sent units)
-                                           ├── Vc8x0Protocol<Vc880Model>   (streaming)
-                                           ├── Vc8x0Protocol<Vc890Model>   (polled)
-                                           ├── ZotekProtocol               (streaming, per-layout LCD image)
-                                           ├── Eevblog121gwProtocol        (streaming)
-                                           ├── Bm78xbtProtocol             (streaming, after the transport's login)
-                                           └── Bm86xProtocol               (polled, LCD segment map)
-```
-
-`Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,
-`request_measurement()`, `parse_payload()`, `send_command()`, `choices()`/`select()`,
-`get_name()`, `profile()`, `capture_steps()`, and `delivery()`: whether the meter answers
-requests (`Delivery::Polled`) or sends readings on its own (`Delivery::Streamed`), decided at
-`init` where the link matters. Each family implements its own framing, parsing, and command
-encoding internally, but all produce the same `Measurement` struct.
-
-`Dmm` keeps the meter's name, the one copy for every family: `Dmm::get_name()` returns the
-name the meter already gave on this link, else asks and keeps the answer, and
-`Dmm::known_name()` never asks. Detection's answer seeds it (`Dmm::from_detected()`), and a
-protocol whose `name_before_init()` says the meter wants its name first gets it through that
-same cache before `init()`, so a meter detection already asked is not asked again. The binaries
-call these and carry no name of their own.
-
-`Dmm` also drops what the meter sent that nobody read, through `Protocol::discard_input()`,
-before a read, `send_command()` or `select()` that must see the meter as it is now. A streaming
-meter queues frames the whole time it goes unread, so after 250 ms without a read (a pause, a
-reconnect, detection, a stalled caller) the queue is dropped rather than read from the front;
-the 250 ms are real time, which a queue fills in, except on a manual clock that tests move by
-hand. A polled meter queues only a reply that came after its request timed out, so
-after a timeout the next request starts from an empty queue instead of taking that late reply
-for its own answer. `framing::discard_queued()` empties the link: on HID it reads until more
-empty reports in a row come back than the OS queue holds, since some bridges queue empty
-reports between packets; over Bluetooth until a short wait brings nothing.
-
-Remote control has two paths. `send_command()` sends a named button press and reads nothing
-back. `choices(Setting, &Measurement)` lists the values a setting (`Mode`, `Range`, `Hold`,
-`Rel`, `MinMax`, `Peak`) can take from where the meter sits, each a `Choice { id, label,
-current }`, and `select(Setting, id)` switches to one, confirmed from the stream. The UT181A
-answers with direct commands; the UT61+/UT161 and Voltcraft families go through
-`protocol/cycle.rs`, and so does the mock, for everything but its mode selector. Both default
-to "unsupported", and the CLI and GUI hide any setting whose list has fewer than two entries.
-A profile can also list keys for a GUI to draw by data rather than by command name:
-`DeviceProfile::meter_keys` is a `MeterKeys { functions, context }` of `MeterKey { command,
-label, hover, applies: fn(&Measurement) -> bool }`; `hover` is a context key's tooltip when
-the meter does it by other than a press of a key of that label. Function keys become the mode readout's menu,
-marked where `applies` holds, when the family lists no mode choices; context keys join the
-buttons only while `applies` holds. Every one is a `supported_commands` entry, sent through
-`send_command()`. `MeterKeys::NONE` is the default; ZOTEK lists its keys per layout, and the
-121GW its 1 kHz filter key as a context key.
-
-**Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
-devices: each family keeps its `SelectableDevice` entries in its `devices.rs`, and `DEVICES` lists
-them in picker order. Each entry contains an ID, display name, aliases, activation
-instructions, and a factory function that creates the correct `Protocol` instance. The CLI
-and GUI resolve user input via `resolve_selection()` — `Selection::Auto` for `AUTO_DEVICE_ID`
-(`"auto"`), `Selection::Device` for anything `resolve_device()` knows — and connect via
-`open_device_by_id_auto()`; they never match on `DeviceFamily` variants or instantiate protocol
-types directly. That opener returns a `Box<dyn Transport>`, trying the cables the selected entry
-lists first (its `links`, set in the family's `devices.rs` from the cable table in
-`supported-devices.md`) and falling back to the remaining bridges. The preference only matters
-when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
-CP2110 and time out on every read — and the fallback keeps unusual cable pairings working. The
-fallback reaches only cables that relay the meter's UART bytes: a cable that speaks a meter's
-protocol itself is tried only for `auto`, last, or for an entry that lists it, and an entry
-listing only such cables is tried on exactly those. The same rule holds a link `--adapter` names
-to the entry before its bridge is initialised: a cable it cannot be on, or the radio for an entry
-on such cables alone, fails with `Error::WrongCable`, naming the link. An
-entry that advertises `bluetooth_names`, a meter with the radio built in, is looked for over Bluetooth alone,
-and fails with its own error (`Error::BluetoothOnly`): not in range, or the radio not searched.
-
-The same opener reaches Bluetooth. `OpenOptions` carries the `--adapter` selector and whether
-Bluetooth may be scanned: the `bluetooth` setting, which `--no-bluetooth` overrides. A selector
-shaped like a Bluetooth address or peripheral identifier goes straight to `transport/ble/`.
-Otherwise the USB bus is tried first. If nothing answers there, scanning is allowed and the entry
-lists Bluetooth among its links, the transport looks for an adapter or a Bluetooth meter: one
-already connected, else one heard in a short scan, else a paired one by address. The caller names
-the peers it takes, by advertised name (`bluetooth_peers()` in `transport/open.rs`): an entry behind an
-adapter takes adapters only, a meter with the radio built in its own `bluetooth_names`, and `"auto"` and
-`list` all of them, so an open for one meter never lands on another unless `--adapter` names an
-address, which opens whatever answers there. Every step has a time limit. When that
-finds nothing, the caller gets the USB error, marked with whether Bluetooth was searched; both
-binaries title their help from that mark. The GUI reconnects a lost Bluetooth link to the same
-adapter by address, without scanning; switching adapters is an explicit Disconnect and Connect.
-A cable with a silent meter wins over a live meter on an adapter: unplug it or name the adapter.
-Listing is split the same way: `list_devices()` stays instant because it backs a GUI control,
-while `list_bluetooth_devices()` scans.
-
-Handed `"auto"` instead of an entry, the same opener identifies the meter first: `detect.rs` runs
-a probe cascade on the opened transport, sending each family's trigger in turn and classifying
-whatever comes back, and a UT61+ name frame resolves to its registry entry. The families own that
-knowledge: each exports a `Fingerprint` — its probe, the families that probe has to follow, and
-its recognition rule, built from the constants it already puts on the wire — and `detect.rs` is
-the engine that runs them, deriving which run from the registry entries pointing at them and
-ranking what they answer by how strong the evidence is. On a Bluetooth peer whose advertised
-name (`Transport::advertised_name()`) belongs to registry entries, only those entries'
-fingerprints run: the transport reports the name, the registry says which meters carry it, and
-a name several entries share narrows the cascade without picking a model. The cascade and its
-failure modes are in `docs/detection-design.md`. `open_auto()` is that path with the `Detected`
-entry handed back, so a caller can name the meter it picked; `open_transport()` is its split
-half — a bridge and its name, no protocol chosen — for a caller that must wrap the transport
-before the probe bytes flow, and pairs with `detect::detect_device()` and `Dmm::from_detected()`; `open_device_transport()` is
-the same for a named entry. `devices_on_bridge()` inverts
-those links to list the meters that could have been on a bridge nothing answered on.
-Adding a new device requires only a registry entry, a `Protocol` implementation and — to be found
-by `"auto"` — a `Fingerprint` the entry points at; nothing in `detect.rs`, zero app code changes.
+|---|---|
+| `lib.rs` | `Dmm`, the public open and list functions, `OpenOptions` |
+| `transport/mod.rs` | `Transport`, `Link`, `Box<dyn Transport>` delegation, `MockTransport` |
+| `transport/open.rs` | Which link an open goes through: `KNOWN_TRANSPORTS`, cable order, Bluetooth fallback |
+| `transport/cp2110.rs` | CP2110 bridge: open, UART setup, interrupt reports |
+| `transport/ch9329.rs` | CH9329 bridge |
+| `transport/ch9325.rs` | CH9325 bridge, with its baud probing |
+| `transport/bu86x.rs` | BU-86X cable, which speaks its meters' protocol itself |
+| `transport/ble/mod.rs` | Bluetooth LE transport: connect, pick a profile, log in, subscribe |
+| `transport/ble/search.rs` | Finding a peer by name or address |
+| `transport/ble/profile.rs` | GATT profiles and picking one from a peer's services |
+| `transport/ble/{issc,fff0,eevblog121gw,brymen}.rs` | One GATT profile each |
+| `transport/ble/winrt.rs` | The one WinRT connection-parameter call btleplug cannot keep |
+| `transport/ble_disabled.rs` | Stand-in when the `bluetooth` feature is off |
+| `protocol/mod.rs` | `Protocol`, `Delivery`, `DeviceProfile`, `Setting`/`Choice`, `MeterKeys`, `Fingerprint` |
+| `protocol/registry.rs` | `SelectableDevice`, `DEVICES`, device lookup |
+| `protocol/<family>/` | One family each: see [protocol.md](protocol.md) and its `mod.rs` |
+| `protocol/framing.rs` | The shared read loop and the frame shapes several families send |
+| `protocol/cycle.rs` | Reaching a mode, range or flag by pressing a button and reading back |
+| `protocol/unrecognised.rs` | `report_unknown()`, once per process |
+| `protocol/expect.rs` | `Expect`: what a correct reading looks like after a capture step |
+| `protocol/steps.rs` | The gate capture steps every family starts with |
+| `detect.rs` | The detection engine behind `auto` |
+| `measurement.rs` | `Measurement`, `MeasuredValue`, `AuxValue` |
+| `flags.rs` | `StatusFlags` |
+| `specs.rs` | Spec metadata types |
+| `transform.rs` | `Transform`: software scale, offset and unit over the main reading |
+| `stats.rs` | `RunningStats`, `Integrator`, `SeriesStats` |
+| `stream.rs` | `MeasurementStream` |
+| `clock.rs` | `Clock` |
+| `replay.rs` | `Replay`: the file format, its reader and writer, playback |
+| `mock/` | `MockProtocol`, its scenarios and button state, its registry entry |
+| `error.rs` | `Error` and `ErrorKind` |
 
 ### dmm-shared
 
-What `dmm-cli` and `dmm-gui` must agree on and `dmm-lib` must not carry — the layering is `dmm-lib` ← `dmm-shared` ← `dmm-cli`, `dmm-gui`. Anything both binaries need that isn't the meter library's business belongs here: the settings file, durable writes, what an export holds and is called, the help text both print, and the log levels both start with. Device, protocol and transport code stays in `dmm-lib`, and anything one binary alone needs stays in that binary. Depends on `serde` + `serde_json` + `directories` + `chrono` + `env_logger` + `log` + `dmm-lib`, whose `Measurement` the export builders read and whose registry and `MockMode::ALL` the help text lists; no UI code.
-
 | Module | Responsibility |
-|--------|---------------|
-| `lib.rs` | The settings schema: `SharedSettings` (`device_family`, and `bluetooth`, whether an open may scan for Bluetooth adapters and meters), `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location), `SharedSettings::load_if_exists()`, and `resolve_device_family()` — the `--device` flag → `device_family` → caller's default precedence both binaries apply; the default is passed in, so the settings code does not reach into the registry. Also `write_atomic()`, the `.tmp` + fsync + rename both binaries persist user data through (settings, capture reports, exports) |
-| `export/mod.rs` | `default_name()`, the `measurements-<meter>-<mode>-<start>.<ext>` name the GUI's Export… dialog opens on and `dmm-cli read -o` (given no file name) writes to; `metadata_line()` + `write_measurement_json()`, the JSON both the GUI's export and `dmm-cli read --format json` emit, so a field added to a reading reaches both at once; the metadata carries the GUI's graph view as an object whose fields only `dmm-gui`'s `graph/view_state.rs` reads |
-| `export/csv_layout.rs` | `CsvLayout`: the CSV header and row cells both exporters write, a software-appended sub-value kept in a fixed column as the meter's own count changes (cells only — each binary writes the rows with the `csv` crate) |
-| `export/read.rs` | `read_csv()` and `read_json()`: an export read back into readings, markers and the saved view, beside the writers so the two cannot drift; `ImportedReading::into_measurement()` rebuilds a `Measurement` with what the file holds and nothing more (no spec, no mode or range code, no frame) |
-| `help.rs` | `--version` / `--device` / `--mock-mode` help and the device tags the `--device` reference table shares, the status line's short link name, the per-link sections of the "nothing found" help, the "no meter answered" grouping and the experimental-protocol warning. Lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs; build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller |
-| `logging.rs` | `init()`, the logger both install: warnings from `dmm_lib` and errors from the rest unless `RUST_LOG` says otherwise |
-
-The GUI's full `Settings` struct includes `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON stays flat (`device_family` at the top level alongside `theme`, `show_graph`, etc.). The CLI deserializes the same file directly into `SharedSettings`, silently ignoring any GUI-only fields. Because both sides reference exactly one Rust type for the shared fields, renaming or retyping `device_family` breaks both compilations simultaneously — the contract is compile-enforced.
+|---|---|
+| `lib.rs` | `SharedSettings`, `config_path()`, `resolve_device_family()`, `write_atomic()` |
+| `export/mod.rs` | The default file name and the JSON both binaries write |
+| `export/csv_layout.rs` | `CsvLayout`: the CSV header and row cells |
+| `export/read.rs` | Reading an export back |
+| `help.rs` | Help and version text both binaries print |
+| `logging.rs` | The logger both binaries install |
 
 ### dmm-cli
 
-CLI binary using `clap`. Its modules:
-
 | Module | Responsibility |
-|--------|---------------|
-| `main.rs` | Entry point: resolves the device (flag, settings file, then detection), dispatches the subcommand, answers `completions` itself, and prints the help that fits a failed run |
-| `cli.rs` | The clap types (`capture`'s flags as one `CaptureArgs`), the value parsers behind `--scale`/`--offset`, and the help text built at run time (`--device`'s registry table, the settings path) |
-| `cmd/mod.rs` | The subcommand modules, and the Ctrl+C flag the looping ones stop on |
-| `cmd/list.rs` | `list`: USB cables, and Bluetooth adapters and meters in range, with the setup help when nothing is found |
-| `cmd/info.rs` | `info`: the meter's name, what detection found, and the transport it answered on |
-| `cmd/read.rs` | `read`: live or replayed readings through `format.rs` and `output.rs`, with the closing min/max/avg and integral summary |
-| `cmd/settings.rs` | `get` and `set`: the settings a meter can switch to from where it sits, as a listing or JSON, and a switch confirmed from the readings that follow |
-| `cmd/command.rs` | `command`: a button press, or the list of the ones the family implements |
-| `cmd/debug.rs` | `debug`: raw frames beside what they decoded to |
-| `open.rs` | Opening the meter a command runs against, named or detected (with or without the capture recorder), the mock for the commands that take one, and the setup help a failed open or a silent meter prints |
-| `choice.rs` | What `set` takes as a choice: a label or a unique fragment of one, typed without the meter's symbols, and the shortest fragment a listing shows |
-| `capture/mod.rs` | The `capture` command: opens the report, runs the passes, prints the coverage epilogue |
-| `capture/report.rs` | Report schema and serde (`CaptureReport`, `StepResult`, `SampleData`), trust tiers, report file read/write |
-| `capture/step.rs` | One capture step (the library's `CaptureStep`): the wait for the state it asks for, the frames that wait sends |
-| `capture/session.rs` | The passes of a run: meter handshake, the device's steps and their equipment, end-of-run review, freeform captures |
-| `capture/input.rs` | Keyboard reader thread polled between readings; per-step log of parse rejections |
-| `capture/listing.rs` | `--list-steps` output (text and issue checklist); validation of `--steps` names |
-| `capture/drive.rs` | Automatic sweeps of driveable settings after a mode step, so every range and flag reaches the report unprompted |
-| `capture/plan.rs` | Maintainer-written step list from YAML, run with `capture --plan` |
-| `capture/recording.rs` | Wire-byte recorder around a transport, including bytes the framing layer rejected |
-| `capture/watch.rs` | Capture step advance logic: when the meter has settled into the state a step asked for, semantic (`expect`) or raw payload diff against the previous step |
-| `format.rs` | What a run writes per reading: text, CSV, JSON, or the meter's own frames as a replay file |
-| `output.rs` | Where it goes: stdout, `-o FILE`, or a file the run names itself once the first reading has arrived |
-| `test_fixtures.rs` | Tests only: the fake meter and the helpers more than one test module uses |
-
-All protocol logic lives in the library crate. The `capture` subcommand provides a guided
-interactive wizard for protocol verification, outputting YAML reports with raw bytes.
-Uses `console` crate for colored output and single-key input, `serde_yaml_ng` for report format.
-Capture reports are written atomically (temp file + rename) for crash safety.
-The capture workflow's design — detectors, trust tiers, report schema — is in
-`docs/capture-design.md`.
+|---|---|
+| `main.rs` | Resolves the device, dispatches the subcommand, prints the help for a failed run |
+| `cli.rs` | The clap types, value parsers and runtime help text |
+| `cmd/` | One module per subcommand, and the Ctrl+C flag |
+| `open.rs` | Opening the meter a command runs against, and the setup help |
+| `choice.rs` | Reading the choice `set` was given |
+| `format.rs` | What a run writes per reading |
+| `output.rs` | Where a run writes it |
+| `capture/` | The guided capture run: steps, watch, drive, plan, report, recording |
+| `test_fixtures.rs` | Test helpers shared across modules |
 
 ### dmm-gui
 
-`eframe`/`egui` application. Runs a background `std::thread` for device I/O,
-communicates with the UI via three `mpsc` channels: measurements and
-connection events out of the thread, a `ThreadControl` channel in (pause —
-pause halts polling in the thread, it is not a UI-side freeze; the UI stops
-the thread by dropping its sender), and a device-command channel in. Main graph via `egui_plot`,
-minimap via custom painter. Uses `clap` for CLI argument parsing (`--device`,
-`--theme`, `--mock-mode`) — overrides are session-only and don't persist to
-`settings.json`. Features: responsive layout with resizable panels,
-dark/light themes with WCAG-compliant colors, PPK2-style minimap navigation,
-continuous timeline across reconnects, pause/resume capture, graph overlays
-(mean line, reference lines, measurement cursors, min/max envelope, trigger markers),
-a series selector plus same-unit sub-value traces for multi-display meters,
-remote control buttons, UI zoom (Ctrl+/-), CSV recording/export with scrollable
-sample log (exporting the graph's samples when nothing was recorded),
-markers with notes on readings, persistent settings.
-
-The update check is the only network access in the workspace. A binary the
-release or dev-build workflow publishes (`DMM_PUBLISHED_BUILD=1` at compile
-time) asks GitHub's releases API once a day on a thread of its own, through
-`ureq` with rustls and the operating system's trust store, and caches the
-answer in `update-check.json` beside `settings.json`. Only a validated tag
-name is kept from the response; the link is built from the repository URL.
-The request sits behind dmm-gui's default `update-check` feature: without it,
-no HTTP or TLS crate is built in.
-
-`App` is declared once in `app/mod.rs`; every module under `app/` adds `impl App`
-methods to it, so no panel owns state of its own.
-
 | Module | Responsibility |
-|--------|---------------|
-| `app/mod.rs` | The `App` struct, `ConnectionState`, construction, and the per-frame `eframe::App::ui` that lays the panels out |
-| `app/appearance.rs` | Font chain and text styles, theme and colour overrides, zoom levels, always-on-top and decoration commands |
-| `app/connection.rs` | The background acquisition thread: open, poll, reconnect, the per-setting choice lists (re-listed only when the reading they are keyed on moves), the `DmmMessage`/`ThreadControl` channel types, and `ConnectedMeter` — what a meter reports on connecting, kept until Disconnect |
-| `app/messages.rs` | The UI side of that channel: connect/disconnect, the message drain, and drawing the connection help |
-| `app/connection_issue.rs` | Why there is nothing to read: the failure classified once as it arrives, and the notice — title, per-link steps, body — the reading column and the big meter draw |
-| `app/capture.rs` | The reading pipeline — software transform, session statistics, graph, history and recording, in that order — and the export layouts that Record and a history's first reading latch |
-| `app/plot_input.rs` | Reducing one measurement to what the graph plots — series, unit, and the other series kept beside it, each with its unit |
-| `app/held_reading.rs` | Keeping the reading on screen whole when a meter sends its parts in frames of their own: the last main reading and sub-values stand in for the ones a frame lacks, for the display only |
-| `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/update/Help/shortcuts/settings group |
-| `app/toast.rs` | The transient status message — its text, kind and time on screen — floated over the window's top-right corner in every layout |
-| `app/controls.rs` | The settings panel and the meter's remote-command buttons |
-| `app/layout.rs` | The reading column shared by the wide and narrow layouts, the specs sections, and the big meter toggle |
-| `app/meter_fit.rs` | Big-meter sizing arithmetic: minimum window size, panel margin, the wide/narrow threshold, and the re-measure cache |
-| `app/stats_panel.rs` | Session and visible-window min/max/avg/count and the running integral |
-| `app/recording_panel.rs` | Record/Export/Discard row, sample log or the line saying Export… saves the graph's samples, discard prompt, and the graph/recording split |
-| `app/marker_list.rs` | What `N`, `Ctrl+N`, a log row's `+` and the plot's menu mark, the per-frame marker trim, and the recording log — markers among the samples, only the rows in view drawn — where notes are written |
-| `app/export.rs` | Export: which format the menu picked, the save dialog off the UI thread, rendering the sample buffer once it returns, then the write off it, and the result toast |
-| `app/transform_ui.rs` | The **Scale** row and its editor for the software transform |
-| `app/shortcuts.rs` | The keyboard binding table, its dispatcher, and the rows the help modal shows |
+|---|---|
+| `app/mod.rs` | `App`, `ConnectionState`, the per-frame `ui` |
+| `app/connection.rs` | The acquisition thread and its channel types |
+| `app/messages.rs` | The UI side of the channel: connect, disconnect, drain |
+| `app/connection_issue.rs` | Why there is nothing to read, as text |
+| `app/capture.rs` | The reading pipeline and the stores it fills |
+| `app/plot_input.rs` | What the graph plots from one reading |
+| `app/held_reading.rs` | Keeping a split reading whole on screen |
+| `app/top_bar.rs` | The top bar |
+| `app/toast.rs` | The status toast |
+| `app/controls.rs` | The settings panel and remote-command buttons |
+| `app/layout.rs` | The reading column and the big meter toggle |
+| `app/meter_fit.rs` | Big-meter sizing arithmetic |
+| `app/stats_panel.rs` | The statistics panel |
+| `app/recording_panel.rs` | The Record / Export / Discard row and the sample log |
+| `app/marker_list.rs` | Placing markers and the recording log |
+| `app/export.rs` | Export… |
+| `app/import.rs` | Import… |
+| `app/transform_ui.rs` | The **Scale** row |
+| `app/shortcuts.rs` | The key binding table |
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
-| `app/whats_new.rs` | The "What's New" release-notes viewport |
-| `app/update_check.rs` | Whether a newer release is on GitHub: the daily request, which release a build may move to, and the cached answer |
-| `graph/` | Scrolling graph: history buffer, view navigation, toolbar, main plot, minimap, visible-slice analysis |
-| `display/mod.rs` | The reading itself in its three sizes, with the mode and range dropdowns and the sub-value rows |
-| `display/text.rs` | The reading as text: stable-width digits, and the screen-reader announcement with the fingerprint that says when to rebuild it |
-| `markers.rs` | The markers on readings, oldest first, one per reading |
-| `recording.rs` | The bounded store of full readings — the graph's history, with a recording as a slice of it — and its CSV, JSON and replay rendering |
-| `settings.rs` | Persisted settings and the colour presets |
-| `specs.rs` | Per-range specification rendering |
-| `theme.rs` | Theme colour tables (WCAG-checked in both modes) |
-| `a11y.rs` | AccessKit label/role extension traits, focus rings, arrow-key resize |
-| `changelog.rs` | The embedded `CHANGELOG.md` shown in the What's New viewport, one folding section per release |
-
-## Key Design Decisions
-
-1. **Sync, not async** — 9600 baud, single device, request/response. No benefit to async complexity.
-2. **Direct hidapi, no cp211x_uart** — the cp211x_uart crate is unmaintained (2017). Our CP2110 layer is ~120 lines.
-3. **hidraw backend** — required for HID feature reports on Linux (libusb backend doesn't support them).
-4. **Transport trait** — enables `MockTransport` for testing without hardware.
-5. **Protocol trait** — each device family implements `Protocol` (object-safe, `Send`). `Dmm` dispatches through `Box<dyn Protocol>`, so callers don't need to know the family at compile time.
-6. **Device tables via trait** — within the UT61E+ family, adding a new meter model = adding one file implementing `ModeTables` (`DeviceTable` is derived from it), plus its spec tables in `specs/`.
-7. **No nom** — each family's payload is a fixed-size struct. Direct indexing is clearer.
-8. **Measurement strings are `Cow<'static, str>`** — `mode`, `unit` and `range_label` borrow static table data for a live reading, avoiding heap allocation per measurement, and own their text for a reading read back from an export.
-9. **Graph two-tier rendering** — the minimap needs the full history, so it keeps it as a min/max level (`graph/level.rs`): one bucket per fixed span of session time about a physical pixel wide (`bucket_secs`), holding that span's vertical extent. A sample folds into the last bucket, an evicted one out of the first, and the level is recut only when the strip's bucket width steps — never per frame, never per push. Each run of buckets between two interruptions is projected through `decimate_columns` and painted as a single polyline, and the auto Y range folds the bucket extremes instead of scanning the points, so the strip's cost follows its width rather than the history length. Buckets are cut in session time, not screen columns: the strip rescales on every sample, so column buckets changed members each frame and the trace flickered. The main graph reads none of it: it binary-searches the history for the visible time window (`visible_index_range`), then builds segments from that slice each frame and thins each drawn line to the first, lowest, highest and last point of every `bucket_secs` span of session time about half a physical pixel wide (`thin_for_drawing`; a whole pixel left dark streaks through a dense band), so a zoomed-out window draws about what the plot's width holds rather than every sample; the spans are cut from the origin, as the minimap's are, so live view does not shimmer. Hover snaps to those drawn points. All per-frame helpers (Y-bounds, statistics, envelope, crossings, nearest-point) also operate on the visible slice only, keeping frame cost independent of total history size. Sub-value overlay traces keep their own time-ordered points, each at its frame's time, so a meter that sends a reading's parts in frames of their own puts each where it was measured; each is binary-searched for the window like the history, a frame appends only to the traces it carries so the single-display case pays nothing, and the minimap stays main-series-only so its level is not multiplied by the overlay count. A trace breaks for want of data only across a silence — a stretch with no frame of any kind longer than the gap threshold in force when it happened, so a sample interval changed later leaves the history's breaks as they were — not merely because its own points are far apart.
-10. **Bounded buffers** — the graph history, its full readings and a recording each hold at most one shared bound (default 500K samples, settable in Settings), and the background channel is drained every frame, so memory cannot grow without limit during sustained use. Full readings live in one store. The history is the store from where the graph's oldest point is, moving only forward — a graph restart, Clear, a new meter, or the bound — and is what Export… saves with nothing recorded. A recording is a slice of the same store, from Record to Stop, carried across the history's restarts and stopping when full; Export… saves it while it exists, and Discard just forgets the slice. While a recording runs both end at the newest reading, so the store is the longer of the two; once stopped and left behind by the history, it moves out into a buffer of its own and the store drops what came between, so memory is at most a full recording plus a full history, and an export waiting on its save dialog, which pins the samples it will write — a recording dropped meanwhile goes to it, and once the history passes them they move out. Markers are kept apart from the graph and the store, pinned to a reading's timestamp, and dropped each frame once neither holds their reading: the graph restarts on a mode change while a recording carries on, so neither alone outlives the other. One marker per reading bounds them by the readings held.
-11. **Settings schema evolution** — `#[serde(default)]` on `Settings` allows adding new fields without breaking existing config files.
-12. **Device registry** — all device metadata (display names, aliases, activation instructions, protocol factories, manual URLs) lives in `SelectableDevice` entries beside each family's code, which a single `DEVICES` index in the library orders. CLI and GUI consume the registry without device-specific knowledge, so adding a new device family requires zero app code changes.
-13. **Static spec data** — per-range specifications (resolution, accuracy bands) and per-mode metadata (input impedance, notes) are `&'static` data in each family's `specs*.rs` files, transcribed from device manuals as rows keyed by range byte (`ModeSpecs`). `Dmm::request_measurement` attaches them to each reading through `Protocol::spec_info(&Measurement)` / `mode_spec_info(&Measurement)`, which take the whole reading so a family can pick the table by more than its mode and range. Use `cargo run -p dmm-lib --example dump_specs` to verify spec data against manuals.
-14. **Derived series model** — a *frame* is one measurement's named series: `Main` plus each sub-value by label. A *derived series* is a (label, unit, op) triple over those names. `Op::Linear` re-expresses the main reading, so it replaces `Main` and keeps the meter's own value as the `Raw` sub-value — the convention meters themselves use (Fluke REL, the UT181A's relative and dBm formats). Planned ops that produce a *new* quantity (`Binary` for V×I or A−B, `Formula`) will instead be appended as sub-values, which the graph selector, the overlay traces and the CSV aux columns already handle. Each consumer applies transforms at exactly one point — the CLI read loop, the GUI's `Capture::ingest` — after acquisition and before any fan-out to display, graph, recording and export, so every output shows the same numbers. The scale is applied in base units (`si_prefix()`) so a factor typed once stays correct when the meter auto-ranges from mV to V. A meter that sends the parts of one reading in frames of their own is not paired up: a frame without the main reading carries `MeasuredValue::Absent` as its value and its part as a sub-value, so every frame keeps its own timestamp and wire bytes (a replay stays complete, an export row is one frame), and the statistics skip it rather than break on it.
-15. **Name the target, confirm from the stream** — `select()` never trusts a press. The cycle driver presses once, waits for a fresh frame, re-reads rather than re-presses on a stale or unanswered one, and gives up after ring length + 1 presses; a range walk aborts if the mode byte moves under it. A mode or range press that changes nothing while HOLD is lit is sent again once HOLD is pressed off: a press a held meter ignores is dropped rather than deferred, so the second press cannot overshoot. The flag settings never release HOLD. Choice id 0 is auto-range on every family and is sent as the meter's own command, never walked to. A setting the family cannot drive fails as `UnsupportedCommand` before any I/O; a switch the meter did not perform fails as `CommandRejected` after it. Both are `ErrorKind::Configuration`, so the GUI shows a toast instead of reconnecting.
-16. **Session clock** — `dmm_lib::Clock` stamps every reading in `Dmm::request_measurement` and is cloned into the mock's waveform and the pacing loop, so all three read the same time. `Clock::real()` is the monotonic `Instant`; `Clock::scaled(f)` runs session time at `f` times real time and `with_preseed(secs)` spends a burst of it instantly, so screenshots and performance runs start with history; `Clock::manual()` moves only when slept on or advanced — by tests, and by `dmm-cli read --replay --mock-clock-scale max`, which so converts a recording as fast as it decodes with the recording's own timestamps. Stamping in one place means stats, graph, recording and export follow without knowing a clock exists. The same place stamps `Measurement::wall_time`, what exports write, through `Clock::wall_time_for`: on the real clock the system time of the reading itself, so a computer that slept mid-session exports true times afterwards (the monotonic `Instant` stops during a suspend on some platforms); on a virtual clock a mapping from its start, backdated by the burst so the burst's readings export the wall time they stand for. A replay pins the clock's wall origin to the time its recording was made and stamps each reading with the session time it was recorded at, so exported timestamps are the recording's own, and a replay file's `# recorded:` is its first reading's wall time. Hardware timeouts, settle delays and transport bring-up sleeps stay on real time: they pace physical USB.
-17. **Unrecognised data asks for a report, once** — data a parser's spec doesn't cover goes through `report_unknown()`, which warns on its first call of the process, with where to report it and how to trace more, and logs every later call at DEBUG. Once per process, because a meter parked on an unknown value would otherwise repeat it every frame and a reconnect every attempt; the parsers are free functions that replay and tests call directly, so the state is process-wide rather than per driver. Warnings from `dmm_lib` show by default, so anything that fires per frame logs at DEBUG, and the golden fixtures and bundled recordings are asserted to report nothing.
-18. **Bluetooth behind a default-on feature, driven only inside its own calls** — `btleplug` (with `tokio` and `futures`) sits beside `hidapi`, behind the `bluetooth` feature; `ble_disabled.rs` has the same three functions, so callers carry no `cfg`. The transport owns a current-thread runtime and runs every stack call in `block_on` on the caller's thread: no background thread, no channel. As with HID, nothing runs between two transport calls, so a streaming meter's notifications wait in the platform's queue while nobody reads. `MeasurementStream` therefore reads a streaming meter continuously and applies the sample interval by keeping one frame per tick, so each frame is read, and stamped, as it arrives; `Dmm` drops what queued meanwhile after a pause or reconnect (see the `Dmm` paragraph above). A GATT profile may run an application login at bring-up, before the subscribe and within a time bound of its own; a refused login fails the open. The `Transport` trait gains three methods: `bluetooth_selector()`, the address a reconnect reuses; `advertised_name()`, the name the peer goes by, which the caller looks up in the registry — the transport knows no model; and `late_readings()`, what to tell the user when `MeasurementStream` sees the link hand readings over two at a time (a link slower than its meter), which the stream logs as a warning and hands to the GUI once per connection. A peer known to set a long connection interval gets a short one asked for at the open, where the platform takes the request. Two error variants cover what USB lacks: `LinkLost` (`ErrorKind::Transport`, reconnected like a pulled cable) and `Bluetooth(String)` (`ErrorKind::Configuration`, a stack that is off or refuses; the GUI's reconnect loop still retries it).
+| `app/whats_new.rs` | The release-notes viewport |
+| `app/update_check.rs` | The daily update check |
+| `app/appearance.rs` | Fonts, theme, zoom, window commands |
+| `graph/` | The graph's points, the main plot (`egui_plot`), the painted minimap |
+| `display/` | The reading in its three sizes |
+| `recording.rs` | The sample store and its CSV, JSON and replay rendering |
+| `markers.rs` | The markers on readings |
+| `settings.rs` | Persisted settings and colour presets |
+| `specs.rs` | Specification rendering |
+| `theme.rs` | Theme colour tables |
+| `a11y.rs` | AccessKit helpers |
+| `changelog.rs` | The embedded changelog |

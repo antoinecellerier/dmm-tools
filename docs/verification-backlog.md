@@ -121,7 +121,7 @@ Open questions, each needing a meter:
   no meter has been watched doing it.
 - **Relaying UART bytes is necessary, not sufficient, for a cable to carry a
   meter.** A named meter falls back to any cable that relays UART bytes
-  (`architecture.md`, USB open path), but the cable's head must also fit the
+  (`architecture.md`, Opening a meter), but the cable's head must also fit the
   meter's optical port and its bridge must run the meter's line settings: our
   init sets the CP2110 to 9600 baud and the CH9325 to 2400, then 19200. A
   fallback that can't fit costs an open and a timeout, not a wrong reading.

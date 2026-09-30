@@ -1,3 +1,14 @@
+//! The device registry: every meter a user can select, and the one place the
+//! binaries learn about devices.
+//!
+//! Each family keeps its [`SelectableDevice`] entries in its own `devices`
+//! module, and [`DEVICES`] orders them. The CLI and GUI resolve what the user
+//! typed with [`resolve_selection`] and open it through the `open_*`
+//! functions in `lib.rs`; they never match on a [`DeviceFamily`]
+//! or build a protocol type. So a new meter is an entry, a [`Protocol`] and,
+//! to be found by `auto`, a `Fingerprint` the entry points at: nothing in
+//! `detect.rs` and no app code.
+
 use super::{DeviceFamily, Fingerprint, Protocol};
 use super::{
     bm78xbt, bm86x, eevblog121gw, ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0, zotek,

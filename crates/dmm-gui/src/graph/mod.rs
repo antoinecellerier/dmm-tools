@@ -8,6 +8,13 @@
 //! the values they parse to) and [`time`] (axis label formatting) — all of
 //! which add methods to the one [`Graph`] declared here, so the type's public
 //! API is unchanged by the split.
+//!
+//! Drawing has two tiers, so a frame costs the same an hour into a session as
+//! a minute in. The minimap shows the whole history, so it reads an
+//! incremental min/max level ([`level`]) rather than the points. Everything
+//! else — the main plot, the statistics, the Y range, the envelope, the
+//! crossings — works on the visible slice, found by binary search, and never
+//! scans the whole history.
 
 mod analysis;
 mod field;

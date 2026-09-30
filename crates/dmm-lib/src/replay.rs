@@ -325,7 +325,8 @@ impl Transport for ReplayTransport {
 ///
 /// `link` is the link the readings came over; left out, the file plays back
 /// as a cable recording, which every file written before the line existed
-/// was.
+/// was. `recorded_rfc3339` is the first reading's wall time, which playback
+/// pins the clock's wall origin to, so every writer must pass that one.
 ///
 /// Callers append [`sample_line`]s to this.
 pub fn header(

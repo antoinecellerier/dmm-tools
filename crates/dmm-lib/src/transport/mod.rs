@@ -28,7 +28,8 @@ pub trait Transport: Send {
     /// Move the meter's serial line to `baud`, for a meter that talks at
     /// another rate than the one the link set up. Default: unsupported, for a
     /// link that cannot change its rate. The error names the link, not the
-    /// chip.
+    /// chip. The one bridge setting the trait exposes: each HID bridge keeps
+    /// its feature reports inside its own transport.
     fn set_baud(&self, baud: u32) -> Result<()> {
         let link = self.link().map_or("link", |link| link.full_name(false));
         Err(crate::error::Error::UnsupportedCommand(format!(

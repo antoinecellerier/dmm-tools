@@ -210,7 +210,8 @@ impl MainLabel {
 /// The `mode`, `unit`, and `range_label` fields use `Cow<'static, str>` to
 /// avoid per-measurement heap allocations. Most values come from static lookup
 /// tables (`Cow::Borrowed`); only fallback paths like `format!("Unknown(0x{:02x})")`
-/// produce owned strings (`Cow::Owned`).
+/// produce owned strings (`Cow::Owned`), and so does a reading read back from
+/// an export, whose text comes from the file.
 #[derive(Debug, Clone)]
 pub struct Measurement {
     /// Session time the reading was taken, stamped by [`crate::Dmm`].

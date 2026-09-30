@@ -6,7 +6,8 @@
 //! says how to report it; every later call logs at DEBUG. One warning per
 //! process keeps a meter parked on an unknown value, or a GUI that
 //! reconnects, from repeating it; the report it brings in carries the trace
-//! that shows the rest.
+//! that shows the rest. The state is process-wide rather than per driver
+//! because a reconnect builds a new driver, which would warn again.
 
 use super::REPO_ISSUES_URL;
 use log::{debug, warn};

@@ -36,7 +36,8 @@ use std::path::{Path, PathBuf};
 ///
 /// Kept deliberately small. New shared fields go here; GUI-only or CLI-only
 /// fields stay in their respective crates and are merged onto this struct via
-/// `#[serde(flatten)]` at the call site.
+/// `#[serde(flatten)]` at the call site, while `dmm-cli` reads the file
+/// straight into this struct and ignores the GUI's fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SharedSettings {

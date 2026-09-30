@@ -1,15 +1,17 @@
 //! The application: the [`App`] state every panel reads and writes, and the
-//! per-frame `update` that lays the panels out.
+//! per-frame `ui` that lays the panels out.
 //!
 //! The concerns live in submodules — [`appearance`] (fonts, theme, zoom),
 //! [`connection`] and [`messages`] (the acquisition thread and its channel),
 //! [`connection_issue`] (why there is nothing to read, as text),
 //! [`capture`] (the reading pipeline and the stores it fills),
-//! [`plot_input`], [`top_bar`], [`toast`], [`controls`], [`layout`] (the
-//! reading column), [`meter_fit`] (the big meter's sizing arithmetic),
-//! [`stats_panel`], [`recording_panel`], [`export`], [`transform_ui`],
-//! [`shortcuts`], [`shortcut_help`] and [`whats_new`] — all of which add
-//! methods to the one [`App`] declared here.
+//! [`held_reading`], [`plot_input`], [`top_bar`], [`toast`], [`controls`],
+//! [`layout`] (the reading column), [`meter_fit`] (the big meter's sizing
+//! arithmetic), [`stats_panel`], [`recording_panel`], [`marker_list`],
+//! [`export`], [`import`], [`transform_ui`], [`shortcuts`],
+//! [`shortcut_help`], [`update_check`] and [`whats_new`] — all of which add
+//! methods to the one [`App`] declared here, so no panel owns state of its
+//! own.
 
 mod appearance;
 mod capture;

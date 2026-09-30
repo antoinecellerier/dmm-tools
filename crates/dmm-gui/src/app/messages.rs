@@ -199,6 +199,8 @@ impl App {
             self.reset_session_for_import();
         }
 
+        // Unbounded: `drain_messages` empties the message channel every
+        // frame, so it only ever holds what arrived since the last one.
         let (msg_tx, msg_rx) = mpsc::channel();
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<RemoteCommand>();

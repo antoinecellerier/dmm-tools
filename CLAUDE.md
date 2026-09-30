@@ -85,7 +85,7 @@ Subsystem-specific rules live in path-scoped rule files that load when their fil
 
 Documentation is part of the deliverable — update affected docs in the same commit as the change, not after.
 
-- `docs/architecture.md` — crate layout, module responsibilities, data flow, key design decisions.
+- `docs/architecture.md` — crate layering, core concepts, the connect and reading paths, subsystems, design decisions by label, module map.
 - `docs/protocol.md` — index of per-family specs. Authoritative content lives in `docs/research/<family>/reverse-engineered-protocol.md`.
 - `docs/setup.md`, `docs/development.md`, `docs/ux-design.md`, `docs/cli-reference.md`, `docs/gui-reference.md` — user and contributor references; update when their subject changes.
 - `docs/adding-devices.md` — end-to-end guide for new device support. **Read this before starting work on any new device.**
