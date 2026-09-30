@@ -236,7 +236,7 @@ fn read_replay(
     transform: &Transform,
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let replay = dmm_lib::replay::Replay::load(path)?;
+    let replay = dmm_shared::replay::load(path)?;
     // On screen the pace is the point; into a file it is only a wait.
     if clock.is_real() && !matches!(destination, output::Destination::Stdout) {
         eprintln!("{}", style(PACED_REPLAY_HINT).dim());

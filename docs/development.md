@@ -126,6 +126,11 @@ a new mode/range/flag combination against real hardware. Fixtures come
 only from captures: a hand-built payload belongs in the parser's unit
 tests, so a family has no golden directory until its first hardware run.
 
+To see how the apps show a fixture's frame, open it as a recording:
+`dmm-gui --replay crates/dmm-lib/tests/golden/<id>/<case>.yaml` (or
+`dmm-cli read --replay …`) plays that one frame from the meter the directory
+names, so a meter nobody here owns can still be looked at.
+
 ## Generated doc tables
 
 Both device tables sit between `<!-- devices:start -->` and `<!-- devices:end -->`

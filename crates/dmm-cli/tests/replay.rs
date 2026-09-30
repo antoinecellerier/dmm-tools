@@ -697,6 +697,24 @@ fn the_bundled_recordings_play_without_a_warning() {
     assert!(played > 0, "no recordings in {}", dir.display());
 }
 
+/// A golden fixture plays as a one-frame recording of the meter its
+/// directory names: the frame's reading, then the end of the file.
+#[test]
+fn a_golden_fixture_plays_as_its_one_frame() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../dmm-lib/tests/golden/ut804/aca.yaml");
+    let (stdout, stderr, ok) = run(&[
+        "read",
+        "--replay",
+        path.to_str().expect("utf-8 path"),
+        "--format",
+        "csv",
+    ]);
+    assert!(ok, "{stderr}");
+    let rows: Vec<&str> = stdout.lines().skip(2).collect();
+    assert_eq!(rows.len(), 1, "got {stdout}");
+    assert!(rows[0].contains(",AC A,00.000,A,10A,"), "got {}", rows[0]);
+}
+
 /// A display the parser can't read warns once, by default, with where to
 /// report it — not once per frame.
 #[test]

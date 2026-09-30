@@ -16,9 +16,9 @@ Windows the `windows` crate for the one WinRT call btleplug cannot make. No exte
 Protocol internals are `pub(crate)`: consumers use `Dmm` and the registry.
 
 **`dmm-shared`** holds what the two binaries must agree on and `dmm-lib` must not carry: the
-settings file, durable writes, what an export holds and is called, the help text and the default
-log levels. Device, protocol and transport code stays in `dmm-lib`. Anything one binary alone needs
-stays in that binary.
+settings file, durable writes, what an export holds and is called, what `--replay` opens, the help
+text and the default log levels. Device, protocol and transport code stays in `dmm-lib`. Anything
+one binary alone needs stays in that binary.
 
 **`dmm-cli`** is a `clap` binary, and **`dmm-gui`** an `eframe`/`egui` one. Neither holds protocol
 logic or knows a device by name, except the mock: both get their devices from the registry.
@@ -346,6 +346,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/mod.rs` | The default file name and the JSON both binaries write |
 | `export/csv_layout.rs` | `CsvLayout`: the CSV header and row cells |
 | `export/read.rs` | Reading an export back |
+| `replay.rs` | What `--replay` opens |
 | `help.rs` | Help and version text both binaries print |
 | `logging.rs` | The logger both binaries install |
 

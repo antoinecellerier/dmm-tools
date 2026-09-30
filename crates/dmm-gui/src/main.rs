@@ -196,7 +196,7 @@ fn load_replay(path: PathBuf) -> ReplaySource {
             .error(clap::error::ErrorKind::InvalidValue, message)
             .exit()
     };
-    let replay = Replay::load(&path).unwrap_or_else(|e| invalid(e.to_string()));
+    let replay = dmm_shared::replay::load(&path).unwrap_or_else(|e| invalid(e.to_string()));
     // dmm-lib keeps the header's date as written, having no date library of
     // its own; turning it into a session origin is this side's job.
     let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).unwrap_or_else(|e| {

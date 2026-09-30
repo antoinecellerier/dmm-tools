@@ -13,8 +13,9 @@
 //! reports and exports are all user data that must survive a crash
 //! mid-write); [`export`], the shape and file name of what the two write
 //! out, so a reading saved from the GUI and one written by the CLI read the
-//! same; [`help`], the help and version text both print; and [`logging`],
-//! the log levels both start with. The canonical settings location is
+//! same; [`replay`], what `--replay` opens, a golden fixture included;
+//! [`help`], the help and version text both print; and [`logging`], the log
+//! levels both start with. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`).
 //!
@@ -26,6 +27,7 @@
 pub mod export;
 pub mod help;
 pub mod logging;
+pub mod replay;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
