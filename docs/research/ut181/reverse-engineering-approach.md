@@ -420,11 +420,8 @@ confirming a shared data processing pipeline.
 
 ### What Remains Unknown [UNVERIFIED]
 
-| Item | What we need | Impact on implementation |
-|------|-------------|------------------------|
-| CH9329 operating mode | Mode 0 (composite KB+mouse+custom HID) or Mode 3 (custom HID only)? `lsusb -v` from device owner needed | If Mode 0, need to select the correct HID interface (not keyboard/mouse). `hidapi` filtering by usage page should handle this |
-| Config sequence necessity | Is the 4-chunk config read/write required before data flows, or does the CH9329 come pre-configured? | Can implement without it initially — if data doesn't flow, add config init |
-| Cable availability | Is UT-D09 now standard with new UT181A purchases, or a regional/production variant? | No impact on implementation |
+Two UT181A cables have streamed without the config sequence (issue #5,
+PR #8); the CH9329 mode is open in [verification.md](verification.md#cables).
 
 ## Phase 3: Mode and range commands (TfrmSetting trace)
 
@@ -710,9 +707,9 @@ them:
   + secondary.Tag`, with the receive side decomposing the same way. The
   nibble *encoding* was already in §6; what is new is that the vendor
   app treats the high byte as the dial position and therefore **never
-  emits a word from a different family** -- so a host cannot change the
-  measurement function over USB, only variants within the dial's own
-  family.
+  emits a word from a different family** -- so the vendor app never
+  changes the measurement function over USB, only variants within the
+  dial's own family.
 - **Per-family primary variants, their on-meter captions, and which of
   them offer REL** (`reverse-engineered-protocol.md` §6.1). Community
   tables list mode words; they do not say which are siblings of which,
@@ -738,26 +735,16 @@ binary:
   `0x4131`), DC-current `n1 = 2` = AC+DC, and `0x5212` / `0x6112` as
   Beeper open-circuit and Diode alarm rather than REL variants.
 
+**Not traced.** How (or whether) the vendor app checks the type `0x01`
+reply after a SET_MODE was not followed through; the reply itself has
+since been seen from a meter (Phase 4). Nor was COMP: the `actComp`
+action is `Visible = False` in the form resource, so the vendor app
+ships COMP switched off in the UI and there is no call site to read.
+
 ### What remains open
 
-- **The vendor app's behaviour is evidence about what UNI-T's own
-  software sends**, not proof the meter accepts it. Phase 4 confirmed
-  much of it on a meter; `docs/verification-backlog.md` carries the
-  rest.
-- **The reply frame was not traced.** How (or whether) the vendor app
-  checks the type `0x01` reply after a SET_MODE was not followed through;
-  the reply itself has since been seen from a meter (Phase 4).
-- **mV AC+DC (`0x2141`).** The vendor UI emits it, but its own label
-  decoder has no case for family `0x21` with `n1 = 4`. A meter reports
-  the word (Phase 4); whether it takes it from the host is untested.
-- **`n0 = 3`.** A third "Peak" secondary radio exists on every tab but
-  is hidden or disabled everywhere, so the vendor app never emits a
-  word ending in 3. Whether the meter would accept one is unknown.
-  (One handler, `rbtnVAC_M6Click`, does not touch that radio at all --
-  it relies on whichever handler ran before it having disabled it.)
-- **No trace of COMP.** The `actComp` action is `Visible = False` in the
-  form resource, so the vendor app ships COMP mode switched off in the
-  UI and there is no call site to read.
+What the vendor app sends is not proof the meter accepts it; the open
+checks are in [verification.md](verification.md).
 
 ## Phase 4: Full hardware capture (2026-09-27)
 
@@ -777,9 +764,7 @@ No new source was consulted; the capture is the only evidence behind the
 "Hardware-confirmed 2026-09-27" notes in the spec.
 
 What it settled is recorded in place in the spec (§4.1, §4.2, §5, §6,
-§6.1, §7, §8). What it left open: 21 REL words, what the LCD shows
-during a blank value, the meaning of misc2 bit 3, manual rungs in Peak,
-the Duty and Pulse rungs, bare `0x12`, and the CP2110 cable.
+§6.1, §7, §8). What it left open is in [verification.md](verification.md).
 
 ## File Inventory
 

@@ -79,10 +79,11 @@ impl Ut181aProtocol {
             profile: DeviceProfile {
                 family_name: "UT181A",
                 model_name: "UNI-T UT181A",
-                // A real meter has sent every mode and all four measurement
-                // formats and taken SET_MODE, SET_RANGE, HOLD, SET_MIN_MAX and
-                // REL (issue #5, 2026-09-27 capture), but 21 REL words and the
-                // CP2110 cable have never run against one. PartlyVerified keeps
+                // A real meter has sent 58 of the 79 mode words, every one but
+                // 21 REL words, and all four measurement formats, and taken
+                // SET_MODE, SET_RANGE, HOLD, SET_MIN_MAX and REL (issue #5,
+                // 2026-09-27 capture); those 21 words and the CP2110 cable have
+                // never run against one. PartlyVerified keeps
                 // the warning and the badge linking to the verification issue
                 // while listing the meter apart from ones nobody has run; README
                 // and docs/supported-devices.md say the same.
@@ -264,7 +265,8 @@ impl Protocol for Ut181aProtocol {
     }
 
     /// Only words from the dial's own family are sent: the vendor app never
-    /// crosses a family boundary, and the meter would refuse it anyway.
+    /// crosses a family boundary, and what the meter does with such a word is
+    /// untested (docs/research/ut181/verification.md).
     /// Ranges are the same story — SET_RANGE takes an index into the
     /// family's own ladder. Validation happens before the write, so a stray
     /// id costs no I/O.
@@ -323,8 +325,9 @@ impl Protocol for Ut181aProtocol {
         use crate::protocol::{CaptureStep, Expect, Need, RangeExpect};
 
         // A real meter has run every step (issue #5, 2026-09-27) but
-        // `manual_range` and `auto`, which changed form since and wait for a
-        // run of their own.
+        // `ohm_ranges`, `vdc_ranges`, `manual_range` and `auto`, which came or
+        // changed form since and wait for a run that drives them
+        // (docs/research/ut181/verification.md).
         let [vdc, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
             Volts::VDc,
             CaptureStep::basic("vdc", "Set meter to V DC"),

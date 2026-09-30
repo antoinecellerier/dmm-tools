@@ -131,12 +131,12 @@ fn compose_mode_name(mode: u16) -> Cow<'static, str> {
             (0x1 | 0x2, _) => " Hz",
             // V DC: AC+DC
             (0x3, _) => " AC+DC",
-            // mV DC: 0x4121 = mV DC Peak per sigrok/antage (sigrok notes
-            // the code might be 0x4131 — hardware check pending)
+            // mV DC: 0x4121 = mV DC Peak, the word a real meter sends
+            // (research spec §6, issue #5)
             (0x4, 0x1) => " Peak",
             // Currents: n1=2 on the DC sub-function (n2=1) is AC+DC
-            // (sigrok MODE_uA/mA/A_DC_ACDC = 0x8121/0x9121/0xA121);
-            // Hz applies only to the AC sub-function (n2=2)
+            // (0x8121/0x9121/0xA121, research spec §6.1 "Agreement with the
+            // community table"); Hz applies only to the AC sub-function (n2=2)
             (0x8..=0xA, 0x1) => " AC+DC",
             (0x8..=0xA, 0x2) => " Hz",
             _ => "",
@@ -353,6 +353,9 @@ fn report_unrecognised_value(float: f32, precision: u8) {
 /// sub-function nibble (N2) together determine which range table applies.
 /// Temperature and A current have fixed ranges (no label).
 pub(super) fn lookup_range_label(mode_word: u16, range: u8) -> &'static str {
+    // Range 0 on a fixed-range position, or on Duty and Pulse width on auto,
+    // only comes from synthetic frames: a real meter sends 1 there (research
+    // spec §7, issue #5).
     if range == 0 {
         return "Auto";
     }
@@ -596,7 +599,8 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                 aux.push(make_aux(aux2_label, av, au, ad, None));
                 offset += 13;
             }
-            // Bargraph (optional, misc bit 3) — skip for now, just advance offset
+            // Bargraph (optional, misc bit 3): the meter's fast sample, not the
+            // reading on its display (research spec §5.3), so it is skipped.
             if misc & 0x08 != 0 && data.len() >= offset + 12 {
                 offset += 12; // float32(4) + unit(8)
             }
@@ -1006,9 +1010,8 @@ raw_payload=19"#
 
     #[test]
     fn aux_labels_by_mode() {
-        // One probe on the main display, the other in aux1. The n1 = 1
-        // arrangement is hardware-confirmed (issue #5); n1 = 2 is its
-        // documented mirror.
+        // One probe on the main display, the other in aux1. Both
+        // arrangements are hardware-confirmed (issue #5, spec §5.3).
         assert_eq!(aux_labels(0x4211).0, "T2");
         assert_eq!(aux_labels(0x4221).0, "T1");
         assert_eq!(aux_labels(0x4311).0, "T2");
@@ -1169,8 +1172,8 @@ raw_payload=19"#
         assert_eq!(m.mode_raw, 0x7211);
         assert_eq!(m.mode, "Duty %");
         // Range byte 0 answers "Auto" before the mode's ladder is consulted,
-        // so this fixed-range mode reads as auto-ranging
-        // (docs/verification-backlog.md).
+        // so this fixed-range mode reads as auto-ranging; a real meter sends
+        // range byte 1 there (research spec §7).
         assert_eq!(m.range_label, "Auto");
     }
 

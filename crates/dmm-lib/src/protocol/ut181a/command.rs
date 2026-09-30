@@ -43,8 +43,8 @@ pub(super) fn build_command(payload: &[u8]) -> Vec<u8> {
 
 /// SET_MONITOR (opcode `0x05`, enable = 1): the meter is silent until it
 /// arrives, then streams measurement frames
-/// (`docs/research/ut181/reverse-engineered-protocol.md` §7). Verified against
-/// real UT181A hardware: bytes AB CD 04 00 05 01 0A 00.
+/// (`docs/research/ut181/reverse-engineered-protocol.md` §4.2, §11.2). Verified
+/// against real UT181A hardware (PR #8): bytes AB CD 04 00 05 01 0A 00.
 ///
 /// `pub(crate)` because detection sends it too, and a UT181A that answers the
 /// probe is left in the state opening it would have produced anyway.
@@ -81,8 +81,9 @@ impl Ut181aProtocol {
     /// `rx_buf`, so the next `request_measurement` resumes mid-stream instead
     /// of losing the bytes a blind drain used to throw away.
     ///
-    /// The reply framing is hardware-unverified, so silence is treated as
-    /// success: a meter that answers nothing must not fail every command.
+    /// A real meter answers within about 70 ms (research spec §4.1, issue #5).
+    /// Silence is still treated as success: a meter that answers nothing must
+    /// not fail every command.
     pub(super) fn send_frame(
         &mut self,
         transport: &dyn Transport,
@@ -225,6 +226,8 @@ impl Ut181aProtocol {
 
     /// Put `setting` in state `id`: one absolute command (REL, MIN/MAX) or
     /// one button press (HOLD), then the meter's own flags to confirm it.
+    /// Every `on` state of HOLD, REL and MIN/MAX a real meter accepted read
+    /// back this way (issue #5).
     pub(super) fn select_flag(
         &mut self,
         transport: &dyn Transport,
@@ -354,8 +357,8 @@ mod tests {
         );
     }
 
-    /// The reply framing is hardware-unverified, so a silent meter must not
-    /// turn every command into an error.
+    /// A meter that sends no reply must not turn every command into an
+    /// error.
     #[test]
     fn silence_is_treated_as_acceptance() {
         let (mut proto, mock) = proto_in(0x3111, 0);

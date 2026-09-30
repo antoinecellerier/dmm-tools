@@ -15,7 +15,7 @@ Items that need real components or specific setups to verify.
   - [Modes not yet tested with real signals](#modes-not-yet-tested-with-real-signals)
   - [Modes not reachable on UT61E+](#modes-not-reachable-on-ut61e)
   - [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)
-  - [UT181A — confirmed on hardware, REL words and CP2110 open](#ut181a--confirmed-on-hardware-rel-words-and-cp2110-open)
+  - [Capture and display checks a UT181A runs](#capture-and-display-checks-a-ut181a-runs)
   - [Range tables](#range-tables)
   - [UT61+ Hz and Duty % off the Hz/% position take its specs](#ut61-hz-and-duty--off-the-hz-position-take-its-specs)
   - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
@@ -83,7 +83,8 @@ Open questions, each needing a meter:
   `0x0A` has already gone out and a short frame reads as a UT171. No UT181A
   reply has been timed through the detector.
 - **What `0x5F` (Get Name) does to a VC-880, VC-890, UT171 or UT181A** is
-  unknown; step 1 sends it to whatever is on the cable.
+  unknown; step 1 sends it to whatever is on the cable. Nor is it known what
+  a UT181A answers to the VC-890 step's `0x5E` (ut181 spec §11.1).
 - **What SET_MONITOR (`0x05`) does to a UT171** is unknown; it goes out
   before the UT171's own connect frame.
 - **The UT61D+ and UT161B/D/E reported names are unverified.** An
@@ -615,7 +616,7 @@ comes from a reporter's meter. One has been: the UT804 is `Verified`
 UT8803, UT171, UT71A–E, Voltcraft VC920/VC940/VC960, UT60BT and UT202BT are
 `Experimental` and have **never been tested against real hardware** — every aspect needs
 end-to-end verification. The UT181A, partly verified, has
-[its own section](#ut181a--confirmed-on-hardware-rel-words-and-cp2110-open).
+[its own list](research/ut181/verification.md).
 
 The ask in every family's issue (#3, #4, #5, #7, #12, #13, #14, #15, #16,
 #22, #23, #26, #27) is
@@ -1270,157 +1271,11 @@ UT60BT has community frames on record; the UT202BT has no capture anywhere.
   `dmm-cli set mode`. The cycle-to-target driver does not apply either: no
   cycle-button command is known for this family.
 
-### UT181A — confirmed on hardware, REL words and CP2110 open
+### Capture and display checks a UT181A runs
 
-Two reporters have run the UT181A on a real meter, both over the CH9329
-(UT-D09) cable ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
-@diego351's full v0.7.0 capture of 2026-09-27 walked every dial position
-and let the tool drive the meter's modes, ranges and flags; how it was
-read is in the approach doc's "Phase 4". A vendor trace of `UT181A.exe`
-V1.05 on 2026-09-06 had added the mode- and range-command semantics
-(spec §6.1, §7.1). The binaries keep the PARTLY VERIFIED label until the
-open items below are closed.
+The meter's own items are in the
+[UT181A verification list](research/ut181/verification.md).
 
-- ~~SET_MONITOR command required during init~~ — **VERIFIED** 2026-04-07
-  by @alexander-magon on real UT181A (CH9329 cable). The meter does not
-  stream until the host sends CMD_CONT_DATA (`AB CD 04 00 05 01 0A 00`).
-  Communication ON alone is not sufficient. See PR #8.
-- ~~Frame extraction (2-byte LE length, LE checksum)~~ — **VERIFIED**
-  2026-04-07 by @alexander-magon: frames parse correctly on real hardware.
-- ~~Float32 LE value parsing with precision byte~~ — **VERIFIED**
-  2026-04-07 by @alexander-magon: VDC mode returns valid float32 values.
-  Precision byte decimal places (bits 4-7) confirmed to produce sane
-  display formatting.
-- ~~Normal-format value layout (main + aux1 + aux2 + bargraph)~~ —
-  **VERIFIED** 2026-09-02 by @diego351 on real UT181A (CH9329 cable).
-  A 57-byte V AC payload (`0x1121`, mains) consumes exactly as a 6-byte
-  header + 13 + 13 + 13 + **12**: main, aux1 and aux2 each carry a
-  precision byte and the bargraph does not (spec §5.3, previously
-  community-sourced only). A 32-byte temperature payload (`0x4211`,
-  two thermocouples) consumes exactly as 6 + 13 + 13. A 31-byte V DC
-  payload (`0x3111`, PR #8, second meter) consumes as 6 + 13 + **12**.
-  Regression frames in `crates/dmm-lib/src/protocol/ut181a/parse.rs` and
-  `crates/dmm-lib/tests/golden/ut181a/`.
-- ~~Relative, min/max and peak formats, and the COMP extension~~ —
-  **VERIFIED** 2026-09-27 by @diego351 on real UT181A (CH9329 cable).
-  About 8,100 frames checksum and every format consumes its payload
-  exactly (spec §5.3, §5.4): REL 45/57 bytes with relative = absolute −
-  reference, min/max 46 bytes with max/min timestamps at the second they
-  were set and the average's counting elapsed seconds, peak 32 bytes,
-  COMP INNER/FAIL on V DC with the digits in the low nibble and the high
-  limit before the low.
-- ~~Mode word decoding~~ — **VERIFIED** 2026-09-27 by @diego351: the
-  meter sent 58 of the 79 words, every plain one included, and no word
-  outside spec §6.1's table. `0x4121` is mV DC Peak (sigrok's `0x4131`
-  alternative can go), `0x2141` is a real mV AC+DC, `0x5212`/`0x6112` are
-  the open beeper and Diode Alarm, and temperature nibble 1 selects the
-  arrangement, T1-T2/T2-T1 carrying T1 in aux1 and T2 in aux2.
-- ~~Sub-value meanings~~ — **VERIFIED** 2026-09-27 by @diego351, spec
-  §5.3's table: Hz variants on every AC dial (Hz, period), AC+DC (AC
-  part, DC part; main is their RMS sum), dBV (the voltage), dBm (the
-  voltage and a 600 Ω reference), the temperature arrangements.
-- ~~Device-sent unit strings~~ — **VERIFIED** 2026-09-27 by @diego351:
-  every string of spec §8, plus bare `V` on diode.
-- ~~Bargraph value meaning~~ — **RESOLVED** 2026-09-27 from @diego351's
-  capture: the meter's fast sample. It changes on every 100 ms frame while
-  the main reading holds for 500 ms. The parser skips it, which stays
-  right.
-- ~~`lookup_range_label` answers "Auto" for range byte 0 on a fixed-range
-  mode~~ — **RESOLVED** 2026-09-27: every fixed-range position (and Duty
-  and Pulse on auto) sends range byte 1 on a real meter, so range 0
-  reaches that branch only in synthetic frames.
-- ~~Command replies (type 0x01, "OK" / "ER")~~ — **VERIFIED** 2026-09-27
-  by @diego351: 56 OK and 5 ER, within about 70 ms (spec §4.1).
-- ~~SET_MODE (0x01)~~ — **VERIFIED** 2026-09-27 by @diego351: eight
-  switches inside a dial family (continuity → open beeper, diode →
-  alarm, µA/mA DC → AC+DC and Peak, µA AC → Hz and Peak) each answered
-  OK and reported the new word. Still open: whether a word from another
-  family is refused (the tool never sends one).
-- ~~REL command~~ — **VERIFIED** 2026-09-27 by @diego351: SET_MODE with
-  nibble 0 flipped entered REL on nS, Duty, Pulse width and the V, µA and
-  mA DC AC+DC variants, the meter reporting `0x5312`, `0x7212`, `0x7312`,
-  `0x3122`, `0x8122` and `0x9122` in the relative format; the REL button
-  on V DC gave `0x3112`.
-- ~~SET_RANGE (0x02)~~ — **VERIFIED** 2026-09-27 by @diego351: every rung
-  of the Cap, Hz, µA DC, µA AC and mA DC ladders and of V DC on its AC+DC
-  variant read back as its index with the auto bit clear, and index 0
-  restored auto.
-- ~~HOLD command `[0x12, 0x5A]`~~ — **VERIFIED** 2026-09-27 by @diego351:
-  toggles misc bit 7 on every position tried, Peak included.
-- ~~SET_MIN_MAX (0x04) payload width~~ — **VERIFIED** 2026-09-27 by
-  @diego351: the one-byte payload the vendor app sends enters (1) and
-  leaves (0) the min/max format.
-- ~~`Setting::Hold`, `Rel` and `MinMax` read-back~~ — **VERIFIED**
-  2026-09-27 by @diego351: every `hold:on`, `rel:on` and `minmax:on`
-  sub-step the meter accepted read the flag back.
-- **Found by the 2026-09-27 capture, to fix in our code:**
-  - ~~A blank value (both overload bits, float 0.0 — spec §5.2) is read as
-    OL and reported as unrecognised~~ — **FIXED** 2026-09-27: read as no
-    reading, shown `----` until the LCD's own rendering is known. It
-    shows after every switch, so range sub-steps sampled only blanks and
-    the REL sweep, which skips an OL reading, never ran after one; the
-    capture now reads past it before sampling a switch.
-  - ~~Unit strings pass through raw (`~`, `k~`, `M~`, `uF`, `VDC`,
-    `mVac+dc`), unlike every other family, and `transform::si_prefix`
-    cannot split `~` or `…ac+dc`~~ — **FIXED** 2026-09-27: the parser
-    reports `Ω`, `µ` and bare `V`/`A`, the mode naming the coupling. The Ω
-    range labels changed code point with it (U+2126 → U+03A9), so a
-    capture resumed onto a v0.7.0 report sweeps the Ω rungs again.
-  - ~~AC+DC, dBV, dBm and the T1-T2/T2-T1 sub-values keep positional
-    Aux1/Aux2 labels and are reported as unrecognised, and so is misc bit
-    0 on every min/max frame~~ — **FIXED** 2026-09-27: named AC, DC,
-    Voltage, Impedance, T1 and T2 (spec §5.3), misc bit 0 silent in
-    min/max.
-  - ~~In a Peak variant the meter answers ER to SET_RANGE 0 and to
-    SET_MIN_MAX 1 (spec §4.2, §7), but the tool offers both~~ — **FIXED**
-    2026-09-27: neither is offered there (`mode::is_peak`). In the capture,
-    the sweep's restore re-sent the refused Auto on three Peak modes, which
-    spent the failure budget and left mA AC, A and temperature unswept.
-- **Found by the 2026-09-28 rerun (dev-e3819f4), to fix in our code:**
-  - ~~The capture's confirmation line showed a bare unit for an OL
-    reading (` MΩ [AUTO]`), so @diego351 rightly refused it and the gate
-    failed on `ohm`~~ — **FIXED** 2026-09-28: it shows `OL` (or `----`).
-    The run then drove nothing: it sent the earlier run's words again and
-    swept no REL or range.
-  - ~~The capture waited 1 s for a blank display to end, but blanks lasted
-    up to 2 s (spec §5.2), so mV AC, mA DC and A AC+DC filed `----`
-    samples~~ — **FIXED** 2026-09-28: it waits 2.5 s.
-- Manual range in a Peak variant — the meter refuses Auto there. On
-  2026-09-28 @diego351's `set range 6000µA` printed `Meter now in 6000µA
-  (manual range)`, which `set` prints only once the meter reports the
-  range; that it ran in µA DC Peak, as asked, is to be confirmed
-- The 21 REL words no meter has sent: `0x1112`, `0x1142`, `0x1152`,
-  `0x1162`, `0x2112`, `0x2142`, `0x4112`, `0x4212`, `0x4222`, `0x4312`,
-  `0x4322`, `0x5112`, `0x6212`, `0x7112`, `0x8112`, `0x8212`, `0x9112`,
-  `0x9212`, `0xA112`, `0xA122`, `0xA212`. A capture that sweeps REL on
-  the V AC, mV, Ω, Cap, Hz, current and temperature positions closes
-  them. @diego351's map of the meter's own keys (2026-09-28) offers REL
-  on all of those positions and none on continuity, diode, the Hz and
-  Peak variants or T1-T2/T2-T1, as the tool does (spec §6.1)
-- What the LCD shows while the meter sends a blank value (spec §5.2) —
-  dashes, nothing, or the previous reading. Answered by looking at the
-  meter right after a range change
-- misc2 bit 3 ("lead error") — seen set for a few frames on the V DC,
-  µA DC and A DC dials (spec §5.1); which LCD warning goes with it, if
-  any, is unknown. On 2026-09-28 it stayed set through every A DC sample
-  (misc2 `0x09`), and @diego351 confirmed a line reading `LEAD ERR`
-- COMP modes OUTER, BELOW and ABOVE, and a PASS result — only INNER/FAIL
-  has come from a meter
-- misc2 bit 5 (record) — never seen set; needs a recording started on the
-  meter while streaming
-- `0x2141` sent from the host — the meter reports it for its mV AC+DC
-  function, but only the meter's own keys have entered it
-- Range ladders the capture did not drive: V AC, mV AC, mV DC, Ω and
-  mA AC. The V DC ladder was driven on its AC+DC variant only
-- Duty cycle (0x7211) and pulse width (0x7311) range labels — the vendor
-  form's range combo holds four items for each (spec §7.1: 60 / 600 / 6000 /
-  60000) but no source says what the LCD calls those rungs, so `get range`
-  offers nothing there and the GUI shows a plain label. Needs hardware: on
-  the Hz dial switched to Duty, `dmm-cli --device ut181a command range`
-  four times with `read --count 1` after each, noting the LCD's range
-  annunciator and the `"range"` field; then `command auto`. The labels the
-  LCD shows are what the table needs
-- HOLD as bare `[0x12]` — only `12 5A` has been sent
 - A capture sweep after an operator step that sets a flag (`rel`, `peak`)
   clears that flag again, so the following `rel_off` / `peak_off` step
   asks for something already done. A capture-tool issue, not the meter's
@@ -1429,14 +1284,6 @@ open items below are closed.
   capture confirms the parser, not the display. Ask for `read --format
   csv` runs in V AC and dual-thermocouple modes (checks the `auxN_*`
   columns) and a GUI screenshot in MIN/MAX
-- CP2110 cable on a UT181A — both hardware reports so far used the
-  CH9329 (UT-D09). The CP2110 transport itself is well exercised by the
-  UT61E+, but nobody has run the two together, and @diego351's older
-  CP2110-equipped unit was never detected on macOS at all (with other
-  software, before dmm-tools existed). Unverified, not known-broken
-- **Not implemented**: recording protocol (0x0A-0x0F), saved measurement
-  retrieval (0x07-0x09), SET_REFERENCE command, timestamp decoding,
-  response types 0x03/0x04/0x05/0x72
 
 ### Range tables
 
@@ -1607,13 +1454,8 @@ Left over from the 2026-09-19 re-verification against the UT61+ manual:
     or the measurable span; the row says 0.1%~99.9%.
   - UT61D+ temperature: "should be less than 230°C/446°F", while the table
     runs to 1000°C/1832°F; the manual does not tie the limit to the probe.
-- **The same kind of unclear notes in the UT181A and UT803 spec data**, left
-  as printed:
-  - UT181A continuity: one set of remarks is read as covering both the
-    short alarm (0x5211) and the open alarm (0x5212); the manual does not
-    say so outright.
-  - UT181A current: "20A: 30s on, then 10min off; not specified above 10A"
-    leaves open what the 10–20A readings are worth.
+- **The same kind of unclear note in the UT803 spec data**, left as
+  printed:
   - UT803 hFE: "bo ≈10µA" is kept as printed; the manual does not define
     `bo`.
 
@@ -2267,8 +2109,9 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
   2025-05-26 and `Setup.zip` 2026-09-09, about 150 MB each), in the bench
   download centre's UT80 and UT88 results. Unopened; it may drive several
   bench meters.
-- **Per-model PC software uploaded 2023-02-03** for the UT61B+, UT61D+, the
-  UT171 series and the UT181A. The UT61E+ one is V2.02 repackaged
+- **Per-model PC software uploaded 2023-02-03** for the UT61B+, UT61D+ and
+  the UT171 series (the UT181A's is in its
+  [verification list](research/ut181/verification.md#vendor-sources)). The UT61E+ one is V2.02 repackaged
   (ut61-family approach doc); hash-compare the others against what the
   family docs used.
 - ~~**iDMM2.0 Android app** (2025-12-20)~~ — **read 2026-09-22** for the

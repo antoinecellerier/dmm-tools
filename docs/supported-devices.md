@@ -135,7 +135,7 @@ Two reporters have run the UT181A over the CH9329 cable, one through every
 dial position: readings in every mode, MIN/MAX, REL, Peak, COMP and remote
 mode, range, HOLD and MIN/MAX control are confirmed. REL on most dial
 positions and the CP2110 cable are still pending
-([backlog](verification-backlog.md#ut181a--confirmed-on-hardware-rel-words-and-cp2110-open)).
+([open checks](research/ut181/verification.md)).
 
 ## Voltcraft VC-880 / VC650BT / VC-890
 

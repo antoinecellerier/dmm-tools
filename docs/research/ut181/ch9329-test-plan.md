@@ -9,7 +9,7 @@ streamed over the CH9329 cable
 ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5),
 [PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8)). The
 steps below remain the procedure for the UT181A items still open in
-[verification-backlog.md](../../verification-backlog.md).
+[verification.md](verification.md).
 
 ## Prerequisites
 

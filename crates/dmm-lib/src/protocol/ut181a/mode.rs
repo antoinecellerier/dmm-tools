@@ -53,8 +53,8 @@ const FAMILIES: &[Family] = &[
         manual_ranges: 4,
     },
     // mV AC: plain, Hz, Peak, AC+DC. 0x2141 is offered by the vendor UI but
-    // missing from its own label decoder, so its name is inferred from the
-    // nibble rule alone — [UNVERIFIED] (§6.1 "Caveats").
+    // missing from its own label decoder; a real meter reports it for its
+    // mV AC+DC function (§6.1 "Caveats").
     Family {
         base: 0x2100,
         variants: &[0x2111, 0x2121, 0x2131, 0x2141],

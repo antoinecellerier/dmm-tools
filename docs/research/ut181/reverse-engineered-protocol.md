@@ -13,11 +13,14 @@ Confidence levels:
 - **[VENDOR]** -- read out of the vendor application `UT181A.exe`
   (V1.05); see `reverse-engineering-approach.md`
 - **[DEDUCED]** -- logical inference
+- **[HARDWARE]** -- seen on a real UT181A, with the issue, the cable and
+  the reporter. The "Hardware-confirmed" notes are the same evidence:
+  @diego351's meter on the CH9329 (UT-D09) cable, issue #5
 - **[UNVERIFIED]** -- needs device testing
 
 [KNOWN] here means the three community implementations agree, which is
-not the same as tested on a meter. What a real UT181A has confirmed, and
-what is still outstanding, is tracked in `docs/verification-backlog.md`.
+not the same as tested on a meter. What a real UT181A has confirmed is
+tagged [HARDWARE]; the open checks are in [verification.md](verification.md).
 
 ---
 
@@ -99,6 +102,11 @@ checksum = sum of bytes[2] through bytes[3 + payload_size - 1]
 
 The checksum covers the length field and all payload bytes. It does
 **not** include the 2-byte magic header.
+
+[HARDWARE] Frames from two meters, both on the CH9329 (UT-D09) cable, fit
+this layout and checksum: @alexander-magon's (PR #8, 2026-04-07) and
+@diego351's (issue #5), about 8,100 of whose frames checksum in the
+2026-09-27 capture.
 
 **[VENDOR] confirmation.** The vendor app builds every outgoing frame in
 one generic sender at `0x870408`, taking `(connection, opcode,
@@ -222,8 +230,10 @@ Hardware-confirmed 2026-09-27: bits 0 (cleared by SET_RANGE, and by
 entering REL, min/max or a Peak variant), 1 (set on a 316 V AC reading
 and on an overloaded mV AC input) and 4 (COMP, below). Bit 3 was set for
 a few frames at a time on the V DC, µA DC and A DC dials and while
-turning to mV DC; which LCD warning, if any, goes with it is
-[UNVERIFIED].
+turning to mV DC. [HARDWARE] On 2026-09-28 it stayed set through every
+A DC sample (misc2 `0x09`), and @diego351 accepted the capture's sample
+line for them (issue #5, CH9329 / UT-D09; dmm-tools shows the bit as
+`LEAD ERR`). Which LCD warning, if any, goes with it is [UNVERIFIED].
 
 The meter sends a measurement frame every 100 ms; the main reading
 changes at most every 500 ms (2 Sa/s), the frames in between repeat it.
@@ -255,6 +265,10 @@ both thermocouples at once (2026-09-28 capture).
 | 1 | Negative overload (-OL) |
 | 4-7 | Decimal places (0-15) |
 
+[HARDWARE] (PR #8, CH9329 / UT-D09, @alexander-magon, 2026-04-07): V DC
+readings arrive as float32 LE, and the decimal places in bits 4-7 give
+sane display formatting.
+
 Hardware-confirmed 2026-09-27 (issue #5):
 
 - An overload sets one bit and keeps the out-of-range float: open leads
@@ -281,10 +295,14 @@ Hardware-confirmed 2026-09-27 (issue #5):
 Hardware-confirmed 2026-09-02 (issue #5): a V AC frame with all three
 optional fields present has a 57-byte payload, which only accounts as
 6 + 13 + 13 + 13 + 12. The bargraph's missing precision byte is what
-makes the arithmetic close. It is not the displayed value (241.02 VAC
-beside a 239.22 VAC main reading): it is the meter's fast sample, which
-changes on every 100 ms frame while the main reading holds for 500 ms
-(2026-09-27 capture, Ω and mV readings with a drifting input).
+makes the arithmetic close. [HARDWARE] The same accounting holds for a
+32-byte temperature payload (`0x4211`, two thermocouples: 6 + 13 + 13)
+from @diego351's meter and a 31-byte V DC payload (`0x3111`: 6 + 13 + 12)
+from @alexander-magon's (PR #8), both on the CH9329 (UT-D09) cable.
+The bargraph is not the displayed value (241.02 VAC beside a 239.22 VAC
+main reading): it is the meter's fast sample, which changes on every
+100 ms frame while the main reading holds for 500 ms (2026-09-27
+capture, Ω and mV readings with a drifting input).
 
 What the aux slots hold depends on the mode word (2026-09-27 capture,
 every variant below seen on a real meter):
@@ -365,8 +383,11 @@ A real meter has sent 58 of them (2026-09-27 capture, issue #5): every
 word with nibble 0 = 1 in §6.1's table, including every row below except
 V AC REL, plus the continuity open beeper `0x5212`, Diode Alarm `0x6112`
 and seven REL words — `0x3112`, `0x3122`, `0x5312`, `0x7212`, `0x7312`,
-`0x8122`, `0x9122`. The 21 never seen are all REL words. No word outside
-§6.1's table appeared. Selected examples:
+`0x8122`, `0x9122`. The 21 never seen are all REL words: `0x1112`,
+`0x1142`, `0x1152`, `0x1162`, `0x2112`, `0x2142`, `0x4112`, `0x4212`,
+`0x4222`, `0x4312`, `0x4322`, `0x5112`, `0x6212`, `0x7112`, `0x8112`,
+`0x8212`, `0x9112`, `0x9212`, `0xA112`, `0xA122`, `0xA212`. No word
+outside §6.1's table appeared. Selected examples:
 
 | Mode | Code | Description |
 |------|------|-------------|
@@ -492,7 +513,9 @@ is `0x3100 + (2 << 4) + 2 = 0x3122`.
 A third secondary radio captioned "Peak" (`Tag = 3`) exists on every
 tab, but it is `Visible = False` in the form resource on eight of them
 and is disabled by the primary click handlers on the rest, so **no
-`n0 = 3` word is reachable from the vendor UI**.
+`n0 = 3` word is reachable from the vendor UI**. (`rbtnVAC_M6Click` does
+not touch that radio: it stays disabled by whichever handler ran before
+it.)
 
 REL gating is done by the primary radio's click handler, which calls
 `TControl.SetEnabled` (`0x4aeb9c`) and `SetCaption` (`0x4aecdc`) on the
@@ -585,7 +608,9 @@ Hardware-confirmed 2026-09-27 (issue #5):
   and so did Duty and Pulse width on auto.
 - A Peak variant enters with the auto bit set and clears it about 600 ms
   later, keeping the rung it entered on; the meter answers ER to
-  SET_RANGE 0 there. Whether it takes a manual rung in Peak is untested.
+  SET_RANGE 0 there. [UNVERIFIED] One SET_RANGE in µA DC Peak had the
+  manual rung reported back (issue #5, CH9329 / UT-D09, @diego351,
+  2026-09-28); the mode it ran in is unconfirmed.
 - V AC LPF (`0x1141`) enters on range 4 (1000 V) with the auto bit clear.
 - REL and min/max clear the auto bit and keep the rung.
 
@@ -782,6 +807,10 @@ The meter requires "Communication ON" in settings before USB works.
 This is a manual step on the device -- there is no USB command to
 enable it. The setting resets on power cycle.
 
+[HARDWARE] (PR #8, CH9329 / UT-D09, @alexander-magon, 2026-04-07):
+Communication ON alone does not start the stream. The meter sends nothing
+until the host sends SET_MONITOR 1, `AB CD 04 00 05 01 0A 00`.
+
 The device cannot measure while charging.
 
 ### 11.3 Value Encoding
@@ -815,7 +844,7 @@ issue #5) the transport, framing, all four measurement formats and the
 COMP extension, 58 of the 79 mode words, every unit string, the OK/ER
 reply, and SET_MODE, SET_RANGE, SET_MIN_MAX and HOLD. The recording and
 saved-measurement protocols, SET_REFERENCE and 21 REL words have never
-run against one. `docs/verification-backlog.md` is the live list.
+run against one. The open checks are in [verification.md](verification.md).
 
 | Aspect | Status | Sources |
 |--------|--------|---------|

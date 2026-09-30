@@ -371,7 +371,7 @@ Use cases: knowing what an input survives before probing, and which fuse to buy 
 
 **Complexity:** Medium-high
 
-The UT181A has built-in recording and saved measurement features (protocol commands 0x07-0x0F) that aren't implemented yet. Download stored recordings and saved measurements from the meter, display in the GUI graph view, and export to CSV.
+The UT181A has built-in recording and saved measurement features (protocol commands 0x07-0x0F) that aren't implemented yet. Download stored recordings and saved measurements from the meter, display in the GUI graph view, and export to CSV. It also needs response types 0x03-0x05 and 0x72, the packed timestamps they carry (spec §9), and SET_REFERENCE (0x03) to type a REL reference; none has run against a meter. The vendor app caps a recording name at 9 characters; whether the meter takes 10 is untested (spec §10.1).
 
 Use cases: retrieving field measurements logged by the meter itself, longer recording sessions than USB-tethered capture allows.
 
