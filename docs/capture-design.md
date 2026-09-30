@@ -78,6 +78,25 @@ breaking out: on an unproven protocol those are the most interesting frames. A s
 unknown mode, a rejection or too few samples is flagged `needs_attention`, so a maintainer
 scanning the YAML finds it without grepping.
 
+### The auto-detection check
+
+Reporters name their meter with `--device`, which skips detection, so without a check of their
+own the meters we don't own would never go through it. `detection.rs` runs one at the end of the
+run and files it in the report's `detection` section; `--steps` selects it as `detect`, the way
+`extra` selects the freeform pass, and a plan run leaves it out.
+
+- **Last.** Protocol data comes first: a probe from another family that upsets the meter can no
+  longer cost any.
+- **On a restarted meter.** A meter the capture left mid-stream answers differently from one just
+  switched on (a streaming UT181A is taken for a UT171), and a USB bridge can keep the capture's
+  frames across an open, so a cable is unplugged too.
+- **On the capture's own bridge.** `auto` alone could open another cable, or USB before a meter's
+  radio, and a miss would be about the link rather than the meter.
+- **Read back through the pick.** The meter is opened as an `auto` session opens it and read at the
+  family's Ω gate step, away from the DC V it was detected at: a reading that follows the dial is
+  live, and a probe that switched the function or stopped the stream shows. Beeps go unseen.
+- **Never fails the run.** What went wrong is the finding.
+
 A meter that never answers the check before the first step still leaves a report, the case
 bring-up hits most: `no_response: true`, no steps, and the bytes received in `init_frames`. It
 goes to a file of its own beside the report, so it never replaces a report in progress or an
@@ -227,7 +246,7 @@ full report.
 
 The schema is `CaptureReport` and `StepResult` in `report.rs`, with each field documented there.
 The report level holds the run's context: the device, `init_frames`, `tier`, `core_semantics`,
-`drive` and `plan`. Each step holds its `samples`, `frames`, `diagnostics`, the operator's
+`drive`, `plan` and `detection`. Each step holds its `samples`, `frames`, `diagnostics`, the operator's
 confirmation and `needs_attention`; sub-steps, mode switches included, are steps of their own. A
 rejected transfer is visible as a frame with no matching sample and a line under
 `diagnostics`. Every field added since the first report format is optional on read, so older

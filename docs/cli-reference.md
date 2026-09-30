@@ -569,7 +569,7 @@ dmm-cli capture [OPTIONS]
 | Option | Default | Description |
 |---|---|---|
 | `-o, --output <FILE>` | `capture-<device>.yaml` | Output file path. |
-| `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). An ID no step matches is an error. |
+| `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`); `extra` is the freeform pass, `detect` the auto-detection check. An ID no step matches is an error. |
 | `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
 | `--plan <FILE>` | | Run the steps in a [plan file](#capture-plan-files) instead of the device's own list. Conflicts with `--steps`, `--unverified` and `--list-steps`. |
 | `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one by hand. |
@@ -609,6 +609,11 @@ After the device's own steps, capture offers **freeform captures**: describe
 any mode the list doesn't cover and the tool records the samples with your
 confirmation, asked the same way. `q` on its own finishes the pass.
 `--steps extra` runs just this pass.
+
+Last, the run checks that auto-detection finds the meter: it asks you to
+restart the meter, unplugging its USB cable if it has one, then detects it as
+`--device auto` would and reads it at Ω. The result goes in the report. A
+`--plan` run skips the check.
 
 The run ends with how many unverified steps the report covers and the issue
 to attach it to.

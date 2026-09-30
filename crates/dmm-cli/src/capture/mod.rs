@@ -1,6 +1,7 @@
 //! The `capture` command: the guided run that walks a meter through its
 //! protocol's steps and writes the report a device report is built on.
 
+mod detection;
 mod drive;
 mod input;
 mod listing;
@@ -11,18 +12,21 @@ mod session;
 mod step;
 mod watch;
 
+pub(crate) use detection::Reopen;
 pub(crate) use input::{ErrorLog, Input};
 pub(crate) use listing::{StepListFormat, list_steps};
 pub(crate) use report::{
     CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report, upsert_step,
 };
 pub(crate) use step::{
-    CaptureStep, FREEFORM_STEP_ID, frames_for_step, read_past_blank, samples_after_switch,
+    CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, frames_for_step, read_past_blank,
+    samples_after_switch,
 };
 
 use crate::cli::CaptureArgs;
 use console::style;
-use listing::validate_step_filter;
+use detection::run_detection_check;
+use listing::{step_included, validate_step_filter};
 use recording::SharedRecorder;
 use report::{
     FrameRecord, Trust, captured_count, load_or_create_report, no_response_path,
@@ -35,6 +39,8 @@ pub(crate) fn cmd_capture(
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
+    detected_at_open: Option<&dmm_lib::detect::Detected>,
+    reopen: Reopen<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // `--list-steps` and `--format` never get here: `main` answers them
     // without opening the meter.
@@ -161,6 +167,29 @@ pub(crate) fn cmd_capture(
 
     report.wire_events_dropped = recording::lock(&recorder).dropped();
     save_report(&report, &output_path)?;
+
+    // Last, and after a `q` too: the protocol data is saved whatever the
+    // detection probes do to the meter. `--steps` names it like the freeform
+    // pass; a plan runs only the steps it lists.
+    let feedback_url = dmm.profile().feedback_url();
+    let previous = report.detection.as_ref();
+    let wanted = plan_path.is_none() && step_included(&step_filter, DETECTION_STEP_ID);
+    let check = if wanted {
+        run_detection_check(dmm, device, detected_at_open, previous, &input, reopen)
+    } else {
+        Ok(None)
+    };
+    match check {
+        Ok(Some(check)) => {
+            report.detection = Some(check);
+            save_report(&report, &output_path)?;
+        }
+        Ok(None) => {}
+        // The report is saved: a keyboard gone at the last prompt must not
+        // hide where to send it.
+        Err(e) => eprintln!("{} auto-detection check: {e}", style("Warning:").yellow()),
+    }
+
     eprintln!();
     eprintln!("{}", style("=== Capture complete! ===").bold().green());
     eprintln!("Report saved to: {}", style(&output_path).bold());
@@ -187,7 +216,7 @@ pub(crate) fn cmd_capture(
     if let Some(hint) = resume_hint(covered, total, plan_path.is_some()) {
         eprintln!("{hint}");
     }
-    eprintln!("Attach the report to {}", dmm.profile().feedback_url());
+    eprintln!("Attach the report to {feedback_url}");
     Ok(())
 }
 
@@ -314,7 +343,14 @@ mod tests {
             list_steps: false,
             format: StepListFormat::Text,
         };
-        let result = cmd_capture(args, dmm, recorder, device);
+        let result = cmd_capture(
+            args,
+            dmm,
+            recorder,
+            device,
+            None,
+            Box::new(|_| panic!("the run stopped at the meter check")),
+        );
         assert_eq!(result.unwrap_err().to_string(), "meter not responding");
 
         assert_eq!(std::fs::read_to_string(&output).unwrap(), "steps: []\n");

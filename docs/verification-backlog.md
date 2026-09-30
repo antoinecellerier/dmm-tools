@@ -28,8 +28,13 @@ in its `verification.md`; what hardware has confirmed is tagged in its spec.
 
 Detection identifies the meter from the bytes it sends
 (`crates/dmm-lib/src/detect.rs`; the algorithm and its failure modes are in
-[detection-design.md](detection-design.md)). What each family is probed with,
-and how well that probe is backed:
+[detection-design.md](detection-design.md)). A capture report's `detection`
+section holds a run through the detector on the reporter's meter: the probes,
+the replies, what was picked and a reading taken through the pick. A section
+with `power_cycled: true` settles a row below; its `read_back` shows whether
+the other families' probes left the meter working, which the items under it
+ask about, though not whether it beeped. What each family is probed
+with, and how well that probe is backed:
 
 | Family | Detection sends | Expects back | Hardware status |
 |---|---|---|---|

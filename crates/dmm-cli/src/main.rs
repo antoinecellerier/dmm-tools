@@ -240,9 +240,15 @@ fn main() {
                     capture::list_steps(device, args.format);
                 })
             } else {
-                open_recording_with_help(selection, opts).and_then(|(dmm, recorder, device)| {
-                    capture::cmd_capture(args, dmm, recorder, device)
-                })
+                open_recording_with_help(selection, opts).and_then(
+                    |(dmm, recorder, device, detected)| {
+                        // The capture's own bridge first: `auto` alone could
+                        // open another cable, or USB before a meter's radio.
+                        let reopen: capture::Reopen<'_> =
+                            Box::new(move |bridge| dmm_lib::open_transport(&[bridge], opts));
+                        capture::cmd_capture(args, dmm, recorder, device, detected, reopen)
+                    },
+                )
             }
         }
     };

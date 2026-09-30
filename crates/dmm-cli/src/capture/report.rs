@@ -67,6 +67,9 @@ pub(crate) struct CaptureReport {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub drive: Option<super::drive::Drive>,
     pub steps: Vec<StepResult>,
+    /// What auto-detection made of the meter, checked once the steps are done.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub detection: Option<super::detection::DetectionCheck>,
 }
 
 /// How much of what the parser says the run takes on trust, which decides how
@@ -761,6 +764,11 @@ pub(super) fn no_response_path(
     path.with_file_name(format!("{stem}-no-response.yaml"))
 }
 
+/// The version a report section was written by, with the commit.
+pub(super) fn tool_version() -> String {
+    format!("{} ({})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
+}
+
 /// Populate report metadata (date, version, device info).
 pub(super) fn populate_report_metadata(
     report: &mut CaptureReport,
@@ -769,7 +777,7 @@ pub(super) fn populate_report_metadata(
     supported: bool,
 ) {
     report.date = chrono::Local::now().to_rfc3339();
-    report.tool_version = format!("{} ({})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"));
+    report.tool_version = tool_version();
     report.device_name = device_name;
     report.transport_name = Some(dmm.transport().transport_name().to_string());
     if let Ok(info) = dmm.transport().transport_info() {

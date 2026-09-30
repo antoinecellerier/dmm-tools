@@ -82,7 +82,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
 - Each step is a copy-pasteable `sh` block run from the build's folder as `./dmm-cli` (an extracted archive is not on `PATH`); meter-side step as an inline comment (`# on the meter: SETUP → Communication → ON`); a revert step for anything changed (udev rule, `device_family` in settings). For a Windows reporter, give the PowerShell form: `$env:RUST_LOG="dmm_lib=trace"` on its own line, then `.\dmm-cli.exe …`.
 - Pair every command with what success and failure look like on the reporter's screen, quoting the exact strings that build prints ("It works if it prints `Detected: UT804`; "No meter answered over the USB cable." means it doesn't."). An either/or experiment names both outcomes and asks which one happened; a result that looks like failure but is valid says so ("No response from meter." is a valid result on the HOLD step). If anything the reporter will see would read ambiguously — a step's wording, the end-of-run summary — fix it in code before asking.
 - Keep results on screen and logs in files: `2> <file>.txt` sends the trace to the file while readings still print — no `grep` for the reporter. Name files after the model, build and purpose (`ut804-dev-666fbf5-readings.txt`), never a bare counter.
-- For a full capture, list the steps it walks inline, a word or two each ("DC V, DC V shorted, AC V, …"), so the reporter can check their coverage; say that `s` skips a position their meter lacks and that re-running offers to resume.
+- For a full capture, list the steps it walks inline, a word or two each ("DC V, DC V shorted, AC V, …"), so the reporter can check their coverage; say that `s` skips a position their meter lacks and that re-running offers to resume. It ends with a detection check that asks them to restart the meter; say so.
 - Design the ask so the reporter exercises the code path that needs validating; mention easier routes only as a failover (the packaged release archive when the question is whether packaged bits work; the bridge they actually own).
 - Detection problems: run the ladder detection → trace → capture, with success stated at each rung (meter beeps on the streaming command; readings appear):
 
@@ -91,6 +91,8 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
   RUST_LOG=dmm_lib=trace ./dmm-cli --device <id> debug --count 5 2> <id>-<build>-readings.txt
   ./dmm-cli --device <id> capture   # --unverified or --steps a,b for a subset
   ```
+
+  A capture report's `detection` section is the detection evidence: `found` with `power_cycled: true` settles the family's row in `docs/verification-backlog.md`, and a pick other than the report's `device_id` is a detection bug to chase from its `frames`.
 
   Give the OS-native fallback for an empty `list`: `lsusb | grep -iE '10C4:EA80|1A86:E429|1A86:E008|0820:0001'`, `ioreg -p IOUSB -l | grep -i CP2110`, Device Manager.
 

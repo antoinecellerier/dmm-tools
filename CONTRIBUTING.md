@@ -25,7 +25,7 @@ dmm-cli capture
 dmm-cli --device ut8803 capture
 ```
 
-It opens with what the run needs on the bench — shorted leads, a DC source, a thermocouple — and skips the steps for anything you don't have. Each step captures on its own once the meter is in the mode asked for; Enter captures now, `s` skips, `q` finishes and saves. The report is a YAML file such as `capture-ut61eplus.yaml`. The [CLI reference](docs/cli-reference.md#dmm-cli-capture) describes the options.
+It opens with what the run needs on the bench — shorted leads, a DC source, a thermocouple — and skips the steps for anything you don't have. Each step captures on its own once the meter is in the mode asked for; Enter captures now, `s` skips, `q` finishes and saves. Last, it asks you to restart the meter and checks that auto-detection finds it. The report is a YAML file such as `capture-ut61eplus.yaml`. The [CLI reference](docs/cli-reference.md#dmm-cli-capture) describes the options.
 
 If you're short on time, run only the steps no one has confirmed on hardware yet:
 

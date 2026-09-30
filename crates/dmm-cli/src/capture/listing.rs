@@ -1,7 +1,7 @@
 //! What `--list-steps` prints for a device, and the check that `--steps`
 //! only names steps that device declares.
 
-use super::step::FREEFORM_STEP_ID;
+use super::step::{DETECTION_STEP_ID, FREEFORM_STEP_ID};
 use clap::ValueEnum;
 use console::style;
 use dmm_lib::protocol::registry::SelectableDevice;
@@ -70,9 +70,17 @@ fn render_step_list(
     }
     out.push_str(&format!("\n{}\n", style("  Always available:").cyan()));
     out.push_str(&format!(
-        "    {:<16} Freeform captures — describe any mode not covered above\n\n",
+        "    {:<16} Freeform captures — describe any mode not covered above\n",
         style(FREEFORM_STEP_ID).bold()
     ));
+    // The mock has no link to detect anything on.
+    if device.requires_hardware {
+        out.push_str(&format!(
+            "    {:<16} Restart the meter and check that auto-detection finds it\n",
+            style(DETECTION_STEP_ID).bold()
+        ));
+    }
+    out.push('\n');
     out.push_str(&format!(
         "Usage: {} {}\n\n",
         style("dmm-cli capture --steps").dim(),
@@ -122,7 +130,7 @@ pub(super) fn validate_step_filter(
     let known: std::collections::HashSet<&str> = steps
         .iter()
         .map(|s| s.id)
-        .chain(std::iter::once(FREEFORM_STEP_ID))
+        .chain([FREEFORM_STEP_ID, DETECTION_STEP_ID])
         .collect();
     let mut unknown: Vec<&str> = filter
         .iter()
@@ -171,13 +179,14 @@ mod tests {
     }
 
     #[test]
-    fn known_step_ids_and_the_freeform_keyword_pass() {
+    fn known_step_ids_and_the_pass_keywords_pass() {
         let steps = (ut61eplus().new_protocol)().capture_steps();
         let filter: Option<std::collections::HashSet<String>> = Some(
             [
                 "dcv".to_string(),
                 "range".to_string(),
                 FREEFORM_STEP_ID.to_string(),
+                DETECTION_STEP_ID.to_string(),
             ]
             .into_iter()
             .collect(),

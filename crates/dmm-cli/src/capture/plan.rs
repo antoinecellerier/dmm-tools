@@ -5,7 +5,7 @@
 //! an issue does not wait for a release. The maintainer pastes a few steps into
 //! the thread and the reporter runs them with `capture --plan`.
 
-use super::{CaptureStep, FREEFORM_STEP_ID};
+use super::{CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID};
 use dmm_lib::flags::Flag;
 use dmm_lib::protocol::{Expect, Need, RangeExpect, ValueExpect};
 use serde::Deserialize;
@@ -75,6 +75,11 @@ fn parse(path: &str, yaml: &str) -> Result<Vec<CaptureStep>, String> {
         if step.id == FREEFORM_STEP_ID {
             return Err(format!(
                 "{path}: step id {FREEFORM_STEP_ID:?} is reserved for the freeform pass"
+            ));
+        }
+        if step.id == DETECTION_STEP_ID {
+            return Err(format!(
+                "{path}: step id {DETECTION_STEP_ID:?} is reserved for the auto-detection check"
             ));
         }
         if !seen.insert(&step.id) {
@@ -307,6 +312,12 @@ steps:
     fn freeform_id_is_reserved() {
         let e = err("steps:\n  - id: extra\n    instruction: b\n");
         assert!(e.contains("reserved for the freeform pass"), "{e}");
+    }
+
+    #[test]
+    fn detection_id_is_reserved() {
+        let e = err("steps:\n  - id: detect\n    instruction: b\n");
+        assert!(e.contains("reserved for the auto-detection check"), "{e}");
     }
 
     #[test]

@@ -22,6 +22,10 @@ pub(crate) const MAX_FRAMES_PER_STEP: usize = 500;
 /// pass generates `extra_0`, `extra_1`, … as the user describes each capture.
 pub(crate) const FREEFORM_STEP_ID: &str = "extra";
 
+/// Filter keyword for the auto-detection check that ends a run. Not a
+/// protocol step either — it files the report's `detection` section.
+pub(crate) const DETECTION_STEP_ID: &str = "detect";
+
 pub(crate) use dmm_lib::protocol::CaptureStep;
 
 /// The line announcing the step. Gate steps say so: skipping one leaves the

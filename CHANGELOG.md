@@ -37,6 +37,7 @@
 ### CLI
 
 - **`read --import` converts or summarises an exported CSV, JSON or replay file without waiting** — with its markers.
+- **`capture` ends by checking that auto-detection finds the meter** — after you restart it; the result goes in the report.
 - **`read --replay` keeps a recording's markers** — in its CSV, JSON and replay output.
 - **Text output names a UT181A's reading and sub-values, such as T1 or AC**
 - **Shell completions offer the meter ids for `--device` and the modes for `--mock-mode`** — regenerate the script to get them.

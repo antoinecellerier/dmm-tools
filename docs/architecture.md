@@ -361,7 +361,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `choice.rs` | Reading the choice `set` was given |
 | `format.rs` | What a run writes per reading |
 | `output.rs` | Where a run writes it |
-| `capture/` | The guided capture run: steps, watch, drive, plan, report, recording |
+| `capture/` | The guided capture run: steps, watch, drive, plan, report, recording, the closing detection check |
 | `test_fixtures.rs` | Test helpers shared across modules |
 
 ### dmm-gui

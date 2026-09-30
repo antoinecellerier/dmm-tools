@@ -153,21 +153,23 @@ pub(crate) fn open_with_help(
     Ok((dmm, device))
 }
 
+/// A meter opened for `capture`: the handle, its wire recorder, the entry it
+/// runs as, and what detection found when the open ran it.
+pub(crate) type RecordingOpen = (
+    BoxedDmm,
+    recording::SharedRecorder,
+    &'static SelectableDevice,
+    Option<&'static dmm_lib::detect::Detected>,
+);
+
 /// Open the meter with every wire byte recorded, the init handshake included,
 /// for `capture` to put in its report.
 pub(crate) fn open_recording_with_help(
     selection: Selection,
     opts: dmm_lib::OpenOptions<'_>,
-) -> Result<
-    (
-        BoxedDmm,
-        recording::SharedRecorder,
-        &'static SelectableDevice,
-    ),
-    Box<dyn std::error::Error>,
-> {
+) -> Result<RecordingOpen, Box<dyn std::error::Error>> {
     type Boxed = Box<dyn dmm_lib::transport::Transport>;
-    let (dmm, recorder, device) = match selection {
+    let (dmm, recorder, device, detected) = match selection {
         // Wrap first, then detect: the probe and the meter's answer to it are
         // the first bytes on the wire, and a report that starts after them
         // hides how the meter was picked.
@@ -181,7 +183,7 @@ pub(crate) fn open_recording_with_help(
             let detected = note_detected(detected);
             let dmm = dmm_lib::Dmm::from_detected(transport, detected)
                 .map_err(|e| open_error_help(selection, e))?;
-            (dmm, recorder, detected.device)
+            (dmm, recorder, detected.device, Some(detected))
         }
         Selection::Device(device) => {
             // The mock has no USB link to open, and none to record either — it
@@ -195,11 +197,11 @@ pub(crate) fn open_recording_with_help(
             let (transport, recorder) = recording::RecordingTransport::new(transport);
             let dmm = dmm_lib::Dmm::new(Box::new(transport) as Boxed, (device.new_protocol)())
                 .map_err(|e| open_error_help(selection, e))?;
-            (dmm, recorder, device)
+            (dmm, recorder, device, None)
         }
     };
     warn_if_experimental(device, dmm.profile());
-    Ok((dmm, recorder, device))
+    Ok((dmm, recorder, device, detected))
 }
 
 /// Identify the meter and hand the cable straight back, for the listings that
