@@ -8,6 +8,7 @@ description = "What dmm-cli and dmm-gui share and dmm-lib must not carry: settin
 
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
+clap.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] } # the saved view goes in and out as the GUI wrote it
 directories.workspace = true

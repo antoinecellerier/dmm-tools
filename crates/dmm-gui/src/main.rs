@@ -267,6 +267,12 @@ fn resolve_device_and_clock(
     Ok((device, clock))
 }
 
+/// The command `--completions` writes a script for: the parsing one, with
+/// the device ids and mock modes a shell offers.
+fn completion_command() -> clap::Command {
+    dmm_shared::help::with_completion_values(Args::command())
+}
+
 fn parse_args() -> CliOverrides {
     let mut cmd = Args::command();
     let device_help = build_device_help();
@@ -276,7 +282,7 @@ fn parse_args() -> CliOverrides {
     if let Some(shell) = args.completions {
         clap_complete::generate(
             shell,
-            &mut Args::command(),
+            &mut completion_command(),
             "dmm-gui",
             &mut std::io::stdout(),
         );
@@ -672,6 +678,22 @@ mod tests {
             clap::error::ErrorKind::ArgumentConflict,
             "{err}"
         );
+    }
+
+    /// The values are keyed on the flags' ids; a renamed field would drop
+    /// them from the script without an error.
+    #[test]
+    fn completions_offer_devices_and_mock_modes() {
+        let mut script = Vec::new();
+        clap_complete::generate(
+            clap_complete::Shell::Bash,
+            &mut completion_command(),
+            "dmm-gui",
+            &mut script,
+        );
+        let script = String::from_utf8(script).unwrap();
+        assert!(script.contains("auto ut61eplus"), "no device ids");
+        assert!(script.contains("dcv acv"), "no mock modes");
     }
 
     /// `max` converts a replay in `dmm-cli read`; the GUI says so rather

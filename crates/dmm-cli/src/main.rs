@@ -77,7 +77,7 @@ fn main() {
                 Some(shell) => {
                     clap_complete::generate(
                         shell,
-                        &mut Cli::command(),
+                        &mut cli::completion_command(),
                         "dmm-cli",
                         &mut std::io::stdout(),
                     );

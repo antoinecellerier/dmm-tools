@@ -329,6 +329,12 @@ pub(crate) fn build_device_help() -> String {
     dmm_shared::help::device_help("Device to connect to.")
 }
 
+/// The command `completions` writes a script for: the parsing one, with the
+/// device ids and mock modes a shell offers.
+pub(crate) fn completion_command() -> clap::Command {
+    dmm_shared::help::with_completion_values(<Cli as clap::CommandFactory>::command())
+}
+
 /// Build long help text for --mock-mode from the mock's own mode table.
 fn build_mock_mode_help() -> String {
     dmm_shared::help::mock_mode_help(
@@ -794,5 +800,22 @@ mod tests {
                 shell: Some(Shell::Bash)
             }
         ));
+    }
+
+    /// The values are keyed on the flags' ids; a renamed field would drop
+    /// them from the script without an error.
+    #[test]
+    fn completions_offer_devices_and_mock_modes() {
+        let mut script = Vec::new();
+        clap_complete::generate(
+            Shell::Bash,
+            &mut completion_command(),
+            "dmm-cli",
+            &mut script,
+        );
+        let script = String::from_utf8(script).unwrap();
+        // The top level's `--device`, and `read --mock-mode`.
+        assert!(script.contains("auto ut61eplus"), "no device ids");
+        assert!(script.contains("dcv acv"), "no mock modes");
     }
 }

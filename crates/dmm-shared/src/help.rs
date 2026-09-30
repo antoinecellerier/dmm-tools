@@ -49,7 +49,7 @@ pub fn device_help(intro: &str) -> String {
     // Leads the list: it is what the flag does when nothing names a meter, and
     // the one value the registry does not carry.
     help.push_str(&format!(
-        "  {:<12} Detect the connected meter (default)\n",
+        "  {:<12} {AUTO_DESCRIPTION} (default)\n",
         registry::AUTO_DEVICE_ID
     ));
     for d in registry::DEVICES {
@@ -61,6 +61,48 @@ pub fn device_help(intro: &str) -> String {
          Quote names with special characters: --device 'ut61e+'",
     );
     help
+}
+
+/// What `auto` does, beside it in `--help` and in a shell's completion menu.
+const AUTO_DESCRIPTION: &str = "Detect the connected meter";
+
+/// `cmd`, with the `--device` and `--mock-mode` flags on it and its
+/// subcommands offering their values, for a completion script.
+///
+/// Both flags take a plain string so a bad one gets our own error, with the
+/// hint to run `--help`; clap's possible values would replace it with its
+/// own. So they are added only to the command a script is generated from,
+/// never to the one that parses. Aliases are left out: the ids cover every
+/// device, and `ut61e+` would need quoting.
+pub fn with_completion_values(mut cmd: clap::Command) -> clap::Command {
+    use clap::builder::{PossibleValue, PossibleValuesParser};
+
+    let subcommands: Vec<String> = cmd
+        .get_subcommands()
+        .map(|s| s.get_name().to_string())
+        .collect();
+    for name in subcommands {
+        cmd = cmd.mut_subcommand(name, with_completion_values);
+    }
+    let devices =
+        std::iter::once(PossibleValue::new(registry::AUTO_DEVICE_ID).help(AUTO_DESCRIPTION)).chain(
+            registry::DEVICES
+                .iter()
+                .map(|d| PossibleValue::new(d.id).help(d.display_name)),
+        );
+    let modes = MockMode::ALL
+        .iter()
+        .map(|m| PossibleValue::new(m.label()).help(m.description()));
+    let values: [(&str, Vec<PossibleValue>); 2] = [
+        ("device", devices.collect()),
+        ("mock_mode", modes.collect()),
+    ];
+    for (id, values) in values {
+        if cmd.get_arguments().any(|a| a.get_id() == id) {
+            cmd = cmd.mut_arg(id, |a| a.value_parser(PossibleValuesParser::new(values)));
+        }
+    }
+    cmd
 }
 
 /// What a device listing says beside a device's name: that it needs no
@@ -463,6 +505,30 @@ mod tests {
             version_label("0.6.0-dev", "abc1234"),
             "v0.6.0-dev (abc1234)"
         );
+    }
+
+    /// Both flags get their values wherever they sit, a subcommand included,
+    /// as `dmm-cli read --mock-mode` does.
+    #[test]
+    fn completion_values_reach_the_flags_on_subcommands() {
+        let cmd = clap::Command::new("t")
+            .arg(clap::Arg::new("device").long("device"))
+            .subcommand(
+                clap::Command::new("read").arg(clap::Arg::new("mock_mode").long("mock-mode")),
+            );
+        let mut cmd = with_completion_values(cmd);
+        let values = |cmd: &clap::Command, id: &str| -> Vec<String> {
+            let arg = cmd.get_arguments().find(|a| a.get_id() == id).unwrap();
+            arg.get_possible_values()
+                .iter()
+                .map(|v| v.get_name().to_string())
+                .collect()
+        };
+        let devices = values(&cmd, "device");
+        assert_eq!(devices[0], registry::AUTO_DEVICE_ID);
+        assert_eq!(devices.len(), registry::DEVICES.len() + 1);
+        let read = cmd.find_subcommand_mut("read").unwrap();
+        assert_eq!(values(read, "mock_mode").len(), MockMode::ALL.len());
     }
 
     #[test]
