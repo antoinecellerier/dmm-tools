@@ -12,19 +12,26 @@ other programs.
 ## UNI-T
 
 - [UT61+ / UT161 family](research/ut61-family/reverse-engineered-protocol.md)
-  — UT61B+, UT61D+, UT61E+, UT161B, UT161D, UT161E. Covers per-model
-  differences; defers to the [UT61E+ spec](research/ut61eplus/reverse-engineered-protocol.md)
-  for transport, framing, commands and flag bytes.
+  — UT61B+, UT61D+, UT61E+, UT161B, UT161D, UT161E, and the UT60BT and
+  UT202BT with Bluetooth built in. Covers per-model differences; defers to
+  the [UT61E+ spec](research/ut61eplus/reverse-engineered-protocol.md) for
+  transport, framing, commands and flag bytes.
 - [UT8803 / UT8803E (bench DMM)](research/ut8803/reverse-engineered-protocol.md)
 - [UCI bench family — UT8802 and transport variants](research/uci-bench-family/reverse-engineered-protocol.md) (extends the UT8803 spec with the UT8802 0xAC wire format and the CP2110/CH9325/serial transport alternatives)
 - [UT171 series](research/ut171/reverse-engineered-protocol.md)
 - [UT181A](research/ut181/reverse-engineered-protocol.md)
 - [UT803 / UT804 — proprietary structured data in 11-byte CR LF packets](research/ut803/reverse-engineered-protocol.md)
 - [UT71A–E — the UT804's packets from a handheld; covers the Voltcraft VC920/VC940/VC960](research/ut71/reverse-engineered-protocol.md)
+- [UT-D07B — the Bluetooth LE adapter that carries a meter's own frames](research/ut-d07b/reverse-engineered-protocol.md)
+
+Researched, not implemented:
+
+- [UT632 / UT632N (bench DMM) — what UNI-T's software shows; no capture yet](research/ut632/reverse-engineered-protocol.md)
+- [UT8805 / UT8806 (bench DMMs) — SCPI over USBTMC, LAN and RS-232](research/ut8805/reverse-engineered-protocol.md)
 
 ## Voltcraft
 
-- [VC880](research/vc880/reverse-engineered-protocol.md)
+- [VC880 / VC650BT](research/vc880/reverse-engineered-protocol.md)
 - [VC890](research/vc890/reverse-engineered-protocol.md)
 - VC920 / VC940 / VC960 — UT71 rebrands, in the [UT71 spec](research/ut71/reverse-engineered-protocol.md)
 
@@ -57,7 +64,7 @@ that owns it.
 | [UT61+ / UT161](research/ut61eplus/reverse-engineered-protocol.md#21-message-framing) | `AB CD` | 1 byte, counting the bytes after it | 16-bit sum of all bytes before it, big-endian |
 | [UT8803](research/ut8803/reverse-engineered-protocol.md#frame-format) | `AB CD`, type `02` in byte 3 | none, fixed 21 bytes | 16-bit sum of bytes 0-18, big-endian |
 | [UT8802](research/uci-bench-family/reverse-engineered-protocol.md#31-frame-format) | `AC` | none, fixed 8 bytes | none |
-| [UT171](research/ut171/reverse-engineered-protocol.md#34-valid-frame-sizes----vendor) | `AB CD` | 2 bytes little-endian, payload + checksum | 16-bit sum of length and payload, little-endian |
+| [UT171](research/ut171/reverse-engineered-protocol.md#31-general-structure) | `AB CD` | 2 bytes little-endian, payload + checksum | 16-bit sum of length and payload, little-endian |
 | [UT181A](research/ut181/reverse-engineered-protocol.md#3-frame-format----known) | `AB CD` | 2 bytes little-endian, payload + checksum | 16-bit sum of length and payload, little-endian |
 | [UT803 / UT804](research/ut803/reverse-engineered-protocol.md#21-11-byte-packets--vendor) | none; ends `0D 0A` | none, fixed 11 bytes | none |
 | [UT71, VC920 / VC940 / VC960](research/ut71/reverse-engineered-protocol.md#2-packet) | none; ends `0D 0A` | none, fixed 11 bytes | none |
