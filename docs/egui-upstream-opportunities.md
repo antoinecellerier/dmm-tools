@@ -177,7 +177,7 @@ picker".
 
 **Workaround we used.** None — accepted the regression so we could
 build a keyboard-navigable color popup (see issue #18 below). See
-`crates/dmm-gui/src/app/controls.rs:577`.
+`crates/dmm-gui/src/app/controls.rs:969` (`color_edit`).
 
 **Suggested fix.** Add `Button::role(WidgetType)` (or, more
 specifically, `Button::color_swatch(Color32) -> Self` since color
@@ -553,7 +553,10 @@ close requires a deferred one-shot that waits until
 
 **Workaround.** See `crates/dmm-gui/src/app/mod.rs` —
 `ShortcutHelp::restore_focus: Option<Id>` field plus a check at the
-start of `ui()` that fires once the modal layer is gone.
+start of `ui()` that fires once the modal layer is gone. The close
+paths set it: `crates/dmm-gui/src/app/shortcut_help.rs:257` for the
+modal's own close, `crates/dmm-gui/src/app/shortcuts.rs:552` for the
+Close shortcut.
 
 **Suggested fix.** Either:
 - add `Memory::request_focus_after_modal(id)` that survives
