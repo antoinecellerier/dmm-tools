@@ -20,7 +20,7 @@ Silicon Labs CP2110 HID-to-UART bridge (VID `0x10C4`, PID `0xEA80`).
 HidUart_SetUartConfig(handle, 9600, 3, 2, 0, 0)
   baudRate = 9600
   dataBits = 3  (SiLabs HID_UART_EIGHT_DATA_BITS)
-  parity   = 2  (SiLabs HID_UART_NO_PARITY — note: enum order differs from Win32)
+  parity   = 2  (read as SiLabs HID_UART_NO_PARITY — [UNVERIFIED], see below)
   stopBits = 0  (SiLabs HID_UART_SHORT_STOP_BIT)
   flowCtrl = 0  (SiLabs HID_UART_NO_FLOW_CONTROL)
 ```
@@ -28,6 +28,12 @@ HidUart_SetUartConfig(handle, 9600, 3, 2, 0, 0)
 **Note**: The SiLabs HID UART API uses different enum values than the
 Win32 serial API. `dataBits=3` maps to 8 data bits in the SiLabs
 `HID_UART_DATA_BITS` enum. [VENDOR, cross-check with SLABHIDtoUART.h]
+
+**Parity** [UNVERIFIED]: the "no parity" reading of `parity = 2` above is
+unconfirmed. The UART config report's parity byte reads 2 as even
+([ut171 spec §2.3](../ut171/reverse-engineered-protocol.md#23-uart-config-report-0x50-layout----vendor),
+0=none, 1=odd, 2=even); the check is in the
+[verification list](verification.md#link-and-streaming).
 
 **Activation**: User must press the PC button on the meter to enable USB
 communication. There is no software command for this — it is meter-side
@@ -166,8 +172,9 @@ manual spec tables.
 **Voltage (functions 0x00 DCV, 0x01 AC+DC V, 0x05 ACV)** — NOT 0x12:
 the vendor never reads the range byte for ACV LPF and fixes its range
 at 1000 (`case 18`, DMSShare_decompiled.cs:16671-16674); pylablib
-indexes the voltage table for LPF, disagreeing with the vendor —
-hardware must settle which matches the wire (corrected 2026-06):
+indexes the voltage table for LPF, disagreeing with the vendor. Which
+matches the wire is [UNVERIFIED] ([verification list](verification.md#frames-and-display);
+corrected 2026-06):
 
 | Index | Range | Resolution | Manual |
 |-------|-------|------------|--------|
@@ -356,7 +363,7 @@ reports that as function 0x02 rather than 0x00 (§4.2, [VENDOR]), so a reading
 of 0x02 alone does not say which of the two positions the dial is on. The two
 positions share no other function, so neither is a safe guess for the other:
 on a bare 0x02 the implementation leaves the position unknown — `dmm-cli
-mode` has nothing to list — until the stream has reported 0x00/0x01 (V⎓) or
+get mode` has nothing to list — until the stream has reported 0x00/0x01 (V⎓) or
 0x03/0x04 (mV), after which 0x02 keeps that position.
 
 **The manual's §8b text contradicts its own figure.** The AC-voltage procedure
@@ -367,8 +374,8 @@ AC V is a SHIFT/SETUP sub-function of a voltage position. The figure instead
 gives V~ a position of its own and puts AC+DC on V⎓. One guess at the mismatch
 — not a finding — is that the text is written for the series rather than this
 model: §7 introduces its symbol list as „alle möglichen Symbole und Angaben der
-Serie VC800“. We follow the figure. A meter would settle it: see
-`docs/verification-backlog.md`.
+Serie VC800“. We follow the figure. A meter would settle it: see the
+[verification list](verification.md#dial-and-modes).
 
 **How the implementation uses this.** `crates/dmm-lib/src/protocol/vc8x0/vc880.rs`
 holds the table as `DIAL`, one entry per position, each a single SHIFT/SETUP

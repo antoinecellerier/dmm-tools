@@ -1,5 +1,9 @@
 # VC880/VC650BT Implementation Plan
 
+Historical: the plan as written before implementation. The implementation
+lives in `crates/dmm-lib/src/protocol/vc8x0/`, not the `vc650bt` module
+named below.
+
 Ready-to-execute plan for adding Voltcraft VC880 and VC650BT support.
 Based on pylablib source analysis (MIT-licensed `VC880` class) and EEVBlog teardown data.
 
@@ -187,19 +191,7 @@ Pre-exhaust pattern: drain all pending messages from read queue before sending c
 
 ## Verification Backlog Items (for Phase 6)
 
-- [ ] Basic connectivity — frames received via `debug` command
-- [ ] All 19 measurement modes parse correctly
-- [ ] Range byte 0x30 prefix confirmed
-- [ ] Main display ASCII parsing (normal values, OL, "---")
-- [ ] Aux display 1 (min/max/avg/rel values)
-- [ ] Aux display 2 (memory)
-- [ ] Aux display 3 (bar graph)
-- [ ] Status flag bits: MAX, MIN, AVG, REL at documented positions
-- [ ] Undocumented status bytes `stat[0]`, `stat[2]`-`stat[6]`
-- [ ] Autorange enable (0x47) command
-- [ ] Autorange disable (0x46) command
-- [ ] PC button activation requirement
-- [ ] VC650BT compatibility (if device available)
+The open checks are in [verification.md](verification.md).
 
 ## Reference Implementations
 

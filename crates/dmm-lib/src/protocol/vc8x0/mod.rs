@@ -50,9 +50,9 @@ pub(crate) const SELECT_BUTTON_NAME: &str = "SHIFT/SETUP";
 
 /// The RANGE button: one press steps the manual range ladder (spec §5,
 /// "RANGE button"). Whether repeated presses really step it one rung at a
-/// time is unverified on both meters — see the VC-880 and VC-890 sections of
-/// docs/verification-backlog.md — which is why the range driver reads the
-/// range back after every press rather than counting them.
+/// time is unverified on both meters — see `docs/research/vc880/verification.md`
+/// and `docs/research/vc890/verification.md` — which is why the range driver
+/// reads the range back after every press rather than counting them.
 pub(crate) const CMD_RANGE_MANUAL: u8 = 0x46;
 
 /// Return to auto-ranging: its own command, as it is its own button.

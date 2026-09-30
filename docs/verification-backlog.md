@@ -731,97 +731,6 @@ plus what no step reaches.
   `remote control unreliable on this meter` line if it appears — those are
   the commands this meter refused
 
-#### Voltcraft VC-880 / VC650BT
-
-- Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
-- Streaming model (no trigger, auto-starts after PC button press)
-- Function code mapping (19 codes, 0x00-0x12) — do mode labels match LCD?
-- Range byte (0x30-based ASCII) — correct range values per function?
-- Main display (7 ASCII bytes) — values match LCD?
-- Sub-displays (sub1, sub2, bar) — format and content
-- Status flag bytes (7 bytes, 28 named flags) — all bit positions correct?
-  Do bytes 30-35 carry a 0x30 prefix like the range byte? The parser
-  reports bits 6-7 of bytes 30-36 as unrecognised and leaves bits 4-5 of
-  bytes 30-35 out until a capture settles this (noted 2026-09-17)
-- Sign1 (msg[30] bit 2) — the value's sign is taken from the display text;
-  the parser reports Sign1 set on a display without a `-` (noted 2026-09-17)
-- AVG flag (byte 31 bit 1) — parsed since 2026-09-07 and reported wherever
-  flags are shown; unverified on hardware. Press MAX/MIN/AVG (0x49) through
-  the cycle and confirm AVG lights only on the AVG step.
-- Overload detection (OL1 flag + "OL" in display string)
-- Commands: hold (0x4A), rel (0x48), range_auto (0x47), range_manual (0x46),
-  max_min_avg (0x49), light (0x4B), select (0x4C)
-- Streaming rate (manual says 2-3 Hz)
-- PC button activation requirement
-- VC650BT compatibility (same protocol confirmed by installer comparison)
-- Dial table and SHIFT/SETUP mode switching — implemented 2026-09-07 as
-  `dmm-cli get mode`/`set mode` (and the GUI's mode dropdown) over the
-  [MANUAL] dial table in spec §4.4. Nothing in it is hardware-confirmed: the manual says which
-  symbol each position offers, never the order the presses walk them, and
-  its §8b text contradicts its own figure over where AC V lives. Runnable
-  checks, one dial position at a time:
-  - `dmm-cli --device vc880 get mode` on every position — the listing should
-    name exactly the functions that position offers, `*` on the live one.
-    V~, Lo and capacitance offer one function each, so they print "no
-    switchable modes" instead of a list. Report the dial symbol and the
-    list whenever they disagree
-  - switch to every entry the listing offers, with
-    `RUST_LOG=dmm_lib=debug dmm-cli --device vc880 set mode "<label>"`, and
-    paste the log: one `cycle: pressing SHIFT/SETUP (in X, want Y)` line per
-    press, so it records both the press count and the order the function
-    codes actually came round in
-  - the raw cycle, independent of our table: `dmm-cli --device vc880 command
-    select` followed by `dmm-cli --device vc880 read --count 3`, repeated
-    until the display returns to where it started, once per position
-  - the figure/text conflict: V~ and Lo are separate positions in the
-    figure, with AC+DC on V⎓. If SHIFT/SETUP on V~ switches anything, the
-    figure is wrong and §8b was right — say what the display did
-  - the 0x02 overlap: on the V⎓ position, let the meter auto-range below
-    400 mV and check with `dmm-cli --device vc880 read --count 1` whether
-    the reading turns into `DC mV` (`dmm-cli --device vc880 debug` prints
-    the raw function byte). That overlap is why a bare 0x02 with no other
-    code seen yet lists nothing to switch to
-  - the settle constants are untuned guesses (no delay, 4 reads for a press
-    to show up in the stream). `the meter refused …: SHIFT/SETUP did nothing
-    in <mode>` while the display *did* change means they are too tight —
-    report the mode and the streaming rate
-- `Setting::Range` — implemented 2026-09-07 the same way, pressing RANGE
-  (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
-  nobody has confirmed that repeated 0x46 steps the ladder one rung at a
-  time on this meter. Runnable check, on a dial position with a stable
-  input applied: `dmm-cli --device vc880 get range` should name the rungs
-  that function offers, `*` on the live one — report any rung the meter's
-  own RANGE button reaches that the listing leaves out. Then
-  `RUST_LOG=dmm_lib=debug dmm-cli --device vc880 set range <label>` for each
-  of them, and `set range auto` to finish. Paste the
-  `cycle: pressing RANGE (in X, want Y)` lines: the press count per rung is
-  what says whether 0x46 steps one at a time.
-  `<label> never appeared; the meter is back in <label>` means it does not,
-  and `the mode changed to <mode>; stopped pressing RANGE` means 0x46 moves
-  the function byte too
-- `Setting::Hold`, `Rel` and `MinMax` — implemented 2026-09-07 by pressing
-  0x4A, 0x48 and 0x49 and reading the flag back, with 0x43 to leave
-  MAX/MIN/AVG. MIN/MAX is offered as off/MAX/MIN/AVG. Unverified: the order
-  0x49 walks those three in, and whether every mode accepts HOLD and REL.
-  Peak is not offered — the vendor command table lists no peak command.
-  Runnable check: `dmm-cli --device vc880 set minmax max`, then
-  `set minmax min`, then `set minmax avg`, then `set minmax off`, each with
-  the badge the LCD shows; `set minmax avg` is also the hardware check the
-  AVG flag item above wants, since it only succeeds if byte 31 bit 1 is
-  read back. Then `set hold on` / `set hold off` and `set rel on` /
-  `set rel off` on two or three dial positions. Run them under
-  `RUST_LOG=dmm_lib=debug` and paste the `cycle:` lines. Also unknown: which
-  buttons a held meter drops. A mode or range walk presses HOLD off and sends
-  a dropped press again; `set hold on` then `set mode` or `set range`
-  exercises it
-- `dmm-cli --device vc880 capture` exercises all of the above on its own
-  since 2026-09-07: once the gate steps pass, every mode step is followed by
-  `set range`/`hold`/`rel`/`minmax` through each value, filed as
-  `<mode>/<setting>:<label>` sub-steps carrying what the meter read back.
-  Report any sub-step with `status: error` and the
-  `remote control unreliable on this meter` line if it appears — those are
-  the commands this meter refused
-
 #### UT803 / UT804 (issues [#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16))
 
 CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
@@ -1641,14 +1550,12 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 - ~~**UT804 interface protocol V1.0 (2023-11-15)**~~ — **DONE 2026-09-19**:
   read into the UT803/UT804 spec as [VENDOR-DOC]. It covers the UT804 alone,
   so it says nothing of the UT804+.
-- **VC880 Protocol Rev 2.4** (VC-880, VC650BT) and **VC890 Protocol Rev
-  1.3** (VC-890), Conrad's protocol documents, archived in
-  `references/vc880/protocol/` and `references/vc890/protocol/` with a
-  SOURCE.txt each. The vc880 and vc890 specs were built from Voltsoft alone.
-  The VC880 document's text layer is broken: read it from rendered pages.
-  The VC890 document's handshake was read 2026-09-28 (its Result message
-  and codes, no timing given) into the vc890 spec as [VENDOR-DOC]; its
-  frame layouts (pp. 3-8) and the whole VC880 document are still to read.
+- **VC890 Protocol Rev 1.3** (VC-890), Conrad's protocol document, archived
+  in `references/vc890/protocol/` with a SOURCE.txt. The vc890 spec was
+  built from Voltsoft alone. Its handshake was read 2026-09-28 (its Result
+  message and codes, no timing given) into the vc890 spec as [VENDOR-DOC];
+  its frame layouts (pp. 3-8) are still to read. The VC880 Protocol Rev 2.4
+  is in its [verification list](research/vc880/verification.md#vendor-sources).
 - **UNI-T's general-purpose PC software** ("优利德上位机软件", `1.10.zip`
   2025-05-26 and `Setup.zip` 2026-09-09, about 150 MB each), in the bench
   download centre's UT80 and UT88 results. Unopened; it may drive several

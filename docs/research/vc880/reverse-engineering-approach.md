@@ -128,7 +128,7 @@ VC-890 requires independent implementation.
 
 | Finding | Confidence | Source |
 |---------|------------|--------|
-| CP2110 bridge at 9600 baud, parity=NONE, stop=SHORT | [VENDOR] | `VC880Obj.OpenDevice()` line 21228 |
+| CP2110 bridge at 9600 baud, stop=SHORT; parity=2 read as NONE, [UNVERIFIED]: the config report reads 2 as even ([ut171 spec §2.3](../ut171/reverse-engineered-protocol.md#23-uart-config-report-0x50-layout----vendor); [check](verification.md#link-and-streaming)) | [VENDOR] | `VC880Obj.OpenDevice()` line 21228 |
 | Frame header: 0xAB 0xCD | [VENDOR] | `_header = { 171, 205 }` line 21061 |
 | Frame format: header + length + command + data + checksum_BE16 | [VENDOR] | `WriteCommand()` lines 21238-21263 |
 | Length byte = data.length + 3 | [VENDOR] | `WriteCommand()` line 21269 |
@@ -160,16 +160,7 @@ VC-890 requires independent implementation.
 
 ### Requires Device Verification ([UNVERIFIED])
 
-| Finding | Question |
-|---------|----------|
-| All 19 function codes produce correct mode labels | Need real meter to confirm |
-| Range byte values per function code | Need real meter to confirm each range index |
-| Status flag bit positions | Named in vendor code but not yet validated |
-| Sub-display field formats | Are they always numeric ASCII? |
-| Bar graph byte interpretation | 3 bytes — exact encoding unknown |
-| Overload representation in ASCII value fields | "OL"? "---"? Need real meter |
-| Streaming rate matches manual (2-3 Hz) | Need real meter |
-| UART config parity=3 means NONE in SiLabs enum | Cross-check with SLABHIDtoUART.dll API docs |
+The open checks are in [verification.md](verification.md).
 
 ## Cross-Reference Against pylablib (Phase 3)
 
@@ -190,6 +181,7 @@ Performed **after** independent analysis above.
 | cmd 0x46 = manual range | Yes (cmd_manualRange = 70) | Yes (0x46) | ✓ |
 | 33-byte payload (pylablib) vs 35 data bytes (our count) | 35 bytes msg[4..38] | 33 bytes (function+range+values+flags) | ~¹ |
 | Status bytes: 6 of 7 undocumented in pylablib | All 7 bytes, 28 flags named | Only stat[1] decoded | Our RE is richer |
+| Sub displays (msg[13..29]) | Sub value 1, sub value 2, bar (SetReadingValue) | Upper right min/max/avg/rel value, upper left memory, bottom bar graph | pylablib names them |
 
 ¹ pylablib counts 33 bytes of "payload" (after header+length+type), while our analysis counts from msg[4] through msg[36] = 33 bytes of measurement data + 2 checksum = 35. These are consistent when accounting for what each includes.
 
