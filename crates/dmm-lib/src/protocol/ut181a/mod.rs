@@ -615,7 +615,7 @@ fn report_unknown_frame_type(payload: &[u8]) {
 /// streams are framed exactly like a UT171's. Two things claim one: a payload
 /// only a UT181A can send, and any measurement frame that arrived while
 /// SET_MONITOR was the last trigger out. Everything shorter and later is left
-/// to the UT171, which detection consults next.
+/// to the UT171's rule, which declines exactly those two.
 pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut181a,
     label: "ut181a set monitor",

@@ -365,9 +365,10 @@ pub(crate) struct Fingerprint {
     /// Log label: what the probe is, e.g. `"ut61+ get name"`.
     pub(crate) label: &'static str,
     /// What to send before this family can answer; `None` for a meter that
-    /// streams unprompted. Byte-identical to what the family's own
-    /// [`Protocol::init`] sends, so a meter that answers a probe is left in
-    /// the state opening it would have produced anyway.
+    /// streams unprompted. Made of bytes the family already sends in normal
+    /// use — its [`Protocol::init`], its name query or its reading request —
+    /// so a meter that answers a probe is left in a state its own session
+    /// would have produced anyway.
     pub(crate) trigger: Option<fn(&dyn Transport) -> Result<()>>,
     /// Families whose trigger must have gone out before this one may be sent.
     /// The UT171 declares `&[DeviceFamily::Ut181a]`: its connect frame is

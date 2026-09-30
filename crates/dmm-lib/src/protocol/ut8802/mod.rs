@@ -440,8 +440,8 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 ///
 /// The meter streams unprompted, so it needs no trigger. Its 8-byte format
 /// carries no checksum and its validation accepts roughly 1% of random input,
-/// so one frame is not evidence: two consecutive ones are required, and
-/// detection consults this fingerprint last
+/// so one frame is not evidence: two consecutive ones are required, and its
+/// claim ranks below any checksummed one
 /// (`docs/research/uci-bench-family/reverse-engineered-protocol.md` §3).
 pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut8802,

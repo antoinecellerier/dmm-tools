@@ -1,7 +1,7 @@
 //! UT8803/UT8803E bench multimeter protocol.
 //!
-//! Streaming protocol: host sends 0x5A trigger byte after CP2110 init,
-//! meter streams 21-byte measurement frames continuously at ~2-3 Hz.
+//! Streaming protocol: the meter streams 21-byte measurement frames
+//! continuously at ~2-3 Hz, unprompted; the host sends nothing.
 //!
 //! Frame format: AB CD [byte2] 02 [mode] [range] [byte6] [display x5]
 //!   [flags0 x2] [flags1 x2] [flags2 x2] [flags3] [chk_hi] [chk_lo]
@@ -447,8 +447,9 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 ///
 /// The meter streams unprompted, so it is identified in whichever window it
 /// first speaks and needs no trigger of its own. Its 21-byte frame carries a
-/// checksum, which is why detection consults this fingerprint before every
-/// other AB CD family (`docs/detection-design.md`).
+/// 16-bit checksum, which is what ranks its claim above an unchecksummed one
+/// or a bare UT61+ reading (`docs/detection-design.md`, "Evidence
+/// strength").
 pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut8803,
     label: "ut8803 stream",

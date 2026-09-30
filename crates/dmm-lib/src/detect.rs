@@ -358,9 +358,11 @@ fn push(buf: &mut Vec<u8>, bytes: &[u8]) {
 /// which each rule already knows about itself.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Strength {
-    /// A model claimed by a rule whose extractor validates no checksum
-    /// (UT8802, UT80x). The `0xAC` format passes roughly 1% of random
-    /// bytes, and a UT181A frame is full of arbitrary float32 bytes.
+    /// A model claimed by a rule whose extractor validates no 16-bit
+    /// checksum: UT8802, UT80x, ZOTEK, the BU-86X series, and the 121GW,
+    /// whose 8-bit XOR passes one window in 256. The UT8802's `0xAC` format
+    /// passes roughly 1% of random bytes, and a UT181A frame is full of
+    /// arbitrary float32 bytes.
     Unchecksummed,
     /// A checksummed frame that settles the family but names no model — a
     /// bare UT61+ reading. Above an unchecksummed claim, below anything that
