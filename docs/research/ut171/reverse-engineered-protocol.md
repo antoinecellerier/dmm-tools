@@ -467,25 +467,21 @@ From `sys.ini`: interval=3s, duration=60min, skipRepeat=0.
 
 ---
 
-## 8. SLABHIDtoUART.dll vs Raw HID Access -- [VENDOR]
+## 8. SLABHIDtoUART.dll's CP2110 Handling -- [VENDOR]
 
-Comparison with our existing CP2110 implementation:
+What UNI-T's copy of Silicon Labs' HID-to-UART library does with the bridge:
 
-| Aspect | SLAB Library | Our transport/cp2110.rs |
-|--------|-------------|---------------|
-| Open sequence | Open → GetPartNumber → EnableUART | EnableUART → SetConfig → PurgeRX |
-| Part number check | Yes (must be 0x0A) | No (relies on VID/PID) |
-| UART enable in Open | Yes (automatic) | Explicit in `Cp2110::open()` |
-| SetUartConfig in Open | No (caller must do) | Done in `Cp2110::open()` |
-| Purge in Open | No (caller must do) | Done in `Cp2110::open()` |
-| Write chunking | Auto (63-byte reports, max 4096/call) | Single reports |
-| Read buffering | Internal ring buffer | Single report reads |
-| UART status byte order | **Big-endian** FIFO counts | Uses from_le_bytes — **potential bug** |
-
-SLABHIDtoUART.dll reads report 0x42's TX/RX FIFO counts big-endian
-(`CONCAT11(byte[1], byte[2])`); our `Cp2110::uart_status` reads them
-little-endian — an open check in the
-[verification backlog](../../verification-backlog.md#usb-bridges) (CP2110 is shared).
+- **Open:** opens the device, checks that the part number is 0x0A, then
+  enables the UART. It sets no line settings and purges nothing;
+  the caller sends SetUartConfig (§2.3) and the purge itself.
+- **Writes:** splits a write of up to 4096 bytes into 63-byte interrupt
+  reports.
+- **Reads:** fills an internal ring buffer from the interrupt reports and
+  hands the caller bytes from it.
+- **UART status (report 0x42):** reads the TX and RX FIFO counts big-endian
+  (`CONCAT11(byte[1], byte[2])`). Whether the chip sends them that way is an
+  open check in the [verification backlog](../../verification-backlog.md#usb-bridges),
+  since the CP2110 serves several families.
 
 ---
 
