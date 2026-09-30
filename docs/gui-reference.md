@@ -548,6 +548,7 @@ another value there clears the override and saves the new one.
 | `--import <FILE>` | Open an exported CSV, JSON or replay file, with its markers, instead of connecting to a meter. Connect leaves it for a meter. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
 | `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
+| `--completions <SHELL>` | Print a completion script for `bash`, `elvish`, `fish`, `powershell` or `zsh` and exit. Install it as in [dmm-cli completions](cli-reference.md#dmm-cli-completions), naming it after `dmm-gui`. |
 | `-V`, `--version` | Print version and exit. |
 | `-h`, `--help` | Print help and exit. |
 

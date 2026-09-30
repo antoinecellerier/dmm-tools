@@ -14,7 +14,7 @@ path = "src/main.rs"
 dmm-lib = { path = "../dmm-lib" }
 dmm-shared = { path = "../dmm-shared" }
 clap.workspace = true
-clap_complete = "4"
+clap_complete.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] } # `get --format json` leads with the header fields
 chrono.workspace = true

@@ -12,7 +12,7 @@ git config core.hooksPath git-hooks
 
 On Linux the build needs `libudev-dev` for hidapi and `libdbus-1-dev` for the Bluetooth transport (`systemd-devel` and `dbus-devel` on Fedora); see [`setup.md`](setup.md) for the full list. `cargo check -p dmm-lib --no-default-features` builds the library without Bluetooth, and `cargo check -p dmm-gui --no-default-features` the GUI without its update check; CI runs both.
 
-Shell completions for `dmm-cli` are in the [CLI reference](cli-reference.md#dmm-cli-completions).
+Shell completions are in the [CLI reference](cli-reference.md#dmm-cli-completions) and the [GUI reference](gui-reference.md#command-line-options).
 
 ## Running tests
 

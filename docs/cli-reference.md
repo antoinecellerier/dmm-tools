@@ -656,6 +656,8 @@ Supported shells: `bash`, `elvish`, `fish`, `powershell`, `zsh`.
 
 Running without a shell argument prints install instructions.
 
+For the GUI, [`dmm-gui --completions <SHELL>`](gui-reference.md#command-line-options) prints its own script.
+
 **Install completions:**
 
 ```bash

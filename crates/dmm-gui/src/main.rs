@@ -74,6 +74,10 @@ struct Args {
     #[arg(long, value_name = "FILE", conflicts_with_all = ["device", "mock_mode", "replay"])]
     import: Option<PathBuf>,
 
+    /// Print a shell completion script and exit
+    #[arg(long, value_enum, value_name = "SHELL", exclusive = true)]
+    completions: Option<clap_complete::Shell>,
+
     /// Run session time at FACTOR times real time (mock only, implies
     /// --device mock). Hidden: a contributor tool for screenshots and
     /// performance runs, documented in docs/development.md.
@@ -268,6 +272,16 @@ fn parse_args() -> CliOverrides {
     let device_help = build_device_help();
     cmd = cmd.mut_arg("device", |a| a.long_help(device_help));
     let args = Args::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e| e.exit());
+
+    if let Some(shell) = args.completions {
+        clap_complete::generate(
+            shell,
+            &mut Args::command(),
+            "dmm-gui",
+            &mut std::io::stdout(),
+        );
+        std::process::exit(0);
+    }
 
     // Validate and canonicalize --device if provided. Through `resolve_selection`
     // so `--device auto` is a choice rather than an unknown device.
@@ -639,6 +653,25 @@ mod tests {
                 "{err}"
             );
         }
+    }
+
+    #[test]
+    fn the_args_are_well_formed() {
+        Args::command().debug_assert();
+    }
+
+    /// `--completions` prints a script and exits, so a flag given with it
+    /// would be silently dropped; clap refuses the pair instead.
+    #[test]
+    fn completions_take_no_other_flag() {
+        let err = Args::try_parse_from(["dmm-gui", "--completions", "zsh", "--device", "mock"])
+            .err()
+            .expect("--completions stands alone");
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::ArgumentConflict,
+            "{err}"
+        );
     }
 
     /// `max` converts a replay in `dmm-cli read`; the GUI says so rather
