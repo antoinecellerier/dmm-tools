@@ -455,10 +455,12 @@ fn write_if_changed(path: &std::path::Path, content: &[u8]) -> bool {
 fn main() -> eframe::Result<()> {
     dmm_shared::logging::init();
 
+    let overrides = parse_args();
+
+    // After parsing: `--help`, `--version` and a bad flag exit there, so
+    // running them from a build tree leaves the desktop entry alone.
     #[cfg(target_os = "linux")]
     install_desktop_integration();
-
-    let overrides = parse_args();
 
     // Embedded icon for the window titlebar / taskbar. On Windows and macOS this
     // is all that's needed. On Linux/Wayland the icon is looked up from the
