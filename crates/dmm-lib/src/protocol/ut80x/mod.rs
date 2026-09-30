@@ -955,6 +955,11 @@ impl Protocol for Ut80xProtocol {
     }
 
     fn discard_input(&mut self, transport: &dyn Transport) -> Result<()> {
+        // The CH9325 carries one meter byte per report, and a HID queue left
+        // unread drops reports: #16's Windows captures kept the newest, and
+        // Linux's hidraw is expected to keep the oldest. Old bytes left here
+        // or in the queue could splice two packets into one that passes
+        // `is_packet`, so both go together.
         self.rx_buf.clear();
         crate::protocol::framing::discard_queued(transport)
     }
@@ -2285,8 +2290,8 @@ raw_payload=11"#
         );
     }
 
-    /// Issue #16: zero digits with the sign bit. Pinned as the parser reads
-    /// it today; what the LCD shows is open (backlog).
+    /// Issue #16: zero digits with the sign bit, which the LCD shows with
+    /// the minus (spec §3.2).
     #[test]
     fn ut804_snapshot_issue16_signed_zero() {
         let m = parse_measurement_ut804(&ISSUE16_SIGNED_ZERO).unwrap();

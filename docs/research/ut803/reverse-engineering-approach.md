@@ -43,6 +43,9 @@
 - **Avoided until 2026-09-16:** every external open-source implementation,
   the sigrok FS9721 driver included. The primary RE (2026-04-19 Ghidra
   passes, 2026-06 protocol-correctness review) consulted none.
+- **Approved and unused:** the sigrok FS9721 decoder and the FS9721-LP3
+  datasheet, approved for this family before the 2026-06 review, which
+  needed neither.
 - **Opened 2026-09-16, with approval,** after issue #16's first UT804
   report, for validation only. Consulted: sigrok libsigrok and its CH9325
   wiki page, `UT804.LOG` (tmatejuk/ut804_linux_logger), Lukas Schwarz's
@@ -136,9 +139,10 @@ chart. UT803.exe has no 7-segment decoder
 - **Range/decimal point tables:** HIGH for the UT804 — the meter, its
   manual and the UNI-T sheet agree but for AC V's top range and the 10 A
   code (spec §3.7); MEDIUM for the UT803
-- **Status flag bits:** MEDIUM — AUTO and sign confirmed; the UNI-T sheet
-  names bit 1 Manual and puts the sign in bit 3, which the meter never
-  sets; REL and low battery unverified
+- **Status flag bits:** MEDIUM — AUTO, Manual (bit 1) and sign confirmed
+  on the UT804, and REL has no bit (spec §3.6); the UNI-T sheet puts the
+  sign in bit 3, which the meter never sets; low battery and the UT803's
+  bits unverified
 - **Digit encoding:** MEDIUM — 0-9 confirmed as digits, 0xA as blank and
   0xC as `L` on the UT804; `B`, `D`-`F` unknown (spec §3.2)
 - **Nibbles 12-14:** none; the packet is 11 bytes

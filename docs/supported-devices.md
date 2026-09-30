@@ -88,9 +88,9 @@ off.
 | UT803 | 6000 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) | |
 | UT804 | 40000 | ✅ Verified ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) | |
 
-A reporter's UT804 has confirmed every dial position and auto-detection;
-what MAX MIN and REL send is still to confirm
-([backlog](verification-backlog.md)). The UT803 has not been run on a meter
+A reporter's UT804 has confirmed every dial position, auto-detection and
+every capture step; low battery is still to confirm
+([open checks](research/ut803/verification.md#ut804-status-and-digits)). The UT803 has not been run on a meter
 yet, and auto-detection does not find it: select UT803 as the device.
 
 ## UT71 / Voltcraft VC920 / VC940 / VC960

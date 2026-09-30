@@ -23,6 +23,7 @@ Items that need real components or specific setups to verify.
   - [UT61E+ AC+DC V: the components as separate readings](#ut61e-acdc-v-the-components-as-separate-readings)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [Bluetooth search and detection with built-in meters](#bluetooth-search-and-detection-with-built-in-meters)
+  - [macOS bridges other than the CH9329](#macos-bridges-other-than-the-ch9329)
   - [CP2110 FIFO counts](#cp2110-fifo-counts)
   - [Streaming meters: read continuously](#streaming-meters-read-continuously)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
@@ -627,237 +628,6 @@ credited here in the same commit, and the checklist is regenerated into the
 issue. The items below are the wire-level questions those steps answer,
 plus what no step reaches.
 
-#### UT803 / UT804 (issues [#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16))
-
-CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
-2026-09-18 (#16); the UT803 is implemented and needs hardware verification
-(#15).
-
-- **UT804 hardware reports** — five runs by @clazie in
-  [#16](https://github.com/antoinecellerier/dmm-tools/issues/16), all over
-  the UT-D04 (CH9325) cable at 2400 baud:
-  - **2026-09-17, v0.7.0-dev (666fbf5), Linux Mint** — `debug --count 5`
-    and a `capture` that stopped after `dcv`: the packet framing, DC V and
-    auto-detection. Nine dial positions also read right by eye in the
-    Windows GUI, with no frames.
-  - **2026-09-18, v0.7.0-dev (3806742), Windows** — all 27 steps at the
-    trusted tier, the gate passed (`core_semantics: confirmed`): every dial
-    position and SELECT alternate, the mode codes and AUTO. Its `acdcv`
-    step caught AC V, and its `cont` samples ran on into Diode and Ω.
-  - **2026-09-18 later, same build, Windows** — the gate failed on
-    `ohm_ol` (the LCD's `.OL MΩ` against our `0L MΩ`): AC+DC V, signed
-    zero, the LCD's OL and LO text, HOLD stopping the stream, and SEND.
-  - **2026-09-19, v0.7.0-dev (720072d), Windows** — `--steps max_min,rel`
-    and two photos of the LCD in diode mode. `max_min` showed status bit 1
-    after RANGE and MAX MIN. `rel` captured the state `max_min`'s EXIT and
-    SEND left, before REL was pressed: the tool's fault, since fixed by
-    steps that wait for Enter.
-  - **2026-09-19 later, v0.7.0-dev (959adfc), Windows** —
-    `--steps manual_range,max_min,rel` and two photos of the LCD in REL:
-    RANGE sets status bit 1, MAX MIN sends nothing of its own, and REL
-    sends the relative reading with bit 1.
-
-  The first three carried the model to `Stability::Verified`: every dial
-  position and SELECT alternate decoded correctly (°F has no step). With
-  the last two every capture step is confirmed; the low-battery indicator
-  is the one item left on the issue.
-- ~~**Readings on a real meter**~~ — **VERIFIED** 2026-09-17 by @clazie on a
-  real UT804 (UT-D04 / CH9325). `debug --count 5` and a `capture` `dcv` step
-  each returned five DC V readings with no errors, and the reporter confirmed
-  the last capture sample against the LCD. See
-  [#16](https://github.com/antoinecellerier/dmm-tools/issues/16).
-- **Golden fixtures**: 28 in `crates/dmm-lib/tests/golden/ut804/`. Three are
-  from the 2026-09-17 run — open leads, the confirmed 1.4 mV reading and a
-  negative one — two are 2026-09-19 samples, `max_min` with status bit 1 and
-  `rel`, and the rest are a confirmed sample from each dial position and
-  SELECT alternate in the 2026-09-18 captures.
-- ~~**CH9325 on Windows**~~ — **VERIFIED** 2026-09-17 by @clazie: the same
-  meter and cable ran under the Windows GUI as well as Linux Mint, with no
-  driver installed, which is what `docs/setup.md` tells users to expect of a
-  plain HID cable. Windows was verified before over CP2110 only
-  ([#1](https://github.com/antoinecellerier/dmm-tools/issues/1), UT61E+), so
-  this is the CH9325's first run on anything but Linux. Both 2026-09-18
-  captures ran on Windows. macOS is still open for every bridge but CP2110
-  ([#2](https://github.com/antoinecellerier/dmm-tools/issues/2)).
-- **Handler decompile (2026-09-16, spec §2)** — the form's event
-  handlers, missed by the first decompile, change what the driver needs:
-  - ~~**Wire format**~~ **Fixed 2026-09-17**: both apps' `USB Connect`
-    and RS232 handlers take 11-byte packets (9 data bytes, CR, LF) and
-    use only low nibbles; the 14-byte index-nibble check belongs to an
-    unused UT60A/B/C path. The driver now splits the stream on CR LF.
-    **VERIFIED** 2026-09-17 by @clazie on a real UT804 (UT-D04 / CH9325):
-    every packet in the `debug` and `capture` runs was 11 bytes ending
-    `0D 8A` and decoded. See
-    [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - ~~**UT803 rate**~~ **Fixed 2026-09-18, unverified**: the UT803 app
-    sets 19200 on the CH9325 and on its serial port, and the UT803 manual
-    gives 19200 7O1. `transport/ch9325.rs` tries 2400 first and takes any
-    report as an answer, so a UT803 stayed at 2400. The UT803's protocol
-    `init` now sends the 19200 report after start-up, and `transport_info`
-    names the rate the bridge was left at; the UT804's start-up is
-    unchanged. Unit tests only: no CH9325 meter here, and no UT803 has
-    answered
-  - ~~**UT803 positions**~~ **Fixed 2026-09-17**: the vendor parser's
-    position k is packet byte k-1; `parse_measurement_ut803` is fed `A`,
-    bytes 1-9 and `D`, as the vendor's is
-  - ~~**UT804 overload**~~ **Fixed 2026-09-17**: the vendor reads
-    nibble 1 = A as an overload unless nibble 2 = C, which it shows as
-    "L0." with value 0 (spec §7.4 item 6), and so does
-    `parse_measurement_ut804` now. **VERIFIED** 2026-09-18 by @clazie on
-    a real UT804 (UT-D04 / CH9325): Ω, diode and continuity OL, and LO on
-    the 4-20 mA %, decode as the LCD reads them. See
-    [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - **Nothing sent**: the apps send only the feature report; no trigger
-    byte or command
-  - **Idle reports**: the apps end each packet at a report without
-    payload and release the connection after 1900 in a row, so the
-    vendor expects the bridge to report while the meter is silent
-- **Resolved (2026-06 review)** — see spec §7.4 for full evidence:
-  - **Sign**: UT804 = nibble 9 bit 2 (previously misread as HOLD);
-    UT803 = nibble 8 bit 2. The old "sign global with no writer" was
-    Delphi RTL locale state (NegCurrFormat), a red herring.
-  - **Two layouts**: UT803 and UT804 use different payloads (UT803:
-    range=nib 2, digits=nibs 3-6, own mode codes, no 0xD/0xA markers);
-    the parser is now model-split.
-  - **Decimal positions count from the left**; all range→dp tables
-    re-derived per mode.
-  - **UT804 mode table corrected** for 9 of 15 codes (6=°C, 7=µA,
-    8=mA, 9=A, A=Cont, B=Diode, C=Freq/Duty, D=°F, F=mA%).
-  - **Overload** = nibble 1 == 0xA (UT804) / nibble 8 bit 0 (UT803).
-  - **Nibbles 12-14 never read by the vendor** (confirmed via the
-    Delphi-string access pattern); UT803 also ignores nibbles 1, 11-14.
-  - UT803 HOLD = nibble 9 bit 3. UT804 HOLD is in neither vendor
-    parser; the meter sends nothing while it is on (below).
-- Transport: CH9325 HID, 2400 baud first, 19200 fallback — implemented.
-- **Community cross-check (2026-09-16, spec §8)** — sigrok and
-  `UT804.LOG` contradicted the UT804 framing we implemented then:
-  - ~~**Wire format**~~ **Fixed 2026-09-17**: both give UT71x — 11
-    bytes, 2400 7O1, `0x30`-`0x3F` characters, CR LF — and #16's UT804
-    sends exactly that (`3x`/`Bx` bytes, then `0D 8A`). The driver
-    splits on CR LF with bit 7 masked. **VERIFIED** 2026-09-17 by @clazie
-    on a real UT804 (UT-D04 / CH9325): that framing carried readings end
-    to end at 2400 baud. See
-    [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The
-    UT803 was not cross-checked
-  - **Overload**: `UT804.LOG` reads `::0<:` (nibbles A A 0 C A) as
-    overload and the 4-20 mA underflow `:<0::` as "L0", as the vendor
-    does and, since the fix above, our parser
-  - **HOLD and REL**: `UT804.LOG` says nothing is transmitted while HOLD
-    is on and REL is never transmitted; a UT71x packet has no nibbles
-    12-14. ~~HOLD~~ — **VERIFIED** 2026-09-18 by @clazie on a real UT804
-    (UT-D04 / CH9325): with HOLD on the LCD and SEND still lit, no
-    packet arrives. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). ~~REL~~ —
-    **VERIFIED** 2026-09-19 by @clazie on a real UT804 (UT-D04 / CH9325):
-    no REL bit; the meter sends the relative reading (`-00.001` with 7.19 V
-    stored), with the Manual bit set. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - `UT804.LOG` holds 36 real packets across 9 dial positions and their
-    sub-functions. Run through `parse_measurement_ut804` as low nibbles
-    (2026-09-16, throwaway test): mode, unit, decimal point, AUTO/MAN,
-    coupling and sign match the log's labels on every non-overload
-    packet; all five overload packets came out as "L0" 0.0 before the
-    overload fix. Test vectors
-    once we decide on attribution (GPL-3.0 repository, author of the log
-    unknown)
-- **Needs hardware verification** (the payload layouts above are
-  decompile-derived):
-  - ~~One frame per dial position~~ — **VERIFIED** 2026-09-18 by @clazie
-    on a real UT804 (UT-D04 / CH9325): every dial position and SELECT
-    alternate, with its mode code, decimal point and unit. See
-    [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The UT803's is open
-  - ~~A negative reading (sign bits) and an overload (OL patterns)~~ —
-    **VERIFIED** 2026-09-18 by @clazie on a real UT804 (UT-D04 /
-    CH9325): -12.041 and -24.196 V DC, and OL on Ω, diode and
-    continuity. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The
-    UT803's are open
-  - ~~Does the UT804 need SEND after a power cycle~~ — **VERIFIED**
-    2026-09-18 by @clazie on a real UT804 (UT-D04 / CH9325): SEND is off
-    at power-on, nothing is sent until it is pressed, and EXIT turns it
-    off, as the manual's Table 2-2 says. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - MIN/MAX/REL/low-battery toggles — candidates: UT803 nibble 9
-    bits 2-1, UT804 nibble 9 bit 3. The UT803 pair lights indicators of
-    its own (§7.4 item 2), so the parser leaves it silent; the UT804 bit
-    is in neither vendor parser, and `UT804.LOG` says HOLD stops
-    transmission rather than setting a bit, so it is reported as
-    unrecognised to draw a trace (noted 2026-09-17). UT804 ~~MAX MIN and
-    REL~~ — **VERIFIED** 2026-09-19 by @clazie on a real UT804 (UT-D04 /
-    CH9325): RANGE alone sets nibble 9 bit 1, the UNI-T sheet's Manual;
-    MAX MIN sends nothing of its own, and REL sends the relative reading
-    with bit 1 (spec §3.6). See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The sheet puts the sign in
-    bit 3, which the meter never set: it sends the sign in bit 2. Low
-    battery is open
-  - ~~UT804 mode 0xF ("mA%") dial position; which of modes 1/2 each V
-    dial sends~~ — **VERIFIED** 2026-09-18 by @clazie on a real UT804
-    (UT-D04 / CH9325): 0xF is the mA position's 4-20 mA %, shown with
-    unit `%`; DC V sends 1 and AC V 2. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - UT804 mode 0xE (unknown glyph; hFE?): the UT804 has no dial position
-    for it (manual Table 2-1), so it may never be sent
-  - UT804 °F: no capture step asks for it
-  - ~~UT804 diode OL: the rule the other OL frames follow predicts `.0L`,
-    which we print, but the reporter twice accepted `0L`~~ — **VERIFIED**
-    2026-09-19 by @clazie on a real UT804 (UT-D04 / CH9325): the LCD
-    shows `. OL`, its point where a diode reading's is (`0.6314`), which
-    is the `.0L` we print. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - UT803 frequency range 0 decimal position; tachometer (RPM) frames
-  - A blank digit (A) inside a reading: `assemble_value` renders a blank
-    right after the decimal-point digit with the point twice ("12..45"),
-    an unparseable value. No spec'd packet has one; the parser reports
-    it as unrecognised (noted 2026-09-17)
-  - Whether 0x5A trigger byte helps/hurts; the UT803's streaming rate
-  - CH9325 feature-report layout: the UT803/UT804 apps send
-    `60 09 00 00 03` (`0x03` in byte 5), the SDK DLL `60 09 03 00 00`
-    (spec §1.2). `transport/ch9325.rs` sent the DLL's until 2026-09-16 and
-    sends the apps' since, for both rates. sigrok, Lukas Schwarz and
-    `he2325u.cpp` all send the apps' layout (spec §8). The sigrok wiki
-    reads byte 5 as the data-bit count, so the DLL's layout asks for 5
-    data bits. Issue #16's UT804 gave clean bytes at 2400 with both
-    layouts (spec §1.2), which settles neither: 2400 may be the bridge's
-    default
-  - CH9325 start-up takes any report as an answer, even one with no meter
-    bytes, and falls back to 19200 baud when none comes within 300 ms —
-    a rate the UT804 app never sets (the UT803 app's rate).
-    Lukas Schwarz and sigrok both describe `F0` reports while the meter
-    is silent, so a report at start-up proves nothing
-  - Three parser behaviours surfaced by the 2026-09 snapshot tests, to
-    settle against real frames rather than change blind: ~~`range_label`
-    is never set for either model although the per-mode tables know the
-    range~~ — **VERIFIED** 2026-09-18 by @clazie on a real UT804 (UT-D04 /
-    CH9325): the UT804 labels its readings from the manual's Table 2-3,
-    whose ranges match the decimal points of every range captured. See
-    [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The UT803's is
-    still unset; a UT804 LO frame (digit 1 = 0xA, digit 2 = 0xC) is reported
-    as `Normal(0.0)` with the LCD's text "L0." ("-L0." with the sign
-    bit), which CSV/JSON export as that string; and UT804 `acdc == 3`
-    (AC+DC) sets the DC flag.
-  - ~~Signed zero: a UT804 packet with zero digits and the sign bit
-    (issue #16) reads `-0.0000`, value `-0.0`. What does the LCD show?~~
-    — **VERIFIED** 2026-09-18 by @clazie on a real UT804 (UT-D04 /
-    CH9325): the LCD shows the minus, `-000.00 µA`, `-00.000 mA` and
-    `-00.000 A`. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - After a long pause in reading, the kernel's HID report queue can
-    drop reports, and the bytes left could splice two packets into one
-    that passes the packet check (not seen yet). To investigate: #16's
-    2026-09-18 captures (Windows) show the queue dropping reports. A
-    step's first wire event is often a packet's tail plus a whole packet,
-    read in one burst after the prompts, and the next live packet follows
-    620-720 ms later. So Windows kept the newest reports (hidapi asks for
-    64, and the bridge's empty reports fill them), and the kept bytes are
-    contiguous and fresh. Linux's hidraw is expected to keep the oldest
-    instead, which makes the first read after a pause stale and opens
-    the splice where old and live reports meet. Its 2026-09-17 run fits:
-    `dcv`'s first frame is followed 148 ms later. Draining the input at
-    each capture step's start would close both
-  - A UT803 is not auto-detected: the CH9325 starts at 2400 and the
-    UT803 talks at 19200, so it has to be named. Its packets are
-    unconfirmed on hardware
-  - The UT804 parser takes AC or AC+DC coupling on the mV position (mode
-    0x3) without a report, though the manual lists no AC mV function; a
-    capture of that position with SELECT pressed would say whether the
-    meter ever sends it
-- See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.
-- UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
-  documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
-  transport — separate scope from HID-based meters.
-
 #### UT60BT / UT202BT, Bluetooth built in (issues [#26](https://github.com/antoinecellerier/dmm-tools/issues/26), [#27](https://github.com/antoinecellerier/dmm-tools/issues/27))
 
 UT61+ frames over the ISSC service (ut61-family spec §1, tables §9). The
@@ -1103,10 +873,8 @@ Left over from the 2026-09-19 re-verification against the UT61+ manual:
     or the measurable span; the row says 0.1%~99.9%.
   - UT61D+ temperature: "should be less than 230°C/446°F", while the table
     runs to 1000°C/1832°F; the manual does not tie the limit to the probe.
-- **The same kind of unclear note in the UT803 spec data**, left as
-  printed:
-  - UT803 hFE: "bo ≈10µA" is kept as printed; the manual does not define
-    `bo`.
+- The UT803's unclear hFE note is in its
+  [verification list](research/ut803/verification.md#spec-data).
 
 ### UT61E+ auto power-off while polled over USB
 
@@ -1182,6 +950,14 @@ the ranges would have to come from hardware. Tracked as a candidate in
   packets and the adapter heartbeat in tests
   ([detection design](detection-design.md)). Watch a UT-D07B report for one.
 
+### macOS bridges other than the CH9329
+
+- **The CP2110, CH9325 and BU-86X on macOS.** Only the CH9329 has run on
+  macOS (a UT181A on its UT-D09, [PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8),
+  [#2](https://github.com/antoinecellerier/dmm-tools/issues/2)). Whether macOS
+  opens the others as plain HID decides what `docs/setup.md` says for them.
+  Needs any meter on one of those cables.
+
 ### CP2110 FIFO counts
 
 - **The byte order of report 0x42's TX/RX FIFO counts.** UNI-T's
@@ -1237,9 +1013,6 @@ rel` after a Pause, and a HID streaming meter (below).
 Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 "Sources"). Each is a separate task:
 
-- ~~**UT804 interface protocol V1.0 (2023-11-15)**~~ — **DONE 2026-09-19**:
-  read into the UT803/UT804 spec as [VENDOR-DOC]. It covers the UT804 alone,
-  so it says nothing of the UT804+.
 - **UNI-T's general-purpose PC software** ("优利德上位机软件", `1.10.zip`
   2025-05-26 and `Setup.zip` 2026-09-09, about 150 MB each), in the bench
   download centre's UT80 and UT88 results. Unopened; it may drive several
@@ -1274,6 +1047,15 @@ Bugs a reader can reproduce, with the cause and fix where known.
   BlueZ keeps a paired device's last RSSI and reports it during our scan
   (UT-D07B spec §4), and `standing()` in `transport/ble/search.rs` takes it
   as heard. Fix, untried: count only RSSI changes seen during our own scan.
+- **A UT804 LO reading is stored as 0.0.** In 4-20 mA % the LCD shows
+  `- LO. %` (ut803 spec §3.3), but the parser reports `Normal(0.0)` with
+  the text "L0.", so statistics, the graph and exports count a zero.
+  Fix, untried: `MeasuredValue::NoReading("LO")`.
+- **The `dc` flag has no definition.** `StatusFlags::dc` carries no doc,
+  and families set it differently on AC+DC: the UT804 sets it from
+  coupling 3, the BM86x and BM78xBT clear it, ZOTEK sets it from its DC
+  annunciator, the UT61E+ within its AC+DC modes. Fix: define it in
+  `flags.rs` and align the families.
 
 ### Entering NCV leaves the previous mode's trace on the graph
 

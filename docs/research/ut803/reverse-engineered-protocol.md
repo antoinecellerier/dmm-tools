@@ -25,7 +25,9 @@ Confidence levels:
   only)
 - **[DEDUCED]** — logical inferences from available evidence
 - **[UNVERIFIED]** — requires real device testing to confirm
-- **[HARDWARE]** — seen on a real meter (the UT804 of issue #16)
+- **[HARDWARE]** — seen on a real meter: the UT804 of issue #16, reported by
+  @clazie over its UT-D04 (CH9325) cable at 2400 baud. No UT803 has been
+  read.
 
 ---
 
@@ -41,6 +43,9 @@ Neither app filters on VID or PID: both list every HID device and
 preselect the last one whose product string is `USB to Serial` and
 that has no serial-number string (UT804 VA 0x56116A, UT803
 VA 0x55D622). VID and PID only name a device with no product string.
+
+[HARDWARE] The UT804's cable ran under Linux Mint and under Windows with no
+driver installed, as a plain HID device (issue #16, 2026-09-17).
 
 ### 1.2 UART Parameters — [VENDOR]
 
@@ -305,7 +310,7 @@ Digit nibbles (1-5) carry BCD-like values:
 - `0`-`9`: digit character '0'-'9'
 - `A` (0x0A): blank
 - `C` (0x0C): drawn as `L` in overload and LO packets (§3.3) [HARDWARE]
-- `B`, `D`-`F`: the vendor shows zeros for `B` in nibble 4 (§7.3), and
+- `B`, `D`-`F`: the vendor shows zeros for `B` in nibble 4, and
   `F` appears in the 4-20 mA "HI" pattern (§8); what the LCD draws for
   either is unknown
 
@@ -315,8 +320,7 @@ within each mode (§3.7).
 **Negative values:** nibble 9 bit 2 is the sign (§3.6, §7.4 item 2)
 [HARDWARE]: a UT804 sent it with -12.041 V and -24.196 V DC that its LCD
 showed (issue #16, 2026-09-18), and on zero readings, where the LCD shows
-the minus too (`-000.00 µA`, `-00.000 mA`, `-00.000 A`). The history of
-the search is in §7.4.1.
+the minus too (`-000.00 µA`, `-00.000 mA`, `-00.000 A`).
 
 ### 3.3 Overload and LO Packets — [VENDOR]
 
@@ -619,157 +623,84 @@ The data nibbles are proprietary, NOT LCD segments (UT804 layout, §3.1):
 
 ### 7.3 What Needs Hardware Verification
 
-The UT804's sign, mode codes, coupling, AUTO and Manual bits, REL and
-the ranges it sent are confirmed (§3). Still open:
+The open checks for both models are in [verification.md](verification.md).
 
-- The UT803's sign, mode list and range tables
-- Status flag bits: bit 3 (the sheet's sign, never sent), Low Battery
-  (§3.6)
-- Whether the meter needs anything sent (the apps send nothing, §4.2)
-- Streaming rate: a packet about every 656 ms on a UT804 (§4.2); the
-  UT803's is open
-- Line format on the wire (§1.2): 7O1 on a UT804; the UT803's is open
-- Digit nibbles `B`, `D`-`F` (§3.2)
-- Whether nibble 4 = 'B' guard condition has meaning
-- The UT804's °F packets (code D), and whether code E (power, no UT804
-  position) or 0 (AC mV, the sheet only) is ever sent
+### 7.4 Sign, Nibbles 12-14, and the Two-Model Split — [VENDOR]
 
-### 7.4 RESOLVED (2026-06): Sign, Nibbles 12-14, and the Two-Model Split
+From the analyzed binaries recovered by a wine administrative install of the
+vendor installers (MD5s as in §9): the cross-referenced globals
+disassembled, every string constant resolved and the bundled LCD fonts
+rendered (2026-06 review, each result re-derived by a second pass).
 
-The 2026-06 protocol-correctness review closed this section's open
-questions by recovering the analyzed binaries (wine administrative
-install of the vendor installers; MD5s match §9 exactly), raw-
-disassembling the cross-referenced globals, resolving every string
-constant, and rendering the bundled LCD fonts. Headline results, each
-re-derived independently by an adversarial second pass:
-
-1. **The "sign global" was a red herring.** `*PTR_DAT_005659c4`
+1. **The formatter's sign global is not wire data.** `*PTR_DAT_005659c4`
    (UT803) / `*PTR_DAT_005699c4` (UT804) is Delphi SysUtils'
    `NegCurrFormat` locale global — its writer is the RTL locale init
    (UT803 VA 0x40E217, reading `GetLocaleInfo(LOCALE_INEGCURR)`), and
    the 16-case `-` switch in `FUN_00490730`/`FUN_0049091c` is the RTL's
-   negative-**currency** formatter. Nothing to do with the wire
-   protocol. (The cluster: 0x566688 CurrencyFormat, 0x566689
-   NegCurrFormat, 0x56668A ThousandSeparator, 0x56668B
+   negative-**currency** formatter. (The cluster: 0x566688 CurrencyFormat,
+   0x566689 NegCurrFormat, 0x56668A ThousandSeparator, 0x56668B
    DecimalSeparator.)
-2. **The real sign is in-band.** UT804: nibble 9 bit 2 (the bit §3.6
-   previously labeled HOLD — the vendor lights the `LcdFH` sign
-   indicator and prepends `"-"`, VA 0x55a3dc; negative overload
-   comparand `"-0@"` at 0x55a434; ut804-decompiled.txt:224244-224374).
+2. **The sign is in-band.** UT804: nibble 9 bit 2 — the vendor lights
+   the `LcdFH` sign indicator and prepends `"-"`, VA 0x55a3dc; negative
+   overload comparand `"-0@"` at 0x55a434; ut804-decompiled.txt:224244-224374.
    UT803: nibble 8 bit 2 (ut803-decompiled.txt:224458-224469). HOLD on
-   the UT803 is nibble 9 bit 3 (`LCDHold`, ut803-decompiled.txt:225086);
-   HOLD's wire encoding on the UT804 appears in **neither** parser and
-   remains unknown.
-3. **Nibbles 12-14 are genuinely never read** — confirmed with the
-   correct access pattern: the frame arrives as a Delphi string of hex
-   characters parsed via 1-based `Copy(s, idx, 1)` (which is why
-   pointer-arithmetic greps found nothing). The UT804 parser reads
-   indices 1-11 only; the UT803 parser reads 2-10. The 0xD/0xA markers
-   are the low nibbles of CR/LF — an ASCII-protocol trailer, which
-   explains the unused tail. *2026-09-16: the live receive paths take
-   11 bytes, so there are no nibbles 12-14, and the UT803's positions
-   2-10 are bytes 1-9 (§2.1).*
+   the UT803 is nibble 9 bit 3 (`LCDHold`, ut803-decompiled.txt:225086),
+   and its nibble 9 bits 2-1 light two indicators of their own, unlabelled.
+   HOLD's wire encoding on the UT804 appears in **neither** parser; the
+   meter sends nothing while HOLD is on (§4.2).
+3. **Nibbles 12-14 are never read.** The frame arrives as a Delphi string
+   of hex characters parsed via 1-based `Copy(s, idx, 1)`, which is why
+   pointer-arithmetic greps found nothing. The UT804 parser reads indices
+   1-11 only; the UT803 parser reads 2-10. The 0xD/0xA markers are the low
+   nibbles of CR/LF. The live receive paths take 11 bytes, so there are no
+   nibbles 12-14, and the UT803's positions 2-10 are bytes 1-9 (§2.1).
 4. **The frame parse is model-specific.** UT804.exe contains three
-   protocol paths selected by UI control (Delphi RTTI method table:
-   `H71ARData`/`LcdDisplay71A` = the UT804 structured parser;
-   `H60BRData`/`LcdDisplay60B` = a 7-segment decoder for legacy
-   UT60A/B/C support; `H70BRData`/`LcdDisplay70B` = dead). *2026-09-16:
-   hidden checkboxes and buttons select them: `H71ARData` on RS232 and
-   `LcdDisplay71A` behind `USB Connect`; `LcdDisplay60B` only on the
-   unused UT60A/B/C path (§2.2-§2.4).* The UT803
-   uses its own layout (range=nibble 2, digits=nibbles 3-6, different
-   mode-code meanings — see §5), with its mode and range tables at
-   ut803-decompiled.txt:224441-225068.
+   protocol paths (Delphi RTTI method table: `H71ARData`/`LcdDisplay71A` =
+   the UT804 structured parser; `H60BRData`/`LcdDisplay60B` = a 7-segment
+   decoder for legacy UT60A/B/C support; `H70BRData`/`LcdDisplay70B` =
+   dead). Hidden checkboxes and buttons select them: `H71ARData` on RS232
+   and `LcdDisplay71A` behind `USB Connect`; `LcdDisplay60B` only on the
+   unused UT60A/B/C path (§2.2-§2.4). The UT803 uses its own layout, with
+   its mode and range tables at ut803-decompiled.txt:224441-225068.
+   Position 2 is the range, positions 3-6 the digits and position 7 the
+   mode code, with meanings of its own (§3.4). Position 9 is read at
+   ut803-decompiled.txt:225083-225112: bit 3 HOLD (widget 0x37c), bits 2-1
+   the two indicators of item 2 (0x5b0, 0x5b4); bit 0 has no known
+   meaning. By the 2026-06 review, as the code records it: position 8
+   bit 3 an alternate (RPM for frequency, °C for temperature), bit 2 the
+   sign, bit 0 overload and bit 1 no known meaning; position 10 bit 3 DC,
+   bit 2 AC and bit 1 AUTO.
 5. **Decimal positions count from the left** (point after digit
    `pos+1`), per the display assembly at ut804-decompiled.txt:
    224289-224356 (point slots LcdP0-LcdP3 interleaved with the digit
-   labels). The previous places-from-right reading inverted every
-   table.
+   labels).
 6. **Nibble 1 = 0xA marks an overload frame** (digits forced to
    "0L"/"L0" via the LCD font where '@' renders as 'L';
-   ut804-decompiled.txt:223810-223823, 224361-224391); `"0@"` → +OL,
-   `"-0@"` → −OL, `"@0"` → 0.0. It is not an "AC flag mode".
-   *2026-09-16: nibble 2 = C gives `"@0"` (0.0, shown "L0."), any other
-   nibble 2 gives `"0@"` (overload, negative with the sign bit);
-   nibbles 3-5 are ignored (VA 0x558B3B-0x558B98, 0x559ABE-0x559B2A).*
-7. **The UT804 mode table was wrong for 9 of 15 codes.** Corrected via
-   unit-string constants + font glyphs (`#`=°C, `?`=°F, `)`=diode,
-   `&`=beeper, `*`=Ω, `@`='L', `$`=battery): 6=Temp °C, 7=µA, 8=mA,
-   9=A, A=Continuity, B=Diode, C=Frequency (duty-% via nibble 9 bit 2,
-   reused since negative frequency is impossible;
-   ut804-decompiled.txt:224271-224283), D=Temp °F,
-   E=unknown glyph (possibly hFE), F="mA%" (likely 4-20 mA loop).
-   *2026-09-21: E is power, unit W (§3.4).*
+   ut804-decompiled.txt:223810-223823, 224361-224391): nibble 2 = C
+   gives `"@0"` (0.0, shown "L0."), any other nibble 2 gives `"0@"`
+   (overload, `"-0@"` with the sign bit); nibbles 3-5 are ignored
+   (VA 0x558B3B-0x558B98, 0x559ABE-0x559B2A).
+7. **The UT804 mode codes**, from the unit-string constants and font
+   glyphs (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω, `@`='L',
+   `$`=battery): 6=Temp °C, 7=µA, 8=mA, 9=A, A=Continuity, B=Diode,
+   C=Frequency (duty-% via nibble 9 bit 2, reused since negative frequency
+   is impossible; ut804-decompiled.txt:224271-224283), D=Temp °F, E: no glyph
+   in UT804.exe; power by the UT71 apps [DEDUCED] (§3.4), F="mA%" (4-20 mA
+   loop).
    Frequency unit boundaries: ranges 0-1 Hz, 2-4 kHz, 5-7 MHz; Ω:
    range 1 Ω, 2-4 kΩ, 5-6 MΩ. The unit strings are appended at
    ut804-decompiled.txt:224075-224184, and the range switches are at
    223961-224033 and 224129-224170.
-
-8. **The frame-string-builder is confirmed (2026-06 follow-up).** The
-   one remaining inferred link — that the parser's positional
-   `Copy(s, idx, 1)` reads wire nibbles in FS9721 index order — was the
-   receive handler `H71ARData` (VA 0x55822c; *2026-09-16: the serial
-   port's handler, not the HID one; it keeps digits in arrival order,
-   syncs on the CR byte and never tests high nibbles — see §2.3*), which RTTI names but
-   Ghidra's call graph never reached (it appears in *neither*
-   decompile). Raw-disassembling it from the recovered binary shows it
-   converts each received byte to a 2-char hex string
-   (`FUN_00409230` → `FUN_004090d0`, an `IntToHex`-style formatter with
-   `add dl,0x30`), peels the data nibble keyed by the byte's high-nibble
-   index, accumulates it into the Delphi string global `DAT_0056b698`,
-   and frame-syncs on the hex markers `"0D"`/`"DA"`/`"AD"` (= the 0x0D/
-   0x0A trailer). So the string the parser reads positionally *is* the
-   ordered sequence of wire data nibbles — the structured-nibble model
-   (not LCD segments) and the 1-based-`Copy` indexing are both
-   vendor-confirmed, not assumed.
-
-Clean-room note: approval was given to consult the sigrok FS9721 decoder
-and the FS9721-LP3 datasheet for this family, but the 2026-06 resolution
-above required neither — it is derived entirely from the vendor
-binaries, their fonts, and the existing decompiles. The clean-room
-boundary was opened later, on 2026-09-16, with approval: §8 records what
-was consulted.
-
-The section below is kept for the historical record of the gap.
-
-### 7.4.1 Historical: Nibbles 12-14 and Secondary Status Bits (superseded)
-
-Two Ghidra passes over `ut803-decompiled.txt` and `ut804-decompiled.txt`
-(226K / 227K lines each, 2026-04-19) have established a negative
-finding about the upper nibbles:
-
-- **Nibbles 12, 13, 14 are never read in the visible decompile.** A
-  full grep for `param_1 + 0xB / 0xC / 0xD / 0xE` (and the short-
-  pointer equivalents) against the frame-parse function (`FUN_00558a7c`
-  in UT804 / its UT803 peer) returns no hits. The visible parser only
-  consumes nibbles 1-11.
-- **The display formatter (`FUN_00490730` / `FUN_0049091c`) reads a
-  precomputed 0-15 byte from a global pointer** (`*PTR_DAT_005659c4` /
-  `*PTR_DAT_005699c4`) and uses it to choose between sixteen format
-  strings — four of which (cases 1, 5, 8, 9) prepend `-`. The cross-
-  reference grep finds exactly one hit per global: the read above. No
-  writer appears anywhere, including at the HID-receive sites.
-- **The `*-gap-decompiled.txt` files are Ghidra build logs, not code**,
-  and contain no additional function bodies.
-
-The implication: the write path that populates the sign global — and
-plausibly the secondary status bits implied by the "may carry
-additional flags" note at the top of this file — lives in code Ghidra
-reconstructed as non-returning / inlined / as an assembly stub. A
-future investigation should either:
-
-1. Re-run Ghidra with call-graph and data-flow recovery tuned to be
-   more aggressive, specifically around the HID transfer callbacks;
-2. Use a raw disassembler (not a decompiler) on the regions
-   cross-referenced by the globals, to see the asm-level store; or
-3. Capture a real UT803 / UT804 reading a known negative value (and a
-   second reading with MIN, MAX, REL, and low-battery each toggled in
-   turn) — four of those captures would nail down exactly which
-   nibble/bit carries each flag.
-
-At that date the spec left nibbles 12-14 as `[UNVERIFIED]` and the sign
-unlocated. Both are superseded: the sign is nibble 9 bit 2 (§3.2,
-§7.4 item 2) and the packet has no nibbles 12-14 (§2.1).
+8. **The string the parser reads is the wire nibbles in order.** The
+   serial handler `H71ARData` (VA 0x55822c, §2.3), which RTTI names but
+   Ghidra's call graph never reached, converts each received byte to a
+   2-char hex string (`FUN_00409230` → `FUN_004090d0`, an `IntToHex`-style
+   formatter with `add dl,0x30`), keeps the low digits in arrival order in
+   the Delphi string global `DAT_0056b698`, syncs on a byte equal to 0x0D,
+   checks positions 1 and 11 for `A` and `D`, and never reads the high
+   digits (§2.3). So the parser's
+   positional `Copy(s, idx, 1)` reads the ordered sequence of wire data
+   nibbles: structured nibbles, not LCD segments.
 
 ---
 
@@ -792,7 +723,7 @@ libsigrok's code unless it says "wiki".
 | Digit values A, C, F | A = blank or flag, B-F unknown (§3.2) | — | `:` blank, `<` 'L', `?` 'H' | ✓ A; C, F new |
 | Overload | Nibble 1 = A: overload unless nibble 2 = C, which gives 0.0 shown "L0." (§7.4) | `::0<:` overload, `:<0::` underload | `::0<:` overload; 4-20 mA `:<0::` "L0", `:?1::` "HI" | ✓³ |
 | Nibbles 12-14 | No such bytes (§2.1) | No such bytes | No such bytes | ✓ |
-| HOLD | Wire encoding unknown (§7.4) | — | Nothing transmitted while HOLD is on | New |
+| HOLD | Nothing sent while HOLD is on [HARDWARE] (§4.2) | — | Nothing transmitted while HOLD is on | ✓ |
 | REL | No bit of its own: the relative reading, with bit 1 (§3.6) | — | Never transmitted | ✓ |
 | 4000-count display | Nibble 5 = A is blank (§3.1) | Byte 4 = `:` | — | ✓ |
 | CH9325 report layout | Apps: rate, `00 00`, `03`; SDK DLL: rate, `03` (§1.2) | `[lo, hi, 00, 00, 03]` | — | ✓ apps⁴ |
