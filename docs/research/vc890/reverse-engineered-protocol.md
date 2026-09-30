@@ -33,7 +33,9 @@ Conrad's VC890 Protocol Rev 1.3 (2013-1-4, `references/vc890/protocol/`).
 
 ## Frame Format -- [VENDOR]
 
-Same AB CD + BE16 framing as VC-880 and UT61E+.
+Host frames use the same AB CD + BE16 framing as VC-880 and UT61E+.
+Voltsoft checks no checksum on a frame the meter sends: that inbound frames
+carry the BE16 sum is inferred from its host-side builder, [UNVERIFIED].
 
 ## Communication Model -- [VENDOR]
 
@@ -76,10 +78,9 @@ The sequence is invoked in two places per measurement cycle:
    3× ack burst after every received frame.
 
 A similar single-shot `AckMessage(clear: false)` (one write, no sleeps)
-is used on an HID read error path at line 3941. The meter still
-receiving / initiating vs. requiring the ack is [UNVERIFIED], but the
-vendor's double bracketing is strong enough evidence to ship the
-sequence on both sides of a measurement.
+is used on an HID read error path at line 3941. Whether the meter
+requires the ack or merely receives it is [UNVERIFIED]
+([verification](verification.md#exchanges)).
 
 **[VENDOR-DOC]** The protocol document defines `0xFF` Result both as a
 DMM→PC message (§3.7) and as a PC→DMM command (§4.6), laid out
@@ -116,14 +117,29 @@ Offset  Size  Field
 58      1     Status 2: Hold(0), Manual(1), OL1(2), OL2(3)
 59      1     Status 3: AutoPower(0), Warning(1), Loz(2), Void(3)
               (Loz and Void both exposed as dedicated bools in vendor:
-              DMSShare_decompiled.cs:23638-23639)
+              DMSShare_decompiled.cs:23638-23639; Void: "OLED show
+              'VOID' symbol" [VENDOR-DOC] p.6, "Data memory contains
+              no values" [MANUAL] §8, p.55)
 60      1     Status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
 61      1     Status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
-62      1     Battery level (low nibble, raw 0-15 — see note below)
+62      1     Battery level (low nibble, raw 0-15 — see note below;
+              0x30-0x33 = gear 0-3 [VENDOR-DOC] p.6)
 63      1     Misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
-              3=V err — DMSShare_decompiled.cs:23649-23665)
+              3=V err — DMSShare_decompiled.cs:23649-23665; bit 2
+              Memory_Overwrite [VENDOR-DOC] p.6)
 64-65   2     Checksum (BE16)
 ```
+
+**[VENDOR-DOC] p.6** gives bytes 59-63; bytes 56-58 are not on it.
+Bytes 59-62 carry `0 0 1 1` in bits 7-4, a `0x30` prefix, and byte 63
+carries `0 0 1 1 0` in bits 7-3. Its names for bytes 59-61 match the rows
+above but for byte 60 bit 0, `Inner_flag` ("1: Inner 0: Outer"), and byte 61
+bit 0, `log_A_flag` ("the continuous memory function is on or not"). Byte
+62's bits are `bat_grade3_flag` to `bat_grade0_flag`, and "Msg[62].bytes =
+0x30, the battery quantum show 0 gear" through 0x33, 3 gear. Byte 63's
+bit 2 is `Memory_Overwrite_flag`, bits 1 and 0 `misplug_warning_flag2` and
+`flag1`, read as "Msg[63].bytes&0x34 = 0x30; misplug NO EEROR" and
+"&0x34 = 0x31; misplug EEROR ON mA INPUT" as printed; the page ends there.
 
 **Battery level (byte 62, low nibble)**: The DLL stores the raw 0–15
 value (`DMSShare_decompiled.cs:23648`, `battery_flag = msg[62] & 0xF`)
@@ -132,9 +148,9 @@ but never read elsewhere in DMSShare.dll, and no low-battery threshold
 is computed at this layer. The thresholding therefore lives in the
 VoltSoft GUI (`VoltSoft System.exe` / `DeviceClient`, not yet
 decompiled). Contrast VC-880 (`msg[33]` bit 3 is a single `Low_batt_flag`
-bool at `DMSShare_decompiled.cs:16799`). Until the GUI is reversed or
-a real device is tested, consumers should surface the raw level and
-treat "low battery" conservatively.
+bool at `DMSShare_decompiled.cs:16799`). Which gear the meter's
+low-battery symbol goes with is [UNVERIFIED]
+([verification](verification.md#status-bytes)).
 
 ## Function Codes -- [VENDOR]
 

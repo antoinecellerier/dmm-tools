@@ -50,6 +50,10 @@ const ACK_GAP: Duration = Duration::from_millis(100);
 /// three ack frames separated by 100ms sleeps. The vendor also calls
 /// `FlushBuffer()` at the end, but the `Transport` trait has no flush
 /// and we have not observed a functional need for one.
+///
+/// Sent before every command and after every live frame, as the vendor
+/// brackets its exchanges; whether the meter needs it is unknown (spec "Ack
+/// protocol").
 fn send_ack_sequence(transport: &dyn Transport) -> Result<()> {
     for i in 0..3 {
         transport.write(&ACK_FRAME)?;
@@ -387,8 +391,8 @@ impl Vc8x0Model for Vc890Model {
         // sample already, but nothing records what the meter itself was
         // showing, so the values can't be interpreted. Ask for that here:
         // the step's screen-confirmation prompt is where the answer lands.
-        // We currently treat 0 as "empty", which is a guess — see the
-        // VC-890 entry in docs/verification-backlog.md.
+        // We currently treat 0 as "empty", which is a guess — see "Status
+        // bytes" in docs/research/vc890/verification.md.
         vec![
             CaptureStep::basic(
                 "battery",
@@ -408,8 +412,8 @@ impl Vc8x0Model for Vc890Model {
     /// `AckMessage(clear: true)` (:3775).
     ///
     /// The vendor also retries the whole GetDeviceID exchange up to 10 times
-    /// with a FlushBuffer between attempts; we make one. See the VC-890 entry
-    /// in docs/verification-backlog.md.
+    /// with a FlushBuffer between attempts; we make one. See "Exchanges" in
+    /// docs/research/vc890/verification.md.
     fn ack(transport: &dyn Transport) -> Result<()> {
         send_ack_sequence(transport)
     }
@@ -430,9 +434,9 @@ impl Vc8x0Model for Vc890Model {
     /// pre-clear ack burst (`WriteCommand(cmd, ack: true)` →
     /// `AckMessage(clear: true)`), then the frame itself.
     ///
-    /// Nothing to read back here: the meter echoes the command in a frame of
-    /// its own, and the live-frame accept filter (type byte 0x01) already
-    /// skips it.
+    /// Nothing to read back here: the vendor expects the meter to echo the
+    /// command in a frame of its own, and the live-frame accept filter (type
+    /// byte 0x01) already skips it.
     fn write_button(_rx_buf: &mut Vec<u8>, transport: &dyn Transport, cmd: u8) -> Result<()> {
         Self::ack(transport)?;
         transport.write(&build_command(cmd))
@@ -1018,8 +1022,8 @@ raw_payload=61"#
     }
 
     /// Battery nibble 0x1 — the lowest non-empty level — is not reported as
-    /// low battery: the vendor's threshold is unknown (see the VC-890 entry
-    /// in docs/verification-backlog.md).
+    /// low battery: the vendor's threshold is unknown (see "Status bytes" in
+    /// docs/research/vc890/verification.md).
     #[test]
     fn snapshot_battery_nibble_one() {
         let mut status = zero_status();

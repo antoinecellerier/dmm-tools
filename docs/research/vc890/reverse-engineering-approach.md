@@ -17,8 +17,11 @@ confidence markers.
 Conrad's VC890 Protocol Rev 1.3 (2013-1-4, `references/vc890/protocol/`)
 was read 2026-09-28, from rendered pages, for its handshake only: the
 Result message and whether any timing is given (pp. 1-2, 9-13). Its
-[VENDOR-DOC] lines are in the spec's Communication Model; its frame
-layouts (pp. 3-8) are not yet compared with the spec.
+[VENDOR-DOC] lines are in the spec's Communication Model. Page 6 (bytes
+59-63) was read 2026-09-30, from a rendered page, into the spec's Live Data
+Frame; the frame layouts on pp. 3-5 and 7-8 are not yet compared with the
+spec.
 
 No VC-890 hardware has been available; everything else is
-decompile-derived and tracked in the verification backlog.
+decompile-derived, and its open checks are in
+[verification.md](verification.md).

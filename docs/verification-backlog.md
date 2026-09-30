@@ -27,7 +27,6 @@ Items that need real components or specific setups to verify.
   - [CP2110 FIFO counts](#cp2110-fifo-counts)
   - [Streaming meters: read continuously](#streaming-meters-read-continuously)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
-  - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
   - [A flat trace labels its y-axis with six decimals](#a-flat-trace-labels-its-y-axis-with-six-decimals)
   - [A meter power cycle surfaces a checksum error](#a-meter-power-cycle-surfaces-a-checksum-error)
@@ -627,109 +626,6 @@ The issue's checklist is `dmm-cli --device <id> capture --list-steps
 credited here in the same commit, and the checklist is regenerated into the
 issue. The items below are the wire-level questions those steps answer,
 plus what no step reaches.
-
-#### Voltcraft VC-890
-
-- Polled communication model (0x5E request → live data response)
-- Frame extraction (66-byte, AB CD header, BE16 checksum)
-- Function code mapping (19 codes, 0x00-0x12, remapped from VC-880!)
-- 60,000 count range values (6/60/600 vs 4/40/400)
-- 7 display value fields (main + 6 sub-displays) — format and content
-- Status flag bytes (8 bytes at msg[56..63]) — all bit positions correct?
-  Do bytes 56-61 carry a 0x30 prefix like the range byte? The parser
-  reports their bits 6-7 as unrecognised and leaves bits 4-5 out until a
-  capture settles this (noted 2026-09-17)
-- Sign1 (msg[56] bit 2) — the value's sign is taken from the display text;
-  the parser reports Sign1 set on a display without a `-` (noted 2026-09-17)
-- AVG flag (byte 57 bit 1) — parsed since 2026-09-07 and reported wherever
-  flags are shown; unverified on hardware. Put the meter in MAX/MIN/AVG and
-  confirm AVG lights only on the AVG step of the cycle.
-- Battery level nibble (msg[62]) — what do the values mean?
-- Misplug warning nibble (msg[63]) — 0=none, 1=mA err, 2=A err, 3=V err
-- ACV LPF (0x01) range byte — vendor ignores it and fixes 1000V (2026-06
-  review, DMSShare_decompiled.cs:23466); what does the meter send there?
-- Inbound checksum — the vendor never validates meter→host checksums; our
-  BE16 check is inferred from the host-side builder. If real frames are
-  all rejected with ChecksumMismatch, suspect a different inbound scheme.
-- Command confirmation frames — vendor `SendCommand` waits for a frame
-  whose type byte equals the command byte (5 retries); we fire-and-forget.
-- Ack protocol (0xFF+\[0x00\] after responses) — is it required or optional?
-- GetDeviceID retries — the vendor loops up to 10 times with a `FlushBuffer`
-  between attempts (`DMSShare_decompiled.cs:3895`); we make a single attempt.
-  Does one attempt reliably return the name on real hardware?
-- Battery nibble ground truth — every capture report already carries the raw
-  byte in `raw_hex`, but nothing records what the meter's own battery
-  indicator showed at the time, so the values stay uninterpretable. The
-  `battery` capture step now asks for that; a report from a meter with a
-  fresh pack *and* one the meter flags as low would settle whether `0` means
-  empty or "not populated" (which is what our `low_battery` currently
-  assumes).
-- Commands: same as VC-880 plus 0x5D (Set Time) and 0x5E (Get Measurement)
-- PC button activation requirement
-- Dial table and SHIFT/SETUP mode switching — implemented 2026-09-07 as
-  `dmm-cli get mode`/`set mode` (and the GUI's mode dropdown) over the
-  [MANUAL] dial table in the spec's "Rotary positions" section. Nothing in it is
-  hardware-confirmed: the manual says which symbol each position offers,
-  never the order the presses walk them. Runnable checks, one dial position
-  at a time:
-  - `dmm-cli --device vc890 get mode` on every position — the listing should
-    name exactly the functions that position offers, `*` on the live one.
-    The capacitance position offers one function, so it prints "no
-    switchable modes" instead of a list. Report the dial symbol and the
-    list whenever they disagree
-  - switch to every entry the listing offers, with
-    `RUST_LOG=dmm_lib=debug dmm-cli --device vc890 set mode "<label>"`, and
-    paste the log: one `cycle: pressing SHIFT/SETUP (in X, want Y)` line per
-    press, so it records both the press count and the order the function
-    codes actually came round in
-  - the raw cycle, independent of our table: `dmm-cli --device vc890 command
-    select` followed by `dmm-cli --device vc890 read --count 3`, repeated
-    until the display returns to where it started, once per position
-  - V~ should carry the low-pass filter (0x01) as its sub-function here,
-    where the VC-880 gives Lo a dial position of its own — confirm on the
-    meter, since the two families' dials otherwise match
-  - the settle constants are untuned guesses (no delay, 2 reads for a press
-    to show up). `the meter refused …: SHIFT/SETUP did nothing in <mode>`
-    while the display *did* change means they are too tight — report the
-    mode and how long the meter takes to answer
-- `Setting::Range` — implemented 2026-09-07 the same way, pressing RANGE
-  (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
-  nobody has confirmed that repeated 0x46 steps the ladder one rung at a
-  time on this meter. Runnable check, on a dial position with a stable
-  input applied: `dmm-cli --device vc890 get range` should name the rungs
-  that function offers, `*` on the live one — report any rung the meter's
-  own RANGE button reaches that the listing leaves out. Then
-  `RUST_LOG=dmm_lib=debug dmm-cli --device vc890 set range <label>` for each
-  of them, and `set range auto` to finish. Paste the
-  `cycle: pressing RANGE (in X, want Y)` lines: the press count per rung is
-  what says whether 0x46 steps one at a time.
-  `<label> never appeared; the meter is back in <label>` means it does not,
-  and `the mode changed to <mode>; stopped pressing RANGE` means 0x46 moves
-  the function byte too
-- `Setting::Hold`, `Rel` and `MinMax` — implemented 2026-09-07 by pressing
-  0x4A, 0x48 and 0x49 and reading the flag back, with 0x43 to leave
-  MAX/MIN/AVG. MIN/MAX is offered as off/MAX/MIN/AVG. Unverified: the order
-  0x49 walks those three in (the driver re-reads after every press, so any
-  order works, but a state the meter never lights shows up as
-  `<state> never appeared; the meter is back in <state>`), and whether
-  every mode accepts HOLD and REL. Peak is not offered — the vendor command
-  table lists no peak command. Runnable check:
-  `dmm-cli --device vc890 set minmax max`, then `set minmax min`, then
-  `set minmax avg`, then `set minmax off`, each with the badge the LCD
-  shows; `set minmax avg` is also the hardware check the AVG flag item
-  above wants, since it only succeeds if byte 31 bit 1 is read back. Then
-  `set hold on` / `set hold off` and `set rel on` / `set rel off` on two or
-  three dial positions. Run them under `RUST_LOG=dmm_lib=debug` and paste
-  the `cycle:` lines. Also unknown: which buttons a held meter drops. A
-  mode or range walk presses HOLD off and sends a dropped press again;
-  `set hold on` then `set mode` or `set range` exercises it
-- `dmm-cli --device vc890 capture` exercises all of the above on its own
-  since 2026-09-07: once the gate steps pass, every mode step is followed by
-  `set range`/`hold`/`rel`/`minmax` through each value, filed as
-  `<mode>/<setting>:<label>` sub-steps carrying what the meter read back.
-  Report any sub-step with `status: error` and the
-  `remote control unreliable on this meter` line if it appears — those are
-  the commands this meter refused
 
 #### UT803 / UT804 (issues [#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16))
 
@@ -1550,12 +1446,6 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 - ~~**UT804 interface protocol V1.0 (2023-11-15)**~~ — **DONE 2026-09-19**:
   read into the UT803/UT804 spec as [VENDOR-DOC]. It covers the UT804 alone,
   so it says nothing of the UT804+.
-- **VC890 Protocol Rev 1.3** (VC-890), Conrad's protocol document, archived
-  in `references/vc890/protocol/` with a SOURCE.txt. The vc890 spec was
-  built from Voltsoft alone. Its handshake was read 2026-09-28 (its Result
-  message and codes, no timing given) into the vc890 spec as [VENDOR-DOC];
-  its frame layouts (pp. 3-8) are still to read. The VC880 Protocol Rev 2.4
-  is in its [verification list](research/vc880/verification.md#vendor-sources).
 - **UNI-T's general-purpose PC software** ("优利德上位机软件", `1.10.zip`
   2025-05-26 and `Setup.zip` 2026-09-09, about 150 MB each), in the bench
   download centre's UT80 and UT88 results. Unopened; it may drive several
@@ -1576,19 +1466,6 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 - **Protocol documents for families we don't support**: the older UT61E and
   UT61B (both are the chipset datasheets — ES51922 and FS9922-DMM3 — not
   UNI-T documents), and the Voltcraft VC-870 (Conrad item 124603, IN01).
-
-### VC-890 VOID readings are plotted as valid
-
-`flags.void` means the meter marked a reading invalid (misplug /
-reference-disconnect detection). It arrives alongside an ordinary `Normal`
-value, and the GUI plots that value, records it and exports it like any
-other — so an invalid reading is indistinguishable from a good one
-everywhere except the flags column.
-
-Needs a VC-890 to settle two things before changing behaviour: whether the
-accompanying value is meaningful at all when VOID is set, and whether
-`lead_error` behaves the same way. If the value is meaningless, it should not
-be plotted — which makes this a correctness fix rather than a rendering one.
 
 ### Entering NCV leaves the previous mode's trace on the graph
 
