@@ -370,8 +370,8 @@ the integral use the scaled reading.
 
 Applying or clearing a scale resets the graph and statistics, like
 **Clear**; a recording in progress continues with scaled values. The setting
-is session-only and survives disconnect and `Ctrl+L`. `dmm-cli read` offers
-the same transform as `--scale`, `--offset` and `--unit`.
+is session-only and survives disconnect, a change of device and `Ctrl+L`.
+`dmm-cli read` offers the same transform as `--scale`, `--offset` and `--unit`.
 
 ## Layout Modes
 
@@ -534,7 +534,9 @@ and the arrow keys drive the focused widget. Press `Escape` to release it.
 ## Command-Line Options
 
 All options override saved settings for the current session only — they
-do not modify the persisted `settings.json`.
+do not modify the persisted `settings.json`. [Settings](#settings) marks an
+overridden value with its option, as in "Auto-detect (--device)"; picking
+another value there clears the override and saves the new one.
 
 | Option | Description |
 |--------|-------------|

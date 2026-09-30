@@ -1,5 +1,10 @@
 # UX Design
 
+The principles behind the CLI and the GUI, and the reasons for the choices a
+user meets. What each command and control does is in the
+[CLI reference](cli-reference.md) and the [GUI reference](gui-reference.md).
+Code paths below are under `crates/dmm-gui/src/`.
+
 ## Design Principles
 
 1. **Clean and modern** — minimal chrome, subtle separators, generous but efficient use of space
@@ -8,260 +13,144 @@
 4. **Configurable** — users choose which panels are visible via a settings gear menu
 5. **Responsive** — adapts between wide (side-by-side) and narrow (stacked) layouts
 
-## CLI Interface
+## Command line
 
-### Subcommands
+**Command-line values last one session.** GUI options (parsed with `clap`, as
+in the CLI) never reach `settings.json`: `--device auto` detects without
+saving, where Auto-detect in the panel saves what it finds.
 
-One subcommand per job; the flags are in [`cli-reference.md`](cli-reference.md#commands).
+**Overrides are marked.** A session-only value has to be told from a saved
+one.
 
-- `dmm-cli list` — enumerate connected devices
-- `dmm-cli info` — connect and print device name (queried from meter)
-- `dmm-cli read` — continuous measurement reading, to the terminal or a file, as text, CSV, JSON or a replay file; optional software scaling; plays a replay file back in place of a meter
-- `dmm-cli command` — send one button press by name
-- `dmm-cli get` — list what the meter's mode, range, HOLD, REL, MIN/MAX and Peak can be switched to from where it sits
-- `dmm-cli set` — switch one of those settings by label
-- `dmm-cli debug` — raw hex dump mode for protocol development
-- `dmm-cli capture` — guided protocol capture wizard for bug reports and device verification. YAML output with raw bytes, structured flags, user screen confirmations; resumes an interrupted run and ends with freeform captures. Design in [`capture-design.md`](capture-design.md)
-- `dmm-cli completions` — shell completion scripts
+## GUI layout
 
-### GUI Command-Line Options
+**One width decides the layout.** The reading column sits beside the graph in
+a wide window and stacks above it in a narrow one (Responsive). The
+threshold is `WIDE_LAYOUT_MIN_WIDTH` in `app/meter_fit.rs`.
 
-The GUI takes its device, theme and mock-mode selection on the command line
-too (via `clap`, consistent with the CLI). These override saved settings for the current
-session only — so `--device auto` detects the meter without saving it, where
-Auto-detect chosen in the panel saves the meter it finds. The settings panel
-shows which values are overridden (e.g., "Auto-detect (--device)"). Clicking a
-different value in the panel clears the override and persists the user's
-choice. See [`gui-reference.md`](gui-reference.md#command-line-options) for the full options table.
+**Columns scroll like a page.** A short window scrolls each column rather than
+cropping it; the top bar stays pinned; the wheel scrolls and Ctrl+wheel zooms
+the graph. Users know these gestures from other apps, unlike nested scrollers.
 
-## GUI Layout
+**News floats as a toast.** A transient message sits over the top-right
+corner, so every layout shows it, minimal mode included, and a narrow top bar
+neither clips it nor grows to hold it.
 
-### Theme
+**The window's position is left to the OS.** Wayland ignores it, and a monitor
+unplugged since would leave the window off-screen. Fullscreen isn't restored
+either: it is a mode the user steps into.
 
-- Supports light and dark mode, toggled via settings
-- Default: dark
-- Connected status: green indicator dot + device name (e.g., "UT61E+"); the top bar's device label names the model, auto-detected when none was picked
-- Disconnected/error: grey indicator dot
-- Reconnecting: orange indicator dot
+**Big-meter sizes are not kept.** The mode itself isn't, and a small readout
+window would cramp the next launch's full layout (`App::track_layout` in
+`app/layout.rs`).
 
-### Color Palette
+**Zoom steps like a browser's.** Ctrl+Plus, Ctrl+Minus and Ctrl+0 walk
+non-linear levels (`ZOOM_LEVELS` in `app/appearance.rs`); 100% is the OS scale.
 
-- Three curated presets: Default (warm), High Contrast (bold), Colorblind-safe (blue/orange/purple)
-- All 24 base colors customizable per-theme via UI color pickers or JSON overrides
-- Colors are split: UI chrome (6), graph (13), status indicators (4), minimap (1)
-- Derived colors auto-track their base (cursor dim/delta, minimap line, recording warning, button hover/active)
-- UI chrome colors (background, text, weak text, button, border, accent) modify egui Visuals — plot grid and axis labels follow automatically
-- Text and Accent reach what egui paints itself (captions, headings, selected fills, focus rings) only once customized, so the stock presets stay egui-native; the heading emphasis lift is small enough that a saturated color keeps its hue
-- Border is pinned only by High Contrast, at 3:1 or better; the other presets keep egui's own faint grey
-- Warnings and errors egui draws itself follow the Warning/Error status colors
-- Preset selection and per-color overrides persist to `settings.json`
+**Big meter and minimal modes.** With the graph and recording hidden the
+reading fills the window, for a bench display or a presentation; minimal mode
+drops the top bar and buttons too. **⊞** and Ctrl+B leave saved panels alone,
+so closing the app keeps the configured layout.
 
-### Top Bar
+**Nothing below a window-sized reading.** In big meter and minimal mode a
+connection problem replaces the reading's placeholder with its title, and the
+steps go in its hover text.
 
-Compact toolbar row: device label, Connect/Disconnect button, Pause/Resume button (freezes capture without disconnecting — pauses >gap threshold show gap markers), Clear button (resets graph/stats), connection status with device name and colored dot, settings gear icon (right-aligned).
+## Reading display
 
-Transient status messages are not part of the row: a toast floats over the window's top-right corner, so every layout shows it and a narrow bar neither clips it nor grows to hold it. Its `✔`/`⚠` glyph carries the kind of news, so colour is not the only cue.
+**The meter's own digits.** The reading is the meter's display string in
+monospace at a fixed width, so digits and a minus sign coming and going never
+shift it (`format_display_raw` in `display/text.rs`).
 
-### Settings Panel
+**Only a working control looks like one.** The mode and range labels become
+dropdowns only where the meter can be switched and offers a choice; elsewhere
+they stay plain labels.
 
-Toggled by the gear icon. Contains:
+**A key list is a list of presses.** A meter that lists function keys (ZOTEK)
+gets a **Meter keys** dropdown captioned as presses. Every pick presses, the
+marked key too, since a key can cycle within its function.
 
-- **Theme:** Dark / Light
-- **Colors:** Default / High Contrast / Colorblind preset selector. Collapsible "Customize colors" section with per-color edit buttons.
-- **Panels:** Show/hide Graph, Statistics, Recording, Specifications
-- **Auto-connect on start:** default on
-- **Show device name on connect (beeps):** default on — queries device name via protocol, which causes the meter to beep
-- **Sample interval:** Every reading (0 ms: each reading the meter produces, at its pace), 100ms, 200ms, 300ms, 500ms, 1s, 2s — at most one reading per interval, the one nearest each tick, so a streaming meter's frames are read as they come and the interval chooses among them rather than pacing the reads.
-- **Zoom:** UI scale selector (30%-300%, Firefox-style non-linear levels) + keyboard shortcuts (Ctrl+/-, Ctrl+0 to reset). 100% = OS default scale. Persists across sessions.
+**A button promises a press.** The remote buttons mirror the meter's front
+panel and send a raw press, so their labels and tooltips promise no more;
+naming a destination is the readout dropdowns' job.
 
-The rows are height-capped and scroll when the window is too short to hold them all; the top bar row above them stays where it is.
+**SCALE comes last.** Its badge follows the meter's own: it is the app's
+state, not the meter's, and among the reported flags it would be misattributed.
 
-Settings persist to `~/.config/dmm-tools/settings.json` on Linux, and to the platform's config directory elsewhere.
+## Scale
 
-### Responsive Layout
+**Scale is set apart from the meter's buttons.** A vertical rule separates it:
+they drive the meter, and Scale changes nothing on it. Without the boundary it
+would suggest the meter knows the factor; a line break serves when it wraps.
 
-Threshold at ~900px available width:
+**Scale is always on screen.** While disconnected it keeps a line of its own,
+so an active scale can always be turned off.
 
-**Wide (≥ 900px):** Two-column layout with resizable panels.
-- Left column (resizable, 180-400px): reading display, remote control buttons, mode/range/flags, specifications panel, statistics panel
-- Right column: graph toolbar + main graph + minimap, drag separator, recording panel
-- Graph/recording split resizable via drag handle
+**Scale commits on Apply.** Apply or Enter commits, never a keystroke: a
+half-typed number would clear the graph and statistics on every character.
 
-**Narrow (< 900px):** Single-column stack.
-- Reading (compact single line for mode/flags)
-- Specifications (compact inline)
-- Statistics (compact line + visible window stats)
-- Graph (toolbar + main + minimap)
-- Recording (resizable via drag handle)
+**Applying a scale resets the graph.** The graph, statistics and integral no
+longer describe the same quantity, so they restart. The recording carries on,
+as it does on **Clear**.
 
-Each column is a page scroller: too short a window scrolls it rather than
-cropping it, the graph area keeping a minimum height. The top bar is outside
-the scrollers and stays pinned. The shortcut help caps itself to the window
-and scrolls inside its own frame rather than being clipped by it.
+## Graph
 
-The window size, maximized state, sidebar width and graph/recording split
-persist in `settings.json`. The position is left to the OS: Wayland ignores
-it, and a monitor unplugged since would leave the window off-screen.
-Fullscreen is not restored, being a mode the user steps into. A size set in
-big meter mode is not kept: the mode itself isn't, and a small readout
-window would cramp the next launch's full layout.
+**The toolbar reads view, series, overlays.** The boxed **Plot:** and
+**Show:** groups get a row between the time window and the analysis toggles:
+inline, nothing told the controls apart (`show_toolbar` in `graph/toolbar.rs`).
 
-**Big meter mode (graph + recording both hidden):** Single centered display.
-- Reading, buttons, specs (inline), and stats scale to fill available space
-- Font size computed from both available width and height using cached measured text ratios
-- Buttons and stats scale proportionally with the reading
-- Quick toggle via **⊞** button (near remote controls) or **Ctrl+B** — temporarily hides all panels without changing saved settings
-- A connection problem replaces the reading's placeholder with its title, hover text carrying the steps — nothing is drawn below a reading sized to the window
-- Useful as a large bench-meter display or for presentations
+**Different units are never overlaid.** A shared axis would imply a
+relationship that isn't there, so a sub-value in another unit is reached
+through **Plot:**. A change of mode or unit clears the graph: the old and new
+scales are incompatible.
 
-### Reading Display
+**The plot key is a key.** It toggles nothing: egui_plot's legend loses its
+show/hide state while the view is pinned every frame (`paint_plot_key` in
+`graph/render.rs`), so the **Show:** chips are the control.
 
-- Primary value uses meter's raw 7-char display string in monospace font for stable formatting
-- Unit adjacent in monospace ("V")
-- Sub-value rows below the value for meters that send them (UT181A, UT171):
-  label, value, unit, and `@Ns` for MIN/MAX timestamps. Nothing is drawn for
-  single-display meters.
-- Mode, range label, and active flags below
-- On meters that can be switched over USB, the mode and range labels are
-  dropdowns naming what the dial position and the live mode offer; everywhere
-  else they stay the plain labels they read as, so nothing appears to be a
-  control that cannot act as one
-- A meter whose profile lists function keys instead (ZOTEK) gets a **Meter
-  keys** dropdown on the mode label: the caption says the entries are
-  presses, not destinations; the key whose function shows is marked, and
-  every pick presses, the marked one too, since a key can cycle within its
-  function
-- Flags shown as subtle colored badges: AUTO, HOLD, REL, MIN, MAX
-- Low battery warning shown as orange "LOW BAT" badge
-- SCALE badge (same accent as AUTO/HOLD) whenever a software scale is active.
-  Drawn after the meter's own badges: it is the app's state, not the meter's,
-  and mixing it in among reported flags would misattribute it
+**Session choices are never saved.** A scale, plotted series or hidden trace
+restored silently at the next launch would corrupt readings or plot a sub-value
+the user doesn't suspect. A hidden trace survives a clear; a plotted series
+lasts while the meter sends it.
 
-### Remote Control Buttons
+## Recording and export
 
-Row of buttons below the reading (only shown when connected and receiving data).
-The buttons mirror the meter's front panel and send a raw press, so their labels
-and tooltips promise a press and nothing more; naming a destination is the
-readout dropdowns' job.
-- **HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK** — highlight blue when the corresponding protocol flag is active
-- **SELECT** — cycles sub-modes (no toggle state, mode change visible in reading)
-- **LIGHT** — toggles backlight (no protocol feedback for state)
-- Context keys from the profile (ZOTEK's **ZERO**, the 121GW's **1kHz**) —
-  shown only while the reading is one they act on (capacitance for ZERO, the
-  AC modes for 1kHz)
+**Import… comes first.** Placed before Record, it leaves Record, Export…,
+Discard and the sample count together as the recording's controls. An import
+replaces the session, so it asks through Record's discard prompt.
 
-### Scale Button
+**Export… saves the graph when nothing is recorded.** The graph and a
+recording share one store, so a reading both hold is paid for once (`Recording`
+in `recording.rs`), and the samples on screen can be saved without Record.
 
-A **Scale** toggle at the end of the remote controls' last line, opening
-`× [scale] + [offset] → [unit] [Apply] [Off]` on a row below when clicked.
-Styled like the remote buttons (filled while a scale is active) but
-deliberately **set apart from them by a vertical rule**: those buttons mirror
-and drive the meter's own state, whereas this changes nothing on the meter.
-Sitting among them with no boundary would suggest the meter knows about the
-factor. When the rule and the button no longer fit on the line (the big-meter
-toggle at the row's right edge counts), the button drops to a line of its own
-and the line break is the boundary; while disconnected it has that line
-anyway, so an active scale can always be turned off.
+**The format is picked before the dialog.** The dialog returns a path but not
+the file type picked, and GTK keeps the name's extension when the filter
+changes (`ExportFormat` in `app/export.rs`).
 
-- Commits on **Apply** or Enter in a field, never on keystroke — a
-  half-typed number would clear the graph and statistics on every character.
-- Bad input raises an error toast naming the field; nothing is applied.
-- Applying or clearing resets graph/stats/integral (the accumulated numbers
-  no longer describe the same quantity) but never the recording buffer,
-  matching the **Clear** button.
-- **Session-only, never persisted.** Same rationale as the graph's plotted-
-  series selection: a factor restored silently at the next launch would
-  corrupt readings the user has no reason to suspect. It does survive
-  disconnect/reconnect, a change of device and Ctrl+L, and the row stays
-  visible so an active scale can always be turned off.
-- Hidden in big-meter Minimal mode, like the remote buttons.
-- Headless tests in `app/transform_ui.rs` pin both placements — on the LIGHT
-  line at 900 pt, on its own line at 420 pt.
+## Accessibility
 
-### Specifications Panel
+**Never colour alone.** Flag badges are bold, the status dot has its text, an
+imported session's ring shape says no meter is attached, a toast carries a
+glyph, and overlay traces differ by dash pattern.
 
-Shows per-range electrical specifications from the device manual:
-- Resolution, accuracy (with multiple frequency bands for AC), input impedance, notes
-- "Manual" hyperlink to manufacturer's product page when `manual_url` is configured
-- Adapts to each layout: full panel (wide), inline summary (big meter), compact line (narrow)
-- The wide panel's heading folds it to the compact line: the title stays left, the fold triangle sits at the right under the big-meter toggle, and the fold is saved, unfolded by default
-- In Settings the fields the panel shows follow the Specifications checkbox, the group wrapping as one; the one-line layouts honour Resolution and Accuracy
-- The one-line layouts show resolution and accuracy only; impedance and notes stay in the full panel
-- A reading with no range row keeps its mode's impedance and notes in the full panel; the one-line layouts show only the Manual link
-- Coverage: UT61E+, UT61B+, UT61D+, UT161 family, UT181A, UT803, UT804, Mock. Other devices show manual link only.
+**11 pt floor.** egui's small text style ships at 9 pt, so it is raised to
+11 pt once at startup rather than avoided per call site (`SMALL_TEXT_SIZE` in
+`app/appearance.rs`).
 
-### Connection Help
+## Colour and contrast
 
-Shown when connection fails:
-- **USB adapter not found:** udev rule instructions, prompt to click Connect
-- **No response from meter:** "Waiting for meter..." animation during timeouts, then step-by-step USB enable instructions (insert module, turn on, long press USB/Hz button)
+**WCAG 2.1 AA in every preset.** Text clears 4.5:1 and graphical elements
+3:1, in both themes: every colour has a dark and a light variant, and tests in
+`theme.rs` check each preset.
 
-### Graph Panel
+**Secondary text has its own colour.** egui's 60% dimming falls under 4.5:1,
+so secondary text takes a per-preset colour clearing it on the panel, the frame
+fill and the text-edit background. A user's own pick is theirs to keep above it.
 
-Three components stacked vertically:
+**Dark text is lifted.** Dark primary text is gray(180), not egui's gray(140):
+beside 140 no dimmer tone clears 4.5:1, and 180 keeps two distinct tiers
+(ratios beside `PRESET_DEFAULT` in `theme.rs`).
 
-**Toolbar:**
-- Time window presets: 5s, 10s, 30s, 1m, 5m, 10m
-- LIVE toggle button (filled when active)
-- Y:Auto / Y:Fixed toggle — in fixed mode, shows min/max text input fields. Switching to fixed snapshots current auto range unless user previously edited values.
-- The **Plot:** and **Show:** groups below sit together on a row of their own, between the time-window row and the Mean/Min/Max/Ref/Cursors row, and appear only for meters that send sub-values — so the toolbar reads view → what is plotted → what is drawn over it. Each group is a faintly boxed caption plus its chips, so the two are not mistaken for the analysis toggles.
-- **Plot:** chips (only for meters that send sub-values) — pick the series the graph draws: the main reading, or any sub-value in the current frame. Session-only; a label the meter stops sending falls back to Main.
-- **Show:** chips (only once a same-unit sub-value is being overlaid) — pick which of those traces are drawn. Hidden ones keep being recorded, so re-showing one brings its history back; they leave the key, the plot and the Y-axis fit while off. Session-only, keyed by label, and kept across a clear or a change of plotted series.
-- **Mean** toggle — dashed horizontal line at visible window average, labeled with value
-- **Min/Max** toggle — sliding window envelope (configurable width in seconds), dashed boundary lines showing value range
-- **Ref** toggle — one or more horizontal reference lines at user-specified values (comma/space/semicolon separated), each labeled. When active, optional **Triggers** toggle shows diamond markers at threshold crossings.
-- **Cursors** toggle — click graph to place cursor A then B (snaps to nearest data point). Draws vertical + horizontal lines at each cursor. Labels show time and value. Toolbar displays ΔT and ΔV between cursors.
-
-**Main graph:**
-- `egui_plot` time series with auto-scaling Y axis (10% padding)
-- Y axis tick labels include unit (e.g. "1.0 mV" not "1.0"), X axis labels include unit ("10 s", "1 m")
-- Crosshair tooltip shows time and value with units
-- In LIVE mode: auto-scrolls to latest data
-- In browse mode (click LIVE to toggle, or click minimap): drag to pan X, Ctrl + scroll wheel (or pinch) over the plot to zoom X (centered on cursor). Y auto-scales to visible data.
-- Dragging or Ctrl + scroll wheel while in LIVE mode exits to browse mode; the plain wheel scrolls the panel and leaves the graph alone
-- Double-click to return to LIVE mode
-- Sub-values sharing the plotted series' unit are drawn as extra dashed/dotted lines (up to four). Different-unit sub-values (Hz, ms beside V AC) are never overlaid — a shared axis would imply a relationship that isn't there — and stay reachable through the **Plot:** selector. Line style, not just colour, distinguishes them.
-- A static key in the plot's top-left names each drawn line with its colour and dash pattern, painted only while something is overlaid. It is a key, not a control: `Plot::reset()` pins the view every frame and clears egui_plot's own legend state, so the show/hide affordance is the toolbar's **Show:** chips instead.
-- Cursors, Mean/Min/Max/Ref, the minimap and the visible-window stats all follow the plotted series; overlays are reference traces only
-- Disconnect gaps shown as dashed red vertical line pairs
-- Consistent line color across reconnects
-- Timeline is continuous across disconnects (data not cleared on reconnect)
-
-**Minimap:**
-- Custom-painted thin strip showing full capture history
-- Viewport indicator as [ ] bracket markers (thick blue lines)
-- Click/drag to navigate: moves main graph viewport to clicked time
-- Clicking near the latest data re-enables LIVE mode
-- Time axis labels with smart interval selection
-
-**History:** up to the configured buffer size, default 500K points (VecDeque, oldest dropped). Mode *or* unit changes clear the graph (incompatible scales) — auto-range crossing a decade changes the unit while the mode stays put. Every sub-value is kept as its own trace, but only those in the plotted unit are drawn. A change of plotted series swaps it with the kept trace of that name, so both keep their past, and moves the Y axis to its unit (two sub-values can share both mode and unit, T1/T2, so the series label is what tells them apart). A kept trace whose own unit moves a decade restarts alone. Overlay traces keep each point at its own frame's time and break only on their own over-range values, a silence, a lost link or a run of frames without them — not where the plotted series goes over range.
-
-### Statistics Panel
-
-- Min, Max, Avg values in monospace with right-aligned fixed-width formatting
-- Sample count
-- Reset button clears stats
-- Stats persist across reconnects (use Clear button for full reset)
-- In wide layout: also shows visible window stats (min/max/avg for current graph interval)
-
-### Recording Panel
-
-- Record/Stop toggle button
-- Discard button beside Export… once a recording has stopped: drops it, and Export… saves the graph's readings, the recording's among them while the graph holds them. It asks only about unexported samples and markers the graph has dropped; with nothing lost the toast says what Export… now saves. Record over a kept recording asks about all of its unexported samples, since Export… saves the recording while there is one
-- Import… button first in the recording row, before Record (open dialog on a separate thread, as Export's), so Record, Export…, Discard and the sample count stay together as the recording's controls: an import replaces the session, so it goes through the discard prompt Record uses; the file's readings go into a stopped recording counted as saved, without the software transform, and the top bar names the file with a ring in place of the status dot — shape as well as colour saying no meter is attached
-- Export… split button (file dialog on a separate thread — no UI freeze; the label saves a CSV, the arrow's menu picks CSV, JSON or replay: the format is settled before the dialog opens because rfd returns the path but not the file type picked, and the GTK chooser keeps the name's extension when its filter changes)
-- Shows sample count and duration while recording
-- Records to in-memory buffer, exported on demand
-- With nothing recorded, Export… saves the samples the graph holds; a dimmed line under the row says so, with their count, and points to Record for capturing across mode changes. One buffer serves both roles — it follows the graph until Record empties it for the recording — so full samples are paid for once, and the graph's are kept only while no recording exists, the only time Export… saves them.
-- Scrollable sample log showing the whole recording (timestamp, value, unit, flags, and any sub-values) in monospace, markers on their readings' rows. Auto-scrolls to bottom. Only the rows in view are drawn, plus every marker's row so Tab reaches each note; past about a million rows f32 positions lose pixel precision, so a longer recording's log starts later and says to export for the rest. With nothing recorded it lists the markers alone.
-
-### Accessibility
-
-- All colors are theme-aware — darker variants on light backgrounds, brighter on dark
-- WCAG 2.1 AA contrast ratios verified: ≥4.5:1 for text, ≥3:1 for graphical elements. Secondary text (mode line, sub-value labels and timestamps, toolbar and hint captions, the side column's section headings) is pinned to a per-preset colour that clears 4.5:1 on the panel, the faint frame fill and the text-edit background, instead of egui's default 60 % dimming of the primary text colour — which measured ~2.7:1 dark / ~2.9:1 light. Like every other palette colour it can be customized, and a picked value is the user's own to keep above 4.5:1
-- Dark-mode primary text is gray(180) rather than egui's gray(140): at 140 no dimmer secondary tone still clears 4.5:1, so lifting the primary keeps two visibly distinct text tiers (8.31:1 and 4.79:1 on the gray(27) panel). Light mode is unchanged at gray(80) / gray(112)
-- Minimum font size 11pt throughout (WCAG recommends ≥12px). egui's small text style ships at 9 pt, so it is raised to 11 pt once at startup rather than avoided per call site
-- Flag badges use bold text in addition to color for non-color distinction
-- Status dot uses text label alongside color indicator
-- Graph overlays use distinct line styles (solid, dashed-dense, dashed-loose) in addition to color
-- `NO_COLOR=1` env var disables CLI color output
+**The stock presets stay egui's own.** Text and Accent reach egui's own
+painting only once customized, and only High Contrast pins Border (3:1), so the
+presets follow egui's defaults as egui changes them.

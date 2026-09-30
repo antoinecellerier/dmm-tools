@@ -87,7 +87,7 @@ Documentation is part of the deliverable — update affected docs in the same co
 
 - `docs/architecture.md` — crate layering, core concepts, the connect and reading paths, subsystems, design decisions by label, module map.
 - `docs/protocol.md` — index of per-family specs. Authoritative content lives in `docs/research/<family>/reverse-engineered-protocol.md`.
-- `docs/setup.md`, `docs/development.md`, `docs/ux-design.md`, `docs/cli-reference.md`, `docs/gui-reference.md` — user and contributor references; update when their subject changes.
+- `docs/setup.md`, `docs/development.md`, `docs/cli-reference.md`, `docs/gui-reference.md` — user and contributor references; update when their subject changes. `docs/ux-design.md` holds the design principles and the reasons behind UX decisions.
 - `docs/adding-devices.md` — end-to-end guide for new device support. **Read this before starting work on any new device.**
 - `docs/research/<family>/` — per-family RE methodology and wire-protocol spec.
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns surface. Critical for preserving state across sessions.
