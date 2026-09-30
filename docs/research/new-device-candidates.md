@@ -611,13 +611,34 @@ Rigol/Siglent" wording meant that.
   plus core channel, a few hundred lines of XDR, std only, cross-platform,
   reaches every model, must tolerate the UT8805N/E's unpadded replies;
   (2) **raw socket 5025 over `std::net`** — trivial, UT8805A/UT8806 line
-  only; (3) **Linux `/dev/usbtmcN` through `std::fs`** — the kernel adds the
-  headers; Linux only, plus a udev rule; (4) **USBTMC over libusb/nusb** on
-  macOS and Windows — a new dmm-lib dependency against the "hidapi,
-  thiserror, log only" rule in `.claude/rules/protocol.md`, and Windows
-  needs WinUSB (Zadig) or a vendor VISA driver; (5) **RS-232** — the serial
-  transport the UT805A and OWON XDM would also use, with its own dependency
-  decision.
+  only. Both LAN options need a host entry in the GUI and its settings (the
+  N line announces nothing to discover) and a network `Link` variant
+  through every site that matches on `Link`; (3) **Linux `/dev/usbtmcN`
+  through `std::fs`** — the kernel adds the headers; Linux only, plus a
+  udev rule. The driver opens a file with auto-abort off and a 5 s timeout,
+  so after a timed-out read the late reply stays queued on the meter and
+  the next read fails on its bTag, unless the transport sets the USBTMC
+  ioctls (`unsafe`) or treats a timeout as a reconnect; (4) **USBTMC over
+  libusb/nusb** on macOS and Windows — the USBTMC headers, bTag and abort
+  are then ours to write, it is a new dmm-lib dependency against the
+  "hidapi, thiserror, log only" rule in `.claude/rules/protocol.md`, and
+  Windows needs WinUSB (Zadig) or a vendor VISA driver, which then owns the
+  meter; (5) **RS-232** — the serial transport the UT805A and OWON XDM
+  would also use, with its own dependency decision.
+- No maintained VISA-free Rust library carries any of these links (crates.io
+  and GitHub, 2026-09-30): `visa-rs` links an installed vendor VISA at
+  build time; `rust-usbtmc` (on `rusb`, last release 2021) and `lxi` (2019)
+  are unmaintained; `instrument-core` 0.1.0 defines a transport trait and
+  implements none; Atmelfan's `lxi-rs` is the instrument side.
+- Work every link needs: one reading takes three or four replies (`CONF?`,
+  `RANG:AUTO?`, `UNIT:TEMP?`, `READ?`), so `raw_payload` has to carry them
+  all for replay and golden files; readings need a unit prefix and
+  `display_raw` per range; if queries lock the keys, capture's hand steps
+  have to set the function with `FUNC` instead; returning the meter to local
+  needs a session-end hook the `Protocol` trait lacks, and it would still
+  miss detection-only opens and a failed init; and the open path,
+  `check_cable`, the `NoTransportFound` text, the `LinkLost` wording and
+  the connection help assume a HID cable or Bluetooth.
 - Value: pyvisa, NI-VISA and UNI-T's own tools serve them; HKJ's
   TestController reaches the UT8805E over RS-232 only, on Linux and Mac as
   well as Windows. What dmm-tools adds is a cross-platform GUI logger over
@@ -636,6 +657,12 @@ made, with Linux `usbtmc` as the cheap interim. Not ahead of the Tier 1
 items. Experimental plus a verification issue, since nobody on the project
 owns one; the open hardware questions are in its
 [verification list](ut8805/verification.md).
+
+**Costed 2026-09-30 and parked**: an implementation plan (Linux `usbtmc`,
+`nusb` elsewhere) came out larger than the work above suggests, mostly in
+the work every link needs. The smallest first cuts are read-only: Linux
+`usbtmc` (every model, Linux only), or VXI-11 (every model and OS, with the
+host entry).
 
 ---
 
@@ -725,7 +752,7 @@ the same transport.
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
 | **ZOTEK BLE (ZOYI/BSIDE/ANENG)** — implemented 2026-09-26 | BLE (built in) | Specified from ZOTEK's own apps ([research/zotek](zotek/reverse-engineered-protocol.md)): one streamed protocol in ZOTEK's apps, which serve ZOYI/ZOTEK meters and their BSIDE and ANENG rebrands, led by the ZT-300AB/AN9002; no cross-platform desktop tool | Done, experimental: `zt300ab`, `zt5566se`, `zt5bq` and `zt5b` await a hardware report |
-| **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Moderate: a network transport (the HID-shaped `Transport` trait must fit or change), a SCPI protocol family, address-based open and `*IDN?` identification; USB TMC deferred behind the dependency decision |
+| **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Parked 2026-09-30 after costing (see its section): a new link (network or USBTMC), a SCPI protocol family, address-based open and `*IDN?` identification, and a session-end hook |
 
 ### Tier 3: Lower priority
 
