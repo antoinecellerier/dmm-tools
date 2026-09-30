@@ -22,7 +22,6 @@ Items that need real components or specific setups to verify.
   - [UT61E+ auto power-off while polled over USB](#ut61e-auto-power-off-while-polled-over-usb)
   - [UT61E+ AC+DC V: the components as separate readings](#ut61e-acdc-v-the-components-as-separate-readings)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
-  - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
   - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
   - [EEVblog 121GW: experimental, awaiting a hardware report](#eevblog-121gw-experimental-awaiting-a-hardware-report)
   - [Brymen BM78xBT: experimental, awaiting a hardware report](#brymen-bm78xbt-experimental-awaiting-a-hardware-report)
@@ -1525,24 +1524,6 @@ iDMM2.0 APK has no UT216 package or range asset either (checked 2026-09-21), so
 the ranges would have to come from hardware. Tracked as a candidate in
 `docs/research/new-device-candidates.md`.
 
-### UT632: the vendor app frames its stream but decodes nothing
-
-Read from UT803.exe 2026-09-21 (`docs/research/ut632/`). The app carries a
-UT632 configuration the shipped form does not select. Selected, it reads the
-serial port at 2400 baud, ends each frame at a byte whose high nibble is E, and
-displays nothing: UT803.exe holds no decoder for it, and it installs no HID
-handler. UT804.exe's copy of the same handler requires 14 bytes whose high
-nibbles spell `123456789ABCDE` and 7-segment decodes them, which is where the
-14-byte index-frame reading comes from `[DEDUCED]`.
-
-A UT632 capture must settle the payload encoding (LCD segments as on the
-UT60A/B/C, or not), the frame length, the line format, whether the meter needs
-a button press to send, and whether the UT632N differs. UNI-T's general-purpose
-PC software ("Vendor sources not yet read" below) is the other vendor source
-not yet opened. Tracked as a candidate in
-`docs/research/new-device-candidates.md`; the 14-byte extractor is recoverable
-from 1693093 (`extract_frame_fs9721`, framing only).
-
 ### UT8805/UT8806: open questions before a SCPI implementation
 
 Specified 2026-09-22 from UNI-T's manuals, five firmware images and UNI-T's
@@ -2108,7 +2089,8 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 - **UNI-T's general-purpose PC software** ("优利德上位机软件", `1.10.zip`
   2025-05-26 and `Setup.zip` 2026-09-09, about 150 MB each), in the bench
   download centre's UT80 and UT88 results. Unopened; it may drive several
-  bench meters.
+  bench meters (the UT632's check is in its
+  [verification list](research/ut632/verification.md#vendor-sources)).
 - **Per-model PC software uploaded 2023-02-03** for the UT61B+, UT61D+ and
   the UT171 series (the UT181A's is in its
   [verification list](research/ut181/verification.md#vendor-sources)). The UT61E+ one is V2.02 repackaged

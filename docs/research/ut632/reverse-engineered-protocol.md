@@ -1,8 +1,8 @@
 # UT632 / UT632N: Reverse-Engineered Protocol Specification
 
 What UNI-T's software shows of the wire protocol of the UT632 and UT632N
-bench multimeters. No UT632 has been captured yet; §5 lists what a
-capture must settle.
+bench multimeters. No UT632 has been captured yet;
+[verification.md](verification.md) lists what a capture must settle.
 
 **In short:** UT803.exe carries a UT632 configuration. Selected, it reads
 the serial port at 2400 baud, ends each frame at a byte whose high nibble
@@ -148,6 +148,8 @@ with that check and that call removed. UT803.exe has no `LcdDisplay60B`.
 - **[DEDUCED]** The frames are 14 bytes with high nibbles 1-E and the data
   in the low nibbles: UT804.exe's twin requires exactly that (§3), and the
   sibling `IFUT60E` HID handler takes 14 bytes (§2.3).
+- **[UNVERIFIED]** What the low nibbles encode — LCD segments as the
+  UT804.exe twin decodes, or not (§3).
 - **[DEDUCED]** The CH9325 passes the UART stream through unchanged: the
   UT804's HID reports carried its RS232 packet format
   (`../ut803/reverse-engineered-protocol.md` §2).
@@ -162,17 +164,8 @@ with that check and that call removed. UT803.exe has no `LcdDisplay60B`.
 
 ## 5. What Needs Hardware — [UNVERIFIED]
 
-Still open, and settled only by a UT632 capture:
-
-- the payload encoding — the UT804.exe twin decodes LCD segments for the
-  UT60A/B/C; UT803.exe holds no decoder;
-- the frame length — UT803.exe checks none;
-- the line format (§1.2);
-- whether the meter needs a button press to send;
-- whether the UT632N differs.
-
-The other vendor source not yet opened is UNI-T's general-purpose PC
-software (`docs/verification-backlog.md`, "Vendor sources not yet read").
+The open checks, and the vendor source not yet opened, are in
+[verification.md](verification.md).
 
 ---
 
