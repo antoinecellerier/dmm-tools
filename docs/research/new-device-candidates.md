@@ -274,7 +274,8 @@ modern GUI.
 **Implemented as the Bluetooth transport** — auto-detected, or pinned with
 `--adapter <address>`; verified on our UT61E+. What the adapter does on the
 wire is in [research/ut-d07b](ut-d07b/reverse-engineered-protocol.md); the
-UT-D07A and the UT202S entry are still open ([backlog](../verification-backlog.md)).
+UT-D07A is still open ([its checks](ut-d07b/verification.md#the-ut-d07a)), and the
+UT202S entry is covered below.
 The analysis below is as it stood before, except the native-BLE paragraphs,
 rewritten 2026-09-25 from the iDMM2.0 app.
 

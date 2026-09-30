@@ -22,7 +22,7 @@ packet has been seen, so every item waits on a first report.
   (`1A86:E008`) or HE2325U (`04FA:2490`) (§1.1) — the HE2325U has no transport
   match and no udev rule. Needs `lsusb` with the cable. (#22, #23)
 - A UT71 over the UT-D07A Bluetooth adapter: in the [UT-D07B verification
-  list](../ut-d07b/verification.md).
+  list](../ut-d07b/verification.md#meters-behind-the-adapter).
 
 ## Functions
 

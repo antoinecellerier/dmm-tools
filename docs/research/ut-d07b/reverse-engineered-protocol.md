@@ -36,7 +36,8 @@ Confidence levels:
 - **[HARDWARE]** — seen on our own UT-D07B with our UT61E+ behind it
 - **[VENDOR]** — from UNI-T's own app, accessory page or printed instructions
 - **[DEDUCED]** — logical inference from the above
-- **[UNVERIFIED]** — needs a measurement or another unit to confirm
+- **[UNVERIFIED]** — needs a measurement or another unit to confirm; the
+  checks are in [verification.md](verification.md)
 - **[COMMUNITY]** — from a community source, §7 only; never in §1-6
 
 ---
@@ -180,6 +181,12 @@ most runs. A connect by address, which BlueZ runs as an LE-only connection
 attempt, reached it every time, within 10 s. How often a freshly powered
 adapter advertises is not measured.
 
+A switched-off adapter can still look heard [HARDWARE] (#25). On 2026-09-25 our
+paired UT-D07B, switched off at its power switch, came back from every BlueZ
+scan with its last RSSI (-74 dBm) while `bluetoothctl scan le` heard nothing:
+BlueZ keeps a paired device's last RSSI, so an RSSI in a scan's results does
+not say the adapter is awake.
+
 Windows 11's advertisement watcher, an active scan, hears it better
 [HARDWARE]: six 3 s scans in a row with the adapter waiting all reported it,
 the first sighting at most about 1.75 s in, among about ten other devices.
@@ -191,8 +198,11 @@ switched off, that connect gave up after about 8 s.
 An adapter just switched back on can refuse its first connect [HARDWARE]:
 heard by a Windows scan within seconds of being switched on, it did not
 answer the connect that followed (WinRT reported it not connected after about
-8 s), and answered the next one, 5 s after that failure. Whether BlueZ sees the same is not known
-[UNVERIFIED].
+8 s), and answered the next one, 5 s after that failure. BlueZ 5.87 refuses
+early too [HARDWARE] (2026-09-22, #25): the first connects after power-on got
+no answer within a 10 s connect bound, or failed with ATT error 0x0e or
+BlueZ's "Failed to register notify session", before one took; readings came
+about 20 s after power-on (2026-09-22 twice, 2026-09-25).
 
 ## 5. Link parameters
 
@@ -208,6 +218,7 @@ BlueZ 5.87 on kernel HCI [HARDWARE].
 | Notification cadence | 310.1 ms between streamed readings on average, whatever the interval: 310.15 ms over 260 notifications at 315 ms and 310.10 ms over 368 at 45 ms, by the HCI timestamps (2026-09-29). The adapter's 315 ms interval is the slower of the two | [HARDWARE] |
 | Readings two to one connection event | at the 315 ms interval the adapter's readings gain a whole event every ~64 events (~20 s), and that reading goes out in the same event as the next: two notifications with the same host-controller timestamp, then a ~630 ms step. Around each crossing, jitter adds more such pairs and steps, netting one extra reading per ~20 s cluster; 12 zero steps, six ~630 ms steps and one 944 ms step in 80 s on 2026-09-29. At 45 ms none; readings arrive on the 45 ms event grid, one or two events late now and then (steps 219-365 ms) | [HARDWARE] |
 | Streamed readings (after the start command, §3) | 3.23 Hz — 60 readings in 18.3 s, one 19-byte frame per notification; the same 3.2 Hz over two minutes | [HARDWARE] |
+| Streamed readings in AC+DC V | about one every 630 ms, against about 315 ms in AC mV, the DC and AC components alternating (2026-09-28, #25) | [HARDWARE] |
 | Polled readings (one 0x5E each) | 1.44 Hz sustained, median gap 0.632 s, with an unacknowledged write; an acknowledged write measured 0.8 s a poll. At the forced 15 ms interval the same poll loop ran at 3.2 Hz, median gap 0.328 s (1.6 Hz before the update in that session) | [HARDWARE] |
 | The same poll over USB | about 0.1 s | [HARDWARE] |
 | First seconds of a fresh link | polls take up to 2 s while bluetoothd reads the Device Information characteristics (model, serial, firmware strings) | [HARDWARE] |
@@ -238,12 +249,11 @@ From UNI-T's accessory pages, read 2026-09-22 [VENDOR]:
 The two pages already disagree on how much each adapter covers, the US mirror
 may name more again, and the adapter being transparent (§1), any meter with the
 matching socket can physically sit behind one. The only meter this document's findings were read
-with is our own UT61E+ [HARDWARE]. Whether the UT-D07A carries the same ISSC
-service set is unknown — it has not been seen. A first capture from one settles
-three things: which service and characteristic pair its transparent UART sits
-on (§2), whether it sends the same heartbeat frame while the meter is silent,
-and whether it acts on the UT61+ start command 0x5D the way this one does (§3)
-[UNVERIFIED].
+with is our own UT61E+ [HARDWARE]. The UT-D07A has not been seen: which
+service and characteristic pair its transparent UART sits on (§2), whether it
+sends the same heartbeat frame while the meter is silent, and whether it acts
+on the UT61+ start command 0x5D the way this one does (§3) are unknown
+[UNVERIFIED] ([verification.md](verification.md#the-ut-d07a)).
 
 ## Implementation Notes
 

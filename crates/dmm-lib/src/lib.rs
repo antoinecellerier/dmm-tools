@@ -52,7 +52,9 @@ pub struct Dmm<T: Transport> {
 /// reconnect, detection or a stalled caller do. Measured in real time, which
 /// a queue fills in: on a fast mock clock, session time would count a
 /// millisecond's stall as seconds away and drop a replay's frames. A manual
-/// clock is the exception, see [`Clock::queue_now`].
+/// clock is the exception, see [`Clock::queue_now`]. On our UT61E+ behind a
+/// UT-D07B, the first reading after a 10-minute GUI Pause was current and
+/// memory stayed flat (2026-09-28, #25).
 const RESYNC_AFTER: Duration = Duration::from_millis(250);
 
 impl<T: Transport> Dmm<T> {

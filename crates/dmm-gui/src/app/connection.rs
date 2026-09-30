@@ -552,6 +552,8 @@ where
                     // Every failure here is retried, whatever its kind — an
                     // adapter that does not answer yet is the case this loop
                     // waits out, so it only updates the Reconnecting notice.
+                    // A UT-D07B switched off and on came back on the third
+                    // attempt, under BlueZ and Windows 11 (#25).
                     match open_fn(reopen_at.as_deref()) {
                         Ok((mut d, detected)) => {
                             info!("background thread: reconnected on attempt {attempt}");

@@ -58,6 +58,7 @@ checks that span families are in the [verification backlog](../../verification-b
 - The UT-D09's CH9329 mode, 0 or 3 — decides whether the transport must pick
   the custom HID interface. Needs `lsusb -v -d 1a86:e429` from an owner
   ([test plan](ch9329-test-plan.md) step 1). (#5)
+- A UT181A behind the UT-D07A or UT-D07B: in the [UT-D07B checks](../ut-d07b/verification.md#meters-behind-the-adapter).
 
 ## Spec data
 

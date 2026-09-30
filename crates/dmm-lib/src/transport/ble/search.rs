@@ -231,7 +231,9 @@ fn named_address(selector: Option<&str>) -> Option<btleplug::api::BDAddr> {
 
 /// A candidate's standing from what the platform says about it. `heard` is
 /// only believed from our own scan (`scanning`): BlueZ drops the RSSI of
-/// every device when a discovery ends, so one read while scanning is ours.
+/// every device when a discovery ends, so one read while scanning is ours —
+/// except a paired device's, whose last RSSI BlueZ keeps, so a paired peer
+/// switched off still counts as heard (UT-D07B spec §4).
 fn standing(connected: bool, heard: bool, scanning: bool) -> Standing {
     if connected {
         Standing::Connected

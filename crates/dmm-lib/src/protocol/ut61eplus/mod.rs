@@ -909,7 +909,7 @@ fn device_for_reported_name(name: &str) -> Option<&'static SelectableDevice> {
 /// record was acked, so the cap only matters if one goes missing.
 const PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(1000);
 /// The same wait over the UT-D07B, whose ack came 1.26 s after the command on
-/// a fresh link (adapter spec §5).
+/// a fresh link (adapter spec §3).
 const BLUETOOTH_PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(2500);
 
 /// How long to leave the meter alone after it acks a button press before

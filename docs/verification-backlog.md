@@ -23,10 +23,10 @@ Items that need real components or specific setups to verify.
   - [UT61E+ AC+DC V: the components as separate readings](#ut61e-acdc-v-the-components-as-separate-readings)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [Bluetooth search and detection with built-in meters](#bluetooth-search-and-detection-with-built-in-meters)
-  - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [CP2110 FIFO counts](#cp2110-fifo-counts)
   - [Streaming meters: read continuously](#streaming-meters-read-continuously)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
+  - [Known defects](#known-defects)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
   - [A flat trace labels its y-axis with six decimals](#a-flat-trace-labels-its-y-axis-with-six-decimals)
   - [A meter power cycle surfaces a checksum error](#a-meter-power-cycle-surfaces-a-checksum-error)
@@ -909,6 +909,16 @@ UT60BT has community frames on record; the UT202BT has no capture anywhere.
   Check on a UT60BT or UT202BT that readings start, named and `auto`.
 - **Spec tables.** None until a meter confirms the range tables; the
   manuals' spec pages are the source then.
+- **The UT60BT and UT202BT.** Read from the iDMM2.0 app 2026-09-25: they speak
+  the UT61+ protocol over the same ISSC service as the UT-D07B and advertise
+  their own names, so the transport needs only to accept those names, plus a
+  range table each (`docs/research/new-device-candidates.md`, Bluetooth
+  section). The `0000ff01`/`ff02`/`ff12` set the app also carries is the
+  UT513C's older firmware only. Since 2026-09-25 both meters have registry
+  entries, each opened by its own name prefix (`UT60BT`, `UT202BT`); an
+  entry behind an adapter takes only `UT-D07*`, and `auto` takes all of
+  them. A real meter has yet to confirm either (their block under
+  [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)).
 
 ### Capture and display checks a UT181A runs
 
@@ -1129,11 +1139,6 @@ timing, HOLD and MIN/MAX are in the ut61eplus spec §2.7 (flag3 bit 3).
 
 Open:
 
-- **UT-D07B, and any sample interval.** Every streamed frame is read, but a
-  sample interval keeps one frame per tick, so an interval may see one
-  component far more often than the other, as a slow CP2110 poll does. At
-  0 ms both come through, checked with the adapter on 2026-09-28 (a reading
-  about every 630 ms in AC+DC, against about 315 ms in AC mV).
 - **Components on different rungs.** Both sat on the 2.2V rung here; a DC
   offset with an AC signal on top would show whether autorange can put them
   on different ones. The display keeps the DC frame's range either way.
@@ -1176,217 +1181,6 @@ the ranges would have to come from hardware. Tracked as a candidate in
   the Bluetooth link and decline AB CD frames, each other's and ZOTEK
   packets and the adapter heartbeat in tests
   ([detection design](detection-design.md)). Watch a UT-D07B report for one.
-
-### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
-
-The adapter's GATT surface and its bring-up were read off our own unit
-2026-09-22 (`docs/research/ut-d07b/reverse-engineered-protocol.md`). What the
-transport does with them is only verified there, with our UT61E+ behind it and
-BlueZ 5.87 underneath, and on the same machine under Windows 11, so each of
-the following needs someone's hardware.
-
-- **The UT-D07A.** Nobody has enumerated its services. It is the same ISSC
-  module class one radio generation back (Bluetooth 4.0), UNI-T lists it for
-  the UT71, UT171 and UT181 series and for the UT513B/C/D and UT512E
-  insulation testers, and the transport matches any adapter whose name starts
-  `UT-D07` — so an A that carries the same transparent UART works unchanged,
-  and one that does not fails at open with "the Bluetooth device has no UART …
-  characteristic". A first report settles it
-  ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)):
-  `dmm-cli list`, `dmm-cli info`,
-  `dmm-cli read --count 60 --interval-ms 0 --format csv`,
-  `RUST_LOG=dmm_lib=trace dmm-cli debug`, and `bluetoothctl info <address>` if
-  the open fails. The UT71 (family `ut80x`, 2400 baud, receive-only) is kept
-  off the Bluetooth link in the ut80x `LINKS` until a report says the A
-  carries it; naming the model and the adapter address
-  (`--device ut71ab --adapter <address>`) opens it over Bluetooth anyway, and
-  #25 asks UT71 owners for that run. The UT171 and UT181A families are
-  already on it.
-- **Other meters over the adapter.** The UT61B+, UT61D+ and the UT161 series
-  are listed on it by UNI-T and are unverified over Bluetooth; so are the
-  UT171 and UT181A, whose families the registry also places on the adapter.
-  A reading over an adapter, and the `dmm-cli list` line for it, is what
-  settles each.
-- **The adapter's full compatibility list.** UNI-T's global page and the two
-  Chinese accessory pages already disagree on which meters each of the
-  UT-D07A and UT-D07B covers, and the US mirror has not been checked. The
-  list belongs to UNI-T's documentation and is to be taken from it rather
-  than inferred from the adapter being transparent — even though it is.
-- ~~**Windows.**~~ — **VERIFIED** 2026-09-22 on Windows 11 Pro 26200 (Intel
-  radio, WinRT), 227bbc3 onwards, adapter never paired: `list` found it in six
-  scans out of six; `info` (Status: MTU 247, heartbeats), `--adapter` in
-  either case, `read --count 60 --interval-ms 0` at 2.9/s (see below),
-  `command hold` (ack 1.24 s, HOLD lit), the link released on exit (waiting
-  flash back), GUI reconnect after the adapter was switched off and on (on
-  its own, the third attempt), and with Bluetooth off, "turned off on this
-  computer" from `list`, `info` and `--adapter`, with the USB cable still
-  opened. Scan misses an awake adapter now and then, and WinRT's known list is
-  only connected devices, so a named address the scan missed is connected by
-  address (d49cf2f); that path was run awake (connected) and switched off
-  ("No Bluetooth device found at …" after ~11 s). Adapter spec §3-5.
-- **A second Windows PC that finds nothing.** On another Windows machine,
-  dev-ef142fb's `list` scanned 3 s and printed "No devices found.", and
-  `--adapter <address> info` failed too, while Microsoft's Bluetooth LE
-  Explorer saw the adapter at once and btleplug's trace showed the watcher
-  delivering devices. Not reproduced on the machine above. A
-  `RUST_LOG=dmm_lib=debug dmm-cli list` from 227bbc3 or later on that PC
-  prints one `saw …` line per device the scan returned, with its names, RSSI
-  and whether it matched — that says whether the adapter is missing, unnamed
-  or unmatched there, and `--adapter` now also tries the address directly.
-- **macOS.** Nothing has been run. Whether a bare binary gets a
-  CoreBluetooth permission prompt or a silent refusal, and whether pairing is
-  needed, are unknown; `--adapter` taking a UUID there rather than an address
-  is documented but unconfirmed. It needs someone else's hardware.
-- **Streamed rate under Windows.** 2.88 and 2.93 readings/s against 3.23 on
-  Linux, the adapter's cadence unchanged: Windows now and then delivers two
-  notifications back to back, and the driver then kept only the newer of two
-  it found queued (66 notifications, 60 readings in a traced run). Since
-  2026-09-28 every streamed frame is read, so at `--interval-ms 0` both
-  should come through: re-run the traced count under Windows.
-- **The first connect after power-on.** Under Windows, an adapter heard
-  seconds after being switched on refused the connect that followed (WinRT
-  "not connected" after ~8 s) and took the next one. The open reports that as
-  "Bluetooth link lost", which fits a link that was up, not one that never
-  came up, and the setup retry does not cover the connect itself. The GUI's
-  reconnect loop absorbs it; a CLI run at that moment fails. BlueZ refuses
-  early too: on 2026-09-22 the GUI's first tries after power-on failed with
-  "Timed out after 10s", ATT error 0x0e and "Failed to register notify
-  session" before one took.
-- ~~**GUI reconnect under Linux.**~~ — **VERIFIED** 2026-09-22 (BlueZ 5.87,
-  twice) and 2026-09-25: the adapter switched off mid-session and back on
-  showed "waiting for meter", then readings about 20 s after power-on, on the
-  third attempt.
-- **A slow reconnect under Linux.** On 2026-09-26 the same off-and-on test
-  took about 60 s, and btleplug panicked reading the MTU of a link BlueZ had
-  not finished setting up; 5129e81 catches that and retries. The panic's
-  message still prints on stderr although it is caught: silencing it takes a
-  process-wide panic hook, left out on purpose. Neither showed
-  on 2026-09-22 with the same kernel and BlueZ. What changed is open: compare
-  6a69591 and the current build under `RUST_LOG=dmm_lib=debug`, and check
-  whether the notify subscription goes out while BlueZ is still tearing the
-  old link down ("StartNotify is not allowed" in bluetoothd's log).
-- ~~**Link parameters.**~~ — **VERIFIED** 2026-09-22 on Linux, from a `btmon`
-  capture: MTU 247; the adapter asks for the connection interval itself right
-  after every connect (L2CAP update request, min 224 / max 255 × 1.25 ms,
-  latency 0, timeout 5 s) and the link runs at 315 ms. Forcing it to 15 ms
-  (`hcitool lecup`) left the readings 315-330 ms apart, so ~315 ms is the
-  adapter's own cadence and not a radio limit: streamed 3.23 Hz, polled
-  1.44 Hz (median gap 0.632 s), and 3.2 Hz polled once the interval was
-  forced down. Details in the adapter spec §5. HCI timestamps on 2026-09-29
-  put the cadence at 310.1 ms, a hair faster than the 315 ms link, which is
-  why streamed readings come two to one connection event every ~20 s.
-- ~~**A short interval on Windows.**~~ — **VERIFIED** 2026-09-29 on Windows 11
-  (10.0.26200): the open's held Balanced request moves the adapter's 315 ms
-  to 60 ms and it stays there; no pairs in 1950 readings at 0 ms interval,
-  nor across three reconnects in one process (adapter spec §5). Open: Windows
-  10, which has no such call, and the adapter's battery cost at 60 ms. The
-  UT60BT and UT202BT, on the same profile, are left alone until someone sees
-  what interval their radios ask for (#26, #27).
-- **Readings in pairs on Linux and macOS.** Neither lets an app ask for a
-  shorter interval, so the stream warns once per connection when the adapter
-  hands readings over two at a time, and on Linux prints the `hcitool lecup`
-  line that fixes the link by hand. Seen on our UT61E+ on 2026-09-29: the
-  warning came within the first minute, and the command's handle lookup
-  found the link. Remote commands sent on a fixed link count no pairs (four
-  presses, 2026-09-29). Open: whether macOS takes the adapter's 315 ms at all
-  (its accessory guidelines reject a 280 ms minimum and a 5 s timeout; a
-  PacketLogger trace settles it), and a UT-D07A in front of a meter faster
-  than its interval, which would bunch so often that the detection, which
-  needs most readings on time, stays silent.
-- **The adapter's heartbeat.** `AB CD 06 AA AA 6E 67 03 A7` comes from the
-  adapter once per link and once a second while the meter is silent; the
-  transport drops it. UNI-T's own app reads it as "no meter data" and answers
-  with Get Name, then the start command. What `6E 67` encodes is still unknown
-  (adapter state, battery, firmware?), and so is whether the adapter sends the
-  same bytes in front of a UT171 or UT181A, whose framing is different — a
-  capture from one of those over the adapter settles both.
-- **The start command in front of other meters.** Our UT61E+ is read at the
-  adapter's cadence because the adapter takes the UT61+ start command 0x5D and
-  polls the meter itself (adapter spec §3). What it does in front of a UT171
-  or a UT181A is unknown: those families send start frames of their own, and
-  whether the adapter also honours 0x5D there, or forwards the family's frame
-  and nothing more, decides which rate they reach. A UT181A over a **UT-D07A**
-  is reported at ~10 Hz by the community, far above our 3.2 Hz, so the cadence
-  may be per family or per adapter. Whether the **UT-D07A** honours 0x5D at
-  all is equally unseen — nobody has run one.
-- **The ack window over Bluetooth.** A button command's `FF 00` ack came
-  1.26 s after the command on a fresh link, so the driver waits 2.5 s over
-  Bluetooth against 1 s on the cable. Whether a warm link ever needs more than
-  the USB second — i.e. whether the wide window costs a real wait in practice
-  — has not been measured.
-- ~~**Pairing as a requirement.**~~ — **VERIFIED** 2026-09-22 on Linux: not
-  required; an unpaired adapter is found by the scan and opens. Windows 11
-  the same, 2026-09-22; macOS remains unchecked.
-- **Link handling since the 2026-09-22 review.** Three changes are unit-tested
-  only. A reconnect releases the old link before opening the new one. With no
-  address named, an adapter connected to this host is opened at once, else
-  the first heard in the scan, else a paired one is tried by address — the
-  interleaved scan misses an awake adapter (UT-D07B spec §4); on 2026-09-22
-  `info` connected on all three runs (11-13 s, two through the paired
-  fallback) and `list` showed the awake adapter as not heard. And a streamed
-  reading is current, not one queued earlier. With our adapter: take it
-  out of range mid-session and bring it back; run `dmm-cli list` and `info`
-  with it in standby (the fallback should end in "No meter found" after about
-  15 s); and check that `dmm-cli read --interval-ms 1000`, and a GUI pause and
-  resume, show readings that follow the meter.
-- **UT-D07B standby with the meter off.** The leaflet puts the adapter in
-  standby after 5 minutes without data to the phone (spec §4). Whether our
-  link survives that with the meter switched off — the adapter's heartbeat
-  may or may not count as data — is unverified: connect, switch the meter
-  off, and watch the link and the blue LED past 5 minutes.
-- **A switched-off paired adapter listed as heard.** On 2026-09-25, a
-  paired UT-D07B switched off by its power switch still came back from
-  every scan with its last RSSI (-74 dBm) while `bluetoothctl scan le`
-  heard nothing, so `dmm-cli list` showed it as heard rather than "paired
-  but not heard", and the doc-screenshot guard refused to run. BlueZ keeps
-  a paired device's last RSSI; telling a fresh advertisement from that
-  cached value needs another signal, e.g. only counting RSSI changes seen
-  during our own scan.
-- **The UT60BT and UT202BT.** Read from the iDMM2.0 app 2026-09-25: they speak
-  the UT61+ protocol over the same ISSC service as the UT-D07B and advertise
-  their own names, so the transport needs only to accept those names, plus a
-  range table each (`docs/research/new-device-candidates.md`, Bluetooth
-  section). The `0000ff01`/`ff02`/`ff12` set the app also carries is the
-  UT513C's older firmware only. Since 2026-09-25 both meters have registry
-  entries, each opened by its own name prefix (`UT60BT`, `UT202BT`); an
-  entry behind an adapter takes only `UT-D07*`, and `auto` takes all of
-  them. A real meter has yet to confirm either (their block under
-  [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)).
-- **Design questions the next Bluetooth meter settles.** Left as they are
-  until a meter needs otherwise:
-  - **Settled 2026-09-26 by the EEVblog 121GW:** the GATT layout stays
-    picked from the services the peer exposes, not per entry: ISSC first,
-    then the 121GW's own service, else FFF0/FFF4 (`transport/ble/`). A
-    meter's own service UUID needs no entry to name it. The UT-D07's
-    heartbeat strip runs on ISSC peers only; writes go without response
-    except to a non-ISSC characteristic that lists only writes with
-    response.
-  - **Settled 2026-09-26 by the Brymen BM78xBT:** a meter that streams only
-    after an application login gets it from the transport, between
-    discovery and the subscribe, for its GATT profile alone
-    (`transport/ble/brymen.rs`, packets from `protocol/bm78xbt/login.rs`):
-    the connection password 0000 goes out before detection or
-    `Protocol::init` run, bounded by its own timeout. The profile's
-    `bring_up` field names it; no Transport method carries it.
-  - UT61+ streams whenever the link is Bluetooth: link, peer or family
-    property? Settled by the UT117C/UT197/UT219PV group or a UT171/UT181A
-    behind a UT-D07A.
-  - A meter with both a radio and a cable: today advertising
-    `bluetooth_names` and being on Bluetooth alone are one thing
-    (`a_built_in_radio_means_bluetooth_alone`), and `bluetooth_only()`
-    reads both. Such a meter splits them: which consumers mean "own radio"
-    (the peer names, the "built-in radio" wording in both binaries) and
-    which mean "no cable" (the open path never trying USB).
-- **Link drops beside a streaming headset.** On our BlueZ machine
-  (2026-09-26, UT-D07B + UT61E+), "Bluetooth link lost" drops happened with
-  old and new builds alike while a WH-1000XM6 headset streamed on the same
-  controller, and none in three runs after it was disconnected. Whether
-  shared-controller load explains them, and on which adapters, is open.
-- **The UT202S registry entry.** UNI-T's UT61+ protocol deck specifies the
-  UT202S clamp meter with a full range table, and it is a Bluetooth meter —
-  now reachable. Adding it means a `SelectableDevice` entry with its own
-  range table and the two-display handling the deck describes for AC, LPF and
-  temperature, and a hardware report to go with it.
 
 ### CP2110 FIFO counts
 
@@ -1466,6 +1260,20 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 - **Protocol documents for families we don't support**: the older UT61E and
   UT61B (both are the chipset datasheets — ES51922 and FS9922-DMM3 — not
   UNI-T documents), and the Voltcraft VC-870 (Conrad item 124603, IN01).
+
+### Known defects
+
+Bugs a reader can reproduce, with the cause and fix where known.
+
+- **A switched-off paired Bluetooth peer listed as heard.** Under BlueZ, a
+  paired UT-D07B switched off at its power switch shows as heard in
+  `dmm-cli list`, not "paired but not heard", and the doc-screenshot guard
+  refuses to run. With no address named, the open ranks it Heard and tries
+  it first; its connect times out and is reported as a Bluetooth error, not
+  "No meter found", since the known-peer fallback skips a Heard peer. Cause:
+  BlueZ keeps a paired device's last RSSI and reports it during our scan
+  (UT-D07B spec §4), and `standing()` in `transport/ble/search.rs` takes it
+  as heard. Fix, untried: count only RSSI changes seen during our own scan.
 
 ### Entering NCV leaves the previous mode's trace on the graph
 

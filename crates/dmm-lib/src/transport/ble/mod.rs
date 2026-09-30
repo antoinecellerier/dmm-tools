@@ -285,6 +285,8 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
     let peripheral = candidate.peripheral.clone();
     // Nothing named and nothing heard: the scan may simply have missed an
     // awake adapter (research doc §4), so the known one is tried by address.
+    // On our UT-D07B `info` connected three times out of three, two of them
+    // through this fallback (#25).
     let fallback = selector.is_none() && candidate.standing == Standing::Known;
     // Either way nothing vouched for the peer being awake, so one that
     // does not answer is not found rather than a fault.
@@ -390,7 +392,8 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
 /// peripheral's service lock held, poisoning it for every later call, so it
 /// is caught here, once, and the open fails as a lost link: the caller's
 /// next try gets a fresh peripheral. Writes use the value read here and never
-/// ask again.
+/// ask again. The default panic hook still prints the panic's message on
+/// stderr: silencing it takes a process-wide hook, left out on purpose.
 fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| peripheral.mtu())) {
         Ok(mtu) => Some(mtu),
@@ -451,7 +454,8 @@ fn interval_command(address: &str, handle: u16) -> Option<String> {
 
 /// The handle BlueZ gave the connection to `address`, from `hcitool con`,
 /// which needs no root. `None` without `hcitool`, with no such link, or when
-/// it has not answered within [`HANDLE_LOOKUP_TIMEOUT`].
+/// it has not answered within [`HANDLE_LOOKUP_TIMEOUT`]. It found the link to
+/// our UT-D07B under BlueZ (#25).
 #[cfg(target_os = "linux")]
 fn connection_handle(address: &str) -> Option<u16> {
     use std::io::Read;

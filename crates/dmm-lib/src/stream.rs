@@ -111,7 +111,9 @@ const PAIRS_FOR_NOTICE: u32 = 3;
 
 /// Readings arriving two at a time: a link slower than the meter carries
 /// one late, together with the next, which comes with a gap as long again
-/// before or after it.
+/// before or after it. On our UT61E+ behind a UT-D07B under BlueZ the notice
+/// came within the first minute, and remote commands sent on a link held
+/// short counted no pairs (#25).
 #[derive(Default)]
 struct Pairs {
     counted: u32,

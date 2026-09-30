@@ -5,7 +5,9 @@
 //! WinRT hands back as soon as it returns, and releasing it withdraws the
 //! preference, so the link goes back to what the peer asked for. Keeping the
 //! object, and the device it was made on, for as long as the link is open
-//! keeps the preference in force.
+//! keeps the preference in force: on Windows 11 (10.0.26200) a UT-D07B's link
+//! stayed at 60 ms for a ten-minute run (adapter spec §5), and no pairs showed
+//! across three reconnects in one process (#25).
 
 use btleplug::api::BDAddr;
 use windows::Devices::Bluetooth::{

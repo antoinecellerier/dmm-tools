@@ -69,7 +69,7 @@ yet: every item waits on a first report.
 - What detection's probes do to a UT171, and its frames against the UT181A's:
   [Device auto-detection](../../verification-backlog.md#device-auto-detection).
 - A UT171 behind the UT-D07A or UT-D07B: in the
-  [UT-D07B checks](../ut-d07b/verification.md).
+  [UT-D07B checks](../ut-d07b/verification.md#meters-behind-the-adapter).
 
 ## Vendor sources
 

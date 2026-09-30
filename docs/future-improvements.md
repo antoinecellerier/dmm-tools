@@ -391,6 +391,12 @@ The BM521s and BM525s log up to 10800 and 87000 readings, which Brymen's memory 
 
 Use cases: logging sessions recorded in the field and retrieved later, as with the UT181A.
 
+### Where Bluetooth streaming is decided
+
+**Complexity:** Low
+
+The UT61+ protocol sends the UT-D07B's start command on every Bluetooth link, adapter or built-in radio (`init` in `protocol/ut61eplus/mod.rs`), so the family and the link decide streaming today. Whether it belongs to the link, the peer or the family is settled when a meter needs otherwise: the UT117C/UT197/UT219PV group ([candidates](research/new-device-candidates.md)), or a UT171 or UT181A behind a UT-D07A ([UT-D07B checks](research/ut-d07b/verification.md#meters-behind-the-adapter)).
+
 ### Known adapters first in the Bluetooth fallback
 
 **Complexity:** Low
