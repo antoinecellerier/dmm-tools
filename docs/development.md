@@ -56,27 +56,7 @@ builds `--release`, so distributed binaries still carry the real commit hash. Se
 
 ## Adding Device Support
 
-See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end guide covering discovery, reverse engineering, implementation, testing, and verification.
-
-### Quick reference: implementation steps
-
-**New device model (same protocol family):**
-
-1. Create `crates/dmm-lib/src/protocol/<family>/tables/new_model.rs`
-2. Implement `ModeTables`: one `entry` match returning the range table per mode (`DeviceTable` is derived), and give the model's spec tables a `SpecModel` variant. Spec tables sit in the family module: `ut61eplus/specs/`, `ut80x/specs_ut803.rs` and `specs_ut804.rs`, `ut181a/specs.rs`.
-3. Register in the family's `tables/mod.rs`
-4. Add a `SelectableDevice` entry in the family's `devices.rs` and list it in `DEVICES` in `protocol/registry.rs`, which sets the picker order
-
-**New protocol family:**
-
-1. Create `crates/dmm-lib/src/protocol/newfamily/mod.rs`
-2. Implement the `Protocol` trait (`init`, `request_measurement`, `send_command`, `get_name`, `profile`, `capture_steps`)
-3. Add variant to `DeviceFamily` enum in `protocol/mod.rs`
-4. Add a `SelectableDevice` entry in `protocol/newfamily/devices.rs` and list it in `DEVICES` in `protocol/registry.rs`. Its `links` name the links the family is seen on — its USB cables by their transport's `NAME` (the transports themselves are in `KNOWN_TRANSPORTS`), and `BLUETOOTH` if a UT-D07B carries it; a meter with the radio built in and no cable sets the `bluetooth_names` it advertises and `BLUETOOTH` alone
-5. Create research docs in `docs/research/newfamily/`
-6. Mark as experimental until verified against real hardware (the CLI prints a warning for every model short of `Stability::Verified`)
-
-The CLI and GUI automatically pick up new devices from the registry — no app code changes needed.
+[`adding-devices.md`](adding-devices.md) is the end-to-end guide, from discovery and reverse engineering through the code steps to hardware verification. Assistants run it through the `add-device` skill (`.claude/skills/add-device/SKILL.md`).
 
 ## Verifying Specification Data
 
