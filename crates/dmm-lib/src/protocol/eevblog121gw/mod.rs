@@ -42,7 +42,9 @@ fn report(p: &[u8], what: &'static str) {
 
 /// What a read that timed out on an older firmware's ASCII packets says
 /// (spec §12): the owner can update the firmware from the SD card (manual
-/// p.72), and current firmware sends the binary packet.
+/// p.72), and current firmware sends the binary packet. Detection never
+/// recognises those packets, so only a read with the 121GW named (e.g.
+/// `--device 121gw`) gets it.
 const OLDER_FIRMWARE: &str = "the 121GW sends the data format of older firmware, which this tool \
      does not read; update the meter's firmware from its SD card (121GW manual p.72)";
 

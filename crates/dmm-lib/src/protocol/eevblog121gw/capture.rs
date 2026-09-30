@@ -98,7 +98,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
         )
         .wait_for_enter(),
         // What the packet holds for a blank secondary display is open
-        // (spec §14.14).
+        // (spec §7.1).
         CaptureStep::basic(
             "setup_blank",
             "DC V: press SETUP until the secondary display is blank (or turn the dial to \

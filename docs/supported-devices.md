@@ -182,7 +182,7 @@ Handheld. Bluetooth built in, no cable; the meter shows up as "121GW"
 
 Not run on a meter yet: the decoding comes from EEVblog's packet-format
 documents, EEVblog's and UEi's apps and the manual, and the remote keys from
-the apps ([backlog](verification-backlog.md#eevblog-121gw-experimental-awaiting-a-hardware-report)).
+the apps ([open checks](research/121gw/verification.md)).
 
 ## Brymen BM788BT / BM787BT
 

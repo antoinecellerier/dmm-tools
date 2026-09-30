@@ -375,6 +375,20 @@ The UT181A has built-in recording and saved measurement features (protocol comma
 
 Use cases: retrieving field measurements logged by the meter itself, longer recording sessions than USB-tethered capture allows.
 
+### 121GW SD-card log import
+
+**Complexity:** Medium
+
+The 121GW logs to its micro SD card as CSV: sample, then the main and the secondary function, value and unit (manual p.54). Importing such a file would open it as a session, as `--replay` opens a recording.
+
+Use cases: reviewing a field log taken without Bluetooth, on the same graph and statistics as a live session.
+
+### Known adapters first in the Bluetooth fallback
+
+**Complexity:** Low
+
+With no meter named, the Bluetooth search falls back to peers the platform knows (paired or cached) when the scan misses. It tries whichever the platform lists first, so a cached built-in meter that is asleep costs a ~10 s connect and "not found" before a known UT-D07B is tried. Trying known adapters ahead of known built-in meters fixes that, once a report shows it matters.
+
 ### Bluetooth notifications read in the background
 
 **Complexity:** Medium

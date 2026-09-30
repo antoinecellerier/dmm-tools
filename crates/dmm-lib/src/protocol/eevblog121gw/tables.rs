@@ -60,10 +60,10 @@ const OHMS: &[Range] = &[
     r(3, "MΩ", "50MΩ"),
 ];
 const CONTINUITY: &[Range] = &[r(2, "Ω", "500Ω")];
-/// 0.1 mV at 3 V, as both apps; the manual gives 1 mV (spec §6.2, §14.6).
+/// 0.1 mV at 3 V, as both apps; the manual gives 1 mV (spec §6.2).
 const DIODE: &[Range] = &[r(4, "V", "3V"), r(3, "V", "15V")];
 /// The top range as both apps and manual p.19; p.71 says 10.00 mF (spec
-/// §6.2, §14.7).
+/// §6.2).
 const CAPACITANCE: &[Range] = &[
     r(2, "nF", "10nF"),
     r(1, "nF", "100nF"),
