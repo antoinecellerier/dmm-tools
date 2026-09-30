@@ -26,7 +26,8 @@ Confidence levels:
 - **[VENDOR]** — read from a firmware image or UNI-T's software, with
   the image or binary and a function address, file or line
 - **[INFERRED]** — logical inference from the above
-- **[UNVERIFIED]** — requires real device testing; all collected in §13
+- **[UNVERIFIED]** — requires real device testing; the checks are in
+  [verification.md](verification.md)
 - **[HARDWARE]** — seen on a real meter: none yet for this family
 
 Manual keys: NP/AP/EP = UT8805N/A/E programming manuals; NU/AU/EU =
@@ -530,43 +531,8 @@ readme routes SCPI instruments to NI-VISA (`uci-sdk.md`).
 
 ## 13. What Needs Hardware Verification
 
-No UT8805 or UT8806 has been on the bench; what real units have shown
-so far is in §14. Every [UNVERIFIED] item, with the way it leans where
-§14 gives one:
-
-- The raw `*IDN?` bytes: the `SW ` prefix and the SN field (a UT8805E's
-  first two fields are `UNI-T,UT8805`, §5.3); `FACTORY:MIS:MODEL/SN` as
-  the source of the fields (§5.3)
-- Reply terminator per line; the RS-232 terminator and handshake (SCPI
-  over RS-232 itself works, §4, §5.1)
-- `CONFigure?` and `FUNCtion?` bytes as sent; `FUNC?` leans quoted (§6.2, §14)
-- `DATA:LAST?` without `INIT` on the free-running panel; its unit token
-  per function (§7.1, §8)
-- `MEASurement:CONTinuous`, `READ:LAST?`, `:SYNC:DATA?`, `CREAD?`,
-  `WREAD?`, `READ:DISP?`, `SYSTem:COMMunication:TCPIP:CONTROL?` (§3.1,
-  §7.2)
-- Reading-memory size, 1,000 or 10,000 (§7.1)
-- Overload signs per line, the A's `READ?` sign quirk, the `*` marker,
-  NaN; continuity and diode open-circuit replies; the UT8805 continuity
-  threshold default, 0 or 30 Ω; whether dB/dBm, limits or statistics
-  change `READ?` (§8)
-- Range ladders per model (UT8806 user manual against S6E; UT8805
-  capacitance top range, EP p.22 "10000uF", leaning 2 mF (§14); every UT8806A
-  "2→1" figure, `FRES:ZERO:AUTO` and AC bandwidth included); the UT8806A
-  NPLC list; the N/E thermocouple types, EP p.21 against p.27, leaning
-  the eight-type list (§14) (§6.3, §6.4, §11)
-- `TRIGger:DELay` range on both families; `OUTPut:TRIGger:SLOPe` on a
-  UT8806 (§7.3)
-- What enters remote per line and whether keys lock; `*UNREMOTE` on
-  the N, leaning accepted (§9, §14)
-- `SYSTem:BEEPer:STATe`, reportedly without effect on a UT8805E (§14)
-- Firmware line and VID:PID of the UT8806A (§1, §11); the UT8805E's
-  VID as enumerated, 0x0483 against the 0x0486 its web page prints, and
-  an `lsusb -v` of any model (§2.1, §3.1)
-- LAN: TCP 80 on the N line and the port set per version (§3.1); GPIB
-  address setting and the E models' GPIB option (§1)
-- `0x5345:0x1234` matching nothing (§2.1); GET_CAPABILITIES bytes as
-  sent (§2.2); the meaning of `ROUTe:TERMinals?` (§6.3)
+The open checks, with the way each leans where §14 gives one, are in
+[verification.md](verification.md).
 
 ---
 
@@ -577,9 +543,12 @@ boundary (opened 2026-09-22, after commit fdddfa2). Every finding here is
 about the UT8805E, the only model anyone has reported on, except two
 UT8806E videos; no community `*IDN?` capture, `lsusb` output, web page
 or port-5025 report was found for the UT8805N, UT8805A, UT8806, UT8806A
-or UT8806E. Nothing in §1-§13 was rewritten on this evidence: §1, §2.1,
-§3.1, §4 and §5.3 carry one-line pointers here where a row settles,
-disputes or adds a wire fact, and §13 records the weak rows as leans.
+or UT8806E, and no `*IDN?` byte capture, `lsusb` output or port scan
+for the UT8805E either (the sources below, 2026-09-22). Nothing in
+§1-§13 was rewritten on this evidence: §1, §2.1, §3.1, §4 and §5.3 carry
+one-line pointers here where a row settles, disputes or adds a wire
+fact, and [verification.md](verification.md) records the weak rows'
+leans or evidence.
 
 | Aspect | § | Our spec | Community source | Class |
 |---|---|---|---|---|

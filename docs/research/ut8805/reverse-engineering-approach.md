@@ -80,8 +80,9 @@ V1.01.0101, Instrument Application V2.00) were listed but not fetched.
   [Cross-Reference with Community Sources](#cross-reference-with-community-sources)
   below and in the spec's §14. Nothing in the spec's §1-§13 was
   rewritten on it: §1, §2.1, §3.1, §4 and §5.3 carry one-line pointers
-  to §14 where it settles, disputes or adds a wire fact, §13 records its
-  weak rows as leans, and no community source is cited inline.
+  to §14 where it settles, disputes or adds a wire fact,
+  [verification.md](verification.md) records its weak rows' leans or
+  evidence, and no community source is cited inline.
 
 ## Methodology
 
@@ -204,7 +205,7 @@ delivered, and on the analysis files:
   port constants; no port has been probed.
 - **Command tree per model:** HIGH for what each image registers; the
   argument syntax rests on the manuals, which contradict themselves in
-  places (spec §11, §13).
+  places (spec §6.4, §7.1, §7.3, §11).
 - **`CONFigure?` and `FUNCtion?` reply formats:** MEDIUM — the reply
   writers of all three lines agree (unquoted with a space; double
   quotes); the UT8805 manuals print `CONF?` two other ways and every

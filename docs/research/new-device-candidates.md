@@ -633,8 +633,8 @@ dependency-rule change, one SCPI family with a UNI-T command map first and
 Rigol/Siglent maps after. Defer USB TMC until the dependency decision is
 made, with Linux `usbtmc` as the cheap interim. Not ahead of the Tier 1
 items. Experimental plus a verification issue, since nobody on the project
-owns one; the open hardware questions are in the
-[backlog](../verification-backlog.md#ut8805ut8806-open-questions-before-a-scpi-implementation).
+owns one; the open hardware questions are in its
+[verification list](ut8805/verification.md).
 
 ---
 
