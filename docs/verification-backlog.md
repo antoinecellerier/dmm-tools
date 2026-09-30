@@ -84,7 +84,8 @@ with, and how well that probe is backed:
   by parse needs UT171 hardware. (#4)
 - A UT181A reply after its ~600 ms window, read as a UT171 once `0x0A` (UT181A
   start recording) is out, and whether a UT181A ever starts recording under `auto`
-  (reasoned, not observed) — decides the probe order. Needs a reply timed. (#5)
+  (reasoned, not observed; likelier behind a UT-D07B, see
+  [Connection](#connection)) — decides the probe order. Needs a reply timed. (#5)
 - The UT61D+ and UT161B/D/E reported names: an unrecognised one falls back to
   the UT61E+ tables and is logged, and a reporter's `RUST_LOG=dmm_lib=debug`
   output turns it into a registry alias. (#7)
@@ -219,6 +220,13 @@ Bugs a reader can reproduce: symptom, cause, and the fix where known.
   silent one.** It tries the BU-86X after every other cable and stops at the
   first bridge found ([detection design](detection-design.md#bridges-and-adapters)).
   Workaround: name the meter, or pass `--adapter`. (#34–#36)
+- **Over the UT-D07B, detection sends a UT61+ meter the UT181A probe.** Our
+  UT61E+ answered Get Name after 617 ms over the adapter, past the 600 ms
+  `WINDOW` (`detect.rs`), so SET_MONITOR went out before the name arrived; the
+  name still won and the meter ignored the probe. A UT181A as slow behind the
+  adapter would get the UT171's `0x0A` (start recording) too, the UT181A item
+  under [Replies and names](#replies-and-names). Fix, untried: a longer window
+  on Bluetooth links. (#25)
 
 ### Capture runs
 
