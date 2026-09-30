@@ -36,6 +36,7 @@ Confidence levels:
 - **[VENDOR]** — confirmed by analyzing UNI-T's UT71 apps
 - **[DEDUCED]** — logical inferences from available evidence
 - **[UNVERIFIED]** — requires real device testing to confirm
+  ([verification.md](verification.md) lists the checks)
 - **[HARDWARE]** — seen on a real meter: none yet for this family
 
 Citations: "EN p.N" and "CN p.N" are the UT71 English and Chinese manuals'
@@ -196,7 +197,10 @@ p.42) [KNOWN].
   2005-2006 sheets say "Unspecified" / "leer"), the app draws unit W with the
   point after digit 4, and the UT71E and VC940 alone have a W position
   reading 0-2500 W (EN p.69; VC09 p.34, p.52). Not sent by any other
-  model, which has no such position.
+  model, which has no such position. On the UT71E's W position the blue
+  key selects the circuit's voltage, current or frequency (CN p.21); EN
+  Table 2-1 (p.13) gives that key no function there. What is sent then is
+  [UNVERIFIED].
 - Conrad's 2006 sheet (123297DS01) labels code 13 "Duty Cycle"
   beside the °F full scale 1832; the UT71 sheet and the app make 13 °F,
   and the other Conrad sheets leave its name blank.
@@ -332,6 +336,7 @@ features]: VC920 ≈ UT71C, VC960 ≈ UT71D, VC940 ≈ UT71E.
 | Resistance | 40000 counts; 4000 with RANGE at power-on | 4000 counts, fixed (VC09 p.46, p.59) |
 | Memory | 100 / 9999 / 100 | 10 / 10000 / 10 (VC09 p.34, p.39, p.54) |
 | Cable | USB (IR) | RS232 optical; USB adapter optional (§1.1) |
+| RANGE key | RANGE: manual ranging; held, SETUP (EN p.16 Table 2-2) | VC09 names it SETUP, held long (p.45), with no range function (keys p.43-44); the 07/05 and 12/05 DE manuals (p.10) and VC06 (p.7-8) give RANGE manual ranging, VC06 setup by holding it (p.16) |
 | SEND, auto power-off | as §4.1 | same (VC09 p.43, p.52, p.54) |
 
 ---
@@ -363,30 +368,8 @@ Wire facts a decoder meets:
 
 ## 6. What Needs Hardware Verification
 
-Everything here is from documents and the apps; no UT71 or VC9x0 packet
-has been seen [UNVERIFIED]:
-
-- The high nibble of the data bytes (`xxxx` on the UT71 sheet, `0011` on
-  the others) and bit-7 parity, hence whether LF arrives as `0A` or `8A`
-  (§1.2, §2)
-- Which USB bridge each cable carries: CH9325 (1A86:E008) or HE2325U
-  (04FA:2490), for the UT71 cable and for Conrad's adapter 120317 (§1.1)
-- Code E power packets from a UT71E or VC940, and their point (§3.2);
-  where VA and cos φ go, if anywhere (§3.1); what the UT71E sends when the
-  blue key on its W position selects the circuit's V, A or Hz (CN p.21;
-  EN Table 2-1 gives that key no function there)
-- That code 0 (AC mV) is never sent (§3.2)
-- AC V range 4: 1000 V on a UT71, 750 V on a VC9x0 (§3.5)
-- Coupling on DC readings, 0 or 2 (§3.3)
-- Status bit 3, and the AUTO/Manual field's values (§3.4)
-- Digit values `B`, `D`-`F`; overload and LO packets as the LCD shows
-  them (§3.1)
-- The duty-cycle sign bit (§3.4)
-- HOLD, REL, MAX MIN and PEAK on the wire (§3.4)
-- What RECALL + ▶ sends, and how the store time gets to the software
-  (§4.1)
-- The UT71A/B's range codes and 4000-count codes (§3.5)
-- The 10 A range code, 0 (sheet) or 1 (UT804) (§3.5)
+No UT71 or VC9x0 packet has been seen; the open checks are in
+[verification.md](verification.md).
 
 ---
 

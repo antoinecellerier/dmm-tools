@@ -192,4 +192,5 @@ on the framing, the function meanings (code E is power), the coupling,
 the sign in bit 2 and most decimal points; it differs on the line
 (7O1), the points of continuity, power and duty cycle, the 10 A range
 code, and names cables and Tenma models no UT71 source does. §1-6 were
-not changed; the differences go to hardware verification.
+not changed; the differences go to hardware verification
+([verification.md](verification.md)).

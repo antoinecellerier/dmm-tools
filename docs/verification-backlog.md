@@ -1053,43 +1053,6 @@ CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
   transport — separate scope from HID-based meters.
 
-#### UT71A–E / Voltcraft VC920 / VC940 / VC960 (issues [#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23))
-
-The UT804's packets from a handheld, decoded by the UT804 parser over the
-model's own range labels; everything is from UNI-T's protocol sheets, the
-manuals and UNI-T's UT71 apps, and no packet has been seen
-(`docs/research/ut71/reverse-engineered-protocol.md` §6).
-
-- High nibble of the data bytes and bit-7 parity: LF `0A` or `8A` would
-  tell a UT71 from a UT804 only if the UT71 is truly 8N1, as its sheet
-  says; sigrok and the UT804 say 7O1 (spec §1.2, §2)
-- Which USB bridge each cable carries: CH9325 (`1A86:E008`) or HE2325U
-  (`04FA:2490`), which has no transport and no udev rule — for the UT71's
-  cable and for Voltcraft's USB adapter 120317, whose manual names no chip
-  (spec §1.1)
-- Code E power packets from a UT71E or VC940, and their decimal point;
-  where VA and cos φ go, if anywhere; what the UT71E's blue key sends on
-  its W position (spec §3.2, §3.1)
-- Code 0 (AC mV) never sent (spec §3.2)
-- AC V range 4: 1000 V on a UT71, 750 V on a VC9x0 (spec §3.5)
-- Coupling on DC readings, 0 or 2 (spec §3.3)
-- Status bit 3, and the AUTO/Manual field's values (spec §3.4)
-- Digit values `B`, `D`-`F`; overload and LO packets as the LCD shows them
-  (spec §3.1)
-- The duty-cycle sign bit (spec §3.4)
-- HOLD, REL, MAX MIN and PEAK on the wire (spec §3.4); the `hold` step
-  words its answer as the UT804's
-- What RECALL + ▶ sends, and how the store time reaches the software
-  (spec §4.1)
-- The UT71A/B's range codes and 4000-count codes (spec §3.5)
-- The 10 A range code, 0 (sheet) or 1 (UT804) (spec §3.5)
-- The `manual_range` step presses RANGE; the 2009 Voltcraft manual
-  describes no RANGE key
-- Sigrok discrepancies, each for hardware to settle (spec §7): continuity,
-  power and duty-cycle decimal points; 10 A range code 0; overload and LO
-  patterns beyond the two sigrok accepts
-- Spec tables for the three models, after a first hardware confirmation
-
 #### UT60BT / UT202BT, Bluetooth built in (issues [#26](https://github.com/antoinecellerier/dmm-tools/issues/26), [#27](https://github.com/antoinecellerier/dmm-tools/issues/27))
 
 UT61+ frames over the ISSC service (ut61-family spec §1, tables §9). The
@@ -1703,12 +1666,6 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
   note `references/idmm2/analysis/findings/protocol-groups.md`. It carries no
   UT202S; its UT202BT table is still to be compared with the deck's UT202S
   one.
-- ~~**UT71 series and UT81 series interface protocols**~~ — **DONE
-  2026-09-21**: both fetched and read, archived with provenance in
-  `references/ut71/` and `references/ut81/`, and written up in
-  `docs/research/new-device-candidates.md`. The UT71 archive also holds the
-  same document filed as the Voltcraft VC920/940/960 protocol; the UT81 one
-  covers the classic UT81A/B, not the current UT81A+–D+.
 - **Protocol documents for families we don't support**: the older UT61E and
   UT61B (both are the chipset datasheets — ES51922 and FS9922-DMM3 — not
   UNI-T documents), and the Voltcraft VC-870 (Conrad item 124603, IN01).

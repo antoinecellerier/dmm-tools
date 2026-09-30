@@ -111,7 +111,7 @@ turns it off.
 | VC940 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | as VC920, adds power (W) |
 
 None has been run on a meter yet: the range tables come from UNI-T's protocol
-sheet and the manuals ([backlog](verification-backlog.md)). Auto-detection
+sheet and the manuals ([open checks](research/ut71/verification.md)). Auto-detection
 reports these meters as a UT804: pick UT71A/B, UT71C/D/E or Voltcraft VC920
 as the device once (`--device ut71ab`, `ut71cde` or `vc920`).
 
