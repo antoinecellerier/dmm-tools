@@ -185,8 +185,8 @@ to UT181A framing). Confirmed by the connect-command capture
 
 | Length | Total | Purpose |
 |--------|-------|---------|
-| 0x03 | 7 | Simple command (connect/pause, query count) |
-| 0x04 | 8 | Single-parameter command (delete) |
+| 0x03 | 7 | Simple command (save, stop, query count) |
+| 0x04 | 8 | Single-parameter command (connect/pause, delete) |
 | 0x0A | 14 | Data logging read command |
 | 0x11 | 21 | Standard measurement response |
 | 0x12 | 22 | Start auto-save command |
@@ -235,7 +235,9 @@ Captured, in the §3.1 framing (length 4, command 0x0A, one parameter byte):
 
 **Pause (stop streaming):** `AB CD 04 00 0A 00 0E 00`
 
-The builder's length-3 commands, none captured (exact IDs [UNVERIFIED]):
+The builder's length-3 commands, none captured (exact IDs [UNVERIFIED]: the
+builder is handed them through virtual dispatch, not visible in the
+decompile):
 - Save current measurement
 - Stop auto-save
 - Query saved data count
@@ -264,7 +266,9 @@ AB CD 0A 52 [6 bytes: index/offset] [checksum]
 
 The 6-byte payload likely encodes uint16 index + uint32 offset (by
 analogy with UT181A). The application enforces "Query Data Count First"
-before reads. [UNVERIFIED: exact byte packing]
+before reads. [UNVERIFIED: exact byte packing] Which of the two reads saved
+measurements and which reads recordings is also by analogy with UT181A.
+[UNVERIFIED]
 
 ### 4.6 Delete Command (0xFF) -- [VENDOR]
 
@@ -291,9 +295,11 @@ command codes sent as the command byte:
 | NCV (0x24) | VDC (0x02) | 0x111 |
 | NCV (0x24) | Ohm (0x0A) | 0x10F |
 
-Not implemented: these values do not fit the one-byte command field that
-`FUN_00755400` writes, so the wire form of a function change is still
-unknown — see `docs/verification-backlog.md` (issue #4).
+These values do not fit the one-byte command field that `FUN_00755400`
+writes, so the wire form of a function change is still unknown
+([verification](verification.md#commands), issue #4). A command that steps
+the function the way a key press does: none found in the manual or the
+UT171C.exe decompile (2026-09-07).
 
 Square wave output (UT171C): pseudo-mode 0x1007, commands 0xE0/0xE1.
 
@@ -322,6 +328,9 @@ total is 21 bytes, not 22.)
 | 15-18 | 4 | Aux value | IEEE 754 float32, LE; frequency in kHz on V AC / mV AC per gulux | [VENDOR] |
 | 19-20 | 2 | Checksum | uint16 LE | [VENDOR] |
 
+The resistance float is range-relative: kΩ on ranges 2–4, MΩ on 5–6, per
+gulux; capacitance and conductance scaling [UNVERIFIED].
+
 ### 5.2 Extended Frame (27 bytes, length = 0x17)
 
 All standard fields plus:
@@ -334,6 +343,7 @@ All standard fields plus:
 
 Byte 6 = 0x03 signals extended frame. The third float is close to the
 main value in AC modes, suggesting AC+DC combined measurement. [DEDUCED]
+No decompile routine reading this layout has been located (2026-06 review).
 
 ### 5.3 Flags Byte (Offset 5) -- [VENDOR]
 
@@ -347,6 +357,9 @@ main value in AC modes, suggesting AC+DC combined measurement. [DEDUCED]
 | 0 | 0x01 | **Gate** for bit 3 effect | Ghidra: secondary condition |
 
 Bits 4-5 (0x10, 0x20): not observed in decompilation. [UNVERIFIED]
+
+The decompile code cited for bits 0, 1 and 3 is the Delphi dataset code §3.3
+retracts (2026-06 review). [UNVERIFIED]
 
 ### 5.4 Range Byte (Offset 8) -- [VENDOR]
 
@@ -399,7 +412,7 @@ encoding), FUN_006405b1 (data-log→mode decoding), FUN_00630c1e
 | 0x0D | Temperature °F | AC group | FUN_0064081c: group 2, range 4. String "Temp-F" |
 | 0x0E | Conductance (nS) | — | FUN_0064081c: group 4, range 10. String "nS Range 1: 0 to 60" |
 | 0x0F | Frequency (Hz) | — | USB confirmed. Hz/kHz/MHz range strings |
-| 0x10 | Duty cycle (%) | — | String "Duty". May share 0x0F with sub-field | [DEDUCED] |
+| 0x10 | Duty cycle (%) | — | [DEDUCED] String "Duty". May share 0x0F with sub-field |
 | 0x11 | µA DC | — | USB confirmed. String "uADC Range 1" |
 | 0x12 | µA AC | AC group | USB confirmed. String "uAAC Range 1" |
 | 0x13 | µA AC+DC | AC group | FUN_0064081c: group 2, range 8. String "uAAC+DC" |
@@ -409,7 +422,7 @@ encoding), FUN_006405b1 (data-log→mode decoding), FUN_00630c1e
 | 0x17 | A DC | — | USB confirmed. String "ADC Range 1" |
 | 0x18 | A AC | R/V/Diode | USB confirmed. String "AAC" |
 | 0x19 | A AC+DC | AC group | FUN_0064081c: group 0x12. String "AAC+DC" |
-| 0x1A | VFC (V→freq converter) | — | String "VFC". Manual: long-press in AC V mode | [DEDUCED] |
+| 0x1A | VFC (V→freq converter) | — | [DEDUCED] String "VFC". Manual: long-press in AC V mode |
 | 0x1B | % (4-20mA) | AC group | FUN_0064081c: group 0x1B. String "Range 1: 4 to 20" |
 | 0x1C | 600A DC (clamp) | AC group | FUN_0064081c: group 1. String "ADC600A". UT171C only |
 | 0x1D | 600A AC (clamp) | AC group | FUN_0064081c: group 2. String "AAC600A". UT171C only |
@@ -421,6 +434,10 @@ encoding), FUN_006405b1 (data-log→mode decoding), FUN_00630c1e
   0x13, 0x19, 0x1B, 0x1C, 0x1D
 - **R/V/Diode group**: 0x02, 0x0A, 0x0B, 0x18, 0x24
 - **Voltage group**: 0x02, 0x03, 0x04, 0x05, 0x06
+
+No 0x10 (Duty %) was found in the data-log encoder (`FUN_0064081c`), nor 0x1A
+(VFC) in it or the mode-group functions; 0x1A is deduced from the 0x19→0x1B
+gap and the "VFC" string. [UNVERIFIED]
 
 ---
 
@@ -465,10 +482,10 @@ Comparison with our existing CP2110 implementation:
 | Read buffering | Internal ring buffer | Single report reads |
 | UART status byte order | **Big-endian** FIFO counts | Uses from_le_bytes — **potential bug** |
 
-**Potential bug**: Our `transport/cp2110.rs` UART status parsing at line
-122-123 uses `u16::from_le_bytes` for TX/RX FIFO counts, but the SLAB DLL
-decompilation shows `CONCAT11(byte[1], byte[2])` which is big-endian.
-Needs device verification.
+SLABHIDtoUART.dll reads report 0x42's TX/RX FIFO counts big-endian
+(`CONCAT11(byte[1], byte[2])`); our `Cp2110::uart_status` reads them
+little-endian — an open check in the
+[verification backlog](../../verification-backlog.md#cp2110-fifo-counts) (CP2110 is shared).
 
 ---
 
@@ -477,7 +494,7 @@ Needs device verification.
 | Aspect | UT61E+ | UT171 | UT181A | UT8803 |
 |--------|--------|-------|--------|--------|
 | Header | AB CD | AB CD | AB CD | AB CD |
-| Length | 1 byte (payload+2) | 1 byte (payload) | 2 bytes LE (payload+2) | 1 byte |
+| Length | 1 byte (payload+2) | 2 bytes LE (payload+2) | 2 bytes LE (payload+2) | 1 byte |
 | Comm model | Polled | Streaming | Streaming | Streaming |
 | Values | 7x ASCII | LE float32 | LE float32 | 5 raw bytes |
 | Mode encoding | 1 byte (0x00-0x19) | 1 byte (0x01-0x24) | 2 bytes LE (0x1111-0xA231) | UCI functional code |
@@ -495,7 +512,8 @@ Needs device verification.
 
 | Finding | Level |
 |---------|-------|
-| Frame header 0xABCD, 1-byte length, 16-bit LE checksum | [VENDOR] |
+| Frame header 0xABCD, 16-bit LE checksum | [VENDOR] |
+| 2-byte LE length (payload+2), from the captures and gulux (§3.4) | [DEDUCED] |
 | 26 mode bytes mapped (24 single-byte + 2 special) | [VENDOR] |
 | 13 mode bytes USB-capture confirmed | [VENDOR] |
 | AUTO flag: bit 6 inverted (clear = active) | [VENDOR] |
@@ -513,15 +531,7 @@ Needs device verification.
 
 ### Remaining Gaps ([UNVERIFIED])
 
-| Gap | Impact |
-|-----|--------|
-| Mode 0x10 (Duty%): may share 0x0F with sub-field | Minor |
-| Mode 0x1A (VFC): deduced from gap, not seen in data-log encoder | Minor |
-| Exact simple command IDs (save, stop, query count) | Need USB capture |
-| 0x51 vs 0x52 exact semantics | Need USB capture |
-| Status2 byte (offset 13) meaning | Capture-deduced 0x40=DC/0x20=AC; no decompile evidence; needs hardware |
-| Flag bits 4-5 (0x10, 0x20) | Not observed |
-| UART status FIFO count endianness (transport/cp2110.rs potential bug) | Need device test |
+The open checks are in [verification.md](verification.md).
 
 ### Cross-Reference with Community Sources
 
@@ -539,3 +549,4 @@ Needs device verification.
 | Data logging commands | Ghidra (new) | Not in gulux | New |
 | CP2110 feature report map | SLAB DLL Ghidra (new) | Not in gulux | New |
 | Mode transition commands | Ghidra (new) | Not in gulux | New |
+| Resistance range-relative (kΩ ranges 2–4, MΩ 5–6) | Not in our RE | gulux scaling | gulux only |

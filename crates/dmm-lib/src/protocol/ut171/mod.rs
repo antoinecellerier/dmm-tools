@@ -390,11 +390,11 @@ fn report_unrecognised_fields(payload: &[u8]) {
         );
     }
     // §5.3: the vendor app reads no bit 4 or 5, and the reading of bits 0
-    // and 3 lost its evidence (`docs/verification-backlog.md`, UT171).
+    // and 3 lost its evidence (`docs/research/ut171/verification.md`, Flags).
     if flags & (0x30 | 0x08 | 0x01) != 0 {
         report_unknown(FAMILY, "flag bits", format_args!("{flags:#04x}"));
     }
-    // §5.3: bit 1 marks an extended frame.
+    // Bit 1 marks an extended frame (spec §5.3, unverified).
     if (flags & 0x02 != 0) != (len == MAX_MEASUREMENT_PAYLOAD) {
         report_unknown(
             FAMILY,

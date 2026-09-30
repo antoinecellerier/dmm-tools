@@ -24,6 +24,7 @@ Items that need real components or specific setups to verify.
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [Bluetooth search and detection with built-in meters](#bluetooth-search-and-detection-with-built-in-meters)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
+  - [CP2110 FIFO counts](#cp2110-fifo-counts)
   - [Streaming meters: read continuously](#streaming-meters-read-continuously)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
@@ -1192,45 +1193,6 @@ UT60BT has community frames on record; the UT202BT has no capture anywhere.
 - Overload detection (BCD nibble 0x0C)
 - Streaming rate
 
-#### UT171A / UT171B / UT171C ([issue #4](https://github.com/antoinecellerier/dmm-tools/issues/4))
-
-- Frame extraction. **Corrected (2026-06 review)**: framing is
-  byte-identical to UT181A — 2-byte LE length = payload + checksum,
-  total = length + 4, LE16 checksum over [2..len+2). The previous
-  1-byte-length model (total = length + 5) could never have validated a
-  real frame; its "reserved" byte was the length high byte and its
-  "padding" byte the checksum low byte. Confirmed by connect-command
-  arithmetic and gulux/Uni-T-CP2110; needs one real measurement frame
-  to close.
-- Connect command (`AB CD 04 00 0A 01 0F 00`) — may be needed before streaming
-- Command framing — the vendor builder (`FUN_00755400`, spec §4.1) writes
-  a 1-byte length and the command in byte 3, unlike the captured connect
-  and pause frames (§3.1). A capture of one builder command (save, read,
-  delete) settles which layout the meter takes.
-- Mode byte mapping (26 modes, 0x01-0x24)
-- Float32 LE value parsing — resistance is range-relative (kΩ at range
-  >= 2, MΩ at >= 5 per gulux); scaling for capacitance/conductance
-  [UNVERIFIED]
-- Flags byte (HOLD bit 7, AUTO bit 6 inverted, Low Battery bit 2) — the
-  decompile citations previously backing bits 0/1/3 were Delphi dataset
-  code, not wire protocol (2026-06 review); all flag bits need hardware
-- Range byte (raw, 1-based)
-- Extended frame (27 bytes, frame type 0x03) — not yet parsed; no
-  decompile evidence located for its layout
-- Status2 byte (offset 13) — capture-deduced 0x40=DC/0x20=AC, no
-  decompile evidence
-- Aux value interpretation — kHz frequency on V AC / mV AC per gulux;
-  other modes unknown
-- Remote function selection — the vendor app's function grid proves the
-  meter takes some command to change function, and the (from, to) mode
-  transition table in the spec (§4.7, `FUN_00630e0b`) is the lead, but the
-  codes it lists exceed the one-byte command field the frame builder
-  (`FUN_00755400`) writes, and the two were never reconciled. Recovering
-  the real encoding — Delphi virtual dispatch, the method-table route that
-  found the UT181A's SET_MODE — is what stands between the UT171 and
-  `dmm-cli set mode`. The cycle-to-target driver does not apply either: no
-  cycle-button command is known for this family.
-
 ### Capture and display checks a UT181A runs
 
 The meter's own items are in the
@@ -1709,6 +1671,13 @@ the following needs someone's hardware.
   range table and the two-display handling the deck describes for AC, LPF and
   temperature, and a hardware report to go with it.
 
+### CP2110 FIFO counts
+
+- **The byte order of report 0x42's TX/RX FIFO counts.** UNI-T's
+  SLABHIDtoUART.dll reads them big-endian, `Cp2110::uart_status`
+  little-endian (UT171 spec §8); idle reads give 0, which fits either.
+  Decides `uart_status`. Needs a CP2110 read with bytes queued, on any meter.
+
 ### Streaming meters: read continuously
 
 Since 2026-09-28 the stream reads every streaming meter (UT171, UT181A,
@@ -1777,9 +1746,10 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
   download centre's UT80 and UT88 results. Unopened; it may drive several
   bench meters (the UT632's check is in its
   [verification list](research/ut632/verification.md#vendor-sources)).
-- **Per-model PC software uploaded 2023-02-03** for the UT61B+, UT61D+ and
-  the UT171 series (the UT181A's is in its
-  [verification list](research/ut181/verification.md#vendor-sources)). The UT61E+ one is V2.02 repackaged
+- **Per-model PC software uploaded 2023-02-03** for the UT61B+ and UT61D+
+  (the UT181A's and the UT171 series' are in their verification lists:
+  [UT181A](research/ut181/verification.md#vendor-sources),
+  [UT171](research/ut171/verification.md#vendor-sources)). The UT61E+ one is V2.02 repackaged
   (ut61-family approach doc); hash-compare the others against what the
   family docs used.
 - ~~**iDMM2.0 Android app** (2025-12-20)~~ — **read 2026-09-22** for the

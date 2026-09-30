@@ -180,31 +180,7 @@ with targeted agents resolved most gaps:
 
 ### What Still Requires Device Verification
 
-1. **Mode 0x10 (Duty%)**: May share mode byte 0x0F with frequency,
-   distinguished by a sub-field rather than a separate mode byte.
-   Not present in the data-log encoding function. [UNVERIFIED]
-
-2. **Mode 0x1A (VFC)**: Deduced from the gap in the mode byte
-   sequence and the "VFC" string in the binary, but not found in
-   the data-log encoding or mode group functions. [DEDUCED]
-
-3. **Exact simple command IDs**: Save current, stop auto-save, and
-   query count use the simple (length=0x03) format but their specific
-   command byte values are passed via virtual dispatch and not directly
-   visible in the decompilation. [UNVERIFIED]
-
-4. **0x51 vs 0x52 exact semantics**: Both use length 0x0A with 6-byte
-   payloads. Which is read-saved-measurement vs read-recording-data
-   is deduced by analogy with UT181A, not confirmed. [UNVERIFIED]
-
-5. **Flag bits 4-5 (0x10, 0x20)**: Not observed in any decompiled
-   function. May be unused or accessed through virtual dispatch.
-   [UNVERIFIED]
-
-6. **UART status FIFO count endianness**: The SLABHIDtoUART.dll
-   decompilation shows big-endian FIFO counts in report 0x42, but
-   our transport/cp2110.rs uses little-endian. Needs device verification.
-   [UNVERIFIED]
+The open checks are in [verification.md](verification.md).
 
 ## Cross-Reference with Community Sources
 
