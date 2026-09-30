@@ -14,9 +14,10 @@
 #
 # Session time is frozen at each scene's preseed instant (see `launch`), so a
 # rerun stages exactly the same frame. Each capture prints the pixel difference
-# against the committed file and leaves that file alone when there is none;
-# Xvfb is not guaranteed to render identically across driver versions, so a
-# small delta is still possible — look at the PNGs before committing them.
+# against the committed file and leaves that file alone when there is none,
+# since a rewritten PNG carries a new timestamp. Xvfb is not guaranteed to
+# render identically across driver versions, so a small delta is still
+# possible — look at the PNGs before committing them.
 set -euo pipefail
 
 # Byte semantics for the [0-9] classes below, and a stable number format in
@@ -26,6 +27,21 @@ export LC_ALL=C
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUI="$ROOT/.claude/skills/verify-gui/scripts/gui-display.sh"
 ASSETS="$ROOT/assets"
+# The bench recordings, shared with the doc snippets, which name theirs in
+# their `via=` marker:
+#   dcma-boot-refresh     an e-paper thermometer booting and refreshing, on a
+#                         fixed 220 mA range
+#   ohm                   a flat 4.649 kΩ on AUTO
+#   dcmv-hold-rel         DC mV with HOLD, then REL
+#   ut181a-vac-hz         one frame from a UT181A golden fixture, repeated
+#   acdcv-cell            a UT61E+ in AC+DC V across a 1.6 V cell, with a lead
+#                         lifted twice
+#   dcv-steps             a bench supply stepped and ramped 2.9–9.3 V; unused
+#   dcma-boot-refresh-autorange
+#                         the thermometer cycle on AUTO, with 22 ↔ 220 mA hops
+#                         and an OL blip at each boot and refresh; unused
+#   ut181a-temp-t1-t2     a UT181A frame with two temperature sub-values;
+#                         unused
 REPLAYS="$ASSETS/replays"
 
 # A state dir of our own so a verify-gui session in another terminal keeps its

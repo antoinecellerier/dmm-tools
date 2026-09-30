@@ -13,7 +13,7 @@ description: >-
 
 # Spec data from a manual
 
-CLAUDE.md applies throughout: never fabricate a value, and read tables from the rendered page, never from extracted text. `pdftotext` loses merged cells, band sub-rows and footnotes, and fonts often drop ±, Ω, ≤ and °. The manual is the source; datasheets and product pages only cross-check it. The code layout and test rules are in `docs/adding-devices.md` ("Specification data"); the `dump_specs` flags are in `docs/development.md`.
+CLAUDE.md applies throughout: never fabricate a value, and read tables from the rendered page, never from extracted text. `pdftotext` loses merged cells, band sub-rows and footnotes, and fonts often drop ±, Ω, ≤ and °. The manual is the source; datasheets and product pages only cross-check it. The code layout and test rules are in `docs/adding-devices.md` ("Specification data"); the `dump_specs` flags are in `docs/development.md` ("Verifying Specification Data"), and the `--marks` format in the header of `crates/dmm-lib/examples/dump_specs.rs`.
 
 Tools: `python3`, `pdftoppm`/`pdftotext` (poppler-utils), `magick` (ImageMagick), `cargo`.
 

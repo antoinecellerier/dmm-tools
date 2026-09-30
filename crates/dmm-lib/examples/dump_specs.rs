@@ -14,6 +14,15 @@
 //!   beside the render of its manual page (`--pages-dir`), with the cells
 //!   listed in `--marks` highlighted. One device.
 //!
+//! `--marks FILE` is a JSON object mapping `"<table> / <range> / <field>"`,
+//! or `"<table> / <field>"` for the whole table, to a note. The field is
+//! `resolution`, `accuracy`, `input_impedance`, `overload_protection`, `row`
+//! or `range` (`ranges` too, for the whole table), `notes`, `page` or
+//! `table`. A note may also be a `{status,
+//! evidence}` object, the shape of a transcription's provenance file, which
+//! colours the cell by status. A marked cell shows its note on hover; marks
+//! that match no cell are listed, collapsed, at the top of the sheet.
+//!
 //! Usage:
 //!   cargo run -p dmm-lib --example dump_specs
 //!   cargo run -p dmm-lib --example dump_specs -- ut61eplus ut61d+
