@@ -137,18 +137,22 @@ From UT171C.exe reader thread (`FUN_00755228`):
 ### 3.1 General Structure
 
 ```
-+------+------+------+-----------+--------+--------+
-| 0xAB | 0xCD | len  | payload   | chk_lo | chk_hi |
-+------+------+------+-----------+--------+--------+
- byte 0 byte 1 byte 2 bytes 3..   len+2    len+3
++------+------+--------+--------+-----------+--------+--------+
+| 0xAB | 0xCD | len_lo | len_hi | payload   | chk_lo | chk_hi |
++------+------+--------+--------+-----------+--------+--------+
+ byte 0 byte 1 byte 2   byte 3   bytes 4..   len+2    len+3
 ```
 
 | Field | Size | Encoding | Description |
 |-------|------|----------|-------------|
 | Header | 2 | Fixed | `0xAB 0xCD` |
-| Length | 1 | uint8 | Payload byte count |
-| Payload | N | Variable | Command or response data |
-| Checksum | 2 | uint16 LE | Sum of bytes[2..len+2) |
+| Length | 2 | uint16 LE | Payload byte count + 2 (the checksum) |
+| Payload | len − 2 | Variable | Command or response data |
+| Checksum | 2 | uint16 LE | Sum of bytes[2..len+2): the length bytes and the payload |
+
+Every frame seen on the wire has this shape: the meter's replies and the
+connect and pause commands (§3.4, §4.3). The vendor's command builder
+writes a different layout for the commands it builds (§4.1).
 
 ### 3.2 Checksum Algorithm -- [VENDOR]
 
@@ -205,6 +209,14 @@ buf[4..] = payload
 [checksum appended]
 ```
 
+This is a 1-byte length with the command in byte 3, which does not match
+the §3.1 framing every captured frame follows: the connect command on the
+wire is `AB CD 04 00 0A 01 0F 00`, a 2-byte length with the command in
+byte 4. No frame this builder makes (commands 0x01, 0x51, 0x52, 0xFF and
+the length-3 ones) has been captured, so whether the meter accepts this
+layout is [UNVERIFIED]. The sketches in §4.2 and §4.4–4.6 follow the
+builder.
+
 ### 4.2 Command Categories
 
 | Command ID | Length | Payload | Purpose |
@@ -215,13 +227,15 @@ buf[4..] = payload
 | 0xFF | 0x04 (4) | 1 byte: index or 0xFF=all | Delete records |
 | Others | 0x03 (3) | None | Simple commands |
 
-### 4.3 Known Simple Commands (length = 0x03)
+### 4.3 Streaming Commands and Simple Commands
+
+Captured, in the §3.1 framing (length 4, command 0x0A, one parameter byte):
 
 **Connect (start streaming):** `AB CD 04 00 0A 01 0F 00`
 
 **Pause (stop streaming):** `AB CD 04 00 0A 00 0E 00`
 
-Other simple commands (exact IDs [UNVERIFIED]):
+The builder's length-3 commands, none captured (exact IDs [UNVERIFIED]):
 - Save current measurement
 - Stop auto-save
 - Query saved data count

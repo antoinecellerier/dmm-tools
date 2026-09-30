@@ -1243,6 +1243,10 @@ UT60BT has community frames on record; the UT202BT has no capture anywhere.
   arithmetic and gulux/Uni-T-CP2110; needs one real measurement frame
   to close.
 - Connect command (`AB CD 04 00 0A 01 0F 00`) — may be needed before streaming
+- Command framing — the vendor builder (`FUN_00755400`, spec §4.1) writes
+  a 1-byte length and the command in byte 3, unlike the captured connect
+  and pause frames (§3.1). A capture of one builder command (save, read,
+  delete) settles which layout the meter takes.
 - Mode byte mapping (26 modes, 0x01-0x24)
 - Float32 LE value parsing — resistance is range-relative (kΩ at range
   >= 2, MΩ at >= 5 per gulux); scaling for capacitance/conductance

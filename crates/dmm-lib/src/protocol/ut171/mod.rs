@@ -1,11 +1,11 @@
 //! UT171A/B/C protocol.
 //!
 //! Streaming protocol: user must manually enable "Communication ON" on the meter.
-//! No trigger byte needed — device streams 22-byte or 28-byte measurement frames.
+//! No trigger byte needed — device streams 21-byte or 27-byte measurement frames.
 //!
-//! Frame format: AB CD len payload chk_lo chk_hi
-//! Length is a 1-byte uint8 = payload size (does NOT include checksum).
-//! Checksum = 16-bit LE sum of length byte + payload bytes.
+//! Frame format: AB CD len_lo len_hi payload chk_lo chk_hi. The LE16 length
+//! counts payload + checksum, as on the UT181A.
+//! Checksum = 16-bit LE sum of the length bytes + payload bytes.
 //!
 //! Values are IEEE 754 float32 (LE). 26 measurement modes.
 //!
