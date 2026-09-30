@@ -63,7 +63,7 @@ shows.
 | UT202BT | 9999 | 🧪 Experimental ([#27](https://github.com/antoinecellerier/dmm-tools/issues/27)) | clamp: 600 A AC, inrush, LPF; second display as a sub-value |
 
 Neither has been run on a meter yet: the range tables come from UNI-T's
-iDMM2.0 app and the manuals ([backlog](verification-backlog.md)).
+iDMM2.0 app and the manuals ([open checks](research/ut61-family/verification.md#ut60bt-and-ut202bt)).
 
 ## UT8802 / UT8803
 

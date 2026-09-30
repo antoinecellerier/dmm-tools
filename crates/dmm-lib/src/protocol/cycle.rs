@@ -353,8 +353,8 @@ impl<M: CycleMeter + ?Sized> Observable<M> for ModeWalk {
 /// The manual range ladder: what [`select_range`] walks.
 ///
 /// `start_mode` is the mode the walk began in. A UT61E+ capture (2026-07-29,
-/// docs/verification-backlog.md) saw repeated RANGE presses flip the mode
-/// byte DC V <-> AC+DC V, which is SELECT's documented effect, not RANGE's.
+/// ut61-family spec §6.1) read the mode byte flipping DC V <-> AC+DC V under
+/// repeated RANGE presses, which is SELECT's documented effect, not RANGE's.
 /// Whatever causes it, pressing on once the function has changed would be
 /// stepping a ladder the user never asked for, so the walk stops instead.
 struct RangeWalk {
@@ -454,8 +454,8 @@ impl FlagSetting {
     ///
     /// HOLD and REL are. MIN/MAX and Peak are not: on a UT61E+ the first
     /// press of 0x41 enters MAX and further presses only swap MAX and MIN —
-    /// off is reached by 0x42 alone (docs/verification-backlog.md, "MIN/MAX
-    /// and Peak measurement reporting"), and 0x4D/0x4E behave the same.
+    /// off is reached by 0x42 alone (ut61-family spec §6.1), and 0x4D/0x4E
+    /// behave the same.
     pub(crate) fn toggles(self) -> bool {
         matches!(self, FlagSetting::Hold | FlagSetting::Rel)
     }
@@ -1343,8 +1343,8 @@ mod tests {
         /// The rung the first press out of auto lands on, as the meter's own
         /// auto-ranging had chosen it.
         auto_rung: u16,
-        /// A meter that changes function under RANGE, as a UT61E+ was seen
-        /// to do (docs/verification-backlog.md, 2026-07-29).
+        /// A meter that changes function under RANGE, as a UT61E+ capture
+        /// once read it to (2026-07-29, ut61-family spec §6.1).
         range_flips_mode: Option<u16>,
         /// Auto-range commands sent, and whether the meter obeys them.
         autos: usize,

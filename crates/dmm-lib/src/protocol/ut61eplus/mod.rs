@@ -55,7 +55,9 @@ pub struct Ut61PlusProtocol {
     streaming: bool,
     /// The secondary display last sent, held for the next main reading
     /// (family spec §2.3). That reading takes it, so a main frame with no
-    /// secondary since the one before it carries none.
+    /// secondary since the one before it carries none. Nothing blanks it
+    /// after 500 ms as UNI-T's app does, and a command leaves it held. A
+    /// replay records each reading's own frame, so it plays none back.
     secondary: Option<AuxValue>,
 }
 
@@ -112,8 +114,7 @@ impl Ut61PlusProtocol {
                 // decoded correctly, every command moved the flag it should,
                 // the second run passed the gate outright and the third
                 // walked the Ω and DC V ladders. What is left open on this
-                // model is in `docs/verification-backlog.md`, "UT61B+ —
-                // hardware reports".
+                // model is in `docs/research/ut61-family/verification.md`.
                 "ut61b+" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT61B+",
@@ -463,7 +464,7 @@ impl Protocol for Ut61PlusProtocol {
         }
 
         // The list is shared by the whole UT61+/UT161 family; the UT61E+ and
-        // the UT61B+ have run every step of it (docs/verification-backlog.md).
+        // the UT61B+ have run every step of it (the B+ in issue #19).
         // A step a verified model has not run must not ride on this flag —
         // the two ladder steps were held back that way for the B+ until it
         // walked them on 2026-09-11.
@@ -712,14 +713,11 @@ fn command_steps(hw: bool) -> [crate::protocol::CaptureStep; 8] {
         CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3)
             .verified_if(hw)
             .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
-        // A single RANGE press, not a sweep. A six-step sweep was tried
-        // and removed: on hardware it produced range indices 0, 2, 0, 0,
-        // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
-        // between DC V (0x02) and AC+DC V (0x19) partway through, which
-        // is the documented effect of SELECT (0x4C), not RANGE (0x46).
-        // Until what 0x46 actually does is known, stepping it repeatedly
-        // just files misleading data. See the UT61E+ section of
-        // docs/verification-backlog.md.
+        // A single RANGE press, not a sweep: the capture walks the ladder
+        // itself through `choices(Range)`, reading back each rung. A blind
+        // six-press sweep was tried and removed: it filed indices 0, 2, 0,
+        // 0, 0, 0 from stale frames, and a mode flip to AC+DC V that 0x46 was
+        // never seen to cause (ut61-family spec §6.1).
         CaptureStep::with_command(
             "range",
             "We will send RANGE to switch to manual.",
@@ -1063,6 +1061,10 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     /// flag where it was. [`REL_DEAD`], [`MINMAX_DEAD`] and [`HOLD_DEAD`] are
     /// that list. Peak depends on the model as well, so it stays with the
     /// table.
+    ///
+    /// The lists narrow `get`/`set` and the capture sweep alone: the GUI's
+    /// buttons and `dmm-cli command` press through `send_command`, so a wrong
+    /// entry cannot stop a press, only `set` reaching a state the meter has.
     fn flag_states(&self, setting: cycle::FlagSetting, mode: u16) -> &'static [u16] {
         // A flag whose button the model does not have (family spec §6.5).
         let command = match setting {
@@ -2645,7 +2647,7 @@ mod tests {
     }
 
     /// Peak activates on AC mV and does nothing on DC V, verified 2026-03-21
-    /// (docs/verification-backlog.md).
+    /// (UT61E+ spec §2.7).
     #[test]
     fn peak_is_offered_in_ac_but_not_in_dc_volts() {
         let proto = Ut61PlusProtocol::new();

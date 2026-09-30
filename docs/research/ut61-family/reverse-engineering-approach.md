@@ -55,7 +55,8 @@ tables, and bar graph segment count.
    19-byte frame and 0x5F-then-0x5D handshake as the UT61+ and UT161 behind a
    UT-D07B, over the same ISSC service (`BleManager`), and differ only in
    their range tables, the APK assets `funOl1_UT60BT.json` and
-   `funOl1_UT202BT.json`, which share the UT61+ assets' schema
+   `funOl1_UT202BT.json`, which share the UT61+ assets' schema. No UT202S
+   table found in the APK (2026-09-25)
 9. **UT60BT manual** (English, 2 pages, from its Chinese product page,
    read 2026-09-25): wireless mode P1 §VIII and P2 §11, dial P1, ranges P2 §X
 10. **UT202T/UT202BT manual** (English, and the Chinese UT202S/UT202BT one
@@ -144,8 +145,8 @@ differently:
   group).
 - Both share the same "LozV" display name string.
 
-Which byte the UT61D+ sends for its single LoZ dial position requires
-device testing.
+That left open which byte the UT61D+ sends for its single LoZ dial
+position.
 
 **Settled by the protocol deck** — [VENDOR-DOC]: 0x15 is LoZ (low-impedance
 AC voltage) and 0x16 is a clamp meter's AC A, which fits the SI prefix

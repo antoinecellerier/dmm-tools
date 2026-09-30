@@ -44,7 +44,9 @@ impl Ut61ePlusTable {
             // (printed page 27, rendered) lists 1000.0V at 0.1V resolution
             // with no 750V row, and gives max input and overload protection as
             // 1000V. The 2026-09-07 RANGE walk read one decimal there, which
-            // is that row's resolution.
+            // is that row's resolution. The walk cannot tell rung 3 from a
+            // 750.0 V one, which would carry the same 0.1 V; its label is the
+            // manual's.
             ac_v: [
                 r("2.2V", "V"),
                 r("22V", "V"),
@@ -53,9 +55,9 @@ impl Ut61ePlusTable {
             ],
             // One range on this model, and RANGE does nothing in either mV
             // mode — DC mV verified 2026-03-21, AC mV 2026-09-07 (three
-            // presses, range byte and AUTO annunciator unmoved); see the
-            // "Range tables" section of docs/verification-backlog.md. The
-            // protocol deck's UT61E+ table has this one rung too.
+            // presses, range byte and AUTO annunciator unmoved); see
+            // ut61-family spec §9. The protocol deck's UT61E+ table has this
+            // one rung too.
             dc_mv: [r("220mV", "mV")],
             ac_mv: [r("220mV", "mV")],
             ohm: [

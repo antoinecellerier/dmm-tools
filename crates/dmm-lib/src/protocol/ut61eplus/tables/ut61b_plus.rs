@@ -11,7 +11,8 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// µA, mA and A 0-1. The rungs left over sit *between* measured ends of an
 /// ascending ladder, so they have nowhere else to be: AC V 1 and 3,
 /// capacitance 1-4 and 6, mV 1. `hz` is the protocol deck's ladder, seen
-/// on a meter at rung 0 only — see `docs/verification-backlog.md`.
+/// on a meter at rung 0 only — see
+/// `docs/research/ut61-family/verification.md`.
 ///
 /// Key differences from UT61E+ (22,000-count):
 /// - DC/AC V: 4 ranges (6V..1000V) vs 4 (2.2V..1000V)

@@ -6,23 +6,15 @@ Items that need real components or specific setups to verify.
 
 - [Device auto-detection](#device-auto-detection)
 - [Pending Verification](#pending-verification)
-  - [UT61+ remote mode selection (cycle-to-target)](#ut61-remote-mode-selection-cycle-to-target)
-  - [UT61+ flag settings (HOLD, REL, MIN/MAX, Peak)](#ut61-flag-settings-hold-rel-minmax-peak)
-  - [UT61E+ — range ladders walked end to end (2026-09-10)](#ut61e--range-ladders-walked-end-to-end-2026-09-10)
   - [Capture leaves the meter manually ranged](#capture-leaves-the-meter-manually-ranged)
-  - [UT61B+ — hardware reports](#ut61b--hardware-reports)
+  - [Capture: settle before HOLD, REL and MIN/MAX](#capture-settle-before-hold-rel-and-minmax)
   - [Capture: gate steps placed after other steps](#capture-gate-steps-placed-after-other-steps)
-  - [Modes not yet tested with real signals](#modes-not-yet-tested-with-real-signals)
-  - [Modes not reachable on UT61E+](#modes-not-reachable-on-ut61e)
   - [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)
   - [Capture and display checks a UT181A runs](#capture-and-display-checks-a-ut181a-runs)
-  - [Range tables](#range-tables)
-  - [UT61+ Hz and Duty % off the Hz/% position take its specs](#ut61-hz-and-duty--off-the-hz-position-take-its-specs)
-  - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
-  - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [Bluetooth search and detection with built-in meters](#bluetooth-search-and-detection-with-built-in-meters)
   - [macOS bridges other than the CH9329](#macos-bridges-other-than-the-ch9329)
   - [CP2110 FIFO counts](#cp2110-fifo-counts)
+  - [CLI paced reads](#cli-paced-reads)
   - [Streaming meters: read continuously](#streaming-meters-read-continuously)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [Known defects](#known-defects)
@@ -31,8 +23,6 @@ Items that need real components or specific setups to verify.
   - [A meter power cycle surfaces a checksum error](#a-meter-power-cycle-surfaces-a-checksum-error)
   - [A settings file this build can't parse is replaced by defaults](#a-settings-file-this-build-cant-parse-is-replaced-by-defaults)
   - [GUI accessibility — screen reader walk-through](#gui-accessibility--screen-reader-walk-through)
-- [Completed Verification](#completed-verification)
-  - [UT61E+ RANGE command (0x46) — RESOLVED](#ut61e-range-command-0x46--resolved)
 
 ## Device auto-detection
 
@@ -84,9 +74,6 @@ Open questions, each needing a meter:
   unrecognised name falls back to the UT61E+ tables and is logged, so a
   reporter's `RUST_LOG=dmm_lib=debug` output is what turns one into a
   registry alias.
-- ~~**Does a UT61+ beep on `0x5F`?**~~ — **VERIFIED** 2026-09-11 on our
-  UT61E+: it does, so every auto connect beeps once, whatever the GUI's
-  name-query setting says; a pinned `--device ut61eplus` read stays silent.
 - **Does a VC-890 answer `0x5E` on the first attempt?** The vendor software
   retries the name request up to 10 times with a buffer flush between
   attempts, so a single poll may not be enough.
@@ -128,220 +115,6 @@ Open questions, each needing a meter:
 
 ## Pending Verification
 
-### UT61+ remote mode selection (cycle-to-target)
-
-Shipped 2026-09-07: `dmm-cli get mode`/`set mode` and the GUI's mode
-dropdown work on the UT61+/UT161 family. The meter takes no set-mode command, so the driver
-(`crates/dmm-lib/src/protocol/cycle.rs`) presses SELECT (0x4C) or Hz/%
-(0x49) and re-reads the mode byte until the target shows, planning from a
-per-model dial table recorded in
-`docs/research/ut61-family/reverse-engineered-protocol.md` §3.1. The UT61E+
-table, its ring orders and the settle timing were verified on our own
-meter the same day, every position and every entry (Completed table below).
-
-Observed 2026-09-07 on our E+, and deliberate: once the meter is in
-Hz (0x04), `get mode` lists only `Hz, Duty %` and `set mode "AC V"` is
-refused as unknown there. The mode byte carries no dial information, nor does
-the rest of an open-lead frame (ut61-family spec §3.1), and the
-driver does not guess between dial positions that do not nest, so from Hz it
-will not walk back to the position's AC mode. `set mode "%"` still works (one
-press), and from Duty % a raw `dmm-cli --device ut61eplus command select2`
-press returns the meter to AC V — the next frame reflects it about a second
-later. A process that watched the meter enter Hz keeps the dial position, so
-the GUI can ask for the walk: Hz → Duty % → AC V went through from the GUI
-on our E+ on 2026-09-13, two presses in a row (ut61-family spec §3.1).
-
-UT61B+/UT61D+/UT161x owners — [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7).
-Their dial tables come from the manual alone and no press has been observed,
-so the listing itself is the thing to check: on each dial position,
-`dmm-cli --device ut61b+ get mode` (or `ut61d+`) should name exactly the
-functions the meter's own SELECT and Hz/% buttons reach there, and a switch
-to each should land. Two specifics: the UT61D+ V≂ position is expected to
-carry both AC V and DC V on SELECT, and its temperature position to switch
-°C/°F on SELECT; the UT61B+ V~ position is expected to have no SELECT
-function at all. A mode listed but unreachable shows up as
-`<mode> never appeared; the meter is back in <mode>`.
-
-### UT61+ flag settings (HOLD, REL, MIN/MAX, Peak)
-
-Shipped 2026-09-07: `Setting::Hold`, `Rel`, `MinMax` and `Peak` reach a
-named state by pressing the family's own button (0x4A, 0x48, 0x41, 0x4D)
-and reading the flag back, leaving MIN/MAX and Peak by 0x42 and 0x4E.
-
-**Verified the same day on our UT61E+**, leads open, V⎓ and V~ dial
-positions, `RUST_LOG=dmm_lib=debug`:
-
-- `set hold on` then `set hold off`: one press each, each confirmed on the
-  next frame. A repeated `set hold on` presses nothing and answers "Meter is
-  already HOLD on".
-- `set rel on` then `set rel off`: one press each.
-- `set minmax max` (from off) and `set minmax min` (from MAX): one press
-  each. `set minmax off` logs `cycle: leaving minmax (in MIN)` and leaves by
-  the 0x42 exit command, not by a press.
-- On V~: `set peak p-max` and `set peak p-min`, one press each;
-  `set peak off` logs `cycle: leaving peak (in P-MIN)` and leaves by 0x4E.
-- Every press is answered with a 2-byte `[FF, 00]` ack frame, which the
-  parser skips. The first measurement frame after a press can still carry
-  the old state; the walk then logs `cycle: meter still reports <state>,
-  re-reading` and re-reads rather than pressing again (seen once each on
-  `set peak p-min` and `set peak off`). Without that it would overshoot.
-
-Partly settled — **which modes Peak is offered in.** Device evidence now
-covers AC V (2026-09-07: the meter entered and left P-MAX/P-MIN) on top of
-AC mV, and DC V is still the one mode confirmed not to react (2026-03-21,
-"MIN/MAX and Peak measurement reporting" below). A `get` on 2026-09-07 also
-showed the Peak row offered in AC V and AC A and absent in DC V, DC A and
-DC mV — but that listing is the code's own table (`AC_PEAK_MODES` in
-`tables/mod.rs`, the five pure-AC modes), so it is a cross-check, not
-evidence about the meter. Left to check on our meter: AC µA and
-AC mA, and AC+DC V and LPF V, which the code refuses with `peak cannot be
-set in <mode> on this meter`. Every mode where the meter reacts but the
-list is empty (or the reverse) is a table fix.
-
-The UT61B+ is offered no Peak at all, from the family spec's flag matrix
-(§4, blank Peak cells) and command matrix (§6, "No effect"); the UT61D+ is
-offered the same AC modes as the E+. Both unverified — issue #7.
-
-Where the buttons do nothing — **VERIFIED** on our UT61E+ (2026-09-07, four
-runs) and again by @ChrisTheExpie on a real UT61B+ (2026-09-10, CH9329,
-issue #19), each sweep ending in `<button> did nothing`.
-The two meters refused the same commands in the same modes:
-
-- **REL:** continuity, Hz, Duty %, NCV and AC+DC V.
-- **MIN/MAX:** continuity, diode, capacitance, Hz, Duty % and NCV.
-- **HOLD:** NCV.
-- **RANGE:** capacitance and Hz. Both have multi-rung tables and auto-ranging
-  reaches those rungs; it is only the button that does nothing.
-
-`choices()` was narrowed to match on 2026-09-10: `HOLD_DEAD`, `REL_DEAD` and
-`MINMAX_DEAD` in `ut61eplus/mod.rs`, `FAMILY_FIXED_RANGE_MODES` in
-`tables/mod.rs`, and spec §6.2. The manual (§VII) gives each button one line
-and no per-function list, so the meters are the only record.
-
-**The bar for that list: a refusal reproduced with a real reading on screen,
-on every meter that can be asked.** Both halves earn their place:
-
-- **A refusal of REL over OL says nothing about the mode.** This meter refuses
-  REL whenever the display reads OL, whatever the mode — `dcmv/rel:on` was
-  refused over OL in the 2026-03 run and taken in all three later runs where
-  DC mV had a value. **HOLD and MIN/MAX are not affected**: diode's HOLD
-  frames carry the flag over OL, and `dcmv/minmax` was taken twice over OL.
-  Tallying every REL and MIN/MAX sub-step by what was on screen, `dcmv` + REL
-  is the only case in any capture where the outcome differs by screen state.
-- ~~**Diode + REL, asked with a diode fitted on a second meter**~~ —
-  **VERIFIED** 2026-09-11 by @ChrisTheExpie on a real UT61B+ (CH9329). Diode
-  is settled for both buttons on both meters that have the mode, each asked
-  with a diode fitted rather than over OL — open leads there read OL, and the
-  meter refuses REL over OL whatever the mode. Our UT61E+ on 2026-09-10 with a
-  Schottky at 0.1968 V (`ut61eplus-diode.yaml`): REL and MIN/MAX refused, HOLD
-  taken. The B+'s `capture --steps diode` run at 0.515 V: `diode/rel:on`
-  refused (`REL did nothing in off`) with the flag nibble unmoved across all
-  three settle reads, `diode/hold:on` taken. REL decoding is proven on that
-  meter by `dcv_ranges/rel:on` the same day, so the refusal is the meter's and
-  not a parse miss. Diode is now in `REL_DEAD` as well as `MINMAX_DEAD`.
-- **AC+DC V joins the REL list**, on three refusals with a real reading:
-  2026-09-07 at 0.07 V and 0.08 V, and 2026-09-10 at 0.0005-0.0175 V
-  (`ut61eplus-acdcv.yaml`). That is every meter that has the mode — the
-  UT61B+ has no such dial position, so three runs on the only meter with it is
-  the ceiling, not a shortfall. HOLD and MIN/MAX both work there, so it is REL
-  specifically: `acdcv/minmax:min` read back 0.0652 V with the MIN flag set.
-
-Narrowing `choices()` reaches `dmm-cli get`/`set` and the capture sweep, and
-nothing else. The GUI's HOLD/REL/MIN-MAX/PEAK buttons come from
-`supported_commands` and press through `send_command`, as does
-`dmm-cli command <name>`, so a wrong entry here cannot stop anyone pressing
-the button — but it can stop `set` reaching a state the meter does have.
-
-**AUTO in LPF V** is a separate E+-only observation (2026-09-07): the meter
-came up in 1000V manual — range byte 1000V with AUTO off — refused AUTO and
-stayed there, although the manual's AC V table lists LPF on every range.
-Whether any other range is reachable with a signal applied is open. Not
-encoded.
-
-The mock follows the same matrix from 2026-09-10, since a mock that offers a
-control the meter ignores is the false confidence `.claude/rules/protocol.md`
-warns about. From 2026-09-14 it also meets HOLD as the E+ does: REL and
-Hz/% dropped, SELECT, RANGE and AUTO releasing it (ut61-family spec §6.3). One divergence is left and predates this: the mock offers Peak in
-Hz, Ω, capacitance, temperature and NCV, where the E+ offers it only in the
-five pure-AC modes (`AC_PEAK_MODES`). `Scenario::peak_applies` is what would
-narrow it.
-
-The sweep skips REL while the reading is OL, so some rows read as absent
-rather than refused in a given run: `continuity/rel:on` was only attempted in
-the runs where the probes were still touching (2026-03 and
-`ut61eplus-verify4.yaml`), and both of those refused it.
-
-### UT61E+ — range ladders walked end to end (2026-09-10)
-
-`capture --unverified` on our UT61E+ ran the two steps added that day
-(`ohm_ranges`, `dcv_ranges`), and a `--steps acdcv` run walked a third ladder.
-Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
-
-- **Every rung of Ω, DC V and AC+DC V is [VERIFIED]**, one rung per RANGE
-  press, ascending, with no press skipped or repeated: Ω 0-6 (220Ω, 2.2kΩ,
-  22kΩ, 220kΩ, 2.2MΩ, 22MΩ, 220MΩ) and DC V and AC+DC V 0-3 (2.2V, 22V, 220V,
-  1000V). Each rung is identified by the decimal count the meter sent there,
-  which on a 22,000-count display names the full scale outright. AC+DC V
-  shares the DC V table, as `ut61e_plus.rs` has it. The probes were shorted
-  throughout, so every rung read zero: the decimal placement is verified, the
-  decoding of a non-zero value at each rung is not. A resistor of 1k-100k
-  across the probes would settle that in one run — it lands inside five of the
-  seven rungs and each must decode to the same resistance.
-- **The AC V ladder was walked earlier, on 2026-09-07** (`acv/range:*` in
-  `ut61eplus-verify5.yaml`), which this section originally left out: all four
-  rungs are golden fixtures, and their decimal counts run 4, 3, 2, 1 across
-  indices 0-3 — `  0.0647`, `   0.395`, `    0.35`, `     0.0` — matching the
-  manual's 0.1mV/1mV/10mV/0.1V resolutions for 2.2000V, 22.000V, 220.00V and
-  1000.0V. AC V does *not* share the DC V table in the code, and does not
-  need to.
-- That closes the 2026-09-07 worry that RANGE could not be swept: the blind
-  six-press sweep that produced indices 0, 2, 0, 0, 0, 0 was the old code
-  pressing without reading back. `choices(Range)` walks to target with a
-  read-back per press and gets every rung.
-- HOLD, REL, MIN and MAX were all taken in Ω, DC V and AC+DC V except REL in
-  AC+DC V (above).
-- Both steps were marked verified **for the UT61E+ only** until 2026-09-11,
-  when the UT61B+ walked them too (issue #19). A verified model that has not
-  run a step must not be marked verified for it by the family-wide `hw` flag,
-  which is what kept `capture --unverified` asking the B+ for exactly these
-  two; with both verified models through every step, it asks neither for
-  anything and the per-model flag is gone.
-- **A resistor across the probes confirms the decode across rungs, and all
-  three overload spellings at once** (`ut61eplus-ohm-82k.yaml`, 82 kΩ marked,
-  reading 80.45 kΩ on auto). The three rungs it overflows produced
-  `  OL.  ` at 220Ω, ` .OL   ` at 2.2kΩ and `  O.L  ` at 22kΩ — the whole of
-  §5.8 in one run on one meter, rather than inferred across seven captures.
-  Re-run with `--settle 3000` (`ut61eplus-ohm-82k-settled.yaml`), every rung
-  it fits decodes to the same resistance: `80.46` kΩ at 220kΩ, `0.0804` MΩ at
-  2.2MΩ, `0.08` MΩ at 220MΩ, against `80.45` kΩ on auto. Different unit,
-  different decimal count, one resistor — which is the check shorted probes
-  could not make, since every rung then reads zero.
-- **The top Ω rungs settle slowly.** With the probes shorted, 22MΩ read
-  0.081 MΩ (81 counts) and 220MΩ read 0.18 MΩ (18 counts), and both were seen
-  on the meter to drop back over several seconds. The sweep samples about
-  200 ms after the press, so **range sub-step values on slow-settling ranges
-  are transients, not measurements**. It does not touch the rung-to-label
-  mapping, which is the decimal placement, nor the golden fixtures, which
-  assert the parse of a frame whatever it held. With the 82 kΩ resistor the
-  scale of it showed: 220MΩ filed 4.38 MΩ, fifty times the true value, and
-  220kΩ filed two OL frames before the reading came down into range.
-  `capture --settle MS` was added for this; waiting for the reading to hold
-  still instead would never finish on leads with nothing stable across them.
-- **A delay after the press cannot cover HOLD, REL or MIN/MAX**, which act on
-  the live reading rather than on the meter's next one. `ohm_ranges/hold:on`
-  filed 12.59 kΩ three times on the 82 kΩ resistor
-  (`ut61eplus-ohm-82k-settled-2.yaml`, 2026-09-10): the press followed the
-  220MΩ rung handing back to auto, so the meter froze a reading still on its
-  way down and every later sample read the frozen value. Settling **before**
-  the press is what would fix it — the wait is on the wrong side of the button
-  for these three.
-- **Golden fixtures**: 20 in `crates/dmm-lib/tests/golden/ut61eplus/` from these
-  runs (2026-09-11) — the 82 kΩ resistor at the four rungs it fits and the three
-  overload shapes at the rungs it does not, the AC+DC V ladder above 2.2V, HOLD, REL
-  and MIN/MAX in Ω and AC+DC V, the Schottky diode with and without HOLD, and a
-  `- 0.000` frame. The hand-built `ohm_overload` fixture, whose `OL` carried no
-  decimal point, is replaced by the real 220Ω frame.
-
 ### Capture leaves the meter manually ranged
 
 The sweep restores each setting it drove, and `docs/capture-design.md` says
@@ -357,193 +130,16 @@ Not harmful — the operator's next dial turn clears it — but it makes a
 resumed or repeated run cover a different set of rungs than a fresh one.
 Re-asserting Auto after the flag sweeps would fix it.
 
-### UT61B+ — hardware reports
+### Capture: settle before HOLD, REL and MIN/MAX
 
-Four UT61B+ captures by @ChrisTheExpie in
-[issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19), all over
-a CH9329 cable, are the family's device evidence beyond our own UT61E+:
-
-- **2026-09-09, v0.6.0** — parsed samples, no wire frames, with the reporter
-  confirming the LCD beside them.
-- **2026-09-10, v0.7.0-dev (6406037)** — wire frames throughout, driven range
-  and flag sweeps, and a gate that passed outright
-  (`core_semantics: confirmed`).
-- **2026-09-11, v0.7.0-dev (88e80ed)** — a `capture --unverified` run, driven,
-  trusted tier, walking the two ladder steps the model was still asked for,
-  plus three freeform extras (a diode, a capacitor, live mains AC V).
-- **2026-09-11 later, v0.7.0-dev (88e80ed)** — `capture --steps diode` with a
-  diode fitted, answering the REL ask, alongside a `debug --count 5` terminal
-  capture on the manually set 600Ω rung answering the other.
-
-Together they carried the model to `Stability::Verified`: every mode its dial
-reaches was captured and decoded correctly, and every command moved the flag it
-should. The family issue stays linked on it for the rungs below.
-
-Settled:
-
-- The meter names itself `UT61B+` (GetName 0x5F) and speaks the UT61E+'s
-  protocol unchanged — AB CD framing, BE16 checksum, 14-byte payload, mode
-  bytes 0x00/02/03/04/05/06/07/08/09/0C/0E/10/14, and all three flag nibbles.
-  The 2026-09-10 run recorded the handshake itself: `AB CD 03 5F 01 DA` out,
-  `AB CD 04 FF 00 02 7B` and `AB CD 08 55 54 36 31 42 2B 02 FD` back. First
-  UT61+ family run on the CH9329 bridge.
-- HOLD (0x4A), REL (0x48), MIN/MAX (0x41), ExitMinMax (0x42), RANGE (0x46)
-  and AUTO (0x47) each moved the expected flag on the next frame, and MIN/MAX
-  cycles MAX then MIN as on the E+.
-- Ascending range-index order, and these rungs are now [VERIFIED] rather than
-  deduced — each identified by the decimal the meter lit there: **every Ω rung
-  0-5** and **every DC V rung 0-3**, walked with RANGE on 2026-09-11 one rung
-  per press and read back from the overload shape (`   OL. ` at 600Ω and
-  600kΩ, `  .OL  ` at 6kΩ and 6MΩ, `   O.L ` at 60kΩ and 60MΩ) or, at 0 V,
-  from the decimal count (`  0.001`, `   0.00`, `    0.0`, `     0 ` for 6V,
-  60V, 600V and 1000V); **AC V 0** (6V) and **AC V 2** (600V, 236.6 V of mains
-  with the HV warning lit — the first HV-warning frame from a B+);
-  **capacitance 5** (6mF, a real capacitor at 4.514 mF, LCD-confirmed);
-  **µA 0 and 1** (600µA, 6000µA), **mA 0 and 1** (60mA, 600mA), **A 0 and 1**
-  (6A, 10A — the B+ tops out where the E+ has 20A).
-- **Diode reads 0.515-0.516 V with a diode fitted** (2026-09-11,
-  LCD-confirmed) — the model's first finite diode frames; the earlier one is
-  OL. The later run of that day drove the step: HOLD taken, REL refused.
-- HOLD, MIN and MAX were taken in Ω over OL, and HOLD, REL, MIN and MAX in
-  DC V at 0 V, with the same nibbles as on the E+ (2026-09-11).
-- Bar graph full scale is 30 across modes (`-9.33` on 60V → 4, `11.72` on
-  60mV → 5, Ω O.L → 30), matching the manual's 31 segments for 6,000-count
-  models.
-- **DC V/AC V range 0 is 6V, not 60mV** — fixed the same day in
-  `ut61b_plus.rs`, and the same shape applied to `ut61d_plus.rs` as
-  [DEDUCED]. Every voltage read a thousandth low because the deduced table
-  put the mV ranges at indices 0-1. The E+ needed the same correction in
-  March; there the spare entry sat at index 4, where the meter never lands.
-  The 2026-09-10 run confirms the fix on the meter.
-- ~~**NCV levels.**~~ — **VERIFIED** 2026-09-10 by @ChrisTheExpie on a real
-  UT61B+ (CH9329). The dash count is the level: the 2026-09-09 frame
-  `14 30 20 20 20 2D 2D 2D 2D 00 00 30 34 30` is four dashes and the reporter
-  confirmed all four bars on the LCD, and the 2026-09-10 run sent one dash
-  next to a weaker field. That report printed `NCV:0` for the four-dash frame
-  only because dash counting (5daf64a) landed after v0.6.0. Both frames are
-  golden fixtures. The B+'s no-field display is still unseen — the E+ idles at
-  `EF`.
-- **Duty % is reached from the Hz/% dial position with the USB short-press**,
-  as `ut61b_plus.rs`'s Hz/% ring (0x49) says. The reporter's first run used
-  the button from V~ instead, which is why the earlier note read SELECT.
-- **Golden fixtures**: 46 in `crates/dmm-lib/tests/golden/ut61b+/`, lifted
-  from all four reports.
-
-Left open on this model:
-
-- **AC V rungs 1 (60V) and 3 (1000V)** — **not a hardware ask**. The ladder
-  has four entries in ascending order, which this meter has shown across
-  every Ω and DC V rung and both current ladders; rung 0 is pinned by
-  `  0.589` (three decimals, 6.000V full scale) and rung 2 by 236.6 V of
-  mains. Rungs 1 and 3 have nowhere else to sit, and every AC V rung carries
-  unit `V`, so a wrong label here cannot change a reading — only the
-  `range_label` string. Rung 3's value came from the manual on 2026-09-12
-  (below); no safe capture can confirm it. A run would still be welcome for
-  its own sake: `acv` is not a gate step, so the sweep walks its ladder as it
-  does any other mode step's — it went unswept on 2026-09-10 only because it
-  then sat before the gate closed (below), and the two runs since were
-  `--unverified` and `--steps`, neither of which reaches a step already
-  marked verified. `capture --steps acv` with the leads open covers it.
-- **Capacitance rungs 1-4 and 6** — pinned by arithmetic, but worth a real
-  measurement if capacitors turn up, because it is one of the two open
-  ladders whose units change mid-way (nF/µF/mF; the Hz ladder is the other,
-  and Ω is the third such ladder but fully verified), and `unit` comes
-  straight from the
-  range table (`ut61eplus/mod.rs:866`), so a wrong rung here is a 1000x
-  error rather than a wrong label. Rung 0 is pinned by `   0.03` (60.00 nF)
-  and rung 5 by `  4.514` (6.000 mF, a capacitor on 2026-09-11); with both
-  ends of a seven-entry decade ladder fixed and the order ascending, 1-4 are
-  the four manual rungs between them and 6 the one above. Reaching them for
-  real needs six capacitors, one per decade — RANGE is dead in capacitance
-  (below), so auto-ranging is the only way there.
-- **The mV ladder** — rung 0 is *measured*, not deduced: `   1.43` in
-  `dcmv.yaml` and `  11.72` in `acmv.yaml`, two decimals each, which is
-  60.00 mV full scale. With two ascending entries that leaves rung 1 at
-  600mV, and both carry unit `mV`. What is genuinely untested is whether
-  RANGE walks them at all (next item).
-- ~~**The 600Ω manual rung.**~~ — the rung is stable; what is left is a
-  question about the press path, not the range table. The 2026-09-11 walk
-  pressed RANGE four times from 600kΩ auto and read back 3 (manual), 4, 5, 0 —
-  then, with no further press, the next poll 150 ms later reported rung 1
-  (6kΩ), still flagged manual, and all three samples of the step sat there:
-  five transitions for four presses, and the tool filed the step
-  `needs_attention`. **VERIFIED** 2026-09-11 by @ChrisTheExpie that the meter
-  does not leave the rung on its own: with 600Ω set by the meter's own RANGE
-  button and the leads open, `debug --count 5` returned five consecutive
-  frames of `06 30 20 20 20 4F 4C 2E 20 03 00 30 34 30` — rung 0, manual
-  (flag2 bit 2 set), the `   OL. ` shape — byte-identical to the one frame the
-  sweep caught there. It had not dropped off at entry time either, or it would
-  have been on 6kΩ before `debug` ran. That matches the E+, which holds its
-  220Ω rung over OL (the 82 kΩ run, 2026-09-10). The remaining candidate is
-  the fourth 0x46 landing twice past the tool: our tx log has exactly four
-  presses, so a duplicate would be in the bridge or the meter's own handling.
-  One observation, on one cable; the check is whether a RANGE walk on our own
-  meter over CH9329 ever gains a rung it did not press for.
-- **The three-member Hz/% rings, and the mV SELECT leg.** Six ring legs are
-  [VERIFIED] on this model: the 2026-09-10 run had the *driver* press through
-  them, one press each, every one reaching its target — SELECT for
-  Ω → Continuity (step `continuity`), Diode → Capacitance (`capacitance`) and
-  DC → AC on µA, mA and A (`acua`, `acma`, `aca`), plus Hz/% for
-  Hz → Duty % (`duty`). All six are two-member rings, where order is trivial.
-  The V~ ring is [VERIFIED] too, in the table's order: issue #20's
-  `hz-walk.yaml` run (2026-09-14) pressed Hz/% once per step, AC V → Hz →
-  Duty % → AC V, each press reaching the next mode.
-  What is left is the mV position's SELECT leg (DC mV ↔ AC mV — the operator
-  pressed that one, so `acmv` carries no press of ours) and the other four
-  three-member Hz/% rings, AC mV/AC µA/AC mA/AC A → Hz → Duty %, which
-  are the only rings on the model where the order could differ from the
-  table. Nothing rests on the order — `cycle.rs` presses and reads the mode
-  back until the target shows, so a wrong order costs at most an extra press
-  — but wrong *contents* could leave `set mode` unable to reach a mode. A
-  `dmm-cli --device ut61b+ set mode duty` from each of those AC modes answers
-  the rest. Issue #7, now that issue #19 is closed.
-- **Hz → AC V and Hz → AC mV switches time out (issue #20, 88e80ed, GUI).**
-  The walk is two Hz/% presses in a row; per the reporter's recording the
-  meter takes the first (Hz → Duty %) and stops there, and the GUI reports a
-  timeout. Our UT61E+ (CP2110) does the same walk without error. The
-  reporter's `hz-walk.yaml` capture (7b48053, 2026-09-14, leads open) caught
-  a timeout of the same shape, on a HOLD press in Hz (`hz_tool/hold:on`): the
-  driver polled 202 ms after the press, the press's ack came 14 ms after that
-  poll, and the poll was never answered — 2 s, then the error, with HOLD lit
-  on the next frame. In open-lead Hz this meter acks 216–217 ms after a
-  press, past the driver's 200 ms read-back. Across every capture on record a
-  poll went out ahead of its ack 12 times on this model (this one lost, the
-  closest; the rest 65–165 ms ahead and answered) and 55 times on our E+
-  (26–214 ms ahead, all answered): one loss, not a rule, and the bytes cannot
-  say whether the meter or the CH9329 dropped it. The GUI walk's first press
-  is Hz/% in Hz with the same timing, which fits the recording — the press
-  lands on Duty % and the read after it times out. Nothing supports the
-  other reading, a second press ignored: of the run's 22 presses only Hz/%
-  under HOLD changed nothing. The capture's own Hz → AC V switch never ran
-  (next item). Whether the #20 run had open leads was never said. A press
-  now waits for the meter's ack (up to 1 s) before anything is polled, and
-  a read-back that times out is read again, never pressed again. Both are
-  unverified on this model: a re-run of the same `hz-walk.yaml` answers them.
-  Our UT61E+ ran that plan clean with both on 2026-09-14: none of its 27
-  presses was followed by a poll before the ack (acks 63–382 ms), and the
-  Hz → Duty % → AC V switch took its two presses.
-- **Buttons under HOLD (issue #20).** The reporter found the meter's buttons
-  ignored while HOLD is lit on the V~ position (2026-09-14, by hand),
-  apparently during the `hz-walk.yaml` run above: the timed-out HOLD step
-  left HOLD on, because the capture sweep skips its restore after any error.
-  The next step's Hz/% press in Hz was acked and the meter stayed in Hz with
-  HOLD lit; ~12 s later the frames show HOLD released and Hz/% pressed twice
-  by hand. So this model drops Hz/% under HOLD on the wire too. Our
-  UT61E+ ignores Hz/% the same way, and takes SELECT, RANGE and AUTO, each of
-  which clears HOLD (ut61-family spec §6.3). RANGE and AUTO under HOLD are
-  unasked on the B+. A mode or range walk now presses HOLD off and sends a
-  press that changed nothing under HOLD again; unverified on the B+, where
-  `set hold on` then `set mode Hz` from AC V exercises it.
-- **The Hz ladder — labels from the protocol deck (2026-09-19); the V~ path
-  still open.** The code's five invented rungs are now the deck's six
-  (99.99 Hz … 9.999 MHz, family spec §5.9), whose rung 0 fits `0.00` and
-  `49.98` from the Hz/% position. Left: `0.0` (one decimal) at index 0 from
-  the V~ Hz path on 2026-09-09. The manual's AC remarks give B+/D+
-  frequency on the AC positions 0.1 Hz resolution, which fits, but then
-  either that path keeps index 0 above 99.99 Hz — and a reading there is
-  labelled Hz while the meter shows kHz — or it ranges like the Hz/%
-  position. One frame from V~ with a ~1 kHz signal settles it; no signal
-  generator here.
+- **A delay after the press cannot cover HOLD, REL or MIN/MAX**, which act on
+  the live reading rather than on the meter's next one. `ohm_ranges/hold:on`
+  filed 12.59 kΩ three times on the 82 kΩ resistor
+  (`ut61eplus-ohm-82k-settled-2.yaml`, 2026-09-10): the press followed the
+  220MΩ rung handing back to auto, so the meter froze a reading still on its
+  way down and every later sample read the frozen value. Settling **before**
+  the press is what would fix it — the wait is on the wrong side of the button
+  for these three.
 
 ### Capture: gate steps placed after other steps
 
@@ -570,40 +166,6 @@ The allow-list in `every_device_finishes_its_gate_before_any_other_step`
 (`crates/dmm-cli/src/capture/step.rs`) names all of them; deleting an entry is
 how a fix lands.
 
-### Modes not yet tested with real signals
-
-Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
-
-- **DC mV (0x03):** Mode byte verified on the mV dial. Needs small DC voltage source for value verification.
-- **AC µA (0x0D):** Mode byte verified via SELECT on µA dial. Needs AC current source for value verification.
-- **AC mA (0x0F):** Mode byte verified via SELECT on mA dial. Needs AC current source for value verification.
-- **AC A (0x11):** Mode byte verified via SELECT on A⎓ dial. Needs high-current AC for value verification.
-- **Temperature °C (0x0A):** Needs K-type thermocouple.
-- **Temperature °F (0x0B):** Needs K-type thermocouple.
-- **Duty Cycle % (0x05):** Mode byte verified via SELECT2 on AC mA. Needs PWM signal for value verification.
-- **Live (0x13), 0x1A-0x1E:** the protocol deck's live-wire check, clamp
-  and current variants. None is on a UT61+ dial, so there is nothing to test
-  until a meter that has them turns up. The same goes for 0x16 and 0x17,
-  under [Modes not reachable on UT61E+](#modes-not-reachable-on-ut61e).
-
-### Modes not reachable on UT61E+
-
-Tracked in [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7) — needs UT61D+ or UT61B+ hardware.
-
-These modes exist in the vendor software but could not be reached on the
-UT61E+ via any dial position + SELECT/SELECT2 combination. They are likely
-UT61D+-only or other-model features. Verified 2026-03-19 by exhaustively
-cycling SELECT and SELECT2 on V~, V=, mA, and A⎓ dial positions.
-- **LoZ V (0x15):** Low impedance ACV (UT61D+ feature).
-- **0x16, 0x17:** a clamp meter's AC A and DC A, by UNI-T's protocol deck,
-  which is what the code names them. The vendor software's mode table labels
-  them "LozV" and "LPF", the older reading: it scales 0x16 by SI prefix as
-  it does no voltage mode, and the deck puts LoZ at 0x15 and LPF at 0x18,
-  the byte our UT61E+ sends for LPF V (ut61-family approach doc, "LoZ mode
-  disambiguation" and "Mode 0x17 (LPF) behavior"). Not reachable on UT61E+
-  and on no UT61+ dial; still open is a frame from any meter that sends
-  either byte.
-
 ### Protocol families we have no meter for
 
 These protocols are implemented from reverse engineering (vendor software
@@ -624,68 +186,6 @@ credited here in the same commit, and the checklist is regenerated into the
 issue. The items below are the wire-level questions those steps answer,
 plus what no step reaches.
 
-#### UT60BT / UT202BT, Bluetooth built in (issues [#26](https://github.com/antoinecellerier/dmm-tools/issues/26), [#27](https://github.com/antoinecellerier/dmm-tools/issues/27))
-
-UT61+ frames over the ISSC service (ut61-family spec §1, tables §9). The
-UT60BT has community frames on record; the UT202BT has no capture anywhere.
-
-- **Range tables.** Every rung is the iDMM2.0 asset's, the labels the
-  manuals'; none is confirmed. Where they disagree (§9 notes): UT60BT Hz
-  labels (the asset's fifth digit and "mHz"), Hz rungs 0 and 7 and
-  capacitance rung 7 outside the manual, Ω rung 4 "9.99MΩ"; UT202BT
-  capacitance top 99.9mF against 105mF, inrush rung 0, continuity rung 1,
-  the °F bounds, and Hz rungs with no manual table at all.
-- **UT202BT AC A code.** The app names 0x11 and 0x16 "ACA"; the table
-  answers to both. The `aca` capture step asserts neither.
-- **UT202BT sparse rows.** LPF V and LPF A are listed at range byte 2 only,
-  °C at byte 1 only; a frame at another byte reports an unrecognised range.
-- **UT202BT secondary display** (mode byte bit 7, ut61-family spec §2.3):
-  decoded from the app and shown as a sub-value of the next main reading;
-  unconfirmed on a meter. A first UT202BT capture should show which modes
-  send one (the manual: frequency in AC V and AC A, °F beside °C, "CUT" on
-  clamp overheating), whether it comes before or after its main frame and
-  how often, what HOLD does to it, and what its bar graph and flag bytes
-  hold. That decides how it attaches: today it rides on the next main
-  frame, without the app's 500 ms blanking, and a command does not clear
-  one held from before it. A replay keeps the main readings only: the
-  secondary frames are not recorded. Any other model reports a bit-7 frame
-  as an unknown mode byte that looks like a secondary display.
-- **UT202BT peak.** Peak modes are AC V and AC A (both codes), from the
-  manual (P8/13, P8/14, P11/20). Which flag bits the meter sets is
-  unconfirmed; the `peak` capture step shows the bits.
-- **Remote commands.** Each meter is offered only the bytes UNI-T's app
-  sends it (ut61-family spec §6.5): HOLD, RANGE, AUTO, REL and SELECT on the
-  UT60BT, HOLD and RANGE on the UT202BT. Open, each settled by a meter's
-  answer to the byte:
-  - 0x41 MIN/MAX on the UT60BT: a community client sends it, the app
-    disables it. Offered once a UT60BT sets the MIN or MAX flag on it.
-  - Peak on the UT202BT: the app long-presses 0x37, the family peaks with
-    0x4D. Peak is not offered until one of them sets the flag bits.
-  - 0x47 AUTO on the UT202BT, which the app never sends. Without it the
-    UT202BT has no range ladder, whose Auto rung would send 0x47.
-- **Remote mode selection.** Neither table describes a dial or button ring,
-  so no mode switching is offered. It needs the button codes and cycle
-  order confirmed on a meter: the UT60BT's SELECT, the UT202BT's
-  0x31/0x33/0x35.
-- **Handshake order.** Community sources say the meter ignores 0x5D until it
-  has answered 0x5F (ut61-family spec §6.4). The UT60BT and UT202BT are
-  sent 0x5F, waited for, then 0x5D; under `auto` the detection probe's 0x5F
-  is that ask, and the meter is not asked again. A meter with no name reply
-  is started anyway, and a silent stream falls back to polling with 0x5E.
-  Check on a UT60BT or UT202BT that readings start, named and `auto`.
-- **Spec tables.** None until a meter confirms the range tables; the
-  manuals' spec pages are the source then.
-- **The UT60BT and UT202BT.** Read from the iDMM2.0 app 2026-09-25: they speak
-  the UT61+ protocol over the same ISSC service as the UT-D07B and advertise
-  their own names, so the transport needs only to accept those names, plus a
-  range table each (`docs/research/new-device-candidates.md`, Bluetooth
-  section). The `0000ff01`/`ff02`/`ff12` set the app also carries is the
-  UT513C's older firmware only. Since 2026-09-25 both meters have registry
-  entries, each opened by its own name prefix (`UT60BT`, `UT202BT`); an
-  entry behind an adapter takes only `UT-D07*`, and `auto` takes all of
-  them. A real meter has yet to confirm either (their block under
-  [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)).
-
 ### Capture and display checks a UT181A runs
 
 The meter's own items are in the
@@ -699,195 +199,6 @@ The meter's own items are in the
   capture confirms the parser, not the display. Ask for `read --format
   csv` runs in V AC and dual-thermocouple modes (checks the `auxN_*`
   columns) and a GUI screenshot in MIN/MAX
-
-### Range tables
-
-Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
-
-- The rungs a meter has sent are under
-  [UT61E+ — range ladders](#ut61e--range-ladders-walked-end-to-end-2026-09-10)
-  and [UT61B+ — hardware reports](#ut61b--hardware-reports); what is left on
-  those two models is in the bullets below. The UT61D+ and the UT161 models
-  are `Experimental`: no meter has answered for their tables (issue #7).
-- ~~**AC V top range: 750V vs 1000V conflict (2026-06 review).**~~ —
-  **RESOLVED** 2026-09-12 in favour of **1000V**, from the manual's AC table
-  read off the PDF rendering (printed page 27): the UT61E+ column ends at
-  `1000.0V / 0.1V`, the shared UT61B+/UT61D+ column at `1000V / 1V`, and
-  neither has a 750V row. The same section gives max input voltage and
-  overload protection as 1000V, and the LoZ ACV rows the UT61D+ adds are
-  600.0V and 1000V, which `ut61d_plus.rs` already had right.
-  **The 750V had no source.** It is absent from the archived vendor
-  decompile, which carries no range-label strings at all — nor do `DMM.exe`
-  and `MyCore.dll` in either ASCII or UTF-16 — so the "from the vendor
-  decompile" attribution in this item was wrong; `git log -S` puts it in the
-  bootstrap commit 048d44b. Corrected for all three models, with the family
-  spec's three `ac_v` rows.
-  **Hardware is consistent but cannot arbitrate this one.** The 2026-09-07
-  UT61E+ RANGE walk reached the rung and read one decimal there
-  (`    0.0`, range byte 3), which is the manual's 0.1V resolution — but a
-  750.0V rung would also carry 0.1V on a 22,000-count display, so the
-  decimal count cannot separate them. Only applying more than 750V AC could,
-  which is not a test worth running; the manual settles it instead.
-- **UT61D+ amps: 6A at range 0, 20A at range 1 — unconfirmed.** The
-  manual lists 6.000A and 20.00A, where the table carried two 20A entries
-  copied from the E+. Since 2026-09-19 `ut61d_plus.rs` has [6A, 20A],
-  ordered as the UT61B+'s [6A, 10A], which issue #19 verified; the
-  protocol deck's joint B+/D+ table also has 6A at byte 0 (it gives byte 1
-  as 10A for both, where the manual gives the D+ 20.00A; the table follows
-  the manual). One D+ frame in each A range settles it (issue #7).
-- **UT61E+ amps: range byte 0 never seen.** The manual prints one A range,
-  every capture shows byte 1, and that is the only byte the protocol deck's
-  UT61E+ table gives; `ut61e_plus.rs` fills index 0 with a second `20A` as a
-  placeholder (family spec §5.5).
-- ~~**Frequency ranges in code are invented structure**~~ — **RESOLVED
-  2026-09-19** from the protocol deck (family spec §5.9): the E+ ladder runs
-  22 Hz … 220 MHz over bytes 0–7 (it stopped at 220 kHz, so a faster
-  signal came out with no unit and an unrecognised-range warning), the
-  B+/D+ one 99.99 Hz … 9.999 MHz over 0–5. Only rung 0 is seen on a meter;
-  the V~-path question is under the UT61B+'s open items. Issue #7.
-- **Hz MHz rungs: from the protocol deck only, unconfirmed on a meter.** The
-  UT61E+'s 2.2/22/220 MHz rungs (range bytes 5–7) and the UT61B+/UT61D+
-  ladder's sixth rung, 9.999 MHz (byte 5), came in with the item above
-  (4318d27, 2026-09-19) and no meter has sent them. One frame from a signal
-  that reaches each rung settles it; no signal generator here.
-- **UT61B+/D+ range-index ordering: ascending, and the mV ranges are
-  not part of the V ladder** — settled for the B+: index 0 is each
-  ladder's bottom rung; the 2026-09-10 capture pinned DC V 0–1, AC V 0,
-  Ω 0/4/5, µA 0–1, mA 0–1 and A 0–1 by the decimal count the meter sent
-  at each, and the 2026-09-11 RANGE walk the rest of Ω and DC V, plus
-  AC V 2 and capacitance 5. The mV rung 0s are measured too (`dcmv.yaml`,
-  `acmv.yaml`). What is left is not [DEDUCED] in the guessing sense but
-  *pinned between measured ends*: with ascending order established and both
-  ends of a ladder measured, AC V 1, capacitance 1–4 and 6 and mV 1 have
-  nowhere else to sit. The Hz ladder is not pinned that way: its labels come
-  from the protocol deck (the two items above), rung 0 alone is seen on a
-  meter, and the V~ path is open under the UT61B+'s items. The whole D+
-  table remains [DEDUCED] for want of D+ hardware. Issue #7.
-- **UT61B+/D+ mV ladders are offered to the RANGE driver, untested — but
-  needs no ask and no new step.** The `dcmv` and `acmv` steps are not gate
-  steps, so the sweep walks their ladders like any other mode step's; they
-  came back without range sub-steps on 2026-09-10 only because they then ran
-  before the gate closed (above). The next plain `capture` run on a B+ or D+
-  files either `dcmv/range:600mV` or a `RANGE did nothing` error, whichever
-  is true.
-  **Our UT61E+ cannot answer it.** `range_is_fixed` covers DC mV and AC mV
-  there on real runs (DC mV 2026-03-21, AC mV 2026-09-07, three presses with
-  the range byte and the AUTO annunciator unmoved), so the sweep offers
-  nothing in mV on that model and a rerun cannot produce a mV rung. The
-  reason it is dead there does not carry over either: the E+'s mV dial has
-  one usable rung, only range byte 0 ever having been seen there, so
-  "RANGE does nothing" needs no explanation beyond having nowhere to step.
-  **The B+'s own evidence points the other way**: on 2026-09-10 RANGE drove
-  all six of its two-rung ladders to both rungs — `dcua`, `acua`, `dcma`,
-  `acma`, `dca`, `aca`, twelve range sub-steps, every one captured — so two
-  rungs are not inherently fixed on that model; mV would have to be
-  specially dead.
-  Low stakes whichever way it falls: both rungs carry unit `mV`, so no
-  reading can be misreported, and the only cost of being wrong is offering a
-  control the meter refuses. Issue #7.
-- **UT61B+ golden set** — 46 fixtures in
-  `crates/dmm-lib/tests/golden/ut61b+/`, lifted from the four issue #19
-  reports: every mode the dial reaches, the Ω, DC V and both current
-  ladders driven rung by rung, HOLD/REL/MIN/MAX in Ω and DC V, HOLD over a
-  forward-biased diode, all three overload shapes, both NCV levels seen,
-  mains AC V with the HV warning.
-- ~~**Golden YAML fidelity (2026-06 review):**~~ — **DONE** 2026-09-12; every
-  UT61E+ golden fixture is now a captured frame. The last two hand-built ones
-  went without a new hardware run:
-  - `dcv_5.678` → `dcv_battery`, a real 1.6109 V frame off a battery on the
-    2.2V rung (2026-09-07, `ut61eplus-verify4-plan.yaml`, step `bat_auto`).
-    Its bar-graph bytes were the real defect — `00 00` behind a 5.678 V
-    reading on the 22V rung, which the meter cannot send. **This item's
-    other stated reason was wrong**: it said the fixture lacked "the
-    DC-indicator bit (verified set on real DC V)", but flag3 bit 3 is set
-    only in AC+DC V frames, and no real DC V frame in any capture sets it.
-    Bit 0 there is bar polarity, correctly clear for a positive reading.
-  - `ncv_3` deleted, not replaced. It asserted a frame shape no meter sends:
-    a literal ASCII `3` where both meters draw the level as "-" segments
-    (`ncv` at one dash on the E+, `ncv_4` at four on the B+, both captured).
-    It was the only cover for `parse_measurement`'s numeric-NCV fallback,
-    which is a guess at other firmware — that now lives in
-    `parse_ncv_numeric_fallback`, where a hand-built payload belongs.
-  The third, `ohm_overload`, whose `OL` had no decimal point, was replaced on
-  2026-09-11 by the real 220Ω frame from the 82 kΩ run.
-- **DC V ranges verified (2026-03-21):** 4 ranges (0=2.2V, 1=22V, 2=220V, 3=1000V).
-  The RANGE button cycles 0→1→2→3→0, skipping ranges that would overflow
-  the current reading; one rung per press and the 1000V→2.2V wrap were
-  re-confirmed 2026-09-07 (see
-  [UT61E+ RANGE command (0x46)](#ut61e-range-command-0x46--resolved)). The code
-  carried a 5th entry (range 4=220mV) from vendor RE, never observed on the
-  UT61E+; it was dropped on 2026-09-07 along with its rows in the family
-  spec tables.
-  The 220mV capability on the UT61E+ is via DC mV mode (0x03), a separate
-  dial position. The UT61B+/D+ tables keep their own shapes.
-- **DC mV mode (0x03) is a separate mode, not DC V range 4.** Auto-range
-  stays in DC V mode (0x02) even at 100mV. DC mV (0x03) is only reached
-  via the mV dial position. On UT61E+, DC mV has only 1 range (range 0 =
-  220mV); the RANGE button has no effect. The meter has never sent the
-  table's range 1 (2.2V).
-- **AC mV (0x01): RANGE is dead there too — verified 2026-09-07.** On the
-  mV dial in AC mV, `set range 2.2V` pressed RANGE once and re-read three
-  times; neither the range byte (220mV throughout) nor the AUTO annunciator
-  moved, and the walk gave up with "RANGE did nothing in 220mV". Both mV
-  modes are therefore fixed-range on the E+ and the choice list offers no
-  range in either. Only range byte 0 has been seen; the meter never sends
-  the table's 2.2V entry.
-
-### UT61+ Hz and Duty % off the Hz/% position take its specs
-
-Known limitation, left as is on 2026-09-19. Hz (0x04) and Duty % (0x05)
-send the same mode byte from every dial position, so a reading taken with
-Hz/% on the V~, mV, µA, mA or A position shows the Hz/% position's
-Frequency/Duty Ratio row. The manual gives those readings terms of their
-own: the AC V remarks (PDF p. 15) take frequency over 40Hz~500Hz (UT61B+),
-40Hz~1kHz (UT61D+) or 40Hz~10kHz (UT61E+) at ≥10% of the range and call
-duty "for reference only"; the AC current remarks (PDF p. 18) ask for ≥50%
-of the range and give the UT61B+/UT61D+ frequency ±(0.1%+4) at 0.1Hz.
-Resolving it means inferring the dial position from the reading history,
-as `DialState` in `protocol/cycle.rs` does for mode selection.
-
-### UT61+ spec data leftovers
-
-Left over from the 2026-09-19 re-verification against the UT61+ manual:
-
-- ~~**The UT61E+ mV range tables keep a 2.2V entry at byte 1.**~~ —
-  **DONE 2026-09-19**: dropped; the protocol deck's UT61E+ table has only
-  220mV there too.
-- **LPF V shares AC V's notes**, including "(1kHz–10kHz: 10%–100%)", which
-  cannot apply with the filter on. It would need notes of its own.
-- **Short notes kept close to unclear manual wording**, to confirm on a meter
-  or leave as printed:
-  - UT61E+ crest factor: "≤2.0 at 10000 counts, ≤1 at 22000 counts", yet the
-    add-ons that follow run to crest factor 3, as in the UT61B+/UT61D+ list.
-  - "Add 4% / 5% / 7%" for a non-sine wave does not say 4% of what.
-  - UT61E+ AC current "minimum 30µA at µA ranges" sits in the 1kHz~10kHz
-    clause, so it may bound that band only.
-  - UT61E+ AC+DC: "For AC voltage, … ≤200 digits", while the AC V table
-    gives ≤10; which reading it covers is unclear.
-  - UT61E+ capacitance: "add 10 digits when the accuracy is ≤3%".
-  - Duty: "Frequency ≤10kHz, duty ratio 10.0%~90.0%" may bound the accuracy
-    or the measurable span; the row says 0.1%~99.9%.
-  - UT61D+ temperature: "should be less than 230°C/446°F", while the table
-    runs to 1000°C/1832°F; the manual does not tie the limit to the probe.
-- The UT803's unclear hFE note is in its
-  [verification list](research/ut803/verification.md#spec-data).
-
-### UT216XD: the UT61+ deck specifies a clamp meter we do not list
-
-Read from the archived deck 2026-09-21 (ut61-family approach doc, source 6).
-Its frame section names the **UT216XD** beside the UT61+, UT161 and UT202S, the
-only stated difference being that the meter has no bargraph, so
-`Msg[12]-Msg[13]` can be ignored. The deck's function table already carries the
-clamp modes (`0x16` clamp ACA, `0x17` clamp DCA, `0x1C` clamp LPF, `0x1D` clamp
-AC+DC).
-
-Two things are missing before it could be added: the deck gives range tables
-for the UT61B+/D+, UT61E+ and UT202S but **none for the UT216XD**, and it
-states no transport — the deck is a Bluetooth protocol, and the model has no
-page in UNI-T's Chinese catalogue. No archived source fills the gap: the
-iDMM2.0 APK has no UT216 package or range asset either (checked 2026-09-21), so
-the ranges would have to come from hardware. Tracked as a candidate in
-`docs/research/new-device-candidates.md`.
 
 ### Bluetooth search and detection with built-in meters
 
@@ -916,6 +227,13 @@ the ranges would have to come from hardware. Tracked as a candidate in
   SLABHIDtoUART.dll reads them big-endian, `Cp2110::uart_status`
   little-endian (UT171 spec §8); idle reads give 0, which fits either.
   Decides `uart_status`. Needs a CP2110 read with bytes queued, on any meter.
+
+### CLI paced reads
+
+- **Ctrl-C during a paced `read`.** The cancellable sleep kept its pacing
+  over 50 reads on our UT61E+ (2026-07-29), but Ctrl-C mid-sleep has not
+  been timed. Decides whether the sleep needs a shorter slice. Needs any
+  polled meter and `read --interval-ms` 2000 or more.
 
 ### Streaming meters: read continuously
 
@@ -954,11 +272,7 @@ rel` after a Pause, and a HID streaming meter (below).
   deadline is dropped rather than taken for the next request's answer
   (UT61+ on its cable, VC-890; the BM86x always did). Not seen on a meter:
   does a UT61E+ reply ever take over 2 s, capacitance included?
-- **A CH9329 reading held across opens.** The UT61+ name query budgets a
-  read for a CH9329 that had a reading buffered; if the CLI's `read` (which
-  asks no name) starts on one, every polled reading may be one behind.
-  Checkable on a CH9329 + UT61+: kill a `read` mid-poll, start it again and
-  compare readings with the LCD. Nothing is dropped at open until then.
+
 
 ### Vendor sources not yet read
 
@@ -970,18 +284,6 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
   download centre's UT80 and UT88 results. Unopened; it may drive several
   bench meters (the UT632's check is in its
   [verification list](research/ut632/verification.md#vendor-sources)).
-- **Per-model PC software uploaded 2023-02-03** for the UT61B+ and UT61D+
-  (the UT181A's and the UT171 series' are in their verification lists:
-  [UT181A](research/ut181/verification.md#vendor-sources),
-  [UT171](research/ut171/verification.md#vendor-sources)). The UT61E+ one is V2.02 repackaged
-  (ut61-family approach doc); hash-compare the others against what the
-  family docs used.
-- ~~**iDMM2.0 Android app** (2025-12-20)~~ — **read 2026-09-22** for the
-  0x5D command and **2026-09-25** for every model it drives: protocol groups
-  in `docs/research/new-device-candidates.md` (Bluetooth section), working
-  note `references/idmm2/analysis/findings/protocol-groups.md`. It carries no
-  UT202S; its UT202BT table is still to be compared with the deck's UT202S
-  one.
 - **Protocol documents for families we don't support**: the older UT61E and
   UT61B (both are the chipset datasheets — ES51922 and FS9922-DMM3 — not
   UNI-T documents), and the Voltcraft VC-870 (Conrad item 124603, IN01).
@@ -1020,6 +322,11 @@ Bugs a reader can reproduce, with the cause and fix where known.
 - **A software offset shifts the AC component of AC+DC V.** It applies to
   the AC sub-value like any same-unit sub-value, which means nothing for an
   RMS value. Fix, untried: exempt AC sub-values from offsets.
+- **The mock offers Peak outside the AC modes.** Its Hz, Ω, capacitance,
+  temperature and NCV scenarios take Peak, where the UT61E+ it stands in for
+  offers it only in `AC_PEAK_MODES` (`protocol/ut61eplus/tables/mod.rs`).
+  Cause: `Scenario::peak_applies` (`mock/scenarios.rs`) excludes only the DC
+  scenarios. Fix: narrow it to the AC ones.
 
 ### Entering NCV leaves the previous mode's trace on the graph
 
@@ -1146,116 +453,3 @@ verification:
 
 Report findings by opening a GitHub issue; the docs should be updated
 to reflect what is actually confirmed working and what still needs fixes.
-
-## Completed Verification
-
-| Mode/Feature | Mode byte | Status |
-|---|---|---|
-| AC V | 0x00 | Verified (open leads + body voltage) |
-| AC mV | 0x01 | Verified (mode byte capture) |
-| DC V | 0x02 | Verified (open, shorted, body voltage, bench PSU: 1V→2.2V, 5V→22V, 25V→220V ranges) |
-| Hz | 0x04 | Verified (mode byte capture) |
-| Ω | 0x06 | Verified (OL on open leads; 2.3–3.4 MΩ across the body on the 22MΩ rung, 2026-09-07) |
-| Continuity | 0x07 | Verified (OL on open leads) |
-| Diode | 0x08 | Verified (OL on open leads) |
-| Capacitance | 0x09 | Verified (stray cap reading) |
-| DC µA | 0x0C | Verified (PPK2 + 56kΩ: 59µA reading, cross-checked with PPK2 ~61µA) |
-| DC mA | 0x0E | Verified (bench PSU: 10mA→22mA range, 100mA→220mA range) |
-| hFE | 0x12 | Verified (mode byte capture) |
-| AC mA | 0x0F | Verified (mA + SELECT) |
-| DC A | 0x10 | Verified (A⎓ dial, bench PSU: ~100mA, range byte=0x01 for 20A) |
-| AC A | 0x11 | Verified (A⎓ + SELECT) |
-| NCV | 0x14 | Verified (`"   EF  "` idle, `"     - "` at a mains cable — one `-` per level, manual §13; two or more segments unobserved) |
-| LPF V | 0x18 | Verified (V~ + SELECT, mode byte capture) |
-| AC+DC V | 0x19 | Verified (V⎓ + SELECT, mode byte capture) |
-| Duty Cycle % | 0x05 | Verified (AC mA + SELECT2, mode byte capture) |
-| Mode collisions | — | Disproven: NCV=0x14, hFE=0x12, DCA=0x10 are unique (vendor RE + device) |
-| HOLD flag | bit1 of byte11 | Verified (physical + remote) |
-| REL flag | bit0 of byte11 | Verified (physical + remote) |
-| MIN flag | bit2 of byte11 | Verified (physical) |
-| MAX flag | bit3 of byte11 | Verified (physical + remote) |
-| AUTO flag | !bit2 of byte12 | Verified (inverted logic) |
-| HV warning | bit0 of byte12 | Verified (>30V per manual; confirmed set at 31V on DC V) |
-| LOW BAT | bit1 of byte12 | Verified (intermittent) |
-| Remote HOLD | 0x4A | Verified |
-| Remote REL | 0x48 | Verified |
-| Remote MIN/MAX | 0x41 | Verified |
-| Remote Exit MIN/MAX | 0x42 | Verified |
-| Remote RANGE | 0x46 | Verified 2026-09-07 on UT61E+: from auto the first press engages manual on the rung already showing, each further press steps one rung up, 1000V wraps to 2.2V; the mode byte never moves |
-| Remote AUTO | 0x47 | Verified 2026-09-07: restores auto-ranging from a manual rung in one command |
-| Remote SELECT | 0x4C | Verified on every dial position (§3.1 of the ut61-family spec: V⎓, V~, mV, Ω, µA, mA, A rings; inert on hFE, NCV) |
-| Remote mode switching (`dmm-cli set mode`, GUI dropdown) | 0x4C / 0x49 | Verified 2026-09-07: every listed entry on every UT61E+ dial position, one press per leg, junction crossings, under MIN/MAX, and under HOLD for SELECT; 2026-09-14: a Hz/% press under HOLD does nothing (ut61-family spec §6.3); settle 150 ms / 3 reads |
-| Remote LIGHT | 0x4B | Verified |
-| Remote SELECT2 | 0x49 | Verified (AC V/mV/µA/mA/A → Hz → Duty Cycle → back; Hz ↔ Duty on the Hz/% dial; inert on V⎓, DC mV, hFE, NCV) |
-| Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV and, 2026-09-07, on AC V; context-dependent, no effect on DC V) |
-| Remote Exit Peak | 0x4E | Verified (clears peak flags, returns to live readings; used by `set peak off`, 2026-09-07) |
-| Remote range/flag setting (`dmm-cli set range`/`hold`/`rel`/`minmax`/`peak`) | 0x46-0x4E | Verified 2026-09-07 on UT61E+: one press per step, each confirmed by read-back; a stale frame is re-read, not re-pressed; MIN/MAX and Peak leave by 0x42 / 0x4E |
-| Mode and range switches under HOLD | 0x49 + 0x4A | Verified 2026-09-14 on UT61E+: from held AC V, `set mode Hz` pressed Hz/%, saw nothing change over three reads, pressed HOLD off and Hz/% again, and landed in Hz; `set mode "LPF V"`, `set range 22V` and `set range auto` under HOLD took their own presses with no release; `set rel on` under HOLD was refused and HOLD left lit |
-| Modes with no range choice (UT61E+) | — | Verified 2026-09-07: `get` prints no range row in DC mV, AC mV, DC A or AC A |
-| Capture steps `dcv_negative`, `ohm_body`, `acdcv`, `lpfv`, `acmv`, `acua`, `acma`, `aca` | — | Verified 2026-09-07 on UT61E+ (captures 4 and 5): sign on a AAA battery, body resistance, and each SELECT sub-mode read back by the tool with open leads |
-| Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name, e.g. "UT61E+") |
-| Start reading | 0x5D | Verified 2026-09-22 on UT61E+ over the CP2110: the meter acks it and sends nothing more — there is no USB streaming, each reading still costs a 0x5E. Behind a UT-D07B the readings do come unasked, from the adapter (UT61E+ spec §2.3, adapter spec §3) |
-| MIN/MAX flag cycling | byte11 bits 2-3 | Verified: MAX only (bit 3) → MIN only (bit 2), 2-state cycle, never both set |
-| MIN/MAX value reporting | — | Verified: meter sends stored min/max value, not live reading |
-| Peak flag cycling | byte13 bits 1-2 | Verified: P-MAX only (bit 2) → P-MIN only (bit 1), 2-state cycle |
-| Peak value reporting | — | Verified: meter sends stored instantaneous peak, not live/RMS |
-| Bar graph encoding | bytes 9-10 | Verified: decimal (b9*10+b10), ~46 segments. Negative: bar_pol flag. OL: 44. |
-| Bar polarity | bit0 of byte13 | Verified (set on negative readings) |
-| AC/DC indicator | bit3 of byte13 | Verified 2026-09-19: AC+DC V (0x19) alternates frames between the DC and AC components with the bit (flag byte 3, 0x08) toggling; across a 1.6 V cell it is set on the AC component's frames, as UNI-T's protocol deck says (UT61E+ spec §2.7), and clear on the DC's; clear in DC V and the AC modes |
-| DC V range table | ranges 0-3 | Verified: 0=2.2V, 1=22V, 2=220V, 3=1000V (4 ranges, not 5) |
-| DC mV mode | 0x03 | Verified: separate mode via dial, range 0=220mV only on UT61E+; RANGE has no effect |
-| AC mV range | 0x01 | Verified 2026-09-07: fixed at 220mV — 3 RANGE presses moved neither the range byte nor AUTO |
-| Command ack frames | — | Verified (2-byte payload after commands, skipped in measurement path) |
-| Frame format | len includes checksum | Verified (19 bytes total) |
-| Checksum | 16-bit BE sum | Verified |
-| CP2110 Get Version Info | report 0x46 | Verified (part=0x0A, firmware=1) |
-| CP2110 Get UART Status | report 0x42 | Verified (TX/RX FIFO=0, no errors at idle) |
-| CP2110 UART Config 9 bytes | report 0x50 | Verified (removed trailing 0x00, meter responds normally) |
-| CP2110 Set Reset Device | report 0x40 | Rejected — HID protocol error, likely locked out by UNI-T |
-| CP2110 read path (stack buffer) | — | Verified 2026-07-29: 50 consecutive reads, no skipped frames |
-| Paced-read loop (cancellable sleep) | — | Verified 2026-07-29: pacing intact over 50 reads; Ctrl-C responsiveness still untested |
-| Idle HID report handling | — | Verified 2026-07-29 on CP2110: no false timeouts over 50 reads |
-
-### UT61E+ RANGE command (0x46) — RESOLVED
-
-Resolved 2026-09-07 on our UT61E+ (CP2110 cable, `RUST_LOG=dmm_lib=debug`)
-with `dmm-cli get range` / `set range`, which press 0x46 and re-read the range
-byte until the target rung shows.
-
-- **The first press from auto engages manual ranging on the rung the meter
-  is already in** — it does not step. Every further press steps exactly one
-  rung up.
-- **The top rung wraps to the bottom:** 1000V → 2.2V on DC V.
-- **`0x47` restores auto-ranging**, from a manual rung, in one command.
-- **The mode byte never moved under any press**, on either the V⎓ or the V~
-  dial position. So `0x46` is a pure range stepper.
-- With 1.5 V DC applied, the same walk read 1.5023 V (2.2V), 1.502 V (22V),
-  1.51 V (220V) and 1.5 V (1000V): resolution follows the rung, as on the LCD.
-
-Evidence — leads open, V⎓ dial, auto in 2.2V at the start:
-
-```
-set range 22V     cycle: pressing RANGE (in Auto, want 22V)
-                  cycle: pressing RANGE (in 2.2V, want 22V)     → 22V
-set range 220V    cycle: pressing RANGE (in 22V, want 220V)     → 220V
-set range 2.2V    cycle: pressing RANGE (in 220V, want 2.2V)
-                  cycle: pressing RANGE (in 1000V, want 2.2V)   → 2.2V
-set range 1000V   three presses: 2.2V → 22V → 220V → 1000V
-set range auto    cycle: setting auto-range (in 1000V)          → auto (220V, settling to 22V)
-```
-
-The 2026-07-29 capture that opened this item — six `range` presses whose
-range index went 0, 2, 0, 0, 0, 0 and whose mode byte appeared to flip
-DC V ↔ AC+DC V at presses 4 and 6 — is explained by reading the frame before
-the meter had applied the press: the indices are stale reads, not a strange
-stepping order. Whatever produced the mode flips there, it was not `0x46`.
-The library now waits for a fresh frame and re-reads a stale one instead of
-pressing again, which is why the walk above lands one rung per press. The
-capture wizard still sends `range` once and restores auto rather than
-sweeping.
-
-`get` prints **no range row** where there is nothing to choose: verified
-2026-09-07 in DC mV (fixed range, and `get range` / `set range` answer
-`Note: UNI-T UT61E+ has no switchable ranges in DC mV — use the dial.`),
-in DC A and in AC A (both table entries read `20A`). AC mV joined them the
-same day — see [Range tables](#range-tables).

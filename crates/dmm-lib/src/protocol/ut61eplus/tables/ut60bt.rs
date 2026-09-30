@@ -19,7 +19,8 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// - Temperature; no hFE, LoZ, LPF, AC+DC, Peak
 ///
 /// The dial is not described, so the meter offers no remote mode selection
-/// until one confirms its button codes (docs/verification-backlog.md).
+/// until one confirms its button codes
+/// (docs/research/ut61-family/verification.md).
 pub struct Ut60btTable {
     dc_v: [RangeInfo; 4],
     ac_v: [RangeInfo; 4],

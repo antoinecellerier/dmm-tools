@@ -34,8 +34,8 @@ pub(crate) enum SpecModel {
     Ut161d,
     /// A model whose manual tables are not transcribed yet: the UT60BT and
     /// UT202BT, which wait for a first real meter
-    /// (docs/verification-backlog.md). Its Specifications panel shows the
-    /// manual link alone.
+    /// (docs/research/ut61-family/verification.md). Its Specifications panel
+    /// shows the manual link alone.
     Untranscribed,
 }
 

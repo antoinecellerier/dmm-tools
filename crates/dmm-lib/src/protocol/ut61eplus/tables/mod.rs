@@ -131,11 +131,12 @@ pub(crate) const FAMILY_FIXED_RANGE_MODES: &[Mode] = &[Mode::Capacitance, Mode::
 
 /// The AC modes where Peak is offered on the models that have it.
 ///
-/// Verified on a UT61E+ only for AC mV, where 0x4D activates while DC V
-/// ignores it (docs/verification-backlog.md, "MIN/MAX and Peak measurement
-/// reporting"). The manual describes Peak as an AC-waveform measurement, so
-/// the other pure-AC modes are offered with it; the AC+DC and LPF variants
-/// are left out until a meter says otherwise (backlog, UT61E+ section).
+/// Verified on a UT61E+ only for AC mV and AC V, where 0x4D activates while
+/// DC V ignores it (`docs/research/ut61eplus/reverse-engineered-protocol.md`
+/// §2.7, ut61-family spec §6.1). The manual describes Peak as an AC-waveform
+/// measurement, so the other pure-AC modes are offered with it; the AC+DC
+/// and LPF variants are left out until a meter says otherwise
+/// (`docs/research/ut61-family/verification.md`, "Flag settings").
 pub(crate) const AC_PEAK_MODES: &[Mode] =
     &[Mode::AcV, Mode::AcMv, Mode::AcUa, Mode::AcMa, Mode::AcA];
 
@@ -399,8 +400,8 @@ mod tests {
             assert!(!b_plus.contains(&m(absent)), "UT61B+ has no {absent:?}");
         }
         // 0x15/0x16/0x17 were unreachable from every UT61E+ dial position
-        // (backlog, "Modes not reachable on UT61E+"); the protocol deck makes
-        // them LoZ and two clamp functions.
+        // (ut61-family spec §3.1); the protocol deck makes them LoZ and two
+        // clamp functions.
         let e_plus = all_modes(Ut61ePlusTable::DIAL_POSITIONS);
         for absent in [Mode::LozV, Mode::ClampAcA, Mode::ClampDcA] {
             assert!(

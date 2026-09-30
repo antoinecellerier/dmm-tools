@@ -55,7 +55,7 @@ impl Scenario {
 
     /// Whether HOLD does anything here. The meter this mock stands in for
     /// ignores it in NCV alone — see `HOLD_DEAD` in the UT61+ protocol and
-    /// the flag matrix in `docs/verification-backlog.md`.
+    /// the flag matrix in ut61-family spec §6.2.
     pub(super) fn hold_applies(&self) -> bool {
         !matches!(self.id, MockMode::Ncv)
     }

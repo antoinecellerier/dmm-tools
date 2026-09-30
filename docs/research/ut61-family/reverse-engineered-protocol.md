@@ -189,6 +189,16 @@ any of the three models; no capture has shown the byte.
 UT61D+ sends. The protocol deck settles it: 0x15 is low-impedance AC
 voltage, 0x16 a clamp meter's AC A. No UT61D+ has confirmed it.
 
+**The UT61B+ column** — [VERIFIED]: every byte it marks has come from a
+UT61B+ and decoded correctly (issue #19, CH9329, @ChrisTheExpie, 2026-09-09
+to 2026-09-11).
+
+**NCV (0x14) on the UT61B+** — [VERIFIED] (issue #19, CH9329,
+@ChrisTheExpie): the dash count is the level, as on the UT61E+ (UT61E+ spec
+§2.4). `   ----` came with all four bars lit on the LCD, and one dash beside
+a weaker field. What it shows with no field near is [UNVERIFIED]; the E+
+idles at `EF`.
+
 ---
 
 ### 3.1 Function dial positions and cycle rings — [MANUAL]
@@ -241,8 +251,10 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
   the Ω ring).
 - One walk takes two presses in a row: Hz → Duty % → AC V. It went through on
   2026-09-13 **[VERIFIED]**, the new mode showing ~0.3 s after the press into
-  Duty % and ~0.6 s after the press into AC V. A UT61B+ fails this walk
-  (issue #20).
+  Duty % and ~0.6 s after the press into AC V. On a UT61B+ over a CH9329
+  the Hz → AC V and Hz → AC mV switches stopped at Duty % with a timeout
+  (issue #20, @ChrisTheExpie), which fits the lost read in its capture
+  (section 6.1); the capture's other 21 presses all took effect.
 - Pressing SELECT while the meter is in Hz or Duty % leaves the Hz/% ring for
   the *other* member of the position's SELECT ring — LPF V on V~, DC mV, DC µA,
   DC mA, DC A — not the junction mode. On the Hz/% position SELECT toggles
@@ -250,8 +262,11 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
 - A switch goes through under MIN/MAX. Under HOLD a SELECT switch goes
   through and the press clears HOLD, but a Hz/% press does nothing
   (section 6.3). AUTO is back once the target mode shows. LPF V always
-  reports manual range (flag byte 15 bit 2 set) and the AUTO button does not
-  change that — a property of the meter, not of the switch. Entering LPF V
+  reports manual range (flag byte 15 bit 2 set), on the 1000V rung (range
+  byte 3) on 2026-09-07, and the AUTO button does not change that — a
+  property of the meter, not of the switch. The manual's AC V table lists
+  LPF on every range [MANUAL]; whether a signal brings another rung is
+  [UNVERIFIED]. Entering LPF V
   on open leads reads high at first: on 2026-09-14 three entries opened at
   361.1 V, 164.8 V and 35.5 V with the HV warning lit, the last decaying
   through 5.1 V to 0.0 V over three reads 300 ms apart, with or without HOLD.
@@ -304,8 +319,8 @@ AC V → Hz → Duty % → AC V, one press per step (2026-09-14 capture, issue #
 **[UNVERIFIED]**: the mV position's SELECT leg (DC mV ↔ AC mV), which the
 operator pressed rather than the driver, and the other three-member Hz/% rings
 (AC mV/AC µA/AC mA/AC A → Hz → Duty %) — the only rings on this model where
-order could differ from the table. Tracked in issue
-#7; see `docs/verification-backlog.md`.
+order could differ from the table. The checks are in
+[verification.md](verification.md#dial-rings) (issue #7).
 
 ---
 
@@ -330,6 +345,18 @@ simply never sets certain flag bits on models that lack the feature.
 
 The protocol deck also names byte 15 bit 3 APO (auto power-off); no
 capture from either meter has set it.
+
+A UT61B+ sets the bits the UT61E+ does — [VERIFIED] (issue #19, CH9329,
+@ChrisTheExpie): HOLD, REL, MIN and MAX in DC V and HOLD, MIN and MAX in Ω,
+the MIN/MAX ring MAX then MIN, AUTO under RANGE and AUTO, and the HV
+warning on 236.6 V of mains in AC V.
+
+**Bar graph on the 6,000-count models** — 31 segments by the manual. A
+UT61B+ sends the bar in the UT61E+'s bytes and encoding (UT61E+ spec §2.6),
+and it tops out at 30 — [VERIFIED] (issue #19, CH9329, @ChrisTheExpie): 30
+at O.L in Ω, 4 for −9.33 V on 60V, 5 for 11.72 mV on 60mV, 1 at 4% of
+range, which is 31 segments counted 0-30. Never walked against a moving
+input [UNVERIFIED].
 
 ---
 
@@ -360,7 +387,11 @@ the whole Ω and DC V ladders with RANGE, one rung per press.
 The *index* column is the manual's own row order, not the wire encoding. On
 the UT61E+ the wire indices for DC V are 0=2.2V, 1=22V, 2=220V, 3=1000V —
 [VERIFIED] 2026-03-21 and re-walked 2026-09-07 (section 6.1). Its 220 mV
-full scale belongs to the separate DC mV mode, not to a DC V range index.
+full scale belongs to the separate DC mV mode, not to a DC V range index:
+auto-ranging stays in DC V (0x02) even at 100 mV. In DC V, auto-ranging put
+1 V on 2.2V, 5 V on 22V and 25 V on 220V (bench supply) [VERIFIED]. AC+DC V
+shares the DC V table, all four rungs [VERIFIED] by one RANGE press each on
+2026-09-10.
 
 The UT61B+ works the same way. Its wire indices are 0=6V, 1=60V, 2=600V,
 3=1000V, all four [VERIFIED] for DC V by the 2026-09-11 RANGE walk, which
@@ -368,13 +399,24 @@ loses one decimal per rung (`  0.001`, `   0.00`, `    0.0`, `     0 `). In
 AC V, index 0 is [VERIFIED] by the 2026-09-09 capture (`  0.037` with the
 screen reading volts) and index 2 by 236.6 V of mains on 2026-09-11; indices
 1 and 3 stay [DEDUCED]. 60 mV and 600 mV are the mV modes on their own dial
-position. The UT61D+ shares the table shape and is assumed to match,
-unverified — issue #7.
+position; rung 0 of both is [VERIFIED] at 60.00 mV full scale (`1.43` in DC
+mV, `11.72` in AC mV, two decimals each; issue #19, CH9329, @ChrisTheExpie),
+rung 1 stays [DEDUCED].
+The UT61D+ shares the table shape and is assumed to match, unverified —
+issue #7.
 
 ### 5.2 AC Voltage
 
 Same structure as DC voltage. AC bandwidth: 40-500 Hz (B+),
 40 Hz-1 kHz (D+), 40 Hz-10 kHz (E+).
+
+On the UT61E+ all four AC V rungs are [VERIFIED] by the 2026-09-07 RANGE
+walk: the decimal count runs 4, 3, 2, 1 over indices 0-3 (`0.0647`, `0.395`,
+`0.35`, `0.0`), the manual's resolutions for 2.2000 V, 22.000 V, 220.00 V
+and 1000.0 V. The top rung is 1000 V in the manual's AC table (printed page
+27) for all three models, with no 750 V row. The walk cannot tell rung 3
+from a 750.0 V one, which would carry the same 0.1 V; its label is the
+manual's.
 
 LoZ ACV ranges (UT61D+ only): 600.0 V and 1000 V.
 
@@ -392,6 +434,18 @@ LoZ ACV ranges (UT61D+ only): 600.0 V and 1000 V.
 
 All six 6,000-count rungs are [VERIFIED] on a UT61B+ by the 2026-09-11 RANGE
 walk, each identified by the decimal its overload dump lights (section 5.8).
+
+All seven 22,000-count rungs are [VERIFIED] on our UT61E+ (2026-09-10), one
+per RANGE press, each named by the decimal count the meter sent there. An
+82 kΩ resistor reads the same on every rung it fits — 80.46 kΩ at 220kΩ,
+0.0804 MΩ at 2.2MΩ and 0.08 MΩ at 220MΩ, against 80.45 kΩ on auto — and
+overloads the three below it in the three shapes of section 5.8. The body
+across the leads read 2.3–3.4 MΩ on the 22MΩ rung (2026-09-07).
+
+The top rungs settle slowly: with the probes shorted, 22MΩ first read
+0.081 MΩ and 220MΩ 0.18 MΩ, both falling back over several seconds; across
+the 82 kΩ resistor 220MΩ first read 4.38 MΩ, and 220kΩ sent two OL frames
+before its reading came into range.
 
 ### 5.4 Capacitance
 
@@ -440,6 +494,12 @@ two sources conflict on byte 1: the deck gives 10A for both models, the
 manual gives the UT61D+ 20.00 A (the table's value). No UT61D+ has confirmed
 either — issue #7.
 
+[VERIFIED] values: in DC µA our UT61E+ read 59 µA through 56 kΩ where a
+PPK2 read about 61 µA, and in DC mA it auto-ranged 10 mA onto 22mA and
+100 mA onto 220mA (bench supply). No AC current value has been checked. A UT61B+ reached both rungs of µA, mA and A, RANGE driving each of
+its six current ladders to both (2026-09-10, issue #19, CH9329,
+@ChrisTheExpie).
+
 ### 5.6 Temperature (UT61D+ / UT161D only) — [MANUAL]
 
 | Range | Resolution | Accuracy |
@@ -454,7 +514,8 @@ either — issue #7.
 K-type thermocouple only. Uses mode bytes 0x0A (°C) and 0x0B (°F), each
 with two range bytes in the protocol deck [VENDOR-DOC]: 0 for -40~300 °C
 (-40~572 °F) and 1 for 300~1000 °C (572~1832 °F), the split where the
-resolution changes.
+resolution changes. How the display field carries a °C or °F reading is
+[UNVERIFIED]: no UT61D+ has sent one.
 
 ### 5.7 Other Modes
 
@@ -475,9 +536,9 @@ model:
 
 | Display | Seen on |
 |---------|---------|
-| ` .OL   ` | E+ Ω 2.2MΩ, E+ diode, B+ diode, B+ Ω 6kΩ and 6MΩ |
+| ` .OL   ` | E+ Ω 2.2kΩ and 2.2MΩ, E+ diode, B+ diode, B+ Ω 6kΩ and 6MΩ |
 | `  O.L  ` | E+ Ω 22kΩ, B+ Ω 60kΩ and 60MΩ |
-| `  OL.  ` | E+ Ω 220kΩ and 220MΩ, E+ DC mV 220mV, E+ continuity, B+ Ω 600Ω and 600kΩ |
+| `  OL.  ` | E+ Ω 220Ω, 220kΩ and 220MΩ, E+ DC mV 220mV, E+ continuity, B+ Ω 600Ω and 600kΩ |
 
 All three UT61B+ reports agree with each other and all five of our UT61E+
 captures show the same pattern; the 2026-09-11 Ω walk showed all three shapes
@@ -507,7 +568,10 @@ models, 10 Hz–220 MHz on the UT61E+); the protocol deck gives the rungs:
 The 6,000-count ladder counts to 9,999, and its top rung (9.999 MHz) stops
 short of the manual's 10.00 MHz. Rung 0 fits both UT61B+ Hz/%-position
 frames (`0.00`, `49.98`) and the UT61E+'s (`0.00`); no other rung has been
-seen on a meter (section 7, item 8).
+seen on a meter. From the UT61B+'s V~ position the same index 0 came with
+`0.0`, one decimal, on 2026-09-09; the manual's AC remarks give the
+6,000-count models 0.1 Hz resolution on the AC positions, which fits, and
+whether the range byte leaves 0 there above 99.99 Hz is [UNVERIFIED].
 
 ## 6. Commands — [VENDOR]
 
@@ -522,19 +586,27 @@ no effect on models lacking the corresponding feature:
 | Hold | 0x4A | Yes | Yes | Yes |
 | Range | 0x46 | Yes | Yes | Yes |
 | Auto | 0x47 | [VERIFIED]* | [DEDUCED] | Yes (§6.1) |
-| Rel | 0x48 | [VERIFIED]* | [DEDUCED] | [DEDUCED] |
-| MinMax | 0x41 | [VERIFIED]* | [DEDUCED] | [DEDUCED] |
-| ExitMinMax | 0x42 | [VERIFIED]* | [DEDUCED] | [DEDUCED] |
-| Select | 0x4C | [DEDUCED] | [DEDUCED] | [DEDUCED] |
-| Select2 | 0x49 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
-| Light | 0x4B | [DEDUCED] | [DEDUCED] | [DEDUCED] |
-| PeakMinMax | 0x4D | No effect | [DEDUCED] | [DEDUCED] |
-| ExitPeak | 0x4E | No effect | [DEDUCED] | [DEDUCED] |
-| GetName | 0x5F | [VERIFIED]* | [UNVERIFIED] | [UNVERIFIED] |
+| Rel | 0x48 | [VERIFIED]* | [DEDUCED] | [VERIFIED]† |
+| MinMax | 0x41 | [VERIFIED]* | [DEDUCED] | [VERIFIED]† |
+| ExitMinMax | 0x42 | [VERIFIED]* | [DEDUCED] | [VERIFIED]† |
+| Select | 0x4C | [VERIFIED] (§3.1) | [DEDUCED] | [VERIFIED] (§3.1) |
+| Select2 | 0x49 | [VERIFIED] (§3.1) | [DEDUCED] | [VERIFIED] (§3.1) |
+| Light | 0x4B | [DEDUCED] | [DEDUCED] | [VERIFIED]† |
+| PeakMinMax | 0x4D | No effect | [DEDUCED] | [VERIFIED]† |
+| ExitPeak | 0x4E | No effect | [DEDUCED] | [VERIFIED]† |
+| GetName | 0x5F | [VERIFIED]* | [UNVERIFIED] | [VERIFIED]† |
 
 \* UT61B+ capture, 2026-09-09 (issue #19): each command moved the flag the
 tool expected on the next frame, and GetName answered `UT61B+`. Hold and
-Range were already [VENDOR]-confirmed and behaved the same way there.
+Range were already [VENDOR]-confirmed and behaved the same way there, and
+MinMax walked MAX then MIN, as on the E+.
+
+† Our UT61E+, the UT61E+ spec §2.3 table. It beeps on every GetName
+(2026-09-11).
+
+The UT61B+'s "No effect" on 0x4D and 0x4E is the manual's, which gives it
+no Peak; whether the meter ignores the byte or answers with an error is
+[UNVERIFIED].
 
 "Yes" in this table means the model has the command at all. Which *modes*
 accept it is section 6.2 — several accept it nowhere useful.
@@ -550,11 +622,28 @@ positions):
   step — and every press after that moves exactly one rung up. The top rung
   wraps to the bottom (DC V: 2.2V → 22V → 220V → 1000V → 2.2V). The mode
   byte never changed under a press, so 0x46 does not touch the function.
+  With 1.5 V DC applied the walk read 1.5023 V (2.2V), 1.502 V (22V),
+  1.51 V (220V) and 1.5 V (1000V): the resolution follows the rung. The
+  2026-03-21 notes add that a press skips rungs the reading on screen
+  would overflow [UNVERIFIED].
 - **Auto (0x47)** puts the meter back in auto-range from any manual rung,
   in one command.
+- A manual rung holds over OL: a UT61B+ set to 600Ω by its own RANGE
+  button sent five identical frames there with the leads open (issue #19,
+  CH9329, @ChrisTheExpie), and our UT61E+ held 220Ω across an 82 kΩ
+  resistor.
 - The meter answers each command with a 2-byte `FF 00` ack frame, and its
   first measurement frame after a press may still carry the pre-press state:
-  a reader that presses again on seeing the old value will overshoot.
+  a reader that presses again on seeing the old value will overshoot. The
+  ack comes 39–415 ms after a press on our UT61E+, and 216–217 ms on a
+  UT61B+ in Hz with the leads open (issue #20, CH9329, @ChrisTheExpie),
+  where one poll sent 14 ms before a late ack was never answered. Every
+  other poll sent ahead of its ack was answered, on both meters, and the
+  bytes cannot say whether the meter or the CH9329 dropped the lost one.
+- A capture of 2026-07-29 read six presses as indices 0, 2, 0, 0, 0, 0,
+  the mode byte flipping DC V ↔ AC+DC V at presses 4 and 6: it took frames
+  sent before each press landed. Whatever flipped the mode there, the walk
+  above never saw 0x46 do it.
 - Modes whose range is fixed ignore 0x46 entirely — on the E+ that is DC mV
   and AC mV (section 9), where neither the range byte nor the AUTO
   annunciator moves.
@@ -574,7 +663,9 @@ used to say the vendor command matrix listed no mode restriction on 0x4A,
 0x48 or 0x41; two meters have since contradicted that, refusing the same
 commands in the same modes — a UT61E+ over CP2110 (2026-09-07,
 `ut61eplus-verify4.yaml`) and a UT61B+ over CH9329 (2026-09-10, issue #19).
-Each row below is a press whose flag did not move on the next frame.
+Each row below is a press whose flag did not move on the next frame. The
+manual (§VII) gives each button one line and no list of functions, so the
+meters are the only record.
 
 | Mode | Hold 0x4A | Rel 0x48 | MinMax 0x41 | Range 0x46 |
 |------|:---------:|:--------:|:-----------:|:----------:|
@@ -682,52 +773,8 @@ send further bytes to a UT60BT (§10).
 
 ## 7. What Requires Real Device Verification
 
-All remaining unknowns require hardware access — no further RE is
-possible from the vendor software.
-
-1. **Range index → full-scale mapping** — manual gives full-scale
-   values but not which range index maps to which. Ascending order
-   is [DEDUCED] except on the UT61E+ DC V ladder, where it is
-   [VERIFIED] (section 6.1: one rung up per RANGE press, 1000V wraps
-   to 2.2V), on the UT61B+ Ω and DC V ladders, walked the same way on
-   2026-09-11, and at the bottom rungs a UT61B+ auto-ranged into
-   (section 5).
-
-2. **6,000-count bar graph encoding** — 31 segments (from manual).
-   The 2026-09-09 UT61B+ capture carries the bar in the same bytes as
-   the E+ (payload 9-10, decimal `b9*10 + b10`), reading 30 at O.L and
-   1 at 4% of range — consistent with 31 segments counted 0-30. Never
-   walked against a moving input. [UNVERIFIED]
-
-3. **LoZ mode byte** — 0x15 per the protocol deck (§3) [VENDOR-DOC];
-   no UT61D+ has sent it yet. [UNVERIFIED]
-
-4. **Temperature display format** — how °C/°F readings are encoded
-   in the 7-byte ASCII display field. [UNVERIFIED]
-
-5. **Mode 0x13 (Live)** — a contact live/neutral wire check
-   [VENDOR-DOC]. No UT61+ dial position lists it (§3.1) and no capture
-   has shown it. [UNVERIFIED]
-
-6. ~~**Commands beyond confirmed 3**~~ — RESOLVED: every command byte is
-   in the protocol deck [VENDOR-DOC]; what each does per model is §6.
-
-7. **UT61B+ Peak command rejection** — whether PeakMinMax (0x4D) is
-   silently ignored or returns an error. [UNVERIFIED]
-
-8. **Frequency ladder on 6,000-count models** — the rungs are now the
-   protocol deck's (§5.9), which fit the Hz/% position's `0.00` and
-   `49.98` at index 0. Still open: the 2026-09-09 UT61B+ capture's `0.0`
-   at index 0 from the V~ position, one decimal where rung 0 has two. The
-   manual's AC remarks give the UT61B+/UT61D+ frequency 0.1 Hz resolution
-   on the AC positions, which would explain it; whether the range byte
-   then leaves 0 above 99.99 Hz is unknown. [UNVERIFIED]
-
-9. **NCV display on the UT61B+** — the same capture sent `   ----` in
-   NCV (mode 0x14). Four dashes read as detection level 4 under the
-   counting rule the UT61E+ taught (§13 of the manual), but the B+ may
-   simply idle at four dashes where the E+ idles at `EF`. Needs one
-   frame taken with no field nearby. [UNVERIFIED]
+The open checks are in [verification.md](verification.md); what real meters
+have confirmed is tagged [VERIFIED] where sections 3-6 and 9 state it.
 
 ---
 
@@ -746,7 +793,7 @@ possible from the vendor software.
 | LoZ modes 0x15 vs 0x16 behavior | **VENDOR** | SI multiplier code paths differ |
 | LoZ mode byte sent by UT61D+ | **VENDOR-DOC** (0x15) | Protocol deck; no UT61D+ capture |
 | Temperature mode bytes (0x0A, 0x0B) | **DEDUCED** | Vendor mode table |
-| Range index → full-scale mapping | **DEDUCED** (E+ DC V, B+ bottom rungs **VERIFIED**) | Ascending order assumed; E+ DC V walked on the device 2026-09-07, B+ bottom rungs from the 2026-09-09 capture |
+| Range index → full-scale mapping | **DEDUCED** (E+ V, AC+DC V and Ω, B+ Ω and DC V **VERIFIED**) | Ascending order; the ladders walked with RANGE on the device (section 5), the rest pinned between measured rungs or assumed |
 | Commands beyond 0x5E/0x4A/0x46 | **VENDOR-DOC** | Protocol deck; per-model effects in §6 |
 
 ---
@@ -757,7 +804,7 @@ possible from the vendor software.
 (`references/ut61eplus/ut61e_manual.pdf`, "IX. Specifications", 2. Electrical
 Specifications). The Hz rungs and the UT61D+ temperature split are the
 protocol deck's (§5.9, §5.6) [VENDOR-DOC]. Which range *index* maps to which
-row is [DEDUCED] except where section 5 says otherwise (section 7, item 1).
+row is [DEDUCED] except where section 5 says otherwise.
 
 Columns: `Table` is the range table name in the source file; `Modes` lists
 the `Mode` variants that share it (derived modes reuse their base mode's
