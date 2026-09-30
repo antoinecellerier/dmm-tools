@@ -46,7 +46,8 @@ Confidence levels:
 - **[KNOWN]** — stated in a ZOTEK manual, cited by file and page
 - **[VENDOR]** — read from a ZOTEK app, with `file:line` or `V2@offset`
 - **[INFERRED]** — logical inference from the above, reason given
-- **[UNVERIFIED]** — no source confirms it; needs a real meter (all in §10)
+- **[UNVERIFIED]** — no source confirms it; needs a real meter
+  ([verification.md](verification.md) lists the checks)
 - **[HARDWARE]** — seen on a real meter: none yet for this family
 - **[COMMUNITY]** — from a community source, §11 only; never in §1-10
 
@@ -395,7 +396,7 @@ plus the digits in 9-13.
 | 3 | 6 | diode | `diode` @854594 | z5, BCU:799-806 | [VENDOR] |
 | 3 | 5 | continuity | `beep` @854576 | z6, BCU:799-808 | [VENDOR] |
 | 3 | 4 | REL | `rel` @854559 | z7, BMA:444 | [VENDOR] |
-| 3 | 3 | unknown ("l1_power") | `l1_power` @854538 | z0, unused | [VENDOR]; meaning [UNVERIFIED] |
+| 3 | 3 | unknown ("l1_power") | `l1_power` @854538 | z0, unused | [VENDOR]; meaning [UNVERIFIED], perhaps the auto-standby icon (legend #2) |
 | 3 | 2 | AUTO range | `auto` @854521 | z1, BMA:443 | [VENDOR] |
 | 3 | 1 | MANU range | `manu` @854504 | z2, unused | [VENDOR]; meaning [INFERRED], legend #4 (5566SE p.8) |
 | 3 | 0 | not read by V2 | — | z3, unused | — |
@@ -427,7 +428,7 @@ plus the digits in 9-13.
 | 18 | 4 | A | `a` @855629 | z35, BCU:596 | [VENDOR] |
 
 The ZT-5566 LCD has an analog bar graph (5566SE p.8-9), a T-RMS icon
-(legend #15) and an auto-standby icon (legend #2) that no bit carries. It has no peak or temperature-measurement
+(legend #15) and an auto-standby icon (legend #2) that no bit is known to carry. It has no peak or temperature-measurement
 icon; °C/°F appear only on the knob LCD for ambient temperature (5566SE
 p.10) [KNOWN].
 
@@ -608,49 +609,13 @@ What the wire requires of any decoder:
 - A blank digit is `00`, not a separate code. The sign and DP bits sit in a
   digit's high nibble whatever its glyph, so a blank digit carrying one reads
   `10` [INFERRED from §6.2]; V2 shows that as OL (V2@1831370), and whether a
-  meter sends it is [UNVERIFIED] (§10).
+  meter sends it is [UNVERIFIED].
 - Commands carry their own `AB CD` header and a checksum; received packets
   carry neither.
 
 ## 10. Open questions — [UNVERIFIED]
 
-1. **Model ↔ type byte.** Every row of §1: ZT-5BQ → 1, ZT-5B → 2, ZT-300AB →
-   3, ZT-5566 family → 4, and each ANENG and BSIDE rebrand. The ZT-6S has no
-   evidence at all. (Community captures: §11.)
-2. **Does the ZT-5566 stream readings?** Its manuals document a Bluetooth
-   speaker (5566 p.20, 5566SE p.22); the SE manual's app section names only
-   other models (5566SE p.32-35). (Community captures: §11.)
-3. **Advertised name** per model: "Bluetooth DMM", "ZY" or other, and whether
-   it is in the advertisement or the scan response. (Community evidence:
-   §11.)
-4. **Notification length** per type, and anything past the last byte the
-   apps read (§5). (Community captures: §11.)
-5. **Write characteristic.** Whether FFF4 accepts writes, or V2's by-property
-   pick lands elsewhere, and whether it takes write without response, write
-   with response or both (§2). (Community evidence: §11.)
-6. **Replies.** Whether the meter answers a command with an `AB`-led frame,
-   and its format (§5, §8.1). (Community evidence: §11.)
-7. **Keys per model.** Which of §8.2's codes each type honours, and what
-   each of `C8`-`CB` selects: V1 and V2 disagree on the AC codes.
-   (Community reports: §11.)
-8. **Clock set.** Whether a type-4 meter needs or acts on cmd `04` (§8.3).
-9. **Type 3 byte 10 bits 7-4.** Unread by both apps; TRUE RMS is the one
-   ZT-300AB legend item with no bit. (Community captures: §11.)
-10. **Type 4 bytes 14-15** (bar graph?), byte 3 bit 0, byte 13 bits 5 and 0, byte 16 bits
-    3-0, byte 17 bits 7-4, byte 18 bits other than 4. (Community captures:
-    §11.)
-11. **Unnamed bits:** `power` (types 1, 2), `vfc`, `l1_power` (type 4; the
-    auto-standby icon, §7.4?). (Community captures: §11.)
-12. **Special displays:** which digit positions each word uses (the apps'
-    rules differ, §6.4); what the number of dashes
-    means in NCV; whether type 4 shows words at all. (Community captures:
-    §11.)
-13. **Two DP bits** in one packet (§6.2), and the type-4 colon's use (§6.3).
-    (Community captures: §11.)
-14. **Update rate on the air** against the LCD's 3 per second (§3).
-    (Community captures: §11.)
-15. **A sign or DP on a blank digit** (`10`, Implementation Notes): whether a
-    meter sends one, e.g. a negative reading with a blank leading digit.
+The open checks are in [verification.md](verification.md).
 
 ---
 
@@ -736,22 +701,22 @@ Facts §1-10 lack or mark [UNVERIFIED], all from captures unless marked:
 
 | Topic (§) | Finding | Source |
 |---|---|---|
-| Model ↔ type (§1, §10.1) | AN9002 and ZT-300AB (BSIDE, ZOYI) → 3; V05B and ZOYI ZT-5B → 2; ANENG ST207 → 1; ZOYI ZT-5566SE → 4. Unseen: ZT-5BQ, AN999S, ZT-5566, ZT-5566S, ZT-6S | riktw, ludwich, ut61xpy, BLE_DMM_Client; ludwich, libreble, bt-multimeter-cli; ST207 log; ZT-5566SE log |
-| ZT-5566SE streams (§10.2) | Type-4 packets; the reporter confirms V AC/DC, Ω, capacitance, diode and current readings in the app | ZT-5566SE log, discussion #35 |
-| Lengths (§5, §10.4) | Exactly 10, 10, 11 and 19 bytes: 124 of 124 type-1 and 425 of 425 type-4 notifications; nothing past the last byte the apps read | all logs |
-| Write (§2, §10.5) | FFF4 takes writes: the vendor app's key frames on a V05B; FFF4 is read, write without response, notify on a ZT-5B | btsnoop (issue #29), bt-multimeter-cli |
+| Model ↔ type (§1) | AN9002 and ZT-300AB (BSIDE, ZOYI) → 3; V05B and ZOYI ZT-5B → 2; ANENG ST207 → 1; ZOYI ZT-5566SE → 4. Unseen: ZT-5BQ, AN999S, ZT-5566, ZT-5566S, ZT-6S | riktw, ludwich, ut61xpy, BLE_DMM_Client; ludwich, libreble, bt-multimeter-cli; ST207 log; ZT-5566SE log |
+| ZT-5566SE streams (§1) | Type-4 packets; the reporter confirms V AC/DC, Ω, capacitance, diode and current readings in the app | ZT-5566SE log, discussion #35 |
+| Lengths (§5) | Exactly 10, 10, 11 and 19 bytes: 124 of 124 type-1 and 425 of 425 type-4 notifications; nothing past the last byte the apps read | all logs |
+| Write (§2) | FFF4 takes writes: the vendor app's key frames on a V05B; FFF4 is read, write without response, notify on a ZT-5B | btsnoop (issue #29), bt-multimeter-cli |
 | GATT (§2) | Services 1800, 1801, FFF0 (handles `0x0007`-`0x000A`: FFF4 at `0x0009`, CCCD `0x000A`), 180A (2A23-2A29, 2A2A, 2A50) and a TI-style OAD service `F000FFC0-0451-4000-B000-000000000000` with FFC1/FFC2 | ludwich's dump, blackPantherOS (AN9002 / ZT-300AB) |
 | Module (§2) | F-9788 with a Beken BK3432; a ZT-5B's Device Information reads "BK-BLE-1.0", "BEKEN SAS" | ludwich, riktw, bt-multimeter-cli |
-| Advertisement (§10.3) | The FFF0 UUID is advertised: clients filtering on it find a V05B and an AN9002. Name in advertisement or scan response, and "ZY", unseen | ble_aneng, multimeter-connect-web (inferred from working tools) |
-| Rate (§3, §10.14) | "around 2.6 measurements per second" on an AN9002; no way found to change it | riktw |
-| OL (§6.4, §10.12) | Types 1-3: glyphs `0` `L` in digits 2-3, digits 1 and 4 blank, the DP moving with the range: " 0.L" MΩ, " .0L" kΩ and diode, " 0L." Ω. Type 4 shows "0.L" and ".0L" as glyphs too. The `o` glyph is never used. V1's rule needs `L` without a DP (BCU:42), so it misses the MΩ form | captures; vendor re-check §6 |
-| Dashes (§6.4, §10.12) | NCV fills 1-4 dashes from the left, which both apps' rules count; also inrush (D3) | AN9002 frames |
-| TRUE RMS (§7.1, §10.9) | Type-3 byte 10 bits 7-4 never set, an AC TRUE RMS frame included: no separate bit | AN9002 frames, ludwich, riktw |
+| Advertisement (§2) | The FFF0 UUID is advertised: clients filtering on it find a V05B and an AN9002. Name in advertisement or scan response, and "ZY", unseen | ble_aneng, multimeter-connect-web (inferred from working tools) |
+| Rate (§3) | "around 2.6 measurements per second" on an AN9002; no way found to change it | riktw |
+| OL (§6.4) | Types 1-3: glyphs `0` `L` in digits 2-3, digits 1 and 4 blank, the DP moving with the range: " 0.L" MΩ, " .0L" kΩ and diode, " 0L." Ω. Type 4 shows "0.L" and ".0L" as glyphs too. The `o` glyph is never used. V1's rule needs `L` without a DP (BCU:42), so it misses the MΩ form | captures; vendor re-check §6 |
+| Dashes (§6.4) | NCV fills 1-4 dashes from the left, which both apps' rules count; also inrush (D3) | AN9002 frames |
+| TRUE RMS (§7.1) | Type-3 byte 10 bits 7-4 never set, an AC TRUE RMS frame included: no separate bit | AN9002 frames, ludwich, riktw |
 | MANUAL (§7.1) | Byte 10 bit 1 never set, even on manual range; only AUTO clears | ludwich's ZT-300AB table, AN9002 frames |
-| Unnamed bits (§7, §10.11) | `ble` set in every type-1, -2 and -3 notification (the icon lit while connected); type-1 `power` always set; type-2 `power` and byte 7 bits 5-4 never set; type-4 `vfc` and byte 3 bit 0 never set, `l1_power` toggles in long runs in V DC | logs |
-| Type-4 other bits (§7.4, §10.10) | The bar graph (D1); byte 13 bit 5 set except in the one notification reading exactly 0.0000; byte 18 bit 7 always set; byte 4 bits 7-5 and bytes 5-8 always 0 — the log covers V DC, Ω and capacitance only, no AC mode and no secondary display | ZT-5566SE log |
+| Unnamed bits (§7) | `ble` set in every type-1, -2 and -3 notification (the icon lit while connected); type-1 `power` always set; type-2 `power` and byte 7 bits 5-4 never set; type-4 `vfc` and byte 3 bit 0 never set, `l1_power` toggles in long runs in V DC | logs |
+| Type-4 other bits (§7.4) | The bar graph (D1); byte 13 bit 5 set except in the one notification reading exactly 0.0000; byte 18 bit 7 always set; byte 4 bits 7-5 and bytes 5-8 always 0 — the log covers V DC, Ω and capacitance only, no AC mode and no secondary display | ZT-5566SE log |
 | Type-4 HOLD, secondary (§7.4) | "hold has a bug that device sending realtime data"; in AC the app is "not showing frequency", never checked | discussion #35, anecdotal |
-| Keys (§8.2, §10.7) | A V05B beeps for AUTO, NCV, °C, °F, CAP, Hz and DIODE, and HOLD works; not MAX/MIN, Ω or mV/Hz. Keys step modes like SEL and cannot switch between the V/Ω and A inputs; ZERO works in capacitance. A ZT-5566SE ignores AUTO. Clamp untested | btsnoop (issue #29), discussion #35, webspiderteam wiki |
-| Replies (§5, §8.1, §10.6) | None reported ("does not handshake or answer requests"). One loose end: ludwich logged on-air `EA EC 8E E1 A2 C1 32 71 65 83` = `AB CD FD B4 00 00 00 00 03 29` (valid sum), and an `AB CD FD B0 …` copy with its sum off by `0x10`, in LightBlue after a button press in the Android app. No vendor app builds cmd `FD` (V1 builds 3 and 4, V2 only 3); direction and origin unknown | libreble; ludwich |
+| Keys (§8.2) | A V05B beeps for AUTO, NCV, °C, °F, CAP, Hz and DIODE, and HOLD works; not MAX/MIN, Ω or mV/Hz. Keys step modes like SEL and cannot switch between the V/Ω and A inputs; ZERO works in capacitance. A ZT-5566SE ignores AUTO. Clamp untested | btsnoop (issue #29), discussion #35, webspiderteam wiki |
+| Replies (§5, §8.1) | None reported ("does not handshake or answer requests"). One loose end: ludwich logged on-air `EA EC 8E E1 A2 C1 32 71 65 83` = `AB CD FD B4 00 00 00 00 03 29` (valid sum), and an `AB CD FD B0 …` copy with its sum off by `0x10`, in LightBlue after a button press in the Android app. No vendor app builds cmd `FD` (V1 builds 3 and 4, V2 only 3); direction and origin unknown | libreble; ludwich |
 | Backlight | Not in the data | webspiderteam issue #2, ludwich |
 | Auto power-off | After 15 min even while connected; held SEL (AN9002) or Hz/NCV (clamp) at power-on disables it | ut61xpy, ludwich |

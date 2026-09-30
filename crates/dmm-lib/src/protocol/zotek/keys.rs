@@ -267,7 +267,9 @@ fn temp_unit(type_byte: u8, showing: Showing) -> u8 {
     }
 }
 
-/// The key-press command byte (spec §8.2).
+/// The key-press command byte (spec §8.2). The clock set, cmd `04`
+/// (spec §8.3), is never sent: only the older apps send it, and whether a
+/// meter needs it is open (`docs/research/zotek/verification.md`).
 const KEY_PRESS: u8 = 0x03;
 
 /// The frame that presses `key`, as it goes on air: `AB CD 03 <key> 00 00

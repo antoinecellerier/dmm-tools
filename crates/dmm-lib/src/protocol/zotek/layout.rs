@@ -376,7 +376,8 @@ pub(crate) static ZT5566SE: Layout = Layout {
         bit(13, 6, Meaning::Ac),
         // Bit 5 is set but at exactly zero (§11.4) and bit 4 (the colon to
         // the apps) is the bar graph's first segment (§11.3 D1). Bit 0 is
-        // used by neither app and open (§7.4, §10.10): reported.
+        // used by neither app and open (§7.4;
+        // `docs/research/zotek/verification.md`): reported.
         silent(13, 0x30),
         bit(13, 1, Meaning::Dc),
         // The analog bar graph, and byte 18 bit 7 always set (§11.3 D1,
@@ -1548,9 +1549,9 @@ mod tests {
         assert_eq!(m.mode, "Auto");
     }
 
-    /// Byte 3 bit 0 and byte 13 bit 0, used by neither app (spec §7.4,
-    /// §10.10); a leading "1" with one segment; secondary digits with no
-    /// unit; `k` on the duty cycle.
+    /// Byte 3 bit 0 and byte 13 bit 0, used by neither app (spec §7.4) and
+    /// open (`docs/research/zotek/verification.md`); a leading "1" with one
+    /// segment; secondary digits with no unit; `k` on the duty cycle.
     #[test]
     fn type4_undocumented_patterns_are_reported() {
         let packets = [

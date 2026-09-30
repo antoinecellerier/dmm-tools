@@ -169,7 +169,7 @@ Not run on a meter yet: the decoding comes from ZOTEK's apps and manuals,
 whose ZT-5566SE pages document Bluetooth for the speaker only, and the
 remote keys from the apps. The meter
 names only its packet layout, so auto-detection picks the row above that
-sends it ([backlog](verification-backlog.md#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)).
+sends it ([open checks](research/zotek/verification.md)).
 
 ## EEVblog
 

@@ -523,11 +523,11 @@ const fn key(id: &'static str, instruction: &'static str, command: &'static str)
 
 /// The ZT-300AB entry's keys: the app greys out capacitance, NCV, Hz and
 /// HOLD, and locks AUTO on, for this layout (spec §8.2). A key cannot turn
-/// the dial, and which keys a meter acts on is open (§10.7), so each step
-/// starts on a position the key would leave. Only Ω names one mode: V, mV
-/// and current leave AC or DC open, diode/continuity either function, the
-/// apps disagree on this layout's °C/°F code (§8.2), and which of MAX and
-/// MIN a press shows is undocumented, so those expect nothing.
+/// the dial, and which keys a meter acts on is open (`verification.md`), so
+/// each step starts on a position the key would leave. Only Ω names one
+/// mode: V, mV and current leave AC or DC open, diode/continuity either
+/// function, the apps disagree on this layout's °C/°F code (§8.2), and which
+/// of MAX and MIN a press shows is undocumented, so those expect nothing.
 fn zt300ab_keys() -> Vec<CaptureStep> {
     vec![
         key(

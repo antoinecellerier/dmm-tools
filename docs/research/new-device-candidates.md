@@ -460,8 +460,8 @@ Which model sends which type byte is inferred from the layout names alone
 (`AB_300`/`300ab` for the ZT-300AB, type 3, the priority); none of the apps
 ties a type to a model. Community captures fit it for four models (AN9002 /
 ZT-300AB 3, V05B / ZT-5B 2, ST207 1, ZT-5566SE 4). The ZT-5566 manuals
-document the Bluetooth speaker, and the SE manual's app section names only other models. Every open question is in the
-[backlog](../verification-backlog.md#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report).
+document the Bluetooth speaker, and the SE manual's app section names only other models. Every open question is in its
+[verification list](zotek/verification.md).
 
 **Gap: moderate.** No cross-platform desktop tool; Bluetooth-DMM-For-Windows
 is Windows-only and inactive. The ZT-300AB/AN9002 pair ranks first of the

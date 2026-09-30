@@ -142,8 +142,9 @@ pub(super) struct Readout {
 /// Read a row of cells, `negative` being its minus sign.
 ///
 /// A blank counts as 0 in the number (spec §6.1). Only one decimal point is
-/// expected; with two the meaning is open (spec §6.2, §10), so it is
-/// reported and the leftmost kept.
+/// expected; with two the meaning is open (spec §6.2;
+/// `docs/research/zotek/verification.md`), so it is reported and the
+/// leftmost kept.
 pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -> Readout {
     let mut points = cells
         .iter()
