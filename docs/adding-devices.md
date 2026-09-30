@@ -134,6 +134,7 @@ Create two files in `docs/research/<family>/`:
    - `[VENDOR]` — derived from vendor software decompilation
    - `[INFERRED]` — logically deduced from other findings
    - `[UNVERIFIED]` — requires real device testing to confirm
+   - `[HARDWARE]` — seen on a real meter; names the issue, the cable and the reporter
 
 2. **`reverse-engineered-protocol.md`** — Protocol specification: frame format, byte layouts, mode tables, command encoding, flag bits, checksum algorithm. This becomes the authoritative reference for implementation.
 

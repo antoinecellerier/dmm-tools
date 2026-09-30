@@ -29,9 +29,9 @@ in that list.
 - Timers and other retunable constants. They go to the code, named from the
   design doc the section links to.
 - Verification history: reporter counts, cables tried, which modes are
-  confirmed, what remains. It goes to `docs/supported-devices.md` and
-  `docs/verification-backlog.md`; the reference says "experimental" and links
-  to supported devices.
+  confirmed, what remains. It goes to `docs/supported-devices.md` and the
+  family's `docs/research/<family>/verification.md`; the reference says
+  "experimental" and links to supported devices.
 - Changelog voice: "now", "still", "no longer", "unlike before". The reference
   describes the current release only.
 - Numbers the reader cannot act on: millisecond timings, pixel thresholds,

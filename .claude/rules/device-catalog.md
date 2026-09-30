@@ -12,7 +12,7 @@ supported yet. The general rules are in `docs-user-facing.md`.
 - A family section is: one line naming the form factor, one line for the
   cable, one line for what to switch on, one table, and at most one
   paragraph on what hardware runs have confirmed and what is pending, linking
-  the backlog.
+  the family's `docs/research/<family>/verification.md`.
 - Table columns are Model, Counts, Status, Notes. A cell is one clause; a
   value the source does not give is `—`, never a guess. Notes carry what
   distinguishes the model from its siblings, nothing about the protocol.

@@ -24,8 +24,7 @@ they change with the code.
 - Table cells are one line: a cell is where clauses pile up unseen. A
   family's internals are its `mod.rs` docs.
 - Design docs describe the current design. A reason stays, with its issue
-  number; dated investigation logs go to `docs/verification-backlog.md` or
-  the issue.
+  number; dated investigation logs go to the issue.
 - A design decision is a bold label and its reason in one to three lines,
   cited by label, never by number: numbers shift when a decision is added or
   merged, and every citation breaks silently.
