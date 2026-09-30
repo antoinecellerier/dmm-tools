@@ -93,7 +93,8 @@ impl Ohms {
 /// verified mark the family uses, so the caller builds them and this adds the
 /// gate mark and the expectation. The result is an array so a caller can
 /// destructure it and place the volts and ohms trios where its own list puts
-/// them — no family has all six in a row.
+/// them. The gate-order test in `dmm-cli`'s `capture/step.rs` wants all six
+/// first, in a row, from every family off its allow-list.
 pub(crate) fn gate_steps(
     volts: Volts,
     volts_entry: CaptureStep,

@@ -1,110 +1,87 @@
 # Capture Design
 
-`dmm-cli capture` is the verification path for every model short of `Stability::Verified`.
-The design below reshapes it around three properties: a step advances on what the meter
-shows rather than on a keypress, every byte on the wire reaches the report even when the
-parser rejects it, and the tool's autonomy scales with how much of the family's protocol is
-already trusted.
+`dmm-cli capture` is the verification path for every model short of `Stability::Verified`: a
+guided run that walks the meter through its family's steps and writes one YAML report with the
+raw bytes. It rests on three properties. A step advances on what the meter shows rather than on
+a keypress. Every byte on the wire reaches the report, even when the parser rejects it. And the
+tool's autonomy scales with how much of the family's protocol is already trusted.
+
+The code is in `crates/dmm-cli/src/capture/`, and each section names the file to open. The step
+definitions, `CaptureStep` and `Expect`, are in `dmm-lib`'s `protocol` module, because each
+family declares its own.
 
 ## A. Auto-advance on observed state
 
 Capture watches the meter instead of asking. After printing an instruction it polls
 continuously and captures on its own once the meter reaches a new, stable state. Keys stay
-as overrides: Enter captures now, `s` skips, `q` finishes the run.
+as overrides: Enter captures now, `s` skips, `q` finishes the run. A dial-only step needs no
+keypress at all: read the instruction, turn the dial, and the samples appear.
 
-Two detectors, picked per step by whether the step carries an `expect`:
+The watcher is `StateWatcher` in `watch.rs`, pure decision logic over readings. It picks one of
+two detectors per step, by whether the step carries an `expect`:
 
 - **Semantic** (step has `expect`): advance when `STABLE_FRAMES` consecutive frames satisfy
-  the predicate — mode label, flag values, range auto/manual, value class (Overload,
-  Negative). A stable state that does not match is reported once
-  (`meter shows: mode is "AC V", want "DC V"`) and the tool keeps waiting rather than filing
-  the wrong mode.
+  the predicate — mode, flags, range auto/manual, value class. A stable state that does not
+  match is reported once, and the tool keeps waiting rather than filing the wrong mode.
 - **Raw-diff** (no `expect`): advance when the payload bytes the previous step's samples held
-  constant differ from that baseline and then hold for `STABLE_FRAMES` frames. Works even
-  when the parser is wrong about everything. The first step of a run has no baseline, so only
-  Enter ends its wait; a resumed run takes the baseline from the report's stored samples.
-
-Stability means `STABLE_FRAMES` = 3 identical signatures — (mode, range, flags) plus, in
-raw-diff, the baseline's constant payload bytes; digits may vary. `STEP_TIMEOUT` = 45 s with
-nothing new prints "press Enter when the meter is ready" and keeps watching, so a user
-hunting for a thermocouple is never stranded. A step at the dial position the previous
-step's last reading was already in (`expect.mode` equals its mode) is Enter-only and prints
-that line immediately: only the leads move, and open probes wander enough to satisfy an
-expectation on their own — a −0.0013 V wobble is not the battery being connected. The one
-exception is a previous reading of OL where the step expects a finite value: Ω open to Ω
-across the body is a change open leads cannot fake, so that step waits for it. An Enter-only
-step still reports a mismatch, so the wrong dial position is caught. A step declared
-`wait_for_enter` is Enter-only wherever it runs: its instruction is a sequence of presses, and
-the watcher would capture the state the first of them leaves. A step with `needs`
-(something has to go on the probes) is gated instead: Enter is offered at once, and the
-watcher captures on its own only after a reading in the step's mode has failed the
-expectation first — the dial is usually turned before the leads are placed, and open leads
-pass "DC V, finite" before the battery is on. Continuity going OL to a reading, or NCV from
-level 0 to 1, is the change a gated step captures on. Stability tolerates a meter that
-alternates two states by design: the UT61E+ in AC+DC V sends the AC and DC components in
-turn with a flag toggling between them, so two signatures differing only in flags, each
-holding for `2 × STABLE_FRAMES` frames, count as settled; two rungs alternating do not.
-
-Command steps (`hold`, `minmax`, …) run the same watcher after `send_command`, against the
-frames read just before it, and expect the flag to flip within `COMMAND_TIMEOUT` = 3 s. If it
-does not, the step records `<command> did nothing; the meter still shows …` in its `error`
-rather than filing pre-command frames — the fix for the stale-frame class of bug. A command
-step whose flag flipped proves that setting for the sweeps (D), the way a sweep hit does.
-
-A dial-only step captures without a keypress: read the instruction, turn the dial, and the
-samples appear. The per-step confirmation prompt after them is what F defers to the end of the run.
+  constant change, and then hold. This works even when the parser is wrong about everything.
+  The first step of a run has no baseline, so only Enter ends its wait.
 
 Stability is the state holding still, not the value: the signature leaves the digits out, so a
-reading still on its way satisfies it. `--settle MS` waits that long before every sample — a
-step's own and a sub-step's (D) — and drops the frame that ended the wait, which was read
-before it. Off by default, because waiting for the digits to hold still instead would never
-finish on leads with nothing stable across them, and `r` is the operator's guard when nobody
-asked for a delay. Evidence: a UT61E+'s top two Ω rungs read 50x high 200 ms after a RANGE
-press and come down over several seconds (2026-09-10).
+reading still on its way satisfies it. After `STEP_TIMEOUT` with nothing new, the step offers
+Enter and keeps watching, so an operator fetching a thermocouple is never stranded.
 
-A display with no reading is not a state worth sampling either: a UT181A sends no value for
-600–700 ms after any range, mode or dial change, and for up to 2 s on some positions. Once a
-step's wait ends — and after every switch the tool makes (D) — the sampler reads past a
-no-reading frame for up to `BLANK_READS` = 25 readings and starts the samples at the first
-real one; a step that expects no reading keeps it. Evidence: every range sub-step of a UT181A
-run held only that frame (issue #5, 2026-09-27), and at 10 readings the rerun still filed
-blank samples on mV AC, mA DC and A AC+DC (2026-09-28).
+**Enter-only and gated steps.** Some changes cannot be seen arriving. At the dial position the
+previous reading was already in, only the leads move, and open probes wander enough to satisfy
+an expectation on their own, so the step waits for Enter. A step with `needs` is usually
+reached dial first, and open leads pass "DC V, finite" before the battery is on, so it captures
+on its own only after a reading in its mode has failed first. Both still report a wrong mode.
+The exceptions, and a meter that alternates two states by design, are in `watch.rs`.
 
-A step whose first sample is in its expected mode and a later one is not is retaken:
-`the meter left <mode> for <other> while sampling — retaking…`, and the wait runs
-again. Only the mode is compared, so a wandering value such as body resistance never retakes,
-and an Enter capture that was never in the mode is filed as it stands. A piped run doesn't
-retake, since nothing there could stop a meter that keeps leaving. Evidence: a UT804 run filed
-Diode and Ω samples under `cont` when the operator pressed SELECT on before sampling was done
-(#16, 2026-09-18).
+Command steps (`hold`, `minmax`, …) run the same watcher after `send_command`, against the
+frames read just before it, and expect the flag to flip within `COMMAND_TIMEOUT`. If it does
+not, the step files the error and no samples: pre-command frames filed as the result are what
+made a dead command look like a captured state. A command whose flag flipped proves that
+setting for the sweeps (D).
+
+`--settle MS` waits before every sample, for readings that take seconds to come down after a
+change, such as a UT61E+'s top two Ω rungs after a RANGE press. It is off by default. Waiting
+for the digits themselves to hold still would never finish on leads with nothing stable across
+them, and `r` at the confirmation prompt is the operator's guard when nobody asked for a delay.
+
+A display with no reading is not a state worth sampling either. After a step's wait, and after
+every switch the tool makes (D), `read_past_blank` in `step.rs` reads past a no-reading frame
+for up to `BLANK_READS` readings. A UT181A sends no value for a while after any change, and
+every range sub-step of one run held only that frame (issue #5).
+
+A step whose samples start in its expected mode and then leave it is retaken, with a line
+saying so: the operator moved on before sampling was done, and a UT804 run filed Diode and Ω
+samples under `cont` that way (issue #16). Only the mode is compared, so a wandering value never
+retakes (`left_mode` in `step.rs`).
 
 ## B. Full wire trace and parse diagnostics
 
-A recording layer wraps the transport and logs every read and write with a timestamp and the
-active step id. `open_device_by_id_auto` splits into "open transport + protocol" and
-`Dmm::new` so the CLI can insert the wrapper before construction, which puts the init
-handshake in the trace too. The wrapper lives in the CLI — `Transport` is a public trait with
-`&self` methods, so delegation is trivial.
+`RecordingTransport` in `recording.rs` wraps the transport and logs every read and write with a
+timestamp and the active step id. `open_recording_with_help` in `crates/dmm-cli/src/open.rs`
+wraps it before detection and before the `Dmm` is built, so the detection probe and the init
+handshake are in the trace too. The wrapper lives in the CLI: `Transport` is a public trait, so
+it needs no library support.
 
-Per step the report carries a bounded `frames` list (ms offset, direction, raw hex)
-alongside `samples`; rejections are listed under `diagnostics`. Consecutive reads on one
-step within 50 ms are recorded as a single event, because the CP2110 delivers one UART byte
-per HID report and a 19-byte frame would otherwise be 19 events. The per-step cap and the
-recorder's bound are explicit constants; the oldest events over the cap are trimmed and
-counted in `frames_dropped`, which does not flag the step — a step that waits on the
-operator passes the cap as a matter of course.
+Per step the report carries a bounded `frames` list beside `samples`. Received bytes that arrive
+close together are one event (`RX_COALESCE_GAP_MS`), because the CP2110 hands up one byte per
+HID report. The per-step cap, `MAX_FRAMES_PER_STEP`, keeps the newest events and counts the rest
+in `frames_dropped`. That count does not flag the step: a step that waits on the operator passes
+the cap as a matter of course.
 
-Sampling records `InvalidResponse`, `ChecksumMismatch` and `UnknownMode` into the step's
-`diagnostics` and keeps going instead of breaking out — on an unproven protocol those are the
-most interesting frames. A step whose samples contain `Unknown(0x..)` in `mode`, or an
-unparsed value, is flagged `needs_attention: true` so a maintainer scanning the YAML finds it
-without grepping.
+Sampling records parse rejections into the step's `diagnostics` and keeps going instead of
+breaking out: on an unproven protocol those are the most interesting frames. A step with an
+unknown mode, a rejection or too few samples is flagged `needs_attention`, so a maintainer
+scanning the YAML finds it without grepping.
 
 A meter that never answers the check before the first step still leaves a report, the case
-bring-up hits most: `no_response: true`, no steps, and the bytes received in `init_frames`.
-It goes to `capture-<device>-no-response.yaml` (`<stem>-no-response.yaml` beside an `-o`
-file), created exclusively and stepping to `-2`, `-3` beside a taken name, so it never
-replaces a report in progress or an earlier failure.
+bring-up hits most: `no_response: true`, no steps, and the bytes received in `init_frames`. It
+goes to a file of its own beside the report, so it never replaces a report in progress or an
+earlier failure.
 
 One file to attach stays the rule: no sidecar trace.
 
@@ -116,132 +93,93 @@ One file to attach stays the rule: no sidecar trace.
 | 1 Gate | short of `Stability::Verified` | semantic where the step declares an expectation | every step, inline | after the gate passes |
 | 2 Trusted | `Stability::Verified`, or gate passed | semantic where the step declares an expectation | gate steps inline; deferred batch review for the rest | yes |
 
-The **gate** is a small block of steps marked `gate: true` in the family's step list: DC V
-open, DC V shorted, Ω open (OL), Ω across the operator's body, Ω shorted, and a negative
-reading. Those six establish mode byte, digits, decimal point, OL and sign — the body
-reading is the only one that puts non-zero digits on screen, open leads showing OL and
-shorted ones zero. They are tagged `(gate)` in the step header as they
-run, and confirm inline: "Did the meter show this?" takes Enter, `n` or `r` and re-asks
-anything else, and only `n` leads to "What did the meter show?", which takes any text. The
-decision is yes-or-no everywhere, so nothing compares typed digits; a mismatch on a gate
-step is a failure whether or not the operator said what the screen held.
+The **gate** is a small block of steps marked `gate` in the family's step list: DC V open, DC V
+shorted, Ω open (OL), Ω across the operator's body, Ω shorted, and a negative reading. Those six
+establish mode byte, digits, decimal point, OL and sign. The body reading is the only one that
+puts non-zero digits on screen, open leads showing OL and shorted ones zero. Gate steps are
+tagged `(gate)` as they run and confirm inline. The question is yes-or-no everywhere, and the
+meter's text is asked for only after a no, so nothing compares typed digits and a word typed at
+the prompt is never filed as the screen. A mismatch on a gate step is a failure whether or not
+the operator said what the screen held.
 
-`r` at that prompt retakes the step: the attempt's samples are dropped and the same wait
-runs again on the same previous state, so a step captured before the leads were where the
-instruction wanted them is redone rather than corrected. The frames of every attempt stay in
-the step — the recorder is per step. The deferred batch review (F) has no retake: by then
-the dial has moved on.
+`r` at the inline prompt retakes the step: its samples are dropped and the same wait runs
+again, so a step captured before the leads were in place is redone rather than corrected. The
+deferred review (F) has no retake, because by then the dial has moved on.
 
-Once every gate step has a result the run rules on it, once, and says so. All captured and
-confirmed: the report records `core_semantics: confirmed`, the run switches to tier 2, and
-the steps after it are reviewed at the end. Any of them corrected, skipped, timed out or
-errored: `core_semantics: failed` with the step ids under `gate_failures`, and the run stays
-at tier 1 — inline confirmation, no remote driving. A resumed run rules on what the loaded
-report already holds. The tier reached is recorded as `tier`.
+Once every gate step has a result, `Trust::update` in `report.rs` rules on it once and says so.
+All confirmed: the report records `core_semantics: confirmed` and the run moves to tier 2.
+Anything else: `core_semantics: failed`, the step ids under `gate_failures`, and the run stays
+at tier 1.
 
-Remote driving (D) runs only at tier 2, which also buys the deferred review.
-That makes where a family puts its gate steps load-bearing: the run reaches
-tier 2 only when the *last* of them reports, and a gate step is never swept
-itself, so any step scheduled among them is one whose ranges and flags nobody
-walks. Declare the whole block first. The UT61+ list used to split it and lost
-the AC V, DC mV and AC mV ladders for it (issue #19); a test in
-`crates/dmm-cli/src/capture/step.rs` now holds the order, with the families
-still to fix named in its allow-list.
+Remote driving (D) runs only at tier 2, which makes where a family puts its gate steps
+load-bearing. The run reaches tier 2 only when the *last* of them reports, and a gate step is
+never swept itself, so a step scheduled among them is one whose ranges and flags nobody walks.
+Declare the whole block first. A split gate cost the UT61+ list its AC V, DC mV and AC mV
+ladders (issue #19); a test in `step.rs` holds the order, with the families still to fix named
+in its allow-list.
 
-A ladder the gate steps themselves sit on needs a plain step of its own after
-the block — `ohm_ranges`, `dcv_ranges` on the UT61+ — since the gate step that
-established the mode cannot be swept.
+A ladder the gate steps themselves sit on needs a plain step of its own after the block —
+`ohm_ranges`, `dcv_ranges` on the UT61+ — since the gate step that established the mode cannot
+be swept.
 
 `--sniff` is the tier for a parser nobody trusts yet: `expect` is ignored, so every step
 advances on the payload bytes changing, and a passed gate does not promote the run.
 
 ## D. Autonomous sub-steps through `select`
 
-For families implementing `choices`/`select` (UT61+/UT161, UT181A, VC-880,
-VC-890, mock), each mode step is followed, without a prompt, by a walk of Hold
-on/off, Rel on/off, every MinMax choice, every Peak choice and the Range
-ladder, capturing the step's own sample count at each and verifying the meter
-reports the target before moving on. Sub-steps are filed as `<mode>/hold:on`,
-`<mode>/range:60V` and so on, which turns "one range per mode" into "every
-range per mode" at no coordination cost. Mode is never swept: the dial is the
-operator's. Sub-steps are protocol evidence, not screen checks, so they are
-neither confirmed inline nor listed in F's review, and they do not enter the
-coverage arithmetic — they are not steps the device declares.
+For families implementing `choices`/`select` (UT61+/UT161, UT181A, VC-880, VC-890, mock), each
+mode step is followed, without a prompt, by a walk of Hold, Rel, every MinMax and Peak choice
+and the Range ladder (`sweep_step` in `drive.rs`). Each sub-step captures the step's own sample
+count and checks that the meter reports the target. Sub-steps are filed as `<mode>/hold:on`,
+`<mode>/range:60V` and so on, which turns "one range per mode" into "every range per mode" at no
+coordination cost. Mode is never swept: the dial is the operator's. Sub-steps are protocol
+evidence, not screen checks, so they are neither confirmed inline nor listed in F's review, and
+they do not count toward coverage.
 
-These paths are hardware-unverified on three of the four families, so:
+Driving relies on reading mode, range and flags back correctly, so:
 
-- Only at tier 2 and only after a non-gate step, because driving relies on
-  reading mode, range and flags back correctly.
-- Fail-soft: any refusal — `CommandRejected`, `UnsupportedCommand`, a timeout —
-  records the sub-step with `status: error` and its `error`, and is never
-  retried. A setting the meter has already taken a value on earlier in the run
-  is refused because the current mode has no such function — MIN/MAX in
-  continuity — so that refusal is filed but does not count: only an unproven
-  setting's does. Nor is it flagged `needs_attention`: the error text is the
-  whole story, and a dozen flagged sub-steps with nothing wrong in them is how
-  a real finding gets missed. An unproven setting's refusal is flagged. One refusal also answers for the setting's remaining choices
-  in that step, which are not asked for. After `DRIVE_FAILURE_BUDGET` = 3
-  counted failures the sweep says `remote control unreliable on this meter`
-  once and disables itself for the rest of the run. At most
-  `MAX_DRIVE_SUBSTEPS_PER_STEP` = 24 sub-steps are filed per mode step.
-- The baseline (auto range, flags off) is restored with a read-back before the
-  next mode step, even once the budget is spent — a meter left latched in HOLD
-  is worse than one more command. A range with no auto — a UT181A's in
-  Peak — goes back to the rung the sweep started on. A failed restore prints
-  `<setting> could not be reset — press the meter's button` and counts a
-  failure.
-- Range sweeps go through `choices(Range)` only, which cycles to target with
-  read-back and stops when the read-back stops moving. No blind repeated
-  presses.
-- REL is skipped while the reading is OL: the meter is entitled to refuse it
-  there, and the refusal would spend the failure budget. So is a display
-  still showing no reading after the wait above: there is nothing to take a
-  reference from.
+- It runs only at tier 2, and only after a non-gate step the operator set by hand.
+- It is fail-soft. A refusal is filed as the sub-step's error and never retried. A setting that
+  already worked this run is refused because the mode lacks it (MIN/MAX in continuity), so that
+  refusal is neither counted nor flagged. `DRIVE_FAILURE_BUDGET` counted failures disable the
+  sweeps for the rest of the run, and `MAX_DRIVE_SUBSTEPS_PER_STEP` caps one mode step.
+- The baseline (auto range, flags off) is restored with a read-back before the next mode step,
+  even once the budget is spent: a meter left latched in HOLD is worse than one more command. A
+  range with no auto — a UT181A's in Peak — goes back to the rung the sweep started on.
+- Range sweeps go through `choices(Range)` only, which cycles to target with read-back and stops
+  when the read-back stops moving. No blind repeated presses.
 
-A step whose `expect.mode` sits on the current dial position's ring — duty from Hz, Hz
-from AC V, continuity, diode and capacitance from Ω on the UT61E+ — is switched to by the
-tool before the step is watched, so the operator turns the dial and nothing else. Which
-ring the meter is on comes from the previous step's last reading, or from a fresh reading
-when there was no previous step — the first step of a run, every step of a `--steps` run,
-and the one after a skip or a resume. A mode
-off the ring is asked for as before, and a refused switch prints what to do by hand and
-counts against the same failure budget.
+A step whose `expect.mode` a button reaches from the current dial position — duty from Hz,
+continuity from Ω — is switched to by the tool before the step is watched
+(`switch_mode_from`), so the operator turns the dial and nothing else. The switch is filed as
+its own sub-step, `<step>/mode:<label>`, so its frames survive the step's wait for a hand switch,
+which would trim them off the step's cap (issue #20, a UT61B+ timing out partway through a
+two-press walk). A plan naming several modes on one dial position reproduces such a bug without
+the GUI: each switch starts from the mode the previous step left, which a one-off `dmm-cli set`
+does not.
 
-The switch is filed ahead of its step as the sub-step `<step>/mode:<label>`: its frames,
-its `error` when refused, and one reading taken afterwards either way, since a timeout's
-text does not say where the presses left the meter. It is flagged `needs_attention` when
-refused or when that reading shows another mode. Filed apart, the frames survive the
-step's wait for a hand switch, which would trim them off the step's cap — issue #20, a
-UT61B+ timing out partway through a two-press Hz/% walk. A plan naming modes on one dial
-position reproduces such a bug without the GUI, keeping the dial history a fresh
-`dmm-cli set` lacks.
-
-`--no-drive` opts out, for a cable that carries no commands or a cautious
-reporter.
-The report records `drive: on | off | disabled` — `off` for `--no-drive` and
-for a family that offered no choice at all, `disabled` when the budget ran out.
-A resumed run keeps the most telling of its own state and the report's, so a
-`disabled` still explains the steps an earlier run left unswept.
+`--no-drive` opts out, for a cable that carries no commands or a cautious reporter. The report's
+`drive` says whether the sweeps ran, so a report with no sub-steps says why.
 
 ## E. Per-step verification status
 
-`CaptureStep` carries `verified: bool` (false for new steps), `gate: bool` (C),
-`expect: Option<Expect>` and `wait_for_enter: bool` (A). Around them:
+Each `CaptureStep` says whether hardware has confirmed it (`verified`), beside `gate`, `expect`,
+`needs` and `wait_for_enter`. Around that flag:
 
-- `dmm-cli capture --unverified` runs only unverified steps plus the freeform pass. This is
-  the one-line ask in every device verification issue. With `--steps` the two intersect.
-- `--list-steps` marks each step ✓/· so reporter and maintainer read the same list, and
-  `--list-steps --format md` emits the `- [ ]`/`- [x]` checklist the issues already use, so
-  the issue and the code cannot drift.
-- The epilogue prints coverage: "Covered 9 of 14 unverified steps for VC-890", followed by
-  the issue to attach the report to, from `DeviceProfile::feedback_url()`.
-- Tests: a Verified family declares no unverified steps, an Experimental family declares at
-  least one, every gate step has an `expect`.
+- `dmm-cli capture --unverified` runs only unverified steps plus the freeform pass. This is the
+  one-line ask in every device verification issue. With `--steps` the two intersect.
+- `--list-steps` marks each verified step, so reporter and maintainer read the same list, and
+  `--list-steps --format md` emits the checklist the issues use, so the issue and the code
+  cannot drift.
+- The epilogue prints how many unverified steps the report covers, and the issue to attach it
+  to, from `DeviceProfile::feedback_url()`.
+- Tests keep the flags honest: a family short of Verified declares at least one unverified step,
+  and every gate step has an `expect`.
 
 `docs/verification-backlog.md` keeps the *why*; verified step ids are struck through and
-credited there as today, and the code flag flips in the same commit. Unknowns that are not
-modes (VC-890 battery nibble, UT8802 byte 6) already follow the "one step whose typed answer
-resolves it" pattern, so the step stays the right unit of verification.
+credited there, and the code flag flips in the same commit. Unknowns that are not modes
+(VC-890 battery nibble, UT8802 byte 6) follow the "one step whose typed answer resolves it"
+pattern, so the step stays the right unit of verification.
 
 ## F. Lower-friction confirmation
 
@@ -253,83 +191,73 @@ after it, so no answer to one is a valid answer to the other. A run with nobody 
 stderr is not a terminal — skips the review and leaves those steps unconfirmed rather than
 recording agreement nobody gave.
 
-Structured fields replace the `screen: "confirmed: …"` string: `confirmed: Option<bool>`,
-`lcd: Option<String>` for the typed correction, and `confirmed_by: inline | batch`. A step
-called wrong with no text typed is a mismatch with no `lcd`, from either prompt. Reports
-carrying the old `screen` string still load, so a resume across versions works.
+The answers are structured fields on `StepResult` in `report.rs`, which replaced a free-text
+`screen` string. Reports carrying that string still load, so a resume across versions works.
 
 ## G. Preparation up front
 
 Before the first step, capture lists what the run needs — shorted leads, a DC source, a
-thermocouple, a live wire, a power adapter with a load, a transistor, an SCR — derived from the `needs` tag on steps and
-numbered in `Need::ALL` order, each line naming the steps waiting on it. The user gives the
-numbers of anything they haven't got and those steps are marked `skipped` with `error:
-"skipped: no <label>"` before the run starts, so the question is asked once rather than met
-again on resume; naming such a step in a later `--steps` run asks again. The checklist covers
-only the steps `--steps` and `--unverified` selected, and a run with nobody to ask — stderr is
-not a terminal — prints the list and attempts everything.
+thermocouple, a live wire, a power adapter with a load, a transistor, an SCR — from the `needs`
+tag on steps, each line naming the steps waiting on it. The user gives the numbers of anything
+they haven't got, and those steps are marked `skipped` before the run starts, so the bench is
+set up once instead of a thermocouple turning up mid-run. A later run asks again. The checklist
+covers only the steps the run selected, and a run with nobody to ask prints the list and
+attempts everything.
 
-Family step lists are ordered so dial rotation is monotonic, lead changes are grouped, and a
-gate step sits right after the mode step it extends — shorting the probes on DC V is the step
-after DC V itself, not a later visit to the same dial position. `docs/adding-devices.md`
-states that rule for new families.
+The step-order rules are in
+[adding-devices.md](adding-devices.md#phase-6-real-device-verification).
 
 ## H. Maintainer-authored plans
 
 `--plan file.yaml` runs a list of steps a maintainer pastes into an issue, so a nitpicky
 sequence that does not belong in the family's shipped list is captured without waiting for a
-release. A plan step carries the `CaptureStep` fields a plan may set, in owned form: `id`,
-`instruction`, `command`, `samples` (default 5), `needs` (the `Need` variants in snake_case)
-and `expect` (`mode`, `flags` by their report names, `range` `auto`/`manual`, `value`
-`overload`/`negative`/`finite`/`ncv`, `at_least` a magnitude, in the mode's base unit, the
-reading must reach). Unknown keys and names are errors naming the file and the step, as are
-a repeated id, the reserved id `extra`, and a plan with no steps. `--plan` conflicts with
-`--steps`, `--unverified` and `--list-steps`; the strings are leaked once at load, so the
-steps meet the run's `&'static` step type.
+release. A plan step sets the `CaptureStep` fields a plan may set. The keys and the errors are
+in [the CLI reference](cli-reference.md#capture-plan-files), and the parser is `plan.rs`.
 
 The plan replaces the device's list for that run and everything else stays: watcher, tiers,
 needs checklist, sweeps and the freeform pass. Plan steps are never `gate`, so a Verified
 family starts Trusted and reviews them in one pass while an Experimental one stays at Gate
-and confirms each inline. The report records `plan: <file>`, the epilogue reads `Plan
-<file>: N of M steps captured` — the device's unverified coverage says nothing about steps
-that are not in its list — and the default output file is
-`capture-<device>-<plan file stem>.yaml`, so a plan run never resumes into the full report.
+and confirms each inline. The report records `plan: <file>`, and the epilogue counts the plan's
+steps, since the device's unverified coverage says nothing about steps that are not in its
+list. The default output file is named after the plan, so a plan run never resumes into the
+full report.
 
-## Report schema additions
+## Report format
 
-Report level: `device_id`, `init_frames`, `no_response`, `wire_events_dropped` (B); `unverified_only`
-(E); `tier`, `core_semantics`, `gate_failures` (C); `drive` (D); `plan` (H). Per step:
-`frames`, `frames_dropped`, `diagnostics` and `needs_attention` (B); `confirmed`, `lcd` (typed corrections
-only) and `confirmed_by` (F); sub-step ids, mode switches included (D). Frames are raw wire transfers, plus
-any change of the link's rate as `feature: true` with its `baud` and no bytes; a rejected transfer is
-visible as a frame with no matching sample and a line under `diagnostics`. Every
-addition is optional on read, so older reports still resume.
+The schema is `CaptureReport` and `StepResult` in `report.rs`, with each field documented there.
+The report level holds the run's context: the device, `init_frames`, `tier`, `core_semantics`,
+`drive` and `plan`. Each step holds its `samples`, `frames`, `diagnostics`, the operator's
+confirmation and `needs_attention`; sub-steps, mode switches included, are steps of their own. A
+rejected transfer is visible as a frame with no matching sample and a line under
+`diagnostics`. Every field added since the first report format is optional on read, so older
+reports still resume.
 
 ```yaml
 steps:
-  - id: dcv/range:22V
-    instruction: "Set range to 22V"
+  - id: dcv
+    instruction: "Set meter to DC V (V⎓). Leave leads open."
     status: captured
-    needs_attention: false
-    confirmed: true
-    confirmed_by: batch
     samples:
       - raw_hex: "02 30 20 30 2E 30 30 30 30 00 00 30 30 30"
+        mode_byte: "0x02"
         mode: "DC V"
         display_raw: "0.0000"
         value: "0.0"
         unit: "V"
-        range_label: "22V"
+        range_label: "2.2V"
+    confirmed: true
+    confirmed_by: inline
     frames:
       - at_ms: 0
         dir: tx
-        hex: "AB CD 03 46 01 C1"
+        hex: "AB CD 03 5E 01 D9"
       - at_ms: 41
         dir: rx
-        hex: "AB CD 10 02 30 20 30 2E 30 30 30 30 00 00 30 30 30 03 2B"
+        hex: "AB CD 10 02 30 20 30 2E 30 30 30 30 00 00 30 30 30 03 88"
       - at_ms: 128
         dir: rx
-        hex: "AB CD 10 02 30 20 30 2E 30 30 30 30 00 00 30 30 30 03 2C"
+        hex: "AB CD 10 02 30 20 30 2E 30 30 30 30 00 00 30 30 30 03 89"
     diagnostics:
-      - "checksum mismatch: expected 0x032B, got 0x032C"
+      - "checksum mismatch: expected 0x0389, got 0x0388"
+    needs_attention: true
 ```

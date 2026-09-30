@@ -14,7 +14,8 @@ use dmm_lib::protocol::ValueExpect;
 use std::time::{Duration, Instant};
 
 /// Cap on wire events recorded per step, so one chatty step can't grow the
-/// report without bound. Overflow is reported in the step's diagnostics.
+/// report without bound. The oldest are trimmed, and counted in the step's
+/// `frames_dropped` (see [`frames_for_step`]).
 pub(crate) const MAX_FRAMES_PER_STEP: usize = 500;
 
 /// Filter keyword for the freeform capture pass. Not a protocol step — the

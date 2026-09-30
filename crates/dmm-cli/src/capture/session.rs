@@ -346,7 +346,8 @@ fn apply_review(report: &mut CaptureReport, answers: &[(String, Option<String>)]
 /// Ask about every reading the run captured without stopping for it, once.
 ///
 /// A piped run has nobody to ask, so those readings stay unconfirmed rather
-/// than being recorded as agreed.
+/// than being recorded as agreed. There is no retake here, unlike the inline
+/// prompt: by now the dial has moved on from every step listed.
 pub(super) fn run_batch_review(
     report: &mut CaptureReport,
     to_review: &[String],

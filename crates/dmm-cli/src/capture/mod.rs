@@ -191,9 +191,6 @@ pub(crate) fn cmd_capture(
     Ok(())
 }
 
-/// The way back into a run that left steps undone. A capture that ended on the
-/// first `q` signs off with the same "Capture complete!" as one that walked
-/// every step, and said nothing about the report being resumable.
 /// Whether `--unverified` left out every gate step because hardware has
 /// confirmed them all. The gate then has nothing to rule on, and what it
 /// would have shown is already known, so the run is trusted from the start
@@ -202,6 +199,9 @@ fn gate_already_confirmed(steps: &[CaptureStep], in_scope: &[CaptureStep]) -> bo
     steps.iter().any(|s| s.gate) && !in_scope.iter().any(|s| s.gate)
 }
 
+/// The way back into a run that left steps undone. A capture that ended on the
+/// first `q` signs off with the same "Capture complete!" as one that walked
+/// every step, and said nothing about the report being resumable.
 fn resume_hint(covered: usize, total: usize, plan: bool) -> Option<String> {
     if covered >= total {
         return None;
