@@ -47,7 +47,7 @@ fn output_report(data: &[u8]) -> Result<[u8; REQUEST_LEN + 1]> {
 /// The data bytes of one input report as hidapi returned `n` of them in
 /// `raw`. The reports are unnumbered, so none should carry a report-ID byte;
 /// a platform that prepends one returns nine bytes with a leading `00`, and
-/// only then is it dropped: the report descriptor is not known (spec §12.2).
+/// only then is it dropped: the report descriptor is not known (spec §2).
 fn input_payload(raw: &[u8], n: usize) -> &[u8] {
     let raw = &raw[..n.min(raw.len())];
     match raw {
@@ -83,7 +83,7 @@ impl Bu86x {
             Ok(info) => cable.release = Some(info.release_number()),
             Err(e) => debug!("{NAME}: no device info ({e})"),
         }
-        // The report descriptor is in no source (spec §12.2): trace it, so a
+        // The report descriptor is in no source (spec §2): trace it, so a
         // first report carries it.
         let mut descriptor = [0u8; hidapi::MAX_REPORT_DESCRIPTOR_SIZE];
         match cable.device.get_report_descriptor(&mut descriptor) {

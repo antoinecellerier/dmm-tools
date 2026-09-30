@@ -6,10 +6,9 @@ BM829s) and the BM520s mobile-logging series (BM521s, BM525s) — from the
 USB device to the LCD-segment reply and the BM520s logged-memory download.
 The live readings of all three series are implemented, experimentally; the
 memory download is not. This pair of documents records
-what the meters and the cable do on the wire. Every fact in §1-11 of the spec, and each
-question of §12, comes from vendor sources; §13 compares them with
-community sources, opened 2026-09-27 after §1-12 were committed, and §12's
-"Community:" notes summarise §13.
+what the meters and the cable do on the wire. Every fact in §1-11 of the spec
+comes from vendor sources; §13 compares them with community sources, opened
+2026-09-27 after §1-12 were committed.
 
 Brymen publishes the protocol, as two-page sheets per series and a
 nine-page memory document, so the question was how far the sheets can be
@@ -22,7 +21,7 @@ request byte).
 Brymen's two programs settle what they can: they match VID:PID
 0x0820:0x0001, index the BM820 reply as its Table 1 does, read the points
 as the labels say, carry a 7-segment table, and send `82 66` to BM520s
-meters, never `52 66`. What remains is listed in spec §12.
+meters, never `52 66`. What remains is in [verification.md](verification.md).
 
 ## Sources Used
 
@@ -134,8 +133,7 @@ vendor names found none, 2026-09-27; the READMEs say only
 The user opened the boundary on **2026-09-27**, after §1-12 were written,
 grounding-checked and committed, for code repositories and TestController's
 supported-equipment list only. The findings are §13 of the spec, marked
-[COMMUNITY]; nothing was merged into §1-11 beyond pointers, and §12's
-questions gained only "Community:" notes that summarise §13. Provenance is in
+[COMMUNITY]; nothing was merged into §1-11 beyond pointers. Provenance is in
 `references/bm86x/community/SOURCE.txt` (gitignored).
 
 | Source | Commit | Licence | Notes |
@@ -165,11 +163,10 @@ questions gained only "Community:" notes that summarise §13. Provenance is in
 
 **Model-recall disclosure.** The assistant that wrote these documents may
 have been trained on community write-ups of this protocol. Recall was never
-used as a source: every fact in §1-11 and every question of §12 cites a
-page of a Brymen document or a line or address of a Brymen program, a
-platform convention is named where one is used, and a fact without either
-is tagged [UNVERIFIED]. Every fact in §13, and so every "Community:" note in
-§12, cites a community file (and line where it has one) at the commit or
+used as a source: every fact in §1-11 cites a page of a Brymen document or
+a line or address of a Brymen program, a platform convention is named where
+one is used, and a fact without either is tagged [UNVERIFIED]. Every fact in
+§13 cites a community file (and line where it has one) at the commit or
 fetch date above, or a re-read of a vendor source.
 
 ## Methodology
@@ -291,4 +288,4 @@ As used in `reverse-engineered-protocol.md`:
   real meter
 - **[HARDWARE]** — seen on a real meter: none yet
 - **[COMMUNITY]** — stated in or implied by a community source, spec §13
-  only, summarised in §12's "Community:" notes; not a vendor fact
+  only; not a vendor fact

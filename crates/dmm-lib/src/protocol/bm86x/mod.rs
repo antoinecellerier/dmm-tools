@@ -46,7 +46,10 @@ impl Series {
     /// Every series, in registry order.
     pub(super) const ALL: [Series; 3] = [Series::Bm86x, Series::Bm82x, Series::Bm52x];
 
-    /// The series code (spec §3.1).
+    /// The series code, sent in the request and returned in the model bytes
+    /// (spec §3.1, §4.2). A BM52x is asked with its own sheet's `52`, which a
+    /// BM525s answers (spec §13.3), not the `82` Brymen's programs send it;
+    /// whether it answers `82` too is open.
     pub(super) const fn code(self) -> u8 {
         match self {
             Series::Bm86x => 0x86,

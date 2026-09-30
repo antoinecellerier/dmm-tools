@@ -23,7 +23,6 @@ Items that need real components or specific setups to verify.
   - [UT61E+ AC+DC V: the components as separate readings](#ut61e-acdc-v-the-components-as-separate-readings)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [Bluetooth search and detection with built-in meters](#bluetooth-search-and-detection-with-built-in-meters)
-  - [Brymen BU-86X, BM86x, BM82x and BM52x: experimental, awaiting a hardware report](#brymen-bu-86x-bm86x-bm82x-and-bm52x-experimental-awaiting-a-hardware-report)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [Streaming meters: read continuously](#streaming-meters-read-continuously)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
@@ -111,7 +110,11 @@ Open questions, each needing a meter:
   with a short one is unknown.
 - **A Brymen meter on the BU-86X can answer after the three 600 ms
   windows**: a BM86x at 500000 counts, or any of them in capacitance; see
-  [Brymen BU-86X, BM86x, BM82x and BM52x](#brymen-bu-86x-bm86x-bm82x-and-bm52x-experimental-awaiting-a-hardware-report).
+  [the BM86x checks](research/bm86x/verification.md#timing-and-replies).
+- **`auto` and the other cables.** `auto` stops at a BU-86X whose meter is
+  silent and does not reach Bluetooth, and with any other cable plugged in
+  too it never probes the BU-86X; setup and detection docs say to name the
+  meter.
 - **Opening after detection runs the family's `init` again**, so a UT181A
   receives SET_MONITOR twice and a UT171 its connect frame twice per auto
   open. Harmless on paper — both are what the meter was already sent — but
@@ -1534,80 +1537,6 @@ the ranges would have to come from hardware. Tracked as a candidate in
   the Bluetooth link and decline AB CD frames, each other's and ZOTEK
   packets and the adapter heartbeat in tests
   ([detection design](detection-design.md)). Watch a UT-D07B report for one.
-
-### Brymen BU-86X, BM86x, BM82x and BM52x: experimental, awaiting a hardware report
-
-Specified 2026-09-26 from Brymen's protocol sheets, Brymen's two programs and
-the manuals (`docs/research/bm86x/reverse-engineered-protocol.md`, §12 for
-the open questions); the community cross-reference (spec §13) came after and
-narrows several items below without being our verification. Implemented
-2026-09-27 as three families on the new BU-86X transport, experimental, one
-registry entry per series: `bm86x` (BM869s, BM867s), `bm82x` (BM829s,
-BM827s, BM822s, BM821s) and `bm52x` (BM525s, BM521s), with verification
-issues [#34](https://github.com/antoinecellerier/dmm-tools/issues/34), [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) and [#36](https://github.com/antoinecellerier/dmm-tools/issues/36). Nobody on the project owns one, so each item notes
-the driver's choice. One capture settles the most at once:
-**`RUST_LOG=dmm_lib=trace dmm-cli --device <id> debug`** for a few seconds
-in DC V with a negative reading (leads reversed on a battery), then in Ω
-with the leads open; the trace carries the cable's report descriptor.
-
-- **Cable enumeration (§2, §12.1-12.2).** The report descriptor, traced at
-  open; the report sizes (a read drops a leading `00` from a 9-byte report
-  only); the strings; whether the serial is printable (left out of the
-  transport info, which goes into capture reports); the release number,
-  shown as the firmware version.
-- **Requests (§3.1, §12.4-12.5).** A named BM52x is asked with its sheet's
-  `52 66` alone; whether it also answers `82 66` (D1) is open, and detection
-  takes its model bytes from either. What a meter does with another series'
-  request: a reply carrying another series' four model bytes fails at once,
-  naming that series' entry.
-- **No meter or meter off (§3.4, §12.8).** What the cable sends with no
-  meter, read as a timeout after 4 s; whether linking disables APO (D2).
-- **Detection misses (§3.3, §12.7, §12.9).** A BM86x at 500000 counts (1.25
-  readings a second) against the three 600 ms windows (≈1.8 s), and whether
-  a new request cancels a pending one; capacitance slower than 4 s; a BM86x
-  not sending `86` in bytes 20-22, which detection needs and a named read
-  does not (the BM860 sheet names byte 23 alone; community captures show
-  `86` in all four, §13.3).
-- **Late replies (§3.3).** Replies carry no sequence number, so one that
-  arrives after its read timed out, in capacitance say, is taken as the
-  next request's reply, and the readings can run one poll behind; the drain
-  before each request drops only what has already arrived.
-- **`auto` and the other cables.** `auto` stops at a BU-86X whose meter is
-  silent and does not reach Bluetooth, and with any other cable plugged in
-  too it never probes the BU-86X; setup and detection docs say to name the
-  meter.
-- **Unconfirmed decodes, both maps (§5.2, §7.3, §8.2, §9.1,
-  §12.10-12.18).** T1 + T2 against T1 − T2: both T bits read as T1-T2, the
-  dash silent; how the meter draws InEr's I (`?nEr` and `1nEr` both read as
-  InEr) and C_Er's `_`; what an open thermocouple shows (dashes and the unit
-  letter read as no reading); △ read as REL.
-- **Unconfirmed decodes, BM86x (§5, §9.1).** The 500000-count digits; the
-  sheet's example without its main V, which reads as an unknown function;
-  the bar scale, ③ and ④, which stay silent.
-- **Unconfirmed decodes, BM82x and BM52x (§4.3, §6, §7.3, §12.3,
-  §12.13-12.17).** Report II's ID at byte 10 and the small display's digits
-  at 11-14, as BM820 Table 1 has them, not the sheet's example; the small
-  display's own C or F on a temperature, and DC② and T1② there as sub-values
-  no manual figure shows; "E.F." read by its letters, its points unread, and
-  the EF field strength as the count of the minus and dashes lit (the
-  manual's figures show four and five); AutoCheck's Ω with the continuity
-  symbol read as LoZ Ω, and any other function with LoZ reported; Hi, Lo,
-  LPF, @, the "%" beside △, the small D%, the MAX-MIN dash and 18.3, all
-  silent; %4~20mA (14.4), which no BM820s manual function lights, read as
-  the loop percentage; the "don't care" bytes 2, 18, 24 bits 3-0 and 25-27.
-  Ω②, F② and S②, which Brymen's program reads as sub-values (§8.1) though no
-  manual function shows them, are reported and dropped, as is a number
-  beside D%②. What dBm shows with the leads open is in no manual figure; on
-  a BM82x a row of dashes there would read as the EF field.
-- **Unconfirmed decodes, BM52x (§7.3, §11.4).** The logging words (LEFt,
-  Strt, PAUS, Cont, StoP, the interval `t0.05`) read as no reading, and a
-  session page `P.001` as Recall; R and C lit together read as Recall and no
-  reading whatever the digits show; the memory points left and the logged
-  item number, digits with no unit (manual p.15-16), are reported as an
-  unknown function until a capture shows what is lit with them.
-- **Not implemented or unmapped.** The BM520s logged-memory download (§10);
-  spec tables, after a first capture; Elma rebrands (§13.8); the BU-82X the
-  BM820s manual names once (§12.6).
 
 ### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
 

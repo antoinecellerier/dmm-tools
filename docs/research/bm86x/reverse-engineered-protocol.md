@@ -13,10 +13,10 @@ and BM520s. The BM521s and BM525s also answer three commands that page out
 their logged memory. The live readings of all three series are
 implemented, experimentally (`crates/dmm-lib/src/protocol/bm86x/`); the
 memory download is not. No meter from this group has been on
-our bench: every fact in §1-11, and each question of §12, comes from
-Brymen's protocol documents, Brymen's two Windows programs and their
-READMEs, and the two user manuals; §13 compares them with community
-sources, and §12's "Community:" notes summarise §13. The approach doc
+our bench: every fact in §1-11 comes from Brymen's protocol documents,
+Brymen's two Windows programs and their READMEs, and the two user manuals;
+§13 compares them with community sources, and the checks a meter still has
+to answer are in [verification.md](verification.md). The approach doc
 beside it records the sources, the method and the clean-room boundary.
 
 Based on:
@@ -91,11 +91,10 @@ Confidence levels:
   address
 - **[INFERRED]** — deduction from the above, reason given
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
-  real meter (all in §12)
+  real meter (checks in [verification.md](verification.md))
 - **[HARDWARE]** — seen on a real meter: none yet
 - **[COMMUNITY]** — stated in or implied by a community source, §13 only
-  (opened 2026-09-27), summarised in §12's "Community:" notes; not a vendor
-  fact
+  (opened 2026-09-27); not a vendor fact
 
 ---
 
@@ -134,7 +133,7 @@ see §13.8.
 
 All [KNOWN]. The BM820s manual contradicts itself; Brymen's program for the
 BM820s and BM520s names only BC-86X, so three sources to one point to the
-BU-86X kit [INFERRED]; which cable a BM820s actually needs is open (§12).
+BU-86X kit [INFERRED]; which cable a BM820s actually needs is [UNVERIFIED].
 Community: see §13.3.
 That a BU-86X kit contains the BC-86X cable is [INFERRED from the names]:
 the manuals name the kit, the READMEs the cable.
@@ -341,8 +340,9 @@ Community: see §13.3.
 sheets, and it equals the request's Command 2 [INFERRED from the tables].
 The live path of either program reads no model byte; only the import probe
 reads byte 23 (§10.4) [VENDOR]. Nothing tells models within a series apart,
-2026-09-26 (sheets and programs) [KNOWN], [VENDOR]; the functions a meter
-shows are the only hint (§11.1) [INFERRED]. Community: see §13.3.
+2026-09-26 (sheets and programs) [KNOWN], [VENDOR]; whether a meter's reply
+does is [UNVERIFIED]; the functions a meter shows are the only hint (§11.1)
+[INFERRED]. Community: see §13.3.
 
 ### 4.3 Where report II starts in a BM820s/BM520s reply
 
@@ -443,7 +443,8 @@ beside the ① bar, is neither a table cell nor explained (BM860 p.1)
 
 "41 Segments Bar graph: 60 per second max" (BM860s manual p.17) [KNOWN]. The
 figure draws a scale 0-5, a ▷ at the right end and a "−" marked ④ at the
-left (BM860 p.1) [KNOWN]. The bar pointers are mapped to no bit; the only
+left (BM860 p.1) [KNOWN]. The bar pointers are mapped to no bit, and that
+no byte of a reply carries them is [UNVERIFIED]; the only
 bar bits are 4.4 "bar scale" and 4.5 (▭ ④), which is the bar's minus by its
 circled number [INFERRED]. 4.4 lights the scale numerals [INFERRED: it is
 set in the example, whose figure highlights the numerals]. Neither program
@@ -544,8 +545,8 @@ BM860 decoder, where 12.4 is the sub minus, is [INFERRED]. Community: see
 "41 Segments Bar-graph: 60 per second max" (BM820s manual p.19) [KNOWN]. The
 figure draws a scale "0" at the left, "6" and "10" at the right, a ▷ and a
 "−" marked ③, and ③ appears in no table cell (BM820 p.1, BM520-ML p.1)
-[KNOWN]. No bar bit exists in this map at all; neither program draws a bar
-[VENDOR]. In EF detection the bar shows the field strength, and while
+[KNOWN]. No bar bit exists in this map at all, and that no byte of a reply
+carries the bar is [UNVERIFIED]; neither program draws a bar [VENDOR]. In EF detection the bar shows the field strength, and while
 logging it becomes a swinging pointer (BM820s manual p.12, p.16) [KNOWN];
 neither is in the data [INFERRED from the map]. Community: see §13.5.
 
@@ -569,6 +570,13 @@ neither is in the data [INFERRED from the map]. Community: see §13.5.
 reply with 9.4 (@) set, with both 15.7 and 15.6 (sub m and µ) set, or with
 both 17.7 and 17.6 (main µ and m) set (Bs8252x `@ 0x424f75-0x425051`)
 [VENDOR]. Community: see §13.5.
+
+Small-display symbols the manual never shows lit [KNOWN]: a function with
+Ω② (16.1), F② (15.0) or S② (15.1), which Bs8252x reads as sub units (§8.1):
+none found in the BM820s manual's SELECT orders (§11.3), 2026-09-30; a
+figure with DC② (9.7) or T1② (9.2): none found in its function figures
+(p.6-17), 2026-09-30, whose small display shows Hz, AC V or A, T2, "Auto",
+"diod" and logging numbers.
 
 ## 7. Seven-segment characters
 
@@ -643,7 +651,13 @@ entry of its own and draws as 0; "S" draws as 5 [INFERRED: same segments].
 | t0.05 … | logging interval (BM820s manual p.15) | renders [VENDOR] |
 | LEFt, Strt, PAUS, Cont, StoP | logging (BM820s manual p.15-16) | "LEFt", "5trt", "PAU5", "Cont", "5toP" [VENDOR] |
 | P.001-P.999 | Recall session page (BM820s manual p.16) | renders [VENDOR] |
-| dashes | EF field strength (BM820s manual p.12) | "-" renders [VENDOR] |
+| dashes | EF field strength (BM820s manual p.12); the figures show four and five marks, a short one where the minus sits and then three or four dashes (p.13) [KNOWN]; how many light at each strength is [UNVERIFIED] | "-" renders [VENDOR] |
+
+The logging models also show bare numbers (BM820s manual p.15-17) [KNOWN]:
+after LEFt, the memory points left, and on SELECT, while logging or in
+Recall, the logged item number, each split into its most significant digits
+on the small display and its least on the main one ("4" and "3102" for
+43102 points). None of these figures lights a unit beside them.
 
 ## 8. How Brymen's programs derive the reading
 
@@ -789,6 +803,8 @@ the protocol reader and again for this spec]:
    figure lights **8p**, giving the caption's 60.11. Fig 1 and Bs86x put 7p
    after digit 7, so the hex and the figure disagree, not the labels
    [INFERRED]. Community: see §13.5.
+
+What a meter sends in either case is [UNVERIFIED].
 
 The figure lights 26 bar pointers, about 3.13 of the 0-5 scale, with no bit
 in the data [INFERRED, count by the protocol reader].
@@ -1104,6 +1120,9 @@ the BM820s (BM860s manual p.13; BM820s manual p.13) [KNOWN].
 
 - Messages: see §7.3. Open-thermocouple indication, "OPEn" or "E" codes:
   none found in either manual, 2026-09-26 [KNOWN].
+- dBm with the leads open: none found in either manual, 2026-09-30; every
+  dBm figure has the leads on an AC source (BM860s manual p.7, p.9; BM820s
+  manual p.7, p.9) [KNOWN].
 - Low battery: below about 7 V (BM860s manual p.17; BM820s manual p.19)
   [KNOWN]; logging stops when it shows (BM820s manual p.16) [KNOWN].
 - APO: about 17 minutes (BM860s manual p.14, p.17), about 30 minutes
@@ -1139,92 +1158,14 @@ What the wire requires of any decoder:
   last secondary digit on the BM820s/BM520s), not as annunciators.
 - No function or range code, no bar-graph bits, no checksum and no sequence
   number in either Table 1; that no byte carries the bar is [UNVERIFIED]
-  (§12.15).
+  (§5.4, §6.4).
 - Memory replies are four reports, 24 data bytes and a 16-bit sum of them,
   low byte first as Brymen's programs read it.
 
 ## 12. Open questions — [UNVERIFIED]
 
-Each question comes from Brymen's sources. Its "Community:" note, where
-there is one, summarises §13 [COMMUNITY] with the strength of the evidence;
-"settled" there means community evidence, not a meter on our bench, so
-every item stays on this list.
-
-1. **VID:PID**: 0x0820:0x0001 (programs) or 0x82/0x01 as printed (sheets)
-   (§2). Community: settled toward 0x0820:0x0001 (code+hw, three
-   projects, and DawOp's code), §13.2.
-2. **Report shape on the wire**: 8-byte input and 3-byte output reports,
-   unnumbered; the report descriptor (§2). Community: the shape is settled
-   (code+hw, one capture); the descriptor stays open, §13.2.
-3. **Report II position** in a BM820s/BM520s reply: byte 10 (BM820 Table
-   1, MRAD, the program) or byte 11 (BM820 example, BM520-ML) (§4.3).
-   Community: settled toward byte 10 (code+hw, BM525s and BM829s), §13.2.
-4. **BM52x real-time request**: whether a BM521s/BM525s answers `52 66`
-   (its sheet), `82 66` (Brymen's programs) or both, and with which byte 23
-   (§3.1). Community: narrowed; a BM525s answers `52 66` with `52` in bytes
-   20-23 (code+hw); `82 66` is in dispute, §13.3 D1.
-5. **Cross-series requests**: what a BM860s does with `82 66` (Bs86x's
-   import probe sends it) and a BM820s with `86 66` (§3.1). Community: none
-   found in these sources, 2026-09-27; the series code is the cable's to
-   interpret [INFERRED], §13.6.
-6. **Cable name for the BM820s/BM520s**: BU-86X/BC-86X (manual p.20,
-   READMEs) or BU-82X (manual p.13) (§1.2). Community: settled toward the
-   BU-86X (code+hw), §13.3.
-7. **Timing**: whether a reply waits for a fresh measurement; the reply rate
-   against the 5/s, 1.25/s and 20/s display rates; whether the device must
-   be reopened per reading as the sheets' flowchart does, or can be polled
-   continuously as the programs do; capacitance replies beyond 4 s (§3.2,
-   §3.3). Community: narrowed; no reopen is needed (code+hw), and about 5
-   replies a second [INFERRED from capture timestamps]; the 1.25/s and
-   20/s modes and capacitance stay open, §13.4.
-8. **No meter, meter off, APO**: what the cable sends without a meter; the
-   byte 23 values the programs map to `82`; whether linking really disables
-   APO (§3.4, §11.6). Community: narrowed; nothing with the meter off
-   (comment, [INFERRED]); APO in dispute (§13.4 D2); the byte 23 values
-   stay open.
-9. **Model bytes**: bytes 20-22 on a BM860s; whether any byte tells models
-   within a series apart (§4.2). Community: bytes 20-22 settled as `86`
-   (captures); telling models apart stays open, §13.3.
-10. **BM860 secondary point**: the example's hex (7p, "6.011") against its
-    figure (8p, "60.11"); the main V bit absent in the example (§9.1).
-    Community: narrowed; the BU-86X decoders follow Table 1 (code+hw); the
-    captures fit it but do not record the LCD; the V bit stays open, §13.5.
-11. **500000-count mode**: how the six main digits and the points are used
-    (§5.2).
-12. **Minus segments**: 4.7 and 12.4 (BM860s), 4.7 and 9.5 (BM820s/BM520s)
-    identified by position and program use (§5.3, §6.3). Community:
-    corroborated (code+hw, one capture), §13.5.
-13. **Byte 18 bit 3** on the BM820s/BM520s: the programs' "mV" variant,
-    "don't care" in the sheet (§8.1).
-14. **Unexplained segments**: △ (5.0; 4.6), "%" (4.5), Hi/Lo, LPF, @, the
-    ③/④/⑤ dashes, the BM860s "bar scale" bit and the small "1" beside 1g
-    (§5.3-§5.5, §6.5). Community: narrowed; △ as relative zero and ⑤ as
-    the MAX-MIN dash (code+hw); ③ as the T1-T2 dash (code+hw, one
-    project); "%", Hi/Lo and @ reported unsupported on a BM525s (comment);
-    LPF, ④, bar scale and the "1" stay open, §13.5.
-15. **Bar graph**: that no byte carries it, in any mode (§5.4, §6.4).
-    Community: no data; the two BM860s captures are near-zero readings with
-    bar-scale off, so they don't show where the bar is, §13.5.
-16. **Glyphs**: how the meter draws I (InEr), _ (C_Er), the points of
-    "E.F." and the EF dashes (§7.3). Community: InEr is shown on a BM525s
-    (comment); the glyphs stay open, §13.5.
-17. **Don't-care bytes**: what the BM860s sends in bytes 2, 20-22 and
-    24-27, and the BM820s/BM520s in bytes 2, 18, 24 bits 3-0 and 25-27
-    (§4.1, §5.1, §6.1). Community: BM860s narrowed; byte 2 `00` (`FF` in
-    resistance, comment), 20-22 `86` and 24-27 `00` (captures); the
-    BM820s/BM520s bytes stay open, §13.3.
-18. **T1 + T2 against T1 − T2**: the dash bit as the only difference (§8.2).
-    Community: the projects disagree; open, §13.5.
-19. **Memory download**: checksum byte order on the meter; D3-D0 as digits
-    or a binary count; MRAD's pointer and address inconsistencies; the
-    Model_Id values 00h/01h; the 60.00A range against the manual's 10.00A;
-    AutoCheck sessions; behaviour in capacitance and during 50 % power-down
-    (§10). Community: narrowed; checksum low byte first, TotalBytes from
-    Model_Id, addresses low byte first and Model_Id `01` on a BM525s
-    (capture); the rest stays open, §13.7.
-20. **Manual gaps**: the BM867s, 821s, 822s and 827s dials; DC+AC current
-    on the 821s/822s; the VFD SELECT order; the BM820s manual's "1V range"
-    Hz sensitivity (p.7), a range the meter does not have (§11).
+What a meter still has to answer is in [verification.md](verification.md);
+what the community sources add to each question is §13.
 
 ---
 
@@ -1398,6 +1339,7 @@ order stands; sigrok's differs from both with no capture behind it.
   (`libsigrok/README.devices:445-447` lists one for the BM257s).
 
 Not answered by the community sources (none found in these sources,
-2026-09-27): §12.5 beyond the inference of §13.6, §12.11, §12.13, §12.15,
-§12.16's glyphs, §12.20, and every question about the BM867s, 821s, 822s,
-827s and 521s.
+2026-09-27): cross-series requests (§3.1) beyond the inference of §13.6, the
+500000-count digits (§5.2), byte 18 bit 3 (§8.1), the bar graph (§5.4,
+§6.4), the glyphs of §7.3, the manual gaps of §11, and every question about
+the BM867s, 821s, 822s, 827s and 521s.

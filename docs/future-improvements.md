@@ -383,6 +383,14 @@ The 121GW logs to its micro SD card as CSV: sample, then the main and the second
 
 Use cases: reviewing a field log taken without Bluetooth, on the same graph and statistics as a live session.
 
+### BM520s logged-memory download
+
+**Complexity:** Medium
+
+The BM521s and BM525s log up to 10800 and 87000 readings, which Brymen's memory commands (`00 52 88`, `…89`, `…8A`) page out in 24-byte blocks (bm86x spec §10). Download them into the GUI graph and the CSV/JSON export; what a meter still has to answer is in the family's [verification list](research/bm86x/verification.md#logging-models).
+
+Use cases: logging sessions recorded in the field and retrieved later, as with the UT181A.
+
 ### Known adapters first in the Bluetooth fallback
 
 **Complexity:** Low

@@ -65,7 +65,7 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT_82),
     manual_url: Some(BM820S_520S_MANUAL),
     // The manual names the BU-86X once and the BU-82X once, Brymen's
-    // program for the series the BC-86X cable alone (spec §1.2, §12.6).
+    // program for the series the BC-86X cable alone (spec §1.2).
     links: &[bu86x::NAME],
     bluetooth_names: &[],
 };

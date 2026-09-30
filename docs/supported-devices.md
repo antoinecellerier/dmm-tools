@@ -223,7 +223,7 @@ programs and manuals; the tool reads live readings, not the logged memory.
 Nothing a meter sends tells the models of a series apart, so each series
 opens as one entry: `bm86x`, `bm82x` and `bm52x`. The BM820s manual names
 the cable BU-82X on one page and BU-86X in its accessory list
-([backlog](verification-backlog.md#brymen-bu-86x-bm86x-bm82x-and-bm52x-experimental-awaiting-a-hardware-report)).
+([open checks](research/bm86x/verification.md#cable)).
 
 ## Not supported yet
 

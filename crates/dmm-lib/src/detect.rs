@@ -1031,7 +1031,7 @@ mod tests {
     }
 
     /// Brymen's programs expect a BM52x to answer the BM82x's request with
-    /// its own model bytes (bm86x spec §3.1, §12.4): the model bytes decide,
+    /// its own model bytes (bm86x spec §3.1): the model bytes decide,
     /// whichever request drew them.
     #[test]
     fn model_bytes_decide_whichever_request_drew_them() {
