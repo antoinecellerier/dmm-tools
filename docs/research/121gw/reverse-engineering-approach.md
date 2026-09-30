@@ -57,7 +57,7 @@ the eevblog.com files from a browser on 2026-09-26.
    `git:<sha>:path:line` or `master path:line`.
 3. **UEi's Android app**, `kr.co.finest.eevblog` 1.0.6 (versionCode 6, minSdk
    18, targetSdk 19), linked from the store page as "UEI's Android app" on
-   Google Play. The user approved it on 2026-09-26 and asked for a mirror
+   Google Play. The maintainer approved it on 2026-09-26 and asked for a mirror
    download, from APKPure:
    https://d.apkpure.com/b/APK/kr.co.finest.eevblog?version=latest.
    Decompiled with jadx 1.5.6 into `uei-app/jadx/` (exit 0); no smali check
@@ -144,8 +144,8 @@ recognition.
 ## Methodology
 
 1. **Acquisition.** The store page listed the sources; the eevblog.com files
-   were saved from a browser by the user (Cloudflare), the app repository
-   cloned, UEi's APK taken from APKPure with the user's approval, and every
+   were saved from a browser by the maintainer (Cloudflare), the app repository
+   cloned, UEi's APK taken from APKPure with the maintainer's approval, and every
    file hashed on arrival (`SOURCE.txt`). The PDFs were rendered to PNG.
 2. **Branch check.** `git log --all` on EEVblog's repository showed that the
    binary-packet code (commit `43b3e94`, 2018-03-22, onwards) never reached
