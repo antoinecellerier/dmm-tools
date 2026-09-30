@@ -1142,57 +1142,6 @@ UT60BT has community frames on record; the UT202BT has no capture anywhere.
 - **Spec tables.** None until a meter confirms the range tables; the
   manuals' spec pages are the source then.
 
-#### UT8802 / UT8802N
-
-- Frame extraction (8-byte, 0xAC header, no checksum)
-- ~~Negative reading shown and exported unsigned~~ **Fixed 2026-09-08**:
-  the parser now puts the sign in `display_raw`; the digit nibbles cannot
-  carry one (uci_dll_decompiled.txt:24813). The `dcv_negative` capture
-  step still confirms the bit itself
-- 0x5A streaming trigger byte — the vendor DLL only sends 0x5A on the
-  QinHeng/CH9325 init path, never to CP2110 devices (2026-06 review);
-  does the UT8802 stream without it, and is sending it harmful?
-- Position code mapping (35 codes, 0x01-0x2D with gaps)
-- Unit magnitude per position. **Resolved from vendor [VENDOR]** (2026-07
-  review): the display digits are range-relative, and `FUN_1001cd30`
-  (uci_dll_decompiled.txt:23603) maps each position code to the SI prefix
-  the vendor renders via `FUN_1001cec0`. Previously the table reported
-  base units with the decade stranded in `range_label`, so capacitance
-  and frequency readings were exported off by up to 10^9 (10 nF logged
-  as "10.00 F"). Hardware must confirm: does a 200 mV reading arrive as
-  millivolts (e.g. "123.45") as the prefix table implies, and does a
-  2 kΩ range report "1.234" for 1.234 kΩ?
-- Display digit order. **Corrected from vendor [VENDOR]** (2026-06
-  review): MSD = byte 4 low nibble, then byte 3 hi/lo, byte 2 hi/lo
-  (uci_dll_decompiled.txt:24714-24719) — previous code had the order
-  reversed. Hardware confirmation pending: any reading with distinct
-  digits settles it.
-- Decimal point position (byte 5 low nibble, 0-4)
-- AC/DC determination. **Corrected from vendor [VENDOR]** (2026-06
-  review): AC/DC comes from a position-code lookup (FUN_1001ca30);
-  byte 5 bits 4-5 are diode/SCR probe direction, not coupling. What
-  byte 5 bits 4-5 carry outside diode/SCR modes is unverified.
-- Overload. **Corrected from vendor [VENDOR]** (2026-06 review): the
-  vendor's only OL mechanism is byte 7 bit 6 (uci_dll:24806-24821);
-  digit nibbles are never checked. We keep the 0x0C digit check as a
-  defensive secondary. Does a real OL set bit 6, send 0x0C nibbles,
-  both, or neither?
-- Sign/polarity (byte 7 bit 7)
-- AUTO flag inverted logic (byte 7 bit 2 clear = auto ON)
-- Byte 7 flag bits (HOLD/REL/MAX/MIN). **Resolved from vendor [VENDOR]**
-  (2026-04-19): a second Ghidra pass traced each status-word bit back
-  to a specific byte-7 bit via the shift chain in `FUN_1001e0a0`.
-  Mapping: MIN=bit 0, MAX=bit 1, AUTO=bit 2 (inverted), REL=bit 3,
-  HOLD=bit 4, Over=bit 5, OL=bit 6, Sign=bit 7. All five previous
-  guesses (bits 6/5/4/3 for HOLD/REL/MAX/MIN) were wrong — HOLD and
-  REL swap with bit-range 4-5 vs 0-3. Real-hardware confirmation is
-  still pending. See `docs/research/uci-bench-family/reverse-engineered-protocol.md` §3.5.
-- Byte 6 purpose: bargraph or secondary status? [UNVERIFIED]
-- Byte 4 high nibble and byte 5 bits 6-7: the vendor never reads them,
-  and the parser reports them as unrecognised when set (noted 2026-09-17)
-- Overload detection (BCD nibble 0x0C)
-- Streaming rate
-
 ### Capture and display checks a UT181A runs
 
 The meter's own items are in the
@@ -1729,10 +1678,6 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 - ~~**UT804 interface protocol V1.0 (2023-11-15)**~~ — **DONE 2026-09-19**:
   read into the UT803/UT804 spec as [VENDOR-DOC]. It covers the UT804 alone,
   so it says nothing of the UT804+.
-- ~~**UT8802N and UT8803N programming manuals V2.0**~~ — **not new**
-  (2026-09-19): every bench "programming manual" on UNI-T's Chinese, US and
-  global sites is byte-identical to the UCI manual V1.1, Chinese or English,
-  that the UCI bench spec was built from.
 - **VC880 Protocol Rev 2.4** (VC-880, VC650BT) and **VC890 Protocol Rev
   1.3** (VC-890), Conrad's protocol documents, archived in
   `references/vc880/protocol/` and `references/vc890/protocol/` with a

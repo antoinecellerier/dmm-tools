@@ -154,7 +154,7 @@ The UT8802 uses a simpler wire format than the UT8803:
 | 2 | Digits 4-5 | High nibble (`>>4`): digit 4; Low nibble (`&0xF`): digit 5 (LSD) | Display digits |
 | 3 | Digits 2-3 | High nibble (`>>4`): digit 2; Low nibble (`&0xF`): digit 3 | Display digits |
 | 4 | Digit 1 | Low nibble (`&0xF`): digit 1 (MSD); High nibble: unused | Most significant digit |
-| 5 | DP + Flags | Low nibble (`&0xF`): decimal point position (0-4); Bits 4-5 (`>>4 & 3`): diode/SCR probe direction | Decimal placement + probe direction |
+| 5 | DP + Flags | Low nibble (`&0xF`): decimal point position (0-4); Bits 4-5 (`>>4 & 3`): diode/SCR probe direction; Bits 6-7: never read [VENDOR] | Decimal placement + probe direction |
 | 6 | Status | All 8 bits extracted individually | Bargraph or secondary status [UNVERIFIED] |
 | 7 | Sign + Flags | Bit 7 (`>>7`): polarity (1=negative); Bits 0-6: status flags | Sign + HOLD/REL/MAX/MIN/AUTO |
 
@@ -200,9 +200,8 @@ replaces the display with the literal `"  0L "`
 
 **Sign**: Byte 7 bit 7 determines polarity. When set, the parsed
 numeric value is negated (multiplied by -1.0). The digit string never
-carries a sign — the vendor passes the bit to its string builder as a
-separate argument (`FUN_1001c950`, line 24813) — so the implementation
-prefixes `-` to `display_raw` itself. [VENDOR]
+carries a sign: the vendor passes the bit to its string builder as a
+separate argument (`FUN_1001c950`, line 24813). [VENDOR]
 
 ### 3.3 Position Code Table -- [KNOWN] + [VENDOR]
 
@@ -301,11 +300,10 @@ Base units come from `FUN_1001cf30` (line 23729): 0=V (0x01, 0x03-0x06,
 2=Ω (0x19-0x1D, 0x1F, 0x24), 3=Hz (0x2B-0x2D), 7=F (0x27-0x29),
 8=hFE (0x25), 9=% (0x22).
 
-Our `POSITION_TABLE` bakes prefix and base unit together into its `unit`
-column, so a 2 kΩ reading of "1.234" reports `1.234 kΩ` and a 200 mV
-reading reports millivolts. This mirrors how the UT8803 parser resolves
-its units (`FUN_1001cdc0` + `FUN_1001cff0`). Hardware confirmation is
-still pending — see `docs/verification-backlog.md`.
+So "1.234" on the 2 kΩ position is 1.234 kΩ, and a 200 mV reading is in
+millivolts. The vendor's UT8803 parser resolves its units the same way
+(`FUN_1001cdc0` + `FUN_1001cff0`). Not yet seen on a meter
+([verification](verification.md#positions-and-units)).
 
 ### 3.4 Byte 5 Flags (Bits 4-5) -- [VENDOR]
 
@@ -331,7 +329,8 @@ For diode mode (position 0x23), these bits encode probe direction:
 - Value 1: left-to-right only (bit 2 set)
 
 For SCR mode (position 0x2A), similar direction encoding applies.
-[VENDOR, partially UNVERIFIED due to Ghidra decompiler artifacts]
+[VENDOR, partially UNVERIFIED due to Ghidra decompiler artifacts: the
+decompile compares this 2-bit value against 0x10 and 0x11]
 
 ### 3.5 Byte 7 Status Flags -- [VENDOR]
 
@@ -354,14 +353,13 @@ debug format at line 24865):
   status-word D6.
 - **Bit 3**: REL → D30
 - **Bit 4**: HOLD → D31
-- **Bit 5**: Over-range → D18 (not currently surfaced in `StatusFlags`)
+- **Bit 5**: Over-range → D18
 - **Bit 6**: OL → D7
 - **Bit 7**: Sign/polarity (1 = negative) → D19. Vendor multiplies the
   parsed float by -1 when set.
 
-[VENDOR]. Real-device confirmation is still pending — the mapping is
-deterministically derived from the decompile but has not been witnessed
-on hardware.
+[VENDOR]. Derived from the decompile; not yet seen on a meter
+([verification](verification.md#flags)).
 
 ### 3.6 Byte 6 Purpose -- [UNVERIFIED]
 
@@ -557,15 +555,14 @@ The DLL contains three serial frame parsers (FUN_1001d960, FUN_1001db70,
 FUN_1001de60) that handle FS9721-style protocols (0xF0|segment header
 bytes, CR/LF delimiters). However, these parsers appear to be for
 **older UNI-T models** (UT61E non-plus, UT60E, etc.) that use the
-FS9721/FS9922 chipset, not the UCI bench DMMs.
+FS9721/FS9922 chipset, not the UCI bench DMMs. No UT805A has been
+captured.
 
-The actual serial frame format used by the UT805A for UCI communication
-is unknown. Possible scenarios:
-1. Same 0xAC or 0xABCD binary frames as HID models, sent over serial
-2. A different text-based or BCD protocol specific to serial
-3. The FS9721-style protocol (less likely given the UCI SDK context)
-
-Without a UT805A device or serial capture, this remains unverified.
+The UT805A's own user manual (`references/ut800/ut805a/`, read 2026-04-10)
+documents an ASCII text protocol: 10-byte frames ending CR LF,
+single-letter commands, 9600/8N1 on a USB virtual COM port, not HID
+[MANUAL]. The UT805A is not supported
+([candidates](../new-device-candidates.md#not-yet-investigated)).
 
 ### 5.5 UT805A Dual Display -- [KNOWN]
 
@@ -676,7 +673,9 @@ The family reaches the host over three transport paths:
 
 1. **CP2110 HID** (UT8802, UT8803): Same transport as UT61E+.
    Feature reports 0x41 + 0x50 set it up (same as UT61E+, minus the
-   purge). No trigger byte (corrected 2026-06): the meter streams.
+   purge). No trigger byte (corrected 2026-06): uci.dll sends nothing;
+   streaming unprompted is not yet seen on a meter [UNVERIFIED]
+   ([verification](verification.md#stream)).
 
 2. **QinHeng HID** (UT632, UT803, UT804): Different chip, different
    feature report format. uci.dll runs the primary init with trigger,
@@ -684,7 +683,8 @@ The family reaches the host over three transport paths:
    takes the wire format from the first frame header (§2.3).
 
 3. **Serial** (UT805A): Standard COM port at 9600 baud. Data bits may
-   be 7 (per manual) or 8 (per DLL default). Wire format unknown.
+   be 7 (per the programming manual) or 8 (per DLL default); the UT805A
+   manual's ASCII protocol is in §5.4.
 
 ### 7.2 Wire Format Detection
 
@@ -717,13 +717,14 @@ UT8803) share VID 0x10C4, PID 0xEA80. Only the application layer
 tells them apart:
 
 - UT61E+/B+/D+/UT161x: polled protocol (send request, get response)
-- UT8802: streaming unprompted, 0xAC frames
-- UT8803: streaming unprompted, 0xABCD frames
+- UT8802: 0xAC frames, uci.dll sending nothing; streaming unprompted is
+  not yet seen on a meter [UNVERIFIED] ([verification](verification.md#stream))
+- UT8803: 0xABCD frames, uci.dll sending nothing
 
 What separates them:
 1. The UT61E+ measurement request is `AB CD 03 5E 01 D9`
 2. A valid response to it means a UT61E+ family device
-3. The UT8802 and UT8803 stream without a request
+3. uci.dll sends the UT8802 and UT8803 no request
 4. Their first frame header is 0xAC or 0xABCD
 
 The UT61E+ family also answers Get Name (`0x5F`), and the reply names the
@@ -763,17 +764,9 @@ exact model; detection is written up in
 
 ### Requires Verification ([UNVERIFIED])
 
-| Finding | Question |
-|---------|----------|
-| ~~QinHeng feature report baud rate encoding~~ | **RESOLVED**: primary=2400 baud (0x0960 LE), fallback=19200 baud (0x4B00 LE) |
-| ~~Which wire format per QinHeng model~~ | **RESOLVED**: UT803/UT804 send 11-byte packets ending CR LF with structured data (NOT LCD segments, NOT 0xAC/0xABCD), per the standalone apps' handlers (2026-09-16; the 2026-04-10 reading of 14-byte FS9721 framing was wrong). UCI SDK's auto-detect is for the SDK only. |
-| UT805A serial frame format | UT805A manual documents ASCII text protocol (10-byte frames + CR/LF, single-letter commands). NOT the same as HID models. |
-| ~~UT805A 7-bit vs 8-bit data~~ | **RESOLVED**: UT805A manual says 9600/8N1. USB is virtual COM port (not HID). |
-| UT8802 byte 6 purpose | Bargraph? Secondary status? |
-| ~~UT8802 byte 7 exact bit assignments~~ | **RESOLVED**: MIN=bit 0, MAX=bit 1, AUTO=bit 2 (inverted), REL=bit 3, HOLD=bit 4, Sign=bit 7. See §3.5. |
-| UT8802 diode/SCR direction flags | Ghidra decompiler artifacts in comparison values |
-| UT803 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding — need verification on a UT803; the UT804's were confirmed on hardware (issue #16, 2026-09-18). See `docs/research/ut803/reverse-engineered-protocol.md` |
-| UT805A ASCII protocol | Fully documented in manual but not yet implemented (needs serial transport) |
+Open UT8802 checks are in [verification.md](verification.md); the UT803's
+are with its [spec](../ut803/reverse-engineered-protocol.md), and the
+UT805A, unsupported, is in [candidates](../new-device-candidates.md#not-yet-investigated).
 
 ---
 

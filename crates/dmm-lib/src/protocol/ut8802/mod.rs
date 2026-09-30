@@ -1,6 +1,6 @@
 //! UT8802/UT8802N bench multimeter protocol.
 //!
-//! Streaming protocol: host sends 0x5A trigger byte after CP2110 init,
+//! Streaming protocol: the host sends nothing after CP2110 init, and the
 //! meter streams 8-byte measurement frames continuously.
 //!
 //! Frame format: AC [position] [d1d2] [d3d4] [d5xx] [dp+flags] [status] [sign]
@@ -228,8 +228,8 @@ fn position_is_dc(position: u8) -> bool {
 /// Convert a BCD nibble to its display character.
 ///
 /// - 0x0-0x9 → '0'-'9'
-/// - 0x0A → '0' (treated as zero per vendor code)
-/// - 0x0C → 'L' (overload indicator)
+/// - 0x0A → '0' and 0x0C → 'L' (overload), kept defensively: the vendor
+///   gives neither a meaning, adding 0x30 to every nibble (spec §3.2)
 ///
 /// Other values should be rejected by the frame extractor's validation,
 /// but we handle them defensively with '?'.
@@ -334,9 +334,9 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         chars.push(ch);
     }
 
-    // Replace leading zeros with spaces (vendor behavior), but preserve
-    // the digit just left of the decimal point (or the last digit when
-    // dp_pos=0). Without this, an all-zero reading would become "     "
+    // Blank leading zeros up to the units digit (the one left of the
+    // decimal point, or the last when dp_pos=0); the vendor blanks only the
+    // first character (spec §3.2). Without this, an all-zero reading would become "     "
     // and fail to parse as 0.0.
     let keep_pos = if dp_pos > 0 {
         chars.len() - dp_pos as usize - 1

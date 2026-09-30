@@ -33,6 +33,14 @@ Added since:
    translation gets wrong
 6. **Issue #16** -- a UT804's CH9325 reports and range nibbles (dated in
    `../ut803/reverse-engineered-protocol.md` §9)
+7. **UT805A user manual** (UNI-T, `references/ut800/ut805a/`, added
+   2026-04-10) -- the UT805A's ASCII serial protocol (spec §5.4)
+
+Checked 2026-09-19, nothing new: the UT8802N and UT8803N programming
+manuals (编程手册 REV.2) and every other bench programming manual on
+UNI-T's Chinese, US and global sites are byte-identical to the UCI manual
+V1.1 above, Chinese or English
+([candidates](../new-device-candidates.md#uni-t-chinese-sites)).
 
 ### Avoided (clean-room boundary)
 
@@ -175,7 +183,7 @@ manual tables:
 | UT8802: AUTO flag has inverted logic | **[VENDOR]** | Ghidra: `~(byte7 >> 2)` |
 | QinHeng primary init: feature report + 0x5A | **[VENDOR]** | Ghidra: FUN_1001d360 |
 | QinHeng fallback init: different report, no trigger | **[VENDOR]** | Ghidra: FUN_1001d270 |
-| CP2110 init: enable + config + 0x5A trigger | **[VENDOR]** | Ghidra: FUN_1001d460 |
+| CP2110 init: enable + config, no UART write | **[VENDOR]** | Ghidra: FUN_1001d460 (0x5A misattributed until 2026-06) |
 | CP2110 init: no purge report (unlike UT61E+) | **[VENDOR]** | Ghidra: absence of [0x43,0x02] |
 | Auto-detect: scans for 0xAC or 0xABCD headers | **[VENDOR]** | Ghidra: FUN_1001eb30 |
 | Frame dispatch: type 4=UT8802, type 5=UT8803 | **[VENDOR]** | Ghidra: connection dispatch |
@@ -185,43 +193,14 @@ manual tables:
 
 | Finding | Confidence | Source |
 |---------|------------|--------|
-| UT632/803/804 use same wire format as UT8802 or UT8803 | **[KNOWN]** | Auto-detected at runtime; DLL scans for 0xAC or 0xABCD headers |
+| ~~UT632/803/804 use same wire format as UT8802 or UT8803~~ | superseded | The UT803/UT804 send neither header (spec §2.3) |
 | QinHeng feature reports: primary=2400, fallback=19200 baud | **[VENDOR]** | Disassembly: little-endian rate word at bytes 1-2 (VA 0x1001D38F-0x1001D3AD, 0x1001D2B2-0x1001D2CD) |
-| UT805A serial likely uses same measurement frame format | **[DEDUCED]** | Same UCI layer; serial parsers in DLL are for older FS9721 meters |
+| ~~UT805A serial likely uses same measurement frame format~~ | superseded | Its manual documents an ASCII protocol (spec §5.4) |
 | Byte 6 in UT8802 frame is bargraph/progress indicator | **[DEDUCED]** | Passed to bitset construction function FUN_1001b9b0 |
 
 ### What Still Requires Device Verification
 
-1. ~~**QinHeng feature report baud rate encoding**~~ — **RESOLVED**
-   2026-04-09: the DLL writes the rate as a little-endian word at bytes
-   1-2. Primary report `00 60 09 03...` = 2400 baud, fallback
-   `00 00 4B 03...` = 19200 baud. What the `0x03` in byte 3 means is
-   [UNVERIFIED]; the UT803/UT804 apps put it in byte 5. Community
-   comparison: [Cross-Reference with Community Sources](#cross-reference-with-community-sources).
-
-2. ~~**Which wire format do UT632/803/804 use?**~~ — **RESOLVED**
-   2026-04-09: The vendor DLL does not dispatch per model. All QinHeng
-   models use runtime auto-detection: scan incoming data for 0xAC or
-   0xABCD headers (Ghidra FUN_1001eb30). Implementation should auto-detect.
-
-3. **UT805A serial frame format**: The programming manual mentions
-   7 data bits, but the DLL defaults to 8. The actual serial framing
-   for UCI bench DMMs is unclear -- the FS9721-style parsers in the
-   DLL appear to be for older models. [UNVERIFIED]
-
-4. **UT8802 byte 6 purpose**: Passed to bitset construction but exact
-   meaning unknown. Likely bargraph or secondary status. [UNVERIFIED]
-
-5. **UT8802 byte 7 complete bit mapping**: The flag construction from
-   byte 7 involves complex Ghidra stack aliasing that makes exact bit
-   positions uncertain. Status flags (HOLD, REL, MAX, MIN, AUTO) are
-   present but exact bit assignments need device confirmation.
-   [UNVERIFIED]
-
-6. **Diode/SCR flag construction anomaly**: Ghidra shows comparisons
-   against 0x10/0x11 on a 2-bit-wide variable -- likely decompiler
-   artifacts. The actual flag bit meanings for diode direction need
-   device verification. [UNVERIFIED]
+Listed in [verification.md](verification.md).
 
 ## Cross-Reference with Community Sources
 
@@ -253,7 +232,7 @@ listed in `../ut803/reverse-engineering-approach.md`, Sources Used.
 | UNI-T | `references/ut8803/UT8803E_User_Manual.pdf` | UT8803 measurement ranges (reference) |
 | UNI-T | `references/ut8803/UNI-T_SDK_V2.3.zip` | UCI SDK headers, examples, uci.dll binary |
 | Silicon Labs | (same as UT61E+/UT8803 analysis) | CP2110 datasheet, AN434 |
+| UNI-T | `references/ut800/ut805a/ut805a-manual.pdf` | The UT805A's ASCII serial protocol and line settings (added 2026-04-10; scanned, no text layer) |
 
-Per-model user manuals for UT8802, UT632, UT803, UT804, and UT805A
-would provide measurement ranges and specifications but are not needed
+Per-model user manuals for UT8802, UT632, UT803 and UT804 would provide measurement ranges and specifications but are not needed
 for protocol understanding.
