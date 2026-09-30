@@ -24,8 +24,10 @@ in that list.
 - Rationale: "because", "so that", "since", "would otherwise", rejected
   alternatives. It goes to `docs/ux-design.md`, `docs/*-design.md` or a code
   comment.
-- Report or file schema keys, internal state names, tiers, timers. They go to
-  the design doc the section links to.
+- Report or file schema keys, internal state names, tiers. They go to the
+  design doc the section links to.
+- Timers and other retunable constants. They go to the code, named from the
+  design doc the section links to.
 - Verification history: reporter counts, cables tried, which modes are
   confirmed, what remains. It goes to `docs/supported-devices.md` and
   `docs/verification-backlog.md`; the reference says "experimental" and links
