@@ -15,10 +15,13 @@ dmm-cli <COMMAND> [OPTIONS]
 
 ## Description
 
-Communicates with digital multimeters over USB or Bluetooth. Supports live
-measurement reading, button commands, settings switching, protocol debugging, and
-guided data capture for verification. See [supported devices](supported-devices.md) for
-the full compatibility list.
+Communicates with digital multimeters over USB or Bluetooth. Supports
+[listing](#dmm-cli-list) and [inspecting](#dmm-cli-info) connected meters, live
+[measurement reading](#dmm-cli-read), [reading](#dmm-cli-get) and
+[switching](#dmm-cli-set) settings, [button commands](#dmm-cli-command),
+[protocol debugging](#dmm-cli-debug), guided [data capture](#dmm-cli-capture)
+for verification, and [shell completions](#dmm-cli-completions). See
+[supported devices](supported-devices.md) for the full compatibility list.
 
 Set `NO_COLOR=1` to disable colored output.
 

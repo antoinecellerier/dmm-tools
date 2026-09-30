@@ -197,3 +197,25 @@ fn cli_reference_tags_default_experimental_and_mock() {
         "{table}"
     );
 }
+
+/// The Description paragraph links every command section, in the order the
+/// sections come.
+#[test]
+fn cli_reference_description_links_every_command_section() {
+    let text = std::fs::read_to_string(repo_root().join("docs/cli-reference.md")).unwrap();
+    let sections: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.strip_prefix("### dmm-cli "))
+        .collect();
+    let description = text
+        .split("## Description\n")
+        .nth(1)
+        .and_then(|rest| rest.trim_start().split("\n\n").next())
+        .expect("the Description paragraph");
+    let linked: Vec<&str> = description
+        .split("(#dmm-cli-")
+        .skip(1)
+        .filter_map(|rest| rest.split(')').next())
+        .collect();
+    assert_eq!(linked, sections);
+}
