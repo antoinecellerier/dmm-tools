@@ -81,8 +81,35 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install pandoc
         run: sudo apt-get update && sudo apt-get install -y pandoc
+      - uses: dtolnay/rust-toolchain@stable
+      # The licences of the code compiled into the binaries, configured in
+      # scripts/third-party-licenses.toml, as the body of the page
+      # package-docs.py renders. A pinned release binary rather than cargo
+      # install: every build job waits on this one.
+      - name: Generate the third-party licences
+        env:
+          CARGO_ABOUT_VERSION: "0.9.2"
+          CARGO_ABOUT_SHA256: "9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af"
+        run: |
+          NAME="cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl"
+          # Verified before extraction, as actionlint is in ci.yml.
+          curl -sSLfo cargo-about.tar.gz \
+            "https://github.com/EmbarkStudios/cargo-about/releases/download/${CARGO_ABOUT_VERSION}/${NAME}.tar.gz"
+          echo "${CARGO_ABOUT_SHA256}  cargo-about.tar.gz" | sha256sum --check --strict
+          tar xzf cargo-about.tar.gz "${NAME}/cargo-about"
+          cargo fetch --locked
+          "${NAME}/cargo-about" generate --workspace --frozen --fail \
+            -c scripts/third-party-licenses.toml scripts/third-party-licenses.hbs \
+            -o third-party-licenses.html 2> cargo-about.log || { cat cargo-about.log; exit 1; }
+          cat cargo-about.log
+          # A clarification whose checksum no longer matches is only a warning,
+          # and the crate silently falls back to its metadata licence.
+          if grep -q WARN cargo-about.log; then
+            echo "::error::cargo-about warned; see the log above and scripts/third-party-licenses.toml"
+            exit 1
+          fi
       - name: Assemble the user docs
-        run: python3 scripts/package-docs.py package-docs
+        run: python3 scripts/package-docs.py package-docs third-party-licenses.html
       - uses: actions/upload-artifact@v7
         if: inputs.upload-artifacts
         with:
@@ -163,7 +190,8 @@ jobs:
             *) echo "Release version, no commit hash expected." ;;
           esac
 
-      # README, LICENSE, the user docs and their images, from the docs job.
+      # README, LICENSE, the third-party licences, the user docs and their
+      # images, from the docs job.
       - uses: actions/download-artifact@v8
         if: inputs.upload-artifacts
         with:

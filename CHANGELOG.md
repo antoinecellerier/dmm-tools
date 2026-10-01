@@ -62,6 +62,10 @@
 - **Big meter mode no longer cuts off buttons after a resize**
 - **The GUI stops redrawing nonstop when tiled smaller than it fits** — it redrew at the screen's refresh rate on tiling window managers.
 
+### Documentation
+
+- **Downloads include the licences of the third-party code they contain** — open `THIRD-PARTY-LICENSES.html`.
+
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 
 The GUI and CLI auto-detect the connected meter and switch mode and range on meters that take commands, the graph keeps hours of readings instead of minutes, and usability fixes land throughout. The UT804 now decodes readings and the UT61B+ reads volts correctly, both verified through the redesigned `capture` workflow; the UT181A is partly verified and shows its sub-values.

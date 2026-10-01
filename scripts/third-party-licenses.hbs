@@ -1,0 +1,26 @@
+{{!-- The body of THIRD-PARTY-LICENSES.html: scripts/package-docs.py wraps it
+      in the user docs' page style. --}}
+<h1>Third-party licences</h1>
+<p>dmm-cli and dmm-gui are licensed under the GPL-3.0-or-later (see <a href="LICENSE">LICENSE</a>).
+They contain the third-party code and fonts below, each under the licence
+shown with it.</p>
+{{!-- Copyright notices of fonts compiled into dmm-gui whose licence texts
+      below carry none, read from each font's own name table. sctk-adwaita
+      (winit's Wayland title bar) ships no licence file for Cantarell at all.
+      Their licences are the OFL-1.1 and Ubuntu Font Licence texts below. --}}
+<h2 id="fonts">Fonts in dmm-gui</h2>
+<ul>
+<li>Noto Emoji (epaint_default_fonts, SIL Open Font License 1.1): Copyright 2013 Google Inc. All Rights Reserved.</li>
+<li>Ubuntu Light (epaint_default_fonts, Ubuntu Font Licence 1.0): Copyright 2011 Canonical Ltd.</li>
+<li>Cantarell (sctk-adwaita, Linux only, SIL Open Font License 1.1): Copyright (c) 2009-2011, Understanding Limited (dave@understandinglimited.com), Copyright (c) 2010-2011, Jakub Steiner (jimmac@gmail.com).</li>
+</ul>
+{{#each licenses}}
+<h2 id="{{id}}-{{@index}}">{{name}}</h2>
+<p>Used by:</p>
+<ul>
+{{#each used_by}}
+<li><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></li>
+{{/each}}
+</ul>
+<pre><code>{{text}}</code></pre>
+{{/each}}

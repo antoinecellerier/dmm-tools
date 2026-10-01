@@ -6,9 +6,11 @@ next to LICENSE and the images they reference, in the repository's layout so
 their relative links keep working. A relative link to anything else (design
 notes, the backlog, research) points at GitHub at the commit being built. A
 relative link to a missing file fails the run. Each HTML page ends with a link
-to the repository and to that commit.
+to the repository and to that commit. Given THIRD_PARTY, the HTML fragment
+cargo-about renders from scripts/third-party-licenses.hbs, it also writes
+THIRD-PARTY-LICENSES.html in the same style.
 
-Usage: scripts/package-docs.py OUT_DIR    (needs pandoc on PATH)
+Usage: scripts/package-docs.py OUT_DIR [THIRD_PARTY]    (needs pandoc on PATH)
 """
 
 import re
@@ -85,8 +87,21 @@ def git(*args):
     ).stdout.strip()
 
 
+def render(text, source_format, title, footer, html):
+    """Render text to the standalone page html, in the docs' shared style."""
+    subprocess.run(
+        ["pandoc", "-f", source_format, "-t", "html5", "-s",
+         "--metadata", f"pagetitle={title}", "-V", "maxwidth=60em",
+         "-V", "mainfont=system-ui, sans-serif", "-V", "linkcolor=#0969da",
+         "-V", f"monobackgroundcolor={CODE_BACKGROUND}",
+         "-V", f"header-includes={STYLE}", "-V", f"include-after={footer}",
+         "-o", str(html)],
+        input=text, check=True, text=True, encoding="utf-8",
+    )
+
+
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3):
         sys.exit(__doc__.strip())
     out = Path(sys.argv[1])
     sha, short = git("rev-parse", "HEAD"), git("rev-parse", "--short", "HEAD")
@@ -102,16 +117,11 @@ def main():
         md.parent.mkdir(parents=True, exist_ok=True)
         md.write_text(rewrite(doc, text, out, sha, html=False), encoding="utf-8")
         title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), doc)
-        subprocess.run(
-            ["pandoc", "-f", "gfm", "-t", "html5", "-s",
-             "--metadata", f"pagetitle={title}", "-V", "maxwidth=60em",
-             "-V", "mainfont=system-ui, sans-serif", "-V", "linkcolor=#0969da",
-             "-V", f"monobackgroundcolor={CODE_BACKGROUND}",
-             "-V", f"header-includes={STYLE}", "-V", f"include-after={footer}",
-             "-o", str(html)],
-            input=rewrite(doc, text, out, sha, html=True),
-            check=True, text=True, encoding="utf-8",
-        )
+        render(rewrite(doc, text, out, sha, html=True), "gfm", title, footer, html)
+    if len(sys.argv) == 3:
+        fragment = Path(sys.argv[2]).read_text(encoding="utf-8")
+        render(fragment, "html", "Third-party licences", footer,
+               out / "THIRD-PARTY-LICENSES.html")
 
 
 if __name__ == "__main__":

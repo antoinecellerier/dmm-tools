@@ -290,9 +290,27 @@ cargo deny check
 
 The allow-list holds exactly the SPDX ids the graph needs today, so a new
 dependency on an unlisted licence fails the check — read the licence, decide
-whether it belongs in a GPL-3.0-or-later binary, and only then add the id.
-The check covers the six targets the release ships; a new target in
-`build-matrix.yml` goes into `deny.toml`'s `[graph]` list too.
+whether it belongs in a GPL-3.0-or-later binary, and only then add the id,
+both there and in `scripts/third-party-licenses.toml`'s `accepted` list. The
+check covers the six targets the release ships; a new target in
+`build-matrix.yml` goes into the `targets` lists of both files too.
+
+Every release archive carries `THIRD-PARTY-LICENSES.html`, the licence texts
+and copyright notices of the code compiled into the binaries. `build-matrix.yml`
+generates its body with [cargo-about](https://github.com/EmbarkStudios/cargo-about)
+from `scripts/third-party-licenses.toml` and the `.hbs` template beside it, and
+`scripts/package-docs.py` renders it in the user docs' style. A crate's
+declared licence can leave out what it compiles in (vendored C, fonts,
+generated tables), so the `.toml` clarifies those crates with checksummed
+licence files. A crate update that changes one of those files fails the build:
+re-read it, then update the entry. Locally, with a cargo-about binary from its
+releases:
+
+```sh
+cargo about generate --workspace --locked --fail -c scripts/third-party-licenses.toml \
+    scripts/third-party-licenses.hbs -o /tmp/third-party.html
+scripts/package-docs.py /tmp/package-docs /tmp/third-party.html
+```
 
 `.github/dependabot.yml` opens weekly update pull requests for the Cargo and
 Actions dependencies, with minor and patch bumps grouped into one PR per
@@ -315,8 +333,8 @@ read every nightly as newer. To try the real request locally, build with
 `DMM_PUBLISHED_BUILD=1`. It caches its answer in `update-check.json` beside
 `settings.json`; delete that file to ask again within the day.
 
-The archives carry only the user docs, as Markdown and as HTML, with LICENSE and
-the images they show. `scripts/package-docs.py` assembles them once per run for
+The archives carry only the user docs, as Markdown and as HTML, with LICENSE,
+THIRD-PARTY-LICENSES.html and the images the docs show. `scripts/package-docs.py` assembles them once per run for
 every archive. Relative links to any other doc become GitHub links at the built
 commit, and a link to a missing file fails the build. A new user doc goes into
 its `DOCS` list. To look at the result locally (needs `pandoc`):
