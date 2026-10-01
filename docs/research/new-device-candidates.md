@@ -186,39 +186,34 @@ UT515A+/C or UT516E: no source for their protocols is known.
 
 ---
 
-### OWON B35T+ / B41T+
+### OWON B/OW handhelds and CM2100B
+
+**In progress since 2026-10-01**, clean-room from OWON's own app and PC
+software (`docs/research/owon/` once specified).
 
 | Aspect | Details |
 |--------|---------|
-| Models | B35T+, B41T+; community tools also name the CM2100B and the OW18E |
-| Price | B35T+ ~$80-100, B41T+ ~$109 |
-| Connection | BLE 4.0 (no USB data — Bluetooth only to phone, or proprietary OWON USB BLE dongle for PC) |
-| Protocol | 14-byte BLE GATT packets, well reverse-engineered |
-| Chip variants | Fortune FS9922 (pre-2017), Semic CS7729CN-001 (post-2017) |
-| Sigrok | Not supported via BLE |
+| Models in scope | B33(+), B35T+, B41T+, OW16B, OW18B, OW18E (the OW16A, OW18A and OW18D have no Bluetooth); the CM2100B clamp if OWON's app gives it the same packets |
+| Connection | Bluetooth LE built in. OWON's PC software works only through OWON's own USB dongle, which dealers describe as a TI CC2540 |
+| OWON's grouping | One Android app, owon iMeter (`com.owon.imeter`), is linked from the B33, B35, B41T, OW16, OW18 and CM2100 pages; OWON's support page says the apps fit "models starting with 'B' and 'OW'". The Windows 7/8 package is the same zip for the B and OW series; the Windows 10/11 one is listed for the B series, OW series and CM2100 |
+| Vendor sources | Manuals and the iMeter APK on `files.owon.com.cn` (`/probook/`, `/app/`); PC packages under `/software/pc/` (Windows 7/8 "multimeterBLE") and `/software/PC/` (Windows 10/11, dongle required). No protocol document for any OWON handheld found on OWON's sites, 2026-10-01 |
+| Out of scope | CMS061/CMS101 clamp-scopes (iMeter app, scope features); OW65B (Bluetooth per OWON Japan) and OW67B/OW69B (Bluetooth not stated); the B35's "Bluetooth 2.0" version, which OWON lists as Android-only and which is presumably classic Bluetooth `[UNVERIFIED]` |
 
-#### Community popularity
+**Demand**, seen 2026-10-01:
 
-Moderate-high. Popular budget BLE logging meters, commonly recommended
-on forums.
+| Signal | Figures |
+|--------|---------|
+| Amazon ratings | OW18E 105 (.de); B41T+ 86 (.de), 83 (.com); B35T+ with adapter 85 (.com); CM2100B about 121 over four .de listings. For scale: UT61E+ 62 (.de), 46 (.com) |
+| AliExpress | Tens per listing: CM2100/CM2100B 105, B41T+ 31, OW16B 24, OW18 series 23, B35T+ 3 |
+| YouTube | B35T 58k and 27.7k views; B41T+ 53k; OW18E 14.7k; OW18B 14.0k; CM2100B 13.8k |
+| GitHub | 16 OWON Bluetooth projects, the largest [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) (53 stars) |
 
-**GitHub projects:**
-- [DeanCording/owonb35](https://github.com/DeanCording/owonb35) (34 stars) — Linux C client, CSV/JSON output, interactive control
-- [sercona/Owon-Multimeters](https://github.com/sercona/Owon-Multimeters) (34 stars) — Linux, B35T+/B41T+/CM2100B/OW18E
-- [inflex/owon-b35](https://github.com/inflex/owon-b35) (12 stars) — older C tool for FS9922 chip models
+**Gap: high.** OWON's PC software needs OWON's dongle; no cross-platform
+desktop logger works with an ordinary Bluetooth adapter.
 
-#### Software gap analysis
-
-| Software | Platform | Type | Status |
-|----------|----------|------|--------|
-| **OWON official** (OWON Share) | Windows only | GUI | **Requires proprietary OWON USB BLE dongle** — does not work with standard BLE adapters |
-| **OWON Multimeter BLE4.0** | iOS/Android | Mobile app | Basic functionality |
-| **owonb35 / sercona** | Linux | CLI (C) | Gattlib-based (notoriously finicky), no GUI |
-| **Bluetooth-DMM-For-Windows** | Windows | GUI (.NET) | 47 stars, development inactive ("probably there will not any Update") |
-
-**Gap: high.** Official PC software requires a proprietary dongle. No
-cross-platform GUI desktop app exists. Linux tools use fragile Gattlib.
-The 47-star Windows-only app is abandoned.
+Community tools describe 14-byte packets and two meter chips (Fortune FS9922
+before 2017, Semic CS7729CN-001 after) `[COMMUNITY]`; the clean-room
+analysis does not use these claims.
 
 ---
 
@@ -478,6 +473,9 @@ the same transport.
 | APPA 100/300/500/700 | USB serial + BLE | Niche (European professional), sigrok driver not merged |
 | Gossen Metrawatt | IR-optical, proprietary binary | Niche, complex proprietary protocol |
 | Keysight U1272A | IR to serial | Proprietary protocol |
+| ANENG 681, 683 | None (USB-C charging only) | High-volume AliExpress sellers (3,000–10,000+ sold, 2026-10-01); no Bluetooth or data link found in retailer listings or manual pages, 2026-10-01 |
+| FNIRSI DMC-100 | None (USB-C for firmware only) | FNIRSI's product page: the USB port is "only for firmware transmission"; no Bluetooth (2026-10-01) |
+| FNIRSI 2C23T, 2C53T, DST-201/210 | USB mass storage | Scope/meter/generator combos; USB exports saved screenshots and waveforms and updates firmware, with no live readings; FNIRSI's software page lists nothing for them (2026-10-01) |
 
 ---
 
@@ -493,7 +491,7 @@ the same transport.
 
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
-| **OWON B35T+/B41T+** | BLE | Popular budget BLE meters, no cross-platform GUI, proprietary dongle required for PC | High |
+| **OWON B/OW handhelds, CM2100B** | BLE (built in) | Amazon ratings on a par with the UT61E+; OWON's PC software needs OWON's dongle; one vendor app and PC package to work from | High. In progress since 2026-10-01 |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
@@ -511,19 +509,18 @@ the same transport.
 ### Strategic notes
 
 - **BLE is where the open demand is.** The Bluetooth transport exists; the
-  OWON B35T/B41T+ is the most-demanded meter it does not reach yet. sigrok's
-  BLE is Linux-only and experimental; no competitor fills this space
-  cross-platform.
+  OWON B/OW handhelds are the most-demanded meters it does not reach yet.
+  sigrok's BLE is Linux-only and experimental; no competitor fills this
+  space cross-platform.
 - **rusty_meter** (100 stars, Rust/egui, OWON XDM) validates the exact
   tech stack dmm-tools uses. Proves community demand for native desktop
   multimeter apps.
-- **Other brands' BLE meters need more than names and tables.** The OWON
-  B35T+/B41T+ is not known to use any GATT profile we carry, so it needs its
-  own. Its protocol is documented only in community code, so it needs a
-  clean-room source decision before work starts.
-- **Bluetooth-DMM-For-Windows** (47 stars, now abandoned) proves demand
-  for a multi-device BLE desktop app. Its Windows-only nature and
-  inactivity leave the gap wide open.
+- **Other brands' BLE meters need more than names and tables.** A meter
+  whose GATT layout no profile we carry covers needs a profile of its own,
+  and its protocol needs vendor sources: for OWON, its iMeter app and PC
+  software (2026-10-01).
+- **Bluetooth-DMM-For-Windows** (53 stars, last pushed 2026-05-01) proves
+  demand for a multi-device BLE desktop app; it is Windows-only.
 - **Adding serial transport** is smaller scope than BLE but the
   highest-value serial target (Fluke) overlaps more with existing tools.
 - **No other UNI-T handheld family publishes a wire protocol**: besides the
