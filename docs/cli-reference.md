@@ -83,6 +83,12 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | Brymen BM869s/BM867s (experimental) |
 | `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | Brymen BM829s/BM827s/BM822s/BM821s (experimental) |
 | `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s` | Brymen BM525s/BM521s (experimental) |
+| `ow18b` | `ow16b`, `owon-ow18b`, `owon-ow16b` | OWON OW18B/OW16B (experimental) |
+| `ow18e` | `owon-ow18e` | OWON OW18E (experimental) |
+| `b33` | `b33t`, `b33+`, `b33t+`, `owon-b33` | OWON B33 (experimental) |
+| `b35t+` | `b35+`, `owon-b35t+` | OWON B35T+ (experimental) |
+| `b41t+` | `b41t`, `owon-b41t+` | OWON B41T+ (experimental) |
+| `cm2100b` | `owon-cm2100b` | OWON CM2100B (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
 <!-- devices:end -->
@@ -152,7 +158,8 @@ dmm-cli --adapter 12:34:56:78:9A:BC read
 
 Connect to the meter and print device info: model name, transport type, and
 transport-specific diagnostics (CP2110 firmware version and UART error flags
-over USB, MTU and adapter heartbeats over Bluetooth).
+over USB; MTU, adapter heartbeats and an OWON meter's device information over
+Bluetooth).
 
 ```
 $ dmm-cli --adapter 12:34:56:78:9A:BC info
@@ -522,6 +529,26 @@ what a key did.
 | `peak` | 1ms PEAK button; AC V only |
 | `light` | Long MODE: toggle backlight |
 | `lpf` | Long REL: 1 kHz low-pass filter; AC modes only |
+
+#### OWON commands
+
+The keys of OWON's app and PC software, not yet tried on a meter; watch the
+reading for what a key did. The B33 offers no `light`, `minmax` or
+`exit_minmax`; the OW16B, OW18B and OW18E no `minmax` or `exit_minmax`; the
+CM2100B only `select`, `hold`, `light` and `zero`.
+
+| Command | Description |
+|---|---|
+| `select` | Select key: steps to the dial position's next function |
+| `range` | Range key: steps to the next manual range |
+| `auto` | Long Range: returns to auto-range |
+| `hold` | Hold key |
+| `light` | Long Hold: backlight, and the OW18B's and OW18E's flashlight |
+| `rel` | △ key; on the OW16B, OW18B and OW18E, the same press as `hz_duty` |
+| `hz_duty` | Hz/Duty key: steps through frequency and duty; AC V, AC A, Hz and duty |
+| `minmax` | Max/Min key: cycles MAX and MIN |
+| `exit_minmax` | Long Max/Min: leaves Max/Min |
+| `zero` | ZERO key: zeroes DC A, relative in capacitance and voltage |
 
 #### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960 / Brymen
 

@@ -131,7 +131,8 @@ it. Each family exports a `Fingerprint`, and `detect.rs` is the engine that runs
 run comes from the registry entries that list that link. On a Bluetooth peer whose advertised name
 (`Transport::advertised_name()`) belongs to registry entries, only those entries' fingerprints run.
 A peer's GATT profile may also read one characteristic at bring-up, whose value
-(`Transport::info_characteristic()`) is the protocol's to read. Either way the transport reports
+(`Transport::info_characteristic()`) is the protocol's to read; a link that read one runs only the
+fingerprints of the family whose profile reads it. Either way the transport reports
 what the link carries and knows no model. The cascade and its failure modes are in
 [detection-design.md](detection-design.md).
 

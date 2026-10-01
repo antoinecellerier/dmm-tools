@@ -602,11 +602,29 @@ mod tests {
                 }
             );
         }
+        for id in ["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"] {
+            assert_eq!(
+                peers(id),
+                BluetoothPeers {
+                    adapters: false,
+                    meters: vec!["BDM", "LILLIPUT"],
+                },
+                "{id}"
+            );
+        }
         assert_eq!(
             bluetooth_peers(None),
             BluetoothPeers {
                 adapters: true,
-                meters: vec!["UT60BT", "UT202BT", "Bluetooth DMM", "121GW", "BM78xBT"],
+                meters: vec![
+                    "UT60BT",
+                    "UT202BT",
+                    "Bluetooth DMM",
+                    "121GW",
+                    "BM78xBT",
+                    "BDM",
+                    "LILLIPUT"
+                ],
             }
         );
     }

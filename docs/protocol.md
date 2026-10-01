@@ -56,11 +56,11 @@ Researched, not implemented:
 
 ## OWON
 
-Researched, not implemented:
-
 - [B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B — Bluetooth LE, 6-byte frames of three little-endian words](research/owon/reverse-engineered-protocol.md)
-  — also covers the 15-byte frame OWON's app decodes for the Voltcraft
-  VC831/VC851/VC871/VC891/VC915/VC925 and OWON's OW65/OW67/OW69.
+  — the 6-byte frame is implemented, experimental. The spec also covers the
+  15-byte frame OWON's app decodes for the Voltcraft
+  VC831/VC851/VC871/VC891/VC915/VC925 and OWON's OW65/OW67/OW69, researched,
+  not implemented.
 
 ## Framing and cables
 
@@ -136,3 +136,4 @@ Bluetooth families; each spec's section has the full list:
 - [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM), webspiderteam and libreble — ZOTEK's four packet layouts (ZOTEK spec §11)
 - [tpwrules/121gw-re](https://github.com/tpwrules/121gw-re), [zonque/121gw-qt5](https://github.com/zonque/121gw-qt5), [chlordk/121gwcli](https://github.com/chlordk/121gwcli) and libsigrok's `eev121gw` — the 121GW (121GW spec §15)
 - [milksplash/brymenble](https://github.com/milksplash/brymenble) and two programs built on it — the BM78xBT (BM78xBT spec §12)
+- [DeanCording/owonb35](https://github.com/DeanCording/owonb35), [sercona/Owon-Multimeters](https://github.com/sercona/Owon-Multimeters), [pjpa365/owon-suite](https://github.com/pjpa365/owon-suite), webspiderteam and others — the OWON meters (OWON spec §14)

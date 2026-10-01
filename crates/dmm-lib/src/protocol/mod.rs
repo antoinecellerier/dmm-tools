@@ -4,6 +4,7 @@ pub(crate) mod cycle;
 pub(crate) mod eevblog121gw;
 mod expect;
 pub(crate) mod framing;
+pub(crate) mod owon;
 pub mod registry;
 pub(crate) mod steps;
 pub(crate) mod unrecognised;
@@ -312,6 +313,9 @@ pub enum DeviceFamily {
     Bm82x,
     /// Brymen BM525s / BM521s, on the BU-86X cable
     Bm52x,
+    /// OWON's Bluetooth meters that send the 6-byte frame (B33, B35T+,
+    /// B41T+, OW16B, OW18B, OW18E, CM2100B), one entry per model code
+    Owon,
     /// Simulated device for testing and demos
     Mock,
 }
@@ -333,6 +337,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Bm86x => write!(f, "Brymen BM86x"),
             DeviceFamily::Bm82x => write!(f, "Brymen BM82x"),
             DeviceFamily::Bm52x => write!(f, "Brymen BM52x"),
+            DeviceFamily::Owon => write!(f, "OWON"),
             DeviceFamily::Mock => write!(f, "mock"),
         }
     }
@@ -382,6 +387,12 @@ pub(crate) struct Fingerprint {
     /// checks an 8-bit XOR (the 121GW) when two of them claim the same
     /// bytes.
     pub(crate) checksummed: bool,
+    /// Whether a link that read a device-information characteristic
+    /// ([`Transport::info_characteristic`]) is this family's: its GATT profile
+    /// is the one that reads one. Such a link runs these families' rules
+    /// alone, as a heard name would narrow it, even when the meter was renamed
+    /// or opened by address.
+    pub(crate) claims_info_links: bool,
     /// Classify the whole receive buffer. Called after every read, so it has
     /// to tolerate partial frames and scan every candidate offset itself: a
     /// bridge can deliver one UART byte per report, and the buffer is never
@@ -422,6 +433,10 @@ pub(crate) struct Probing {
     /// ([`crate::built_in_meters`]); `None` on an adapter or a cable, and
     /// when several meters share the name.
     pub(crate) advertised: Option<&'static registry::SelectableDevice>,
+    /// What the link read from the meter at bring-up
+    /// ([`Transport::info_characteristic`]): OWON's FFF2, which names the
+    /// model. `None` on every other link.
+    pub(crate) info_characteristic: Option<Vec<u8>>,
 }
 
 impl Probing {

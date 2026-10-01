@@ -186,41 +186,32 @@ UT515A+/C or UT516E: no source for their protocols is known.
 
 ---
 
-### OWON B/OW handhelds and CM2100B
+### OWON: the older B35/B35T, and the 15-byte meters
 
-**In progress since 2026-10-01**, clean-room from OWON's own app and PC
-software (`docs/research/owon/` once specified).
+OWON's B33, B35T+, B41T+, OW16B, OW18B, OW18E and CM2100B are supported
+(`owon`, [research/owon](owon/reverse-engineered-protocol.md)). What OWON's
+sources describe beyond them:
 
-| Aspect | Details |
-|--------|---------|
-| Models in scope | B33(+), B35T+, B41T+, OW16B, OW18B, OW18E (the OW16A, OW18A and OW18D have no Bluetooth); the CM2100B clamp if OWON's app gives it the same packets |
-| Connection | Bluetooth LE built in. OWON's PC software works only through OWON's own USB dongle, which dealers describe as a TI CC2540 |
-| OWON's grouping | One Android app, owon iMeter (`com.owon.imeter`), is linked from the B33, B35, B41T, OW16, OW18 and CM2100 pages; OWON's support page says the apps fit "models starting with 'B' and 'OW'". The Windows 7/8 package is the same zip for the B and OW series; the Windows 10/11 one is listed for the B series, OW series and CM2100 |
-| Vendor sources | Manuals and the iMeter APK on `files.owon.com.cn` (`/probook/`, `/app/`); PC packages under `/software/pc/` (Windows 7/8 "multimeterBLE") and `/software/PC/` (Windows 10/11, dongle required). No protocol document for any OWON handheld found on OWON's sites, 2026-10-01 |
-| Out of scope | CMS061/CMS101 clamp-scopes (iMeter app, scope features); OW65B (Bluetooth per OWON Japan) and OW67B/OW69B (Bluetooth not stated); the B35's "Bluetooth 2.0" version, which OWON lists as Android-only and which is presumably classic Bluetooth `[UNVERIFIED]` |
+- **Next: the older B35 and B35T, on the FS9922 14-byte ASCII frame.** OWON's
+  PC source keeps a fully commented-out parser for 14-byte frames, and notes
+  that the B35 without offline record "still uses its chip protocol"
+  ([research/owon §11](owon/reverse-engineered-protocol.md#11-an-earlier-format-14-byte-ascii-pc-source-commented-out));
+  the status-bit constants it uses are defined nowhere in that source.
+  Community tools describe FS9922 B35T units sending those frames on FFF4
+  in the same service (spec §14.4) `[COMMUNITY]`. When taken up, OWON's
+  commented-out parser is the source, before any community cross-reference.
+- **OWON's 15-byte frame.** OWON's iMeter app decodes a second, 15-byte frame
+  with a sub-display for the Voltcraft VC831, VC851, VC871, VC891, VC915 and
+  VC925, OWON's OW65, OW67 and OW69, and the CMS061/CMS101 clamp-scopes; it
+  is specified from the app alone
+  ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)).
+  These Voltcraft meters are not the VC880/VC890 line already supported.
+  OWON Japan lists Bluetooth for the OW65B; for the OW67B and OW69B it is
+  not stated (2026-10-01).
 
-**Demand**, seen 2026-10-01:
-
-| Signal | Figures |
-|--------|---------|
-| Amazon ratings | OW18E 105 (.de); B41T+ 86 (.de), 83 (.com); B35T+ with adapter 85 (.com); CM2100B about 121 over four .de listings. For scale: UT61E+ 62 (.de), 46 (.com) |
-| AliExpress | Tens per listing: CM2100/CM2100B 105, B41T+ 31, OW16B 24, OW18 series 23, B35T+ 3 |
-| YouTube | B35T 58k and 27.7k views; B41T+ 53k; OW18E 14.7k; OW18B 14.0k; CM2100B 13.8k |
-| GitHub | 16 OWON Bluetooth projects, the largest [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) (53 stars) |
-
-**Gap: high.** OWON's PC software needs OWON's dongle; no cross-platform
-desktop logger works with an ordinary Bluetooth adapter.
-
-**Next after these: OWON's 15-byte frame.** OWON's iMeter app decodes a
-second, 15-byte frame with a sub-display for the Voltcraft VC831, VC851,
-VC871, VC891, VC915 and VC925, OWON's OW65, OW67 and OW69, and the CMS061/
-CMS101 clamp-scopes; it is specified from the app alone
-([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)).
-These Voltcraft meters are not the VC880/VC890 line already supported.
-
-Community tools describe 14-byte packets and two meter chips (Fortune FS9922
-before 2017, Semic CS7729CN-001 after) `[COMMUNITY]`; the clean-room
-analysis does not use these claims.
+Out of scope: the CMS061/CMS101's scope features; the B35's "Bluetooth 2.0"
+version, which OWON lists as Android-only and which is presumably classic
+Bluetooth `[UNVERIFIED]`.
 
 ---
 
@@ -498,8 +489,8 @@ the same transport.
 
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
-| **OWON B/OW handhelds, CM2100B** | BLE (built in) | Amazon ratings on a par with the UT61E+; OWON's PC software needs OWON's dongle; one vendor app and PC package to work from | High. In progress since 2026-10-01 |
-| **Voltcraft VC831/851/871/891/915/925, OWON OW65/67/69** | BLE (built in) | OWON's 15-byte frame, specified from OWON's iMeter app ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)); the same transport and family module as the B/OW meters | Moderate: a second frame layout with a sub-display, one vendor source |
+| **OWON B35/B35T (FS9922, before the B35T+)** | BLE (built in) | The supported OWON meters' service per community tools; OWON's PC source keeps a commented-out parser ([research/owon §11](owon/reverse-engineered-protocol.md#11-an-earlier-format-14-byte-ascii-pc-source-commented-out)) | Moderate: a 14-byte ASCII frame whose status bits OWON's source does not define |
+| **Voltcraft VC831/851/871/891/915/925, OWON OW65/67/69, CMS061/101** | BLE (built in) | OWON's 15-byte frame, specified from OWON's iMeter app ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)); the same transport and family module as the B/OW meters | Moderate: a second frame layout with a sub-display, one vendor source |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
@@ -516,10 +507,10 @@ the same transport.
 
 ### Strategic notes
 
-- **BLE is where the open demand is.** The Bluetooth transport exists; the
-  OWON B/OW handhelds are the most-demanded meters it does not reach yet.
-  sigrok's BLE is Linux-only and experimental; no competitor fills this
-  space cross-platform.
+- **BLE is where the open demand is.** The Bluetooth transport exists and
+  reaches OWON's B, OW and CM2100B meters; OWON's older and 15-byte meters are
+  the next step. sigrok's BLE is Linux-only and experimental; no
+  competitor fills this space cross-platform.
 - **rusty_meter** (100 stars, Rust/egui, OWON XDM) validates the exact
   tech stack dmm-tools uses. Proves community demand for native desktop
   multimeter apps.

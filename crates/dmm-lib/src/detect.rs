@@ -178,7 +178,21 @@ fn probe_order(carried: &[&'static Fingerprint]) -> Vec<&'static Fingerprint> {
 /// back; the receive buffer persists across steps, so a meter that speaks
 /// slowly still gets the whole cascade's worth of time.
 pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<Detected> {
-    detect_among(transport, bridge, &crate::built_in_meters(transport))
+    // A link that read a device-information characteristic is the radio of
+    // the family whose profile reads one, even when its name matched no
+    // entry (renamed, or opened by address): it narrows to that family's
+    // entries as a heard name would, and the other families' probes stay
+    // off its key characteristic.
+    let named = if transport.info_characteristic().is_some() {
+        registry::DEVICES
+            .iter()
+            .copied()
+            .filter(|d| d.fingerprint.is_some_and(|fp| fp.claims_info_links))
+            .collect()
+    } else {
+        crate::built_in_meters(transport)
+    };
+    detect_among(transport, bridge, &named)
 }
 
 /// [`detect_device`], `named` being the meters the peer's advertised name
@@ -207,6 +221,7 @@ fn detect_among(
             [one] => Some(*one),
             _ => None,
         },
+        info_characteristic: transport.info_characteristic().map(<[u8]>::to_vec),
         ..Probing::default()
     };
     // A frame that settles the family but not the model — a bare UT61+
@@ -362,10 +377,11 @@ fn push(buf: &mut Vec<u8>, bytes: &[u8]) {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Strength {
     /// A model claimed by a rule whose extractor validates no 16-bit
-    /// checksum: UT8802, UT80x, ZOTEK, the BU-86X series, and the 121GW,
-    /// whose 8-bit XOR passes one window in 256. The UT8802's `0xAC` format
-    /// passes roughly 1% of random bytes, and a UT181A frame is full of
-    /// arbitrary float32 bytes.
+    /// checksum: UT8802, UT80x, ZOTEK, the BU-86X series, the 121GW, whose
+    /// 8-bit XOR passes one window in 256, and OWON frames with no model
+    /// code read, which carry no checksum at all. The UT8802's `0xAC`
+    /// format passes roughly 1% of random bytes, and a UT181A frame is full
+    /// of arbitrary float32 bytes.
     Unchecksummed,
     /// A checksummed frame that settles the family but names no model — a
     /// bare UT61+ reading. Above an unchecksummed claim, below anything that
@@ -373,8 +389,9 @@ enum Strength {
     FamilyOnly,
     /// A model claimed from a frame whose checksum held.
     Checksummed,
-    /// A model the meter named itself. Only the UT61+ name frame reaches
-    /// here, and it is what tells the siblings of that family apart.
+    /// A model the meter named itself: the UT61+ name frame, which tells
+    /// the siblings of that family apart, and an OWON meter's model code,
+    /// which its link read at bring-up.
     Named,
 }
 
@@ -719,6 +736,8 @@ mod tests {
     struct Advertising {
         inner: MockTransport,
         name: &'static str,
+        /// What the link read at bring-up, as OWON's profile reads FFF2.
+        info: Option<Vec<u8>>,
     }
 
     impl Advertising {
@@ -726,6 +745,7 @@ mod tests {
             Self {
                 inner: MockTransport::new(responses),
                 name,
+                info: None,
             }
         }
 
@@ -754,6 +774,10 @@ mod tests {
 
         fn advertised_name(&self) -> Option<&str> {
             Some(self.name)
+        }
+
+        fn info_characteristic(&self) -> Option<&[u8]> {
+            self.info.as_deref()
         }
     }
 
@@ -1089,6 +1113,60 @@ mod tests {
         ));
     }
 
+    /// An OWON meter advertising "BDM" gets OWON's listen window alone:
+    /// nothing is written, and the model code its link read picks the
+    /// entry (owon spec §14.5's B41T+ value and frame).
+    #[test]
+    fn bdm_with_its_model_code_opens_that_entry_and_sends_nothing() {
+        let frame = vec![0x24, 0xF0, 0x04, 0x00, 0x03, 0x00];
+        let mut meter = Advertising::new("BDM", vec![frame]);
+        meter.info = Some(vec![0x29, 0xFF, 0x00, 0x01, 0x02, 0x00]);
+        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        assert_eq!(detected.device.id, "b41t+");
+        assert_eq!(detected.reported_name.as_deref(), Some("OWON B41T+"));
+        assert!(meter.inner.written.borrow().is_empty());
+
+        // With no model code read, two frames in a row open the B35T+.
+        let stream = crate::protocol::owon::frame::tests::stream();
+        let meter = Advertising::new("BDM", vec![stream]);
+        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        assert_eq!(detected.device.id, "b35t+");
+        assert_eq!(detected.reported_name, None);
+        assert!(meter.inner.written.borrow().is_empty());
+    }
+
+    /// A renamed OWON meter, or one opened by address, whose link read its
+    /// model code: OWON's listen window alone, and nothing is written.
+    #[test]
+    fn a_renamed_owon_meter_with_its_model_code_gets_no_probe() {
+        let mut meter = Advertising::new("My meter", vec![]);
+        meter.info = Some(vec![0x29, 0xFF, 0x00, 0x01, 0x02, 0x00]);
+        let (sent, built_in_radio) = probes_to_silent(&meter, &meter.inner);
+        assert!(sent.is_empty(), "{sent:02X?}");
+        assert!(built_in_radio);
+
+        let frame = vec![0x24, 0xF0, 0x04, 0x00, 0x03, 0x00];
+        let mut meter = Advertising::new("My meter", vec![frame]);
+        meter.info = Some(vec![0x29, 0xFF, 0x00, 0x01, 0x02, 0x00]);
+        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        assert_eq!(detected.device.id, "b41t+");
+        assert!(meter.inner.written.borrow().is_empty());
+    }
+
+    /// OWON's frames, run past every rule a Bluetooth link carries: only
+    /// OWON's claims them.
+    #[test]
+    fn an_owon_stream_is_claimed_by_owon_alone() {
+        let stream = crate::protocol::owon::frame::tests::stream().repeat(3);
+        let probing = Probing::default();
+        let claims: Vec<DeviceFamily> = fingerprints_on(crate::BLUETOOTH, &[])
+            .iter()
+            .filter(|fp| (fp.recognise)(&stream, &probing).is_some())
+            .map(|fp| fp.family)
+            .collect();
+        assert_eq!(claims, [DeviceFamily::Owon]);
+    }
+
     /// The full cascade as it comes out of the registry and the rules: Get
     /// Name first (the registry's first entry, and the most verified probe),
     /// SET_MONITOR before the UT171 connect because the UT171 asks to be sent
@@ -1163,7 +1241,8 @@ mod tests {
         assert_eq!(families("CH9325"), vec![DeviceFamily::Ut80x]);
         // The UT-D07B gets the probes of the families UNI-T lists for it, and
         // not the UT80x's — the UT71 is on the UT-D07A, a different adapter.
-        // The ZOTEK meters, the 121GW and the BM78xBT have the radio built in.
+        // The ZOTEK meters, the 121GW, the BM78xBT and OWON's meters have
+        // the radio built in.
         assert_eq!(
             families(crate::BLUETOOTH),
             vec![
@@ -1173,6 +1252,7 @@ mod tests {
                 DeviceFamily::Zotek,
                 DeviceFamily::Eevblog121gw,
                 DeviceFamily::Bm78xbt,
+                DeviceFamily::Owon,
             ],
             "the registry places these families on the UT-D07B"
         );
@@ -1259,6 +1339,7 @@ mod tests {
         trigger: Some(send_nothing),
         send_after: &[DeviceFamily::Mock],
         checksummed: true,
+        claims_info_links: false,
         recognise: recognise_nothing,
     };
 
@@ -1268,6 +1349,7 @@ mod tests {
         trigger: Some(send_nothing),
         send_after: &[DeviceFamily::Ut181a],
         checksummed: true,
+        claims_info_links: false,
         recognise: recognise_nothing,
     };
 
@@ -1277,6 +1359,7 @@ mod tests {
         trigger: Some(send_nothing),
         send_after: &[DeviceFamily::Ut171],
         checksummed: true,
+        claims_info_links: false,
         recognise: recognise_nothing,
     };
 
@@ -1309,6 +1392,7 @@ mod tests {
                 trigger: None,
                 send_after: &[],
                 checksummed: $checksummed,
+                claims_info_links: false,
                 recognise: |_buf: &[u8], _probing: &Probing| Some($evidence),
             };
         };

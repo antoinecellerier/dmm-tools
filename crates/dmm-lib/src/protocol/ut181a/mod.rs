@@ -625,6 +625,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     trigger: Some(send_set_monitor),
     send_after: &[],
     checksummed: true,
+    claims_info_links: false,
     recognise,
 };
 

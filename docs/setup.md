@@ -124,6 +124,14 @@ switches off after 15 to 30 minutes idle; hold SELECT while turning it on to
 disable that. A renamed meter opens with
 `--device bm78xbt --adapter <address>`.
 
+OWON's B and OW meters and the CM2100B have Bluetooth built in and need no
+pairing either: disconnect any phone app, then hold △/ᛒ on a B33, B35T+ or
+B41T+, Hz/Duty△/ᛒ on an OW16B, OW18B or OW18E, or ZERO/ᛒ for about 2 s on
+the CM2100B, until ᛒ shows. The meter shows up as "BDM", or as "Lilliput" on
+some systems; its Bluetooth switches off after 10 minutes idle, 5 on the
+CM2100B. A renamed meter opens with `--device <id> --adapter <address>`, the
+id from [Devices](cli-reference.md#devices).
+
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
 
 Readings arrive as fast as the link delivers: on a UT61E+, about 3 a second

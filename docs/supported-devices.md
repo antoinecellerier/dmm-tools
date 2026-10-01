@@ -4,10 +4,10 @@
 
 Most supported meters talk over a USB cable; the UT-D07
 Bluetooth adapters serve the meters listed for them below, and the UT60BT,
-UT202BT, ZOTEK meters, EEVblog 121GW and Brymen BM788BT/BM787BT have
-Bluetooth built in. The tool works out which link and which meter are
-attached from the bytes the meter sends ([how](detection-design.md)), so the
-default `auto` device needs no setup beyond switching the meter's data
+UT202BT, ZOTEK meters, EEVblog 121GW, Brymen BM788BT/BM787BT and OWON's
+meters have Bluetooth built in. The tool works out which link and which
+meter are attached from the bytes the meter sends ([how](detection-design.md)),
+so the default `auto` device needs no setup beyond switching the meter's data
 transmission on, as listed per family below.
 
 **✅ Verified** means the model's protocol tables have been confirmed on real
@@ -225,9 +225,35 @@ opens as one entry: `bm86x`, `bm82x` and `bm52x`. The BM820s manual names
 the cable BU-82X on one page and BU-86X in its accessory list
 ([open checks](research/bm86x/verification.md#cable)).
 
+## OWON
+
+Handheld (B33, B35T+, B41T+, OW16B, OW18B, OW18E) and clamp meter (CM2100B).
+Bluetooth built in, no cable; the meter shows up as "BDM", or as "Lilliput"
+on some systems ([setup](setup.md#bluetooth)). Switch on: disconnect any
+phone app, then hold △/ᛒ on the B33, B35T+ and B41T+, Hz/Duty△/ᛒ on the
+OW16B, OW18B and OW18E, or ZERO/ᛒ for about 2 s on the CM2100B, until ᛒ
+shows.
+
+| Model | Counts | Status | Notes |
+|---|---|---|---|
+| OW18B | 5999 | 🧪 Experimental | NCV; hFE or a mV position, depending on the unit |
+| OW16B | 5999 | 🧪 Experimental | NCV; hFE in place of µA on some units |
+| OW18E | 19999 | 🧪 Experimental | NCV; hFE or a mV position, depending on the unit |
+| B33 | 3999 | 🧪 Experimental | no ℉ or Max/Min |
+| B35T+ | 6000 | 🧪 Experimental | hFE and a mV position |
+| B41T+ | 22000 | 🧪 Experimental | a mV position; no hFE |
+| CM2100B | 19999 | 🧪 Experimental | clamp: 2 A, 20 A and 100 A positions; NCV, ZERO; no temperature |
+
+Not run on a meter yet: the decoding and the remote keys come from OWON's
+app, OWON's PC software and the manuals. The meter reports its model when it
+connects, which picks its entry; the OW16B opens as the OW18B's, `ow18b`,
+which code it reports is still to confirm
+([open checks](research/owon/verification.md)).
+
 ## Not supported yet
 
-Other meters with a Bluetooth radio built in (OWON) and
+Other meters with a Bluetooth radio built in (the older OWON B35 and B35T,
+OWON's OW65/OW67/OW69, Voltcraft's VC831/VC851/VC871/VC891/VC915/VC925) and
 serial meters (Fluke 28x, UT805A) are not supported yet.
 Candidates, their protocols and what each would take are researched in
 [new-device-candidates.md](research/new-device-candidates.md). Your model is

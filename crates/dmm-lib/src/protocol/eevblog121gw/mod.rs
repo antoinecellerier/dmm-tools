@@ -212,6 +212,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     // time in 256: too weak to rank with a 16-bit checksum
     // (docs/detection-design.md).
     checksummed: false,
+    claims_info_links: false,
     recognise,
 };
 

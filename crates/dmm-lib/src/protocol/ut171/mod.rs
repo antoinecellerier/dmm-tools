@@ -568,6 +568,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     // be identified — before this one goes out.
     send_after: &[DeviceFamily::Ut181a],
     checksummed: true,
+    claims_info_links: false,
     recognise,
 };
 

@@ -870,6 +870,7 @@ pub(crate) static VC880_FINGERPRINT: Fingerprint = Fingerprint {
     trigger: None,
     send_after: &[],
     checksummed: true,
+    claims_info_links: false,
     recognise: recognise_vc880,
 };
 
@@ -881,6 +882,7 @@ pub(crate) static VC890_FINGERPRINT: Fingerprint = Fingerprint {
     trigger: Some(vc890::request_live),
     send_after: &[],
     checksummed: true,
+    claims_info_links: false,
     recognise: recognise_vc890,
 };
 

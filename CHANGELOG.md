@@ -12,6 +12,7 @@
 - **The EEVblog 121GW Bluetooth meter is supported experimentally** — with remote keys ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)).
 - **Brymen's BM788BT and BM787BT Bluetooth meters are supported experimentally** ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)).
 - **Brymen's BM869s/BM867s, BM829s/BM827s/BM822s/BM821s and BM525s/BM521s are supported experimentally on the BU-86X cable** ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34), [#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) — on Linux, reinstall `udev/70-dmm-tools.rules` and replug the cable; on a headless machine, keep a group on the rule — see `docs/setup.md`.
+- **OWON's Bluetooth meters are supported experimentally** — the B33, B35T+, B41T+, OW16B, OW18B, OW18E and CM2100B, with remote keys.
 - **More of the UT181A is confirmed on a real meter** — every dial position, MIN/MAX, REL, Peak, COMP and remote control; thanks to [@diego351](https://github.com/diego351) for the capture.
 
 ### GUI

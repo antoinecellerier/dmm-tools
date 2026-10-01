@@ -7,8 +7,9 @@ a 16-bit sign-and-magnitude count, all little-endian, with no header, length
 or checksum. A one-off read of FFF2 gives the model code and firmware version;
 16-byte commands (record, read-back, rename and a challenge/response) go to
 FFF1, and 2-byte key presses to FFF3. OWON's app also decodes a 15-byte frame
-for Voltcraft-branded and other OWON meters (§10, app only). Not implemented,
-and no OWON meter has been on our bench: every fact in §1-12 comes from OWON's
+for Voltcraft-branded and other OWON meters (§10, app only). The 6-byte frame
+is implemented in `protocol/owon/`, experimental; the 15-byte one is not. No
+OWON meter has been on our bench: every fact in §1-12 comes from OWON's
 Android app, OWON's PC software source and OWON's manuals and product pages.
 §14 compares them with community projects and their captures. The approach
 doc beside it records the sources, the method and the clean-room boundary.

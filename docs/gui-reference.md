@@ -134,8 +134,9 @@ A row of buttons shown when connected and receiving data (visible in the
 | **AUTO** | Return to auto-range |
 | **MIN/MAX** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. |
 | **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. |
-| **ZERO** | Zero the capacitance reading (ZOTEK, shown in capacitance only) |
+| **ZERO** | Zero the reading (shown in capacitance on ZOTEK meters, and in DC A, capacitance and voltage on the OWON CM2100B) |
 | **1kHz** | Switch the 1 kHz low-pass filter on or off (121GW, shown in AC modes only) |
+| **Hz/Duty** | Step through frequency and duty (OWON B and OW meters, shown in AC V, AC A, Hz and duty only) |
 | **SELECT** | Cycle sub-modes |
 | **LIGHT** | Toggle backlight |
 

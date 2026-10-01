@@ -395,6 +395,14 @@ The 121GW logs to its micro SD card as CSV: sample, then the main and the second
 
 Use cases: reviewing a field log taken without Bluetooth, on the same graph and statistics as a live session.
 
+### OWON offline-record read-back
+
+**Complexity:** Medium
+
+OWON's "+" B-series meters, the OW16B, OW18B, OW18E and CM2100B log up to 10,000 readings while disconnected; FFF1 commands start a recording and read it back as a dump on FFF4 (owon spec §7.2, §8). Read it into the GUI graph and the CSV/JSON export; what a meter still has to answer is in the family's [verification list](research/owon/verification.md#offline-records).
+
+Use cases: a log taken away from the computer, on the same graph and statistics as a live session.
+
 ### BM520s logged-memory download
 
 **Complexity:** Medium

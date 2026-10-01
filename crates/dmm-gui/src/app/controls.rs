@@ -346,8 +346,8 @@ impl App {
             }
 
             // The meter's context keys (ZOTEK's ZERO in capacitance, the
-            // 121GW's 1kHz in AC), each only while the reading is one it
-            // applies to.
+            // 121GW's 1kHz in AC, OWON's Hz/Duty, and the CM2100B's ZERO),
+            // each only while the reading is one it applies to.
             let reading = self.last_measurement.as_ref();
             for key in self.connection.meter_keys().context {
                 if !reading.is_some_and(|m| (key.applies)(m)) {

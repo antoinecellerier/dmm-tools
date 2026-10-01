@@ -53,6 +53,12 @@ and each still wants a capture of our own.
   search. Needs two hosts.
 - What FFF5 holds, read-only behind authentication on a B41T+ (§14.4) —
   decides whether it matters to a decoder. Needs a bonded host.
+- Whether any model asks for pairing or bonding before it streams or takes
+  key presses (§2; FFF5 needs authentication on a B41T+, §14.4) — decides
+  setup's "no pairing". Needs a first connection from a host never paired.
+- Whether a host that has cached the GAP Device Name lists "LILLIPUT" rather
+  than "BDM" (a B41T+'s name; Windows showed "Lilliput" for a B35T+, §14.4)
+  — decides the entries' second Bluetooth name. Needs `dmm-cli list` per OS.
 
 ## Models and device information
 
@@ -134,8 +140,13 @@ and each still wants a capture of our own.
 - Hz/Duty on an OW18B/E: key 5, as both OWON programs send, or 4, as
   MartMet sends ([§7.3](reverse-engineered-protocol.md#73-key-sets-per-model),
   §14.3 D6) — decides the OW key table. Needs `04 01` and `05 01` sent.
+- `rel` on an OW16B, OW18B or OW18E in AC V, AC A or Hz: the same `05 01`
+  as `hz_duty`, so it steps Hz/Duty instead (§7.3). Needs one sent `rel` there.
 - Max/Min (key 6) on a B33, which has no such key (§7.3) — settles §7.3.
   Needs a B33.
+- Whether the FFF2 read fails on any model or host (`dmm-cli info`: "device
+  information: not read"), keys then going out unchecked — decides whether
+  they stay on without a model code. Needs `dmm-cli info` per model and OS.
 - The `*READlen?` reply: 2 bytes (app) or 4 (PC), and what it counts
   ([§7.2](reverse-engineered-protocol.md#72-fff1-commands); the payload's
   byte count on a B41T+, §14.4) — settles §7.2. Needs a "+" meter with a
@@ -171,6 +182,18 @@ and each still wants a capture of our own.
 - Which OW16B and OW18B/E units carry hFE, and the OW16's µA top range, 600
   (dial table) or 6000 µA (spec table) (§9.2) — settles §9.2 and the spec
   tables. Needs units of each variant.
+- A dropped link (out of range, idle-off, power-off): whether the meter
+  advertises again without the ᛒ key held (B35-UM p.33/28: reconnect after a
+  restart) — decides the reconnect steps. Needs a meter walked out of range.
+
+## Detection
+
+- Two frames in one `LISTEN_ONLY_WINDOW` (1.5 s) with no model code read, at
+  about 1.7 frames a second (B35T+, §14.4) — decides that window, or one
+  frame on a "BDM" link. Needs a `RUST_LOG=dmm_lib=debug` detection, timed.
+- What the UT61+, UT181A and UT171 probes do to an OWON meter and the OWON
+  detection row: [Device auto-detection](../../verification-backlog.md#device-auto-detection);
+  a chance OWON claim on a UT-D07B link: [Bluetooth](../../verification-backlog.md#bluetooth).
 
 ## 15-byte frame
 

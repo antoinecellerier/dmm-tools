@@ -50,7 +50,7 @@ every AB CD family, so the table is its cascade:
 | 2 | `AB CD 04 00 05 01 0A 00` (UT181A SET_MONITOR) | UT181A |
 | 3 | `AB CD 04 00 0A 01 0F 00` (UT171 connect) | UT171 |
 | 4 | 3× `AB CD 04 FF 00 02 7B` then `AB CD 03 5E 01 D9` (VC-890 poll) | VC-890 |
-| any | — (nothing sent) | UT8803, UT8802, VC-880; on Bluetooth, the ZOTEK meters, the 121GW and the BM78xBT |
+| any | — (nothing sent) | UT8803, UT8802, VC-880; on Bluetooth, the ZOTEK meters, the 121GW, the BM78xBT and the OWON meters |
 
 The CH9329 and the UT-D07B carry only the UT61+, UT171 and UT181A, so they run steps 1–3; on
 Bluetooth, the meters with the radio built in are heard in those windows. The BU-86X gets three
@@ -85,10 +85,10 @@ every read, against every candidate offset in the buffer, and the strongest answ
 
 | Rank | Evidence | Where it comes from |
 |---|---|---|
-| 4 | a model the meter named itself | the UT61+ name frame, the only one that picks an exact sibling |
+| 4 | a model the meter named itself | the UT61+ name frame; an OWON meter's model code, read from FFF2 |
 | 3 | a model from a frame whose 16-bit checksum held | UT8803, UT171, UT181A, VC-880, VC-890, BM78xBT |
 | 2 | `FamilyOnly` — a checksummed frame naming no model | a bare 14-byte UT61+ reading |
-| 1 | a model from a rule with no checksum, or an 8-bit XOR | UT8802, UT804, ZOTEK, 121GW, BM86x, BM82x, BM52x |
+| 1 | a model from a rule with no checksum, or an 8-bit XOR | UT8802, UT804, ZOTEK, 121GW, BM86x, BM82x, BM52x, OWON frames without a model code |
 
 A `FamilyOnly` at the top is remembered rather than acted on: the window keeps listening, and a
 name frame arriving in it outranks the fallback (see
@@ -127,6 +127,11 @@ The overlaps the ranking arbitrates, each rule declining what is not its own:
 - `bm86x`, `bm82x`, `bm52x` — four model bytes of the series in a row, whichever request drew
   them: Brymen's programs expect a BM52x to answer the BM82x's request. One meter sends one
   series' code, so no two of the rules match.
+- `owon` — a 6-byte frame whose function word carries OWON's marker. With a model code read at
+  connect, one frame names the code's entry, or the B35T+ entry for an unknown code; a code
+  OWON's programs read with another decoder (the 15-byte frame, series 55) gives the B35T+ entry
+  on any bytes, and its `init` refuses it naming the format. Without a code, two frames 6 bytes
+  apart, no unknown status bit set, give the B35T+ entry at rank 1.
 
 The bytes each rule expects are in the backlog's
 [Device auto-detection](verification-backlog.md#device-auto-detection) table and in each family's
@@ -150,7 +155,10 @@ in each entry's `bluetooth_names`, with the prefix rule the search takes the pee
 
 When entries match, detection runs only their fingerprints: a UT60BT gets Get Name and never the
 UT181A's or the UT171's probes. An adapter's name, or a peer opened by address with no name heard,
-matches none and gets the bridge's whole cascade.
+matches none and gets the bridge's whole cascade. A link that read a characteristic at bring-up
+runs only the fingerprints that declare `claims_info_links` (OWON's, whose profile is the only one
+that reads one) whatever its name, so a renamed OWON meter gets no UNI-T probe on its key
+characteristic.
 
 When exactly one entry matches, a `FamilyOnly` fallback opens that entry rather than
 `ut61eplus`, and so does an unrecognised name frame. The tables differ: a UT60BT's V range starts
@@ -195,6 +203,11 @@ seen on a new cable joins detection there by being listed on it.
 - **BM78xBT** streams once the transport has logged in, before detection starts. Its rule takes
   one CRC-valid reading packet, and with "BM78xBT" advertised it is the only rule that runs.
   Behind an unnamed link it rides the UNI-T probe windows and sends nothing.
+- **OWON meters** stream on their own too. Their Bluetooth profile reads the model code once at
+  connect, before detection starts, and the rule takes it with one frame; with no code read, it
+  needs two. With "BDM" or "LILLIPUT" as the peer's name, or FFF2 read, it is the only rule that
+  runs; behind an unnamed link that read no FFF2 it rides the UNI-T probe windows and sends
+  nothing.
 - **BU-86X** carries Brymen's three series alone, so detection there sends each series' reading
   request, the one a named meter sends for every reading. A meter in capacitance, or a BM86x at
   500000 counts, can answer after the windows close; the activation steps say to set a voltage

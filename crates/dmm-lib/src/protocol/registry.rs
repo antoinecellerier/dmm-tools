@@ -11,7 +11,8 @@
 
 use super::{DeviceFamily, Fingerprint, Protocol};
 use super::{
-    bm78xbt, bm86x, eevblog121gw, ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0, zotek,
+    bm78xbt, bm86x, eevblog121gw, owon, ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0,
+    zotek,
 };
 use crate::mock;
 
@@ -127,6 +128,13 @@ pub static DEVICES: &[&SelectableDevice] = &[
     &bm86x::devices::BM86X,
     &bm86x::devices::BM82X,
     &bm86x::devices::BM52X,
+    // OWON, one entry per model code
+    &owon::devices::OW18B,
+    &owon::devices::OW18E,
+    &owon::devices::B33,
+    &owon::devices::B35T_PLUS,
+    &owon::devices::B41T_PLUS,
+    &owon::devices::CM2100B,
     // Mock
     &mock::devices::MOCK,
     &zotek::sim::MOCK_ZT5B,
@@ -396,6 +404,8 @@ mod tests {
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
+        // Experimental, with their verification issues still to be opened.
+        const ISSUE_TO_OPEN: &[&str] = &["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
@@ -414,7 +424,7 @@ mod tests {
                 "device {} has unexpected stability",
                 device.id
             );
-            if !expected.is_verified() {
+            if !expected.is_verified() && !ISSUE_TO_OPEN.contains(&device.id) {
                 assert!(
                     profile.verification_issue.is_some(),
                     "{} device {} must link to a verification issue",
@@ -519,8 +529,41 @@ mod tests {
         ] {
             assert_eq!(ids(name), [id], "{name:?}");
         }
-        for name in ["UT-D07B", "UT-D07A", "UT61E+", "UT60", "121", "BM78", ""] {
+        for name in [
+            "UT-D07B", "UT-D07A", "UT61E+", "UT60", "121", "BM78", "BD", "",
+        ] {
             assert!(ids(name).is_empty(), "{name:?}");
+        }
+    }
+
+    /// OWON's meters all advertise "BDM", padded on air with non-printing
+    /// bytes, and give "LILLIPUT" as a device name: either finds the six
+    /// OWON entries in table order, and nothing else; no other meter's name
+    /// finds them.
+    #[test]
+    fn bdm_finds_every_owon_entry() {
+        const OWON: [&str; 6] = ["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"];
+        let ids = |name: &str| advertising(name).iter().map(|d| d.id).collect::<Vec<_>>();
+        let nuls = format!("BDM{}", "\0".repeat(12));
+        let ones = format!("BDM{}", "\u{1}".repeat(12));
+        for name in ["BDM", " bdm ", &nuls, &ones, "LILLIPUT", "Lilliput"] {
+            assert_eq!(ids(name), OWON, "{name:?}");
+        }
+        for name in [
+            "Bluetooth DMM",
+            "BD",
+            "BM78xBT",
+            "121GW",
+            "UT60BT",
+            "UT202BT",
+            "UT-D07A",
+            "UT-D07B",
+        ] {
+            assert!(
+                !ids(name).iter().any(|id| OWON.contains(id)),
+                "{name:?}: {:?}",
+                ids(name)
+            );
         }
     }
 

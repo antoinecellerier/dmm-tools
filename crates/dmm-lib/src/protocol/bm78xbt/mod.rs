@@ -143,6 +143,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     send_after: &[],
     // A CRC-16 over 26 bytes (spec §4).
     checksummed: true,
+    claims_info_links: false,
     recognise,
 };
 

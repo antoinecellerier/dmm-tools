@@ -21,6 +21,7 @@ in its `verification.md`; what hardware has confirmed is tagged in its spec.
 | EEVblog 121GW | [121gw](research/121gw/verification.md) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
 | Brymen BM78xBT | [bm78xbt](research/bm78xbt/verification.md) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
 | Brymen BU-86X: BM86x, BM82x, BM52x | [bm86x](research/bm86x/verification.md) | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34)–[#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
+| OWON | [owon](research/owon/verification.md) | — |
 | UT632 (not implemented) | [ut632](research/ut632/verification.md) | — |
 | UT8805, UT8806 (not implemented) | [ut8805](research/ut8805/verification.md) | — |
 
@@ -56,6 +57,7 @@ with, and how well that probe is backed:
 | Brymen BM869s, BM867s | `00 86 66`, the reading request, on the BU-86X alone | a reply whose model bytes 20-23 are four `86` | Deduced from Brymen's sheet and programs, unverified; community captures show the four `86` (bm86x spec §13.3) |
 | Brymen BM829s, BM827s, BM822s, BM821s | `00 82 66`, after `00 86 66`, on the BU-86X alone | a reply whose model bytes 20-23 are four `82`, whichever request drew it | Deduced from Brymen's sheet and programs, unverified (bm86x spec §4.2) |
 | Brymen BM525s, BM521s | `00 52 66`, after `00 86 66` and `00 82 66`, on the BU-86X alone | a reply whose model bytes 20-23 are four `52`, whichever request drew it: Brymen's programs expect one to answer `82 66` | Deduced from Brymen's sheet and programs, unverified; community code reads four `52` from a BM525s (bm86x spec §13.3) |
+| OWON OW18B/OW16B, OW18E, B33, B35T+, B41T+, CM2100B | nothing — the meter streams over its built-in Bluetooth; the model code is read from FFF2 at connect | with a model code, one 6-byte frame whose function-word bits 10-15 are `111100`; without, two such frames 6 bytes apart with status bits 6-15 clear | Deduced from OWON's app and PC software, unverified; community captures show frames from five of the models and a B41T+'s code (OWON spec §14.5) |
 
 ### Probes on the wrong meter
 
@@ -73,6 +75,10 @@ with, and how well that probe is backed:
 - The same probes on a BM78xBT opened by address with no name heard (renamed,
   or `auto --adapter`): 6- and 8-byte writes to CDD4, where r4 knows only
   32-byte commands (bm78xbt spec §5). Needs one watched. (#33)
+- The same probes on an OWON meter opened by address with no name heard
+  and no model code read (renamed, or `auto --adapter`): 6- and 8-byte
+  writes to FFF3, which takes 2-byte key presses (OWON spec §7.1). Needs one
+  watched.
 - The family's `init` run again on the open after detection: a UT181A gets
   SET_MONITOR twice, a UT171 its connect frame twice — both already sent, but
   no meter has been watched. Needs either under `auto`. (#4, #5)
@@ -118,9 +124,10 @@ each step settles is in the family's file.
 - A cached built-in meter against a known UT-D07B: the fallback tries the platform's
   first, so an asleep 121GW, BM78xBT or ZOTEK meter costs a ~10 s connect — decides
   [known adapters first](future-improvements.md#known-adapters-first-in-the-bluetooth-fallback). Needs a report that shows it.
-- A chance 121GW or BM78xBT claim on a UT-D07B link: both rules decline AB CD
-  frames, each other's and ZOTEK packets and the adapter heartbeat in tests
-  ([detection design](detection-design.md)). Watch UT-D07B reports. (#25)
+- A chance 121GW, BM78xBT or OWON claim on a UT-D07B link: the three rules
+  decline AB CD frames, each other's and ZOTEK packets and the adapter
+  heartbeat in tests ([detection design](detection-design.md)). Watch UT-D07B
+  reports. (#25)
 
 ### USB bridges
 

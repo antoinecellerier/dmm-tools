@@ -182,6 +182,7 @@ pub(crate) static FINGERPRINT_86: Fingerprint = Fingerprint {
     trigger: Some(|transport| trigger(transport, Series::Bm86x)),
     send_after: &[],
     checksummed: false,
+    claims_info_links: false,
     recognise: |buf, _| recognise(buf, Series::Bm86x),
 };
 
@@ -191,6 +192,7 @@ pub(crate) static FINGERPRINT_82: Fingerprint = Fingerprint {
     trigger: Some(|transport| trigger(transport, Series::Bm82x)),
     send_after: &[],
     checksummed: false,
+    claims_info_links: false,
     recognise: |buf, _| recognise(buf, Series::Bm82x),
 };
 
@@ -200,6 +202,7 @@ pub(crate) static FINGERPRINT_52: Fingerprint = Fingerprint {
     trigger: Some(|transport| trigger(transport, Series::Bm52x)),
     send_after: &[],
     checksummed: false,
+    claims_info_links: false,
     recognise: |buf, _| recognise(buf, Series::Bm52x),
 };
 
