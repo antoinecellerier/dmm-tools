@@ -153,7 +153,8 @@ pub(crate) struct BluetoothPeers {
 /// it once trimmed, in any case.
 ///
 /// A prefix because one UT60BT advertises `UT60BTk`
-/// (`docs/research/new-device-candidates.md`, Bluetooth section). The one rule
+/// (`docs/research/ut61-family/reverse-engineering-approach.md`,
+/// cross-reference). The one rule
 /// both the search and the registry lookup of a peer's name apply
 /// (`registry::advertising`), so a peer the search took is found there too.
 pub(crate) fn name_matches(prefix: &str, name: &str) -> bool {

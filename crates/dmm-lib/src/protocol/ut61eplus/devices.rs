@@ -160,7 +160,8 @@ pub(crate) static UT60BT: SelectableDevice = SelectableDevice {
     manual_url: Some("https://meters.uni-trend.com.cn/content/1298.html"),
     // Bluetooth built in, no cable.
     links: &[crate::BLUETOOTH],
-    // One UT60BT advertises `UT60BTk` (docs/research/new-device-candidates.md).
+    // One UT60BT advertises `UT60BTk` (docs/research/ut61-family/
+    // reverse-engineering-approach.md, cross-reference).
     bluetooth_names: &["UT60BT"],
 };
 

@@ -114,7 +114,8 @@ Not searched for or opened while §1-12 of the spec were written:
 - the EEVblog forum and other forums, blog posts and videos; the web beyond
   the brymen.com pages and files above
 - `docs/research/new-device-candidates.md` and
-  `docs/research/non-unit-candidates.md`
+  `docs/research/non-unit-candidates.md` (their Brymen sections, and the
+  second file, removed 2026-10-01; see git history)
 
 **Exposure note.** Before this work, our two candidates docs already
 carried community-sourced claims about this cable: its VID:PID, its trigger

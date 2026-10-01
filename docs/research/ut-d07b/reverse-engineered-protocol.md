@@ -79,7 +79,7 @@ that UUID on this unit [HARDWARE]. It is a scan hint, not a data path. The
 `0000ff01`/`ff02`/`ff12` service set the iDMM2.0 app also carries is the
 UT513C insulation tester's older firmware only; the app talks to the
 native-BLE UT60BT and UT202BT over the ISSC service above, as to this adapter
-[VENDOR] (read 2026-09-25, `new-device-candidates.md`).
+[VENDOR] (read 2026-09-25, [ut61-family §1](../ut61-family/reverse-engineered-protocol.md)).
 
 On connect, BlueZ 5.87 logs
 `profiles/gap/gas.c:read_ppcp_cb() GAS PPCP: Invalid Connection Parameters

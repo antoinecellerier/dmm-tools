@@ -1114,7 +1114,9 @@ LPF V, LPF A and °C are listed at the range bytes shown and no others. AC A
 is under both 0x11 and 0x16, the two codes the app names "ACA"; which one the
 meter sends is unknown. Inrush rung 0 and continuity rung 1 are the asset's
 alone. The capacitance top rung is printed "99.9mF" in the manual and "105mF"
-in the asset. The manual has no frequency table: frequency shows on the
+in the asset. The Ω ladder is not the protocol deck's UT202S one: the
+manual and the asset start at 99.99Ω with 7 rungs, the deck's UT202S table at
+999.9Ω with 6. The manual has no frequency table: frequency shows on the
 auxiliary display in AC V and AC A. The asset's °F bounds (590, −58) do not
 match its own label.
 

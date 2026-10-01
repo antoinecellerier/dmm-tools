@@ -34,7 +34,9 @@ source carry URLs, sizes and MD5s.
    datasheet, the CN product sheets for A/B and C/D/E, and the UT71A/B and
    UT71C/D/E Interface Software Manuals (2011), all from UNI-T's global
    and Chinese sites. Dial tables, buttons, SEND, RECALL, counts, ranges.
-   Tagged [KNOWN]. `references/ut71/manual/`, notes in
+   UNI-T's UT-D04 accessory page
+   (https://meters.uni-trend.com.cn/content/4381.html) lists exactly
+   `UT71A、UT71B、UT71C、UT71D、UT71E` for the cable. Tagged [KNOWN]. `references/ut71/manual/`, notes in
    `references/ut71/manual-notes.md`.
 
 5. **Voltcraft manuals** — the VC920/VC940/VC960 operating instructions
@@ -45,7 +47,8 @@ source carry URLs, sizes and MD5s.
    [KNOWN]. `references/vc920/manuals/`, `references/vc920/other/`.
 
 6. **UNI-T's UT71 interface software CD** — "110401700522 UT71系列接口软件光盘",
-   RAR from the Chinese download centre (server date 2026-05-15): two
+   RAR from the Chinese download centre (server date 2026-05-15, listed as
+   "适用于Win7系统", for Windows 7): two
    InstallShield installers, `UT71A_B_V3.00.exe` and `UT71C_D_E_V3.00.exe`,
    and four PDF guides. The installed apps `UT71A_B.exe` (V3.00, MD5
    1cc346ad…) and `UT71C_D_E.exe` (V3.00, MD5 85b8888f…) are Borland

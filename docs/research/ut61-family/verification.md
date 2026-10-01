@@ -156,7 +156,7 @@ a later manual or UNI-T's word.
   it with Software V2.02, as the UT61E+ one was ([approach
   doc](reverse-engineering-approach.md)); decides whether V2.02 covers them.
 - iDMM2.0's UT202BT table against the deck's UT202S one — only the Ω ladder
-  is compared, and differs ([candidates](../new-device-candidates.md));
+  is compared, and differs ([§9 UT202BT](reverse-engineered-protocol.md#ut202bt-9999-counts));
   decides how far the deck backs `ut202bt.rs`.
 
 ## Detection

@@ -268,7 +268,7 @@ Update these in the same commit as the code:
 - `docs/gui-reference.md` — if the device adds new GUI behavior
 - `docs/architecture.md` — for a new transport or GATT profile (its module map), or a new concept
 - `docs/setup.md` — if the meter needs a new link or activation step (a Bluetooth adapter, a pairing quirk)
-- `docs/research/new-device-candidates.md` — mark the model's candidate entry as supported
+- `docs/research/new-device-candidates.md` — remove the model's entries, after moving anything the family docs lack
 - `CHANGELOG.md` — one `## Unreleased` entry, in user-visible phrasing
 
 ## Quick Reference: File Locations

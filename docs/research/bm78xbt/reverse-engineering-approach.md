@@ -102,7 +102,9 @@ Not searched for or opened while §1-11 of the spec were written:
 - eevblog.com beyond the two files the user saved, and the web in general
   beyond the brymen.com pages and files above
 - `docs/research/new-device-candidates.md`,
-  `docs/research/non-unit-candidates.md` and `references/testcontroller.md`:
+  `docs/research/non-unit-candidates.md` (their Brymen sections, and the
+  second file, removed 2026-10-01; see git history) and
+  `references/testcontroller.md`:
   they hold community-sourced notes on Brymen meters written before this
   work, and were kept out of every reader's brief and out of the drafting of
   both documents

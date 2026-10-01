@@ -95,7 +95,8 @@ Not opened while §1-14 of the spec were written:
 - chlordk/121gwcli
 - forum protocol posts (EEVblog forum and others)
 - the web in general, beyond the store page and the files above
-- `docs/research/new-device-candidates.md` §"EEVBlog 121GW": it held
+- `docs/research/new-device-candidates.md` §"EEVBlog 121GW" (removed
+  2026-10-01; see git history): it held
   community-derived notes on this meter written before this work, and was
   kept out of every reader's brief and out of the drafting of both documents
 

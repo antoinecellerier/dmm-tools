@@ -24,5 +24,6 @@ supported yet. The general rules are in `docs-user-facing.md`.
 - The README's device table uses the same words and emoji.
 - Research stays out: decompilation sources, line counts, hashes,
   cross-correlation with community code, protocol summaries, candidate
-  market analysis. It lives in `docs/research/<family>/` and
-  `docs/research/new-device-candidates.md`; the catalog links.
+  market analysis. It lives in `docs/research/<family>/` and, while a model
+  is only a candidate, `docs/research/new-device-candidates.md`; the catalog
+  links.

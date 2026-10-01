@@ -4,8 +4,9 @@
 //!
 //! The UT-D07B is a transparent BLE-to-UART bridge: the bytes it carries are
 //! the ones the USB cable carries. The UT60BT and UT202BT send the same UT61+
-//! frames over the same ISSC service (`docs/research/new-device-candidates.md`,
-//! Bluetooth section). So no parser or framing code knows about Bluetooth.
+//! frames over the same ISSC service
+//! (`docs/research/ut61-family/reverse-engineered-protocol.md` §1). So no
+//! parser or framing code knows about Bluetooth.
 //! Everything Bluetooth-specific is here
 //! (`docs/research/ut-d07b/reverse-engineered-protocol.md`).
 //!
