@@ -4,7 +4,8 @@ Scope: OWON's Bluetooth LE multimeters — the B33(T)(+), B35(T)(+),
 B41T(+), OW16B, OW18B, OW18E and CM2100B — from the advertisement to the
 frames they send and the commands they accept. Not implemented yet; this
 pair of documents records what the meters do on the wire, from vendor
-sources only. The spec covers both frame formats OWON's app decodes: the
+sources only; community projects and their captures are compared in spec
+§14 alone. The spec covers both frame formats OWON's app decodes: the
 6-byte frame of these meters in full, and the 15-byte frame of the Voltcraft
 VC831/851/871/891/915/925, OWON OW65/67/69 and CMS101/061 in its own section
 (§10), from the app alone. Only the 6-byte group is planned for
@@ -111,11 +112,73 @@ chips) before the readers reported. None of them is used. The 14-byte format
 in spec §11 is the PC reader's own reading of commented-out code in OWON's
 PC source.
 
-### Cross-referenced
+### Cross-referenced (clean-room boundary opened 2026-10-01)
 
-Not yet. As of **2026-10-01** the clean-room boundary stands: no community
-source has been opened for this family. Spec §14 is the placeholder for the
-comparison.
+The user opened the boundary on **2026-10-01**, after the vendor-only spec
+was committed (`41ac399d`). The findings are §14 of the spec, marked
+[COMMUNITY]; nothing was merged into §1-12, which only point to it.
+Repositories were cloned into a scratch directory and deleted afterwards;
+no community code was copied. Real Bluetooth addresses in those sources are
+left out.
+
+Read on 2026-10-01, at the commit given:
+
+1. [DeanCording/owonb35](https://github.com/DeanCording/owonb35) `dbbc4e1`:
+   README and `owonb35.c`; and [inflex/owon-b35](https://github.com/inflex/owon-b35)
+   `73c6baf` (README, `owoncli.c`) with its
+   [issue #1](https://github.com/inflex/owon-b35/issues/1) and that issue's
+   attachment `packets.txt` (a Wireshark listing of OWON's 2018 Android app).
+2. [sercona/Owon-Multimeters](https://github.com/sercona/Owon-Multimeters)
+   `1718fda`: README, `code/`, `esp32/`, `test_txt/`;
+   [sercona/owon-cm2100b-clamp-meter](https://github.com/sercona/owon-cm2100b-clamp-meter)
+   `bc683b2`: README only (the repository moved; its deleted files were not
+   used).
+3. [JayTee42/ow18b](https://github.com/JayTee42/ow18b) `ce4e131` and its fork
+   [kwasmich/ow18e](https://github.com/kwasmich/ow18e) `6dfe32e`
+   (`ow18e.txt` included).
+4. [rbelnienk/OWON-OW18B-BLE-Connector](https://github.com/rbelnienk/OWON-OW18B-BLE-Connector)
+   `2de51d2`, [MartMet/OW18B](https://github.com/MartMet/OW18B) `c1c52e8`,
+   [JAQUBA/OWON_OW18B](https://github.com/JAQUBA/OWON_OW18B) `c3277c7`.
+5. [reaper7/M5Stack_BLE_client_Owon_B35T](https://github.com/reaper7/M5Stack_BLE_client_Owon_B35T)
+   `540e576`, [cransom/b35t-reader](https://github.com/cransom/b35t-reader)
+   `2912481`, [akemnade/owon-tools](https://github.com/akemnade/owon-tools)
+   `2787c4c`, [ondras12345/B35T](https://github.com/ondras12345/B35T)
+   `8842d9b` (README and test fixtures),
+   [53845714nF/OWON_B35T](https://github.com/53845714nF/OWON_B35T) `cbf1051`.
+6. [jtcash/OwonB41T](https://github.com/jtcash/OwonB41T) `9d880c2` and its
+   fork art-ya/OwonB41T `1f23cba`;
+   [likeablob/owon-bdm-webui](https://github.com/likeablob/owon-bdm-webui)
+   `00a61b8` with its history; [PBrunot/owonb41t](https://github.com/PBrunot/owonb41t)
+   `db9dbbe`; [palmerr23/Owon_B41T](https://github.com/palmerr23/Owon_B41T)
+   `dec8a5b`; [pjpa365/owon-suite](https://github.com/pjpa365/owon-suite)
+   `693b534` (`docs/protocol-spec.md`, `backend/app/owon_ble/`,
+   `poc/tests/test_protocol.py`);
+   [luissantos/multimeter_gui](https://github.com/luissantos/multimeter_gui)
+   `44d6c4b`; [VYD3N/Mult-AI-Meter](https://github.com/VYD3N/Mult-AI-Meter)
+   `89620da`.
+7. [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows)
+   `2b83d9e`, OWON parts only: `Decoders/DecoderOwon.cs`, the OWON test data
+   in `Utilities.cs` and its history (`be440f0`, `fb9ff02`, `b65294e`), and
+   discussions #40, #49 and #66 with their comments; from #66 the attachment
+   `VC871 BLE GATT.txt`.
+8. [libreble/multimeter](https://github.com/libreble/multimeter) `d26ba48`:
+   `docs/protocols/owon-plus.md`, `owon-old.md`.
+9. sigrok: [libsigrok](https://github.com/sigrokproject/libsigrok) `0bc2487`
+   (no OWON Bluetooth support; OWON appears only in `scpi-dmm`), the sigrok
+   wiki's search (no hits), and the sigrok-devel post
+   ["Add support for Owon B35T"](https://sourceforge.net/p/sigrok/mailman/message/35691836/)
+   (2017-02-27).
+10. EEVblog: search-result snippets only, no forum page fetched; they added
+    nothing beyond the projects above.
+
+Opened, not about this family: [bialybudyn/Owon-Multimeter-Manager](https://github.com/bialybudyn/Owon-Multimeter-Manager)
+`65da106` (the XDM2041 bench meter over SCPI).
+
+Unreachable or not opened: the hackaday.io project "Bluetooth Data Owon
+B35T Multimeter" (12922; 502 to the fetch tool, no connection with curl,
+2026-10-01); the other issue and discussion attachments (logs, `Debug.zip`,
+`TestLogs.zip`, `uuids.txt`); granzscientific/b35t-reader (a fork of
+cransom's, not opened); videos; Reddit; mikrocontroller.net.
 
 ### Model-recall disclosure
 
@@ -171,6 +234,18 @@ without one is tagged [UNVERIFIED].
    masks and model table, the B35 and B41T product pages' Bluetooth and rate
    lines, and the text of two manual pages (B35-UM p.40/35, B33-UM
    p.27/22-28/23).
+8. **Community cross-reference** (boundary opened 2026-10-01, above). Each
+   claim of spec §1-12 compared with the community sources, noting for each
+   whether it rests on a meter capture or on OWON's code, and every captured
+   frame decoded with the spec's tables (spec §14.5).
+9. **Vendor re-check.** Each disputed point re-read in OWON's app listing or
+   PC source alone: the bit-6 OL name (MC:1594-1598), the `*READ?`/`*READ1?`
+   header's bytes 12-15 (stored as `OfflineRecordConfig.recordLen`, unused by
+   the parse, R2W:687-1017), the OW key for Hz/Duty (MD:5989;
+   `frame/MainFrame.java:330-348`), decimal codes 6 and 7, and the app's
+   FFF0 scan filter. The spec's reading held in every case, so no body
+   statement changed; each disagreement in spec §14.3 sets a capture against
+   OWON's code, or is a community error.
 
 Resolved disagreements (`findings/adjudication.md`, and drafting):
 
@@ -282,4 +357,4 @@ As used in `reverse-engineered-protocol.md`:
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter
 - **[HARDWARE]** — seen on a real meter: none yet
-- **[COMMUNITY]** — from a community source, spec §14 only: none yet
+- **[COMMUNITY]** — from a community source, spec §14 only
