@@ -404,8 +404,6 @@ mod tests {
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
-        // Experimental, with their verification issues still to be opened.
-        const ISSUE_TO_OPEN: &[&str] = &["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
@@ -424,7 +422,7 @@ mod tests {
                 "device {} has unexpected stability",
                 device.id
             );
-            if !expected.is_verified() && !ISSUE_TO_OPEN.contains(&device.id) {
+            if !expected.is_verified() {
                 assert!(
                     profile.verification_issue.is_some(),
                     "{} device {} must link to a verification issue",

@@ -114,12 +114,12 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | Brymen BM869s/BM867s | 🧪 Experimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
 | Brymen BM829s/BM827s/BM822s/BM821s | 🧪 Experimental | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
 | Brymen BM525s/BM521s | 🧪 Experimental | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
-| OWON OW18B/OW16B | — | 🧪 Experimental (built in) | — |
-| OWON OW18E | — | 🧪 Experimental (built in) | — |
-| OWON B33 | — | 🧪 Experimental (built in) | — |
-| OWON B35T+ | — | 🧪 Experimental (built in) | — |
-| OWON B41T+ | — | 🧪 Experimental (built in) | — |
-| OWON CM2100B | — | 🧪 Experimental (built in) | — |
+| OWON OW18B/OW16B | — | 🧪 Experimental (built in) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
+| OWON OW18E | — | 🧪 Experimental (built in) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
+| OWON B33 | — | 🧪 Experimental (built in) | [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) |
+| OWON B35T+ | — | 🧪 Experimental (built in) | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
+| OWON B41T+ | — | 🧪 Experimental (built in) | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
+| OWON CM2100B | — | 🧪 Experimental (built in) | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
 <!-- devices:end -->
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.

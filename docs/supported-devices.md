@@ -236,13 +236,13 @@ shows.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| OW18B | 5999 | 🧪 Experimental | NCV; hFE or a mV position, depending on the unit |
-| OW16B | 5999 | 🧪 Experimental | NCV; hFE in place of µA on some units |
-| OW18E | 19999 | 🧪 Experimental | NCV; hFE or a mV position, depending on the unit |
-| B33 | 3999 | 🧪 Experimental | no ℉ or Max/Min |
-| B35T+ | 6000 | 🧪 Experimental | hFE and a mV position |
-| B41T+ | 22000 | 🧪 Experimental | a mV position; no hFE |
-| CM2100B | 19999 | 🧪 Experimental | clamp: 2 A, 20 A and 100 A positions; NCV, ZERO; no temperature |
+| OW18B | 5999 | 🧪 Experimental ([#39](https://github.com/antoinecellerier/dmm-tools/issues/39)) | NCV; hFE or a mV position, depending on the unit |
+| OW16B | 5999 | 🧪 Experimental ([#39](https://github.com/antoinecellerier/dmm-tools/issues/39)) | NCV; hFE in place of µA on some units |
+| OW18E | 19999 | 🧪 Experimental ([#40](https://github.com/antoinecellerier/dmm-tools/issues/40)) | NCV; hFE or a mV position, depending on the unit |
+| B33 | 3999 | 🧪 Experimental ([#41](https://github.com/antoinecellerier/dmm-tools/issues/41)) | no ℉ or Max/Min |
+| B35T+ | 6000 | 🧪 Experimental ([#42](https://github.com/antoinecellerier/dmm-tools/issues/42)) | hFE and a mV position |
+| B41T+ | 22000 | 🧪 Experimental ([#43](https://github.com/antoinecellerier/dmm-tools/issues/43)) | a mV position; no hFE |
+| CM2100B | 19999 | 🧪 Experimental ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)) | clamp: 2 A, 20 A and 100 A positions; NCV, ZERO; no temperature |
 
 Not run on a meter yet: the decoding and the remote keys come from OWON's
 app, OWON's PC software and the manuals. The meter reports its model when it

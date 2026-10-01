@@ -111,7 +111,8 @@ pub(crate) struct OwonProtocol {
 }
 
 impl OwonProtocol {
-    fn new(model: &'static Model) -> Self {
+    /// `issue` is the entry's verification issue, one per model.
+    fn new(model: &'static Model, issue: u16) -> Self {
         Self {
             rx_buf: Vec::with_capacity(64),
             model,
@@ -121,7 +122,7 @@ impl OwonProtocol {
                 stability: Stability::Experimental,
                 supported_commands: model.commands,
                 max_aux_values: 0,
-                verification_issue: None,
+                verification_issue: Some(issue),
                 meter_keys: model.meter_keys,
             },
             confirmed: Confirmation::NoInfo,
@@ -371,7 +372,8 @@ mod tests {
     }
 
     fn proto(model: &'static Model) -> OwonProtocol {
-        OwonProtocol::new(model)
+        // The issue number plays no part in decoding.
+        OwonProtocol::new(model, 0)
     }
 
     /// `bytes` in reads of `size`.
@@ -665,6 +667,7 @@ mod tests {
 
     #[test]
     fn every_registry_entry_is_its_models() {
+        let mut issues = Vec::new();
         for m in model::MODELS {
             let entry = registry::find_device(m.id).expect("registry entry");
             assert_eq!(entry.display_name, m.name);
@@ -693,9 +696,11 @@ mod tests {
             assert_eq!(profile.stability, Stability::Experimental);
             assert_eq!(profile.supported_commands, m.commands);
             assert_eq!(profile.max_aux_values, 0);
-            assert_eq!(profile.verification_issue, None);
+            issues.push(profile.verification_issue);
             assert_eq!(proto.delivery(), crate::protocol::Delivery::Streamed);
         }
+        let issues: Vec<u16> = issues.into_iter().flatten().collect();
+        assert_eq!(issues, [39, 40, 41, 42, 43, 44]);
         let ids: Vec<&str> = model::MODELS.iter().map(|m| m.id).collect();
         assert_eq!(ids, ["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"]);
         for (alias, id) in [

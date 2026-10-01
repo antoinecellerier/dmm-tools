@@ -1,7 +1,13 @@
 # OWON verification
 
 Open checks for OWON's Bluetooth meters — the B33(T)(+), B35(T)(+),
-B41T(+), OW16B, OW18B, OW18E and CM2100B; no issue is open yet.
+B41T(+), OW16B, OW18B, OW18E and CM2100B, issues
+[#39](https://github.com/antoinecellerier/dmm-tools/issues/39) (OW18B/OW16B),
+[#40](https://github.com/antoinecellerier/dmm-tools/issues/40) (OW18E),
+[#41](https://github.com/antoinecellerier/dmm-tools/issues/41) (B33),
+[#42](https://github.com/antoinecellerier/dmm-tools/issues/42) (B35T+),
+[#43](https://github.com/antoinecellerier/dmm-tools/issues/43) (B41T+) and
+[#44](https://github.com/antoinecellerier/dmm-tools/issues/44) (CM2100B).
 What real meters have confirmed is tagged `[HARDWARE]` in the
 [spec](reverse-engineered-protocol.md); checks that span families are in the
 [verification backlog](../../verification-backlog.md). Community captures
