@@ -129,8 +129,10 @@ not found with `Error::BluetoothOnly`. `list_devices()` stays instant because it
 For `auto`, the opener takes the first bridge that answers and `detect.rs` identifies the meter on
 it. Each family exports a `Fingerprint`, and `detect.rs` is the engine that runs them. Which ones
 run comes from the registry entries that list that link. On a Bluetooth peer whose advertised name
-(`Transport::advertised_name()`) belongs to registry entries, only those entries' fingerprints run:
-the transport reports the name and knows no model. The cascade and its failure modes are in
+(`Transport::advertised_name()`) belongs to registry entries, only those entries' fingerprints run.
+A peer's GATT profile may also read one characteristic at bring-up, whose value
+(`Transport::info_characteristic()`) is the protocol's to read. Either way the transport reports
+what the link carries and knows no model. The cascade and its failure modes are in
 [detection-design.md](detection-design.md).
 
 Code: `transport/open.rs`, the open and list functions in `lib.rs`, `protocol/registry.rs`,
@@ -312,10 +314,10 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `transport/ch9329.rs` | CH9329 bridge |
 | `transport/ch9325.rs` | CH9325 bridge, with its baud probing |
 | `transport/bu86x.rs` | BU-86X cable, which speaks its meters' protocol itself |
-| `transport/ble/mod.rs` | Bluetooth LE transport: connect, pick a profile, log in, subscribe |
+| `transport/ble/mod.rs` | Bluetooth LE transport: connect, pick a profile, run its bring-up, subscribe |
 | `transport/ble/search.rs` | Finding a peer by name or address |
 | `transport/ble/profile.rs` | GATT profiles and picking one from a peer's services |
-| `transport/ble/{issc,fff0,eevblog121gw,brymen}.rs` | One GATT profile each |
+| `transport/ble/{issc,fff0,eevblog121gw,brymen,owon}.rs` | One GATT profile each |
 | `transport/ble/winrt.rs` | The one WinRT connection-parameter call btleplug cannot keep |
 | `transport/ble_disabled.rs` | Stand-in when the `bluetooth` feature is off |
 | `protocol/mod.rs` | `Protocol`, `Delivery`, `DeviceProfile`, `Setting`/`Choice`, `MeterKeys`, `Fingerprint` |

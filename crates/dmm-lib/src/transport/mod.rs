@@ -88,6 +88,16 @@ pub trait Transport: Send {
         None
     }
 
+    /// For a Bluetooth link whose profile reads a characteristic at
+    /// bring-up, the value it read. `None` for every other link, and for a
+    /// read that failed.
+    ///
+    /// A fact about the link, as [`Transport::advertised_name`] is: what the
+    /// bytes say about the meter is its protocol's to read.
+    fn info_characteristic(&self) -> Option<&[u8]> {
+        None
+    }
+
     /// The notice to give when this link's readings are seen arriving two
     /// at a time ([`LateReadings`]), for a link known to bunch them. `None`
     /// for every other link: pairs there are logged, not shown.
@@ -249,6 +259,10 @@ impl Transport for Box<dyn Transport> {
         (**self).advertised_name()
     }
 
+    fn info_characteristic(&self) -> Option<&[u8]> {
+        (**self).info_characteristic()
+    }
+
     fn late_readings(&self) -> Option<LateReadings> {
         (**self).late_readings()
     }
@@ -393,6 +407,30 @@ mod tests {
         }
         let t: Box<dyn Transport> = Box::new(Radio);
         assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
+    }
+
+    /// A protocol reads the value through a boxed transport: a box that
+    /// fell back on the default would hide it.
+    #[test]
+    fn a_boxed_transport_forwards_the_info_characteristic() {
+        struct Radio;
+        impl Transport for Radio {
+            fn write(&self, _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+                Ok(0)
+            }
+            fn link(&self) -> Option<Link> {
+                Some(Link::Bluetooth)
+            }
+            fn info_characteristic(&self) -> Option<&[u8]> {
+                Some(&[0x12, 0x63])
+            }
+        }
+        let t: Box<dyn Transport> = Box::new(Radio);
+        assert_eq!(t.info_characteristic(), Some(&[0x12, 0x63][..]));
+        assert_eq!(NullTransport.info_characteristic(), None);
     }
 
     #[test]

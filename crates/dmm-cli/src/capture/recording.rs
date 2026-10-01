@@ -200,6 +200,10 @@ impl Transport for RecordingTransport {
         self.inner.advertised_name()
     }
 
+    fn info_characteristic(&self) -> Option<&[u8]> {
+        self.inner.info_characteristic()
+    }
+
     fn late_readings(&self) -> Option<LateReadings> {
         self.inner.late_readings()
     }
@@ -262,6 +266,10 @@ mod tests {
             Some("UT60BT")
         }
 
+        fn info_characteristic(&self) -> Option<&[u8]> {
+            Some(&[0x29, 0xFF])
+        }
+
         fn late_readings(&self) -> Option<LateReadings> {
             Some(LateReadings { command: None })
         }
@@ -270,7 +278,8 @@ mod tests {
     /// What the open path and detection ask of the link reaches it through
     /// the recorder. These methods have defaults, so one the wrapper dropped
     /// would answer as a link with nothing behind it — and detection on a
-    /// Bluetooth link reads the advertised name through the recorder.
+    /// Bluetooth link reads the advertised name, and a protocol the
+    /// information characteristic, through the recorder.
     #[test]
     fn the_links_own_answers_pass_through() {
         let (t, _rec) = RecordingTransport::new(Box::new(PeerTransport));
@@ -278,6 +287,7 @@ mod tests {
         assert_eq!(t.transport_name(), "Bluetooth");
         assert_eq!(t.bluetooth_selector(), Some("12:34:56:78:9A:BC"));
         assert_eq!(t.advertised_name(), Some("UT60BT"));
+        assert_eq!(t.info_characteristic(), Some(&[0x29, 0xFF][..]));
         assert_eq!(t.late_readings(), Some(LateReadings { command: None }));
     }
 

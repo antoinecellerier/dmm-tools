@@ -5,6 +5,7 @@ use super::brymen::BRYMEN;
 use super::eevblog121gw::EEVBLOG_121GW;
 use super::fff0::FFF0;
 use super::issc::ISSC_UART;
+use super::owon::OWON;
 use btleplug::api::{CharPropFlags, Characteristic, WriteType};
 use std::collections::BTreeSet;
 
@@ -47,6 +48,11 @@ pub(super) enum BringUp {
     Subscribe,
     /// The BM78xBT's password login (`brymen.rs`).
     BrymenLogin,
+    /// Read this characteristic, in the profile's service, once before the
+    /// subscribe, and hand its value to the protocol
+    /// ([`crate::transport::Transport::info_characteristic`]). The profile
+    /// is taken only where the characteristic offers a read.
+    ReadInfo(&'static str),
 }
 
 /// The profiles, in the order a peer's services are tried
@@ -60,20 +66,29 @@ pub(super) enum BringUp {
 /// it is; the order between those two never meets a real peer. FFF0 last:
 /// it is a common service on generic modules, so a peer that also carries a
 /// meter's own service is read over that.
-pub(super) const PROFILES: [&GattProfile; 4] = [&ISSC_UART, &EEVBLOG_121GW, &BRYMEN, &FFF0];
+///
+/// OWON's after it, in the same service: it is taken only by a peer whose
+/// FFF4 offers no write, which FFF0 refuses, so every peer that was read
+/// over a profile before still is. A peer whose FFF4 takes writes is read
+/// over FFF0 even with OWON's other characteristics beside it.
+pub(super) const PROFILES: [&GattProfile; 5] = [&ISSC_UART, &EEVBLOG_121GW, &BRYMEN, &FFF0, &OWON];
 
 /// A profile's characteristics, as one look at a peer's services found them.
 pub(super) struct Chosen {
     pub(super) profile: &'static GattProfile,
     pub(super) notify: Characteristic,
     pub(super) write: Characteristic,
+    /// The characteristic a [`BringUp::ReadInfo`] profile reads; `None` for
+    /// every other profile.
+    pub(super) info: Option<Characteristic>,
 }
 
 /// The profile a peer's discovered characteristics carry, or the role
 /// (`"write"` or `"notify"`) that is missing.
 ///
 /// The first of [`PROFILES`] whose two characteristics are there, under its
-/// service, and offer what the profile needs of them. Failing that, the
+/// service, and offer what the profile needs of them, with the readable
+/// characteristic a [`BringUp::ReadInfo`] names beside them. Failing that, the
 /// error names what the closest profile lacks: the first whose service
 /// carries either of its characteristics, else ISSC, which is what a peer
 /// with no known profile always heard.
@@ -93,16 +108,27 @@ pub(super) fn choose_profile(
     };
 
     for profile in PROFILES {
-        if let (Some(notify), Some(write)) = found(profile)
-            && fits(notify.properties, profile.notify_needs)
-            && fits(write.properties, profile.write_needs)
+        let (Some(notify), Some(write)) = found(profile) else {
+            continue;
+        };
+        if !fits(notify.properties, profile.notify_needs)
+            || !fits(write.properties, profile.write_needs)
         {
-            return Ok(Chosen {
-                profile,
-                notify: notify.clone(),
-                write: write.clone(),
-            });
+            continue;
         }
+        let info = match profile.bring_up {
+            BringUp::ReadInfo(uuid) => match find(profile.service, uuid) {
+                Some(info) if info.properties.contains(CharPropFlags::READ) => Some(info.clone()),
+                _ => continue,
+            },
+            BringUp::Subscribe | BringUp::BrymenLogin => None,
+        };
+        return Ok(Chosen {
+            profile,
+            notify: notify.clone(),
+            write: write.clone(),
+            info,
+        });
     }
 
     let closest = PROFILES
@@ -208,6 +234,25 @@ mod tests {
                 BRYMEN.write,
                 CharPropFlags::READ | CharPropFlags::WRITE,
             ),
+        ]
+    }
+
+    /// OWON's information, key and stream characteristics, the information
+    /// one with `info`: FFF4 notifies only, as a B35T+ lists it, and FFF3
+    /// takes both writes (`docs/research/owon/reverse-engineered-protocol.md`
+    /// §14.4).
+    fn owon(info: CharPropFlags) -> [Characteristic; 3] {
+        let BringUp::ReadInfo(info_uuid) = OWON.bring_up else {
+            panic!("OWON's profile reads its information characteristic");
+        };
+        [
+            characteristic(OWON.service, info_uuid, info),
+            characteristic(
+                OWON.service,
+                OWON.write,
+                CharPropFlags::WRITE | CharPropFlags::WRITE_WITHOUT_RESPONSE,
+            ),
+            characteristic(OWON.service, OWON.notify, CharPropFlags::NOTIFY),
         ]
     }
 
@@ -465,6 +510,62 @@ mod tests {
             choose(brymen().into_iter().chain([fff4_as_listed()])),
             Ok(BRYMEN.name)
         );
+    }
+
+    /// A peer whose FFF4 only notifies, with a readable FFF2 and a writable
+    /// FFF3 beside it, is read over OWON's profile: subscribed on FFF4,
+    /// written on FFF3, and FFF2 read first.
+    #[test]
+    fn owon_is_chosen_when_fff4_only_notifies() {
+        let [info, keys, stream] = owon(CharPropFlags::READ);
+        let chosen = choose_profile(&[info.clone(), keys.clone(), stream.clone()].into()).unwrap();
+        assert_eq!(chosen.profile.name, OWON.name);
+        assert_eq!(chosen.notify, stream);
+        assert_eq!(chosen.write, keys);
+        assert_eq!(chosen.info, Some(info));
+    }
+
+    /// ZOTEK's FFF0 holds FFF4 alone, taking writes, and stays on FFF0's
+    /// profile with nothing read first.
+    #[test]
+    fn a_zotek_fff0_peer_stays_on_fff0() {
+        let chosen = choose_profile(&[fff4_as_listed()].into()).unwrap();
+        assert_eq!(chosen.profile.name, FFF0.name);
+        assert_eq!(chosen.info, None);
+    }
+
+    /// FFF0 comes first: a peer whose FFF4 takes writes is read over it even
+    /// with OWON's other characteristics there, as it was before OWON's
+    /// profile.
+    #[test]
+    fn fff0_keeps_a_peer_whose_fff4_takes_writes() {
+        let [info, keys, _] = owon(CharPropFlags::READ);
+        let chosen = choose_profile(&[info, keys, fff4_as_listed()].into()).unwrap();
+        assert_eq!(chosen.profile.name, FFF0.name);
+        assert_eq!(chosen.write, fff4_as_listed());
+        assert_eq!(chosen.info, None);
+    }
+
+    /// Without a readable FFF2 there is no OWON profile, and FFF0, the
+    /// closest, names the write it lacks.
+    #[test]
+    fn owon_needs_its_information_characteristic() {
+        let [_, keys, stream] = owon(CharPropFlags::READ);
+        assert_eq!(choose([keys.clone(), stream.clone()]), Err("write"));
+
+        let [unreadable, ..] = owon(CharPropFlags::WRITE);
+        assert_eq!(choose([unreadable, keys, stream]), Err("write"));
+    }
+
+    /// Key presses go unacknowledged where FFF3 lists that, as a B41T+ acts
+    /// on, and acknowledged where it lists only that.
+    #[test]
+    fn owon_keys_go_unacknowledged_where_fff3_takes_it() {
+        let [_, keys, _] = owon(CharPropFlags::READ);
+        assert_eq!(write_type(&OWON, &keys), WriteType::WithoutResponse);
+
+        let acknowledged = characteristic(OWON.service, OWON.write, CharPropFlags::WRITE);
+        assert_eq!(write_type(&OWON, &acknowledged), WriteType::WithResponse);
     }
 
     /// An over-MTU write is rejected by the peer, so the chunk size has to

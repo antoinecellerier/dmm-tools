@@ -42,8 +42,9 @@ and each still wants a capture of our own.
   across a power cycle (§2, §7.2; changed on a B41T+, §14.4) — settles §2's
   row. Needs a meter renamed by OWON's app.
 - Notify or indicate on FFF4, the full 128-bit UUIDs, and write without
-  response on FFF1 and FFF3 (§2; a B41T+ takes it on FFF3 only, §14.4) —
-  settles §2's rows. Needs GATT discovery.
+  response on FFF1 and FFF3 (§2; FFF3 only on a B41T+, §14.4) — settles
+  §2's rows, and whether OWON's profile is chosen over FFF0 (only where FFF4
+  takes no write). Needs GATT discovery per model, OW-handle models first.
 - The GATT handle layouts, BT (0x25…) and OW (0x15…), per model (§2; BT on the
   B35T, B35T+, B41T+, OW on the OW18B, OW18E, CM2100B, §14.4) — settles which
   models share a GATT table. Needs a discovery on a B33 and an OW16B.

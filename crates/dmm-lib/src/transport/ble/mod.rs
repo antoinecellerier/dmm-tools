@@ -1,6 +1,6 @@
 //! Bluetooth LE transport for UNI-T's UT-D07 adapters and the meters with
 //! the radio built in (the UT60BT, UT202BT, ZOTEK's meters, the EEVblog
-//! 121GW and the Brymen BM78xBT), called peers here.
+//! 121GW, the Brymen BM78xBT and OWON's meters), called peers here.
 //!
 //! The UT-D07B is a transparent BLE-to-UART bridge: the bytes it carries are
 //! the ones the USB cable carries. The UT60BT and UT202BT send the same UT61+
@@ -10,12 +10,14 @@
 //! Everything Bluetooth-specific is here
 //! (`docs/research/ut-d07b/reverse-engineered-protocol.md`).
 //!
-//! A peer carries its byte stream over one of four GATT profiles, picked
+//! A peer carries its byte stream over one of five GATT profiles, picked
 //! from the services it offers once connected (`profile.rs`): ISSC's
 //! transparent UART (`issc.rs`), the EEVblog 121GW's own
-//! (`eevblog121gw.rs`), Brymen's own (`brymen.rs`), or the FFF0/FFF4 one
-//! (`fff0.rs`). Brymen's alone has a login, which runs between discovery
-//! and the subscribe.
+//! (`eevblog121gw.rs`), Brymen's own (`brymen.rs`), the FFF0/FFF4 one
+//! (`fff0.rs`), or OWON's, in the same service (`owon.rs`). Between
+//! discovery and the subscribe, Brymen's logs in and OWON's reads one
+//! characteristic, whose value the transport hands on without knowing what
+//! it says ([`Transport::info_characteristic`]).
 //!
 //! There is no background thread and no channel: the struct owns a
 //! current-thread tokio runtime and every btleplug call runs inside
@@ -32,6 +34,7 @@ mod brymen;
 mod eevblog121gw;
 mod fff0;
 mod issc;
+mod owon;
 mod profile;
 mod search;
 #[cfg(target_os = "windows")]
@@ -78,6 +81,8 @@ const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(15);
 /// and never later than this long after the discovery bound, so both tries
 /// of the setup share one login bound.
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(8);
+/// How long a profile's information read may take, bounded as the login is.
+const INFO_READ_TIMEOUT: Duration = Duration::from_secs(3);
 /// The pause before retrying a link setup that failed.
 const SETUP_RETRY_PAUSE: Duration = Duration::from_millis(500);
 /// How often to look again while the service tree is still filling in.
@@ -106,6 +111,9 @@ pub(crate) struct Ble {
     write_char: Characteristic,
     /// The ATT MTU, as [`read_mtu`] found it when the link was set up.
     mtu: u16,
+    /// What a [`BringUp::ReadInfo`] profile's read found; `None` for every
+    /// other profile, and for a read that failed.
+    info_characteristic: Option<Vec<u8>>,
     notifications: RefCell<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>,
     /// Bytes a notification delivered that did not fit the caller's buffer.
     pending: RefCell<VecDeque<u8>>,
@@ -191,6 +199,7 @@ struct Opened {
     profile: &'static GattProfile,
     write_char: Characteristic,
     mtu: u16,
+    info_characteristic: Option<Vec<u8>>,
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     selector: String,
     advertised_name: Option<String>,
@@ -220,6 +229,7 @@ fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
         profile: opened.profile,
         write_char: opened.write_char,
         mtu: opened.mtu,
+        info_characteristic: opened.info_characteristic,
         notifications: RefCell::new(opened.notifications),
         pending: RefCell::new(VecDeque::new()),
         heartbeats: Cell::new(0),
@@ -340,7 +350,12 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
     };
     // From here on the link is up, so a failure has to take it down again:
     // left connected, the peer stays awake with nobody reading it.
-    let (profile, write_char, notifications) = match subscribed {
+    let Subscribed {
+        profile,
+        write_char,
+        notifications,
+        info_characteristic,
+    } = match subscribed {
         Ok(subscribed) => subscribed,
         Err(SetupFailure::Refused(e) | SetupFailure::Other(e)) => {
             disconnect(&peripheral).await;
@@ -378,6 +393,7 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         profile,
         write_char,
         mtu,
+        info_characteristic,
         notifications,
         selector,
         advertised_name: candidate.taken_by,
@@ -504,9 +520,8 @@ fn handle_in(connections: &str, address: &str) -> Option<u16> {
     })
 }
 
-/// Find a profile on a connected peer, log in where the profile has a login,
-/// and subscribe to its notifications, handing back the profile, the write
-/// characteristic and the stream.
+/// Find a profile on a connected peer, run its bring-up, and subscribe to
+/// its notifications.
 ///
 /// The service tree fills in as the platform resolves it, so it is looked
 /// at again until a profile is there or the deadline passes. What one look
@@ -528,19 +543,13 @@ fn handle_in(connections: &str, address: &str) -> Option<u16> {
 /// changing, so a service that outranks it still resolving had its chance —
 /// or at the deadline.
 ///
-/// The login has a bound of its own ([`LOGIN_TIMEOUT`]), so one that starts
-/// near `deadline` still gets its time.
+/// The login and the information read have bounds of their own
+/// ([`LOGIN_TIMEOUT`], [`INFO_READ_TIMEOUT`]), so one that starts near
+/// `deadline` still gets its time ([`bring_up_deadline`]).
 async fn subscribe_profile(
     peripheral: &Peripheral,
     deadline: tokio::time::Instant,
-) -> std::result::Result<
-    (
-        &'static GattProfile,
-        Characteristic,
-        Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
-    ),
-    SetupFailure,
-> {
+) -> std::result::Result<Subscribed, SetupFailure> {
     let mut last_look = None;
     let chosen = loop {
         peripheral.discover_services().await.map_err(link_error)?;
@@ -559,18 +568,25 @@ async fn subscribe_profile(
     };
     debug!("Bluetooth: {} profile", chosen.profile.name);
 
+    let mut info_characteristic = None;
     match chosen.profile.bring_up {
         // Nothing is written to any characteristic first (research doc §3;
         // `docs/research/zotek/reverse-engineered-protocol.md` §3;
         // `docs/research/121gw/reverse-engineered-protocol.md` §3).
         BringUp::Subscribe => {}
+        // Read before the subscribe, as OWON's programs read it
+        // (`docs/research/owon/reverse-engineered-protocol.md` §3.2, §3.3).
+        // `choose_profile` took the profile only with the characteristic.
+        BringUp::ReadInfo(_) => {
+            if let Some(info) = &chosen.info {
+                info_characteristic = read_info(peripheral, info, deadline).await;
+            }
+        }
         // A BM78xBT streams only once logged in, which comes first in r4's
         // order (`docs/research/bm78xbt/reverse-engineered-protocol.md` §3.1).
         BringUp::BrymenLogin => {
             let now = tokio::time::Instant::now();
-            let login_deadline = deadline
-                .max(now + LOGIN_TIMEOUT)
-                .min(deadline + LOGIN_TIMEOUT);
+            let login_deadline = bring_up_deadline(deadline, now, LOGIN_TIMEOUT);
             if login_deadline <= now {
                 // The first try's login spent the bound; the stream shows
                 // whether the meter took it.
@@ -597,7 +613,65 @@ async fn subscribe_profile(
         .await
         .map_err(link_error)?;
     let notifications = peripheral.notifications().await.map_err(link_error)?;
-    Ok((chosen.profile, chosen.write, notifications))
+    Ok(Subscribed {
+        profile: chosen.profile,
+        write_char: chosen.write,
+        notifications,
+        info_characteristic,
+    })
+}
+
+/// What [`subscribe_profile`] set up.
+struct Subscribed {
+    profile: &'static GattProfile,
+    write_char: Characteristic,
+    notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
+    /// What a [`BringUp::ReadInfo`] read found.
+    info_characteristic: Option<Vec<u8>>,
+}
+
+/// When a bring-up step starting at `now` has to end: at least `bound`
+/// after its start, and never later than `bound` past the discovery
+/// `deadline`, so both tries of the setup share one bound.
+fn bring_up_deadline(
+    deadline: tokio::time::Instant,
+    now: tokio::time::Instant,
+    bound: Duration,
+) -> tokio::time::Instant {
+    deadline.max(now + bound).min(deadline + bound)
+}
+
+/// Read `info` once, within [`INFO_READ_TIMEOUT`].
+///
+/// Never fails the open: the stream does not need the value, so one not
+/// read is `None`, and what that means is the protocol's.
+async fn read_info(
+    peripheral: &Peripheral,
+    info: &Characteristic,
+    deadline: tokio::time::Instant,
+) -> Option<Vec<u8>> {
+    let now = tokio::time::Instant::now();
+    let read_deadline = bring_up_deadline(deadline, now, INFO_READ_TIMEOUT);
+    if read_deadline <= now {
+        // The first try's read spent the bound.
+        debug!("Bluetooth: no time left to read {}", info.uuid);
+        return None;
+    }
+    match tokio::time::timeout_at(read_deadline, peripheral.read(info)).await {
+        Ok(Ok(value)) => {
+            trace!("Bluetooth RX ({} bytes, read): {value:02X?}", value.len());
+            debug!("Bluetooth: read {} ({} bytes)", info.uuid, value.len());
+            Some(value)
+        }
+        Ok(Err(e)) => {
+            debug!("Bluetooth: {} not read: {e}", info.uuid);
+            None
+        }
+        Err(_) => {
+            debug!("Bluetooth: {} not read in time", info.uuid);
+            None
+        }
+    }
 }
 
 /// Why a link setup failed, for the opener's one retry.
@@ -668,6 +742,20 @@ fn missing_characteristic(role: &str) -> Error {
         "the Bluetooth device has no data {role} characteristic we recognise — \
          it is not a supported adapter or meter, or its services never resolved"
     ))
+}
+
+/// What `transport_info` adds for a profile that reads a characteristic at
+/// bring-up: its value in hex, or that it was not read, so a report shows
+/// the bytes the protocol went by. Nothing for any other profile.
+fn info_note(bring_up: &BringUp, value: Option<&[u8]>) -> String {
+    match (bring_up, value) {
+        (BringUp::ReadInfo(_), Some(value)) => {
+            let hex: Vec<String> = value.iter().map(|b| format!("{b:02X}")).collect();
+            format!(", device information: {}", hex.join(" "))
+        }
+        (BringUp::ReadInfo(_), None) => ", device information: not read".to_string(),
+        (BringUp::Subscribe | BringUp::BrymenLogin, _) => String::new(),
+    }
 }
 
 impl Transport for Ble {
@@ -765,7 +853,8 @@ impl Transport for Ble {
             .and_then(|p| p.local_name)
             .map(|n| printable(&n))
             .unwrap_or_else(|| "unnamed device".to_string());
-        Ok(format!("{name} ({})", self.selector))
+        let info = info_note(&self.profile.bring_up, self.info_characteristic.as_deref());
+        Ok(format!("{name} ({}){info}", self.selector))
     }
 
     fn transport_status(&self) -> Result<String> {
@@ -809,6 +898,10 @@ impl Transport for Ble {
 
     fn advertised_name(&self) -> Option<&str> {
         self.advertised_name.as_deref()
+    }
+
+    fn info_characteristic(&self) -> Option<&[u8]> {
+        self.info_characteristic.as_deref()
     }
 
     /// The adapters, which set a long interval: where the open could not
@@ -931,14 +1024,49 @@ mod tests {
         assert!(pending.is_empty());
     }
 
+    /// A bring-up step gets its bound even when it starts at the discovery
+    /// deadline, and the second try gets only what the first left of it.
+    #[test]
+    fn both_tries_share_one_bring_up_bound() {
+        let bound = Duration::from_secs(3);
+        let deadline = tokio::time::Instant::now() + DISCOVERY_TIMEOUT;
+        let early = deadline - Duration::from_secs(10);
+        assert_eq!(bring_up_deadline(deadline, early, bound), deadline);
+        assert_eq!(
+            bring_up_deadline(deadline, deadline, bound),
+            deadline + bound
+        );
+        let late = deadline + Duration::from_secs(1);
+        assert_eq!(bring_up_deadline(deadline, late, bound), deadline + bound);
+        let spent = deadline + bound;
+        assert!(bring_up_deadline(deadline, spent, bound) <= spent);
+    }
+
+    /// The value read at bring-up reaches `info` and capture reports in
+    /// hex, a failed read says so, and a profile with no read adds nothing.
+    #[test]
+    fn transport_info_notes_the_information_read() {
+        let reads = BringUp::ReadInfo("0000fff2-0000-1000-8000-00805f9b34fb");
+        assert_eq!(
+            info_note(&reads, Some(&[0x12, 0x63, 0x04, 0x00, 0x09, 0x00])),
+            ", device information: 12 63 04 00 09 00"
+        );
+        assert_eq!(info_note(&reads, None), ", device information: not read");
+        assert_eq!(info_note(&BringUp::Subscribe, None), "");
+        assert_eq!(info_note(&BringUp::BrymenLogin, None), "");
+    }
+
     /// The opener's bounds have to keep the GUI's synchronous reconnect loop
     /// responsive: worst case is one scan, one connect, one discovery, one
     /// login and the disconnect after it fails. The setup retry sits inside
     /// the discovery bound, and both tries' logins inside one login bound.
+    /// A profile has one bring-up, a login or a read, so the read fits in
+    /// the login's place.
     #[test]
     fn open_is_bounded() {
         assert!(SCAN_POLL < SCAN_WINDOW);
         assert!(SETUP_RETRY_PAUSE < DISCOVERY_TIMEOUT);
+        assert!(INFO_READ_TIMEOUT <= LOGIN_TIMEOUT);
         let worst_case =
             SCAN_WINDOW + CONNECT_TIMEOUT + DISCOVERY_TIMEOUT + LOGIN_TIMEOUT + DISCONNECT_TIMEOUT;
         assert!(worst_case <= Duration::from_secs(40), "{worst_case:?}");
