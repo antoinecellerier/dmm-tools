@@ -54,6 +54,14 @@ Researched, not implemented:
   — implemented, experimental, for live readings; the BM520s logged-memory
   download is not.
 
+## OWON
+
+Researched, not implemented:
+
+- [B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B — Bluetooth LE, 6-byte frames of three little-endian words](research/owon/reverse-engineered-protocol.md)
+  — also covers the 15-byte frame OWON's app decodes for the Voltcraft
+  VC831/VC851/VC871/VC891/VC915/VC925 and OWON's OW65/OW67/OW69.
+
 ## Framing and cables
 
 How each family delimits a frame, in short; each row links the spec section
@@ -76,6 +84,8 @@ that owns it.
 | [BM78xBT](research/bm78xbt/reverse-engineered-protocol.md#4-framing) | `FF 01` or `FF 02`; ends `FF 03` | byte 2, 32 or 24 | CRC-16/MODBUS of byte 2 up to the CRC |
 | [BM86x request](research/bm86x/reverse-engineered-protocol.md#31-requests) | none | fixed 3 bytes: `00`, series code, `66` | none |
 | [BM86x live reply](research/bm86x/reverse-engineered-protocol.md#41-reports-and-numbering) | none; three 9-byte HID reports | none, fixed 27 bytes | none |
+| [OWON readings](research/owon/reverse-engineered-protocol.md#5-live-frame-framing) | none | none, fixed 6 bytes | none |
+| [OWON 15-byte readings](research/owon/reverse-engineered-protocol.md#102-framing) | none | none, fixed 15 bytes | none |
 
 A family's bytes are the same on every cable or adapter that relays them.
 Which cable and bridge chip serve which meter is the

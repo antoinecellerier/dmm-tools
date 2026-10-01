@@ -211,6 +211,13 @@ software (`docs/research/owon/` once specified).
 **Gap: high.** OWON's PC software needs OWON's dongle; no cross-platform
 desktop logger works with an ordinary Bluetooth adapter.
 
+**Next after these: OWON's 15-byte frame.** OWON's iMeter app decodes a
+second, 15-byte frame with a sub-display for the Voltcraft VC831, VC851,
+VC871, VC891, VC915 and VC925, OWON's OW65, OW67 and OW69, and the CMS061/
+CMS101 clamp-scopes; it is specified from the app alone
+([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)).
+These Voltcraft meters are not the VC880/VC890 line already supported.
+
 Community tools describe 14-byte packets and two meter chips (Fortune FS9922
 before 2017, Semic CS7729CN-001 after) `[COMMUNITY]`; the clean-room
 analysis does not use these claims.
@@ -492,6 +499,7 @@ the same transport.
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
 | **OWON B/OW handhelds, CM2100B** | BLE (built in) | Amazon ratings on a par with the UT61E+; OWON's PC software needs OWON's dongle; one vendor app and PC package to work from | High. In progress since 2026-10-01 |
+| **Voltcraft VC831/851/871/891/915/925, OWON OW65/67/69** | BLE (built in) | OWON's 15-byte frame, specified from OWON's iMeter app ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)); the same transport and family module as the B/OW meters | Moderate: a second frame layout with a sub-display, one vendor source |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
