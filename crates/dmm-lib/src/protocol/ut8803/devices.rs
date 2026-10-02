@@ -4,7 +4,7 @@
 
 use super::{FINGERPRINT, Ut8803Protocol};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::registry::{Brand, SelectableDevice, factory};
 use crate::transport::cp2110;
 
 /// The link the UT8803 is found on: the CP2110 UT-D09 covers the UT880x
@@ -18,6 +18,7 @@ pub(crate) const ACTIVATION: &str = "\
 pub(crate) static UT8803: SelectableDevice = SelectableDevice {
     id: "ut8803",
     display_name: "UT8803",
+    brand: Brand::UniT,
     aliases: &["ut8803e"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

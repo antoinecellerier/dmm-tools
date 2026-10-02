@@ -5,7 +5,7 @@
 
 use super::{FINGERPRINT, Ut80xProtocol};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::SelectableDevice;
+use crate::protocol::registry::{Brand, SelectableDevice};
 use crate::transport::ch9325;
 
 /// The link the UT80x meters are found on. The CH9325 UT-D04 is what the
@@ -46,6 +46,7 @@ Note: EXIT turns SEND off.";
 pub(crate) static UT803: SelectableDevice = SelectableDevice {
     id: "ut803",
     display_name: "UT803",
+    brand: Brand::UniT,
     aliases: &[],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT803,
@@ -60,6 +61,7 @@ pub(crate) static UT803: SelectableDevice = SelectableDevice {
 pub(crate) static UT804: SelectableDevice = SelectableDevice {
     id: "ut804",
     display_name: "UT804",
+    brand: Brand::UniT,
     aliases: &[],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT804,
@@ -74,6 +76,7 @@ pub(crate) static UT804: SelectableDevice = SelectableDevice {
 pub(crate) static UT71AB: SelectableDevice = SelectableDevice {
     id: "ut71ab",
     display_name: "UT71A/B",
+    brand: Brand::UniT,
     aliases: &["ut71a", "ut71b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT71,
@@ -88,6 +91,7 @@ pub(crate) static UT71AB: SelectableDevice = SelectableDevice {
 pub(crate) static UT71CDE: SelectableDevice = SelectableDevice {
     id: "ut71cde",
     display_name: "UT71C/D/E",
+    brand: Brand::UniT,
     aliases: &["ut71c", "ut71d", "ut71e"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT71,
@@ -102,6 +106,7 @@ pub(crate) static UT71CDE: SelectableDevice = SelectableDevice {
 pub(crate) static VC920: SelectableDevice = SelectableDevice {
     id: "vc920",
     display_name: "Voltcraft VC920/VC940/VC960",
+    brand: Brand::Voltcraft,
     aliases: &["vc-920", "vc940", "vc-940", "vc960", "vc-960"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT71, // same keys as the UT71

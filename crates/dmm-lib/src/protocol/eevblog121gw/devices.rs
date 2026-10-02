@@ -4,7 +4,7 @@
 
 use super::{Eevblog121gwProtocol, FINGERPRINT, ID};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::SelectableDevice;
+use crate::protocol::registry::{Brand, SelectableDevice};
 
 /// Manual p.55 and p.33 (Bluetooth), p.61 (auto power-off).
 const ACTIVATION: &str = "\
@@ -15,6 +15,7 @@ Note: the meter switches off after 30 minutes; set APO.oF in SETUP to disable th
 pub(crate) static EEVBLOG_121GW: SelectableDevice = SelectableDevice {
     id: ID,
     display_name: "EEVblog 121GW",
+    brand: Brand::Eevblog,
     aliases: &["eevblog121gw", "eevblog-121gw"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

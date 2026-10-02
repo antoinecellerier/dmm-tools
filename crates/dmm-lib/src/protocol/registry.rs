@@ -22,6 +22,8 @@ pub struct SelectableDevice {
     pub id: &'static str,
     /// Human-readable display name (e.g., "UT61E+", "Mock (simulated)").
     pub display_name: &'static str,
+    /// The name on the meter's case, which the device lists group by.
+    pub brand: Brand,
     /// Additional strings that resolve to this entry (case-insensitive).
     pub aliases: &'static [&'static str],
     /// Whether this device requires USB hardware.
@@ -75,6 +77,15 @@ pub struct SelectableDevice {
 }
 
 impl SelectableDevice {
+    /// [`Self::display_name`] without a leading brand, for a list that already
+    /// shows the brand as a heading: "VC-880" under Voltcraft.
+    pub fn model_name(&self) -> &'static str {
+        self.display_name
+            .strip_prefix(self.brand.name())
+            .and_then(|rest| rest.strip_prefix(' '))
+            .unwrap_or(self.display_name)
+    }
+
     /// A meter with the radio built in, looked for by its own names over
     /// Bluetooth alone, whatever the bus holds.
     pub fn bluetooth_only(&self) -> bool {
@@ -82,15 +93,74 @@ impl SelectableDevice {
     }
 }
 
+/// Whose name a meter carries, as the device lists group them.
+///
+/// Declared in display order: alphabetical, so a reader finds a brand without
+/// knowing ours, with the simulated devices last. It is the brand on the case,
+/// not the protocol family: the Voltcraft VC871 runs OWON's frame and lists
+/// under Voltcraft.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Brand {
+    Brymen,
+    Eevblog,
+    Owon,
+    UniT,
+    Voltcraft,
+    Zotek,
+    Simulated,
+}
+
+impl Brand {
+    /// Every brand, in display order.
+    pub const ALL: [Brand; 7] = [
+        Brand::Brymen,
+        Brand::Eevblog,
+        Brand::Owon,
+        Brand::UniT,
+        Brand::Voltcraft,
+        Brand::Zotek,
+        Brand::Simulated,
+    ];
+
+    /// The brand as a list heading shows it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Brand::Brymen => "Brymen",
+            Brand::Eevblog => "EEVblog",
+            Brand::Owon => "OWON",
+            Brand::UniT => "UNI-T",
+            Brand::Voltcraft => "Voltcraft",
+            // ZOTEK makes them; they are sold under all four names.
+            Brand::Zotek => "ZOTEK / ZOYI / BSIDE / ANENG",
+            Brand::Simulated => "Simulated",
+        }
+    }
+}
+
+/// [`DEVICES`] grouped by brand, for the device lists: brands in [`Brand`]'s
+/// order, each with its entries in registry order, which keeps related
+/// models together. Brands with no entry are left out.
+pub fn brand_groups() -> Vec<(Brand, Vec<&'static SelectableDevice>)> {
+    Brand::ALL
+        .into_iter()
+        .map(|brand| {
+            let entries = DEVICES.iter().copied().filter(|d| d.brand == brand);
+            (brand, entries.collect::<Vec<_>>())
+        })
+        .filter(|(_, entries)| !entries.is_empty())
+        .collect()
+}
+
 /// Generic factory for protocols that implement `Default`.
 pub(crate) fn factory<P: Protocol + Default + 'static>() -> Box<dyn Protocol> {
     Box::new(P::default())
 }
 
-/// All selectable devices, in GUI display order.
+/// All selectable devices, in registry order.
 ///
 /// Each entry lives in its family's `devices` module; this list is the one
-/// place that orders them.
+/// place that orders them. Auto-detection probes in this order, and the
+/// device lists show each brand's entries in it ([`brand_groups`]).
 pub static DEVICES: &[&SelectableDevice] = &[
     // UT61E+ family — each model has its own DeviceTable
     &ut61eplus::devices::UT61EPLUS,
@@ -344,6 +414,58 @@ mod tests {
     fn default_device_is_ut61eplus() {
         let d = default_device();
         assert_eq!(d.id, "ut61eplus");
+    }
+
+    /// The lists read `ALL` for their order, the derived `Ord` is what a
+    /// sort would use; both must be the order the doc comment promises.
+    #[test]
+    fn brands_are_alphabetical_with_simulated_last() {
+        let (simulated, real) = Brand::ALL.split_last().unwrap();
+        assert_eq!(*simulated, Brand::Simulated);
+        assert!(
+            real.windows(2)
+                .all(|w| w[0].name().to_lowercase() < w[1].name().to_lowercase()),
+            "brands out of alphabetical order: {real:?}"
+        );
+        assert!(Brand::ALL.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn brand_groups_cover_every_device_once() {
+        let grouped: Vec<&str> = brand_groups()
+            .into_iter()
+            .flat_map(|(_, entries)| entries.into_iter().map(|d| d.id))
+            .collect();
+        assert_eq!(grouped.len(), DEVICES.len());
+        for device in DEVICES {
+            assert!(grouped.contains(&device.id), "{} not grouped", device.id);
+        }
+    }
+
+    /// Under its heading an entry is known by its model name alone, so two
+    /// of one brand must not share it.
+    #[test]
+    fn model_names_are_unique_within_a_brand() {
+        for (brand, entries) in brand_groups() {
+            let mut names: Vec<&str> = entries.iter().map(|d| d.model_name()).collect();
+            assert!(names.iter().all(|n| !n.is_empty()), "{brand:?}: {names:?}");
+            names.sort_unstable();
+            names.dedup();
+            assert_eq!(
+                names.len(),
+                entries.len(),
+                "{brand:?}: duplicate model name"
+            );
+        }
+    }
+
+    #[test]
+    fn model_name_drops_the_brand() {
+        assert_eq!(find_device("vc880").unwrap().model_name(), "VC-880");
+        assert_eq!(find_device("vc871").unwrap().model_name(), "VC871");
+        assert_eq!(find_device("121gw").unwrap().model_name(), "121GW");
+        assert_eq!(find_device("ut61eplus").unwrap().model_name(), "UT61E+");
+        assert_eq!(find_device("zt5b").unwrap().model_name(), "ZT-5B / V05B");
     }
 
     #[test]

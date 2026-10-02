@@ -4,7 +4,7 @@
 
 use super::{FINGERPRINT, Ut8802Protocol};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::registry::{Brand, SelectableDevice, factory};
 use crate::protocol::ut8803;
 use crate::transport::cp2110;
 
@@ -15,6 +15,7 @@ const LINKS: &[&str] = &[cp2110::NAME];
 pub(crate) static UT8802: SelectableDevice = SelectableDevice {
     id: "ut8802",
     display_name: "UT8802",
+    brand: Brand::UniT,
     aliases: &["ut8802n"],
     requires_hardware: true,
     activation_instructions: ut8803::devices::ACTIVATION, // same setup as UT8803

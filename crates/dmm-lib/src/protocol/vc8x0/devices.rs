@@ -7,7 +7,7 @@ use super::vc880::Vc880Protocol;
 use super::vc890::Vc890Protocol;
 use super::{VC880_FINGERPRINT, VC890_FINGERPRINT};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::registry::{Brand, SelectableDevice, factory};
 use crate::transport::cp2110;
 
 /// The link the Voltcraft meters are found on: the CP2110 UT-D09 covers them
@@ -22,6 +22,7 @@ const ACTIVATION: &str = "\
 pub(crate) static VC880: SelectableDevice = SelectableDevice {
     id: "vc880",
     display_name: "Voltcraft VC-880",
+    brand: Brand::Voltcraft,
     aliases: &["vc-880"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
@@ -38,6 +39,7 @@ pub(crate) static VC880: SelectableDevice = SelectableDevice {
 pub(crate) static VC650BT: SelectableDevice = SelectableDevice {
     id: "vc650bt",
     display_name: "Voltcraft VC650BT",
+    brand: Brand::Voltcraft,
     aliases: &["vc-650bt"],
     requires_hardware: true,
     activation_instructions: ACTIVATION, // same protocol as VC-880
@@ -54,6 +56,7 @@ pub(crate) static VC650BT: SelectableDevice = SelectableDevice {
 pub(crate) static VC890: SelectableDevice = SelectableDevice {
     id: "vc890",
     display_name: "Voltcraft VC-890",
+    brand: Brand::Voltcraft,
     aliases: &["vc-890"],
     requires_hardware: true,
     activation_instructions: ACTIVATION, // same activation as VC-880

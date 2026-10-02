@@ -3,7 +3,7 @@
 //! [`DEVICES`]: crate::protocol::registry::DEVICES
 
 use super::{FINGERPRINT, Ut61PlusProtocol};
-use crate::protocol::registry::SelectableDevice;
+use crate::protocol::registry::{Brand, SelectableDevice};
 use crate::protocol::{DeviceFamily, Protocol};
 use crate::transport::{ch9329, cp2110};
 
@@ -67,6 +67,7 @@ Note: Bluetooth turns itself off after 5 minutes without a connection.";
 pub(crate) static UT61EPLUS: SelectableDevice = SelectableDevice {
     id: "ut61eplus",
     display_name: "UT61E+",
+    brand: Brand::UniT,
     aliases: &["ut61e+", "ut61e"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
@@ -81,6 +82,7 @@ pub(crate) static UT61EPLUS: SelectableDevice = SelectableDevice {
 pub(crate) static UT61BPLUS: SelectableDevice = SelectableDevice {
     id: "ut61b+",
     display_name: "UT61B+",
+    brand: Brand::UniT,
     aliases: &["ut61bplus", "ut61b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
@@ -95,6 +97,7 @@ pub(crate) static UT61BPLUS: SelectableDevice = SelectableDevice {
 pub(crate) static UT61DPLUS: SelectableDevice = SelectableDevice {
     id: "ut61d+",
     display_name: "UT61D+",
+    brand: Brand::UniT,
     aliases: &["ut61dplus", "ut61d"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
@@ -109,6 +112,7 @@ pub(crate) static UT61DPLUS: SelectableDevice = SelectableDevice {
 pub(crate) static UT161B: SelectableDevice = SelectableDevice {
     id: "ut161b",
     display_name: "UT161B",
+    brand: Brand::UniT,
     aliases: &[],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
@@ -123,6 +127,7 @@ pub(crate) static UT161B: SelectableDevice = SelectableDevice {
 pub(crate) static UT161D: SelectableDevice = SelectableDevice {
     id: "ut161d",
     display_name: "UT161D",
+    brand: Brand::UniT,
     aliases: &[],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
@@ -137,6 +142,7 @@ pub(crate) static UT161D: SelectableDevice = SelectableDevice {
 pub(crate) static UT161E: SelectableDevice = SelectableDevice {
     id: "ut161e",
     display_name: "UT161E",
+    brand: Brand::UniT,
     aliases: &["ut161"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
@@ -151,6 +157,7 @@ pub(crate) static UT161E: SelectableDevice = SelectableDevice {
 pub(crate) static UT60BT: SelectableDevice = SelectableDevice {
     id: "ut60bt",
     display_name: "UT60BT",
+    brand: Brand::UniT,
     aliases: &[],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT60BT,
@@ -168,6 +175,7 @@ pub(crate) static UT60BT: SelectableDevice = SelectableDevice {
 pub(crate) static UT202BT: SelectableDevice = SelectableDevice {
     id: "ut202bt",
     display_name: "UT202BT",
+    brand: Brand::UniT,
     aliases: &[],
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT202BT,

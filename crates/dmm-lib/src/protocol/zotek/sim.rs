@@ -26,7 +26,7 @@ use super::layout::{Meaning, Prefix, Unit, ZT5B};
 use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
-use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::registry::{Brand, SelectableDevice, factory};
 use crate::protocol::{DeviceFamily, DeviceProfile, Protocol, Stability};
 use crate::transport::{Link, Transport};
 use log::debug;
@@ -42,6 +42,7 @@ pub(crate) const MOCK_ID: &str = "mock-zt5b";
 pub(crate) static MOCK_ZT5B: SelectableDevice = SelectableDevice {
     id: MOCK_ID,
     display_name: "Mock ZT-5B / V05B (simulated)",
+    brand: Brand::Simulated,
     aliases: &[],
     requires_hardware: false,
     activation_instructions: crate::mock::devices::ACTIVATION,

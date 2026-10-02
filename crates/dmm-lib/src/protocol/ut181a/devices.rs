@@ -4,7 +4,7 @@
 
 use super::{FINGERPRINT, Ut181aProtocol};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::registry::{Brand, SelectableDevice, factory};
 use crate::transport::{ch9329, cp2110};
 
 /// The links the UT181A is found on, most likely first. The CH9329 UT-D09
@@ -26,6 +26,7 @@ Note: this setting resets on power cycle.";
 pub(crate) static UT181A: SelectableDevice = SelectableDevice {
     id: "ut181a",
     display_name: "UT181A",
+    brand: Brand::UniT,
     aliases: &["ut181"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

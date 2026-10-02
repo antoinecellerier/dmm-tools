@@ -7,7 +7,7 @@
 
 use super::{Bm78xbtProtocol, FINGERPRINT, ID};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::SelectableDevice;
+use crate::protocol::registry::{Brand, SelectableDevice};
 
 /// BM788BT manual p.19 (Bluetooth), p.5 (what works in AutoV), p.18-19
 /// and p.23 (auto power-off: 30 minutes in the text, 15 in the
@@ -27,6 +27,7 @@ If the meter is not found or its connection password was changed, ",
 pub(crate) static BM78XBT: SelectableDevice = SelectableDevice {
     id: ID,
     display_name: "Brymen BM788BT/BM787BT",
+    brand: Brand::Brymen,
     aliases: &["bm788bt", "bm787bt", "brymen-bm788bt", "brymen-bm787bt"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

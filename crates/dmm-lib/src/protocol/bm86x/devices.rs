@@ -8,7 +8,7 @@
 
 use super::{Bm86xProtocol, FINGERPRINT_52, FINGERPRINT_82, FINGERPRINT_86, Series};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::SelectableDevice;
+use crate::protocol::registry::{Brand, SelectableDevice};
 use crate::transport::bu86x;
 
 /// One text for the three series, so the help for a silent cable prints it
@@ -30,6 +30,7 @@ const BM820S_520S_MANUAL: &str =
 pub(crate) static BM86X: SelectableDevice = SelectableDevice {
     id: Series::Bm86x.id(),
     display_name: "Brymen BM869s/BM867s",
+    brand: Brand::Brymen,
     aliases: &["bm869s", "bm867s", "brymen-bm869s", "brymen-bm867s"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
@@ -48,6 +49,7 @@ pub(crate) static BM86X: SelectableDevice = SelectableDevice {
 pub(crate) static BM82X: SelectableDevice = SelectableDevice {
     id: Series::Bm82x.id(),
     display_name: "Brymen BM829s/BM827s/BM822s/BM821s",
+    brand: Brand::Brymen,
     aliases: &[
         "bm829s",
         "bm827s",
@@ -73,6 +75,7 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
 pub(crate) static BM52X: SelectableDevice = SelectableDevice {
     id: Series::Bm52x.id(),
     display_name: "Brymen BM525s/BM521s",
+    brand: Brand::Brymen,
     aliases: &["bm525s", "bm521s", "brymen-bm525s", "brymen-bm521s"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

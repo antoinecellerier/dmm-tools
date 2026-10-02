@@ -4,7 +4,7 @@
 
 use super::{FINGERPRINT, Ut171Protocol};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::registry::{Brand, SelectableDevice, factory};
 use crate::transport::{ch9329, cp2110};
 
 /// The links the UT171 is found on, most likely first. The CP2110 UT-D09
@@ -25,6 +25,7 @@ const ACTIVATION: &str = "\
 pub(crate) static UT171: SelectableDevice = SelectableDevice {
     id: "ut171",
     display_name: "UT171A/B/C",
+    brand: Brand::UniT,
     aliases: &["ut171a", "ut171b", "ut171c"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

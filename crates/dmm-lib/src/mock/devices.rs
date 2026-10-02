@@ -4,7 +4,7 @@
 
 use super::MockProtocol;
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::registry::{Brand, SelectableDevice, factory};
 
 pub(crate) const ACTIVATION: &str = "No setup required \u{2014} this is a simulated device.";
 
@@ -13,6 +13,7 @@ pub(crate) const ACTIVATION: &str = "No setup required \u{2014} this is a simula
 pub static MOCK: SelectableDevice = SelectableDevice {
     id: "mock",
     display_name: "Mock (simulated)",
+    brand: Brand::Simulated,
     aliases: &[],
     requires_hardware: false,
     activation_instructions: ACTIVATION,
