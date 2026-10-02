@@ -180,7 +180,11 @@ pub(super) struct Cache {
 }
 
 impl Cache {
+    /// None under test, like the settings file's.
     fn path() -> Option<PathBuf> {
+        if cfg!(test) {
+            return None;
+        }
         dmm_shared::config_path().map(|p| p.with_file_name("update-check.json"))
     }
 

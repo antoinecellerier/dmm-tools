@@ -453,7 +453,12 @@ impl Settings {
         ThemeColors::new(dark, self.color_preset, self.color_overrides.for_mode(dark))
     }
 
+    /// None under test: a test that picks a setting saves it, and that must
+    /// never reach the settings file of whoever runs the suite.
     fn config_path() -> Option<PathBuf> {
+        if cfg!(test) {
+            return None;
+        }
         dmm_shared::config_path()
     }
 
