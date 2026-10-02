@@ -414,13 +414,10 @@ fn show_choice_readout(
 /// own highlight so it still answers as a control. Its popup is capped at
 /// [`MAX_CHOICE_POPUP_FONT_SIZE`], under the dropdown's caption if it has one.
 ///
-/// The open list behaves as a native listbox: focus lands on the live entry
-/// as it opens (the first when none is live), Up/Down (Home/End) move it,
-/// Enter/Space or a click picks, Esc or Tab closes without a pick, and focus
-/// returns to the readout on every close. The mechanisms are the ones
-/// `color_edit` uses for its picker: a was-open flag to see the open and
-/// close transitions, consumed keys plus a cancelled focus move, and a focus
-/// lock filter on the entry.
+/// The open list behaves as a native listbox through [`listbox_dropdown`]:
+/// focus lands on the live entry as it opens (the first when none is live),
+/// Up/Down (Home/End) move it, Enter/Space or a click picks, Esc or Tab
+/// closes without a pick, and focus returns to the readout on every close.
 fn show_dropdown(
     ui: &mut Ui,
     dropdown: &Dropdown,
@@ -428,12 +425,11 @@ fn show_dropdown(
     size: f32,
     entries: &[(&str, bool)],
 ) -> Option<usize> {
-    let mut picked = None;
     let focus_on_open = entries.iter().position(|&(_, live)| live).unwrap_or(0);
     let popup_size = size.clamp(MIN_AUX_FONT_SIZE, MAX_CHOICE_POPUP_FONT_SIZE);
     let ctx = ui.ctx().clone();
     let row_height = ctx.fonts_mut(|f| f.row_height(&FontId::proportional(size)));
-    let response = ui
+    let (response, picked) = ui
         .scope(|ui| {
             let widgets = &mut ui.visuals_mut().widgets;
             widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
@@ -454,109 +450,137 @@ fn show_dropdown(
             // The interactive colour, not the label's weak one: this is a
             // control, and it has to clear the text contrast bar as one.
             let text_color = ui.visuals().text_color();
-
-            // The id `ComboBox::from_id_salt` derives below, known up front
-            // so the list's state can be read before the box is drawn. The
-            // salt is wrapped in `IdSalt::new` the way `from_id_salt` wraps
-            // it: hashing the bare string, or an `Id`, gives a different id.
-            let button_id = ui.make_persistent_id(IdSalt::new(dropdown.id_salt));
-            let was_open_key = button_id.with("was_open");
-            let was_open: bool = ctx.data(|d| d.get_temp(was_open_key)).unwrap_or(false);
-
-            // Keys that leave the list, handled before it is drawn so this
-            // frame already shows it closed: Tab and Shift+Tab step out of a
-            // listbox rather than through it, Esc abandons it. `consume_key`
-            // drops the press; `move_focus(None)` cancels the focus jump egui
-            // queued from it as the frame began.
-            if was_open {
-                let leave = ctx.input_mut(|i| {
-                    i.consume_key(Modifiers::NONE, Key::Tab)
-                        | i.consume_key(Modifiers::SHIFT, Key::Tab)
-                        | i.consume_key(Modifiers::NONE, Key::Escape)
-                });
-                if leave {
-                    Popup::close_all(&ctx);
-                    ctx.memory_mut(|m| m.move_focus(FocusDirection::None));
+            let combo = |combo: ComboBox| {
+                combo
+                    .width(0.0)
+                    // egui's default cap scrolls a list of ten keys; let it
+                    // grow to the window, scrolling only when the window is
+                    // shorter.
+                    .height(ctx.content_rect().height())
+                    .selected_text(
+                        RichText::new(label)
+                            .font(FontId::proportional(size))
+                            .color(text_color),
+                    )
+            };
+            listbox_dropdown(ui, dropdown.id_salt, combo, |ui, was_open| {
+                if let Some(heading) = dropdown.heading {
+                    ui.label(
+                        RichText::new(heading)
+                            .font(FontId::proportional(popup_size))
+                            .color(ui.visuals().weak_text_color()),
+                    );
                 }
-            }
-
-            let inner = ComboBox::from_id_salt(dropdown.id_salt)
-                .width(0.0)
-                // egui's default cap scrolls a list of ten keys; let it grow
-                // to the window, scrolling only when the window is shorter.
-                .height(ctx.content_rect().height())
-                .selected_text(
-                    RichText::new(label)
-                        .font(FontId::proportional(size))
-                        .color(text_color),
-                )
-                .show_ui(ui, |ui| {
-                    // No `set_modal_layer` here, unlike `color_edit`: Tab
-                    // and the arrows are handled outright, and the modal
-                    // layer outlives the list by a frame, in which egui
-                    // surrenders the focus just handed back to the readout
-                    // (`Context::create_widget` on a layer below the modal).
-                    if let Some(heading) = dropdown.heading {
-                        ui.label(
-                            RichText::new(heading)
-                                .font(FontId::proportional(popup_size))
-                                .color(ui.visuals().weak_text_color()),
-                        );
+                let mut picked = None;
+                let mut responses = Vec::with_capacity(entries.len());
+                for (i, &(text, live)) in entries.iter().enumerate() {
+                    // Three spaces sit close enough under the mark to keep
+                    // the entries aligned without a figure space the bundled
+                    // fonts may not have.
+                    let text = if live {
+                        format!("{LIVE_CHOICE_MARK} {text}")
+                    } else {
+                        format!("   {text}")
+                    };
+                    let entry = ui.selectable_label(
+                        live,
+                        RichText::new(text).font(FontId::proportional(popup_size)),
+                    );
+                    // Focus lands on the live entry as the list opens — by
+                    // click, or by Enter/Space on the readout — so a screen
+                    // reader announces it and Enter picks it.
+                    if !was_open && i == focus_on_open {
+                        entry.request_focus();
                     }
-                    let mut responses = Vec::with_capacity(entries.len());
-                    for (i, &(text, live)) in entries.iter().enumerate() {
-                        // Three spaces sit close enough under the mark to
-                        // keep the entries aligned without a figure space
-                        // the bundled fonts may not have.
-                        let text = if live {
-                            format!("{LIVE_CHOICE_MARK} {text}")
-                        } else {
-                            format!("   {text}")
-                        };
-                        let entry = ui.selectable_label(
-                            live,
-                            RichText::new(text).font(FontId::proportional(popup_size)),
-                        );
-                        // Focus lands on the live entry as the list opens —
-                        // by click, or by Enter/Space on the readout — so a
-                        // screen reader announces it and Enter picks it.
-                        if !was_open && i == focus_on_open {
-                            entry.request_focus();
-                        }
-                        if entry.clicked() {
-                            picked = Some(i);
-                        }
-                        responses.push(entry);
+                    if entry.clicked() {
+                        picked = Some(i);
                     }
-                    navigate_choice_entries(&ctx, &responses);
-                });
-
-            // Enter/Space "clicks" the focused entry without a pointer
-            // click, which is the only thing a menu popup closes on by
-            // itself.
-            let activated = picked.is_some();
-            if activated {
-                Popup::close_all(&ctx);
-            }
-            let is_open = ComboBox::is_open(&ctx, button_id);
-            // A click outside the list that closed it may have landed on
-            // another widget, which took the focus as it was drawn; that
-            // click is the user's choice of focus. A click on an entry is
-            // `activated` and not "elsewhere" in this sense.
-            let clicked_away = inner.response.clicked_elsewhere() && !activated;
-            if was_open && !is_open && !clicked_away {
-                // Closed by pick, Esc or Tab: focus goes back to the readout
-                // rather than to the top of the Tab order.
-                ctx.memory_mut(|m| m.request_focus(button_id));
-            }
-            ctx.data_mut(|d| d.insert_temp(was_open_key, is_open));
-            inner.response
+                    responses.push(entry);
+                }
+                navigate_choice_entries(ui.ctx(), &responses);
+                picked
+            })
         })
         .inner;
     response
         .on_hover_text(dropdown.hover)
         .a11y_label(dropdown.a11y);
     picked
+}
+
+/// A `ComboBox` whose open list behaves as a native listbox, for every
+/// dropdown that lists choices: the readouts' and the Settings device list.
+///
+/// `combo` styles the box (`selected_text`, width, height); `add_entries`
+/// draws the list and returns what was picked this frame. It is handed
+/// whether the list was already open last frame, false on the frame it
+/// opens, which is when it moves focus onto an entry; arrow keys between
+/// entries are its own (`navigate_choice_entries`).
+///
+/// This owns the rest. Esc and Tab close the list without a pick, a pick
+/// closes it, and focus returns to the box on every close but a click
+/// elsewhere. The mechanisms are the ones `color_edit` uses for its picker:
+/// a was-open flag to see the open and close transitions, consumed keys plus
+/// a cancelled focus move, and a focus lock filter on the entry.
+pub(crate) fn listbox_dropdown<R>(
+    ui: &mut Ui,
+    id_salt: &'static str,
+    combo: impl FnOnce(ComboBox) -> ComboBox,
+    add_entries: impl FnOnce(&mut Ui, bool) -> Option<R>,
+) -> (Response, Option<R>) {
+    let ctx = ui.ctx().clone();
+    // The id `ComboBox::from_id_salt` derives below, known up front so the
+    // list's state can be read before the box is drawn. The salt is wrapped
+    // in `IdSalt::new` the way `from_id_salt` wraps it: hashing the bare
+    // string, or an `Id`, gives a different id.
+    let button_id = ui.make_persistent_id(IdSalt::new(id_salt));
+    let was_open_key = button_id.with("was_open");
+    let was_open: bool = ctx.data(|d| d.get_temp(was_open_key)).unwrap_or(false);
+
+    // Keys that leave the list, handled before it is drawn so this frame
+    // already shows it closed: Tab and Shift+Tab step out of a listbox
+    // rather than through it, Esc abandons it. `consume_key` drops the press;
+    // `move_focus(None)` cancels the focus jump egui queued from it as the
+    // frame began.
+    if was_open {
+        let leave = ctx.input_mut(|i| {
+            i.consume_key(Modifiers::NONE, Key::Tab)
+                | i.consume_key(Modifiers::SHIFT, Key::Tab)
+                | i.consume_key(Modifiers::NONE, Key::Escape)
+        });
+        if leave {
+            Popup::close_all(&ctx);
+            ctx.memory_mut(|m| m.move_focus(FocusDirection::None));
+        }
+    }
+
+    let mut picked = None;
+    // No `set_modal_layer` here, unlike `color_edit`: Tab and the arrows are
+    // handled outright, and the modal layer outlives the list by a frame, in
+    // which egui surrenders the focus just handed back to the box
+    // (`Context::create_widget` on a layer below the modal).
+    let inner =
+        combo(ComboBox::from_id_salt(id_salt)).show_ui(ui, |ui| picked = add_entries(ui, was_open));
+
+    // Enter/Space "clicks" the focused entry without a pointer click, which
+    // is the only thing a menu popup closes on by itself.
+    let activated = picked.is_some();
+    if activated {
+        Popup::close_all(&ctx);
+    }
+    let is_open = ComboBox::is_open(&ctx, button_id);
+    // A click outside the list that closed it may have landed on another
+    // widget, which took the focus as it was drawn; that click is the user's
+    // choice of focus. A click on an entry is `activated` and not
+    // "elsewhere" in this sense.
+    let clicked_away = inner.response.clicked_elsewhere() && !activated;
+    if was_open && !is_open && !clicked_away {
+        // Closed by pick, Esc or Tab: focus goes back to the box rather than
+        // to the top of the Tab order.
+        ctx.memory_mut(|m| m.request_focus(button_id));
+    }
+    ctx.data_mut(|d| d.insert_temp(was_open_key, is_open));
+    (inner.response, picked)
 }
 
 /// Keyboard navigation inside an open readout list: ArrowDown/ArrowUp move
