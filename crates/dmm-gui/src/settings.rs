@@ -2,6 +2,7 @@ use crate::theme::ThemeColors;
 use dmm_shared::SharedSettings;
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -378,6 +379,11 @@ pub struct Settings {
     /// The recording panel's height under the graph, as dragged. The layout
     /// fits it to the window without changing it.
     pub recording_height: f32,
+    /// Sub-value traces switched off with the graph's **Show:** chips, by
+    /// label. Remembered, unlike the plotted series: hiding a trace loses no
+    /// reading, and its chip still lists it, unlit.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub hidden_series: BTreeSet<String>,
     /// CLI overrides (not serialized).
     #[serde(skip)]
     pub overrides: Overrides,
@@ -416,6 +422,7 @@ impl Default for Settings {
             window_maximized: false,
             reading_panel_width: SIDE_PANEL_DEFAULT_WIDTH,
             recording_height: DEFAULT_RECORDING_HEIGHT,
+            hidden_series: BTreeSet::new(),
             overrides: Overrides::default(),
         }
     }
@@ -597,6 +604,16 @@ mod tests {
         );
     }
 
+    /// A file from before hidden traces were remembered hides none, and an
+    /// empty set writes nothing.
+    #[test]
+    fn no_hidden_traces_by_default() {
+        let s: Settings = serde_json::from_str(r#"{"theme":"Light"}"#).unwrap();
+        assert!(s.hidden_series.is_empty());
+        let json = serde_json::to_string(&Settings::default()).unwrap();
+        assert!(!json.contains("hidden_series"), "{json}");
+    }
+
     #[test]
     fn default_settings() {
         let s = Settings::default();
@@ -698,10 +715,12 @@ mod tests {
             window_maximized: true,
             reading_panel_width: 300.0,
             recording_height: 200.0,
+            hidden_series: BTreeSet::from(["Period".to_string()]),
             overrides: Overrides::default(),
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.hidden_series, s.hidden_series);
         assert_eq!(deserialized.theme, ThemeMode::Light);
         assert!(!deserialized.show_graph);
         assert!(deserialized.show_stats);

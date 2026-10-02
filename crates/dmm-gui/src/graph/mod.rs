@@ -237,12 +237,16 @@ pub struct Graph {
     /// silently plot a sub-value the next session may not even have. Dropped
     /// with its option, see [`Graph::set_series_options`].
     selected_series: Option<String>,
-    /// Sub-value labels the user has switched off in the toolbar's **Show:**
-    /// group. Session-only, and deliberately keyed by label rather than by
-    /// index so a choice survives `clear()`, a change of plotted series and a
-    /// sub-value that disappears and comes back. Hidden overlays are still
-    /// recorded in lockstep — re-showing one brings its history with it.
+    /// Sub-value labels switched off in the toolbar's **Show:** group, seeded
+    /// from the settings at start-up (see [`Graph::take_trace_choice`]).
+    /// Keyed by label rather than by index so a choice survives `clear()`, a
+    /// change of plotted series, a sub-value that disappears and comes back,
+    /// and a relaunch. Hidden overlays are still recorded in lockstep —
+    /// re-showing one brings its history with it.
     hidden_overlays: HashSet<String>,
+    /// A **Show:** chip the user clicked since the last call, with whether
+    /// it is now hidden — see [`Graph::take_trace_choice`].
+    trace_choice: Option<(String, bool)>,
     /// Sub-values the meter is sending, with their resolved units, in the
     /// order first offered. Drives the toolbar's selector.
     series_options: Vec<SeriesOption>,
@@ -389,6 +393,7 @@ impl Graph {
             levels: false,
             selected_series: None,
             hidden_overlays: HashSet::new(),
+            trace_choice: None,
             series_options: Vec::new(),
             last_display_raw: None,
             origin: None,
@@ -1353,6 +1358,19 @@ impl Graph {
             .between(at(x_min), at(x_max.max(x_min)))
             .map(|m| (self.elapsed_secs(m.at), m))
             .collect()
+    }
+
+    /// The **Show:** chip the user clicked since the last call, with whether
+    /// its trace is now hidden, for the settings to remember. `None` for the
+    /// main reading's own chip (shown when a sub-value is plotted): kept, it
+    /// would hide that reading on the next meter to plot a sub-value.
+    pub(crate) fn take_trace_choice(&mut self) -> Option<(String, bool)> {
+        self.trace_choice.take()
+    }
+
+    /// Hide the traces the settings remember hidden, at start-up.
+    pub(crate) fn hide_overlays<'a>(&mut self, labels: impl IntoIterator<Item = &'a String>) {
+        self.hidden_overlays.extend(labels.into_iter().cloned());
     }
 
     /// The number of the marker whose flag was clicked since the last call.

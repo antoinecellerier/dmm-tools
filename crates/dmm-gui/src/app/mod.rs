@@ -475,6 +475,7 @@ impl App {
         let mut graph = Graph::new();
         // One setting bounds both stores of the sample stream.
         graph.set_max_points(settings.max_samples);
+        graph.hide_overlays(&settings.hidden_series);
         let capture = Capture::new(settings.max_samples);
         let initial_device = named_device(&settings.shared.device_family);
         Self {

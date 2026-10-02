@@ -2544,6 +2544,62 @@ fn a_hidden_overlay_is_still_recorded() {
     assert_eq!(drawn_overlay_labels(&g), vec!["T2", "T3"]);
 }
 
+/// A chip click is left for the settings to remember, both ways; hiding it
+/// in code (Raw under a scale) is not.
+#[test]
+fn a_chip_click_is_left_for_the_settings() {
+    let mut g = graph_with_two_overlays();
+    g.hide_overlay("T2");
+    assert_eq!(g.take_trace_choice(), None);
+
+    g.click_overlay_chip("T3".to_string());
+    assert_eq!(g.take_trace_choice(), Some(("T3".to_string(), true)));
+    assert_eq!(g.take_trace_choice(), None, "taken once");
+    g.click_overlay_chip("T3".to_string());
+    assert_eq!(g.take_trace_choice(), Some(("T3".to_string(), false)));
+}
+
+/// The main reading's chip, shown while a sub-value is plotted, flips its
+/// trace but isn't remembered: it would hide the main reading on the next
+/// meter to plot a sub-value.
+#[test]
+fn the_main_reading_s_chip_is_not_remembered() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..3 {
+        push_aux(
+            &mut g,
+            50.0,
+            t0 + Duration::from_secs(i),
+            Some("T2"),
+            &[(MAIN_SERIES, Some(20.0))],
+        );
+    }
+    assert_eq!(drawn_overlay_labels(&g), vec![MAIN_SERIES]);
+
+    g.click_overlay_chip(MAIN_SERIES.to_string());
+    assert!(drawn_overlay_labels(&g).is_empty());
+    assert_eq!(g.take_trace_choice(), None);
+}
+
+/// Traces the settings remember hidden start hidden.
+#[test]
+fn remembered_hidden_traces_start_hidden() {
+    let mut g = Graph::new();
+    g.hide_overlays(&["T3".to_string()]);
+    let t0 = Instant::now();
+    for i in 0..3 {
+        push_aux(
+            &mut g,
+            20.0,
+            t0 + Duration::from_secs(i),
+            None,
+            &[("T2", Some(50.0)), ("T3", Some(60.0))],
+        );
+    }
+    assert_eq!(drawn_overlay_labels(&g), vec!["T2"]);
+}
+
 /// Every overlay hidden is the same as no overlay drawn: no key.
 #[test]
 fn hiding_every_overlay_removes_the_key() {

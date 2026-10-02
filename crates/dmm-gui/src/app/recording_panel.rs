@@ -591,6 +591,20 @@ impl App {
             })
     }
 
+    /// What the graph asked of the app this frame: its marker actions, and a
+    /// **Show:** chip the user clicked, which the settings remember.
+    fn take_graph_actions(&mut self) {
+        self.take_graph_marker_actions();
+        if let Some((label, hidden)) = self.graph.take_trace_choice() {
+            if hidden {
+                self.settings.hidden_series.insert(label);
+            } else {
+                self.settings.hidden_series.remove(&label);
+            }
+            self.settings_save.schedule(std::time::Instant::now());
+        }
+    }
+
     /// Render the graph+recording area with a resizable drag separator between them.
     pub(super) fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
         // Built before `self.graph` is borrowed mutably below: the palette
@@ -604,7 +618,7 @@ impl App {
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                 self.graph.show(ui, &tc, &self.markers);
             });
-            self.take_graph_marker_actions();
+            self.take_graph_actions();
 
             let sep = ui.separator();
             let sep_id = ui.id().with("rec_resize");
@@ -648,7 +662,7 @@ impl App {
             self.show_recording_section(ui, compact);
         } else if self.settings.show_graph {
             self.graph.show(ui, &tc, &self.markers);
-            self.take_graph_marker_actions();
+            self.take_graph_actions();
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
         }
@@ -661,6 +675,25 @@ mod tests {
     use crate::settings::Settings;
     use eframe::egui::{Pos2, Rect, vec2};
     use std::time::Instant;
+
+    /// A **Show:** chip click lands in the settings and saves them; turning
+    /// it back on forgets it.
+    #[test]
+    fn a_hidden_trace_is_remembered() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.graph.click_overlay_chip("Period".to_string());
+        app.take_graph_actions();
+        assert!(app.settings.hidden_series.contains("Period"));
+        assert!(app.settings_save.take_pending());
+
+        app.take_graph_actions();
+        assert!(!app.settings_save.take_pending(), "no click, no save");
+
+        app.graph.click_overlay_chip("Period".to_string());
+        app.take_graph_actions();
+        assert!(app.settings.hidden_series.is_empty());
+        assert!(app.settings_save.take_pending());
+    }
 
     /// The recording row in a headless window, driven a frame at a time.
     struct MenuRun {

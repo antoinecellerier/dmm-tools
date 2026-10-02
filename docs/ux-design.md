@@ -108,10 +108,12 @@ scales are incompatible.
 show/hide state while the view is pinned every frame (`paint_plot_key` in
 `graph/render.rs`), so the **Show:** chips are the control.
 
-**Session choices are never saved.** A scale, plotted series or hidden trace
-restored silently at the next launch would corrupt readings or plot a sub-value
-the user doesn't suspect. A hidden trace survives a clear; a plotted series
-lasts while the meter sends it.
+**Session choices are never saved, hidden traces are.** A scale or plotted
+series restored silently at the next launch would corrupt readings or plot a
+sub-value the user doesn't suspect; a plotted series lasts while the meter
+sends it. Hiding a trace loses no reading and its chip still lists it, unlit,
+so a **Show:** click is remembered by label (`Settings::hidden_series`) — but
+not the main reading's own chip, which would hide it on the next meter.
 
 ## Recording and export
 

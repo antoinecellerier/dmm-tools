@@ -496,7 +496,7 @@ impl Graph {
         });
 
         if let Some(label) = toggled {
-            self.toggle_overlay_hidden(label);
+            self.click_overlay_chip(label);
         }
 
         ui.add_space(6.0);
@@ -524,10 +524,23 @@ impl Graph {
         }
     }
 
-    /// Flip one sub-value trace between drawn and hidden.
-    pub(super) fn toggle_overlay_hidden(&mut self, label: String) {
-        if !self.hidden_overlays.remove(&label) {
+    /// A **Show:** chip was clicked: flip its trace, and leave the choice for
+    /// the settings to remember ([`Graph::take_trace_choice`]).
+    pub(crate) fn click_overlay_chip(&mut self, label: String) {
+        let hidden = self.toggle_overlay_hidden(label.clone());
+        if label != self.main_name() {
+            self.trace_choice = Some((label, hidden));
+        }
+    }
+
+    /// Flip one sub-value trace between drawn and hidden, returning whether
+    /// it is now hidden.
+    pub(super) fn toggle_overlay_hidden(&mut self, label: String) -> bool {
+        if self.hidden_overlays.remove(&label) {
+            false
+        } else {
             self.hidden_overlays.insert(label);
+            true
         }
     }
 
