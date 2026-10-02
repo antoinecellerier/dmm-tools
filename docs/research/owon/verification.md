@@ -7,7 +7,7 @@ B41T(+), OW16B, OW18B, OW18E and CM2100B, issues
 [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) (B33),
 [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) (B35T+),
 [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) (B41T+) and
-[#44](https://github.com/antoinecellerier/dmm-tools/issues/44) (CM2100B).
+[#44](https://github.com/antoinecellerier/dmm-tools/issues/44) (CM2100B); the 15-byte meters (§10) have none yet.
 What real meters have confirmed is tagged `[HARDWARE]` in the
 [spec](reverse-engineered-protocol.md); checks that span families are in the
 [verification backlog](../../verification-backlog.md). Community captures
@@ -203,9 +203,42 @@ and each still wants a capture of our own.
 
 ## 15-byte frame
 
-- Any VC831/851/871/891/915/925, OW65/67/69 or CMS101/061 — a trace settles
-  §10's G24 bit 11, V24 status 5 and bits 19 and 13-23, the `FF` skip rule
-  and the VC871's sub-display under REL/MAX/MIN
-  ([§10](reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only);
-  VC871 captures show bit 11 marking the sub-display word and G24 bits 16-23
-  `F0`, §14.4). Out of scope until a reporter has one.
+- A first trace on any 15-byte meter (CMS101/061, OW65B/67B/69B, VC871,
+  VC891, VC915, VC925 PV): name, GATT discovery, FFF2 and FFF4 in DC V —
+  settles [§10.2](reverse-engineered-protocol.md#102-framing)'s frames per
+  notification and the `FF` skip, G24 bits 11 and 13-23 and V24 bit 19
+  (VC871 captures: bit 11 with the sub-display, bits 16-23 `F0`, §14.4).
+- The advertised name of a Voltcraft meter out of the box: "BDM", "VC871",
+  "VC891", "VCxxx" or "VC8xx_1" (§2) — decides the entries' names. Needs a
+  passive scan of each, VC871 and VC915 first.
+- FFF4's properties on each 15-byte model: notify only, or also write —
+  decides whether OWON's profile is chosen over the FFF0 one. Needs GATT
+  discovery per model.
+- V24 status 5, which the app logs as large error data
+  ([§10.4](reverse-engineered-protocol.md#104-reading-word-v24)) — settles
+  what makes a meter send it. Needs a reading near a range's limit.
+- The sub-display per mode, and the VC871's under REL, MAX and MIN
+  ([§10.7](reverse-engineered-protocol.md#107-vc871-code-87)) — settles
+  §10.3 bit 12 and §10.7. Needs the modes of §9.4 on a VC871 and an OW67B.
+- Status bits 6-18 per mode on a 15-byte meter (§6.6, §10.6; AC and DC
+  bits seen on a VC871, §14.4) — decides their names. Needs captures across
+  modes and keys.
+- Time (19), Motor (24), PF (16) and 4~20 mA (17) as sent (§10.4, §10.5) —
+  settles their rules. Needs USB and AC power on an OW67B/VC871, Motor on a
+  VC915, 4-20 mA on any but the CMS.
+- Hz/Duty `05 01` on an OW65B or OW67B, whose app lists lack it while their
+  manuals' screenshots show it ([§10.8](reverse-engineered-protocol.md#108-commands))
+  — decides those key sets. Needs each.
+- Hold/Light long `09 01` on a CMS101/061 (manual: HOLD held zeroes DC A),
+  and on the others whether it is the light (§10.8). Needs each.
+- Whether a meter streams and keeps its clock with no `#TIMEsync` written
+  (§10.8) — decides whether a client may skip it. Needs an OW67B/69B or a
+  VC871/891/915/925.
+- Whether Bluetooth streams in the CMS's scope mode, and what OSC (bit 18)
+  marks ([§9.4](reverse-engineered-protocol.md#94-the-15-byte-meters)).
+  Needs a CMS101 or CMS061.
+- Bluetooth off and idle-off on each model (OW67B 5 min; the others not
+  stated, §9.4) — decides whether a long session ends by itself. Needs a
+  connected meter left idle.
+- The VC925 PV's phone link while it talks to its LX-925 adaptor (§9.4) —
+  decides the PV functions' capture steps. Needs a VC925 PV and its adaptor.

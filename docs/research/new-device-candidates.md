@@ -204,7 +204,7 @@ sources describe beyond them:
   with a sub-display for the Voltcraft VC831, VC851, VC871, VC891, VC915 and
   VC925, OWON's OW65, OW67 and OW69, and the CMS061/CMS101 clamp-scopes; it
   is specified from the app alone
-  ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)).
+  ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame)).
   These Voltcraft meters are not the VC880/VC890 line already supported.
   OWON's OW65, OW67 and OW69 manuals give Bluetooth to their B models.
   **In progress (2026-10-02), every app code in scope.** Demand, seen
@@ -498,7 +498,7 @@ the same transport.
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
 | **OWON B35/B35T (FS9922, before the B35T+)** | BLE (built in) | The supported OWON meters' service per community tools; OWON's PC source keeps a commented-out parser ([research/owon §11](owon/reverse-engineered-protocol.md#11-an-earlier-format-14-byte-ascii-pc-source-commented-out)) | Moderate: a 14-byte ASCII frame whose status bits OWON's source does not define |
-| **Voltcraft VC831/851/871/891/915/925, OWON OW65/67/69, CMS061/101** | BLE (built in) | OWON's 15-byte frame, specified from OWON's iMeter app ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)); the same transport and family module as the B/OW meters | Moderate: a second frame layout with a sub-display, one vendor source |
+| **Voltcraft VC831/851/871/891/915/925, OWON OW65/67/69, CMS061/101** | BLE (built in) | OWON's 15-byte frame, specified from OWON's iMeter app ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame)); the same transport and family module as the B/OW meters | Moderate: a second frame layout with a sub-display, one vendor source |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |

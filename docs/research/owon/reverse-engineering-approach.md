@@ -7,10 +7,11 @@ implemented in `protocol/owon/`, experimental; this
 pair of documents records what the meters do on the wire, from vendor
 sources only; community projects and their captures are compared in spec
 §14 alone. The spec covers both frame formats OWON's app decodes: the
-6-byte frame of these meters in full, and the 15-byte frame of the Voltcraft
-VC831/851/871/891/915/925, OWON OW65/67/69 and CMS101/061 in its own section
-(§10), from the app alone. Only the 6-byte group is planned for
-implementation now; that is a project decision, not a protocol fact.
+6-byte frame of these meters in full, and the 15-byte frame of the OWON
+CMS101/061 and OW65B/67B/69B and the Voltcraft VC871/891/915/925 PV in its
+own section (§10), with those meters' manuals in §9.4. The 15-byte round
+(2026-10-02) added Voltcraft's app, the manuals of those meters, and the
+VC831/VC851 manuals, which show no Bluetooth.
 
 The question was what the meters send, with no published protocol. The
 answer came from two independent OWON programs: **OWON's app and OWON's PC
@@ -26,7 +27,8 @@ the wire.
 
 ## Sources Used
 
-All OWON's own. Fetched and analysed 2026-10-01. Provenance — URL, date,
+All OWON's own, and for the 15-byte round Voltcraft's (Conrad's). Fetched
+and analysed 2026-10-01, the 15-byte round 2026-10-02. Provenance — URL, date,
 SHA-256 — is in `references/owon/SOURCE.txt` (gitignored); the reader
 reports, grounding checks and adjudication are in
 `references/owon/analysis/findings/`.
@@ -94,6 +96,47 @@ and each file checked by its magic bytes.
 
 The hashes of the product pages and datasheets are in `SOURCE.txt`.
 
+**The 15-byte round** (2026-10-02; the user approved each source):
+
+6. **Voltcraft "VC800 VC900 Series" 1.2.5** (`com.voltcraft.series800`,
+   versionCode 2050), Voltcraft's Android app, downloaded by the assistant
+   as an XAPK from APKPure (`d.apkpure.com/b/XAPK/com.voltcraft.series800`)
+   and accepted by the user as the vendor's: signed with a Google Play App
+   Signing key (SHA-256 `140763bd…32a4`), Play source stamp verified, Play
+   developer "CEI Conrad Electronic International (HK) Limited" per a
+   mirror's listing. `libapp.so` comes from the `config.arm64_v8a.apk`
+   split. Tagged [VENDOR, app], cited `V:file:lines`.
+7. **OWON's CMS101, CMS061, OW65, OW67 and OW69 manuals** and quick guides:
+   the OW6x user manuals downloaded by the user, the rest by the assistant,
+   from `https://files.owon.com.cn/probook/<name>`. The file served as
+   `OW65_multimeter_quick_guide.pdf` is the OWH65 power supply's guide and
+   was not used.
+8. **Conrad's Voltcraft manuals** for the VC831, VC851, VC871, VC891, VC915
+   and VC925 PV, datasheets for the first four, and the VC871/VC891 app
+   manual, downloaded by
+   the assistant from `https://asset.conrad.com/media10/add/160267/c1/-/GL/<id>/<id>-GL.pdf`.
+   The later app manual bundled in the app (VAPP) was read from the APK.
+
+| Source | File (under `references/owon/`) | SHA-256 |
+|---|---|---|
+| Voltcraft XAPK | `voltcraft-app/com.voltcraft.series800_1.2.5_2050.xapk` | `341508ca10b30541b31d8a841347f75bd75251163fa18ca3364a3b9572ebf0cb` |
+| Voltcraft native split | `voltcraft-app/splits/config.arm64_v8a.apk` | `d2b21615ebb4e3c6b05417b3f2dad3bf5f74d984fd21875ab550e06034d2c6d3` |
+| CMS101-UM | `manuals/CMS_User_Manual.pdf` | `2f9700148864f720115fb54fc474f147c2f438276a7d7b7fac76e2a4c7f5a35e` |
+| CMS061-UM | `manuals/CMS061_User_Manual.pdf` | `2f392dcd84693b4f3f5de3af0024c9449ce4b7604400926b9d6cb365e149d61e` |
+| OW65-UM | `manuals/OW65_multimeter_user_manual.pdf` | `924fa76f2609bc1ca8a5119587539b995041729aef56ae89f9a7f80060885432` |
+| OW67-UM | `manuals/OW67_multimeter_user_manual.pdf` | `b1194f42df58c9b059eb9a2c2e953416cd3f1a893b230f51061377dbcbc39ada` |
+| OW69-UM | `manuals/OW69_multimeter_user_manual.pdf` | `62eea75c71ab5aad697029778ffd72563635ac6958aa89f0f059a872104fdbb1` |
+| VC871-UM | `voltcraft/002576867ML00.pdf` | `5f9198e01d6020f2d2221431b2567687139ff77cab35c18eed3aefdca8ba29a8` |
+| VC891-UM | `voltcraft/002576866ML00.pdf` | `c51e24adee940e1853e27c7bd9eb2b247a6e2022d990ac4bb82a4b00e1f5a4a5` |
+| VC915-UM | `voltcraft/003072347ML00.pdf` | `7f5ac4d2b074d2e730b12d789be7b9eb60059a90a062390a0eded0b222ac1d8c` |
+| VC925-UM | `voltcraft/003072348ML00.pdf` | `a43a272791e5e3f37e447f91f4cd16e65eed0d73f9f14bdbd2279611d25e9f82` |
+| VC-APP | `voltcraft/002576866ML04.pdf` | `fd3b16f75d323936e9d54ec65f261dcec2858feb27493341b0e46082f9d186b8` |
+| VC831-UM | `voltcraft/002576864ML00.pdf` | `5c8c75acb6f98882b37f8a81ebc8b006d6bfc8423eecbc7c9e7d326c338367bc` |
+| VC851-UM | `voltcraft/002576865ML00.pdf` | `e91045360f14167614e3d0dc128e73f528cde85941508825f841f714ea779de6` |
+
+The quick guides, the datasheets and the other Conrad files are in
+`SOURCE.txt`.
+
 ### Avoided during the vendor analysis
 
 Not searched for or opened while §1-12 of the spec were written:
@@ -105,13 +148,18 @@ Not searched for or opened while §1-12 of the spec were written:
   `references/owon/analysis/findings/survey-2026-10-01.md`: they hold
   community claims about OWON meters, and were kept out of every reader's
   brief and out of the drafting of all three documents
+- in the 15-byte round, also spec §14 (community VC871 captures and GATT
+  notes) and `findings/survey-15byte-2026-10-02.md`, kept out of every
+  reader's and checker's brief
 
 The adjudicator — the main session, which settled the readers'
 disagreements — had read the community claims in
 `docs/research/new-device-candidates.md` (14-byte packets, FS9922 / CS7729CN
 chips) before the readers reported. None of them is used. The 14-byte format
 in spec §11 is the PC reader's own reading of commented-out code in OWON's
-PC source.
+PC source. In the 15-byte round the adjudicator had likewise read spec §14
+and the 15-byte survey; the new text of spec §1, §2, §9.4 and §10 cites only
+the vendor sources above.
 
 ### Cross-referenced (clean-room boundary opened 2026-10-01)
 
@@ -247,6 +295,18 @@ without one is tagged [UNVERIFIED].
    FFF0 scan filter. The spec's reading held in every case, so no body
    statement changed; each disagreement in spec §14.3 sets a capture against
    OWON's code, or is a community error.
+10. **The 15-byte round** (2026-10-02). Voltcraft's `libapp.so` decompiled
+    with the same blutter build (Dart 3.9.2). Three readers, none shown
+    another's report: the manuals (`findings/manuals-15byte.md`, from
+    renders), iMeter's 15-byte code (`findings/app-15byte-gaps.md`), and
+    Voltcraft's app against iMeter (`findings/voltcraft-app.md`, a diff with
+    addresses, branch targets and pool offsets masked and each pool object
+    replaced by a hash of its contents). Adjudication
+    (`findings/adjudication-15byte.md`), four grounding checks
+    (`findings/grounding-*.md`; chiefly cite lines, the order of the app-side
+    keys, the speech text for LPF, the tags on Dart-runtime readings, and
+    the manuals' screenshot key lists), and a narrow re-check of the fixed
+    rows.
 
 Resolved disagreements (`findings/adjudication.md`, and drafting):
 
@@ -279,6 +339,21 @@ Resolved disagreements (`findings/adjudication.md`, and drafting):
 14. **The 15-byte frame**: app only, given its own section.
 15. **`*READlen?` reply** (found in drafting): bytes 0-1 as a u16 (app)
     against bytes 0-3 as a u32 (PC); open.
+16. **Voltcraft's advertised name**: "VC871", "VC891" and "VCxxx" in the
+    meter manuals, "VC8xx_1" in the 2022 app manual, "BDM" in the app manual
+    bundled with app 1.2.5 (on a VC925, by its key list). All recorded; no
+    app code tests a name; open.
+17. **Key lists against the manuals' app screenshots**: the app's list per
+    model code is what the app sends; the OWON manuals' screenshots show
+    Hz/Duty on an OW65 and OW67, whose lists lack it, and their caption says
+    the keys match the meter's, which has no Hz/Duty or light key. Taken as
+    generic screens; open for `05 01`.
+18. **Hold/Light long press `09 01` on the CMS**, whose manual gives HOLD's
+    long press as "DCA to zero" and no light key; the bytes recorded, the
+    effect open.
+19. **Spec corrections from the app**: Compare (`0F`) is on the VC925's list
+    too, and the VC915/925 Hold long press is `03 00`, not `09 01`; code
+    223's full-scale lines are 1095-1101.
 
 ### Source disagreements: manuals
 
@@ -311,6 +386,25 @@ Recorded, not adjudicated; the ones a meter can settle are in
   every OW16 and OW18 spec table and the OW18 datasheet.
 - MIN/MAX segments on the OW18 and CM2100 LCD figures, which describe no
   MAX/MIN feature; RPM and a bolt on the B35 LCD (B35-UM p.15/10).
+- OW65: "<" and ">" keys in the setup and 4-20 mA procedures that its panel
+  lacks (OW65-UM p.17/12, p.25/20); the torch key opens a menu (p.11/6) or
+  toggles the light (p.13/8). OW67: p.11/6 still shows the OW65's torch key.
+- "750 Vac" in the voltage warnings against 1000 V AC on the jacks and in the
+  specifications (OW65-UM p.19/14 against p.15/10; OW67-UM p.20/15; OW69-UM
+  p.19/14).
+- VC871 frequency: "10 Hz to 10 MHz" in the procedure (VC871-UM p.78)
+  against 60.000 MHz in the specification (p.106) and 60 MHz in the
+  intended use (p.59).
+- VC915 20 A: 10 s "in 10-minute intervals" (VC915-UM p.77) against
+  15-minute (p.101-102); RECORD "sent to the measurement app" (p.68) against
+  "onto the device" (p.89).
+- VC925 rating: CAT III 1500 V, CAT IV 1000 V in the technical data
+  (VC925-UM p.100) against CAT III 2000 V for the leads (p.66, p.101) and
+  on the jack print.
+- Phone requirements: Android 4.3 and iOS 7.0 (VC871-UM p.69) against Android
+  6.0 and iOS 11.0 (VC-APP p.4; VC891-UM p.63). The app's "+" is "in
+  the top left corner" (VC-APP p.11), a "large plus sign in the middle" in
+  the meter manuals (VC871-UM p.92).
 
 ### Source disagreements: manual against product page or datasheet
 

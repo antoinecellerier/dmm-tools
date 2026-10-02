@@ -1,4 +1,4 @@
-# OWON Bluetooth multimeters (B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B): Reverse-Engineered Protocol Specification
+# OWON Bluetooth multimeters (B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B, CMS101, CMS061, OW65B, OW67B, OW69B; Voltcraft VC871, VC891, VC915, VC925 PV): Reverse-Engineered Protocol Specification
 
 What OWON's Bluetooth LE multimeters send and accept. After a connection the
 meter notifies 6-byte frames on characteristic FFF4: a 16-bit function/range
@@ -6,13 +6,16 @@ word (function, SI prefix, decimal-point position), a 16-bit status word and
 a 16-bit sign-and-magnitude count, all little-endian, with no header, length
 or checksum. A one-off read of FFF2 gives the model code and firmware version;
 16-byte commands (record, read-back, rename and a challenge/response) go to
-FFF1, and 2-byte key presses to FFF3. OWON's app also decodes a 15-byte frame
-for Voltcraft-branded and other OWON meters (§10, app only). The 6-byte frame
-is implemented in `protocol/owon/`, experimental; the 15-byte one is not. No
-OWON meter has been on our bench: every fact in §1-12 comes from OWON's
-Android app, OWON's PC software source and OWON's manuals and product pages.
-§14 compares them with community projects and their captures. The approach
-doc beside it records the sources, the method and the clean-room boundary.
+FFF1, and 2-byte key presses to FFF3. The CMS101/061, OW65B/67B/69B and
+Voltcraft VC871/891/915/925 PV send a 15-byte frame with a sub-display
+instead (§10), decoded by OWON's app and by Voltcraft's, which is the same
+code (§10.10). The 6-byte frame is implemented in `protocol/owon/`,
+experimental; the 15-byte one is not. No OWON or Voltcraft meter has been on
+our bench: every fact in §1-12 comes from OWON's and Voltcraft's Android
+apps, OWON's PC software source, and OWON's and Voltcraft's manuals and
+product pages. §14 compares them with community projects and their captures.
+The approach doc beside it records the sources, the method and the
+clean-room boundary.
 
 Based on:
 - OWON's Android app iMeter 1.2.4 (`com.owon.imeter`), a Flutter build,
@@ -23,6 +26,12 @@ Based on:
 - The eight OWON manuals (33 series, 35 series & B41T, OW16, OW18, CM2100;
   user manuals and quick guides), read from the rendered pages
 - OWON's product pages on owon.com.hk and the datasheets they link
+- For the 15-byte meters (§9.4, §10): Voltcraft's Android app "Voltcraft
+  VC800 VC900 Series" 1.2.5 (`com.voltcraft.series800`), the same Flutter
+  code as iMeter, decompiled with blutter; OWON's manuals for the CMS101,
+  CMS061, OW65, OW67 and OW69; Conrad's manuals for the Voltcraft VC831,
+  VC851, VC871, VC891, VC915 and VC925 PV, its datasheets for the first
+  four, and its manuals for Voltcraft's app
 
 Citation keys:
 - **app `file:lines`** — the blutter listing under
@@ -46,7 +55,22 @@ Citation keys:
   Oct. 2018 V1.2.2), **B35-UM** (`OWON_35_Series&B41T_USER_MANUAL.pdf`, Sep.
   2026 V1.4.0), **B35-QG** (its quick guide, 2026.09 V1.6.6), **OW16-UM**
   (July 2019 V1.0.3), **OW16-QG** (2018.10 V1.0.1), **OW18-UM** (Nov 2023
-  V1.1.3), **OW18-QG** (2023.11 V1.1.1), **CM2100-UM** (Jan. 2026 V1.0.3)
+  V1.1.3), **OW18-QG** (2023.11 V1.1.1), **CM2100-UM** (Jan. 2026 V1.0.3);
+  for the 15-byte meters **CMS101-UM** (`CMS_User_Manual.pdf`, Sep. 2025
+  V1.0.4), **CMS061-UM** (Sep. 2025 V1.0.4), **OW65-UM** (Feb. 2025
+  V1.0.0), **OW67-UM** (Dec. 2025 V1.0.2), **OW69-UM** (Sep. 2025 V1.0.2)
+- **V: `file:lines`** — the blutter listing of Voltcraft's app under
+  `references/owon/voltcraft-app/blutter/asm/`, the same file names as the
+  app's
+- **Voltcraft manuals**, `<key> p.N` = PDF page, under
+  `references/owon/voltcraft/` (Conrad item numbers; English sections):
+  **VC871-UM** (`002576867ML00`, p.56-109, v12_0826), **VC891-UM**
+  (`002576866ML00`, p.51-98, v9_0826), **VC915-UM** (`003072347ML00`,
+  p.55-105, v4_00626), **VC925-UM** (`003072348ML00`, p.57-109, V2_0826),
+  **VC831-UM** (`002576864ML00`, p.47-89), **VC851-UM** (`002576865ML00`,
+  p.46-88); **VC-APP**, Voltcraft's app manual (`002576866ML04`,
+  V1_1222, © 2022); **VAPP**, the later app manual bundled in Voltcraft's
+  app 1.2.5 (`2576866_67_V4_0526_02_jh_m_App_EN`, © 2023)
 - **page `<model>`** — the product page saved under `references/owon/web/`
   (B35 = `products_owon_3_5-6_…`, B41T = `products_owon_4_1-2_…_b41t.html`)
 
@@ -54,9 +78,11 @@ Byte and bit numbering: byte 0 is the first byte of a frame or value; bit 0
 is the least significant bit of a little-endian word.
 
 Confidence levels:
-- **[KNOWN]** — stated in an OWON manual or on OWON's site, cited by page
+- **[KNOWN]** — stated in an OWON or Voltcraft manual or on OWON's site,
+  cited by page
 - **[VENDOR, app]**, **[VENDOR, PC]**, **[VENDOR, both]** — read from OWON's
-  app, OWON's PC source, or both independently, cited by file and lines
+  app (or Voltcraft's, cited `V:`), OWON's PC source, or both independently,
+  cited by file and lines
 - **[INFERRED]** — deduction from the above, reason given
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter ([verification.md](verification.md) lists the checks)
@@ -76,9 +102,15 @@ The manuals' Bluetooth models [KNOWN]:
 | OW16 | OW16B | OW16A | OW16-UM p.1, p.50/45 |
 | OW18 | OW18B, OW18E | OW18A, OW18D | OW18-UM p.1, p.48/43 |
 | CM2100 | CM2100B | CM2100 | CM2100-UM p.1, p.34/31 |
+| CMS | CMS101, CMS061 (a "BLE" label on the panel) | none named | CMS101-UM p.12/7, p.33/28; CMS061-UM p.12/7 |
+| OW65, OW67, OW69 | OW65B, OW67B, OW69B: "Bluetooth √ (Only for B model)" | the models without B | OW65-UM p.48/43; OW67-UM p.33/28, p.49/44; OW69-UM p.30/25, p.51/46 |
+| Voltcraft VC800 | VC871, VC891: "Bluetooth® LE 4.0" | VC831, VC851 (below) | VC871-UM p.68, p.100; VC891-UM p.63, p.90 |
+| Voltcraft VC900 | VC915, VC925 PV: "Bluetooth LE 5.0" (on the VC925 in a §23.3 that follows the adaptor's §23.2, not assigned to either) | — | VC915-UM p.99; VC925-UM p.101 |
+| Voltcraft VC831, VC851 | none: no Bluetooth, app or radio-module text in either manual or datasheet, and no BLE key or icon on the panel | VC831, VC851 | VC831-UM p.46-89, p.52; VC851-UM p.46-88, p.50 |
 
 "T" is true RMS and "+" the offline record function, both optional (B35-UM
-p.1; B33-UM p.1) [KNOWN].
+p.1; B33-UM p.1) [KNOWN]. The VC831/VC851 row is a search of those sources,
+2026-10-02.
 
 **The model code.** Both vendor programs identify a meter after connecting,
 by byte 0 of the FFF2 read (§4), never by its advertisement [VENDOR, both:
@@ -110,7 +142,7 @@ Both [VENDOR] for their columns. The app's other codes are 15-byte meters
   false (BSI:56-69) [VENDOR, PC].
 - **223** (0xDF) has counts (20000) and shares the CM2100's full-scale table
   in the app, but no model entry, so the app rejects a meter that sends it
-  (MD:6739-6793; `multimeter_fs.dart` ~1069-1080) [VENDOR, app]; its product
+  (MD:6739-6793; `multimeter_fs.dart` 1095-1101) [VENDOR, app]; its product
   is [UNVERIFIED].
 
 **What differs per code** in the two programs [VENDOR]:
@@ -137,11 +169,12 @@ same for every code but 55 [VENDOR, both]. The manuals' counts are in §9.1.
 | Item | Value | Source | Tag |
 |---|---|---|---|
 | Advertised name | "BDM" by default: the app's device list shows it ("select BDM", "Click 'BDM' in the device list to pair") | B35-UM p.26/21; OW18-UM p.24/19; OW16-UM p.25/20; B33-UM p.24/19; CM2100-UM p.17/14-18/15 | [KNOWN] (cross-reference §14) |
-| Rename | the app can rename the meter; the name "will be memorized in the device"; "Only digits, letters and underscore can be entered" | B35-UM p.28/23 | [KNOWN]; the command is §7.2 |
+| Name, 15-byte meters | "BDM" in the app's list in the CMS and OW6x manuals, and on every device card and controls screen of VAPP, whose controls screen shows the VC925's key list (§10.8). Voltcraft's meter manuals say to select "VC871", "VC891" or "VCxxx"; VC-APP's screenshots show "VC8xx_1" and "VC8xx_2" | CMS101-UM p.34/29; OW65-UM p.28/23-29/24; OW67-UM p.33/28-34/29; OW69-UM p.30/25-31/26; VAPP p.6-8, p.11, p.14-15, p.20, p.22-23; VC871-UM p.92; VC891-UM p.82; VC915-UM p.88; VC925-UM p.94; VC-APP p.12, p.15 | [KNOWN]; which name a Voltcraft meter advertises out of the box is [UNVERIFIED] |
+| Rename | the app can rename the meter; the name "will be memorized in the device"; "Only digits, letters and underscore can be entered". Voltcraft: "The new name is permanently stored on the multimeter" | B35-UM p.28/23; VAPP p.7 | [KNOWN]; the command is §7.2 |
 | Renamed name advertised | the app shows only advertised names in its list, and the manual says the name is stored in the meter | — | [INFERRED]; [UNVERIFIED] on a meter (cross-reference §14) |
 | Name filter | none in either program. The app shows any peer whose name, stripped to `[0-9a-zA-Z_]`, is not empty, de-duplicated by id (`device_add_view_model.dart:202-563`; `built_in_ble_device.dart:36-78`); the PC lists every advertiser by address, its name field left `""` with the comment `// "BDM"` (`kernal/Event.java:178-191`, `:188`) | app, PC | [VENDOR, both] |
 | Other advertising data | read by neither: the app uses only the device id and name; the PC ignores the event type, address type and advertising data (`kernal/Event.java:159-203`) | app, PC | [VENDOR, both] |
-| Service filter | the app's optional "Filter device" switch scans with service `0000fff0-0000-1000-8000-00805f9b34fb` (`ble_device_scanner.dart:30`, `:130-145`); it is off by default in OWON's build (`device_add_view_model.dart:63-83`, `:181-185`; `main.dart:13-21`). The manuals: "Filter device" hides incompatible meters (B35-UM p.25/20-26/21) | app, manual | [VENDOR, app], [KNOWN]; that the meter advertises the FFF0 UUID [INFERRED from the filter]; [UNVERIFIED] (cross-reference §14, D1) |
+| Service filter | the app's optional "Filter device" switch scans with service `0000fff0-0000-1000-8000-00805f9b34fb` (`ble_device_scanner.dart:30`, `:130-145`); it is off by default in OWON's build (`device_add_view_model.dart:63-83`, `:181-185`; `main.dart:13-21`) and on in Voltcraft's (V:`device_add_view_model.dart:63-80`, `:181-185`). The manuals: "Filter device" hides incompatible meters (B35-UM p.25/20-26/21); VAPP tells the user to switch it on and shows "BDM" found with it on (p.6-7) | app, manual | [VENDOR, app], [KNOWN]; that the meter advertises the FFF0 UUID [INFERRED from the filter and VAPP's screenshot]; [UNVERIFIED] (cross-reference §14, D1) |
 | Address type | the PC connects with the peer address type hard-coded to public (`kernal/Command.java:160-176`) | PC | [VENDOR, PC]; that the meters use a public address [INFERRED] (cross-reference §14) |
 | Service | FFF0, required by the app in its short or 128-bit form (`owon_imeter/device_manager/utils.dart:92-146`). No service UUID appears in the PC source; it discovers nothing (`kernal/BleAgent.java:161-163`) | app | [VENDOR, app] |
 | FFF1 | commands (§7.2); read back for the challenge reply and the `*READlen?` reply. PC name "RW" | app, PC | [VENDOR, both] |
@@ -700,11 +733,114 @@ battery symbol and "cannot work" (CM2100-UM p.15/12) [KNOWN]. With no
 reading OWON's app shows "------" (`device_control_page.dart:1320-1323`)
 [VENDOR, app].
 
-## 10. The 15-byte frame (OWON's app only)
+The 15-byte meters' manuals [KNOWN]: "OL" on all; "EF" and one to four
+dashes for NCV on the CMS (CMS101-UM p.25/20), "INRUSH", and "Trig",
+"Ready", "Scan", "Stop" in its scope mode (p.30/25); "Loz", "REC", "COMP" and
+"FAIL", "Lo" on the OW67/69, low-pass on the OW69 (OW67-UM p.14/9,
+p.30/25-32/27; OW69-UM p.14/9-15/10); "Loz", "Lo", "COMP", "RECORD", "STOP", "SAVE" and
+"LOG" on the VC915 (VC915-UM p.67-68); "Check inPut" for a
+lead in the wrong socket on the VC871 (VC871-UM p.73); "HOT PANEL REMOVE
+SENSOR", "INV" and "PV Direction Fail" in the VC925's PV mode (VC925-UM
+p.70-71, p.90-91, p.93).
 
-OWON's app decodes a second frame for the meters below; nothing in the PC
-source, the manuals or the product pages covers it, so every fact in this
-section is [VENDOR, app] from one source, unless tagged. VC871 captures:
+### 9.4 The 15-byte meters
+
+OW67B = VC871 and OW69B = VC891 by their panels, keys, dials, menus and
+spec tables [INFERRED from comparing the manuals]; the VC915 and VC925 PV
+are a 20000-count IP65 design of their own.
+
+| | CMS101, CMS061 | OW65B | OW67B, VC871 | OW69B, VC891 | VC915 | VC925 PV |
+|---|---|---|---|---|---|---|
+| Counts | not stated; ranges in 20000 steps | 6000 | 60000 | 60000 | 20000 | 20000 |
+| Bluetooth on | hold Tab⇌ (BLE) | hold SETUP (BLE) | hold < (BLE), about 2 s on the VC871 | hold < (BLE), about 2 s on the VC891 | hold < (BLE) about 2 s | hold < (BLE) about 2 s |
+| Bluetooth off | not stated | hold SETUP | not stated ("switchable" on the VC871) | not stated ("switchable" on the VC891) | not stated | not stated |
+| Bluetooth idle-off | not stated | not stated | 5 min (OW67) | not stated | not stated | not stated |
+| Auto power-off | about 10 min, can be cancelled; suspended while Bluetooth is on | 5/10/15/30 min or Always ON | as OW65 | — | 5/10/15/30 min or Always ON | 5/10/15/30 min or Always ON |
+| Clock (Set Time, Set Date) | none found | none found | yes | yes | yes | yes |
+| App | QR code only | QR code only | "Voltcraft VC800-Series" (VC871) | "Voltcraft VC800-Series" (VC891) | "Voltcraft VC800 VC900 series" | "Voltcraft VC800 VC900 series" |
+
+"—" is not read for this spec. Cites: counts CMS101-UM p.35/30-36/31,
+OW65-UM p.48/43, OW67-UM p.49/44, OW69-UM p.51/46, VC915-UM p.66, p.98,
+VC925-UM p.100; Bluetooth on CMS101-UM p.33/28-34/29, OW65-UM
+p.13/8, OW67-UM p.13/8, p.33/28, OW69-UM p.30/25, VC871-UM p.92, VC891-UM
+p.82, VC915-UM p.88, VC925-UM p.94; off OW65-UM p.13/8, VC871-UM p.68,
+VC891-UM p.63; idle-off OW67-UM p.33/28 ("after 5 minutes of inactivity";
+left out of its quick guide); auto power-off CMS101-UM p.34/29, p.37/32,
+OW65-UM p.17/12, OW67-UM p.17/12-18/13, VC871-UM p.89-90, p.100, VC915-UM
+p.90, p.98, VC925-UM p.73, p.88, p.100; clocks OW67-UM p.11/6, OW69-UM
+p.11/6, p.18/13, VC871-UM p.91, VC891-UM p.81, VC915-UM p.90, VC925-UM p.73; apps VC871-UM p.92, VC891-UM p.82,
+VC915-UM p.88, VC925-UM p.94. Also [KNOWN]:
+
+- **Bluetooth.** No manual gives a PIN or pairing step. OWON's say "More
+  than one meters can be connected simultaneously" to the app (OW65-UM
+  p.28/23); none says how many phones one meter takes. Voltcraft's app must
+  be reconnected, with Bluetooth enabled again, after every power-on (VC-APP
+  p.10). Over Bluetooth "The knob function cannot be controlled!" (VC871-UM
+  p.92). OWON's manuals describe the offline record's read-back with the
+  Android app only (OW65-UM p.35/30; OW67-UM p.40/35).
+- **CMS scope mode.** The power key toggles DMM and oscilloscope; the scope
+  is one channel, 5 MSa/s (CMS101-UM p.30/25-33/28, p.37/32). Whether
+  Bluetooth streams in scope mode is not stated; the ᛒ icon is part of the
+  scope's status bar (p.31/26).
+- **VC925 PV adaptor.** The VC925 PV searches for and connects to its
+  LX-925 irradiance adaptor over Bluetooth, "Default adaptor name: "PV adaptor VC92"", from
+  the PV position's Find page (VC925-UM p.89-90, p.92). In VAPP, F2 (APPS) or
+  F3 (PV92) chooses which link the meter takes (VAPP p.20-21). Whether
+  the phone and adaptor links can run together is not stated.
+
+**Functions** from the dials, SELECT cycles and menus; the codes are §6.2's
+and §10.5's, matched by name [INFERRED]:
+
+| Function (code) | CMS101/061 | OW65B | OW67B, VC871 | OW69B, VC891 | VC915 | VC925 PV |
+|---|---|---|---|---|---|---|
+| V DC, AC (0, 1) | yes | yes | yes | yes | yes | yes |
+| A DC, AC (2, 3) | clamp | yes | yes | yes | yes | µA and mA only |
+| Ω, diode, continuity (4, 10, 11) | yes | yes | yes | yes | yes | yes |
+| Capacitance, Hz, duty (5, 6, 7) | yes | yes | yes | yes | yes | yes |
+| ℃, ℉ (8, 9) | no | yes | yes | yes | yes | yes |
+| NCV (13) | yes | no | no | no | no | no |
+| Power W, VA, PF (14, 15, 16) | no | no | AC and DC power | no | no | no |
+| 4~20 mA (17) | no | yes | yes | yes | yes | yes |
+| USB power (18-22) | no | no | yes (mAh, Wh, V, A, a timer) | no | no | no |
+| AC+DC V (23) | no | no | no | yes | yes | no |
+| Motor (24) | no | no | no | no | yes | no |
+| Solar, angle, compass (25-27) | no | no | no | no | no | with the LX-925 |
+| HV DC, AC (28, 29) | no | no | no | no | no | 2 kV DC, 1.5 kV AC |
+| LoZ, low-pass (Lo) | no | LoZ | both | both | both | LoZ |
+| Peak, Inrush | Inrush | "Peak (1ms) √" in the specification only | Peak | Peak | no | no |
+
+Cites: CMS101-UM p.17/12-25/20; OW65-UM p.13/8-14/9, p.19/14-25/20, p.48/43;
+OW67-UM p.13/8-14/9, p.26/21-28/23, p.32/27; OW69-UM p.13/8-14/9,
+p.28/23-29/24; VC871-UM p.62, p.71, p.75-90; VC891-UM p.56, p.65, p.70;
+VC915-UM p.60, p.72-79; VC925-UM p.68-72, p.75-93. The OW67's "Lo" softkey
+is not explained in its manual; the VC871's is a 1 kHz low-pass (VC871-UM
+p.71).
+
+**Sub-display.** MAX/MIN shows the live value and REL the reference on
+the OW65, OW67 and VC871, while the CMS's MaxMin row shows Min, Max and Avg
+(CMS101-UM p.27/22); the frequency or duty beside AC V and Hz; W with VA, V, A, PF
+or Hz on the power functions; VAC or VDC beside AC+DC (VC915-UM p.73); the
+voltage in Motor (p.76); irradiance or temperature in PV mode (VC925-UM
+p.69). Cites: OW65-UM p.26/21-27/22; OW67-UM p.14/9, p.27/22-32/27;
+VC871-UM p.78, p.85-88.
+
+**Keys on the meter.** The CMS has a power key (DMM/OSC), HOLD (held: "DCA
+to zero"), Tab⇌ (menu pages), F1-F4, ▲▼, ◄► and A (CMS101-UM p.11/6,
+p.13/8, p.26/21-28/23). The OW65 has F1 RANGE, F2 MAX/MIN, F3 REL, F4 HOLD,
+SELECT, SETUP, a torch key and LoZ (OW65-UM p.13/8-14/9). The OW67/69 and
+the Voltcraft meters have F1-F4 under on-screen labels (page 1 RANGE,
+MAX/MIN, REL, HOLD), SELECT (SETUP above it), < (BLE), > (torch) and LoZ
+(OW67-UM p.13/8, p.29/24-32/27; VC871-UM p.62; VC915-UM p.60); on the
+Voltcraft meters RANGE, MAX/MIN and REL held (about 1 s on the VC871 and
+VC915) return to auto or leave the function (VC871-UM p.88-91; VC915-UM
+p.86-90; VC925-UM p.86-87).
+
+## 10. The 15-byte frame
+
+OWON's app decodes a second frame for the meters below, and Voltcraft's app
+is the same code (§10.10); nothing in the PC source or the manuals covers
+the wire, so every wire fact in this section is [VENDOR, app], one code base,
+unless tagged. The meters' own behaviour is §9.4. VC871 captures:
 cross-reference §14.
 
 ### 10.1 Models
@@ -727,12 +863,16 @@ and 1 for this one (BM:274-300, :1347-1409); MD:21-744 [VENDOR, app].
 | 69 | OW69 (`:720`) | 5 | 60000 | `_c891AndOw69Keys` | yes |
 
 Counts from `baseCounts` (MD:6739-6793). Brand does not gate which codes
-connect: one model table serves every build of the app [VENDOR, app].
+connect: one model table serves every build of the app, Voltcraft's
+included (§10.10) [VENDOR, app]. The VC831 and VC851 have no Bluetooth
+(§1), so codes 83 and 85 name no product found with a radio, 2026-10-02.
 
 ### 10.2 Framing
 
 Each notification is cut into 15-byte chunks and a shorter remainder dropped
-(BM:367-399). A chunk whose byte 14 is `FF` is skipped (BM:399-405); that
+(BM:367-399); nothing is kept between notifications, so a frame split across
+two is lost to the app (BM:357-405) [VENDOR, app]. Whether a meter ever
+splits one, or sends several per notification, is [UNVERIFIED]. A chunk whose byte 14 is `FF` is skipped (BM:399-405); that
 the byte tested is the last is [INFERRED from the listing selector read as
 `last`]. Whether real frames end in `FF` filler is [UNVERIFIED].
 
@@ -775,10 +915,19 @@ R10W:948-1071.
 | 2 | "UL", value 0 |
 | 3 | "HI", value = full-scale counts |
 | 4 | "LO", value 0 |
-| 5 | a number, with a flag whose meaning is not found [UNVERIFIED] |
+| 5 | a number, flagged as large error data (below) |
 | 6, 7 | no reading |
 
-R10W:270-947. Further rules (R10W:532-940): a count longer than the model's
+R10W:270-947. Status 5 sets a flag in the value (R10W:484-515, :530-533)
+whose only reader found is the app's log: with the setting "Filter out large error
+data" on, such a reading is not logged (`realtime_data_logger.dart:1653-1712`;
+label `owon_imeter/generated/intl/messages_en.dart:963`). OWON's build leaves the setting off by
+default; Voltcraft's turns it on at every start
+(V:`realtime_data_logger.dart:784-791`). The display is unchanged, and the
+6-byte parser never sets the flag (R2W:206-219, :252-269, :302-317,
+:346-361, :514-529) [VENDOR, app]. That status 5 means a
+large measurement error is [INFERRED from the setting's name]. Further rules
+(R10W:532-940): a count longer than the model's
 digits is no reading; NCV (13) uses §6.7's texts; Time (19) is seconds shown
 "H:MM:SS"; Motor (24) uses the texts 0 "- - -", 1 "- - -", 2 "1-2-3",
 3 "3-2-1" (PE:1318-1393; other values throw); decimal codes 6 and 7 give
@@ -802,9 +951,9 @@ digits is no reading; NCV (13) uses §6.7's texts; Time (19) is seconds shown
 | 27 | Compass, ° |
 | 28 | DC_HV, V |
 | 29 | AC_HV, V |
-| 30, 31 | none: no reading |
+| 30, 31 | no entry: the lookup throws, dropping the rest of that notification [INFERRED] |
 
-PE:122-869. Codes 16, 17, 19 and 24 also take no prefix (PE:871-947). With
+PE:122-869, :4425-4481. Codes 16, 17, 19 and 24 also take no prefix (PE:871-947). With
 main function 23, a DC V or AC V sub-display is labelled "DC" or "AC"
 (PE:5952-6085).
 
@@ -816,7 +965,11 @@ main function 23, a DC V or AC V sub-display is labelled "DC" or "AC"
 | 17 | 0x20000 | Inrush |
 | 18 | 0x40000 | OSC |
 
-PE:3534-3917.
+PE:3534-3917. Each set bit's name is shown as a chip on the control page
+(`device_control_page.dart:2798-3100`); no bit is gated by model, on either
+frame (PE:3447-3533). With OSC set, the app neither charts the reading nor
+keeps it in record lists (PE:6334-6393, :6505-6554;
+`data_logger_client.dart:44-113`) [VENDOR, app].
 
 ### 10.7 VC871 (code 87)
 
@@ -827,19 +980,65 @@ flags. OW67, which shares the VC871's key list, gets the ordinary parser.
 
 ### 10.8 Commands
 
-- `#TIMEsync` (9 bytes, raw string) + CC YY MM DD hh mm ss, 16 bytes, on
-  connect for codes 87, 89, 91, 92, 67 and 69 (PE:2938-3369; BBM:1211-1301).
-- Key presses as §7.1, with codes up to `11` (VC915: Compare `0F`, AC/DC
-  `10`, Motor `11`; 4~20mA `0A`, Display `0C`, LPF 7, Peak 8, Inrush `0D` on
-  the models whose lists carry them), and Hold/Light's long press sent as
-  `09 01` on the CMS101/061, VC831/851, OW65, VC871/OW67 and VC891/OW69
-  (MD:745-4910 lists).
+- **`#TIMEsync`**: `23 54 49 4D 45 73 79 6E 63` ("#TIMEsync") + CC YY MM
+  DD hh mm ss, 16 bytes, binary, local time, written to FFF1 with response
+  after the FFF4 subscribe, for codes 87, 89, 91, 92, 67 and 69 only
+  (`modelWithRTCList`, MD:6302-6357; PE:2938-3369; BBM:1138-1301). No reply
+  is read; a failed write disconnects (BBM:81-165). The field order maps the
+  runtime's `DateTime` parts [INFERRED]. These are the models with a clock
+  (§9.4).
+- **Key presses** as §7.1: `[code, 01]` short, `[code, 00]` long, except
+  Hold/Light, whose long press is `09 01` (MD:745-4910; long press from
+  `onLongPress`, settled through the Flutter code in the listing:
+  `material_button.dart:140-143`, `ink_well.dart:777-936`) [VENDOR, app]:
+
+| List (MD line) | Codes | Keys (code) |
+|---|---|---|
+| `_cms101Keys` (4385) | 101, 61 | Select 1, Range 2, Hold/Light 3, Rel 4, Hz/Duty 5, Max/Min 6, Inrush `0D` |
+| `_c91Keys` (3502) | 91 | Select 1, Range 2, Hold 3, Rel 4, Max/Min 6, LPF 7, Compare `0F`, AC/DC `10`, Motor `11`, 4~20mA `0A`, Display `0C` |
+| `_c92Keys` (2909) | 92 | Select 1, Range 2, Hold 3, Rel 4, Max/Min 6, Compare `0F`, 4~20mA `0A`, Display `0C` |
+| `_c831And851Keys` (2454) | 83, 85 | Select 1, Range 2, Hold/Light 3, Rel 4, Hz/Duty 5, Max/Min 6 |
+| `_Ow65Keys` (2069) | 65 | Select 1, Range 2, Hold/Light 3, Rel 4, Max/Min 6 |
+| `_c871AndOw67Keys` (1474) | 87, 67 | Select 1, Range 2, Hold/Light 3, Rel 4, Max/Min 6, Peak 8, 4~20mA `0A`, Display `0C` |
+| `_c891AndOw69Keys` (745) | 89, 69 | Select 1, Range 2, Hold/Light 3, Rel 4, Hz/Duty 5, Max/Min 6, LPF 7, Peak 8, 4~20mA `0A` |
+
+The VC915/925 "Hold" long press is `03 00`. That code 9 is the light is
+[INFERRED from the label "Hold/Light"]; the CMS manual gives its HOLD key's
+long press as "DCA to zero" (CMS101-UM p.13/8) and names no light key.
+Every list key is offered both ways; none is labelled Bluetooth
+[VENDOR, app]. Which code, if any, the meters' BLE keys (§9.4) map to is
+[UNVERIFIED]. The control page
+adds "Read record" and "Start to record", which open app pages and send
+nothing (`device_control_page.dart:3844-4199`). The manuals' screenshots of
+the app show other sets: Select, Range, H/light, Rel, Hz/Duty, Max/Min on
+the OW65, plus Peak on the OW67 and LPF and Peak on the OW69 (OW65-UM
+p.31/26; OW67-UM p.36/31; OW69-UM p.33/28); VC-APP, for the VC871/891,
+the `_c871AndOw67Keys` set (p.17). Whether `05 01` does anything on an OW65 or OW67 is [UNVERIFIED].
 
 ### 10.9 Offline words
 
 3-byte words: byte 2 = `F0` marks a G24 function/range word, any other word
 is a V24 reading (R10W:1406-1739). G24 never uses bits 16-23, so the marker
 fits [INFERRED].
+
+### 10.10 Voltcraft's app
+
+Voltcraft's "VC800 VC900 Series" app 1.2.5 is OWON's iMeter code base
+(`imeter_base`, `owon_imeter`). With addresses, branch targets and pool
+offsets masked and each pool object compared by contents, the listings of
+the model table, both frame parsers, the offline parser, the FFF2 reader, the
+challenge, the BLE adapter, the scanner and the device classes are the same
+as iMeter 1.2.4's; `protocol_element.dart` adds one read-only list used for
+speech [VENDOR, app: V: against app, `findings/voltcraft-app.md`]. So §1-10
+hold for both apps. In the code that connects and decodes, the build
+differs in defaults only (the UI files were not compared): `OEM_CODE` 1
+against 0 (`V:main.dart:15-21`), which selects Voltcraft's pages, turns the
+"Filter device" switch on (§2) and turns "Filter out large error data" on at
+every start (§10.4); and its CSV export starts with a UTF-8 BOM
+(`V:imeter_base/utils/extension.dart:66-70`). Other changes are app-only:
+speech, and the auto-save count's meaning. No comparison of an advertised
+name was found in either listing, 2026-10-02; "VC" is tested only against the model name,
+for the CSV header (`V:extension.dart:785-818`) [VENDOR, app].
 
 ## 11. An earlier format: 14-byte ASCII (PC source, commented out)
 
@@ -937,7 +1136,8 @@ range word (`F0 & FC = F0`), then 249.3, 249.8 and 248.8 mV DC.
 What the wire requires of any decoder, from the vendor sources:
 
 - The model is FFF2 byte 0, read after connecting; the advertised name is
-  "BDM" or one a user chose.
+  "BDM" or one a user chose (Voltcraft's manuals name "VC871", "VC891"
+  and "VCxxx").
 - Live frames arrive as FFF4 notifications with no request; the only write
   either vendor program makes before them is the app's challenge (§3.4).
 - A frame is 6 bytes, three little-endian 16-bit words, with no framing;
@@ -950,6 +1150,11 @@ What the wire requires of any decoder, from the vendor sources:
   vendor sources disagree.
 - Function 13 is NCV on the OW16, OW18 and CM2100, whose NCV levels 0-4 are
   "EF" and one to four dashes; on B-series meters it is open.
+- Codes 101, 61, 91, 92, 65, 87, 67, 89 and 69 send 15-byte frames: five
+  little-endian 24-bit words, main and sub-display function and reading,
+  then status; the sub-display words count only when main G24 bit 12 is
+  set. Reading magnitudes are 19 bits, with a 3-bit status code and a sign
+  bit.
 - An offline dump sits between two runs of 20 `FF` bytes; inside it a word
   whose high byte masked with `FC` is `F0` sets the range for the readings
   after it.

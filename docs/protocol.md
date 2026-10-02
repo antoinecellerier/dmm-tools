@@ -58,9 +58,9 @@ Researched, not implemented:
 
 - [B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B — Bluetooth LE, 6-byte frames of three little-endian words](research/owon/reverse-engineered-protocol.md)
   — the 6-byte frame is implemented, experimental. The spec also covers the
-  15-byte frame OWON's app decodes for the Voltcraft
-  VC831/VC851/VC871/VC891/VC915/VC925 and OWON's OW65/OW67/OW69, researched,
-  not implemented.
+  15-byte frame of OWON's CMS101/CMS061 and OW65B/OW67B/OW69B and the
+  Voltcraft VC871/VC891/VC915/VC925 PV, from OWON's and Voltcraft's apps and
+  manuals, researched, not implemented.
 
 ## Framing and cables
 
