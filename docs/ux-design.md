@@ -99,10 +99,18 @@ as it does on **Clear**.
 **Show:** groups get a row between the time window and the analysis toggles:
 inline, nothing told the controls apart (`show_toolbar` in `graph/toolbar.rs`).
 
-**Different units are never overlaid.** A shared axis would imply a
-relationship that isn't there, so a sub-value in another unit is reached
-through **Plot:**. A change of mode or unit clears the graph: the old and new
-scales are incompatible.
+**Each unit gets its own axis.** A sub-value in another unit is drawn
+against a Y axis of its own on the right, up to four units; a fifth's chip
+waits for one to be hidden, and a narrow window sheds the outermost axes. The
+right axes label the plotted unit's gridlines in round steps of their own,
+since egui_plot gives every axis one transform and one grid (`graph/axes.rs`).
+Where lines of two units cross means nothing, so the analysis tools and the
+minimap stay on the plotted series, which **Plot:** picks, and with a right
+axis the hover lists every series at its time rather than one height. Stacked
+lanes, one per unit, were the alternative: no false crossings, but every lane
+shorter ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
+A change of mode or unit clears the graph: the old and new scales are
+incompatible.
 
 **The plot key is a key.** It toggles nothing: egui_plot's legend loses its
 show/hide state while the view is pinned every frame (`paint_plot_key` in
@@ -133,7 +141,8 @@ changes (`ExportFormat` in `app/export.rs`).
 
 **Never colour alone.** Flag badges are bold, the status dot has its text, an
 imported session's ring shape says no meter is attached, a toast carries a
-glyph, and overlay traces differ by dash pattern.
+glyph, overlay traces differ by dash pattern, and with a right axis the plot
+key and every tick name their unit.
 
 **11 pt floor.** egui's small text style ships at 9 pt, so it is raised to
 11 pt once at startup rather than avoided per call site (`SMALL_TEXT_SIZE` in

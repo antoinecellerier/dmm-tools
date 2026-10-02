@@ -3,7 +3,7 @@
 //!
 //! The concerns live in submodules — [`view`] (what slice is shown and the
 //! gestures that move it), [`toolbar`], [`render`] (the main plot),
-//! [`minimap`], [`level`] (the minimap's bucketed trace), [`analysis`]
+//! [`axes`] (the Y axes of sub-values in other units), [`minimap`], [`level`] (the minimap's bucketed trace), [`analysis`]
 //! (visible-slice statistics), [`field`] (the toolbar's text-edit buffers and
 //! the values they parse to) and [`time`] (axis label formatting) — all of
 //! which add methods to the one [`Graph`] declared here, so the type's public
@@ -17,6 +17,7 @@
 //! scans the whole history.
 
 mod analysis;
+mod axes;
 mod field;
 mod level;
 mod minimap;
@@ -43,12 +44,17 @@ use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
 
 /// Maximum number of sub-value traces the graph keeps beside the plotted
-/// series — the ones drawn in its unit and the ones kept in another unit for
-/// **Plot:** to switch to.
+/// series, in its unit or another.
 ///
 /// The protocols send at most four sub-values per frame (UT181A), so this is
 /// the ceiling the wire imposes rather than a display choice.
 pub(crate) const MAX_OVERLAYS: usize = 4;
+
+/// Most units drawn at once, each on its own Y axis: the plotted series' on
+/// the left, the others on the right. Four leaves room for a scaled
+/// reading's Raw beside a UT181A's V, Hz and ms; more axes would squeeze
+/// the plot.
+pub(crate) const MAX_AXES: usize = 4;
 
 /// What the meter's main reading is called when the meter gives it no name
 /// of its own: on the **Plot:** chip, in the key, and as the trace drawn
@@ -64,6 +70,22 @@ pub(crate) const MAIN_SERIES: &str = "Main";
 /// so one truncated reply omits them without the meter having moved. Three
 /// consecutive frames without the label is.
 const SERIES_DROP_FRAMES: u32 = 3;
+
+/// Width kept for the plotted unit's axis, and the narrowest plot worth
+/// giving up a right axis for, in points. Each right axis is reckoned at
+/// [`RIGHT_AXIS_ROOM`]: a label such as "49.98 Hz" plus margins.
+const LEFT_AXIS_ROOM: f32 = 60.0;
+const MIN_PLOT_WIDTH: f32 = 240.0;
+const RIGHT_AXIS_ROOM: f32 = 90.0;
+
+/// Why a sub-value's unit gets no Y axis: see [`Graph::axis_refusal`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AxisRefusal {
+    /// [`MAX_AXES`] units are drawn already.
+    Full,
+    /// The window is too narrow for its axis.
+    Narrow,
+}
 
 /// Gap threshold multiplier: gap = max(interval * multiplier, minimum), the
 /// same multiple the session integral bridges.
@@ -137,7 +159,7 @@ pub(super) struct OverlayPoint {
 struct OverlaySeries {
     label: String,
     /// What its points measure in. A trace in another unit than the plotted
-    /// series is kept but not drawn.
+    /// series is drawn on an axis of its own: see [`Graph::axis_units`].
     unit: String,
     points: VecDeque<OverlayPoint>,
     /// Frames since the last one that carried this sub-value; see
@@ -193,10 +215,10 @@ pub struct PlotSample<'a> {
     /// quantity: its axis steps in whole numbers and its readouts drop the
     /// decimals.
     pub levels: bool,
-    /// The frame's other series, as (label, unit, value). Those in `unit`
-    /// are drawn beside the plotted series; the rest are kept for **Plot:**
-    /// to switch to. `None` for an over-range sub-value — it breaks that
-    /// trace without breaking the others.
+    /// The frame's other series, as (label, unit, value), drawn beside the
+    /// plotted series — those in another unit than `unit` on axes of their
+    /// own. `None` for an over-range sub-value — it breaks that trace without
+    /// breaking the others.
     pub overlays: &'a [(&'a str, &'a str, Option<f64>)],
 }
 
@@ -244,9 +266,17 @@ pub struct Graph {
     /// and a relaunch. Hidden overlays are still recorded in lockstep —
     /// re-showing one brings its history with it.
     hidden_overlays: HashSet<String>,
+    /// The main reading's own trace switched off, while a sub-value is
+    /// plotted. Session-only and apart from `hidden_overlays`, whose
+    /// remembered labels can name another mode's main reading: a UT181A
+    /// hiding its T2 sub-value must still draw T2 where T2 is the main one.
+    main_hidden: bool,
     /// A **Show:** chip the user clicked since the last call, with whether
     /// it is now hidden — see [`Graph::take_trace_choice`].
     trace_choice: Option<(String, bool)>,
+    /// How many units' axes fit the graph's width, from the last frame: see
+    /// [`Graph::axis_units`].
+    axis_room: usize,
     /// Sub-values the meter is sending, with their resolved units, in the
     /// order first offered. Drives the toolbar's selector.
     series_options: Vec<SeriesOption>,
@@ -393,7 +423,9 @@ impl Graph {
             levels: false,
             selected_series: None,
             hidden_overlays: HashSet::new(),
+            main_hidden: false,
             trace_choice: None,
+            axis_room: MAX_AXES,
             series_options: Vec::new(),
             last_display_raw: None,
             origin: None,
@@ -809,9 +841,63 @@ impl Graph {
         true
     }
 
-    /// Whether a kept trace is drawn: it is in the plotted series' unit.
+    /// The units given a Y axis, the plotted series' first, then each shown
+    /// trace's in the order the meter first sent them, up to [`MAX_AXES`].
+    /// A hidden trace claims none, so hiding one frees its axis for the next,
+    /// and nor does one with no reading in view: a sub-value the meter
+    /// stopped sending doesn't hold an axis it has nothing to draw on.
+    /// Not cut to the width: see [`Graph::drawn_units`].
+    fn axis_units(&self) -> Vec<&str> {
+        let (x_min, x_max) = self.view_bounds();
+        let mut units = vec![self.current_unit.as_str()];
+        for o in &self.overlays {
+            if units.len() == MAX_AXES {
+                break;
+            }
+            if self.is_hidden(o) || units.contains(&o.unit.as_str()) {
+                continue;
+            }
+            let (start, end) = self.time_index_range(&o.points, |p| p.time, x_min, x_max);
+            if o.points.range(start..end).any(|p| p.value.is_some()) {
+                units.push(&o.unit);
+            }
+        }
+        units
+    }
+
+    /// [`Graph::axis_units`] cut to the axes the graph's width has room for,
+    /// dropping the outermost first.
+    fn drawn_units(&self) -> Vec<&str> {
+        let mut units = self.axis_units();
+        units.truncate(self.axis_room.max(1));
+        units
+    }
+
+    /// Whether a kept trace is drawn, when shown: its unit has an axis.
     fn drawn(&self, o: &OverlaySeries) -> bool {
-        o.unit == self.current_unit
+        self.drawn_units().contains(&o.unit.as_str())
+    }
+
+    /// Why a kept trace's unit has no axis, if it hasn't: the axes are all
+    /// taken, or the window is too narrow for them. `None` while it has one,
+    /// or while hidden with an axis free to take.
+    fn axis_refusal(&self, o: &OverlaySeries) -> Option<AxisRefusal> {
+        let units = self.axis_units();
+        if units.contains(&o.unit.as_str()) {
+            return (!self.drawn(o)).then_some(AxisRefusal::Narrow);
+        }
+        (units.len() == MAX_AXES).then_some(AxisRefusal::Full)
+    }
+
+    /// Set how many axes fit a graph `width` points wide: room for the plot
+    /// beside the plotted unit's axis, then [`RIGHT_AXIS_ROOM`] per extra
+    /// unit.
+    fn fit_axes_to(&mut self, width: f32) {
+        let spare = width - LEFT_AXIS_ROOM - MIN_PLOT_WIDTH;
+        self.axis_room = 1
+            + (spare / RIGHT_AXIS_ROOM)
+                .floor()
+                .clamp(0.0, (MAX_AXES - 1) as f32) as usize;
     }
 
     /// Restart each kept trace whose unit moved in this frame (a frequency
@@ -831,6 +917,8 @@ impl Graph {
         self.current_mode = Some(mode.to_string());
         self.current_unit = unit.to_string();
         self.current_series = series.map(str::to_owned);
+        // The main reading's chip hid this mode's reading, not the next's.
+        self.main_hidden = false;
         self.levels = false;
         self.origin = Some(now);
         self.live = true;
@@ -875,8 +963,8 @@ impl Graph {
     /// Start a trace for each sub-value seen for the first time. It begins at
     /// its first point: nothing is back-filled.
     ///
-    /// Past [`MAX_OVERLAYS`], a trace that would be drawn takes the place of
-    /// one that isn't: kept Frequency and Period traces must not keep a
+    /// Past [`MAX_OVERLAYS`], a trace in the plotted unit takes the place of
+    /// one in another: kept Frequency and Period traces must not keep a
     /// MIN/MAX's Min off the plot. Otherwise the new one is skipped.
     fn register_overlays(&mut self, overlays: &[(&str, &str, Option<f64>)]) {
         for &(label, unit, _) in overlays {
@@ -892,7 +980,10 @@ impl Graph {
             if self.overlays.len() < MAX_OVERLAYS {
                 self.overlays.push(trace);
             } else if unit == self.current_unit
-                && let Some(i) = self.overlays.iter().position(|o| !self.drawn(o))
+                && let Some(i) = self
+                    .overlays
+                    .iter()
+                    .position(|o| o.unit != self.current_unit)
             {
                 self.overlays[i] = trace;
             }
@@ -1331,6 +1422,7 @@ impl Graph {
     /// both.
     pub fn show(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
         self.handle_keyboard(ui.ctx());
+        self.fit_axes_to(ui.available_width());
         self.show_toolbar(ui, tc);
         let minimap_reserve = MINIMAP_HEIGHT + 30.0;
         let main_height = (ui.available_height() - minimap_reserve).max(60.0);
@@ -1366,6 +1458,22 @@ impl Graph {
     /// would hide that reading on the next meter to plot a sub-value.
     pub(crate) fn take_trace_choice(&mut self) -> Option<(String, bool)> {
         self.trace_choice.take()
+    }
+
+    /// Whether the user switched a kept trace off: the main reading's by its
+    /// own chip ([`Graph::main_hidden`]), a sub-value's by label.
+    fn is_hidden(&self, o: &OverlaySeries) -> bool {
+        if self.is_main_trace(&o.label) {
+            self.main_hidden
+        } else {
+            self.hidden_overlays.contains(&o.label)
+        }
+    }
+
+    /// Whether `label` names the main reading's trace, drawn beside a
+    /// plotted sub-value.
+    fn is_main_trace(&self, label: &str) -> bool {
+        self.current_series.is_some() && label == self.main_name()
     }
 
     /// Hide the traces the settings remember hidden, at start-up.

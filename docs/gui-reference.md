@@ -159,8 +159,8 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **LIVE** | Auto-scroll to latest data (filled when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading, under its own name where it has one: **DC** in the UT61E+'s AC+DC V; **T1** or **T2**, **Relative** or **Peak Max** on a UT181A) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching keeps the graph: the two series change places with their past, and the Y axis moves to the new series' unit. If the meter stops sending the chosen sub-value, the graph returns to **Main**, which kept its past too. |
-| **Show:** | One chip per sub-value in the plotted series' unit: click to draw or hide its trace beside the plotted series. Hidden traces are still recorded, and stay hidden at the next launch. |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading, under its own name where it has one: **DC** in the UT61E+'s AC+DC V; **T1** or **T2**, **Relative** or **Peak Max** on a UT181A) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching keeps the graph: the two series change places with their past, and the left Y axis moves to the new series' unit. If the meter stops sending the chosen sub-value, the graph returns to **Main**, which kept its past too. |
+| **Show:** | One chip per sub-value: click to draw or hide its trace beside the plotted series. Up to four units are drawn at once; a chip past that is greyed out until another unit is hidden. Hidden traces are still recorded, and stay hidden at the next launch. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
 | **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
@@ -174,7 +174,8 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - Time-series line plot with auto-scaling Y axis
 - Axis labels include units (e.g. "1.0 mV", "10 s")
 - Crosshair tooltip shows time and value with units, and names the series it
-  is over when several are drawn
+  is over when several are drawn; with a right axis it lists every series'
+  value at that time, the one under the pointer first
 - No-data gaps (disconnect, pause, slow sample interval) shown as dashed
   vertical line pairs
 - Overloads shown as a filled band in the error colour, drawn at their true
@@ -188,13 +189,16 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range
   crossing a decade (Ω→kΩ)
-- Sub-values in the plotted series' unit are drawn beside it as dashed or
-  dotted lines, named in a key in the plot's top-left corner; the toolbar's
-  **Show:** chips pick which. Each keeps going where the plotted series is
-  over range. Sub-values in another unit are kept but not drawn, ready for
-  **Plot:** to switch to
+- Sub-values are drawn beside the plotted series as dashed or dotted lines,
+  named in a key in the plot's top-left corner; the toolbar's **Show:** chips
+  pick which. Each keeps going where the plotted series is over range
+- A sub-value in another unit, such as a UT181A's frequency and period beside
+  its AC voltage, gets a Y axis of its own on the right, with ticks in round
+  steps of its unit on the same gridlines, and the key names every unit.
+  Each axis's ticks take its line's colour where that colour reads as text. A
+  narrow window drops the outermost right axes until it is widened
 - The minimap, the cursors, the Mean/Min/Max/Ref overlays and the
-  visible-window statistics follow the plotted series
+  visible-window statistics follow the plotted series, on the left axis
 
 ![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.png)
 

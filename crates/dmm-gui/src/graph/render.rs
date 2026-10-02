@@ -8,6 +8,7 @@ use egui_plot::{
 };
 use std::time::Instant;
 
+use super::axes::{self, AxisMap};
 use super::minimap::bucket_secs;
 use super::time::format_time_axis_label;
 use super::{GapKind, Graph, OverlaySeries, SegmentsAndGaps};
@@ -546,6 +547,84 @@ pub(super) fn thin_for_drawing(points: &[[f64; 2]], bucket_secs: f64) -> Vec<[f6
     out
 }
 
+/// Points between the plotted unit's grid lines, at most, when right axes
+/// share them: room for a label each, without crowding the grid.
+const AXIS_TICK_SPACING: f32 = 50.0;
+
+/// Points a right axis keeps beside its widest label: egui_plot's margin
+/// either side of the text, plus a pixel of air.
+const RIGHT_AXIS_MARGIN: f32 = 9.0;
+
+/// The tick label a right axis writes at a height on the plot: the whole
+/// step of its unit there, then the unit.
+fn right_axis_label(map: AxisMap, unit: String) -> impl Fn(f64) -> String {
+    let decimals = map.decimals();
+    move |y| {
+        let v = (map.value_at(y) / map.step).round() * map.step;
+        let val = eframe::emath::format_with_decimals_in_range(v, decimals..=decimals);
+        format!("  {val} {unit}")
+    }
+}
+
+/// The value a drawn trace has at time `t`: its nearest point within the
+/// segment spanning `t`, or `None` in a break between segments.
+pub(super) fn trace_value_at(segments: &[Vec<[f64; 2]>], t: f64) -> Option<f64> {
+    let seg = segments
+        .iter()
+        .find(|s| s.first().is_some_and(|p| p[0] <= t) && s.last().is_some_and(|p| p[0] >= t))?;
+    let i = seg.partition_point(|p| p[0] < t);
+    let after = seg.get(i);
+    let before = i.checked_sub(1).and_then(|j| seg.get(j));
+    match (before, after) {
+        (Some(b), Some(a)) => Some(if t - b[0] <= a[0] - t { b[1] } else { a[1] }),
+        (Some(p), None) | (None, Some(p)) => Some(p[1]),
+        (None, None) => None,
+    }
+}
+
+/// One series in the hover readout with right axes: its drawn segments,
+/// at their own values, and its unit.
+pub(super) struct HoverSeries<'a> {
+    pub name: String,
+    pub segments: &'a [Vec<[f64; 2]>],
+    pub unit: String,
+}
+
+/// The hover readout with right axes: the time, then every series with a
+/// value at `t` in its own unit, the one named `hovered` first. The plotted
+/// series (first in `series`) reads "overload" inside its band.
+pub(super) fn hover_readout(
+    time_label: &str,
+    series: &[HoverSeries],
+    hovered: &str,
+    t: f64,
+    overload: bool,
+    decimals: usize,
+) -> String {
+    let first = series.iter().position(|s| s.name == hovered);
+    let order = first
+        .into_iter()
+        .chain((0..series.len()).filter(|&i| Some(i) != first));
+    let mut text = time_label.to_string();
+    for i in order {
+        let HoverSeries {
+            name,
+            segments,
+            unit,
+        } = &series[i];
+        let line = if i == 0 && overload {
+            Some(format!("{name}: overload"))
+        } else {
+            trace_value_at(segments, t).map(|v| format!("{name}: {v:.decimals$} {unit}"))
+        };
+        if let Some(line) = line {
+            text.push('\n');
+            text.push_str(&line);
+        }
+    }
+    text
+}
+
 /// The Y grid of a level's axis: egui_plot's decade steps, the finest of
 /// them never under one — a level is a whole number, and a tick at 0.5 of
 /// one names a reading the meter cannot give.
@@ -690,16 +769,23 @@ impl Graph {
     /// The drawn overlays the user has not switched off, paired with their
     /// index.
     ///
-    /// The index is the overlay's position among the drawn ones, which is what
-    /// keys its colour and line style — stable while the plotted unit is, so
-    /// hiding one does not reshuffle the palette of the others, and traces
-    /// kept in another unit take no colour from the ones drawn.
+    /// The index is the overlay's position among the kept ones, which is what
+    /// keys its colour and line style — so hiding one, or an axis shed for
+    /// width, does not reshuffle the palette of the others.
     pub(super) fn shown_overlays(&self) -> impl Iterator<Item = (usize, &OverlaySeries)> {
+        let units = self.drawn_units();
         self.overlays
             .iter()
-            .filter(|o| self.drawn(o))
             .enumerate()
-            .filter(|(_, o)| !self.hidden_overlays.contains(&o.label))
+            .filter(move |(_, o)| units.contains(&o.unit.as_str()) && !self.is_hidden(o))
+    }
+
+    /// The unit a kept trace is in; the plotted unit for one no longer kept.
+    pub(super) fn overlay_unit(&self, label: &str) -> &str {
+        self.overlays
+            .iter()
+            .find(|o| o.label == label)
+            .map_or(self.current_unit.as_str(), |o| o.unit.as_str())
     }
 
     /// The sub-value traces actually drawn over `[x_min, x_max]`.
@@ -750,6 +836,9 @@ impl Graph {
     /// `show_main` is about to draw rather than recomputing them, so the key
     /// cannot list a line that isn't there — the plotted series included,
     /// which has no line while a held meter sends only a sub-value.
+    ///
+    /// With a trace on an axis of its own, every row names its unit, which is
+    /// what ties a line to its axis without leaning on colour.
     pub(super) fn key_entries(
         &self,
         drawn: &[OverlayTrace],
@@ -758,15 +847,29 @@ impl Graph {
         if drawn.is_empty() {
             return Vec::new();
         }
+        let with_units = drawn
+            .iter()
+            .any(|(_, label, _)| self.overlay_unit(label) != self.current_unit);
+        let name = |label: String, unit: &str| {
+            if with_units && !unit.is_empty() {
+                format!("{label} ({unit})")
+            } else {
+                label
+            }
+        };
         let mut entries = Vec::with_capacity(drawn.len() + 1);
         if plotted_drawn {
-            entries.push((self.plotted_series_name(), KeyStyle::Plotted));
+            entries.push((
+                name(self.plotted_series_name(), &self.current_unit),
+                KeyStyle::Plotted,
+            ));
         }
-        entries.extend(
-            drawn
-                .iter()
-                .map(|(k, label, _)| (label.clone(), KeyStyle::Overlay(*k))),
-        );
+        entries.extend(drawn.iter().map(|(k, label, _)| {
+            (
+                name(label.clone(), self.overlay_unit(label)),
+                KeyStyle::Overlay(*k),
+            )
+        }));
         entries
     }
 
@@ -892,11 +995,6 @@ impl Graph {
         let cursor_color_dim = tc.graph_cursor_dim();
         let env_color = tc.graph_envelope();
 
-        // Sub-value traces over the same window as the main series, minus
-        // any the user switched off in the toolbar's Show: group.
-        let overlay_traces = self.visible_overlay_traces(view_min, view_max);
-        let key_entries = self.key_entries(&overlay_traces, !visible_segments.is_empty());
-        let multi_series = !overlay_traces.is_empty();
         // Every drawn line carries the name of its series, which is what the
         // hover label reports; every helper item is named "" and falls through
         // to the plain form.
@@ -914,16 +1012,119 @@ impl Graph {
             .y_range_for_view(view_min, view_max, true)
             .unwrap_or((-1.0, 1.0));
 
+        // Sub-values in another unit each get a right axis, aligned on a grid
+        // of round steps of the plotted unit (`axes.rs`). Without one, the
+        // plot keeps egui_plot's own grid, as a single unit always has.
+        // Not on a level's whole-number grid, nor on a flat or non-finite
+        // range (a Y: Fixed of "inf"), which has no steps to share.
+        let secondaries = self.secondary_targets(view_min, view_max);
+        let shareable = !self.levels && y_min.is_finite() && y_max.is_finite() && y_max > y_min;
+        let grid_step = (shareable && !secondaries.is_empty()).then(|| {
+            let max_ticks = (ui.available_height() / AXIS_TICK_SPACING).floor();
+            axes::primary_step(y_min, y_max, max_ticks.clamp(2.0, 10.0) as usize)
+        });
+        let axis_maps: Vec<(String, AxisMap)> = match grid_step {
+            Some(step) => secondaries
+                .iter()
+                .map(|(unit, target)| {
+                    (
+                        unit.clone(),
+                        axes::fit_secondary(y_min, y_max, step, *target),
+                    )
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        let map_of = |label: &str| {
+            let unit = self.overlay_unit(label);
+            axis_maps.iter().find(|(u, _)| u == unit).map(|&(_, m)| m)
+        };
+
+        // Sub-value traces over the same window as the main series, minus
+        // any the user switched off in the toolbar's Show: group, and any in
+        // a unit with no axis in view to read them against.
+        let mut overlay_traces = self.visible_overlay_traces(view_min, view_max);
+        overlay_traces.retain(|(_, label, _)| {
+            self.overlay_unit(label) == self.current_unit || map_of(label).is_some()
+        });
+        let trace_maps: Vec<Option<AxisMap>> = overlay_traces
+            .iter()
+            .map(|(_, label, _)| map_of(label))
+            .collect();
+        let key_entries = self.key_entries(&overlay_traces, !visible_segments.is_empty());
+        let multi_series = !overlay_traces.is_empty();
+        let multi_axis = !axis_maps.is_empty();
+
         let unit = self.current_unit.clone();
         let y_axis = AxisHints::new_y().formatter(move |mark, _range| {
-            let decimals = (-mark.step_size.log10().round() as usize).min(6);
-            let val = eframe::emath::format_with_decimals_in_range(mark.value, decimals..=decimals);
+            // On the shared grid every tick is a whole step, written to the
+            // step's decimals like the right axes beside it.
+            let (value, decimals) = match grid_step {
+                Some(step) => (
+                    (mark.value / step).round() * step,
+                    axes::step_decimals(step),
+                ),
+                None => (
+                    mark.value,
+                    (-mark.step_size.log10().round() as usize).min(6),
+                ),
+            };
+            let val = eframe::emath::format_with_decimals_in_range(value, decimals..=decimals);
             if unit.is_empty() {
                 val
             } else {
                 format!("{val} {unit}  ")
             }
         });
+        // With right axes, each axis's ticks take the colour of the first
+        // line drawn against it, where that colour reads as text on the
+        // panel; the unit on every tick stays the cue that needs no colour.
+        let panel = ui.visuals().panel_fill;
+        let tick_color = |series: egui::Color32| {
+            crate::theme::legible_on(series, panel).unwrap_or(ui.visuals().text_color())
+        };
+        let y_axis = if multi_axis {
+            y_axis.tick_label_color(tick_color(line_color))
+        } else {
+            y_axis
+        };
+        let mut y_axes = vec![y_axis];
+        if let Some(step) = grid_step {
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let ticks: Vec<f64> = (((y_min / step).ceil() as i64)
+                ..=((y_max / step).floor() as i64))
+                .map(|k| k as f64 * step)
+                .collect();
+            for (unit, map) in &axis_maps {
+                let label = right_axis_label(*map, unit.clone());
+                // As wide as this frame's widest label: egui_plot otherwise
+                // sizes the axis from the previous frame's, and the plot
+                // shifts sideways as labels change length.
+                let width = ticks
+                    .iter()
+                    .map(|&y| {
+                        ui.fonts_mut(|f| {
+                            f.layout_no_wrap(label(y), font.clone(), egui::Color32::PLACEHOLDER)
+                                .size()
+                                .x
+                        })
+                    })
+                    .fold(0.0_f32, f32::max);
+                let first = overlay_traces
+                    .iter()
+                    .find(|(_, label, _)| self.overlay_unit(label) == unit.as_str());
+                let color = first.map_or(ui.visuals().text_color(), |&(k, _, _)| {
+                    tick_color(Self::overlay_color_and_style(tc, k).0)
+                });
+                y_axes.push(
+                    AxisHints::new_y()
+                        .placement(egui_plot::HPlacement::Right)
+                        .tick_label_color(color)
+                        .min_thickness(width + RIGHT_AXIS_MARGIN)
+                        .formatter(move |mark, _range| label(mark.value)),
+                );
+            }
+        }
 
         // The marker flags hang in the time axis's row, so the time labels
         // they would cover are left out. The formatter runs before this
@@ -1003,6 +1204,28 @@ impl Graph {
         let levels = self.levels;
         // Moved into the label_formatter closure, which is rebuilt each frame.
         let tooltip_spans = overload_spans.clone();
+        // With a right axis, a height on the plot means a different value on
+        // each axis, so the readout lists every drawn series at the hovered
+        // time instead, in its own unit — the one under the pointer first.
+        let hover_series: Vec<HoverSeries> = if multi_axis {
+            std::iter::once(HoverSeries {
+                name: main_name.clone(),
+                segments: visible_segments.as_slice(),
+                unit: self.current_unit.clone(),
+            })
+            .chain(
+                overlay_traces
+                    .iter()
+                    .map(|(_, label, segments)| HoverSeries {
+                        name: label.clone(),
+                        segments: segments.as_slice(),
+                        unit: self.overlay_unit(label).to_string(),
+                    }),
+            )
+            .collect()
+        } else {
+            Vec::new()
+        };
         // The readout under the pointer would cover the menu's entry, which
         // opens where the pointer is.
         let menu_open = egui::Popup::is_id_open(ui.ctx(), plot_menu_id());
@@ -1022,7 +1245,7 @@ impl Graph {
             .allow_double_click_reset(false)
             .reset()
             .custom_x_axes(vec![x_axis])
-            .custom_y_axes(vec![y_axis])
+            .custom_y_axes(y_axes)
             .y_axis_min_width(60.0)
             .cursor_color(tc.graph_crosshair())
             .label_formatter(move |pos| {
@@ -1055,7 +1278,18 @@ impl Graph {
                 // `Span` can't be hovered itself (its geometry is None), so
                 // this is where the condition gets named. It is also the only
                 // cue that isn't visual.
-                if tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b) {
+                let overload = tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b);
+                if !hover_series.is_empty() {
+                    return Some(hover_readout(
+                        &time_label,
+                        &hover_series,
+                        name,
+                        t,
+                        overload,
+                        point_decimals,
+                    ));
+                }
+                if overload {
                     return Some(format!("{time_label}\noverload"));
                 }
                 // Only a named item is a trace, so only its y is a point; a
@@ -1081,6 +1315,10 @@ impl Graph {
             });
         if levels {
             plot = plot.y_grid_spacer(whole_number_marks);
+        } else if let Some(step) = grid_step {
+            plot = plot.y_grid_spacer(egui_plot::uniform_grid_spacer(move |_| {
+                [step, step * 10.0, step * 100.0]
+            }));
         }
         let response = plot.show(ui, |plot_ui| {
             // Set exact bounds: our X view range + computed Y range
@@ -1125,12 +1363,19 @@ impl Graph {
                 );
             }
 
-            // Sub-values first: the plotted series goes on top of them.
-            for (k, label, segments) in &overlay_traces {
+            // Sub-values first: the plotted series goes on top of them. One in
+            // another unit is drawn at its axis's heights.
+            for ((k, label, segments), map) in overlay_traces.iter().zip(&trace_maps) {
                 let (color, style) = Self::overlay_color_and_style(tc, *k);
                 for seg in segments {
+                    let mut points = thin(seg);
+                    if let Some(map) = map {
+                        for p in &mut points {
+                            p[1] = map.height_of(p[1]);
+                        }
+                    }
                     plot_ui.line(
-                        Line::new(label.clone(), PlotPoints::new(thin(seg)))
+                        Line::new(label.clone(), PlotPoints::new(points))
                             .color(color)
                             .style(style),
                     );
@@ -1367,9 +1612,13 @@ impl Graph {
         // Only the traces actually drawn are spoken: a sub-value the user
         // switched off is not on screen, so announcing it would describe a
         // graph that isn't there.
-        let shown_labels: Vec<&str> = self
+        // Each with its unit when it is on a right axis of its own.
+        let shown_labels: Vec<(&str, Option<&str>)> = self
             .shown_overlays()
-            .map(|(_, o)| o.label.as_str())
+            .map(|(_, o)| {
+                let own_axis = o.unit != self.current_unit;
+                (o.label.as_str(), own_axis.then_some(o.unit.as_str()))
+            })
             .collect();
         let sig = {
             let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -1404,7 +1653,14 @@ impl Graph {
             let also = if shown_labels.is_empty() {
                 String::new()
             } else {
-                format!(" Also showing {}.", shown_labels.join(", "))
+                let named: Vec<String> = shown_labels
+                    .iter()
+                    .map(|&(label, unit)| match unit {
+                        Some(unit) => format!("{label} in {unit} on a right axis"),
+                        None => label.to_string(),
+                    })
+                    .collect();
+                format!(" Also showing {}.", named.join(", "))
             };
             self.a11y_label_sig = sig;
             let unit = if self.current_unit.is_empty() {

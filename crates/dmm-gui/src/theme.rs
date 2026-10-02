@@ -603,6 +603,13 @@ pub(crate) fn contrast(a: Color32, b: Color32) -> f64 {
     (hi + 0.05) / (lo + 0.05)
 }
 
+/// `color` for text on `ground` when it reads there at AA's 4.5:1, else
+/// `None` for the caller's plain text colour: a series colour picked for a
+/// line, or set by the user, isn't always fit for text.
+pub(crate) fn legible_on(color: Color32, ground: Color32) -> Option<Color32> {
+    (contrast(color, ground) >= 4.5).then_some(color)
+}
+
 /// How far [`ThemeColors::strong_text`] pushes a customised text colour
 /// towards white (dark mode) or black (light) to emphasise it.
 ///
@@ -1195,6 +1202,19 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A series colour stands in for an axis's text colour only where it
+    /// reads as text; the colour-blind palette's orange on the dark panel
+    /// falls back.
+    #[test]
+    fn a_series_colour_labels_an_axis_only_where_legible() {
+        let dark_panel = Color32::from_gray(27);
+        assert_eq!(
+            legible_on(Color32::from_rgb(0, 200, 200), dark_panel),
+            Some(Color32::from_rgb(0, 200, 200))
+        );
+        assert_eq!(legible_on(Color32::from_rgb(213, 94, 0), dark_panel), None);
     }
 
     /// A marker's number is text — in its flag on the plot and minimap

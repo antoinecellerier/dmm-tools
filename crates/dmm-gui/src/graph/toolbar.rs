@@ -3,7 +3,7 @@
 
 use eframe::egui::{self, Ui};
 
-use super::{Graph, SeriesOption, TIME_WINDOWS};
+use super::{AxisRefusal, Graph, MAX_AXES, SeriesOption, TIME_WINDOWS};
 use crate::a11y::ResponseA11yExt;
 use crate::theme::ThemeColors;
 
@@ -453,15 +453,18 @@ impl Graph {
         ui.add_space(6.0);
     }
 
-    /// Chips choosing which sub-value traces in the plotted unit are drawn
-    /// beside the plotted series.
+    /// Chips choosing which sub-value traces are drawn beside the plotted
+    /// series, in its unit or on an axis of their own.
     ///
     /// The plot key is a key, not a control (`Plot::reset()` wipes egui_plot's
     /// own legend state every frame), so the show/hide affordance lives here
     /// in the toolbar with the rest of them. Hiding a trace stops it being
     /// drawn but not recorded — turning it back on brings its history with it.
+    /// A trace whose unit can't have an axis says why: with every axis taken
+    /// its chip is unlit and disabled, while one shed for width stays as the
+    /// user left it.
     fn show_overlay_toggles(&mut self, ui: &mut Ui) {
-        if !self.overlays.iter().any(|o| self.drawn(o)) {
+        if self.overlays.is_empty() {
             return;
         }
 
@@ -473,20 +476,28 @@ impl Graph {
         frame.show(ui, |ui| {
             group_caption(ui, "Show:");
 
-            for o in self.overlays.iter().filter(|o| self.drawn(o)) {
+            for o in &self.overlays {
                 let label = o.label.as_str();
-                let shown = !self.hidden_overlays.contains(&o.label);
-                let hover = if shown {
-                    format!("Hide the {label} trace")
-                } else {
-                    format!("Draw the {label} trace beside the plotted series")
+                let refusal = self.axis_refusal(o);
+                let full = refusal == Some(AxisRefusal::Full);
+                let shown = !full && !self.is_hidden(o);
+                let hover = match refusal {
+                    Some(AxisRefusal::Full) => {
+                        format!("{MAX_AXES} units at most \u{2014} hide one to show {label}")
+                    }
+                    Some(AxisRefusal::Narrow) if shown => {
+                        format!("Widen the window to show the {label} axis, or click to hide it")
+                    }
+                    _ if shown => format!("Hide the {label} trace"),
+                    _ => format!("Draw the {label} trace beside the plotted series"),
                 };
                 // Toggle buttons, unlike the mutually exclusive **Plot:**
                 // chips — but with the same naming problem, so the group goes
                 // in the accessible name here too.
                 if ui
-                    .selectable_label(shown, label)
-                    .on_hover_text(hover)
+                    .add_enabled(!full, egui::Button::selectable(shown, label))
+                    .on_hover_text(hover.clone())
+                    .on_disabled_hover_text(hover)
                     .a11y_label(&overlay_chip_label(label))
                     .clicked()
                 {
@@ -526,9 +537,15 @@ impl Graph {
 
     /// A **Show:** chip was clicked: flip its trace, and leave the choice for
     /// the settings to remember ([`Graph::take_trace_choice`]).
+    ///
+    /// The main reading's own chip flips [`Graph::main_hidden`] instead and
+    /// leaves nothing to remember: kept, it would hide that reading on the
+    /// next meter to plot a sub-value.
     pub(crate) fn click_overlay_chip(&mut self, label: String) {
-        let hidden = self.toggle_overlay_hidden(label.clone());
-        if label != self.main_name() {
+        if self.is_main_trace(&label) {
+            self.main_hidden = !self.main_hidden;
+        } else {
+            let hidden = self.toggle_overlay_hidden(label.clone());
             self.trace_choice = Some((label, hidden));
         }
     }

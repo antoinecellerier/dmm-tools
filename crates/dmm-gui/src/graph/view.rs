@@ -211,7 +211,12 @@ impl Graph {
         if with_overlays {
             // Hidden overlays are excluded: an axis stretched to frame a trace
             // the user switched off would flatten the one they are looking at.
-            for o in self.shown_overlays().map(|(_, o)| o) {
+            // So are those in another unit: they have axes of their own.
+            for o in self
+                .shown_overlays()
+                .map(|(_, o)| o)
+                .filter(|o| o.unit == self.current_unit)
+            {
                 let (start, end) = self.time_index_range(&o.points, |p| p.time, x_min, x_max);
                 for v in o.points.range(start..end).filter_map(|p| p.value) {
                     y_min = y_min.min(v);
@@ -229,6 +234,38 @@ impl Graph {
             y_max = y_max.max(1.0);
         }
         Some(pad_range(y_min, y_max))
+    }
+
+    /// Each unit drawn on a right axis, with its traces' padded min/max over
+    /// `[x_min, x_max]` — what its axis has to frame. A unit with nothing in
+    /// view gets no axis.
+    pub(super) fn secondary_targets(&self, x_min: f64, x_max: f64) -> Vec<(String, (f64, f64))> {
+        let mut targets: Vec<(String, (f64, f64))> = Vec::new();
+        for (_, o) in self.shown_overlays() {
+            if o.unit == self.current_unit {
+                continue;
+            }
+            let (start, end) = self.time_index_range(&o.points, |p| p.time, x_min, x_max);
+            let (lo, hi) = o
+                .points
+                .range(start..end)
+                .filter_map(|p| p.value)
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                    (lo.min(v), hi.max(v))
+                });
+            if lo > hi {
+                continue;
+            }
+            match targets.iter_mut().find(|(unit, _)| *unit == o.unit) {
+                Some((_, range)) => *range = (range.0.min(lo), range.1.max(hi)),
+                None => targets.push((o.unit.clone(), (lo, hi))),
+            }
+        }
+        for (_, range) in &mut targets {
+            let (lo, hi) = super::axes::widen_steady(range.0, range.1);
+            *range = pad_range(lo, hi);
+        }
+        targets
     }
 
     /// Auto-scaled Y range (ignoring fixed mode setting). Used to snapshot

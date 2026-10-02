@@ -33,8 +33,8 @@ pub(super) struct PlotInput<'a> {
     pub display_raw: Option<&'a str>,
     /// Label of the plotted sub-value, or `None` for the main reading.
     pub series: Option<&'a str>,
-    /// The frame's other series, as (label, unit, value): drawn beside it in
-    /// its unit, kept for **Plot:** to switch to in another.
+    /// The frame's other series, as (label, unit, value): drawn beside it, on
+    /// its axis or, in another unit, on one of their own.
     pub overlays: Vec<(&'a str, &'a str, Option<f64>)>,
 }
 
@@ -73,11 +73,10 @@ fn overlay_value(v: &MeasuredValue) -> Option<Option<f64>> {
 /// Decide what the graph plots for this measurement, given the toolbar's
 /// series selection as (label, unit) and the mode the graph is plotting.
 ///
-/// Every other series goes along with its unit, but the graph draws only
-/// those sharing the plotted series' unit. A frequency in Hz beside an AC
-/// voltage measures something else entirely, and drawing it on the volt axis
-/// would invent a relationship that isn't there — it is kept, so that picking
-/// it under **Plot:** brings its past along.
+/// Every other series goes along with its unit. A frequency in Hz beside an
+/// AC voltage measures something else entirely, so the graph draws it on an
+/// axis of its own, never on the volt axis, and picking it under **Plot:**
+/// brings its past along.
 pub(super) fn resolve_plot_input<'a>(
     m: &'a Measurement,
     selected: Option<(&'a str, &'a str)>,
@@ -133,7 +132,7 @@ pub(super) fn resolve_plot_input<'a>(
     }
     // Plotting a sub-value: the meter's own reading is the natural companion
     // — choosing T2 should still show T1 next to it, and choosing Frequency
-    // keeps the voltage to switch back to.
+    // keeps the voltage beside it, on a right axis.
     if series.is_some()
         && overlays.len() < MAX_OVERLAYS
         && let Some(v) = overlay_value(&m.value)
@@ -191,7 +190,7 @@ mod tests {
 
     /// A UT181A in V AC + Hz sends the frequency and the period beside the
     /// voltage. Neither measures volts, so neither belongs on the volt axis —
-    /// they go along in their own units, for the graph to keep but not draw.
+    /// they go along in their own units, for the graph's right axes.
     #[test]
     fn different_unit_sub_values_go_along_in_their_units() {
         let m = meter(
@@ -231,9 +230,9 @@ mod tests {
         assert_eq!(plot.overlays, vec![("Max", "V", Some(5.0123))]);
     }
 
-    /// Selecting a sub-value in a different unit rescales the whole plot to
-    /// it. Nothing else on the frame shares that unit, so nothing is drawn
-    /// beside it, but the voltage and the period go along to be kept.
+    /// Selecting a sub-value in a different unit moves the left axis to it.
+    /// Nothing else on the frame shares that unit; the voltage and the period
+    /// go along for the right axes.
     #[test]
     fn a_selected_different_unit_sub_value_is_plotted_alone() {
         let m = meter(

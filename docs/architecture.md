@@ -394,7 +394,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/whats_new.rs` | The release-notes viewport |
 | `app/update_check.rs` | The daily update check |
 | `app/appearance.rs` | Fonts, theme, zoom, window commands |
-| `graph/` | The graph's points, the main plot (`egui_plot`), the painted minimap |
+| `graph/` | The graph's points, the main plot (`egui_plot`) with a right Y axis per sub-value unit, the painted minimap |
 | `display/` | The reading in its three sizes |
 | `recording.rs` | The sample store and its CSV, JSON and replay rendering |
 | `markers.rs` | The markers on readings |

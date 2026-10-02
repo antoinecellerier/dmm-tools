@@ -331,13 +331,21 @@ Zoomed out to many samples per pixel, a noisy trace's edges shimmer slightly as 
 
 Zoomed out on a noisy sub-value, its dashes merge into a solid band, so only colour tells it from the plotted series, against the rule that colour is never the only cue. A fix must keep every extreme visible: dashes laid along time were tried and drop a one-sample spike or a vertical Min/Max step that falls in a gap. Candidates are a lighter fill or an outline for a dense band.
 
-### Several units on one chart
+### Sub-value traces across a prefix step
 
 **Complexity:** Medium
 
-**Show:** draws only the sub-values in the plotted series' unit; the rest are kept but wait for **Plot:** to switch to them. A second and third Y axis would draw them side by side. Three is enough: a UT181A never shows more than three units at once (V AC Hz: V, Hz, ms; dBm: dBm, V, Ω), as @diego351 pointed out against an eight-axis battery-charger chart ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
+A sub-value whose unit steps a decade mid-capture (a 121GW or ZOTEK frequency flipping between Hz and kHz) restarts its trace, as the plotted series does, and a scaled reading's **Raw** in mV gets an axis apart from a V reading. Keeping each trace in its base unit and choosing the axis prefix from the range shown would keep the history and share the axis.
 
-Use cases: mains voltage and its frequency over a day; a dBm reading beside the voltage behind it.
+Use cases: a frequency near 1 kHz over an afternoon; Raw beside its scaled reading.
+
+### XY plot of two series
+
+**Complexity:** Medium
+
+The graph draws every series against time. Plotting one recorded series against another — V against Hz, or the two thermocouples of a UT181A against each other — shows how one quantity follows the other rather than how each varies. Open questions: pairing samples that arrive at different times (nearest frame, as the hover does), and showing time on the trace, with a colour ramp or markers along it.
+
+Use cases: a supply's output voltage against its load current; a sensor's reading against temperature.
 
 ### Sampling in step with streaming meters
 

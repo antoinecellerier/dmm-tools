@@ -1,6 +1,7 @@
 use super::render::{
-    KeyStyle, cursor_label_rect, layout_marker_flags, level_label_rects, quantize_for_hash,
-    segment_hits_rect, stepped, thin_for_drawing, whole_number_marks,
+    HoverSeries, KeyStyle, cursor_label_rect, hover_readout, layout_marker_flags,
+    level_label_rects, quantize_for_hash, segment_hits_rect, stepped, thin_for_drawing,
+    whole_number_marks,
 };
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
@@ -2101,9 +2102,9 @@ fn push_vac_hz(g: &mut Graph, t: Instant, series: Option<&str>, v: f64, hz: (f64
     });
 }
 
-/// Frequency is kept beside the voltage although it is not drawn, so
-/// picking it swaps the two traces like a same-unit switch: both keep their
-/// past, and the Y axis moves to Hz, dropping a range pinned for volts.
+/// Frequency is drawn beside the voltage on an axis of its own, and picking
+/// it swaps the two traces like a same-unit switch: both keep their past,
+/// and the left axis moves to Hz, dropping a range pinned for volts.
 #[test]
 fn a_series_change_to_another_unit_swaps_the_traces() {
     let mut g = Graph::new();
@@ -2112,7 +2113,11 @@ fn a_series_change_to_another_unit_swaps_the_traces() {
     for i in 0..3 {
         push_vac_hz(&mut g, at(i), None, 230.0 + i as f64, (50.0, "Hz"));
     }
-    assert!(key_names(&g).is_empty(), "Hz and ms are kept, not drawn");
+    assert_eq!(
+        key_names(&g),
+        vec!["Main (V)", "Frequency (Hz)", "Period (ms)"],
+        "Hz and ms on axes of their own"
+    );
     g.y_axis_fixed = true;
     g.y_user_set = true;
 
@@ -2127,7 +2132,11 @@ fn a_series_change_to_another_unit_swaps_the_traces() {
         g.overlay_values("Main"),
         vec![Some(230.0), Some(231.0), Some(232.0), Some(233.0)]
     );
-    assert!(key_names(&g).is_empty(), "the volts are not drawn on Hz");
+    assert_eq!(
+        key_names(&g),
+        vec!["Frequency (Hz)", "Main (V)", "Period (ms)"],
+        "the volts take Frequency's place, on a right axis"
+    );
     assert_eq!(g.origin, Some(t0), "the time axis stays where it was");
     assert!(
         !g.y_axis_fixed && !g.y_user_set,
@@ -2189,8 +2198,9 @@ fn a_swap_hands_each_trace_its_run_of_missing_frames() {
     );
 }
 
-/// A trace kept in another unit is not drawn, so it must not stretch the
-/// auto Y range: a 50 Hz frequency beside a 230 V reading.
+/// A trace in another unit has an axis of its own, so it must not stretch
+/// the plotted unit's auto Y range: a 50 Hz frequency beside a 230 V
+/// reading.
 #[test]
 fn a_kept_trace_in_another_unit_leaves_the_y_range_alone() {
     let mut g = Graph::new();
@@ -2212,9 +2222,10 @@ fn a_kept_trace_in_another_unit_leaves_the_y_range_alone() {
 
 /// Kept traces fill the cap as they come, but must not keep a trace in the
 /// plotted unit off the plot: MIN/MAX's Min, arriving with Frequency and
-/// Period kept and Max and Average already in, takes an undrawn slot.
+/// Period kept and Max and Average already in, takes the slot of one in
+/// another unit.
 #[test]
-fn a_drawn_sub_value_takes_the_slot_of_an_undrawn_one() {
+fn a_sub_value_in_the_plotted_unit_takes_the_slot_of_one_in_another() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     push_vac_hz(&mut g, t0, None, 230.0, (50.0, "Hz"));
@@ -2236,14 +2247,13 @@ fn a_drawn_sub_value_takes_the_slot_of_an_undrawn_one() {
     assert_eq!(g.overlays_len(), MAX_OVERLAYS);
     let mut drawn = drawn_overlay_labels(&g);
     drawn.sort();
-    assert_eq!(drawn, vec!["Average", "Max", "Min"]);
+    assert_eq!(drawn, vec!["Average", "Max", "Min", "Period"]);
 }
 
-/// Colours and line styles go to the drawn traces in turn: the first one
-/// drawn gets the first style even with traces kept in another unit ahead
-/// of it.
+/// Colours and line styles go to the kept traces in turn, so hiding one
+/// leaves the others as they were.
 #[test]
-fn the_overlay_palette_counts_drawn_traces_only() {
+fn the_overlay_palette_follows_the_kept_order() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     push_vac_hz(&mut g, t0, None, 230.0, (50.0, "Hz"));
@@ -2258,12 +2268,158 @@ fn the_overlay_palette_counts_drawn_traces_only() {
         levels: false,
         overlays: &[("Max", "V", Some(231.0))],
     });
-    let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
-    let slots: Vec<_> = drawn
-        .iter()
-        .map(|(k, label, _)| (*k, label.as_str()))
-        .collect();
-    assert_eq!(slots, vec![(0, "Max")]);
+    let slots = |g: &Graph| -> Vec<(usize, String)> {
+        g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY)
+            .into_iter()
+            .map(|(k, label, _)| (k, label))
+            .collect()
+    };
+    let named = |pairs: &[(usize, &str)]| -> Vec<(usize, String)> {
+        pairs.iter().map(|&(k, l)| (k, l.to_string())).collect()
+    };
+    assert_eq!(
+        slots(&g),
+        named(&[(0, "Frequency"), (1, "Period"), (2, "Max")])
+    );
+    g.toggle_overlay_hidden("Period".to_string());
+    assert_eq!(slots(&g), named(&[(0, "Frequency"), (2, "Max")]));
+}
+
+/// One sample of a V reading beside a sub-value in each of `units`.
+fn push_units(g: &mut Graph, t: Instant, units: &[(&'static str, &'static str)]) {
+    let overlays: Vec<_> = units.iter().map(|&(l, u)| (l, u, Some(1.0))).collect();
+    g.push_sample(PlotSample {
+        value: Some(230.0),
+        timestamp: t,
+        mode: "V AC",
+        unit: "V",
+        display_raw: None,
+        series: None,
+        main_label: None,
+        levels: false,
+        overlays: &overlays,
+    });
+}
+
+const FIVE_UNITS: [(&str, &str); 4] = [
+    ("Frequency", "Hz"),
+    ("Period", "ms"),
+    ("Current", "A"),
+    ("Impedance", "\u{2126}"),
+];
+
+/// Four units at most: a fifth is refused an axis until one is hidden, and
+/// a hidden one waiting for a free axis is refused too.
+#[test]
+fn a_fifth_unit_waits_for_a_free_axis() {
+    let mut g = Graph::new();
+    push_units(&mut g, Instant::now(), &FIVE_UNITS);
+    assert_eq!(g.axis_units(), vec!["V", "Hz", "ms", "A"]);
+    let refusal = |g: &Graph, label: &str| {
+        let o = g.overlays.iter().find(|o| o.label == label).expect("kept");
+        g.axis_refusal(o)
+    };
+    assert_eq!(refusal(&g, "Impedance"), Some(AxisRefusal::Full));
+    assert_eq!(refusal(&g, "Current"), None);
+    assert!(!drawn_overlay_labels(&g).contains(&"Impedance".to_string()));
+
+    g.toggle_overlay_hidden("Period".to_string());
+    assert_eq!(g.axis_units(), vec!["V", "Hz", "A", "\u{2126}"]);
+    assert_eq!(refusal(&g, "Impedance"), None);
+    assert_eq!(refusal(&g, "Period"), Some(AxisRefusal::Full));
+}
+
+/// A sub-value that has stopped holds no axis once it is out of view, so a
+/// live one can take it.
+#[test]
+fn a_stopped_sub_value_frees_its_axis() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    push_units(&mut g, t0, &FIVE_UNITS);
+    assert_eq!(g.axis_units(), vec!["V", "Hz", "ms", "A"]);
+    let rest = [FIVE_UNITS[0], FIVE_UNITS[1], FIVE_UNITS[3]];
+    for s in 1..=120 {
+        push_units(&mut g, t0 + Duration::from_secs(s), &rest);
+    }
+    assert_eq!(g.axis_units(), vec!["V", "Hz", "ms", "\u{2126}"]);
+}
+
+/// A narrow graph sheds right axes from the outermost in, down to the
+/// plotted unit alone; the traces keep their place for when it widens.
+#[test]
+fn a_narrow_graph_sheds_the_outermost_axes() {
+    let mut g = Graph::new();
+    push_units(&mut g, Instant::now(), &FIVE_UNITS[..3]);
+    let refusal = |g: &Graph, label: &str| {
+        let o = g.overlays.iter().find(|o| o.label == label).expect("kept");
+        g.axis_refusal(o)
+    };
+    g.fit_axes_to(1000.0);
+    assert_eq!(g.drawn_units(), vec!["V", "Hz", "ms", "A"]);
+    g.fit_axes_to(LEFT_AXIS_ROOM + MIN_PLOT_WIDTH + 2.0 * RIGHT_AXIS_ROOM);
+    assert_eq!(g.drawn_units(), vec!["V", "Hz", "ms"]);
+    assert_eq!(refusal(&g, "Current"), Some(AxisRefusal::Narrow));
+    g.fit_axes_to(200.0);
+    assert_eq!(g.drawn_units(), vec!["V"]);
+    assert!(drawn_overlay_labels(&g).is_empty());
+    assert_eq!(refusal(&g, "Frequency"), Some(AxisRefusal::Narrow));
+}
+
+/// A right axis frames its own traces only, in its own unit.
+#[test]
+fn each_right_axis_frames_its_own_unit() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for (i, hz) in [49.9, 50.1].into_iter().enumerate() {
+        push_vac_hz(
+            &mut g,
+            t0 + Duration::from_secs(i as u64),
+            None,
+            230.0,
+            (hz, "Hz"),
+        );
+    }
+    let targets = g.secondary_targets(f64::NEG_INFINITY, f64::INFINITY);
+    let units: Vec<&str> = targets.iter().map(|(u, _)| u.as_str()).collect();
+    assert_eq!(units, vec!["Hz", "ms"]);
+    let (lo, hi) = targets[0].1;
+    assert!(
+        lo < 49.9 && lo > 49.8 && hi > 50.1 && hi < 50.2,
+        "{lo}..{hi}"
+    );
+}
+
+/// With right axes, the hover lists every series at the hovered time, the
+/// one under the pointer first, and leaves out one in a break.
+#[test]
+fn the_hover_lists_every_series_at_its_time() {
+    let volts = vec![vec![[0.0, 230.0], [2.0, 231.0]]];
+    let hz = vec![vec![[0.0, 50.0], [0.9, 50.1]], vec![[1.8, 49.9]]];
+    let series = [
+        HoverSeries {
+            name: "Main".into(),
+            segments: &volts,
+            unit: "V".into(),
+        },
+        HoverSeries {
+            name: "Frequency".into(),
+            segments: &hz,
+            unit: "Hz".into(),
+        },
+    ];
+    assert_eq!(
+        hover_readout("0.5 s", &series, "Frequency", 0.5, false, 1),
+        "0.5 s\nFrequency: 50.1 Hz\nMain: 230.0 V"
+    );
+    assert_eq!(
+        hover_readout("1.2 s", &series, "", 1.2, false, 1),
+        "1.2 s\nMain: 231.0 V",
+        "Frequency is in a break at 1.2 s"
+    );
+    assert_eq!(
+        hover_readout("1.2 s", &series, "", 0.2, true, 1),
+        "1.2 s\nMain: overload\nFrequency: 50.0 Hz"
+    );
 }
 
 /// Same series, same mode, same unit: nothing to reset.
@@ -2580,6 +2736,49 @@ fn the_main_reading_s_chip_is_not_remembered() {
     g.click_overlay_chip(MAIN_SERIES.to_string());
     assert!(drawn_overlay_labels(&g).is_empty());
     assert_eq!(g.take_trace_choice(), None);
+}
+
+/// A remembered hidden label names a sub-value, never the main reading: a
+/// UT181A that hid its T2 sub-value still draws T2 where T2 is the main
+/// reading, beside a plotted T1.
+#[test]
+fn a_remembered_label_never_hides_the_main_reading() {
+    let mut g = Graph::new();
+    g.hide_overlays(&["T2".to_string()]);
+    let t0 = Instant::now();
+    for i in 0..3 {
+        g.push_sample(PlotSample {
+            value: Some(21.0),
+            timestamp: t0 + Duration::from_secs(i),
+            mode: "Temp",
+            unit: "\u{00B0}C",
+            display_raw: None,
+            series: Some("T1"),
+            main_label: Some("T2"),
+            levels: false,
+            overlays: &[("T2", "\u{00B0}C", Some(23.0))],
+        });
+    }
+    assert_eq!(drawn_overlay_labels(&g), vec!["T2"]);
+}
+
+/// Hiding the main reading's trace lasts for the mode it was hidden in.
+#[test]
+fn a_hidden_main_trace_comes_back_in_the_next_mode() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    push_aux(&mut g, 50.0, t0, Some("T2"), &[(MAIN_SERIES, Some(20.0))]);
+    g.click_overlay_chip(MAIN_SERIES.to_string());
+    assert!(drawn_overlay_labels(&g).is_empty());
+
+    push_vac_hz(
+        &mut g,
+        t0 + Duration::from_secs(1),
+        Some("Frequency"),
+        230.0,
+        (50.0, "Hz"),
+    );
+    assert!(drawn_overlay_labels(&g).contains(&MAIN_SERIES.to_string()));
 }
 
 /// Traces the settings remember hidden start hidden.
