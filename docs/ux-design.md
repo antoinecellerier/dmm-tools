@@ -144,7 +144,10 @@ changes (`ExportFormat` in `app/export.rs`).
 **Never colour alone.** Flag badges are bold, the status dot has its text, an
 imported session's ring shape says no meter is attached, a toast carries a
 glyph, overlay traces differ by dash pattern, and with a right axis the plot
-key and every tick name their unit.
+key and every tick name their unit. **Graph lines: Solid** gives up the dash
+patterns for those who don't need them, on data lines only: the mean,
+reference, envelope, cursor, marker and data-loss lines keep theirs, which
+are what tell them from data and from each other.
 
 **11 pt floor.** egui's small text style ships at 9 pt, so it is raised to
 11 pt once at startup rather than avoided per call site (`SMALL_TEXT_SIZE` in

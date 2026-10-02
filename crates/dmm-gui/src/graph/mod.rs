@@ -275,6 +275,9 @@ pub struct Graph {
     /// A **Show:** chip the user clicked since the last call, with whether
     /// it is now hidden — see [`Graph::take_trace_choice`].
     trace_choice: Option<(String, bool)>,
+    /// Sub-value lines drawn solid rather than dashed and dotted, as the
+    /// user chose in Settings → Graph lines.
+    pub(crate) solid_lines: bool,
     /// How many units' axes fit the graph's width, from the last frame: see
     /// [`Graph::axis_units`].
     axis_room: usize,
@@ -433,6 +436,7 @@ impl Graph {
             hidden_overlays: HashSet::new(),
             main_hidden: false,
             trace_choice: None,
+            solid_lines: false,
             axis_room: MAX_AXES,
             series_options: Vec::new(),
             last_display_raw: None,

@@ -12,7 +12,7 @@ use super::toast::Toast;
 use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
 use crate::recording::BufferRole;
-use crate::settings::MIN_RECORDING_HEIGHT;
+use crate::settings::{GraphLines, MIN_RECORDING_HEIGHT};
 
 /// The arrow segment of the Export… split button (U+23F7, in egui's icon
 /// font like the `⏵` its submenus use).
@@ -611,6 +611,7 @@ impl App {
         // reads `self.settings`, which the borrow checker would otherwise
         // see as overlapping.
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
+        self.graph.solid_lines = self.settings.graph_lines == GraphLines::Solid;
         if self.settings.show_graph && self.settings.show_recording {
             let total = ui.available_height();
             let graph_height = (total - self.settings.recording_height).max(80.0);

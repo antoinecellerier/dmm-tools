@@ -113,6 +113,16 @@ pub enum ColorPreset {
     ColorblindSafe,
 }
 
+/// How the graph tells its data lines apart. Patterned by default: dashes and
+/// dots keep sub-values distinct without colour (`ux-design.md`,
+/// Accessibility); solid is the opt-out for those who don't need that.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum GraphLines {
+    #[default]
+    Patterned,
+    Solid,
+}
+
 /// A color that serializes as a hex string (`"#RRGGBB"` or `"#RRGGBBAA"`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HexColor(pub Color32);
@@ -354,6 +364,9 @@ pub struct Settings {
     /// Per-color overrides (dark and light themes independently).
     #[serde(default)]
     pub color_overrides: ColorOverrides,
+    /// How sub-value lines are drawn on the graph.
+    #[serde(default)]
+    pub graph_lines: GraphLines,
     /// Last version the user has seen the "What's New" dialog for.
     /// `None` means the user has never dismissed it (new install or pre-feature upgrade).
     #[serde(default)]
@@ -415,6 +428,7 @@ impl Default for Settings {
             mock_mode: String::new(),
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
+            graph_lines: GraphLines::Patterned,
             last_seen_version: None,
             check_for_updates: default_check_for_updates(),
             last_folder: None,
@@ -605,11 +619,12 @@ mod tests {
     }
 
     /// A file from before hidden traces were remembered hides none, and an
-    /// empty set writes nothing.
+    /// empty set writes nothing. Nor did it choose solid lines.
     #[test]
     fn no_hidden_traces_by_default() {
         let s: Settings = serde_json::from_str(r#"{"theme":"Light"}"#).unwrap();
         assert!(s.hidden_series.is_empty());
+        assert_eq!(s.graph_lines, GraphLines::Patterned);
         let json = serde_json::to_string(&Settings::default()).unwrap();
         assert!(!json.contains("hidden_series"), "{json}");
     }
@@ -708,6 +723,7 @@ mod tests {
             mock_mode: "dcv".to_string(),
             color_preset: ColorPreset::HighContrast,
             color_overrides: ColorOverrides::default(),
+            graph_lines: GraphLines::Solid,
             last_seen_version: Some("0.3.0".to_string()),
             check_for_updates: false,
             last_folder: Some(PathBuf::from("/data/bench")),
@@ -721,6 +737,7 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.hidden_series, s.hidden_series);
+        assert_eq!(deserialized.graph_lines, GraphLines::Solid);
         assert_eq!(deserialized.theme, ThemeMode::Light);
         assert!(!deserialized.show_graph);
         assert!(deserialized.show_stats);

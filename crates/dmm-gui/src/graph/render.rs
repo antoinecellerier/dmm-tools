@@ -555,6 +555,10 @@ const AXIS_TICK_SPACING: f32 = 50.0;
 /// either side of the text, plus a pixel of air.
 const RIGHT_AXIS_MARGIN: f32 = 9.0;
 
+/// Colours the palette has for sub-value traces before they repeat
+/// (`ThemeColors::graph_overlay`).
+const OVERLAY_COLORS: usize = 3;
+
 /// Rows of stacked right-axis labels: a gap of this many points between
 /// one gridline's stack and the next.
 const STACK_GAP: f32 = 6.0;
@@ -857,12 +861,16 @@ impl Graph {
     /// Keyed on the overlay's index — never on a hash of its label, which
     /// would reshuffle the palette when a sub-value appears or disappears
     /// mid-capture. The line style carries the same information without
-    /// colour, as `.claude/rules/gui.md` requires.
-    fn overlay_color_and_style(
+    /// colour, as `.claude/rules/gui.md` requires — unless the user chose
+    /// solid lines (`solid`, Settings → Graph lines). Even then a fourth
+    /// trace, which shares the first one's colour, keeps its pattern.
+    pub(super) fn overlay_color_and_style(
         tc: &ThemeColors,
         index: usize,
+        solid: bool,
     ) -> (egui::Color32, egui_plot::LineStyle) {
         let style = match index % 4 {
+            _ if solid && index < OVERLAY_COLORS => egui_plot::LineStyle::Solid,
             0 => egui_plot::LineStyle::dashed_loose(),
             1 => egui_plot::LineStyle::dotted_loose(),
             2 => egui_plot::LineStyle::dashed_dense(),
@@ -937,6 +945,7 @@ impl Graph {
         plot_rect: egui::Rect,
         entries: &[(String, KeyStyle)],
         tc: &ThemeColors,
+        solid: bool,
     ) -> Option<egui::Rect> {
         if entries.is_empty() {
             return None;
@@ -981,7 +990,7 @@ impl Graph {
             let mid = top + row_height / 2.0;
             let (color, line_style) = match style {
                 KeyStyle::Plotted => (tc.graph_line(), egui_plot::LineStyle::Solid),
-                KeyStyle::Overlay(k) => Self::overlay_color_and_style(tc, *k),
+                KeyStyle::Overlay(k) => Self::overlay_color_and_style(tc, *k, solid),
             };
             painter.extend(key_line_sample(
                 egui::pos2(rect.left() + PAD, mid),
@@ -1216,6 +1225,7 @@ impl Graph {
 
         // Theme-aware colors from shared palette
         let line_color = tc.graph_line();
+        let solid_lines = self.solid_lines;
         let gap_color = tc.graph_gap();
         let overload_edge = tc.graph_overload();
         let overload_fill = tc.graph_overload_fill();
@@ -1502,7 +1512,7 @@ impl Graph {
             // Sub-values first: the plotted series goes on top of them. One in
             // another unit is drawn at its axis's heights.
             for ((k, label, segments), map) in overlay_traces.iter().zip(&trace_maps) {
-                let (color, style) = Self::overlay_color_and_style(tc, *k);
+                let (color, style) = Self::overlay_color_and_style(tc, *k, solid_lines);
                 for seg in segments {
                     let mut points = thin(seg);
                     if let Some(map) = map {
@@ -1645,10 +1655,15 @@ impl Graph {
         };
         // The key and the flags first: the labels lay themselves out around
         // them.
-        let mut taken: Vec<egui::Rect> =
-            Self::paint_plot_key(ui, response.response.rect, &key_entries, tc)
-                .into_iter()
-                .collect();
+        let mut taken: Vec<egui::Rect> = Self::paint_plot_key(
+            ui,
+            response.response.rect,
+            &key_entries,
+            tc,
+            self.solid_lines,
+        )
+        .into_iter()
+        .collect();
         let (clicked_marker, flags) = Self::paint_marker_flags(
             ui,
             &response.transform,

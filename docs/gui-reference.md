@@ -442,6 +442,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 |---|---|---|
 | **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none) |
 | **Colors** | Default | Color preset: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
+| **Graph lines** | Patterned | How sub-value lines are drawn: **Patterned** dashes and dots them so they can be told apart without colour; **Solid** draws them continuous, told apart by colour and the plot key (a fourth sub-value, sharing the first one's colour, keeps its dashes). Mean, reference, envelope, cursor, marker and data-loss lines keep their patterns. |
 | **Graph** | on | Toggle graph panel visibility |
 | **Statistics** | on | Toggle statistics panel visibility |
 | **Recording** | on | Toggle recording panel visibility |

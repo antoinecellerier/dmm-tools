@@ -329,7 +329,7 @@ Zoomed out to many samples per pixel, a noisy trace's edges shimmer slightly as 
 
 **Complexity:** Medium
 
-Zoomed out on a noisy sub-value, its dashes merge into a solid band, so only colour tells it from the plotted series, against the rule that colour is never the only cue. A fix must keep every extreme visible: dashes laid along time were tried and drop a one-sample spike or a vertical Min/Max step that falls in a gap. Candidates are a lighter fill or an outline for a dense band.
+Zoomed out on a noisy sub-value, its dashes merge into a solid band, so only colour tells it from the plotted series, against the rule that colour is never the only cue. A fix must keep every extreme visible: dashes laid along time were tried and drop a one-sample spike or a vertical Min/Max step that falls in a gap. Candidates are a lighter fill or an outline for a dense band. **Graph lines: Solid** sidesteps it for those who chose it.
 
 ### Sub-value traces across a prefix step
 

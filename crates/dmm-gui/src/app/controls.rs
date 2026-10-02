@@ -5,8 +5,8 @@ use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
 use crate::settings::{
-    ColorOverrides, ColorPreset, HexColor, SpecFields, ThemeMode, buffer_memory_estimate,
-    format_sample_count,
+    ColorOverrides, ColorPreset, GraphLines, HexColor, SpecFields, ThemeMode,
+    buffer_memory_estimate, format_sample_count,
 };
 use crate::theme::{PaletteField, PaletteGroup, ThemeColors};
 
@@ -570,6 +570,32 @@ impl App {
 
         // -- Collapsible color customization --
         self.show_color_customization(ui);
+
+        // -- Graph line style --
+        ui.horizontal_wrapped(|ui| {
+            let chips = [
+                (
+                    GraphLines::Patterned,
+                    "Patterned",
+                    "Dashed and dotted sub-value lines, told apart without colour",
+                ),
+                (
+                    GraphLines::Solid,
+                    "Solid",
+                    "Continuous lines, told apart by colour and the key",
+                ),
+            ]
+            .map(|(value, label, tooltip)| Chip {
+                value,
+                selected: self.settings.graph_lines == value,
+                label: label.to_string(),
+                tooltip: tooltip.to_string(),
+            });
+            if let Some(lines) = chip_row(ui, "Graph lines:", chips) {
+                self.settings.graph_lines = lines;
+                self.settings.save();
+            }
+        });
 
         ui.horizontal_wrapped(|ui| {
             let changed = setting_checkbox(

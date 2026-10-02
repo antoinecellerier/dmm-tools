@@ -2285,6 +2285,26 @@ fn the_overlay_palette_follows_the_kept_order() {
     assert_eq!(slots(&g), named(&[(0, "Frequency"), (2, "Max")]));
 }
 
+/// Solid lines take a sub-value's pattern away and keep its colour, but a
+/// fourth, sharing the first one's colour, keeps its pattern; patterned
+/// lines are never solid, as colour alone isn't enough.
+#[test]
+fn solid_lines_keep_colours_and_drop_patterns() {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    for k in 0..4 {
+        let (patterned_color, patterned) = Graph::overlay_color_and_style(&tc, k, false);
+        let (solid_color, solid) = Graph::overlay_color_and_style(&tc, k, true);
+        assert_ne!(patterned, egui_plot::LineStyle::Solid);
+        assert_eq!(solid_color, patterned_color);
+        if k < 3 {
+            assert_eq!(solid, egui_plot::LineStyle::Solid);
+        } else {
+            assert_eq!(tc.graph_overlay(k), tc.graph_overlay(0));
+            assert_eq!(solid, patterned, "the fourth keeps its pattern");
+        }
+    }
+}
+
 /// One sample of a V reading beside a sub-value in each of `units`.
 fn push_units(g: &mut Graph, t: Instant, units: &[(&'static str, &'static str)]) {
     let overlays: Vec<_> = units.iter().map(|&(l, u)| (l, u, Some(1.0))).collect();
