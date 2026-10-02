@@ -180,9 +180,8 @@ pub(crate) struct OwonProtocol {
 }
 
 impl OwonProtocol {
-    /// `issue` is the entry's verification issue, `None` until it is
-    /// opened.
-    fn new(model: &'static Model, issue: Option<u16>) -> Self {
+    /// `issue` is the entry's verification issue, one per hardware twin.
+    fn new(model: &'static Model, issue: u16) -> Self {
         Self {
             rx_buf: Vec::with_capacity(64),
             model,
@@ -192,7 +191,7 @@ impl OwonProtocol {
                 stability: Stability::Experimental,
                 supported_commands: model.commands,
                 max_aux_values: model.frame.max_aux_values(),
-                verification_issue: issue,
+                verification_issue: Some(issue),
                 meter_keys: model.meter_keys,
             },
             confirmed: Confirmation::NoInfo,
@@ -526,7 +525,7 @@ mod tests {
 
     fn proto(model: &'static Model) -> OwonProtocol {
         // The issue number plays no part in decoding.
-        OwonProtocol::new(model, None)
+        OwonProtocol::new(model, 0)
     }
 
     /// `bytes` in reads of `size`.
@@ -1073,26 +1072,10 @@ mod tests {
             issues.push(profile.verification_issue);
             assert_eq!(proto.delivery(), crate::protocol::Delivery::Streamed);
         }
-        // The 15-byte entries' issues are still to be opened.
+        let issues: Vec<u16> = issues.into_iter().flatten().collect();
         assert_eq!(
             issues,
-            [
-                Some(39),
-                Some(40),
-                Some(41),
-                Some(42),
-                Some(43),
-                Some(44),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None
-            ]
+            [39, 40, 41, 42, 43, 44, 45, 45, 46, 47, 48, 47, 48, 49, 49]
         );
         let ids: Vec<&str> = model::MODELS.iter().map(|m| m.id).collect();
         assert_eq!(

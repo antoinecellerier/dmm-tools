@@ -21,7 +21,7 @@ in its `verification.md`; what hardware has confirmed is tagged in its spec.
 | EEVblog 121GW | [121gw](research/121gw/verification.md) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
 | Brymen BM78xBT | [bm78xbt](research/bm78xbt/verification.md) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
 | Brymen BU-86X: BM86x, BM82x, BM52x | [bm86x](research/bm86x/verification.md) | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34)–[#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
-| OWON | [owon](research/owon/verification.md) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39)–[#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
+| OWON | [owon](research/owon/verification.md) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39)–[#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 | UT632 (not implemented) | [ut632](research/ut632/verification.md) | — |
 | UT8805, UT8806 (not implemented) | [ut8805](research/ut8805/verification.md) | — |
 

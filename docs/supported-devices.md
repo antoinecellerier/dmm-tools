@@ -247,15 +247,15 @@ Voltcraft meters, until the Bluetooth symbol shows.
 | B35T+ | 6000 | 🧪 Experimental ([#42](https://github.com/antoinecellerier/dmm-tools/issues/42)) | hFE and a mV position |
 | B41T+ | 22000 | 🧪 Experimental ([#43](https://github.com/antoinecellerier/dmm-tools/issues/43)) | a mV position; no hFE |
 | CM2100B | 19999 | 🧪 Experimental ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)) | clamp: 2 A, 20 A and 100 A positions; NCV, ZERO; no temperature |
-| CMS101 | — | 🧪 Experimental | clamp, 1000 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
-| CMS061 | — | 🧪 Experimental | clamp, 600 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
-| OW65B | 6000 | 🧪 Experimental | LoZ, 4-20 mA; second display as a sub-value |
-| OW67B | 60000 | 🧪 Experimental | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
-| OW69B | 60000 | 🧪 Experimental | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
-| VC871 | 60000 | 🧪 Experimental | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
-| VC891 | 60000 | 🧪 Experimental | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
-| VC915 | 20000 | 🧪 Experimental | AC+DC V, low-pass, motor rotation; LoZ, 4-20 mA; second display as a sub-value |
-| VC925 PV | 20000 | 🧪 Experimental | solar with its LX-925 adapter; 2 kV DC, 1.5 kV AC; no A position; second display as a sub-value |
+| CMS101 | — | 🧪 Experimental ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 1000 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
+| CMS061 | — | 🧪 Experimental ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 600 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
+| OW65B | 6000 | 🧪 Experimental ([#46](https://github.com/antoinecellerier/dmm-tools/issues/46)) | LoZ, 4-20 mA; second display as a sub-value |
+| OW67B | 60000 | 🧪 Experimental ([#47](https://github.com/antoinecellerier/dmm-tools/issues/47)) | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
+| OW69B | 60000 | 🧪 Experimental ([#48](https://github.com/antoinecellerier/dmm-tools/issues/48)) | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
+| VC871 | 60000 | 🧪 Experimental ([#47](https://github.com/antoinecellerier/dmm-tools/issues/47)) | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
+| VC891 | 60000 | 🧪 Experimental ([#48](https://github.com/antoinecellerier/dmm-tools/issues/48)) | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
+| VC915 | 20000 | 🧪 Experimental ([#49](https://github.com/antoinecellerier/dmm-tools/issues/49)) | AC+DC V, low-pass, motor rotation; LoZ, 4-20 mA; second display as a sub-value |
+| VC925 PV | 20000 | 🧪 Experimental ([#49](https://github.com/antoinecellerier/dmm-tools/issues/49)) | solar with its LX-925 adapter; 2 kV DC, 1.5 kV AC; no A position; second display as a sub-value |
 
 Not run on a meter yet: the decoding and the remote keys come from OWON's
 and Voltcraft's apps, OWON's PC software and the manuals. The meter reports

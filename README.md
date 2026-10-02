@@ -120,11 +120,11 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | OWON B35T+ | — | 🧪 Experimental (built in) | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
 | OWON B41T+ | — | 🧪 Experimental (built in) | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
 | OWON CM2100B | — | 🧪 Experimental (built in) | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
-| OWON CMS101/CMS061 | — | 🧪 Experimental (built in) | — |
-| OWON OW65B | — | 🧪 Experimental (built in) | — |
-| OWON OW67B (Voltcraft VC871) | — | 🧪 Experimental (built in) | — |
-| OWON OW69B (Voltcraft VC891) | — | 🧪 Experimental (built in) | — |
-| Voltcraft VC915/VC925 PV | — | 🧪 Experimental (built in) | — |
+| OWON CMS101/CMS061 | — | 🧪 Experimental (built in) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON OW65B | — | 🧪 Experimental (built in) | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |
+| OWON OW67B (Voltcraft VC871) | — | 🧪 Experimental (built in) | [#47](https://github.com/antoinecellerier/dmm-tools/issues/47) |
+| OWON OW69B (Voltcraft VC891) | — | 🧪 Experimental (built in) | [#48](https://github.com/antoinecellerier/dmm-tools/issues/48) |
+| Voltcraft VC915/VC925 PV | — | 🧪 Experimental (built in) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 <!-- devices:end -->
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.

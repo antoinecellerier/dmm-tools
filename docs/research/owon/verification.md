@@ -8,9 +8,12 @@ B41T(+), OW16B, OW18B, OW18E and CM2100B, issues
 [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) (B35T+),
 [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) (B41T+) and
 [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) (CM2100B) — and
-the 15-byte meters (§10), the CMS101, CMS061, OW65B, OW67B, OW69B and
-Voltcraft VC871, VC891, VC915 and VC925 PV, whose issues are still to be
-opened. Step ids are the `capture` steps of each meter's entry.
+the 15-byte meters (§10), issues
+[#45](https://github.com/antoinecellerier/dmm-tools/issues/45) (CMS101/CMS061),
+[#46](https://github.com/antoinecellerier/dmm-tools/issues/46) (OW65B),
+[#47](https://github.com/antoinecellerier/dmm-tools/issues/47) (Voltcraft VC871/OW67B),
+[#48](https://github.com/antoinecellerier/dmm-tools/issues/48) (Voltcraft VC891/OW69B) and
+[#49](https://github.com/antoinecellerier/dmm-tools/issues/49) (Voltcraft VC915/VC925 PV). Step ids are the `capture` steps of each meter's entry.
 What real meters have confirmed is tagged `[HARDWARE]` in the
 [spec](reverse-engineered-protocol.md); checks that span families are in the
 [verification backlog](../../verification-backlog.md). Community captures
