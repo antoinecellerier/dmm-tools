@@ -38,7 +38,9 @@ pub fn version_label(version: &str, git_hash: &str) -> String {
     }
 }
 
-/// Long help for a `--device` flag: `intro`, then one line per known device.
+/// Long help for a `--device` flag: `intro`, then one line per known device,
+/// under its brand as the GUI's device list groups them
+/// ([`registry::brand_groups`]).
 ///
 /// `intro` is the only part that differs between the binaries — the CLI's is
 /// bare, the GUI's notes that the flag overrides saved settings.
@@ -52,9 +54,12 @@ pub fn device_help(intro: &str) -> String {
         "  {:<12} {AUTO_DESCRIPTION} (default)\n",
         registry::AUTO_DEVICE_ID
     ));
-    for d in registry::DEVICES {
-        let tag = device_tag(d, false).map_or(String::new(), |t| format!(" ({t})"));
-        help.push_str(&format!("  {:<12} {}{}\n", d.id, d.display_name, tag));
+    for (brand, devices) in registry::brand_groups() {
+        help.push_str(&format!("\n  {}\n", brand.name()));
+        for d in devices {
+            let tag = device_tag(d, false).map_or(String::new(), |t| format!(" ({t})"));
+            help.push_str(&format!("    {:<12} {}{}\n", d.id, d.model_name(), tag));
+        }
     }
     help.push_str(
         "\nAlso accepts aliases: ut61e+, ut61b, ut171a, ut181, etc.\n\
@@ -544,9 +549,39 @@ mod tests {
         );
         for d in registry::DEVICES {
             assert!(help.contains(d.id), "missing {}", d.id);
-            assert!(help.contains(d.display_name), "missing {}", d.display_name);
+            assert!(help.contains(d.model_name()), "missing {}", d.display_name);
         }
         assert!(help.contains("Also accepts aliases"));
+    }
+
+    /// Each device sits under its brand's heading, by its model name: the
+    /// heading carries the brand the name would otherwise repeat.
+    #[test]
+    fn device_help_groups_devices_under_their_brand() {
+        let help = device_help("x");
+        let mut brand = None;
+        let mut seen = 0;
+        for line in help.split("Devices:\n").nth(1).unwrap().lines() {
+            if let Some(heading) = line.strip_prefix("  ").filter(|l| !l.starts_with(' ')) {
+                brand = registry::brand_groups()
+                    .into_iter()
+                    .find(|(b, _)| b.name() == heading);
+                continue;
+            }
+            let Some(entry) = line.strip_prefix("    ") else {
+                continue;
+            };
+            let (_, devices) = brand.as_ref().expect("an entry before any heading");
+            let id = entry.split_whitespace().next().unwrap();
+            let device = devices.iter().find(|d| d.id == id).expect(line);
+            assert!(entry.contains(device.model_name()), "{line}");
+            seen += 1;
+        }
+        assert_eq!(seen, registry::DEVICES.len());
+        assert!(
+            help.contains("\n  Voltcraft\n    vc880        VC-880"),
+            "{help}"
+        );
     }
 
     /// Both binaries render these lines verbatim, so the header and the empty

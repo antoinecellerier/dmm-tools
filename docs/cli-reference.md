@@ -54,6 +54,26 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | Value | Aliases | Description |
 |---|---|---|
 | `auto` |  | [Detect the connected meter](detection-design.md) (default) |
+| **Brymen** |  |  |
+| `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | BM788BT/BM787BT (experimental) |
+| `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | BM869s/BM867s (experimental) |
+| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | BM829s/BM827s/BM822s/BM821s (experimental) |
+| `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s` | BM525s/BM521s (experimental) |
+| **EEVblog** |  |  |
+| `121gw` | `eevblog121gw`, `eevblog-121gw` | 121GW (experimental) |
+| **OWON** |  |  |
+| `ow18b` | `ow16b`, `owon-ow18b`, `owon-ow16b` | OW18B/OW16B (experimental) |
+| `ow18e` | `owon-ow18e` | OW18E (experimental) |
+| `b33` | `b33t`, `b33+`, `b33t+`, `owon-b33` | B33 (experimental) |
+| `b35t+` | `b35+`, `owon-b35t+` | B35T+ (experimental) |
+| `b41t+` | `b41t`, `owon-b41t+` | B41T+ (experimental) |
+| `cm2100b` | `owon-cm2100b` | CM2100B (experimental) |
+| `cms101` | `owon-cms101` | CMS101 (experimental) |
+| `cms061` | `owon-cms061` | CMS061 (experimental) |
+| `ow65b` | `owon-ow65b` | OW65B (experimental) |
+| `ow67b` | `owon-ow67b` | OW67B (experimental) |
+| `ow69b` | `owon-ow69b` | OW69B (experimental) |
+| **UNI-T** |  |  |
 | `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (verified) |
 | `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (verified) |
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
@@ -70,34 +90,21 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut71cde` | `ut71c`, `ut71d`, `ut71e` | UT71C/D/E (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (partly verified) |
-| `vc880` | `vc-880` | Voltcraft VC-880 (experimental) |
-| `vc650bt` | `vc-650bt` | Voltcraft VC650BT (experimental) |
-| `vc890` | `vc-890` | Voltcraft VC-890 (experimental) |
-| `vc920` | `vc-920`, `vc940`, `vc-940`, `vc960`, `vc-960` | Voltcraft VC920/VC940/VC960 (experimental) |
+| **Voltcraft** |  |  |
+| `vc880` | `vc-880` | VC-880 (experimental) |
+| `vc650bt` | `vc-650bt` | VC650BT (experimental) |
+| `vc890` | `vc-890` | VC-890 (experimental) |
+| `vc920` | `vc-920`, `vc940`, `vc-940`, `vc960`, `vc-960` | VC920/VC940/VC960 (experimental) |
+| `vc871` | `vc-871` | VC871 (experimental) |
+| `vc891` | `vc-891` | VC891 (experimental) |
+| `vc915` | `vc-915` | VC915 (experimental) |
+| `vc925pv` | `vc-925pv` | VC925 PV (experimental) |
+| **ZOTEK / ZOYI / BSIDE / ANENG** |  |  |
 | `zt300ab` | `zt-300ab`, `an9002`, `an-9002` | ZT-300AB / AN9002 (experimental) |
 | `zt5566se` | `zt-5566se`, `zt5566s`, `zt-5566s`, `an999s`, `an-999s` | ZT-5566SE / AN999S (experimental) |
 | `zt5bq` | `zt-5bq`, `st207` | ZT-5BQ / ST207 (experimental) |
 | `zt5b` | `zt-5b`, `v05b` | ZT-5B / V05B (experimental) |
-| `121gw` | `eevblog121gw`, `eevblog-121gw` | EEVblog 121GW (experimental) |
-| `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | Brymen BM788BT/BM787BT (experimental) |
-| `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | Brymen BM869s/BM867s (experimental) |
-| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | Brymen BM829s/BM827s/BM822s/BM821s (experimental) |
-| `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s` | Brymen BM525s/BM521s (experimental) |
-| `ow18b` | `ow16b`, `owon-ow18b`, `owon-ow16b` | OWON OW18B/OW16B (experimental) |
-| `ow18e` | `owon-ow18e` | OWON OW18E (experimental) |
-| `b33` | `b33t`, `b33+`, `b33t+`, `owon-b33` | OWON B33 (experimental) |
-| `b35t+` | `b35+`, `owon-b35t+` | OWON B35T+ (experimental) |
-| `b41t+` | `b41t`, `owon-b41t+` | OWON B41T+ (experimental) |
-| `cm2100b` | `owon-cm2100b` | OWON CM2100B (experimental) |
-| `cms101` | `owon-cms101` | OWON CMS101 (experimental) |
-| `cms061` | `owon-cms061` | OWON CMS061 (experimental) |
-| `ow65b` | `owon-ow65b` | OWON OW65B (experimental) |
-| `ow67b` | `owon-ow67b` | OWON OW67B (experimental) |
-| `ow69b` | `owon-ow69b` | OWON OW69B (experimental) |
-| `vc871` | `vc-871` | Voltcraft VC871 (experimental) |
-| `vc891` | `vc-891` | Voltcraft VC891 (experimental) |
-| `vc915` | `vc-915` | Voltcraft VC915 (experimental) |
-| `vc925pv` | `vc-925pv` | Voltcraft VC925 PV (experimental) |
+| **Simulated** |  |  |
 | `mock` |  | Mock (simulated, no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
 <!-- devices:end -->

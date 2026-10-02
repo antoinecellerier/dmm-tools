@@ -23,9 +23,10 @@ use std::path::PathBuf;
 const START: &str = "<!-- devices:start -->";
 const END: &str = "<!-- devices:end -->";
 
-/// The CLI reference's `--device` table: one row per selectable device.
+/// The CLI reference's `--device` table: one row per selectable device,
+/// grouped under a bold row per brand as `--help` groups them.
 ///
-/// The Description column is the device name plus the same tag `--help`
+/// The Description column is the model name plus the same tag `--help`
 /// appends ([`dmm_shared::help::device_tag`]), so the two cannot disagree
 /// about which devices are experimental. Counts, form factor and which models
 /// share a protocol table stay in `docs/supported-devices.md`, which the
@@ -40,21 +41,25 @@ fn cli_reference_table() -> String {
         "\n| `{}` |  | [Detect the connected meter](detection-design.md) (default) |",
         registry::AUTO_DEVICE_ID
     ));
-    for device in registry::DEVICES {
-        let aliases: Vec<String> = device.aliases.iter().map(|a| format!("`{a}`")).collect();
-        let tag = dmm_shared::help::device_tag(device, true).expect("every row is tagged");
-        // A display name that already ends in a parenthetical — the mock's
-        // "Mock (simulated)" — takes the tag inside it instead of growing a
-        // second bracketed group.
-        let description = match device.display_name.strip_suffix(')') {
-            Some(head) => format!("{head}, {tag})"),
-            None => format!("{} ({tag})", device.display_name),
-        };
-        table.push_str(&format!(
-            "\n| `{}` | {} | {description} |",
-            device.id,
-            aliases.join(", ")
-        ));
+    for (brand, devices) in registry::brand_groups() {
+        table.push_str(&format!("\n| **{}** |  |  |", brand.name()));
+        for device in devices {
+            let aliases: Vec<String> = device.aliases.iter().map(|a| format!("`{a}`")).collect();
+            let tag = dmm_shared::help::device_tag(device, true).expect("every row is tagged");
+            // A name that already ends in a parenthetical — the mock's
+            // "Mock (simulated)" — takes the tag inside it instead of growing
+            // a second bracketed group.
+            let name = device.model_name();
+            let description = match name.strip_suffix(')') {
+                Some(head) => format!("{head}, {tag})"),
+                None => format!("{name} ({tag})"),
+            };
+            table.push_str(&format!(
+                "\n| `{}` | {} | {description} |",
+                device.id,
+                aliases.join(", ")
+            ));
+        }
     }
     table
 }
@@ -189,6 +194,10 @@ fn cli_reference_tags_default_experimental_and_mock() {
         "| `auto` |  | [Detect the connected meter](detection-design.md) (default) |"
     );
     assert!(table.contains("| UT61E+ (verified) |"), "{table}");
+    assert!(
+        table.contains("| **Voltcraft** |  |  |\n| `vc880` | `vc-880` | VC-880 (experimental) |"),
+        "{table}"
+    );
     assert_eq!(table.matches("default").count(), 1, "{table}");
     assert!(table.contains("| UT171A/B/C (experimental) |"), "{table}");
     assert!(table.contains("| UT181A (partly verified) |"), "{table}");
