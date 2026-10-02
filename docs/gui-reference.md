@@ -23,16 +23,16 @@ and remote control of digital multimeters over USB or Bluetooth.
 
 ## Connecting
 
-The Settings panel includes a **Device** selector. **Auto-detect**, the
+The Settings panel includes a **Device** list. **Auto-detect**, the
 default, works out which meter is connected from its replies
 ([how](detection-design.md)), shows it in the top bar and saves it as the
 **Device**; pick **Auto-detect** again after swapping meters. The probe makes
 a UT61+/UT161 beep once.
 
-The other choices are every supported model (see [supported
-devices](supported-devices.md)), **Mock (simulated)**, which generates
-synthetic measurements without hardware, and **Mock ZT-5B / V05B
-(simulated)**, which simulates a ZOTEK meter ([what its keys
+The other choices are every supported model, grouped by brand (see
+[supported devices](supported-devices.md)), and under **Simulated**: **Mock
+(simulated)**, which generates synthetic measurements without hardware, and
+**Mock ZT-5B / V05B (simulated)**, which simulates a ZOTEK meter ([what its keys
 do](cli-reference.md#zotek-mock)); picking one skips detection. The
 selection persists across sessions and requires a reconnect to take effect.
 When the connected protocol is not fully verified, an orange
@@ -453,7 +453,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name. |
 | **Sample interval** | Every reading | **Every reading** the meter produces, at its own pace (on a UT61E+, about 10 a second over USB, 3 over Bluetooth), or at most one reading per 100, 200, 300 or 500 ms, 1 s or 2 s: the one nearest each tick. |
 | **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys; a stopped recording kept beside the graph's readings can take as much memory again. `settings.json` accepts any size from 1K to 50M. |
-| **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
+| **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other entries, grouped by brand, pick a model directly. Requires reconnect. |
 | **Look for Bluetooth devices** | on | When off, nothing scans for adapters or meters and the connection help offers no Bluetooth steps. An address given to `--adapter` is still opened. Takes effect on the next connect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
@@ -575,7 +575,7 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
 - Tab and Shift+Tab cycle through every control in visual order, with a visible focus outline.
 - Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the saturation/value square and the hue gradient also accept arrow keys.
-- The mode and range dropdowns under the reading open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes.
+- The mode and range dropdowns under the reading, and the Settings **Device** list, open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes. In the **Device** list, Left/Right move to the next column.
 - Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
 - The `?` help overlay and the **What's New** window keep focus inside while open and return it to the control that opened them when closed.
 
@@ -585,6 +585,7 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 
 - Every button, toggle, text field, and custom widget has a spoken name; icon-only buttons, color swatches, the graph minimap and the resize bars announce what they do instead of their glyph or color.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button and **Scale** announce whether they are currently on or off — you don't have to rely on the color change.
+- The **Device** list announces each meter by its full name, brand included, though a brand heading shows it once on screen.
 - The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
 - The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled".
 - The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-value traces drawn beside it, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.

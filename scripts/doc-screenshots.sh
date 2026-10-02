@@ -75,7 +75,7 @@ GRAPH_CROP="1428x983+492+48"
 # ends at x 1198 — and the plot as far as the trace's spike, without the
 # minimap. Narrow enough that the four still read side by side in a table.
 THEME_CROP="720x760+492+48"
-# The top bar and the whole settings panel — its closing rule is at y 610 —
+# The top bar and the whole settings panel — its closing rule is at y 615 —
 # over a band of the reading and graph below, enough to place the panel in the
 # window without carrying its full height.
 SETTINGS_CROP="1920x960+0+0"

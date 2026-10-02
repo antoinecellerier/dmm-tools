@@ -12,7 +12,7 @@ if it gave one; `Dmm::from_detected` opens the session with both, so the name is
 again. What each family sends and what it recognises is the family's own
 `Fingerprint`, declared in the family module next to the constants it already puts on the wire;
 `detect.rs` is the engine that runs them. This document is the algorithm and the reasons behind
-its shape; the CLI and GUI surface (`--device auto`, the Auto-detect chip) is described in
+its shape; the CLI and GUI surface (`--device auto`, the Auto-detect entry) is described in
 [cli-reference.md](cli-reference.md) and [gui-reference.md](gui-reference.md). Per-family
 verification status is not repeated here — it lives in the backlog's
 [Device auto-detection](verification-backlog.md#device-auto-detection) section. Where the
@@ -188,7 +188,7 @@ seen on a new cable joins detection there by being listed on it.
   VC920/VC940/VC960, which send the UT804's packets. It is receive-only past its init, which
   already sends `0x5A`, so detection there is a single listen window that takes any whole CR LF
   packet as a UT804. A packet does not name its model, so a UT71 or VC9x0 is claimed as a UT804
-  and has to be named (the GUI's device chip, saved once, or `--device ut71ab` / `ut71cde` /
+  and has to be named (the GUI's **Device** list, saved once, or `--device ut71ab` / `ut71cde` /
   `vc920`). The CH9325 starts at 2400 baud, where only the UT804 is heard: a UT803 talks at
   19200, so it is not detected and has to be named (`--device ut803`).
 - **UT-D07B** is a transparent UART bridge like the cables, so the UT61+, UT171 and UT181A
@@ -244,8 +244,8 @@ what gives a slow streamer (the UT8803) the whole walk instead of one window.
 | Misidentification from junk | Random bytes passing a lax extractor | Wrong parser, later parse errors | The [evidence ranking](#evidence-strength); the "Detected X" notice |
 | Stale frame from an earlier session | CH9329 does not purge RX on open | Family evidence before the probe reply | A name frame outranks a reading; a lone reading falls back |
 | UT181A vs UT171 ambiguity | Same framing and type byte, overlapping lengths | Wrong one of the two | Each rule declines the other's frames ([overlaps](#evidence-strength)) |
-| VC650BT reported as VC-880 | Byte-identical protocol | The wrong name, readings unaffected | Pick the VC650BT chip, or `--device vc650bt` |
-| UT71 or VC9x0 reported as UT804 | They send the UT804's packets | The wrong name, specs and range labels | Pick the model chip once, or `--device` |
+| VC650BT reported as VC-880 | Byte-identical protocol | The wrong name, readings unaffected | Pick the VC650BT in the GUI, or `--device vc650bt` |
+| UT71 or VC9x0 reported as UT804 | They send the UT804's packets | The wrong name, specs and range labels | Pick the model in the GUI once, or `--device` |
 | Unknown UT61+ name | A name not seen yet, or a future model | Reading works, tables may be off | Fallback tables, `reported_name` kept; aliases absorb variants |
 | Probe side effect on the wrong meter | The UT171 connect is UT181A start recording | A recording started, a beep, or nothing | [Probe order](#the-cascade) (`send_after`); `--device` skips probing |
 | Probe changes meter state | SET_MONITOR left on; the VC-890 ack burst | None expected | Both are sent in normal use anyway |

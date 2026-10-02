@@ -242,7 +242,10 @@ pub(crate) fn scroll_to_focus(ui: &Ui) {
     };
     // Only when the widget isn't already in view: a scroll that moves
     // nothing still unsticks a `stick_to_bottom` scroller from its end.
+    // The layer too: an open popup's entry can sit over the scroller's
+    // rect without being in it.
     if response.gained_focus()
+        && response.layer_id == ui.layer_id()
         && ui.min_rect().contains_rect(response.rect)
         && !ui.clip_rect().contains_rect(response.rect)
     {

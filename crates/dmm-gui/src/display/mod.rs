@@ -48,7 +48,7 @@ const MAX_CHOICE_POPUP_FONT_SIZE: f32 = 18.0;
 
 /// Marks the live entry in a readout selector's popup, in text as well as in
 /// the selection colour.
-const LIVE_CHOICE_MARK: &str = "\u{25CF}";
+pub(crate) const LIVE_CHOICE_MARK: &str = "\u{25CF}";
 
 /// Badge color for a flag: hazard in the error color, the conditions that
 /// cast doubt on the reading in the warning color, the rest in accent.
@@ -463,49 +463,59 @@ fn show_dropdown(
                             .color(text_color),
                     )
             };
-            listbox_dropdown(ui, dropdown.id_salt, combo, |ui, was_open| {
-                if let Some(heading) = dropdown.heading {
-                    ui.label(
-                        RichText::new(heading)
-                            .font(FontId::proportional(popup_size))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                }
-                let mut picked = None;
-                let mut responses = Vec::with_capacity(entries.len());
-                for (i, &(text, live)) in entries.iter().enumerate() {
-                    // Three spaces sit close enough under the mark to keep
-                    // the entries aligned without a figure space the bundled
-                    // fonts may not have.
-                    let text = if live {
-                        format!("{LIVE_CHOICE_MARK} {text}")
-                    } else {
-                        format!("   {text}")
-                    };
-                    let entry = ui.selectable_label(
-                        live,
-                        RichText::new(text).font(FontId::proportional(popup_size)),
-                    );
-                    // Focus lands on the live entry as the list opens — by
-                    // click, or by Enter/Space on the readout — so a screen
-                    // reader announces it and Enter picks it.
-                    if !was_open && i == focus_on_open {
-                        entry.request_focus();
+            listbox_dropdown(
+                ui,
+                dropdown.id_salt,
+                || 0,
+                combo,
+                |ui, was_open| {
+                    if let Some(heading) = dropdown.heading {
+                        ui.label(
+                            RichText::new(heading)
+                                .font(FontId::proportional(popup_size))
+                                .color(ui.visuals().weak_text_color()),
+                        );
                     }
-                    if entry.clicked() {
-                        picked = Some(i);
+                    let mut picked = None;
+                    let mut responses = Vec::with_capacity(entries.len());
+                    for (i, &(text, live)) in entries.iter().enumerate() {
+                        let entry = ui.selectable_label(
+                            live,
+                            RichText::new(choice_entry_text(text, live))
+                                .font(FontId::proportional(popup_size)),
+                        );
+                        // Focus lands on the live entry as the list opens — by
+                        // click, or by Enter/Space on the readout — so a screen
+                        // reader announces it and Enter picks it.
+                        if !was_open && i == focus_on_open {
+                            entry.request_focus();
+                        }
+                        if entry.clicked() {
+                            picked = Some(i);
+                        }
+                        responses.push(entry);
                     }
-                    responses.push(entry);
-                }
-                navigate_choice_entries(ui.ctx(), &responses);
-                picked
-            })
+                    navigate_choice_entries(ui.ctx(), &responses);
+                    picked
+                },
+            )
         })
         .inner;
     response
         .on_hover_text(dropdown.hover)
         .a11y_label(dropdown.a11y);
     picked
+}
+
+/// An entry of an open choice list: `text`, marked when it is the live one.
+pub(crate) fn choice_entry_text(text: &str, live: bool) -> String {
+    // Three spaces sit close enough under the mark to keep the entries
+    // aligned without a figure space the bundled fonts may not have.
+    if live {
+        format!("{LIVE_CHOICE_MARK} {text}")
+    } else {
+        format!("   {text}")
+    }
 }
 
 /// A `ComboBox` whose open list behaves as a native listbox, for every
@@ -517,6 +527,11 @@ fn show_dropdown(
 /// opens, which is when it moves focus onto an entry; arrow keys between
 /// entries are its own (`navigate_choice_entries`).
 ///
+/// `layout` names the list's shape, such as its column count, and is asked
+/// only while the list is open: egui sizes a popup on the frame it opens and
+/// only ever widens it after, so when the shape changes under an open list,
+/// the list closes for a frame and opens again at its new size.
+///
 /// This owns the rest. Esc and Tab close the list without a pick, a pick
 /// closes it, and focus returns to the box on every close but a click
 /// elsewhere. The mechanisms are the ones `color_edit` uses for its picker:
@@ -525,6 +540,7 @@ fn show_dropdown(
 pub(crate) fn listbox_dropdown<R>(
     ui: &mut Ui,
     id_salt: &'static str,
+    layout: impl Fn() -> usize,
     combo: impl FnOnce(ComboBox) -> ComboBox,
     add_entries: impl FnOnce(&mut Ui, bool) -> Option<R>,
 ) -> (Response, Option<R>) {
@@ -537,6 +553,14 @@ pub(crate) fn listbox_dropdown<R>(
     let was_open_key = button_id.with("was_open");
     let was_open: bool = ctx.data(|d| d.get_temp(was_open_key)).unwrap_or(false);
 
+    // The popup's id as `ComboBox` derives it from the box's (its private
+    // `widget_to_popup_id`, behind `ComboBox::is_open`).
+    let popup_id = button_id.with("popup");
+    let layout_key = button_id.with("layout");
+    let reopen_key = button_id.with("reopen");
+    if ctx.data_mut(|d| d.remove_temp::<bool>(reopen_key)) == Some(true) {
+        Popup::open_id(&ctx, popup_id);
+    }
     // Keys that leave the list, handled before it is drawn so this frame
     // already shows it closed: Tab and Shift+Tab step out of a listbox
     // rather than through it, Esc abandons it. `consume_key` drops the press;
@@ -551,6 +575,14 @@ pub(crate) fn listbox_dropdown<R>(
         if leave {
             Popup::close_all(&ctx);
             ctx.memory_mut(|m| m.move_focus(FocusDirection::None));
+        }
+        // A list left this frame stays closed, whatever its shape did.
+        let shape = layout();
+        let last: Option<usize> = ctx.data(|d| d.get_temp(layout_key));
+        ctx.data_mut(|d| d.insert_temp(layout_key, shape));
+        if !leave && last.is_some_and(|last| last != shape) {
+            Popup::close_id(&ctx, popup_id);
+            ctx.data_mut(|d| d.insert_temp(reopen_key, true));
         }
     }
 
@@ -569,6 +601,10 @@ pub(crate) fn listbox_dropdown<R>(
         Popup::close_all(&ctx);
     }
     let is_open = ComboBox::is_open(&ctx, button_id);
+    if is_open && !was_open {
+        // The shape it opened at, for the next frame to compare against.
+        ctx.data_mut(|d| d.insert_temp(layout_key, layout()));
+    }
     // A click outside the list that closed it may have landed on another
     // widget, which took the focus as it was drawn; that click is the user's
     // choice of focus. A click on an entry is `activated` and not
