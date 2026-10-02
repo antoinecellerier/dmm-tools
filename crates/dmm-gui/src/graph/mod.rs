@@ -72,7 +72,7 @@ pub(crate) const MAIN_SERIES: &str = "Main";
 const SERIES_DROP_FRAMES: u32 = 3;
 
 /// Width kept for the plotted unit's axis, and the narrowest plot worth
-/// giving up a right axis for, in points. Each right axis is reckoned at
+/// giving up the right axes for, in points. Their one column is reckoned at
 /// [`RIGHT_AXIS_ROOM`]: a label such as "49.98 Hz" plus margins.
 const LEFT_AXIS_ROOM: f32 = 60.0;
 const MIN_PLOT_WIDTH: f32 = 240.0;
@@ -865,8 +865,8 @@ impl Graph {
         units
     }
 
-    /// [`Graph::axis_units`] cut to the axes the graph's width has room for,
-    /// dropping the outermost first.
+    /// [`Graph::axis_units`] cut to the axes the graph's width has room for:
+    /// all of them, or the plotted unit's alone.
     fn drawn_units(&self) -> Vec<&str> {
         let mut units = self.axis_units();
         units.truncate(self.axis_room.max(1));
@@ -890,14 +890,15 @@ impl Graph {
     }
 
     /// Set how many axes fit a graph `width` points wide: room for the plot
-    /// beside the plotted unit's axis, then [`RIGHT_AXIS_ROOM`] per extra
-    /// unit.
+    /// beside the plotted unit's axis, then [`RIGHT_AXIS_ROOM`] for the one
+    /// column every right axis shares, their labels stacked.
     fn fit_axes_to(&mut self, width: f32) {
         let spare = width - LEFT_AXIS_ROOM - MIN_PLOT_WIDTH;
-        self.axis_room = 1
-            + (spare / RIGHT_AXIS_ROOM)
-                .floor()
-                .clamp(0.0, (MAX_AXES - 1) as f32) as usize;
+        self.axis_room = if spare >= RIGHT_AXIS_ROOM {
+            MAX_AXES
+        } else {
+            1
+        };
     }
 
     /// Restart each kept trace whose unit moved in this frame (a frequency

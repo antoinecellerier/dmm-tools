@@ -195,8 +195,9 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - A sub-value in another unit, such as a UT181A's frequency and period beside
   its AC voltage, gets a Y axis of its own on the right, with ticks in round
   steps of its unit on the same gridlines, and the key names every unit.
-  Each axis's ticks take its line's colour where that colour reads as text. A
-  narrow window drops the outermost right axes until it is widened
+  Each axis's ticks take its line's colour where that colour reads as text.
+  Two or more right axes share one column, each gridline's values stacked in
+  key order. A narrow window drops the right axes until it is widened
 - The minimap, the cursors, the Mean/Min/Max/Ref overlays and the
   visible-window statistics follow the plotted series, on the left axis
 

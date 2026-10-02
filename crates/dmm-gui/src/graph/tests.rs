@@ -1,7 +1,7 @@
 use super::render::{
     HoverSeries, KeyStyle, cursor_label_rect, hover_readout, layout_marker_flags,
-    level_label_rects, quantize_for_hash, segment_hits_rect, stepped, thin_for_drawing,
-    whole_number_marks,
+    level_label_rects, quantize_for_hash, segment_hits_rect, stacks_that_fit, stepped,
+    thin_for_drawing, whole_number_marks,
 };
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
@@ -2344,22 +2344,20 @@ fn a_stopped_sub_value_frees_its_axis() {
     assert_eq!(g.axis_units(), vec!["V", "Hz", "ms", "\u{2126}"]);
 }
 
-/// A narrow graph sheds right axes from the outermost in, down to the
-/// plotted unit alone; the traces keep their place for when it widens.
+/// Every right axis shares one column, so a graph has room for all of them
+/// or, too narrow, for the plotted unit's alone; the traces keep their place
+/// for when it widens.
 #[test]
-fn a_narrow_graph_sheds_the_outermost_axes() {
+fn a_narrow_graph_drops_the_right_column() {
     let mut g = Graph::new();
     push_units(&mut g, Instant::now(), &FIVE_UNITS[..3]);
     let refusal = |g: &Graph, label: &str| {
         let o = g.overlays.iter().find(|o| o.label == label).expect("kept");
         g.axis_refusal(o)
     };
-    g.fit_axes_to(1000.0);
+    g.fit_axes_to(LEFT_AXIS_ROOM + MIN_PLOT_WIDTH + RIGHT_AXIS_ROOM);
     assert_eq!(g.drawn_units(), vec!["V", "Hz", "ms", "A"]);
-    g.fit_axes_to(LEFT_AXIS_ROOM + MIN_PLOT_WIDTH + 2.0 * RIGHT_AXIS_ROOM);
-    assert_eq!(g.drawn_units(), vec!["V", "Hz", "ms"]);
-    assert_eq!(refusal(&g, "Current"), Some(AxisRefusal::Narrow));
-    g.fit_axes_to(200.0);
+    g.fit_axes_to(LEFT_AXIS_ROOM + MIN_PLOT_WIDTH + RIGHT_AXIS_ROOM - 1.0);
     assert_eq!(g.drawn_units(), vec!["V"]);
     assert!(drawn_overlay_labels(&g).is_empty());
     assert_eq!(refusal(&g, "Frequency"), Some(AxisRefusal::Narrow));
@@ -2386,6 +2384,23 @@ fn each_right_axis_frames_its_own_unit() {
     assert!(
         lo < 49.9 && lo > 49.8 && hi > 50.1 && hi < 50.2,
         "{lo}..{hi}"
+    );
+}
+
+/// Stacked right-axis labels keep to the plot's height and never overlap:
+/// on a short plot a line too close to the last keeps no stack.
+#[test]
+fn stacked_labels_fit_or_are_left_out() {
+    let room = egui::Rangef::new(100.0, 310.0);
+    assert_eq!(
+        stacks_that_fit(&[290.0, 110.0, 200.0], 30.0, room),
+        vec![200.0, 290.0],
+        "110 spills above the plot"
+    );
+    assert_eq!(
+        stacks_that_fit(&[150.0, 170.0, 190.0], 30.0, room),
+        vec![150.0, 190.0],
+        "170 would overlap 150's stack"
     );
 }
 

@@ -3,8 +3,8 @@
 
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
-    AxisHints, GridInput, GridMark, HLine, HoverPosition, Line, Plot, PlotBounds, PlotPoints,
-    PlotTransform, Points, Span, VLine,
+    AxisHints, GridInput, GridMark, HLine, HoverPosition, Line, Plot, PlotBounds, PlotPoint,
+    PlotPoints, PlotTransform, Points, Span, VLine,
 };
 use std::time::Instant;
 
@@ -555,6 +555,38 @@ const AXIS_TICK_SPACING: f32 = 50.0;
 /// either side of the text, plus a pixel of air.
 const RIGHT_AXIS_MARGIN: f32 = 9.0;
 
+/// Rows of stacked right-axis labels: a gap of this many points between
+/// one gridline's stack and the next.
+const STACK_GAP: f32 = 6.0;
+
+/// One right axis's tick label at a height on the plot, and its colour.
+type RightAxisLabel = (Box<dyn Fn(f64) -> String>, egui::Color32);
+
+/// A frame's right axes: see [`Graph::right_axes`].
+#[derive(Default)]
+struct RightAxes {
+    /// The plotted unit's grid step they share; `None` without any.
+    step: Option<f64>,
+    /// Each other unit's map onto the plot, in key order.
+    maps: Vec<(String, AxisMap)>,
+    /// The gridlines in view, in the plotted unit.
+    ticks: Vec<f64>,
+}
+
+impl RightAxes {
+    /// The map of `unit`'s axis, if it has one.
+    fn map_of(&self, unit: &str) -> Option<AxisMap> {
+        self.maps.iter().find(|(u, _)| u == unit).map(|&(_, m)| m)
+    }
+}
+
+/// An axis's tick colour for a line drawn in `series`: that colour where it
+/// reads as text on the panel, else the text colour. The unit on every tick
+/// stays the cue that needs no colour.
+fn tick_color(ui: &Ui, series: egui::Color32) -> egui::Color32 {
+    crate::theme::legible_on(series, ui.visuals().panel_fill).unwrap_or(ui.visuals().text_color())
+}
+
 /// The tick label a right axis writes at a height on the plot: the whole
 /// step of its unit there, then the unit.
 fn right_axis_label(map: AxisMap, unit: String) -> impl Fn(f64) -> String {
@@ -564,6 +596,24 @@ fn right_axis_label(map: AxisMap, unit: String) -> impl Fn(f64) -> String {
         let val = eframe::emath::format_with_decimals_in_range(v, decimals..=decimals);
         format!("  {val} {unit}")
     }
+}
+
+/// The gridlines, by height on screen (`mids`), whose stack of labels
+/// `height` tall fits: within `room`, and clear of the stack kept before
+/// it. A plot too short for a stack at each line keeps every other one, or
+/// none, as egui_plot drops labels it has no room for.
+pub(super) fn stacks_that_fit(mids: &[f32], height: f32, room: egui::Rangef) -> Vec<f32> {
+    let mut sorted = mids.to_vec();
+    sorted.sort_by(f32::total_cmp);
+    let mut kept: Vec<f32> = Vec::new();
+    for mid in sorted {
+        let (top, bottom) = (mid - height / 2.0, mid + height / 2.0);
+        let clear = kept.last().is_none_or(|&last| top >= last + height / 2.0);
+        if top >= room.min && bottom <= room.max && clear {
+            kept.push(mid);
+        }
+    }
+    kept
 }
 
 /// The value a drawn trace has at time `t`: its nearest point within the
@@ -948,6 +998,187 @@ impl Graph {
         Some(rect)
     }
 
+    /// The plotted unit's axis, on the left. On a grid shared with right axes
+    /// (`grid_step`) every tick is a whole step, written to the step's
+    /// decimals like theirs, and in the colour of the plotted line.
+    fn left_axis(
+        &self,
+        ui: &Ui,
+        grid_step: Option<f64>,
+        line_color: egui::Color32,
+    ) -> AxisHints<'static> {
+        let unit = self.current_unit.clone();
+        let axis = AxisHints::new_y().formatter(move |mark, _range| {
+            let (value, decimals) = match grid_step {
+                Some(step) => (
+                    (mark.value / step).round() * step,
+                    axes::step_decimals(step),
+                ),
+                None => (
+                    mark.value,
+                    (-mark.step_size.log10().round() as usize).min(6),
+                ),
+            };
+            let val = eframe::emath::format_with_decimals_in_range(value, decimals..=decimals);
+            if unit.is_empty() {
+                val
+            } else {
+                format!("{val} {unit}  ")
+            }
+        });
+        match grid_step {
+            Some(_) => axis.tick_label_color(tick_color(ui, line_color)),
+            None => axis,
+        }
+    }
+
+    /// The series the hover lists with right axes: the plotted one, named
+    /// `main_name`, then each drawn trace, every one with its unit.
+    fn hover_series<'a>(
+        &self,
+        main_name: &str,
+        plotted: &'a [Vec<[f64; 2]>],
+        traces: &'a [OverlayTrace],
+    ) -> Vec<HoverSeries<'a>> {
+        let plotted = HoverSeries {
+            name: main_name.to_string(),
+            segments: plotted,
+            unit: self.current_unit.clone(),
+        };
+        let traces = traces.iter().map(|(_, label, segments)| HoverSeries {
+            name: label.clone(),
+            segments: segments.as_slice(),
+            unit: self.overlay_unit(label).to_string(),
+        });
+        std::iter::once(plotted).chain(traces).collect()
+    }
+
+    /// This frame's right axes: one per sub-value unit drawn beside the
+    /// plotted series, aligned on a grid of round steps of the plotted unit
+    /// (`axes.rs`). None — egui_plot's own grid, as a single unit always
+    /// has — on a level's whole-number grid, or on a flat or non-finite range
+    /// (a Y: Fixed of "inf"), which has no steps to share.
+    fn right_axes(
+        &self,
+        ui: &Ui,
+        (view_min, view_max): (f64, f64),
+        (y_min, y_max): (f64, f64),
+    ) -> RightAxes {
+        let secondaries = self.secondary_targets(view_min, view_max);
+        let shareable = !self.levels && y_min.is_finite() && y_max.is_finite() && y_max > y_min;
+        if !shareable || secondaries.is_empty() {
+            return RightAxes::default();
+        }
+        // The stacked labels need a row each between gridlines.
+        let rows = secondaries.len() as f32;
+        let row_height = ui.text_style_height(&egui::TextStyle::Body);
+        let spacing = AXIS_TICK_SPACING.max(rows * row_height + STACK_GAP);
+        let max_ticks = (ui.available_height() / spacing).floor().clamp(2.0, 10.0);
+        let step = axes::primary_step(y_min, y_max, max_ticks as usize);
+        RightAxes {
+            step: Some(step),
+            maps: secondaries
+                .into_iter()
+                .map(|(unit, target)| (unit, axes::fit_secondary(y_min, y_max, step, target)))
+                .collect(),
+            ticks: (((y_min / step).ceil() as i64)..=((y_max / step).floor() as i64))
+                .map(|k| k as f64 * step)
+                .collect(),
+        }
+    }
+
+    /// The labels of `right`'s axes, each in the colour of the first of
+    /// `traces` drawn against it, and the width of the column they share:
+    /// this frame's widest label. egui_plot would otherwise size it from the
+    /// previous frame's, and the plot would shift sideways as labels change
+    /// length.
+    fn right_axis_labels(
+        &self,
+        ui: &Ui,
+        tc: &ThemeColors,
+        right: &RightAxes,
+        traces: &[OverlayTrace],
+    ) -> (Vec<RightAxisLabel>, f32) {
+        // The palette repeats after three colours, so a later axis whose
+        // colour an earlier one already wears takes the text colour: two
+        // axes in one colour would say their lines are one.
+        let mut worn: Vec<egui::Color32> = Vec::new();
+        let labels: Vec<RightAxisLabel> = right
+            .maps
+            .iter()
+            .map(|(unit, map)| {
+                let first = traces
+                    .iter()
+                    .find(|(_, label, _)| self.overlay_unit(label) == unit.as_str());
+                let color = match first.map(|&(k, _, _)| tc.graph_overlay(k)) {
+                    Some(c) if !worn.contains(&c) => {
+                        worn.push(c);
+                        tick_color(ui, c)
+                    }
+                    _ => ui.visuals().text_color(),
+                };
+                (Box::new(right_axis_label(*map, unit.clone())) as _, color)
+            })
+            .collect();
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let width = labels
+            .iter()
+            .flat_map(|(label, _)| right.ticks.iter().map(move |&y| label(y)))
+            .map(|text| {
+                ui.fonts_mut(|f| {
+                    f.layout_no_wrap(text, font.clone(), egui::Color32::PLACEHOLDER)
+                        .size()
+                        .x
+                })
+            })
+            .fold(0.0_f32, f32::max);
+        (labels, width)
+    }
+
+    /// Paint the right axes' labels in the column right of `plot`: at each
+    /// gridline, one row per axis, in key order and in its axis's colour,
+    /// centred on the line as egui_plot centres its own. They sit on the same
+    /// gridlines by construction, so one column holds them all.
+    fn paint_stacked_ticks(
+        ui: &Ui,
+        plot: egui::Rect,
+        transform: &PlotTransform,
+        ticks: &[f64],
+        rows: &[RightAxisLabel],
+    ) {
+        if rows.is_empty() {
+            return;
+        }
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let painter = ui.painter();
+        // egui_plot's margin before a right axis's text.
+        const INSET: f32 = 4.0;
+        let x = transform.bounds().min()[0];
+        let row_height = ui.text_style_height(&egui::TextStyle::Body);
+        let mids: Vec<f32> = ticks
+            .iter()
+            .map(|&y| transform.position_from_point(&PlotPoint::new(x, y)).y)
+            .collect();
+        let height = row_height * rows.len() as f32;
+        let fits = stacks_that_fit(&mids, height, plot.y_range().expand(row_height / 2.0));
+        for (&y, &mid) in ticks
+            .iter()
+            .zip(&mids)
+            .filter(|&(_, mid)| fits.contains(mid))
+        {
+            let galleys: Vec<_> = rows
+                .iter()
+                .map(|(label, color)| painter.layout_no_wrap(label(y), font.clone(), *color))
+                .collect();
+            let mut top = mid - height / 2.0;
+            for (galley, (_, color)) in galleys.into_iter().zip(rows) {
+                let row = galley.size().y;
+                painter.galley(egui::pos2(plot.right() + INSET, top), galley, *color);
+                top += row;
+            }
+        }
+    }
+
     /// Render the main graph.
     pub fn show_main(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
         let (view_min, view_max) = self.view_bounds();
@@ -1012,33 +1243,10 @@ impl Graph {
             .y_range_for_view(view_min, view_max, true)
             .unwrap_or((-1.0, 1.0));
 
-        // Sub-values in another unit each get a right axis, aligned on a grid
-        // of round steps of the plotted unit (`axes.rs`). Without one, the
-        // plot keeps egui_plot's own grid, as a single unit always has.
-        // Not on a level's whole-number grid, nor on a flat or non-finite
-        // range (a Y: Fixed of "inf"), which has no steps to share.
-        let secondaries = self.secondary_targets(view_min, view_max);
-        let shareable = !self.levels && y_min.is_finite() && y_max.is_finite() && y_max > y_min;
-        let grid_step = (shareable && !secondaries.is_empty()).then(|| {
-            let max_ticks = (ui.available_height() / AXIS_TICK_SPACING).floor();
-            axes::primary_step(y_min, y_max, max_ticks.clamp(2.0, 10.0) as usize)
-        });
-        let axis_maps: Vec<(String, AxisMap)> = match grid_step {
-            Some(step) => secondaries
-                .iter()
-                .map(|(unit, target)| {
-                    (
-                        unit.clone(),
-                        axes::fit_secondary(y_min, y_max, step, *target),
-                    )
-                })
-                .collect(),
-            None => Vec::new(),
-        };
-        let map_of = |label: &str| {
-            let unit = self.overlay_unit(label);
-            axis_maps.iter().find(|(u, _)| u == unit).map(|&(_, m)| m)
-        };
+        let right = self.right_axes(ui, (view_min, view_max), (y_min, y_max));
+        let grid_step = right.step;
+        let multi_axis = grid_step.is_some();
+        let map_of = |label: &str| right.map_of(self.overlay_unit(label));
 
         // Sub-value traces over the same window as the main series, minus
         // any the user switched off in the toolbar's Show: group, and any in
@@ -1053,77 +1261,18 @@ impl Graph {
             .collect();
         let key_entries = self.key_entries(&overlay_traces, !visible_segments.is_empty());
         let multi_series = !overlay_traces.is_empty();
-        let multi_axis = !axis_maps.is_empty();
 
-        let unit = self.current_unit.clone();
-        let y_axis = AxisHints::new_y().formatter(move |mark, _range| {
-            // On the shared grid every tick is a whole step, written to the
-            // step's decimals like the right axes beside it.
-            let (value, decimals) = match grid_step {
-                Some(step) => (
-                    (mark.value / step).round() * step,
-                    axes::step_decimals(step),
-                ),
-                None => (
-                    mark.value,
-                    (-mark.step_size.log10().round() as usize).min(6),
-                ),
-            };
-            let val = eframe::emath::format_with_decimals_in_range(value, decimals..=decimals);
-            if unit.is_empty() {
-                val
-            } else {
-                format!("{val} {unit}  ")
-            }
-        });
-        // With right axes, each axis's ticks take the colour of the first
-        // line drawn against it, where that colour reads as text on the
-        // panel; the unit on every tick stays the cue that needs no colour.
-        let panel = ui.visuals().panel_fill;
-        let tick_color = |series: egui::Color32| {
-            crate::theme::legible_on(series, panel).unwrap_or(ui.visuals().text_color())
-        };
-        let y_axis = if multi_axis {
-            y_axis.tick_label_color(tick_color(line_color))
-        } else {
-            y_axis
-        };
-        let mut y_axes = vec![y_axis];
-        if let Some(step) = grid_step {
-            let font = egui::TextStyle::Body.resolve(ui.style());
-            let ticks: Vec<f64> = (((y_min / step).ceil() as i64)
-                ..=((y_max / step).floor() as i64))
-                .map(|k| k as f64 * step)
-                .collect();
-            for (unit, map) in &axis_maps {
-                let label = right_axis_label(*map, unit.clone());
-                // As wide as this frame's widest label: egui_plot otherwise
-                // sizes the axis from the previous frame's, and the plot
-                // shifts sideways as labels change length.
-                let width = ticks
-                    .iter()
-                    .map(|&y| {
-                        ui.fonts_mut(|f| {
-                            f.layout_no_wrap(label(y), font.clone(), egui::Color32::PLACEHOLDER)
-                                .size()
-                                .x
-                        })
-                    })
-                    .fold(0.0_f32, f32::max);
-                let first = overlay_traces
-                    .iter()
-                    .find(|(_, label, _)| self.overlay_unit(label) == unit.as_str());
-                let color = first.map_or(ui.visuals().text_color(), |&(k, _, _)| {
-                    tick_color(Self::overlay_color_and_style(tc, k).0)
-                });
-                y_axes.push(
-                    AxisHints::new_y()
-                        .placement(egui_plot::HPlacement::Right)
-                        .tick_label_color(color)
-                        .min_thickness(width + RIGHT_AXIS_MARGIN)
-                        .formatter(move |mark, _range| label(mark.value)),
-                );
-            }
+        let mut y_axes = vec![self.left_axis(ui, grid_step, line_color)];
+        // The right axes share one column, their labels painted once the plot
+        // is drawn (`paint_stacked_ticks`); egui_plot only keeps its width.
+        let (right_labels, column_width) = self.right_axis_labels(ui, tc, &right, &overlay_traces);
+        if !right_labels.is_empty() {
+            y_axes.push(
+                AxisHints::new_y()
+                    .placement(egui_plot::HPlacement::Right)
+                    .min_thickness(column_width + RIGHT_AXIS_MARGIN)
+                    .formatter(|_, _| String::new()),
+            );
         }
 
         // The marker flags hang in the time axis's row, so the time labels
@@ -1207,22 +1356,8 @@ impl Graph {
         // With a right axis, a height on the plot means a different value on
         // each axis, so the readout lists every drawn series at the hovered
         // time instead, in its own unit — the one under the pointer first.
-        let hover_series: Vec<HoverSeries> = if multi_axis {
-            std::iter::once(HoverSeries {
-                name: main_name.clone(),
-                segments: visible_segments.as_slice(),
-                unit: self.current_unit.clone(),
-            })
-            .chain(
-                overlay_traces
-                    .iter()
-                    .map(|(_, label, segments)| HoverSeries {
-                        name: label.clone(),
-                        segments: segments.as_slice(),
-                        unit: self.overlay_unit(label).to_string(),
-                    }),
-            )
-            .collect()
+        let hover_series = if multi_axis {
+            self.hover_series(&main_name, &visible_segments, &overlay_traces)
         } else {
             Vec::new()
         };
@@ -1478,6 +1613,13 @@ impl Graph {
         });
 
         self.plot_rect = Some(response.response.rect);
+        Self::paint_stacked_ticks(
+            ui,
+            response.response.rect,
+            &response.transform,
+            &right.ticks,
+            &right_labels,
+        );
 
         let overlay = OverlayLabelData {
             show_mean,
