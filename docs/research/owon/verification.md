@@ -207,13 +207,14 @@ and each still wants a capture of our own.
   VC891, VC915, VC925 PV): name, GATT discovery, FFF2 and FFF4 in DC V —
   settles [§10.2](reverse-engineered-protocol.md#102-framing)'s frames per
   notification and the `FF` skip, G24 bits 11 and 13-23 and V24 bit 19
-  (VC871 captures: bit 11 with the sub-display, bits 16-23 `F0`, §14.4).
+  (VC871: one frame per notification, bit 11 with the sub-display, bits
+  13-23 `0x780`, §14.2, §14.4).
 - The advertised name of a Voltcraft meter out of the box: "BDM", "VC871",
-  "VC891", "VCxxx" or "VC8xx_1" (§2) — decides the entries' names. Needs a
-  passive scan of each, VC871 and VC915 first.
-- FFF4's properties on each 15-byte model: notify only, or also write —
-  decides whether OWON's profile is chosen over the FFF0 one. Needs GATT
-  discovery per model.
+  "VC891", "VCxxx" or "VC8xx_1" (§2; Windows listed a VC871 as "VC871",
+  §14.4) — decides the entries' names. Needs a passive scan of each.
+- FFF4's properties on each 15-byte model: notify only, or also write
+  (notify only on two VC871s, §14.2) — decides whether OWON's profile is
+  chosen over the FFF0 one. Needs GATT discovery per model.
 - V24 status 5, which the app logs as large error data
   ([§10.4](reverse-engineered-protocol.md#104-reading-word-v24)) — settles
   what makes a meter send it. Needs a reading near a range's limit.

@@ -220,6 +220,25 @@ Read on 2026-10-01, at the commit given:
 10. EEVblog: search-result snippets only, no forum page fetched; they added
     nothing beyond the projects above.
 
+Read on 2026-10-02 for the 15-byte meters, after their vendor text was
+committed (`ca23ba9d`), the user having opened the boundary for them that
+day:
+
+11. webspiderteam discussion #66 again, with its attachments `uuids.txt`,
+    RefuCire's 2025-09-24 log and FireBird3314's `TestLogs.zip` (its
+    `Debug.zip` attachments are executables and were not opened); the
+    repository unchanged at `2b83d9e`.
+12. [libreble/multimeter](https://github.com/libreble/multimeter) `d26ba48`:
+    `docs/protocols/voltcraft.md`, `drivers/voltcraft.ts`.
+13. [ble-multimeter/fakemeter](https://github.com/ble-multimeter/fakemeter)
+    `4cca1d5`: `docs/PROGRESS.md`, `docs/owon-voltcraft-handshake.md`,
+    `docs/voltcraft-measurement-protocol.md` (one author's adapter address
+    in `PROGRESS.md` left out).
+14. GitHub repository and code search, and web search (EEVblog and Reddit as
+    result snippets only), for each model, `com.voltcraft.series800`,
+    `#TIMEsync`, `imeter_base` and `owon_imeter`: nothing else with data on
+    these meters, 2026-10-02.
+
 Opened, not about this family: [bialybudyn/Owon-Multimeter-Manager](https://github.com/bialybudyn/Owon-Multimeter-Manager)
 `65da106` (the XDM2041 bench meter over SCPI).
 

@@ -169,7 +169,7 @@ same for every code but 55 [VENDOR, both]. The manuals' counts are in §9.1.
 | Item | Value | Source | Tag |
 |---|---|---|---|
 | Advertised name | "BDM" by default: the app's device list shows it ("select BDM", "Click 'BDM' in the device list to pair") | B35-UM p.26/21; OW18-UM p.24/19; OW16-UM p.25/20; B33-UM p.24/19; CM2100-UM p.17/14-18/15 | [KNOWN] (cross-reference §14) |
-| Name, 15-byte meters | "BDM" in the app's list in the CMS and OW6x manuals, and on every device card and controls screen of VAPP, whose controls screen shows the VC925's key list (§10.8). Voltcraft's meter manuals say to select "VC871", "VC891" or "VCxxx"; VC-APP's screenshots show "VC8xx_1" and "VC8xx_2" | CMS101-UM p.34/29; OW65-UM p.28/23-29/24; OW67-UM p.33/28-34/29; OW69-UM p.30/25-31/26; VAPP p.6-8, p.11, p.14-15, p.20, p.22-23; VC871-UM p.92; VC891-UM p.82; VC915-UM p.88; VC925-UM p.94; VC-APP p.12, p.15 | [KNOWN]; which name a Voltcraft meter advertises out of the box is [UNVERIFIED] |
+| Name, 15-byte meters | "BDM" in the app's list in the CMS and OW6x manuals, and on every device card and controls screen of VAPP, whose controls screen shows the VC925's key list (§10.8). Voltcraft's meter manuals say to select "VC871", "VC891" or "VCxxx"; VC-APP's screenshots show "VC8xx_1" and "VC8xx_2" | CMS101-UM p.34/29; OW65-UM p.28/23-29/24; OW67-UM p.33/28-34/29; OW69-UM p.30/25-31/26; VAPP p.6-8, p.11, p.14-15, p.20, p.22-23; VC871-UM p.92; VC891-UM p.82; VC915-UM p.88; VC925-UM p.94; VC-APP p.12, p.15 | [KNOWN]; which name a Voltcraft meter advertises out of the box is [UNVERIFIED] (cross-reference §14) |
 | Rename | the app can rename the meter; the name "will be memorized in the device"; "Only digits, letters and underscore can be entered". Voltcraft: "The new name is permanently stored on the multimeter" | B35-UM p.28/23; VAPP p.7 | [KNOWN]; the command is §7.2 |
 | Renamed name advertised | the app shows only advertised names in its list, and the manual says the name is stored in the meter | — | [INFERRED]; [UNVERIFIED] on a meter (cross-reference §14) |
 | Name filter | none in either program. The app shows any peer whose name, stripped to `[0-9a-zA-Z_]`, is not empty, de-duplicated by id (`device_add_view_model.dart:202-563`; `built_in_ble_device.dart:36-78`); the PC lists every advertiser by address, its name field left `""` with the comment `// "BDM"` (`kernal/Event.java:178-191`, `:188`) | app, PC | [VENDOR, both] |
@@ -801,7 +801,7 @@ and §10.5's, matched by name [INFERRED]:
 | NCV (13) | yes | no | no | no | no | no |
 | Power W, VA, PF (14, 15, 16) | no | no | AC and DC power | no | no | no |
 | 4~20 mA (17) | no | yes | yes | yes | yes | yes |
-| USB power (18-22) | no | no | yes (mAh, Wh, V, A, a timer) | no | no | no |
+| USB power (18-22) | no | no | yes (mAh, Wh, V, A, a timer; cross-reference §14, D11) | no | no | no |
 | AC+DC V (23) | no | no | no | yes | yes | no |
 | Motor (24) | no | no | no | no | yes | no |
 | Solar, angle, compass (25-27) | no | no | no | no | no | with the LX-925 |
@@ -872,7 +872,8 @@ included (§10.10) [VENDOR, app]. The VC831 and VC851 have no Bluetooth
 Each notification is cut into 15-byte chunks and a shorter remainder dropped
 (BM:367-399); nothing is kept between notifications, so a frame split across
 two is lost to the app (BM:357-405) [VENDOR, app]. Whether a meter ever
-splits one, or sends several per notification, is [UNVERIFIED]. A chunk whose byte 14 is `FF` is skipped (BM:399-405); that
+splits one, or sends several per notification, is [UNVERIFIED]
+(cross-reference §14). A chunk whose byte 14 is `FF` is skipped (BM:399-405); that
 the byte tested is the last is [INFERRED from the listing selector read as
 `last`]. Whether real frames end in `FF` filler is [UNVERIFIED].
 
@@ -1173,7 +1174,10 @@ Every point a community source disputes was re-read in OWON's app and PC
 source alone: the reading of OWON's code in §1-12 holds in every case, and
 no body statement changed. One [INFERRED] statement, that the meters
 advertise FFF0, is contradicted by captures (D1); it keeps its tag and
-points here. Sources and the boundary:
+points here. A second read on 2026-10-02, after the 15-byte meters' vendor
+text was committed (`ca23ba9d`), covered those meters under the same rule;
+only the VC871 has hardware data, and one [INFERRED] mapping of §9.4 is
+contradicted (D11). Sources and the boundary:
 `reverse-engineering-approach.md`.
 
 DeanCording's B35T+ work (2018) is the root of most later 6-byte clients
@@ -1199,8 +1203,9 @@ their captures (§14.5).
 | [jtcash/OwonB41T](https://github.com/jtcash/OwonB41T) `9d880c2` (2021; art-ya/OwonB41T `1f23cba` forks it) | B41T+ | WinRT client: keys, `*DATe`, `*RECOrd,`, `*READlen?`, `*READ1?`, rename (`B41T.cpp:133-262`; `packet_handler.hpp:9-30`) | README read-back run | Unlicense |
 | [likeablob/owon-bdm-webui](https://github.com/likeablob/owon-bdm-webui) `00a61b8`; [PBrunot/owonb41t](https://github.com/PBrunot/owonb41t) `db9dbbe`; [palmerr23/Owon_B41T](https://github.com/palmerr23/Owon_B41T) `dec8a5b` | B41T+ | Web Bluetooth clients; an ESP32 bridge that writes the CCCD (`BLEfuncs.h:71`) | No | MIT; MIT; none |
 | [pjpa365/owon-suite](https://github.com/pjpa365/owon-suite) `693b534` (2026) | B41T+ | GATT enumeration, FFF2, write rules, offline read-back (`docs/protocol-spec.md` §2.1, §4-6) | Yes, 2026-07: `poc/tests/test_protocol.py:104-157` | none stated |
-| [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) `2b83d9e`, discussions [#49](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows/discussions/49) and [#66](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows/discussions/66) | B35T+ (a reporter, #49); Voltcraft VC871 (two reporters, #66) | Decoders for the 14-, 6- and 15-byte frames (`Decoders/DecoderOwon.cs`, whose comment also quotes a decompiled older OWON Android app) | Yes: 840 6-byte frames in `Utilities.cs` (`dev_type == 6`, `:1342`), added in `fb9ff02` on 2024-04-15, the day the #49 B35T+ owner posted OL logs [INFERRED provenance]; VC871 frames with the owner's readings and FireBird3314's bit notes (`VC871 BLE GATT.txt`, #66) | none stated |
-| [libreble/multimeter](https://github.com/libreble/multimeter) `d26ba48` | none ("not yet live on a physical meter") | Ports of webspiderteam (`docs/protocols/owon-plus.md`, `owon-old.md`) | No | MIT |
+| [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) `2b83d9e`, discussions [#49](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows/discussions/49) and [#66](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows/discussions/66) | B35T+ (a reporter, #49); Voltcraft VC871 (two reporters, #66) | Decoders for the 14-, 6- and 15-byte frames (`Decoders/DecoderOwon.cs`, whose comment also quotes a decompiled older OWON Android app) | Yes: 840 6-byte frames in `Utilities.cs` (`dev_type == 6`, `:1342`), added in `fb9ff02` on 2024-04-15, the day the #49 B35T+ owner posted OL logs [INFERRED provenance]; VC871 frames with the owner's readings and FireBird3314's bit notes (`VC871 BLE GATT.txt`, #66); read again 2026-10-02: #66's attachments `uuids.txt` (11 GATT dumps, two meters), RefuCire's log (411 frames) and FireBird3314's `TestLogs.zip` (369 raw notifications, 220 frames with the app's decode, 2026-01-23) | none stated (the repository's LICENSE is Microsoft's MIT text for "Bluetooth LE Explorer") |
+| [libreble/multimeter](https://github.com/libreble/multimeter) `d26ba48` | none ("not yet live on a physical meter") | Ports of webspiderteam (`docs/protocols/owon-plus.md`, `owon-old.md`); a Voltcraft driver (`docs/protocols/voltcraft.md`, `drivers/voltcraft.ts`, read 2026-10-02) | No | MIT |
+| [ble-multimeter/fakemeter](https://github.com/ble-multimeter/fakemeter) `4cca1d5` (2026-06) | none: a BlueZ emulator posing as code 91 (VC915) to Voltcraft's app 1.2.3 | The app's writes and checks against an emulated meter (`docs/PROGRESS.md`, `docs/owon-voltcraft-handshake.md`) | No meter; the vendor app's writes, captured | MIT |
 | [53845714nF/OWON_B35T](https://github.com/53845714nF/OWON_B35T) `cbf1051`; [luissantos/multimeter_gui](https://github.com/luissantos/multimeter_gui) `44d6c4b`; [VYD3N/Mult-AI-Meter](https://github.com/VYD3N/Mult-AI-Meter) `89620da` | B35T+; B41T+; unstated | Derivative clients | No | MIT; none stated; none |
 | [sigrok-devel, 2017-02-27](https://sourceforge.net/p/sigrok/mailman/message/35691836/) | B35T | "based on the Fortune Semiconductor FS9922-DMM4", its serial data sent over BLE | No | — |
 
@@ -1227,6 +1232,11 @@ Nothing on these meters in libsigrok (`0bc2487`: OWON appears only in
 | §8.2 dump framing | 20 `FF`, payload, 20 `FF`, in 20-byte notifications (DeanCording's B35T+ example; pjpa365's B41T+ streams) | captures |
 | §8.3 payload | Century, YY…ss, byte 7 `00`, interval u32 in s, a u32, then a range word (`(b1 & FC) == F0`) and readings; a new range word at each range or OL change (pjpa365) | captures |
 | §9.1 | Bluetooth suspends auto power-off: "The meter will not sleep while BT is enabled" (cransom README) | user report |
+| §2 GATT, VC871 | FFF0 holds FFF1 (Read, Write Without Response, Write), FFF2 (Read), FFF3 (Write), FFF4 (Notify only) and FFF5 (Read); identical in 11 dumps from two meters. The declaration handles put the values at 0x0015, 0x0017, 0x0019 and 0x001B, the PC's "OW" handles [INFERRED from the declaration-handle arithmetic] | `uuids.txt` (#66), WinRT dumps |
+| §3.1, §3.4 on the VC871 | It streams after a CCCD write alone: no FFF2 read, challenge or `#TIMEsync` (webspiderteam's client, `GattMonitor.cs:331-335`; both owners got readings) | working client |
+| §10.2 framing | One 15-byte frame per notification (369 raw notifications, all 15 bytes); byte 14 never `FF` | capture (VC871) |
+| §10.3-10.5 | G24 bits 13-23 are `0x780` (byte 2 and byte 8 `F0`) in every main and sub word; magnitudes above 16 bits (540.74 mV as `3A D3 00`); OL as V24 status 1 with decimal code 7; Time (19) in seconds (sub 62 against the LCD's "00:01:02"); prefix 4 with duty, ℃, ℉, PF, Time, diode and continuity | capture (VC871), LCD photo |
+| §10.8 keys, `#TIMEsync` | Voltcraft's app 1.2.3, driving an emulated code 91, wrote exactly `_c91Keys`' short presses to FFF3 and `#TIMEsync` to FFF1 after the subscribe, needing no reply; it accepted the raw 16-byte MD5 and showed "code:3" on a wrong one, "code:-2" for an FFF2 shorter than 6 bytes | fakemeter `docs/PROGRESS.md:549-605`; the vendor app's behaviour, no meter |
 | §10 15-byte frame | The VC871 frames in §14.5 decode per §10.2-10.5 to the readings reported, where one is; FireBird3314's notes match G24 bits 0-2, 3-5, 6-10 and 12, V24 bits 0-18 (">65535 counts" at bit 16), OL at bit 20 (status 1), sign at bit 23, status bits 0-5 and functions 14-22 | captures (VC871) |
 | §11 14-byte layout | Sign, four ASCII digits, space, a DP byte `1`/`2`/`4`, four status bytes, a bar-graph byte, CR LF (inflex, akemnade, cransom, reaper7, ondras12345) | captures |
 
@@ -1248,6 +1258,8 @@ error.
 | D8 | §8.2 the closing 20 `FF` | pjpa365 §6.2: "there isn't one — no `0xFFFF` terminator" | Both expect it | community error: its own streams end in 20 `FF` (`_OPEN_CIRCUIT_FULL_STREAM`, `_VOLTAGE_FULL_STREAM`), and its 86- and 116-byte totals include them | settled |
 | D9 | §7.2 `*RECOrd,` interval in s | DeanCording's README example: `40 16 40 00` (4 200 000) with count `10 27 00 00` (10 000) | Both seconds; PC "Sec" | unexplained example: DeanCording's code, jtcash and pjpa365 send seconds, and pjpa365's headers echo 1, 2 and 3 | settled |
 | D10 | §6.2 function 9 = ℉ | kwasmich: at ℉ the OW18E sends 9 "(value is in °C)" (`ow18e.txt`) | Both label 9 ℉ and show the count as sent | unsettled: a note, no capture | An OW18E at ℉ against its LCD |
+| D11 | §9.4's functions table: 18-22 as the OW67B/VC871's USB power [INFERRED by name] | VC871: 21 (V) and 22 (A) also come in AC power (status bit 13: 21 with sub 3, A AC) and DC power (bit 14: 14 with sub 22, 21 with sub 22); 18 (mAh) and 20 (Wh) with sub 19 under bit 15 (USB) | The app labels 21 "Power, V" and 22 "Power, A", with no USB tie (PE:122-869) | our inference vs meter: the captures | Settled for the VC871 |
+| D12 | §10.1, §10.3 | libreble: "VC800 / R2W meters use a SEPARATE 6-byte protocol" (`docs/protocols/voltcraft.md:27`); "the real meter sends [the sub block] zero with bit 12 cleared" (`:65`); functions above 13 rejected (`:41-47`); "redundant AC/DC state bits 13/14" (`:88`). fakemeter: big-endian words (`docs/voltcraft-measurement-protocol.md:17`, `:36`), prefixes only p-m (`:228-231`) | Codes 87 and 89 are 15-byte (§10.1); bits 13/14 are the app's AC and DC chips (§6.6) | community errors, none from hardware: the VC871 sends 15 bytes, functions 14-22, sub words filled with bit 12 clear (§14.4), bits 13/14 only in power modes, and prefixes k and M, little-endian | settled |
 
 ### 14.4 New
 
@@ -1276,8 +1288,15 @@ Facts §1-12 lack or mark [UNVERIFIED], from captures unless marked:
 | Long presses (§7.1) | `02 00` back to auto range, `03 00` backlight, `04 00` Bluetooth off, `06 00` leave MIN/MAX (B35T+, DeanCording's interactive keys; reused for the B41T+ by likeablob and pjpa365, only HOLD confirmed); `03 00` light on an OW18B (MartMet) | DeanCording README; MartMet README |
 | `*READlen?` (§7.2) | Read as a u32: the payload's byte count, 62 on a B41T+ | jtcash README, `B41T.cpp:223-249` |
 | Read-back (§8) | 2-3 live frames precede the opening `FF`s and live frames resume after the closing ones; the date reads 0 (century 0) until `*DATe` has been sent; `interval` 0 is accepted (pjpa365 timed about 500 samples/s, once, by stopwatch) | pjpa365 §6, DeanCording README |
-| G24 (§10.3) | Bit 11 is 0 in the main word and 1 in the sub-display word; bits 16-23 are `F0` in both, like §10.9's offline marker; the sub-display bytes are filled even with bit 12 clear | VC871 frames and notes (#66) |
-| 15-byte status (§10.6) | VC871: bit 8 LoZ, 12 power factor, 13 AC, 14 DC and 15 USB power measurement — the app's Loz, CosPhi, AC, DC and USB; bits 6-7, 9-11 and 16-23 always 0 | FireBird3314 (#66) |
+| G24 (§10.3) | Bit 11 is 0 in the main word and 1 in the sub-display word; bits 16-23 are `F0` in both, like §10.9's offline marker; the sub-display bytes are filled even with bit 12 clear: a Hz word `A1 09 F0` carrying the main reading's magnitude early in a session, then `A2 09 F0 00 00 00` once a function with a sub-display has run, and a ℃ word (268.6) at µA DC | VC871 frames and notes (#66) |
+| 15-byte status (§10.6) | VC871: bit 8 LoZ, 12 power factor, 13 AC, 14 DC and 15 USB power measurement — the app's Loz, CosPhi, AC, DC and USB (FireBird3314's notes); bit 16 set in 4 notifications right after the dial moved from mA AC to A DC (`… 04 00 01`), the app's "Err_port" [INFERRED: a wrong-jack warning]; AUTO clear at mV AC, continuity, diode, ℃, ℉ and in power modes; bits 6-7, 9-11 and 17-23 never seen set | FireBird3314 (#66), notes and captures |
+| GATT extras (§2) | VC871: GAP Device Name Read + Notify; Device Information 2A29, 2A24, 2A26; a vendor service `00010203-0405-0607-0809-0a0b0c0d1912` (`…1911` in later dumps) with one Read + Write Without Response characteristic | `uuids.txt` (#66) |
+| Name (§2) | Windows listed FireBird3314's VC871 as "VC871"; advertised name or GAP name cannot be told apart there | #66, 2026-01-25 |
+| OL (§10.4) | The magnitude at OL is not full scale or 0: 10971 (kΩ), 911 (MΩ), 32258 (diode), `0x7FFFF` (nF) | capture (VC871) |
+| Repeats (§10.2) | Unchanged frames are notified again; the rate is not logged | capture (VC871) |
+| Sub-display pairs (§10, §9.4) | V AC and A AC with Hz; Hz with duty and duty with Hz; ℃ with ℉ and back; W with VA; PF with Hz; the power modes as D11 | capture (VC871) |
+| Bluetooth (§9.4) | Bluetooth needs the BLE key after each power-on; an auto-reconnecting client still sees a ~1 s connection as the meter starts | FireBird3314 (#66), user report |
+| Not seen (§10) | On the VC871: functions 17 and 23-29, V24 statuses 2-7, V24 bit 19, REL/MAX/MIN frames (§10.7), FFF2's bytes, the advertisement, any reply to keys or `#TIMEsync`. No capture of any other 15-byte model, 2026-10-02 | all |
 | 15-byte models (§10.1) | The VC871 streams 15-byte frames on FFF4, up to 60000 counts | #66 |
 
 ### 14.5 Captured vectors
@@ -1314,3 +1333,30 @@ Decoded with §5-6 (§10 for the VC871, §11 for the 14-byte frames).
 | #66, VC871 | `21 12 F0 F9 00 00 61 1A F0 00 03 00 00 00 00` | ℃, dp 1, sub present: 24.9; sub ℉: 76.8 | fits |
 | #66, VC871 | `A1 13 F0 00 00 00 E1 1B F0 00 00 00 00 20 00` | function 14 (W), sub 15 (VA); status bit 13 | fits ("Power Measurement", "VA") |
 | #66, VC871 | `20 15 F0 00 00 00 E0 1C F0 00 00 00 00 80 00` | function 20 (Wh), sub 19 (Time); status bit 15 | fits ("Wh", time on the sub-display) |
+| #66 `TestLogs.zip`, VC871 | `24 00 F0 21 15 00 A1 09 F0 21 15 00 04 00 00` | 0.5409 V DC; sub Hz word with the main magnitude, bit 12 clear | fits |
+| same | `1A 00 F0 3A D3 00 A2 09 F0 00 00 00 04 00 00` | 540.74 mV DC (a 19-bit magnitude) | fits |
+| same | `59 10 F0 3B 02 00 A2 19 F0 00 00 00 00 00 00` | 57.1 mV AC, sub 0.00 Hz; no AUTO | fits |
+| same | `29 01 F0 71 0E 00 A2 09 F0 00 00 00 04 00 00` | 369.7 kΩ | fits |
+| same | `A4 02 F0 83 15 00 A2 09 F0 00 00 00 00 00 00` | 0.5507 V diode | fits |
+| same | `4C 01 F0 B6 02 00 A2 09 F0 00 00 00 04 00 00` | 0.0694 nF | fits |
+| same | `A3 11 F0 53 C3 00 E2 19 F0 77 11 00 04 00 00` | 50.003 Hz, sub 44.71 % | fits |
+| same | `E2 11 F0 7A 14 00 A3 19 F0 96 C6 00 04 00 00` | 52.42 %, sub 50.838 Hz | fits |
+| same | `21 12 F0 E2 00 00 61 1A F0 D8 02 00 00 00 00` | 22.6 ℃, sub 72.8 ℉ | fits |
+| same | `61 12 F0 0F 03 00 21 1A F0 01 01 00 00 00 00` | 78.3 ℉, sub 25.7 ℃ | fits |
+| same | `91 00 F0 36 3E 80 21 0A F0 7E 0A 00 04 00 00` | −1592.6 µA DC; sub ℃ word, bit 12 clear | fits |
+| same | `D1 10 F0 88 06 00 A2 19 F0 00 00 00 04 00 00` | 167.2 µA AC | fits |
+| same | `9B 00 F0 90 06 80 A2 09 F0 00 00 00 04 00 00` | −1.680 mA DC | fits |
+| same | `DA 10 F0 62 00 00 A2 19 F0 00 00 00 04 00 00` | 0.98 mA AC | fits |
+| same | `A4 00 F0 4D 0B 00 A2 09 F0 00 00 00 04 00 00` | 0.2893 A DC | fits |
+| same | `E3 10 F0 4E 00 00 A2 19 F0 00 00 00 04 00 00` | 0.078 A AC | fits |
+| same | `A1 13 F0 82 12 00 E1 1B F0 00 00 00 00 20 00` | 473.8 W, sub 0.0 VA; bit 13 | fits |
+| same | `23 14 F0 01 00 80 A1 19 F0 00 00 00 00 30 00` | −0.001 PF, sub 0.0 Hz; bits 12-13 | fits |
+| same | `62 15 F0 00 00 00 A2 1D F0 1D 00 00 00 80 00` | function 21 0.00 V, sub 22 0.29 A; bit 15 (USB) | fits |
+| same | `98 14 F0 00 00 00 E0 1C F0 00 00 00 00 80 00` | 0 mAh (18, prefix m), sub Time 0; bit 15 | fits the LCD photo's mode |
+| same | `61 15 F0 04 00 00 E1 18 F0 00 00 00 00 20 00` | function 21 0.4 V, sub A AC 0.0; bit 13 (AC power) | no reading stated (D11) |
+| same | `A3 00 F0 00 00 00 A2 09 F0 00 00 00 04 00 01` | 0.000 A DC; AUTO and bit 16 | no reading stated |
+| same | `2F 01 F0 DB 2A 10 …`, `4F 01 F0 FF FF 17 …` | kΩ and nF, decimal code 7 and V24 status 1: OL | fits ("OL") |
+
+The `TestLogs.zip` readings are webspiderteam's decoder output, which the
+owner said matched the meter ("all values and units are displayed
+correctly", #66).
