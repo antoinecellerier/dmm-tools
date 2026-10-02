@@ -1,7 +1,7 @@
 use super::render::{
-    HoverSeries, KeyStyle, cursor_label_rect, hover_readout, layout_marker_flags,
-    level_label_rects, quantize_for_hash, segment_hits_rect, stacks_that_fit, stepped,
-    thin_for_drawing, whole_number_marks,
+    HoverSeries, KeyStyle, cursor_label_rect, hover_lines, layout_marker_flags, level_label_rects,
+    quantize_for_hash, segment_hits_rect, stacks_that_fit, stepped, thin_for_drawing,
+    whole_number_marks,
 };
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
@@ -2566,25 +2566,34 @@ fn the_hover_lists_every_series_at_its_time() {
             name: "Main".into(),
             segments: &volts,
             unit: "V".into(),
+            color: egui::Color32::RED,
         },
         HoverSeries {
             name: "Frequency".into(),
             segments: &hz,
             unit: "Hz".into(),
+            color: egui::Color32::BLUE,
         },
     ];
+    let rows = |hovered, t, overload| hover_lines(&series, hovered, t, overload, 1);
     assert_eq!(
-        hover_readout("0.5 s", &series, "Frequency", 0.5, false, 1),
-        "0.5 s\nFrequency: 50.1 Hz\nMain: 230.0 V"
+        rows("Frequency", 0.5, false),
+        vec![
+            (1, "Frequency: 50.1 Hz".to_string()),
+            (0, "Main: 230.0 V".to_string())
+        ]
     );
     assert_eq!(
-        hover_readout("1.2 s", &series, "", 1.2, false, 1),
-        "1.2 s\nMain: 231.0 V",
+        rows("", 1.2, false),
+        vec![(0, "Main: 231.0 V".to_string())],
         "Frequency is in a break at 1.2 s"
     );
     assert_eq!(
-        hover_readout("1.2 s", &series, "", 0.2, true, 1),
-        "1.2 s\nMain: overload\nFrequency: 50.0 Hz"
+        rows("", 0.2, true),
+        vec![
+            (0, "Main: overload".to_string()),
+            (1, "Frequency: 50.0 Hz".to_string())
+        ]
     );
 }
 

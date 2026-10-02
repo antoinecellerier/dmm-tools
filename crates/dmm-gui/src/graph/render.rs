@@ -642,41 +642,71 @@ pub(super) struct HoverSeries<'a> {
     pub name: String,
     pub segments: &'a [Vec<[f64; 2]>],
     pub unit: String,
+    /// Its line's colour, for its row of the readout.
+    pub color: egui::Color32,
 }
 
-/// The hover readout with right axes: the time, then every series with a
-/// value at `t` in its own unit, the one named `hovered` first. The plotted
-/// series (first in `series`) reads "overload" inside its band.
-pub(super) fn hover_readout(
-    time_label: &str,
+/// The rows of the hover readout with right axes, after the time: every
+/// series with a value at `t` in its own unit, the one named `hovered`
+/// first, each with its index in `series`. The plotted series (first in
+/// `series`) reads "overload" inside its band.
+pub(super) fn hover_lines(
     series: &[HoverSeries],
     hovered: &str,
     t: f64,
     overload: bool,
     decimals: usize,
-) -> String {
+) -> Vec<(usize, String)> {
     let first = series.iter().position(|s| s.name == hovered);
     let order = first
         .into_iter()
         .chain((0..series.len()).filter(|&i| Some(i) != first));
-    let mut text = time_label.to_string();
-    for i in order {
-        let HoverSeries {
-            name,
-            segments,
-            unit,
-        } = &series[i];
-        let line = if i == 0 && overload {
-            Some(format!("{name}: overload"))
-        } else {
-            trace_value_at(segments, t).map(|v| format!("{name}: {v:.decimals$} {unit}"))
-        };
-        if let Some(line) = line {
-            text.push('\n');
-            text.push_str(&line);
+    order
+        .filter_map(|i| {
+            let HoverSeries {
+                name,
+                segments,
+                unit,
+                ..
+            } = &series[i];
+            let line = if i == 0 && overload {
+                Some(format!("{name}: overload"))
+            } else {
+                trace_value_at(segments, t).map(|v| format!("{name}: {v:.decimals$} {unit}"))
+            };
+            line.map(|l| (i, l))
+        })
+        .collect()
+}
+
+/// Show the hover readout with right axes where egui_plot shows its own, by
+/// the pointer: the time, then a row per series in its line's colour where
+/// that reads as text on the tooltip, as the axes do. egui_plot's readout is
+/// one string in one colour, so [`Graph::show_main`] keeps it empty here.
+fn show_hover_readout(
+    plot: &egui::Response,
+    time_label: &str,
+    series: &[HoverSeries],
+    lines: &[(usize, String)],
+) {
+    let mut tooltip = egui::Tooltip::always_open(
+        plot.ctx.clone(),
+        plot.layer_id,
+        plot.id,
+        egui::PopupAnchor::Pointer,
+    );
+    let width = plot.ctx.global_style().spacing.tooltip_width;
+    tooltip.popup = tooltip.popup.width(width);
+    tooltip.gap(12.0).show(|ui| {
+        ui.set_max_width(width);
+        ui.label(time_label);
+        let ground = ui.visuals().window_fill;
+        for (i, line) in lines {
+            let color = crate::theme::legible_on(series[*i].color, ground)
+                .unwrap_or(ui.visuals().text_color());
+            ui.label(egui::RichText::new(line).color(color));
         }
-    }
-    text
+    });
 }
 
 /// The Y grid of a level's axis: egui_plot's decade steps, the finest of
@@ -1045,6 +1075,7 @@ impl Graph {
     /// `main_name`, then each drawn trace, every one with its unit.
     fn hover_series<'a>(
         &self,
+        tc: &ThemeColors,
         main_name: &str,
         plotted: &'a [Vec<[f64; 2]>],
         traces: &'a [OverlayTrace],
@@ -1053,11 +1084,13 @@ impl Graph {
             name: main_name.to_string(),
             segments: plotted,
             unit: self.current_unit.clone(),
+            color: tc.graph_line(),
         };
-        let traces = traces.iter().map(|(_, label, segments)| HoverSeries {
+        let traces = traces.iter().map(|(k, label, segments)| HoverSeries {
             name: label.clone(),
             segments: segments.as_slice(),
             unit: self.overlay_unit(label).to_string(),
+            color: tc.graph_overlay(*k),
         });
         std::iter::once(plotted).chain(traces).collect()
     }
@@ -1367,8 +1400,14 @@ impl Graph {
         // With a right axis, a height on the plot means a different value on
         // each axis, so the readout lists every drawn series at the hovered
         // time instead, in its own unit — the one under the pointer first.
+        // What the pointer is over with right axes, left by the formatter
+        // for `show_hover_readout`: the time's label, the series under the
+        // pointer, the time, and whether it is in an overload.
+        let hover_hit: std::cell::RefCell<Option<(String, String, f64, bool)>> =
+            std::cell::RefCell::new(None);
+        let hit = &hover_hit;
         let hover_series = if multi_axis {
-            self.hover_series(&main_name, &visible_segments, &overlay_traces)
+            self.hover_series(tc, &main_name, &visible_segments, &overlay_traces)
         } else {
             Vec::new()
         };
@@ -1425,15 +1464,9 @@ impl Graph {
                 // this is where the condition gets named. It is also the only
                 // cue that isn't visual.
                 let overload = tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b);
-                if !hover_series.is_empty() {
-                    return Some(hover_readout(
-                        &time_label,
-                        &hover_series,
-                        name,
-                        t,
-                        overload,
-                        point_decimals,
-                    ));
+                if multi_axis {
+                    *hit.borrow_mut() = Some((time_label, name.to_string(), t, overload));
+                    return None;
                 }
                 if overload {
                     return Some(format!("{time_label}\noverload"));
@@ -1624,6 +1657,10 @@ impl Graph {
         });
 
         self.plot_rect = Some(response.response.rect);
+        if let Some((time_label, name, t, overload)) = hover_hit.take() {
+            let lines = hover_lines(&hover_series, &name, t, overload, point_decimals);
+            show_hover_readout(&response.response, &time_label, &hover_series, &lines);
+        }
         Self::paint_stacked_ticks(
             ui,
             response.response.rect,
