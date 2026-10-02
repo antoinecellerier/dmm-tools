@@ -486,6 +486,8 @@ scene_color_customization() {
 	write_settings '{"device_family": "auto"}'
 	launch_without_meter
 	click "$GEAR_X" "$GEAR_Y"
+	# A click before the panel has settled misses the header.
+	"$GUI" settle >/dev/null
 	click "$CUSTOMIZE_X" "$CUSTOMIZE_Y"
 	click "$CROSSHAIR_SWATCH_X" "$CROSSHAIR_SWATCH_Y"
 	capture gui-color-customization.png "$COLOR_CROP"
