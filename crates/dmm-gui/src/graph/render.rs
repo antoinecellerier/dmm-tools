@@ -592,11 +592,15 @@ fn tick_color(ui: &Ui, series: egui::Color32) -> egui::Color32 {
 }
 
 /// The tick label a right axis writes at a height on the plot: the whole
-/// step of its unit there, then the unit.
+/// step of its unit there, then the unit — or nothing on a gridline it
+/// leaves unlabelled.
 fn right_axis_label(map: AxisMap, unit: String) -> impl Fn(f64) -> String {
     let decimals = map.decimals();
     move |y| {
         let v = (map.value_at(y) / map.step).round() * map.step;
+        if !map.labels(v) {
+            return String::new();
+        }
         let val = eframe::emath::format_with_decimals_in_range(v, decimals..=decimals);
         format!("  {val} {unit}")
     }
@@ -1213,10 +1217,11 @@ impl Graph {
                 .map(|(label, color)| painter.layout_no_wrap(label(y), font.clone(), *color))
                 .collect();
             let mut top = mid - height / 2.0;
+            // A row a step apart, an unlabelled one included, so each unit
+            // keeps its place in the stack.
             for (galley, (_, color)) in galleys.into_iter().zip(rows) {
-                let row = galley.size().y;
                 painter.galley(egui::pos2(plot.right() + INSET, top), galley, *color);
-                top += row;
+                top += row_height;
             }
         }
     }

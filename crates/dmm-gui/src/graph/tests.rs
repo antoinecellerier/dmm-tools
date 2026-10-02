@@ -2400,11 +2400,7 @@ fn each_right_axis_frames_its_own_unit() {
     let targets = g.secondary_targets(f64::NEG_INFINITY, f64::INFINITY);
     let units: Vec<&str> = targets.iter().map(|(u, _)| u.as_str()).collect();
     assert_eq!(units, vec!["Hz", "ms"]);
-    let (lo, hi) = targets[0].1;
-    assert!(
-        lo < 49.9 && lo > 49.8 && hi > 50.1 && hi < 50.2,
-        "{lo}..{hi}"
-    );
+    assert_eq!(targets[0].1, (49.9, 50.1), "its data, unpadded");
 }
 
 /// Stacked right-axis labels keep to the plot's height and never overlap:

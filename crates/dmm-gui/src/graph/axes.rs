@@ -3,17 +3,20 @@
 //! egui_plot draws every Y axis from one transform and one grid spacer, so a
 //! right axis can only label the tick positions of the plotted unit. Each
 //! other unit is therefore mapped onto the plot as `y = offset + scale·v`,
-//! chosen so those shared ticks land on round values of its own: every axis
-//! reads in steps of 1, 2 or 5 × 10ⁿ, and one set of gridlines serves them
-//! all.
+//! chosen so those shared ticks land on round values of its own, and one set
+//! of gridlines serves them all. A right axis steps 1, 2, 2.5 or 5 × 10ⁿ per
+//! gridline; at 2.5 it labels every other line only, so each label it writes
+//! is still a whole 1, 2 or 5 × 10ⁿ, and a trace that 2 would squeeze and 5
+//! would flatten gets the height between.
 
 /// Where one unit's values sit on the plot: `y = offset + scale·v`, with a
-/// tick every `step` of the unit.
+/// gridline every `step` of the unit and a label every `label_step`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct AxisMap {
     offset: f64,
     scale: f64,
     pub step: f64,
+    pub label_step: f64,
 }
 
 impl AxisMap {
@@ -27,9 +30,16 @@ impl AxisMap {
         (y - self.offset) / self.scale
     }
 
-    /// The decimals the axis's ticks need.
+    /// The decimals the axis's labels need.
     pub(super) fn decimals(self) -> usize {
-        step_decimals(self.step)
+        step_decimals(self.label_step)
+    }
+
+    /// Whether the gridline at `v` carries a label: every one, or every
+    /// other one on a 2.5 step.
+    pub(super) fn labels(self, v: f64) -> bool {
+        let k = v / self.label_step;
+        (k - k.round()).abs() < 1e-6
     }
 }
 
@@ -40,6 +50,20 @@ pub(super) fn nice_step(x: f64) -> f64 {
     }
     let base = 10f64.powf(x.log10().floor());
     [1.0, 2.0, 5.0, 10.0]
+        .into_iter()
+        .map(|m| m * base)
+        .find(|&s| s >= x * (1.0 - 1e-9))
+        .unwrap_or(10.0 * base)
+}
+
+/// The smallest 1, 2, 2.5 or 5 × 10ⁿ at least `x`: a right axis's step per
+/// gridline.
+fn secondary_step(x: f64) -> f64 {
+    if !(x.is_finite() && x > 0.0) {
+        return 1.0;
+    }
+    let base = 10f64.powf(x.log10().floor());
+    [1.0, 2.0, 2.5, 5.0, 10.0]
         .into_iter()
         .map(|m| m * base)
         .find(|&s| s >= x * (1.0 - 1e-9))
@@ -112,7 +136,7 @@ pub(super) fn fit_secondary(lo: f64, hi: f64, step: f64, target: (f64, f64)) -> 
     let n = (hi - lo) / step;
     let u0 = lo / step;
     let (t0, t1) = (target.0.min(target.1), target.0.max(target.1));
-    let mut s = nice_step((t1 - t0) / n);
+    let mut s = secondary_step((t1 - t0) / n);
     for _ in 0..32 {
         // `c` at least `low` keeps `t0` in view, at most `high` keeps `t1`.
         let low = u0 - t0 / s;
@@ -120,13 +144,19 @@ pub(super) fn fit_secondary(lo: f64, hi: f64, step: f64, target: (f64, f64)) -> 
         let (c_min, c_max) = ((low - 1e-9).ceil(), (high + 1e-9).floor());
         if c_min <= c_max {
             let c = ((low + high) / 2.0).round().clamp(c_min, c_max);
+            let mantissa = s / 10f64.powf(s.log10().floor());
             return AxisMap {
                 offset: c * step,
                 scale: step / s,
                 step: s,
+                label_step: if (mantissa - 2.5).abs() < 1e-6 {
+                    2.0 * s
+                } else {
+                    s
+                },
             };
         }
-        s = nice_step(s * 1.5);
+        s = secondary_step(s * 1.01);
     }
     // Each round step at least doubles the last, so a few dozen outgrow any
     // target on a plot of some height; the caller keeps a flat or
@@ -135,6 +165,7 @@ pub(super) fn fit_secondary(lo: f64, hi: f64, step: f64, target: (f64, f64)) -> 
         offset: (lo + hi) / 2.0 - (t0 + t1) / 2.0,
         scale: 1.0,
         step: s,
+        label_step: s,
     }
 }
 
@@ -230,6 +261,24 @@ mod tests {
         assert_aligned(-5.2, -1.1, 0.5, (-0.033, 0.021));
         assert_aligned(-1.0, 1.0, 0.5, (-120.0, -80.0));
         assert_aligned(1e-6, 9e-6, 1e-6, (3.0e3, 3.5e3));
+    }
+
+    /// A wander that a 0.02 step would squeeze and 0.05 flatten takes 0.025
+    /// per gridline, labelled every other one, in whole 0.05s.
+    #[test]
+    fn a_half_step_labels_every_other_gridline() {
+        let (lo, hi) = (117.6, 122.4);
+        let map = assert_aligned(lo, hi, 1.0, (59.94, 60.06));
+        assert_eq!((map.step, map.label_step), (0.025, 0.05));
+        assert_eq!(map.decimals(), 2);
+        let labelled: Vec<f64> = (118..=122)
+            .map(|k| map.value_at(k as f64))
+            .filter(|&v| map.labels(v))
+            .collect();
+        assert!((2..=3).contains(&labelled.len()), "{labelled:?}");
+        for v in labelled {
+            assert!(((v / 0.05) - (v / 0.05).round()).abs() < 1e-6, "{v}");
+        }
     }
 
     /// A target that only just fits one step size moves up a step rather

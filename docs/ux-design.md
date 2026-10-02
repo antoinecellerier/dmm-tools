@@ -103,9 +103,11 @@ inline, nothing told the controls apart (`show_toolbar` in `graph/toolbar.rs`).
 against a Y axis of its own on the right, up to four units; a fifth's chip
 waits for one to be hidden. The right axes label the plotted unit's
 gridlines in round steps of their own, since egui_plot gives every axis one
-transform and one grid (`graph/axes.rs`). Aligned by construction, several
-share one column, each gridline's values stacked: one label's width rather
-than one per unit, so a narrow window keeps them all.
+transform and one grid (`graph/axes.rs`); a 2.5 step labels every other
+gridline, which gives a trace the height between a 2 and a 5 step. Aligned
+by construction, several share one column, each gridline's values stacked:
+one label's width rather than one per unit, so they fit far narrower
+windows before the column is dropped.
 Where lines of two units cross means nothing, so the analysis tools and the
 minimap stay on the plotted series, which **Plot:** picks, and with a right
 axis the hover lists every series at its time rather than one height. Stacked

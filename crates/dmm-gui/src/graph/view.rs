@@ -283,8 +283,11 @@ impl Graph {
             }
         }
         for (_, range) in &mut targets {
-            let (lo, hi) = super::axes::widen_steady(range.0, range.1);
-            *range = pad_range(lo, hi);
+            // Not padded: the plotted unit's padding already gives the plot
+            // its margin, and the fitter widens a target to a round step;
+            // padding it too would often push it a step coarser and flatten
+            // the trace. A steady value still needs a span to fit.
+            *range = super::axes::widen_steady(range.0, range.1);
         }
         targets
     }
