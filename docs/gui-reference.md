@@ -157,7 +157,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 |---|---|
 | **5s, 10s, 30s, 1m, 5m, 10m** | Time window presets |
 | **LIVE** | Auto-scroll to latest data (filled when active) |
-| **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
+| **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values. Fixed holds every axis where it is; the values set the left one |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
 | **Plot:** | Choose which series the graph draws: **Main** (the meter's reading, under its own name where it has one: **DC** in the UT61E+'s AC+DC V; **T1** or **T2**, **Relative** or **Peak Max** on a UT181A) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching keeps the graph: the two series change places with their past, and the left Y axis moves to the new series' unit. If the meter stops sending the chosen sub-value, the graph returns to **Main**, which kept its past too. |
 | **Show:** | One chip per sub-value: click to draw or hide its trace beside the plotted series. Up to four units are drawn at once; a chip past that is greyed out until another unit is hidden. Hidden traces are still recorded, and stay hidden at the next launch. |
@@ -214,7 +214,7 @@ it, and several dropouts between the same two readings collapse into one gap.
 | **Ctrl + scroll wheel** (or pinch) | Zoom X axis centered on cursor (2s–3600s range); leaves live mode |
 | **Scroll wheel** | Scrolls the panel — the graph ignores it |
 | **Click & drag** | Pan left/right through history |
-| **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region. Release to apply; press Escape to cancel. |
+| **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region, every Y axis included. Release to apply; press Escape to cancel. |
 | **Double-click** | Return to live mode with auto Y |
 | **Click** (cursors active) | Place cursor A or B, snapping to nearest data point |
 

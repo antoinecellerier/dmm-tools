@@ -125,6 +125,9 @@ impl Graph {
                 self.y_user_set = true;
                 self.y_min.restore(min);
                 self.y_max.restore(max);
+                // A saved view keeps the plotted unit's range only; the
+                // right axes fit their data.
+                self.y_pins.clear();
             }
             _ => self.y_axis_fixed = false,
         }

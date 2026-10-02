@@ -1244,6 +1244,7 @@ impl Graph {
             .unwrap_or((-1.0, 1.0));
 
         let right = self.right_axes(ui, (view_min, view_max), (y_min, y_max));
+        self.axis_maps.clone_from(&right.maps);
         let grid_step = right.step;
         let multi_axis = grid_step.is_some();
         let map_of = |label: &str| right.map_of(self.overlay_unit(label));

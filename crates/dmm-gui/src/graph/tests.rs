@@ -2404,6 +2404,137 @@ fn stacked_labels_fit_or_are_left_out() {
     );
 }
 
+/// A V reading beside a frequency wandering between 49.9 and 50.1 Hz.
+fn graph_with_hz() -> Graph {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for (i, hz) in [49.9, 50.1, 50.0].into_iter().enumerate() {
+        push_vac_hz(
+            &mut g,
+            t0 + Duration::from_secs(i as u64),
+            None,
+            230.0,
+            (hz, "Hz"),
+        );
+    }
+    g
+}
+
+/// Y:Fixed pins every axis at the range it frames now — its target, not the
+/// round range its axis widens that to — so the axes don't move when it is
+/// pressed, nor grow at each press.
+#[test]
+fn fixing_y_pins_every_axis_where_it_is() {
+    let mut g = graph_with_hz();
+    let (x_min, x_max) = g.view_bounds();
+    let before = g.secondary_targets(x_min, x_max);
+    g.y_axis_fixed = true;
+    g.pin_y_axes_to_view();
+    assert_eq!(g.secondary_targets(x_min, x_max), before);
+
+    g.y_axis_fixed = false;
+    g.y_axis_fixed = true;
+    g.pin_y_axes_to_view();
+    assert_eq!(g.secondary_targets(x_min, x_max), before, "no growth");
+}
+
+/// Y:Fixed pressed in a window too narrow for the right axes still pins
+/// them, for when it widens.
+#[test]
+fn fixing_y_in_a_narrow_window_pins_the_shed_axes() {
+    let mut g = graph_with_hz();
+    let (x_min, x_max) = g.view_bounds();
+    let fitted = g.secondary_targets(x_min, x_max);
+    g.fit_axes_to(100.0);
+    g.y_axis_fixed = true;
+    g.pin_y_axes_to_view();
+    assert_eq!(g.y_pins.len(), fitted.len());
+}
+
+/// A view restored with a fixed range fixes the left axis only; pressing
+/// Y:Fixed again fixes the right axes too, keeping the restored bounds.
+#[test]
+fn y_fixed_after_a_restored_range_pins_the_right_axes() {
+    let mut g = graph_with_hz();
+    g.y_axis_fixed = true;
+    g.y_user_set = true;
+    g.y_min.set(200.0);
+    g.y_max.set(260.0);
+    g.y_axis_fixed = false;
+    g.y_axis_fixed = true;
+    g.pin_y_axes_to_view();
+    assert_eq!((g.y_min.value(), g.y_max.value()), (200.0, 260.0));
+    assert!(g.y_pins.contains_key("Hz"));
+}
+
+/// A sub-value stepping to another unit drops its axis's fixed range: it
+/// was set for the old unit, and would be wrong if that unit came back.
+#[test]
+fn a_unit_step_drops_its_axis_pin() {
+    let mut g = graph_with_hz();
+    g.y_axis_fixed = true;
+    g.pin_y_axes_to_view();
+    assert!(g.y_pins.contains_key("Hz"));
+    push_vac_hz(
+        &mut g,
+        Instant::now() + Duration::from_secs(3),
+        None,
+        230.0,
+        (1.001, "kHz"),
+    );
+    assert!(!g.y_pins.contains_key("Hz"));
+    assert!(g.y_pins.contains_key("ms"), "the others keep theirs");
+}
+
+/// A box zoom pins each right axis to its share of the box, through the
+/// axis's map, and Reset Zoom lets them all fit their data again.
+#[test]
+fn a_box_zoom_pins_every_axis_to_its_share() {
+    let mut g = graph_with_hz();
+    let (x_min, x_max) = g.view_bounds();
+    let fitted = g.secondary_targets(x_min, x_max);
+    // The plot shows 229..231 V, gridded every 0.5 V.
+    g.axis_maps = fitted
+        .iter()
+        .map(|(unit, target)| {
+            (
+                unit.clone(),
+                super::axes::fit_secondary(229.0, 231.0, 0.5, *target),
+            )
+        })
+        .collect();
+    let hz = g.axis_maps[0].1;
+
+    g.apply_bbox_zoom((0.5, 230.0), (1.5, 230.5));
+    let pinned = g.secondary_targets(x_min, x_max);
+    assert_eq!(pinned[0].0, "Hz");
+    let (lo, hi) = pinned[0].1;
+    assert!((lo - hz.value_at(230.0)).abs() < 1e-9 && (hi - hz.value_at(230.5)).abs() < 1e-9);
+    assert!(hi - lo < fitted[0].1.1 - fitted[0].1.0, "zoomed in");
+
+    g.reset_view();
+    assert_eq!(g.secondary_targets(x_min, x_max), fitted);
+}
+
+/// A switch of **Plot:** into another unit releases the right axes' pins
+/// with the left one's: they were set against the old plotted unit.
+#[test]
+fn a_swap_into_another_unit_releases_every_pin() {
+    let mut g = graph_with_hz();
+    g.y_axis_fixed = true;
+    g.pin_y_axes_to_view();
+    assert!(!g.y_pins.is_empty());
+    push_vac_hz(
+        &mut g,
+        Instant::now() + Duration::from_secs(3),
+        Some("Frequency"),
+        230.0,
+        (50.0, "Hz"),
+    );
+    assert!(!g.y_axis_fixed);
+    assert!(g.y_pins.is_empty());
+}
+
 /// With right axes, the hover lists every series at the hovered time, the
 /// one under the pointer first, and leaves out one in a break.
 #[test]

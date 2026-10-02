@@ -205,17 +205,8 @@ impl Graph {
             };
             // The chip has already flipped the flag, so `self.y_axis_fixed`
             // below reads "fixed mode was just switched on".
-            if toggle_chip(ui, &mut self.y_axis_fixed, y_label, y_tooltip)
-                && self.y_axis_fixed
-                && !self.y_user_set
-            {
-                let (view_min, view_max) = self.view_bounds();
-                // Snapshot with the overlays included, so pinning the axis
-                // doesn't jump the view the moment Y:Fixed is pressed.
-                if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max, true) {
-                    self.y_min.set(y_lo);
-                    self.y_max.set(y_hi);
-                }
+            if toggle_chip(ui, &mut self.y_axis_fixed, y_label, y_tooltip) && self.y_axis_fixed {
+                self.pin_y_axes_to_view();
             }
             if self.y_axis_fixed {
                 let field_width = 50.0;

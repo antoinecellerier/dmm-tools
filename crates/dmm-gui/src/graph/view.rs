@@ -236,13 +236,34 @@ impl Graph {
         Some(pad_range(y_min, y_max))
     }
 
-    /// Each unit drawn on a right axis, with its traces' padded min/max over
-    /// `[x_min, x_max]` — what its axis has to frame. A unit with nothing in
-    /// view gets no axis.
+    /// Each unit drawn on a right axis, with the range its axis has to
+    /// frame: its pin while the axes are fixed, else its data's
+    /// ([`Graph::fitted_targets`]).
     pub(super) fn secondary_targets(&self, x_min: f64, x_max: f64) -> Vec<(String, (f64, f64))> {
+        let mut targets = self.fitted_targets(&self.drawn_units(), x_min, x_max);
+        if self.y_axis_fixed {
+            for (unit, range) in &mut targets {
+                if let Some(pin) = self.y_pins.get(unit) {
+                    *range = *pin;
+                }
+            }
+        }
+        targets
+    }
+
+    /// Each of `units` but the plotted one, with its shown traces' min/max
+    /// over `[x_min, x_max]`: what its right axis has to frame. A unit with
+    /// nothing in view gets no axis.
+    pub(super) fn fitted_targets(
+        &self,
+        units: &[&str],
+        x_min: f64,
+        x_max: f64,
+    ) -> Vec<(String, (f64, f64))> {
         let mut targets: Vec<(String, (f64, f64))> = Vec::new();
-        for (_, o) in self.shown_overlays() {
-            if o.unit == self.current_unit {
+        for o in &self.overlays {
+            if o.unit == self.current_unit || !units.contains(&o.unit.as_str()) || self.is_hidden(o)
+            {
                 continue;
             }
             let (start, end) = self.time_index_range(&o.points, |p| p.time, x_min, x_max);
@@ -297,8 +318,39 @@ impl Graph {
     pub fn reset_view(&mut self) {
         self.live = true;
         self.view_center = 0.0;
+        self.release_y_pins();
+    }
+
+    /// Back to auto Y on every axis, forgetting the fixed ranges: the scale
+    /// they were chosen for is gone, or the user asked for the default view.
+    pub(super) fn release_y_pins(&mut self) {
         self.y_axis_fixed = false;
         self.y_user_set = false;
+        self.y_pins.clear();
+    }
+
+    /// Fix every axis at the range it shows now, as the **Y:Fixed** chip
+    /// does: the plotted unit's fields unless the user has typed or restored
+    /// bounds, and each right axis without a pin yet — all of them afresh
+    /// with the fields. Each takes its target rather than the round range its
+    /// axis widened it to, so fitting it again gives the same axes instead of
+    /// growing them at each toggle. Axes shed for width are fixed too, so
+    /// they come back where they were.
+    pub(super) fn pin_y_axes_to_view(&mut self) {
+        let (view_min, view_max) = self.view_bounds();
+        if !self.y_user_set {
+            // With the overlays included, so pinning the axis doesn't jump
+            // the view the moment Y:Fixed is pressed.
+            if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max, true) {
+                self.y_min.set(y_lo);
+                self.y_max.set(y_hi);
+            }
+            self.y_pins.clear();
+        }
+        let targets = self.fitted_targets(&self.axis_units(), view_min, view_max);
+        for (unit, target) in targets {
+            self.y_pins.entry(unit).or_insert(target);
+        }
     }
 
     /// True when the view has been zoomed or panned away from the default
@@ -364,6 +416,15 @@ impl Graph {
         self.y_min.set(y_min);
         self.y_max.set(y_max);
         self.y_user_set = true;
+        // Each right axis to its share of the box, on this frame's map.
+        self.y_pins = self
+            .axis_maps
+            .iter()
+            .map(|(unit, map)| {
+                let (a, b) = (map.value_at(y_min), map.value_at(y_max));
+                (unit.clone(), (a.min(b), a.max(b)))
+            })
+            .collect();
     }
 
     /// Process drag, zoom, and cursor-click interactions on the plot.

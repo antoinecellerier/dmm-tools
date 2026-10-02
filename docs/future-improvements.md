@@ -339,6 +339,14 @@ A sub-value whose unit steps a decade mid-capture (a 121GW or ZOTEK frequency fl
 
 Use cases: a frequency near 1 kHz over an afternoon; Raw beside its scaled reading.
 
+### Fixed bounds for a right axis
+
+**Complexity:** Low
+
+**Y:Fixed** holds every axis where it is, and a box zoom pins each to its share of the box, but the min/max fields set the plotted unit's axis only. Typing a right axis's bounds would need a pair of fields per unit in the toolbar, or a menu on the axis; its range is otherwise reached by switching **Plot:** to it.
+
+Use cases: a frequency held at 49.5–50.5 Hz while the voltage beside it auto-scales.
+
 ### XY plot of two series
 
 **Complexity:** Medium

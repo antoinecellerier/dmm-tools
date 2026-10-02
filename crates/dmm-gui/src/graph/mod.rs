@@ -33,12 +33,13 @@ pub(crate) use view_state::ViewState;
 mod tests;
 
 use eframe::egui::{self, Ui};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::time::Instant;
 
 use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
 use crate::theme::ThemeColors;
+use axes::AxisMap;
 use field::{NumberField, NumberListField};
 use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
@@ -347,6 +348,13 @@ pub struct Graph {
     y_max: NumberField,
     /// Whether the user has manually set Y-axis values this session.
     y_user_set: bool,
+    /// Each right axis's range while `y_axis_fixed`, by unit, as its axis
+    /// has to frame it: kept, like the fields, when Y:Auto is picked, and
+    /// dropped by [`Graph::release_y_pins`]. A unit with none fits its data.
+    y_pins: BTreeMap<String, (f64, f64)>,
+    /// This frame's right axes, by unit, for a box zoom to pin each to its
+    /// share of the box: see [`Graph::apply_bbox_zoom`].
+    axis_maps: Vec<(String, AxisMap)>,
     /// The main plot's area at the last frame, where the marker flags are
     /// placed while the time labels they cover are chosen.
     plot_rect: Option<egui::Rect>,
@@ -446,6 +454,8 @@ impl Graph {
             y_min: NumberField::new("-1", -1.0),
             y_max: NumberField::new("1", 1.0),
             y_user_set: false,
+            y_pins: BTreeMap::new(),
+            axis_maps: Vec::new(),
             plot_rect: None,
             show_mean: false,
             show_envelope: false,
@@ -830,8 +840,7 @@ impl Graph {
             missing_frames: self.main_missing_frames,
         };
         if self.overlays[i].unit != unit {
-            self.y_axis_fixed = false;
-            self.y_user_set = false;
+            self.release_y_pins();
         }
         self.main_missing_frames = incoming_missing;
         self.current_series = series.map(str::to_owned);
@@ -929,8 +938,7 @@ impl Graph {
         // — the trace lands far outside the plot and the graph just looks
         // empty, with the old numbers still on the axis. `clear()` and
         // `reset_view()` both release these for the same reason.
-        self.y_axis_fixed = false;
-        self.y_user_set = false;
+        self.release_y_pins();
         self.cursor_a = None;
         self.cursor_b = None;
         self.cursor_next_is_b = false;
@@ -955,6 +963,9 @@ impl Graph {
         if let Some(o) = self.overlays.iter_mut().find(|o| o.label == label)
             && o.unit != unit
         {
+            // A range fixed for the old unit means nothing in the new one,
+            // nor when the unit comes back: the axis fits its data again.
+            self.y_pins.remove(&o.unit);
             o.unit = unit.to_string();
             o.points.clear();
             o.missing_frames = 0;
@@ -1239,8 +1250,7 @@ impl Graph {
         self.origin = None;
         self.live = true;
         self.view_center = 0.0;
-        self.y_axis_fixed = false;
-        self.y_user_set = false;
+        self.release_y_pins();
         self.cursor_a = None;
         self.cursor_b = None;
         self.cursor_next_is_b = false;
