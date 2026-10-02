@@ -1112,7 +1112,8 @@ mod tests {
             bluetooth_only,
             [
                 "ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq", "zt5b", "121gw", "bm78xbt",
-                "ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"
+                "ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b", "cms101", "cms061", "ow65b",
+                "ow67b", "ow69b", "vc871", "vc891", "vc915", "vc925pv"
             ]
         );
         for kt in KNOWN_TRANSPORTS {

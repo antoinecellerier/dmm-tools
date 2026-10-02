@@ -1,12 +1,18 @@
 //! Remote key presses: the keys each model offers, and the two bytes each
-//! sends (`docs/research/owon/reverse-engineered-protocol.md` §7.1, §7.3).
+//! sends (`docs/research/owon/reverse-engineered-protocol.md` §7.1, §7.3,
+//! §10.8).
 //!
 //! A press is `[key code, 01]` short or `[key code, 00]` long, written to
-//! FFF3 with no reply (spec §7.1). Each model offers the keys OWON's app
-//! lists for it, plus the long presses its manual gives those keys. A long
-//! press of the key that also carries ᛒ switches Bluetooth on the meter
+//! FFF3 with no reply (spec §7.1, §10.8). Each model offers the keys OWON's
+//! app lists for it, plus the long presses its manual gives those keys. A
+//! long press of the key that also carries ᛒ switches Bluetooth on the meter
 //! (spec §9.1), so it is never offered: code 4 on the B series and the
-//! CM2100B, code 5 on the OW16/OW18.
+//! CM2100B, code 5 on the OW16/OW18. The 15-byte meters' BLE key has no
+//! known code (spec §10.8), so they take taps, and the long presses their
+//! own manuals give; one of those, REL held, is code 4, which goes out only
+//! once FFF2 has named the model ([`Key::needs_confirmed`]). The app's
+//! Hold/Light long press, `09 01`, is never sent: what code 9 does is
+//! inferred from a label (spec §10.8).
 
 use super::decode::function;
 use crate::protocol::{MeterKey, MeterKeys};
@@ -22,6 +28,10 @@ pub(super) struct Key {
     pub(super) command: &'static str,
     pub(super) code: u8,
     pub(super) press: u8,
+    /// Sent only once FFF2 has named the entry's model: a long press of
+    /// code 4 switches Bluetooth on the B series and the CM2100B (spec
+    /// §7.1, §9.1), which an entry opened without a model code may be.
+    pub(super) needs_confirmed: bool,
 }
 
 const fn key(command: &'static str, code: u8, press: u8) -> Key {
@@ -29,6 +39,7 @@ const fn key(command: &'static str, code: u8, press: u8) -> Key {
         command,
         code,
         press,
+        needs_confirmed: false,
     }
 }
 
@@ -114,6 +125,138 @@ pub(super) static CM2100_COMMANDS: [&str; 4] = commands(&CM2100);
 /// ZERO/ᛒ (spec §9.1).
 pub(super) const CM2100_BLUETOOTH_KEY: u8 = 0x04;
 
+/// The 15-byte meters' key codes beyond §7.1's (spec §10.8).
+const REL: Key = key("rel", 0x04, SHORT);
+const HZ_DUTY: Key = key("hz_duty", 0x05, SHORT);
+const MINMAX: Key = key("minmax", 0x06, SHORT);
+const LPF: Key = key("lpf", 0x07, SHORT);
+const PEAK: Key = key("peak", 0x08, SHORT);
+const CURRENT_LOOP: Key = key("current_loop", 0x0A, SHORT);
+const DISPLAY: Key = key("display", 0x0C, SHORT);
+const INRUSH: Key = key("inrush", 0x0D, SHORT);
+const COMPARE: Key = key("compare", 0x0F, SHORT);
+const AC_DC: Key = key("ac_dc", 0x10, SHORT);
+const MOTOR: Key = key("motor", 0x11, SHORT);
+/// The 15-byte meters' Hold/Light and Hold, as a tap (spec §10.8).
+const HOLD_TAP: Key = key("hold", 0x03, SHORT);
+
+/// REL held (about 1 s) leaves REL on the Voltcraft meters (VC871-UM p.89;
+/// VC891-UM p.79; VC915-UM p.86; VC925-UM p.87).
+const EXIT_REL: Key = Key {
+    command: "exit_rel",
+    code: 0x04,
+    press: LONG,
+    needs_confirmed: true,
+};
+
+/// The CMS101 and CMS061: the app's `_cms101Keys` (spec §10.8). HOLD held
+/// is "DCA to zero" (CMS101-UM p.13/8), not the light the app's label
+/// names, so it goes as a tap only.
+pub(super) static CMS: [Key; 7] = [SELECT, RANGE, HOLD_TAP, REL, HZ_DUTY, MINMAX, INRUSH];
+pub(super) static CMS_COMMANDS: [&str; 7] = commands(&CMS);
+
+/// The OW65B: the app's `_Ow65Keys` (spec §10.8); its manual gives no long
+/// press of these keys (OW65-UM p.13/8-14/9).
+pub(super) static OW65: [Key; 5] = [SELECT, RANGE, HOLD_TAP, REL, MINMAX];
+pub(super) static OW65_COMMANDS: [&str; 5] = commands(&OW65);
+
+/// The OW67B: the app's `_c871AndOw67Keys` (spec §10.8), taps only.
+pub(super) static OW67: [Key; 8] = [
+    SELECT,
+    RANGE,
+    HOLD_TAP,
+    REL,
+    MINMAX,
+    PEAK,
+    CURRENT_LOOP,
+    DISPLAY,
+];
+pub(super) static OW67_COMMANDS: [&str; 8] = commands(&OW67);
+
+/// The VC871: the OW67B's keys, with RANGE held about 1 s back to auto
+/// range (VC871-UM p.88) and REL held leaving REL.
+pub(super) static VC871: [Key; 10] = [
+    SELECT,
+    RANGE,
+    AUTO,
+    HOLD_TAP,
+    REL,
+    EXIT_REL,
+    MINMAX,
+    PEAK,
+    CURRENT_LOOP,
+    DISPLAY,
+];
+pub(super) static VC871_COMMANDS: [&str; 10] = commands(&VC871);
+
+/// The OW69B: the app's `_c891AndOw69Keys` (spec §10.8), taps only.
+pub(super) static OW69: [Key; 9] = [
+    SELECT,
+    RANGE,
+    HOLD_TAP,
+    REL,
+    HZ_DUTY,
+    MINMAX,
+    LPF,
+    PEAK,
+    CURRENT_LOOP,
+];
+pub(super) static OW69_COMMANDS: [&str; 9] = commands(&OW69);
+
+/// The VC891: the OW69B's keys, with RANGE held about 1 s back to auto
+/// range (VC891-UM p.79) and REL held leaving REL.
+pub(super) static VC891: [Key; 11] = [
+    SELECT,
+    RANGE,
+    AUTO,
+    HOLD_TAP,
+    REL,
+    EXIT_REL,
+    HZ_DUTY,
+    MINMAX,
+    LPF,
+    PEAK,
+    CURRENT_LOOP,
+];
+pub(super) static VC891_COMMANDS: [&str; 11] = commands(&VC891);
+
+/// The VC915: the app's `_c91Keys` (spec §10.8), with RANGE held about 1 s
+/// back to auto range (VC915-UM p.86) and REL held leaving REL.
+pub(super) static VC915: [Key; 13] = [
+    SELECT,
+    RANGE,
+    AUTO,
+    HOLD_TAP,
+    REL,
+    EXIT_REL,
+    MINMAX,
+    LPF,
+    COMPARE,
+    AC_DC,
+    MOTOR,
+    CURRENT_LOOP,
+    DISPLAY,
+];
+pub(super) static VC915_COMMANDS: [&str; 13] = commands(&VC915);
+
+/// The VC925 PV: the app's `_c92Keys` (spec §10.8), with RANGE held back to
+/// auto range, MAX/MIN held leaving MAX/MIN and REL held leaving REL
+/// (VC925-UM p.86-87).
+pub(super) static VC925: [Key; 11] = [
+    SELECT,
+    RANGE,
+    AUTO,
+    HOLD_TAP,
+    REL,
+    EXIT_REL,
+    MINMAX,
+    key("exit_minmax", 0x06, LONG),
+    COMPARE,
+    CURRENT_LOOP,
+    DISPLAY,
+];
+pub(super) static VC925_COMMANDS: [&str; 11] = commands(&VC925);
+
 /// Whether the reading's function is one of `codes`, by the function code
 /// the decoder put in `mode_raw`.
 fn function_in(m: &crate::measurement::Measurement, codes: &[u8]) -> bool {
@@ -180,24 +323,42 @@ pub(super) const CM2100_METER_KEYS: MeterKeys = MeterKeys {
     context: std::slice::from_ref(&CM2100_ZERO),
 };
 
+/// The 15-byte meters with a Hz/Duty key (spec §10.8): the B series'
+/// button, in the same functions.
+pub(super) const HZ_DUTY_METER_KEYS: MeterKeys = B_METER_KEYS;
+
 #[cfg(test)]
 mod tests {
     use super::super::model::MODELS;
     use super::*;
 
     /// A long press of the key that carries ᛒ switches Bluetooth (spec
-    /// §9.1); no model may send one.
+    /// §9.1): no model sends one of any 6-byte model's Bluetooth key
+    /// unless FFF2 has named the model, as an entry may be opened on
+    /// another model's meter.
     #[test]
     fn no_long_press_of_the_bluetooth_key_is_ever_sent() {
+        let bluetooth_keys: Vec<u8> = MODELS.iter().filter_map(|m| m.bluetooth_key).collect();
         for model in MODELS {
             for key in model.keys {
                 assert!(
-                    !(key.code == model.bluetooth_key && key.press == LONG),
+                    !(bluetooth_keys.contains(&key.code) && key.press == LONG)
+                        || key.needs_confirmed,
                     "{} sends {:02X?}",
                     model.id,
                     frame(key)
                 );
             }
+        }
+        let confirmed: Vec<&str> = MODELS
+            .iter()
+            .flat_map(|m| m.keys)
+            .filter(|k| k.needs_confirmed)
+            .map(|k| k.command)
+            .collect();
+        assert!(confirmed.iter().all(|&c| c == "exit_rel"), "{confirmed:?}");
+        for key in MODELS.iter().flat_map(|m| m.keys) {
+            assert_ne!(frame(key), [0x09, 0x01], "Hold/Light long (spec §10.8)");
         }
         assert_eq!(OW_BLUETOOTH_KEY, 0x05);
         assert_eq!(B_BLUETOOTH_KEY, 0x04);
@@ -221,13 +382,100 @@ mod tests {
             "exit_minmax",
         ];
         let cm2100 = ["select", "hold", "light", "zero"];
-        let expected: [(&str, &[&str]); 6] = [
+        let cms = [
+            "select", "range", "hold", "rel", "hz_duty", "minmax", "inrush",
+        ];
+        let ow65 = ["select", "range", "hold", "rel", "minmax"];
+        let ow67 = [
+            "select",
+            "range",
+            "hold",
+            "rel",
+            "minmax",
+            "peak",
+            "current_loop",
+            "display",
+        ];
+        let vc871 = [
+            "select",
+            "range",
+            "auto",
+            "hold",
+            "rel",
+            "exit_rel",
+            "minmax",
+            "peak",
+            "current_loop",
+            "display",
+        ];
+        let ow69 = [
+            "select",
+            "range",
+            "hold",
+            "rel",
+            "hz_duty",
+            "minmax",
+            "lpf",
+            "peak",
+            "current_loop",
+        ];
+        let vc891 = [
+            "select",
+            "range",
+            "auto",
+            "hold",
+            "rel",
+            "exit_rel",
+            "hz_duty",
+            "minmax",
+            "lpf",
+            "peak",
+            "current_loop",
+        ];
+        let vc915 = [
+            "select",
+            "range",
+            "auto",
+            "hold",
+            "rel",
+            "exit_rel",
+            "minmax",
+            "lpf",
+            "compare",
+            "ac_dc",
+            "motor",
+            "current_loop",
+            "display",
+        ];
+        let vc925 = [
+            "select",
+            "range",
+            "auto",
+            "hold",
+            "rel",
+            "exit_rel",
+            "minmax",
+            "exit_minmax",
+            "compare",
+            "current_loop",
+            "display",
+        ];
+        let expected: [(&str, &[&str]); 15] = [
             ("ow18b", &ow),
             ("ow18e", &ow),
             ("b33", &b33),
             ("b35t+", &b35),
             ("b41t+", &b35),
             ("cm2100b", &cm2100),
+            ("cms101", &cms),
+            ("cms061", &cms),
+            ("ow65b", &ow65),
+            ("ow67b", &ow67),
+            ("ow69b", &ow69),
+            ("vc871", &vc871),
+            ("vc891", &vc891),
+            ("vc915", &vc915),
+            ("vc925pv", &vc925),
         ];
         for (model, (id, commands)) in MODELS.iter().zip(expected) {
             assert_eq!(model.id, id);
@@ -253,6 +501,32 @@ mod tests {
         assert_eq!(code(&B35_B41, "exit_minmax"), [0x06, 0x00]);
         assert_eq!(code(&CM2100, "zero"), [0x04, 0x01]);
         assert_eq!(code(&CM2100, "light"), [0x03, 0x00]);
+    }
+
+    /// The 15-byte meters' codes (spec §10.8) and their manuals' long
+    /// presses.
+    #[test]
+    fn the_15_byte_keys_send_the_apps_codes() {
+        let code = |keys: &[Key], command| {
+            keys.iter()
+                .find(|k| k.command == command)
+                .map(frame)
+                .unwrap()
+        };
+        assert_eq!(code(&CMS, "hold"), [0x03, 0x01]);
+        assert_eq!(code(&CMS, "inrush"), [0x0D, 0x01]);
+        assert_eq!(code(&VC871, "peak"), [0x08, 0x01]);
+        assert_eq!(code(&VC871, "current_loop"), [0x0A, 0x01]);
+        assert_eq!(code(&VC871, "display"), [0x0C, 0x01]);
+        assert_eq!(code(&VC891, "lpf"), [0x07, 0x01]);
+        assert_eq!(code(&VC915, "compare"), [0x0F, 0x01]);
+        assert_eq!(code(&VC915, "ac_dc"), [0x10, 0x01]);
+        assert_eq!(code(&VC915, "motor"), [0x11, 0x01]);
+        for keys in [&VC871[..], &VC891, &VC915, &VC925] {
+            assert_eq!(code(keys, "auto"), [0x02, 0x00]);
+            assert_eq!(code(keys, "exit_rel"), [0x04, 0x00]);
+        }
+        assert_eq!(code(&VC925, "exit_minmax"), [0x06, 0x00]);
     }
 
     #[test]

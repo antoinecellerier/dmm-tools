@@ -6,7 +6,7 @@ Open-source logging, graphing and remote-control software for UNI-T, ZOTEK (ZOYI
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter from a desktop app, over its USB cable or wirelessly over Bluetooth. Supports the UNI-T UT61E+ (UT61E Plus), UT181A, UT161, UT71, UT60BT, UT61D+, UT61B+, UT803, UT804, UT8802, UT8803, UT171 and UT202BT, the ANENG AN9002, AN999S, ST207 and V05B (ZOTEK ZT-300AB, ZT-5566SE, ZT-5BQ, ZT-5B), the OWON B33, B35T+, B41T+, OW16B, OW18B, OW18E and CM2100B, the Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM788BT, BM787BT, BM525s and BM521s, the EEVblog 121GW, and the Voltcraft VC-890, VC-880, VC650BT, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
+Read, record and remote-control a digital multimeter from a desktop app, over its USB cable or wirelessly over Bluetooth. Supports the UNI-T UT61E+ (UT61E Plus), UT181A, UT161, UT71, UT60BT, UT61D+, UT61B+, UT803, UT804, UT8802, UT8803, UT171 and UT202BT, the ANENG AN9002, AN999S, ST207 and V05B (ZOTEK ZT-300AB, ZT-5566SE, ZT-5BQ, ZT-5B), the OWON B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B, CMS101, CMS061, OW65B, OW67B and OW69B, the Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM788BT, BM787BT, BM525s and BM521s, the EEVblog 121GW, and the Voltcraft VC-890, VC-880, VC650BT, VC871, VC891, VC915, VC925 PV, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
@@ -120,6 +120,11 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | OWON B35T+ | — | 🧪 Experimental (built in) | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
 | OWON B41T+ | — | 🧪 Experimental (built in) | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
 | OWON CM2100B | — | 🧪 Experimental (built in) | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
+| OWON CMS101/CMS061 | — | 🧪 Experimental (built in) | — |
+| OWON OW65B | — | 🧪 Experimental (built in) | — |
+| OWON OW67B (Voltcraft VC871) | — | 🧪 Experimental (built in) | — |
+| OWON OW69B (Voltcraft VC891) | — | 🧪 Experimental (built in) | — |
+| Voltcraft VC915/VC925 PV | — | 🧪 Experimental (built in) | — |
 <!-- devices:end -->
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.

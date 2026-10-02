@@ -34,6 +34,7 @@ Researched, not implemented:
 - [VC880 / VC650BT](research/vc880/reverse-engineered-protocol.md)
 - [VC890](research/vc890/reverse-engineered-protocol.md)
 - VC920 / VC940 / VC960 — UT71 rebrands, in the [UT71 spec](research/ut71/reverse-engineered-protocol.md)
+- VC871 / VC891 / VC915 / VC925 PV — OWON's 15-byte frame, in the [OWON spec](research/owon/reverse-engineered-protocol.md)
 
 ## ZOTEK (ZOYI / BSIDE / ANENG)
 
@@ -56,11 +57,11 @@ Researched, not implemented:
 
 ## OWON
 
-- [B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B — Bluetooth LE, 6-byte frames of three little-endian words](research/owon/reverse-engineered-protocol.md)
-  — the 6-byte frame is implemented, experimental. The spec also covers the
-  15-byte frame of OWON's CMS101/CMS061 and OW65B/OW67B/OW69B and the
-  Voltcraft VC871/VC891/VC915/VC925 PV, from OWON's and Voltcraft's apps and
-  manuals, researched, not implemented.
+- [OWON's Bluetooth meters — Bluetooth LE, 6-byte frames of three little-endian words, or 15-byte frames with a sub-display](research/owon/reverse-engineered-protocol.md)
+  — both frames are implemented, experimental. The B33, B35T+, B41T+,
+  OW16B, OW18B, OW18E and CM2100B send the 6-byte frame; the CMS101,
+  CMS061, OW65B, OW67B, OW69B and the Voltcraft VC871, VC891, VC915 and
+  VC925 PV the 15-byte one.
 
 ## Framing and cables
 

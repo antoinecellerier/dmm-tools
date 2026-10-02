@@ -61,20 +61,23 @@ pub(super) fn extract(buf: &[u8], aligned: bool) -> Result<Option<(Vec<u8>, usiz
     Ok(Some((buf[start..end].to_vec(), end)))
 }
 
-/// Whether `frame` passes detection's stricter test: the marker, and status
-/// bits 6-15 clear, as in every 6-byte capture (spec §14.4, "Not seen").
-pub(super) fn plausible(frame: &[u8]) -> bool {
-    frame.len() == FRAME_LEN && has_marker(frame[1]) && frame[3] == 0 && frame[2] & 0xC0 == 0
+/// Whether `frame` passes the stream check's stricter test: the marker, and
+/// status bits 6 and 8-15 clear, as in every 6-byte capture (spec §14.4,
+/// "Not seen"). Bit 7 is the B41T+'s RMR (spec §6.6).
+fn plausible(frame: &[u8]) -> bool {
+    frame.len() == FRAME_LEN && has_marker(frame[1]) && frame[3] == 0 && frame[2] & 0x40 == 0
 }
 
 /// Whether `buf` reads as a 6-byte stream: two plausible frames in a row,
 /// whose 6-byte steps run whole to the end of the buffer, every later step
 /// carrying the marker. Over Bluetooth a 6-byte stream arrives in whole
 /// frames, so it passes from any join offset, a steady reading included,
-/// with no more bytes than two frames. A 15-byte stream does not: a pair
-/// found inside it either leaves a part step at the end, or steps onto
-/// bytes with no marker, such as each frame's last, status bits 16-23
-/// (spec §10.2, §10.6), as in every VC871 frame of spec §14.5.
+/// with no more bytes than two frames. A 15-byte stream of whole frames
+/// does not. Its frames' `F0`s, bytes 2 and 8 (spec §10.2, §14.4), would
+/// make a pair starting at byte 1, which never runs whole to the end of
+/// whole 15-byte frames. A pair elsewhere needs two reading bytes six
+/// apart to pass as markers, with clear bytes where the pair's status
+/// words fall, which no VC871 frame of spec §14.5 has.
 pub(super) fn tiles(buf: &[u8]) -> bool {
     buf.windows(2 * FRAME_LEN).enumerate().any(|(start, w)| {
         (buf.len() - start).is_multiple_of(FRAME_LEN)
@@ -160,13 +163,13 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn plausibility_wants_the_marker_and_clear_high_status_bits() {
+    fn plausibility_wants_the_marker_and_clear_unseen_status_bits() {
         let mut v = VECTORS[0];
         assert!(plausible(&v));
         v[2] = 0x44;
         assert!(!plausible(&v), "bit 6");
         v[2] = 0x84;
-        assert!(!plausible(&v), "bit 7");
+        assert!(plausible(&v), "bit 7, RMR");
         v[2] = 0x04;
         v[3] = 0x01;
         assert!(!plausible(&v), "bit 8");

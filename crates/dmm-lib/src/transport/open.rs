@@ -612,6 +612,26 @@ mod tests {
                 "{id}"
             );
         }
+        for id in ["cms101", "cms061", "ow65b", "ow67b", "ow69b"] {
+            assert_eq!(
+                peers(id),
+                BluetoothPeers {
+                    adapters: false,
+                    meters: vec!["BDM"],
+                },
+                "{id}"
+            );
+        }
+        for id in ["vc871", "vc891", "vc915", "vc925pv"] {
+            assert_eq!(
+                peers(id),
+                BluetoothPeers {
+                    adapters: false,
+                    meters: vec!["BDM", "VC8", "VC9"],
+                },
+                "{id}"
+            );
+        }
         assert_eq!(
             bluetooth_peers(None),
             BluetoothPeers {
@@ -623,7 +643,9 @@ mod tests {
                     "121GW",
                     "BM78xBT",
                     "BDM",
-                    "LILLIPUT"
+                    "LILLIPUT",
+                    "VC8",
+                    "VC9"
                 ],
             }
         );

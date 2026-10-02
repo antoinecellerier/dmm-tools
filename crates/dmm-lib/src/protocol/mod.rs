@@ -313,8 +313,10 @@ pub enum DeviceFamily {
     Bm82x,
     /// Brymen BM525s / BM521s, on the BU-86X cable
     Bm52x,
-    /// OWON's Bluetooth meters that send the 6-byte frame (B33, B35T+,
-    /// B41T+, OW16B, OW18B, OW18E, CM2100B), one entry per model code
+    /// OWON's Bluetooth meters, on the 6-byte frame (B33, B35T+, B41T+,
+    /// OW16B, OW18B, OW18E, CM2100B) or the 15-byte one (CMS101, CMS061,
+    /// OW65B, OW67B, OW69B, Voltcraft VC871, VC891, VC915, VC925 PV), one
+    /// entry per model code
     Owon,
     /// Simulated device for testing and demos
     Mock,
@@ -556,11 +558,19 @@ pub enum Need {
     Transistor,
     /// A thyristor for the SCR test.
     Scr,
+    /// A 4-20 mA current loop with its DC supply (15-48 V on OWON's and
+    /// Voltcraft's meters).
+    LoopSource,
+    /// A meter's optional DC or USB power measurement module, with what it
+    /// measures: a DC supply or USB charger and a load.
+    PowerModule,
+    /// The VC925 PV's LX-925 irradiance adapter, linked to the meter.
+    PvAdapter,
 }
 
 impl Need {
     /// Every need, in the order the up-front checklist lists them.
-    pub const ALL: [Need; 7] = [
+    pub const ALL: [Need; 10] = [
         Need::ShortedLeads,
         Need::DcSource,
         Need::Thermocouple,
@@ -568,6 +578,9 @@ impl Need {
         Need::PowerAdapter,
         Need::Transistor,
         Need::Scr,
+        Need::LoopSource,
+        Need::PowerModule,
+        Need::PvAdapter,
     ];
 
     /// What to call this on the checklist, as an article-less noun phrase: it
@@ -581,6 +594,9 @@ impl Need {
             Need::PowerAdapter => "power adapter, live outlet and load",
             Need::Transistor => "transistor",
             Need::Scr => "SCR (thyristor)",
+            Need::LoopSource => "4-20 mA loop and its 15-48 V supply",
+            Need::PowerModule => "DC or USB power measurement module, supply and load",
+            Need::PvAdapter => "LX-925 irradiance adapter",
         }
     }
 }
@@ -946,6 +962,9 @@ mod tests {
             Need::PowerAdapter => "adapter",
             Need::Transistor => "transistor",
             Need::Scr => "thyristor",
+            Need::LoopSource => "loop",
+            Need::PowerModule => "module",
+            Need::PvAdapter => "lx-925",
         }
     }
 

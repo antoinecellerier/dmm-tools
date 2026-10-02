@@ -89,6 +89,15 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `b35t+` | `b35+`, `owon-b35t+` | OWON B35T+ (experimental) |
 | `b41t+` | `b41t`, `owon-b41t+` | OWON B41T+ (experimental) |
 | `cm2100b` | `owon-cm2100b` | OWON CM2100B (experimental) |
+| `cms101` | `owon-cms101` | OWON CMS101 (experimental) |
+| `cms061` | `owon-cms061` | OWON CMS061 (experimental) |
+| `ow65b` | `owon-ow65b` | OWON OW65B (experimental) |
+| `ow67b` | `owon-ow67b` | OWON OW67B (experimental) |
+| `ow69b` | `owon-ow69b` | OWON OW69B (experimental) |
+| `vc871` | `vc-871` | Voltcraft VC871 (experimental) |
+| `vc891` | `vc-891` | Voltcraft VC891 (experimental) |
+| `vc915` | `vc-915` | Voltcraft VC915 (experimental) |
+| `vc925pv` | `vc-925pv` | Voltcraft VC925 PV (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
 <!-- devices:end -->
@@ -408,8 +417,8 @@ After switching, `dmm-cli` waits for the meter to report the new value and
 prints it (`Meter now in AC+DC V`). A refused or unconfirmed switch exits
 non-zero: check the dial position, and for a range that the input is within it.
 
-On the UT61+/UT161 and the Voltcraft meters a switch is a burst of button
-presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
+On the UT61+/UT161 and the VC-880, VC650BT and VC-890 a switch is a burst
+of button presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
 shows, so it is slower than a single command and audible on the meter. A
 switch on a UT61+/UT161 in HOLD turns HOLD off.
 
@@ -530,12 +539,11 @@ what a key did.
 | `light` | Long MODE: toggle backlight |
 | `lpf` | Long REL: 1 kHz low-pass filter; AC modes only |
 
-#### OWON commands
+#### OWON and Voltcraft VC871 / VC891 / VC915 / VC925 PV commands
 
-The keys of OWON's app and PC software, not yet tried on a meter; watch the
-reading for what a key did. The B33 offers no `light`, `minmax` or
-`exit_minmax`; the OW16B, OW18B and OW18E no `minmax` or `exit_minmax`; the
-CM2100B only `select`, `hold`, `light` and `zero`.
+The keys of OWON's and Voltcraft's apps and OWON's PC software, not yet tried
+on a meter; watch the reading for what a key did. Each model offers only its
+own keys.
 
 | Command | Description |
 |---|---|
@@ -544,11 +552,20 @@ CM2100B only `select`, `hold`, `light` and `zero`.
 | `auto` | Long Range: returns to auto-range |
 | `hold` | Hold key |
 | `light` | Long Hold: backlight, and the OW18B's and OW18E's flashlight |
-| `rel` | △ key; on the OW16B, OW18B and OW18E, the same press as `hz_duty` |
+| `rel` | △ or REL key; on the OW16B, OW18B and OW18E, the same press as `hz_duty` |
+| `exit_rel` | Long REL: leaves REL |
 | `hz_duty` | Hz/Duty key: steps through frequency and duty; AC V, AC A, Hz and duty |
 | `minmax` | Max/Min key: cycles MAX and MIN |
 | `exit_minmax` | Long Max/Min: leaves Max/Min |
 | `zero` | ZERO key: zeroes DC A, relative in capacitance and voltage |
+| `peak` | Peak key |
+| `lpf` | LPF key: low-pass filter |
+| `inrush` | Inrush key; AC A |
+| `current_loop` | 4~20mA key: a 4-20 mA loop as a percentage |
+| `display` | Display key: changes what the main and second displays show |
+| `compare` | Compare key: limit test |
+| `ac_dc` | AC/DC key |
+| `motor` | Motor key: motor rotation |
 
 #### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960 / Brymen
 

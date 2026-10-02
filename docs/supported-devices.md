@@ -4,8 +4,8 @@
 
 Most supported meters talk over a USB cable; the UT-D07
 Bluetooth adapters serve the meters listed for them below, and the UT60BT,
-UT202BT, ZOTEK meters, EEVblog 121GW, Brymen BM788BT/BM787BT and OWON's
-meters have Bluetooth built in. The tool works out which link and which
+UT202BT, ZOTEK meters, EEVblog 121GW, Brymen BM788BT/BM787BT, OWON's meters
+and the Voltcraft VC871, VC891, VC915 and VC925 PV have Bluetooth built in. The tool works out which link and which
 meter are attached from the bytes the meter sends ([how](detection-design.md)),
 so the default `auto` device needs no setup beyond switching the meter's data
 transmission on, as listed per family below.
@@ -23,7 +23,7 @@ list, indexed in the [verification backlog](verification-backlog.md).
 
 | Cable | Chip | VID:PID | Direction | Meters | Confirmed with |
 |---|---|---|---|---|---|
-| UT-D09 | CP2110 | `10C4:EA80` | both ways | UT61+/UT161, UT171, UT8802/UT8803, Voltcraft, older UT181A units | UT61E+ |
+| UT-D09 | CP2110 | `10C4:EA80` | both ways | UT61+/UT161, UT171, UT8802/UT8803, Voltcraft VC-880/VC650BT/VC-890, older UT181A units | UT61E+ |
 | UT-D09 | CH9329 | `1A86:E429` | both ways | sold for UT181A, UT171, UT243 | UT181A (two units), UT61B+ |
 | UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per UNI-T's accessory page | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 | BU-86X kit (BC-86X cable) | — | `0820:0001` | both ways | Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM525s, BM521s per Brymen's manuals | — untested |
@@ -225,14 +225,18 @@ opens as one entry: `bm86x`, `bm82x` and `bm52x`. The BM820s manual names
 the cable BU-82X on one page and BU-86X in its accessory list
 ([open checks](research/bm86x/verification.md#cable)).
 
-## OWON
+## OWON / Voltcraft VC871 / VC891 / VC915 / VC925 PV
 
-Handheld (B33, B35T+, B41T+, OW16B, OW18B, OW18E) and clamp meter (CM2100B).
+Handheld (B33, B35T+, B41T+, OW16B, OW18B, OW18E, OW65B, OW67B, OW69B and
+the Voltcraft meters) and clamp meters (CM2100B, CMS101, CMS061).
 Bluetooth built in, no cable; the meter shows up as "BDM", or as "Lilliput"
-on some systems ([setup](setup.md#bluetooth)). Switch on: disconnect any
-phone app, then hold △/ᛒ on the B33, B35T+ and B41T+, Hz/Duty△/ᛒ on the
-OW16B, OW18B and OW18E, or ZERO/ᛒ for about 2 s on the CM2100B, until ᛒ
-shows.
+on some systems (B35T+, B41T+), and a Voltcraft meter may show up under its
+model name
+([setup](setup.md#bluetooth)). Switch on: disconnect any phone app, then
+hold △/ᛒ on the B33, B35T+ and B41T+, Hz/Duty△/ᛒ on the OW16B, OW18B and
+OW18E, ZERO/ᛒ for about 2 s on the CM2100B, Tab⇌ on the CMS101 and CMS061,
+SETUP on the OW65B, the < key on the OW67B and OW69B, or BLE for about 2 s on the
+Voltcraft meters, until the Bluetooth symbol shows.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
@@ -243,18 +247,26 @@ shows.
 | B35T+ | 6000 | 🧪 Experimental ([#42](https://github.com/antoinecellerier/dmm-tools/issues/42)) | hFE and a mV position |
 | B41T+ | 22000 | 🧪 Experimental ([#43](https://github.com/antoinecellerier/dmm-tools/issues/43)) | a mV position; no hFE |
 | CM2100B | 19999 | 🧪 Experimental ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)) | clamp: 2 A, 20 A and 100 A positions; NCV, ZERO; no temperature |
+| CMS101 | — | 🧪 Experimental | clamp, 1000 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
+| CMS061 | — | 🧪 Experimental | clamp, 600 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
+| OW65B | 6000 | 🧪 Experimental | LoZ, 4-20 mA; second display as a sub-value |
+| OW67B | 60000 | 🧪 Experimental | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
+| OW69B | 60000 | 🧪 Experimental | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
+| VC871 | 60000 | 🧪 Experimental | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
+| VC891 | 60000 | 🧪 Experimental | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
+| VC915 | 20000 | 🧪 Experimental | AC+DC V, low-pass, motor rotation; LoZ, 4-20 mA; second display as a sub-value |
+| VC925 PV | 20000 | 🧪 Experimental | solar with its LX-925 adapter; 2 kV DC, 1.5 kV AC; no A position; second display as a sub-value |
 
 Not run on a meter yet: the decoding and the remote keys come from OWON's
-app, OWON's PC software and the manuals. The meter reports its model when it
-connects, which picks its entry; the OW16B opens as the OW18B's, `ow18b`,
-which code it reports is still to confirm
+and Voltcraft's apps, OWON's PC software and the manuals. The meter reports
+its model when it connects, which picks its entry; the OW16B opens as the
+OW18B's, `ow18b`, which code it reports is still to confirm
 ([open checks](research/owon/verification.md)).
 
 ## Not supported yet
 
-Other meters with a Bluetooth radio built in (the older OWON B35 and B35T,
-OWON's OW65/OW67/OW69, Voltcraft's VC831/VC851/VC871/VC891/VC915/VC925) and
-serial meters (Fluke 28x, UT805A) are not supported yet.
+Other meters with a Bluetooth radio built in (the older OWON B35 and B35T)
+and serial meters (Fluke 28x, UT805A) are not supported yet.
 Candidates, their protocols and what each would take are researched in
 [new-device-candidates.md](research/new-device-candidates.md). Your model is
 missing? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues)

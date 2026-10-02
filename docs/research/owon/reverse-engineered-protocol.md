@@ -9,8 +9,8 @@ or checksum. A one-off read of FFF2 gives the model code and firmware version;
 FFF1, and 2-byte key presses to FFF3. The CMS101/061, OW65B/67B/69B and
 Voltcraft VC871/891/915/925 PV send a 15-byte frame with a sub-display
 instead (§10), decoded by OWON's app and by Voltcraft's, which is the same
-code (§10.10). The 6-byte frame is implemented in `protocol/owon/`,
-experimental; the 15-byte one is not. No OWON or Voltcraft meter has been on
+code (§10.10). Both frames are implemented in `protocol/owon/`,
+experimental. No OWON or Voltcraft meter has been on
 our bench: every fact in §1-12 comes from OWON's and Voltcraft's Android
 apps, OWON's PC software source, and OWON's and Voltcraft's manuals and
 product pages. §14 compares them with community projects and their captures.
@@ -760,8 +760,8 @@ are a 20000-count IP65 design of their own.
 | App | QR code only | QR code only | "Voltcraft VC800-Series" (VC871) | "Voltcraft VC800-Series" (VC891) | "Voltcraft VC800 VC900 series" | "Voltcraft VC800 VC900 series" |
 
 "—" is not read for this spec. Cites: counts CMS101-UM p.35/30-36/31,
-OW65-UM p.48/43, OW67-UM p.49/44, OW69-UM p.51/46, VC915-UM p.66, p.98,
-VC925-UM p.100; Bluetooth on CMS101-UM p.33/28-34/29, OW65-UM
+OW65-UM p.48/43, OW67-UM p.49/44, OW69-UM p.51/46, VC871-UM p.68, p.100,
+VC891-UM p.63, p.90, VC915-UM p.66, p.98, VC925-UM p.100; Bluetooth on CMS101-UM p.33/28-34/29, OW65-UM
 p.13/8, OW67-UM p.13/8, p.33/28, OW69-UM p.30/25, VC871-UM p.92, VC891-UM
 p.82, VC915-UM p.88, VC925-UM p.94; off OW65-UM p.13/8, VC871-UM p.68,
 VC891-UM p.63; idle-off OW67-UM p.33/28 ("after 5 minutes of inactivity";

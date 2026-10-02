@@ -2,7 +2,7 @@
 
 Scope: OWON's Bluetooth LE multimeters — the B33(T)(+), B35(T)(+),
 B41T(+), OW16B, OW18B, OW18E and CM2100B — from the advertisement to the
-frames they send and the commands they accept. The 6-byte frame is
+frames they send and the commands they accept. Both frames are
 implemented in `protocol/owon/`, experimental; this
 pair of documents records what the meters do on the wire, from vendor
 sources only; community projects and their captures are compared in spec

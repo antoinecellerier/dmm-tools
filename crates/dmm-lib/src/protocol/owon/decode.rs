@@ -40,14 +40,14 @@ const NO_PREFIX: u8 = 4;
 
 /// Each prefixed base unit with prefixes p, n, µ, m, none, k, M, G, by
 /// prefix code (spec §6.3).
-const VOLT_UNITS: [&str; 8] = ["pV", "nV", "µV", "mV", "V", "kV", "MV", "GV"];
-const AMP_UNITS: [&str; 8] = ["pA", "nA", "µA", "mA", "A", "kA", "MA", "GA"];
+pub(super) const VOLT_UNITS: [&str; 8] = ["pV", "nV", "µV", "mV", "V", "kV", "MV", "GV"];
+pub(super) const AMP_UNITS: [&str; 8] = ["pA", "nA", "µA", "mA", "A", "kA", "MA", "GA"];
 const OHM_UNITS: [&str; 8] = ["pΩ", "nΩ", "µΩ", "mΩ", "Ω", "kΩ", "MΩ", "GΩ"];
 const FARAD_UNITS: [&str; 8] = ["pF", "nF", "µF", "mF", "F", "kF", "MF", "GF"];
 const HERTZ_UNITS: [&str; 8] = ["pHz", "nHz", "µHz", "mHz", "Hz", "kHz", "MHz", "GHz"];
 
 /// How a function's unit is written.
-enum Unit {
+pub(super) enum Unit {
     /// With the frame's prefix.
     Prefixed(&'static [&'static str; 8]),
     /// With none: OWON's app forces prefix code 4 and leaves it out
@@ -59,7 +59,7 @@ enum Unit {
 
 /// The mode name and unit of `function` on `model` (spec §6.2), or `None`
 /// for one no spec section covers on it.
-fn function_of(function: u8, model: &Model) -> Option<(&'static str, Unit)> {
+pub(super) fn function_of(function: u8, model: &Model) -> Option<(&'static str, Unit)> {
     use Unit::{Bare, Prefixed};
     Some(match function {
         function::DC_V => ("DC V", Prefixed(&VOLT_UNITS)),
@@ -83,13 +83,13 @@ fn function_of(function: u8, model: &Model) -> Option<(&'static str, Unit)> {
     })
 }
 
-/// Status bits 0-5 (spec §6.6).
-const HOLD: u16 = 0x0001;
-const REL: u16 = 0x0002;
-const AUTO: u16 = 0x0004;
-const LOW_BATTERY: u16 = 0x0008;
-const MIN: u16 = 0x0010;
-const MAX: u16 = 0x0020;
+/// Status bits 0-5 (spec §6.6), the same in the 15-byte frame (spec §10.2).
+pub(super) const HOLD: u16 = 0x0001;
+pub(super) const REL: u16 = 0x0002;
+pub(super) const AUTO: u16 = 0x0004;
+pub(super) const LOW_BATTERY: u16 = 0x0008;
+pub(super) const MIN: u16 = 0x0010;
+pub(super) const MAX: u16 = 0x0020;
 /// Bits 6-15, whose meanings in a 6-byte meter's frames are open (spec
 /// §6.6, §14.3 D2).
 const UNDOCUMENTED: u16 = 0xFFC0;
@@ -97,11 +97,11 @@ const UNDOCUMENTED: u16 = 0xFFC0;
 const RMR: u16 = 0x0080;
 
 /// Decimal-point codes 6 and 7: UL and OL (spec §6.4).
-const DP_UL: u8 = 6;
-const DP_OL: u8 = 7;
+pub(super) const DP_UL: u8 = 6;
+pub(super) const DP_OL: u8 = 7;
 /// Decimal-point code 5: ÷10⁵ in OWON's app, unscaled in its PC software
 /// (spec §6.4).
-const DP_5: u8 = 5;
+pub(super) const DP_5: u8 = 5;
 /// The magnitude OWON's app treats as no reading (spec §6.5).
 const NO_READING: u16 = 0x6FFF;
 
@@ -189,7 +189,7 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
                 if dp == DP_5 {
                     report("decimal-point code 5");
                 }
-                let (value, digits) = number(negative, magnitude, dp);
+                let (value, digits) = number(negative, u32::from(magnitude), dp);
                 (MeasuredValue::Normal(value), Some(digits))
             }
         }
@@ -220,10 +220,9 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
 /// The value and the digits of a count with `decimals` digits after the
 /// point, built from integers as the LCD draws them: no leading zeros
 /// beyond the one before the point.
-fn number(negative: bool, magnitude: u16, decimals: u8) -> (f64, String) {
+pub(super) fn number(negative: bool, magnitude: u32, decimals: u8) -> (f64, String) {
     let sign = if negative { "-" } else { "" };
     let divisor = 10u32.pow(u32::from(decimals));
-    let magnitude = u32::from(magnitude);
     let digits = if decimals == 0 {
         format!("{sign}{magnitude}")
     } else {

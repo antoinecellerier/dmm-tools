@@ -186,11 +186,13 @@ UT515A+/C or UT516E: no source for their protocols is known.
 
 ---
 
-### OWON: the older B35/B35T, and the 15-byte meters
+### OWON: the older B35/B35T
 
-OWON's B33, B35T+, B41T+, OW16B, OW18B, OW18E and CM2100B are supported
-(`owon`, [research/owon](owon/reverse-engineered-protocol.md)). What OWON's
-sources describe beyond them:
+OWON's B33, B35T+, B41T+, OW16B, OW18B, OW18E and CM2100B, and the meters on
+its 15-byte frame (CMS101, CMS061, OW65B, OW67B, OW69B, Voltcraft VC871,
+VC891, VC915, VC925 PV), are supported (`owon`,
+[research/owon](owon/reverse-engineered-protocol.md)), the CMS's
+oscilloscope features aside. What OWON's sources describe beyond them:
 
 - **Next: the older B35 and B35T, on the FS9922 14-byte ASCII frame.** OWON's
   PC source keeps a fully commented-out parser for 14-byte frames, and notes
@@ -200,26 +202,8 @@ sources describe beyond them:
   Community tools describe FS9922 B35T units sending those frames on FFF4
   in the same service (spec §14.4) `[COMMUNITY]`. When taken up, OWON's
   commented-out parser is the source, before any community cross-reference.
-- **OWON's 15-byte frame.** OWON's iMeter app decodes a second, 15-byte frame
-  with a sub-display for the Voltcraft VC831, VC851, VC871, VC891, VC915 and
-  VC925, OWON's OW65, OW67 and OW69, and the CMS061/CMS101 clamp-scopes; it
-  is specified from the app alone
-  ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame)).
-  These Voltcraft meters are not the VC880/VC890 line already supported.
-  OWON's OW65, OW67 and OW69 manuals give Bluetooth to their B models.
-  **In progress (2026-10-02), every app code in scope.** Demand, seen
-  2026-10-02, is about a tenth of the 6-byte group's: the CMS101 has five
-  YouTube reviews of 6.9k-26.4k views, an EEVblog thread, about 108
-  AliExpress sales and about 15 amazon.de ratings; the VC871 and VC891 have
-  6 and 4 amazon.de ratings and Voltcraft's own app 1k+ downloads; the VC915
-  and VC925 PV (2025) none yet; the OW65B, OW67B and OW69B are sold only by
-  regional distributors. All are current (2022-2025). No Bluetooth was found
-  for the VC831 or VC851: Voltcraft's app lists only the VC871, VC891, VC915
-  and VC925 PV, and the VC851 manual never mentions it.
-
-Out of scope: the CMS061/CMS101's scope features; the B35's "Bluetooth 2.0"
-version, which OWON lists as Android-only and which is presumably classic
-Bluetooth `[UNVERIFIED]`.
+Out of scope: the B35's "Bluetooth 2.0" version, which OWON lists as
+Android-only and which is presumably classic Bluetooth `[UNVERIFIED]`.
 
 ---
 
@@ -498,7 +482,6 @@ the same transport.
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
 | **OWON B35/B35T (FS9922, before the B35T+)** | BLE (built in) | The supported OWON meters' service per community tools; OWON's PC source keeps a commented-out parser ([research/owon §11](owon/reverse-engineered-protocol.md#11-an-earlier-format-14-byte-ascii-pc-source-commented-out)) | Moderate: a 14-byte ASCII frame whose status bits OWON's source does not define |
-| **Voltcraft VC831/851/871/891/915/925, OWON OW65/67/69, CMS061/101** | BLE (built in) | OWON's 15-byte frame, specified from OWON's iMeter app ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame)); the same transport and family module as the B/OW meters | Moderate: a second frame layout with a sub-display, one vendor source |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
@@ -516,7 +499,7 @@ the same transport.
 ### Strategic notes
 
 - **BLE is where the open demand is.** The Bluetooth transport exists and
-  reaches OWON's B, OW and CM2100B meters; OWON's older and 15-byte meters are
+  reaches OWON's meters, the 15-byte ones included; OWON's older B35/B35T is
   the next step. sigrok's BLE is Linux-only and experimental; no
   competitor fills this space cross-platform.
 - **rusty_meter** (100 stars, Rust/egui, OWON XDM) validates the exact

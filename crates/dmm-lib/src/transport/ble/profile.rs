@@ -568,6 +568,33 @@ mod tests {
         assert_eq!(write_type(&OWON, &acknowledged), WriteType::WithResponse);
     }
 
+    /// A VC871's FFF0 as its owners dumped it: FFF1 read and both writes,
+    /// FFF2 read, FFF3 acknowledged writes only, FFF4 notify only and FFF5
+    /// read (`docs/research/owon/reverse-engineered-protocol.md` §14.2). It
+    /// takes OWON's profile, and its keys go acknowledged.
+    #[test]
+    fn a_vc871_takes_owons_profile_with_acknowledged_keys() {
+        let uuid = |n: u16| format!("0000{n:04x}-0000-1000-8000-00805f9b34fb");
+        let service = uuid(0xFFF0);
+        let vc871 = [
+            characteristic(
+                &service,
+                &uuid(0xFFF1),
+                CharPropFlags::READ | CharPropFlags::WRITE | CharPropFlags::WRITE_WITHOUT_RESPONSE,
+            ),
+            characteristic(&service, &uuid(0xFFF2), CharPropFlags::READ),
+            characteristic(&service, &uuid(0xFFF3), CharPropFlags::WRITE),
+            characteristic(&service, &uuid(0xFFF4), CharPropFlags::NOTIFY),
+            characteristic(&service, &uuid(0xFFF5), CharPropFlags::READ),
+        ];
+        let chosen = choose_profile(&vc871.clone().into()).unwrap();
+        assert_eq!(chosen.profile.name, OWON.name);
+        assert_eq!(chosen.notify, vc871[3]);
+        assert_eq!(chosen.write, vc871[2]);
+        assert_eq!(chosen.info, Some(vc871[1].clone()));
+        assert_eq!(write_type(&OWON, &chosen.write), WriteType::WithResponse);
+    }
+
     /// An over-MTU write is rejected by the peer, so the chunk size has to
     /// follow whatever the platform negotiated.
     #[test]

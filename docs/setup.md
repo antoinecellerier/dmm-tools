@@ -124,13 +124,17 @@ switches off after 15 to 30 minutes idle; hold SELECT while turning it on to
 disable that. A renamed meter opens with
 `--device bm78xbt --adapter <address>`.
 
-OWON's B and OW meters and the CM2100B have Bluetooth built in and need no
-pairing either: disconnect any phone app, then hold △/ᛒ on a B33, B35T+ or
-B41T+, Hz/Duty△/ᛒ on an OW16B, OW18B or OW18E, or ZERO/ᛒ for about 2 s on
-the CM2100B, until ᛒ shows. The meter shows up as "BDM", or as "Lilliput" on
-some systems; its Bluetooth switches off after 10 minutes idle, 5 on the
-CM2100B. A renamed meter opens with `--device <id> --adapter <address>`, the
-id from [Devices](cli-reference.md#devices).
+OWON's meters and the Voltcraft VC871, VC891, VC915 and VC925 PV have
+Bluetooth built in and need no pairing either: disconnect any phone app,
+then hold the meter's Bluetooth key, as
+[supported devices](supported-devices.md) lists, until the Bluetooth symbol
+shows. The meter shows up as "BDM", or as "Lilliput" on some systems (B35T+,
+B41T+); a Voltcraft meter may show up under its model name. Bluetooth switches off
+after 10 minutes idle on the B33, B35T+, B41T+, OW16B, OW18B and OW18E, and
+after 5 on the CM2100B and OW67B; switch it on again after every power-on
+of a VC871 or VC891. A renamed meter opens with
+`--device <id> --adapter <address>`, the id from
+[Devices](cli-reference.md#devices).
 
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
 

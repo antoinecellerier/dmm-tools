@@ -1,19 +1,49 @@
-//! The six models a registry entry stands for, by the model code they read
-//! out of FFF2, and that read itself
-//! (`docs/research/owon/reverse-engineered-protocol.md` §1, §4).
+//! The models a registry entry stands for, by the model code they read out
+//! of FFF2, and that read itself
+//! (`docs/research/owon/reverse-engineered-protocol.md` §1, §4, §10.1).
 
 use super::keys::{self, Key};
 use crate::protocol::MeterKeys;
 use std::fmt;
 
+/// Which frame a model sends (spec §10.1): OWON's app picks its parser by
+/// the model code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FrameKind {
+    /// Three 16-bit words (spec §5, §6).
+    Six,
+    /// Five 24-bit words with a sub-display (spec §10.2).
+    Fifteen,
+}
+
+impl FrameKind {
+    /// The most sub-values one frame carries: the 15-byte frame's
+    /// sub-display (spec §10.2).
+    pub(super) fn max_aux_values(self) -> usize {
+        match self {
+            FrameKind::Six => 0,
+            FrameKind::Fifteen => 1,
+        }
+    }
+
+    /// How messages name it.
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            FrameKind::Six => "6-byte",
+            FrameKind::Fifteen => "15-byte",
+        }
+    }
+}
+
 /// What function 13 is on a model (spec §6.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Function13 {
-    /// NCV, levels 0-4 (spec §6.7): the OW16, OW18 and CM2100, whose dials
-    /// have an NCV position (spec §9.2).
+    /// NCV, levels 0-4 (spec §6.7): the OW16, OW18, CM2100 and CMS, which
+    /// have an NCV position or function (spec §9.2, §9.4).
     Ncv,
     /// The app's NCV against the PC's "ADP" on the B series, whose dials
-    /// have neither (spec §6.2): what such a meter sends is open.
+    /// have neither (spec §6.2), and on the other 15-byte meters, which
+    /// have no NCV (spec §9.4): what such a meter sends is open.
     Open,
 }
 
@@ -23,6 +53,7 @@ pub(super) enum Function13 {
 pub(super) struct Model {
     /// FFF2 byte 0 (spec §1).
     pub(super) code: u8,
+    pub(super) frame: FrameKind,
     /// The registry id.
     pub(super) id: &'static str,
     /// The registry display name, and the profile's model name.
@@ -36,9 +67,13 @@ pub(super) struct Model {
     /// The keys' commands, in the same order, for the profile.
     pub(super) commands: &'static [&'static str],
     /// The key code a long press of which switches Bluetooth (spec §7.1,
-    /// §9.1); never sent long.
-    pub(super) bluetooth_key: u8,
+    /// §9.1); never sent long. `None` on the 15-byte meters, whose BLE
+    /// key's code is unknown (spec §10.8).
+    pub(super) bluetooth_key: Option<u8>,
     pub(super) meter_keys: MeterKeys,
+    /// Whether the sub-display takes the main display's function under
+    /// REL, MAX or MIN: the VC871 alone (spec §10.7).
+    pub(super) sub_follows_main: bool,
 }
 
 /// Code 18, the OW18B: OWON's PC software names it `OW18_16`, the one
@@ -47,60 +82,70 @@ pub(super) static OW18B: Model = Model {
     code: 18,
     id: "ow18b",
     name: "OWON OW18B/OW16B",
+    frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
     keys: &keys::OW,
     commands: &keys::OW_COMMANDS,
-    bluetooth_key: keys::OW_BLUETOOTH_KEY,
+    bluetooth_key: Some(keys::OW_BLUETOOTH_KEY),
     meter_keys: keys::OW_METER_KEYS,
+    sub_follows_main: false,
 };
 
 pub(super) static OW18E: Model = Model {
     code: 20,
     id: "ow18e",
     name: "OWON OW18E",
+    frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
     keys: &keys::OW,
     commands: &keys::OW_COMMANDS,
-    bluetooth_key: keys::OW_BLUETOOTH_KEY,
+    bluetooth_key: Some(keys::OW_BLUETOOTH_KEY),
     meter_keys: keys::OW_METER_KEYS,
+    sub_follows_main: false,
 };
 
 pub(super) static B33: Model = Model {
     code: 33,
     id: "b33",
     name: "OWON B33",
+    frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: false,
     keys: &keys::B33,
     commands: &keys::B33_COMMANDS,
-    bluetooth_key: keys::B_BLUETOOTH_KEY,
+    bluetooth_key: Some(keys::B_BLUETOOTH_KEY),
     meter_keys: keys::B_METER_KEYS,
+    sub_follows_main: false,
 };
 
 pub(super) static B35: Model = Model {
     code: 35,
     id: "b35t+",
     name: "OWON B35T+",
+    frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: false,
     keys: &keys::B35_B41,
     commands: &keys::B35_B41_COMMANDS,
-    bluetooth_key: keys::B_BLUETOOTH_KEY,
+    bluetooth_key: Some(keys::B_BLUETOOTH_KEY),
     meter_keys: keys::B_METER_KEYS,
+    sub_follows_main: false,
 };
 
 pub(super) static B41: Model = Model {
     code: 41,
     id: "b41t+",
     name: "OWON B41T+",
+    frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: true,
     keys: &keys::B35_B41,
     commands: &keys::B35_B41_COMMANDS,
-    bluetooth_key: keys::B_BLUETOOTH_KEY,
+    bluetooth_key: Some(keys::B_BLUETOOTH_KEY),
     meter_keys: keys::B_METER_KEYS,
+    sub_follows_main: false,
 };
 
 /// Code 21 is in OWON's app only (spec §1).
@@ -108,20 +153,155 @@ pub(super) static CM2100B: Model = Model {
     code: 21,
     id: "cm2100b",
     name: "OWON CM2100B",
+    frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
     keys: &keys::CM2100,
     commands: &keys::CM2100_COMMANDS,
-    bluetooth_key: keys::CM2100_BLUETOOTH_KEY,
+    bluetooth_key: Some(keys::CM2100_BLUETOOTH_KEY),
     meter_keys: keys::CM2100_METER_KEYS,
+    sub_follows_main: false,
+};
+
+/// The CMS101 and CMS061, clamp meters with an oscilloscope mode and NCV
+/// (spec §9.4), share the app's key list (spec §10.8).
+pub(super) static CMS101: Model = Model {
+    code: 101,
+    id: "cms101",
+    name: "OWON CMS101",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Ncv,
+    rmr: false,
+    keys: &keys::CMS,
+    commands: &keys::CMS_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    sub_follows_main: false,
+};
+
+pub(super) static CMS061: Model = Model {
+    code: 61,
+    id: "cms061",
+    name: "OWON CMS061",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Ncv,
+    rmr: false,
+    keys: &keys::CMS,
+    commands: &keys::CMS_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    sub_follows_main: false,
+};
+
+pub(super) static OW65B: Model = Model {
+    code: 65,
+    id: "ow65b",
+    name: "OWON OW65B",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Open,
+    rmr: false,
+    keys: &keys::OW65,
+    commands: &keys::OW65_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: MeterKeys::NONE,
+    sub_follows_main: false,
+};
+
+/// The OW67B is the VC871's twin by its manual (spec §9.4), but the app
+/// reads it with the ordinary parser (spec §10.7).
+pub(super) static OW67B: Model = Model {
+    code: 67,
+    id: "ow67b",
+    name: "OWON OW67B",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Open,
+    rmr: false,
+    keys: &keys::OW67,
+    commands: &keys::OW67_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: MeterKeys::NONE,
+    sub_follows_main: false,
+};
+
+pub(super) static OW69B: Model = Model {
+    code: 69,
+    id: "ow69b",
+    name: "OWON OW69B",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Open,
+    rmr: false,
+    keys: &keys::OW69,
+    commands: &keys::OW69_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    sub_follows_main: false,
+};
+
+pub(super) static VC871: Model = Model {
+    code: 87,
+    id: "vc871",
+    name: "Voltcraft VC871",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Open,
+    rmr: false,
+    keys: &keys::VC871,
+    commands: &keys::VC871_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: MeterKeys::NONE,
+    sub_follows_main: true,
+};
+
+pub(super) static VC891: Model = Model {
+    code: 89,
+    id: "vc891",
+    name: "Voltcraft VC891",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Open,
+    rmr: false,
+    keys: &keys::VC891,
+    commands: &keys::VC891_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    sub_follows_main: false,
+};
+
+pub(super) static VC915: Model = Model {
+    code: 91,
+    id: "vc915",
+    name: "Voltcraft VC915",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Open,
+    rmr: false,
+    keys: &keys::VC915,
+    commands: &keys::VC915_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: MeterKeys::NONE,
+    sub_follows_main: false,
+};
+
+pub(super) static VC925PV: Model = Model {
+    code: 92,
+    id: "vc925pv",
+    name: "Voltcraft VC925 PV",
+    frame: FrameKind::Fifteen,
+    function13: Function13::Open,
+    rmr: false,
+    keys: &keys::VC925,
+    commands: &keys::VC925_COMMANDS,
+    bluetooth_key: None,
+    meter_keys: MeterKeys::NONE,
+    sub_follows_main: false,
 };
 
 /// Every model, in registry order.
-pub(super) static MODELS: [&Model; 6] = [&OW18B, &OW18E, &B33, &B35, &B41, &CM2100B];
+pub(super) static MODELS: [&Model; 15] = [
+    &OW18B, &OW18E, &B33, &B35, &B41, &CM2100B, &CMS101, &CMS061, &OW65B, &OW67B, &OW69B, &VC871,
+    &VC891, &VC915, &VC925PV,
+];
 
 /// What detection falls back to with no model code, or one no entry has:
 /// OWON's PC software decodes an unknown code as a B-series meter (spec
-/// §1).
+/// §1), which sends the 6-byte frame.
 pub(super) static FALLBACK: &Model = &B35;
 
 impl Model {
@@ -132,18 +312,19 @@ impl Model {
 }
 
 /// Why a model code's meter cannot be read here, for the codes OWON's
-/// programs read with another decoder; `None` for every other code.
+/// programs read but no entry carries, to follow "the meter reports OWON
+/// model code N"; `None` for every other code.
 pub(super) fn unsupported_format(code: u8) -> Option<&'static str> {
     match code {
-        // The app's 15-byte meters: Voltcraft's VC8x1/VC9x5, the OW65-69
-        // and the CMS061/101 (spec §10.1).
-        101 | 61 | 91 | 92 | 83 | 85 | 65 | 87 | 67 | 89 | 69 => {
-            Some("it sends OWON's 15-byte frame, which this tool does not read yet")
+        // The app's VC831 and VC851, which have no Bluetooth (spec §1,
+        // §10.1).
+        83 | 85 => {
+            Some(", which this tool does not read yet; please open an issue with this message")
         }
         // Series 55's 6-byte frame takes its sign from the function word
         // (spec §6.5).
         55 => Some(
-            "it sends OWON's 6-byte frame with the sign in the function word, which this tool \
+            ": it sends OWON's 6-byte frame with the sign in the function word, which this tool \
              does not read yet",
         ),
         _ => None,
@@ -274,10 +455,10 @@ mod tests {
         assert_eq!(none.record, Some(Record::None));
     }
 
-    /// Codes 55 and 223 have no entry (spec §1).
+    /// Codes 55, 83, 85 and 223 have no entry (spec §1, §10.1).
     #[test]
     fn codes_without_an_entry_name_no_model() {
-        for code in [55, 223, 0, 87] {
+        for code in [55, 83, 85, 223, 0] {
             assert!(Model::for_code(code).is_none(), "{code}");
         }
         for model in MODELS {
@@ -286,16 +467,55 @@ mod tests {
         }
     }
 
-    /// The app's 15-byte codes and series 55 are refused, nothing else.
+    /// The VC831/VC851 codes and series 55 are refused, nothing else.
     #[test]
     fn the_other_formats_are_named() {
-        for code in [101, 61, 91, 92, 83, 85, 65, 87, 67, 89, 69] {
+        for code in [83, 85] {
             assert!(
-                unsupported_format(code).is_some_and(|why| why.contains("15-byte")),
+                unsupported_format(code).is_some_and(|why| why.contains("open an issue")),
                 "{code}"
             );
         }
         assert!(unsupported_format(55).is_some_and(|why| why.contains("sign")));
         assert!(unsupported_format(223).is_none());
+    }
+
+    /// The app's 15-byte codes are the nine 15-byte entries, in registry
+    /// order (spec §10.1), each with one sub-value and no Bluetooth key
+    /// code; only the VC871's sub-display follows the main one (spec
+    /// §10.7).
+    #[test]
+    fn the_15_byte_codes_are_their_entries() {
+        let fifteen: Vec<(u8, &str)> = MODELS
+            .iter()
+            .filter(|m| m.frame == FrameKind::Fifteen)
+            .map(|m| (m.code, m.id))
+            .collect();
+        assert_eq!(
+            fifteen,
+            [
+                (101, "cms101"),
+                (61, "cms061"),
+                (65, "ow65b"),
+                (67, "ow67b"),
+                (69, "ow69b"),
+                (87, "vc871"),
+                (89, "vc891"),
+                (91, "vc915"),
+                (92, "vc925pv"),
+            ]
+        );
+        for model in MODELS {
+            let fifteen = model.frame == FrameKind::Fifteen;
+            assert_eq!(model.bluetooth_key.is_none(), fifteen, "{}", model.id);
+            assert_eq!(model.frame.max_aux_values(), usize::from(fifteen));
+            assert_eq!(model.sub_follows_main, model.code == 87, "{}", model.id);
+        }
+        let ncv: Vec<&str> = MODELS
+            .iter()
+            .filter(|m| m.function13 == Function13::Ncv)
+            .map(|m| m.id)
+            .collect();
+        assert_eq!(ncv, ["ow18b", "ow18e", "cm2100b", "cms101", "cms061"]);
     }
 }

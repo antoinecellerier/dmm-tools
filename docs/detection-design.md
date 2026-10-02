@@ -113,8 +113,8 @@ The overlaps the ranking arbitrates, each rule declining what is not its own:
   rule can fire on the other families: a UT61+ name frame reads a length of `0x5508`, a VC-880
   frame `0x0124`.
 - `vc880`, `vc890` and `ut61eplus` — the 1-byte BE16 families. A UT8803 frame's mode byte reads
-  as a plausible length here, which is what the checksum settles. The two Voltcraft meters share
-  a type byte and differ in payload length. Acks are skipped. A name frame picks a UT61+ model; a
+  as a plausible length here, which is what the checksum settles. The VC-880 and VC-890 share a
+  type byte and differ in payload length. Acks are skipped. A name frame picks a UT61+ model; a
   bare reading settles the family only (`FamilyOnly`, fallback `ut61eplus`).
 - `ut8802` — two consecutive `0xAC` frames. That format's validation passes roughly 1% of random
   bytes and UT181A frames carry arbitrary float32 payload, which is why an unchecksummed claim
@@ -127,12 +127,11 @@ The overlaps the ranking arbitrates, each rule declining what is not its own:
 - `bm86x`, `bm82x`, `bm52x` — four model bytes of the series in a row, whichever request drew
   them: Brymen's programs expect a BM52x to answer the BM82x's request. One meter sends one
   series' code, so no two of the rules match.
-- `owon` — a 6-byte frame whose function word carries OWON's marker. With a model code read at
-  connect, one frame names the code's entry, or the B35T+ entry for an unknown code; a code
-  OWON's programs read with another decoder (the 15-byte frame, series 55) gives the B35T+ entry
-  on any bytes, and its `init` refuses it naming the format. Without a code, two frames 6 bytes
-  apart, no unknown status bit set, and the marker at every later 6-byte step to the buffer's end,
-  in whole steps, give the B35T+ entry at rank 1; a 15-byte meter's frames fail that.
+- `owon` — OWON's frames, named by the model code read at connect: a 6-byte model's code, or an
+  unknown one (the B35T+ entry), takes one 6-byte frame; a 15-byte model's any 15 bytes; a code
+  no entry reads (codes 83 and 85, the app's VC831 and VC851, and series 55) any bytes, for
+  `init` to refuse. Without a code, two plausible 6-byte frames with whole marked steps to the
+  buffer's end give the B35T+ entry at rank 1; a 15-byte meter then opens nothing.
 
 The bytes each rule expects are in the backlog's
 [Device auto-detection](verification-backlog.md#device-auto-detection) table and in each family's
@@ -206,9 +205,9 @@ seen on a new cable joins detection there by being listed on it.
   Behind an unnamed link it rides the UNI-T probe windows and sends nothing.
 - **OWON meters** stream on their own too. Their Bluetooth profile reads the model code once at
   connect, before detection starts, and the rule takes it with one frame; with no code read, it
-  needs two. With "BDM" or "LILLIPUT" as the peer's name, or FFF2 read, it is the only rule that
-  runs; behind an unnamed link that read no FFF2 it rides the UNI-T probe windows and sends
-  nothing.
+  needs two 6-byte frames. With "BDM", "LILLIPUT", "VC8…" or "VC9…" as the peer's name, or FFF2
+  read, it is the only rule that runs; behind an unnamed link that read no FFF2 it rides the
+  UNI-T probe windows and sends nothing.
 - **BU-86X** carries Brymen's three series alone, so detection there sends each series' reading
   request, the one a named meter sends for every reading. A meter in capacitance, or a BM86x at
   500000 counts, can answer after the windows close; the activation steps say to set a voltage

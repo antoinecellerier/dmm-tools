@@ -191,6 +191,9 @@ fn need_name(need: Need) -> &'static str {
         Need::PowerAdapter => "power_adapter",
         Need::Transistor => "transistor",
         Need::Scr => "scr",
+        Need::LoopSource => "loop_source",
+        Need::PowerModule => "power_module",
+        Need::PvAdapter => "pv_adapter",
     }
 }
 

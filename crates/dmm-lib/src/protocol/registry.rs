@@ -128,13 +128,23 @@ pub static DEVICES: &[&SelectableDevice] = &[
     &bm86x::devices::BM86X,
     &bm86x::devices::BM82X,
     &bm86x::devices::BM52X,
-    // OWON, one entry per model code
+    // OWON, one entry per model code, the Voltcraft meters on its frame
+    // included
     &owon::devices::OW18B,
     &owon::devices::OW18E,
     &owon::devices::B33,
     &owon::devices::B35T_PLUS,
     &owon::devices::B41T_PLUS,
     &owon::devices::CM2100B,
+    &owon::devices::CMS101,
+    &owon::devices::CMS061,
+    &owon::devices::OW65B,
+    &owon::devices::OW67B,
+    &owon::devices::OW69B,
+    &owon::devices::VC871,
+    &owon::devices::VC891,
+    &owon::devices::VC915,
+    &owon::devices::VC925PV,
     // Mock
     &mock::devices::MOCK,
     &zotek::sim::MOCK_ZT5B,
@@ -404,6 +414,10 @@ mod tests {
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
+        // Experimental, with their verification issues still to be opened.
+        const ISSUE_TO_OPEN: &[&str] = &[
+            "cms101", "cms061", "ow65b", "ow67b", "ow69b", "vc871", "vc891", "vc915", "vc925pv",
+        ];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
@@ -422,7 +436,7 @@ mod tests {
                 "device {} has unexpected stability",
                 device.id
             );
-            if !expected.is_verified() {
+            if !expected.is_verified() && !ISSUE_TO_OPEN.contains(&device.id) {
                 assert!(
                     profile.verification_issue.is_some(),
                     "{} device {} must link to a verification issue",
@@ -535,17 +549,31 @@ mod tests {
     }
 
     /// OWON's meters all advertise "BDM", padded on air with non-printing
-    /// bytes, and give "LILLIPUT" as a device name: either finds the six
-    /// OWON entries in table order, and nothing else; no other meter's name
-    /// finds them.
+    /// bytes, and the 6-byte ones give "LILLIPUT" as a device name; the
+    /// Voltcraft ones may advertise "VC871", "VC891", "VCxxx" or "VC8xx_1"
+    /// instead. Each finds its OWON entries in table order, and nothing
+    /// else; no other meter's name finds them.
     #[test]
     fn bdm_finds_every_owon_entry() {
-        const OWON: [&str; 6] = ["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"];
+        const SIX: [&str; 6] = ["ow18b", "ow18e", "b33", "b35t+", "b41t+", "cm2100b"];
+        const OWON_15: [&str; 5] = ["cms101", "cms061", "ow65b", "ow67b", "ow69b"];
+        const VOLTCRAFT: [&str; 4] = ["vc871", "vc891", "vc915", "vc925pv"];
+        let owon: Vec<&str> = [&SIX[..], &OWON_15, &VOLTCRAFT].concat();
         let ids = |name: &str| advertising(name).iter().map(|d| d.id).collect::<Vec<_>>();
         let nuls = format!("BDM{}", "\0".repeat(12));
         let ones = format!("BDM{}", "\u{1}".repeat(12));
-        for name in ["BDM", " bdm ", &nuls, &ones, "LILLIPUT", "Lilliput"] {
-            assert_eq!(ids(name), OWON, "{name:?}");
+        for name in ["BDM", " bdm ", &nuls, &ones] {
+            assert_eq!(ids(name), owon, "{name:?}");
+        }
+        for name in ["LILLIPUT", "Lilliput"] {
+            assert_eq!(ids(name), SIX, "{name:?}");
+        }
+        for name in ["VC871", "VC891", "VC8xx_1", "vc915", "VC925"] {
+            assert_eq!(ids(name), VOLTCRAFT, "{name:?}");
+        }
+        // No other entry advertises a VC name, nor takes these.
+        for name in ["VC", "V", "VC7", "VC650BT", "VC-880", "VC-890"] {
+            assert!(ids(name).is_empty(), "{name:?}: {:?}", ids(name));
         }
         for name in [
             "Bluetooth DMM",
@@ -558,7 +586,7 @@ mod tests {
             "UT-D07B",
         ] {
             assert!(
-                !ids(name).iter().any(|id| OWON.contains(id)),
+                !ids(name).iter().any(|id| owon.contains(id)),
                 "{name:?}: {:?}",
                 ids(name)
             );

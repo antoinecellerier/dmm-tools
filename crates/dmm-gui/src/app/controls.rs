@@ -1435,16 +1435,17 @@ mod tests {
     /// and there is nothing to scroll.
     #[test]
     fn a_tall_window_shows_every_row_with_nothing_scrolled() {
-        let frame = settings_panel(400.0, 900.0);
+        // Tall enough for every device chip, wrapped at this width.
+        let frame = settings_panel(400.0, 1200.0);
         let panel = egui::PanelState::load(&frame.ctx, Id::new("top_bar")).expect("the panel ran");
         let height = panel.outer_rect.height();
         assert!(
             height > SETTINGS_MIN_HEIGHT + 40.0,
-            "settings panel is only {height} pt tall in a 900 pt window"
+            "settings panel is only {height} pt tall in a 1200 pt window"
         );
         // Short of the cap, so the rows fit inside it.
         assert!(
-            height < settings_scroll_cap(900.0, 0.0),
+            height < settings_scroll_cap(1200.0, 0.0),
             "settings panel is {height} pt tall, at the cap"
         );
         let inner = frame.scrolled.inner_rect;
