@@ -1126,9 +1126,10 @@ mod tests {
         assert_eq!(detected.reported_name.as_deref(), Some("OWON B41T+"));
         assert!(meter.inner.written.borrow().is_empty());
 
-        // With no model code read, two frames in a row open the B35T+.
-        let stream = crate::protocol::owon::frame::tests::stream();
-        let meter = Advertising::new("BDM", vec![stream]);
+        // With no model code read, two frames in a row open the B35T+. Each
+        // comes in a notification of its own, as on the meter.
+        let frames = crate::protocol::owon::frame::tests::VECTORS.map(|v| v.to_vec());
+        let meter = Advertising::new("BDM", frames.to_vec());
         let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
         assert_eq!(detected.device.id, "b35t+");
         assert_eq!(detected.reported_name, None);

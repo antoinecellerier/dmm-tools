@@ -301,7 +301,8 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 
 /// With FFF2 read, its model code names the entry once one frame has come:
 /// the link is OWON's profile, so the frames are OWON's. Without it, two
-/// plausible frames in a row, which open the fallback entry. A code the
+/// plausible frames in a row with the marker at every later 6-byte step
+/// ([`frame::tiles`]), which open the fallback entry. A code the
 /// 15-byte or series-55 decoder reads (spec §1, §10.1) opens the fallback
 /// entry on any bytes, so that `init` refuses it naming the format.
 fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
@@ -316,7 +317,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
                 reported_name: Some(name_for(info.code)),
             })
         }
-        None => frame::two_in_a_row(buf).then_some(Evidence::Model {
+        None => frame::tiles(buf).then_some(Evidence::Model {
             id: FALLBACK.id,
             reported_name: None,
         }),
@@ -771,6 +772,34 @@ mod tests {
             recognise(&stream(), &probing(Some(&[]))),
             recognise(&stream(), &none)
         );
+    }
+
+    /// Without a model code, a 15-byte meter's frames are not taken for
+    /// 6-byte ones, alone, repeated or joined anywhere: spec §14.5's VC871
+    /// frames, and one with status bit 16 set.
+    #[test]
+    fn recognise_without_device_information_declines_15_byte_frames() {
+        let err = [
+            0xA3, 0x00, 0xF0, 0x00, 0x00, 0x00, 0xA2, 0x09, 0xF0, 0x00, 0x00, 0x00, 0x04, 0x00,
+            0x01,
+        ];
+        let none = probing(None);
+        for frame in VC871.iter().chain([&err]) {
+            for count in 1..=4 {
+                let frames = frame.repeat(count);
+                for skip in 0..frame.len() {
+                    assert_eq!(
+                        recognise(&frames[skip..], &none),
+                        None,
+                        "{frame:02X?} {skip}"
+                    );
+                }
+            }
+        }
+        let all = VC871.concat();
+        for skip in 0..15 {
+            assert_eq!(recognise(&all[skip..], &none), None, "{skip}");
+        }
     }
 
     /// A code no entry carries is still a model code: the fallback entry,

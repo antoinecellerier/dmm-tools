@@ -67,10 +67,23 @@ pub(super) fn plausible(frame: &[u8]) -> bool {
     frame.len() == FRAME_LEN && has_marker(frame[1]) && frame[3] == 0 && frame[2] & 0xC0 == 0
 }
 
-/// Whether two plausible frames follow each other anywhere in `buf`.
-pub(super) fn two_in_a_row(buf: &[u8]) -> bool {
-    buf.windows(2 * FRAME_LEN)
-        .any(|w| plausible(&w[..FRAME_LEN]) && plausible(&w[FRAME_LEN..]))
+/// Whether `buf` reads as a 6-byte stream: two plausible frames in a row,
+/// whose 6-byte steps run whole to the end of the buffer, every later step
+/// carrying the marker. Over Bluetooth a 6-byte stream arrives in whole
+/// frames, so it passes from any join offset, a steady reading included,
+/// with no more bytes than two frames. A 15-byte stream does not: a pair
+/// found inside it either leaves a part step at the end, or steps onto
+/// bytes with no marker, such as each frame's last, status bits 16-23
+/// (spec §10.2, §10.6), as in every VC871 frame of spec §14.5.
+pub(super) fn tiles(buf: &[u8]) -> bool {
+    buf.windows(2 * FRAME_LEN).enumerate().any(|(start, w)| {
+        (buf.len() - start).is_multiple_of(FRAME_LEN)
+            && plausible(&w[..FRAME_LEN])
+            && plausible(&w[FRAME_LEN..])
+            && buf[start + 2 * FRAME_LEN..]
+                .chunks(FRAME_LEN)
+                .all(|step| has_marker(step[1]))
+    })
 }
 
 /// Whether `buf`, which may start mid-frame, holds one whole frame.
@@ -164,14 +177,63 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn two_in_a_row_wants_both_frames() {
+    fn tiling_wants_two_frames() {
         let stream = stream();
-        assert!(two_in_a_row(&stream));
-        assert!(two_in_a_row(&stream[3..]));
-        assert!(!two_in_a_row(&stream[..11]));
-        assert!(!two_in_a_row(&VECTORS[0]));
+        assert!(tiles(&stream));
+        assert!(tiles(&stream[3..]));
+        assert!(!tiles(&stream[..11]));
+        assert!(!tiles(&VECTORS[0]));
         assert!(holds_frame(&VECTORS[0]));
         assert!(!holds_frame(&VECTORS[0][..5]));
+    }
+
+    /// Every prefix of the vectors ending on a frame boundary and holding
+    /// two whole frames tiles, from each join offset, and so does a steady
+    /// reading whose low byte is a marker.
+    #[test]
+    fn a_6_byte_stream_tiles_from_any_offset() {
+        let stream = stream();
+        for skip in 0..FRAME_LEN {
+            let joined = &stream[skip..];
+            let first = (FRAME_LEN - skip) % FRAME_LEN;
+            for len in (first + 2 * FRAME_LEN..=joined.len()).step_by(FRAME_LEN) {
+                assert!(tiles(&joined[..len]), "{skip} {len}");
+            }
+        }
+        let steady = [0x19, 0xF0, 0x04, 0x00, 0xF0, 0x00].repeat(5);
+        for skip in 0..FRAME_LEN {
+            assert!(tiles(&steady[skip..]), "{skip}");
+        }
+    }
+
+    /// A 15-byte frame whose reading's low byte is F0 (DC 0.0240 V, its sub
+    /// word the usual stale copy, spec §14.5) holds two plausible 6-byte
+    /// frames from byte 2; they leave a part step at the end, alone,
+    /// repeated or joined anywhere.
+    #[test]
+    fn a_15_byte_frame_with_a_marker_in_its_reading_does_not_tile() {
+        let frame = [
+            0x24, 0x00, 0xF0, 0xF0, 0x00, 0x00, 0xA1, 0x09, 0xF0, 0xF0, 0x00, 0x00, 0x04, 0x00,
+            0x00,
+        ];
+        assert!(plausible(&frame[2..8]) && plausible(&frame[8..14]));
+        for count in 1..=4 {
+            let frames = frame.repeat(count);
+            for skip in 0..frame.len() {
+                assert!(!tiles(&frames[skip..]), "{count} {skip}");
+            }
+        }
+    }
+
+    /// A buffer cut short of a frame boundary does not tile yet: its last
+    /// step is a part frame.
+    #[test]
+    fn a_buffer_cut_short_of_a_boundary_waits() {
+        let stream = stream();
+        for cut in 1..FRAME_LEN {
+            assert!(!tiles(&stream[..2 * FRAME_LEN + cut]), "{cut}");
+            assert!(!tiles(&stream[..stream.len() - cut]), "{cut}");
+        }
     }
 
     #[test]

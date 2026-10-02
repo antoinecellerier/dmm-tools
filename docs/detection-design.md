@@ -131,7 +131,8 @@ The overlaps the ranking arbitrates, each rule declining what is not its own:
   connect, one frame names the code's entry, or the B35T+ entry for an unknown code; a code
   OWON's programs read with another decoder (the 15-byte frame, series 55) gives the B35T+ entry
   on any bytes, and its `init` refuses it naming the format. Without a code, two frames 6 bytes
-  apart, no unknown status bit set, give the B35T+ entry at rank 1.
+  apart, no unknown status bit set, and the marker at every later 6-byte step to the buffer's end,
+  in whole steps, give the B35T+ entry at rank 1; a 15-byte meter's frames fail that.
 
 The bytes each rule expects are in the backlog's
 [Device auto-detection](verification-backlog.md#device-auto-detection) table and in each family's
