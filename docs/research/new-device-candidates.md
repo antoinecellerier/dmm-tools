@@ -206,8 +206,16 @@ sources describe beyond them:
   is specified from the app alone
   ([research/owon §10](owon/reverse-engineered-protocol.md#10-the-15-byte-frame-owons-app-only)).
   These Voltcraft meters are not the VC880/VC890 line already supported.
-  OWON Japan lists Bluetooth for the OW65B; for the OW67B and OW69B it is
-  not stated (2026-10-01).
+  OWON's OW65, OW67 and OW69 manuals give Bluetooth to their B models.
+  **In progress (2026-10-02), every app code in scope.** Demand, seen
+  2026-10-02, is about a tenth of the 6-byte group's: the CMS101 has five
+  YouTube reviews of 6.9k-26.4k views, an EEVblog thread, about 108
+  AliExpress sales and about 15 amazon.de ratings; the VC871 and VC891 have
+  6 and 4 amazon.de ratings and Voltcraft's own app 1k+ downloads; the VC915
+  and VC925 PV (2025) none yet; the OW65B, OW67B and OW69B are sold only by
+  regional distributors. All are current (2022-2025). No Bluetooth was found
+  for the VC831 or VC851: Voltcraft's app lists only the VC871, VC891, VC915
+  and VC925 PV, and the VC851 manual never mentions it.
 
 Out of scope: the CMS061/CMS101's scope features; the B35's "Bluetooth 2.0"
 version, which OWON lists as Android-only and which is presumably classic
