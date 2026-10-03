@@ -3,29 +3,41 @@
 //! script that re-implements it.
 //!
 //! The output is plain text for a terminal, a file or an issue: a header,
-//! findings one per line tagged by kind, each step's distinct readings and
-//! the run's stats. Nothing in it carries a time, so two reports of the
-//! same steps diff line by line.
+//! findings one per line tagged by kind, each step's readings and the run's
+//! stats, then with `--timeline` each step's frames in order. Only the
+//! timeline carries times, so two reports of the same steps diff line by
+//! line without it.
 
+mod decode;
 mod load;
+mod log;
+mod replay;
+mod timeline;
+
+pub(crate) use log::install as install_triage_logger;
 
 use super::report::{CaptureReport, SampleData, StepResult, StepStatus, hex_bytes};
 use super::watch::{State, enter_only};
 use crate::cli::TriageArgs;
+use decode::{EventKind, Wire};
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{CaptureStep, Protocol, capture_reports};
 
 pub(crate) fn cmd_triage(
-    args: TriageArgs,
+    args: &TriageArgs,
     named_device: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let report = load::load(&args.report)?;
     let device = load::device(named_device, &report)?;
     let plan = args.plan.as_deref().map(super::plan::load).transpose()?;
     let triage = Triage::new(&report, device, plan);
-    print!("{}", load::scrub_addresses(&triage.render()));
+    let mut text = triage.render();
+    if let Some(steps) = &args.timeline {
+        text.push_str(&timeline::render(&triage, steps));
+    }
+    print!("{}", load::scrub_addresses(&text));
     Ok(())
 }
 
@@ -47,6 +59,9 @@ struct StepView<'a> {
     parsed: Vec<Result<Measurement, String>>,
     /// What the parser called unrecognised while parsing them.
     unrecognised: Vec<String>,
+    /// The step's frames as the protocol decodes them; `None` with no
+    /// device or no frames.
+    wire: Option<Wire>,
 }
 
 impl StepView<'_> {
@@ -68,6 +83,18 @@ impl StepView<'_> {
         let first = self.result.frames.first()?.at_ms;
         let last = self.result.frames.last()?.at_ms;
         Some((first, last))
+    }
+
+    /// What the step's readings say, from the wire where its frames
+    /// decoded and from its samples otherwise.
+    fn all_readings(&self) -> Vec<SampleData> {
+        match &self.wire {
+            Some(wire) if wire.readings().next().is_some() => wire
+                .readings()
+                .map(|(_, m)| SampleData::from_measurement(m))
+                .collect(),
+            _ => self.readings(),
+        }
     }
 
     /// Each sample as this build reads it, falling back to what the report
@@ -97,10 +124,20 @@ impl<'a> Triage<'a> {
             (None, Some(_), _) => None,
             (None, None, protocol) => protocol.as_ref().map(|p| p.capture_steps()),
         };
+        let link = match report.transport_name.as_deref() {
+            Some(dmm_lib::BLUETOOTH) => dmm_lib::transport::Link::Bluetooth,
+            _ => dmm_lib::transport::Link::UsbCable,
+        };
         let steps = report
             .steps
             .iter()
-            .map(|result| parse_step(result, protocol.as_deref()))
+            .map(|result| {
+                let mut view = parse_step(result, protocol.as_deref());
+                view.wire = device
+                    .filter(|_| !result.frames.is_empty())
+                    .map(|d| decode::decode(&result.frames, d, Some(link)));
+                view
+            })
             .collect();
         Triage {
             report,
@@ -279,7 +316,25 @@ impl<'a> Triage<'a> {
             out.push(line);
         }
         for step in &self.steps {
-            for (text, n) in tally(step.unrecognised.iter().cloned()) {
+            let Some(wire) = &step.wire else { continue };
+            let errors = wire.events.iter().filter_map(|e| match &e.kind {
+                EventKind::Error(text) => Some(text.clone()),
+                EventKind::Timeout if wire.polled => Some("a request went unanswered".to_string()),
+                EventKind::Timeout => Some("a gap with no reading".to_string()),
+                _ => None,
+            });
+            for (text, n) in tally(errors) {
+                out.push(format!("[wire] {}: {n}\u{d7} {text}", step.id()));
+            }
+        }
+        for step in &self.steps {
+            let wire_reports = step
+                .wire
+                .iter()
+                .flat_map(|w| &w.events)
+                .flat_map(|e| e.reports.iter().cloned());
+            let reports = step.unrecognised.iter().cloned().chain(wire_reports);
+            for (text, n) in tally(reports) {
                 out.push(format!("[unrecognised] {}: {n}\u{d7} {text}", step.id()));
             }
         }
@@ -401,11 +456,18 @@ impl<'a> Triage<'a> {
             for (text, n) in tally(step.readings().iter().map(describe)) {
                 out.push_str(&format!("      {text} \u{d7}{n}\n"));
             }
+            if let Some(wire) = &step.wire {
+                out.push_str("    on the wire:\n");
+                for line in wire_states(wire) {
+                    out.push_str(&format!("      {line}\n"));
+                }
+            }
         }
     }
 
     fn stats(&self, out: &mut String) {
-        let readings: Vec<SampleData> = self.steps.iter().flat_map(StepView::readings).collect();
+        let readings: Vec<SampleData> =
+            self.steps.iter().flat_map(StepView::all_readings).collect();
         if readings.is_empty() {
             out.push_str("  no readings\n");
             return;
@@ -459,12 +521,199 @@ impl<'a> Triage<'a> {
             } else {
                 format!("; ranges {}", ranges.join(" "))
             };
+            let units: Vec<String> = units.into_iter().filter(|u| !u.is_empty()).collect();
+            let units = if units.is_empty() {
+                "no unit".to_string()
+            } else {
+                format!("units {}", units.join(" "))
+            };
+            out.push_str(&format!("  mode {mode}: {units}{ranges}\n"));
+        }
+        self.wire_stats(out);
+    }
+
+    /// Timing and shape of what came over the wire, from every step's
+    /// decoded frames.
+    fn wire_stats(&self, out: &mut String) {
+        let wires: Vec<&Wire> = self.steps.iter().filter_map(|s| s.wire.as_ref()).collect();
+        if wires.is_empty() {
+            return;
+        }
+        let lengths = tally(
+            wires
+                .iter()
+                .flat_map(|w| w.readings())
+                .map(|(_, m)| m.raw_payload.len().to_string()),
+        );
+        let lengths: Vec<String> = lengths
+            .iter()
+            .map(|(len, n)| format!("{len} bytes \u{d7}{n}"))
+            .collect();
+        out.push_str(&format!("  payloads: {}\n", lengths.join(", ")));
+
+        // Only between readings that each had a record to themselves: the
+        // capture merged reads under 50 ms apart into one record, dated by
+        // its first, so several packets in one say nothing of their spacing.
+        let mut intervals = Vec::new();
+        let mut poll_delays = Vec::new();
+        let mut command_delays = Vec::new();
+        let mut unanswered = 0;
+        for wire in &wires {
+            // In record order, so a record shared with another reading is a
+            // neighbour's.
+            let dated: Vec<usize> = wire.readings().filter_map(|(r, _)| r).collect();
+            let alone = |i: usize| {
+                (i == 0 || dated[i - 1] != dated[i])
+                    && dated.get(i + 1).is_none_or(|next| *next != dated[i])
+            };
+            intervals.extend(
+                (1..dated.len())
+                    .filter(|&i| alone(i - 1) && alone(i))
+                    .map(|i| {
+                        wire.at_ms(dated[i])
+                            .saturating_sub(wire.at_ms(dated[i - 1]))
+                    }),
+            );
+            for &r in &dated {
+                // The request this reading answered: the last one before it.
+                let before = wire.polls.partition_point(|&p| p < r);
+                if let Some(&poll) = before.checked_sub(1).and_then(|i| wire.polls.get(i)) {
+                    poll_delays.push(wire.at_ms(r).saturating_sub(wire.at_ms(poll)));
+                }
+            }
+            command_delays.extend(wire.commands.iter().filter_map(|&c| reply_delay(wire, c)));
+            if wire.polled {
+                unanswered += wire
+                    .events
+                    .iter()
+                    .filter(|e| matches!(e.kind, EventKind::Timeout))
+                    .count();
+            }
+        }
+        if let Some(line) = spread(&intervals) {
+            out.push_str(&format!("  reading interval: {line}\n"));
+        }
+        if let Some(line) = spread(&poll_delays) {
+            out.push_str(&format!("  request to reading: {line}\n"));
+        }
+        if unanswered > 0 {
+            out.push_str(&format!("  requests unanswered: {unanswered}\n"));
+        }
+        let commands: usize = wires.iter().map(|w| w.commands.len()).sum();
+        if commands > 0 {
+            let replies = spread(&command_delays).unwrap_or_else(|| "none".to_string());
             out.push_str(&format!(
-                "  mode {mode}: units {}{ranges}\n",
-                units.join(" ")
+                "  keys sent: {commands}, first bytes back after: {replies}\n"
             ));
         }
+
+        let logs = tally(
+            wires
+                .iter()
+                .flat_map(|w| &w.events)
+                .flat_map(|e| e.logs.iter().map(|l| log_kind(l))),
+        );
+        for (line, n) in logs {
+            out.push_str(&format!("  log {n}\u{d7} {line}\n"));
+        }
     }
+}
+
+/// How long after the key at `command` the next bytes came.
+fn reply_delay(wire: &Wire, command: usize) -> Option<u64> {
+    let reply = wire.records[command + 1..]
+        .iter()
+        .find(|r| r.dir == super::report::FrameDir::Rx)?;
+    Some(reply.at_ms.saturating_sub(wire.at_ms(command)))
+}
+
+/// Median, minimum and maximum of `ms`, and how many.
+fn spread(ms: &[u64]) -> Option<String> {
+    let mut sorted = ms.to_vec();
+    sorted.sort_unstable();
+    let median = *sorted.get(sorted.len() / 2)?;
+    Some(format!(
+        "median {median} ms, min {} ms, max {} ms over {}",
+        sorted[0],
+        sorted[sorted.len() - 1],
+        sorted.len()
+    ))
+}
+
+/// A log line with its numbers and byte lists blanked, so the lines one
+/// kind of event logs count as one.
+fn log_kind(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut depth = 0;
+    for c in line.chars() {
+        match c {
+            '[' => {
+                depth += 1;
+                if depth == 1 {
+                    out.push_str("[\u{2026}]");
+                }
+            }
+            ']' => depth = (depth - 1).max(0),
+            _ if depth > 0 => {}
+            c if c.is_ascii_digit() => {
+                if !out.ends_with('#') {
+                    out.push('#');
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// A step's decoded readings grouped by the state they show, with how many
+/// and the first and last digits: the wire's readings run to hundreds.
+fn wire_states(wire: &Wire) -> Vec<String> {
+    let mut groups: Vec<(String, usize, String, String)> = Vec::new();
+    for (_, m) in wire.readings() {
+        let s = SampleData::from_measurement(m);
+        let flags = StatusFlags::from(&s.flags).to_string();
+        let range = if s.range_label.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", s.range_label)
+        };
+        let state = if flags.is_empty() {
+            format!("{}{range}", s.mode)
+        } else {
+            format!("{}{range} [{flags}]", s.mode)
+        };
+        let shown = format!("{} {}", s.shown(), s.unit).trim_end().to_string();
+        match groups.iter_mut().find(|(g, ..)| *g == state) {
+            Some((_, n, _, last)) => {
+                *n += 1;
+                *last = shown;
+            }
+            None => groups.push((state, 1, shown.clone(), shown)),
+        }
+    }
+    let mut lines: Vec<String> = groups
+        .into_iter()
+        .map(|(state, n, first, last)| {
+            if first == last {
+                format!("{state}: {first} \u{d7}{n}")
+            } else {
+                format!("{state}: {first} \u{2026} {last} \u{d7}{n}")
+            }
+        })
+        .collect();
+    let errors = wire
+        .events
+        .iter()
+        .filter(|e| matches!(e.kind, EventKind::Error(_) | EventKind::Timeout))
+        .count();
+    if errors > 0 {
+        lines.push(format!("errors \u{d7}{errors}"));
+    }
+    if lines.is_empty() {
+        lines.push("nothing decoded".to_string());
+    }
+    lines
 }
 
 /// The step with each sample parsed again by `protocol`.
@@ -474,6 +723,7 @@ fn parse_step<'a>(result: &'a StepResult, protocol: Option<&dyn Protocol>) -> St
             result,
             parsed: vec![],
             unrecognised: vec![],
+            wire: None,
         };
     };
     let (parsed, unrecognised) = capture_reports(|| {
@@ -486,10 +736,14 @@ fn parse_step<'a>(result: &'a StepResult, protocol: Option<&dyn Protocol>) -> St
             })
             .collect()
     });
+    // What parsing the samples logged belongs to no frame; left in the
+    // buffer, it would show under the next step's first event.
+    log::take();
     StepView {
         result,
         parsed,
         unrecognised,
+        wire: None,
     }
 }
 
@@ -501,7 +755,8 @@ fn describe(s: &SampleData) -> String {
     } else {
         format!(" {}", s.range_label)
     };
-    format!("{}{range}: {}", s.mode, s.summary())
+    // A reading with no unit leaves a double space in the summary.
+    format!("{}{range}: {}", s.mode, s.summary().replace("  ", " "))
 }
 
 /// The operator said the reading was wrong: what they saw beside what this

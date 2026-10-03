@@ -112,12 +112,23 @@ build's parser and no meter. It takes the meter from the report's
 `dmm-cli --device <id> triage <report>`. A plan run's expectations need its
 plan file, passed as `--plan`.
 
+Each step's recorded frames are played back to the device's own protocol
+(`capture/triage/replay.rs`), so the decode is the driver's, not a script's.
+A request the protocol writes releases the reply recorded after it, and the
+keys the capture pressed stay in place.
+
 It prints four sections:
 - a header: the run's tier, sessions, truncation and diagnostics;
 - findings, one per line, tagged by kind;
-- each step's distinct readings;
-- the stats: flags never or always set, and the modes, units and ranges
-  seen.
+- each step's distinct samples, and the states its frames went through;
+- the stats: flags never or always set, the modes, units and ranges seen,
+  payload lengths, reading intervals, and how soon keys and requests were
+  answered.
+
+`--timeline` adds each step's frames in order, or only the steps it names,
+comma-separated. It shows each reading with its payload, the keys and the
+bytes back, and what the library logged at each frame. Identical readings
+fold into one line.
 
 The kinds of finding:
 - `[error]`, `[timeout]` and `[attention]` repeat what the capture filed.
@@ -125,6 +136,7 @@ The kinds of finding:
   difference in the unit alone.
 - `[stale]` is a step whose first sample shows the state the step before
   it ended in.
+- `[wire]` is a frame that did not decode, or a request nothing answered.
 - `[reparse]` counts samples this build reads differently from the build
   that wrote the report. The details follow the findings.
 - `[unrecognised]` is data the parser reported as unknown.

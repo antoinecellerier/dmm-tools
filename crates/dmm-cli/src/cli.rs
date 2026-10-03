@@ -195,6 +195,16 @@ pub(crate) struct TriageArgs {
     /// expectations
     #[arg(long, value_name = "FILE")]
     pub(crate) plan: Option<String>,
+    /// Also print each step's frames in order as decoded: every step, or
+    /// with `=` the comma-separated step ids given
+    #[arg(
+        long,
+        value_name = "STEPS",
+        num_args = 0..=1,
+        require_equals = true,
+        value_delimiter = ','
+    )]
+    pub(crate) timeline: Option<Vec<String>>,
 }
 
 /// The `capture` flags, handed to [`crate::capture::cmd_capture`] whole.

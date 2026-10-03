@@ -10,7 +10,7 @@
 use log::LevelFilter;
 use std::ffi::OsStr;
 
-/// Install the logger. Call once, first thing in `main`.
+/// Install the logger. Call once in `main`, before anything logs.
 pub fn init() {
     let mut builder = env_logger::Builder::from_default_env();
     default_unless_set(

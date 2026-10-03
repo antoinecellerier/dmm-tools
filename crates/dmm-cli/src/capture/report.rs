@@ -132,12 +132,7 @@ impl From<&super::recording::WireEvent> for FrameRecord {
                 super::recording::Direction::Tx => FrameDir::Tx,
                 super::recording::Direction::Rx => FrameDir::Rx,
             },
-            hex: e
-                .bytes
-                .iter()
-                .map(|b| format!("{b:02X}"))
-                .collect::<Vec<_>>()
-                .join(" "),
+            hex: hex_string(&e.bytes),
             feature: e.baud.is_some(),
             baud: e.baud,
         }
@@ -394,12 +389,7 @@ impl SampleData {
         // The parsed value, not `display_raw`: the report stores both, and
         // this column is the one a golden fixture is compared against.
         let value = m.value.to_string();
-        let raw_hex = m
-            .raw_payload
-            .iter()
-            .map(|b| format!("{b:02X}"))
-            .collect::<Vec<_>>()
-            .join(" ");
+        let raw_hex = hex_string(&m.raw_payload);
         Self {
             raw_hex,
             mode_byte: format!("{:#04x}", m.mode_raw),
@@ -599,6 +589,15 @@ pub(super) fn baseline_from_report(report: &CaptureReport, step_id: &str) -> Opt
         .filter_map(|s| hex_bytes(&s.raw_hex))
         .collect();
     Baseline::from_payloads(payloads.iter().map(Vec::as_slice))
+}
+
+/// Bytes as a report writes them: "02 30 20".
+pub(super) fn hex_string(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// "02 30 20" back to the payload it was written from.

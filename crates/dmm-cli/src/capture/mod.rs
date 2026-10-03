@@ -23,7 +23,7 @@ pub(crate) use step::{
     CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, frames_for_step, read_past_blank,
     samples_after_switch,
 };
-pub(crate) use triage::cmd_triage;
+pub(crate) use triage::{cmd_triage, install_triage_logger};
 
 use crate::cli::CaptureArgs;
 use console::style;

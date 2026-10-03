@@ -26,8 +26,6 @@ use open::{
 };
 
 fn main() {
-    dmm_shared::logging::init();
-
     // Build CLI with registry-generated --device long_help and a dynamic
     // after_long_help that resolves the actual per-platform settings path.
     let mut cmd = Cli::command();
@@ -36,6 +34,20 @@ fn main() {
     cmd = cmd.after_long_help(build_after_long_help());
     let cli =
         Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
+    // Before the settings file and the meter: a report names its own meter,
+    // and `--device` as typed overrides it, never the settings file's
+    // choice, which a newer build may have written. Its logger keeps what
+    // the library logs beside the frame that caused it, so it is installed
+    // after parsing, which logs nothing.
+    if let Cmd::Triage(args) = &cli.command {
+        capture::install_triage_logger();
+        if let Err(e) = capture::cmd_triage(args, cli.device.as_deref()) {
+            eprintln!("{} {e}", style("Error:").red().bold());
+            std::process::exit(1);
+        }
+        return;
+    }
+    dmm_shared::logging::init();
 
     // Whether the meter was named on the command line, as opposed to coming
     // from the settings file or from detection. Only `read --replay` asks.
@@ -72,9 +84,8 @@ fn main() {
     // Device-independent commands — handle before mock/real split
     let result = match cli.command {
         Cmd::List => cmd_list(bluetooth),
-        // The report names its meter; `--device` as typed overrides it, never
-        // the settings file's choice.
-        Cmd::Triage(args) => capture::cmd_triage(args, cli.device.as_deref()),
+        // Run and returned from before the settings file was read.
+        Cmd::Triage(_) => Ok(()),
         Cmd::Completions { shell } => {
             match shell {
                 Some(shell) => {
