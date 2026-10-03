@@ -393,13 +393,14 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
 | `app/whats_new.rs` | The release-notes viewport |
 | `app/update_check.rs` | The daily update check |
-| `app/appearance.rs` | Fonts, theme, zoom, window commands |
+| `app/appearance.rs` | Fonts, theme, zoom, window commands; reading the themes folder |
+| `app/theme_save.rs` | Save as theme… |
 | `graph/` | The graph's points, the main plot (`egui_plot`) with a right Y axis per sub-value unit, the painted minimap |
 | `display/` | The reading in its three sizes |
 | `recording.rs` | The sample store and its CSV, JSON and replay rendering |
 | `markers.rs` | The markers on readings |
 | `settings.rs` | Persisted settings and colour presets |
 | `specs.rs` | Specification rendering |
-| `theme.rs` | Theme colour tables |
+| `theme/` | The palette: preset colour tables, named themes and the themes folder (`named.rs`), linked colours (`links.rs`) |
 | `a11y.rs` | AccessKit helpers |
 | `changelog.rs` | The embedded changelog |

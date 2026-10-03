@@ -1,9 +1,12 @@
 use crate::theme::ThemeColors;
+use crate::theme::links;
+use crate::theme::named::{self, NamedTheme, ThemeCatalog};
 use dmm_shared::SharedSettings;
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Samples the graph history and the sample buffer each keep by default: ~14
@@ -105,6 +108,16 @@ pub enum ThemeMode {
     System,
 }
 
+/// A pick on the Theme row or from `--theme`: one of the modes, or a named
+/// theme by its name. Never saved as such — a named theme is saved in
+/// `Settings::named_theme`, beside the mode, so an older build that knows
+/// only the modes still reads the file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ThemeChoice {
+    Mode(ThemeMode),
+    Named(String),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ColorPreset {
     #[default]
@@ -176,18 +189,29 @@ impl<'de> serde::Deserialize<'de> for HexColor {
     }
 }
 
-/// Per-theme overrides for all customizable colors.
-/// Fields that are `None` fall back to the active preset's default.
+/// Overrides for every customizable color: the user's, or a named theme's
+/// own. A field left `None` falls back to the preset's color, or for a
+/// follower moved with its anchor, to where the anchor took it
+/// (`theme::links`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PaletteOverrides {
     // -- UI chrome --
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<HexColor>,
+    /// The top bar's and reading panel's fill; unset, `background`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<HexColor>,
+    /// The reading and the sub-value readings; unset, `text`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reading: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weak_text: Option<HexColor>,
+    /// Panel headings; unset, `weak_text`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heading: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub button: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -235,8 +259,9 @@ pub struct PaletteOverrides {
     pub minimap_viewport: Option<HexColor>,
 }
 
-/// Color overrides split by theme (dark/light). Each theme's overrides
-/// are independent — a dark-mode override does not affect light mode.
+/// The user's color overrides: for Dark and for Light, each over its preset,
+/// and for each named theme over its own colors. Each is independent — a
+/// dark-mode override does not affect light mode, nor Midnight's.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ColorOverrides {
@@ -244,11 +269,35 @@ pub struct ColorOverrides {
     pub dark: PaletteOverrides,
     #[serde(default)]
     pub light: PaletteOverrides,
+    /// Tweaks to each named theme, by its name, over the theme's own colours.
+    /// Kept apart from `dark`/`light` so tuning Midnight leaves Dark alone.
+    /// An entry is removed once it holds no tweak.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub named: BTreeMap<String, PaletteOverrides>,
 }
 
 impl ColorOverrides {
     pub fn for_mode(&self, dark: bool) -> &PaletteOverrides {
         if dark { &self.dark } else { &self.light }
+    }
+
+    /// The user's changes to the named theme `name`, matched as theme names
+    /// are (`named::same_name`): a user file spelled "MIDNIGHT" that takes
+    /// Midnight's place keeps the changes made to it.
+    pub(crate) fn for_theme(&self, name: &str) -> Option<&PaletteOverrides> {
+        self.named
+            .iter()
+            .find(|(key, _)| named::same_name(key, name))
+            .map(|(_, tweaks)| tweaks)
+    }
+
+    /// Keep `tweaks` as the changes to the named theme `name`, under that
+    /// spelling alone; none at all removes the entry.
+    pub(crate) fn set_for_theme(&mut self, name: &str, tweaks: PaletteOverrides) {
+        self.named.retain(|key, _| !named::same_name(key, name));
+        if tweaks != PaletteOverrides::default() {
+            self.named.insert(name.to_string(), tweaks);
+        }
     }
 
     pub fn for_mode_mut(&mut self, dark: bool) -> &mut PaletteOverrides {
@@ -290,8 +339,8 @@ pub struct Overrides {
     pub device_family: Option<String>,
     /// Original persisted value for mock_mode (if overridden).
     pub mock_mode: Option<String>,
-    /// Original persisted value for theme (if overridden).
-    pub theme: Option<ThemeMode>,
+    /// Original persisted mode and named theme (if `--theme` overrode them).
+    pub theme: Option<(ThemeMode, Option<String>)>,
     /// Original persisted value for Bluetooth probing (if overridden).
     pub bluetooth: Option<bool>,
     /// CLI-specified adapter (serial number or HID path).
@@ -326,6 +375,11 @@ pub struct Settings {
     #[serde(flatten)]
     pub shared: SharedSettings,
     pub theme: ThemeMode,
+    /// The named theme picked on the Theme row, by its name. It wins over
+    /// `theme` while it names a known theme; `theme` is the fallback if its
+    /// file goes missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub named_theme: Option<String>,
     pub show_graph: bool,
     pub show_stats: bool,
     pub show_recording: bool,
@@ -400,6 +454,10 @@ pub struct Settings {
     /// CLI overrides (not serialized).
     #[serde(skip)]
     pub overrides: Overrides,
+    /// The user's themes folder, as last read (not serialized). Shared
+    /// rather than copied: the settings are cloned on every save.
+    #[serde(skip)]
+    pub(crate) user_themes: Arc<ThemeCatalog>,
 }
 
 impl Default for Settings {
@@ -412,6 +470,7 @@ impl Default for Settings {
                 ..SharedSettings::default()
             },
             theme: ThemeMode::Dark,
+            named_theme: None,
             show_graph: true,
             show_stats: true,
             show_recording: true,
@@ -438,19 +497,56 @@ impl Default for Settings {
             recording_height: DEFAULT_RECORDING_HEIGHT,
             hidden_series: BTreeSet::new(),
             overrides: Overrides::default(),
+            user_themes: Arc::default(),
         }
     }
 }
 
 impl Settings {
+    /// The named theme in use: `named_theme`, if it names a known theme.
+    pub(crate) fn active_theme(&self) -> Option<&NamedTheme> {
+        named::find(self.named_theme.as_deref()?, &self.user_themes.themes)
+    }
+
     /// Build the palette for one theme mode from the preset and that mode's
-    /// overrides.
+    /// overrides — or, under a named theme, from its colours over the Default
+    /// preset with the user's tweaks to it over those.
     ///
-    /// The single place those three fields meet: every widget that needs a
-    /// color goes through here, so a preset switch or an override edit can't
-    /// reach one part of the UI and miss another.
+    /// The single place those fields meet: every widget that needs a color
+    /// goes through here, so a preset switch or an override edit can't reach
+    /// one part of the UI and miss another. A named theme applies only in its
+    /// own mode, which is the mode the UI is in while it is active.
     pub fn theme_colors(&self, dark: bool) -> ThemeColors {
-        ThemeColors::new(dark, self.color_preset, self.color_overrides.for_mode(dark))
+        let base = self.uncustomized_colors(dark);
+        match self.color_tweaks(dark) {
+            Some(tweaks) if *tweaks != PaletteOverrides::default() => {
+                // Followers of a recoloured anchor move with it.
+                let colors = links::apply(dark, &base, tweaks);
+                ThemeColors::new(dark, base.preset(), &colors)
+            }
+            _ => base,
+        }
+    }
+
+    /// The user's own changes to the palette in use: to the named theme, or
+    /// to the preset in this mode.
+    pub(crate) fn color_tweaks(&self, dark: bool) -> Option<&PaletteOverrides> {
+        match self.active_theme() {
+            Some(theme) if theme.dark == dark => self.color_overrides.for_theme(&theme.name),
+            _ => Some(self.color_overrides.for_mode(dark)),
+        }
+    }
+
+    /// The palette before the user's own changes: the preset, or the named
+    /// theme's colours. What a swatch shows once its override is cleared,
+    /// and what a follower keeps its relation to.
+    pub(crate) fn uncustomized_colors(&self, dark: bool) -> ThemeColors {
+        match self.active_theme() {
+            Some(theme) if theme.dark == dark => {
+                ThemeColors::new(dark, theme.preset, &theme.colors)
+            }
+            _ => ThemeColors::new(dark, self.color_preset, &PaletteOverrides::default()),
+        }
     }
 
     /// None under test: a test that picks a setting saves it, and that must
@@ -513,8 +609,9 @@ impl Settings {
             if let Some(ref original) = self.overrides.mock_mode {
                 to_save.mock_mode = original.clone();
             }
-            if let Some(original) = self.overrides.theme {
-                to_save.theme = original;
+            if let Some((mode, ref named)) = self.overrides.theme {
+                to_save.theme = mode;
+                to_save.named_theme = named.clone();
             }
             if let Some(original) = self.overrides.bluetooth {
                 to_save.shared.bluetooth = original;
@@ -709,6 +806,7 @@ mod tests {
                 bluetooth: false,
             },
             theme: ThemeMode::Light,
+            named_theme: Some("Desert".to_string()),
             show_graph: false,
             show_stats: true,
             show_recording: false,
@@ -738,12 +836,14 @@ mod tests {
             recording_height: 200.0,
             hidden_series: BTreeSet::from(["Period".to_string()]),
             overrides: Overrides::default(),
+            user_themes: Arc::default(),
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.hidden_series, s.hidden_series);
         assert_eq!(deserialized.graph_lines, GraphLines::Solid);
         assert_eq!(deserialized.theme, ThemeMode::Light);
+        assert_eq!(deserialized.named_theme.as_deref(), Some("Desert"));
         assert!(!deserialized.show_graph);
         assert!(deserialized.show_stats);
         assert!(!deserialized.show_recording);
@@ -789,6 +889,7 @@ mod tests {
         // land on the default bound, not on zero.
         assert_eq!(s.max_samples, DEFAULT_MAX_SAMPLES);
         // Color fields default correctly
+        assert_eq!(s.named_theme, None);
         assert_eq!(s.color_preset, ColorPreset::Default);
         assert_eq!(s.color_overrides, ColorOverrides::default());
         // New optional fields default to None
@@ -931,6 +1032,15 @@ mod tests {
         let mut overrides = ColorOverrides::default();
         overrides.dark.graph_line = Some(HexColor(Color32::from_rgb(100, 200, 255)));
         overrides.light.status_ok = Some(HexColor(Color32::from_rgb(0, 150, 50)));
+        // Nothing written for the named themes until one is tweaked.
+        assert!(!serde_json::to_string(&overrides).unwrap().contains("named"));
+        overrides.named.insert(
+            "Midnight".to_string(),
+            PaletteOverrides {
+                accent: Some(HexColor(Color32::from_rgb(1, 2, 3))),
+                ..Default::default()
+            },
+        );
 
         let json = serde_json::to_string_pretty(&overrides).unwrap();
         let parsed: ColorOverrides = serde_json::from_str(&json).unwrap();
@@ -944,6 +1054,66 @@ mod tests {
             parsed.light.status_ok,
             Some(HexColor(Color32::from_rgb(0, 150, 50)))
         );
+    }
+
+    /// A named theme draws over the Default preset whatever the Colors row
+    /// says, with the user's tweaks to it on top; the dark/light overrides
+    /// are the presets' and stay out of it. A name no theme answers to
+    /// falls back to the mode and preset.
+    #[test]
+    fn a_named_theme_draws_its_colours_with_its_tweaks_over_them() {
+        let midnight = crate::theme::named::find("Midnight", &[]).unwrap();
+        let tweak = Color32::from_rgb(0x12, 0x34, 0x56);
+        let mut s = Settings {
+            theme: ThemeMode::Light,
+            named_theme: Some("Midnight".to_string()),
+            color_preset: ColorPreset::HighContrast,
+            ..Settings::default()
+        };
+        s.color_overrides.dark.text = Some(HexColor(Color32::RED));
+        s.color_overrides.named.insert(
+            "Midnight".to_string(),
+            PaletteOverrides {
+                accent: Some(HexColor(tweak)),
+                ..Default::default()
+            },
+        );
+
+        assert!(midnight.dark);
+        let tc = s.theme_colors(true);
+        assert_eq!(Some(HexColor(tc.background())), midnight.colors.background);
+        assert_eq!(Some(HexColor(tc.text())), midnight.colors.text);
+        assert_eq!(tc.accent(), tweak);
+        let plain = s.uncustomized_colors(true);
+        assert_eq!(Some(HexColor(plain.accent())), midnight.colors.accent);
+
+        s.named_theme = Some("Gone".to_string());
+        assert_eq!(s.active_theme(), None);
+        let tc = s.theme_colors(false);
+        let preset = ThemeColors::new(
+            false,
+            ColorPreset::HighContrast,
+            &PaletteOverrides::default(),
+        );
+        assert_eq!(tc.background(), preset.background());
+    }
+
+    /// Changes kept for a theme stay with it whichever spelling of its name
+    /// is in use: a user file "MIDNIGHT" that takes Midnight's place keeps
+    /// what was changed on Midnight, and storing them again leaves one entry.
+    #[test]
+    fn a_themes_changes_follow_it_across_spellings_of_its_name() {
+        let tweak = PaletteOverrides {
+            accent: Some(HexColor(Color32::from_rgb(1, 2, 3))),
+            ..Default::default()
+        };
+        let mut overrides = ColorOverrides::default();
+        overrides.set_for_theme("Midnight", tweak.clone());
+        assert_eq!(overrides.for_theme("MIDNIGHT"), Some(&tweak));
+        overrides.set_for_theme("MIDNIGHT", tweak.clone());
+        assert_eq!(overrides.named.len(), 1);
+        overrides.set_for_theme("midnight", PaletteOverrides::default());
+        assert!(overrides.named.is_empty());
     }
 
     #[test]

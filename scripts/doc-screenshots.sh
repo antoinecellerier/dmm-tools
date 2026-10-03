@@ -89,9 +89,9 @@ COLOR_CROP="1920x638+0+58"
 HELP_CROP="478x843+0+46"
 GEAR_X=1884; GEAR_Y=22              # the settings gear, right end of the top bar
 CUSTOMIZE_X=150; CUSTOMIZE_Y=166    # the "Customize colors" collapsing header
-# The Graph row's last swatch, Crosshair: its picker opens against the right
-# edge instead of over the rows beside it.
-CROSSHAIR_SWATCH_X=1578; CROSSHAIR_SWATCH_Y=281
+# The Text family's last swatch, Crosshair: its picker opens beside the
+# families above it, over the end of the graph rows, and fits the crop.
+CROSSHAIR_SWATCH_X=757; CROSSHAIR_SWATCH_Y=281
 # Empty left-column space, below the statistics and below the narrow layout's
 # recording hint: clicking here moves the pointer off the plot without
 # activating anything, so no crosshair tooltip lands in the picture.
@@ -149,6 +149,10 @@ SCENES=(
 	"gui-theme-light.png scene_themes"
 	"gui-theme-high-contrast.png scene_themes"
 	"gui-theme-colorblind.png scene_themes"
+	"gui-theme-bubble-gum.png scene_themes"
+	"gui-theme-desert.png scene_themes"
+	"gui-theme-midnight.png scene_themes"
+	"gui-theme-phosphor.png scene_themes"
 	"gui-color-customization.png scene_color_customization"
 	"gui-connection-help.png scene_connection_help"
 )
@@ -465,16 +469,20 @@ scene_settings() {
 	capture gui-settings.png "$SETTINGS_CROP"
 }
 
-# One graph picture per colour preset, with THEMES_VIEW's mean and reference
-# line, so each shows the palette on a trace, a mean line, a reference line
-# and its trigger markers.
+# One graph picture per colour preset and per named theme, with THEMES_VIEW's
+# mean and reference line, so each shows the palette on a trace, a mean line,
+# a reference line and its trigger markers.
 scene_themes() {
 	local entry asset preset
 	for entry in \
 		'gui-theme-dark.png {"theme": "Dark", "color_preset": "Default"}' \
 		'gui-theme-light.png {"theme": "Light", "color_preset": "Default"}' \
 		'gui-theme-high-contrast.png {"theme": "Dark", "color_preset": "HighContrast"}' \
-		'gui-theme-colorblind.png {"theme": "Dark", "color_preset": "ColorblindSafe"}'; do
+		'gui-theme-colorblind.png {"theme": "Dark", "color_preset": "ColorblindSafe"}' \
+		'gui-theme-bubble-gum.png {"named_theme": "Bubble Gum"}' \
+		'gui-theme-desert.png {"named_theme": "Desert"}' \
+		'gui-theme-midnight.png {"named_theme": "Midnight"}' \
+		'gui-theme-phosphor.png {"named_theme": "Phosphor"}'; do
 		asset="${entry%% *}"
 		preset="${entry#* }"
 		write_settings "$preset"

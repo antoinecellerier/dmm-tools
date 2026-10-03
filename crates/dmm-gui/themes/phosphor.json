@@ -1,0 +1,33 @@
+{
+  "name": "Phosphor",
+  "mode": "dark",
+  "colors": {
+    "background": "#08140C",
+    "frame": "#0F2617",
+    "text": "#9BE3AE",
+    "reading": "#4DFF7A",
+    "weak_text": "#64AB76",
+    "heading": "#E0A43A",
+    "button": "#16391F",
+    "border": "#2E7A45",
+    "accent": "#FFB000",
+    "graph_line": "#33FF66",
+    "graph_gap": "#FF5555",
+    "graph_mean": "#EDE6CF",
+    "graph_ref": "#FF9966",
+    "graph_crossing": "#FDF39A",
+    "graph_cursor": "#FFB000",
+    "graph_envelope": "#2F9E50",
+    "graph_overlay_1": "#3BE0FF",
+    "graph_overlay_2": "#FDA7CB",
+    "graph_overlay_3": "#C8A2FF",
+    "plot_background": "#030A05",
+    "graph_crosshair": "#A8FFC0",
+    "graph_marker": "#FF7AD9",
+    "status_ok": "#33FF66",
+    "status_warning": "#FFB000",
+    "status_error": "#FF5555",
+    "status_inactive": "#6F9A7A",
+    "minimap_viewport": "#33FF66"
+  }
+}

@@ -191,10 +191,11 @@ impl App {
                 self.show_integral_gap_warning(ui, sub_font);
             }
         } else {
+            let heading = self.settings.theme_colors(ui.visuals().dark_mode).heading();
             ui.label(
                 RichText::new("Statistics")
                     .font(egui::FontId::proportional(sub_font))
-                    .color(ui.visuals().weak_text_color()),
+                    .color(heading),
             );
             show_stat_rows(ui, &formatted.session, main_font, None);
             if formatted.session.integral.is_some() {
@@ -210,7 +211,7 @@ impl App {
                     RichText::new("Visible")
                         .strong()
                         .font(egui::FontId::proportional(sub_font))
-                        .color(weak),
+                        .color(heading),
                 );
                 show_stat_rows(ui, vis, sub_font, Some(weak));
             }

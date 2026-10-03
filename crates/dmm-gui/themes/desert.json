@@ -1,0 +1,33 @@
+{
+  "name": "Desert",
+  "mode": "light",
+  "colors": {
+    "background": "#F9F1E0",
+    "frame": "#E8CB94",
+    "text": "#232A5C",
+    "reading": "#0A5C66",
+    "weak_text": "#4A4E70",
+    "heading": "#7A3216",
+    "button": "#F0DFBF",
+    "border": "#8A6C47",
+    "accent": "#963820",
+    "graph_line": "#0B6E79",
+    "graph_gap": "#741026",
+    "graph_mean": "#4C7A2E",
+    "graph_ref": "#8A6A00",
+    "graph_crossing": "#C90054",
+    "graph_cursor": "#333333",
+    "graph_envelope": "#4A8890",
+    "graph_overlay_1": "#B5452B",
+    "graph_overlay_2": "#7A3E9D",
+    "graph_overlay_3": "#2C60B4",
+    "plot_background": "#FFFBF2",
+    "graph_crosshair": "#5A4632",
+    "graph_marker": "#9C2F6E",
+    "status_ok": "#2B6227",
+    "status_warning": "#854700",
+    "status_error": "#AB0E4A",
+    "status_inactive": "#625542",
+    "minimap_viewport": "#0B6E79"
+  }
+}

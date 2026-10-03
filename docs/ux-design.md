@@ -157,9 +157,22 @@ are what tell them from data and from each other.
 
 ## Colour and contrast
 
-**WCAG 2.1 AA in every preset.** Text clears 4.5:1 and graphical elements
-3:1, in both themes: every colour has a dark and a light variant, and tests in
-`theme.rs` check each preset.
+**WCAG 2.1 AA in every preset and built-in theme.** Text clears 4.5:1 and
+graphical elements 3:1 in both modes, checked by tests in `theme/`. A shared
+theme file is its author's, held only to 3:1 for text and button captions, so
+the chips that switch it off stay readable.
+
+**A named theme fixes its mode.** Midnight has no light form worth having, so
+a theme is one palette in one mode, beside Dark, Light and System rather than
+layered on them. It is an override set on a preset, in the colour fields
+`settings.json` takes, so a file needs only what it changes.
+
+**Related colours move together.** A follower keeps its OKLCH offset from its
+anchor, so a tinted frame stays a step off a new background in its hue, and
+moves only its lightness to stay over its floor. A surface never moves for
+what is drawn on it; the text warns instead. Accent, status and the other
+graph colours, whose hues mean something, follow nothing; graph colours under
+ΔE 30 apart are flagged.
 
 **Secondary text has its own colour.** egui's 60% dimming falls under 4.5:1,
 so secondary text takes a per-preset colour clearing it on the panel, the frame
@@ -167,7 +180,7 @@ fill and the text-edit background. A user's own pick is theirs to keep above it.
 
 **Dark text is lifted.** Dark primary text is gray(180), not egui's gray(140):
 beside 140 no dimmer tone clears 4.5:1, and 180 keeps two distinct tiers
-(ratios beside `PRESET_DEFAULT` in `theme.rs`).
+(ratios beside `PRESET_DEFAULT` in `theme/mod.rs`).
 
 **The stock presets stay egui's own.** Text and Accent reach egui's own
 painting only once customized, and only High Contrast pins Border (3:1), so the

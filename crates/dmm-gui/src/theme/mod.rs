@@ -1,5 +1,8 @@
 use eframe::egui::{self, Color32};
 
+pub(crate) mod links;
+pub(crate) mod named;
+
 use crate::settings::{ColorPreset, HexColor, PaletteOverrides};
 
 /// One user-customisable colour in the palette.
@@ -14,8 +17,11 @@ use crate::settings::{ColorPreset, HexColor, PaletteOverrides};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PaletteField {
     Background,
+    Frame,
     Text,
+    Reading,
     WeakText,
+    Heading,
     Button,
     Border,
     Accent,
@@ -43,8 +49,11 @@ impl PaletteField {
     /// Every field, in settings-panel order.
     pub(crate) const ALL: &'static [PaletteField] = &[
         PaletteField::Background,
+        PaletteField::Frame,
         PaletteField::Text,
+        PaletteField::Reading,
         PaletteField::WeakText,
+        PaletteField::Heading,
         PaletteField::Button,
         PaletteField::Border,
         PaletteField::Accent,
@@ -72,8 +81,11 @@ impl PaletteField {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Background => "Background",
+            Self::Frame => "Frame",
             Self::Text => "Text",
+            Self::Reading => "Reading",
             Self::WeakText => "Weak text",
+            Self::Heading => "Heading",
             Self::Button => "Button",
             Self::Border => "Border",
             Self::Accent => "Accent",
@@ -102,11 +114,18 @@ impl PaletteField {
     pub(crate) fn tooltip(self) -> &'static str {
         match self {
             Self::Background => "Panel background color",
+            Self::Frame => "Top bar and reading panel background (the panel background unless set)",
             Self::Text => "Primary text color",
+            Self::Reading => "The reading and sub-value readings (the text color unless set)",
             Self::WeakText => "Secondary text: mode line, sub-value labels, hints and captions",
+            Self::Heading => {
+                "Panel headings: Specifications, Statistics, Visible (the weak text color unless set)"
+            }
             Self::Button => "Button background color",
             Self::Border => "Separators, panel edges, frames and the plot outline",
-            Self::Accent => "Mode badges, and the fill behind selected toggles, chips and text",
+            Self::Accent => {
+                "Mode badges, links, and the fill behind selected toggles, chips and text"
+            }
             Self::GraphLine => "Data line color on the graph",
             Self::GraphGap => "Color used to mark gaps in recorded data",
             Self::GraphMean => "Mean overlay line color",
@@ -134,35 +153,6 @@ impl PaletteField {
         }
     }
 
-    /// The settings-panel group this colour is listed under.
-    pub(crate) fn group(self) -> PaletteGroup {
-        match self {
-            Self::Background
-            | Self::Text
-            | Self::WeakText
-            | Self::Button
-            | Self::Border
-            | Self::Accent => PaletteGroup::Ui,
-            Self::GraphLine
-            | Self::GraphGap
-            | Self::GraphMean
-            | Self::GraphRef
-            | Self::GraphCrossing
-            | Self::GraphCursor
-            | Self::GraphEnvelope
-            | Self::GraphOverlay1
-            | Self::GraphOverlay2
-            | Self::GraphOverlay3
-            | Self::PlotBackground
-            | Self::GraphCrosshair
-            | Self::GraphMarker => PaletteGroup::Graph,
-            Self::StatusOk | Self::StatusWarning | Self::StatusError | Self::StatusInactive => {
-                PaletteGroup::Status
-            }
-            Self::MinimapViewport => PaletteGroup::Minimap,
-        }
-    }
-
     /// The override slot for this field.
     ///
     /// Pairing the field with its slot here means a call site can't ask for
@@ -170,8 +160,11 @@ impl PaletteField {
     pub(crate) fn override_slot(self, o: &mut PaletteOverrides) -> &mut Option<HexColor> {
         match self {
             Self::Background => &mut o.background,
+            Self::Frame => &mut o.frame,
             Self::Text => &mut o.text,
+            Self::Reading => &mut o.reading,
             Self::WeakText => &mut o.weak_text,
+            Self::Heading => &mut o.heading,
             Self::Button => &mut o.button,
             Self::Border => &mut o.border,
             Self::Accent => &mut o.accent,
@@ -194,48 +187,6 @@ impl PaletteField {
             Self::StatusInactive => &mut o.status_inactive,
             Self::MinimapViewport => &mut o.minimap_viewport,
         }
-    }
-}
-
-/// What a group of palette colours affects, as the settings panel heads them.
-///
-/// The panel used to cut `PaletteField::ALL` into groups by index
-/// (`ALL[3..15]`), so a colour inserted anywhere but the end of a group
-/// silently moved into the neighbouring one. Declaring the group on the field
-/// puts a new colour under the right heading by construction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PaletteGroup {
-    Ui,
-    Graph,
-    Status,
-    Minimap,
-}
-
-impl PaletteGroup {
-    /// Every group, in settings-panel order.
-    pub(crate) const ALL: &'static [PaletteGroup] = &[
-        PaletteGroup::Ui,
-        PaletteGroup::Graph,
-        PaletteGroup::Status,
-        PaletteGroup::Minimap,
-    ];
-
-    /// Heading shown before the group's swatches.
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Self::Ui => "UI:",
-            Self::Graph => "Graph:",
-            Self::Status => "Status:",
-            Self::Minimap => "Minimap:",
-        }
-    }
-
-    /// This group's fields, in `PaletteField::ALL` order.
-    pub(crate) fn fields(self) -> impl Iterator<Item = PaletteField> {
-        PaletteField::ALL
-            .iter()
-            .copied()
-            .filter(move |f| f.group() == self)
     }
 }
 
@@ -624,6 +575,18 @@ pub(crate) fn legible_on(color: Color32, ground: Color32) -> Option<Color32> {
 /// 180 → 255 / 60 → 0: egui moves between two greys, where hue cannot be lost.
 const STRONG_TEXT_LIFT: f32 = 0.4;
 
+/// `top`'s colours over `base`'s: every field `top` sets wins.
+pub(crate) fn layered(base: &PaletteOverrides, top: &PaletteOverrides) -> PaletteOverrides {
+    let mut out = base.clone();
+    let mut top = top.clone();
+    for &field in PaletteField::ALL {
+        if let Some(c) = *field.override_slot(&mut top) {
+            *field.override_slot(&mut out) = Some(c);
+        }
+    }
+    out
+}
+
 // ── ThemeColors ─────────────────────────────────────────────────────────────
 
 /// Theme-aware color palette. Resolves colors from: override → preset → default.
@@ -631,6 +594,7 @@ const STRONG_TEXT_LIFT: f32 = 0.4;
 /// on their respective backgrounds.
 pub(crate) struct ThemeColors {
     dark: bool,
+    kind: ColorPreset,
     preset: &'static PresetColors,
     overrides: PaletteOverrides,
 }
@@ -639,9 +603,28 @@ impl ThemeColors {
     pub(crate) fn new(dark: bool, preset: ColorPreset, overrides: &PaletteOverrides) -> Self {
         Self {
             dark,
+            kind: preset,
             preset: preset_colors(preset),
             overrides: overrides.clone(),
         }
+    }
+
+    /// Whether this is a dark-mode palette.
+    pub(crate) fn is_dark(&self) -> bool {
+        self.dark
+    }
+
+    /// The preset under the overrides.
+    pub(crate) fn preset(&self) -> ColorPreset {
+        self.kind
+    }
+
+    /// The overrides this palette resolves first: the user's own, or a named
+    /// theme's colours with the user's tweaks over them. Whether a field is
+    /// set here is what decides if the chrome egui draws for it follows the
+    /// palette or keeps egui's own value.
+    pub(crate) fn overrides(&self) -> &PaletteOverrides {
+        &self.overrides
     }
 
     /// Resolve a color: override wins, then preset default.
@@ -660,9 +643,27 @@ impl ThemeColors {
         self.resolve(self.overrides.background, &self.preset.background)
     }
 
+    /// The top bar's and the wide layout's reading panel's fill: a second
+    /// surface, so the window reads as a frame around the graph rather than
+    /// one flat sheet. No preset sets it; unset it is the background, and the
+    /// window is the single surface it has always been.
+    pub(crate) fn frame(&self) -> Color32 {
+        self.overrides
+            .frame
+            .map_or_else(|| self.background(), |h| h.0)
+    }
+
     /// Primary text color for labels and values.
     pub(crate) fn text(&self) -> Color32 {
         self.resolve(self.overrides.text, &self.preset.text)
+    }
+
+    /// The reading and the sub-value readings: what the window is for, so a
+    /// theme may set it apart from the labels around it. No preset sets it;
+    /// unset it is the text colour, as it always was. An overload still draws
+    /// in the error colour.
+    pub(crate) fn reading(&self) -> Color32 {
+        self.overrides.reading.map_or_else(|| self.text(), |h| h.0)
     }
 
     /// Secondary text: hint captions, the mode line, sub-value labels and
@@ -677,6 +678,14 @@ impl ThemeColors {
     /// and then owns its contrast.
     pub(crate) fn weak_text(&self) -> Color32 {
         self.resolve(self.overrides.weak_text, &self.preset.weak_text)
+    }
+
+    /// Panel headings: Specifications, Statistics and Visible. No preset sets
+    /// it; unset it is the weak text colour the headings have always had.
+    pub(crate) fn heading(&self) -> Color32 {
+        self.overrides
+            .heading
+            .map_or_else(|| self.weak_text(), |h| h.0)
     }
 
     /// Caption colour of buttons and of an open combo box
@@ -941,8 +950,11 @@ impl ThemeColors {
     pub(crate) fn effective_color(&self, field: PaletteField) -> Color32 {
         match field {
             PaletteField::Background => self.background(),
+            PaletteField::Frame => self.frame(),
             PaletteField::Text => self.text(),
+            PaletteField::Reading => self.reading(),
             PaletteField::WeakText => self.weak_text(),
+            PaletteField::Heading => self.heading(),
             PaletteField::Button => self.button(),
             PaletteField::Border => self.border(),
             PaletteField::Accent => self.accent(),
@@ -972,6 +984,31 @@ impl ThemeColors {
 mod tests {
     use super::*;
 
+    /// Every palette the app ships, by a label for failure messages: each
+    /// preset in both modes, and each built-in named theme in its own. The
+    /// overrides are the theme's colours (none for a preset), for a test to
+    /// build the palette from or lay its own overrides over.
+    fn every_palette() -> Vec<(String, bool, ColorPreset, PaletteOverrides)> {
+        let presets = [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ]
+        .into_iter()
+        .flat_map(|preset| {
+            [true, false].map(|dark| {
+                let mode = if dark { "dark" } else { "light" };
+                let label = format!("{preset:?} {mode} mode");
+                (label, dark, preset, PaletteOverrides::default())
+            })
+        });
+        let themes = crate::theme::named::builtin().iter().map(|theme| {
+            let label = format!("{} theme", theme.name);
+            (label, theme.dark, theme.preset, theme.colors.clone())
+        });
+        presets.chain(themes).collect()
+    }
+
     /// Every field must resolve to a real colour. The old string-keyed
     /// lookup fell through to TRANSPARENT, so a typo produced an invisible
     /// swatch at runtime instead of a compile error.
@@ -998,26 +1035,9 @@ mod tests {
             assert!(!seen.contains(&f), "{f:?} listed twice");
             seen.push(f);
         }
-        // Bumping this is the reminder to check the new colour landed under
-        // the heading it should — see `groups_partition_all_in_panel_order`.
-        assert_eq!(seen.len(), 24);
-    }
-
-    /// The panel renders group by group, so the concatenated groups have to
-    /// reproduce ALL exactly: every field in exactly one group, and in the
-    /// order the panel used to get from its index slices.
-    #[test]
-    fn groups_partition_all_in_panel_order() {
-        let grouped: Vec<PaletteField> =
-            PaletteGroup::ALL.iter().flat_map(|g| g.fields()).collect();
-        assert_eq!(grouped, PaletteField::ALL);
-    }
-
-    /// The headings, and the order they appear in, are what the user reads.
-    #[test]
-    fn group_headings_are_in_panel_order() {
-        let headings: Vec<&str> = PaletteGroup::ALL.iter().map(|g| g.label()).collect();
-        assert_eq!(headings, ["UI:", "Graph:", "Status:", "Minimap:"]);
+        // Bumping this is the reminder to place the new colour on the
+        // settings panel — see `panel_rows_list_every_field_once`.
+        assert_eq!(seen.len(), 27);
     }
 
     /// An override must come back from the field it was written to — the
@@ -1133,26 +1153,20 @@ mod tests {
             )
         }
 
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for &dark in &[true, false] {
-                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let bg = tc.plot_background();
-                let banded = composite(tc.graph_overload_fill(), bg);
-                let ratio = contrast(banded, bg);
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let bg = tc.plot_background();
+            let banded = composite(tc.graph_overload_fill(), bg);
+            let ratio = contrast(banded, bg);
 
-                assert!(
-                    ratio > 1.10,
-                    "banded area {banded:?} is indistinguishable from the plot                      background {bg:?} ({ratio:.3}:1, {preset:?}, dark={dark})"
-                );
-                assert!(
-                    ratio < 3.0,
-                    "banded area {banded:?} is too strong against {bg:?}                      ({ratio:.3}:1) — the trace must stay readable through it                      ({preset:?}, dark={dark})"
-                );
-            }
+            assert!(
+                ratio > 1.10,
+                "banded area {banded:?} is indistinguishable from the plot                      background {bg:?} ({ratio:.3}:1, {label})"
+            );
+            assert!(
+                ratio < 3.0,
+                "banded area {banded:?} is too strong against {bg:?}                      ({ratio:.3}:1) — the trace must stay readable through it                      ({label})"
+            );
         }
     }
 
@@ -1161,21 +1175,15 @@ mod tests {
     /// by design and `luminance()` ignores alpha, so it is not checked here.
     #[test]
     fn overload_border_meets_graphical_contrast_on_the_plot_area() {
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for &dark in &[true, false] {
-                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let ratio = contrast(tc.graph_overload(), tc.plot_background());
-                assert!(
-                    ratio >= 3.0,
-                    "overload border {:?} on plot background {:?} is {ratio:.2}:1, below 3:1 ({preset:?}, dark={dark})",
-                    tc.graph_overload(),
-                    tc.plot_background()
-                );
-            }
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let ratio = contrast(tc.graph_overload(), tc.plot_background());
+            assert!(
+                ratio >= 3.0,
+                "overload border {:?} on plot background {:?} is {ratio:.2}:1, below 3:1 ({label})",
+                tc.graph_overload(),
+                tc.plot_background()
+            );
         }
     }
 
@@ -1184,22 +1192,16 @@ mod tests {
     /// both themes, the case that historically broke light mode.
     #[test]
     fn overlay_colors_meet_graphical_contrast_on_the_plot_area() {
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for &dark in &[true, false] {
-                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let bg = tc.plot_background();
-                for k in 0..3 {
-                    let c = tc.graph_overlay(k);
-                    let ratio = contrast(c, bg);
-                    assert!(
-                        ratio >= 3.0,
-                        "overlay {k} {c:?} on plot background {bg:?} is {ratio:.2}:1, below 3:1 ({preset:?}, dark={dark})"
-                    );
-                }
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let bg = tc.plot_background();
+            for k in 0..3 {
+                let c = tc.graph_overlay(k);
+                let ratio = contrast(c, bg);
+                assert!(
+                    ratio >= 3.0,
+                    "overlay {k} {c:?} on plot background {bg:?} is {ratio:.2}:1, below 3:1 ({label})"
+                );
             }
         }
     }
@@ -1223,35 +1225,29 @@ mod tests {
     /// plot background on the marker colour, the same pair.
     #[test]
     fn marker_color_meets_text_contrast_wherever_it_is_drawn() {
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for dark in [true, false] {
-                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let bg = tc.background();
-                let faint = Color32::from_rgb(
-                    bg.r().saturating_add(5),
-                    bg.g().saturating_add(5),
-                    bg.b().saturating_add(5),
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let bg = tc.background();
+            let faint = Color32::from_rgb(
+                bg.r().saturating_add(5),
+                bg.g().saturating_add(5),
+                bg.b().saturating_add(5),
+            );
+            let fg = tc.graph_marker();
+            for (name, ground) in [
+                ("panel background", bg),
+                ("faint frame fill", faint),
+                ("plot / text-edit background", tc.plot_background()),
+            ] {
+                let ratio = contrast(fg, ground);
+                assert!(
+                    ratio >= 4.5,
+                    "{label}: marker {fg:?} on {name} {ground:?} is {ratio:.2}:1"
                 );
-                let fg = tc.graph_marker();
-                for (name, ground) in [
-                    ("panel background", bg),
-                    ("faint frame fill", faint),
-                    ("plot / text-edit background", tc.plot_background()),
-                ] {
-                    let ratio = contrast(fg, ground);
-                    assert!(
-                        ratio >= 4.5,
-                        "{preset:?} dark={dark}: marker {fg:?} on {name} {ground:?} is {ratio:.2}:1"
-                    );
-                }
-                assert_ne!(fg, tc.graph_cursor(), "{preset:?} dark={dark}");
-                assert_ne!(fg, tc.graph_gap(), "{preset:?} dark={dark}");
-                assert_ne!(fg, tc.graph_line(), "{preset:?} dark={dark}");
             }
+            assert_ne!(fg, tc.graph_cursor(), "{label}");
+            assert_ne!(fg, tc.graph_gap(), "{label}");
+            assert_ne!(fg, tc.graph_line(), "{label}");
         }
     }
 
@@ -1261,27 +1257,21 @@ mod tests {
     /// hard read — so the four have to be four distinct colours.
     #[test]
     fn overlay_colors_differ_from_each_other_and_the_data_line() {
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for &dark in &[true, false] {
-                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let line = tc.graph_line();
-                for k in 0..3 {
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let line = tc.graph_line();
+            for k in 0..3 {
+                assert_ne!(
+                    tc.graph_overlay(k),
+                    line,
+                    "overlay {k} matches the data line ({label})"
+                );
+                for j in 0..k {
                     assert_ne!(
                         tc.graph_overlay(k),
-                        line,
-                        "overlay {k} matches the data line ({preset:?}, dark={dark})"
+                        tc.graph_overlay(j),
+                        "overlays {j} and {k} share a colour ({label})"
                     );
-                    for j in 0..k {
-                        assert_ne!(
-                            tc.graph_overlay(k),
-                            tc.graph_overlay(j),
-                            "overlays {j} and {k} share a colour ({preset:?}, dark={dark})"
-                        );
-                    }
                 }
             }
         }
@@ -1366,31 +1356,34 @@ mod tests {
     /// selected text on the selection fill.
     #[test]
     fn text_colors_meet_wcag_aa_in_both_themes() {
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for dark in [true, false] {
-                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let bg = tc.background();
-                let text_colors = [
-                    ("text", tc.text()),
-                    ("status_ok", tc.status_ok()),
-                    ("status_warning", tc.status_warning()),
-                    ("status_error", tc.status_error()),
-                    ("status_inactive", tc.status_inactive()),
-                    ("accent", tc.accent()),
-                ];
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let text_colors = [
+                ("text", tc.text()),
+                ("reading", tc.reading()),
+                ("heading", tc.heading()),
+                ("status_ok", tc.status_ok()),
+                ("status_warning", tc.status_warning()),
+                ("status_error", tc.status_error()),
+                ("status_inactive", tc.status_inactive()),
+                ("accent", tc.accent()),
+            ];
+            // The top bar and the reading panel are on the frame; the rest
+            // of the window, and the narrow and big-meter layouts, on the
+            // background.
+            for (ground_name, ground) in [("background", tc.background()), ("frame", tc.frame())] {
                 for (name, fg) in text_colors {
-                    let ratio = contrast(fg, bg);
+                    let ratio = contrast(fg, ground);
                     assert!(
                         ratio >= 4.5,
-                        "{preset:?} {} mode: {name} {fg:?} on {bg:?} is {ratio:.2}:1, below WCAG AA 4.5:1",
-                        if dark { "dark" } else { "light" },
+                        "{label}: {name} {fg:?} on the {ground_name} {ground:?} is {ratio:.2}:1, below WCAG AA 4.5:1"
                     );
                 }
             }
+            // An overload turns the reading the error colour, with "OL"
+            // in place of the digits; the colour has to change for it to
+            // count as a cue.
+            assert_ne!(tc.reading(), tc.status_error(), "{label}");
         }
     }
 
@@ -1414,32 +1407,26 @@ mod tests {
     /// no weak text is painted there.
     #[test]
     fn weak_text_meets_wcag_aa_on_every_ground_it_lands_on() {
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for dark in [true, false] {
-                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let bg = tc.background();
-                let faint = Color32::from_rgb(
-                    bg.r().saturating_add(5),
-                    bg.g().saturating_add(5),
-                    bg.b().saturating_add(5),
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let bg = tc.background();
+            let faint = Color32::from_rgb(
+                bg.r().saturating_add(5),
+                bg.g().saturating_add(5),
+                bg.b().saturating_add(5),
+            );
+            let fg = tc.weak_text();
+            for (name, ground) in [
+                ("panel background", bg),
+                ("faint frame fill", faint),
+                ("plot / text-edit background", tc.plot_background()),
+                ("frame surface", tc.frame()),
+            ] {
+                let ratio = contrast(fg, ground);
+                assert!(
+                    ratio >= 4.5,
+                    "{label}: weak_text {fg:?} on {name} {ground:?} is {ratio:.2}:1, below WCAG AA 4.5:1"
                 );
-                let fg = tc.weak_text();
-                for (name, ground) in [
-                    ("panel background", bg),
-                    ("faint frame fill", faint),
-                    ("plot / text-edit background", tc.plot_background()),
-                ] {
-                    let ratio = contrast(fg, ground);
-                    assert!(
-                        ratio >= 4.5,
-                        "{preset:?} {} mode: weak_text {fg:?} on {name} {ground:?} is {ratio:.2}:1, below WCAG AA 4.5:1",
-                        if dark { "dark" } else { "light" },
-                    );
-                }
             }
         }
     }
@@ -1451,38 +1438,38 @@ mod tests {
     #[test]
     fn weak_text_override_takes_precedence() {
         let picked = Color32::from_rgb(0x9A, 0x8C, 0x70);
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for dark in [true, false] {
-                let plain = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let tc = ThemeColors::new(
-                    dark,
-                    preset,
+        for (label, dark, preset, base) in every_palette() {
+            let plain = ThemeColors::new(dark, preset, &base);
+            let tc = ThemeColors::new(
+                dark,
+                preset,
+                &layered(
+                    &base,
                     &PaletteOverrides {
                         weak_text: Some(HexColor(picked)),
                         ..Default::default()
                     },
-                );
-                assert_eq!(tc.weak_text(), picked, "{preset:?} dark={dark}");
+                ),
+            );
+            assert_eq!(tc.weak_text(), picked, "{label}");
 
-                let neighbours = ThemeColors::new(
-                    dark,
-                    preset,
+            let neighbours = ThemeColors::new(
+                dark,
+                preset,
+                &layered(
+                    &base,
                     &PaletteOverrides {
                         background: Some(HexColor(Color32::from_rgb(10, 20, 30))),
                         text: Some(HexColor(Color32::from_rgb(200, 210, 220))),
                         ..Default::default()
                     },
-                );
-                assert_eq!(
-                    neighbours.weak_text(),
-                    plain.weak_text(),
-                    "{preset:?} dark={dark}: weak_text followed another field's override"
-                );
-            }
+                ),
+            );
+            assert_eq!(
+                neighbours.weak_text(),
+                plain.weak_text(),
+                "{label}: weak_text followed another field's override"
+            );
         }
     }
 
@@ -1606,10 +1593,28 @@ mod tests {
 
     /// The reason the field exists: borders are a graphical element, so
     /// `.claude/rules/gui.md` asks for 3:1 — against the panel they separate
-    /// and against the plot area they outline. Only High Contrast is held to
-    /// it; the other presets defer to egui, whose grey is deliberately faint.
+    /// and against the plot area they outline. Every palette that pins one is
+    /// held to it: High Contrast and the named themes. Default and
+    /// Colorblind defer to egui, whose grey is deliberately faint.
     #[test]
-    fn high_contrast_border_meets_graphical_contrast() {
+    fn a_pinned_border_meets_graphical_contrast() {
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            if !tc.border_pinned() {
+                continue;
+            }
+            let border = tc.border();
+            for (name, ground) in [
+                ("panel background", tc.background()),
+                ("plot background", tc.plot_background()),
+            ] {
+                let ratio = contrast(border, ground);
+                assert!(
+                    ratio >= 3.0,
+                    "{label}: border {border:?} on {name} {ground:?} is {ratio:.2}:1, below 3:1"
+                );
+            }
+        }
         for dark in [true, false] {
             let tc = ThemeColors::new(
                 dark,
@@ -1620,18 +1625,6 @@ mod tests {
                 tc.border_pinned(),
                 "dark={dark}: High Contrast pins no border"
             );
-            let border = tc.border();
-            for (name, ground) in [
-                ("panel background", tc.background()),
-                ("plot background", tc.plot_background()),
-            ] {
-                let ratio = contrast(border, ground);
-                assert!(
-                    ratio >= 3.0,
-                    "HighContrast {} mode: border {border:?} on {name} {ground:?} is {ratio:.2}:1, below 3:1",
-                    if dark { "dark" } else { "light" },
-                );
-            }
         }
     }
 
@@ -1640,20 +1633,14 @@ mod tests {
     #[test]
     fn border_override_takes_precedence() {
         let picked = Color32::from_rgb(0x30, 0x90, 0xC0);
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for dark in [true, false] {
-                let overrides = PaletteOverrides {
-                    border: Some(HexColor(picked)),
-                    ..Default::default()
-                };
-                let tc = ThemeColors::new(dark, preset, &overrides);
-                assert_eq!(tc.border(), picked, "{preset:?} dark={dark}");
-                assert!(tc.border_pinned(), "{preset:?} dark={dark}");
-            }
+        for (label, dark, preset, base) in every_palette() {
+            let overrides = PaletteOverrides {
+                border: Some(HexColor(picked)),
+                ..Default::default()
+            };
+            let tc = ThemeColors::new(dark, preset, &layered(&base, &overrides));
+            assert_eq!(tc.border(), picked, "{label}");
+            assert!(tc.border_pinned(), "{label}");
         }
     }
 
@@ -1665,47 +1652,41 @@ mod tests {
     /// and the emphasised captions stop separating from the fills below them.
     #[test]
     fn overridden_text_meets_aa_on_button_fill() {
-        for preset in [
-            ColorPreset::Default,
-            ColorPreset::HighContrast,
-            ColorPreset::ColorblindSafe,
-        ] {
-            for dark in [true, false] {
-                let plain = ThemeColors::new(dark, preset, &PaletteOverrides::default());
-                let overrides = PaletteOverrides {
-                    text: Some(HexColor(plain.text())),
-                    ..Default::default()
-                };
-                let tc = ThemeColors::new(dark, preset, &overrides);
-                let (hover, active) = tc.button_hover_active();
-                let mode = if dark { "dark" } else { "light" };
+        for (label, dark, preset, base) in every_palette() {
+            let plain = ThemeColors::new(dark, preset, &base);
+            let overrides = PaletteOverrides {
+                text: Some(HexColor(plain.text())),
+                ..Default::default()
+            };
+            let tc = ThemeColors::new(dark, preset, &layered(&base, &overrides));
+            let (hover, active) = tc.button_hover_active();
 
-                for (name, fg, ground) in [
-                    (
-                        "button caption on the button fill",
-                        tc.button_text(),
-                        tc.button(),
-                    ),
-                    ("button caption on the hover fill", tc.button_text(), hover),
-                    ("hovered caption on the hover fill", tc.strong_text(), hover),
-                    // The pressed fill is only a momentary state, and light
-                    // mode drops it 65 per channel — the darkest ground a
-                    // caption lands on. It clears the full 4.5:1 anyway
-                    // (5.36:1 at the worst preset), so it is held to the text
-                    // bar rather than the 3:1 graphical one.
-                    (
-                        "pressed caption on the pressed fill",
-                        tc.strong_text(),
-                        active,
-                    ),
-                    ("heading on the panel", tc.strong_text(), tc.background()),
-                ] {
-                    let ratio = contrast(fg, ground);
-                    assert!(
-                        ratio >= 4.5,
-                        "{preset:?} {mode} mode: {name} {fg:?} on {ground:?} is {ratio:.2}:1, below WCAG AA 4.5:1"
-                    );
-                }
+            for (name, fg, ground) in [
+                (
+                    "button caption on the button fill",
+                    tc.button_text(),
+                    tc.button(),
+                ),
+                ("button caption on the hover fill", tc.button_text(), hover),
+                ("hovered caption on the hover fill", tc.strong_text(), hover),
+                // The pressed fill is only a momentary state, and light
+                // mode drops it 65 per channel — the darkest ground a
+                // caption lands on. It clears the full 4.5:1 anyway
+                // (5.36:1 at the worst preset), so it is held to the text
+                // bar rather than the 3:1 graphical one.
+                (
+                    "pressed caption on the pressed fill",
+                    tc.strong_text(),
+                    active,
+                ),
+                ("heading on the panel", tc.strong_text(), tc.background()),
+                ("heading on the frame", tc.strong_text(), tc.frame()),
+            ] {
+                let ratio = contrast(fg, ground);
+                assert!(
+                    ratio >= 4.5,
+                    "{label}: {name} {fg:?} on {ground:?} is {ratio:.2}:1, below WCAG AA 4.5:1"
+                );
             }
         }
     }

@@ -21,6 +21,9 @@
 - **Import… opens an exported CSV, JSON or replay file, with its markers and graph view** — `Ctrl+I`, or `--import FILE` at launch; CSV files keep no view.
 - **The top bar links to a newer release when one is out** — downloaded builds check GitHub once a day; Settings turns it off ([#37](https://github.com/antoinecellerier/dmm-tools/issues/37)).
 - **`dmm-gui --completions <SHELL>` prints a shell completion script**
+- **Named themes: Bubble Gum, Desert, Midnight and Phosphor** — each sets its own light or dark mode; `--theme midnight` picks one at launch.
+- **Theme files in the `themes` folder join the Theme row** — Save as theme… writes the colors on screen to one, to keep or share.
+- **Customize colors moves related colors together, and adds Reading, Heading and Frame** — recoloring Background, Text or Data line carries its family, saved changes included; the picker takes pasted hex.
 - **The graph plots NCV levels** — turning to NCV left the previous mode's trace on screen.
 - **The recording log scrolls back through the whole recording** — it showed only the last 500 samples.
 - **Record no longer drops the graph's readings** — after a Discard, Export… saves them, markers included.

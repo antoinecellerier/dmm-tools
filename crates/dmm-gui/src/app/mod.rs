@@ -30,6 +30,7 @@ mod recording_panel;
 mod shortcut_help;
 mod shortcuts;
 mod stats_panel;
+mod theme_save;
 mod toast;
 mod top_bar;
 mod transform_ui;
@@ -50,9 +51,10 @@ use crate::a11y::ResponseA11yExt;
 use crate::display;
 use crate::graph::Graph;
 use crate::settings::{
-    DeferredSave, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, SaveDue, Settings, ThemeMode,
+    DeferredSave, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, SaveDue, Settings, ThemeChoice,
+    ThemeMode,
 };
-use appearance::{UiColorKey, font_definitions, install_text_styles};
+use appearance::{UiColorKey, font_definitions, frame_panel, install_text_styles, on_frame};
 use capture::Capture;
 use connection::RemoteCommand;
 use connection_issue::ConnectionIssue;
@@ -321,6 +323,15 @@ impl Connection {
 pub struct App {
     pub(super) settings: Settings,
     pub(super) settings_open: bool,
+    /// A read of the user's themes folder in flight, started when Settings
+    /// opens; `None` once its result is taken in.
+    theme_scan: Option<std::sync::mpsc::Receiver<Option<crate::theme::named::ThemeCatalog>>>,
+    /// Bumped by every change the app itself makes to the themes folder, so
+    /// a read started before one — which would not have seen it — is
+    /// dropped rather than taken in over it.
+    theme_folder_writes: u64,
+    /// `theme_folder_writes` when the read in flight started.
+    theme_scan_started_at: u64,
     /// A settings write waiting for a control to stop moving (colour edits).
     settings_save: DeferredSave,
 
@@ -397,6 +408,8 @@ pub struct App {
     applied: AppliedChrome,
     /// Transient status toast.
     toast: Option<Toast>,
+    /// The Save as theme row under Customize colors.
+    theme_save: theme_save::ThemeSave,
     /// The export waiting on its save dialog or its write, if any.
     export: Option<PendingExport>,
     meter_fit: MeterFit,
@@ -453,8 +466,16 @@ impl App {
             settings.mock_mode = mock_mode.label().to_string();
         }
         if let Some(theme) = cli.theme {
-            settings.overrides.theme = Some(settings.theme);
-            settings.theme = theme;
+            settings.overrides.theme = Some((settings.theme, settings.named_theme.clone()));
+            match theme {
+                ThemeChoice::Mode(mode) => {
+                    settings.theme = mode;
+                    // A named theme wins over the mode, so asking for a mode
+                    // has to set it aside for the session.
+                    settings.named_theme = None;
+                }
+                ThemeChoice::Named(name) => settings.named_theme = Some(name),
+            }
         }
         // Only the off switch is a flag: there is nothing to force on, the
         // setting already is.
@@ -481,6 +502,9 @@ impl App {
         Self {
             settings,
             settings_open: false,
+            theme_scan: None,
+            theme_folder_writes: 0,
+            theme_scan_started_at: 0,
             settings_save: DeferredSave::default(),
             connection: Connection::default(),
             last_measurement: None,
@@ -509,6 +533,7 @@ impl App {
             on_wayland: false,
             applied: AppliedChrome::default(),
             toast: None,
+            theme_save: Default::default(),
             export: None,
             meter_fit: MeterFit::new(),
             big_meter_mode: BigMeterMode::Off,
@@ -813,6 +838,8 @@ impl eframe::App for App {
             self.shortcut_help.restore_focus = None;
         }
         self.refresh_selected_profile();
+        self.poll_theme_scan();
+        self.poll_theme_save();
         self.apply_theme(&ctx);
         self.apply_color_overrides(&ctx);
         self.apply_zoom(&ctx);
@@ -879,11 +906,17 @@ impl eframe::App for App {
         // Where the toast hangs from: under the bar (and under the settings
         // rows it opens), at the window's top edge when there is no bar.
         let mut toast_top = ctx.content_rect().top();
+        // The top bar and the wide layout's reading panel sit on the
+        // palette's Frame surface, around the graph column.
+        let frame_fill = self.settings.theme_colors(ui.visuals().dark_mode).frame();
         if !minimal {
-            let top = egui::Panel::top("top_bar").show(ui, |ui| {
-                self.show_top_bar(ui, &ctx);
-                self.show_settings_panel(ui);
-            });
+            let top = egui::Panel::top("top_bar")
+                .frame(frame_panel(ui.style(), frame_fill))
+                .show(ui, |ui| {
+                    on_frame(ui, frame_fill);
+                    self.show_top_bar(ui, &ctx);
+                    self.show_settings_panel(ui);
+                });
             toast_top = top.response.rect.bottom();
         }
 
@@ -946,7 +979,9 @@ impl eframe::App for App {
                 .default_size(self.settings.reading_panel_width)
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
+                .frame(frame_panel(ui.style(), frame_fill))
                 .show(ui, |ui| {
+                    on_frame(ui, frame_fill);
                     self.show_reading_column_scrolled(ui, ContentLayout::Wide);
                 });
             // egui's `Panel::left(..).resizable(true)` allocates a
@@ -1097,6 +1132,7 @@ mod tests {
                 device: None,
                 mock_mode: None,
                 theme: None,
+                user_themes: None,
                 renderer: None,
                 adapter: None,
                 no_bluetooth: true,
@@ -1108,6 +1144,49 @@ mod tests {
         );
         assert!(!app.settings.shared.bluetooth, "this session skips it");
         assert_eq!(app.settings.overrides.bluetooth, Some(true));
+    }
+
+    /// `--theme` picks a named theme or a mode for one session. A mode sets
+    /// a saved named theme aside, since the theme would otherwise win; both
+    /// saved values are kept for [`Settings::save`] to write back.
+    #[test]
+    fn the_theme_flag_does_not_reach_the_settings_file() {
+        let session = |saved: Option<&str>, flag: ThemeChoice| {
+            let settings = Settings {
+                auto_connect: false,
+                theme: ThemeMode::Light,
+                named_theme: saved.map(str::to_string),
+                ..Settings::default()
+            };
+            App::from_cli(
+                settings,
+                crate::CliOverrides {
+                    device: None,
+                    mock_mode: None,
+                    theme: Some(flag),
+                    user_themes: None,
+                    renderer: None,
+                    adapter: None,
+                    no_bluetooth: false,
+                    clock: dmm_lib::Clock::real(),
+                    replay: None,
+                    import: None,
+                    update_notice: None,
+                },
+            )
+        };
+
+        let app = session(None, ThemeChoice::Named("Midnight".to_string()));
+        assert_eq!(app.settings.active_theme().unwrap().name, "Midnight");
+        assert_eq!(app.settings.overrides.theme, Some((ThemeMode::Light, None)));
+
+        let app = session(Some("Desert"), ThemeChoice::Mode(ThemeMode::Dark));
+        assert_eq!(app.settings.theme, ThemeMode::Dark);
+        assert_eq!(app.settings.active_theme(), None);
+        assert_eq!(
+            app.settings.overrides.theme,
+            Some((ThemeMode::Light, Some("Desert".to_string())))
+        );
     }
 
     /// A pick on a real meter has nothing to do with the mock's pin.
@@ -1145,6 +1224,7 @@ mod tests {
                 device: Some(replay.device.id.to_string()),
                 mock_mode: None,
                 theme: None,
+                user_themes: None,
                 renderer: None,
                 adapter: None,
                 no_bluetooth: false,

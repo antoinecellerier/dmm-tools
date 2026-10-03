@@ -290,9 +290,12 @@ impl App {
     fn show_specs_section(&mut self, ui: &mut Ui, scale: f32) {
         let expanded = self.settings.specs_expanded;
         let fields = self.settings.spec_fields;
+        let heading = self.settings.theme_colors(ui.visuals().dark_mode).heading();
         let mut toggled = false;
         self.show_specs_with(ui, scale, |ui, spec, mode_spec, manual_url, scale| {
-            toggled = specs::show_specs(ui, spec, mode_spec, manual_url, scale, expanded, fields);
+            toggled = specs::show_specs(
+                ui, spec, mode_spec, manual_url, scale, expanded, fields, heading,
+            );
         });
         if toggled {
             self.settings.specs_expanded = !expanded;

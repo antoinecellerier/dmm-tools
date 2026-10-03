@@ -117,7 +117,7 @@ fn show_aux_rows(
                 // by color alone.
                 let value_color = match aux.value {
                     MeasuredValue::Overload => tc.status_error(),
-                    _ => ui.visuals().text_color(),
+                    _ => tc.reading(),
                 };
                 // Value and unit are one label, not a nested `ui.horizontal`.
                 // A horizontal scope allocates its child `Ui` at
@@ -143,7 +143,7 @@ fn show_aux_rows(
                         2.0,
                         TextFormat {
                             font_id: FontId::monospace(size),
-                            color: ui.visuals().text_color(),
+                            color: tc.reading(),
                             ..Default::default()
                         },
                     );
@@ -214,12 +214,12 @@ fn value_label(
 }
 
 /// Prepare the value text and color from a measurement.
-fn value_display(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> (String, Color32) {
+fn value_display(m: &Measurement, tc: &ThemeColors) -> (String, Color32) {
     match &m.value {
-        MeasuredValue::Normal(_) => (format_value_display(m), ui.visuals().text_color()),
+        MeasuredValue::Normal(_) => (format_value_display(m), tc.reading()),
         MeasuredValue::Overload => (format_value_display(m), tc.status_error()),
         MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) | MeasuredValue::Absent => {
-            (format_value_display(m), ui.visuals().text_color())
+            (format_value_display(m), tc.reading())
         }
     }
 }
@@ -911,7 +911,7 @@ fn show_reading_sized(
 
     match measurement {
         Some(m) => {
-            let (value_text, value_color) = value_display(ui, m, tc);
+            let (value_text, value_color) = value_display(m, tc);
 
             ui.live_region_horizontal(
                 live_region_fingerprint(Some(m), scaled, NO_READING_TITLE),
@@ -929,7 +929,7 @@ fn show_reading_sized(
                     ui.label(
                         RichText::new(&*m.unit)
                             .font(FontId::monospace(unit_size))
-                            .color(ui.visuals().text_color()),
+                            .color(tc.reading()),
                     );
                 },
             );
@@ -985,7 +985,7 @@ fn show_reading_inline(
 
     match measurement {
         Some(m) => {
-            let (value_text, value_color) = value_display(ui, m, tc);
+            let (value_text, value_color) = value_display(m, tc);
             let draw_value = |ui: &mut Ui| {
                 ui.label(value_label(
                     ui,
@@ -998,7 +998,7 @@ fn show_reading_inline(
                 ui.label(
                     RichText::new(&*m.unit)
                         .font(FontId::monospace(unit_size))
-                        .color(ui.visuals().text_color()),
+                        .color(tc.reading()),
                 );
             };
 
@@ -1217,7 +1217,7 @@ pub fn show_reading_compact(
         Some(m) => {
             let value_text = format_value_display(m);
             let draw_value = |ui: &mut Ui| {
-                let color = ui.visuals().text_color();
+                let color = tc.reading();
                 ui.label(value_label(
                     ui,
                     m,
@@ -1227,7 +1227,9 @@ pub fn show_reading_compact(
                     MIN_AUX_FONT_SIZE,
                 ));
                 ui.label(
-                    RichText::new(&*m.unit).font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
+                    RichText::new(&*m.unit)
+                        .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
+                        .color(color),
                 );
             };
 

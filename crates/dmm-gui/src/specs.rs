@@ -98,7 +98,9 @@ const UNFOLD_TOOLTIP: &str = "Show the full specifications";
 /// is `None`) has its mode's impedance and notes only.
 ///
 /// The caller owns `expanded`, a saved setting: this returns `true` when the
-/// heading was clicked this frame, and the caller flips it.
+/// heading was clicked this frame, and the caller flips it. `heading` is the
+/// palette's heading colour, which the title is drawn in.
+#[allow(clippy::too_many_arguments)]
 pub fn show_specs(
     ui: &mut Ui,
     spec: Option<&SpecInfo>,
@@ -107,6 +109,7 @@ pub fn show_specs(
     scale: f32,
     expanded: bool,
     fields: SpecFields,
+    heading: Color32,
 ) -> bool {
     // The title where it always sat, egui's fold triangle at the column's
     // right edge, centred under the big-meter toggle, and the whole row one
@@ -115,7 +118,7 @@ pub fn show_specs(
     let title = egui::WidgetText::from(
         RichText::new("Specifications")
             .font(egui::FontId::proportional(11.0 * scale))
-            .color(weak),
+            .color(heading),
     )
     .into_galley(
         ui,
@@ -139,7 +142,7 @@ pub fn show_specs(
     });
     if ui.is_rect_visible(rect) {
         let title_pos = egui::pos2(rect.left(), rect.center().y - title.size().y / 2.0);
-        ui.painter().galley(title_pos, title, weak);
+        ui.painter().galley(title_pos, title, heading);
         // Customize colors' triangle, in the big-meter toggle's muted colour
         // until the row is hovered or focused.
         let size = ui.spacing().icon_width_inner;
@@ -419,6 +422,7 @@ mod tests {
                 1.0,
                 expanded,
                 fields,
+                Color32::GRAY,
             );
         });
         out.textures_delta.clear();

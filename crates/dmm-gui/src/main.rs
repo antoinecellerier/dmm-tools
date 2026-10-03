@@ -44,8 +44,7 @@ struct Args {
     #[arg(long, long_help = build_mock_mode_help())]
     mock_mode: Option<String>,
 
-    /// Theme override [dark, light, system]
-    #[arg(long)]
+    #[arg(long, help = theme_help())]
     theme: Option<String>,
 
     /// Graphics renderer [wgpu, glow]
@@ -121,6 +120,25 @@ fn build_device_help() -> String {
     )
 }
 
+/// What `--theme` accepts, as `--help` and the error for a bad value list it:
+/// the modes, then the themes as the Theme row lists them, `user` files
+/// included and each name once.
+fn theme_values(user: &[theme::named::NamedTheme]) -> String {
+    let named = theme::named::listed(user)
+        .into_iter()
+        .map(|t| theme::named::flag_name(&t.name));
+    ["dark", "light", "system"]
+        .map(String::from)
+        .into_iter()
+        .chain(named)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn theme_help() -> String {
+    format!("Theme override [{}]", theme_values(&[]))
+}
+
 /// Build long help text for --mock-mode from the mock's own mode table.
 fn build_mock_mode_help() -> String {
     dmm_shared::help::mock_mode_help(
@@ -135,7 +153,9 @@ fn build_mock_mode_help() -> String {
 pub struct CliOverrides {
     pub device: Option<String>,
     pub mock_mode: Option<dmm_lib::mock::MockMode>,
-    pub theme: Option<settings::ThemeMode>,
+    pub theme: Option<settings::ThemeChoice>,
+    /// The user's themes folder, when `--theme` named a theme and so read it.
+    pub(crate) user_themes: Option<theme::named::ThemeCatalog>,
     pub renderer: Option<eframe::Renderer>,
     pub adapter: Option<String>,
     /// `--no-bluetooth`: no Bluetooth scanning for this session, whatever the
@@ -308,18 +328,32 @@ fn parse_args() -> CliOverrides {
             }
         });
 
-    // Parse --theme if provided
-    let theme = args.theme.as_deref().map(|t| match t {
-        "dark" => settings::ThemeMode::Dark,
-        "light" => settings::ThemeMode::Light,
-        "system" => settings::ThemeMode::System,
-        other => {
-            Args::command()
-                .error(
-                    clap::error::ErrorKind::InvalidValue,
-                    format!("unknown theme '{other}'. Valid options: dark, light, system"),
-                )
-                .exit();
+    // Parse --theme if provided. A named theme reads the user's themes
+    // folder, whose files may replace a built-in; the modes never do.
+    let mut user_themes = None;
+    let theme = args.theme.as_deref().map(|t| {
+        use settings::{ThemeChoice, ThemeMode};
+        match t {
+            "dark" => ThemeChoice::Mode(ThemeMode::Dark),
+            "light" => ThemeChoice::Mode(ThemeMode::Light),
+            "system" => ThemeChoice::Mode(ThemeMode::System),
+            other => {
+                let catalog = theme::named::discover_user();
+                let found = theme::named::find(other, &catalog.themes).map(|t| t.name.clone());
+                let Some(name) = found else {
+                    Args::command()
+                        .error(
+                            clap::error::ErrorKind::InvalidValue,
+                            format!(
+                                "unknown theme '{other}'. Valid options: {}",
+                                theme_values(&catalog.themes)
+                            ),
+                        )
+                        .exit();
+                };
+                user_themes = Some(catalog);
+                ThemeChoice::Named(name)
+            }
         }
     });
 
@@ -368,6 +402,7 @@ fn parse_args() -> CliOverrides {
         device,
         mock_mode,
         theme,
+        user_themes,
         renderer,
         adapter: args.adapter,
         no_bluetooth: args.no_bluetooth,
@@ -492,7 +527,23 @@ fn main() -> eframe::Result<()> {
     let renderer = overrides.renderer.unwrap_or(eframe::Renderer::Wgpu);
 
     // Loaded here, not in `App::new`: the window is built from them first.
-    let settings = settings::Settings::load();
+    let mut settings = settings::Settings::load();
+    // The themes folder is read before the first frame only when this
+    // session draws a named theme, which may be one of its files, so that
+    // frame is already in the right colours. Otherwise opening Settings is
+    // the first read.
+    let named = match &overrides.theme {
+        Some(choice) => matches!(choice, settings::ThemeChoice::Named(_)),
+        None => settings.named_theme.is_some(),
+    };
+    if named {
+        let catalog = overrides
+            .user_themes
+            .clone()
+            .unwrap_or_else(theme::named::discover_user);
+        theme::named::log_skipped(&catalog, None);
+        settings.user_themes = std::sync::Arc::new(catalog);
+    }
     // eframe clamps the size to the largest monitor. The title bar is
     // hidden here rather than by the first frame's command, which on
     // Windows keeps the outer size and so grows the kept inner size on every

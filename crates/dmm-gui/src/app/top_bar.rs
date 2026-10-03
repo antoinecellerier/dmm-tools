@@ -424,6 +424,10 @@ impl App {
             .a11y_label("Settings");
         if settings_btn.clicked() {
             self.settings_open = !self.settings_open;
+            if self.settings_open {
+                // A theme file dropped or edited since shows on the Theme row.
+                self.start_theme_scan(ui.ctx());
+            }
         }
 
         let actual_width = ui.min_rect().right() - before - notice_w;

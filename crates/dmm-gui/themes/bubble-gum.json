@@ -1,0 +1,33 @@
+{
+  "name": "Bubble Gum",
+  "mode": "light",
+  "colors": {
+    "background": "#FFF0F6",
+    "frame": "#F9CFE0",
+    "text": "#0B4A2A",
+    "reading": "#006D34",
+    "weak_text": "#48634F",
+    "heading": "#A0176E",
+    "button": "#FDE6F0",
+    "border": "#A95586",
+    "accent": "#B30E77",
+    "graph_line": "#F04F9E",
+    "graph_gap": "#870011",
+    "graph_mean": "#5560C8",
+    "graph_ref": "#8E5B00",
+    "graph_crossing": "#160F80",
+    "graph_cursor": "#00737E",
+    "graph_envelope": "#D173A9",
+    "graph_overlay_1": "#989400",
+    "graph_overlay_2": "#43A600",
+    "graph_overlay_3": "#3797E9",
+    "plot_background": "#FFFBFD",
+    "graph_crosshair": "#6B3B5E",
+    "graph_marker": "#9320A1",
+    "status_ok": "#156438",
+    "status_warning": "#8B4400",
+    "status_error": "#B0100B",
+    "status_inactive": "#64525F",
+    "minimap_viewport": "#D472A6"
+  }
+}

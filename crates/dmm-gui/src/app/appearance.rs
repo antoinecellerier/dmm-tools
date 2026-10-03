@@ -90,12 +90,85 @@ pub(super) fn font_definitions() -> egui::FontDefinitions {
     fonts
 }
 
+/// The frame a panel on the palette's Frame surface draws: egui's own panel
+/// frame, filled with `fill`.
+pub(super) fn frame_panel(style: &egui::Style, fill: egui::Color32) -> egui::Frame {
+    egui::Frame::side_top_panel(style).fill(fill)
+}
+
+/// Inside a panel on the Frame surface, the fills egui derives from the
+/// panel background follow the frame instead: the scroll trough, and the
+/// colour a disabled widget fades towards, which would otherwise fade it
+/// towards the graph column's background rather than into the panel it sits
+/// on. Nothing changes while the frame is the background.
+pub(super) fn on_frame(ui: &mut egui::Ui, fill: egui::Color32) {
+    let v = ui.visuals_mut();
+    if fill != v.panel_fill {
+        v.widgets.noninteractive.bg_fill = fill;
+        v.widgets.noninteractive.weak_bg_fill = fill;
+        // What the focus ring and a series colour's legibility are judged
+        // against: the surface they are drawn on.
+        v.panel_fill = fill;
+    }
+}
+
 impl App {
-    /// Whether the UI should render dark, resolving `System` against the OS.
+    /// Read the user's themes folder on a thread of its own: a folder on a
+    /// slow or network home costs a moment before the chips update, never a
+    /// frame. One read at a time.
+    pub(super) fn start_theme_scan(&mut self, ctx: &egui::Context) {
+        if self.theme_scan.is_some() {
+            return;
+        }
+        let Some(dir) = crate::theme::named::user_dir() else {
+            return;
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let catalog = std::panic::catch_unwind(|| crate::theme::named::discover(&dir)).ok();
+            let _ = tx.send(catalog);
+            ctx.request_repaint();
+        });
+        self.theme_scan = Some(rx);
+        self.theme_scan_started_at = self.theme_folder_writes;
+    }
+
+    /// Take in a finished read of the themes folder: new chips, and new
+    /// colours if the theme in use was edited.
+    pub(super) fn poll_theme_scan(&mut self) {
+        let Some(rx) = &self.theme_scan else {
+            return;
+        };
+        let result = match rx.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        self.theme_scan = None;
+        if self.theme_scan_started_at != self.theme_folder_writes {
+            return; // Started before a save it can't have seen.
+        }
+        let Some(catalog) = result else {
+            log::error!("reading the themes folder failed; keeping the themes already read");
+            return;
+        };
+        if catalog != *self.settings.user_themes {
+            crate::theme::named::log_skipped(&catalog, Some(&self.settings.user_themes));
+            self.settings.user_themes = std::sync::Arc::new(catalog);
+            self.applied.ui_colors = None;
+        }
+    }
+
+    /// Whether the UI should render dark: a named theme's own mode, else the
+    /// Theme row's, resolving `System` against the OS.
     ///
     /// `system_theme()` returns `None` when the platform reports no
     /// preference; Dark is the app's default, so that's the fallback.
     fn resolve_dark(&self, ctx: &egui::Context) -> bool {
+        if let Some(theme) = self.settings.active_theme() {
+            return theme.dark;
+        }
         match self.settings.theme {
             ThemeMode::Dark => true,
             ThemeMode::Light => false,
@@ -130,7 +203,9 @@ impl App {
     pub(super) fn apply_color_overrides(&mut self, ctx: &egui::Context) {
         let dark = self.resolve_dark(ctx);
         let tc = self.settings.theme_colors(dark);
-        let overrides = self.settings.color_overrides.for_mode(dark);
+        // A named theme's colours count as set here just as the user's own
+        // overrides do, so its chrome follows it rather than egui.
+        let overrides = tc.overrides();
         let bg_overridden = overrides.background.is_some();
         let button_overridden = overrides.button.is_some();
         let accent_overridden = overrides.accent.is_some();
@@ -226,10 +301,18 @@ impl App {
         // colour, and that one sits on the panel rather than on the accent,
         // so it disappears here: the graph toolbar and Scale fields paint
         // `a11y::paint_focus_ring` over it for a cue that survives an Accent.
-        let (selection_fill, selection_text) = if accent_overridden {
-            (accent, bg)
+        //
+        // Links follow Accent on the same rule. egui's link blue is tuned
+        // for its own panels and drops to about 2.4:1 on a tinted light one,
+        // where the accent clears AA by construction.
+        let (selection_fill, selection_text, link) = if accent_overridden {
+            (accent, bg, accent)
         } else {
-            (stock.selection.bg_fill, stock.selection.stroke.color)
+            (
+                stock.selection.bg_fill,
+                stock.selection.stroke.color,
+                stock.hyperlink_color,
+            )
         };
         ctx.global_style_mut(|style| {
             let v = &mut style.visuals;
@@ -284,6 +367,7 @@ impl App {
             v.widgets.active.bg_stroke.color = active_stroke;
             v.selection.bg_fill = selection_fill;
             v.selection.stroke.color = selection_text;
+            v.hyperlink_color = link;
         });
     }
 
@@ -602,9 +686,9 @@ mod tests {
         }
     }
 
-    /// The fill behind a selected toggle or chip, and the colour egui redraws
-    /// its caption in, stay on egui's blue until Accent is customised. The
-    /// stroke *width* is egui's and must survive the recolour.
+    /// The fill behind a selected toggle or chip, the colour egui redraws
+    /// its caption in, and links stay on egui's blue until Accent is
+    /// customised. The stroke *width* is egui's and must survive the recolour.
     #[test]
     fn the_selection_tracks_egui_until_the_accent_is_overridden() {
         for dark in [true, false] {
@@ -619,6 +703,10 @@ mod tests {
             assert_eq!(selection.bg_fill, stock.selection.bg_fill, "dark={dark}");
             assert_eq!(
                 selection.stroke.color, stock.selection.stroke.color,
+                "dark={dark}"
+            );
+            assert_eq!(
+                style.visuals.hyperlink_color, stock.hyperlink_color,
                 "dark={dark}"
             );
             drop(style);
@@ -636,10 +724,52 @@ mod tests {
             let selection = &style.visuals.selection;
             assert_eq!(selection.bg_fill, picked, "dark={dark}");
             assert_eq!(selection.stroke.color, tc.background(), "dark={dark}");
+            assert_eq!(style.visuals.hyperlink_color, picked, "dark={dark}");
             assert_eq!(
                 selection.stroke.width, stock.selection.stroke.width,
                 "selection stroke width changed (dark={dark})"
             );
+        }
+    }
+
+    /// A named theme's colours count as set, as the user's overrides do: its
+    /// mode wins over the Theme row's, and the chrome that waits for an
+    /// override — the trough, the open combo box, the selection, the borders
+    /// and captions — follows the theme instead of egui.
+    #[test]
+    fn a_named_theme_sets_its_mode_and_its_chrome() {
+        for theme in crate::theme::named::builtin() {
+            let settings = Settings {
+                theme: if theme.dark {
+                    ThemeMode::Light
+                } else {
+                    ThemeMode::Dark
+                },
+                named_theme: Some(theme.name.clone()),
+                ..Settings::default()
+            };
+            let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+            let ctx = egui::Context::default();
+            app.apply_theme(&ctx);
+            app.apply_color_overrides(&ctx);
+            let tc = app.settings.theme_colors(theme.dark);
+            let style = ctx.global_style();
+            let v = &style.visuals;
+            let name = &theme.name;
+            assert_eq!(v.dark_mode, theme.dark, "{name}");
+            assert_eq!(v.panel_fill, tc.background(), "{name}");
+            assert_eq!(v.widgets.noninteractive.bg_fill, tc.background(), "{name}");
+            assert_eq!(v.widgets.open.weak_bg_fill, tc.button(), "{name}");
+            assert_eq!(v.selection.bg_fill, tc.accent(), "{name}");
+            assert_eq!(v.selection.stroke.color, tc.background(), "{name}");
+            assert_eq!(v.hyperlink_color, tc.accent(), "{name}");
+            assert_eq!(
+                v.widgets.noninteractive.bg_stroke.color,
+                tc.border(),
+                "{name}"
+            );
+            assert_eq!(v.widgets.hovered.bg_stroke.color, tc.border(), "{name}");
+            assert_eq!(v.widgets.inactive.fg_stroke.color, tc.text(), "{name}");
         }
     }
 

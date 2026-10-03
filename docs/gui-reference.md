@@ -441,8 +441,8 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 
 | Setting | Default | Description |
 |---|---|---|
-| **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none) |
-| **Colors** | Default | Color preset: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
+| **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none), or a [named theme](#color-customization), which brings its own colors and mode. |
+| **Colors** | Default | Color preset for Dark, Light and System: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
 | **Graph lines** | Patterned | How sub-value lines are drawn: **Patterned** dashes and dots them so they can be told apart without colour; **Solid** draws them continuous, told apart by colour and the plot key (a fourth sub-value, sharing the first one's colour, keeps its dashes). Mean, reference, envelope, cursor, marker and data-loss lines keep their patterns. |
 | **Graph** | on | Toggle graph panel visibility |
 | **Statistics** | on | Toggle statistics panel visibility |
@@ -467,8 +467,8 @@ A downloaded build asks GitHub's public releases API once a day whether a newer 
 
 ### Color Customization
 
-**Presets.** The **Colors** row picks the palette. Switching presets resets
-any per-color overrides.
+**Presets.** The **Colors** row picks the palette for Dark, Light and
+System. Switching presets resets their per-color overrides.
 
 | Preset | Palette |
 |---|---|
@@ -481,13 +481,50 @@ any per-color overrides.
 | ![The graph in the Default preset, dark theme](../assets/gui-theme-dark.png) | ![The graph in the Default preset, light theme](../assets/gui-theme-light.png) |
 | ![The graph in the High Contrast preset](../assets/gui-theme-high-contrast.png) | ![The graph in the Colorblind preset](../assets/gui-theme-colorblind.png) |
 
-**Per-color editing.** Expand **Customize colors** for a swatch per color,
-grouped UI, Graph, Status and Minimap; click one to open a picker. The
-swatches edit the theme mode you are in; dark and light each keep their own
-colors. The same colors can be set in `settings.json` — see [Color
-fields](#color-fields) in the appendix.
+**Named themes.** Picked on the **Theme** row, each in its own mode.
 
-![The Customize colors swatch rows with one swatch's picker open, showing its RGB values, saturation square and hue strip](../assets/gui-color-customization.png)
+| Theme | Mode | Palette |
+|---|---|---|
+| **Bubble Gum** | light | pink, with green text |
+| **Desert** | light | sand, indigo text, teal trace |
+| **Midnight** | dark | navy and moon-gold |
+| **Phosphor** | dark | green-on-black CRT, amber accent |
+
+| | |
+|---|---|
+| ![The graph in the Bubble Gum theme](../assets/gui-theme-bubble-gum.png) | ![The graph in the Desert theme](../assets/gui-theme-desert.png) |
+| ![The graph in the Midnight theme](../assets/gui-theme-midnight.png) | ![The graph in the Phosphor theme](../assets/gui-theme-phosphor.png) |
+
+**Per-color editing.** Expand **Customize colors** for a swatch per color;
+click one for a picker, whose hex field copies or takes a pasted `#RRGGBB`.
+The swatches after an arrow follow the color before it, keeping their offset
+from it, until you pick one; **↺ relink** makes it follow again. Changes apply
+to the theme or mode in use, and **Reset colors** discards them. The same
+colors can be set in `settings.json` — see [Color fields](#color-fields).
+
+**Save as theme…** writes the colors on screen to a theme file; one saved in
+your themes folder joins the **Theme** row.
+
+![The Customize colors swatch rows with one swatch's picker open, showing its RGB values, saturation square, hue strip and hex field](../assets/gui-color-customization.png)
+
+### Theme files
+
+A theme is a JSON file in the `themes` folder next to `settings.json`
+(`~/.config/dmm-tools/themes/` on Linux), read each time Settings opens;
+delete the file to remove it. One named like a built-in theme replaces it.
+
+```json
+{
+  "name": "My Theme",
+  "mode": "dark",
+  "colors": { "background": "#10172E", "text": "#C9D4F2", "accent": "#F2C14E" }
+}
+```
+
+`colors` takes the [color fields](#color-fields); one left out comes from
+`preset` (`Default`, `HighContrast` or `ColorblindSafe`; Default if absent).
+The built-in themes in [`crates/dmm-gui/themes`](../crates/dmm-gui/themes) are
+examples.
 
 ## Keyboard Shortcuts
 
@@ -554,7 +591,7 @@ another value there clears the override and saves the new one.
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
 | `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --format replay` — instead of connecting to a meter. The last reading stays on screen once the recording has ended. |
 | `--import <FILE>` | Open an exported CSV, JSON or replay file, with its markers, instead of connecting to a meter. Connect leaves it for a meter. |
-| `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
+| `--theme <THEME>` | Theme override: `dark`, `light`, `system`, or a named theme such as `midnight`. |
 | `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
 | `--completions <SHELL>` | Print a completion script for `bash`, `elvish`, `fish`, `powershell` or `zsh` and exit. Install it as in [dmm-cli completions](cli-reference.md#dmm-cli-completions), naming it after `dmm-gui`. |
 | `-V`, `--version` | Print version and exit. |
@@ -568,6 +605,7 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 
 - Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements). Minimum 11 pt font; status flags use bold text in addition to color so they don't rely on color alone.
 - Secondary text (the mode line under the reading, sub-value labels, toolbar and hint captions) has its own per-preset color that meets the same 4.5:1 bar as the primary text.
+- The built-in named themes meet the same bars.
 - Every button, link, toggle, and setting has a hover tooltip explaining what it does — hover any control to learn it without leaving the GUI.
 
 ### Keyboard
@@ -603,7 +641,8 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 ### Color fields
 
 Colors can be edited directly in `settings.json` using hex strings
-(`#RRGGBB` or `#RRGGBBAA`), per theme mode:
+(`#RRGGBB` or `#RRGGBBAA`), per theme mode, and per named theme under
+`named`:
 
 ```json
 {
@@ -615,19 +654,22 @@ Colors can be edited directly in `settings.json` using hex strings
     },
     "light": {
       "graph_line": "#0050A0"
+    },
+    "named": {
+      "Midnight": { "accent": "#FFB000" }
     }
   }
 }
 ```
 
-Available color fields:
+Available color fields, which a [theme file](#theme-files) takes too:
 
-- **UI chrome:** `background`, `text`, `weak_text`, `button`, `border`, `accent`
+- **UI chrome:** `background`, `frame` (top bar and reading panel), `text`, `reading` (the reading and sub-values), `weak_text`, `heading` (panel headings), `button`, `border`, `accent`
 - **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`, `graph_marker`
 - **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`
 - **Minimap:** `minimap_viewport`
 
-Derived colors auto-track their base: cursor dim/delta from `graph_cursor`, minimap line from `graph_line`, recording warning from `status_warning`, button hover/active from `button`, plot grid and axis labels from `text`. `text` also governs button captions and headings, and `accent` selected toggles and chips, focus rings and selected text; left unset, both keep egui's defaults. `border` is set only by the High Contrast preset.
+Derived colors auto-track their base: cursor dim/delta from `graph_cursor`, minimap line from `graph_line`, recording warning from `status_warning`, button hover/active from `button`, plot grid and axis labels from `text`; `frame`, `reading` and `heading` default to `background`, `text` and `weak_text`. `text` also governs button captions and headings, and `accent` selected toggles and chips, links, focus rings and selected text; left unset, both keep egui's defaults. `border` is set by the High Contrast preset and the named themes; left unset, it is egui's.
 
 ## See Also
 

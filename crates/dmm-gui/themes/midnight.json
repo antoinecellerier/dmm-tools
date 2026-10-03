@@ -1,0 +1,33 @@
+{
+  "name": "Midnight",
+  "mode": "dark",
+  "colors": {
+    "background": "#10172E",
+    "frame": "#1B2649",
+    "text": "#C9D4F2",
+    "reading": "#FFE08A",
+    "weak_text": "#98A4C9",
+    "heading": "#8AB4FF",
+    "button": "#2A3768",
+    "border": "#6071A8",
+    "accent": "#F2C14E",
+    "graph_line": "#8AB4FF",
+    "graph_gap": "#FF6B7A",
+    "graph_mean": "#5FD38D",
+    "graph_ref": "#AFA06E",
+    "graph_crossing": "#FEE484",
+    "graph_cursor": "#FFA86B",
+    "graph_envelope": "#6A80B8",
+    "graph_overlay_1": "#5EE0E0",
+    "graph_overlay_2": "#C18BFD",
+    "graph_overlay_3": "#E8E8F0",
+    "plot_background": "#080C1C",
+    "graph_crosshair": "#B8C2E0",
+    "graph_marker": "#F58FD0",
+    "status_ok": "#5FD38D",
+    "status_warning": "#F0A04B",
+    "status_error": "#FF6B7A",
+    "status_inactive": "#98A2BF",
+    "minimap_viewport": "#8AB4FF"
+  }
+}
