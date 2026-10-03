@@ -4,7 +4,8 @@
 //! Nobody on the project owns a ZOTEK meter, so this stands in for one to
 //! run the real driver against. [`SimulatedMeter`] is a transport: it
 //! streams scrambled type-2 packets drawn with the layout's own bit table
-//! (§4, §6.2, §7.3) and takes the key frames written to it (§8.1). [`MockZt5b`]
+//! (§4, §6.2, §7.3) and takes the key frames written to it (§8.1),
+//! answering the keys a ZT-5B answers (§8.2). [`MockZt5b`]
 //! puts the unchanged [`ZotekProtocol`] on top, so every reading goes
 //! through the extractor and the decoder, and every key through the frame
 //! builder, as with a meter.
@@ -432,8 +433,23 @@ fn key_code(data: &[u8]) -> Result<u8> {
 }
 
 /// How often the simulated meter sends a packet, in session time: "around
-/// 2.6 measurements per second", as an AN9002 was seen to (spec §11).
+/// 2.6 measurements per second", as an AN9002 was seen to (spec §11). A
+/// ZT-5B sends about 3 (spec §3); the sim's tests are paced to this.
 const PERIOD: Duration = Duration::from_millis(385);
+
+/// The keys a ZT-5B answered (spec §8.2); `B5` and the codes the driver
+/// never sends to type 2 were not tried.
+const ANSWERED: &[u8] = &[0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB6, 0xB7, 0xB8];
+
+/// The meter's answer to `key`, on air: `AB CD FD <key> 00 00 00 00` and
+/// their big-endian sum (spec §8.2).
+fn answer(key: u8) -> Vec<u8> {
+    let mut frame = vec![0xAB, 0xCD, 0xFD, key, 0, 0, 0, 0, 0, 0];
+    let sum: u16 = frame[..8].iter().map(|&b| u16::from(b)).sum();
+    frame[8..].copy_from_slice(&sum.to_be_bytes());
+    frame::xor_key(&mut frame);
+    frame
+}
 
 /// Most packets the simulated meter keeps waiting for a reader: the sim's
 /// own queue bound, so a fast session clock draws a bounded backlog. Not a
@@ -479,9 +495,14 @@ impl SimulatedMeter {
 }
 
 impl Transport for SimulatedMeter {
+    /// A key press: the meter acts on it, and answers a key it knows
+    /// ahead of its next packet.
     fn write(&self, data: &[u8]) -> Result<()> {
         let key = key_code(data)?;
         self.meter.borrow_mut().press(key, self.clock.now());
+        if ANSWERED.contains(&key) {
+            self.pending.borrow_mut().extend(answer(key));
+        }
         Ok(())
     }
 
@@ -946,6 +967,25 @@ mod tests {
         }
         seen.dedup();
         assert!(seen.len() > 10, "{seen:?}");
+    }
+
+    /// A key the ZT-5B answered draws its answer ahead of the next packet;
+    /// the driver reads past it to the reading, reporting nothing.
+    #[test]
+    fn a_known_key_is_answered() {
+        let meter = SimulatedMeter::new(Clock::manual());
+        meter
+            .write(&crate::protocol::zotek::keys::frame(0xB4))
+            .unwrap();
+        let mut buf = [0u8; 10];
+        assert_eq!(meter.read_timeout(&mut buf, 0).unwrap(), 10);
+        frame::xor_key(&mut buf);
+        assert_eq!(buf, [0xAB, 0xCD, 0xFD, 0xB4, 0, 0, 0, 0, 0x03, 0x29]);
+
+        // `read` fails on any report.
+        let (mut mock, _) = mock();
+        press(&mut mock, "hold");
+        assert!(read(&mut mock).flags.hold);
     }
 
     #[test]
