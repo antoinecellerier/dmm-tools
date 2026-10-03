@@ -30,7 +30,6 @@ mod recording_panel;
 mod shortcut_help;
 mod shortcuts;
 mod stats_panel;
-mod theme_save;
 mod toast;
 mod top_bar;
 mod transform_ui;
@@ -409,7 +408,7 @@ pub struct App {
     /// Transient status toast.
     toast: Option<Toast>,
     /// The Save as theme row under Customize colors.
-    theme_save: theme_save::ThemeSave,
+    theme_save: controls::theme_save::ThemeSave,
     /// The export waiting on its save dialog or its write, if any.
     export: Option<PendingExport>,
     meter_fit: MeterFit,

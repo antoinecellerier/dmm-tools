@@ -248,8 +248,8 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::super::controls::SCALE_RULE_WIDTH;
     use super::*;
+    use crate::app::controls::remote::SCALE_RULE_WIDTH;
     use crate::settings::Settings;
     use eframe::egui::accesskit::Node;
     use eframe::egui::{Pos2, Rect, vec2};

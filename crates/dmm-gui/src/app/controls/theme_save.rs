@@ -15,8 +15,8 @@ use std::sync::mpsc::{self, Receiver};
 
 use eframe::egui::{self, Ui};
 
-use super::App;
-use super::toast::Toast;
+use crate::app::App;
+use crate::app::toast::Toast;
 use crate::settings::PaletteOverrides;
 use crate::theme::named::{self, NamedTheme};
 
@@ -26,7 +26,7 @@ type DialogAnswer = Result<Option<PathBuf>, String>;
 
 /// The save dialog, while it is open.
 #[derive(Default)]
-pub(super) struct ThemeSave {
+pub(in crate::app) struct ThemeSave {
     dialog: Option<Receiver<DialogAnswer>>,
 }
 
@@ -97,7 +97,7 @@ impl App {
     }
 
     /// Take in the save dialog's answer, and save.
-    pub(super) fn poll_theme_save(&mut self) {
+    pub(in crate::app) fn poll_theme_save(&mut self) {
         let Some(rx) = &self.theme_save.dialog else {
             return;
         };

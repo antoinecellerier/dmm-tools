@@ -180,7 +180,7 @@ picker".
 
 **Workaround we used.** None — accepted the regression so we could
 build a keyboard-navigable color popup (see issue #18 below). See
-`crates/dmm-gui/src/app/controls.rs:969` (`color_edit`).
+`crates/dmm-gui/src/app/controls/colors.rs` (`color_edit`).
 
 **Suggested fix.** Add `Button::role(WidgetType)` (or, more
 specifically, `Button::color_swatch(Color32) -> Self` since color
@@ -472,7 +472,7 @@ popup.
 
 **Workaround.** Cover the one-frame hole by also calling
 `memory.move_focus(FocusDirection::None)` if any arrow is held this
-frame. See `crates/dmm-gui/src/app/controls.rs` (search for
+frame. See `crates/dmm-gui/src/app/controls/colors.rs` (search for
 `set_focus_lock_filter`).
 
 **Suggested fix.** Drop the `had_focus_last_frame` gate, or make
@@ -681,7 +681,7 @@ semantics make it impossible to distinguish.
 `was_open_key` in `ctx.data`. Lots of hand-rolled boilerplate.
 
 **Workaround.** See `color_edit` in
-`crates/dmm-gui/src/app/controls.rs`.
+`crates/dmm-gui/src/app/controls/colors.rs`.
 
 **Suggested fix.** Add a `Popup::modal(true) -> Self` builder that:
 - calls `set_modal_layer` for the popup's duration,
@@ -719,7 +719,7 @@ and width > 3× height → 1D hue slider) and apply a 0.02 step to the
 cached `Hsva` ourselves. The 50px threshold was chosen because the
 actual slider widths in our theme happen to be exactly 100px — the
 heuristic is acknowledged-brittle and would break under non-default
-DPI or theme tweaks. See `crates/dmm-gui/src/app/controls.rs`
+DPI or theme tweaks. See `crates/dmm-gui/src/app/controls/colors.rs`
 `color_edit`.
 
 **This is the single biggest upstream gap in the entire pass.**

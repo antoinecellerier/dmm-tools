@@ -380,7 +380,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/held_reading.rs` | Keeping a split reading whole on screen |
 | `app/top_bar.rs` | The top bar |
 | `app/toast.rs` | The status toast |
-| `app/controls.rs` | The settings panel and remote-command buttons |
+| `app/controls/` | The settings panel and its rows, the Device list, the colour rows with Save as theme, and the remote-command buttons |
 | `app/layout.rs` | The reading column and the big meter toggle |
 | `app/meter_fit.rs` | Big-meter sizing arithmetic |
 | `app/stats_panel.rs` | The statistics panel |
@@ -394,7 +394,6 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/whats_new.rs` | The release-notes viewport |
 | `app/update_check.rs` | The daily update check |
 | `app/appearance.rs` | Fonts, theme, zoom, window commands; reading the themes folder |
-| `app/theme_save.rs` | Save as theme… |
 | `graph/` | The graph's points, the main plot (`egui_plot`) with a right Y axis per sub-value unit, the painted minimap |
 | `display/` | The reading in its three sizes |
 | `recording.rs` | The sample store and its CSV, JSON and replay rendering |
