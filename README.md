@@ -108,7 +108,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | ZOTEK ZT-300AB (ANENG AN9002) | — | 🧪 Experimental (built in) | [#28](https://github.com/antoinecellerier/dmm-tools/issues/28) |
 | ZOTEK ZT-5566SE (ANENG AN999S) | — | 🧪 Experimental (built in) | [#29](https://github.com/antoinecellerier/dmm-tools/issues/29) |
 | ZOTEK ZT-5BQ (ANENG ST207) | — | 🧪 Experimental (built in) | [#30](https://github.com/antoinecellerier/dmm-tools/issues/30) |
-| ZOTEK ZT-5B (ANENG V05B) | — | 🟡 Partly verified (built in) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
+| ZOTEK ZT-5B (ANENG V05B) | — | ✅ Verified (built in) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
 | EEVblog 121GW | — | 🧪 Experimental (built in) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
 | Brymen BM788BT/BM787BT | — | 🧪 Experimental (built in) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
 | Brymen BM869s/BM867s | 🧪 Experimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |

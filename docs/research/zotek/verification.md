@@ -65,6 +65,12 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
   capacitance bits (§11.3 D4) — decides the layouts' prefix bits. Needs
   10-100 µF on a ZT-300AB / AN9002: byte 8 `A0`. (#28)
 
+## Functions
+
+- AC A on a ZT-5B: the AC bit and the A unit each confirmed, in AC V and
+  DC A, never together (§7.3) — confirms the ZT-5B's last function. Needs
+  `aca` with a low-voltage AC load. (#31)
+
 ## Flags
 
 - Type-4 bar graph: bar segments counted against byte 13 bit 4 and bytes
@@ -91,6 +97,9 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 - Whether type-1 byte 3 bit 2 stays set at high and at zero voltage (§11.3
   D6) — decides Bluetooth icon or HV mark. Needs `dcv`, `acv` and `auto_idle`
   on a ZT-5BQ / ST207. (#30)
+- Type-2 low battery, byte 3 bit 0, never set on a ZT-5B (§7.3) — decides
+  the `low_battery` flag. Needs a ZT-5B or V05B with a weak battery, the
+  LCD's battery icon noted. (#31)
 
 ## Keys and commands
 

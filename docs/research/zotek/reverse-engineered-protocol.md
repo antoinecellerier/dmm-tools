@@ -740,7 +740,7 @@ error.
 | D9 | §2 name | libreble: inconsistent names, "BDM" the common prefix; bt-multimeter-cli's README example: "ZOYI-ZT5B" | No app contains "BDM" | community error: every scan shows "Bluetooth DMM"; bt-multimeter-cli's own probe shows no name | A passive scan per model |
 | D10 | §4 key byte 17 = `1A` | ludwich's wiki, anszom, BLE_DMM_Client, bt-multimeter-cli: `21` | All three apps: `1A` (smali `array-data` too) | community typo: only `1A` gives coherent ZT-5566SE byte-17 flags (n, F in capacitance); only type 4 reaches byte 17 | settled |
 | D11 | §5, §6.3 type 4: 19 bytes, digits 9-12, sign and leading "1" in 13 | ludwich: "Only 17 Byte", digits 8-11, sign, ":" and leading 1 in 12 | Both apps: at least 19 bytes, digits 9-12, flags in 13 | community error: the ZT-5566SE log has 19-byte packets that decode only with the spec's offsets; ludwich's row is shifted one byte | settled |
-| D12 | §8.2 keys pick their function [HARDWARE] | webspiderteam wiki: on a V05B the keys step modes like SEL | The apps label each key by the function it tests (§8.2) | meter vs community: a ZT-5B's `B2`, `B6` and `B7` went straight to NCV, °C and °F (§8.2) | The capacitance, Hz, diode and AUTO keys from Auto on a ZT-5B |
+| D12 | §8.2 keys pick their function [HARDWARE] | webspiderteam wiki: on a V05B the keys step modes like SEL | The apps label each key by the function it tests (§8.2) | meter vs community: a ZT-5B's `B2`, `B6` and `B7` went straight to NCV, °C and °F (§8.2) | settled: a ZT-5B's `B0`, `B3`, `B1` and `B8` each went straight to their function (§8.2) |
 
 ### 11.4 New
 

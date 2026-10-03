@@ -103,7 +103,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `zt300ab` | `zt-300ab`, `an9002`, `an-9002` | ZT-300AB / AN9002 (experimental) |
 | `zt5566se` | `zt-5566se`, `zt5566s`, `zt-5566s`, `an999s`, `an-999s` | ZT-5566SE / AN999S (experimental) |
 | `zt5bq` | `zt-5bq`, `st207` | ZT-5BQ / ST207 (experimental) |
-| `zt5b` | `zt-5b`, `v05b` | ZT-5B / V05B (partly verified) |
+| `zt5b` | `zt-5b`, `v05b` | ZT-5B / V05B (verified) |
 | **Simulated** |  |  |
 | `mock` |  | Mock (simulated, no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |

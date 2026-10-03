@@ -100,11 +100,11 @@ impl ZotekProtocol {
 
     pub(crate) fn new_zt5b() -> Self {
         let mut zt5b = Self::new(&layout::ZT5B, 31);
-        // A ZOYI ZT-5B has run every reading but AC A, and every key its
-        // entry offers (issue #31, 2026-10-03); AC A, and the V05B, have
-        // not. PartlyVerified keeps the warning and the badge linking to
-        // the issue; README and docs/supported-devices.md say the same.
-        zt5b.profile.stability = Stability::PartlyVerified;
+        // A ZOYI ZT-5B has run every reading but AC A, every key its entry
+        // offers and detection (issue #31, 2026-10-03). AC A decodes
+        // through the AC bit and the A unit, each confirmed in another
+        // function; the V05B sends the same layout (spec §11.4).
+        zt5b.profile.stability = Stability::Verified;
         zt5b
     }
 
