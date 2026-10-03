@@ -127,7 +127,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | Voltcraft VC915/VC925 PV | — | 🧪 Experimental (built in) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
 <!-- devices:end -->
 
-✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.
+✅ = modes and commands confirmed on real hardware, short of a few localized checks. 🟡 = connection and the main modes confirmed, whole modes or commands still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.
 
 Bluetooth "adapter" is UNI-T's UT-D07A/B add-on; "built in" needs no adapter. Each issue collects hardware reports for its row; reports on the adapter itself go to [#25](https://github.com/antoinecellerier/dmm-tools/issues/25).
 

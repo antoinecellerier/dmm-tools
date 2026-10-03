@@ -10,14 +10,15 @@ meter are attached from the bytes the meter sends ([how](detection-design.md)),
 so the default `auto` device needs no setup beyond switching the meter's data
 transmission on, as listed per family below.
 
-**✅ Verified** means the model's protocol tables have been confirmed on real
-hardware. **🟡 Partly verified** means connection and the main modes are
-confirmed and the rest is still to verify. **🧪 Experimental** means the
-protocol was reverse-engineered from vendor software and manuals. Short of
-verified, the linked issue collects hardware reports and the tool prints a
-warning on connect. The per-family research is under
-[docs/research/](research/); what remains to verify is in each family's
-list, indexed in the [verification backlog](verification-backlog.md).
+**✅ Verified** means the model's modes and commands have run on real hardware,
+short of a few localized checks listed in the family's open checks. **🟡 Partly
+verified** means connection and the main modes are confirmed, and whole modes
+or commands are still to verify. **🧪 Experimental** means the protocol was
+reverse-engineered from vendor software and manuals. Short of verified, the
+linked issue collects hardware reports and the tool prints a warning on
+connect. The per-family research is under [docs/research/](research/); what
+remains to verify is in each family's list, indexed in the [verification
+backlog](verification-backlog.md).
 
 ## Cables and adapters
 

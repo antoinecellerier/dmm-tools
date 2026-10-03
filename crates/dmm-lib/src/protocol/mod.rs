@@ -159,10 +159,12 @@ pub(crate) mod test_support {
 /// run; the words come from [`Stability::label`] so every surface agrees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stability {
-    /// Verified against real hardware.
+    /// Verified against real hardware: every mode family, its flags and the
+    /// entry's commands have run, short of localized checks listed in the
+    /// family's `verification.md` (the gate is in `docs/adding-devices.md`).
     Verified,
-    /// Connection and the main modes confirmed on real hardware; other
-    /// formats or commands still unverified.
+    /// Connection and the main modes confirmed on real hardware; a whole
+    /// mode family, command set or format still unrun.
     PartlyVerified,
     /// Based on reverse engineering, not yet verified against real hardware.
     Experimental,

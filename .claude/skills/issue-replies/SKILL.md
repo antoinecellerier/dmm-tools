@@ -117,7 +117,7 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 - Reporter-verified item → delete it from the family's `verification.md` and record the result per `.claude/rules/verification-docs.md`: what the meter does as a spec fact tagged `[HARDWARE]` (`[VERIFIED]` in the UT61 specs) with the issue, the cable and `@user`; what our driver does as a code comment with the issue. Community-sourced but unrun → `per <source>`, no tag.
 - Verification issue body → updated in the same round as the reply: regenerate the checklist (`dmm-cli --device <id> capture --list-steps --format md`, never hand-edited — a verified item flips the step's `.verified()` in the code), and update the summary, and the dev-build line where it names a `dev-<sha>`. Show it, then `gh issue edit` on a go-ahead.
 - A `CHANGELOG.md` entry saying a model works or is verified, with credit, lands in the commit that records the reporter's confirmation, not before; a targeted fix with credible evidence gets its entry with the fix (`.claude/rules/changelog.md`).
-- Family fully verified → follow the sign-off in `docs/adding-devices.md` (Stability flip, golden tests, `docs/supported-devices.md`).
+- Model meets the Verified gate → follow the sign-off in `docs/adding-devices.md` (Stability flip, golden tests, `docs/supported-devices.md`).
 - New unknown from the thread → the family's `verification.md`, or `docs/verification-backlog.md` when it spans families. Doc gap the reporter hit → fix it in the same commit and link it from the reply.
 - Two to three weeks of silence on an ask → one polite nudge.
 
