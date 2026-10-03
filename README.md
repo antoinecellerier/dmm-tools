@@ -6,7 +6,7 @@ Open-source logging, graphing and remote-control software for UNI-T, ZOTEK (ZOYI
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter from a desktop app, over its USB cable or wirelessly over Bluetooth. Supports the UNI-T UT61E+ (UT61E Plus), UT181A, UT161, UT71, UT60BT, UT61D+, UT61B+, UT803, UT804, UT8802, UT8803, UT171 and UT202BT, the ANENG AN9002, AN999S, ST207 and V05B (ZOTEK ZT-300AB, ZT-5566SE, ZT-5BQ, ZT-5B), the OWON B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B, CMS101, CMS061, OW65B, OW67B and OW69B, the Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM788BT, BM787BT, BM525s and BM521s, the EEVblog 121GW, and the Voltcraft VC-890, VC-880, VC650BT, VC871, VC891, VC915, VC925 PV, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
+Read, record and remote-control a digital multimeter from a desktop app, over its USB cable or wirelessly over Bluetooth. Works with the UNI-T UT61E+ (UT61E Plus), UT181A, UT161, UT71, UT60BT and UT804, the ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E and B41T+, Voltcraft VC-890 and [more](#supported-devices).
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 

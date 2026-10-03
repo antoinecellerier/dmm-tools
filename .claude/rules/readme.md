@@ -10,10 +10,14 @@ project does and where to learn more, and by search engines. It is an entry
 point, not a fourth reference. The general rules are in
 `docs-user-facing.md`.
 
-- The first paragraph names what the tool does, the meter families and
-  models, and the platforms, in prose — a crawler weights the first hundred
-  words, and a table cell less than a sentence. Cable names belong in the
-  catalog, not the intro.
+- The first paragraph names what the tool does, the meter brands and the
+  platforms, in prose — a crawler weights the first hundred words, and a
+  table cell less than a sentence. Cable names belong in the catalog, not
+  the intro.
+- The intro names about a dozen of the most-searched models, at least one
+  per brand, and ends with "and more" linking to the device table, which
+  lists every model. A new device gets a table row, not an intro mention,
+  unless it outsells the models already named for its brand.
 - The GUI and CLI lists are what a user can do, at most six bullets each,
   the most-used capability first. No mechanism, no option names except the
   one flag that names the feature.
