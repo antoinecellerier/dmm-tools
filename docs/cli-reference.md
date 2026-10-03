@@ -508,9 +508,8 @@ dmm-cli command <ACTION>          # send a command
 
 #### ZOTEK commands
 
-The keys of ZOTEK's app; a ZT-5B has run `hold`, `ncv` and `temp_unit`, the
-others are not yet tried on a meter, so watch the reading for what a key
-did. The ZT-300AB offers no `hold`, `auto_function`, `capacitance`, `hz` or
+The keys of ZOTEK's app; a ZT-5B has run all of its keys, the other models'
+are not yet tried on a meter, so watch the reading for what a key did. The ZT-300AB offers no `hold`, `auto_function`, `capacitance`, `hz` or
 `ncv`; the ZT-5B no `volts`, `millivolts`, `ohms` or `current`; only the
 ZT-5566SE offers `minmax`.
 
@@ -772,7 +771,7 @@ dmm-cli --device mock read --mock-mode dcv
 ### ZOTEK mock
 
 What each key does on `--device mock-zt5b`. The keys do what ZOTEK's app
-intends; a ZT-5B has confirmed HOLD, NCV and °C/°F.
+intends; a ZT-5B has confirmed every one.
 
 | Key | The simulated meter shows |
 |---|---|

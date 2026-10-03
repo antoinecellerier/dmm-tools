@@ -734,12 +734,12 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
     ]
 }
 
-/// The ZT-5B entry's keys. A ZT-5B's NCV and °C/°F keys pick their
-/// function rather than step to the next as SEL does (spec §8.2), so each
-/// step expects the function its key picks; ZERO, which leaves capacitance
-/// showing, captures the first change instead. A meter in DC A acknowledged
-/// the function keys and stayed there (issue #31), so the first step brings
-/// the red lead back from the A mA jack. A V05B does not beep for Ω, mV or
+/// The ZT-5B entry's keys. A ZT-5B's function keys pick their function
+/// rather than step to the next as SEL does (spec §8.2), so each step
+/// expects the function its key picks, and ZERO a zeroed capacitance. With
+/// the red lead in the A mA jack it acknowledged them and stayed in DC A
+/// (issue #31), so the first step brings the lead back to the V jack. A V05B
+/// does not beep for Ω, mV or
 /// MAX/MIN (§11.4), and a ZT-5B ignores V and current (issue #31), so no
 /// step sends them.
 fn zt5b_keys() -> Vec<CaptureStep> {
@@ -750,14 +750,18 @@ fn zt5b_keys() -> Vec<CaptureStep> {
              does): we will send the capacitance key.",
             "capacitance",
         )
-        .expect(Expect::mode("Capacitance")),
+        .expect(Expect::mode("Capacitance"))
+        .verified(),
         key(
             "key_zero",
             "Capacitance showing (SEL twice from Auto if not), leads open: we will send ZERO.",
             "zero",
         )
-        .expect(ZERO_DONE),
-        key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
+        .expect(ZERO_DONE)
+        .verified(),
+        key("key_hz", "Leads open: we will send the Hz key.", "hz")
+            .expect(Expect::mode("Hz"))
+            .verified(),
         // With the leads open the continuity/diode position shows the
         // diode's OL (the `diode_ol` step).
         key(
@@ -765,13 +769,15 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "Leads open: we will send the diode/continuity key.",
             "diode_continuity",
         )
-        .expect(Expect::mode("Diode")),
+        .expect(Expect::mode("Diode"))
+        .verified(),
         key(
             "key_auto",
             "Leads open, meter not showing Auto (SEL once if it is): we will send AUTO.",
             "auto_function",
         )
-        .expect(Expect::new().value(ValueExpect::NoReading)),
+        .expect(Expect::new().value(ValueExpect::NoReading))
+        .verified(),
         key(
             "key_ncv",
             "Leads out of the A mA jack, away from mains wiring: we will send the NCV key.",
@@ -827,7 +833,7 @@ mod tests {
             assert!(steps.iter().any(|s| s.gate), "{}", layout.id);
             let verified: Vec<_> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
             if layout.id == "zt5b" {
-                assert_eq!(verified.len(), 19, "{verified:?}");
+                assert_eq!(verified.len(), 24, "{verified:?}");
             } else {
                 assert!(verified.is_empty(), "{}: {verified:?}", layout.id);
             }

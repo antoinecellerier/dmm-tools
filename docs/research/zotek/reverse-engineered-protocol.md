@@ -536,15 +536,18 @@ A ZT-5B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31),
 @whymzml, Bluetooth) [HARDWARE]:
 
 - It answers a key it knows with `AB CD FD <key> 00 00 00 00 <sum>`, the
-  sum of bytes 0-7, 0.20-0.24 s later: `B0`, `B1`, `B2`, `B3`, `B4`, `B6`,
-  `B7` and `B8` each drew one. `C4` (V) and `C9` (current) drew none and
-  changed nothing; each was sent once, with DC A showing.
-- `B2` switched DC A to NCV, `B6` NCV to °C, `B7` °C to °F, and `B4` set
-  and cleared HOLD: these keys pick their function, not the next one in
-  SEL's cycle.
-- With DC A showing, `B0`, `B1`, `B3` and `B8` were answered but changed
-  nothing; whether the red lead was still in the A mA jack is not recorded.
-- `B5`, `BE`, `C6`, `C8`, `CA`, `CB` and `D1` were not sent.
+  sum of bytes 0-7, 0.20-0.25 s later: `B0`, `B1`, `B2`, `B3`, `B4`, `B5`,
+  `B6`, `B7` and `B8` each drew one, and it beeps for each. `C4` (V) and
+  `C9` (current) drew none and changed nothing; each was sent once, with
+  DC A showing.
+- These keys pick their function, not the next one in SEL's cycle: `B0`
+  switched Auto to capacitance, `B3` capacitance to Hz, `B1` Hz to diode,
+  `B8` diode to Auto, `B2` DC A to NCV, `B6` NCV to °C and `B7` °C to °F;
+  `B4` set and cleared HOLD.
+- `B5` in capacitance took the open leads' 0.019 nF to 0.000 nF.
+- With the red lead in the A mA jack and DC A showing, `B0`, `B1`, `B3` and
+  `B8` were answered but changed nothing.
+- `BE`, `C6`, `C8`, `CA`, `CB` and `D1` were not sent.
 - SEL itself steps Auto → continuity/diode → capacitance → Hz → °C → °F →
   Auto.
 

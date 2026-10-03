@@ -100,9 +100,9 @@ impl ZotekProtocol {
 
     pub(crate) fn new_zt5b() -> Self {
         let mut zt5b = Self::new(&layout::ZT5B, 31);
-        // A ZOYI ZT-5B has run every reading but AC A, and the HOLD, NCV and
-        // °C/°F keys (issue #31, 2026-10-03); its other keys, and the V05B,
-        // have not. PartlyVerified keeps the warning and the badge linking to
+        // A ZOYI ZT-5B has run every reading but AC A, and every key its
+        // entry offers (issue #31, 2026-10-03); AC A, and the V05B, have
+        // not. PartlyVerified keeps the warning and the badge linking to
         // the issue; README and docs/supported-devices.md say the same.
         zt5b.profile.stability = Stability::PartlyVerified;
         zt5b
