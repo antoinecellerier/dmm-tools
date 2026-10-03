@@ -77,8 +77,9 @@ GRAPH_CROP="1428x983+492+48"
 THEME_CROP="720x760+492+48"
 # The top bar and the whole settings panel — its closing rule is at y 615 —
 # over a band of the reading and graph below, enough to place the panel in the
-# window without carrying its full height.
-SETTINGS_CROP="1920x960+0+0"
+# window without carrying its full height: the no-reading dashes and the graph
+# toolbar, down to the blank rows above Scale and the plot.
+SETTINGS_CROP="1920x722+0+0"
 # The colour rows of the settings panel plus a swatch picker opened at the
 # panel's right edge, where it covers no other setting.
 COLOR_CROP="1920x638+0+58"
@@ -97,10 +98,13 @@ CROSSHAIR_SWATCH_X=1578; CROSSHAIR_SWATCH_Y=281
 PARK_X=240; PARK_Y=1240
 # Big meter takes one window, sized so nothing wraps out of it. Minimal mode
 # has two shapes, one picture each: the mode and range controls beside the
-# reading in a wide, short window, and under it in a narrow one.
+# reading in a wide, short window, and under it in a narrow one. The narrow
+# reading is sized by the width, so height past that is a blank band; 170 is
+# about as short as it goes, since at 160 (80 logical) the app hides the
+# corner button.
 BIG_METER_W=900; BIG_METER_H=640
 MINIMAL_WIDE_W=1200; MINIMAL_WIDE_H=200
-MINIMAL_NARROW_W=420; MINIMAL_NARROW_H=240
+MINIMAL_NARROW_W=420; MINIMAL_NARROW_H=170
 # Each graph scene's state, as the `# view:` line `staged` appends: times in
 # seconds from the recording's first frame, which is where the app puts them
 # back. The markers' offsets are in the scenes themselves.
