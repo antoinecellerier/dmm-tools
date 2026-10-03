@@ -10,6 +10,7 @@ pub(crate) mod recording;
 mod report;
 mod session;
 mod step;
+mod triage;
 mod watch;
 
 pub(crate) use detection::Reopen;
@@ -22,6 +23,7 @@ pub(crate) use step::{
     CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, frames_for_step, read_past_blank,
     samples_after_switch,
 };
+pub(crate) use triage::cmd_triage;
 
 use crate::cli::CaptureArgs;
 use console::style;

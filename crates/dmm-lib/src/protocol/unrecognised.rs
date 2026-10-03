@@ -58,8 +58,9 @@ fn first(flag: &AtomicBool) -> bool {
 
 /// Run `f` and return what it reported on this thread, one line per call.
 ///
-/// For tests: the process-wide warning fires once whichever test gets there
-/// first, so tests check this list instead. Captures do not nest.
+/// For tests, where the process-wide warning fires once whichever test gets
+/// there first, and for `dmm-cli triage`, which files each report beside the
+/// payload that raised it. Captures do not nest.
 #[doc(hidden)]
 pub fn capture_reports<R>(f: impl FnOnce() -> R) -> (R, Vec<String>) {
     CAPTURED.with_borrow_mut(|captured| *captured = Some(Vec::new()));

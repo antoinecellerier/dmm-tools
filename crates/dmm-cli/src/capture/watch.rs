@@ -70,7 +70,7 @@ impl Signature {
 /// these fields out so a value flickering between OL and a number, or the
 /// UT61E+'s AC+DC frames taking turns, still settles.
 #[derive(Clone, PartialEq)]
-struct State {
+pub(super) struct State {
     /// Mode, range, flags and payload shape, with no baseline bytes.
     signature: Signature,
     /// The mode as parsed, beside its raw code: some decoders name a key's
@@ -84,7 +84,7 @@ struct State {
 }
 
 impl State {
-    fn of(m: &Measurement) -> Self {
+    pub(super) fn of(m: &Measurement) -> Self {
         State {
             signature: Signature::of(m, None),
             mode: m.mode.clone(),

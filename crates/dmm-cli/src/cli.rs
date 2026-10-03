@@ -178,6 +178,23 @@ Install completions for your shell:
     },
     /// Guided protocol capture for bug reports and verification
     Capture(CaptureArgs),
+    /// Read a capture report with this build's parser, no meter needed.
+    /// Hidden: a maintainer tool for the reports reporters attach.
+    #[command(hide = true)]
+    Triage(TriageArgs),
+}
+
+/// The `triage` flags, handed to [`crate::capture::cmd_triage`] whole. The
+/// meter is the report's own `device_id`, or the top-level `--device` as
+/// given, which a report from before `device_id` existed needs.
+#[derive(clap::Args)]
+pub(crate) struct TriageArgs {
+    /// The report a `capture` run wrote
+    pub(crate) report: PathBuf,
+    /// The plan file a `capture --plan` run followed, for its steps'
+    /// expectations
+    #[arg(long, value_name = "FILE")]
+    pub(crate) plan: Option<String>,
 }
 
 /// The `capture` flags, handed to [`crate::capture::cmd_capture`] whole.

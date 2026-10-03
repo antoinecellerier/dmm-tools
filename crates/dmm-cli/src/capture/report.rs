@@ -602,7 +602,7 @@ pub(super) fn baseline_from_report(report: &CaptureReport, step_id: &str) -> Opt
 }
 
 /// "02 30 20" back to the payload it was written from.
-fn hex_bytes(hex: &str) -> Option<Vec<u8>> {
+pub(super) fn hex_bytes(hex: &str) -> Option<Vec<u8>> {
     hex.split_whitespace()
         .map(|b| u8::from_str_radix(b, 16).ok())
         .collect()

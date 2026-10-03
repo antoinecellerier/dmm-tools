@@ -72,6 +72,9 @@ fn main() {
     // Device-independent commands — handle before mock/real split
     let result = match cli.command {
         Cmd::List => cmd_list(bluetooth),
+        // The report names its meter; `--device` as typed overrides it, never
+        // the settings file's choice.
+        Cmd::Triage(args) => capture::cmd_triage(args, cli.device.as_deref()),
         Cmd::Completions { shell } => {
             match shell {
                 Some(shell) => {

@@ -104,6 +104,35 @@ cargo run -p dmm-lib --example dump_specs -- --format html \
 names, such as a transcription's `provenance.json`. Its format and the JSON
 shape are in the header of `crates/dmm-lib/examples/dump_specs.rs`.
 
+## Triaging a capture report
+
+`dmm-cli triage <report>` reads a report a `capture` run wrote, with this
+build's parser and no meter. It takes the meter from the report's
+`device_id`; a v0.6.0 report has none, so name it, as in
+`dmm-cli --device <id> triage <report>`. A plan run's expectations need its
+plan file, passed as `--plan`.
+
+It prints four sections:
+- a header: the run's tier, sessions, truncation and diagnostics;
+- findings, one per line, tagged by kind;
+- each step's distinct readings;
+- the stats: flags never or always set, and the modes, units and ranges
+  seen.
+
+The kinds of finding:
+- `[error]`, `[timeout]` and `[attention]` repeat what the capture filed.
+- `[lcd]` sets the operator's text beside this build's reading, and tags a
+  difference in the unit alone.
+- `[stale]` is a step whose first sample shows the state the step before
+  it ended in.
+- `[reparse]` counts samples this build reads differently from the build
+  that wrote the report. The details follow the findings.
+- `[unrecognised]` is data the parser reported as unknown.
+
+A hardware address is masked wherever it appears. The step summary carries
+no times, so diffing two reports' output compares the same steps across
+runs.
+
 ## Golden file tests
 
 Golden file tests verify measurement parsing against known-good byte sequences.
@@ -192,6 +221,9 @@ The subcommands and what each one waits for are in the `verify-gui` skill
 ## Hidden flags
 
 These contributor flags are left out of `--help`.
+
+**Report triage.** `dmm-cli triage <report>`; see [Triaging a capture
+report](#triaging-a-capture-report).
 
 **Session clock.** `--mock-clock-preseed <SECS>` hands out that many seconds
 of session time instantly, and `--mock-clock-scale <FACTOR>` runs what follows
