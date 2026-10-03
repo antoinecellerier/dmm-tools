@@ -1,0 +1,8 @@
+# Frequency of the mains through a low-voltage source.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step hz).
+raw_hex: "5A A5 02 40 CE DF 8F 8F 00 20"
+mode: "Hz"
+value: "49.93"
+unit: "Hz"
+range_label: ""
+flags: {}

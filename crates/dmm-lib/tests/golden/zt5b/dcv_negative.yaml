@@ -1,0 +1,9 @@
+# DC V, leads reversed on the battery: the minus is byte 3 bit 4.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step dcv_negative).
+raw_hex: "5A A5 02 50 FE 8B EF 87 06 00"
+mode: "DC V"
+value: "-4.036"
+unit: "V"
+range_label: ""
+flags:
+  dc: true

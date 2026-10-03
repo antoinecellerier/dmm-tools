@@ -267,5 +267,5 @@ As used in `reverse-engineered-protocol.md`:
 - **[VENDOR]** — read from a ZOTEK app, with `file:line` or `V2@offset`
 - **[INFERRED]** — logical inference from the above, reason given
 - **[UNVERIFIED]** — no source confirms it; needs a real meter
-- **[HARDWARE]** — seen on a real meter: none yet for this family
+- **[HARDWARE]** — seen on a real meter, with the issue and the reporter: a ZOYI ZT-5B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31))
 - **[COMMUNITY]** — from a community source, spec §11 only

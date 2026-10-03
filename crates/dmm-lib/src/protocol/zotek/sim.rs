@@ -9,8 +9,8 @@
 //! through the extractor and the decoder, and every key through the frame
 //! builder, as with a meter.
 //!
-//! The keys do what ZOTEK's app intends; no meter has confirmed them (§8.2
-//! leaves open which keys a model honours). Where the app's intent leaves
+//! The keys do what ZOTEK's app intends; a ZT-5B has confirmed HOLD, NCV
+//! and °C/°F, and §8.2 leaves the others open. Where the app's intent leaves
 //! the effect open, the choice made here is named at the key. There is no
 //! V, Ω, mV or current key, as the ZT-5B has none (§8.2): AUTO finds the
 //! battery, the mains and the resistor.
@@ -183,8 +183,8 @@ fn volts(source: Source, t: f64) -> Option<Display> {
         Source::Mains => (229.6 + wander(t, 1.6, 23.0, 3.1), Meaning::Ac),
     };
     let mut lit = vec![Meaning::Unit(Unit::Volt), coupling];
-    // Community captures have over-voltage set at 180 and 233 V AC and
-    // clear at low voltage (spec §7.3, §11.2).
+    // A ZT-5B had over-voltage set at 207-227 V AC and clear at 2 V, and
+    // community captures at 180 and 233 V AC (spec §7.3, §11.2).
     if source == Source::Mains {
         lit.push(Meaning::OverVoltage);
     }

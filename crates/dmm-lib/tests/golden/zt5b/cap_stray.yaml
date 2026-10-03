@@ -1,0 +1,8 @@
+# Capacitance, leads open: their stray capacitance in nF.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step cap).
+raw_hex: "5A A5 02 E0 FB 0B 0A 8A 11 00"
+mode: "Capacitance"
+value: "0.011"
+unit: "nF"
+range_label: ""
+flags: {}

@@ -431,77 +431,89 @@ fn zt5b() -> Vec<CaptureStep> {
         CaptureStep::basic("ohm_ol", "unused"),
     );
     vec![
-        dcv,
-        dcv_negative,
-        ohm_body,
+        dcv.verified(),
+        dcv_negative.verified(),
+        ohm_body.verified(),
         CaptureStep::basic(
             "diode_ol",
             "Press SEL once for continuity/diode, leads open (should show 0L)",
         )
         .gate()
-        .expect(Expect::new().value(ValueExpect::Overload)),
+        .expect(Expect::new().value(ValueExpect::Overload))
+        .verified(),
         CaptureStep::basic(
             "cont",
             "Continuity/diode (SEL once from Auto): touch the probe tips together",
         )
-        .needs(&[Need::ShortedLeads]),
+        .needs(&[Need::ShortedLeads])
+        .verified(),
         CaptureStep::basic(
             "cap",
             "Press SEL once more for capacitance (twice from Auto), leads open",
         )
-        .expect(Expect::mode("Capacitance")),
-        // Whether the press also lights HOLD is not documented.
+        .expect(Expect::mode("Capacitance"))
+        .verified(),
+        // The press lights neither HOLD nor any other flag: the layout has
+        // no REL bit (issue #31).
         CaptureStep::basic(
             "cap_zero",
             "Capacitance, leads open: press H/ZERO once (in capacitance it clears the \
              reading), then Enter.",
         )
         .wait_for_enter()
-        .expect(Expect::mode("Capacitance")),
+        .expect(Expect::mode("Capacitance"))
+        .verified(),
         CaptureStep::basic(
             "hz",
             "Press SEL once more for frequency (three times from Auto), leads on a low-voltage \
              AC source",
         )
-        .expect(Expect::mode("Hz")),
+        .expect(Expect::mode("Hz"))
+        .verified(),
         CaptureStep::basic(
             "temp",
             "Press SEL once more for temperature (four times from Auto; K-type \
              thermocouple, if available)",
         )
         .needs(&[Need::Thermocouple])
-        .expect(Expect::mode("°C")),
+        .expect(Expect::mode("°C"))
+        .verified(),
         CaptureStep::basic(
             "auto_idle",
             "Leads open: press SEL until Auto shows (twice from °C)",
         )
-        .expect(Expect::new().value(ValueExpect::NoReading)),
+        .expect(Expect::new().value(ValueExpect::NoReading))
+        .verified(),
         CaptureStep::basic(
             "acv",
             "Hold the leads on a low-voltage AC source above 0.8 V, such as a transformer's \
              output (AC V shows)",
         )
-        .expect(Expect::mode("AC V")),
+        .expect(Expect::mode("AC V"))
+        .verified(),
         CaptureStep::basic(
             "hold",
             "Leads on a DC source above 0.8 V (DC V shows): press H/ZERO once, then Enter. \
              Press it again afterwards.",
         )
         .wait_for_enter()
-        .expect(Expect::new().flags(HOLD_ON)),
+        .expect(Expect::new().flags(HOLD_ON))
+        .verified(),
         CaptureStep::basic(
             "ncv",
             "Leads out of the A mA jack: hold SEL/NCV down for NCV and keep holding it \
              near a live mains wire",
         )
         .needs(&[Need::LiveWire])
-        .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected)),
+        .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected))
+        .verified(),
         CaptureStep::basic(
             "dca",
             "Red lead in the A mA jack, in series with a battery and a load such as a \
              resistor or LED (DC A shows)",
         )
-        .expect(Expect::mode("DC A")),
+        .expect(Expect::mode("DC A"))
+        .verified(),
         CaptureStep::basic(
             "aca",
             "Red lead in the A mA jack, in series with a low-voltage AC load such as a \
@@ -756,7 +768,8 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "Leads out of the A mA jack, away from mains wiring: we will send the NCV key.",
             "ncv",
         )
-        .expect(Expect::mode("NCV")),
+        .expect(Expect::mode("NCV"))
+        .verified(),
         // From anything but °C the driver sends `B6`, which picks °C; from
         // °C, `B7`, which picks °F (spec §8.2).
         key(
@@ -766,23 +779,27 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "temp_unit",
         )
         .needs(&[Need::Thermocouple])
-        .expect(Expect::mode("°C")),
+        .expect(Expect::mode("°C"))
+        .verified(),
         key(
             "key_temp_back",
             "Temperature showing °C: we will send °C/°F again.",
             "temp_unit",
         )
         .needs(&[Need::Thermocouple])
-        .expect(Expect::mode("°F")),
+        .expect(Expect::mode("°F"))
+        .verified(),
         key(
             "key_hold",
             "Leads on a DC source above 0.8 V (DC V shows; SEL once from °F for Auto): we \
              will send HOLD.",
             "hold",
         )
-        .expect(Expect::new().flags(HOLD_ON)),
+        .expect(Expect::new().flags(HOLD_ON))
+        .verified(),
         key("key_hold_off", "We will send HOLD again.", "hold")
-            .expect(Expect::new().flags(HOLD_OFF)),
+            .expect(Expect::new().flags(HOLD_OFF))
+            .verified(),
     ]
 }
 
@@ -792,14 +809,19 @@ mod tests {
     use crate::protocol::zotek::keys;
     use crate::protocol::zotek::layout::LAYOUTS;
 
-    /// Every layout has its steps, a gate among them, and none claims a
-    /// hardware run.
+    /// Every layout has its steps, a gate among them, and only the ZT-5B's,
+    /// which a reporter's meter has run (issue #31), claim a hardware run.
     #[test]
     fn every_layout_has_steps_in_its_own_modes() {
         for layout in LAYOUTS {
             let steps = steps(layout);
             assert!(steps.iter().any(|s| s.gate), "{}", layout.id);
-            assert!(steps.iter().all(|s| !s.verified), "{}", layout.id);
+            let verified: Vec<_> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
+            if layout.id == "zt5b" {
+                assert_eq!(verified.len(), 19, "{verified:?}");
+            } else {
+                assert!(verified.is_empty(), "{}: {verified:?}", layout.id);
+            }
         }
     }
 

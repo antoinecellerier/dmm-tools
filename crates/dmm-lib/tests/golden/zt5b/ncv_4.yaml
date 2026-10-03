@@ -1,0 +1,8 @@
+# NCV held near a live wire: four dashes.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step ncv).
+raw_hex: "5A A5 02 00 04 04 04 84 00 00"
+mode: "NCV"
+value: "NCV:4"
+unit: ""
+range_label: ""
+flags: {}

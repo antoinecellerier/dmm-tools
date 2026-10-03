@@ -1,0 +1,8 @@
+# Temperature, °F, after the °F key.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step key_temp_back).
+raw_hex: "5A A5 02 00 00 E0 8F 8F 00 40"
+mode: "°F"
+value: "83"
+unit: "°F"
+range_label: ""
+flags: {}

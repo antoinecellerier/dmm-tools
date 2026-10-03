@@ -1,0 +1,8 @@
+# NCV away from mains wiring: EF in digits 2-3.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step key_ncv).
+raw_hex: "5A A5 02 00 E0 E5 04 80 00 00"
+mode: "NCV"
+value: "NCV:0"
+unit: ""
+range_label: ""
+flags: {}

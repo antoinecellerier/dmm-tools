@@ -15,9 +15,9 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 
 - The advertised name and a few seconds of raw FFF4 notifications, with the
   model, function and LCD reading noted — settles most items below at once.
-  Needs any model and `dmm-cli capture`. (#28–#31)
+  Needs any model and `dmm-cli capture`; a ZT-5B has run. (#28–#30)
 - A first confirmed report per model — gates that model's spec tables, which
-  its ZOTEK manual carries. (#28–#31)
+  its ZOTEK manual carries. Needs a ZT-300AB, ZT-5566SE or ZT-5BQ. (#28–#30)
 
 ## Models and layouts
 
@@ -41,18 +41,19 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 
 ## Packets
 
-- Exactly 10, 10, 11 and 19 bytes per type, nothing after (§5, §11.4) —
-  decides where the extractor cuts (`frame::packet_len`). Needs any capture.
-  (#28–#31)
+- Exactly 10, 11 and 19 bytes for types 1, 3 and 4, nothing after (§5,
+  §11.4; type 2 settled) — decides where the extractor cuts
+  (`frame::packet_len`). Needs any capture. (#28–#30)
 - Notifications per second against the LCD's 3 updates (§3; about 2.6 on an
-  AN9002, §11.4) — decides whether one update is one packet. Needs any
-  capture. (#28–#31)
+  AN9002, §11.4; about 3 on a ZT-5B) — decides whether one update is one
+  packet. Needs any capture. (#28–#30)
 
 ## Display
 
-- Which digit positions each word uses, and whether type 4 shows words (§6.4;
-  §11.3 D2, §11.4) — decides `glyph::read`'s patterns. Needs `ohm_ol` (types
-  1-2: `diode_ol`), `auto_idle`, `ncv`; type 4: `ohm_ol`, `key_ncv`. (#28–#31)
+- Which digit positions each word uses on types 1, 3 and 4, and whether
+  type 4 shows words (§6.4, type 2 settled; §11.3 D2, §11.4) — decides
+  `glyph::read`'s patterns. Needs `ohm_ol` (type 1: `diode_ol`),
+  `auto_idle`, `ncv`; type 4: `ohm_ol`, `key_ncv`. (#28–#30)
 - What the number of NCV dashes means (§6.4; they fill from the left, §11.4)
   — decides the NCV level reported. Needs `ncv` at several distances from the
   wire. (#28, #30, #31)
@@ -60,9 +61,6 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
   `inrush` on a ZT-5BQ / ST207. (#30)
 - What two DP bits in one packet mean, never seen (§6.2) — decides which point
   `glyph::read` keeps. Needs a capture that shows one. (#28–#31)
-- Whether a blank digit ever carries a sign or DP (`10`, Implementation
-  Notes) — decides how such a blank reads. Needs a negative reading with a
-  blank leading digit. (#28–#31)
 - Which prefixes a meter sets per unit (§7.5), and type 3's m and µ
   capacitance bits (§11.3 D4) — decides the layouts' prefix bits. Needs
   10-100 µF on a ZT-300AB / AN9002: byte 8 `A0`. (#28)
@@ -87,15 +85,12 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 - Type-3 byte 10 bits 7-4 (TRUE RMS?) and MANUAL, byte 10 bit 1, never set in
   community captures (§7.1, §11.4) — decides whether they stay silent. Needs
   `acv` and `manual_range` on a ZT-300AB / AN9002. (#28)
-- What `power` (types 1, 2), `vfc` and `l1_power` (type 4) mean (§7.2-7.4,
-  §11.4) — decides whether any becomes a flag. Needs captures across modes.
-  (#29–#31)
+- What `power` (type 1), `vfc` and `l1_power` (type 4) mean (§7.2, §7.4,
+  §11.4; type 2's is never set, §7.3) — decides whether any becomes a flag.
+  Needs captures across modes. (#29, #30)
 - Whether type-1 byte 3 bit 2 stays set at high and at zero voltage (§11.3
   D6) — decides Bluetooth icon or HV mark. Needs `dcv`, `acv` and `auto_idle`
   on a ZT-5BQ / ST207. (#30)
-- Whether type-2 byte 3 bit 2 (over-voltage) sets at high AC V and clears low
-  (§7.3, §11.3 D5) — decides the HV warning flag. Needs a ZT-5B / V05B above
-  180 V AC; no capture step: that would put the leads on mains. (#31)
 
 ## Keys and commands
 

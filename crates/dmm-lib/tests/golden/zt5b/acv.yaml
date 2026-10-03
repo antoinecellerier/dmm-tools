@@ -1,0 +1,8 @@
+# AC V on a low-voltage source.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step acv).
+raw_hex: "5A A5 02 00 FA 87 EF 8F 0A 00"
+mode: "AC V"
+value: "1.638"
+unit: "V"
+range_label: ""
+flags: {}

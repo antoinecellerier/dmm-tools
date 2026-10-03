@@ -1,0 +1,8 @@
+# Auto with nothing on the leads: the Auto word, no function lit.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step auto_idle).
+raw_hex: "5A A5 02 E0 2E 63 25 87 00 00"
+mode: "Auto"
+value: "Auto"
+unit: ""
+range_label: ""
+flags: {}

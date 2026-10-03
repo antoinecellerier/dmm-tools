@@ -529,13 +529,14 @@ mod tests {
     /// from two captures reported in issue #19 (2026-09-09 and 2026-09-10),
     /// and the UT804 from one reporter's meter (issue #16), which walked every
     /// dial position on 2026-09-18. The UT181A has run for its main modes
-    /// only, so it is PartlyVerified (see its profile). Everything else must
+    /// only, and the ZT-5B for its readings (issue #31), so they are
+    /// PartlyVerified (see their profiles). Everything else must
     /// stay flagged so the GUI shows the EXPERIMENTAL badge and links to the
     /// verification issue.
     #[test]
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
-        const PARTLY_VERIFIED: &[&str] = &["ut181a"];
+        const PARTLY_VERIFIED: &[&str] = &["ut181a", "zt5b"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

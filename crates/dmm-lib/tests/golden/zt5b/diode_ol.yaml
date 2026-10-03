@@ -1,0 +1,8 @@
+# Diode, leads open: " .0L ", the continuity bit lit beside the diode bit.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step diode_ol).
+raw_hex: "5A A5 02 08 F0 6B 01 80 22 00"
+mode: "Diode"
+value: "OL"
+unit: "V"
+range_label: ""
+flags: {}

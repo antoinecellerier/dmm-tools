@@ -1,0 +1,9 @@
+# DC A drifting below zero: the minus sits on a blank leading digit.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step key_capacitance).
+raw_hex: "5A A5 02 10 00 E0 FB 87 44 04"
+mode: "DC A"
+value: "-0.6"
+unit: "mA"
+range_label: ""
+flags:
+  dc: true

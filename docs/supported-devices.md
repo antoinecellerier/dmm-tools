@@ -163,13 +163,14 @@ short-press the red button on the ZT-5B, until the Bluetooth symbol shows.
 | ZT-300AB / AN9002 | 6000 | 🧪 Experimental ([#28](https://github.com/antoinecellerier/dmm-tools/issues/28)) | rotary dial; also sold by BSIDE |
 | ZT-5566SE / AN999S | 19999 | 🧪 Experimental ([#29](https://github.com/antoinecellerier/dmm-tools/issues/29)) | Bluetooth speaker; second display as a sub-value |
 | ZT-5BQ / ST207 | 6000 | 🧪 Experimental ([#30](https://github.com/antoinecellerier/dmm-tools/issues/30)) | clamp: 600 A AC, inrush, peak hold |
-| ZT-5B / V05B | 6000 | 🧪 Experimental ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31)) | auto-only pocket meter |
+| ZT-5B / V05B | 6000 | 🟡 Partly verified ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31)) | auto-only pocket meter |
 
-Not run on a meter yet: the decoding comes from ZOTEK's apps and manuals,
-whose ZT-5566SE pages document Bluetooth for the speaker only, and the
-remote keys from the apps. The meter
-names only its packet layout, so auto-detection picks the row above that
-sends it ([open checks](research/zotek/verification.md)).
+A reporter's ZOYI ZT-5B has run every reading but AC A, and the HOLD, NCV
+and °C/°F keys. The rest is not run on a meter yet: the decoding comes from ZOTEK's
+apps and manuals, whose ZT-5566SE pages document Bluetooth for the speaker
+only, and the remote keys from the apps. The meter names only its packet
+layout, so auto-detection picks the row above that sends it
+([open checks](research/zotek/verification.md)).
 
 ## EEVblog
 

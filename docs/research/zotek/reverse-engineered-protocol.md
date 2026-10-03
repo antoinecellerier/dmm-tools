@@ -62,7 +62,8 @@ only in identifiers), and no app picks a parser by advertised name
 (`findings/protocol-groups.md`).
 The only link is each layout's identifier, and the flag set each layout
 carries against each manual's LCD legend. So **every model ↔ type row below
-is [INFERRED]**.
+is [INFERRED]**, but one: a ZOYI ZT-5B sends type 2 ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml,
+Bluetooth) [HARDWARE].
 
 | Type | V1 enum · V2 parser | Named for | Why it fits |
 |---|---|---|---|
@@ -99,11 +100,12 @@ download page listing e-Bull V2 for the ZT-5566 and ZT-5566SE.
 |---|---|---|---|
 | Name | **"Bluetooth DMM"**: V1/BD accept that exact name or exact **"ZY"** (V1 `ui/main/NewEquipmentActivity.java:161`); V2 accepts any name containing "Bluetooth DMM" (V2@1698973). Devices with no name are dropped (blue/a/c.java:57-58, 228-230) | apps | [VENDOR] |
 | Name, manuals | the pairing list entry to tap is "Bluetooth DMM" (300AB p.29; 5BQ p.2/-7-, p.3/-1-; 5566SE p.32-35) | manuals | [KNOWN] |
+| Name, ZT-5B | a ZOYI ZT-5B is found as "Bluetooth DMM" ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml) | meter | [HARDWARE] |
 | Name, AD type | whether the name is in the advertisement or the scan response, and whether any model sends "ZY" | — | [UNVERIFIED] |
 | Scan filter | none: no service UUID filter (blue/BleConfig.java:26; V2@1698817), the raw scan record is stored but never parsed (blue/a/c.java:226, 198) | apps | [VENDOR] |
 | Service | `0000FFF0-0000-1000-8000-00805F9B34FB` (V1 `MultimeterApp.java:131`; V2 takes the service whose UUID starts `0000FFF0`, V2@259092) | apps | [VENDOR] |
 | Notify characteristic | `0000FFF4-…` (V1 `MultimeterApp.java:132`); V2 takes the last characteristic in FFF0 with `notify` (V2@259435) | apps | [VENDOR] |
-| Write characteristic | V1/BD write to the **same** `0000FFF4-…` (V1 `MultimeterApp.java:133`); V2 takes the last characteristic in FFF0 with `write` (V2@259501). V1 also declares FFF3 notify / FFF2 write constants that nothing uses (V1 `constant/Constans.java:7-8`) | apps | [VENDOR]; that FFF4 is the meter's write characteristic [UNVERIFIED] |
+| Write characteristic | V1/BD write to the **same** `0000FFF4-…` (V1 `MultimeterApp.java:133`); V2 takes the last characteristic in FFF0 with `write` (V2@259501). V1 also declares FFF3 notify / FFF2 write constants that nothing uses (V1 `constant/Constans.java:7-8`) | apps | [VENDOR]; a ZOYI ZT-5B answers key frames written to FFF4 (§8.2) [HARDWARE] |
 | Subscribe | V1/BD: CCCD `0x2902` on FFF4 written with ENABLE_NOTIFICATION (blue/a.java:401-406). V2: on the characteristic it picked by property (V2@259726), with ENABLE_INDICATION instead if that characteristic can indicate (DCloud's `BluetoothBaseAdapter.notifyBLECharacteristicValueChange` in `classes2.dex`) | apps | [VENDOR] |
 | Write type | V1/BD: write without response (blue/a.java:436). V2 asks for it on Android and a plain write elsewhere (V2@260897, @260953), but its Android runtime ignores `writeType` and writes with the characteristic's default type (`BluetoothBaseAdapter.writeBLECharacteristicValue`) | apps | [VENDOR]; which types FFF4 takes [UNVERIFIED] |
 | MTU | never requested by any app (no `requestMtu`, no `setBLEMTU`) | apps | [VENDOR] |
@@ -126,7 +128,9 @@ sends it.
 
 The display updates 3 times a second on the ZT-300AB (300AB p.22) and the
 ZT-5566 (5566SE p.26) [KNOWN]. Whether each update is one notification is
-[UNVERIFIED].
+[UNVERIFIED]. A ZOYI ZT-5B sends a packet every 315-360 ms in most gaps
+(276-406 ms in all), 337 ms median, about 3 a second; a gap stretches to
+0.5-0.6 s after each key answer (§8.2) ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml, Bluetooth) [HARDWARE].
 
 ## 4. Descramble
 
@@ -162,8 +166,10 @@ After descrambling [VENDOR]:
 | A notification of 10 bytes or more whose byte 0 is `AB` is logged as "接收回应数据数据" (received reply data) and dropped by V1; V2 drops it at the header check | DataParsing:25-30 |
 | Only types 1-4 are defined. V1 parses any other type byte with the type-1 layout, labelled `S_5G` (BCU:815-826); V2 ignores it | DataParsing:45-47; V2@250980 |
 
-The apps give only minimum lengths. Whether the meter sends anything past the
-last byte read is [UNVERIFIED]. No app requests a larger MTU [VENDOR]; every
+The apps give only minimum lengths. A ZOYI ZT-5B's packets are exactly 10
+bytes, 1,002 of 1,002, with nothing between them but its key replies (§8.2)
+([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml, Bluetooth) [HARDWARE]; for the other types, whether
+the meter sends anything past the last byte read is [UNVERIFIED]. No app requests a larger MTU [VENDOR]; every
 layout fits in a 20-byte ATT payload (the default ATT_MTU of 23 minus the
 3-byte header), which the 20-byte key covers exactly [INFERRED]. The meter
 could still negotiate a larger MTU, so the notification length stays
@@ -255,7 +261,11 @@ by different rules [VENDOR]:
 
 The rules agree on §9's examples. They disagree when `E`, `F` sit in digits
 3-4: V2 reads that as EF, V1 shows the glyphs but not as EF, since it checks
-only digit 2. Which positions the meters use is [UNVERIFIED].
+only digit 2. A ZOYI ZT-5B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml, Bluetooth) [HARDWARE] draws
+`Auto` in digits 1-4 (bytes 3-7 `E0 2E 63 25 87`), EF in digits 2-3
+(`00 E0 E5 04 80`), dashes filling from digit 1 (one, three and four seen as
+a probe neared a live wire), and OL as " .0L " in diode and " 0L. " in
+continuity. Which positions the other types use is [UNVERIFIED].
 
 | Display | On the LCD | When | Tag |
 |---|---|---|---|
@@ -363,7 +373,7 @@ digits (§6.2); byte 7 bits 5-4 are not read by V2 (V1: z6, z7, unused).
 |---|---|---|---|---|---|
 | 3 | 7-5, 4 | digit 1 a, f, e; minus | @263798; `pol` @263781 | BCU:124,128 | [VENDOR] |
 | 3 | 3 | continuity | `beep` @263710 | z0 | [VENDOR] |
-| 3 | 2 | over-voltage | `over_vol` @263727 | z1, unused | [VENDOR]; meaning [INFERRED] |
+| 3 | 2 | over-voltage | `over_vol` @263727 | z1, unused | [VENDOR]; meaning [HARDWARE] on a ZT-5B (below) |
 | 3 | 1 | HOLD | `hold` @263748 | z2 | [VENDOR] |
 | 3 | 0 | low battery | `bat` @263765 | z3 | [VENDOR]; meaning [INFERRED] |
 | 7 | 7 | Bluetooth icon | `ble` @264302 | z4, unused | [VENDOR]; meaning [INFERRED] |
@@ -386,6 +396,19 @@ digits (§6.2); byte 7 bits 5-4 are not read by V2 (V1: z6, z7, unused).
 | 9 | 0 | Ω | `R` @264504 | z19 | [VENDOR] |
 
 No AUTO, REL, MAX or MIN bit.
+
+On a ZOYI ZT-5B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml, Bluetooth) [HARDWARE]:
+
+- Over-voltage (byte 3 bit 2) was set at 206.9, 224.9 and 226.6 V AC and
+  clear at 2.060 V AC and below and at 4 V DC; it stayed set on the blank
+  packet that followed each over-voltage run (§6.4).
+- The Bluetooth icon (byte 7 bit 7) was set in every packet; `power` (byte 7
+  bit 6), byte 7 bits 5-4 and low battery (byte 3 bit 0) never were.
+- Continuity (byte 3 bit 3) is lit in continuity, and in diode beside the
+  diode bit, on the one continuity/diode position.
+- HOLD (byte 3 bit 1) is set by the meter's H/ZERO, whose release was not
+  captured, and set and cleared by key `B4`. H/ZERO in capacitance zeroes
+  the reading and lights no bit.
 
 ### 7.4 Type 4 (ZT-5566 family)
 
@@ -437,7 +460,8 @@ p.10) [KNOWN].
 ### 7.5 Units and prefixes
 
 How V2 turns the bits into a unit string [VENDOR]; which prefixes a meter
-actually sets per unit is [UNVERIFIED].
+actually sets per unit is [UNVERIFIED]. A ZOYI ZT-5B set m with A, n with F
+and M with Ω (none in continuity), and none with V, Hz, °C or °F ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml) [HARDWARE].
 
 | Type | Prefix bits | Units they attach to | Source |
 |---|---|---|---|
@@ -626,8 +650,9 @@ What the wire requires of any decoder:
   type byte is read before any flag.
 - A blank digit is `00`, not a separate code. The sign and DP bits sit in a
   digit's high nibble whatever its glyph, so a blank digit carrying one reads
-  `10` [INFERRED from §6.2]; V2 shows that as OL (V2@1831370), and whether a
-  meter sends it is [UNVERIFIED].
+  `10` [INFERRED from §6.2]; V2 shows that as OL (V2@1831370). A ZT-5B sends
+  both: the minus on a blank digit 1 for −0.6 mA (bytes 3-4 `10 00`), and a
+  DP on an otherwise blank display (§6.4) [HARDWARE] ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31)).
 - Commands carry their own `AB CD` header and a checksum; received packets
   carry neither.
 
@@ -705,7 +730,7 @@ error.
 | D2 | §6.4 positions; §9's EF example had `E F` in digits 3-4 (now the form both apps read as EF) | AN9002 and ST207 captures: bytes 3-7 `04 E0 E5 04 00`, E in digit 2, F in digit 3, digit 4 blank | Both apps read the captured form as EF; §9's form only V2 does (V1 charts it as 9970) | meters vs §9's old example: the capture; the reading of the apps holds, and the old example used a position no meter was seen to send | NCV on any model, digit 4 read |
 | D3 | §6.4 dashes "When: NCV" | ST207 log: `----` with AC, A and INRUSH (bytes 7-9 `84 04 90`) | V1 highlights NCV on EF or dashes only while the INRUSH label is hidden (BMA:504, 533); V2 flags NCV regardless | extends the spec: the capture, which V1 anticipates | INRUSH on a ZT-5BQ / ST207 |
 | D4 | §7.1 byte 8 bit 6 = m, bit 5 = µ | ludwich's all-variants page and multimeter-connect-web swap them | Both apps: bit 6 m, bit 5 µ | community error: webspiderteam, libreble, ut61xpy and ludwich's older 11-byte page agree with the spec; no source has a type-3 µF or mF capture | 10-100 µF on a ZT-300AB / AN9002: byte 8 = `A0` |
-| D5 | §7.3 byte 3 bit 2 = over-voltage | libreble: REL, "confirmed live" on a ZT-5B | V2 names it `over_vol`, V1 ignores it; no type-2 REL in either | community error: the V05B captures track voltage (§11.2) | AC V from a few volts to above 180 V on a ZT-5B / V05B |
+| D5 | §7.3 byte 3 bit 2 = over-voltage | libreble: REL, "confirmed live" on a ZT-5B | V2 names it `over_vol`, V1 ignores it; no type-2 REL in either | community error: the V05B captures track voltage (§11.2) | settled: a ZT-5B set it at 207-227 V AC and cleared it at 2 V (§7.3) |
 | D6 | §7.2 byte 3 bit 2 = Bluetooth icon | ludwich: "H.V"; webspiderteam: HV, inverted | V2 names it `ble` and leaves it unused, V1 ignores it; neither inverts | community error: set in 124 of 124 ST207 notifications, 0.000 V included | High and zero voltage on a ZT-5BQ / ST207: the bit stays set |
 | D7 | §7.3 byte 8 | bt-multimeter-cli's table: bit 0 F, bit 4 n, bit 6 mF | Both apps agree with the spec | community error: V05B "221.1 µF" has byte 8 = `90`, "100.8 mA DC" `44`; the table is marked work in progress | settled |
 | D8 | §2 write on FFF4 | webspiderteam since 2024-05 and libreble write FFF3 (libreble: "declared for profile-completeness only") | V1/BD write FFF4 and never use their FFF2/FFF3 constants; V2 picks by property | community error: the vendor app writes FFF4 on a V05B (btsnoop), webspiderteam's 2022-23 FFF4 writes worked there, a ZT-300AB has no FFF3, and a ZT-5B lists FFF4 as read, write without response, notify | GATT discovery on a type-1 and a type-4 meter |

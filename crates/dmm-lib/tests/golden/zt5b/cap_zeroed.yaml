@@ -1,0 +1,8 @@
+# Capacitance, leads open, after the meter's H/ZERO: no REL bit in this layout.
+# Captured 2026-10-03 from a ZOYI ZT-5B over Bluetooth (issue #31, 0.8.0-dev eea85ba report, step cap_zero).
+raw_hex: "5A A5 02 E0 FB EB EB 8B 11 00"
+mode: "Capacitance"
+value: "0"
+unit: "nF"
+range_label: ""
+flags: {}

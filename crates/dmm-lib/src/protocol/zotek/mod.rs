@@ -99,7 +99,13 @@ impl ZotekProtocol {
     }
 
     pub(crate) fn new_zt5b() -> Self {
-        Self::new(&layout::ZT5B, 31)
+        let mut zt5b = Self::new(&layout::ZT5B, 31);
+        // A ZOYI ZT-5B has run every reading but AC A, and the HOLD, NCV and
+        // °C/°F keys (issue #31, 2026-10-03); its other keys, and the V05B,
+        // have not. PartlyVerified keeps the warning and the badge linking to
+        // the issue; README and docs/supported-devices.md say the same.
+        zt5b.profile.stability = Stability::PartlyVerified;
+        zt5b
     }
 
     /// The layout a packet of `type_byte` is in, the first time it is not
@@ -134,8 +140,8 @@ impl Protocol for ZotekProtocol {
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used, and it only cuts packets of the four
-        // types, each with a layout. About 2.6 packets a second arrive
-        // (spec §11.4), well inside read_frame's 2 s. A packet with no digit
+        // types, each with a layout. About 3 packets a second arrive (spec
+        // §3), well inside read_frame's 2 s. A packet with no digit
         // lit on the main display has no reading, so it is skipped for the
         // next one.
         let packet = framing::read_frame(
