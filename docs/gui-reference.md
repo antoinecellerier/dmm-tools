@@ -19,6 +19,8 @@ dmm-gui [OPTIONS]
 A desktop GUI for live measurement display, time-series graphing, recording,
 and remote control of digital multimeters over USB or Bluetooth.
 
+[Connecting](#connecting) · [Top Bar](#top-bar) · [Reading Display](#reading-display) · [Remote Control](#remote-control) · [Graph](#graph) · [Statistics](#statistics) · [Recording](#recording) · [Specifications](#specifications) · [Scale](#scale) · [Layout Modes](#layout-modes) · [Settings](#settings) · [Keyboard Shortcuts](#keyboard-shortcuts) · [Command-Line Options](#command-line-options) · [Accessibility](#accessibility) · [Appendix](#appendix)
+
 ![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](../assets/gui-wide-layout.png)
 
 ## Connecting
