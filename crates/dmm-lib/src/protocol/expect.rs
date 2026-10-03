@@ -35,6 +35,8 @@ pub enum ValueExpect {
     NcvDetected,
     /// A word the meter shows instead of a reading, such as `Auto`.
     NoReading,
+    /// A numeric reading of exactly zero: what a ZERO key leaves on screen.
+    Zero,
 }
 
 impl ValueExpect {
@@ -46,6 +48,7 @@ impl ValueExpect {
             ValueExpect::Finite => "a numeric reading",
             ValueExpect::NcvDetected => "an NCV level of 1 or more",
             ValueExpect::NoReading => "a word instead of a reading",
+            ValueExpect::Zero => "a reading of zero",
         }
     }
 
@@ -56,6 +59,7 @@ impl ValueExpect {
             (ValueExpect::Finite, MeasuredValue::Normal(v)) => v.is_finite(),
             (ValueExpect::NcvDetected, MeasuredValue::NcvLevel(level)) => *level >= 1,
             (ValueExpect::NoReading, MeasuredValue::NoReading(_)) => true,
+            (ValueExpect::Zero, MeasuredValue::Normal(v)) => *v == 0.0,
             _ => false,
         }
     }
@@ -338,6 +342,18 @@ mod tests {
         assert_eq!(
             Expect::new().value(ValueExpect::Negative).check(&finite),
             Err("value is 12.345, want a negative reading".to_string())
+        );
+        let zero = make_test_measurement(0x02, 0x01, b" 0.0000", (0, 0), (0, 0, 0));
+        assert_eq!(Expect::new().value(ValueExpect::Zero).check(&zero), Ok(()));
+        assert_eq!(
+            Expect::new().value(ValueExpect::Zero).check(&finite),
+            Err("value is 12.345, want a reading of zero".to_string())
+        );
+        assert!(
+            Expect::new()
+                .value(ValueExpect::Zero)
+                .check(&overload)
+                .is_err()
         );
         assert_eq!(
             Expect::new().value(ValueExpect::Finite).check(&overload),

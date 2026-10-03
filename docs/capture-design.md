@@ -42,7 +42,12 @@ Command steps (`hold`, `minmax`, …) run the same watcher after `send_command`,
 frames read just before it, and expect the flag to flip within `COMMAND_TIMEOUT`. If it does
 not, the step files the error and no samples: pre-command frames filed as the result are what
 made a dead command look like a captured state. A command whose flag flipped proves that
-setting for the sweeps (D).
+setting for the sweeps (D). A command step with no `expect` is judged by the parse outside
+Sniff: the mode, range, flags, kind of value or sub-values must reach a state none of the
+frames before the command showed, since a steady reading's baseline marks its digits constant
+and a flicker would read as the command's effect. A command whose only effect is the number,
+such as ZERO, says so in its `expect`; an `expect` the frames before already met cannot show
+the command working, so the step waits for a new state that still meets it.
 
 `--settle MS` waits before every sample, for readings that take seconds to come down after a
 change, such as a UT61E+'s top two Ω rungs after a RANGE press. It is off by default. Waiting

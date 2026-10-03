@@ -164,11 +164,14 @@ impl PlanExpect {
                 "negative" => ValueExpect::Negative,
                 "finite" => ValueExpect::Finite,
                 "ncv" => ValueExpect::NcvDetected,
+                "zero" => ValueExpect::Zero,
                 other => {
                     return Err(problem(
                         path,
                         id,
-                        format!("unknown value {other:?} (valid: overload, negative, finite, ncv)"),
+                        format!(
+                            "unknown value {other:?} (valid: overload, negative, finite, ncv, zero)"
+                        ),
                     ));
                 }
             });
@@ -333,6 +336,10 @@ steps:
         let yaml = "steps:\n  - id: a\n    instruction: b\n    expect:\n      value: ncv\n";
         let expect = parse("edge.yaml", yaml).unwrap()[0].expect.unwrap();
         assert_eq!(expect.value, Some(ValueExpect::NcvDetected));
+
+        let yaml = "steps:\n  - id: a\n    instruction: b\n    expect:\n      value: zero\n";
+        let expect = parse("edge.yaml", yaml).unwrap()[0].expect.unwrap();
+        assert_eq!(expect.value, Some(ValueExpect::Zero));
 
         let yaml = "steps:\n  - id: a\n    instruction: b\n    expect:\n      value: negative\n      at_least: 1.0\n";
         let expect = parse("edge.yaml", yaml).unwrap()[0].expect.unwrap();

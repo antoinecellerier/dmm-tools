@@ -1091,7 +1091,8 @@ fn cm2100b_keys() -> Vec<CaptureStep> {
              nothing in the jaws: we will send a short ZERO press.",
             "zero",
         )
-        .expect(Expect::mode("DC A")),
+        // Its only effect is the number, which the parse shows as zero.
+        .expect(Expect::mode("DC A").value(ValueExpect::Zero)),
     ]
 }
 

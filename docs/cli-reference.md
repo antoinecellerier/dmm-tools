@@ -806,7 +806,7 @@ own steps. Plan steps never act as gate steps, and the report goes to
 | `expect.mode` | | Mode name as the family's mode table spells it. |
 | `expect.flags` | | Flags by report name (`hold`, `rel`, `auto_range`, …), each `true` or `false`. |
 | `expect.range` | | `auto` or `manual`. |
-| `expect.value` | | `overload`, `negative`, `finite` or `ncv`. |
+| `expect.value` | | `overload`, `negative`, `finite`, `ncv` or `zero`. |
 | `expect.at_least` | | Magnitude a numeric reading must reach, sign aside. |
 
 Any other key, unknown name or repeated id is an error naming the file and

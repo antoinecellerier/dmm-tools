@@ -523,12 +523,17 @@ fn zt5b() -> Vec<CaptureStep> {
     ]
 }
 
+/// What ZERO leaves: capacitance still showing, as before the key, and a
+/// reading of zero, which open leads' stray capacitance is not. A ZT-5B read
+/// 0.010 nF before ZERO and held 0.000 after (issue #31); the other layouts'
+/// meters are assumed to hold it too, which their first ZERO step checks.
+const ZERO_DONE: Expect = Expect::mode("Capacitance").value(ValueExpect::Zero);
+
 /// A step that sends `command` once the user has set the meter up.
 ///
-/// With no expectation, a key step captures the first change from what the
-/// meter showed before the key, and files "did nothing" when none comes:
-/// the ZERO steps rely on that, since capacitance shows before ZERO as
-/// after it.
+/// With no expectation, a key step captures the first change in what the
+/// meter shows (its function, flags or sub-values; the digits moving is not
+/// one), and files "did nothing" when none comes.
 const fn key(id: &'static str, instruction: &'static str, command: &'static str) -> CaptureStep {
     CaptureStep::with_command(id, instruction, command, 5)
 }
@@ -579,7 +584,8 @@ fn zt300ab_keys() -> Vec<CaptureStep> {
             "key_zero",
             "Dial at Ω, SEL until capacitance shows, leads open: we will send ZERO.",
             "zero",
-        ),
+        )
+        .expect(ZERO_DONE),
         key(
             "key_minmax",
             "Dial at V, SEL until DC shows, leads open: we will send MAX/MIN. Hold MAX/MIN \
@@ -607,7 +613,8 @@ fn zt5566se_keys() -> Vec<CaptureStep> {
             "key_zero",
             "Capacitance showing (capacitance button if not), leads open: we will send ZERO.",
             "zero",
-        ),
+        )
+        .expect(ZERO_DONE),
         key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
         key(
             "key_diode_cont",
@@ -668,7 +675,8 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
             "Capacitance showing (Power/Select twice from Auto if not), leads open: we \
              will send ZERO.",
             "zero",
-        ),
+        )
+        .expect(ZERO_DONE),
         key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
         key(
             "key_diode_cont",
@@ -747,7 +755,8 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "key_zero",
             "Capacitance showing (SEL twice from Auto if not), leads open: we will send ZERO.",
             "zero",
-        ),
+        )
+        .expect(ZERO_DONE),
         key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
         // With the leads open the continuity/diode position shows the
         // diode's OL (the `diode_ol` step).

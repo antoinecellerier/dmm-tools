@@ -229,14 +229,21 @@ struct Meter {
     since: Instant,
     /// What HOLD froze, while it is on.
     held: Option<Display>,
-    /// What ZERO took off the capacitance, in nF.
-    zero_nf: f64,
+    /// What ZERO took off beyond the leads' stray capacitance, in nF, once
+    /// pressed: nothing with the leads open, the capacitor on them if one
+    /// was (spec §8.2, "zeroes the reading").
+    zeroed: Option<f64>,
+}
+
+/// The open leads' own capacitance, in nF.
+fn stray_nf(t: f64) -> f64 {
+    0.418 + wander(t, 0.006, 13.0, 2.9)
 }
 
 /// The capacitance the probes see, in nF: the leads open (their own
 /// stray capacitance) for 5 s, then a 100 nF film capacitor for 15 s.
 fn capacitance_nf(t: f64) -> f64 {
-    let stray = 0.418 + wander(t, 0.006, 13.0, 2.9);
+    let stray = stray_nf(t);
     if phase(t, 20.0) < 5.0 {
         stray
     } else {
@@ -250,7 +257,7 @@ impl Meter {
             function: Function::Auto,
             since: now,
             held: None,
-            zero_nf: 0.0,
+            zeroed: None,
         }
     }
 
@@ -267,7 +274,7 @@ impl Meter {
         self.function = function;
         self.since = now;
         self.held = None;
-        self.zero_nf = 0.0;
+        self.zeroed = None;
     }
 
     /// Press the key `code` (spec §8.2).
@@ -294,8 +301,12 @@ impl Meter {
                 return;
             }
             // Sent only while F shows (spec §8.2): the reading becomes zero.
+            // The leads' stray capacitance comes off as it wanders, so open
+            // leads read 0.000 and hold it, as a ZT-5B's did (§8.2, issue
+            // #31); a capacitor on them comes off as it was.
             0xB5 if self.function == Function::Capacitance && self.held.is_none() => {
-                self.zero_nf = capacitance_nf(self.elapsed(now));
+                let t = self.elapsed(now);
+                self.zeroed = Some(capacitance_nf(t) - stray_nf(t));
                 return;
             }
             // ZERO outside capacitance, or a key type 2 has no use for.
@@ -334,7 +345,10 @@ impl Meter {
                 }))
             }
             Function::Capacitance => {
-                let nf = capacitance_nf(t) - self.zero_nf;
+                let nf = match self.zeroed {
+                    Some(extra) => capacitance_nf(t) - stray_nf(t) - extra,
+                    None => capacitance_nf(t),
+                };
                 reading(
                     nf,
                     auto_decimals(nf),
@@ -908,7 +922,9 @@ mod tests {
         assert_ne!(live.display_raw, held.display_raw);
     }
 
-    /// ZERO takes the open leads' stray capacitance off; the driver refuses
+    /// ZERO takes the open leads' stray capacitance off, so they read 0.000
+    /// until a capacitor goes on, and zeroes a capacitor already on; the
+    /// driver refuses
     /// it outside capacitance, and a function key ends it.
     #[test]
     fn zero_clears_the_stray_capacitance() {
@@ -921,10 +937,20 @@ mod tests {
         let stray = value(&read(&mut mock));
         assert!(stray > 0.3, "{stray}");
         press(&mut mock, "zero");
-        assert!(value(&read(&mut mock)).abs() < 0.02);
-        clock.advance(secs(6.0));
+        for _ in 0..3 {
+            assert_eq!(value(&read(&mut mock)), 0.0, "open leads hold zero");
+            clock.advance(secs(0.4));
+        }
+        clock.advance(secs(5.0));
         let zeroed = value(&read(&mut mock));
         assert!((95.0..100.0).contains(&zeroed), "{zeroed}");
+
+        // Pressed with the capacitor on, it is the capacitor that reads 0.
+        press(&mut mock, "capacitance");
+        clock.advance(secs(6.0));
+        assert!(value(&read(&mut mock)) > 95.0);
+        press(&mut mock, "zero");
+        assert!(value(&read(&mut mock)).abs() < 0.05);
 
         press(&mut mock, "capacitance");
         clock.advance(secs(1.0));

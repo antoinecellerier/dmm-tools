@@ -12,6 +12,8 @@
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::{Expect, ValueExpect};
+use std::borrow::Cow;
+use std::mem::Discriminant;
 
 /// Frames that must agree before the meter counts as settled. Two would fire
 /// mid-flip on a meter that reports the new mode a frame before the digits.
@@ -58,6 +60,36 @@ impl Signature {
             flags: m.flags,
             len: m.raw_payload.len(),
             stable: baseline.map(|b| b.pick(&m.raw_payload)).unwrap_or_default(),
+        }
+    }
+}
+
+/// What a reading says about the meter's state, its digits aside: where a
+/// key's effect shows, and a reading's noise does not. Wider than the
+/// [`Signature`] it holds, which says when the meter has settled and leaves
+/// these fields out so a value flickering between OL and a number, or the
+/// UT61E+'s AC+DC frames taking turns, still settles.
+#[derive(Clone, PartialEq)]
+struct State {
+    /// Mode, range, flags and payload shape, with no baseline bytes.
+    signature: Signature,
+    /// The mode as parsed, beside its raw code: some decoders name a key's
+    /// effect only there, as OWON's LPF, Peak and Inrush do.
+    mode: Cow<'static, str>,
+    /// A number, OL, an NCV level or a word, whatever the number.
+    kind: Discriminant<MeasuredValue>,
+    /// The sub-values' labels; not their units, which a sub-display's
+    /// autoranging flips on noise.
+    aux: Vec<Cow<'static, str>>,
+}
+
+impl State {
+    fn of(m: &Measurement) -> Self {
+        State {
+            signature: Signature::of(m, None),
+            mode: m.mode.clone(),
+            kind: std::mem::discriminant(&m.value),
+            aux: m.aux_values.iter().map(|a| a.label.clone()).collect(),
         }
     }
 }
@@ -120,6 +152,15 @@ enum Detector {
     /// Nothing can be asserted about the parse, so any new state that holds
     /// counts. Without a baseline only the operator's Enter ends the wait.
     RawDiff(Option<Baseline>),
+    /// A command judged by the parse: any state none of the readings before
+    /// the command showed counts once it holds, and still meets the step's
+    /// expectation when the readings before met it already. The digits
+    /// alone moving does not: on a ZT-5B, a −0.6 mA flicker at 0.0 mA DC A
+    /// passed two keys that had done nothing (issue #31).
+    StateChange {
+        before: Vec<State>,
+        still: Option<Expect>,
+    },
 }
 
 /// Watches one capture step's readings for the state its instruction asked
@@ -137,7 +178,8 @@ pub(crate) struct StateWatcher {
     armed: bool,
     /// The signature the current run of frames shares, and its length.
     run: Option<(Signature, usize)>,
-    /// Frames in a row that satisfied the expectation.
+    /// Frames in a row that satisfied the expectation, or for a command
+    /// judged by the parse, that showed a state other than the one before.
     matched: usize,
     /// The last two signatures, newest first, and how many frames in a row
     /// have matched the one two frames back with only the flags moving: a
@@ -160,11 +202,47 @@ impl StateWatcher {
         baseline: Option<&Baseline>,
         auto_advance: bool,
     ) -> Self {
-        StateWatcher {
-            detector: match expect {
-                Some(expect) => Detector::Semantic(expect),
-                None => Detector::RawDiff(baseline.cloned()),
+        let detector = match expect {
+            Some(expect) => Detector::Semantic(expect),
+            None => Detector::RawDiff(baseline.cloned()),
+        };
+        Self::with(detector, auto_advance)
+    }
+
+    /// A command step's watcher; `before` is what the meter showed before
+    /// the command.
+    ///
+    /// - An expectation decides, unless every reading before already met
+    ///   it: then it cannot show the command working, so a new state decides,
+    ///   one that still meets it. A Hz key that cycles a meter already in Hz
+    ///   on to Duty has left the step's state, not reached it.
+    /// - Without one, the parse decides where the run reads it (not in
+    ///   `--sniff`): the command must leave a state none of `before` showed.
+    /// - Otherwise the payload bytes changing from `before` decide, and
+    ///   with no `before` only the operator's Enter ends the wait.
+    pub(crate) fn for_command(
+        expect: Option<Expect>,
+        before: &[Measurement],
+        reads_parse: bool,
+    ) -> Self {
+        let already_met =
+            |e: &Expect| !before.is_empty() && before.iter().all(|m| e.check(m).is_ok());
+        let detector = match expect {
+            Some(expect) if !already_met(&expect) => Detector::Semantic(expect),
+            still if reads_parse && !before.is_empty() => Detector::StateChange {
+                before: before.iter().map(State::of).collect(),
+                still,
             },
+            _ => Detector::RawDiff(Baseline::from_payloads(
+                before.iter().map(|m| m.raw_payload.as_slice()),
+            )),
+        };
+        Self::with(detector, true)
+    }
+
+    fn with(detector: Detector, auto_advance: bool) -> Self {
+        StateWatcher {
+            detector,
             auto_advance,
             gated: false,
             armed: false,
@@ -192,7 +270,7 @@ impl StateWatcher {
             m,
             match &self.detector {
                 Detector::RawDiff(baseline) => baseline.as_ref(),
-                Detector::Semantic(_) => None,
+                Detector::Semantic(_) | Detector::StateChange { .. } => None,
             },
         );
         let run = match self.run.take() {
@@ -236,6 +314,20 @@ impl StateWatcher {
                         Verdict::Waiting
                     }
                 }
+            };
+        }
+
+        if let Detector::StateChange { before, still } = &self.detector {
+            let meets = still.is_none_or(|e| e.check(m).is_ok());
+            self.matched = if meets && !before.contains(&State::of(m)) {
+                self.matched + 1
+            } else {
+                0
+            };
+            return if self.matched >= STABLE_FRAMES && settled && self.auto_advance {
+                Verdict::Ready
+            } else {
+                Verdict::Waiting
             };
         }
 
@@ -374,6 +466,109 @@ mod tests {
             assert_eq!(w.feed(&frame(i)), Verdict::Waiting, "frame {i}");
         }
         assert_eq!(w.feed(&frame(7)), Verdict::Ready);
+    }
+
+    /// A command with no expectation, judged by the parse: the digits
+    /// flickering in the same state are not the command's effect, a flag or
+    /// a function changing is. On a ZT-5B a −0.6 mA flicker at 0.0 mA passed
+    /// two keys that had done nothing (issue #31).
+    #[test]
+    fn a_command_is_judged_by_the_state_it_leaves() {
+        let before = [dcv(b" 0.0000"), dcv(b" 0.0000"), dcv(b" 0.0000")];
+        let mut w = StateWatcher::for_command(None, &before, true);
+        for _ in 0..6 {
+            assert_eq!(w.feed(&dcv(b"-0.0006")), Verdict::Waiting);
+        }
+        let mut held = dcv(b"-0.0006");
+        held.flags.hold = true;
+        assert_eq!(w.feed(&held), Verdict::Waiting);
+        assert_eq!(w.feed(&held), Verdict::Waiting);
+        assert_eq!(w.feed(&held), Verdict::Ready);
+
+        let mut w = StateWatcher::for_command(None, &before, true);
+        assert_eq!(w.feed(&ohm(b"  OL.  ")), Verdict::Waiting);
+        assert_eq!(w.feed(&ohm(b"  OL.  ")), Verdict::Waiting);
+        assert_eq!(w.feed(&ohm(b"  OL.  ")), Verdict::Ready);
+    }
+
+    /// A key whose effect the decoder names only in the mode string, as
+    /// OWON's LPF and Peak, still counts; a state any reading before the key
+    /// showed does not, so a range the meter was already settling on is not
+    /// the key's effect.
+    #[test]
+    fn a_command_counts_the_mode_name_and_no_state_seen_before() {
+        let before = [dcv(b" 0.0000"), dcv(b" 0.0000"), dcv(b" 0.0000")];
+        let mut w = StateWatcher::for_command(None, &before, true);
+        let mut lpf = dcv(b" 0.0000");
+        lpf.mode = "LPF DC V".into();
+        assert_eq!(w.feed(&lpf), Verdict::Waiting);
+        assert_eq!(w.feed(&lpf), Verdict::Waiting);
+        assert_eq!(w.feed(&lpf), Verdict::Ready);
+
+        let before = [dcv_on(0x01), dcv_on(0x01), dcv_on(0x02)];
+        let mut w = StateWatcher::for_command(None, &before, true);
+        for _ in 0..6 {
+            assert_eq!(w.feed(&dcv_on(0x01)), Verdict::Waiting);
+        }
+    }
+
+    /// An expectation the meter met before the key cannot show the key
+    /// working: a ZERO sent to open leads already at 0.000 is judged by the
+    /// state it leaves, and leaves none.
+    #[test]
+    fn an_expectation_met_before_the_command_proves_nothing() {
+        let zero = Expect::mode("DC V").value(ValueExpect::Zero);
+        let before = [dcv(b" 0.0000"), dcv(b" 0.0000"), dcv(b" 0.0000")];
+        let mut w = StateWatcher::for_command(Some(zero), &before, true);
+        for _ in 0..6 {
+            assert_eq!(w.feed(&dcv(b" 0.0000")), Verdict::Waiting);
+        }
+        let before = [dcv(b" 0.0011"), dcv(b" 0.0010"), dcv(b" 0.0011")];
+        let mut w = StateWatcher::for_command(Some(zero), &before, true);
+        assert_eq!(w.feed(&dcv(b" 0.0000")), Verdict::Waiting);
+        assert_eq!(w.feed(&dcv(b" 0.0000")), Verdict::Waiting);
+        assert_eq!(w.feed(&dcv(b" 0.0000")), Verdict::Ready);
+    }
+
+    /// An expectation the meter met before the key still has to hold after
+    /// it: HOLD pressed with hold already on turns it off, a new state that
+    /// leaves the one the step asks for.
+    #[test]
+    fn a_command_met_before_must_not_leave_its_expectation() {
+        let held = |digits: &[u8; 7]| {
+            let mut m = dcv(digits);
+            m.flags.hold = true;
+            m
+        };
+        let hold_on = Expect::new().flags(&[(dmm_lib::flags::Flag::Hold, true)]);
+        let before = [held(b" 0.0000"), held(b" 0.0000"), held(b" 0.0000")];
+        let mut w = StateWatcher::for_command(Some(hold_on), &before, true);
+        for _ in 0..6 {
+            assert_eq!(w.feed(&dcv(b" 0.0000")), Verdict::Waiting);
+        }
+        // A new state that keeps hold on still counts.
+        let mut w = StateWatcher::for_command(Some(hold_on), &before, true);
+        let mut rel = held(b" 0.0000");
+        rel.flags.rel = true;
+        assert_eq!(w.feed(&rel), Verdict::Waiting);
+        assert_eq!(w.feed(&rel), Verdict::Waiting);
+        assert_eq!(w.feed(&rel), Verdict::Ready);
+    }
+
+    /// Without a parse to trust (`--sniff`), the payload bytes are all a
+    /// command step has: its digits moving from a steady reading count.
+    #[test]
+    fn a_sniffed_command_falls_back_to_the_bytes() {
+        let before = [dcv(b" 0.0000"), dcv(b" 0.0000"), dcv(b" 0.0000")];
+        let mut w = StateWatcher::for_command(None, &before, false);
+        assert_eq!(w.feed(&dcv(b"-0.0006")), Verdict::Waiting);
+        assert_eq!(w.feed(&dcv(b"-0.0006")), Verdict::Waiting);
+        assert_eq!(w.feed(&dcv(b"-0.0006")), Verdict::Ready);
+        // With nothing read before the command, only Enter ends the wait.
+        let mut w = StateWatcher::for_command(None, &[], true);
+        for _ in 0..6 {
+            assert_eq!(w.feed(&acv(b"  1.234")), Verdict::Waiting);
+        }
     }
 
     /// A gated step reached dial first: open leads already pass "DC V,

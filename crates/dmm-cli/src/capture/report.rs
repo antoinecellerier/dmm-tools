@@ -527,10 +527,12 @@ impl Trust {
     /// What the step's detector may assume. Sniff assumes nothing: the step
     /// advances on the payload bytes changing, whatever the parse made of it.
     pub(super) fn expect(&self, step: &CaptureStep) -> Option<dmm_lib::protocol::Expect> {
-        match self.tier {
-            Tier::Sniff => None,
-            Tier::Gate | Tier::Trusted => step.expect,
-        }
+        self.reads_parse().then_some(step.expect).flatten()
+    }
+
+    /// Whether a step may judge the meter by the parse at all: not in Sniff.
+    pub(super) fn reads_parse(&self) -> bool {
+        self.tier != Tier::Sniff
     }
 
     /// Whether the run may drive the meter's settings itself: only once the

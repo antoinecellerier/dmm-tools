@@ -468,7 +468,6 @@ pub(crate) fn run_capture_step(
             // What the meter shows before the button is pressed, so a command
             // that changes nothing can be told from one that works.
             let before = capture_samples(dmm, STABLE_FRAMES, &mut errors);
-            let before = Baseline::from_payloads(before.iter().map(|m| m.raw_payload.as_slice()));
 
             if let Err(e) = dmm.send_command(cmd) {
                 eprintln!("  {}", style(format!("Command failed: {e}")).red());
@@ -477,7 +476,7 @@ pub(crate) fn run_capture_step(
                 return Ok(StepOutcome::nothing(false));
             }
 
-            let mut watcher = StateWatcher::for_step(expect, before.as_ref(), true);
+            let mut watcher = StateWatcher::for_command(expect, &before, trust.reads_parse());
             match watch_for_state(
                 dmm,
                 input,
