@@ -521,6 +521,8 @@ A ZT-5B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31),
 - With DC A showing, `B0`, `B1`, `B3` and `B8` were answered but changed
   nothing; whether the red lead was still in the A mA jack is not recorded.
 - `B5`, `BE`, `C6`, `C8`, `CA`, `CB` and `D1` were not sent.
+- SEL itself steps Auto → continuity/diode → capacitance → Hz → °C → °F →
+  Auto.
 
 ### 8.3 Clock set, cmd `04`
 

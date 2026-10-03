@@ -473,7 +473,7 @@ fn zt5b() -> Vec<CaptureStep> {
         .expect(Expect::mode("°C")),
         CaptureStep::basic(
             "auto_idle",
-            "Leads open, back at Auto: the display shows Auto",
+            "Leads open: press SEL until Auto shows (twice from °C)",
         )
         .expect(Expect::new().value(ValueExpect::NoReading)),
         CaptureStep::basic(
@@ -714,55 +714,70 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
     ]
 }
 
-/// The ZT-5B entry's keys. A V05B's keys step its modes as SEL does, and
-/// HOLD works (spec §11.4), so only HOLD expects a result: each other step
-/// records what its key did. A V05B does not beep for Ω, mV or MAX/MIN
-/// (§11.4), and a ZT-5B ignores V and current (issue #31), so no step
-/// sends them.
+/// The ZT-5B entry's keys. A ZT-5B's NCV and °C/°F keys pick their
+/// function rather than step to the next as SEL does (spec §8.2), so each
+/// step expects the function its key picks; ZERO, which leaves capacitance
+/// showing, captures the first change instead. A meter in DC A acknowledged
+/// the function keys and stayed there (issue #31), so the first step brings
+/// the red lead back from the A mA jack. A V05B does not beep for Ω, mV or
+/// MAX/MIN (§11.4), and a ZT-5B ignores V and current (issue #31), so no
+/// step sends them.
 fn zt5b_keys() -> Vec<CaptureStep> {
     vec![
         key(
             "key_capacitance",
-            "Leads open, meter showing Auto: we will send the capacitance key.",
+            "Red lead back in the V jack, leads open, meter showing Auto (SEL until it \
+             does): we will send the capacitance key.",
             "capacitance",
-        ),
+        )
+        .expect(Expect::mode("Capacitance")),
         key(
             "key_zero",
             "Capacitance showing (SEL twice from Auto if not), leads open: we will send ZERO.",
             "zero",
         ),
-        key("key_hz", "Leads open: we will send the Hz key.", "hz"),
+        key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
+        // With the leads open the continuity/diode position shows the
+        // diode's OL (the `diode_ol` step).
         key(
             "key_diode_cont",
             "Leads open: we will send the diode/continuity key.",
             "diode_continuity",
-        ),
+        )
+        .expect(Expect::mode("Diode")),
         key(
             "key_auto",
             "Leads open, meter not showing Auto (SEL once if it is): we will send AUTO.",
             "auto_function",
-        ),
+        )
+        .expect(Expect::new().value(ValueExpect::NoReading)),
         key(
             "key_ncv",
             "Leads out of the A mA jack, away from mains wiring: we will send the NCV key.",
             "ncv",
-        ),
+        )
+        .expect(Expect::mode("NCV")),
+        // From anything but °C the driver sends `B6`, which picks °C; from
+        // °C, `B7`, which picks °F (spec §8.2).
         key(
             "key_temp_unit",
-            "Thermocouple in, temperature showing °C (SEL four times from Auto): we will \
-             send °C/°F.",
+            "Thermocouple in, any function but temperature: we will send °C/°F for \
+             temperature.",
             "temp_unit",
         )
-        .needs(&[Need::Thermocouple]),
+        .needs(&[Need::Thermocouple])
+        .expect(Expect::mode("°C")),
         key(
             "key_temp_back",
-            "Temperature: we will send °C/°F again.",
+            "Temperature showing °C: we will send °C/°F again.",
             "temp_unit",
         )
-        .needs(&[Need::Thermocouple]),
+        .needs(&[Need::Thermocouple])
+        .expect(Expect::mode("°F")),
         key(
             "key_hold",
-            "Leads on a DC source above 0.8 V (DC V shows): we will send HOLD.",
+            "Leads on a DC source above 0.8 V (DC V shows; SEL once from °F for Auto): we \
+             will send HOLD.",
             "hold",
         )
         .expect(Expect::new().flags(HOLD_ON)),
