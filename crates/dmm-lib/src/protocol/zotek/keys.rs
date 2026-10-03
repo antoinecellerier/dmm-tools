@@ -49,16 +49,16 @@ const TYPE1_KEYS: &[&str] = &[
 
 /// Type 2's: no MAX/MIN, as type 1, and no Ω or mV: the ZT-5B matches Ω
 /// from the input jack and has no mV function, so it has no key they could
-/// stand for (spec §8.2).
+/// stand for (spec §8.2). No V or current either: it matches those from the
+/// jack too, and a ZT-5B neither acknowledged nor acted on their codes
+/// (issue #31).
 const TYPE2_KEYS: &[&str] = &[
     "hold",
     "auto_function",
-    "volts",
     "capacitance",
     "hz",
     "diode_continuity",
     "ncv",
-    "current",
     "temp_unit",
     "zero",
 ];
@@ -179,14 +179,12 @@ const EVERY_FUNCTION_KEY: &[MeterKey] = &[
     AUTO_FUNCTION,
 ];
 
-/// Type 2's, without the Ω and mV [`TYPE2_KEYS`] leaves out.
+/// Type 2's, without the V, mV, Ω and current [`TYPE2_KEYS`] leaves out.
 const TYPE2_FUNCTION_KEYS: &[MeterKey] = &[
-    VOLTS,
     CAPACITANCE,
     HZ,
     DIODE_CONTINUITY,
     NCV,
-    CURRENT,
     TEMP_UNIT,
     AUTO_FUNCTION,
 ];
@@ -374,7 +372,7 @@ mod tests {
     }
 
     /// Type 3 goes without five keys, types 1-2 without MAX/MIN, type 2
-    /// also without Ω and mV, and type 4 offers every key.
+    /// also without V, mV, Ω and current, and type 4 offers every key.
     #[test]
     fn each_layout_offers_its_keys() {
         for layout in LAYOUTS {
@@ -389,7 +387,7 @@ mod tests {
                     &[&"hold", &"auto_function", &"capacitance", &"hz", &"ncv"]
                 }
                 1 => &[&"minmax"],
-                2 => &[&"minmax", &"millivolts", &"ohms"],
+                2 => &[&"minmax", &"volts", &"millivolts", &"ohms", &"current"],
                 _ => &[],
             };
             assert_eq!(missing, expected, "{}", layout.id);
@@ -498,12 +496,10 @@ mod tests {
         assert_eq!(
             labels(&ZT5B),
             [
-                "V",
                 "Capacitance",
                 "Hz",
                 "Diode / continuity",
                 "NCV",
-                "Current",
                 "°C / °F",
                 "Auto function"
             ]
@@ -524,7 +520,6 @@ mod tests {
     #[test]
     fn a_pressed_function_key_is_the_one_that_applies() {
         let cases: &[(&[&str], &str, &str)] = &[
-            (&["volts"], "volts", "V"),
             (&["capacitance"], "capacitance", "Capacitance"),
             (&["hz"], "hz", "Hz"),
             (&["diode_continuity"], "diode_continuity", "Diode"),
@@ -534,7 +529,6 @@ mod tests {
                 "Continuity",
             ),
             (&["ncv"], "ncv", "NCV"),
-            (&["current"], "current", "A"),
             (&["temp_unit"], "temp_unit", "°C"),
             (&["temp_unit", "temp_unit"], "temp_unit", "°F"),
             (&["auto_function"], "auto_function", "Auto"),

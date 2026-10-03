@@ -717,7 +717,8 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
 /// The ZT-5B entry's keys. A V05B's keys step its modes as SEL does, and
 /// HOLD works (spec §11.4), so only HOLD expects a result: each other step
 /// records what its key did. A V05B does not beep for Ω, mV or MAX/MIN
-/// (§11.4), so no step sends them.
+/// (§11.4), and a ZT-5B ignores V and current (issue #31), so no step
+/// sends them.
 fn zt5b_keys() -> Vec<CaptureStep> {
     vec![
         key(
@@ -740,12 +741,6 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "key_auto",
             "Leads open, meter not showing Auto (SEL once if it is): we will send AUTO.",
             "auto_function",
-        ),
-        key("key_volts", "Leads open: we will send the V key.", "volts"),
-        key(
-            "key_current",
-            "Leads out of the A mA jack: we will send the current key.",
-            "current",
         ),
         key(
             "key_ncv",

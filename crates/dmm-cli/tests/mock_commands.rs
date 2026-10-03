@@ -125,8 +125,8 @@ fn a_named_device_is_not_detected() {
 fn the_zt5b_mock_opens_as_its_own_device() {
     let (stdout, _) = run(&["--device", "mock-zt5b", "read", "--count", "1"]);
     assert_eq!(stdout.trim(), "Auto", "got {stdout}");
-    let (stdout, _) = run(&["--device", "mock-zt5b", "command", "volts"]);
-    assert_eq!(stdout.trim(), "Sent volts");
+    let (stdout, _) = run(&["--device", "mock-zt5b", "command", "ncv"]);
+    assert_eq!(stdout.trim(), "Sent ncv");
     let (_, stderr) = run(&["--device", "mock-zt5b", "command", "zero"]);
     assert!(
         stderr.contains("ZERO works in capacitance only"),

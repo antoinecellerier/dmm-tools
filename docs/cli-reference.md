@@ -508,9 +508,10 @@ dmm-cli command <ACTION>          # send a command
 
 #### ZOTEK commands
 
-The keys of ZOTEK's app, not yet tried on a meter; watch the reading for
-what a key did. The ZT-300AB offers no `hold`, `auto_function`,
-`capacitance`, `hz` or `ncv`; the ZT-5B no `ohms` or `millivolts`; only the
+The keys of ZOTEK's app; a ZT-5B has run `hold`, `ncv` and `temp_unit`, the
+others are not yet tried on a meter, so watch the reading for what a key
+did. The ZT-300AB offers no `hold`, `auto_function`, `capacitance`, `hz` or
+`ncv`; the ZT-5B no `volts`, `millivolts`, `ohms` or `current`; only the
 ZT-5566SE offers `minmax`.
 
 | Command | Description |
@@ -776,13 +777,11 @@ intends; no meter has confirmed them.
 | Key | The simulated meter shows |
 |---|---|
 | `auto_function` | The `Auto` word, then a 9 V battery (DC V), a 4.7 kΩ resistor, open (OL) now and then, and the mains (AC V, `[HV!]`), the word between each; where it starts |
-| `volts` | The battery and the mains in turn |
 | `capacitance` | The open leads' stray capacitance, then a 100 nF capacitor |
 | `zero` | In capacitance, the reading taken as zero |
 | `hz` | The mains frequency |
 | `diode_continuity` | A diode, reversed (OL) now and then; pressed again, swaps diode and continuity |
 | `ncv` | `EF`, then one to four dashes as a live wire nears, and back |
-| `current` | A DC mA current |
 | `temp_unit` | °C; pressed again, °F |
 | `hold` | The display frozen until pressed again or a function key |
 

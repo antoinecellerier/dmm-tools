@@ -11,12 +11,13 @@
 //!
 //! The keys do what ZOTEK's app intends; no meter has confirmed them (§8.2
 //! leaves open which keys a model honours). Where the app's intent leaves
-//! the effect open, the choice made here is named at the key. There is no Ω
-//! or mV key, as the ZT-5B has none (§8.2): AUTO finds the resistor.
+//! the effect open, the choice made here is named at the key. There is no
+//! V, Ω, mV or current key, as the ZT-5B has none (§8.2): AUTO finds the
+//! battery, the mains and the resistor.
 //!
 //! The probes move on their own, as a function of session time since the
-//! function was picked: a battery and the mains in V, those and a resistor
-//! lifted off now and then in AUTO, a probe nearing a live wire in NCV. So
+//! function was picked: a battery, the mains and a resistor lifted off now
+//! and then in AUTO, a probe nearing a live wire in NCV. So
 //! `dmm-cli read` has something to show without anyone pressing a key.
 
 use super::ZotekProtocol;
@@ -61,13 +62,11 @@ pub(crate) static MOCK_ZT5B: SelectableDevice = SelectableDevice {
 enum Function {
     /// AUTO: the `Auto` word until the probes find a signal (spec §6.4).
     Auto,
-    Volts,
     Capacitance,
     Frequency,
     Diode,
     Continuity,
     Ncv,
-    Current,
     Celsius,
     Fahrenheit,
 }
@@ -164,7 +163,7 @@ fn phase(t: f64, period: f64) -> f64 {
 /// (spec §7.3, §11.4), and read by neither the driver nor the apps.
 const BLUETOOTH_ICON: (usize, u8) = (7, 0x80);
 
-/// Where the probes are in V and AUTO.
+/// Where the probes are in AUTO.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Source {
     /// Off anything: AUTO shows its word.
@@ -273,8 +272,6 @@ impl Meter {
     fn press(&mut self, code: u8, now: Instant) {
         let pick = match code {
             0xB8 => Function::Auto,
-            // The ZT-5B chooses AC or DC itself (spec §1), so one V key.
-            0xC4 => Function::Volts,
             0xB0 => Function::Capacitance,
             0xB3 => Function::Frequency,
             // One key for diode and continuity: the first press picks the
@@ -283,9 +280,6 @@ impl Meter {
             0xB1 if self.function == Function::Diode => Function::Continuity,
             0xB1 => Function::Diode,
             0xB2 => Function::Ncv,
-            // Every current code picks the one current function the
-            // simulation has; the driver sends `C9` from type 2 (spec §8.2).
-            0xC8..=0xCB => Function::Current,
             // The app sends `B7` while °C shows, else `B6` (spec §8.2): `B6`
             // asks for °C and `B7` for °F.
             0xB6 => Function::Celsius,
@@ -336,14 +330,6 @@ impl Meter {
                     negative: false,
                     lit: Vec::new(),
                 }))
-            }
-            Function::Volts => {
-                let source = if phase(t, 24.0) < 12.0 {
-                    Source::Battery
-                } else {
-                    Source::Mains
-                };
-                volts(source, t)
             }
             Function::Capacitance => {
                 let nf = capacitance_nf(t) - self.zero_nf;
@@ -398,18 +384,6 @@ impl Meter {
                     negative: false,
                     lit: Vec::new(),
                 })
-            }
-            Function::Current => {
-                let ma = 23.47 + wander(t, 0.08, 27.0, 3.3);
-                reading(
-                    ma,
-                    auto_decimals(ma),
-                    lit(&[
-                        Meaning::Unit(Unit::Amp),
-                        Meaning::Prefix(Prefix::Milli, &[]),
-                        Meaning::Dc,
-                    ]),
-                )
             }
             Function::Celsius | Function::Fahrenheit => {
                 let celsius = 23.4 + wander(t, 0.3, 47.0, 6.1);
@@ -753,13 +727,11 @@ mod tests {
     fn every_packet_decodes_quietly() {
         let cases: &[&[&str]] = &[
             &["auto_function"],
-            &["volts"],
             &["capacitance"],
             &["hz"],
             &["diode_continuity"],
             &["diode_continuity", "diode_continuity"],
             &["ncv"],
-            &["current"],
             &["temp_unit"],
             &["temp_unit", "temp_unit"],
         ];
@@ -820,7 +792,7 @@ mod tests {
         assert!((225.0..235.0).contains(&value(&m)), "{m:?}");
         assert!(m.flags.hv_warning);
 
-        press(&mut mock, "volts");
+        press(&mut mock, "ncv");
         press(&mut mock, "auto_function");
         let m = read(&mut mock);
         assert!(matches!(m.value, MeasuredValue::NoReading("Auto")), "{m:?}");
@@ -830,11 +802,9 @@ mod tests {
     #[test]
     fn each_key_picks_its_function() {
         for (key, mode, unit) in [
-            ("volts", "DC V", "V"),
             ("capacitance", "Capacitance", "nF"),
             ("hz", "Hz", "Hz"),
             ("diode_continuity", "Diode", "V"),
-            ("current", "DC A", "mA"),
             ("temp_unit", "°C", "°C"),
         ] {
             let (mut mock, clock) = mock();
@@ -968,7 +938,7 @@ mod tests {
     #[test]
     fn readings_move() {
         let (mut mock, clock) = mock();
-        press(&mut mock, "current");
+        press(&mut mock, "hz");
         let mut seen = Vec::new();
         for _ in 0..20 {
             seen.push(read(&mut mock).display_raw);

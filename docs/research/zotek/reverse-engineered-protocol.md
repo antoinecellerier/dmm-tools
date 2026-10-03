@@ -464,8 +464,8 @@ AB CD <cmd> <p0> <p1> <p2> <p3> <p4> <sumHi> <sumLo>
 
 `sum` is the 16-bit sum of bytes 0-7, big-endian. V2 writes it in chunks of
 up to 20 bytes (`sendData2`, V2@261945), so as one write. Neither app waits
-for a reply; what the meter sends back is §5's `AB`-led frame, if anything
-[UNVERIFIED].
+for a reply; a ZT-5B answered each of the eight known keys sent to it with
+§5's `AB`-led frame, cmd `FD` (§8.2) [HARDWARE].
 
 ### 8.2 Key press, cmd `03`
 
@@ -507,6 +507,20 @@ p.2/-5-, -6-); V, Ω and current are auto-matched from the input jack (5B
 p.1/-4-, p.2/-5-), and the spec table lists no mV function (5B p.2/-7-)
 [KNOWN]. So the ZT-5B has no key a `BE` or `C6` could stand for [INFERRED].
 Which keys each model honours is otherwise [UNVERIFIED].
+
+A ZT-5B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31),
+@whymzml, Bluetooth) [HARDWARE]:
+
+- It answers a key it knows with `AB CD FD <key> 00 00 00 00 <sum>`, the
+  sum of bytes 0-7, 0.20-0.24 s later: `B0`, `B1`, `B2`, `B3`, `B4`, `B6`,
+  `B7` and `B8` each drew one. `C4` (V) and `C9` (current) drew none and
+  changed nothing; each was sent once, with DC A showing.
+- `B2` switched DC A to NCV, `B6` NCV to °C, `B7` °C to °F, and `B4` set
+  and cleared HOLD: these keys pick their function, not the next one in
+  SEL's cycle.
+- With DC A showing, `B0`, `B1`, `B3` and `B8` were answered but changed
+  nothing; whether the red lead was still in the A mA jack is not recorded.
+- `B5`, `BE`, `C6`, `C8`, `CA`, `CB` and `D1` were not sent.
 
 ### 8.3 Clock set, cmd `04`
 
@@ -696,6 +710,7 @@ error.
 | D9 | §2 name | libreble: inconsistent names, "BDM" the common prefix; bt-multimeter-cli's README example: "ZOYI-ZT5B" | No app contains "BDM" | community error: every scan shows "Bluetooth DMM"; bt-multimeter-cli's own probe shows no name | A passive scan per model |
 | D10 | §4 key byte 17 = `1A` | ludwich's wiki, anszom, BLE_DMM_Client, bt-multimeter-cli: `21` | All three apps: `1A` (smali `array-data` too) | community typo: only `1A` gives coherent ZT-5566SE byte-17 flags (n, F in capacitance); only type 4 reaches byte 17 | settled |
 | D11 | §5, §6.3 type 4: 19 bytes, digits 9-12, sign and leading "1" in 13 | ludwich: "Only 17 Byte", digits 8-11, sign, ":" and leading 1 in 12 | Both apps: at least 19 bytes, digits 9-12, flags in 13 | community error: the ZT-5566SE log has 19-byte packets that decode only with the spec's offsets; ludwich's row is shifted one byte | settled |
+| D12 | §8.2 keys pick their function [HARDWARE] | webspiderteam wiki: on a V05B the keys step modes like SEL | The apps label each key by the function it tests (§8.2) | meter vs community: a ZT-5B's `B2`, `B6` and `B7` went straight to NCV, °C and °F (§8.2) | The capacitance, Hz, diode and AUTO keys from Auto on a ZT-5B |
 
 ### 11.4 New
 
@@ -719,6 +734,6 @@ Facts §1-10 lack or mark [UNVERIFIED], all from captures unless marked:
 | Type-4 other bits (§7.4) | The bar graph (D1); byte 13 bit 5 set except in the one notification reading exactly 0.0000; byte 18 bit 7 always set; byte 4 bits 7-5 and bytes 5-8 always 0 — the log covers V DC, Ω and capacitance only, no AC mode and no secondary display | ZT-5566SE log |
 | Type-4 HOLD, secondary (§7.4) | "hold has a bug that device sending realtime data"; in AC the app is "not showing frequency", never checked | discussion #35, anecdotal |
 | Keys (§8.2) | A V05B beeps for AUTO, NCV, °C, °F, CAP, Hz and DIODE, and HOLD works; not MAX/MIN, Ω or mV/Hz. Keys step modes like SEL and cannot switch between the V/Ω and A inputs; ZERO works in capacitance. A ZT-5566SE ignores AUTO. Clamp untested | btsnoop (issue #29), discussion #35, webspiderteam wiki |
-| Replies (§5, §8.1) | None reported ("does not handshake or answer requests"). One loose end: ludwich logged on-air `EA EC 8E E1 A2 C1 32 71 65 83` = `AB CD FD B4 00 00 00 00 03 29` (valid sum), and an `AB CD FD B0 …` copy with its sum off by `0x10`, in LightBlue after a button press in the Android app. No vendor app builds cmd `FD` (V1 builds 3 and 4, V2 only 3); direction and origin unknown | libreble; ludwich |
+| Replies (§5, §8.1) | None reported ("does not handshake or answer requests"). One loose end: ludwich logged on-air `EA EC 8E E1 A2 C1 32 71 65 83` = `AB CD FD B4 00 00 00 00 03 29` (valid sum), and an `AB CD FD B0 …` copy with its sum off by `0x10`, in LightBlue after a button press in the Android app. No vendor app builds cmd `FD` (V1 builds 3 and 4, V2 only 3); a ZT-5B sends that exact `B4` frame as its answer to key `B4` (§8.2) | libreble; ludwich |
 | Backlight | Not in the data | webspiderteam issue #2, ludwich |
 | Auto power-off | After 15 min even while connected; held SEL (AN9002) or Hz/NCV (clamp) at power-on disables it | ut61xpy, ludwich |

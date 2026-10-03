@@ -99,18 +99,16 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 
 ## Keys and commands
 
-- Which key codes each type honours (§8.2): a V05B's subset (§11.4), and
-  whether the ZT-300AB's dial acts on any — decides each entry's keys
-  (`keys.rs`). Needs the `key_*` steps. (#28–#31)
+- Which key codes each type honours (§8.2): a V05B's subset (§11.4), what
+  a ZT-5B's `B0`, `B1`, `B3`, `B5` and `B8` do from Auto, and whether the
+  ZT-300AB's dial acts on any — decides each entry's keys (`keys.rs`).
+  Needs the `key_*` steps. (#28–#31)
 - What each of `C8`-`CB` selects, the apps swapping the AC codes (§8.2) —
   decides the current key's code. Needs `key_current` on a ZT-5566SE in each
   current mode. (#29)
-- Whether a key press draws an `AB`-led notification, and its format (§5,
-  §8.1; none reported, §11.4) — decides whether the stream reads replies.
-  Needs any `key_*` step. (#28–#31)
-- Whether a meter sends the `AB CD FD` frame a community log shows, which no
-  vendor app builds (§11.4, Replies), and what it means — decides a §8 row.
-  Needs raw notifications around a key press. (#28–#31)
+- Whether types 1, 3 and 4 answer a key press with cmd `FD`, as a ZT-5B
+  does (§8.2) — decides whether the stream could confirm a key. Needs any
+  `key_*` step. (#28–#30)
 - Whether a type-4 meter needs or acts on the clock set, cmd `04` (§8.3; the
   app side only, §11.2) — decides whether the driver sends it; it never does.
   Needs a ZT-5566/SE; no capture step sends it. (#29)
