@@ -76,6 +76,8 @@ pub(crate) static UT61EPLUS: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
+    // Our UT61E+, on its CP2110 cable and through a UT-D07B.
+    detection_verified: &[cp2110::NAME, crate::BLUETOOTH],
     bluetooth_names: &[],
 };
 
@@ -91,6 +93,8 @@ pub(crate) static UT61BPLUS: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
+    // Issue #19.
+    detection_verified: &[ch9329::NAME],
     bluetooth_names: &[],
 };
 
@@ -106,6 +110,7 @@ pub(crate) static UT61DPLUS: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: &[],
 };
 
@@ -121,6 +126,7 @@ pub(crate) static UT161B: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: &[],
 };
 
@@ -136,6 +142,7 @@ pub(crate) static UT161D: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: &[],
 };
 
@@ -151,6 +158,7 @@ pub(crate) static UT161E: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: &[],
 };
 
@@ -167,6 +175,7 @@ pub(crate) static UT60BT: SelectableDevice = SelectableDevice {
     manual_url: Some("https://meters.uni-trend.com.cn/content/1298.html"),
     // Bluetooth built in, no cable.
     links: &[crate::BLUETOOTH],
+    detection_verified: &[],
     // One UT60BT advertises `UT60BTk` (docs/research/ut61-family/
     // reverse-engineering-approach.md, cross-reference).
     bluetooth_names: &["UT60BT"],
@@ -185,5 +194,6 @@ pub(crate) static UT202BT: SelectableDevice = SelectableDevice {
     manual_url: Some("https://meters.uni-trend.com.cn/content/1341.html"),
     // Bluetooth built in, no cable.
     links: &[crate::BLUETOOTH],
+    detection_verified: &[],
     bluetooth_names: &["UT202BT"],
 };

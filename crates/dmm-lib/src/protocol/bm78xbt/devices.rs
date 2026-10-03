@@ -39,5 +39,6 @@ pub(crate) static BM78XBT: SelectableDevice = SelectableDevice {
     // default, which the owner can change (spec §2); a renamed meter opens
     // with `--device bm78xbt --adapter <address>`.
     links: &[crate::BLUETOOTH],
+    detection_verified: &[],
     bluetooth_names: &["BM78xBT"],
 };

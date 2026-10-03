@@ -39,7 +39,7 @@ with, and how well that probe is backed:
 
 | Family | Detection sends | Expects back | Hardware status |
 |---|---|---|---|
-| UT61E+ | `AB CD 03 5F 01 DA` (Get Name) | ack `AB CD 04 FF 00 02 7B`, then an ASCII name frame | Verified through the detector on our UT61E+ (CP2110) |
+| UT61E+ | `AB CD 03 5F 01 DA` (Get Name) | ack `AB CD 04 FF 00 02 7B`, then an ASCII name frame | Verified through the detector on our UT61E+ (CP2110, and Bluetooth through a UT-D07B) |
 | UT61B+ | same | same, the name being `UT61B+` | Verified over CH9329 ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)) |
 | UT61D+, UT161B/D/E | same | same, the name being the model | Unverified; no report has named one of these meters |
 | UT60BT, UT202BT | same, over their built-in Bluetooth | same, the name being `UT60BT` or `UT202BT` | Unverified; a community UT60BT's `UT60BT` reply is on record (ut61-family approach doc), nothing for the UT202BT |

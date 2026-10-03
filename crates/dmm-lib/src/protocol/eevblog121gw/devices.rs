@@ -27,5 +27,6 @@ pub(crate) static EEVBLOG_121GW: SelectableDevice = SelectableDevice {
     // meter was seen advertising (spec §15.4); EEVblog's app also accepts
     // "Bluegiga", which no meter was seen to send.
     links: &[crate::BLUETOOTH],
+    detection_verified: &[],
     bluetooth_names: &["121GW"],
 };

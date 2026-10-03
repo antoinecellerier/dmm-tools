@@ -170,7 +170,7 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 
 1. Implement the `Protocol` trait in its `mod.rs`. The trait, in `crates/dmm-lib/src/protocol/mod.rs`, says which methods are required and which have a default.
 2. In `protocol/mod.rs`, declare the module and add a `DeviceFamily` variant with its `Display` arm.
-3. Add its `SelectableDevice` entries in `protocol/<family>/devices.rs` and list them in `DEVICES`. Their `links` name the links the family is seen on: its USB cables by their transport's `NAME` (the transports themselves are in `KNOWN_TRANSPORTS`), and `BLUETOOTH` if a UT-D07B carries it. A meter with the radio built in and no cable sets the `bluetooth_names` it advertises and `BLUETOOTH` alone.
+3. Add its `SelectableDevice` entries in `protocol/<family>/devices.rs` and list them in `DEVICES`. Their `links` name the links the family is seen on: its USB cables by their transport's `NAME` (the transports themselves are in `KNOWN_TRANSPORTS`), and `BLUETOOTH` if a UT-D07B carries it. A meter with the radio built in and no cable sets the `bluetooth_names` it advertises and `BLUETOOTH` alone. `detection_verified` stays empty until a report's detection check finds the meter after a restart (Phase 6 sign-off).
 4. For a family on Bluetooth, add it to the lists of Bluetooth families in the `lib.rs` and `detect.rs` tests.
 5. Keep its research docs in `docs/research/<family>/` (Phase 2).
 
@@ -250,7 +250,7 @@ These are real bugs we discovered only through device testing — expect similar
 ### Verification sign-off
 Once verified:
 1. Change `Stability::Experimental` to `Stability::Verified` in the device profile (`Stability::PartlyVerified` once connection and the main modes are confirmed but formats or commands remain; it behaves as Experimental and only changes the label)
-2. Delete each confirmed item from the family's `verification.md` and record its result: a spec fact tagged `[HARDWARE]` (`[VERIFIED]` in the UT61 specs) with the issue, the cable and the reporter, or a code comment for what the driver does. In the same commit mark the capture steps they cover `.verified()` so `--unverified` stops asking for them
+2. Delete each confirmed item from the family's `verification.md` and record its result: a spec fact tagged `[HARDWARE]` (`[VERIFIED]` in the UT61 specs) with the issue, the cable and the reporter, or a code comment for what the driver does. In the same commit mark the capture steps they cover `.verified()`, and a detection check that found the meter after a restart in the entry's `detection_verified` for its link, so `--unverified` stops asking for them
 3. Add golden files from the capture report ([Golden file tests](development.md#golden-file-tests))
 4. Update `docs/supported-devices.md` with verification status
 

@@ -43,6 +43,7 @@ pub(crate) static BM86X: SelectableDevice = SelectableDevice {
     // The manual names this cable (spec §1.2); it relays no UART, so the
     // meter is on no other.
     links: &[bu86x::NAME],
+    detection_verified: &[],
     bluetooth_names: &[],
 };
 
@@ -69,6 +70,7 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
     // The manual names the BU-86X once and the BU-82X once, Brymen's
     // program for the series the BC-86X cable alone (spec §1.2).
     links: &[bu86x::NAME],
+    detection_verified: &[],
     bluetooth_names: &[],
 };
 
@@ -84,6 +86,7 @@ pub(crate) static BM52X: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT_52),
     manual_url: Some(BM820S_520S_MANUAL),
     links: &[bu86x::NAME],
+    detection_verified: &[],
     bluetooth_names: &[],
 };
 

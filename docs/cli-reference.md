@@ -625,7 +625,7 @@ dmm-cli capture [OPTIONS]
 |---|---|---|
 | `-o, --output <FILE>` | `capture-<device>.yaml` | Output file path. |
 | `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`); `extra` is the freeform pass, `detect` the auto-detection check. An ID no step matches is an error. |
-| `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
+| `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass; the auto-detection check is left out on a link where it is already confirmed. |
 | `--plan <FILE>` | | Run the steps in a [plan file](#capture-plan-files) instead of the device's own list. Conflicts with `--steps`, `--unverified` and `--list-steps`. |
 | `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one by hand. |
 | `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step. |

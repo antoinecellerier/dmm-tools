@@ -173,7 +173,19 @@ pub(crate) fn cmd_capture(
     // pass; a plan runs only the steps it lists.
     let feedback_url = dmm.profile().feedback_url();
     let previous = report.detection.as_ref();
-    let wanted = plan_path.is_none() && step_included(&step_filter, DETECTION_STEP_ID);
+    let bridge = dmm.transport().transport_name();
+    let confirmed = detection_already_confirmed(unverified_only, &step_filter, device, bridge);
+    let wanted =
+        plan_path.is_none() && !confirmed && step_included(&step_filter, DETECTION_STEP_ID);
+    if confirmed {
+        eprintln!(
+            "{}",
+            style(format!(
+                "Auto-detection is already confirmed over {bridge}, so its check is skipped."
+            ))
+            .dim()
+        );
+    }
     let check = if wanted {
         run_detection_check(dmm, device, detected_at_open, previous, &input, reopen)
     } else {
@@ -231,6 +243,18 @@ fn gate_already_confirmed(steps: &[CaptureStep], in_scope: &[CaptureStep]) -> bo
 /// The way back into a run that left steps undone. A capture that ended on the
 /// first `q` signs off with the same "Capture complete!" as one that walked
 /// every step, and said nothing about the report being resumable.
+/// Whether `--unverified` leaves the detection check out: a report has
+/// already confirmed detection of `device` over `bridge`, as `.verified()`
+/// marks a step, and `--steps` does not name it.
+fn detection_already_confirmed(
+    unverified_only: bool,
+    step_filter: &Option<std::collections::HashSet<String>>,
+    device: &dmm_lib::protocol::registry::SelectableDevice,
+    bridge: &str,
+) -> bool {
+    unverified_only && step_filter.is_none() && device.detection_verified.contains(&bridge)
+}
+
 fn resume_hint(covered: usize, total: usize, plan: bool) -> Option<String> {
     if covered >= total {
         return None;
@@ -369,6 +393,35 @@ mod tests {
 
     /// A run that stopped early has to say it can be picked up; one that
     /// covered everything has nothing to add.
+    /// `--unverified` skips the check over a link detection is confirmed
+    /// on, and only there; a plain run, or `--steps detect`, still runs it.
+    #[test]
+    fn unverified_skips_a_confirmed_detection_only() {
+        let zt5b = dmm_lib::protocol::registry::find_device("zt5b").unwrap();
+        let ut181a = dmm_lib::protocol::registry::find_device("ut181a").unwrap();
+        let named = Some(std::iter::once(DETECTION_STEP_ID.to_string()).collect());
+        assert!(detection_already_confirmed(
+            true,
+            &None,
+            zt5b,
+            dmm_lib::BLUETOOTH
+        ));
+        assert!(!detection_already_confirmed(
+            false,
+            &None,
+            zt5b,
+            dmm_lib::BLUETOOTH
+        ));
+        assert!(!detection_already_confirmed(
+            true,
+            &named,
+            zt5b,
+            dmm_lib::BLUETOOTH
+        ));
+        assert!(!detection_already_confirmed(true, &None, zt5b, "CP2110"));
+        assert!(!detection_already_confirmed(true, &None, ut181a, "CH9329"));
+    }
+
     #[test]
     fn an_unfinished_run_says_how_to_resume() {
         let hint = resume_hint(1, 27, false).expect("26 steps left");

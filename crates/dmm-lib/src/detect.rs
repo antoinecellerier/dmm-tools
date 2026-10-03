@@ -843,6 +843,7 @@ mod tests {
                 &*Box::leak(Box::new(SelectableDevice {
                     id,
                     links: &[crate::BLUETOOTH],
+                    detection_verified: &[],
                     bluetooth_names: &["Shared DMM"],
                     ..*base
                 }))

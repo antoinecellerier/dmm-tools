@@ -76,8 +76,9 @@ fn render_step_list(
     // The mock has no link to detect anything on.
     if device.requires_hardware {
         out.push_str(&format!(
-            "    {:<16} Restart the meter and check that auto-detection finds it\n",
-            style(DETECTION_STEP_ID).bold()
+            "    {:<16} Restart the meter and check that auto-detection finds it{}\n",
+            style(DETECTION_STEP_ID).bold(),
+            detection_confirmed(device)
         ));
     }
     out.push('\n');
@@ -98,6 +99,19 @@ fn render_step_list(
         ));
     }
     out
+}
+
+/// Where auto-detection is already confirmed, as the detection line says
+/// it; `--unverified` skips the check over those links.
+fn detection_confirmed(device: &SelectableDevice) -> String {
+    let links = device.detection_verified;
+    if links.is_empty() {
+        return String::new();
+    }
+    format!(
+        " (\u{2713} over {}; --unverified skips it there)",
+        links.join(", ")
+    )
 }
 
 /// The checklist the device verification issues carry, generated so the issue

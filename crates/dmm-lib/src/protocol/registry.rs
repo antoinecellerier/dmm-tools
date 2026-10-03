@@ -70,6 +70,12 @@ pub struct SelectableDevice {
     /// meter with the radio built in, listed on Bluetooth alone, never
     /// opening USB.
     pub(crate) links: &'static [&'static str],
+    /// The links among `links` a hardware report has seen auto-detection
+    /// find this meter on after a restart; the evidence is in
+    /// docs/verification-backlog.md, "Device auto-detection". `dmm-cli
+    /// capture --unverified` leaves its detection check out on these, as it
+    /// does a step marked `.verified()`.
+    pub detection_verified: &'static [&'static str],
     /// The name prefixes a meter with the radio built in advertises, which
     /// is how an open for it tells it from an adapter or another meter in
     /// range; empty for every other entry.
@@ -522,6 +528,20 @@ mod tests {
                 panic!("devices {other} and {} both report {model:?}", device.id);
             }
             seen.push((device.id, model));
+        }
+    }
+
+    /// A confirmed detection names only links the entry lists, and only a
+    /// meter that needs hardware has one.
+    #[test]
+    fn detection_is_verified_on_listed_links_only() {
+        for device in DEVICES {
+            for link in device.detection_verified {
+                assert!(device.links.contains(link), "{}: {link}", device.id);
+            }
+            if !device.requires_hardware {
+                assert!(device.detection_verified.is_empty(), "{}", device.id);
+            }
         }
     }
 

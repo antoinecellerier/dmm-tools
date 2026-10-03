@@ -145,6 +145,7 @@ pub(crate) static OW18B: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(OW18_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES,
 };
 
@@ -160,6 +161,7 @@ pub(crate) static OW18E: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(OW18DE_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES,
 };
 
@@ -176,6 +178,7 @@ pub(crate) static B33: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(B33_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES,
 };
 
@@ -191,6 +194,7 @@ pub(crate) static B35T_PLUS: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(B35_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES,
 };
 
@@ -206,6 +210,7 @@ pub(crate) static B41T_PLUS: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(B41T_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES,
 };
 
@@ -221,6 +226,7 @@ pub(crate) static CM2100B: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(CM2100_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES,
 };
 
@@ -236,6 +242,7 @@ pub(crate) static CMS101: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(CMS_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_15,
 };
 
@@ -251,6 +258,7 @@ pub(crate) static CMS061: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(CMS_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_15,
 };
 
@@ -266,6 +274,7 @@ pub(crate) static OW65B: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(OW65_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_15,
 };
 
@@ -281,6 +290,7 @@ pub(crate) static OW67B: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(OW67_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_15,
 };
 
@@ -296,6 +306,7 @@ pub(crate) static OW69B: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(OW69_PAGE),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_15,
 };
 
@@ -311,6 +322,7 @@ pub(crate) static VC871: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(VC871_MANUAL),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_VOLTCRAFT,
 };
 
@@ -326,6 +338,7 @@ pub(crate) static VC891: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(VC891_MANUAL),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_VOLTCRAFT,
 };
 
@@ -341,6 +354,7 @@ pub(crate) static VC915: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(VC915_MANUAL),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_VOLTCRAFT,
 };
 
@@ -356,5 +370,6 @@ pub(crate) static VC925PV: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(VC925_MANUAL),
     links: LINKS,
+    detection_verified: &[],
     bluetooth_names: NAMES_VOLTCRAFT,
 };

@@ -24,5 +24,6 @@ pub static MOCK: SelectableDevice = SelectableDevice {
         "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#mock-modes",
     ),
     links: &[],
+    detection_verified: &[],
     bluetooth_names: &[],
 };
