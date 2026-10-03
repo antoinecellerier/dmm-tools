@@ -135,7 +135,16 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let tmp = path.with_file_name(tmp_name);
 
     fn write_and_sync(tmp: &Path, bytes: &[u8]) -> io::Result<()> {
-        let mut file = fs::File::create(tmp)?;
+        // A `.tmp` already there is a crash's leftover, or something planted:
+        // a link to another file, which `File::create` would follow and
+        // truncate. Remove it (the link, not what it points at) and create
+        // the temp file exclusively, which never follows a link and fails if
+        // one is put back in between.
+        let _ = fs::remove_file(tmp);
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(tmp)?;
         file.write_all(bytes)?;
         // sync_all before the rename: without it the rename can land while the
         // new contents are still only in the page cache, so a power loss would
@@ -337,5 +346,29 @@ mod tests {
         };
         let json = serde_json::to_string(&s).unwrap();
         assert_eq!(json, r#"{"device_family":"vc880","bluetooth":true}"#);
+    }
+
+    /// A `.tmp` link planted beside the file — by a theme pack unpacked into
+    /// the themes folder, say — must not have the write follow it into
+    /// another file.
+    #[cfg(unix)]
+    #[test]
+    fn a_planted_temp_link_is_not_followed() {
+        let dir = TempDir::new("planted-tmp-link");
+        let victim = dir.path().join("victim");
+        fs::write(&victim, b"keep me").unwrap();
+        let path = dir.path().join("theme.json");
+        std::os::unix::fs::symlink(&victim, dir.path().join("theme.json.tmp")).unwrap();
+
+        write_atomic(&path, b"{}").unwrap();
+
+        assert_eq!(fs::read(&victim).unwrap(), b"keep me");
+        assert_eq!(fs::read(&path).unwrap(), b"{}");
+        assert!(
+            !fs::symlink_metadata(&path)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
     }
 }
