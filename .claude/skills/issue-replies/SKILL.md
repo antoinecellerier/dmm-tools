@@ -92,7 +92,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
   ./dmm-cli --device <id> capture   # --unverified or --steps a,b for a subset
   ```
 
-  A capture report's `detection` section is the detection evidence: `found` with `power_cycled: true` settles the family's row in `docs/verification-backlog.md`, and a pick other than the report's `device_id` is a detection bug to chase from its `frames`.
+  A capture report's `detection` section is the detection evidence: `found` with `power_cycled: true` settles the family's row in `docs/verification-backlog.md` and adds the capture's bridge to the entry's `detection_verified`, so `--unverified` stops asking for it there; and a pick other than the report's `device_id` is a detection bug to chase from its `frames`.
 
   Give the OS-native fallback for an empty `list`: `lsusb | grep -iE '10C4:EA80|1A86:E429|1A86:E008|0820:0001'`, `ioreg -p IOUSB -l | grep -i CP2110`, Device Manager.
 
