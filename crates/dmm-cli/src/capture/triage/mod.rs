@@ -16,14 +16,14 @@ mod timeline;
 
 pub(crate) use log::install as install_triage_logger;
 
-use super::report::{CaptureReport, SampleData, StepResult, StepStatus, hex_bytes};
-use super::watch::{State, enter_only};
+use super::report::{CaptureReport, SampleData, StepResult, StepStatus, Tier, hex_bytes};
+use super::watch::{STABLE_FRAMES, State, StateWatcher, Verdict, enter_only};
 use crate::cli::TriageArgs;
 use decode::{EventKind, Wire};
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
-use dmm_lib::protocol::{CaptureStep, Protocol, capture_reports};
+use dmm_lib::protocol::{CaptureStep, Expect, Protocol, RangeExpect, capture_reports};
 
 pub(crate) fn cmd_triage(
     args: &TriageArgs,
@@ -312,6 +312,8 @@ impl<'a> Triage<'a> {
             }
         }
         out.extend(self.stale_starts());
+        out.extend(self.commands_without_effect());
+        out.extend(self.expectations());
         if let Some(line) = self.reparse_summary() {
             out.push(line);
         }
@@ -377,6 +379,133 @@ impl<'a> Triage<'a> {
                 fields.join(", ")
             )
         })
+    }
+
+    /// Captured steps whose key left no state the readings before it had
+    /// not shown. A step's own command is its last key, after any mode
+    /// switch the tool made first, judged as this build's capture judges a
+    /// key ([`StateWatcher::for_command`]): on a ZT-5B two keys that did
+    /// nothing passed on a −0.6 mA flicker (issue #31). A sub-step's presses
+    /// run from its first key to its last, and the tool filed its sample as
+    /// soon as the setting showed, often on a blank display, so only its
+    /// last reading is asked for a state the readings before had not shown.
+    fn commands_without_effect(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for step in self.steps.iter().filter(|s| s.captured()) {
+            let definition = self.definition(step.id());
+            let sub_step = step.is_sub_step();
+            if !sub_step && definition.is_none_or(|d| d.command.is_none()) {
+                continue;
+            }
+            let Some(wire) = &step.wire else { continue };
+            let (Some(&first), Some(&last)) = (wire.commands.first(), wire.commands.last()) else {
+                if step.result.frames_dropped > 0 {
+                    out.push(format!(
+                        "[command] {}: its key is not in the frames the report kept",
+                        step.id()
+                    ));
+                }
+                continue;
+            };
+            let from = if sub_step { first } else { last };
+            let dated: Vec<(usize, &Measurement)> =
+                wire.readings().filter_map(|(r, m)| Some((r?, m))).collect();
+            // The readings just before the key, as many as the capture took.
+            let earlier: Vec<Measurement> = dated
+                .iter()
+                .filter(|(r, _)| *r < from)
+                .map(|(_, m)| (*m).clone())
+                .collect();
+            let before = &earlier[earlier.len().saturating_sub(STABLE_FRAMES)..];
+            if before.is_empty() {
+                // Nothing to measure the key against: the cap trimmed the
+                // readings before it, or none decoded. A sub-step's key
+                // opens its frames, and its setting is judged by its id.
+                if !sub_step {
+                    out.push(format!(
+                        "[command] {}: no reading before its key was kept, so it is not judged",
+                        step.id()
+                    ));
+                }
+                continue;
+            }
+            // A `--sniff` run trusted no parse: the capture judged the key by
+            // the payload bytes, with no expectation.
+            let reads_parse = self.report.tier != Some(Tier::Sniff);
+            let expect = if sub_step || !reads_parse {
+                None
+            } else {
+                definition.and_then(|d| d.expect)
+            };
+            let after: Vec<&Measurement> = dated
+                .iter()
+                .filter(|(r, _)| *r > last)
+                .map(|(_, m)| *m)
+                .collect();
+            let took = if sub_step {
+                let seen: Vec<State> = before.iter().map(State::of).collect();
+                after.last().is_some_and(|m| !seen.contains(&State::of(m)))
+            } else {
+                let mut watcher = StateWatcher::for_command(expect, before, reads_parse);
+                after.iter().any(|m| watcher.feed(m) == Verdict::Ready)
+            };
+            if took {
+                continue;
+            }
+            let shows = after
+                .last()
+                .map(|m| describe(&SampleData::from_measurement(m)))
+                .unwrap_or_else(|| "no reading".to_string());
+            out.push(format!(
+                "[command] {}: no new state held after the key; the meter shows {shows}",
+                step.id()
+            ));
+        }
+        out
+    }
+
+    /// Captured steps whose last sample this build's step would not accept,
+    /// and a step this build no longer has. A `mode:X` or `range:X`
+    /// sub-step expects X; other sub-steps are not judged, as a setting can
+    /// rename the mode (a UT181A's REL makes "nS" "nS REL").
+    fn expectations(&self) -> Vec<String> {
+        if self.definitions.is_none() {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for step in self.steps.iter().filter(|s| s.captured()) {
+            let id = step.id();
+            if id.starts_with(super::FREEFORM_STEP_ID) {
+                continue;
+            }
+            let Some(definition) = self.definition(id) else {
+                out.push(format!("[expect] {id}: this build has no such step"));
+                continue;
+            };
+            let Some(Ok(last)) = step.parsed.last() else {
+                continue;
+            };
+            let verdict = match id.split_once('/').map(|(_, sub)| sub.split_once(':')) {
+                Some(Some(("mode", mode))) => {
+                    (last.mode != mode).then(|| format!("mode is {:?}, want {mode:?}", last.mode))
+                }
+                // The id holds the choice's label: "Auto", or the rung's.
+                Some(Some(("range", "Auto"))) => {
+                    Expect::new().range(RangeExpect::Auto).check(last).err()
+                }
+                Some(Some(("range", range))) => (last.range_label != range)
+                    .then(|| format!("range is {:?}, want {range:?}", last.range_label)),
+                Some(_) => None,
+                None => definition.expect.and_then(|e| e.check(last).err()),
+            };
+            if let Some(reason) = verdict {
+                out.push(format!(
+                    "[expect] {id}: {reason} (this build's step): {}",
+                    describe(&SampleData::from_measurement(last))
+                ));
+            }
+        }
+        out
     }
 
     /// Steps whose first sample shows the state the step before them ended
@@ -1137,6 +1266,129 @@ mod tests {
             text.contains("[lcd] ohm_ranges/range:600Ω: meter showed \"0.0001 V\"; decoded DC V 22V: 0.0001 V [AUTO] (matches this build)"),
             "{text}"
         );
+    }
+
+    /// A ZT-5B report, its steps' frames as the meter put them on air.
+    fn zt5b_report(steps: Vec<StepResult>) -> CaptureReport {
+        CaptureReport {
+            device_id: Some("zt5b".to_string()),
+            transport_name: Some(dmm_lib::BLUETOOTH.to_string()),
+            ..ut61eplus_report(steps)
+        }
+    }
+
+    /// A captured ZT-5B key step: `before` three times, the key, `after`
+    /// four times, and the last as its sample (`plain`, descrambled).
+    fn key_step(id: &str, key: &str, before: &str, after: &str, plain: &str) -> StepResult {
+        let mut list = vec![(0, "rx", before), (330, "rx", before), (660, "rx", before)];
+        list.push((660, "tx", key));
+        list.extend((1..=4).map(|i| (660 + 330 * i, "rx", after)));
+        let mut step = step(id, vec![]);
+        step.frames = decode::tests::frames(&list);
+        let payload = hex_bytes(plain).unwrap();
+        let m = (find_device("zt5b").unwrap().new_protocol)()
+            .parse_payload(&payload)
+            .unwrap();
+        step.samples = vec![SampleData::from_measurement(&m)];
+        step
+    }
+
+    /// Two keys a ZT-5B ignored passed on a flicker (issue #31); the one
+    /// that took is not flagged.
+    #[test]
+    fn a_key_that_left_the_meter_as_it_was_is_found() {
+        let dca = "1B 84 71 55 A2 21 C9 FA 22 AE";
+        let fahrenheit = "1B 84 71 55 A2 21 BD FE 66 EA";
+        let held = "1B 84 71 57 A2 21 BD FE 66 EA";
+        let report = zt5b_report(vec![
+            key_step(
+                "key_capacitance",
+                "EA EC 70 E5 A2 C1 32 71 64 81",
+                dca,
+                dca,
+                "5A A5 02 00 00 E0 FB 8B 44 04",
+            ),
+            key_step(
+                "key_hold",
+                "EA EC 70 E1 A2 C1 32 71 64 85",
+                fahrenheit,
+                held,
+                "5A A5 02 02 00 E0 8F 8F 00 40",
+            ),
+        ]);
+        let text = load::scrub_addresses(&Triage::new(&report, find_device("zt5b"), None).render());
+        assert_eq!(
+            findings(&text),
+            [
+                "[command] key_capacitance: no new state held after the key; the meter shows DC A: 0.0 mA",
+                "[expect] key_capacitance: mode is \"DC A\", want \"Capacitance\" (this build's step): DC A: 0.0 mA",
+            ],
+            "{text}"
+        );
+    }
+
+    /// A sub-step is held to the setting its id names; a step this build
+    /// dropped says so, and a plan run's steps are left alone without the
+    /// plan.
+    #[test]
+    fn a_sub_step_must_show_its_setting() {
+        let report = ut61eplus_report(vec![
+            step("dcv/range:2.2V", vec![dcv(b" 0.0001")]),
+            step("dcv/mode:AC V", vec![dcv(b" 0.0001")]),
+            step("dcv/hold:on", vec![dcv(b" 0.0001")]),
+            step("rpm", vec![dcv(b" 0.0001")]),
+        ]);
+        let text = triage(&report);
+        assert_eq!(
+            findings(&text),
+            [
+                "[expect] dcv/range:2.2V: range is \"22V\", want \"2.2V\" (this build's step): DC V 22V: 0.0001 V [AUTO]",
+                "[expect] dcv/mode:AC V: mode is \"DC V\", want \"AC V\" (this build's step): DC V 22V: 0.0001 V [AUTO]",
+                "[expect] rpm: this build has no such step",
+            ],
+            "{text}"
+        );
+        let planned = CaptureReport {
+            plan: Some("plan.yaml".to_string()),
+            ..report
+        };
+        let text = triage(&planned);
+        assert_eq!(findings(&text), ["none"], "{text}");
+    }
+
+    /// A key with no reading kept before it has nothing to be measured
+    /// against, and a plan run triaged without its plan has no definitions
+    /// to tell a key step or a same-dial step by.
+    #[test]
+    fn what_cannot_be_judged_is_not() {
+        let dca = "1B 84 71 55 A2 21 C9 FA 22 AE";
+        let mut trimmed = key_step(
+            "key_capacitance",
+            "EA EC 70 E5 A2 C1 32 71 64 81",
+            dca,
+            dca,
+            "5A A5 02 00 00 E0 FB 8B 44 04",
+        );
+        trimmed.frames.drain(..3);
+        trimmed.samples.clear();
+        let text = load::scrub_addresses(
+            &Triage::new(&zt5b_report(vec![trimmed]), find_device("zt5b"), None).render(),
+        );
+        assert_eq!(
+            findings(&text),
+            ["[command] key_capacitance: no reading before its key was kept, so it is not judged"],
+            "{text}"
+        );
+
+        let planned = CaptureReport {
+            plan: Some("plan.yaml".to_string()),
+            ..ut61eplus_report(vec![
+                step("dcv", vec![dcv(b" 0.0001")]),
+                step("acv", vec![dcv(b" 0.0001")]),
+            ])
+        };
+        let text = triage(&planned);
+        assert_eq!(findings(&text), ["none"], "{text}");
     }
 
     #[test]

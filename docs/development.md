@@ -136,6 +136,11 @@ The kinds of finding:
   difference in the unit alone.
 - `[stale]` is a step whose first sample shows the state the step before
   it ended in.
+- `[command]` is a captured step whose key left no new state, judged as
+  this build's capture judges a key.
+- `[expect]` is a captured step whose sample this build's step, or the
+  setting a sub-step names, would not accept, or a step this build no
+  longer has.
 - `[wire]` is a frame that did not decode, or a request nothing answered.
 - `[reparse]` counts samples this build reads differently from the build
   that wrote the report. The details follow the findings.
