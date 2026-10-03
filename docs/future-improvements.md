@@ -496,3 +496,11 @@ Use cases: organizing and identifying captures, adding test context without exte
 **Complexity:** Low-medium
 
 The top bar links to a newer release's page on GitHub. The What's New window could show that release's notes instead, from the same response the update check already reads — at the cost of rendering Markdown fetched from the network.
+
+### A reporter's say on a key the capture judged dead
+
+**Complexity:** Low
+
+A `capture` key step with no expectation passes only when the parse shows a new mode, range, flag, kind of value or sub-value. A key whose effect is a bit the decoder does not map (a backlight, a display toggle) is filed as "did nothing", with its frames but no samples, and the reporter is never asked. On that timeout the step could ask whether the meter did anything, and on a yes file the readings after the key as its samples with the answer beside them.
+
+Use cases: unverified families, where a key's effect is often in a byte the decoder does not read yet.
