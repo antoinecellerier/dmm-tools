@@ -5,8 +5,9 @@ and ANENG — send and accept. One protocol: every notification is XOR-scrambled
 with a fixed 20-byte key, starts `5A A5` once descrambled, and carries a type
 byte that selects one of four packet layouts, each a dump of the meter's LCD
 segments and annunciators. All four layouts are implemented, experimentally
-(`crates/dmm-lib/src/protocol/zotek/`), and no meter has been on our bench: every fact in §1-10 comes from ZOTEK's apps and manuals, and
-§11 compares them with community sources. The approach doc beside it records
+(`crates/dmm-lib/src/protocol/zotek/`), and no meter has been on our bench:
+§1-10 come from ZOTEK's apps and manuals, with what a reporter's ZT-5B
+showed tagged [HARDWARE], and §11 compares them with community sources. The approach doc beside it records
 the sources, the method and the clean-room boundary.
 
 Based on:
@@ -48,7 +49,7 @@ Confidence levels:
 - **[INFERRED]** — logical inference from the above, reason given
 - **[UNVERIFIED]** — no source confirms it; needs a real meter
   ([verification.md](verification.md) lists the checks)
-- **[HARDWARE]** — seen on a real meter: none yet for this family
+- **[HARDWARE]** — seen on a real meter, with the issue and the reporter
 - **[COMMUNITY]** — from a community source, §11 only; never in §1-10
 
 ---
@@ -262,6 +263,7 @@ only digit 2. Which positions the meters use is [UNVERIFIED].
 | EF | `EF` (the apps' patterns) | NCV, as both apps treat it (V2@253820, only while no function flag is set, V2@1830549; V1 BMA:504, 533) | [INFERRED] |
 | dashes | one to four `-` (the apps' patterns) | NCV, as for EF; what the count means is not stated | meaning [UNVERIFIED] |
 | OL | `0L` | overload, open resistance, reversed diode (300AB p.6, p.16, p.17; 5566SE p.7, drawn `0L`) | [KNOWN] |
+| blank | no digit lit, at most a DP: bytes 3-7 `00 00 10 00 80` in AC V | for one or two packets at a function or range change, the function's annunciators lit; 10 of 1,002 packets on a ZT-5B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31), @whymzml, Bluetooth) | [HARDWARE] on a ZT-5B; other types [UNVERIFIED] |
 
 In type 4, V2 shows "OL" for any non-digit glyph and matches no word
 (V2@856869); V1 renders the same glyph table (BCU:354-447).

@@ -13,6 +13,7 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::unknown_mode;
+use log::debug;
 use std::borrow::Cow;
 
 /// A unit annunciator.
@@ -300,6 +301,10 @@ pub(crate) struct Layout {
     prefix_names_position: bool,
     /// Most sub-values one packet carries.
     pub(crate) max_aux_values: usize,
+    /// Whether a meter is seen to blank its main display between readings,
+    /// so a blank one is skipped without a report: a ZT-5B does at each
+    /// function or range change (spec §6.4; issue #31).
+    blanks_between_readings: bool,
 }
 
 /// Type 3, named for the ZT-300AB (spec §7.1).
@@ -346,6 +351,7 @@ pub(crate) static ZT300AB: Layout = Layout {
     ],
     prefix_names_position: true,
     max_aux_values: 0,
+    blanks_between_readings: false,
 };
 
 /// Type 4, named for the ZT-5566 family (spec §7.4).
@@ -399,6 +405,7 @@ pub(crate) static ZT5566SE: Layout = Layout {
     ],
     prefix_names_position: true,
     max_aux_values: 1,
+    blanks_between_readings: false,
 };
 
 /// Type 1, named for the ZT-5BQ clamp (spec §7.2).
@@ -439,6 +446,7 @@ pub(crate) static ZT5BQ: Layout = Layout {
     // An auto-ranging clamp: a prefix is a range step (spec §1).
     prefix_names_position: false,
     max_aux_values: 0,
+    blanks_between_readings: false,
 };
 
 /// Type 2, named for the ZT-5B (spec §7.3).
@@ -479,6 +487,7 @@ pub(crate) static ZT5B: Layout = Layout {
     // An auto-only pocket meter: a prefix is a range step (spec §1).
     prefix_names_position: false,
     max_aux_values: 0,
+    blanks_between_readings: true,
 };
 
 /// Every layout, by type byte: one for each type the apps define (spec §1).
@@ -903,25 +912,35 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
 }
 
 /// Whether the main display of a whole descrambled packet has a digit lit:
-/// one with none has no reading, and [`decode`] refuses it. No section of
-/// the spec shows a blank main display, so one is reported.
+/// one with none has no reading, and [`decode`] refuses it. It is reported,
+/// except on a layout whose meter is seen to send one between readings.
 pub(super) fn shows_digits(packet: &[u8]) -> bool {
     let Ok(layout) = layout_of(packet) else {
         return false;
     };
     let blank = layout.digits.main(packet).blank();
     if blank {
-        Unrecognised {
-            id: layout.id,
-            packet,
-        }
-        .report(BLANK_MAIN);
+        report_blank(layout, packet);
     }
     !blank
 }
 
 /// What a blank main display is reported as.
 const BLANK_MAIN: &str = "blank main display";
+
+/// Report a blank main display, or log it where the layout's meter is seen
+/// to send one between readings.
+fn report_blank(layout: &Layout, packet: &[u8]) {
+    if layout.blanks_between_readings {
+        debug!("zotek: blank main display, skipped: {packet:02X?}");
+    } else {
+        Unrecognised {
+            id: layout.id,
+            packet,
+        }
+        .report(BLANK_MAIN);
+    }
+}
 
 /// [`decode`], and what the packet shows for the keys.
 pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
@@ -931,11 +950,11 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
         packet,
     };
     // A main display with no digit lit, every glyph a blank (`00`, spec
-    // §6.1), has no reading to give: the packet is reported and refused,
-    // before its other bits are.
+    // §6.1), has no reading to give: the packet is refused before its other
+    // bits are read.
     let row = layout.digits.main(packet);
     if row.blank() {
-        unrecognised.report(BLANK_MAIN);
+        report_blank(layout, packet);
         return Err(Error::invalid_response(
             "zotek: no digit lit on the main display",
             packet,
@@ -1842,7 +1861,8 @@ mod tests {
     }
 
     /// No digit lit on the main display: no reading to give, so the packet
-    /// is reported and refused, a sign or a point on the blanks included.
+    /// is refused, a sign or a point on the blanks included, and reported,
+    /// except from a ZT-5B, which sends one at each function change.
     #[test]
     fn a_blank_main_display_is_refused() {
         for packet in [
@@ -1854,6 +1874,9 @@ mod tests {
             assert!(m.is_err(), "{packet:02X?}: {m:?}");
             assert_eq!(reports.len(), 1, "{packet:02X?}: {reports:?}");
         }
+        let (m, reports) = capture_reports(|| decode(&t2("    ", Some(2), &[(8, 0x0A)])));
+        assert!(m.is_err(), "{m:?}");
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     /// A blank secondary display carries no sub-value, its unit lit or not.

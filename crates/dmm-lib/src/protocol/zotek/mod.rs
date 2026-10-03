@@ -135,8 +135,8 @@ impl Protocol for ZotekProtocol {
         // The extractor never fails, so the recovery mode and the skip
         // pattern are never used, and it only cuts packets of the four
         // types, each with a layout. About 2.6 packets a second arrive
-        // (spec §11.4), well inside read_frame's 2 s. A packet with no digit lit on the main
-        // display has no reading, so it is reported and skipped for the
+        // (spec §11.4), well inside read_frame's 2 s. A packet with no digit
+        // lit on the main display has no reading, so it is skipped for the
         // next one.
         let packet = framing::read_frame(
             &mut self.rx_buf,
@@ -429,22 +429,21 @@ mod tests {
         assert!(proto.request_measurement(&mock).is_err());
     }
 
-    /// A packet with no digit lit gives no reading: the read reports it and
-    /// skips it for the next one.
+    /// A packet with no digit lit gives no reading: the read skips it for
+    /// the next one, quietly, since a ZT-5B sends one at each function or
+    /// range change. This one, AC V with only a decimal point lit, is from
+    /// a ZT-5B switching to AC V (issue #31).
     #[test]
-    fn a_blank_display_is_skipped() {
-        let (raw, plain) = EXAMPLES[0];
-        let mut blank = plain.to_vec();
-        blank[3] &= 0x0F;
-        blank[4..7].fill(0);
-        blank[7] &= 0xF0;
+    fn a_blank_display_is_skipped_quietly() {
+        let (raw, plain) = EXAMPLES[2];
+        let blank = [0x5A, 0xA5, 0x02, 0x00, 0x00, 0x10, 0x00, 0x80, 0x0A, 0x00];
         let mut stream = scrambled(&blank);
         stream.extend_from_slice(raw);
         let mock = MockTransport::new(vec![stream]);
-        let mut proto = ZotekProtocol::new_zt300ab();
+        let mut proto = ZotekProtocol::new_zt5b();
         let (m, reports) = crate::protocol::capture_reports(|| proto.request_measurement(&mock));
         assert_eq!(m.unwrap().raw_payload, plain);
-        assert_eq!(reports.len(), 1, "{reports:?}");
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     /// Joining mid-packet onto bytes that happen to read `1B 84 70`: the
