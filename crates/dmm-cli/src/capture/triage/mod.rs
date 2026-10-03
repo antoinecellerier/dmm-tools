@@ -9,6 +9,7 @@
 //! line without it.
 
 mod decode;
+mod fixtures;
 mod load;
 mod log;
 mod replay;
@@ -36,6 +37,9 @@ pub(crate) fn cmd_triage(
     let mut text = triage.render();
     if let Some(steps) = &args.timeline {
         text.push_str(&timeline::render(&triage, steps));
+    }
+    if args.fixtures {
+        text.push_str(&fixtures::render(&triage));
     }
     print!("{}", load::scrub_addresses(&text));
     Ok(())
@@ -1078,7 +1082,7 @@ fn tally(items: impl IntoIterator<Item = String>) -> Vec<(String, usize)> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use dmm_lib::protocol::make_test_measurement;
     use dmm_lib::protocol::registry::find_device;
@@ -1094,7 +1098,7 @@ mod tests {
         ))
     }
 
-    fn dcv(digits: &[u8; 7]) -> SampleData {
+    pub(super) fn dcv(digits: &[u8; 7]) -> SampleData {
         sample(0x02, digits)
     }
 
@@ -1102,14 +1106,14 @@ mod tests {
         sample(0x00, digits)
     }
 
-    fn step(id: &str, samples: Vec<SampleData>) -> StepResult {
+    pub(super) fn step(id: &str, samples: Vec<SampleData>) -> StepResult {
         StepResult {
             samples,
             ..StepResult::new(id, "", StepStatus::Captured)
         }
     }
 
-    fn ut61eplus_report(steps: Vec<StepResult>) -> CaptureReport {
+    pub(super) fn ut61eplus_report(steps: Vec<StepResult>) -> CaptureReport {
         CaptureReport {
             tool_version: "0.8.0-dev (test)".to_string(),
             device_id: Some("ut61eplus".to_string()),

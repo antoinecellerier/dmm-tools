@@ -125,8 +125,9 @@ It prints four sections:
   payload lengths, reading intervals, and how soon keys and requests were
   answered.
 
-`--timeline` adds each step's frames in order, or only the steps it names,
-comma-separated. It shows each reading with its payload, the keys and the
+`--fixtures` adds each distinct sample as a golden fixture, for picking
+(see [Golden file tests](#golden-file-tests)). `--timeline` adds each
+step's frames in order, and `--timeline=<step>,<step>` only those steps'. It shows each reading with its payload, the keys and the
 bytes back, and what the library logged at each frame. Identical readings
 fold into one line.
 
@@ -162,8 +163,10 @@ copy a sample directly from a capture report into a golden file.
 To add a golden test:
 
 1. Run `dmm-cli --device <id> capture` and complete the steps
-2. Open the capture YAML and find a sample with known-good values
-3. Copy the sample fields into a new `.yaml` file in `tests/golden/<id>/`
+2. Run `dmm-cli triage <report> --fixtures` and pick a sample whose values
+   the meter's screen confirms
+3. Save it as a new `.yaml` file in `tests/golden/<id>/`, its first line
+   saying what the frame shows and its second where it was captured
 4. Run `cargo test --workspace` to verify
 
 Golden tests run as part of the standard test suite. They are the primary

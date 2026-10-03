@@ -205,6 +205,9 @@ pub(crate) struct TriageArgs {
         value_delimiter = ','
     )]
     pub(crate) timeline: Option<Vec<String>>,
+    /// Also print each distinct sample as a golden fixture to pick from
+    #[arg(long)]
+    pub(crate) fixtures: bool,
 }
 
 /// The `capture` flags, handed to [`crate::capture::cmd_capture`] whole.
