@@ -61,7 +61,8 @@ fn build_spec_parts(
         return Vec::new();
     };
     let mut parts = Vec::new();
-    if fields.resolution {
+    // An empty resolution is one the manual doesn't print.
+    if fields.resolution && !spec.resolution.is_empty() {
         parts.push(format!("{res_label} {}", spec.resolution));
     }
     if fields.accuracy
@@ -206,7 +207,7 @@ fn show_specs_body(
     let weak = ui.visuals().weak_text_color();
 
     if let Some(spec) = spec {
-        if fields.resolution {
+        if fields.resolution && !spec.resolution.is_empty() {
             ui.label(
                 RichText::new(format!("Resolution  {}", spec.resolution))
                     .font(egui::FontId::proportional(main_font)),
@@ -591,6 +592,29 @@ mod tests {
             }
             assert!(texts.iter().any(|t| t == MANUAL), "{texts:?}");
         }
+    }
+
+    /// A row whose manual prints no resolution shows its accuracy alone,
+    /// unfolded and on one line.
+    #[test]
+    fn a_row_with_no_resolution_shows_only_its_accuracy() {
+        let row = SpecInfo {
+            resolution: "",
+            accuracy: DC_BAND,
+        };
+        let texts = panel_texts(&row, true, SpecFields::default());
+        assert!(
+            texts.iter().any(|t| t == "Accuracy  \u{00B1}(0.1%+5)"),
+            "{texts:?}"
+        );
+        assert!(
+            !texts.iter().any(|t| t.starts_with("Resolution")),
+            "{texts:?}"
+        );
+        assert_eq!(
+            build_spec_parts(Some(&row), SpecFields::default(), "Res:", "Acc:"),
+            ["Acc: \u{00B1}(0.1%+5)"]
+        );
     }
 
     /// The panel doesn't fold itself: a click anywhere on the heading row,

@@ -16,7 +16,8 @@ pub struct AccuracyBand {
 /// Per-range specification data (resolution and accuracy).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpecInfo {
-    /// Display resolution (e.g. "0.01mV", "1Ω").
+    /// Display resolution (e.g. "0.01mV", "1Ω"); empty where the manual
+    /// prints none for the range.
     pub resolution: &'static str,
     /// Accuracy bands: 1 for DC, 2-3 for AC with multiple frequency ranges.
     pub accuracy: &'static [AccuracyBand],

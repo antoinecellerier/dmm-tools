@@ -304,9 +304,12 @@ fn to_json(dev: &SelectableDevice, sheet: &[SpecSheetTable]) -> Value {
                         .iter()
                         .map(|b| json!({"freq_range": b.freq_range, "accuracy": b.accuracy}))
                         .collect();
+                    // An empty resolution is one the manual doesn't print,
+                    // which a transcription records as null.
+                    let resolution = Some(r.spec.resolution).filter(|s| !s.is_empty());
                     json!({
                         "range": r.label,
-                        "resolution": r.spec.resolution,
+                        "resolution": resolution,
                         "accuracy": accuracy,
                     })
                 })
