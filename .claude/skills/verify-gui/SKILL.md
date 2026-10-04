@@ -7,8 +7,6 @@ description: >-
   window on the live desktop. Use for any GUI change that needs to be seen or
   driven: a screenshot, a theme or contrast check, a layout check at any window
   size, or a shortcut/click/scroll test.
-paths:
-  - "crates/dmm-gui/**"
 allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/gui-display.sh *)
 ---
 
