@@ -5,4 +5,5 @@ mode: "Hz"
 value: "49.93"
 unit: "Hz"
 range_label: ""
+resolution: "0.01Hz"
 flags: {}

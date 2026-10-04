@@ -69,7 +69,11 @@ All ZOTEK's own, or ZOTEK's distributors'. Fetched 2026-09-25, analysed
    Read from the rendered pages; text extraction only to locate passages.
    Tagged [KNOWN] with file and page. None prints its own model number (the
    app sections in the ZT-300AB and ZT-5566SE manuals list the ZT-300AB,
-   ZT-5BQ and ZT-5B); the file names are the link.
+   ZT-5BQ and ZT-5B); the file names are the link. The ZT-5B spec data comes
+   from `ZT-5B.pdf`'s "Electrical Specifications" (PDF p. 2) and its
+   operating instructions (PDF pp. 1-2), cross-checked against the ZT-5B
+   product page on zotektools.com (https://zotektools.com/?lm2/121.html,
+   fetched 2026-10-04), which gives ranges only.
 
 | File | Pages | Drive id | SHA-256 |
 |---|---|---|---|
@@ -82,7 +86,8 @@ All ZOTEK's own, or ZOTEK's distributors'. Fetched 2026-09-25, analysed
 | `ZT-5566S.pdf` | 36 | `1Ijp-K4ey770sHOo7BEYeNLb337BWfdin` | same file as `ZT-5566SE.pdf` |
 
 5. **Product and distributor pages**, for the model list, the rebrand
-   pairings and popularity only — no protocol content: zotektools.com product
+   pairings, popularity and the ZT-5B spec cross-check (item 4) only — no
+   protocol content: zotektools.com product
    and support pages, szzotek.com (h-nd-39, h-col-159), zoyi-tw.com,
    zoyi.co.uk, bsidemeter.com, iTunes lookups of the iOS apps, manuals.plus
    copies of the ANENG AN9002 and V05B manuals (not archived), and reseller

@@ -53,7 +53,8 @@ pub struct SpecSheetTable {
 pub struct SpecSheetRow {
     /// The range as the manual labels it.
     pub label: &'static str,
-    /// The range byte the row is for, `None` where any range byte is.
+    /// The range byte the row is for (or, where the frames carry no range
+    /// byte, the family's stand-in), `None` where any range byte is.
     pub range_raw: Option<u8>,
     pub spec: &'static SpecInfo,
 }
@@ -61,7 +62,8 @@ pub struct SpecSheetRow {
 /// One row of a manual spec table, keyed by the range byte it answers.
 #[derive(Debug)]
 pub(crate) struct RangeSpec {
-    /// The range byte, `None` for a mode with one range whose byte varies
+    /// The range byte (or, where the frames carry no range byte, the
+    /// family's stand-in), `None` for a mode with one range whose byte varies
     /// on the wire (or that has no reading at all).
     pub(crate) range: Option<u8>,
     /// The range as the manual labels it.

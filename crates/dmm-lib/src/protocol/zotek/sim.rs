@@ -30,6 +30,7 @@ use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::protocol::registry::{Brand, SelectableDevice, factory};
 use crate::protocol::{DeviceFamily, DeviceProfile, Protocol, Stability};
+use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::{Link, Transport};
 use log::debug;
 use std::cell::{Cell as StdCell, RefCell};
@@ -630,6 +631,19 @@ impl Protocol for MockZt5b {
     fn profile(&self) -> &DeviceProfile {
         &self.profile
     }
+
+    // The ZT-5B's spec tables, as the driver gives them.
+    fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        self.driver.spec_info(m)
+    }
+
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
+        self.driver.mode_spec_info(m)
+    }
+
+    fn spec_sheet(&self) -> Vec<SpecSheetTable> {
+        self.driver.spec_sheet()
+    }
 }
 
 #[cfg(test)]
@@ -832,6 +846,24 @@ mod tests {
         press(&mut mock, "auto_function");
         let m = read(&mut mock);
         assert!(matches!(m.value, MeasuredValue::NoReading("Auto")), "{m:?}");
+    }
+
+    /// The readings carry the ZT-5B's specs, as `Dmm` attaches them: the
+    /// Auto notes while the word shows, then the battery's row.
+    #[test]
+    fn readings_carry_the_zt5b_specs() {
+        let (mut mock, clock) = mock();
+        let m = read(&mut mock);
+        assert_eq!(m.mode, "Auto");
+        assert!(m.spec.is_none());
+        let notes = m.mode_spec.expect("Auto's notes").notes;
+        assert!(notes.iter().any(|n| n.contains("SEL/NCV")), "{notes:?}");
+
+        clock.advance(secs(8.0));
+        let m = read(&mut mock);
+        assert_eq!(m.mode, "DC V");
+        assert_eq!(m.spec.map(|s| s.resolution), Some("0.01V"));
+        assert!(m.mode_spec.is_some());
     }
 
     /// Each function key lands on its function: (key, mode, unit).

@@ -14,6 +14,7 @@
 //! - `layout.rs`: each layout's bit table, and packet → `Measurement`
 //! - `keys.rs`: the remote keys each layout offers, and their frames
 //! - `capture.rs`: the capture steps per layout
+//! - `specs.rs`: the ZT-5B manual's spec tables
 //! - `sim.rs`: a simulated ZT-5B, the `mock-zt5b` device
 
 mod capture;
@@ -23,6 +24,7 @@ mod glyph;
 mod keys;
 mod layout;
 pub(crate) mod sim;
+mod specs;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
@@ -31,6 +33,7 @@ use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
 };
+use crate::specs::{ModeSpecInfo, ModeSpecs, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 use layout::{Layout, Showing};
 use log::{debug, warn};
@@ -64,6 +67,9 @@ pub(crate) struct ZotekProtocol {
     /// The type byte of the last packet decoded on this connection, and
     /// what it showed, which the key codes follow; `None` before the first.
     showing: Option<(u8, Showing)>,
+    /// The model's spec tables, empty for a layout whose manual has none
+    /// transcribed.
+    specs: &'static [&'static ModeSpecs],
 }
 
 impl ZotekProtocol {
@@ -83,6 +89,7 @@ impl ZotekProtocol {
             },
             warned_layout: false,
             showing: None,
+            specs: &[],
         }
     }
 
@@ -105,7 +112,15 @@ impl ZotekProtocol {
         // through the AC bit and the A unit, each confirmed in another
         // function; the V05B sends the same layout (spec §11.4).
         zt5b.profile.stability = Stability::Verified;
+        zt5b.specs = specs::ALL;
         zt5b
+    }
+
+    /// Whether reading `m` takes the entry's spec tables: it has some, and
+    /// the packet is in the entry's layout, as another layout's packet is
+    /// decoded too, from a meter the tables are not for.
+    fn has_specs(&self, m: &Measurement) -> bool {
+        !self.specs.is_empty() && m.raw_payload.get(frame::TYPE_AT) == Some(&self.layout.type_byte)
     }
 
     /// The layout a packet of `type_byte` is in, the first time it is not
@@ -200,6 +215,24 @@ impl Protocol for ZotekProtocol {
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
         capture::steps(self.layout)
+    }
+
+    fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        if !self.has_specs(m) {
+            return None;
+        }
+        specs::row(m).map(|row| &row.spec)
+    }
+
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
+        if !self.has_specs(m) {
+            return None;
+        }
+        specs::table(m).map(|(table, _)| &table.mode)
+    }
+
+    fn spec_sheet(&self) -> Vec<SpecSheetTable> {
+        self.specs.iter().map(|t| t.sheet_table()).collect()
     }
 }
 

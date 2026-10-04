@@ -930,6 +930,23 @@ mod tests {
         assert!(m.mode_spec.is_some_and(|ms| ms.input_impedance.is_some()));
     }
 
+    /// A ZT-5B's row follows where its display puts the point, which the
+    /// replayed payload carries.
+    #[test]
+    fn a_replayed_zt5b_reading_carries_its_specs() {
+        // 4.036 V DC, from `tests/golden/zt5b/dcv.yaml`.
+        const ZT5B_DCV: &str = "5A A5 02 40 FE 8B EF 87 06 00";
+        let mut text = header("zt5b", RECORDED, None, None);
+        text.push_str(&sample_line(Duration::ZERO, &payload(ZT5B_DCV)));
+        let mut dmm = parsed(&text)
+            .open(Clock::manual())
+            .expect("the replay opens");
+        let m = dmm.request_measurement().expect("the first frame is due");
+        assert_eq!(m.mode, "DC V");
+        assert_eq!(m.spec.map(|s| s.resolution), Some("0.001V"));
+        assert!(m.mode_spec.is_some_and(|ms| ms.notes.contains(&"Max 600V")));
+    }
+
     #[test]
     fn the_first_sample_is_ready_at_session_zero() {
         let (mut dmm, _clock, start) = open_manual();

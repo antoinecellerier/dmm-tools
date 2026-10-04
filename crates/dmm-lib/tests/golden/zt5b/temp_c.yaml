@@ -5,4 +5,5 @@ mode: "°C"
 value: "28"
 unit: "°C"
 range_label: ""
+resolution: ""
 flags: {}

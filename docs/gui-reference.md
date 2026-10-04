@@ -348,9 +348,9 @@ Input Z and notes in the full panel. When no spec data is available
 (unsupported device or unrecognized mode), only the Manual link is shown (if
 configured). If neither specs nor manual URL exist, nothing renders.
 
-**Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804, and
-Mock (the UT61E+'s figures; none in its temperature modes). Other devices
-show only the Manual link.
+**Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804,
+ZT-5B / V05B, and Mock (the UT61E+'s figures; none in its temperature modes).
+Other devices show only the Manual link.
 
 ## Scale
 

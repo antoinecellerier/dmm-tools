@@ -5,4 +5,5 @@ mode: "Ω"
 value: "19.28"
 unit: "MΩ"
 range_label: ""
+resolution: "0.01MΩ"
 flags: {}

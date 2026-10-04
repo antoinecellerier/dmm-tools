@@ -553,6 +553,19 @@ pub(super) enum Coupling {
     Both,
 }
 
+impl Coupling {
+    /// The coupling reading `m`, decoded here, is in: its `mode_raw`'s
+    /// coupling bits (see [`Function`]).
+    pub(super) fn shown_in(m: &Measurement) -> Self {
+        match m.mode_raw & 0x30 {
+            0x10 => Coupling::Dc,
+            0x20 => Coupling::Ac,
+            0x30 => Coupling::Both,
+            _ => Coupling::None,
+        }
+    }
+}
+
 /// The measuring function the annunciators show, with the code
 /// [`Measurement::mode_raw`] carries for it.
 ///

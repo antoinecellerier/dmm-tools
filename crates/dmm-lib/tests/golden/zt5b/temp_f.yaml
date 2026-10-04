@@ -5,4 +5,5 @@ mode: "°F"
 value: "83"
 unit: "°F"
 range_label: ""
+resolution: ""
 flags: {}

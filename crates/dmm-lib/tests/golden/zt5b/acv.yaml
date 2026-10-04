@@ -5,4 +5,5 @@ mode: "AC V"
 value: "1.638"
 unit: "V"
 range_label: ""
+resolution: "0.001V"
 flags: {}

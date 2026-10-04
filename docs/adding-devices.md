@@ -192,7 +192,7 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 ### Specification data
 
 Add spec tables once a first hardware capture has confirmed the model; until then the Specifications panel shows the manual link, and the family's `verification.md` carries the task. If the device manual includes accuracy/resolution tables per mode and range:
-1. Add the spec tables in the family module, following `ut61eplus/specs/`, `ut80x/specs_ut804.rs` or `ut181a/specs.rs`. How a manual table maps onto rows is in `crates/dmm-lib/src/specs.rs` and those files' module docs.
+1. Add the spec tables in the family module, following `ut61eplus/specs/`, `ut80x/specs_ut804.rs` or `ut181a/specs.rs`. How a manual table maps onto rows is in `crates/dmm-lib/src/specs.rs` and those files' module docs; a meter whose frames carry no range byte keys its rows on what its display shows (`zotek/specs.rs`).
 2. **Never fabricate values.** If a cell in the manual is ambiguous or you can't read it, give the row an empty accuracy list or omit the entry. Wrong specs are worse than missing specs.
 3. Watch for common manual pitfalls:
    - **Merged cells** — one accuracy value spanning multiple ranges
