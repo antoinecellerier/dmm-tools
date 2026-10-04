@@ -307,10 +307,19 @@ mod tests {
         let folder = Folder::new("clash");
         let mut app = customized_app();
         app.save_theme(folder.0.join("plum.json"), false, Some(&folder.0));
+        let saved = std::fs::read(folder.0.join("plum.json")).unwrap();
         app.settings.named_theme = None;
+        app.settings.color_overrides.light.accent = Some(HexColor(Color32::from_rgb(1, 2, 3)));
         app.save_theme(folder.0.join("PLUM.json"), false, Some(&folder.0));
-        assert!(!folder.0.join("PLUM.json").exists());
         assert!(app.toast.as_ref().is_some_and(|t| t.is_error));
+        // Listed rather than probed: on a case-insensitive file system
+        // (Windows, macOS) `PLUM.json` names `plum.json`.
+        let files: Vec<_> = std::fs::read_dir(&folder.0)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(files, ["plum.json"]);
+        assert_eq!(std::fs::read(folder.0.join("plum.json")).unwrap(), saved);
     }
 
     /// Saving a tweaked theme back over its own file keeps its name and
