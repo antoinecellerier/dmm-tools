@@ -623,6 +623,9 @@ timestamp,mode,value,unit,range,flags,marker,note
     #[test]
     fn a_connect_after_an_import_starts_afresh() {
         let mut app = app();
+        // The mock: Auto-detect would probe the machine's USB and Bluetooth
+        // from a thread that outlives the test.
+        app.settings.shared.device_family = "mock".to_string();
         let path = file("then-connect.csv", CSV);
         import(&mut app, path.clone());
         app.connect(&egui::Context::default());
