@@ -294,7 +294,7 @@ both. Before changing a family's protocol code, read its
 2. Rename the heading to the version. If the release has a theme, add a short tagline stating what it changes in scope or intent: `## v0.2.0 — Multi-Device Protocol Support`. Open the section with a one- or two-sentence summary of the intent and the main areas touched. Close it with the `**Full Changelog**` compare link, as the existing entries do
 3. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.3.0"`
 4. Update `Cargo.lock`: `cargo update --workspace`
-5. With the USB cable unplugged — three scenes skip themselves otherwise — regenerate the GUI pictures with `scripts/doc-screenshots.sh all`, review the deltas and the PNGs, and commit the ones whose changelog entry changed what they show
+5. Regenerate the GUI pictures with `scripts/doc-screenshots.sh all`, review the deltas and the PNGs, and commit the ones whose changelog entry changed what they show. Three scenes need no meter attached: the script checks with `dmm-cli list` and names any it skipped. If it skips any, unplug the cable and run those scenes again
 6. Run `scripts/package-docs.py <dir>` (needs `pandoc`): a dead relative link in a shipped doc fails the tagged build
 7. Commit: `git commit -am "Release v0.3.0"`
 8. Push the release commit and wait for CI to go green: `git push`

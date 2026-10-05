@@ -22,6 +22,7 @@ A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite 
 
 ### Physical device interaction
 - When testing requires physical device interaction (dial position, lead placement, connections), describe the setup and **wait for user confirmation** before each step. Never assume the device is in the right state.
+- What a check can answer, check yourself before asking: `dmm-cli list` shows any attached cable or meter. When a step needs a cable out and the check finds one (e.g. `scripts/doc-screenshots.sh` names skipped scenes), ask the user to unplug it, wait for confirmation, then rerun the skipped part.
 
 ### Specification data
 - **Never fabricate specification data.** If a value cannot be directly read from the source document, mark it unknown rather than guessing.
