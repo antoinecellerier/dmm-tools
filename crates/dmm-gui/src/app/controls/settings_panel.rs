@@ -167,6 +167,17 @@ const SETTINGS_RESERVE: f32 = 160.0;
 /// beside a sliver of content, and nothing can be found in it.
 const SETTINGS_MIN_HEIGHT: f32 = 96.0;
 
+/// How many frames the Zoom row is followed after a zoom change: the new
+/// scale applies from the next frame, and the panel takes its size from the
+/// frame before that.
+const ZOOM_FOLLOW_FRAMES: u8 = 3;
+
+/// The zoom last seen by the settings panel, and the frames left to follow
+/// the Zoom row for.
+fn zoom_follow_id() -> egui::Id {
+    egui::Id::new("settings_zoom_follow")
+}
+
 /// How tall the scrolling settings rows may be, given the window height and
 /// where the rows start. Floored to whole points so that a fractional
 /// overflow can't raise a scrollbar beside rows that fit.
@@ -185,6 +196,9 @@ impl App {
         ui: &mut Ui,
     ) -> Option<egui::scroll_area::ScrollAreaOutput<()>> {
         if !self.settings_open {
+            // A zoom changed while the panel is closed is not followed into
+            // view when it opens.
+            ui.data_mut(|d| d.remove::<(u32, u8)>(zoom_follow_id()));
             return None;
         }
 
@@ -497,7 +511,7 @@ impl App {
     /// **Zoom** and how the window sits on the desktop, then the update
     /// check.
     fn show_window_rows(&mut self, ui: &mut Ui) {
-        ui.horizontal_wrapped(|ui| {
+        let zoom_row = ui.horizontal_wrapped(|ui| {
             let chips = Self::ZOOM_LEVELS.iter().map(|&level| Chip {
                 value: level,
                 selected: self.settings.zoom_pct == level,
@@ -513,6 +527,7 @@ impl App {
                 self.settings.save();
             }
         });
+        self.keep_zoom_row_in_view(ui, &zoom_row.response);
 
         // Always on top last: its Wayland caption is a sentence that wraps
         // rather than running off the edge of a narrow window, and egui
@@ -565,6 +580,27 @@ impl App {
                 }
             });
         }
+    }
+
+    /// After the zoom changes — from this row, a shortcut or anywhere else —
+    /// every row reflows at the new scale under an unchanged scroll offset,
+    /// and the Zoom row often lands out of view. Follow it for the frames the
+    /// new scale takes to settle, so the row just used stays on screen.
+    fn keep_zoom_row_in_view(&self, ui: &Ui, row: &egui::Response) {
+        let zoom = self.settings.zoom_pct;
+        let (seen, frames) = ui
+            .data(|d| d.get_temp::<(u32, u8)>(zoom_follow_id()))
+            .unwrap_or((zoom, 0));
+        let frames = if seen != zoom {
+            ZOOM_FOLLOW_FRAMES
+        } else {
+            frames
+        };
+        if frames > 0 {
+            row.scroll_to_me(None);
+            ui.ctx().request_repaint();
+        }
+        ui.data_mut(|d| d.insert_temp(zoom_follow_id(), (zoom, frames.saturating_sub(1))));
     }
 
     /// **Theme**, **Colors**, **Customize colors** and **Graph lines**.
@@ -633,6 +669,7 @@ mod tests {
     struct SettingsRun {
         app: App,
         ctx: egui::Context,
+        /// The window, in OS logical points: egui's points at 100% zoom.
         screen: Rect,
         /// Jumps a second per frame, so egui's scroll animation — a few
         /// hundred milliseconds — has always finished by the next one.
@@ -666,12 +703,19 @@ mod tests {
             self.seconds += secs;
             let mut out = self.ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(self.screen),
+                    // In points, as egui-winit passes it: the window's size
+                    // over the scale, so a zoom shrinks it as on screen.
+                    screen_rect: Some(Rect::from_min_size(
+                        Pos2::ZERO,
+                        self.screen.size() / self.ctx.pixels_per_point(),
+                    )),
                     events,
                     time: Some(self.seconds),
                     ..Default::default()
                 },
                 |ui| {
+                    // As the app does at the start of every frame.
+                    app.apply_zoom(ui.ctx());
                     egui::Panel::top("top_bar").show(ui, |ui| {
                         let ctx = ui.ctx().clone();
                         app.show_top_bar(ui, &ctx);
@@ -1502,6 +1546,41 @@ mod tests {
             background.y0 < header.y1 + line,
             "a line is left between the header and the swatches: {background:?}"
         );
+    }
+
+    /// A zoom picked on a short window reflows every row at the new scale
+    /// under the same scroll offset: the Zoom row is followed back into view,
+    /// whether a chip was clicked or the zoom came from a shortcut.
+    #[test]
+    fn the_zoom_row_stays_in_view_after_a_zoom_change() {
+        let zoom_row_in_view = |run: &mut SettingsRun, label: &str| {
+            for _ in 0..4 {
+                run.frame(vec![]);
+            }
+            let frame = run.frame(vec![]);
+            let chip = node_bounds(&frame, label);
+            let inner = frame.scrolled.inner_rect;
+            assert!(
+                chip.y0 >= f64::from(inner.top()) - 1.0
+                    && chip.y1 <= f64::from(inner.bottom()) + 1.0,
+                "{label} at {chip:?} is outside the {inner:?} viewport"
+            );
+        };
+        let mut run = SettingsRun::new(1200.0, 520.0);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        let chip = node_bounds(&frame, "200%");
+        run.click(Pos2::new(
+            ((chip.x0 + chip.x1) / 2.0) as f32,
+            ((chip.y0 + chip.y1) / 2.0) as f32,
+        ));
+        assert_eq!(run.app.settings.zoom_pct, 200);
+        zoom_row_in_view(&mut run, "200%");
+
+        // Ctrl+Plus, as the shortcut sets it.
+        run.app.settings.zoom_pct = 240;
+        zoom_row_in_view(&mut run, "240%");
     }
 
     #[test]
