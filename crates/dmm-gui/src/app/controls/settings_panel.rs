@@ -1197,6 +1197,76 @@ mod tests {
         node_bounds(&frame, "(restart without --replay to pick a meter)");
     }
 
+    /// Open Customize colors in `run`, and return the frame it is open in.
+    fn open_customize_colors(run: &mut SettingsRun) -> SettingsFrame {
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        let header = node_bounds(&frame, "Customize colors");
+        run.click(Pos2::new(
+            ((header.x0 + header.x1) / 2.0) as f32,
+            ((header.y0 + header.y1) / 2.0) as f32,
+        ));
+        run.frame(vec![]);
+        run.frame(vec![])
+    }
+
+    fn has_node(frame: &SettingsFrame, text: &str) -> bool {
+        frame
+            .nodes
+            .iter()
+            .any(|(_, n)| n.label() == Some(text) || n.value() == Some(text))
+    }
+
+    /// Reset colors and Save as theme show once a colour is changed, and
+    /// not before: with nothing changed there is nothing to reset or save.
+    #[test]
+    fn the_colour_buttons_wait_for_a_change() {
+        let mut run = SettingsRun::new(1200.0, 1200.0);
+        let frame = open_customize_colors(&mut run);
+        node_bounds(&frame, "Background");
+        assert!(!has_node(&frame, "Reset colors"));
+        assert!(!has_node(&frame, "Save as theme\u{2026}"));
+
+        *crate::theme::PaletteField::Background
+            .override_slot(&mut run.app.settings.color_overrides.dark) =
+            Some(crate::settings::HexColor(egui::Color32::from_rgb(1, 2, 3)));
+        let frame = run.frame(vec![]);
+        assert!(has_node(&frame, "Reset colors"));
+        assert!(has_node(&frame, "Save as theme\u{2026}"));
+    }
+
+    /// Reset colors goes once there is nothing left to reset. Pressed from
+    /// the keyboard, it hands focus to the section's header, so the next Tab
+    /// carries on from there rather than from the top of the window.
+    #[test]
+    fn reset_colors_leaves_the_focus_on_the_section() {
+        let mut run = SettingsRun::new(1200.0, 1200.0);
+        *crate::theme::PaletteField::Background
+            .override_slot(&mut run.app.settings.color_overrides.dark) =
+            Some(crate::settings::HexColor(egui::Color32::from_rgb(1, 2, 3)));
+        open_customize_colors(&mut run);
+        let mut on_reset = false;
+        for _ in 0..120 {
+            let frame = run.frame(tab());
+            if focused_on(&frame, "Reset colors") {
+                on_reset = true;
+                break;
+            }
+        }
+        assert!(on_reset, "Tab never reached Reset colors");
+        run.frame(press(egui::Key::Enter));
+        let frame = run.frame(vec![]);
+        assert!(
+            !has_node(&frame, "Reset colors"),
+            "the reset did not happen"
+        );
+        assert!(
+            focused_on(&frame, "Customize colors"),
+            "the focus did not land on the section's header"
+        );
+    }
+
     #[test]
     fn the_scroller_spans_the_panel() {
         let frame = settings_panel(400.0, 220.0);

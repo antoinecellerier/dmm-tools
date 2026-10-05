@@ -196,6 +196,11 @@ impl App {
     pub(super) fn show_color_customization(&mut self, ui: &mut Ui) {
         let dark = ui.visuals().dark_mode;
 
+        // The header's id, kept from the frame before: `CollapsingHeader`
+        // makes it inside a `ui.vertical` of its own, so it can't be worked
+        // out here, but it doesn't change from one frame to the next.
+        let header_key = ui.id().with("customize_colors_header");
+        let header_id: Option<egui::Id> = ui.data(|d| d.get_temp(header_key));
         let collapsing = egui::CollapsingHeader::new("Customize colors")
             .default_open(false)
             .show(ui, |ui| {
@@ -279,31 +284,36 @@ impl App {
                     self.settings.color_overrides.set_for_theme(name, tweaks);
                 }
 
-                // Reset button
-                ui.horizontal(|ui| {
-                    if ui
-                        .button("Reset colors")
-                        .on_hover_text(match &named {
+                // Only once there is something to reset or save.
+                if self.has_color_changes(dark) {
+                    ui.horizontal(|ui| {
+                        let reset = ui.button("Reset colors").on_hover_text(match &named {
                             Some(name) => format!("Discard your changes to {name}'s colors"),
                             None => "Discard your changes to the colors of this mode".to_string(),
-                        })
-                        .clicked()
-                    {
-                        match &named {
-                            Some(name) => self
-                                .settings
-                                .color_overrides
-                                .set_for_theme(name, PaletteOverrides::default()),
-                            None => {
-                                *self.settings.color_overrides.for_mode_mut(dark) =
-                                    PaletteOverrides::default()
+                        });
+                        if reset.clicked() {
+                            // The button goes with the changes it resets;
+                            // focus left on it would fall back to the top of
+                            // the window, so hand it to the section's header.
+                            if let Some(header) = header_id.filter(|_| reset.has_focus()) {
+                                ui.memory_mut(|m| m.request_focus(header));
                             }
+                            match &named {
+                                Some(name) => self
+                                    .settings
+                                    .color_overrides
+                                    .set_for_theme(name, PaletteOverrides::default()),
+                                None => {
+                                    *self.settings.color_overrides.for_mode_mut(dark) =
+                                        PaletteOverrides::default()
+                                }
+                            }
+                            changed = true;
                         }
-                        changed = true;
-                    }
-                    // On the same row: the section is tall enough already.
-                    self.show_theme_save_row(ui, dark);
-                });
+                        // On the same row: the section is tall enough already.
+                        self.show_theme_save_row(ui);
+                    });
+                }
 
                 if changed {
                     self.applied.ui_colors = None; // force reapply
@@ -312,6 +322,8 @@ impl App {
                     self.settings_save.schedule(std::time::Instant::now());
                 }
             });
+        let header_id = collapsing.header_response.id;
+        ui.data_mut(|d| d.insert_temp(header_key, header_id));
         // Paint an explicit focus ring on the header when Tab-focused —
         // egui's CollapsingHeader shows only a subtle highlight otherwise,
         // which is easy to miss.

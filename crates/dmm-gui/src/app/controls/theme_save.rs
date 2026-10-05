@@ -36,17 +36,14 @@ const DIALOG_FAILED: &str = "the save dialog failed";
 impl App {
     /// Whether the colours on screen differ from the preset's or the
     /// theme's own.
-    fn has_color_changes(&self, dark: bool) -> bool {
+    pub(super) fn has_color_changes(&self, dark: bool) -> bool {
         self.settings
             .color_tweaks(dark)
             .is_some_and(|t| *t != PaletteOverrides::default())
     }
 
     /// The Save as theme button, under the colour swatches.
-    pub(super) fn show_theme_save_row(&mut self, ui: &mut Ui, dark: bool) {
-        if !self.has_color_changes(dark) {
-            return;
-        }
+    pub(super) fn show_theme_save_row(&mut self, ui: &mut Ui) {
         if ui
             .button("Save as theme\u{2026}")
             .on_hover_text(
