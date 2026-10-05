@@ -134,6 +134,40 @@ fn aux_cells(ui: &Ui, m: &Measurement, aux: &AuxValue, size: f32, tc: &ThemeColo
     AuxCells { label, value, secs }
 }
 
+/// The compact layout's one-line summary, `Measurement::aux_summary`'s text
+/// coloured as the grid's cells are: weak labels and timestamps, values and
+/// units in the reading colour, an overload in the error colour.
+fn aux_summary_job(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> LayoutJob {
+    let format = |color| TextFormat {
+        font_id: FontId::monospace(MIN_AUX_FONT_SIZE),
+        color,
+        ..Default::default()
+    };
+    let weak = ui.visuals().weak_text_color();
+    let mut job = LayoutJob::default();
+    for aux in m.present_aux() {
+        if !job.is_empty() {
+            job.append(", ", 0.0, format(weak));
+        }
+        job.append(&aux.label, 0.0, format(weak));
+        let value_color = match aux.value {
+            MeasuredValue::Overload => tc.status_error(),
+            _ => tc.reading(),
+        };
+        job.append(" ", 0.0, format(weak));
+        job.append(&aux.value_str(), 0.0, format(value_color));
+        let unit = aux.unit_or(&m.unit);
+        if !unit.is_empty() {
+            job.append(" ", 0.0, format(weak));
+            job.append(unit, 0.0, format(tc.reading()));
+        }
+        if let Some(secs) = aux.elapsed_secs {
+            job.append(&format!(" @{secs}s"), 0.0, format(weak));
+        }
+    }
+    job
+}
+
 /// The sub-value grid's font size for a mode line at `font_size`: the rows
 /// are secondary information and should not compete with the main value, but
 /// they still have to stay readable.
@@ -1632,9 +1666,9 @@ pub fn show_reading_compact(
             // One summary line rather than the grid: the compact layout is
             // the narrow-window one, where a label/value/unit grid would
             // squeeze the reading itself.
-            let summary = m.aux_summary();
+            let summary = aux_summary_job(ui, m, tc);
             if !summary.is_empty() {
-                ui.label(RichText::new(summary).font(FontId::monospace(MIN_AUX_FONT_SIZE)));
+                ui.label(summary);
             }
             picked
         }
@@ -1755,6 +1789,55 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The compact layout's summary line reads as `aux_summary` does and is
+    /// coloured as the grid is: values and units in the reading colour (an
+    /// overload in the error colour), everything else weak.
+    #[test]
+    fn the_compact_summary_colours_values_as_the_grid_does() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.0), "V", StatusFlags::default());
+        let mut over = aux("Max", "0", "");
+        over.value = MeasuredValue::Overload;
+        over.elapsed_secs = Some(12);
+        m.aux_values = vec![aux("Frequency", "50.01", "Hz"), over];
+        let ctx = eframe::egui::Context::default();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let mut job = LayoutJob::default();
+        let mut weak = Color32::TRANSPARENT;
+        let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
+            job = aux_summary_job(ui, &m, &tc);
+            weak = ui.visuals().weak_text_color();
+        });
+        out.textures_delta.clear();
+
+        assert_eq!(job.text, m.aux_summary());
+        // `append` merges neighbours of one format into a section, and the
+        // single spaces between value and unit are dropped here.
+        let colours: Vec<(&str, Color32)> = job
+            .sections
+            .iter()
+            .map(|s| {
+                (
+                    &job.text[s.byte_range.start.0..s.byte_range.end.0],
+                    s.format.color,
+                )
+            })
+            .filter(|(text, _)| !text.trim().is_empty())
+            .collect();
+        assert_eq!(
+            colours,
+            [
+                ("Frequency ", weak),
+                ("50.01", tc.reading()),
+                ("Hz", tc.reading()),
+                (", Max ", weak),
+                ("OL", tc.status_error()),
+                ("V", tc.reading()),
+                (" @12s", weak),
+            ]
+        );
     }
 
     /// Rects of the readout row's three kinds of widget — mode label, range
