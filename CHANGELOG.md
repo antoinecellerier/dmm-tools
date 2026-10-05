@@ -70,7 +70,7 @@ Bluetooth arrives, through UNI-T's UT-D07B adapter (verified on a UT61E+) and wi
 - **`read --format replay` dates the file from its first reading** — it was dated from the start of the run, so converted times came out early.
 - **A UT181A no longer shows OL, or warns, after each switch** — it shows `----` until the new reading arrives.
 - **The graph restarts when the dial turns to a mode showing OL** — it carried on the previous mode's trace.
-- **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
+- **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed `~`, `k~`, `M~` and `u`, and volts and amps carried AC/DC suffixes.
 - **`dmm-cli` reports a pulled cable as an error, not a silent meter** — it said to switch data transmission on, also for any argument containing "timeout".
 - **A UT181A no longer warns in AC+DC, dB, T1-T2 or MIN/MAX**
 - **`dmm-cli capture` shows OL for an over-range reading** — the line to confirm showed only the unit, so a correct "no" stopped the run driving the meter.
