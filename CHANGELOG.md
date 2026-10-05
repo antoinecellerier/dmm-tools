@@ -4,73 +4,73 @@
 
 ### Devices
 
-- **Bluetooth via the UT-D07B adapter** — tested on a UT61E+; the other meters UNI-T lists for the adapter should work too. `--no-bluetooth` or a Settings checkbox turns scanning off.
+- **The UT61E+ connects over Bluetooth through the UT-D07B adapter** — untested on the other meters UNI-T lists for it ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)); `--no-bluetooth` or a Settings checkbox turns scanning off.
+- **The ZOYI ZT-5B Bluetooth meter is verified, remote keys included** — the ANENG V05B sends the same packets; a simulated ZT-5B lets you try the keys ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31)). Thanks to [@whymzml](https://github.com/whymzml) for the captures.
+- **More of the UT181A is confirmed on a real meter** — every dial position, MIN/MAX, REL, Peak, COMP and remote control ([#5](https://github.com/antoinecellerier/dmm-tools/issues/5)); thanks to [@diego351](https://github.com/diego351) for the capture.
 - **The UT-D07A Bluetooth adapter is supported experimentally** — untested; UNI-T lists it for the UT171 and UT181A, and a UT71 needs both `--device` and `--adapter` ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)).
-- **The UT71A–E ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) and Voltcraft VC920/VC940/VC960 ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) can be picked as experimental models** — auto-detection reports them as a UT804, so name the meter.
 - **UNI-T's UT60BT ([#26](https://github.com/antoinecellerier/dmm-tools/issues/26)) and UT202BT ([#27](https://github.com/antoinecellerier/dmm-tools/issues/27)) Bluetooth meters are supported experimentally**
-- **ZOTEK Bluetooth meters (ZOYI, BSIDE, ANENG) are supported, the ZT-5B verified and the others experimentally** — the ZT-300AB / AN9002 ([#28](https://github.com/antoinecellerier/dmm-tools/issues/28)), ZT-5566SE / AN999S ([#29](https://github.com/antoinecellerier/dmm-tools/issues/29)), ZT-5BQ / ST207 ([#30](https://github.com/antoinecellerier/dmm-tools/issues/30)) and ZT-5B / V05B ([#31](https://github.com/antoinecellerier/dmm-tools/issues/31)), with remote keys, also on the GUI's mode label, and a simulated ZT-5B to try them on. Thanks to [@whymzml](https://github.com/whymzml) for the ZT-5B captures, remote keys included.
-- **The EEVblog 121GW Bluetooth meter is supported experimentally** — with remote keys ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)).
-- **Brymen's BM788BT and BM787BT Bluetooth meters are supported experimentally** ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)).
-- **Brymen's BM869s/BM867s ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)), BM829s/BM827s/BM822s/BM821s ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) and BM525s/BM521s ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) are supported experimentally on the BU-86X cable** — on Linux, reinstall `udev/70-dmm-tools.rules` and replug the cable; on a headless machine, keep a group on the rule — see `docs/setup.md`.
+- **The UT71A–E ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) and Voltcraft VC920/VC940/VC960 ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) can be picked as experimental models** — auto-detection reports them as a UT804, so name the meter.
+- **More ZOTEK Bluetooth meters are supported experimentally, with remote keys** — sold as ZOYI, BSIDE and ANENG: the ZT-300AB / AN9002 ([#28](https://github.com/antoinecellerier/dmm-tools/issues/28)), ZT-5566SE / AN999S ([#29](https://github.com/antoinecellerier/dmm-tools/issues/29)) and ZT-5BQ / ST207 ([#30](https://github.com/antoinecellerier/dmm-tools/issues/30)).
 - **OWON's Bluetooth meters and Voltcraft's VC871/VC891/VC915/VC925 PV are supported experimentally** — with remote keys: the OW18B and OW16B ([#39](https://github.com/antoinecellerier/dmm-tools/issues/39)), OW18E ([#40](https://github.com/antoinecellerier/dmm-tools/issues/40)), B33 ([#41](https://github.com/antoinecellerier/dmm-tools/issues/41)), B35T+ ([#42](https://github.com/antoinecellerier/dmm-tools/issues/42)), B41T+ ([#43](https://github.com/antoinecellerier/dmm-tools/issues/43)), CM2100B ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)), CMS101 and CMS061 ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)), OW65B ([#46](https://github.com/antoinecellerier/dmm-tools/issues/46)), VC871 and OW67B ([#47](https://github.com/antoinecellerier/dmm-tools/issues/47)), VC891 and OW69B ([#48](https://github.com/antoinecellerier/dmm-tools/issues/48)), and VC915 and VC925 PV ([#49](https://github.com/antoinecellerier/dmm-tools/issues/49)).
-- **More of the UT181A is confirmed on a real meter** — every dial position, MIN/MAX, REL, Peak, COMP and remote control; thanks to [@diego351](https://github.com/diego351) for the capture.
+- **Brymen's BM869s/BM867s ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)), BM829s/BM827s/BM822s/BM821s ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) and BM525s/BM521s ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) are supported experimentally on the BU-86X cable** — on Linux, reinstall `udev/70-dmm-tools.rules` and replug the cable; on a headless machine, keep a group on the rule — see `docs/setup.md`.
+- **Brymen's BM788BT and BM787BT Bluetooth meters are supported experimentally** ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)).
+- **The EEVblog 121GW Bluetooth meter is supported experimentally** — with remote keys ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)).
 
 ### GUI
 
-- **Mark moments with `N`, `Ctrl+N`, a log row's `+` or the graph's right-click menu, and write notes on them** — drawn on the graph and minimap, and included in CSV, JSON and replay exports.
-- **Import… opens an exported CSV, JSON or replay file, with its markers and graph view** — `Ctrl+I`, or `--import FILE` at launch; CSV files keep no view.
-- **The top bar links to a newer release when one is out** — downloaded builds check GitHub once a day; Settings turns it off ([#37](https://github.com/antoinecellerier/dmm-tools/issues/37)).
-- **`dmm-gui --completions <SHELL>` prints a shell completion script**
+- **Markers flag moments on the graph, with notes** — `N`, `Ctrl+N`, a log row's `+` or the graph's right-click menu; CSV, JSON and replay exports keep them.
+- **Import… opens an exported CSV, JSON or replay file** — with its markers, and a JSON or replay file's graph view; `Ctrl+I`, or `--import FILE` at launch.
+- **Sub-values in other units get Y axes of their own** — such as a UT181A's frequency and period beside its voltage; hidden traces stay hidden at the next launch.
 - **Named themes: Bubble Gum, Desert, Midnight and Phosphor** — each sets its own light or dark mode; `--theme midnight` picks one at launch.
 - **Theme files in the `themes` folder join the Theme row** — Save as theme… writes the colors on screen to one, to keep or share.
-- **Customize colors moves related colors together, and adds Reading, Heading and Frame** — recoloring Background, Text or Data line carries its family, saved changes included; the picker takes pasted hex.
-- **The graph plots NCV levels** — turning to NCV left the previous mode's trace on screen.
+- **The top bar links to a newer release when one is out** — downloaded builds check GitHub once a day; Settings turns it off ([#37](https://github.com/antoinecellerier/dmm-tools/issues/37)).
+- **`dmm-gui --completions <SHELL>` prints a shell completion script**
 - **The recording log scrolls back through the whole recording** — it showed only the last 500 samples.
-- **Record no longer drops the graph's readings** — after a Discard, Export… saves them, markers included.
-- **The top bar names the link the meter is on** — `UT61E+ · USB cable` or `UT61E+ · Bluetooth`.
+- **Record keeps the graph's readings** — after a Discard, Export… saves what the graph shows; Record cleared them.
 - **Switching Plot: keeps the graph** — such as T1 and T2, or a UT181A's voltage and its frequency; it restarted empty.
-- **The graph draws sub-values in other units on Y axes of their own** — such as a UT181A's frequency and period beside its voltage; hidden traces stay hidden at the next launch.
-- **Graph lines can be drawn solid** — a setting for those who don't need sub-values told apart without colour.
-- **The big meter puts sub-values beside the reading when the window is wide** — rows under it shrank the reading in a short window.
-- **A UT181A's reading and sub-values are named, such as T1 or AC** — the graph called them Main, Aux1 and Aux2.
+- **The graph plots NCV levels** — turning to NCV left the previous mode's trace on screen.
+- **More of a UT181A's values are named, such as T1 or AC** — the graph called them Main, Aux1 and Aux2.
 - **The Specifications panel covers the ZOYI ZT-5B** — the ANENG V05B, which shares its entry, shows the same figures.
-- **The GUI uses less CPU while connected or zoomed out, and none while paused** — it redrew up to three times per reading, ten times a second while paused, and drew every sample of a zoomed-out graph.
 - **A new Sample interval takes effect at once** — it waited for a reconnect.
-- **Exporting a long recording as JSON no longer freezes the GUI for seconds**
+- **The GUI uses less CPU, and none while paused**
 - **Import… and Export… open in the folder last used** — or in Documents, the first time.
 - **The window and its panels reopen at the size they were left**
+- **Customize colors moves related colors together, and adds Reading, Heading and Frame** — recoloring Background, Text or Data line carries its family, saved changes included; the picker takes pasted hex.
+- **A wide big meter puts sub-values beside the reading** — rows under it shrank the reading in a short window.
+- **Graph lines can be drawn solid** — a setting for those who don't need sub-values told apart without colour.
+- **The graph's mean, reference and cursor labels stay readable when crowded** — they drew over each other and the plot key.
+- **The top bar names the link the meter is on** — `UT61E+ · USB cable` or `UT61E+ · Bluetooth`.
+- **Settings groups its rows by topic and lists the meters by brand** — the Device row filled several lines of chips.
 - **What's New opens on this release, with earlier ones folded**
-- **The graph's mean, reference and cursor labels stay readable when crowded** — they drew over each other, the plot key and marker flags.
-- **Settings picks the meter from a list grouped by brand** — the Device row filled several lines of chips.
-- **Settings are grouped by topic, the meter first**
 
 ### CLI
 
-- **`read --import` converts or summarises an exported CSV, JSON or replay file without waiting** — with its markers.
-- **`capture` ends by checking that auto-detection finds the meter** — after you restart it; the result goes in the report.
+- **`read --import` converts or summarises an exported CSV, JSON or replay file** — with its markers, at once.
 - **`read --replay` keeps a recording's markers** — in its CSV, JSON and replay output.
-- **Text output names a UT181A's reading and sub-values, such as T1 or AC**
-- **Shell completions offer the meter ids for `--device` and the modes for `--mock-mode`** — regenerate the script to get them.
+- **Text output names more UT181A values, such as T1 or AC**
+- **`capture` ends by checking that auto-detection finds the meter** — after you restart it; the result goes in the report.
+- **Shell completions offer `--device` meter ids and `--mock-mode` modes** — regenerate the script to get them.
 
 ### Bug fixes
 
-- **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; now labelled DC and AC, with AC in `aux1` CSV columns every UT61E+ export gains.
-- **The integral covers readings at a 1 s or 2 s sample interval, and stops at a pause or lost link** — it skipped many of those readings, and bridged a pause shorter than 2 s.
+- **A VC-890 on its USB cable reads without timing out**
 - **Readings stay current at a sample interval and after Pause** — on Linux, a UT181A, UT171, UT8802, UT8803, UT803/UT804 or VC-880 on USB showed old readings stamped as new.
-- **A replay ends with its recording** — `read --replay` repeated the last reading until Ctrl+C, and the GUI for ever, adding rows the file never had to exports.
+- **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; UT61E+ CSV exports gain `aux1` columns carrying AC.
+- **The integral covers what the graph draws unbroken** — at a 1 s or 2 s sample interval it skipped many readings, and bridged pauses under 2 s.
 - **Exported times stay right after the computer sleeps** — every later CSV and JSON time was early by the sleep's length.
+- **A replay ends with its recording** — `read --replay` repeated the last reading until Ctrl+C, and the GUI for ever, adding rows the file never had to exports.
 - **`read --format replay` dates the file from its first reading** — it was dated from the start of the run, so converted times came out early.
 - **A UT181A no longer shows OL, or warns, after each switch** — it shows `----` until the new reading arrives.
-- **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
 - **The graph restarts when the dial turns to a mode showing OL** — it carried on the previous mode's trace.
+- **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
 - **`dmm-cli` reports a pulled cable as an error, not a silent meter** — it said to switch data transmission on, also for any argument containing "timeout".
-- **A UT181A in Peak no longer sends Auto range or MIN/MAX** — the meter refused both, and `dmm-cli capture` gave up sweeping after three Peak modes.
-- **Disconnect after a reconnect releases the meter at once** — with a sample interval set, it held the link until the next sample.
 - **A UT181A no longer warns in AC+DC, dB, T1-T2 or MIN/MAX**
 - **`dmm-cli capture` shows OL for an over-range reading** — the line to confirm showed only the unit, so a correct "no" stopped the run driving the meter.
+- **A UT181A in Peak no longer sends Auto range or MIN/MAX** — the meter refused both, and `dmm-cli capture` gave up sweeping after three Peak modes.
+- **Disconnect after a reconnect releases the meter at once** — with a sample interval set, it held the link until the next sample.
 - **`dmm-cli capture` no longer passes a key step whose key did nothing** — a flickering last digit counted as the key's effect.
-- **A VC-890 on its USB cable reads without timing out**
 - **Big meter mode no longer cuts off buttons after a resize**
+- **Exporting a long recording as JSON no longer freezes the GUI**
 - **The GUI stops redrawing nonstop when tiled smaller than it fits** — it redrew at the screen's refresh rate on tiling window managers.
 
 ### Documentation
