@@ -113,6 +113,9 @@ struct ShortcutHelp {
     /// has to handle itself. Set by `handle_shortcut_help_keys` before the
     /// panels and spent when the modal draws.
     scroll: HelpScroll,
+    /// What last frame measured of the help, for this one to pick its
+    /// columns from.
+    layout: shortcut_help::HelpLayout,
 }
 
 /// A pending keyboard scroll of the shortcut help.
