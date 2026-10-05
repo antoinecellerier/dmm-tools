@@ -97,9 +97,10 @@ pub(super) fn live_region_label(
                 }
                 parts.push_str(&m.mode);
             }
-            // Sub-values sit between the mode and the flags, matching the
-            // visible order: the rows are drawn under the reading and above
-            // the mode/flags line. Without them a UT181A user in MIN/MAX
+            // Sub-values sit between the mode and the flags. Whether the
+            // rows are drawn under the reading or beside it depends on the
+            // window, so the spoken order follows neither; it stays put
+            // while the layout moves. Without them a UT181A user in MIN/MAX
             // hears only the live value and never the extremes the meter is
             // actually displaying.
             for aux in m.present_aux() {

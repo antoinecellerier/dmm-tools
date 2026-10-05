@@ -1413,6 +1413,87 @@ mod tests {
         );
     }
 
+    /// Bounds of the plain label whose text is exactly `text`: the live
+    /// region's sentence and the top bar's longer strings never match.
+    fn label_exact(nodes: &[(NodeId, Node)], text: &str) -> Option<egui::Rect> {
+        let (_, node) = nodes.iter().find(|(_, n)| n.value() == Some(text))?;
+        let b = node.bounds().expect("a drawn label has bounds");
+        Some(egui::Rect::from_min_max(
+            egui::pos2(b.x0 as f32, b.y0 as f32),
+            egui::pos2(b.x1 as f32, b.y1 as f32),
+        ))
+    }
+
+    /// The user's case: a T2-T1 difference with T1 and T2 under it, in a
+    /// wide, short minimal-mode window. Through the real fit loop the
+    /// sub-values settle beside the value, before the mode line, and the
+    /// row's far end — the AUTO badge — stays inside the window; the same
+    /// with a UT181A's four MIN/MAX rows, which outgrow the value.
+    #[test]
+    fn a_wide_minimal_window_settles_with_the_sub_values_beside_the_value() {
+        use dmm_lib::flags::StatusFlags;
+        use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
+        let row = |label: &'static str, digits: &str| AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(digits.trim().parse().unwrap_or(0.0)),
+            unit: "".into(),
+            display_raw: Some(digits.to_string()),
+            elapsed_secs: None,
+        };
+        let cases = [
+            vec![row("T1", "20.500"), row("T2", "22.382")],
+            vec![
+                row("Max", "24.117"),
+                row("Average", "22.050"),
+                row("Min", "20.003"),
+                row("Raw", "21.996"),
+            ],
+        ];
+        for (w, h) in [(1998.0, 275.0), (1200.0, 200.0)] {
+            for rows in &cases {
+                let case = format!("{} rows at {w}x{h}", rows.len());
+                let mut app = App::from_settings(
+                    Settings {
+                        auto_connect: false,
+                        ..Settings::default()
+                    },
+                    dmm_lib::Clock::real(),
+                );
+                app.big_meter_mode = BigMeterMode::Minimal;
+                let mut m = Measurement::test_fixture(
+                    MeasuredValue::Normal(1.8812),
+                    "\u{00B0}C",
+                    StatusFlags {
+                        auto_range: true,
+                        ..StatusFlags::default()
+                    },
+                );
+                m.display_raw = Some(" 1.8812".to_string());
+                m.mode = "Temp \u{00B0}C T2-T1".into();
+                m.aux_values = rows.clone();
+                app.last_measurement = Some(m);
+
+                let nodes = meter_nodes(&mut app, w, h);
+                let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+                let find = |text: &str| {
+                    label_exact(&nodes, text).unwrap_or_else(|| panic!("{case}: no {text:?}"))
+                };
+                let value = find(" 1.8812");
+                let first = find(rows[0].label.as_ref());
+                let mode = find("Temp \u{00B0}C T2-T1");
+                let auto = find("AUTO");
+                assert!(
+                    value.right() < first.left() && first.right() < mode.left(),
+                    "{case}: value {value:?}, sub-values {first:?}, mode {mode:?} not side by side"
+                );
+                assert!(
+                    screen.contains_rect(auto),
+                    "{case}: AUTO {auto:?} hangs out of {screen:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn the_big_meter_puts_the_connection_issue_in_the_readout() {
         for mode in [BigMeterMode::Full, BigMeterMode::Minimal] {

@@ -40,8 +40,8 @@ ASSETS="$ROOT/assets"
 #   dcma-boot-refresh-autorange
 #                         the thermometer cycle on AUTO, with 22 ↔ 220 mA hops
 #                         and an OL blip at each boot and refresh; unused
-#   ut181a-temp-t1-t2     a UT181A frame with two temperature sub-values;
-#                         unused
+#   ut181a-temp-t1-t2     a UT181A frame with two temperature readings,
+#                         T1 the value and T2 its sub-value
 REPLAYS="$ASSETS/replays"
 
 # A state dir of our own so a verify-gui session in another terminal keeps its
@@ -98,13 +98,14 @@ CROSSHAIR_SWATCH_X=757; CROSSHAIR_SWATCH_Y=616
 # activating anything, so no crosshair tooltip lands in the picture.
 PARK_X=240; PARK_Y=1240
 # Big meter takes one window, sized so nothing wraps out of it. Minimal mode
-# has two shapes, one picture each: the mode and range controls beside the
-# reading in a wide, short window, and under it in a narrow one. The narrow
-# reading is sized by the width, so height past that is a blank band; 170 is
-# about as short as it goes, since at 160 (80 logical) the app hides the
-# corner button.
+# has two shapes, one picture each: the sub-values and the mode and range
+# controls beside the reading in a wide, short window, and under it in a
+# narrow one. The narrow reading is sized by the width, so height past that is
+# a blank band; 170 is about as short as it goes, since at 160 (80 logical)
+# the app hides the corner button. The wide shot needs it too: at 200 the
+# sub-value still fits under the reading.
 BIG_METER_W=900; BIG_METER_H=640
-MINIMAL_WIDE_W=1200; MINIMAL_WIDE_H=200
+MINIMAL_WIDE_W=1200; MINIMAL_WIDE_H=170
 MINIMAL_NARROW_W=420; MINIMAL_NARROW_H=170
 # Each graph scene's state, as the `# view:` line `staged` appends: times in
 # seconds from the recording's first frame, which is where the app puts them
@@ -437,25 +438,35 @@ scene_big_meter() {
 }
 
 # Ctrl+B again drops the top bar and the buttons: the reading and its mode
-# line only, one picture per shape. A reading with no sub-values under it, so
-# the wide shape has the room to put the mode line beside the value.
+# line only, one picture per shape. The wide shape is the UT181A frame with
+# T2 moved beside T1, the value; the narrow one a reading with no sub-values,
+# the mode line under the value.
 scene_minimal_meter() {
 	local geometry
 	"$GUI" stop >/dev/null
 	export VERIFY_GUI_GEOMETRY="$METER_GEOMETRY"
-	write_settings
-	launch dcma-boot-refresh 166
-	# Settled after each press, as in scene_big_meter; a fit draws frames
-	# back to back, and a second press landing in one of them is lost.
-	key ctrl+b
-	"$GUI" settle >/dev/null
-	key ctrl+b
-	"$GUI" settle >/dev/null
+	write_settings '{"device_family": "ut181a"}'
+	launch ut181a-temp-t1-t2 60
+	minimal_mode
 	geometry="$(fit "$MINIMAL_WIDE_W" "$MINIMAL_WIDE_H")"
 	capture gui-minimal-meter-wide.png "$geometry+0+0"
+	"$GUI" stop >/dev/null
+	write_settings
+	launch dcma-boot-refresh 166
+	minimal_mode
 	geometry="$(fit "$MINIMAL_NARROW_W" "$MINIMAL_NARROW_H")"
 	capture gui-minimal-meter-narrow.png "$geometry+0+0"
 	export VERIFY_GUI_GEOMETRY="$ROOT_GEOMETRY"
+}
+
+# Ctrl+B twice, from the normal layout to minimal mode. Settled after each
+# press, as in scene_big_meter; a fit draws frames back to back, and a second
+# press landing in one of them is lost.
+minimal_mode() {
+	key ctrl+b
+	"$GUI" settle >/dev/null
+	key ctrl+b
+	"$GUI" settle >/dev/null
 }
 
 # The settings panel as a user with no meter plugged in meets it: Auto-detect

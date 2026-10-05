@@ -1,12 +1,13 @@
 mod text;
 
 use dmm_lib::flags::Flag;
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use dmm_lib::protocol::{Choice, MeterKey, Setting};
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{
-    Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, IdSalt, Key, Modifiers,
-    Popup, Rect, Response, RichText, Stroke, TextFormat, TextStyle, Ui,
+    Align, Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, Id, IdSalt, Key,
+    Layout, Modifiers, Popup, Rect, Response, RichText, Stroke, TextFormat, TextStyle,
+    TextWrapMode, Ui, UiBuilder, Vec2, WidgetText, vec2,
 };
 
 use crate::a11y::{ResponseA11yExt, UiA11yExt};
@@ -78,19 +79,167 @@ fn badge_tone(flag: Flag, tc: &ThemeColors) -> Color32 {
 /// not by their caller.
 type AuxRowRects = (Rect, Rect);
 
-/// Render one row per sub-value beneath the primary reading.
+/// One sub-value row's cells: label, value with its unit, and the MIN/MAX
+/// timestamp. Built in one place for drawing and for measuring, so the fit's
+/// idea of the grid's size can't drift from the grid drawn.
+struct AuxCells {
+    label: RichText,
+    value: LayoutJob,
+    secs: Option<RichText>,
+}
+
+fn aux_cells(ui: &Ui, m: &Measurement, aux: &AuxValue, size: f32, tc: &ThemeColors) -> AuxCells {
+    let label = RichText::new(&*aux.label)
+        .font(FontId::proportional(size))
+        .color(ui.visuals().weak_text_color());
+    // Overload in the error color, as the main value is — and the text
+    // still reads "OL", so the state is never signalled by color alone.
+    let value_color = match aux.value {
+        MeasuredValue::Overload => tc.status_error(),
+        _ => tc.reading(),
+    };
+    // Value and unit are one label, not a nested `ui.horizontal`. A
+    // horizontal scope allocates its child `Ui` at `interact_size.y` (~18 px)
+    // and then expands downwards, so taller content lands half a line below
+    // the grid row it belongs to: 12 px out at the side panel's 36 px, 66 px
+    // out at the big meter's 130 px. With every cell a plain label, the
+    // grid's own `LEFT_CENTER` alignment does the work.
+    let mut value = LayoutJob::default();
+    value.append(
+        &format_aux_value(aux),
+        0.0,
+        TextFormat {
+            font_id: FontId::monospace(size),
+            color: value_color,
+            ..Default::default()
+        },
+    );
+    let unit = aux.unit_or(&m.unit);
+    if !unit.is_empty() {
+        value.append(
+            unit,
+            2.0,
+            TextFormat {
+                font_id: FontId::monospace(size),
+                color: tc.reading(),
+                ..Default::default()
+            },
+        );
+    }
+    let secs = aux.elapsed_secs.map(|secs| {
+        RichText::new(format!("@{secs}s"))
+            .font(FontId::proportional(size))
+            .color(ui.visuals().weak_text_color())
+    });
+    AuxCells { label, value, secs }
+}
+
+/// The sub-value grid's font size for a mode line at `font_size`: the rows
+/// are secondary information and should not compete with the main value, but
+/// they still have to stay readable.
+fn aux_font_size(font_size: f32) -> f32 {
+    font_size.max(MIN_AUX_FONT_SIZE)
+}
+
+/// Gap between the sub-value grid's columns.
+fn aux_column_gap(size: f32) -> f32 {
+    (size * 0.5).max(4.0)
+}
+
+/// Gap between the sub-value grid's rows.
+const AUX_ROW_GAP: f32 = 2.0;
+
+/// The sub-value grid's text, laid out at one font size: the widest cell of
+/// each column and the tallest cell. The big meter's fit scales these to
+/// whatever size it is weighing rather than laying text out at every
+/// candidate size, which would fill the font atlas with sizes never drawn.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct AuxGridMetrics {
+    /// The size the cells were laid out at, floored as the grid floors it.
+    font_size: f32,
+    label_w: f32,
+    value_w: f32,
+    /// Zero when no row carries a MIN/MAX timestamp: the grid then has two
+    /// columns, not three.
+    secs_w: f32,
+    text_h: f32,
+    rows: usize,
+}
+
+impl AuxGridMetrics {
+    /// Lay the cells out with a mode line at `font_size`; `None` when the
+    /// measurement has no sub-values and the grid draws nothing.
+    fn measure(ui: &Ui, m: &Measurement, font_size: f32, tc: &ThemeColors) -> Option<Self> {
+        if m.aux_values.is_empty() {
+            return None;
+        }
+        let size = aux_font_size(font_size);
+        let galley = |text: WidgetText| {
+            text.into_galley(
+                ui,
+                Some(TextWrapMode::Extend),
+                f32::INFINITY,
+                TextStyle::Body,
+            )
+            .size()
+        };
+        let mut metrics = Self {
+            font_size: size,
+            label_w: 0.0,
+            value_w: 0.0,
+            secs_w: 0.0,
+            text_h: 0.0,
+            rows: m.aux_values.len(),
+        };
+        for aux in &m.aux_values {
+            let cells = aux_cells(ui, m, aux, size, tc);
+            let label = galley(cells.label.into());
+            let value = galley(cells.value.into());
+            let secs = cells.secs.map_or(Vec2::ZERO, |s| galley(s.into()));
+            metrics.label_w = metrics.label_w.max(label.x);
+            metrics.value_w = metrics.value_w.max(value.x);
+            metrics.secs_w = metrics.secs_w.max(secs.x);
+            metrics.text_h = metrics.text_h.max(label.y).max(value.y).max(secs.y);
+        }
+        Some(metrics)
+    }
+
+    /// The grid's size with a mode line at `font_size`, as `show_aux_rows`
+    /// lays it out: each cell at least `min_cell` (egui's `interact_size`,
+    /// the grid's default floor), columns and rows apart by the grid's gaps.
+    fn size(&self, font_size: f32, min_cell: Vec2) -> Vec2 {
+        let size = aux_font_size(font_size);
+        let k = size / self.font_size;
+        let col = |w: f32| (w * k).max(min_cell.x);
+        let (mut width, mut columns) = (col(self.label_w) + col(self.value_w), 2.0);
+        if self.secs_w > 0.0 {
+            width += col(self.secs_w);
+            columns += 1.0;
+        }
+        width += (columns - 1.0) * aux_column_gap(size);
+        let row = (self.text_h * k).max(min_cell.y);
+        let rows = self.rows as f32;
+        vec2(width, rows * row + (rows - 1.0) * AUX_ROW_GAP)
+    }
+}
+
+/// Render one row per sub-value: beneath the primary reading, or in its own
+/// column beside it.
 ///
 /// Draws nothing at all when the measurement has none, so single-display
 /// meters keep the layout they had before sub-values existed.
 ///
 /// `font_size` is the caller's mode-line size, floored at
-/// [`MIN_AUX_FONT_SIZE`]: the rows are secondary information and should not
-/// compete with the main value, but they still have to stay readable.
+/// [`MIN_AUX_FONT_SIZE`]. `id` is the grid's scope, used as it is rather
+/// than mixed with the id of the `ui` it is drawn in: the beside layout nests
+/// the grid deeper than the others do, and a grid under a new id spends a
+/// frame sizing itself unseen, then keeps column widths from another size.
 ///
 /// Returns one [`AuxRowRects`] per row, which production callers drop — it
 /// exists so a test can assert the label and its value stay on one line.
 fn show_aux_rows(
     ui: &mut Ui,
+    id: Id,
     m: &Measurement,
     font_size: f32,
     tc: &ThemeColors,
@@ -98,69 +247,33 @@ fn show_aux_rows(
     if m.aux_values.is_empty() {
         return Vec::new();
     }
-    let size = font_size.max(MIN_AUX_FONT_SIZE);
+    let size = aux_font_size(font_size);
     let mut rects: Vec<AuxRowRects> = Vec::with_capacity(m.aux_values.len());
     // A grid rather than a stack of horizontal rows so labels, digits and
     // timestamps line up in columns however long the individual strings are.
-    Grid::new(ui.id().with("aux_rows"))
-        .num_columns(3)
-        .spacing([(size * 0.5).max(4.0), 2.0])
-        .show(ui, |ui| {
-            for aux in &m.aux_values {
-                let label = ui.label(
-                    RichText::new(&*aux.label)
-                        .font(FontId::proportional(size))
-                        .color(ui.visuals().weak_text_color()),
-                );
-                // Overload in the error color, as the main value is — and
-                // the text still reads "OL", so the state is never signalled
-                // by color alone.
-                let value_color = match aux.value {
-                    MeasuredValue::Overload => tc.status_error(),
-                    _ => tc.reading(),
-                };
-                // Value and unit are one label, not a nested `ui.horizontal`.
-                // A horizontal scope allocates its child `Ui` at
-                // `interact_size.y` (~18 px) and then expands downwards, so
-                // taller content lands half a line below the grid row it
-                // belongs to: 12 px out at the side panel's 36 px, 66 px out
-                // at the big meter's 130 px. With every cell a plain label,
-                // the grid's own `LEFT_CENTER` alignment does the work.
-                let mut job = LayoutJob::default();
-                job.append(
-                    &format_aux_value(aux),
-                    0.0,
-                    TextFormat {
-                        font_id: FontId::monospace(size),
-                        color: value_color,
-                        ..Default::default()
-                    },
-                );
-                let unit = aux.unit_or(&m.unit);
-                if !unit.is_empty() {
-                    job.append(
-                        unit,
-                        2.0,
-                        TextFormat {
-                            font_id: FontId::monospace(size),
-                            color: tc.reading(),
-                            ..Default::default()
-                        },
-                    );
+    ui.scope_builder(UiBuilder::new().id(id), |ui| {
+        Grid::new("aux_rows")
+            .num_columns(3)
+            .spacing([aux_column_gap(size), AUX_ROW_GAP])
+            .show(ui, |ui| {
+                for aux in &m.aux_values {
+                    let cells = aux_cells(ui, m, aux, size, tc);
+                    let label = ui.label(cells.label);
+                    let value = ui.label(cells.value);
+                    rects.push((label.rect, value.rect));
+                    if let Some(secs) = cells.secs {
+                        ui.label(secs);
+                    }
+                    ui.end_row();
                 }
-                let value = ui.label(job);
-                rects.push((label.rect, value.rect));
-                if let Some(secs) = aux.elapsed_secs {
-                    ui.label(
-                        RichText::new(format!("@{secs}s"))
-                            .font(FontId::proportional(size))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                }
-                ui.end_row();
-            }
-        });
+            });
+    });
     rects
+}
+
+/// The id every layout gives the sub-value grid drawn into `ui`.
+fn aux_grid_id(ui: &Ui) -> Id {
+    ui.id().with("aux_rows")
 }
 
 /// The reading's digits, led by its own name when it has one ("DC" beside an
@@ -833,8 +946,8 @@ impl<'a> NoReadingText<'a> {
         Some(ReadingRatios {
             w: bars.x.max(block.x) / base,
             h: (bars.y + spacing.y + block.y) / base,
-            inline_w: (bars.x + spacing.x + block.x) / base,
-            inline_h: bars.y.max(block.y) / base,
+            row_w: (bars.x + spacing.x + block.x) / base,
+            row_h: bars.y.max(block.y) / base,
         })
     }
 
@@ -934,7 +1047,7 @@ fn show_reading_sized(
                 },
             );
 
-            let _ = show_aux_rows(ui, m, mode_size, tc);
+            let _ = show_aux_rows(ui, aux_grid_id(ui), m, mode_size, tc);
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(2.0);
@@ -968,9 +1081,52 @@ fn show_reading_sized(
     }
 }
 
-/// Render the reading with value and mode on a single line (inline layout).
+/// The value and its unit, as the one-row layouts draw them.
+fn show_value_and_unit(ui: &mut Ui, m: &Measurement, value_size: f32, tc: &ThemeColors) {
+    let (value_text, value_color) = value_display(m, tc);
+    ui.label(value_label(
+        ui,
+        m,
+        &value_text,
+        FontId::monospace(value_size),
+        value_color,
+        value_size * MODE_SIZE_RATIO,
+    ));
+    ui.label(
+        RichText::new(&*m.unit)
+            .font(FontId::monospace(value_size))
+            .color(tc.reading()),
+    );
+}
+
+/// Space between the blocks of a one-row reading — value, separators,
+/// sub-values, mode — for a mode line at `mode_size`.
+fn one_row_spacing(mode_size: f32) -> f32 {
+    (mode_size * 0.3).max(2.0)
+}
+
+/// Space either side of the divider after the value, for a mode line at
+/// `mode_size`: the selector line spaces its blocks as every one-row reading
+/// does, the plain line keeps the value's own 2 pt. The beside layout's
+/// second divider takes the same, so the two one-row layouts differ by the
+/// grid and one divider only, and either can measure the line for both.
+fn divider_gap(mode_size: f32, selectors: bool) -> f32 {
+    if selectors {
+        one_row_spacing(mode_size)
+    } else {
+        2.0
+    }
+}
+
+/// Width egui gives a separator across its line.
+const SEPARATOR_WIDTH: f32 = 6.0;
+
+/// Render the reading with value and mode on a single line and the
+/// sub-values in rows under it (below layout).
 ///
-/// Returns the setting and value the user picked from a selector, if any.
+/// Returns the setting and value the user picked from a selector, if any,
+/// and the size of the line alone, the space under it included — what the
+/// fit measures the one-row layouts by.
 fn show_reading_inline(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
@@ -979,47 +1135,30 @@ fn show_reading_inline(
     scaled: bool,
     choices: ReadoutChoices<'_>,
     no_reading: NoReadingText<'_>,
-) -> Option<ReadoutPick> {
-    let unit_size = value_size;
+) -> (Option<ReadoutPick>, Vec2) {
     let mode_size = value_size * MODE_SIZE_RATIO;
+    let grid_id = aux_grid_id(ui);
+    let top = ui.cursor().top();
+    let line = |ui: &Ui| vec2(ui.min_rect().width(), ui.cursor().top() - top);
 
     match measurement {
         Some(m) => {
-            let (value_text, value_color) = value_display(m, tc);
-            let draw_value = |ui: &mut Ui| {
-                ui.label(value_label(
-                    ui,
-                    m,
-                    &value_text,
-                    FontId::monospace(value_size),
-                    value_color,
-                    mode_size,
-                ));
-                ui.label(
-                    RichText::new(&*m.unit)
-                        .font(FontId::monospace(unit_size))
-                        .color(tc.reading()),
-                );
-            };
-
+            let draw_value = |ui: &mut Ui| show_value_and_unit(ui, m, value_size, tc);
             let picked = if !choices.any_offered() {
                 show_reading_line_plain(ui, m, scaled, draw_value, mode_size, tc);
                 None
             } else {
                 ui.scope(|ui| {
-                    ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
+                    ui.spacing_mut().item_spacing.x = one_row_spacing(mode_size);
                     show_reading_line_with_selector(
                         ui, m, scaled, draw_value, mode_size, choices, tc,
                     )
                 })
                 .inner
             };
-
-            // Sub-values still get their own rows in the inline layout: the
-            // single line is already the widest thing on screen, and folding
-            // four UT181A sub-values into it would force the value font down.
-            let _ = show_aux_rows(ui, m, mode_size, tc);
-            picked
+            let line = line(ui);
+            let _ = show_aux_rows(ui, grid_id, m, mode_size, tc);
+            (picked, line)
         }
         None => {
             no_reading_placeholder(ui, scaled, no_reading.title(), |ui| {
@@ -1034,9 +1173,95 @@ fn show_reading_inline(
                     );
                 }
             });
-            None
+            (None, line(ui))
         }
     }
+}
+
+/// Render the reading, its sub-values and the mode line on one row, each a
+/// column with a divider between (beside layout): the sub-values are
+/// readings, so they sit next to the reading, and the mode, a control, comes
+/// last.
+///
+/// The value and the grid are placed at heights known up front, so the row
+/// centres them on each other whichever is the taller — four UT181A rows
+/// outgrow the value. A nested layout placed at its natural size would start
+/// `interact_size.y` tall and grow downwards from the top of the row.
+///
+/// Returns the pick, as [`show_reading`] does, and the size of the line
+/// as the below layout would draw it — the row without the grid, its second
+/// separator and their spacing, and with the space under it — so either
+/// one-row layout measures the line for both.
+fn show_reading_beside(
+    ui: &mut Ui,
+    m: &Measurement,
+    value_size: f32,
+    tc: &ThemeColors,
+    scaled: bool,
+    choices: ReadoutChoices<'_>,
+) -> (Option<ReadoutPick>, Vec2) {
+    let mode_size = value_size * MODE_SIZE_RATIO;
+    let grid_id = aux_grid_id(ui);
+    let grid = AuxGridMetrics::measure(ui, m, mode_size, tc).map_or(Vec2::ZERO, |g| {
+        g.size(mode_size, ui.spacing().interact_size)
+    });
+    let value_h = ui.fonts_mut(|f| f.row_height(&FontId::monospace(value_size)));
+    let spacing_y = ui.spacing().item_spacing.y;
+    let gap = divider_gap(mode_size, choices.any_offered());
+    let (picked, line_h) = ui
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            ui.set_min_height(value_h.max(grid.y));
+            let value = ui
+                .allocate_ui_with_layout(
+                    vec2(ui.available_width(), value_h),
+                    // Top, not centre: the live region is a nested horizontal,
+                    // which starts `interact_size.y` tall where the layout puts
+                    // it and grows downwards — centred, it would hang half the
+                    // value's height low. From the top it fills the slot exactly.
+                    Layout::left_to_right(Align::Min),
+                    |ui| {
+                        ui.live_region_horizontal(
+                            live_region_fingerprint(Some(m), scaled, NO_READING_TITLE),
+                            || live_region_label(Some(m), scaled, NO_READING_TITLE),
+                            |ui| {
+                                ui.spacing_mut().item_spacing.x = 2.0;
+                                show_value_and_unit(ui, m, value_size, tc);
+                            },
+                        );
+                    },
+                )
+                .response
+                .rect;
+            ui.separator();
+            ui.allocate_ui_with_layout(
+                vec2(ui.available_width(), grid.y),
+                Layout::top_down(Align::Min),
+                |ui| show_aux_rows(ui, grid_id, m, mode_size, tc),
+            );
+            ui.separator();
+            // Past the dividers, the readouts space as the line under the
+            // value spaces them.
+            ui.spacing_mut().item_spacing.x = one_row_spacing(mode_size);
+            let mode = show_mode_readout(ui, m, mode_size, choices);
+            let range = show_range_readout(ui, m, mode_size, choices.range, RangeAtRest::Nothing);
+            show_flags(ui, m, mode_size, tc, scaled);
+            // The row is the line's height unless the grid made it taller; then
+            // the value is, as the selectors centred beside it are no taller.
+            let row = ui.min_rect().height();
+            let line_h = if grid.y <= value.height() {
+                row
+            } else {
+                value.height()
+            };
+            (mode.or(range), line_h)
+        })
+        .inner;
+    let extra = grid.x + SEPARATOR_WIDTH + 2.0 * gap;
+    (
+        picked,
+        vec2(ui.min_rect().width() - extra, line_h + spacing_y),
+    )
 }
 
 /// Render the large primary reading display.
@@ -1066,16 +1291,23 @@ pub fn show_reading(
 /// Cached ratios of rendered reading dimensions to font size.
 /// Used by `show_reading_large` to compute the optimal font size and
 /// updated by the caller only on window resize (to avoid oscillation).
+///
+/// The two one-row layouts share the line — value, separator, mode — and
+/// differ only in where the sub-value grid goes, under it or beside it. So
+/// the cache holds the line alone, and the fit adds the grid, whose size it
+/// works out from the text: either layout measures the line for both, and
+/// the one not drawn is never judged by a stale guess.
 #[derive(Clone)]
 pub struct ReadingRatios {
     /// Two-line layout: reading width / font_size.
     pub w: f32,
     /// Two-line layout: reading height / font_size.
     pub h: f32,
-    /// Inline layout: reading width / font_size.
-    pub inline_w: f32,
-    /// Inline layout: reading height / font_size.
-    pub inline_h: f32,
+    /// One-row layouts: the line's width / font_size, without the grid.
+    pub row_w: f32,
+    /// One-row layouts: the line's height / font_size, the space under it
+    /// included, without the grid.
+    pub row_h: f32,
 }
 
 impl ReadingRatios {
@@ -1085,8 +1317,8 @@ impl ReadingRatios {
         let near = |a: f32, b: f32| (a - b).abs() <= 0.02 * a.abs().max(b.abs());
         near(self.w, measured.w)
             && near(self.h, measured.h)
-            && near(self.inline_w, measured.inline_w)
-            && near(self.inline_h, measured.inline_h)
+            && near(self.row_w, measured.row_w)
+            && near(self.row_h, measured.row_h)
     }
 
     /// The larger of each ratio: a reading that size fits both measures.
@@ -1094,8 +1326,8 @@ impl ReadingRatios {
         Self {
             w: self.w.max(other.w),
             h: self.h.max(other.h),
-            inline_w: self.inline_w.max(other.inline_w),
-            inline_h: self.inline_h.max(other.inline_h),
+            row_w: self.row_w.max(other.row_w),
+            row_h: self.row_h.max(other.row_h),
         }
     }
 }
@@ -1105,8 +1337,8 @@ impl Default for ReadingRatios {
         Self {
             w: 6.5,
             h: 1.8,
-            inline_w: 10.0,
-            inline_h: 1.0,
+            row_w: 10.0,
+            row_h: 1.0,
         }
     }
 }
@@ -1120,6 +1352,155 @@ pub struct ReadingFit<'a> {
     /// in so the optimal scale can be computed.
     pub base_content_height: f32,
     pub ratios: &'a ReadingRatios,
+}
+
+/// Where the big meter puts the mode line and the sub-values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReadingLayout {
+    /// Value, then the sub-value rows, then the mode line wrapped under them.
+    TwoLine,
+    /// Value │ mode on one line, the sub-value rows under it.
+    Below,
+    /// Value │ sub-values │ mode, all on one row.
+    Beside,
+}
+
+/// The sub-value grid as the fit weighs it: its text, laid out once, and
+/// the pixel spacing egui puts around it.
+struct GridFit {
+    metrics: AuxGridMetrics,
+    /// egui's `interact_size`, the floor under every grid cell.
+    min_cell: Vec2,
+    /// egui's vertical `item_spacing`, left under the grid as under any
+    /// widget.
+    spacing_y: f32,
+    /// Whether the mode line carries selectors, which space its dividers
+    /// wider ([`divider_gap`]).
+    selectors: bool,
+}
+
+impl GridFit {
+    /// The grid's size beside or under a value at `value_size`.
+    fn size(&self, value_size: f32) -> Vec2 {
+        self.metrics
+            .size(value_size * MODE_SIZE_RATIO, self.min_cell)
+    }
+
+    /// What the beside layout adds to the line's width at `value_size`: the
+    /// grid, a second separator, and the spacing either side of it.
+    fn beside_extra_width(&self, value_size: f32) -> f32 {
+        self.size(value_size).x
+            + SEPARATOR_WIDTH
+            + 2.0 * divider_gap(value_size * MODE_SIZE_RATIO, self.selectors)
+    }
+}
+
+/// The largest font size at which `fits` holds, searched up to `limit`; 0
+/// when even the smallest does not fit. `fits` must grow monotonically
+/// stricter with the size, as every layout's extent does.
+fn largest_fitting_size(limit: f32, fits: impl Fn(f32) -> bool) -> f32 {
+    let (mut lo, mut hi) = (0.0_f32, limit.max(1.0));
+    if fits(hi) {
+        return hi;
+    }
+    // Forty halvings take any window's range well under a hundredth of a
+    // point, far below what a pixel shows.
+    for _ in 0..40 {
+        let mid = 0.5 * (lo + hi);
+        if fits(mid) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    lo
+}
+
+/// Pick the big meter's layout and value font size for a reading in
+/// `avail`, with `content_coeff` points of content under it per point of
+/// font: whichever layout gives the largest value wins, so there is no
+/// width breakpoint. `grid` is `None` when there are no sub-values, and
+/// then the beside layout is no different from the below one and is never
+/// offered.
+///
+/// Beside has to beat the others outright: at a tie the below layout, which
+/// predates it, keeps the picture it always drew.
+///
+/// `last` is the layout drawn the frame before. With sub-values the choice
+/// is weighed every frame from their live text, so a timestamp growing a
+/// digit or a value turning to OL near the boundary would otherwise flip the
+/// whole reading back and forth; the last layout stays until another beats
+/// it by [`LAYOUT_SWITCH_MARGIN`]. Without sub-values the choice comes from
+/// the cached ratios alone, which move only on a re-measure, and `last` is
+/// ignored.
+fn pick_layout(
+    avail: Vec2,
+    content_coeff: f32,
+    ratios: &ReadingRatios,
+    grid: Option<&GridFit>,
+    last: Option<ReadingLayout>,
+) -> (ReadingLayout, f32) {
+    let two_line = (avail.x / ratios.w).min(avail.y / (ratios.h + content_coeff));
+    let (below, beside) = match grid {
+        // The closed form, as with no grid the line is the whole reading.
+        None => (
+            (avail.x / ratios.row_w).min(avail.y / (ratios.row_h + content_coeff)),
+            0.0,
+        ),
+        Some(grid) => {
+            let limit = avail.x.max(avail.y);
+            let below = largest_fitting_size(limit, |s| {
+                let g = grid.size(s);
+                ratios.row_w * s <= avail.x
+                    && g.x <= avail.x
+                    && (ratios.row_h + content_coeff) * s + g.y + grid.spacing_y <= avail.y
+            });
+            let beside = largest_fitting_size(limit, |s| {
+                let g = grid.size(s);
+                ratios.row_w * s + grid.beside_extra_width(s) <= avail.x
+                    && (ratios.row_h * s).max(g.y + grid.spacing_y) + content_coeff * s <= avail.y
+            });
+            (below, beside)
+        }
+    };
+    let (layout, size) = if below >= two_line {
+        (ReadingLayout::Below, below)
+    } else {
+        (ReadingLayout::TwoLine, two_line)
+    };
+    let best = if beside > size {
+        (ReadingLayout::Beside, beside)
+    } else {
+        (layout, size)
+    };
+    let kept = last.filter(|_| grid.is_some()).map(|last| {
+        let size = match last {
+            ReadingLayout::TwoLine => two_line,
+            ReadingLayout::Below => below,
+            ReadingLayout::Beside => beside,
+        };
+        (last, size)
+    });
+    match kept {
+        Some((last, size)) if size > 0.0 && best.1 <= size * (1.0 + LAYOUT_SWITCH_MARGIN) => {
+            (last, size)
+        }
+        _ => best,
+    }
+}
+
+/// How much larger another layout must make the value before the big meter
+/// leaves the one it drew last; see [`pick_layout`].
+const LAYOUT_SWITCH_MARGIN: f32 = 0.02;
+
+/// What the big meter drew last frame, kept in egui's memory: the layout,
+/// for [`pick_layout`]'s margin, and the value's size, which the fit lays the
+/// sub-values out at to weigh them — a size already drawn, so its glyphs are
+/// cached, and the very size the next frame picks once the window is still.
+#[derive(Clone, Copy)]
+struct LastFit {
+    layout: ReadingLayout,
+    size: f32,
 }
 
 /// Render an extra-large reading that scales to fill available space.
@@ -1152,52 +1533,57 @@ pub fn show_reading_large(
         .then(|| no_reading.layout_ratios(ui))
         .flatten();
     let ratios = own_ratios.as_ref().unwrap_or(ratios);
-    let available_w = ui.available_width();
-    let available_h = ui.available_height();
-
+    let last_id = ui.id().with("big_meter_last_fit");
+    let last: Option<LastFit> = ui.data(|d| d.get_temp(last_id));
+    // Laid out at the size drawn last, scaled from there: text does not
+    // scale exactly, but at the size it was laid out at the estimate is the
+    // grid as drawn, so a still window fits it to the pixel. The side panel's
+    // size, whose glyphs are cached too, stands in before the first frame.
+    let reference = last.map_or(BASE_READING_FONT_SIZE, |l| l.size);
+    let grid = measurement
+        .and_then(|m| AuxGridMetrics::measure(ui, m, reference * MODE_SIZE_RATIO, tc))
+        .map(|metrics| GridFit {
+            metrics,
+            min_cell: ui.spacing().interact_size,
+            spacing_y: ui.spacing().item_spacing.y,
+            selectors: choices.any_offered(),
+        });
+    let avail = ui.available_size();
     let content_coeff = base_content_height / BASE_READING_FONT_SIZE;
-
-    // Two-line layout: value+unit on top, mode below.
-    let two_line_w = available_w / ratios.w;
-    let two_line_h = available_h / (ratios.h + content_coeff);
-    let two_line_size = two_line_w.min(two_line_h);
-
-    // Inline layout: value+unit+mode all on one row.
-    let inline_w = available_w / ratios.inline_w;
-    let inline_h = available_h / (ratios.inline_h + content_coeff);
-    let inline_size = inline_w.min(inline_h);
-
-    // Use inline layout when it produces an equal or larger font size,
-    // meaning the window is wide enough to fit everything on one line
-    // without shrinking the value.
-    let use_inline = inline_size >= two_line_size;
-    let size = if use_inline {
-        inline_size
-    } else {
-        two_line_size
-    }
-    .max(MIN_BIG_METER_FONT_SIZE);
+    let (layout, size) = pick_layout(
+        avail,
+        content_coeff,
+        ratios,
+        grid.as_ref(),
+        last.map(|l| l.layout),
+    );
+    let size = size.max(MIN_BIG_METER_FONT_SIZE);
+    ui.data_mut(|d| d.insert_temp(last_id, LastFit { layout, size }));
 
     // Render and measure actual dimensions.
     let before = ui.cursor().top();
-    let picked = if use_inline {
-        show_reading_inline(ui, measurement, size, tc, scaled, choices, no_reading)
-    } else {
-        show_reading_sized(ui, measurement, size, tc, scaled, choices, no_reading)
-    };
-    let reading_w = ui.min_rect().width();
-    let reading_h = ui.cursor().top() - before;
-
     let mut measured = ratios.clone();
-    if size > 0.0 {
-        if use_inline {
-            measured.inline_w = reading_w / size;
-            measured.inline_h = reading_h / size;
-        } else {
-            measured.w = reading_w / size;
-            measured.h = reading_h / size;
+    let picked = match (layout, measurement, grid.as_ref()) {
+        (ReadingLayout::Beside, Some(m), Some(_)) => {
+            let (picked, line) = show_reading_beside(ui, m, size, tc, scaled, choices);
+            measured.row_w = line.x / size;
+            measured.row_h = line.y / size;
+            picked
         }
-    }
+        (ReadingLayout::TwoLine, ..) => {
+            let picked = show_reading_sized(ui, measurement, size, tc, scaled, choices, no_reading);
+            measured.w = ui.min_rect().width() / size;
+            measured.h = (ui.cursor().top() - before) / size;
+            picked
+        }
+        _ => {
+            let (picked, line) =
+                show_reading_inline(ui, measurement, size, tc, scaled, choices, no_reading);
+            measured.row_w = line.x / size;
+            measured.row_h = line.y / size;
+            picked
+        }
+    };
 
     (size / BASE_READING_FONT_SIZE, measured, picked)
 }
@@ -1300,7 +1686,6 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors, sc
 mod tests {
     use super::*;
     use dmm_lib::flags::StatusFlags;
-    use dmm_lib::measurement::AuxValue;
     use std::borrow::Cow;
 
     /// Build a sub-value the way the protocols do: digits in `display_raw`,
@@ -1329,7 +1714,7 @@ mod tests {
         for _ in 0..3 {
             rects.clear();
             let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
-                rects = show_aux_rows(ui, m, font_size, &tc);
+                rects = show_aux_rows(ui, aux_grid_id(ui), m, font_size, &tc);
             });
             // See `run_frame`: epaint 0.36 debug-asserts that texture deltas
             // were applied before being dropped.
@@ -1453,6 +1838,333 @@ mod tests {
         }
     }
 
+    /// A reading with `rows` sub-values, the first `with_secs` of them
+    /// stamped as MIN/MAX extremes are.
+    fn reading_with_rows(rows: usize, with_secs: usize) -> Measurement {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        m.aux_values = (0..rows)
+            .map(|i| {
+                let mut a = aux(["Max", "Average", "Min", "Raw"][i], &format!("1.{i}25"), "");
+                a.elapsed_secs = (i < with_secs).then_some(12);
+                a
+            })
+            .collect();
+        m
+    }
+
+    /// The grid as drawn: run a few frames, as the grid sizes its columns
+    /// from the frame before, and return the last frame's rect.
+    fn drawn_grid(m: &Measurement, font_size: f32) -> egui::Rect {
+        let ctx = egui::Context::default();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let mut rect = egui::Rect::NOTHING;
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let id = aux_grid_id(ui);
+                rect = ui
+                    .scope(|ui| show_aux_rows(ui, id, m, font_size, &tc))
+                    .response
+                    .rect;
+            });
+            out.textures_delta.clear();
+        }
+        rect
+    }
+
+    fn grid_metrics(m: &Measurement, font_size: f32) -> (AuxGridMetrics, Vec2) {
+        let ctx = egui::Context::default();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let mut metrics = None;
+        let mut min_cell = Vec2::ZERO;
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            metrics = AuxGridMetrics::measure(ui, m, font_size, &tc);
+            min_cell = ui.spacing().interact_size;
+        });
+        out.textures_delta.clear();
+        (metrics.expect("the reading has sub-values"), min_cell)
+    }
+
+    /// The beside layout centres the grid on a height worked out from the
+    /// text, and the fit adds the grid's width to the line's: both are only
+    /// right if the worked-out size is the size the grid draws at. Laid out
+    /// at the size drawn it matches to the pixel; scaled from the side
+    /// panel's size, as the fit scales it, to within a couple of percent.
+    #[test]
+    fn the_grid_size_worked_out_from_the_text_is_the_size_drawn() {
+        let base = BASE_READING_FONT_SIZE * MODE_SIZE_RATIO;
+        for (rows, secs) in [(2, 0), (4, 0), (3, 3)] {
+            let m = reading_with_rows(rows, secs);
+            // 14.4 is the side panel's mode size, 52 a 130 px big meter's.
+            for size in [base, 52.0] {
+                let drawn = drawn_grid(&m, size).size();
+                let (exact, min_cell) = grid_metrics(&m, size);
+                let worked_out = exact.size(size, min_cell);
+                assert!(
+                    (worked_out - drawn).abs().max_elem() <= 1.0,
+                    "{rows} rows ({secs} stamped) at {size}: worked out {worked_out:?}, drawn {drawn:?}"
+                );
+                let (scaled, _) = grid_metrics(&m, base);
+                let scaled = scaled.size(size, min_cell);
+                let off = ((scaled - drawn) / drawn).abs().max_elem();
+                assert!(
+                    off <= 0.02,
+                    "{rows} rows ({secs} stamped) at {size}: scaled {scaled:?}, drawn {drawn:?}"
+                );
+            }
+        }
+    }
+
+    /// Bounds of the plain label whose text contains `needle`. Labels carry
+    /// their text as the node's value; the live region's row carries the
+    /// whole sentence as its label, so it never matches here.
+    fn label_bounds(nodes: &[(NodeId, Node)], needle: &str) -> egui::Rect {
+        let (_, node) = nodes
+            .iter()
+            .find(|(_, n)| n.value().is_some_and(|t| t.contains(needle)))
+            .unwrap_or_else(|| panic!("no label reads {needle:?}"));
+        let b = node.bounds().expect("drawn widgets have bounds");
+        egui::Rect::from_min_max(
+            egui::pos2(b.x0 as f32, b.y0 as f32),
+            egui::pos2(b.x1 as f32, b.y1 as f32),
+        )
+    }
+
+    /// Value │ sub-values │ mode: the three blocks run left to right and sit
+    /// centred on each other, whether the grid is shorter than the value
+    /// (two rows) or outgrows it (four). A nested layout placed at its
+    /// natural size starts `interact_size.y` tall and grows downwards, which
+    /// left the value hanging under the grid and the mode line.
+    #[test]
+    fn the_beside_row_centres_value_sub_values_and_mode() {
+        let ctx = egui::Context::default();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        for rows in [2, 4] {
+            let m = reading_with_rows(rows, 0);
+            for size in [36.0_f32, 130.0] {
+                let mut nodes = Vec::new();
+                for _ in 0..3 {
+                    nodes = run_frame(&ctx, Vec::new(), |ui| {
+                        show_reading_beside(ui, &m, size, &tc, false, ReadoutChoices::default()).0
+                    })
+                    .nodes;
+                }
+                let case = format!("{rows} rows at {size} px");
+                let value = label_bounds(&nodes, "5.678");
+                let grid = label_bounds(&nodes, "Max")
+                    .union(label_bounds(&nodes, "1.025"))
+                    .union(label_bounds(&nodes, &format!("1.{}25", rows - 1)));
+                let mode = label_bounds(&nodes, "DC V");
+                for (name, rect) in [("sub-values", grid), ("mode", mode)] {
+                    let delta = (rect.center().y - value.center().y).abs();
+                    assert!(
+                        delta <= 1.0,
+                        "{case}: {name} centre {} vs value centre {} (delta {delta} px)",
+                        rect.center().y,
+                        value.center().y
+                    );
+                }
+                assert!(
+                    value.right() < grid.left() && grid.right() < mode.left(),
+                    "{case}: value {value:?}, sub-values {grid:?}, mode {mode:?} out of order"
+                );
+            }
+        }
+    }
+
+    /// Two T1/T2-sized sub-values, as `GridFit` sees them at the side
+    /// panel's size: a 2-row grid about 120 px wide and 40 tall there.
+    fn two_row_grid() -> GridFit {
+        GridFit {
+            metrics: AuxGridMetrics {
+                font_size: BASE_READING_FONT_SIZE * MODE_SIZE_RATIO,
+                label_w: 18.0,
+                value_w: 80.0,
+                secs_w: 0.0,
+                text_h: 18.0,
+                rows: 2,
+            },
+            min_cell: vec2(40.0, 18.0),
+            spacing_y: 3.0,
+            selectors: true,
+        }
+    }
+
+    /// A value │ mode line about seven value-widths long, as measured.
+    fn line_ratios() -> ReadingRatios {
+        ReadingRatios {
+            w: 6.5,
+            h: 1.8,
+            row_w: 7.0,
+            row_h: 1.2,
+        }
+    }
+
+    /// A wide, short window is the one the rows under the value starve of
+    /// height: the sub-values move beside it, and the value grows.
+    #[test]
+    fn a_wide_short_window_puts_the_sub_values_beside_the_value() {
+        let grid = two_row_grid();
+        for avail in [vec2(1998.0, 275.0), vec2(1200.0, 200.0)] {
+            let (layout, size) = pick_layout(avail, 0.0, &line_ratios(), Some(&grid), None);
+            assert_eq!(layout, ReadingLayout::Beside, "{avail:?}");
+            // And what it picked fits.
+            let width = line_ratios().row_w * size + grid.beside_extra_width(size);
+            assert!(
+                width <= avail.x + 0.01,
+                "{avail:?}: {width} px wide at {size}"
+            );
+            let height = (line_ratios().row_h * size).max(grid.size(size).y + grid.spacing_y);
+            assert!(
+                height <= avail.y + 0.01,
+                "{avail:?}: {height} px tall at {size}"
+            );
+        }
+    }
+
+    /// Where width is what runs out first, a third column only costs size:
+    /// a narrow or tall window keeps the rows under the value.
+    #[test]
+    fn a_narrow_or_tall_window_keeps_the_sub_values_under_the_value() {
+        let grid = two_row_grid();
+        for avail in [vec2(420.0, 170.0), vec2(900.0, 640.0), vec2(1998.0, 1400.0)] {
+            let (layout, _) = pick_layout(avail, 0.0, &line_ratios(), Some(&grid), None);
+            assert_ne!(layout, ReadingLayout::Beside, "{avail:?}");
+        }
+    }
+
+    /// With no sub-values the beside layout is the below one, and is never
+    /// picked; the choice and size are the closed form the big meter has
+    /// always used.
+    #[test]
+    fn a_reading_without_sub_values_never_goes_beside() {
+        let ratios = line_ratios();
+        for avail in [vec2(1998.0, 275.0), vec2(420.0, 170.0), vec2(900.0, 640.0)] {
+            for content_coeff in [0.0, 2.5] {
+                let (layout, size) = pick_layout(avail, content_coeff, &ratios, None, None);
+                assert_ne!(layout, ReadingLayout::Beside, "{avail:?}");
+                let last = Some(ReadingLayout::Beside);
+                assert_eq!(
+                    pick_layout(avail, content_coeff, &ratios, None, last),
+                    (layout, size),
+                    "{avail:?}: a last layout moved a reading with no sub-values"
+                );
+                let two_line = (avail.x / ratios.w).min(avail.y / (ratios.h + content_coeff));
+                let below = (avail.x / ratios.row_w).min(avail.y / (ratios.row_h + content_coeff));
+                assert_eq!(size, two_line.max(below), "{avail:?}");
+            }
+        }
+    }
+
+    /// Near the boundary the layout drawn last stays, unless another makes
+    /// the value clearly larger: with sub-values the choice is weighed every
+    /// frame, and a timestamp growing a digit must not flip the reading.
+    #[test]
+    fn the_last_layout_stays_until_another_clearly_wins() {
+        let grid = two_row_grid();
+        let ratios = line_ratios();
+        let pick = |avail, last| pick_layout(avail, 0.0, &ratios, Some(&grid), last);
+        // Grow the height until beside stops winning: one pixel short of
+        // that, it wins by a hair over the layout that takes over.
+        let mut avail = vec2(1200.0, 100.0);
+        while pick(avail, None).0 == ReadingLayout::Beside {
+            avail.y += 1.0;
+        }
+        let (other, _) = pick(avail, None);
+        avail.y -= 1.0;
+        assert_eq!(pick(avail, None).0, ReadingLayout::Beside);
+        assert_eq!(
+            pick(avail, Some(other)).0,
+            other,
+            "a marginal gain flipped the layout from {other:?}"
+        );
+        // A window where beside wins outright switches straight away.
+        assert_eq!(
+            pick(vec2(1998.0, 275.0), Some(ReadingLayout::Below)).0,
+            ReadingLayout::Beside
+        );
+    }
+
+    /// Both one-row layouts measure the line the fit caches for both, so
+    /// they must agree on it, with selectors on the line or without: a
+    /// disagreement makes each pass undo the one before.
+    #[test]
+    fn both_one_row_layouts_measure_the_same_line() {
+        let ctx = egui::Context::default();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let m = reading_with_rows(2, 0);
+        let offered = two_choices();
+        for choices in [ReadoutChoices::default(), modes(&offered)] {
+            for size in [36.0_f32, 130.0] {
+                let mut lines = [Vec2::ZERO; 2];
+                for (i, beside) in [false, true].into_iter().enumerate() {
+                    for _ in 0..3 {
+                        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                            lines[i] = if beside {
+                                show_reading_beside(ui, &m, size, &tc, false, choices).1
+                            } else {
+                                show_reading_inline(
+                                    ui,
+                                    Some(&m),
+                                    size,
+                                    &tc,
+                                    false,
+                                    choices,
+                                    NoReadingText::Plain,
+                                )
+                                .1
+                            };
+                        });
+                        out.textures_delta.clear();
+                    }
+                }
+                let [below, beside] = lines;
+                let selectors = choices.any_offered();
+                assert!(
+                    (below.x - beside.x).abs() <= 1.0,
+                    "selectors {selectors}, {size} px: below's line is {below:?}, beside's {beside:?}"
+                );
+            }
+        }
+    }
+
+    /// A layout switch keeps the sub-value grid's id. A grid under a new id
+    /// hides itself for a sizing pass and discards the frame — and that
+    /// discarded frame counted against the fit's re-measure passes.
+    #[test]
+    fn switching_to_beside_keeps_the_grid() {
+        let ctx = egui::Context::default();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let m = reading_with_rows(2, 0);
+        // A discarded frame is run again inside the same `run_ui`, so it
+        // shows as the closure running twice.
+        let passes = |beside: bool| {
+            let mut passes = 0;
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                passes += 1;
+                if beside {
+                    let _ = show_reading_beside(ui, &m, 130.0, &tc, false, Default::default());
+                } else {
+                    let _ = show_reading_inline(
+                        ui,
+                        Some(&m),
+                        130.0,
+                        &tc,
+                        false,
+                        Default::default(),
+                        NoReadingText::Plain,
+                    );
+                }
+            });
+            out.textures_delta.clear();
+            passes
+        };
+        for _ in 0..3 {
+            passes(false);
+        }
+        assert_eq!(passes(true), 1, "the grid started over under a new id");
+    }
+
     /// Single-display meters must draw nothing at all — no grid, no row.
     #[test]
     fn aux_rows_draw_nothing_without_sub_values() {
@@ -1528,7 +2240,7 @@ mod tests {
     }
 
     /// The layouts the readout appears in, drawn at the side-panel size.
-    const LAYOUTS: [&str; 3] = ["two-line", "inline", "compact"];
+    const LAYOUTS: [&str; 4] = ["two-line", "inline", "beside", "compact"];
 
     fn draw_reading(
         ui: &mut Ui,
@@ -1547,15 +2259,19 @@ mod tests {
                 choices,
                 NoReadingText::Plain,
             ),
-            "inline" => show_reading_inline(
-                ui,
-                Some(m),
-                BASE_READING_FONT_SIZE,
-                &tc,
-                false,
-                choices,
-                NoReadingText::Plain,
-            ),
+            "inline" => {
+                show_reading_inline(
+                    ui,
+                    Some(m),
+                    BASE_READING_FONT_SIZE,
+                    &tc,
+                    false,
+                    choices,
+                    NoReadingText::Plain,
+                )
+                .0
+            }
+            "beside" => show_reading_beside(ui, m, BASE_READING_FONT_SIZE, &tc, false, choices).0,
             _ => show_reading_compact(ui, Some(m), &tc, false, choices),
         }
     }

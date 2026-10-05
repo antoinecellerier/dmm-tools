@@ -57,6 +57,12 @@ reading fills the window, for a bench display or a presentation; minimal mode
 drops the top bar and buttons too. **⊞** and Ctrl+B leave saved panels alone,
 so closing the app keeps the configured layout.
 
+**The reading's layout is whichever gives the biggest value.** Value over mode
+line, value │ mode with the sub-values under it, or value │ sub-values │ mode:
+there is no width breakpoint (`pick_layout` in `display/mod.rs`). Beside the
+value, the sub-values come before the mode. They are readings and the mode is a
+control.
+
 **Nothing below a window-sized reading.** In big meter and minimal mode a
 connection problem replaces the reading's placeholder with its title, and the
 steps go in its hover text.

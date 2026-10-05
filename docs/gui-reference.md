@@ -98,7 +98,8 @@ top-right corner in every layout and expire on their own.
 - Sub-value rows under the reading for meters that send them (UT181A, UT171,
   and the UT61E+'s AC component in AC+DC V): label, value and unit, plus
   `@Ns` for the MIN/MAX timestamps. The narrow layout condenses them to one
-  line. In AC+DC V the reading itself is captioned **DC**.
+  line; in a wide big-meter window they sit beside the reading. In AC+DC V the
+  reading itself is captioned **DC**.
 - Mode and range label below in smaller text
 - On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
   VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
@@ -418,7 +419,8 @@ statistics, graph, recording.
 
 Activated when both graph and recording panels are hidden (via settings
 or the toggle). The reading display scales to fill the available space —
-useful as a bench-mount display or for presentations.
+useful as a bench-mount display or for presentations. The mode line and
+sub-values move beside the reading or under it, whichever lets it grow larger.
 
 Use the **⊞** button (near the remote control buttons) or **Ctrl+B** to
 quickly enter big meter mode — this temporarily hides graph, recording,
@@ -428,7 +430,7 @@ top bar and command buttons, leaving only the reading and mode line.
 Press **Ctrl+B** a third time to return to your normal layout. In a window
 too small to show the **⊞** button, **Ctrl+B** is the way out.
 
-![Minimal mode in a wide, short window: the mode and range selectors beside the reading](../assets/gui-minimal-meter-wide.png)
+![Minimal mode in a wide, short window: a UT181A's T1 reading with T2 beside it, then the mode selector](../assets/gui-minimal-meter-wide.png)
 
 ![Minimal mode in a narrow window: the mode and range selectors under the reading](../assets/gui-minimal-meter-narrow.png)
 
