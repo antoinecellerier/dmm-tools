@@ -59,6 +59,9 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-matrix.yml
     with:
+      # Named after the tag, so each release's downloads are told apart. A
+      # branch dispatch keeps the bare name: a branch can contain a slash.
+      archive-prefix: ${{ github.ref_type == 'tag' && format('dmm-tools-{0}', github.ref_name) || 'dmm-tools' }}
       # The same test the release job gates on: a branch dispatch builds
       # binaries nothing publishes.
       published: ${{ startsWith(github.ref, 'refs/tags/v') }}

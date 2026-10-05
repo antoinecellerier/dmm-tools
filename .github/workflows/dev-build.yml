@@ -104,7 +104,9 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-matrix.yml
     with:
-      archive-prefix: dmm-tools-dev-${{ needs.check.outputs.short_sha }}
+      # The version and commit the dev release is titled with, e.g.
+      # "v0.9.0-dev (abc1234)" becomes dmm-tools-v0.9.0-dev-abc1234.
+      archive-prefix: dmm-tools-v${{ needs.check.outputs.version }}-${{ needs.check.outputs.short_sha }}
       published: true
 
   publish:

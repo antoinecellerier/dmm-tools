@@ -14,7 +14,7 @@ Once it runs, the [CLI reference](cli-reference.md) and [GUI reference](gui-refe
 
 To try unreleased changes without installing a Rust toolchain, use a dev build — built nightly from `main`.
 
-Find them in the [dev build listing](https://github.com/antoinecellerier/dmm-tools/releases?q=prerelease%3Atrue), newest first. Archives are named `dmm-tools-dev-<commit>-<platform>`. Their first launch shows the same security warning on [Windows](#windows-protected-your-pc) and [macOS](#macos-wont-open-dmm-cli-or-dmm-gui).
+Find them in the [dev build listing](https://github.com/antoinecellerier/dmm-tools/releases?q=prerelease%3Atrue), newest first. Archives are named `dmm-tools-v<version>-dev-<commit>-<platform>`. Their first launch shows the same security warning on [Windows](#windows-protected-your-pc) and [macOS](#macos-wont-open-dmm-cli-or-dmm-gui).
 
 Dev builds may be broken, and only the newest seven are kept. When reporting a problem, include the version you're running, from `dmm-cli --version`.
 

@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       archive-prefix:
-        description: "Base name for the archives, e.g. dmm-tools or dmm-tools-dev-abc1234"
+        description: "Base name for the archives, e.g. dmm-tools-v0.8.0 or dmm-tools-v0.9.0-dev-abc1234"
         type: string
         default: dmm-tools
       subset:
