@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "dmm-cli"
-version = "0.8.0-dev"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "clap",
@@ -1105,7 +1105,7 @@ dependencies = [
 
 [[package]]
 name = "dmm-gui"
-version = "0.8.0-dev"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "clap",
@@ -1128,7 +1128,7 @@ dependencies = [
 
 [[package]]
 name = "dmm-lib"
-version = "0.8.0-dev"
+version = "0.8.0"
 dependencies = [
  "btleplug",
  "env_logger",
@@ -1145,7 +1145,7 @@ dependencies = [
 
 [[package]]
 name = "dmm-shared"
-version = "0.8.0-dev"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "clap",
