@@ -1236,6 +1236,60 @@ mod tests {
         assert!(has_node(&frame, "Save as theme\u{2026}"));
     }
 
+    /// The AccessKit nodes in reading order: depth first from the roots,
+    /// children in the order they were added — the order a screen reader
+    /// walks them.
+    fn reading_order(frame: &SettingsFrame) -> Vec<egui::accesskit::NodeId> {
+        let children: std::collections::HashSet<_> = frame
+            .nodes
+            .iter()
+            .flat_map(|(_, n)| n.children().iter().copied())
+            .collect();
+        let mut todo: Vec<_> = frame
+            .nodes
+            .iter()
+            .map(|(id, _)| *id)
+            .filter(|id| !children.contains(id))
+            .collect();
+        todo.reverse();
+        let mut order = Vec::new();
+        while let Some(id) = todo.pop() {
+            order.push(id);
+            if let Some((_, n)) = frame.nodes.iter().find(|(nid, _)| *nid == id) {
+                todo.extend(n.children().iter().rev().copied());
+            }
+        }
+        order
+    }
+
+    /// A screen reader meets the caption with the header it sits beside,
+    /// before the swatches — not after every one of them, where a child
+    /// drawn once the section was done had put it.
+    #[test]
+    fn the_editing_caption_is_read_before_the_swatches() {
+        let mut run = SettingsRun::new(1200.0, 1200.0);
+        let frame = open_customize_colors(&mut run);
+        let order = reading_order(&frame);
+        let at = |text: &str| {
+            let (id, _) = frame
+                .nodes
+                .iter()
+                .find(|(_, n)| n.label() == Some(text) || n.value() == Some(text))
+                .unwrap_or_else(|| panic!("no {text:?} node"));
+            order
+                .iter()
+                .position(|o| o == id)
+                .expect("every node is in the tree")
+        };
+        let header = at("Customize colors");
+        let caption = at("(editing dark theme colors)");
+        let background = at("Background");
+        assert!(
+            header < caption && caption < background,
+            "read as header {header}, caption {caption}, first swatch {background}"
+        );
+    }
+
     /// Reset colors goes once there is nothing left to reset. Pressed from
     /// the keyboard, it hands focus to the section's header, so the next Tab
     /// carries on from there rather than from the top of the window.
@@ -1264,6 +1318,28 @@ mod tests {
         assert!(
             focused_on(&frame, "Customize colors"),
             "the focus did not land on the section's header"
+        );
+    }
+
+    /// The open section names the palette it edits beside its header, not
+    /// on a line of its own under it.
+    #[test]
+    fn the_editing_caption_sits_beside_the_header() {
+        let mut run = SettingsRun::new(1200.0, 1200.0);
+        let frame = open_customize_colors(&mut run);
+        let header = node_bounds(&frame, "Customize colors");
+        let caption = node_bounds(&frame, "(editing dark theme colors)");
+        assert!(
+            caption.y0 >= header.y0 && caption.y1 <= header.y1,
+            "the caption left the header's line: {caption:?} by {header:?}"
+        );
+        assert!(caption.x0 >= header.x1, "{caption:?} overlaps {header:?}");
+        // And the swatches start under the header, not a caption line lower.
+        let background = node_bounds(&frame, "Background");
+        let line = f64::from(frame.ctx.global_style().spacing.interact_size.y);
+        assert!(
+            background.y0 < header.y1 + line,
+            "a line is left between the header and the swatches: {background:?}"
         );
     }
 

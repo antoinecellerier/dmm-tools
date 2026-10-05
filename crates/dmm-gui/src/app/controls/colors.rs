@@ -196,32 +196,52 @@ impl App {
     pub(super) fn show_color_customization(&mut self, ui: &mut Ui) {
         let dark = ui.visuals().dark_mode;
 
+        // A named theme's own palette only in its own mode, as
+        // `Settings::color_tweaks` has it: on the frame a chip is picked, the
+        // UI may still be in the other.
+        let named = self
+            .settings
+            .active_theme()
+            .filter(|t| t.dark == dark)
+            .map(|t| t.name.clone());
+        let editing = match &named {
+            Some(name) => format!("(editing {name} colors)"),
+            None if dark => "(editing dark theme colors)".to_string(),
+            None => "(editing light theme colors)".to_string(),
+        };
+
         // The header's id, kept from the frame before: `CollapsingHeader`
         // makes it inside a `ui.vertical` of its own, so it can't be worked
         // out here, but it doesn't change from one frame to the next.
         let header_key = ui.id().with("customize_colors_header");
         let header_id: Option<egui::Id> = ui.data(|d| d.get_temp(header_key));
+        let clip = ui.clip_rect();
         let collapsing = egui::CollapsingHeader::new("Customize colors")
             .default_open(false)
             .show(ui, |ui| {
-                // A named theme's own palette only in its own mode, as
-                // `Settings::color_tweaks` has it: on the frame a chip is
-                // picked, the UI may still be in the other.
-                let named = self
-                    .settings
-                    .active_theme()
-                    .filter(|t| t.dark == dark)
-                    .map(|t| t.name.clone());
-                let editing = match &named {
-                    Some(name) => format!("(editing {name} colors)"),
-                    None if dark => "(editing dark theme colors)".to_string(),
-                    None => "(editing light theme colors)".to_string(),
-                };
-                ui.label(
-                    RichText::new(editing)
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
-                );
+                // Beside the header rather than on a line of its own under
+                // it, but created first in the body: a screen reader then
+                // reaches it straight after the header, before the swatches.
+                // In a child the body never allocates for, as allocating
+                // would move the cursor back up; clipped to the panel rather
+                // than to the body, which starts below the header's line.
+                if let Some(header) = header_id.and_then(|id| ui.ctx().read_response(id)) {
+                    let header = header.rect;
+                    let beside = egui::Rect::from_min_max(
+                        egui::pos2(header.right() + ui.spacing().item_spacing.x, header.top()),
+                        egui::pos2(ui.max_rect().right(), header.bottom()),
+                    );
+                    let mut caption = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(beside)
+                            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                    );
+                    caption.set_clip_rect(beside.intersect(clip));
+                    let weak = caption.visuals().weak_text_color();
+                    caption.add(
+                        egui::Label::new(RichText::new(&editing).small().color(weak)).truncate(),
+                    );
+                }
 
                 let mut changed = false;
                 // What every swatch shows: followers already moved with
