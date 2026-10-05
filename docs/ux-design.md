@@ -44,6 +44,11 @@ either: it is a mode the user steps into.
 window would cramp the next launch's full layout (`App::track_layout` in
 `app/layout.rs`).
 
+**Settings run meter first, appearance last.** Groups a rule apart, in the
+order a first run needs them: the meter, what is kept, the panels, the window,
+then the look, set once, whose expanding Customize colors grows the panel at
+its foot (`show_settings_rows` in `app/controls/settings_panel.rs`).
+
 **Zoom steps like a browser's.** Ctrl+Plus, Ctrl+Minus and Ctrl+0 walk
 non-linear levels (`ZOOM_LEVELS` in `app/appearance.rs`); 100% is the OS scale.
 

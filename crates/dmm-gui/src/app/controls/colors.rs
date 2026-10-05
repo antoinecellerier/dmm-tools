@@ -344,6 +344,29 @@ impl App {
             });
         let header_id = collapsing.header_response.id;
         ui.data_mut(|d| d.insert_temp(header_key, header_id));
+        // Near the foot of the panel, the section opens below the fold of a
+        // short window. Once it has finished opening, scroll as much of it
+        // into view as fits, the header first.
+        let header = &collapsing.header_response;
+        let reveal = header.id.with("reveal");
+        if header.clicked() {
+            let opened = egui::collapsing_header::CollapsingState::load(ui.ctx(), header.id)
+                .is_some_and(|state| state.is_open());
+            ui.data_mut(|d| {
+                if opened {
+                    d.insert_temp(reveal, true);
+                } else {
+                    d.remove::<bool>(reveal);
+                }
+            });
+        }
+        if collapsing.fully_open() && ui.data_mut(|d| d.remove_temp::<bool>(reveal).is_some()) {
+            let body = collapsing
+                .body_response
+                .as_ref()
+                .map_or(header.rect, |b| b.rect);
+            ui.scroll_to_rect(header.rect.union(body), None);
+        }
         // Paint an explicit focus ring on the header when Tab-focused —
         // egui's CollapsingHeader shows only a subtle highlight otherwise,
         // which is easy to miss.

@@ -439,29 +439,29 @@ to their defaults.
 
 Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Linux (XDG config dir under the `dmm-tools` project name; macOS and Windows use the equivalent platform-specific location).
 
-![The settings panel open above the reading and graph, with the theme, colour, panel, interval, buffer, device and zoom rows](../assets/gui-settings.png)
+![The settings panel open above the reading and graph, with the device, connection, interval, buffer, panel, zoom, window, theme, colour and graph-line rows](../assets/gui-settings.png)
 
 | Setting | Default | Description |
 |---|---|---|
-| **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none), or a [named theme](#color-customization), which brings its own colors and mode. |
-| **Colors** | Default | Color preset for Dark, Light and System: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
-| **Graph lines** | Patterned | How sub-value lines are drawn: **Patterned** dashes and dots them so they can be told apart without colour; **Solid** draws them continuous, told apart by colour and the plot key (a fourth sub-value, sharing the first one's colour, keeps its dashes). Mean, reference, envelope, cursor, marker and data-loss lines keep their patterns. |
+| **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other entries, grouped by brand, pick a model directly. Requires reconnect. |
+| **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
+| **Auto-connect on start** | on | Connect to meter automatically on startup |
+| **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name. |
+| **Look for Bluetooth devices** | on | When off, nothing scans for adapters or meters and the connection help offers no Bluetooth steps. An address given to `--adapter` is still opened. Takes effect on the next connect. |
+| **Sample interval** | Every reading | **Every reading** the meter produces, at its own pace (on a UT61E+, about 10 a second over USB, 3 over Bluetooth), or at most one reading per 100, 200, 300 or 500 ms, 1 s or 2 s: the one nearest each tick. |
+| **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys; a stopped recording kept beside the graph's readings can take as much memory again. `settings.json` accepts any size from 1K to 50M. |
 | **Graph** | on | Toggle graph panel visibility |
 | **Statistics** | on | Toggle statistics panel visibility |
 | **Recording** | on | Toggle recording panel visibility |
 | **Specifications** | on | Toggle [specifications](#specifications) panel visibility |
 | **Resolution**, **Accuracy**, **Input Z**, **Notes** | on | Shown while **Specifications** is on. Each shows or hides its field in the specifications. |
-| **Auto-connect on start** | on | Connect to meter automatically on startup |
-| **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name. |
-| **Sample interval** | Every reading | **Every reading** the meter produces, at its own pace (on a UT61E+, about 10 a second over USB, 3 over Bluetooth), or at most one reading per 100, 200, 300 or 500 ms, 1 s or 2 s: the one nearest each tick. |
-| **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys; a stopped recording kept beside the graph's readings can take as much memory again. `settings.json` accepts any size from 1K to 50M. |
-| **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other entries, grouped by brand, pick a model directly. Requires reconnect. |
-| **Look for Bluetooth devices** | on | When off, nothing scans for adapters or meters and the connection help offers no Bluetooth steps. An address given to `--adapter` is still opened. Takes effect on the next connect. |
-| **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
-| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
+| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
 | **Check for new versions** | on | Only in downloaded builds. See [Update checks](#update-checks). |
+| **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none), or a [named theme](#color-customization), which brings its own colors and mode. |
+| **Colors** | Default | Color preset for Dark, Light and System: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
+| **Graph lines** | Patterned | How sub-value lines are drawn: **Patterned** dashes and dots them so they can be told apart without colour; **Solid** draws them continuous, told apart by colour and the plot key (a fourth sub-value, sharing the first one's colour, keeps its dashes). Mean, reference, envelope, cursor, marker and data-loss lines keep their patterns. |
 
 ### Update checks
 

@@ -11,9 +11,39 @@ use crate::app::{App, BigMeterMode};
 use super::device_list::device_dropdown;
 use super::{Chip, chip_row};
 
+/// A checkbox as egui lays it out: the box, the icon gap, the label.
+fn checkbox_width(ui: &Ui, label: &str) -> f32 {
+    let galley = egui::WidgetText::from(label).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::FontSelection::Default,
+    );
+    ui.spacing().icon_width + ui.spacing().icon_spacing + galley.size().x
+}
+
+/// A checkbox that moves to the next line of a wrapped row whole. Left to
+/// itself, egui squeezes the label into what is left of the line and wraps
+/// it there, a word to a line; sized before it is placed, the checkbox moves
+/// down instead, and wraps only when a whole line is too narrow for it.
+fn wrapped_checkbox(ui: &mut Ui, enabled: bool, value: &mut bool, label: &str) -> egui::Response {
+    let size = egui::vec2(
+        checkbox_width(ui, label).min(ui.max_rect().width()),
+        ui.spacing().interact_size.y,
+    );
+    ui.allocate_ui_with_layout(
+        size,
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| ui.add_enabled(enabled, egui::Checkbox::new(value, label)),
+    )
+    .inner
+}
+
 /// Show a settings checkbox with a hover tooltip; returns `true` if the value changed.
 fn setting_checkbox(ui: &mut Ui, value: &mut bool, label: &str, tooltip: &str) -> bool {
-    ui.checkbox(value, label).on_hover_text(tooltip).changed()
+    wrapped_checkbox(ui, true, value, label)
+        .on_hover_text(tooltip)
+        .changed()
 }
 
 /// The **Specifications** checkbox and, while it is on, the fields the
@@ -60,19 +90,9 @@ fn specs_checkboxes(ui: &mut Ui, show: &mut bool, fields: &mut SpecFields) -> (b
     ];
     let shown = if on { field_boxes.len() } else { 0 };
 
-    // A checkbox as egui lays it out: the box, the icon gap, the label.
-    let checkbox_width = |label: &str| {
-        let galley = egui::WidgetText::from(label).into_galley(
-            ui,
-            Some(egui::TextWrapMode::Extend),
-            f32::INFINITY,
-            egui::FontSelection::Default,
-        );
-        ui.spacing().icon_width + ui.spacing().icon_spacing + galley.size().x
-    };
     let width = std::iter::once(panel_label)
         .chain(field_boxes[..shown].iter().map(|(_, label, _)| *label))
-        .map(checkbox_width)
+        .map(|label| checkbox_width(ui, label))
         .sum::<f32>()
         + ui.spacing().item_spacing.x * shown as f32;
     let size = egui::vec2(
@@ -219,79 +239,116 @@ impl App {
         }
     }
 
-    /// The settings rows, top to bottom. Drawn inside the scroll area that
-    /// [`Self::show_settings_panel`] caps, and kept in their own method so
-    /// that the rows stay at one indentation level. The colour rows at the
-    /// top live in `colors.rs`.
+    /// The settings rows, top to bottom, in groups a rule apart: the meter,
+    /// what is kept of its readings, which panels show, the window, and how
+    /// it all looks. Appearance comes last, being set once and holding the
+    /// one section that opens, **Customize colors**, which then grows the
+    /// panel near its foot rather than pushing every other row down. Drawn
+    /// inside the scroll area that [`Self::show_settings_panel`] caps; the
+    /// colour rows live in `colors.rs`.
     fn show_settings_rows(&mut self, ui: &mut Ui) {
-        self.show_theme_row(ui);
+        self.show_meter_rows(ui);
+        ui.separator();
+        self.show_data_rows(ui);
+        ui.separator();
+        self.show_panel_rows(ui);
+        ui.separator();
+        self.show_window_rows(ui);
+        ui.separator();
+        self.show_appearance_rows(ui);
+    }
 
-        // -- Color preset selector --
-        // Presets are palettes for Dark, Light and System; a named theme
-        // carries its own, so the row only shows where it applies.
-        if self.settings.active_theme().is_none() {
-            self.show_color_preset_row(ui);
-        }
-
-        // -- Collapsible color customization --
-        self.show_color_customization(ui);
-
-        // -- Graph line style --
+    /// **Device**, **Mock mode** while the mock is picked, and how a
+    /// connection is made.
+    fn show_meter_rows(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
-            let chips = [
-                (
-                    GraphLines::Patterned,
-                    "Patterned",
-                    "Dashed and dotted sub-value lines, told apart without colour",
-                ),
-                (
-                    GraphLines::Solid,
-                    "Solid",
-                    "Continuous lines, told apart by colour and the key",
-                ),
-            ]
-            .map(|(value, label, tooltip)| Chip {
-                value,
-                selected: self.settings.graph_lines == value,
-                label: label.to_string(),
-                tooltip: tooltip.to_string(),
+            let pinned = self.device_row_pin();
+            let has_override = self.settings.overrides.has_device();
+            // What the selection resolves to, not what the file spells: an
+            // alias, or an id no entry answers to, would otherwise leave the
+            // row with nothing marked while the session opened something.
+            let selected_id = self
+                .selected_device()
+                .map_or(registry::AUTO_DEVICE_ID, |d| d.id);
+            let name = registry::find_device(selected_id).map_or("Auto-detect", |d| d.display_name);
+            let label = if has_override {
+                format!("{name} (--device)")
+            } else {
+                name.to_string()
+            };
+            let picked = ui
+                .scope(|ui| {
+                    if pinned.is_some() {
+                        ui.disable();
+                    }
+                    ui.label("Device:");
+                    device_dropdown(ui, selected_id, &label)
+                })
+                .inner;
+            if let Some(note) = pinned {
+                ui.label(
+                    RichText::new(note)
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                );
+            }
+            if let Some(id) = picked {
+                self.settings.shared.device_family = id.to_string();
+                // Clear the override — user explicitly chose a device
+                self.settings.overrides.device_family = None;
+                self.settings.save();
+                // Auto-reconnect if currently connected
+                if self.connection.state != crate::app::ConnectionState::Disconnected {
+                    self.connection.needs_reconnect = true;
+                }
+            }
+        });
+
+        // Mock mode selector (only shown when mock device is selected)
+        if self
+            .selected_device()
+            .is_some_and(|d| d.id == dmm_lib::mock::MOCK.id)
+        {
+            ui.horizontal_wrapped(|ui| {
+                let has_override = self.settings.overrides.has_mock_mode();
+                // "Auto" = cycle through all modes, and leads the row.
+                let auto_selected = self.settings.mock_mode.is_empty();
+                let auto = std::iter::once(Chip {
+                    value: String::new(),
+                    selected: auto_selected,
+                    label: if auto_selected && has_override {
+                        "Auto (cycle) (--mock-mode)"
+                    } else {
+                        "Auto (cycle)"
+                    }
+                    .to_string(),
+                    tooltip: "Cycle through all synthetic modes to exercise the GUI".to_string(),
+                });
+                let modes = MockMode::ALL.iter().map(|mode| {
+                    let mode_label = mode.label();
+                    let selected = self.settings.mock_mode == mode_label;
+                    Chip {
+                        value: mode_label.to_string(),
+                        selected,
+                        label: if selected && has_override {
+                            format!("{mode_label} (--mock-mode)")
+                        } else {
+                            mode_label.to_string()
+                        },
+                        tooltip: mode.description().to_string(),
+                    }
+                });
+                if let Some(mock_mode) = chip_row(ui, "Mock mode:", auto.chain(modes)) {
+                    self.settings.mock_mode = mock_mode;
+                    // Clear the override — user explicitly chose a mock mode
+                    self.settings.overrides.mock_mode = None;
+                    self.settings.save();
+                    if self.connection.state != crate::app::ConnectionState::Disconnected {
+                        self.connection.needs_reconnect = true;
+                    }
+                }
             });
-            if let Some(lines) = chip_row(ui, "Graph lines:", chips) {
-                self.settings.graph_lines = lines;
-                self.settings.save();
-            }
-        });
-
-        ui.horizontal_wrapped(|ui| {
-            let changed = setting_checkbox(
-                ui,
-                &mut self.settings.show_graph,
-                "Graph",
-                "Show the rolling time-series plot",
-            ) | setting_checkbox(
-                ui,
-                &mut self.settings.show_stats,
-                "Statistics",
-                "Show Min / Max / Avg / integral for the live session",
-            ) | setting_checkbox(
-                ui,
-                &mut self.settings.show_recording,
-                "Recording",
-                "Show the recording controls and sample log",
-            );
-            let (specs_changed, fields_changed) = specs_checkboxes(
-                ui,
-                &mut self.settings.show_specs,
-                &mut self.settings.spec_fields,
-            );
-            if changed || specs_changed {
-                // Manual settings change exits big meter toggle.
-                self.big_meter_mode = BigMeterMode::Off;
-            }
-            if changed || specs_changed || fields_changed {
-                self.settings.save();
-            }
-        });
+        }
 
         ui.horizontal_wrapped(|ui| {
             let changed = setting_checkbox(
@@ -305,11 +362,35 @@ impl App {
                 "Show device name on connect (beeps)",
                 "Query the meter's name after connecting — the meter will beep once",
             );
-            if changed {
+            let label = if self.settings.overrides.has_bluetooth() {
+                format!("{BLUETOOTH_SETTING} (--no-bluetooth)")
+            } else {
+                BLUETOOTH_SETTING.to_string()
+            };
+            // No reconnect: a session already running over an adapter would
+            // be dropped by one, and the setting only decides what the next
+            // connect looks at.
+            let bluetooth_changed = setting_checkbox(
+                ui,
+                &mut self.settings.shared.bluetooth,
+                &label,
+                "Look for a Bluetooth adapter or meter in range when no USB cable answers. \
+                 Takes effect on the next connect.",
+            );
+            if bluetooth_changed {
+                // Cleared like every other row the user sets by hand: the
+                // value they picked is theirs to keep.
+                self.settings.overrides.bluetooth = None;
+            }
+            if changed || bluetooth_changed {
                 self.settings.save();
             }
         });
+    }
 
+    /// **Sample interval** and **Buffer size**: side by side, as the buffer's
+    /// caption reckons its hours from the interval.
+    fn show_data_rows(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
             let chips = [0u32, 100, 200, 300, 500, 1000, 2000]
                 .into_iter()
@@ -377,119 +458,45 @@ impl App {
                     .color(ui.visuals().weak_text_color()),
             );
         });
+    }
 
+    /// Which panels show, and what the Specifications panel shows.
+    fn show_panel_rows(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
-            let pinned = self.device_row_pin();
-            let has_override = self.settings.overrides.has_device();
-            // What the selection resolves to, not what the file spells: an
-            // alias, or an id no entry answers to, would otherwise leave the
-            // row with nothing marked while the session opened something.
-            let selected_id = self
-                .selected_device()
-                .map_or(registry::AUTO_DEVICE_ID, |d| d.id);
-            let name = registry::find_device(selected_id).map_or("Auto-detect", |d| d.display_name);
-            let label = if has_override {
-                format!("{name} (--device)")
-            } else {
-                name.to_string()
-            };
-            let picked = ui
-                .scope(|ui| {
-                    if pinned.is_some() {
-                        ui.disable();
-                    }
-                    ui.label("Device:");
-                    device_dropdown(ui, selected_id, &label)
-                })
-                .inner;
-            if let Some(note) = pinned {
-                ui.label(
-                    RichText::new(note)
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
-                );
-            }
-            if let Some(id) = picked {
-                self.settings.shared.device_family = id.to_string();
-                // Clear the override — user explicitly chose a device
-                self.settings.overrides.device_family = None;
-                self.settings.save();
-                // Auto-reconnect if currently connected
-                if self.connection.state != crate::app::ConnectionState::Disconnected {
-                    self.connection.needs_reconnect = true;
-                }
-            }
-        });
-
-        ui.horizontal_wrapped(|ui| {
-            let label = if self.settings.overrides.has_bluetooth() {
-                format!("{BLUETOOTH_SETTING} (--no-bluetooth)")
-            } else {
-                BLUETOOTH_SETTING.to_string()
-            };
-            // No reconnect: a session already running over an adapter would
-            // be dropped by one, and the setting only decides what the next
-            // connect looks at.
-            if setting_checkbox(
+            let changed = setting_checkbox(
                 ui,
-                &mut self.settings.shared.bluetooth,
-                &label,
-                "Look for a Bluetooth adapter or meter in range when no USB cable answers. \
-                 Takes effect on the next connect.",
-            ) {
-                // Cleared like every other row the user sets by hand: the
-                // value they picked is theirs to keep.
-                self.settings.overrides.bluetooth = None;
+                &mut self.settings.show_graph,
+                "Graph",
+                "Show the rolling time-series plot",
+            ) | setting_checkbox(
+                ui,
+                &mut self.settings.show_stats,
+                "Statistics",
+                "Show Min / Max / Avg / integral for the live session",
+            ) | setting_checkbox(
+                ui,
+                &mut self.settings.show_recording,
+                "Recording",
+                "Show the recording controls and sample log",
+            );
+            let (specs_changed, fields_changed) = specs_checkboxes(
+                ui,
+                &mut self.settings.show_specs,
+                &mut self.settings.spec_fields,
+            );
+            if changed || specs_changed {
+                // Manual settings change exits big meter toggle.
+                self.big_meter_mode = BigMeterMode::Off;
+            }
+            if changed || specs_changed || fields_changed {
                 self.settings.save();
             }
         });
+    }
 
-        // Mock mode selector (only shown when mock device is selected)
-        if self
-            .selected_device()
-            .is_some_and(|d| d.id == dmm_lib::mock::MOCK.id)
-        {
-            ui.horizontal_wrapped(|ui| {
-                let has_override = self.settings.overrides.has_mock_mode();
-                // "Auto" = cycle through all modes, and leads the row.
-                let auto_selected = self.settings.mock_mode.is_empty();
-                let auto = std::iter::once(Chip {
-                    value: String::new(),
-                    selected: auto_selected,
-                    label: if auto_selected && has_override {
-                        "Auto (cycle) (--mock-mode)"
-                    } else {
-                        "Auto (cycle)"
-                    }
-                    .to_string(),
-                    tooltip: "Cycle through all synthetic modes to exercise the GUI".to_string(),
-                });
-                let modes = MockMode::ALL.iter().map(|mode| {
-                    let mode_label = mode.label();
-                    let selected = self.settings.mock_mode == mode_label;
-                    Chip {
-                        value: mode_label.to_string(),
-                        selected,
-                        label: if selected && has_override {
-                            format!("{mode_label} (--mock-mode)")
-                        } else {
-                            mode_label.to_string()
-                        },
-                        tooltip: mode.description().to_string(),
-                    }
-                });
-                if let Some(mock_mode) = chip_row(ui, "Mock mode:", auto.chain(modes)) {
-                    self.settings.mock_mode = mock_mode;
-                    // Clear the override — user explicitly chose a mock mode
-                    self.settings.overrides.mock_mode = None;
-                    self.settings.save();
-                    if self.connection.state != crate::app::ConnectionState::Disconnected {
-                        self.connection.needs_reconnect = true;
-                    }
-                }
-            });
-        }
-
+    /// **Zoom** and how the window sits on the desktop, then the update
+    /// check.
+    fn show_window_rows(&mut self, ui: &mut Ui) {
         ui.horizontal_wrapped(|ui| {
             let chips = Self::ZOOM_LEVELS.iter().map(|&level| Chip {
                 value: level,
@@ -505,26 +512,32 @@ impl App {
                 self.settings.zoom_pct = level;
                 self.settings.save();
             }
-            ui.label(
-                RichText::new("(Ctrl+/- to adjust, Ctrl+0 = 100%)")
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
         });
 
-        // The Wayland caption is a sentence, so it wraps rather than
-        // running off the edge of a narrow window.
+        // Always on top last: its Wayland caption is a sentence that wraps
+        // rather than running off the edge of a narrow window, and egui
+        // can't line a widget up beside a wrapped label's last line.
         ui.horizontal_wrapped(|ui| {
+            if setting_checkbox(
+                ui,
+                &mut self.settings.hide_decorations,
+                "Hide window decorations",
+                "Borderless window — use Ctrl+D to toggle back",
+            ) {
+                self.apply_decorations(ui.ctx());
+                self.settings.save();
+            }
             // Greyed rather than hidden on Wayland, and the saved value is
             // left alone: a `true` written on an X11 session still applies
             // there.
-            let response = ui
-                .add_enabled(
-                    !self.on_wayland,
-                    egui::Checkbox::new(&mut self.settings.always_on_top, "Always on top"),
-                )
-                .on_hover_text("Keep the window above other desktop windows (Ctrl+T)")
-                .on_disabled_hover_text(ALWAYS_ON_TOP_WAYLAND_HINT);
+            let response = wrapped_checkbox(
+                ui,
+                !self.on_wayland,
+                &mut self.settings.always_on_top,
+                "Always on top",
+            )
+            .on_hover_text("Keep the window above other desktop windows (Ctrl+T)")
+            .on_disabled_hover_text(ALWAYS_ON_TOP_WAYLAND_HINT);
             if response.changed() {
                 self.apply_always_on_top(ui.ctx());
                 self.settings.save();
@@ -538,25 +551,7 @@ impl App {
             }
         });
 
-        ui.horizontal_wrapped(|ui| {
-            if setting_checkbox(
-                ui,
-                &mut self.settings.hide_decorations,
-                "Hide window decorations",
-                "Borderless window — use Ctrl+D to toggle back",
-            ) {
-                self.apply_decorations(ui.ctx());
-                self.settings.save();
-            }
-            ui.label(
-                RichText::new("(Ctrl+D to toggle)")
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
-        });
-
-        // Only downloaded builds ask, so only they have the row. Last, so the
-        // rows above keep the places the doc screenshots click.
+        // Only downloaded builds ask, so only they have the row.
         if self.update_check.applies() {
             ui.horizontal_wrapped(|ui| {
                 if setting_checkbox(
@@ -570,6 +565,44 @@ impl App {
                 }
             });
         }
+    }
+
+    /// **Theme**, **Colors**, **Customize colors** and **Graph lines**.
+    fn show_appearance_rows(&mut self, ui: &mut Ui) {
+        self.show_theme_row(ui);
+
+        // Presets are palettes for Dark, Light and System; a named theme
+        // carries its own, so the row only shows where it applies.
+        if self.settings.active_theme().is_none() {
+            self.show_color_preset_row(ui);
+        }
+
+        self.show_color_customization(ui);
+
+        ui.horizontal_wrapped(|ui| {
+            let chips = [
+                (
+                    GraphLines::Patterned,
+                    "Patterned",
+                    "Dashed and dotted sub-value lines, told apart without colour",
+                ),
+                (
+                    GraphLines::Solid,
+                    "Solid",
+                    "Continuous lines, told apart by colour and the key",
+                ),
+            ]
+            .map(|(value, label, tooltip)| Chip {
+                value,
+                selected: self.settings.graph_lines == value,
+                label: label.to_string(),
+                tooltip: tooltip.to_string(),
+            });
+            if let Some(lines) = chip_row(ui, "Graph lines:", chips) {
+                self.settings.graph_lines = lines;
+                self.settings.save();
+            }
+        });
     }
 }
 
@@ -1055,7 +1088,7 @@ mod tests {
     #[test]
     fn the_expanded_colours_wrap_and_the_other_rows_keep_reflowing() {
         // Narrower than the Graph swatch row and than the Zoom row.
-        let width = 700.0;
+        let width = 600.0;
         let mut run = SettingsRun::new(1200.0, 900.0);
         run.ctx.enable_accesskit();
         run.frame(vec![]);
@@ -1109,10 +1142,10 @@ mod tests {
         }
         // The Zoom row folded at the window, not at the swatch row.
         let first = node_bounds(&frame, "30%");
-        let last = node_bounds(&frame, "(Ctrl+/- to adjust, Ctrl+0 = 100%)");
+        let last = node_bounds(&frame, "300%");
         assert!(
             last.y0 >= first.y1,
-            "the Zoom row did not reflow: 30% at {first:?}, its hint at {last:?}"
+            "the Zoom row did not reflow: 30% at {first:?}, 300% at {last:?}"
         );
     }
 
@@ -1195,6 +1228,134 @@ mod tests {
         assert!(disabled, "the list is still pickable during a replay");
         // And the row says how to get the choice back.
         node_bounds(&frame, "(restart without --replay to pick a meter)");
+    }
+
+    /// The groups in the panel's order: the meter, what is kept, the
+    /// panels, the window, then how it looks.
+    #[test]
+    fn the_settings_groups_run_meter_first_appearance_last() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        let rows = [
+            "Device",
+            "Auto-connect on start",
+            "Every reading",
+            "100K",
+            "Graph",
+            "30%",
+            "Always on top",
+            "Check for new versions",
+            "Dark",
+            "Default",
+            "Customize colors",
+            "Patterned",
+        ];
+        let tops = rows.map(|label| node_bounds(&frame, label).y0);
+        for (pair, tops) in rows.windows(2).zip(tops.windows(2)) {
+            assert!(tops[0] < tops[1], "{} is not above {}", pair[0], pair[1]);
+        }
+    }
+
+    /// Customize colors opens near the foot of the panel, below the fold of a
+    /// short window: once open, the rows scroll to show it, header first.
+    #[test]
+    fn opening_customize_colors_scrolls_it_into_view() {
+        let mut run = SettingsRun::new(1200.0, 560.0);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        assert_eq!(frame.scrolled.state.offset, egui::Vec2::ZERO);
+        let header = node_bounds(&frame, "Customize colors");
+        run.click(Pos2::new(
+            ((header.x0 + header.x1) / 2.0) as f32,
+            ((header.y0 + header.y1) / 2.0) as f32,
+        ));
+        // Open, then the scroll's animation, a second a frame.
+        for _ in 0..3 {
+            run.frame(vec![]);
+        }
+        let frame = run.frame(vec![]);
+        let inner = frame.scrolled.inner_rect;
+        assert!(
+            frame.scrolled.state.offset.y > 0.0,
+            "nothing scrolled: content {:?} in {inner:?}",
+            frame.scrolled.content_size
+        );
+        let header = node_bounds(&frame, "Customize colors");
+        assert!(
+            header.y0 >= f64::from(inner.top()) - 1.0,
+            "the header is scrolled off the top: {header:?} in {inner:?}"
+        );
+        // And the swatches are on screen below it.
+        let background = node_bounds(&frame, "Background");
+        assert!(
+            background.y1 <= f64::from(inner.bottom()) + 1.0,
+            "the first swatch is below the fold: {background:?} in {inner:?}"
+        );
+    }
+
+    /// The connection checkboxes share a row, and so do the window's two.
+    /// On a narrow window each moves down whole rather than folding its
+    /// label a word to a line, with the longest labels they can carry.
+    #[test]
+    fn the_merged_checkbox_rows_wrap_a_checkbox_at_a_time() {
+        let bluetooth = format!("{BLUETOOTH_SETTING} (--no-bluetooth)");
+        let meter = [
+            "Auto-connect on start",
+            "Show device name on connect (beeps)",
+            bluetooth.as_str(),
+        ];
+        let window = ["Always on top", "Hide window decorations"];
+        for width in [1200.0, 400.0] {
+            let mut run = SettingsRun::new(width, 1600.0);
+            run.app.settings.overrides.bluetooth = Some(true);
+            run.ctx.enable_accesskit();
+            run.frame(vec![]);
+            let frame = run.frame(vec![]);
+            let line = f64::from(frame.ctx.global_style().spacing.interact_size.y);
+            for label in meter.iter().chain(&window) {
+                let b = node_bounds(&frame, label);
+                assert!(
+                    b.y1 - b.y0 <= line + 0.5,
+                    "{label:?} folds at {width}: {b:?}"
+                );
+                assert!(b.x1 <= f64::from(width), "{label:?} runs off: {b:?}");
+            }
+            if width == 1200.0 {
+                for row in [&meter[..], &window[..]] {
+                    let first = node_bounds(&frame, row[0]).y0;
+                    for label in &row[1..] {
+                        assert_eq!(node_bounds(&frame, label).y0, first, "{label:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// On Wayland the note on the greyed Always on top follows it on its
+    /// line, and ends the row: Hide window decorations comes before them.
+    #[test]
+    fn the_wayland_note_follows_always_on_top() {
+        let note = format!("({ALWAYS_ON_TOP_WAYLAND_HINT})");
+        for width in [1200.0, 700.0, 400.0] {
+            let mut run = SettingsRun::new(width, 1600.0);
+            run.app.on_wayland = true;
+            run.ctx.enable_accesskit();
+            run.frame(vec![]);
+            let frame = run.frame(vec![]);
+            let [hide, on_top, note] = ["Hide window decorations", "Always on top", note.as_str()]
+                .map(|label| node_bounds(&frame, label));
+            for b in [hide, on_top, note] {
+                assert!(b.x1 <= f64::from(width), "runs off at {width}: {b:?}");
+            }
+            assert_eq!(hide.y0, on_top.y0, "the checkboxes split at {width}");
+            assert!(hide.x1 <= on_top.x0, "out of order at {width}");
+            // A note that wraps spans the row from its left edge, so it is
+            // placed by where it starts: on the checkbox's line.
+            assert_eq!(note.y0, on_top.y0, "the note left the line at {width}");
+        }
     }
 
     /// Open Customize colors in `run`, and return the frame it is open in.

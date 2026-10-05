@@ -75,23 +75,24 @@ GRAPH_CROP="1428x983+492+48"
 # ends at x 1198 — and the plot as far as the trace's spike, without the
 # minimap. Narrow enough that the four still read side by side in a table.
 THEME_CROP="720x760+492+48"
-# The top bar and the whole settings panel — its closing rule is at y 615 —
+# The top bar and the whole settings panel — its closing rule is at y 603 —
 # over a band of the reading and graph below, enough to place the panel in the
 # window without carrying its full height: the no-reading dashes and the graph
 # toolbar, down to the blank rows above Scale and the plot.
-SETTINGS_CROP="1920x722+0+0"
-# The colour rows of the settings panel plus a swatch picker opened at the
-# panel's right edge, where it covers no other setting.
-COLOR_CROP="1920x638+0+58"
+SETTINGS_CROP="1920x710+0+0"
+# The Appearance rows at the foot of the settings panel, from Theme, and the
+# swatch picker that hangs below the panel, down to the gap under the
+# no-meter heading on the left and the time axis on the right.
+COLOR_CROP="1920x666+0+424"
 # The left column down to the rule under the connection help (y 889): the
 # no-reading dashes, then the help's title and a section per link, which is
 # the whole subject — the rest of the window is an empty graph.
 HELP_CROP="478x843+0+46"
 GEAR_X=1884; GEAR_Y=22              # the settings gear, right end of the top bar
-CUSTOMIZE_X=150; CUSTOMIZE_Y=166    # the "Customize colors" collapsing header
-# The Text family's last swatch, Crosshair: its picker opens beside the
-# families above it, over the end of the graph rows, and fits the crop.
-CROSSHAIR_SWATCH_X=757; CROSSHAIR_SWATCH_Y=281
+CUSTOMIZE_X=150; CUSTOMIZE_Y=532    # the "Customize colors" collapsing header
+# The Text family's last swatch, Crosshair: its picker opens below it, over
+# the end of the graph rows and the plot under the panel.
+CROSSHAIR_SWATCH_X=757; CROSSHAIR_SWATCH_Y=616
 # Empty left-column space, below the statistics and below the narrow layout's
 # recording hint: clicking here moves the pointer off the plot without
 # activating anything, so no crosshair tooltip lands in the picture.
@@ -501,6 +502,8 @@ scene_color_customization() {
 	# A click before the panel has settled misses the header.
 	"$GUI" settle >/dev/null
 	click "$CUSTOMIZE_X" "$CUSTOMIZE_Y"
+	# The section animates open.
+	"$GUI" settle >/dev/null
 	click "$CROSSHAIR_SWATCH_X" "$CROSSHAIR_SWATCH_Y"
 	capture gui-color-customization.png "$COLOR_CROP"
 }

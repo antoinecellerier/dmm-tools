@@ -41,6 +41,7 @@
 - **What's New opens on this release, with earlier ones folded**
 - **The graph's mean, reference and cursor labels stay readable when crowded** — they drew over each other, the plot key and marker flags.
 - **Settings picks the meter from a list grouped by brand** — the Device row filled several lines of chips.
+- **Settings are grouped by topic, the meter first**
 
 ### CLI
 
