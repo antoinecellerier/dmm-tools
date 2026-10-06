@@ -135,6 +135,9 @@ Create two files in `docs/research/<family>/`:
    - `[INFERRED]` — logically deduced from other findings
    - `[UNVERIFIED]` — requires real device testing to confirm
    - `[HARDWARE]` — seen on a real meter; names the issue, the cable and the reporter
+   - `[COMMUNITY]` — from a community source, only in the labelled cross-reference section (Phase 3)
+
+   Older specs use synonyms, listed in each spec's own legend: `[MANUAL]` and `[VENDOR-DOC]` split `[KNOWN]` by document, `[DEDUCED]` means `[INFERRED]`, and the UT61 specs use `[VERIFIED]` for `[HARDWARE]`.
 
 2. **`reverse-engineered-protocol.md`** — Protocol specification: frame format, byte layouts, mode tables, command encoding, flag bits, checksum algorithm. This becomes the authoritative reference for implementation.
 
