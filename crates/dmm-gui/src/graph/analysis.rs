@@ -64,9 +64,17 @@ impl Graph {
     ) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         let window = window_secs.max(0.1);
 
-        // Collect points: need data back to x_min - window for edge correctness.
-        // Use visible_index_range to skip the bulk of the history.
-        let (start, end) = self.visible_index_range(x_min - window, x_max);
+        // Emitted from the last point before `x_min`, as the overlay builder
+        // reaches back, so a dashed edge can carry its pattern from left of
+        // the view (`pattern.rs`). Collected from a window before that point
+        // for edge correctness, through visible_index_range to skip the bulk
+        // of the history.
+        let lead = self.visible_index_range(x_min, x_max).0.saturating_sub(1);
+        let from = self
+            .history
+            .get(lead)
+            .map_or(x_min, |p| self.elapsed_secs(p.time).min(x_min));
+        let (start, end) = self.visible_index_range(from - window, x_max);
         let points: Vec<(f64, f64)> = (start..end)
             .map(|i| {
                 let p = &self.history[i];
@@ -108,10 +116,10 @@ impl Graph {
                 max_deque.pop_front();
             }
 
-            // Only emit envelope points within the visible range. Points
-            // before `x_min` still feed the deques so the first visible
-            // sample sees the correct trailing window.
-            if t < x_min {
+            // Only emit envelope points from the lead on. Points before it
+            // still feed the deques so the first emitted sample sees the
+            // correct trailing window.
+            if start + i < lead {
                 continue;
             }
 

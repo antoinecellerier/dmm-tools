@@ -127,6 +127,10 @@ fn text_field(
     let resp = ui.add(
         egui::TextEdit::singleline(text)
             .desired_width(width)
+            // The buttons' padding rather than egui's 2 pt, so a field
+            // showing up beside them doesn't make its row taller and shift
+            // the graph below.
+            .margin(ui.spacing().button_padding)
             .hint_text(hint),
     );
     // egui's own focused frame is invisible under a pinned Accent; the ring

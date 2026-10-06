@@ -3,13 +3,15 @@
 
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
-    AxisHints, GridInput, GridMark, HLine, HoverPosition, Line, Plot, PlotBounds, PlotPoint,
-    PlotPoints, PlotTransform, Points, Span, VLine,
+    AxisHints, GridInput, GridMark, HoverPosition, Line, Plot, PlotBounds, PlotPoint, PlotPoints,
+    PlotTransform, Points, Span, VLine,
 };
+use std::cell::RefCell;
 use std::time::Instant;
 
 use super::axes::{self, AxisMap};
 use super::minimap::bucket_secs;
+use super::pattern::{DASH_GAP, PatternKey, Patterns, TimedHLine, anchor_layout};
 use super::time::format_time_axis_label;
 use super::{GapKind, Graph, OverlaySeries, SegmentsAndGaps};
 use crate::markers::Markers;
@@ -58,16 +60,12 @@ fn key_line_sample(
         egui_plot::LineStyle::Dotted { spacing } => {
             egui::Shape::dotted_line(&[a, b], color, spacing, WIDTH)
         }
-        egui_plot::LineStyle::Dashed { length } => {
-            // The same golden-ratio gap `egui_plot::LineStyle::style_line` uses.
-            const GOLDEN_RATIO: f32 = 0.618_034;
-            egui::Shape::dashed_line(
-                &[a, b],
-                egui::Stroke::new(WIDTH, color),
-                length,
-                length * GOLDEN_RATIO,
-            )
-        }
+        egui_plot::LineStyle::Dashed { length } => egui::Shape::dashed_line(
+            &[a, b],
+            egui::Stroke::new(WIDTH, color),
+            length,
+            length * DASH_GAP,
+        ),
     }
 }
 
@@ -1251,6 +1249,21 @@ impl Graph {
                 / f64::from(2.0 * ui.available_width() * ui.ctx().pixels_per_point()),
         );
         let thin = |points: &[[f64; 2]]| thin_for_drawing(points, bucket);
+        // The dashed and dotted lines are built from further left, so the
+        // pattern they carry from anchor to anchor stays on the line as the
+        // view moves (`pattern.rs`).
+        let (anchor_secs, draw_min) = anchor_layout(
+            view_min,
+            bucket,
+            (view_max - view_min) / f64::from(ui.available_width()),
+        );
+        self.dash_phases
+            .begin_frame(draw_min, view_max + anchor_secs);
+        let phases = RefCell::new(std::mem::take(&mut self.dash_phases));
+        let patterns = Patterns {
+            anchor_secs,
+            phases: &phases,
+        };
         // Overload spans, including one still in progress. Used both to draw
         // the bands and to answer the crosshair tooltip, which is the only
         // non-visual cue available — `Span` is never a hover target.
@@ -1300,7 +1313,7 @@ impl Graph {
         // Sub-value traces over the same window as the main series, minus
         // any the user switched off in the toolbar's Show: group, and any in
         // a unit with no axis in view to read them against.
-        let mut overlay_traces = self.visible_overlay_traces(view_min, view_max);
+        let mut overlay_traces = self.visible_overlay_traces(draw_min, view_max);
         overlay_traces.retain(|(_, label, _)| {
             self.overlay_unit(label) == self.current_unit || map_of(label).is_some()
         });
@@ -1377,7 +1390,7 @@ impl Graph {
 
         let show_envelope = self.show_envelope;
         let (env_min, env_max) = if show_envelope {
-            self.build_envelope(view_min, view_max, self.envelope_window.value())
+            self.build_envelope(draw_min, view_max, self.envelope_window.value())
         } else {
             (Vec::new(), Vec::new())
         };
@@ -1535,33 +1548,44 @@ impl Graph {
 
             // Min/max envelope (drawn first so it's behind the data line)
             if show_envelope && !env_min.is_empty() {
-                plot_ui.line(
-                    Line::new("", PlotPoints::new(thin(&env_max)))
-                        .color(env_color)
-                        .style(egui_plot::LineStyle::dashed_dense()),
-                );
-                plot_ui.line(
-                    Line::new("", PlotPoints::new(thin(&env_min)))
-                        .color(env_color)
-                        .style(egui_plot::LineStyle::dashed_dense()),
-                );
+                // Never from where it begins: that is the oldest point held,
+                // which moves once the buffer's bound starts dropping them.
+                for (edge, key) in [
+                    (&env_max, PatternKey::EnvelopeMax),
+                    (&env_min, PatternKey::EnvelopeMin),
+                ] {
+                    patterns.line(
+                        plot_ui,
+                        Line::new("", PlotPoints::new(thin(edge))),
+                        env_color,
+                        egui_plot::LineStyle::dashed_dense(),
+                        key,
+                        false,
+                    );
+                }
             }
 
             // Sub-values first: the plotted series goes on top of them. One in
             // another unit is drawn at its axis's heights.
             for ((k, label, segments), map) in overlay_traces.iter().zip(&trace_maps) {
                 let (color, style) = Self::overlay_color_and_style(tc, *k, solid_lines);
-                for seg in segments {
+                for (i, seg) in segments.iter().enumerate() {
                     let mut points = thin(seg);
                     if let Some(map) = map {
                         for p in &mut points {
                             p[1] = map.height_of(p[1]);
                         }
                     }
-                    plot_ui.line(
-                        Line::new(label.clone(), PlotPoints::new(points))
-                            .color(color)
-                            .style(style),
+                    // A later segment begins after a break, at a fixed time.
+                    // The first begins at the oldest point held, which moves
+                    // once the buffer's bound starts dropping them.
+                    patterns.line(
+                        plot_ui,
+                        Line::new(label.clone(), PlotPoints::new(points)),
+                        color,
+                        style,
+                        PatternKey::Overlay(label.clone()),
+                        i > 0,
                     );
                 }
             }
@@ -1606,21 +1630,21 @@ impl Graph {
 
             // Mean line overlay
             if show_mean && let Some(avg) = mean_value {
-                plot_ui.hline(
-                    HLine::new("", avg)
-                        .color(mean_color)
-                        .style(egui_plot::LineStyle::dashed_loose()),
-                );
+                plot_ui.add(TimedHLine::new(
+                    avg,
+                    mean_color,
+                    egui_plot::LineStyle::dashed_loose(),
+                ));
             }
 
             // Reference line overlays
             if show_ref {
                 for &v in &ref_values {
-                    plot_ui.hline(
-                        HLine::new("", v)
-                            .color(ref_color)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
+                    plot_ui.add(TimedHLine::new(
+                        v,
+                        ref_color,
+                        egui_plot::LineStyle::dashed_dense(),
+                    ));
                 }
             }
 
@@ -1640,27 +1664,28 @@ impl Graph {
                     plot_ui.vline(VLine::new("", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_va {
-                    plot_ui.hline(
-                        HLine::new("", v)
-                            .color(cursor_color_dim)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
+                    plot_ui.add(TimedHLine::new(
+                        v,
+                        cursor_color_dim,
+                        egui_plot::LineStyle::dashed_dense(),
+                    ));
                 }
                 if let Some(t) = cursor_b {
                     plot_ui.vline(VLine::new("", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_vb {
-                    plot_ui.hline(
-                        HLine::new("", v)
-                            .color(cursor_color_dim)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
+                    plot_ui.add(TimedHLine::new(
+                        v,
+                        cursor_color_dim,
+                        egui_plot::LineStyle::dashed_dense(),
+                    ));
                 }
             }
 
             drawn_trace
         });
 
+        self.dash_phases = phases.into_inner();
         self.plot_rect = Some(response.response.rect);
         if let Some((time_label, name, t, overload)) = hover_hit.take() {
             let lines = hover_lines(&hover_series, &name, t, overload, point_decimals);

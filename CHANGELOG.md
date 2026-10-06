@@ -5,6 +5,7 @@
 ### Bug fixes
 
 - **Bluetooth no longer crashes Windows scans near some devices or hangs macOS connects**
+- **Dashed and dotted graph lines move with the data** — their pattern crawled along the curve as readings arrived or the view was dragged.
 
 ### Internal
 

@@ -4603,3 +4603,543 @@ fn a_wide_window_draws_about_as_much_as_a_narrow_one() {
     // About 10 times as many; every sample drawn made it about 47.
     assert!(wide < 20 * narrow, "1 h: {wide} vertices, 1 min: {narrow}");
 }
+
+// ── Dash patterns that move with the data ───────────────────────────────────
+
+use super::pattern::{DashPhases, PatternKey, anchor_layout, walk_pattern};
+
+/// The dashes `walk_pattern` draws along the x axis, as (from, to) in x,
+/// joining the pieces it cuts at each point.
+fn dash_spans(shapes: &[egui::Shape]) -> Vec<(f32, f32)> {
+    let mut spans: Vec<(f32, f32)> = Vec::new();
+    for shape in shapes {
+        let egui::Shape::LineSegment { points, .. } = shape else {
+            panic!("a dash is a segment: {shape:?}");
+        };
+        match spans.last_mut() {
+            Some(last) if (last.1 - points[0].x).abs() < 1e-4 => last.1 = points[1].x,
+            _ => spans.push((points[0].x, points[1].x)),
+        }
+    }
+    spans
+}
+
+fn dot_xs(shapes: &[egui::Shape]) -> Vec<f32> {
+    shapes
+        .iter()
+        .map(|shape| match shape {
+            egui::Shape::Circle(c) => c.center.x,
+            _ => panic!("a dot is a disc: {shape:?}"),
+        })
+        .collect()
+}
+
+/// Dashes keep egui_plot's lengths across the points a line bends at, and
+/// a phase into the dash draws what is left of it first.
+#[test]
+fn walk_pattern_keeps_dash_and_gap_lengths() {
+    let line = [
+        egui::pos2(0.0, 0.0),
+        egui::pos2(37.0, 0.0),
+        egui::pos2(100.0, 0.0),
+    ];
+    let stroke = egui::Stroke::new(1.5, egui::Color32::RED);
+    let style = egui_plot::LineStyle::Dashed { length: 10.0 };
+    let gap = 10.0 * super::pattern::DASH_GAP;
+    let mut out = Vec::new();
+    walk_pattern(
+        &line,
+        0.0,
+        style,
+        stroke,
+        false,
+        egui::Rect::EVERYTHING,
+        &mut out,
+    );
+    let spans = dash_spans(&out);
+    for (i, &(from, to)) in spans.iter().enumerate() {
+        let start = i as f32 * (10.0 + gap);
+        assert!(
+            (from - start).abs() < 1e-3,
+            "dash {i} at {from}, not {start}"
+        );
+        if to < 100.0 {
+            assert!((to - from - 10.0).abs() < 1e-3, "dash {i}: {from}..{to}");
+        }
+    }
+    assert_eq!(spans.len(), 7, "{spans:?}");
+
+    let mut out = Vec::new();
+    walk_pattern(
+        &line,
+        4.0,
+        style,
+        stroke,
+        false,
+        egui::Rect::EVERYTHING,
+        &mut out,
+    );
+    let spans = dash_spans(&out);
+    assert!((spans[0].0 - 0.0).abs() < 1e-3 && (spans[0].1 - 6.0).abs() < 1e-3);
+    assert!((spans[1].0 - (6.0 + gap)).abs() < 1e-3, "{spans:?}");
+}
+
+#[test]
+fn walk_pattern_places_dots_on_the_phase() {
+    let line = [
+        egui::pos2(0.0, 0.0),
+        egui::pos2(12.0, 0.0),
+        egui::pos2(30.0, 0.0),
+    ];
+    let stroke = egui::Stroke::new(1.5, egui::Color32::RED);
+    let style = egui_plot::LineStyle::Dotted { spacing: 10.0 };
+    let mut out = Vec::new();
+    walk_pattern(
+        &line,
+        0.0,
+        style,
+        stroke,
+        false,
+        egui::Rect::EVERYTHING,
+        &mut out,
+    );
+    assert_eq!(dot_xs(&out), [0.0, 10.0, 20.0, 30.0]);
+    let mut out = Vec::new();
+    walk_pattern(
+        &line,
+        7.0,
+        style,
+        stroke,
+        false,
+        egui::Rect::EVERYTHING,
+        &mut out,
+    );
+    assert_eq!(dot_xs(&out), [3.0, 13.0, 23.0]);
+    // A lone point, and none, draw without panicking.
+    let mut out = Vec::new();
+    walk_pattern(
+        &line[..1],
+        3.0,
+        style,
+        stroke,
+        false,
+        egui::Rect::EVERYTHING,
+        &mut out,
+    );
+    walk_pattern(
+        &[],
+        3.0,
+        style,
+        stroke,
+        false,
+        egui::Rect::EVERYTHING,
+        &mut out,
+    );
+    assert_eq!(out.len(), 1);
+}
+
+/// A stretch outside the clip only advances the pattern: what the clip
+/// shows is drawn as the full walk draws it. A repeated point, which a gap
+/// ending exactly on the period would divide by, draws nothing amiss.
+#[test]
+fn walk_pattern_skips_what_the_clip_hides() {
+    let mut line: Vec<egui::Pos2> = (0..=20)
+        .map(|i| egui::pos2(i as f32 * 10.0, (i % 3) as f32))
+        .collect();
+    line.insert(5, line[4]);
+    let stroke = egui::Stroke::new(1.5, egui::Color32::RED);
+    let clip = egui::Rect::from_min_max(egui::pos2(100.0, -10.0), egui::pos2(200.0, 10.0));
+    for style in [
+        egui_plot::LineStyle::Dashed { length: 10.0 },
+        egui_plot::LineStyle::Dotted { spacing: 10.0 },
+    ] {
+        let (mut full, mut clipped) = (Vec::new(), Vec::new());
+        walk_pattern(
+            &line,
+            3.0,
+            style,
+            stroke,
+            false,
+            egui::Rect::EVERYTHING,
+            &mut full,
+        );
+        walk_pattern(&line, 3.0, style, stroke, false, clip, &mut clipped);
+        let shown = |shape: &egui::Shape| shape.visual_bounding_rect().max.x > 100.0;
+        let near = |a: &egui::Shape, b: &egui::Shape| {
+            let (a, b) = (a.visual_bounding_rect(), b.visual_bounding_rect());
+            (a.min - b.min).length() < 1e-3 && (a.max - b.max).length() < 1e-3
+        };
+        assert!(
+            clipped.iter().all(|c| full.iter().any(|f| near(c, f))),
+            "{style:?}"
+        );
+        assert!(
+            full.iter()
+                .filter(|f| shown(f))
+                .all(|f| clipped.iter().any(|c| near(c, f))),
+            "{style:?}"
+        );
+        assert!(clipped.len() < full.len(), "{style:?}");
+    }
+}
+
+/// The anchors are whole buckets about 150 pt apart, and the slice starts a
+/// bucket before the one at or left of the view's edge.
+#[test]
+fn anchor_layout_reaches_past_the_anchor() {
+    let (bucket, secs_per_pt) = (0.004, 0.01);
+    let (anchor, draw_min) = anchor_layout(23.456, bucket, secs_per_pt);
+    let buckets = anchor / bucket;
+    assert!((buckets - buckets.round()).abs() < 1e-9, "{anchor}");
+    assert!((150.0..151.0).contains(&(anchor / secs_per_pt)), "{anchor}");
+    let k = (23.456 / anchor).floor();
+    assert!((draw_min - (k * anchor - bucket)).abs() < 1e-12);
+    assert!(draw_min < 23.456 - bucket && draw_min > 23.456 - anchor - bucket);
+}
+
+/// A straight polyline through `times` at `px_per_s`, rising `slope` px
+/// per second, shifted left by `offset` px.
+fn ramp(times: &[f64], px_per_s: f32, slope: f32, offset: f32) -> Vec<egui::Pos2> {
+    times
+        .iter()
+        .map(|&t| egui::pos2(t as f32 * px_per_s - offset, t as f32 * slope))
+        .collect()
+}
+
+/// With nothing remembered the pattern starts on the first point; the
+/// anchors on the line are remembered from it, and a later frame showing
+/// less of the line's start carries on from them.
+#[test]
+fn carry_starts_at_the_first_point_then_follows_its_anchors() {
+    let key = PatternKey::Overlay("T1".into());
+    let mut phases = DashPhases::default();
+    let times: Vec<f64> = (0..=40).map(|i| f64::from(i) * 0.25).collect();
+    let screen = ramp(&times, 30.0, 0.0, 0.0);
+    let phase0 = phases.carry(&key, &times, &screen, 2.0, 16.0, false);
+    assert_eq!(phase0, 0.0);
+    // 60 px of line to the anchor at 2 s: 60 mod 16.
+    let at2 = phases.phase_at(&key, 2.0).expect("remembered");
+    assert!((at2 - 12.0).abs() < 1e-6, "{at2}");
+
+    // The same line, 0.75 s later along: its first point is 22.5 px past
+    // where the pattern began.
+    let later = &times[3..];
+    let phase0 = phases.carry(&key, later, &screen[3..], 2.0, 16.0, false);
+    assert!(
+        (phase0 - 22.5_f64.rem_euclid(16.0)).abs() < 1e-4,
+        "{phase0}"
+    );
+
+    // A real segment start takes no notice of what is remembered.
+    let phase0 = phases.carry(&key, later, &screen[3..], 2.0, 16.0, true);
+    assert_eq!(phase0, 0.0);
+}
+
+/// A change of scale holds the pattern at the leftmost anchor; a frame run
+/// twice, as egui does when asked to discard one, leaves the table as it
+/// was; a line with no finite position remembers nothing.
+#[test]
+fn carry_holds_the_leftmost_anchor_and_is_idempotent() {
+    let key = PatternKey::EnvelopeMax;
+    let mut phases = DashPhases::default();
+    let times: Vec<f64> = (0..=40).map(|i| 0.5 + f64::from(i) * 0.25).collect();
+    let flat = ramp(&times, 30.0, 0.0, 0.0);
+    phases.carry(&key, &times, &flat, 2.0, 16.0, false);
+    let (at2, at4) = (phases.phase_at(&key, 2.0), phases.phase_at(&key, 4.0));
+
+    let steep = ramp(&times, 30.0, 40.0, 0.0);
+    let first = phases.carry(&key, &times, &steep, 2.0, 16.0, false);
+    assert_eq!(
+        phases.phase_at(&key, 2.0),
+        at2,
+        "held at the leftmost anchor"
+    );
+    assert_ne!(phases.phase_at(&key, 4.0), at4, "re-phased right of it");
+    let again = phases.carry(&key, &times, &steep, 2.0, 16.0, false);
+    assert_eq!(first, again);
+    assert_eq!(phases.phase_at(&key, 4.0).map(f64::to_bits), {
+        phases.carry(&key, &times, &steep, 2.0, 16.0, false);
+        phases.phase_at(&key, 4.0).map(f64::to_bits)
+    });
+
+    let other = PatternKey::EnvelopeMin;
+    let mut lost = steep.clone();
+    lost[5].y = f32::NAN;
+    assert_eq!(phases.carry(&other, &times, &lost, 2.0, 16.0, false), 0.0);
+    assert_eq!(phases.phase_at(&other, 2.0), None);
+}
+
+/// A new anchor spacing, after a zoom or a resize, takes the old one's
+/// anchors on the segment with it, all but the reference it starts from:
+/// none is left to take over later with a phase from the old scale.
+#[test]
+fn carry_drops_the_anchors_of_an_old_spacing() {
+    let key = PatternKey::EnvelopeMax;
+    let mut phases = DashPhases::default();
+    let times: Vec<f64> = (0..=40).map(|i| 0.5 + f64::from(i) * 0.25).collect();
+    phases.carry(
+        &key,
+        &times,
+        &ramp(&times, 30.0, 0.0, 0.0),
+        2.0,
+        16.0,
+        false,
+    );
+    let at2 = phases.phase_at(&key, 2.0);
+    phases.carry(
+        &key,
+        &times,
+        &ramp(&times, 20.0, 0.0, 0.0),
+        3.0,
+        16.0,
+        false,
+    );
+    assert_eq!(phases.phase_at(&key, 2.0), at2, "the reference stays");
+    for gone in [4.0, 8.0, 10.0] {
+        assert_eq!(phases.phase_at(&key, gone), None, "{gone}");
+    }
+    for kept in [3.0, 6.0, 9.0] {
+        assert!(phases.phase_at(&key, kept).is_some(), "{kept}");
+    }
+}
+
+/// A frame forgets the anchors outside its slice and the lines the last
+/// frame did not draw; clearing the graph forgets them all.
+#[test]
+fn dash_phases_are_pruned_and_cleared() {
+    let mut phases = DashPhases::default();
+    let times: Vec<f64> = (0..=40).map(|i| f64::from(i) * 0.25).collect();
+    let screen = ramp(&times, 30.0, 0.0, 0.0);
+    let (a, b) = (PatternKey::EnvelopeMax, PatternKey::EnvelopeMin);
+    phases.carry(&a, &times, &screen, 2.0, 16.0, false);
+    phases.carry(&b, &times, &screen, 2.0, 16.0, false);
+    phases.begin_frame(3.0, 20.0);
+    assert_eq!(phases.phase_at(&a, 2.0), None);
+    assert!(phases.phase_at(&a, 4.0).is_some());
+    phases.carry(&a, &times, &screen, 2.0, 16.0, false);
+    phases.begin_frame(3.0, 20.0);
+    assert!(phases.phase_at(&a, 4.0).is_some());
+    assert_eq!(phases.phase_at(&b, 4.0), None, "not drawn last frame");
+    phases.begin_frame(3.0, 20.0);
+    assert!(phases.is_empty());
+
+    let (mut g, _) = graph_over(30);
+    g.dash_phases.carry(&a, &times, &screen, 2.0, 16.0, false);
+    assert!(!g.dash_phases.is_empty());
+    g.clear();
+    assert!(g.dash_phases.is_empty());
+}
+
+/// The envelope reaches one point back past its range, with that point's
+/// own trailing window.
+#[test]
+fn build_envelope_emits_the_point_before_its_range() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let values = [3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
+    for (i, &v) in values.iter().enumerate() {
+        g.push(v, t0 + Duration::from_secs(i as u64), "DC V", "V", None);
+    }
+    let (min_pts, max_pts) = g.build_envelope(3.5, 7.0, 2.5);
+    // t = 3 sees 1.0, 4.0 and 1.0 over [0.5, 3].
+    assert_eq!(min_pts[0], [3.0, 1.0]);
+    assert_eq!(max_pts[0], [3.0, 4.0]);
+    assert_eq!(min_pts.len(), 5);
+}
+
+/// The main graph's shapes in `color` below `below`, clear of the key, each
+/// as its points: a dash's two ends, or a dot's centre.
+fn shapes_in(
+    out: &[egui::epaint::ClippedShape],
+    color: egui::Color32,
+    below: f32,
+) -> Vec<Vec<egui::Pos2>> {
+    out.iter()
+        .filter_map(|c| match &c.shape {
+            // A sliver of a dash past a bend comes and goes with rounding.
+            egui::Shape::LineSegment { points, stroke }
+                if stroke.color == color && (points[1] - points[0]).length() > 0.05 =>
+            {
+                Some(points.to_vec())
+            }
+            egui::Shape::Circle(d) if d.fill == color => Some(vec![d.center]),
+            _ => None,
+        })
+        .filter(|p| p.iter().all(|p| p.y > below))
+        .collect()
+}
+
+/// A graph drawing a sine with two sub-values, one dashed and one dotted,
+/// its min/max envelope and a reference line, on a pinned Y axis, with `samples` of them
+/// 40 ms apart.
+fn patterned_graph(samples: u32) -> (Graph, Instant) {
+    let mut g = Graph::new();
+    g.time_window_secs = 10.0;
+    g.show_envelope = true;
+    g.show_ref_line = true;
+    g.ref_lines.set(&[0.25]);
+    let t0 = Instant::now();
+    push_patterned(&mut g, t0, 0, samples);
+    // After the first sample, whose new mode lets go of a pinned axis.
+    g.y_axis_fixed = true;
+    g.y_user_set = true;
+    g.y_min.set(-2.0);
+    // The traces stay in the lower half, clear of the key.
+    g.y_max.set(6.0);
+    (g, t0)
+}
+
+fn push_patterned(g: &mut Graph, t0: Instant, from: u32, to: u32) {
+    for i in from..to {
+        let t = f64::from(i) * 0.04;
+        push_aux(
+            g,
+            (t * 1.3).sin(),
+            t0 + Duration::from_millis(u64::from(i) * 40),
+            None,
+            &[
+                ("T1", Some((t * 0.9).sin() * 1.5)),
+                ("T2", Some((t * 2.1).cos())),
+            ],
+        );
+    }
+}
+
+/// Each patterned line's shapes in one frame of the main graph, and the
+/// plot's area.
+type PatternFrame = ([Vec<Vec<egui::Pos2>>; 4], egui::Rect);
+
+/// Draw the main graph and keep the shapes of its two sub-values, its
+/// envelope's edges and its reference line, below the key.
+fn pattern_frame(g: &mut Graph, ctx: &egui::Context, tc: &ThemeColors) -> PatternFrame {
+    let markers = crate::markers::Markers::default();
+    let mut shapes = Vec::new();
+    // Twice: the axes settle on the first, and a discarded frame is run
+    // again just so.
+    for _ in 0..2 {
+        let input = egui::RawInput {
+            screen_rect: Some(gesture_screen()),
+            ..Default::default()
+        };
+        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, tc, &markers));
+        out.textures_delta.clear();
+        shapes = out.shapes;
+    }
+    let plot = g.plot_rect.expect("drawn");
+    let below = plot.top() + plot.height() * 0.4;
+    let colors = [
+        tc.graph_overlay(0),
+        tc.graph_overlay(1),
+        tc.graph_envelope(),
+        tc.graph_ref(),
+    ];
+    (colors.map(|c| shapes_in(&shapes, c, below)), plot)
+}
+
+/// Every dash and dot `now` shows that `before` showed too is where it
+/// was, `dx` px to the left.
+fn assert_moved(now: &PatternFrame, before: &PatternFrame, dx: f32) {
+    let plot = now.1;
+    // Clear of the edges, and of where the older frame's lines ended.
+    let lo = plot.left() + 20.0 + (-dx).max(0.0);
+    let hi = plot.right() - 20.0 - dx.max(0.0);
+    for (k, (now, before)) in now.0.iter().zip(&before.0).enumerate() {
+        let shown: Vec<_> = now
+            .iter()
+            .filter(|p| p.iter().all(|p| (lo..hi).contains(&p.x)))
+            .collect();
+        assert!(shown.len() > 20, "line {k}: {} shapes", shown.len());
+        for shape in shown {
+            let moved = before.iter().any(|b| {
+                b.len() == shape.len()
+                    && b.iter()
+                        .zip(shape)
+                        .all(|(b, s)| (b.x - dx - s.x).abs() < 0.02 && (b.y - s.y).abs() < 0.02)
+            });
+            assert!(
+                moved,
+                "line {k}: {shape:?} was not drawn {dx} px to its right"
+            );
+        }
+    }
+}
+
+/// Live view: as readings arrive, every dash and dot of the sub-values
+/// and the envelope moves left with the data, by just what the time it
+/// was drawn at did. Before, each sample leaving the left edge moved the
+/// pattern's start and it crawled along the curve.
+#[test]
+fn dashes_move_with_the_data_in_live_view() {
+    let (mut g, t0) = patterned_graph(751);
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let ctx = egui::Context::default();
+    let mut last = pattern_frame(&mut g, &ctx, &tc);
+    // Steps of one sample and of several, past a few anchors.
+    for (step, n) in [(1, 1), (1, 7), (7, 6), (13, 3)] {
+        for _ in 0..n {
+            let from = (g.data_time_range().1 / 0.04).round() as u32 + 1;
+            push_patterned(&mut g, t0, from, from + step);
+            let next = pattern_frame(&mut g, &ctx, &tc);
+            let px_per_s = f64::from(next.1.width()) / g.time_window_secs;
+            assert_moved(&next, &last, (f64::from(step) * 0.04 * px_per_s) as f32);
+            last = next;
+        }
+    }
+}
+
+/// Dragging the view either way moves the pattern with the line, and
+/// coming back draws it as it was.
+#[test]
+fn dashes_move_with_the_view_both_ways() {
+    let (mut g, _) = patterned_graph(1500);
+    let tc = ThemeColors::new(false, ColorPreset::Default, &PaletteOverrides::default());
+    let ctx = egui::Context::default();
+    g.live = false;
+    g.view_center = 30.0;
+    let start = pattern_frame(&mut g, &ctx, &tc);
+    let mut last = (30.0, start.clone());
+    for center in [30.3, 31.1, 33.7, 31.9, 30.6, 30.0] {
+        g.view_center = center;
+        let next = pattern_frame(&mut g, &ctx, &tc);
+        let px_per_s = f64::from(next.1.width()) / g.time_window_secs;
+        assert_moved(&next, &last.1, ((center - last.0) * px_per_s) as f32);
+        last = (center, next);
+    }
+    assert_moved(&last.1, &start, 0.0);
+}
+
+/// The toolbar keeps its height as its fields come and go, so switching
+/// Min/Max, Ref or Y:Fixed on doesn't move the plot below it — which would
+/// rescale the graph and shift every line's pattern.
+#[test]
+fn toolbar_fields_leave_its_height_alone() {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let ctx = egui::Context::default();
+    let height = |g: &mut Graph| {
+        let mut h = 0.0;
+        // The second frame: the first lays out the fonts.
+        for _ in 0..2 {
+            let input = egui::RawInput {
+                screen_rect: Some(gesture_screen()),
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(input, |ui| {
+                h = ui
+                    .scope(|ui| g.show_toolbar(ui, &tc))
+                    .response
+                    .rect
+                    .height();
+            });
+            out.textures_delta.clear();
+        }
+        h
+    };
+    let (mut g, _) = graph_over(30);
+    let plain = height(&mut g);
+    g.show_envelope = true;
+    assert_eq!(height(&mut g), plain, "Min/Max window field");
+    g.show_ref_line = true;
+    assert_eq!(height(&mut g), plain, "reference values field");
+    g.y_axis_fixed = true;
+    assert_eq!(height(&mut g), plain, "fixed Y bounds fields");
+}

@@ -3,7 +3,7 @@
 //!
 //! The concerns live in submodules — [`view`] (what slice is shown and the
 //! gestures that move it), [`toolbar`], [`render`] (the main plot),
-//! [`axes`] (the Y axes of sub-values in other units), [`minimap`], [`level`] (the minimap's bucketed trace), [`analysis`]
+//! [`pattern`] (its dashed and dotted lines), [`axes`] (the Y axes of sub-values in other units), [`minimap`], [`level`] (the minimap's bucketed trace), [`analysis`]
 //! (visible-slice statistics), [`field`] (the toolbar's text-edit buffers and
 //! the values they parse to) and [`time`] (axis label formatting) — all of
 //! which add methods to the one [`Graph`] declared here, so the type's public
@@ -21,6 +21,7 @@ mod axes;
 mod field;
 mod level;
 mod minimap;
+mod pattern;
 mod render;
 mod time;
 mod toolbar;
@@ -416,6 +417,9 @@ pub struct Graph {
     mark_request: Option<(Instant, f64)>,
     /// Put the focus on the menu's entry again next frame.
     menu_focus_pending: bool,
+    /// Where the dashed and dotted lines' patterns stand, so they move with
+    /// the data: see [`pattern`].
+    dash_phases: pattern::DashPhases,
 }
 
 impl Graph {
@@ -483,6 +487,7 @@ impl Graph {
             menu_reading: None,
             mark_request: None,
             menu_focus_pending: false,
+            dash_phases: pattern::DashPhases::default(),
         }
     }
 
@@ -960,6 +965,7 @@ impl Graph {
         self.pending_break_since = None;
         self.pending_heard_until = None;
         self.pending_band_from = None;
+        self.dash_phases = pattern::DashPhases::default();
     }
 
     /// Restart the kept trace `label` if its unit is no longer `unit`.
@@ -1263,6 +1269,7 @@ impl Graph {
         self.bbox_zoom_current_px = None;
         self.minimap_level = None;
         self.pushed_total = 0;
+        self.dash_phases = pattern::DashPhases::default();
     }
 
     /// When the oldest point still in the history or a sub-value trace was
