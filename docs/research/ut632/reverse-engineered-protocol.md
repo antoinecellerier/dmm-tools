@@ -1,7 +1,8 @@
 # UT632 / UT632N: Reverse-Engineered Protocol Specification
 
 What UNI-T's software shows of the wire protocol of the UT632 and UT632N
-bench multimeters. No UT632 has been captured yet;
+bench AC millivoltmeters (4 mV–400 V, per retailers; UNI-T's bench
+programming manual is titled for multimeters and millivoltmeters). No UT632 has been captured yet;
 [verification.md](verification.md) lists what a capture must settle.
 
 **In short:** UT803.exe carries a UT632 configuration. Selected, it reads

@@ -3,8 +3,8 @@
 ## Objective
 
 Extend the UT8803 reverse engineering to cover the remaining UCI bench
-DMM models: UT8802/UT8802N, UT632/UT632N, UT803/UT803N, UT804/UT804N,
-and UT805A/UT805N. These models all share the UCI (United Communication
+models: UT8802/UT8802N, UT632/UT632N (an AC millivoltmeter),
+UT803/UT803N, UT804/UT804N, and UT805A/UT805N. These models all share the UCI (United Communication
 Interface) protocol layer but differ in transport (CP2110 vs QinHeng HID
 vs serial), wire format (0xAC 8-byte vs 0xABCD 21-byte), and
 measurement capabilities.

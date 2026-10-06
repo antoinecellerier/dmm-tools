@@ -26,7 +26,7 @@ other programs.
 
 Researched, not implemented:
 
-- [UT632 / UT632N (bench DMM) — what UNI-T's software shows; no capture yet](research/ut632/reverse-engineered-protocol.md)
+- [UT632 / UT632N (bench AC millivoltmeter) — what UNI-T's software shows; no capture yet](research/ut632/reverse-engineered-protocol.md)
 - [UT8805 / UT8806 (bench DMMs) — SCPI over USBTMC, LAN and RS-232](research/ut8805/reverse-engineered-protocol.md)
 
 ## Voltcraft

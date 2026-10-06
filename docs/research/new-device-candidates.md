@@ -1,9 +1,11 @@
 # New Device Candidates
 
 Research into multimeters worth supporting (April 2026; UNI-T's own catalogue
-swept model by model 2026-09-21). Covers USB HID, Bluetooth LE, USB-serial, and
-IR-optical connections. A meter leaves this file once supported: its research
-is under `docs/research/<family>/`, its entry in
+swept model by model 2026-09-21; popularity of the pending USB HID and
+Bluetooth candidates surveyed 2026-10-06, figures and sources in the local,
+gitignored `references/popularity/`). Covers USB HID, Bluetooth LE,
+USB-serial, and IR-optical connections. A meter leaves this file once
+supported: its research is under `docs/research/<family>/`, its entry in
 [supported devices](../supported-devices.md).
 
 ## Landscape Overview
@@ -29,14 +31,15 @@ connectivity.
 ### UNI-T UT632 / UT632N
 
 **Same bridge as the UT803, a different framing — and the vendor code we hold
-decodes nothing.**
+decodes nothing. An AC millivoltmeter, not a DMM, and discontinued.**
 
 | Aspect | Details |
 |--------|---------|
-| Models | UT632, UT632N (bench DMM) |
+| Models | UT632, UT632N — bench AC millivoltmeter, 4 mV–400 V true RMS, per two retailers (toolboom, gotronik). UNI-T's bench programming manual is titled for "multimeters and millivoltmeters" (万用表、毫伏表) and every other model it lists is a bench DMM |
 | Connection | USB HID, driverless |
 | VID:PID | `1A86:E008` — the CH9325 bridge we already drive |
 | Protocol | Not the UT803's. The UT803 app's UT632 configuration ends each frame at a byte whose high nibble is E and decodes nothing; what the frames carry needs a capture. Spec: [research/ut632](ut632/reverse-engineered-protocol.md) |
+| Popularity | Low: toolboom lists it as discontinued; no rating, sales count, video or forum thread found (2026-10-06) |
 | Vendor document | UNI-T's shared bench programming manual V1.1 lists it beside the UT803/UT804/UT8802/UT8803 with the device address `[C:DM][D:T632][T:HID][PID:0xe008][VID:0x1a86]`. No UT632 protocol document exists on either Chinese site |
 
 The UCI layer these bench meters share is already specified in
@@ -74,7 +77,7 @@ LCD segments.
 
 ### Victor 70C / 86C
 
-**Secondary USB HID candidate. Cheap, protocol documented, smaller community.**
+**Cheap, protocol documented, small community.**
 
 | Aspect | Details |
 |--------|---------|
@@ -85,6 +88,7 @@ LCD segments.
 | Protocol | 14-byte FS9922-DMM4, obfuscated |
 | Direction | Read-only |
 | Sigrok driver | `victor-dmm` (supported) |
+| Popularity | Low: no AliExpress listing for either, one 17-star community tool, one 86C video at 3.7k views; the 86E has replaced the 86C. amazon.com listings exist but did not load (2026-10-06) |
 
 #### Protocol details
 
@@ -133,6 +137,9 @@ were rewritten 2026-09-25 from the iDMM2.0 app.
 **The UT-D07A** lists `UT513B, UT513C, UT513D, UT512E` on its
 [accessory page](https://meters.uni-trend.com.cn/content/4374.html); the
 adapter itself is still open ([its checks](ut-d07b/verification.md#the-ut-d07a)).
+Popularity is low: AliExpress sells it only in listings shared with the
+UT-D07B (17 and 14 sold), and none of its four meters showed a rating or a
+sales count (2026-10-06).
 
 **Two clamp meters speak the UT61+ frame.** UNI-T's UT61+ protocol deck
 ([research/ut61-family](ut61-family/reverse-engineering-approach.md)) specifies
@@ -166,7 +173,11 @@ and nothing else's (`UT513Manager`). All frames start `AB CD` and end in a
   frame, `AB CD 00 04 05 00 01 81` every 300-600 ms, replying with ASCII value
   and unit strings; UT61+'s checksum rule. The field layout differs per model
   (`UT117cManager`, `UT197Manager`, `UT219pvManager`), so this would be a new
-  family with a layout per model.
+  family with a layout per model. Popularity, 2026-10-06: the UT117C draws
+  attention but few sales (two videos at 45k, an EEVblog launch thread read
+  about 46k times; 5 amazon.de and 3 amazon.com ratings, 18 sold on
+  AliExpress); the UT197/UT197PV and UT219PV showed no ratings and no
+  AliExpress listing of their own.
 - **Formats of their own**, one model each, all polled unless noted:
   - UT219P: big-endian length, little-endian sum from byte 2; paged reads
     (cmd 05 + page 0-8), name cmd 0x17.
@@ -202,6 +213,11 @@ oscilloscope features aside. What OWON's sources describe beyond them:
   Community tools describe FS9922 B35T units sending those frames on FFF4
   in the same service (spec §14.4) `[COMMUNITY]`. When taken up, OWON's
   commented-out parser is the source, before any community cross-reference.
+  Popularity is installed base, not sales: 2015–2017 videos at 17k–58k
+  views and the most community clients of any OWON meter (36 and 35
+  stars), but no AliExpress listing of the non-plus models and 15
+  amazon.com ratings on a listing that mixes the B35 and B35T; one retailer
+  marks it retired (2026-10-01 and 2026-10-06).
 Out of scope: the B35's "Bluetooth 2.0" version, which OWON lists as
 Android-only and which is presumably classic Bluetooth `[UNVERIFIED]`.
 
@@ -216,7 +232,8 @@ Android-only and which is presumably classic Bluetooth `[UNVERIFIED]`.
 | Protocol | Tree-based config system over BLE GATT, well documented |
 | Sigrok | Supported (Linux BLE only) |
 
-**Orphaned product.** Thousands in circulation, official app unmaintained
+**Orphaned product.** 69 amazon.com ratings on a listing now unavailable,
+an EEVblog thread read 83k times (2026-10-06); official app unmaintained
 since 2018, breaks on newer OS versions. Multiple community rescue
 projects keep appearing (3 repos updated 2025-2026).
 
@@ -235,8 +252,11 @@ requires BLED112 dongle), [ghtyrant/libsooshi](https://github.com/ghtyrant/libso
 | Connection | BLE, multimeter + oscilloscope + data logger |
 | Protocol | Partially documented, reverse-engineered by dokit project |
 
-**Already well-served** by [pcolby/dokit](https://github.com/pcolby/dokit) (63 stars,
-C++/Qt, cross-platform CLI, actively maintained through April 2026).
+The most popular of the pending Bluetooth candidates: Pokit states about
+35k devices in the field, its Kickstarters drew 6,944 (Pro) and 2,295
+(Meter) backers, amazon.com shows 33 and 35 ratings (2026-10-06).
+**Already well-served** by [pcolby/dokit](https://github.com/pcolby/dokit) (75 stars
+2026-10-06, C++/Qt, cross-platform CLI, pushed 2026-09-15).
 **Not a priority target.**
 
 ---
@@ -438,14 +458,14 @@ the same transport.
 
 | Model | Brand | Type | Transport | Notes |
 |-------|-------|------|-----------|-------|
-| **UT612** | UNI-T | LCR meter | USB HID (`10C4:EA80`) | ES51919 chipset, TX-only, CP2110 transport. [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612) |
-| **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | CH9325 (UT-D04 cable), ES51966A chipset |
+| **UT612** | UNI-T | LCR meter | USB HID (`10C4:EA80`) | ES51919 chipset, TX-only, CP2110 transport. [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612). Popularity moderate for its niche: 9 amazon.de ratings (#25 LCR Meters), two reviews at 36k views (2026-10-06) |
+| **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | CH9325 (UT-D04 cable), ES51966A chipset. Discontinued at retailers; popularity low (EEVblog thread 4k reads, best video 7.4k views, 2026-10-06) |
 | **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04), per sigrok only. The supported UT71 decoder covers them ([research/ut71](ut71/reverse-engineered-protocol.md)); a Tenma would be named as a UT71 |
-| **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). A "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf) is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). The [UT804+ page](https://instruments.uni-trend.com.cn/cate/143.html) lists software but no protocol document. The "UT804接口协议" on the [UT800 series page](https://instruments.uni-trend.com.cn/cate/140.html), read 2026-09-19, describes the UT804 alone (its first digit runs 0-4, a 40000-count display), so whether the UT804+ speaks a protocol we support is still open |
-| **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. Its Ω ladder is not the supported UT202BT's ([research/ut61-family](ut61-family/reverse-engineered-protocol.md#ut202bt-9999-counts)). The Bluetooth transport carries it; it needs a registry entry and a capture |
+| **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). A "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf) is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). The [UT804+ page](https://instruments.uni-trend.com.cn/cate/143.html) lists software but no protocol document. The "UT804接口协议" on the [UT800 series page](https://instruments.uni-trend.com.cn/cate/140.html), read 2026-09-19, describes the UT804 alone (its first digit runs 0-4, a 40000-count display), so whether the UT804+ speaks a protocol we support is still open. UNI-T lists it as current while marking the UT800 series obsolete; one video found (680 views, 2026-10-06) |
+| **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. Its Ω ladder is not the supported UT202BT's ([research/ut61-family](ut61-family/reverse-engineered-protocol.md#ut202bt-9999-counts)). The Bluetooth transport carries it; it needs a registry entry and a capture. No sales figure of its own: AliExpress sells it only in listings shared with the UT202BT (38 sold, 2026-10-06) |
 | **UT117C, UT197 / UT197PV, UT219PV** | UNI-T | Not recorded | Bluetooth LE, built in (ISSC) | One polled `AB CD` frame with a 2-byte length and ASCII readings, a field layout per model (Bluetooth section above). The iDMM2.0 app is the only source |
 | **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional); see [research/ut8803](ut8803/reverse-engineering-approach.md). The shared bench programming manual's device table gives `[T:COM][PORT:8][BAUD:9600][PARITY:N][STOP:1][DATA:7]` and a CP210x driver |
-| **UT216XD** | UNI-T | Clamp meter | Unstated — the deck that specifies it is a Bluetooth protocol | Speaks the UT61+ frame, bargraph bytes aside (Bluetooth section above). **No archived source carries its ranges**: the deck names it only in the two bargraph exceptions, the iDMM2.0 APK has no UT216 package or range asset (checked 2026-09-21), and it has no page in the Chinese catalogue. Its range table would have to come from hardware or from vendor software we do not have |
+| **UT216XD** | UNI-T | Clamp meter | Unstated — the deck that specifies it is a Bluetooth protocol | Speaks the UT61+ frame, bargraph bytes aside (Bluetooth section above). **No archived source carries its ranges**: the deck names it only in the two bargraph exceptions, the iDMM2.0 APK has no UT216 package or range asset (checked 2026-09-21), and it has no page in the Chinese catalogue. Its range table would have to come from hardware or from vendor software we do not have. No retail product by this name found (Amazon, AliExpress, YouTube, web, 2026-10-06): searches return the UT216A–D |
 | **UT61B / UT61C / UT61D / UT61E** | UNI-T | Handheld DMM (classic, pre-`+`) | UT-D04 (CH9325) in practice | UNI-T's "protocol" downloads are the chipset datasheets: ["UT61E接口协议"](https://meters.uni-trend.com.cn/static/upload/file/20220908/1662605553430400.pdf) is the Cyrustek **ES51922** (19230 baud, 7-odd-1) and ["UT61B通信协议"](https://meters.uni-trend.com.cn/static/upload/file/20220110/UT61B%20protocol.pdf) is the Fortune **FS9922-DMM3**. Long discontinued; sigrok covers both chipsets |
 | **UT81A+ / UT81B+ / UT81C+ / UT81D+** | UNI-T | Handheld scopemeter | Type-C, transport unstated (CDC, TMC or HID) | Their pages advertise "支持SCPI通信功能，可二次开发" (SCPI, open to development) but publish no command list. The only UT81 protocol document, ["UT81系列接口协议"](https://meters.uni-trend.com.cn/static/upload/file/20211102/ut81b%E9%80%9A%E8%AE%AF%E5%8D%8F%E8%AE%AE.rar) (read 2026-09-21, `references/ut81/`), covers the **older UT81A/B**: 9600 8N1, records framed by `0x5A` with a decimal-digit length and checksum, a 15-byte instrument-state block, two 10-byte ASCII readings and an optional 160-sample waveform block, with `0x5A` doubled where it occurs in the data. It names no cable or bridge chip |
 | **UT620A / UT620B** | UNI-T | 直流/回路电阻测试仪 — DC and loop resistance tester | USB, "免安装驱动" (driver-free) and bidirectional — a HID hint, unconfirmed | Not a DMM, but the closest neighbour to our framing: ["UT620B通信接口参数"](https://meters.uni-trend.com.cn/static/upload/file/20211123/UT620B%E9%80%9A%E4%BF%A1%E6%8E%A5%E5%8F%A3%E5%8F%82%E6%95%B0.docx) gives 19200 and a 23-byte `"ABCD"`-headed frame with a 2-byte sum, plus host commands (0x30 keypress, 0x31 one-shot read, 0x32 memory dump). Cable UT-D18 |
@@ -482,22 +502,26 @@ the same transport.
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
 | **OWON B35/B35T (FS9922, before the B35T+)** | BLE (built in) | The supported OWON meters' service per community tools; OWON's PC source keeps a commented-out parser ([research/owon §11](owon/reverse-engineered-protocol.md#11-an-earlier-format-14-byte-ascii-pc-source-commented-out)) | Moderate: a 14-byte ASCII frame whose status bits OWON's source does not define |
-| **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
-| **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
-| **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
+| **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app; the UT117C draws the most attention of the three, though few sales | Moderate: a new protocol family with a field layout per model |
 | **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Parked 2026-09-30 after costing (see its section): a new link (network or USBTMC), a SCPI protocol family, address-based open and `*IDN?` identification, and a session-end hook |
 
 ### Tier 3: Lower priority
 
 | Candidate | Transport | Why excluded or deprioritized |
 |-----------|-----------|-------------------------------|
+| Victor 70C/86C | USB HID | Protocol documented, but low popularity: no AliExpress listing, one 17-star tool, the 86C replaced by the 86E |
+| UNI-T UT632/UT632N | USB HID (CH9325) | An AC millivoltmeter, discontinued, with no popularity signal found; the UT803 app's UT632 configuration decodes nothing, so the payload needs a capture |
 | Mooshimeter | BLE | Discontinued, shrinking user base |
 | OWON XDM series | USB serial SCPI | Already well-served by rusty_meter (100 stars, Rust/egui) |
-| Pokit Pro | BLE | Already well-served by dokit (63 stars) |
+| Pokit Pro | BLE | The most popular pending Bluetooth meter, but already well-served by dokit (75 stars) |
 | Rigol/Siglent bench | USB TMC/SCPI, LAN | Well-served by pyvisa/lxi-tools; separate SCPI dialects (Rigol DM3000 tree; Truevolt layout on DM858, Siglent SDM, Teledyne T3DMM). Would ride the UT8805/UT8806 SCPI family (Tier 2) as extra command maps over the same transport, not a project of its own |
 
 ### Strategic notes
 
+- **No pending USB HID or Bluetooth candidate sells like the UT61E+**
+  (2026-10-06 survey): the UT612 and UT117C show moderate interest, Pokit
+  the largest installed base but already has its own desktop tool, the
+  rest little or none.
 - **BLE is where the open demand is.** The Bluetooth transport exists and
   reaches OWON's meters, the 15-byte ones included; OWON's older B35/B35T is
   the next step. sigrok's BLE is Linux-only and experimental; no
