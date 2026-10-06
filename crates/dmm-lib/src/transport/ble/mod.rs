@@ -44,7 +44,8 @@ use crate::DeviceInfo;
 use crate::error::{Error, Result};
 use crate::transport::{BluetoothPeers, LateReadings, Link, Transport};
 use btleplug::api::{
-    Central, CentralState, Characteristic, Manager as _, Peripheral as _, ValueNotification,
+    Central, CentralState, Characteristic, DEFAULT_MTU_SIZE, Manager as _, Peripheral as _,
+    ValueNotification,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::stream::{Stream, StreamExt};
@@ -363,17 +364,13 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         }
     };
 
-    let Some(mtu) = read_mtu(&peripheral) else {
-        disconnect(&peripheral).await;
-        return Err(Error::LinkLost);
-    };
+    let mtu = read_mtu(&peripheral, deadline).await;
     match profile.min_mtu {
         Some(min_mtu) if mtu < min_mtu => warn!(
             "Bluetooth: the link's MTU is {mtu} bytes, under the {min_mtu} the meter's \
              readings need; they may arrive cut short; if no readings arrive, report it"
         ),
-        Some(_) => debug!("Bluetooth: MTU {mtu}"),
-        None => {}
+        _ => debug!("Bluetooth: MTU {mtu}"),
     }
     let short_interval = if issc::is_adapter(candidate.taken_by.as_deref()) {
         request_short_interval(&peripheral).await
@@ -403,21 +400,29 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
 
 /// The link's ATT MTU, read once while the link is being set up.
 ///
-/// btleplug 0.13's BlueZ backend unwraps a characteristic's MTU that BlueZ
-/// leaves unset while it re-creates a reconnected peer's GATT objects (seen
-/// on a UT-D07B switched off and on, 2026-09-26). The panic fires with the
-/// peripheral's service lock held, poisoning it for every later call, so it
-/// is caught here, once, and the open fails as a lost link: the caller's
-/// next try gets a fresh peripheral. Writes use the value read here and never
-/// ask again. The default panic hook still prints the panic's message on
-/// stderr: silencing it takes a process-wide hook, left out on purpose.
-fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| peripheral.mtu())) {
-        Ok(mtu) => Some(mtu),
-        Err(_) => {
-            debug!("Bluetooth: the platform could not report the MTU yet");
-            None
+/// On BlueZ, btleplug copies the MTU from the daemon's GATT objects at each
+/// `discover_services`, and reports its [`DEFAULT_MTU_SIZE`] when none carries
+/// one: a look that caught BlueZ re-creating a reconnected peer's objects
+/// (seen on a UT-D07B switched off and on, 2026-09-26). So the default earns
+/// one more look, within the discovery `deadline`, before it is taken;
+/// otherwise a profile's `min_mtu` warning and `info` would report it as the
+/// link's. Writes use the value read here and never ask again; at the default
+/// they only go in smaller chunks. On our UT-D07B the second look still saw
+/// the default, and the link's first write failed, so the reconnect that
+/// follows a lost link took over (#25).
+async fn read_mtu(peripheral: &Peripheral, deadline: tokio::time::Instant) -> u16 {
+    let mtu = peripheral.mtu();
+    if mtu != DEFAULT_MTU_SIZE || tokio::time::Instant::now() >= deadline {
+        return mtu;
+    }
+    debug!("Bluetooth: the platform's default MTU; looking again");
+    match tokio::time::timeout_at(deadline, peripheral.discover_services()).await {
+        Ok(Ok(())) => peripheral.mtu(),
+        Ok(Err(e)) => {
+            debug!("Bluetooth: looking again for the MTU failed: {e}");
+            mtu
         }
+        Err(_) => mtu,
     }
 }
 

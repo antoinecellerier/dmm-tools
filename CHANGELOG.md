@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bug fixes
+
+- **Bluetooth no longer crashes Windows scans near some devices or hangs macOS connects**
+
 ### Internal
 
 - **Release and dev build downloads carry the version in their name** — such as `dmm-tools-v0.9.0-linux-x86_64.tar.gz`; every release used the same names.
