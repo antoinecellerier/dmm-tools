@@ -15,7 +15,10 @@
 # Session time is frozen at each scene's preseed instant (see `launch`), so a
 # rerun stages exactly the same frame. Each capture prints the pixel difference
 # against the committed file and leaves that file alone when there is none,
-# since a rewritten PNG carries a new timestamp. Xvfb is not guaranteed to
+# since a rewritten PNG carries a new timestamp. On a -dev version it also
+# leaves it alone when only the top bar's version label differs, so the bump
+# after a release doesn't flag every picture; a release run, on the release
+# version, refreshes the pictures that show it. Xvfb is not guaranteed to
 # render identically across driver versions, so a small delta is still
 # possible — look at the PNGs before committing them.
 set -euo pipefail
@@ -89,6 +92,16 @@ COLOR_CROP="1920x666+0+424"
 # the whole subject — the rest of the window is an empty graph.
 HELP_CROP="478x843+0+46"
 GEAR_X=1884; GEAR_Y=22              # the settings gear, right end of the top bar
+# The band the top bar's version label is drawn in, for `report`: the bar
+# right-aligns it before Help / GitHub, so its text ends 295 px from the
+# window's right edge and the link starts 27 px later. The band stops between
+# the two and reaches far further left than any version string. Its rows are
+# the bar's own in a wide window, its second when the bar wraps. Each picture
+# that shows the bar is cropped from the window's top left corner and runs to
+# its right edge, so window and picture coordinates agree.
+VERSION_RIGHT=282; VERSION_BAND_W=300
+VERSION_ROW_WIDE="0 43"
+VERSION_ROW_WRAPPED="44 85"
 CUSTOMIZE_X=150; CUSTOMIZE_Y=532    # the "Customize colors" collapsing header
 # The Text family's last swatch, Crosshair: its picker opens below it, over
 # the end of the graph rows and the plot under the panel.
@@ -173,14 +186,20 @@ require() {
 		die "missing tool(s): ${missing[*]} — ask the user to run: sudo apt install xvfb xdotool imagemagick python3-pil"
 }
 
+workspace_version() {
+	local version
+	version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$ROOT/Cargo.toml" | head -1)"
+	[ -n "$version" ] || die "no workspace version in Cargo.toml"
+	echo "$version"
+}
+
 # The settings every scene starts from, overridden per scene with a JSON object.
 # last_seen_version is the workspace version so the What's New popup, which
 # opens by itself after an upgrade, stays closed.
 write_settings() {
 	local overrides="${1:-}" version
 	[ -n "$overrides" ] || overrides='{}'
-	version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$ROOT/Cargo.toml" | head -1)"
-	[ -n "$version" ] || die "no workspace version in Cargo.toml"
+	version="$(workspace_version)"
 	mkdir -p "$CONFIG_DIR"
 	python3 - "$CONFIG_DIR/settings.json" "$version" "$overrides" <<-'PY'
 		import json, sys
@@ -307,13 +326,14 @@ shot() {
 	fi
 }
 
-# capture <asset> [crop] — shoot, report the delta, move into assets/ unless no
-# pixel changed: a PNG carries the time it was written, so an identical picture
-# would still show up as modified in git.
+# capture <asset> [crop] [version row] — shoot, report the delta, move into
+# assets/ unless no pixel changed: a PNG carries the time it was written, so an
+# identical picture would still show up as modified in git. A picture showing
+# the top bar names the rows its version label is on (VERSION_ROW_*).
 capture() {
-	local asset="$1" crop="${2:-}"
+	local asset="$1" crop="${2:-}" row="${3:-}"
 	shot "$TMP/$asset" "$crop"
-	if report "$asset" "$TMP/$asset"; then
+	if report "$asset" "$TMP/$asset" "$row"; then
 		mv "$TMP/$asset" "$ASSETS/$asset"
 	fi
 }
@@ -333,9 +353,10 @@ fit() {
 
 # How far the new picture is from the committed one, for the human who reviews
 # it: a mis-click or a popup left open shows up as a delta in the millions.
-# Fails when not one pixel differs.
+# Fails when not one pixel differs, or on a -dev version when every one that
+# does is in the version label's band on `row` ("<top> <bottom>").
 report() {
-	local asset="$1" new="$2" old="$ASSETS/$1" size delta
+	local asset="$1" new="$2" row="${3:-}" old="$ASSETS/$1" size delta
 	size="$(identify -format '%wx%h' "$new")"
 	if [ ! -f "$old" ]; then
 		echo "$asset: new, $size"
@@ -351,7 +372,27 @@ report() {
 		echo "$asset: unchanged, $size"
 		return 1
 	fi
+	if [ -n "$row" ] && [[ "$(workspace_version)" == *-dev* ]] &&
+		[ "$(outside_version_band "$old" "$new" "$row")" = 0 ]; then
+		echo "$asset: $delta px differ, all in the version label — kept, $size"
+		return 1
+	fi
 	echo "$asset: $delta px differ, $size"
+}
+
+# outside_version_band <old> <new> <row> — how many pixels differ once the
+# version label's band on `row` is blanked in both.
+outside_version_band() {
+	local old="$1" new="$2" top bottom width right delta f
+	read -r top bottom <<<"$3"
+	width="$(identify -format '%w' "$new")"
+	right=$((width - VERSION_RIGHT))
+	for f in old new; do
+		convert "${!f}" -fill black \
+			-draw "rectangle $((right - VERSION_BAND_W)),$top $right,$bottom" "$TMP/band-$f.png"
+	done
+	delta="$(compare -metric AE "$TMP/band-old.png" "$TMP/band-new.png" null: 2>&1 || true)"
+	echo "${delta%%[^0-9]*}"
 }
 
 ## Scenes ####################################################################
@@ -369,7 +410,7 @@ scene_wide() {
 		'# marker: 8018 2 wifi off' \
 		'# marker: 9998 3 e-Paper display refreshing')" 160.5
 	park
-	capture gui-wide-layout.png
+	capture gui-wide-layout.png "" "$VERSION_ROW_WIDE"
 }
 
 # The hero's session and window in a window too narrow for two columns. The
@@ -380,7 +421,7 @@ scene_narrow() {
 	launch_file "$(staged dcma-boot-refresh "$NARROW_VIEW")" 160.5
 	"$GUI" resize 1000 1280 >/dev/null
 	park
-	capture gui-narrow-layout.png "1000x1280+0+0"
+	capture gui-narrow-layout.png "1000x1280+0+0" "$VERSION_ROW_WRAPPED"
 }
 
 # The reading with a flag lit and the remote-control buttons under it, from the
@@ -434,7 +475,7 @@ scene_big_meter() {
 	# next from a different point, and a different picture.
 	"$GUI" settle >/dev/null
 	geometry="$(fit "$BIG_METER_W" "$BIG_METER_H")"
-	capture gui-big-meter.png "$geometry+0+0"
+	capture gui-big-meter.png "$geometry+0+0" "$VERSION_ROW_WRAPPED"
 }
 
 # Ctrl+B again drops the top bar and the buttons: the reading and its mode
@@ -478,7 +519,7 @@ scene_settings() {
 	launch_without_meter
 	click "$GEAR_X" "$GEAR_Y"
 	park
-	capture gui-settings.png "$SETTINGS_CROP"
+	capture gui-settings.png "$SETTINGS_CROP" "$VERSION_ROW_WIDE"
 }
 
 # One graph picture per colour preset and per named theme, with THEMES_VIEW's
