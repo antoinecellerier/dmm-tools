@@ -378,6 +378,35 @@ fn open_error_help(
     }
 }
 
+/// The mock scenario a run on `selection` pins: `--mock-mode` when given,
+/// else the settings file's `mock_mode`, which the GUI's Mock mode row
+/// writes. `None` for a meter on a cable, and for a saved name the mock
+/// doesn't know, which is warned about so the mock cycling isn't a mystery —
+/// the GUI does the same with it.
+pub(crate) fn pinned_mock_mode(
+    selection: Selection,
+    flag: Option<String>,
+    saved: Option<&dmm_shared::SharedSettings>,
+) -> Option<String> {
+    if flag.is_some() || requires_hardware(selection) {
+        return flag;
+    }
+    let saved = saved
+        .map(|s| s.mock_mode.as_str())
+        .filter(|m| !m.is_empty())?;
+    match saved.parse::<dmm_lib::mock::MockMode>() {
+        Ok(_) => Some(saved.to_string()),
+        Err(message) => {
+            eprintln!(
+                "{} mock_mode in the settings file: {}",
+                style("Warning:").yellow(),
+                message.lines().next().unwrap_or_default(),
+            );
+            None
+        }
+    }
+}
+
 /// Open the simulated device `selection` names on `clock`, the UT61E+ mock
 /// pinned to `mock_mode` when one was given.
 ///

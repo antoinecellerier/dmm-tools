@@ -326,7 +326,7 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 let has_override = self.settings.overrides.has_mock_mode();
                 // "Auto" = cycle through all modes, and leads the row.
-                let auto_selected = self.settings.mock_mode.is_empty();
+                let auto_selected = self.settings.shared.mock_mode.is_empty();
                 let auto = std::iter::once(Chip {
                     value: String::new(),
                     selected: auto_selected,
@@ -340,7 +340,7 @@ impl App {
                 });
                 let modes = MockMode::ALL.iter().map(|mode| {
                     let mode_label = mode.label();
-                    let selected = self.settings.mock_mode == mode_label;
+                    let selected = self.settings.shared.mock_mode == mode_label;
                     Chip {
                         value: mode_label.to_string(),
                         selected,
@@ -353,7 +353,7 @@ impl App {
                     }
                 });
                 if let Some(mock_mode) = chip_row(ui, "Mock mode:", auto.chain(modes)) {
-                    self.settings.mock_mode = mock_mode;
+                    self.settings.shared.mock_mode = mock_mode;
                     // Clear the override — user explicitly chose a mock mode
                     self.settings.overrides.mock_mode = None;
                     self.settings.save();

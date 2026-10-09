@@ -54,6 +54,11 @@ pub struct SharedSettings {
     /// it. An address named on `--adapter` is still opened.
     #[serde(default = "bluetooth_default")]
     pub bluetooth: bool,
+    /// The mock scenario to pin the simulated meter to (e.g. `"dcv"`), as
+    /// the GUI's Mock mode row picks it and a `--mock-mode` flag would name
+    /// it. Empty means cycle through every scenario.
+    #[serde(default)]
+    pub mock_mode: String,
 }
 
 /// Bluetooth probing is on unless it was turned off: a settings file written
@@ -67,6 +72,7 @@ impl Default for SharedSettings {
         Self {
             device_family: String::new(),
             bluetooth: bluetooth_default(),
+            mock_mode: String::new(),
         }
     }
 }
@@ -345,7 +351,10 @@ mod tests {
             ..Default::default()
         };
         let json = serde_json::to_string(&s).unwrap();
-        assert_eq!(json, r#"{"device_family":"vc880","bluetooth":true}"#);
+        assert_eq!(
+            json,
+            r#"{"device_family":"vc880","bluetooth":true,"mock_mode":""}"#
+        );
     }
 
     /// A `.tmp` link planted beside the file — by a theme pack unpacked into

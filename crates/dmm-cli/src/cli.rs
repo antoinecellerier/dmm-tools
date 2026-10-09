@@ -100,7 +100,8 @@ pub(crate) enum Cmd {
         #[command(flatten)]
         alarm: AlarmArgs,
         /// Pin mock device to a specific mode (only with --device mock).
-        /// Without this, mock cycles through all modes automatically.
+        /// Without this, the settings file's mock mode applies, else the
+        /// mock cycles through all modes.
         #[arg(long, long_help = build_mock_mode_help())]
         mock_mode: Option<String>,
         /// Play back a file written by --format replay instead of opening a meter; ends with the file
@@ -141,7 +142,8 @@ pub(crate) enum Cmd {
         #[arg(long, default_value = "text")]
         format: SettingsFormat,
         /// Pin mock device to a specific mode (only with --device mock).
-        /// Without this, mock cycles through all modes automatically.
+        /// Without this, the settings file's mock mode applies, else the
+        /// mock cycles through all modes.
         #[arg(long)]
         mock_mode: Option<String>,
     },
@@ -154,7 +156,8 @@ pub(crate) enum Cmd {
         /// Value label, or a unique fragment of one, from the listing (run without it to see them)
         choice: Option<String>,
         /// Pin mock device to a specific mode (only with --device mock).
-        /// Without this, mock cycles through all modes automatically.
+        /// Without this, the settings file's mock mode applies, else the
+        /// mock cycles through all modes.
         #[arg(long)]
         mock_mode: Option<String>,
     },
@@ -446,7 +449,8 @@ pub(crate) fn completion_command() -> clap::Command {
 fn build_mock_mode_help() -> String {
     dmm_shared::help::mock_mode_help(
         "Pin the mock device to a specific measurement mode instead of \
-         auto-cycling. Only effective with --device mock.",
+         auto-cycling. Only effective with --device mock. Without it, the \
+         settings file's mock_mode (dmm-gui's Mock mode) pins it.",
         "--device mock read --mock-mode dcv",
     )
 }

@@ -409,9 +409,6 @@ pub struct Settings {
     /// reason about. Applied live; see `MIN_MAX_SAMPLES` for the floor.
     #[serde(default = "default_max_samples")]
     pub max_samples: usize,
-    /// Mock mode to pin to (e.g. "dcv", "acv"). Empty string = auto-cycle.
-    /// Only meaningful when device_family is "mock".
-    pub mock_mode: String,
     /// Color palette preset.
     #[serde(default)]
     pub color_preset: ColorPreset,
@@ -484,7 +481,6 @@ impl Default for Settings {
             zoom_pct: 100,
             sample_interval_ms: 0,
             max_samples: DEFAULT_MAX_SAMPLES,
-            mock_mode: String::new(),
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
             graph_lines: GraphLines::Patterned,
@@ -607,7 +603,7 @@ impl Settings {
                 to_save.shared.device_family = original.clone();
             }
             if let Some(ref original) = self.overrides.mock_mode {
-                to_save.mock_mode = original.clone();
+                to_save.shared.mock_mode = original.clone();
             }
             if let Some((mode, ref named)) = self.overrides.theme {
                 to_save.theme = mode;
@@ -804,6 +800,7 @@ mod tests {
             shared: SharedSettings {
                 device_family: "ut8803".to_string(),
                 bluetooth: false,
+                mock_mode: "dcv".to_string(),
             },
             theme: ThemeMode::Light,
             named_theme: Some("Desert".to_string()),
@@ -823,7 +820,6 @@ mod tests {
             zoom_pct: 150,
             sample_interval_ms: 500,
             max_samples: 2_000_000,
-            mock_mode: "dcv".to_string(),
             color_preset: ColorPreset::HighContrast,
             color_overrides: ColorOverrides::default(),
             graph_lines: GraphLines::Solid,

@@ -9,6 +9,7 @@
 ### CLI
 
 - **`read --alarm-high` and `--alarm-low` warn when a reading leaves its limits** — each alarm is marked in CSV, JSON and replay output; `--alarm-hysteresis` sets the re-arm band.
+- **The mock follows `dmm-gui`'s Mock mode setting** — without `--mock-mode`, `dmm-cli` cycled through every scenario.
 
 ### Bug fixes
 

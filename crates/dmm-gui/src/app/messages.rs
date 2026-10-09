@@ -269,10 +269,10 @@ impl App {
                 thread_ctx,
             );
         } else if let Some(device) = device_entry.filter(|d| !d.requires_hardware) {
-            let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
+            let mock_mode: Option<MockMode> = if self.settings.shared.mock_mode.is_empty() {
                 None
             } else {
-                match self.settings.mock_mode.parse() {
+                match self.settings.shared.mock_mode.parse() {
                     Ok(mode) => Some(mode),
                     // Only a hand-edited settings file reaches this: clap
                     // rejects a bad `--mock-mode` and the Settings row writes

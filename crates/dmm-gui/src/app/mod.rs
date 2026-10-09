@@ -467,11 +467,11 @@ impl App {
             settings.shared.device_family = device;
         }
         if let Some(mock_mode) = cli.mock_mode {
-            settings.overrides.mock_mode = Some(settings.mock_mode.clone());
+            settings.overrides.mock_mode = Some(settings.shared.mock_mode.clone());
             // The label, not what was typed: the Settings row matches on
             // labels, so an alias (`--mock-mode temp_dual`) would leave the
             // row showing no selection at all.
-            settings.mock_mode = mock_mode.label().to_string();
+            settings.shared.mock_mode = mock_mode.label().to_string();
         }
         if let Some(theme) = cli.theme {
             settings.overrides.theme = Some((settings.theme, settings.named_theme.clone()));
@@ -624,7 +624,7 @@ impl App {
         if let Some(tx) = &self.connection.cmd_tx {
             let _ = tx.send(RemoteCommand::Select(setting, id));
         }
-        // Only the mode pin: `settings.mock_mode` names a scenario, and a
+        // Only the mode pin: `settings.shared.mock_mode` names a scenario, and a
         // range pick leaves the mock in the scenario it is already pinned to.
         if setting == Setting::Mode && self.repin_mock(id) {
             self.settings.save();
@@ -633,7 +633,7 @@ impl App {
 
     /// Keep the Settings row's mock pin truthful after a dropdown pick.
     ///
-    /// `settings.mock_mode` is the scenario the mock is pinned to at connect;
+    /// `settings.shared.mock_mode` is the scenario the mock is pinned to at connect;
     /// a pick moves the mock's live scenario without a reconnect, so a pinned
     /// mock is re-pinned to the scenario picked. Returns whether the settings
     /// changed (and so need saving). No `needs_reconnect`: the mock has
@@ -646,14 +646,14 @@ impl App {
         if self
             .selected_device()
             .is_none_or(|d| d.id != dmm_lib::mock::MOCK.id)
-            || self.settings.mock_mode.is_empty()
+            || self.settings.shared.mock_mode.is_empty()
         {
             return false;
         }
         let Some(mode) = MockMode::from_choice_id(id) else {
             return false;
         };
-        self.settings.mock_mode = mode.label().to_string();
+        self.settings.shared.mock_mode = mode.label().to_string();
         // An explicit choice, as in the Settings row: it replaces a
         // `--mock-mode` override rather than being saved under it.
         self.settings.overrides.mock_mode = None;
@@ -1109,7 +1109,7 @@ mod tests {
     fn app(device: &str, mock_mode: &str) -> App {
         let mut settings = Settings::default();
         settings.shared.device_family = device.to_string();
-        settings.mock_mode = mock_mode.to_string();
+        settings.shared.mock_mode = mock_mode.to_string();
         // As after `--mock-mode`: the pin on screen is an override.
         settings.overrides.mock_mode = Some(String::new());
         App::from_settings(settings, dmm_lib::Clock::real())
@@ -1127,7 +1127,7 @@ mod tests {
     fn a_pick_re_pins_a_pinned_mock_without_reconnecting() {
         let mut app = app("mock", "temp2");
         assert!(app.repin_mock(choice_id_of(MockMode::TempDiff)));
-        assert_eq!(app.settings.mock_mode, "temp-diff");
+        assert_eq!(app.settings.shared.mock_mode, "temp-diff");
         assert_eq!(
             app.settings.overrides.mock_mode, None,
             "the pick replaces a --mock-mode override"
@@ -1141,7 +1141,7 @@ mod tests {
     fn a_pick_leaves_an_auto_cycling_mock_unpinned() {
         let mut app = app("mock", "");
         assert!(!app.repin_mock(choice_id_of(MockMode::TempDiff)));
-        assert_eq!(app.settings.mock_mode, "");
+        assert_eq!(app.settings.shared.mock_mode, "");
         assert!(!app.connection.needs_reconnect);
     }
 
@@ -1222,7 +1222,7 @@ mod tests {
     fn a_pick_on_a_real_meter_leaves_the_mock_pin_alone() {
         let mut app = app("ut181a", "temp2");
         assert!(!app.repin_mock(0x1121));
-        assert_eq!(app.settings.mock_mode, "temp2");
+        assert_eq!(app.settings.shared.mock_mode, "temp2");
     }
 
     /// `--replay` runs the session as the meter the recording came from —

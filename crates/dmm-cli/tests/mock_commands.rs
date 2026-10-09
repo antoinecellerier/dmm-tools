@@ -56,6 +56,56 @@ fn read_honours_mock_mode() {
     assert_eq!(reading["unit"], "k\u{3a9}");
 }
 
+/// The GUI's Mock mode row writes `mock_mode` to the settings file both
+/// binaries read; a run without `--mock-mode` pins the mock to it, and the
+/// flag still wins. Linux only: `XDG_CONFIG_HOME` moves the file there, and
+/// nothing moves it on Windows.
+#[cfg(target_os = "linux")]
+#[test]
+fn read_follows_the_saved_mock_mode() {
+    let config = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("dmm-cli-saved-mock-mode");
+    let run_with = |saved_mode: &str, args: &[&str]| {
+        std::fs::create_dir_all(config.join("dmm-tools")).expect("config dir");
+        std::fs::write(
+            config.join("dmm-tools/settings.json"),
+            format!(r#"{{"device_family": "mock", "mock_mode": "{saved_mode}"}}"#),
+        )
+        .expect("settings file");
+        let out = dmm_cli()
+            .env("XDG_CONFIG_HOME", &config)
+            .args(["read", "--count", "1", "--format", "csv"])
+            .args(args)
+            .output()
+            .expect("run dmm-cli");
+        (
+            String::from_utf8(out.stdout).expect("utf-8 stdout"),
+            String::from_utf8(out.stderr).expect("utf-8 stderr"),
+        )
+    };
+    let (csv, _) = run_with("ohm", &[]);
+    assert!(csv.contains(",k\u{3a9},"), "pinned to ohm: {csv}");
+    let (csv, _) = run_with("ohm", &["--mock-mode", "acv"]);
+    assert!(csv.contains("AC V,"), "the flag wins: {csv}");
+    let (csv, stderr) = run_with("nonsense", &[]);
+    assert!(csv.lines().count() == 3, "still reads, cycling: {csv}");
+    assert!(
+        stderr.contains("Warning: mock_mode in the settings file:"),
+        "got {stderr}"
+    );
+    let replay = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../assets/replays/dcv-steps.replay"
+    );
+    let (_, stderr) = run_with(
+        "nonsense",
+        &["--replay", replay, "--mock-clock-scale", "max"],
+    );
+    assert!(
+        !stderr.contains("mock_mode"),
+        "a replay opens no mock: {stderr}"
+    );
+}
+
 /// The mock answers instantly, so the read loop floors a `0` interval at
 /// 100 ms; without it `--count` would spin as fast as the CPU allows.
 #[test]

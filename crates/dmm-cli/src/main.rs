@@ -21,8 +21,8 @@ use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_shared::help::LinksSearched;
 use log::error;
 use open::{
-    device_for_listing, open_recording_with_help, opened_device, print_no_response_help,
-    print_setup_sections, requires_hardware, selection_id,
+    device_for_listing, open_recording_with_help, opened_device, pinned_mock_mode,
+    print_no_response_help, print_setup_sections, requires_hardware, selection_id,
 };
 
 fn main() {
@@ -239,7 +239,12 @@ fn main() {
                             integrate,
                             &transform.to_transform(),
                             alarm,
-                            mock_mode,
+                            // A replay opens no mock: its saved mode is not read.
+                            if replay.is_some() {
+                                mock_mode
+                            } else {
+                                pinned_mock_mode(selection, mock_mode, settings.as_ref())
+                            },
                             replay,
                             clock,
                         )
@@ -252,12 +257,24 @@ fn main() {
             setting,
             format,
             mock_mode,
-        } => cmd_get(selection, opts, setting, format, mock_mode),
+        } => cmd_get(
+            selection,
+            opts,
+            setting,
+            format,
+            pinned_mock_mode(selection, mock_mode, settings.as_ref()),
+        ),
         Cmd::Set {
             setting,
             choice,
             mock_mode,
-        } => cmd_set(selection, opts, setting, choice, mock_mode),
+        } => cmd_set(
+            selection,
+            opts,
+            setting,
+            choice,
+            pinned_mock_mode(selection, mock_mode, settings.as_ref()),
+        ),
         Cmd::Debug { count, interval_ms } => cmd_debug(selection, opts, count, interval_ms),
         Cmd::Capture(args) => {
             if args.list_steps {
