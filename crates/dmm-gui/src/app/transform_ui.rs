@@ -36,12 +36,6 @@ pub(super) struct TransformEditor {
 }
 
 impl TransformEditor {
-    fn clear_fields(&mut self) {
-        self.scale.clear();
-        self.offset.clear();
-        self.unit.clear();
-    }
-
     /// Nothing typed in any field: no scale for the chip to switch on.
     fn is_blank(&self) -> bool {
         [&self.scale, &self.offset, &self.unit]
@@ -222,8 +216,8 @@ impl App {
                 .clicked();
         });
 
+        // Off keeps the fields, so Apply turns the same scale back on.
         if off {
-            self.transform_editor.clear_fields();
             self.set_transform(Transform::default());
         } else if apply {
             self.apply_transform_fields();

@@ -5,6 +5,7 @@
 ### GUI
 
 - **Alarm limits mark each reading that leaves them** — **Alarm** beside **Scale** (`A`); a toast, a HI LIMIT/LO LIMIT badge and a count in Statistics go with it.
+- **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
 
 ### CLI
 

@@ -395,7 +395,8 @@ Nothing is sent to the meter. Clicking it opens three fields:
 | **+** (Offset) | add this afterwards | +0 |
 | **→** (Unit label) | show this unit instead of the base unit | no relabel |
 
-**Apply**, or Enter in a field, commits; **Off** turns scaling off.
+**Apply**, or Enter in a field, commits; **Off** turns scaling off and keeps
+the fields for the next **Apply**.
 
 The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
 factor survives auto-ranging: a 10 mV/A clamp is `× 100 → A`. With no unit
