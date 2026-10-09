@@ -267,7 +267,6 @@ impl App {
         // alarm stops instead, its fields kept for Apply.
         if self.alarm.take().is_some() {
             message.push_str(" \u{2014} alarm off; set its limits again in the new unit");
-            self.sync_alarm_view();
         }
         self.toast = Some(Toast::info(message));
     }
@@ -482,7 +481,7 @@ mod tests {
         app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
         app.set_transform(Transform::linear(100.0, 0.0, Some("A".to_string())));
         assert!(app.alarm.is_none());
-        assert!(app.graph.alarm_view.limits.is_empty());
+        assert!(app.watched_limits().is_none());
         let toast = app.toast.as_ref().expect("a toast");
         assert!(toast.message.contains("alarm off"), "{}", toast.message);
     }

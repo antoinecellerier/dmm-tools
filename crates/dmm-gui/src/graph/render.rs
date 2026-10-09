@@ -1228,7 +1228,13 @@ impl Graph {
     }
 
     /// Render the main graph.
-    pub fn show_main(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
+    pub fn show_main(
+        &mut self,
+        ui: &mut Ui,
+        tc: &ThemeColors,
+        markers: &Markers,
+        limits: Option<super::WatchedLimits>,
+    ) {
         let (view_min, view_max) = self.view_bounds();
         let marker_color = tc.graph_marker();
         let in_view = self.markers_between(markers, view_min, view_max);
@@ -1401,7 +1407,7 @@ impl Graph {
         let show_mean = self.show_mean;
         let show_ref = self.show_ref_line;
         let ref_values = self.ref_lines.values().to_vec();
-        let limit_lines = self.limit_lines();
+        let limit_lines = self.limit_lines(limits);
         let show_crossings = self.show_crossings;
         let crossings = if show_ref && show_crossings && !ref_values.is_empty() {
             self.find_crossings(&ref_values, view_min, view_max)

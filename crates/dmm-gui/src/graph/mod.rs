@@ -29,7 +29,7 @@ mod toolbar;
 mod view;
 mod view_state;
 
-pub(crate) use limits::AlarmView;
+pub(crate) use limits::WatchedLimits;
 pub(crate) use view_state::ViewState;
 
 #[cfg(test)]
@@ -380,8 +380,6 @@ pub struct Graph {
     /// Set when the lines are switched on, by the chip or by its key: the
     /// field appears empty, and nothing is drawn until a value is typed.
     focus_ref_field: bool,
-    /// What the app's alarm is watching, which the limit lines need.
-    pub(crate) alarm_view: AlarmView,
     /// Measurement cursors: two vertical lines with ΔT/ΔV readout.
     pub cursors_active: bool,
     /// Cursor positions in seconds from origin. None = not yet placed.
@@ -476,7 +474,6 @@ impl Graph {
             show_crossings: true,
             ref_lines: NumberListField::default(),
             focus_ref_field: false,
-            alarm_view: AlarmView::default(),
             cursors_active: false,
             cursor_a: None,
             cursor_b: None,
@@ -1446,15 +1443,21 @@ impl Graph {
     }
 
     /// Combined render: toolbar + main graph + minimap, with `markers` on
-    /// both.
-    pub fn show(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
+    /// both and the alarm's `limits` on the main graph.
+    pub fn show(
+        &mut self,
+        ui: &mut Ui,
+        tc: &ThemeColors,
+        markers: &Markers,
+        limits: Option<WatchedLimits>,
+    ) {
         self.handle_keyboard(ui.ctx());
         self.fit_axes_to(ui.available_width());
         self.show_toolbar(ui, tc);
         let minimap_reserve = MINIMAP_HEIGHT + 30.0;
         let main_height = (ui.available_height() - minimap_reserve).max(60.0);
         ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
-            self.show_main(ui, tc, markers);
+            self.show_main(ui, tc, markers, limits);
         });
         ui.add_space(4.0);
         self.show_minimap(ui, tc, markers);

@@ -3911,7 +3911,7 @@ fn gesture_frame(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events
     input.events.push(egui::Event::PointerMoved(pointer));
     input.events.extend_from_slice(events);
     let mut output = ctx.run_ui(input, |ui| {
-        g.show_main(ui, &tc, &crate::markers::Markers::default())
+        g.show_main(ui, &tc, &crate::markers::Markers::default(), None)
     });
     // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
     output.textures_delta.clear();
@@ -4026,7 +4026,7 @@ fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
             events,
             ..Default::default()
         },
-        |ui| g.show(ui, &tc, &crate::markers::Markers::default()),
+        |ui| g.show(ui, &tc, &crate::markers::Markers::default(), None),
     );
     // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
     output.textures_delta.clear();
@@ -4303,7 +4303,7 @@ fn clicking_a_flag_reports_its_marker() {
             events,
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers));
+        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None));
         out.textures_delta.clear();
         out.platform_output.accesskit_update.and_then(|update| {
             update
@@ -4348,7 +4348,7 @@ fn menu_frame(
         ..Default::default()
     };
     let mut out = ctx.run_ui(input, |ui| {
-        g.show_main(ui, &tc, &crate::markers::Markers::default())
+        g.show_main(ui, &tc, &crate::markers::Markers::default(), None)
     });
     out.textures_delta.clear();
     out.platform_output
@@ -4585,7 +4585,7 @@ fn a_wide_window_draws_about_as_much_as_a_narrow_one() {
                 screen_rect: Some(screen),
                 ..Default::default()
             };
-            let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers));
+            let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None));
             out.textures_delta.clear();
             count = ctx
                 .tessellate(out.shapes, out.pixels_per_point)
@@ -5021,7 +5021,7 @@ fn pattern_frame(g: &mut Graph, ctx: &egui::Context, tc: &ThemeColors) -> Patter
             screen_rect: Some(gesture_screen()),
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, tc, &markers));
+        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, tc, &markers, None));
         out.textures_delta.clear();
         shapes = out.shapes;
     }

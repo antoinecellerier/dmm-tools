@@ -5,7 +5,7 @@
 //! With the reading rather than on the graph's toolbar: the alarm judges the
 //! main reading whatever the graph plots, its verdict shows on the reading
 //! and in Statistics, and an unattended run in the big meter has no graph.
-//! The graph only draws the limits it is handed (`Graph::alarm_view`).
+//! The graph only draws the limits it is handed (`watched_limits`).
 //!
 //! The rules — base units, the quantity bound, what counts as a breach — are
 //! `dmm_lib::alarm`'s, shared with `dmm-cli read --alarm-*`. Session-only,
@@ -18,6 +18,7 @@ use super::controls::remote::SplitChip;
 use super::marker_list::log_line;
 use super::toast::Toast;
 use crate::display::ReadingState;
+use crate::graph::WatchedLimits;
 use dmm_lib::alarm::{Alarm, Breach, Hysteresis, HysteresisError, LimitError, Limits};
 use dmm_lib::measurement::Measurement;
 use eframe::egui::{self, RichText, Ui};
@@ -202,20 +203,26 @@ impl App {
         let font_size = (12.0 * scale).max(SMALL_TEXT_SIZE);
         let font = egui::FontId::proportional(font_size);
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-        // What the limits are in, or why they are idle: the graph's copy of
-        // the alarm's state, which `sync_alarm_view` keeps.
-        let view = &self.graph.alarm_view;
-        let status = match (&view.idle, &view.unit) {
+        // What the limits are in, or why they are idle.
+        let alarm = self.alarm.as_ref();
+        let relabel = self
+            .transform
+            .unit
+            .as_deref()
+            .filter(|_| self.alarm_scaled());
+        let idle = alarm.and_then(|a| a.idle());
+        let unit = alarm.and_then(|a| a.limits_unit(relabel));
+        let status = match (idle, unit) {
             (Some(idle), _) => Some((
                 format!("idle: {idle}"),
                 tc.status_warning(),
                 format!(
                     "Waiting: the readings are in {idle}, the limits in {}",
-                    view.watched.as_deref().unwrap_or_default()
+                    alarm.and_then(|a| a.quantity()).unwrap_or_default()
                 ),
             )),
             (None, Some(unit)) => Some((
-                unit.clone(),
+                unit.to_string(),
                 ui.visuals().weak_text_color(),
                 "The unit the limits are in".to_string(),
             )),
@@ -323,7 +330,6 @@ impl App {
             self.alarm = Some(Alarm::new(limits, band));
             self.toast = Some(Toast::info(format!("Alarm on: {}", limits.describe(band))));
         }
-        self.sync_alarm_view();
     }
 
     /// Judge one reading, as shown, against the limits; `scaled` says
@@ -359,29 +365,14 @@ impl App {
         }
     }
 
-    /// Hand the graph what the alarm watches, for its lines and the unit
-    /// after the fields. Compared before it is written, as it runs once per
-    /// drained frame.
-    pub(super) fn sync_alarm_view(&mut self) {
-        let scaled = self.alarm_scaled();
-        let relabel = self.transform.unit.as_deref().filter(|_| scaled);
-        let alarm = self.alarm.as_ref();
-        let watched = alarm.and_then(|a| a.quantity());
-        let idle = alarm.and_then(|a| a.idle());
-        let unit = alarm.and_then(|a| a.limits_unit(relabel));
-        let limits = alarm.map(|a| a.limits()).unwrap_or_default();
-        let view = &mut self.graph.alarm_view;
-        view.limits = limits;
-        if view.watched.as_deref() != watched {
-            view.watched = watched.map(str::to_string);
-        }
-        if view.idle.as_deref() != idle {
-            view.idle = idle.map(str::to_string);
-        }
-        if view.unit.as_deref() != unit {
-            view.unit = unit.map(str::to_string);
-        }
-        view.scaled = scaled;
+    /// The limits the graph draws: only while the alarm watches the main
+    /// reading's quantity — bound to it, and not idle on another's.
+    pub(super) fn watched_limits(&self) -> Option<WatchedLimits> {
+        let alarm = self.alarm.as_ref()?;
+        (alarm.quantity().is_some() && alarm.idle().is_none()).then(|| WatchedLimits {
+            limits: alarm.limits(),
+            scaled: self.alarm_scaled(),
+        })
     }
 }
 
@@ -429,12 +420,10 @@ mod tests {
         assert_eq!(app.alarm.as_ref().unwrap().high_count, 1);
         assert_eq!(app.reading_state().alarm, Some(dmm_lib::alarm::Zone::Above));
 
-        app.sync_alarm_view();
-        assert_eq!(app.graph.alarm_view.watched.as_deref(), Some("V"));
+        assert!(app.watched_limits().is_some());
         let ohms = reading(&app, 12.0, "kΩ");
         assert!(app.check_alarm(&ohms, false).is_none());
-        app.sync_alarm_view();
-        assert_eq!(app.graph.alarm_view.idle.as_deref(), Some("Ω"));
+        assert!(app.watched_limits().is_none(), "idle on ohms: no lines");
 
         app.clear_session();
         assert_eq!(app.alarm.as_ref().unwrap().high_count, 0);
@@ -513,10 +502,15 @@ mod tests {
     #[test]
     fn no_limits_turn_the_alarm_off() {
         let mut app = app_with_high_limit(5.0);
-        assert_eq!(app.graph.alarm_view.limits.high, Some(5.0));
+        assert!(
+            app.watched_limits().is_none(),
+            "no lines before a reading binds it"
+        );
+        assert!(app.check_alarm(&reading(&app, 4.0, "V"), false).is_none());
+        assert_eq!(app.watched_limits().map(|w| w.limits.high), Some(Some(5.0)));
         app.set_limits(Limits::default(), Hysteresis::Auto);
         assert!(app.alarm.is_none());
-        assert!(app.graph.alarm_view.limits.is_empty());
+        assert!(app.watched_limits().is_none());
         assert_eq!(
             app.toast.as_ref().map(|t| t.message.as_str()),
             Some("Alarm off")

@@ -546,7 +546,6 @@ impl App {
         }
 
         self.mark_breaches(breaches);
-        self.sync_alarm_view();
 
         if thread_gone && !clear_channel {
             // The acquisition thread exited on its own — it panicked, or it

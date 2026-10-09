@@ -369,9 +369,6 @@ impl App {
             ctx.request_repaint();
         }
         self.import_job = job;
-        // Once the job or the finished import is back in place: they say the
-        // readings are the file's, unscaled.
-        self.sync_alarm_view();
     }
 
     /// Latch what the recording is exported under and start it.
@@ -642,7 +639,6 @@ timestamp,mode,value,unit,range,flags,marker,note
         // Nor does the alarm judge the file's readings, or draw its limits,
         // as scaled.
         assert!(!app.alarm_scaled());
-        assert!(!app.graph.alarm_view.scaled);
         let first = app
             .capture
             .recording

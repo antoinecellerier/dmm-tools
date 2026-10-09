@@ -617,7 +617,8 @@ impl App {
             let graph_height = (total - self.settings.recording_height).max(80.0);
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                self.graph.show(ui, &tc, &self.markers);
+                let limits = self.watched_limits();
+                self.graph.show(ui, &tc, &self.markers, limits);
             });
             self.take_graph_actions();
 
@@ -662,7 +663,8 @@ impl App {
 
             self.show_recording_section(ui, compact);
         } else if self.settings.show_graph {
-            self.graph.show(ui, &tc, &self.markers);
+            let limits = self.watched_limits();
+            self.graph.show(ui, &tc, &self.markers, limits);
             self.take_graph_actions();
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
