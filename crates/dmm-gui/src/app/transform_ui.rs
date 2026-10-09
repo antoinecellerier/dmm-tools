@@ -17,7 +17,7 @@ use eframe::egui::{self, RichText, Ui};
 
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
-use super::controls::remote::SplitChip;
+use super::controls::remote::{SplitChip, row_field};
 use super::toast::Toast;
 
 /// Draft text for the three fields, kept apart from the applied
@@ -46,9 +46,6 @@ impl TransformEditor {
 
 /// Tooltip on the chip's caret.
 const SCALE_HOVER: &str = "Set the scale";
-
-/// Width of each of the three fields, in points before zoom.
-const FIELD_WIDTH: f32 = 50.0;
 
 /// The chip's name.
 const SCALE_NAME: &str = "Scale";
@@ -171,41 +168,13 @@ impl App {
         let focus = std::mem::take(&mut self.transform_editor.focus);
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
-            let width = FIELD_WIDTH * scale;
-            let field =
-                |ui: &mut Ui, sign: &str, text: &mut String, hint: &'static str, focus: bool| {
-                    ui.label(RichText::new(sign).font(font.clone()));
-                    let resp = ui.add(
-                        egui::TextEdit::singleline(text)
-                            .desired_width(width)
-                            .font(font.clone())
-                            .hint_text(RichText::new(hint).font(font.clone())),
-                    );
-                    if focus {
-                        resp.request_focus();
-                    }
-                    // egui's own focused frame is invisible under a pinned
-                    // Accent; the ring is the field's only keyboard cue then.
-                    crate::a11y::paint_focus_ring(ui, &resp);
-                    // Enter, never `.changed()`: committing per keystroke would
-                    // clear the graph and the statistics on every digit typed.
-                    resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                };
-            apply |= field(
-                ui,
-                "\u{D7}",
-                &mut self.transform_editor.scale,
-                "Scale factor",
-                focus,
-            );
-            apply |= field(ui, "+", &mut self.transform_editor.offset, "Offset", false);
-            apply |= field(
-                ui,
-                "\u{2192}",
-                &mut self.transform_editor.unit,
-                "Unit label",
-                false,
-            );
+            let editor = &mut self.transform_editor;
+            let mut field = |ui: &mut Ui, sign, text, hint, focus| {
+                apply |= row_field(ui, &font, scale, sign, text, hint, focus).1;
+            };
+            field(ui, "\u{D7}", &mut editor.scale, "Scale factor", focus);
+            field(ui, "+", &mut editor.offset, "Offset", false);
+            field(ui, "\u{2192}", &mut editor.unit, "Unit label", false);
             apply |= ui
                 .add(egui::Button::new(RichText::new("Apply").font(font.clone())))
                 .on_hover_text("Apply these values to every reading from now on")

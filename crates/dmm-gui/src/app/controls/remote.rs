@@ -146,6 +146,57 @@ impl SplitChip<'_> {
 /// The hairline between a split chip's body and its caret.
 const SPLIT_GAP: f32 = 1.0;
 
+/// Width of each field in a split chip's row, in points before zoom.
+const FIELD_WIDTH: f32 = 50.0;
+
+/// One captioned field in a split chip's row (**Scale**'s factor, **Alarm**'s
+/// limits), in a `horizontal_wrapped` row at `scale`: the field's response,
+/// and whether Enter committed it this frame.
+///
+/// Enter, never `.changed()`: a value taken per keystroke would rescale the
+/// readings, or raise an alarm at 1, on the way to typing 12.
+pub(in crate::app) fn row_field(
+    ui: &mut Ui,
+    font: &egui::FontId,
+    scale: f32,
+    caption: &str,
+    text: &mut String,
+    hint: &str,
+    focus: bool,
+) -> (egui::Response, bool) {
+    let width = FIELD_WIDTH * scale;
+    // A caption and its field wrap together: a caption left at the end of a
+    // line reads as labelling nothing.
+    let caption = RichText::new(caption).font(font.clone());
+    let caption_width = egui::WidgetText::from(caption.clone())
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Body,
+        )
+        .size()
+        .x;
+    if caption_width + ui.spacing().item_spacing.x + width > ui.available_size_before_wrap().x {
+        ui.end_row();
+    }
+    ui.label(caption);
+    let resp = ui.add(
+        egui::TextEdit::singleline(text)
+            .desired_width(width)
+            .font(font.clone())
+            .hint_text(RichText::new(hint).font(font.clone())),
+    );
+    if focus {
+        resp.request_focus();
+    }
+    // egui's own focused frame is invisible under a pinned Accent; the ring
+    // is the field's only keyboard cue then.
+    crate::a11y::paint_focus_ring(ui, &resp);
+    let committed = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    (resp, committed)
+}
+
 impl App {
     /// The meter's buttons, with the **Scale** and **Alarm** chips on the end
     /// of their last line when they fit and on a line of their own otherwise.

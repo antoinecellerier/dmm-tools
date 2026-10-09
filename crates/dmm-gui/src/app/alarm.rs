@@ -14,7 +14,7 @@
 
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
-use super::controls::remote::SplitChip;
+use super::controls::remote::{SplitChip, row_field};
 use super::marker_list::log_line;
 use super::toast::Toast;
 use crate::display::ReadingState;
@@ -55,9 +55,6 @@ impl AlarmEditor {
 
 /// Tooltip on the chip's caret.
 const ALARM_HOVER: &str = "Set the limits";
-
-/// Width of each limit field, in points before zoom: the Scale row's.
-const FIELD_WIDTH: f32 = 50.0;
 
 /// The chip's name.
 const ALARM_NAME: &str = "Alarm";
@@ -249,43 +246,9 @@ impl App {
         let editor = &mut self.alarm_editor;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
-            let width = FIELD_WIDTH * scale;
-            let mut field = |ui: &mut Ui,
-                             caption: &str,
-                             text: &mut String,
-                             hint: &str,
-                             focus: bool|
-             -> egui::Response {
-                // A caption and its field wrap together: a caption left at
-                // the end of a line reads as labelling nothing.
-                let caption = RichText::new(caption).font(font.clone());
-                let caption_width = egui::WidgetText::from(caption.clone())
-                    .into_galley(
-                        ui,
-                        Some(egui::TextWrapMode::Extend),
-                        f32::INFINITY,
-                        egui::TextStyle::Body,
-                    )
-                    .size()
-                    .x;
-                let needed = caption_width + ui.spacing().item_spacing.x + width;
-                if needed > ui.available_size_before_wrap().x {
-                    ui.end_row();
-                }
-                ui.label(caption);
-                let resp = ui.add(
-                    egui::TextEdit::singleline(text)
-                        .desired_width(width)
-                        .font(font.clone())
-                        .hint_text(RichText::new(hint).font(font.clone())),
-                );
-                if focus {
-                    resp.request_focus();
-                }
-                crate::a11y::paint_focus_ring(ui, &resp);
-                // Enter, never `.changed()`: a limit taken per keystroke
-                // would raise an alarm at 1 on the way to typing 12.
-                apply |= resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let mut field = |ui: &mut Ui, caption, text, hint, focus| {
+                let (resp, committed) = row_field(ui, &font, scale, caption, text, hint, focus);
+                apply |= committed;
                 resp
             };
             let focus = std::mem::take(&mut editor.focus);
