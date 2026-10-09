@@ -8,24 +8,21 @@ Contributions and feedback welcome via [GitHub Issues](https://github.com/antoin
 
 ## Monitoring & Alerts
 
-### Threshold alarms
-
-**Complexity:** Medium
-
-Configurable high/low thresholds that trigger visual and audible alerts when a measurement crosses a boundary.
-
-- CLI: `--alarm-high 5.0 --alarm-low 3.0` flags, warning lines to stderr
-- GUI: threshold lines on graph with active monitoring, toast and optional sound on breach, breach count in stats panel
-
-Use cases: unattended battery discharge testing, thermal monitoring, production go/no-go checks.
-
 ### Pass/fail testing mode
 
 **Complexity:** Medium
 
-Define a nominal value and tolerance (e.g., `5.0V +/-2%` or `4.9V..5.1V`), display live pass/fail status with color coding. Log results to CSV with timestamps.
+Define a nominal value and tolerance (e.g., `5.0V +/-2%` or `4.9V..5.1V`), display live pass/fail status with color coding. Log results to CSV with timestamps. The alarm limits (`dmm-cli read --alarm-*`, the GUI's **Alarm**) already judge readings against a range and mark the breaches; this would add the tolerance form and a verdict per test.
 
 Use cases: production testing, incoming inspection, calibration verification.
+
+### A sound on an alarm
+
+**Complexity:** Low-medium
+
+The GUI's **Alarm** marks each crossing and shows a badge but makes no sound; the CLI has `--alarm-bell`. A short tone needs an audio crate in the GUI (`cpal` reuses crates already in the lock), which brings the ALSA headers into the Linux build and `libasound.so.2` into its runtime.
+
+Use cases: an unattended run where nobody is watching the screen.
 
 ---
 

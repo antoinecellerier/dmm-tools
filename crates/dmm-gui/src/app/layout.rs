@@ -56,14 +56,14 @@ impl App {
                 ui,
                 self.last_measurement.as_ref(),
                 &tc,
-                !self.transform.is_identity(),
+                self.reading_state(),
                 self.connection.readouts(),
             ),
             ContentLayout::Narrow => display::show_reading_compact(
                 ui,
                 self.last_measurement.as_ref(),
                 &tc,
-                !self.transform.is_identity(),
+                self.reading_state(),
                 self.connection.readouts(),
             ),
         };
@@ -80,6 +80,7 @@ impl App {
         );
         self.show_big_meter_toggle_at(ui, toggle_rect);
         self.show_transform_editor(ui, 1.0);
+        self.show_alarm_editor(ui, 1.0);
         self.show_connection_help(ui);
         self.show_late_readings(ui);
 

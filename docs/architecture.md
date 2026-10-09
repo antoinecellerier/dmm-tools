@@ -390,6 +390,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/export.rs` | Export… |
 | `app/import.rs` | Import… |
 | `app/transform_ui.rs` | The **Scale** row |
+| `app/alarm.rs` | The **Alarm** chip and row, the alarm behind them and the markers it places |
 | `app/shortcuts.rs` | The key binding table |
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
 | `app/whats_new.rs` | The release-notes viewport |

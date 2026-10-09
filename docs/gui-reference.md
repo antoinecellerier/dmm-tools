@@ -122,6 +122,7 @@ top-right corner in every layout and expire on their own.
     low-impedance voltage input
   - **VOID** — reading marked invalid by the meter (orange)
   - **SCALE** — a software [scale](#scale) is applied to the reading
+  - **HI LIMIT**, **LO LIMIT** — the reading is past an [alarm limit](#alarm) (red)
 - Overload ("OL") rendered in warning red
 
 ## Remote Control
@@ -241,7 +242,9 @@ A thin strip below the main plot showing the full capture history.
 - **Int** — cumulative time-integral (shown only for current and voltage modes).
   For current modes, displays charge in Ah/mAh/µAh. For voltage modes, V·s.
   Resets with the Reset button.
-- **Reset** button — clears statistics and integral
+- **Alarms** — readings that went past each [alarm limit](#alarm),
+  while limits are set
+- **Reset** button — clears statistics, integral and alarm counts
 - Stats persist across reconnects (use Clear for full reset)
 - In wide layout, a second row shows **visible window stats** — min/max/avg
   computed only over the current graph viewport
@@ -353,6 +356,33 @@ configured). If neither specs nor manual URL exist, nothing renders.
 ZT-5B / V05B, and Mock (the UT61E+'s figures; none in its temperature modes).
 Other devices show only the Manual link.
 
+## Alarm
+
+**Alarm**, next to **Scale**, watches the main reading for unattended runs.
+Clicking it, or pressing `A`, opens three fields:
+
+| Field | Meaning | Left empty |
+|---|---|---|
+| **Low**, **High** | alarm when the reading goes past this | no limit on that side |
+| **±** (Hysteresis) | how far back inside the reading must come before the same limit alarms again: a value in the limits' unit, or a percentage of the limit (`1%`) | a few counts of the meter's last digit |
+
+**Apply**, or Enter in a field, sets the limits; **Off** stops the alarm and
+keeps them for the next **Apply**.
+
+Each reading that goes past a limit is marked, with the limit in the marker's
+note; while the reading is out it turns the error colour
+with a **HI LIMIT** or **LO LIMIT** badge, the graph draws the limits as
+dotted lines, and [Statistics](#statistics) counts the alarms. The band
+keeps a reading hovering at a limit to one alarm; overloads don't count.
+
+Limits are in the base unit (V, A, Ω, …), as the [scale](#scale)'s factor
+is, or in the scale's unit while one is applied. They watch the quantity of
+the first reading after they are set: after a dial turn to another quantity
+the row reads **idle** until the dial comes back. They last for the session.
+Without a recording, a marker leaves with its reading when the graph clears;
+the count stays until Reset or Clear. `dmm-cli read` offers the same alarm as
+`--alarm-high`, `--alarm-low` and `--alarm-hysteresis`.
+
 ## Scale
 
 **Scale**, next to the remote controls, applies a software transform to the
@@ -379,7 +409,7 @@ scaled with it; sub-values in another unit are left as sent. Statistics and
 the integral use the scaled reading.
 
 Applying or clearing a scale resets the graph and statistics, like
-**Clear**; a recording in progress continues with scaled values. The setting
+**Clear**, and turns an [alarm](#alarm) off; a recording in progress continues with scaled values. The setting
 is session-only and survives disconnect, a change of device and `Ctrl+L`.
 `dmm-cli read` offers the same transform as `--scale`, `--offset` and `--unit`.
 
@@ -626,10 +656,10 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md#gui-accessibility). Reports of what does and doesn't come through as expected are welcome.
 
 - Every button, toggle, text field, and custom widget has a spoken name; icon-only buttons, color swatches, the graph minimap and the resize bars announce what they do instead of their glyph or color.
-- Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button and **Scale** announce whether they are currently on or off — you don't have to rely on the color change.
+- Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button, **Scale** and **Alarm** announce whether they are currently on or off — you don't have to rely on the color change.
 - The **Device** list announces each meter by its full name, brand included, though a brand heading shows it once on screen.
 - The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
-- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled".
+- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled"; one past an [alarm limit](#alarm) with ", above the high limit" or ", below the low limit".
 - The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-value traces drawn beside it, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
 - The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 

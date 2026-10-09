@@ -238,6 +238,8 @@ impl App {
             if self.pin_replay_origin(recorded) || std::mem::take(&mut self.requeue_replay) {
                 let mut markers = replay.markers.clone();
                 markers.sort_by_key(|m| m.offset);
+                self.markers
+                    .reserve(markers.iter().map(|m| m.number).max().unwrap_or(0));
                 self.replay_markers = markers.into();
                 self.replay_view = replay
                     .view
@@ -367,6 +369,9 @@ impl App {
         self.graph.clear();
         self.capture.recording.clear_history();
         self.capture.session.reset();
+        if let Some(alarm) = &mut self.alarm {
+            alarm.clear_counts();
+        }
         self.last_measurement = None;
         self.held.clear();
     }
@@ -391,7 +396,7 @@ impl App {
         }
 
         let mut clear_channel = false;
-
+        let mut breaches = Vec::new();
         for msg in messages {
             match msg {
                 DmmMessage::Connected(meter) => {
@@ -491,6 +496,9 @@ impl App {
                     // Filled in from the frames before it when the meter sends
                     // a reading's parts in frames of their own.
                     self.place_replay_marker(&m);
+                    // After the file's marker: a breach on the same reading
+                    // adds its note to that marker rather than pushing it on.
+                    breaches.extend(self.check_alarm(&m, self.alarm_scaled()));
                     self.apply_replay_view(&m);
                     let shown = self.held.fill_in(self.last_measurement.as_ref(), m);
                     self.last_measurement = Some(shown);
@@ -536,6 +544,9 @@ impl App {
                 }
             }
         }
+
+        self.mark_breaches(breaches);
+        self.sync_alarm_view();
 
         if thread_gone && !clear_channel {
             // The acquisition thread exited on its own — it panicked, or it

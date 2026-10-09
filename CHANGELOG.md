@@ -2,9 +2,13 @@
 
 ## Unreleased
 
+### GUI
+
+- **Alarm limits mark each reading that leaves them** — **Alarm** beside **Scale** (`A`); a toast, a HI LIMIT/LO LIMIT badge and a count in Statistics go with it.
+
 ### CLI
 
-- **`read --alarm-high` and `--alarm-low` warn when a reading leaves its limits** — each alarm is marked in CSV, JSON and replay output; `--alarm-bell` rings the terminal bell.
+- **`read --alarm-high` and `--alarm-low` warn when a reading leaves its limits** — each alarm is marked in CSV, JSON and replay output; `--alarm-hysteresis` sets the re-arm band.
 
 ### Bug fixes
 

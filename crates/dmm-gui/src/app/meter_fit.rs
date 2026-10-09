@@ -150,11 +150,12 @@ pub(super) struct FitInputs {
     /// The meter-only view's spec line leaves out the fields turned off.
     pub(super) spec_fields: crate::settings::SpecFields,
     pub(super) big_meter_mode: BigMeterMode,
-    /// Opening the Scale editor adds a row under the buttons, and an active
-    /// scale adds the `Raw` sub-value — both change how much room is left
-    /// for the reading.
-    pub(super) transform_editor_open: bool,
+    /// An active scale adds the `Raw` sub-value, which changes how much room
+    /// is left for the reading. (The Scale and Alarm rows never show here.)
     pub(super) transform_is_identity: bool,
+    /// A set alarm reserves the limit badge's slot by the reading and adds
+    /// the Alarms line to the statistics.
+    pub(super) alarm_set: bool,
     /// Which connection notice, if any, stands in for the reading. Its title
     /// takes the readout's place in the big-meter modes and the titles differ
     /// in length, so the fitted font has to be re-measured when one replaces
@@ -232,8 +233,8 @@ mod tests {
             show_specs: false,
             spec_fields: crate::settings::SpecFields::default(),
             big_meter_mode: BigMeterMode::Off,
-            transform_editor_open: false,
             transform_is_identity: true,
+            alarm_set: false,
             notice_kind: None,
         }
     }
@@ -518,11 +519,11 @@ mod tests {
             ..inputs()
         });
         mutations.push(FitInputs {
-            transform_editor_open: true,
+            transform_is_identity: false,
             ..inputs()
         });
         mutations.push(FitInputs {
-            transform_is_identity: false,
+            alarm_set: true,
             ..inputs()
         });
         mutations.push(FitInputs {

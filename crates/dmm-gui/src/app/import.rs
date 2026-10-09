@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime};
 
+use dmm_lib::alarm::Alarm;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::transport::Link;
 use eframe::egui;
@@ -335,6 +336,11 @@ impl App {
         self.requeue_replay = self.replay.is_some();
         self.imported = None;
         self.import_job = None;
+        // A file, or the meter after one, is judged afresh: bound to its own
+        // first reading, not to the quantity and zone the last session left.
+        if let Some(alarm) = &self.alarm {
+            self.alarm = Some(Alarm::new(alarm.limits(), alarm.hysteresis()));
+        }
     }
 
     /// Take the next chunk of an import under way, or pick up the parsed
@@ -363,6 +369,9 @@ impl App {
             ctx.request_repaint();
         }
         self.import_job = job;
+        // Once the job or the finished import is back in place: they say the
+        // readings are the file's, unscaled.
+        self.sync_alarm_view();
     }
 
     /// Latch what the recording is exported under and start it.
@@ -401,6 +410,8 @@ impl App {
         self.set_gap_interval(self.settings.sample_interval_ms);
         let total = readings.len();
         let first = readings.first().map(|m| m.timestamp);
+        self.markers
+            .reserve(markers.iter().map(|&(_, n, _)| n).max().unwrap_or(0));
         self.capture.recording.toggle(self.clock.now());
         Some(ImportJob::Ingesting(Ingest {
             path,
@@ -418,6 +429,7 @@ impl App {
     /// arrive; the end of the file, or a full buffer, finishes the import.
     fn ingest_chunk(&mut self, mut ingest: Ingest) -> Option<ImportJob> {
         let mut full = false;
+        let mut breaches = Vec::new();
         for _ in 0..CHUNK {
             let Some(m) = ingest.readings.next() else {
                 break;
@@ -433,12 +445,16 @@ impl App {
                         .insert(m.timestamp, number, note, m.wall_time.into(), reading);
                 }
             }
+            // After the file's marker, as for a live reading. Unscaled: the
+            // file holds the readings as they were shown.
+            breaches.extend(self.check_imported(&m));
             ingest.taken += 1;
             self.last_measurement = Some(m);
             if full {
                 break;
             }
         }
+        self.mark_breaches(breaches);
         if !full && ingest.taken < ingest.total {
             let percent = ingest.taken * 100 / ingest.total;
             self.toast = Some(Toast::info(format!(
@@ -595,6 +611,24 @@ timestamp,mode,value,unit,range,flags,marker,note
         let _ = std::fs::remove_file(path);
     }
 
+    /// An alarm set before the import judges the file's readings as the
+    /// live ones: the crossing adds its note to the file's marker on it.
+    #[test]
+    fn an_import_is_judged_by_the_alarm() {
+        let mut app = app();
+        let limits = dmm_lib::alarm::Limits::check(None, Some(1.61095)).unwrap();
+        app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
+        let path = file("alarm.csv", CSV);
+        import(&mut app, path.clone());
+        let marker = app.markers.iter().next().expect("the file's marker");
+        assert_eq!(
+            (marker.number, marker.note.as_str()),
+            (3, "load on, 2.2 ohm; Above high limit 1.61095 V")
+        );
+        assert_eq!(app.alarm.as_ref().map(|a| a.high_count), Some(1));
+        let _ = std::fs::remove_file(path);
+    }
+
     /// The file holds what was shown, scaled or not: a transform in force is
     /// not applied again. And the meter the file names is not saved as the
     /// user's.
@@ -605,6 +639,10 @@ timestamp,mode,value,unit,range,flags,marker,note
         app.transform = dmm_lib::transform::Transform::linear(2.0, 0.0, None);
         let path = file("scaled.csv", CSV);
         import(&mut app, path.clone());
+        // Nor does the alarm judge the file's readings, or draw its limits,
+        // as scaled.
+        assert!(!app.alarm_scaled());
+        assert!(!app.graph.alarm_view.scaled);
         let first = app
             .capture
             .recording

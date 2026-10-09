@@ -744,6 +744,8 @@ struct OverlayLabelData {
     mean_value: Option<f64>,
     show_ref: bool,
     ref_values: Vec<f64>,
+    /// The alarm limits drawn, in the plotted unit, with their names.
+    limit_lines: Vec<(f64, &'static str)>,
     cursors_active: bool,
     cursor_a: Option<f64>,
     cursor_b: Option<f64>,
@@ -763,6 +765,7 @@ struct OverlayLabelData {
     view_max: f64,
     mean_color: egui::Color32,
     ref_color: egui::Color32,
+    limit_color: egui::Color32,
     cursor_color: egui::Color32,
     /// The plot's background, which rims each label so grid lines, the
     /// trace and other lines stop short of its letters.
@@ -1286,6 +1289,7 @@ impl Graph {
         let cursor_color = tc.graph_cursor();
         let cursor_color_dim = tc.graph_cursor_dim();
         let env_color = tc.graph_envelope();
+        let limit_color = tc.status_error();
 
         // Every drawn line carries the name of its series, which is what the
         // hover label reports; every helper item is named "" and falls through
@@ -1397,6 +1401,7 @@ impl Graph {
         let show_mean = self.show_mean;
         let show_ref = self.show_ref_line;
         let ref_values = self.ref_lines.values().to_vec();
+        let limit_lines = self.limit_lines();
         let show_crossings = self.show_crossings;
         let crossings = if show_ref && show_crossings && !ref_values.is_empty() {
             self.find_crossings(&ref_values, view_min, view_max)
@@ -1648,6 +1653,18 @@ impl Graph {
                 }
             }
 
+            // Alarm limits, loosely dotted: the trace is solid and the mean
+            // and reference lines dashed, so the limits read apart from all
+            // of them without the colour — the error colour can be the
+            // trace's own hue, as in the default themes. Wider than the
+            // others, so the sparse dots still read as a line.
+            for &(v, _) in &limit_lines {
+                plot_ui.add(
+                    TimedHLine::new(v, limit_color, egui_plot::LineStyle::dotted_loose())
+                        .width(2.0),
+                );
+            }
+
             // Trigger crossing markers (where data crosses reference lines)
             if !crossings.is_empty() {
                 plot_ui.points(
@@ -1704,6 +1721,7 @@ impl Graph {
             mean_value,
             show_ref,
             ref_values,
+            limit_lines,
             cursors_active,
             cursor_a,
             cursor_b,
@@ -1717,6 +1735,7 @@ impl Graph {
             view_max,
             mean_color,
             ref_color,
+            limit_color,
             cursor_color,
             halo_color: tc.plot_background(),
         };
@@ -2130,6 +2149,11 @@ impl Graph {
             refs.dedup();
             levels.extend(refs.into_iter().map(|v| (v, level_text(v), data.ref_color)));
         }
+        levels.extend(
+            data.limit_lines
+                .iter()
+                .map(|&(v, name)| (v, format!("{name}: {}", level_text(v)), data.limit_color)),
+        );
         let mut levels: Vec<_> = levels
             .into_iter()
             .map(|(v, text, color)| (screen(data.view_max, v).y, layout(text, color), color))

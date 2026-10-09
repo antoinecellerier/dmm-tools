@@ -190,6 +190,7 @@ impl App {
                 );
                 self.show_integral_gap_warning(ui, sub_font);
             }
+            self.show_alarm_counts(ui, main_font);
         } else {
             let heading = self.settings.theme_colors(ui.visuals().dark_mode).heading();
             ui.label(
@@ -201,6 +202,7 @@ impl App {
             if formatted.session.integral.is_some() {
                 self.show_integral_gap_warning(ui, sub_font);
             }
+            self.show_alarm_counts(ui, main_font);
             self.reset_button(ui, sub_font);
 
             // Windowed stats for visible graph interval
@@ -218,16 +220,40 @@ impl App {
         }
     }
 
+    /// `Alarms: 2 high, 0 low` while the **Alarm** row has limits set, a
+    /// count for each limit there is. Reset and Clear zero it.
+    fn show_alarm_counts(&self, ui: &mut Ui, font_size: f32) {
+        let Some(alarm) = &self.alarm else {
+            return;
+        };
+        let limits = alarm.limits();
+        let counts: Vec<String> = [
+            limits.high.map(|_| format!("{} high", alarm.high_count)),
+            limits.low.map(|_| format!("{} low", alarm.low_count)),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        ui.label(
+            RichText::new(format!("Alarms: {}", counts.join(", ")))
+                .font(egui::FontId::proportional(font_size)),
+        )
+        .on_hover_text("Times the reading crossed each limit, each marked on the graph");
+    }
+
     /// The session-stats reset control, identical in both layout modes.
     fn reset_button(&mut self, ui: &mut Ui, font_size: f32) {
         if ui
             .add(egui::Button::new(
                 RichText::new("Reset").font(egui::FontId::proportional(font_size)),
             ))
-            .on_hover_text("Reset Min / Max / Avg / integral counters")
+            .on_hover_text("Reset Min / Max / Avg / integral and alarm counters")
             .clicked()
         {
             self.capture.session.reset();
+            if let Some(alarm) = &mut self.alarm {
+                alarm.clear_counts();
+            }
         }
     }
 

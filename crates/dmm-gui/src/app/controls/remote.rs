@@ -18,11 +18,139 @@ fn context_key_hover(key: &dmm_lib::protocol::MeterKey) -> String {
 /// points before zoom: egui's own separator spacing.
 pub(in crate::app) const SCALE_RULE_WIDTH: f32 = 6.0;
 
+/// The caret a row chip ends with: folded, and open.
+const FOLDED: &str = "\u{25B8}";
+const OPEN: &str = "\u{25BE}";
+
+/// One of the app's own chips beside the meter's buttons (**Scale**,
+/// **Alarm**): a body that switches the feature on or off, joined to a caret
+/// that shows or hides its row of fields.
+///
+/// The body does the same in every layout; the big meter, which has no
+/// room for the row, leaves the caret out.
+pub(in crate::app) struct SplitChip<'a> {
+    pub(in crate::app) name: &'a str,
+    /// In force: the chip's fill.
+    pub(in crate::app) active: bool,
+    /// There are values to switch on, or it is on: else the body opens the
+    /// row instead, or with no row to open it is greyed out.
+    pub(in crate::app) ready: bool,
+    /// Whether the row is open; `None` where there is no row (the big meter).
+    pub(in crate::app) open: Option<bool>,
+    /// The body's hover text.
+    pub(in crate::app) hover: &'a str,
+    /// The caret's hover text: what the fields take.
+    pub(in crate::app) fields_hover: &'a str,
+    /// The greyed body's hover: where the row can be opened.
+    pub(in crate::app) unready_hover: &'a str,
+}
+
+/// What a click on a [`SplitChip`] asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::app) enum ChipClick {
+    None,
+    /// The body: switch on or off.
+    Body,
+    /// The caret: show or hide the row.
+    Caret,
+}
+
+impl SplitChip<'_> {
+    fn body_label(&self, font_size: f32) -> RichText {
+        RichText::new(self.name).font(egui::FontId::proportional(font_size))
+    }
+
+    fn caret_label(open: bool, font_size: f32) -> RichText {
+        let caret = if open { OPEN } else { FOLDED };
+        RichText::new(caret).font(egui::FontId::proportional(font_size))
+    }
+
+    /// Width the chip takes, so the button row can tell before placing the
+    /// app's own chips whether they fit on the line.
+    pub(in crate::app) fn width(&self, ui: &Ui, font_size: f32) -> f32 {
+        let width = |text: RichText| {
+            egui::WidgetText::from(text)
+                .into_galley(
+                    ui,
+                    Some(egui::TextWrapMode::Extend),
+                    f32::INFINITY,
+                    egui::TextStyle::Button,
+                )
+                .size()
+                .x
+                + 2.0 * ui.spacing().button_padding.x
+        };
+        width(self.body_label(font_size))
+            + self.open.map_or(0.0, |open| {
+                SPLIT_GAP + width(Self::caret_label(open, font_size))
+            })
+    }
+
+    /// Place the chip where the caller's row has its cursor.
+    ///
+    /// Spoken as two controls: the body by its name, `active` as selected,
+    /// and the caret as "<name> settings", expanded or collapsed.
+    pub(in crate::app) fn show(&self, ui: &mut Ui, font_size: f32) -> ChipClick {
+        let r = ui.visuals().widgets.inactive.corner_radius;
+        let (body_radius, caret_radius) = if self.open.is_some() {
+            (
+                egui::CornerRadius { ne: 0, se: 0, ..r },
+                egui::CornerRadius { nw: 0, sw: 0, ..r },
+            )
+        } else {
+            (r, r)
+        };
+        // egui spaces each widget from the one after it by the spacing in
+        // force as it is placed: the body takes the hairline only when the
+        // caret follows it, and the caret, last, the row's own gap.
+        let gap = ui.spacing().item_spacing.x;
+        if self.open.is_some() {
+            ui.spacing_mut().item_spacing.x = SPLIT_GAP;
+        }
+        // `selected` puts the state in the widget info for AT users, whom
+        // the fill alone doesn't reach; the frame stays when off so the
+        // chip still reads as actionable.
+        let body = ui
+            .add_enabled(
+                self.ready || self.open.is_some(),
+                egui::Button::new(self.body_label(font_size))
+                    .selected(self.active)
+                    .corner_radius(body_radius),
+            )
+            .on_hover_text(self.hover)
+            .on_disabled_hover_text(self.unready_hover);
+        let caret = self.open.map(|open| {
+            ui.spacing_mut().item_spacing.x = gap;
+            let caret = ui
+                .add(
+                    egui::Button::new(Self::caret_label(open, font_size))
+                        .selected(self.active)
+                        .corner_radius(caret_radius),
+                )
+                .on_hover_text(self.fields_hover)
+                .a11y_label(&format!("{} settings", self.name));
+            ui.ctx()
+                .accesskit_node_builder(caret.id, |builder| builder.set_expanded(open));
+            caret
+        });
+        if body.clicked() {
+            ChipClick::Body
+        } else if caret.is_some_and(|c| c.clicked()) {
+            ChipClick::Caret
+        } else {
+            ChipClick::None
+        }
+    }
+}
+
+/// The hairline between a split chip's body and its caret.
+const SPLIT_GAP: f32 = 1.0;
+
 impl App {
-    /// The meter's buttons, with the **Scale** chip on the end of their last
-    /// line when it fits and on a line of its own otherwise. `right_reserve`
-    /// is width the caller paints over at the row's right edge (the big-meter
-    /// toggle), which the chip must not run under.
+    /// The meter's buttons, with the **Scale** and **Alarm** chips on the end
+    /// of their last line when they fit and on a line of their own otherwise.
+    /// `right_reserve` is width the caller paints over at the row's right
+    /// edge (the big-meter toggle), which the chips must not run under.
     pub(in crate::app) fn show_remote_controls(
         &mut self,
         ui: &mut Ui,
@@ -39,17 +167,19 @@ impl App {
             || self.last_measurement.is_none()
             || self.connection.supported_commands().is_empty()
         {
-            // No button row to join: Scale keeps its own, so an active
-            // scale can still be turned off while disconnected.
-            let clicked = ui
+            // No button row to join: the app's chips keep their own, so an
+            // active scale or alarm can still be turned off while
+            // disconnected.
+            let (scale_clicked, alarm_clicked) = ui
                 .horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = spacing;
-                    self.show_scale_button(ui, font_size)
+                    (
+                        self.scale_chip().show(ui, font_size),
+                        self.alarm_chip().show(ui, font_size),
+                    )
                 })
                 .inner;
-            if clicked {
-                self.toggle_transform_editor();
-            }
+            self.take_app_chip_clicks(scale_clicked, alarm_clicked);
             return;
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
@@ -64,7 +194,8 @@ impl App {
 
         // Collected rather than acted on inside the closure, which holds
         // `has_cmd`'s borrow of `self`.
-        let mut scale_clicked = false;
+        let mut scale_clicked = ChipClick::None;
+        let mut alarm_clicked = ChipClick::None;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = spacing;
             // Whether any meter button landed on the row: only then is there
@@ -201,15 +332,18 @@ impl App {
                 placed = true;
             }
 
-            // Scale, set apart by a rule: it changes nothing on the meter,
-            // and sitting it among the buttons with no boundary would
-            // suggest the meter knows about the factor. Measured as one
-            // unit before placing, so the rule can never be left dangling
-            // at the end of a line the chip wrapped off. On a line of its
-            // own the line break is the boundary and the rule is dropped.
+            // Scale and Alarm, set apart by a rule: they change nothing on
+            // the meter, and sitting them among the buttons with no
+            // boundary would suggest the meter knows about the factor or
+            // the limits. Measured as one unit before placing, so the rule
+            // can never be left dangling at the end of a line the chips
+            // wrapped off. On a line of their own the line break is the
+            // boundary and the rule is dropped.
             let rule_width = SCALE_RULE_WIDTH * scale;
-            let chip_width = Self::scale_button_width(ui, font_size);
-            let needed = rule_width + spacing + chip_width + spacing + right_reserve;
+            let chips_width = self.scale_chip().width(ui, font_size)
+                + spacing
+                + self.alarm_chip().width(ui, font_size);
+            let needed = rule_width + spacing + chips_width + spacing + right_reserve;
             if placed && needed <= ui.available_size_before_wrap().x {
                 let height = ui.cursor().height();
                 let (rect, _) =
@@ -222,10 +356,24 @@ impl App {
             } else if placed {
                 ui.end_row();
             }
-            scale_clicked = self.show_scale_button(ui, font_size);
+            scale_clicked = self.scale_chip().show(ui, font_size);
+            alarm_clicked = self.alarm_chip().show(ui, font_size);
         });
-        if scale_clicked {
-            self.toggle_transform_editor();
+        self.take_app_chip_clicks(scale_clicked, alarm_clicked);
+    }
+
+    /// Act on a click on the Scale or Alarm chip — switch it, or show or
+    /// hide its row — once the button row's closure has let go of `self`.
+    fn take_app_chip_clicks(&mut self, scale: ChipClick, alarm: ChipClick) {
+        match scale {
+            ChipClick::Body => self.toggle_scale(),
+            ChipClick::Caret => self.toggle_transform_editor(),
+            ChipClick::None => {}
+        }
+        match alarm {
+            ChipClick::Body => self.toggle_alarm(),
+            ChipClick::Caret => self.toggle_alarm_editor(),
+            ChipClick::None => {}
         }
     }
 }
@@ -234,6 +382,111 @@ impl App {
 mod tests {
     use super::*;
     use crate::settings::Settings;
+
+    /// The carets draw from the bundled fonts, not as the replacement box
+    /// (`Fonts::has_glyph` can't tell; see `.claude/rules/gui.md`).
+    #[test]
+    fn the_carets_have_glyphs() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::app::appearance::font_definitions());
+        let font = egui::FontId::proportional(14.0);
+        let atlas_rect = |ui: &egui::Ui, text: &str| {
+            let galley = ui.painter().layout_no_wrap(
+                text.to_string(),
+                font.clone(),
+                egui::Color32::PLACEHOLDER,
+            );
+            galley.rows[0].row.glyphs[0].uv_rect
+        };
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let replacement = atlas_rect(ui, "\u{25FB}");
+            for caret in [FOLDED, OPEN] {
+                assert_ne!(
+                    atlas_rect(ui, caret),
+                    replacement,
+                    "{caret:?} draws as a box"
+                );
+            }
+        });
+        out.textures_delta.clear();
+    }
+
+    /// The body with nothing typed opens the row to type in; with limits
+    /// typed it switches the alarm on, and again off, the fields kept.
+    #[test]
+    fn the_alarm_body_switches_with_its_fields() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.toggle_alarm();
+        assert!(app.alarm_editor.open && app.alarm.is_none());
+        app.alarm_editor.open = false;
+        app.alarm_editor.set_drafts("", "5");
+        app.toggle_alarm();
+        assert!(app.alarm.is_some() && !app.alarm_editor.open);
+        app.toggle_alarm();
+        assert!(app.alarm.is_none());
+        assert!(
+            app.alarm_chip().ready,
+            "the limits are kept for the next click"
+        );
+    }
+
+    #[test]
+    fn the_scale_body_switches_with_its_fields() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.toggle_scale();
+        assert!(app.transform_editor.open && app.transform.is_identity());
+        app.transform_editor.scale = "100".to_string();
+        app.toggle_scale();
+        assert!(!app.transform.is_identity());
+        app.toggle_scale();
+        assert!(app.transform.is_identity());
+        assert_eq!(app.transform_editor.scale, "100");
+    }
+
+    /// The big meter has no row: no caret, and nothing to switch on greys
+    /// the body out rather than opening a row it can't show.
+    #[test]
+    fn the_big_meter_chips_have_no_caret() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.big_meter_mode = crate::app::BigMeterMode::Full;
+        let chip = app.alarm_chip();
+        assert_eq!((chip.open, chip.ready), (None, false));
+        app.alarm_editor.set_drafts("3", "");
+        assert!(app.alarm_chip().ready);
+    }
+
+    /// The greyed chip names the way to a row: Ctrl+B out of the big meter,
+    /// but with the graph and recording hidden in Settings, Ctrl+B only
+    /// cycles big-meter views that have none.
+    #[test]
+    fn the_greyed_chip_names_the_way_to_its_row() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.big_meter_mode = crate::app::BigMeterMode::Full;
+        assert!(app.scale_chip().unready_hover.contains("Ctrl+B"));
+        app.big_meter_mode = crate::app::BigMeterMode::Off;
+        app.settings.show_graph = false;
+        app.settings.show_recording = false;
+        let chip = app.scale_chip();
+        assert_eq!(chip.open, None);
+        assert!(
+            chip.unready_hover.contains("Settings"),
+            "{}",
+            chip.unready_hover
+        );
+    }
+
+    /// One row under the chips: opening either closes the other.
+    #[test]
+    fn opening_a_row_closes_the_other() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.toggle_transform_editor();
+        app.toggle_alarm_editor();
+        assert!(app.alarm_editor.open && !app.transform_editor.open);
+        app.toggle_transform_editor();
+        assert!(app.transform_editor.open && !app.alarm_editor.open);
+        app.toggle_transform_editor();
+        assert!(!app.transform_editor.open && !app.alarm_editor.open);
+    }
 
     /// A context key offered in farads only.
     const ZERO_IN_FARADS: &[dmm_lib::protocol::MeterKey] = &[dmm_lib::protocol::MeterKey {

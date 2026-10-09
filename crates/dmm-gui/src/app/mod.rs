@@ -13,6 +13,7 @@
 //! methods to the one [`App`] declared here, so no panel owns state of its
 //! own.
 
+mod alarm;
 mod appearance;
 mod capture;
 mod connection;
@@ -348,6 +349,11 @@ pub struct App {
     /// Draft text for the **Scale** row, separate from `transform` so a
     /// half-typed number never reaches the reading.
     transform_editor: TransformEditor,
+    /// The alarm judging every reading against the **Alarm** row's limits,
+    /// while any are set. Session-only, as the transform is.
+    alarm: Option<dmm_lib::alarm::Alarm>,
+    /// Draft text for the **Alarm** row.
+    alarm_editor: alarm::AlarmEditor,
 
     graph: Graph,
     /// The session statistics, the sample buffer and its export layouts:
@@ -513,6 +519,8 @@ impl App {
             held: held_reading::HeldReading::default(),
             transform: Transform::default(),
             transform_editor: TransformEditor::default(),
+            alarm: None,
+            alarm_editor: alarm::AlarmEditor::default(),
             graph,
             capture,
             markers: crate::markers::Markers::default(),
@@ -590,6 +598,23 @@ impl App {
         match pick {
             display::ReadoutPick::Select(setting, id) => self.select(setting, id),
             display::ReadoutPick::Press(command) => self.send_command(command),
+        }
+    }
+
+    /// Whether the window shows the meter alone, sized to fill it: the big
+    /// meter, or the graph and recording both hidden in Settings.
+    pub(super) fn meter_only(&self) -> bool {
+        self.big_meter_mode != BigMeterMode::Off
+            || (!self.settings.show_graph && !self.settings.show_recording)
+    }
+
+    /// Where a Scale or Alarm chip greyed out in a meter-only view can be
+    /// set up: the layout with a row for its fields.
+    pub(super) fn chip_setup_hint(&self) -> &'static str {
+        if !self.settings.show_graph && !self.settings.show_recording {
+            "Show the graph or recording in Settings first"
+        } else {
+            "Set up in the normal layout first (Ctrl+B)"
         }
     }
 
@@ -723,8 +748,8 @@ impl App {
                 show_specs: self.settings.show_specs,
                 spec_fields: self.settings.spec_fields,
                 big_meter_mode: self.big_meter_mode,
-                transform_editor_open: self.transform_editor.open,
                 transform_is_identity: self.transform.is_identity(),
+                alarm_set: self.alarm.is_some(),
                 notice_kind: notice.as_ref().map(|n| n.kind),
             };
             let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
@@ -757,7 +782,7 @@ impl App {
                             ratios: &self.meter_fit.reading_ratios,
                         },
                         &tc,
-                        !self.transform.is_identity(),
+                        self.reading_state(),
                         self.connection.readouts(),
                         no_reading,
                     );
@@ -769,8 +794,10 @@ impl App {
                     if !minimal {
                         // The big-meter toggle sits in the panel corner
                         // here, not on the row: nothing to keep clear of.
+                        // No Scale or Alarm row: a row of fields drawn at the
+                        // big meter's size takes room the fit gave the
+                        // reading. Their chips switch them on and off.
                         self.show_remote_controls(ui, scale, 0.0);
-                        self.show_transform_editor(ui, scale);
                     }
 
                     if self.big_meter_mode == BigMeterMode::Off {
@@ -925,8 +952,7 @@ impl eframe::App for App {
         // Determine layout mode before panels
         let wide = meter_fit::is_wide(ctx.content_rect().width());
 
-        let meter_only = self.big_meter_mode != BigMeterMode::Off
-            || (!self.settings.show_graph && !self.settings.show_recording);
+        let meter_only = self.meter_only();
 
         // Dynamic minimum window size derived from actual rendered content.
         // Reading dimensions come from cached ratios × minimum big meter

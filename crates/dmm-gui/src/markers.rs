@@ -11,9 +11,7 @@ use chrono::{DateTime, Local};
 use std::collections::VecDeque;
 use std::time::Instant;
 
-/// Longest note a marker takes, in characters. A note labels a moment; the
-/// cap bounds what a stuck key or a paste can put in every export row.
-pub(crate) const NOTE_MAX_CHARS: usize = 200;
+pub(crate) use dmm_shared::export::NOTE_MAX_CHARS;
 
 /// One marked reading.
 #[derive(Debug, Clone)]
@@ -42,6 +40,10 @@ pub(crate) struct Markers {
     list: VecDeque<Marker>,
     /// Number the next marker gets.
     next_number: u32,
+    /// Highest number the file being played or imported puts back on its
+    /// readings: a marker added meanwhile is numbered past it, or the file's
+    /// would come in under a number already taken.
+    reserved: u32,
 }
 
 impl Markers {
@@ -61,8 +63,8 @@ impl Markers {
         if self.list.is_empty() {
             self.next_number = 1;
         }
-        let number = self.next_number;
-        self.next_number += 1;
+        let number = self.next_number.max(self.reserved.saturating_add(1));
+        self.next_number = number.saturating_add(1);
         self.list.insert(
             i,
             Marker {
@@ -74,6 +76,25 @@ impl Markers {
             },
         );
         Ok(number)
+    }
+
+    /// Mark the reading taken at `at` with `note`, or put the note after the
+    /// one its marker already has: an alarm's breach goes on whatever the
+    /// reading carries. Returns the marker's number.
+    pub(crate) fn add_noted(
+        &mut self,
+        at: Instant,
+        wall_time: DateTime<Local>,
+        reading: String,
+        note: &str,
+    ) -> u32 {
+        let number = match self.add(at, wall_time, reading) {
+            Ok(number) | Err(number) => number,
+        };
+        if let Some(marker) = self.list.iter_mut().find(|m| m.number == number) {
+            dmm_shared::export::append_note(&mut marker.note, note);
+        }
+        number
     }
 
     /// Put back a marker a file was saved with, under its own number, on the
@@ -108,6 +129,12 @@ impl Markers {
             },
         );
         true
+    }
+
+    /// Keep the numbers up to `highest` for the markers a file is putting
+    /// back; 0 when there is none.
+    pub(crate) fn reserve(&mut self, highest: u32) {
+        self.reserved = highest;
     }
 
     /// Drop every marker: a new session starts from none.
@@ -170,6 +197,26 @@ mod tests {
         assert_eq!(m.iter().count(), 2);
     }
 
+    #[test]
+    fn a_noted_marker_adds_to_a_note_already_there() {
+        let mut m = Markers::default();
+        let t = Instant::now();
+        let reading = || "1.234 V".to_string();
+        assert_eq!(
+            m.add_noted(t, Local::now(), reading(), "Above high limit 1 V"),
+            1
+        );
+        assert_eq!(m.get(1).unwrap().note, "Above high limit 1 V");
+        add(&mut m, t + Duration::from_secs(1)).unwrap();
+        m.iter_mut().last().unwrap().note = "load on".to_string();
+        let later = t + Duration::from_secs(1);
+        assert_eq!(
+            m.add_noted(later, Local::now(), reading(), "Below low limit 0 V"),
+            2
+        );
+        assert_eq!(m.get(2).unwrap().note, "load on; Below low limit 0 V");
+    }
+
     /// Numbers survive a delete, so a gap is left; they start over only once
     /// the store is empty.
     #[test]
@@ -187,6 +234,27 @@ mod tests {
         m.retain(|_| false);
         assert!(m.is_empty());
         assert_eq!(add(&mut m, t + Duration::from_secs(9)), Ok(1));
+    }
+
+    /// A marker added while a file is putting its own back is numbered past
+    /// the file's, so the file's later ones keep their numbers unshared.
+    #[test]
+    fn a_files_numbers_are_kept_for_it() {
+        let mut m = Markers::default();
+        let t = Instant::now();
+        m.reserve(2);
+        assert!(m.insert(t, 1, "start".into(), Local::now(), String::new()));
+        let breach = m.add_noted(t + Duration::from_secs(5), Local::now(), String::new(), "x");
+        assert_eq!(breach, 3);
+        assert!(m.insert(
+            t + Duration::from_secs(9),
+            2,
+            "end".into(),
+            Local::now(),
+            String::new()
+        ));
+        let numbers: Vec<u32> = m.iter().map(|k| k.number).collect();
+        assert_eq!(numbers, [1, 3, 2]);
     }
 
     /// The readings still held need not be one stretch: a marker between

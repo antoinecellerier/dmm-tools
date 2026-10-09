@@ -531,6 +531,13 @@ impl TimedHLine {
             style,
         }
     }
+
+    /// Draw the line `width` points wide.
+    pub(super) fn width(mut self, width: f32) -> Self {
+        self.line = self.line.width(width);
+        self.stroke.width = width;
+        self
+    }
 }
 
 impl PlotItem for TimedHLine {

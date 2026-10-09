@@ -198,8 +198,24 @@ impl Limits {
     }
 }
 
+/// The unit a limit typed now would be in for readings like `m`: its base
+/// unit, or with `scaled` the transform's output unit, which is already the
+/// base or the user's label. `None` for a reading with no unit to go by: a
+/// word shown instead of a reading, or a frame without a main reading.
+pub fn limit_unit(m: &Measurement, scaled: bool) -> Option<&str> {
+    if matches!(m.value, MeasuredValue::NoReading(_) | MeasuredValue::Absent) {
+        return None;
+    }
+    let unit = if scaled {
+        m.unit.as_ref()
+    } else {
+        si_prefix(&m.unit).0
+    };
+    (!unit.is_empty()).then_some(unit)
+}
+
 /// Where a reading lies against the limits.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Zone {
     Inside,
     Above,
@@ -679,6 +695,16 @@ mod tests {
         assert_eq!(a.high_count, 0);
         assert_eq!(a.limits_unit(None), Some("V"));
         assert_eq!(a.limits_unit(Some("A")), Some("A"));
+    }
+
+    #[test]
+    fn a_limit_is_in_the_readings_base_unit() {
+        let t = Instant::now();
+        assert_eq!(limit_unit(&reading(4980.0, "mV", t), false), Some("V"));
+        assert_eq!(limit_unit(&reading(12.3, "A", t), true), Some("A"));
+        let flags = StatusFlags::default();
+        let auto = Measurement::test_fixture(MeasuredValue::NoReading("Auto"), "", flags);
+        assert_eq!(limit_unit(&auto, false), None);
     }
 
     #[test]

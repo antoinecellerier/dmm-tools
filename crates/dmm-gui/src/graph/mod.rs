@@ -20,6 +20,7 @@ mod analysis;
 mod axes;
 mod field;
 mod level;
+mod limits;
 mod minimap;
 mod pattern;
 mod render;
@@ -28,6 +29,7 @@ mod toolbar;
 mod view;
 mod view_state;
 
+pub(crate) use limits::AlarmView;
 pub(crate) use view_state::ViewState;
 
 #[cfg(test)]
@@ -378,6 +380,8 @@ pub struct Graph {
     /// Set when the lines are switched on, by the chip or by its key: the
     /// field appears empty, and nothing is drawn until a value is typed.
     focus_ref_field: bool,
+    /// What the app's alarm is watching, which the limit lines need.
+    pub(crate) alarm_view: AlarmView,
     /// Measurement cursors: two vertical lines with ΔT/ΔV readout.
     pub cursors_active: bool,
     /// Cursor positions in seconds from origin. None = not yet placed.
@@ -472,6 +476,7 @@ impl Graph {
             show_crossings: true,
             ref_lines: NumberListField::default(),
             focus_ref_field: false,
+            alarm_view: AlarmView::default(),
             cursors_active: false,
             cursor_a: None,
             cursor_b: None,

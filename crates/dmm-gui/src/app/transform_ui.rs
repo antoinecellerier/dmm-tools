@@ -17,6 +17,7 @@ use eframe::egui::{self, RichText, Ui};
 
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
+use super::controls::remote::SplitChip;
 use super::toast::Toast;
 
 /// Draft text for the three fields, kept apart from the applied
@@ -29,6 +30,9 @@ pub(super) struct TransformEditor {
     pub(super) scale: String,
     pub(super) offset: String,
     pub(super) unit: String,
+    /// Put the caret in the scale field the next time the row is drawn: set
+    /// when the chip's body opens the row to have a scale typed.
+    focus: bool,
 }
 
 impl TransformEditor {
@@ -37,20 +41,23 @@ impl TransformEditor {
         self.offset.clear();
         self.unit.clear();
     }
+
+    /// Nothing typed in any field: no scale for the chip to switch on.
+    fn is_blank(&self) -> bool {
+        [&self.scale, &self.offset, &self.unit]
+            .iter()
+            .all(|f| f.trim().is_empty())
+    }
 }
 
-/// Tooltip on the toggle. Names the base-unit rule, which is the one thing
-/// about this feature a user cannot guess from the fields.
-const SCALE_HOVER: &str = "Scale, offset or relabel the reading in software (applied in base units: V, A, \u{3A9}\u{2026})";
+/// Tooltip on the chip's caret.
+const SCALE_HOVER: &str = "Set the scale";
 
 /// Width of each of the three fields, in points before zoom.
 const FIELD_WIDTH: f32 = 50.0;
 
-/// The chip's label at the remote-controls font, so the chip and the
-/// measurement of it in [`App::scale_button_width`] cannot drift apart.
-fn scale_label(font_size: f32) -> RichText {
-    RichText::new("Scale").font(egui::FontId::proportional(font_size))
-}
+/// The chip's name.
+const SCALE_NAME: &str = "Scale";
 
 /// Turn the three draft strings into a [`Transform`].
 ///
@@ -94,39 +101,60 @@ fn parse_field(
 }
 
 impl App {
-    /// Width the [`show_scale_button`](Self::show_scale_button) chip takes at
-    /// `font_size`, so the remote-controls row can tell before placing it
-    /// whether it fits on the line.
-    pub(super) fn scale_button_width(ui: &Ui, font_size: f32) -> f32 {
-        let galley = egui::WidgetText::from(scale_label(font_size)).into_galley(
-            ui,
-            Some(egui::TextWrapMode::Extend),
-            f32::INFINITY,
-            egui::TextStyle::Button,
-        );
-        galley.size().x + 2.0 * ui.spacing().button_padding.x
-    }
-
-    /// The **Scale** toggle chip, placed wherever the caller's row has its
-    /// cursor; returns whether it was clicked, for the caller to hand to
-    /// [`toggle_transform_editor`](Self::toggle_transform_editor) once its
-    /// row closure has let go of `self`. Styled like the remote buttons
-    /// (filled while a scale is active), which is why a caller sitting it
-    /// next to them draws a rule in between: those mirror and drive the
-    /// meter's own state, this one changes nothing on the meter at all.
-    pub(super) fn show_scale_button(&self, ui: &mut Ui, font_size: f32) -> bool {
+    /// The **Scale** chip: filled while a scale is active. Styled like the
+    /// remote buttons, which is why a caller sitting it next to them draws a
+    /// rule in between: those mirror and drive the meter's own state, this
+    /// one changes nothing on the meter at all.
+    pub(super) fn scale_chip(&self) -> SplitChip<'static> {
         let active = !self.transform.is_identity();
-        // `selected` puts the state in the widget info for AT users, whom
-        // the fill alone doesn't reach; the frame stays when off so the
-        // chip still reads as actionable.
-        ui.add(egui::Button::new(scale_label(font_size)).selected(active))
-            .on_hover_text(SCALE_HOVER)
-            .clicked()
+        SplitChip {
+            name: SCALE_NAME,
+            active,
+            ready: active || !self.transform_editor.is_blank(),
+            open: (!self.meter_only()).then_some(self.transform_editor.open),
+            hover: "Turn scaling on or off",
+            fields_hover: SCALE_HOVER,
+            unready_hover: self.chip_setup_hint(),
+        }
     }
 
-    /// Open the editor row if closed, close it if open.
+    /// The chip's body: scaling off if on; else on with the fields' values,
+    /// or with none typed the row opened to type them.
+    pub(super) fn toggle_scale(&mut self) {
+        if !self.transform.is_identity() {
+            self.set_transform(Transform::default());
+        } else if self.transform_editor.is_blank() {
+            if !self.transform_editor.open {
+                self.toggle_transform_editor();
+            }
+            self.transform_editor.focus = true;
+        } else {
+            self.apply_transform_fields();
+        }
+    }
+
+    /// Apply what the fields hold, or say which to fix: the row's Apply, and
+    /// the chip's body.
+    fn apply_transform_fields(&mut self) {
+        match parse_transform_fields(
+            &self.transform_editor.scale,
+            &self.transform_editor.offset,
+            &self.transform_editor.unit,
+        ) {
+            Ok(new) => self.set_transform(new),
+            // Nothing is applied — the previous transform (identity or
+            // not) keeps running, and the toast names the field to fix.
+            Err(message) => self.toast = Some(Toast::error(message)),
+        }
+    }
+
+    /// Open the editor row if closed, closing the Alarm row so one row sits
+    /// under the chips; close it if open.
     pub(super) fn toggle_transform_editor(&mut self) {
         self.transform_editor.open = !self.transform_editor.open;
+        if self.transform_editor.open {
+            self.alarm_editor.open = false;
+        }
     }
 
     /// The `× [scale] + [offset] → [unit] [Apply] [Off]` row under the
@@ -146,36 +174,43 @@ impl App {
         // needs `&mut self`.
         let mut apply = false;
         let mut off = false;
+        let focus = std::mem::take(&mut self.transform_editor.focus);
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
             let width = FIELD_WIDTH * scale;
-            let field = |ui: &mut Ui, sign: &str, text: &mut String, hint: &'static str| {
-                ui.label(RichText::new(sign).font(font.clone()));
-                let resp = ui.add(
-                    egui::TextEdit::singleline(text)
-                        .desired_width(width)
-                        .font(font.clone())
-                        .hint_text(hint),
-                );
-                // egui's own focused frame is invisible under a pinned
-                // Accent; the ring is the field's only keyboard cue then.
-                crate::a11y::paint_focus_ring(ui, &resp);
-                // Enter, never `.changed()`: committing per keystroke would
-                // clear the graph and the statistics on every digit typed.
-                resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
-            };
+            let field =
+                |ui: &mut Ui, sign: &str, text: &mut String, hint: &'static str, focus: bool| {
+                    ui.label(RichText::new(sign).font(font.clone()));
+                    let resp = ui.add(
+                        egui::TextEdit::singleline(text)
+                            .desired_width(width)
+                            .font(font.clone())
+                            .hint_text(RichText::new(hint).font(font.clone())),
+                    );
+                    if focus {
+                        resp.request_focus();
+                    }
+                    // egui's own focused frame is invisible under a pinned
+                    // Accent; the ring is the field's only keyboard cue then.
+                    crate::a11y::paint_focus_ring(ui, &resp);
+                    // Enter, never `.changed()`: committing per keystroke would
+                    // clear the graph and the statistics on every digit typed.
+                    resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                };
             apply |= field(
                 ui,
                 "\u{D7}",
                 &mut self.transform_editor.scale,
                 "Scale factor",
+                focus,
             );
-            apply |= field(ui, "+", &mut self.transform_editor.offset, "Offset");
+            apply |= field(ui, "+", &mut self.transform_editor.offset, "Offset", false);
             apply |= field(
                 ui,
                 "\u{2192}",
                 &mut self.transform_editor.unit,
                 "Unit label",
+                false,
             );
             apply |= ui
                 .add(egui::Button::new(RichText::new("Apply").font(font.clone())))
@@ -191,16 +226,7 @@ impl App {
             self.transform_editor.clear_fields();
             self.set_transform(Transform::default());
         } else if apply {
-            match parse_transform_fields(
-                &self.transform_editor.scale,
-                &self.transform_editor.offset,
-                &self.transform_editor.unit,
-            ) {
-                Ok(new) => self.set_transform(new),
-                // Nothing is applied — the previous transform (identity or
-                // not) keeps running, and the toast names the field to fix.
-                Err(message) => self.toast = Some(Toast::error(message)),
-            }
+            self.apply_transform_fields();
         }
     }
 
@@ -242,6 +268,13 @@ impl App {
                 .extra_slots
                 .max(self.transform.extra_aux_count());
         }
+        // Limits typed against the old unit would judge the new one: a high
+        // limit of 5 meant for volts becomes 5 A under a clamp scale. The
+        // alarm stops instead, its fields kept for Apply.
+        if self.alarm.take().is_some() {
+            message.push_str(" \u{2014} alarm off; set its limits again in the new unit");
+            self.sync_alarm_view();
+        }
         self.toast = Some(Toast::info(message));
     }
 }
@@ -258,6 +291,13 @@ mod tests {
     /// the connected reading column out in a window `width` points wide. Two
     /// frames: a wrapped row is cut at the width the previous frame settled.
     fn chip_bounds(width: f32) -> (egui::accesskit::Rect, egui::accesskit::Rect) {
+        let bounds = column_bounds(width);
+        (bounds("LIGHT"), bounds("Scale"))
+    }
+
+    /// The bounds of each labelled widget in the connected reading column,
+    /// laid out as [`chip_bounds`] says.
+    fn column_bounds(width: f32) -> impl Fn(&str) -> egui::accesskit::Rect {
         let settings = Settings {
             // No acquisition thread: the connected state is set by hand.
             auto_connect: false,
@@ -303,14 +343,25 @@ mod tests {
                 .map(|update| update.nodes)
                 .unwrap_or_default();
         }
-        let bounds = |label: &str| {
+        move |label: &str| {
             nodes
                 .iter()
                 .find(|(_, n)| n.label() == Some(label))
                 .and_then(|(_, n)| n.bounds())
                 .unwrap_or_else(|| panic!("{label} chip is drawn"))
-        };
-        (bounds("LIGHT"), bounds("Scale"))
+        }
+    }
+
+    /// A chip's halves sit a hairline apart, the chips themselves a button
+    /// gap apart, as the meter's buttons are.
+    #[test]
+    fn a_split_chip_is_joined_and_spaced_from_the_next() {
+        let bounds = column_bounds(900.0);
+        let (scale, caret, alarm) = (bounds("Scale"), bounds("Scale settings"), bounds("Alarm"));
+        let joint = caret.x0 - scale.x1;
+        let between = alarm.x0 - caret.x1;
+        assert!(joint < 2.0, "the halves join: {joint}");
+        assert!(between > joint + 1.0, "the chips stand apart: {between}");
     }
 
     /// With room to spare the Scale chip ends the meter's button line, set
@@ -426,5 +477,19 @@ mod tests {
     fn a_negative_scale_is_accepted() {
         let t = parse_transform_fields("-1", "", "").expect("valid");
         assert_eq!(t, Transform::linear(-1.0, 0.0, None));
+    }
+
+    /// Limits typed against volts must not start judging a clamp's amps:
+    /// a new scale turns the alarm off, and says so.
+    #[test]
+    fn a_new_scale_turns_the_alarm_off() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).unwrap();
+        app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
+        app.set_transform(Transform::linear(100.0, 0.0, Some("A".to_string())));
+        assert!(app.alarm.is_none());
+        assert!(app.graph.alarm_view.limits.is_empty());
+        let toast = app.toast.as_ref().expect("a toast");
+        assert!(toast.message.contains("alarm off"), "{}", toast.message);
     }
 }
