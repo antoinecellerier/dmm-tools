@@ -118,7 +118,7 @@ verification issue on GitHub. Please report findings there.
 
 The `mock` device generates synthetic measurements without hardware, cycling
 through the scenarios listed under [Mock modes](#mock-modes); `--mock-mode`
-pins one, as does `dmm-gui`'s Mock mode setting. It supports `read`, `command`, `get` and `set`.
+pins one. It supports `read`, `command`, `get` and `set`.
 
 The `mock-zt5b` device simulates a ZT-5B / V05B, to try the ZOTEK remote keys
 without a meter. It supports `read` and `command`, sends about 2.6 readings a
@@ -208,7 +208,7 @@ dmm-cli read [OPTIONS]
 | `--unit <LABEL>` | | Label the scaled reading with LABEL instead of the meter's base unit. |
 | `--alarm-high <VALUE>` | | Alarm when the reading rises above VALUE. See [Alarms](#alarms). |
 | `--alarm-low <VALUE>` | | Alarm when the reading falls below VALUE. |
-| `--alarm-hysteresis <BAND>` | a few counts of the meter's last digit | How far back inside the reading must come before the same limit alarms again: a value in the limits' unit, or a percentage of the limit (`1%`). |
+| `--alarm-hysteresis <BAND>` | a few counts of the meter's last digit | How far back inside the reading must come before that limit alarms again: a value, or a percentage of the limit (`1%`). |
 | `--alarm-bell` | off | Ring the terminal bell with each alarm. |
 
 CSV output begins with a `# device:` comment line identifying the meter model,
@@ -306,11 +306,11 @@ dmm-cli read --format replay -o bench.replay --count 600
 #### Alarms
 
 `--alarm-high` and `--alarm-low` watch the reading through an unattended run.
-A reading that goes past a limit prints an `Alarm:` line on stderr and is
+A reading that crosses a limit prints an `Alarm:` line on stderr and is
 marked, with the limit in its note, in the CSV and JSON marker fields and a
-replay copy. The summary counts the alarms. The same limit alarms again only
-once the reading has come back inside by `--alarm-hysteresis`, so a reading
-hovering at a limit raises one alarm; overloads don't count.
+replay copy; the summary counts the alarms. That limit alarms again once the
+reading has come back inside by `--alarm-hysteresis`, so a reading hovering
+at a limit raises one alarm. Overloads don't count.
 
 Limits are in the base unit (V, A, Ω, …), as `--scale`'s factor is, or in
 `--unit` for a scaled reading. They watch the quantity of the first reading:
@@ -768,8 +768,8 @@ dmm-cli completions powershell >> $PROFILE
 ### Mock modes
 
 `--device mock` cycles through these scenarios; `--mock-mode <MODE>` on
-`read`, `get` or `set` pins one. Without the flag, the `mock_mode` field
-`dmm-gui`'s Mock mode setting writes to `settings.json` pins it:
+`read`, `get` or `set` pins one, and without it `dmm-gui`'s Mock mode setting
+does (`mock_mode` in `settings.json`):
 
 | Mode | Description |
 |---|---|

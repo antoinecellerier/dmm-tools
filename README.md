@@ -14,17 +14,18 @@ Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
 ## [GUI](docs/gui-reference.md)
 
-- Live reading with the meter's flags and sub-values, and buttons to switch mode, range, HOLD, REL and MIN/MAX from the screen
+- Live reading with the meter's flags, sub-values and range specifications, and buttons to switch mode, range, HOLD, REL and MIN/MAX from the screen
 - Time-series graph with sub-values, a minimap, cursors, mean and min/max overlays, and reference lines with threshold triggers
 - Recording for hours at a time, with notes on marked moments, exported as CSV, JSON or a replay file and imported again
+- Alarms on a low or high limit for unattended runs, each crossing marked
 - Software scale, offset and unit relabel for clamps, shunts and sensors
-- Live specifications (resolution, accuracy) for the current range
 - Big meter mode for bench-mount use
 
 ## [CLI](docs/cli-reference.md)
 
 - Stream readings as text, CSV or JSON, at any interval
 - Switch mode, range, HOLD, REL, MIN/MAX and Peak by name, or press the meter's buttons
+- Alarms on a low or high limit, each crossing marked in the output
 - Coulomb counting / energy integration (`--integrate`)
 - Software scaling (`--scale`, `--offset`, `--unit`) for clamps, shunts and sensors
 - Guided protocol capture wizard for bug reports and verifying new meters

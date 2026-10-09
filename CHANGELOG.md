@@ -4,12 +4,12 @@
 
 ### GUI
 
-- **Alarm limits mark each reading that leaves them** — **Alarm** beside **Scale** (`A`); a toast, a HI LIMIT/LO LIMIT badge and a count in Statistics go with it.
+- **An alarm marks each reading that crosses a low or high limit**
 - **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
 
 ### CLI
 
-- **`read --alarm-high` and `--alarm-low` warn when a reading leaves its limits** — each alarm is marked in CSV, JSON and replay output; `--alarm-hysteresis` sets the re-arm band.
+- **`read --alarm-high` and `--alarm-low` warn when a reading crosses a limit** — and mark it in CSV, JSON and replay output.
 - **The mock follows `dmm-gui`'s Mock mode setting** — without `--mock-mode`, `dmm-cli` cycled through every scenario.
 
 ### Bug fixes
