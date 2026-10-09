@@ -802,3 +802,138 @@ fn replay_keeps_its_markers() {
     );
     assert!(copy.contains("\n# marker: 200 5 \n"), "got {copy}");
 }
+
+/// The three frames of [`RECORDING`] reordered — -0.000, 1.6109, then
+/// -0.5137 V — with a marker on the last, so each limit is crossed once
+/// after a reading inside both.
+const RECORDING_CROSSING: &str = "\
+# dmm-replay 1
+# device: ut61eplus
+# recorded: 2026-09-02T10:00:00Z
+# model: UT61E+
+0 02 31 2D 20 30 2E 30 30 30 00 00 30 34 31
+100 02 30 20 31 2E 36 31 30 39 03 02 30 30 30
+200 02 30 2D 30 2E 35 31 33 37 01 00 30 30 31
+# marker: 200 2 load on, 2.2 ohm
+";
+
+/// A breach is marked on the reading that crossed the limit, after the
+/// file's own markers in number; on a reading the file already marked, its
+/// note follows the file's.
+#[test]
+fn an_alarm_marks_each_breach() {
+    let dir = dir_for("alarm");
+    let path = recording_of(&dir, RECORDING_CROSSING);
+    let (csv, stderr, ok) = read_csv(&path, &["--alarm-high", "1", "--alarm-low", "-0.1"]);
+    assert!(ok, "replay failed: {stderr}");
+    let lines: Vec<&str> = csv.lines().collect();
+    assert!(lines[2].ends_with(",,"), "inside both: {}", lines[2]);
+    assert!(
+        lines[3].ends_with(",3,Above high limit 1 V"),
+        "got {}",
+        lines[3]
+    );
+    assert!(
+        lines[4].ends_with(",2,\"load on, 2.2 ohm; Below low limit -0.1 V\""),
+        "got {}",
+        lines[4]
+    );
+    assert!(
+        stderr.contains("Alarm: Above high limit 1 V (1.6109 V)\n"),
+        "got {stderr}"
+    );
+    assert!(
+        stderr.contains("Alarms: 1 above 1 V, 1 below -0.1 V\n"),
+        "got {stderr}"
+    );
+}
+
+/// A reading already out when the alarm starts is said, not marked or
+/// counted: no crossing was seen. A file marker on it stays as it was.
+#[test]
+fn a_reading_already_out_is_noted_not_marked() {
+    let dir = dir_for("alarm-already-out");
+    let path = recording_of(&dir, &marked_recording());
+    let (csv, stderr, ok) = read_csv(&path, &["--alarm-high", "1"]);
+    assert!(ok, "replay failed: {stderr}");
+    let lines: Vec<&str> = csv.lines().collect();
+    assert!(lines[2].ends_with(",,"), "not marked: {}", lines[2]);
+    assert!(
+        lines[3].ends_with(",2,\"load on, 2.2 ohm\""),
+        "got {}",
+        lines[3]
+    );
+    assert!(
+        stderr.contains("Note: Already above high limit 1 V; alarms start at the next crossing\n"),
+        "got {stderr}"
+    );
+    assert_eq!(stderr.matches("Alarm: ").count(), 0, "got {stderr}");
+    assert!(stderr.contains("Alarms: 0 above 1 V\n"), "got {stderr}");
+}
+
+/// A reading flickering at the limit is one breach under the automatic
+/// band, not one per crossing; with no band, each crossing counts.
+#[test]
+fn a_reading_hovering_at_the_limit_is_one_breach() {
+    let path = common::repo_root().join("assets/replays/dcv-steps.replay");
+    let alarms = |extra: &[&str]| {
+        let mut args = vec![
+            "read",
+            "--replay",
+            path.to_str().expect("utf-8 path"),
+            "--mock-clock-scale",
+            "max",
+            "--alarm-high",
+            "7.2975",
+        ];
+        args.extend_from_slice(extra);
+        let (_, stderr, ok) = run(&args);
+        assert!(ok, "replay failed: {stderr}");
+        stderr.matches("Alarm: ").count()
+    };
+    assert_eq!(alarms(&[]), 1);
+    assert!(alarms(&["--alarm-hysteresis", "0"]) > 1);
+}
+
+/// Limits typed for volts don't judge ohms after a dial turn.
+#[test]
+fn an_alarm_idles_on_another_quantity() {
+    let dir = dir_for("alarm-idle");
+    // On to capacitance after the resistance (the `capacitance` golden
+    // fixture): each turn is said, not only the first away.
+    let recording =
+        format!("{RECORDING_ACROSS_MODES}200 09 30 20 20 30 2E 30 31 35 00 00 30 30 30\n");
+    let path = recording_of(&dir, &recording);
+    let (_, stderr, ok) = read_csv(&path, &["--alarm-high", "2"]);
+    assert!(ok, "replay failed: {stderr}");
+    assert_eq!(stderr.matches("Alarm: ").count(), 0, "got {stderr}");
+    assert!(
+        stderr.contains("Note: alarm idle: readings in Ω, limits in V"),
+        "got {stderr}"
+    );
+    assert!(
+        stderr.contains("Note: alarm idle: readings in F, limits in V"),
+        "got {stderr}"
+    );
+}
+
+#[test]
+fn alarm_flags_are_checked_before_the_run() {
+    let dir = dir_for("alarm-refusals");
+    let path = recording_in(&dir);
+    let path = path.to_str().expect("utf-8 path");
+    for (args, wanted) in [
+        (
+            &["--alarm-low", "2", "--alarm-high", "1"][..],
+            "--alarm-low must be below --alarm-high",
+        ),
+        (&["--alarm-bell"][..], "--alarm-bell needs"),
+    ] {
+        let mut argv = vec!["read", "--replay", path];
+        argv.extend_from_slice(args);
+        let (stdout, stderr, ok) = run(&argv);
+        assert!(!ok, "{args:?} should be refused");
+        assert!(stdout.is_empty(), "got {stdout}");
+        assert!(stderr.contains(wanted), "got {stderr}");
+    }
+}

@@ -206,6 +206,10 @@ dmm-cli read [OPTIONS]
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
 | `--offset <VALUE>` | `0` | Add VALUE after scaling. |
 | `--unit <LABEL>` | | Label the scaled reading with LABEL instead of the meter's base unit. |
+| `--alarm-high <VALUE>` | | Alarm when the reading rises above VALUE. See [Alarms](#alarms). |
+| `--alarm-low <VALUE>` | | Alarm when the reading falls below VALUE. |
+| `--alarm-hysteresis <BAND>` | a few counts of the meter's last digit | How far back inside the reading must come before the same limit alarms again: a value in the limits' unit, or a percentage of the limit (`1%`). |
+| `--alarm-bell` | off | Ring the terminal bell with each alarm. |
 
 CSV output begins with a `# device:` comment line identifying the meter model,
 followed by the column header. JSON output begins with a `_metadata` line
@@ -297,6 +301,25 @@ dmm-cli read --format csv -o
 
 # Keep a session to replay later
 dmm-cli read --format replay -o bench.replay --count 600
+```
+
+#### Alarms
+
+`--alarm-high` and `--alarm-low` watch the reading through an unattended run.
+A reading that goes past a limit prints an `Alarm:` line on stderr and is
+marked, with the limit in its note, in the CSV and JSON marker fields and a
+replay copy. The summary counts the alarms. The same limit alarms again only
+once the reading has come back inside by `--alarm-hysteresis`, so a reading
+hovering at a limit raises one alarm; overloads don't count.
+
+Limits are in the base unit (V, A, Ω, …), as `--scale`'s factor is, or in
+`--unit` for a scaled reading. They watch the quantity of the first reading:
+after a dial turn to another quantity the alarm is idle until the dial comes
+back, and a stderr note says so.
+
+```bash
+dmm-cli read --alarm-low 3.0 --format csv -o discharge.csv   # cell run down
+dmm-cli read --alarm-high 5.25 --alarm-bell                  # 5 V rail out of tolerance
 ```
 
 #### Scaling readings in software

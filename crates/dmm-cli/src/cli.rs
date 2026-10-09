@@ -5,6 +5,7 @@ use crate::capture::StepListFormat;
 use crate::format::OutputFormat;
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use dmm_lib::alarm::{Hysteresis, HysteresisError, LimitError, Limits};
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
 use std::path::PathBuf;
@@ -96,6 +97,8 @@ pub(crate) enum Cmd {
         integrate: bool,
         #[command(flatten)]
         transform: TransformArgs,
+        #[command(flatten)]
+        alarm: AlarmArgs,
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, mock cycles through all modes automatically.
         #[arg(long, long_help = build_mock_mode_help())]
@@ -320,6 +323,80 @@ fn parse_offset(s: &str) -> Result<f64, String> {
     parse_factor("offset", s, Transform::check_offset)
 }
 
+/// The `read` flags that set a threshold alarm.
+#[derive(clap::Args, Clone)]
+pub(crate) struct AlarmArgs {
+    /// Warn when the reading rises above VALUE, in base units (V, A, Ω, …),
+    /// or in the --unit of a scaled reading
+    #[arg(long, value_name = "VALUE", allow_negative_numbers = true, value_parser = parse_limit)]
+    pub(crate) alarm_high: Option<f64>,
+    /// Warn when the reading falls below VALUE, as --alarm-high
+    #[arg(long, value_name = "VALUE", allow_negative_numbers = true, value_parser = parse_limit)]
+    pub(crate) alarm_low: Option<f64>,
+    /// How far back inside a reading must come before the same limit alarms
+    /// again: a value in the limits' unit, or a percentage of the limit
+    /// (`1%`) [default: a few counts of the meter's last digit]
+    #[arg(long, value_name = "BAND", allow_negative_numbers = true, value_parser = parse_hysteresis)]
+    pub(crate) alarm_hysteresis: Option<Hysteresis>,
+    /// Ring the terminal bell on each alarm
+    #[arg(long)]
+    pub(crate) alarm_bell: bool,
+}
+
+impl AlarmArgs {
+    /// The limits these flags set and their band, `None` without any limit,
+    /// or why the flags are unusable together.
+    pub(crate) fn limits(&self) -> Result<Option<(Limits, Hysteresis)>, String> {
+        match Limits::check(self.alarm_low, self.alarm_high) {
+            Ok(limits) if limits.is_empty() && self.alarm_bell => {
+                Err("--alarm-bell needs --alarm-high or --alarm-low".to_string())
+            }
+            Ok(limits) if limits.is_empty() && self.alarm_hysteresis.is_some() => {
+                Err("--alarm-hysteresis needs --alarm-high or --alarm-low".to_string())
+            }
+            Ok(limits) if limits.is_empty() => Ok(None),
+            Ok(limits) => self
+                .alarm_hysteresis
+                .unwrap_or_default()
+                .check(&limits)
+                .map(|band| Some((limits, band)))
+                .map_err(|_| {
+                    "--alarm-hysteresis as a percentage needs limits other than 0; give a value instead"
+                        .to_string()
+                }),
+            Err(e) => Err(limit_message(e, "")),
+        }
+    }
+}
+
+/// A limit rejection in the CLI's words; `value` is the number as typed,
+/// empty for a rejection of the pair.
+fn limit_message(e: LimitError, value: &str) -> String {
+    match e {
+        LimitError::NotFinite => format!("an alarm limit must be a finite number, got `{value}`"),
+        LimitError::LowNotBelowHigh => "--alarm-low must be below --alarm-high".to_string(),
+    }
+}
+
+/// One alarm limit: a finite number.
+fn parse_limit(s: &str) -> Result<f64, String> {
+    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
+    Limits::check(Some(value), None).map_err(|e| limit_message(e, s))?;
+    Ok(value)
+}
+
+/// `--alarm-hysteresis`: a value, or a percentage with `%`.
+fn parse_hysteresis(s: &str) -> Result<Hysteresis, String> {
+    Hysteresis::parse(s).map_err(|e| match e {
+        HysteresisError::NotANumber => {
+            format!("`{s}` is not a number, or a percentage such as `1%`")
+        }
+        HysteresisError::NotABand | HysteresisError::PercentOfZero => {
+            format!("--alarm-hysteresis must be zero or more, got `{s}`")
+        }
+    })
+}
+
 /// What `get` and `set` name on the command line, one word per
 /// [`dmm_lib::protocol::Setting`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
@@ -433,6 +510,7 @@ mod tests {
                 count,
                 integrate,
                 transform,
+                alarm: _,
                 mock_mode,
                 replay,
                 import,
@@ -577,6 +655,7 @@ mod tests {
                 mock_mode: _,
                 integrate: _,
                 transform: _,
+                alarm: _,
                 replay: _,
                 mock_clock_scale: _,
                 mock_clock_preseed: _,
@@ -665,6 +744,37 @@ mod tests {
             Ok(_) => panic!("{flag} {value} should have been rejected"),
             Err(e) => e.to_string(),
         }
+    }
+
+    fn read_alarm(args: &[&str]) -> Result<Option<(Limits, Hysteresis)>, String> {
+        let mut argv = vec!["dmm-cli", "read"];
+        argv.extend_from_slice(args);
+        match Cli::try_parse_from(argv).unwrap().command {
+            Cmd::Read { alarm, .. } => alarm.limits(),
+            _ => panic!("expected Read"),
+        }
+    }
+
+    #[test]
+    fn clap_parse_read_alarm_limits() {
+        assert_eq!(read_alarm(&[]), Ok(None));
+        let (limits, band) = read_alarm(&["--alarm-low", "-1.5", "--alarm-high", "5"])
+            .unwrap()
+            .unwrap();
+        assert_eq!((limits.low, limits.high), (Some(-1.5), Some(5.0)));
+        assert_eq!(band, Hysteresis::Auto);
+        let message = read_alarm(&["--alarm-low", "0", "--alarm-hysteresis", "1%"]).unwrap_err();
+        assert!(message.contains("give a value"), "got {message}");
+        assert_eq!(
+            read_alarm(&["--alarm-low", "5", "--alarm-high", "3"]),
+            Err("--alarm-low must be below --alarm-high".to_string()),
+        );
+        assert!(read_alarm(&["--alarm-bell"]).is_err());
+        assert!(read_alarm(&["--alarm-hysteresis", "1%"]).is_err());
+        let msg = flag_error("--alarm-hysteresis", "-1");
+        assert!(msg.contains("zero or more"), "got {msg}");
+        let msg = flag_error("--alarm-high", "nan");
+        assert!(msg.contains("finite number, got `nan`"), "got {msg}");
     }
 
     /// A zero or non-finite factor would destroy the reading rather than

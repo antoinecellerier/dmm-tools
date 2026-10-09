@@ -1,3 +1,4 @@
+pub mod alarm;
 pub mod clock;
 pub mod detect;
 pub mod error;

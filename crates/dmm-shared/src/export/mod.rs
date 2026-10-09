@@ -21,6 +21,33 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::borrow::Cow;
 
+/// Longest note a marker takes, in characters. A note labels a moment; the
+/// cap bounds what a stuck key or a paste can put in every export row.
+pub const NOTE_MAX_CHARS: usize = 200;
+
+/// Put `more` after a marker's `note`, `; ` between, within
+/// [`NOTE_MAX_CHARS`]: an alarm's note on a reading that already carries a
+/// marker, written the same by both binaries. The marker's own note is what
+/// gets shortened, ending in `…`, so the alarm's always shows.
+pub fn append_note(note: &mut String, more: &str) {
+    if !note.is_empty() {
+        let room = NOTE_MAX_CHARS.saturating_sub(more.chars().count() + "; ".len());
+        if note.chars().count() > room {
+            truncate_chars(note, room.saturating_sub(1));
+            note.push('…');
+        }
+        note.push_str("; ");
+    }
+    note.push_str(more);
+    truncate_chars(note, NOTE_MAX_CHARS);
+}
+
+fn truncate_chars(text: &mut String, max: usize) {
+    if let Some((cut, _)) = text.char_indices().nth(max) {
+        text.truncate(cut);
+    }
+}
+
 /// The `_metadata` object a JSON export opens with, as its line — without the
 /// newline that ends it.
 ///
@@ -199,6 +226,22 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
     use dmm_lib::measurement::AuxValue;
+
+    /// An alarm's note follows the marker's own, and the pair stays within
+    /// the cap a typed note has: the marker's own note gives way.
+    #[test]
+    fn an_appended_note_keeps_to_the_cap() {
+        let mut note = String::new();
+        append_note(&mut note, "Above high limit 5 V");
+        assert_eq!(note, "Above high limit 5 V");
+        let mut note = "probe moved".to_string();
+        append_note(&mut note, "Above high limit 5 V");
+        assert_eq!(note, "probe moved; Above high limit 5 V");
+        let mut note = "Ω".repeat(NOTE_MAX_CHARS);
+        append_note(&mut note, "Above high limit 5 V");
+        assert_eq!(note.chars().count(), NOTE_MAX_CHARS);
+        assert!(note.ends_with("Ω…; Above high limit 5 V"), "{note}");
+    }
 
     fn start() -> DateTime<Local> {
         Local

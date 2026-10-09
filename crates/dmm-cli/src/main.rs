@@ -128,12 +128,24 @@ fn main() {
             count,
             integrate,
             transform,
+            alarm,
             mock_mode,
             replay,
             import,
             mock_clock_scale,
             mock_clock_preseed,
         } => {
+            let alarm = match alarm.limits() {
+                Ok(limits) => limits.map(|(limits, hysteresis)| cmd::read::AlarmOptions {
+                    limits,
+                    hysteresis,
+                    bell: alarm.alarm_bell,
+                }),
+                Err(msg) => {
+                    eprintln!("{} {msg}", style("Error:").red().bold());
+                    std::process::exit(1);
+                }
+            };
             // An import names its own meter, as a replay does; a replay file
             // imported is a replay played without waiting.
             // Detected as the GUI detects it: an extensionless replay file is
@@ -198,6 +210,7 @@ fn main() {
                             count,
                             integrate,
                             &transform.to_transform(),
+                            alarm,
                         )
                     }
                 }
@@ -225,6 +238,7 @@ fn main() {
                             count,
                             integrate,
                             &transform.to_transform(),
+                            alarm,
                             mock_mode,
                             replay,
                             clock,

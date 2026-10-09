@@ -10,12 +10,13 @@ use crate::open::{
 };
 use crate::output;
 use console::style;
+use dmm_lib::alarm::{Alarm, Hysteresis, Limits};
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{SelectableDevice, Selection};
 use dmm_lib::stream::{MeasurementStream, NO_RESPONSE_TIMEOUTS, StreamEvent};
 use dmm_lib::transform::Transform;
 use log::info;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -30,6 +31,7 @@ pub(crate) fn cmd_read(
     count: usize,
     integrate: bool,
     transform: &Transform,
+    alarm: Option<AlarmOptions>,
     mock_mode: Option<String>,
     replay: Option<PathBuf>,
     // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
@@ -46,6 +48,7 @@ pub(crate) fn cmd_read(
             count,
             integrate,
             transform,
+            alarm,
             clock,
         );
     }
@@ -61,7 +64,7 @@ pub(crate) fn cmd_read(
         // The link these readings come over, so a session played back from
         // the file says what it was recorded on rather than nothing.
         let link = dmm.transport().link();
-        let out = read_output(format, &dmm, transform, integrate, false, || {
+        let out = read_output(format, &dmm, transform, integrate, alarm.is_some(), || {
             format::ReplayHeader {
                 device: device.id.to_string(),
                 model,
@@ -79,6 +82,7 @@ pub(crate) fn cmd_read(
             Some(device),
             integrate,
             transform,
+            alarm,
             Vec::new(),
         )
     } else {
@@ -89,7 +93,7 @@ pub(crate) fn cmd_read(
                 .as_millis() as u64;
         // `--format replay` is refused for a device that synthesises its
         // readings, so the header below is never built.
-        let out = read_output(format, &dmm, transform, integrate, false, || {
+        let out = read_output(format, &dmm, transform, integrate, alarm.is_some(), || {
             format::ReplayHeader {
                 device: selection_id(selection).to_string(),
                 model: None,
@@ -111,6 +115,7 @@ pub(crate) fn cmd_read(
             None,
             integrate,
             transform,
+            alarm,
             Vec::new(),
         )
     }
@@ -234,6 +239,7 @@ fn read_replay(
     count: usize,
     integrate: bool,
     transform: &Transform,
+    alarm: Option<AlarmOptions>,
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let replay = dmm_shared::replay::load(path)?;
@@ -258,7 +264,7 @@ fn read_replay(
         &dmm,
         transform,
         integrate,
-        !replay.markers.is_empty(),
+        !replay.markers.is_empty() || alarm.is_some(),
         || {
             format::ReplayHeader {
                 device: replay.device.id.to_string(),
@@ -294,6 +300,7 @@ fn read_replay(
         None,
         integrate,
         transform,
+        alarm,
         replay.markers.clone(),
     )
 }
@@ -352,6 +359,14 @@ struct Run<'a> {
     session: dmm_lib::stats::SeriesStats,
     transform: &'a Transform,
     integrate: bool,
+    alarm: Option<Alarm>,
+    // Ring the terminal bell on a breach: asked for, and stderr a terminal.
+    bell: bool,
+    // The number the next breach's marker takes: after every marker the
+    // file being played already holds.
+    next_marker: u32,
+    // The idle unit the last stderr note named, so each change is said once.
+    noted_idle: Option<String>,
 }
 
 impl<'a> Run<'a> {
@@ -360,6 +375,7 @@ impl<'a> Run<'a> {
     /// one meter's exports all sort together, the rule the GUI's Export…
     /// names its files by. `model_name` is what the CSV comment and the JSON
     /// metadata carry, `view` the saved graph view passed through to JSON.
+    #[allow(clippy::too_many_arguments)]
     fn open(
         destination: output::Destination,
         meter_name: &str,
@@ -368,6 +384,8 @@ impl<'a> Run<'a> {
         transform: &'a Transform,
         integrate: bool,
         tick: Duration,
+        alarm: Option<AlarmOptions>,
+        next_marker: u32,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut writer = output::Writer::new(destination, meter_name)?;
         if !transform.is_identity() {
@@ -379,6 +397,16 @@ impl<'a> Run<'a> {
                 style(format!(
                     "Note: readings scaled in software ({})",
                     transform.describe()
+                ))
+                .dim()
+            );
+        }
+        if let Some(alarm) = &alarm {
+            eprintln!(
+                "{}",
+                style(format!(
+                    "Note: alarm on: {}",
+                    alarm.limits.describe(alarm.hysteresis),
                 ))
                 .dim()
             );
@@ -397,6 +425,12 @@ impl<'a> Run<'a> {
             session,
             transform,
             integrate,
+            bell: alarm
+                .as_ref()
+                .is_some_and(|a| a.bell && std::io::stderr().is_terminal()),
+            alarm: alarm.map(|a| Alarm::new(a.limits, a.hysteresis)),
+            next_marker,
+            noted_idle: None,
         })
     }
 
@@ -423,6 +457,8 @@ impl<'a> Run<'a> {
             };
             eprintln!("{} {change}, {what} reset", style("Note:").yellow());
         }
+        let marker = self.check_alarm(&m, marker);
+        let marker = marker.as_ref().map(|(n, note)| (*n, note.as_ref()));
         // Already `None` unless --integrate was given.
         let integral_display = self.session.integral_display();
         // Before the write: a file the run names itself is named after the
@@ -437,6 +473,66 @@ impl<'a> Run<'a> {
             .write(&mut self.writer, &m, integral_display, marker)?;
         self.writer.flush()?;
         Ok(())
+    }
+
+    /// Compare a reading against the alarm's limits, saying on stderr when it
+    /// breaches one or the alarm goes idle, and return the marker the
+    /// reading is written with: the file's own, a breach's, or the file's
+    /// with the breach's note after its own.
+    fn check_alarm<'m>(
+        &mut self,
+        m: &dmm_lib::measurement::Measurement,
+        marker: Option<(u32, &'m str)>,
+    ) -> Option<(u32, std::borrow::Cow<'m, str>)> {
+        let marker = marker.map(|(n, note)| (n, std::borrow::Cow::Borrowed(note)));
+        let Some(alarm) = &mut self.alarm else {
+            return marker;
+        };
+        let breach = alarm.check(m, !self.transform.is_identity());
+        // Said on every change of what the readings are in, so an unattended
+        // log follows each dial turn, not only the first away.
+        if alarm.idle() != self.noted_idle.as_deref() {
+            match (alarm.idle(), alarm.quantity()) {
+                (Some(now), Some(watched)) => eprintln!(
+                    "{} alarm idle: readings in {now}, limits in {watched}",
+                    style("Note:").yellow(),
+                ),
+                (None, Some(watched)) => eprintln!(
+                    "{} alarm watching readings in {watched} again",
+                    style("Note:").yellow(),
+                ),
+                _ => {}
+            }
+            self.noted_idle = alarm.idle().map(str::to_string);
+        }
+        let Some(breach) = breach else {
+            return marker;
+        };
+        let note = breach.note();
+        if !breach.crossing {
+            // Out before the alarm saw it cross: said, not marked or rung.
+            eprintln!("{} {note}", style("Note:").yellow());
+            return marker;
+        }
+        eprintln!(
+            "{}{} {note} ({} {})",
+            if self.bell { "\x07" } else { "" },
+            style("Alarm:").red().bold(),
+            m.value_display_str(),
+            m.unit,
+        );
+        Some(match marker {
+            Some((n, own)) => {
+                let mut own = own.into_owned();
+                dmm_shared::export::append_note(&mut own, &note);
+                (n, own.into())
+            }
+            None => {
+                let n = self.next_marker;
+                self.next_marker += 1;
+                (n, note.into())
+            }
+        })
     }
 
     /// A gap: nothing was read, so the integral does not bridge it.
@@ -500,6 +596,25 @@ impl<'a> Run<'a> {
                 }
             }
         }
+        if let Some(alarm) = &self.alarm {
+            let unit = alarm
+                .limits_unit(self.transform.unit.as_deref())
+                .map(|u| format!(" {u}"))
+                .unwrap_or_default();
+            let limits = alarm.limits();
+            let counts: Vec<_> = [
+                limits
+                    .high
+                    .map(|v| format!("{} above {v}{unit}", alarm.high_count)),
+                limits
+                    .low
+                    .map(|v| format!("{} below {v}{unit}", alarm.low_count)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            eprintln!("    Alarms: {}", counts.join(", "));
+        }
         // Only a file the run named itself is worth a line, either way: every
         // other destination is in the command the user typed.
         match self.writer.finish()? {
@@ -522,6 +637,19 @@ impl<'a> Run<'a> {
     }
 }
 
+/// What the `--alarm-*` flags ask of a run.
+pub(crate) struct AlarmOptions {
+    pub(crate) limits: Limits,
+    pub(crate) hysteresis: Hysteresis,
+    pub(crate) bell: bool,
+}
+
+/// The number a run's first breach marker takes: after the highest of the
+/// markers a played-back file already holds, so none is numbered twice.
+fn next_marker_number(numbers: impl Iterator<Item = u32>) -> u32 {
+    numbers.max().map_or(1, |n| n + 1)
+}
+
 /// Shared measurement loop for both real and mock devices.
 #[allow(clippy::too_many_arguments)]
 fn run_read_loop<T: dmm_lib::transport::Transport>(
@@ -538,6 +666,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // Applied to every reading before anything else sees it; the identity
     // transform (no --scale/--offset/--unit) is a no-op.
     transform: &Transform,
+    alarm: Option<AlarmOptions>,
     // A recording's markers, in file order; none for a meter.
     markers: Vec<dmm_lib::replay::ReplayMarker>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -555,6 +684,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // is the family's — `meter_name` is what this meter answers to.
     let model_name = dmm.profile().model_name;
     let tick = Duration::from_millis(interval_ms);
+    let first_marker = next_marker_number(markers.iter().map(|m| m.number));
     let mut run = Run::open(
         destination,
         meter_name,
@@ -563,6 +693,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         transform,
         integrate,
         tick,
+        alarm,
+        first_marker,
     )?;
 
     let mut i = 0usize;
@@ -653,6 +785,7 @@ pub(crate) fn read_import(
     count: usize,
     integrate: bool,
     transform: &Transform,
+    alarm: Option<AlarmOptions>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
     let fail = |e: String| format!("{}: {e}", path.display());
@@ -673,7 +806,7 @@ pub(crate) fn read_import(
         family_slots: imported.aux_slots,
         extra_slots: transform.extra_aux_count(),
         integral: integrate,
-        markers: !imported.markers.is_empty(),
+        markers: !imported.markers.is_empty() || alarm.is_some(),
     };
     let experimental = imported.readings.iter().any(|r| r.experimental);
     let out = format::Output::new(format, layout, experimental, unreachable_replay_header)
@@ -682,6 +815,7 @@ pub(crate) fn read_import(
     // the GUI's import does, so a slow file does not break at every point.
     let offsets = imported.offsets();
     let tick = dmm_shared::export::median_spacing(&offsets);
+    let first_marker = next_marker_number(imported.markers.iter().map(|m| m.number));
     let mut run = Run::open(
         destination,
         &device,
@@ -690,6 +824,8 @@ pub(crate) fn read_import(
         transform,
         integrate,
         tick,
+        alarm,
+        first_marker,
     )?;
     let base = std::time::Instant::now();
     let mut markers = imported.markers.iter().peekable();

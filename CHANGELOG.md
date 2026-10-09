@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### CLI
+
+- **`read --alarm-high` and `--alarm-low` warn when a reading leaves its limits** — each alarm is marked in CSV, JSON and replay output; `--alarm-bell` rings the terminal bell.
+
 ### Bug fixes
 
 - **Bluetooth no longer crashes Windows scans near some devices or hangs macOS connects**

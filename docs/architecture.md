@@ -335,6 +335,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `specs.rs` | Spec metadata types |
 | `transform.rs` | `Transform`: software scale, offset and unit over the main reading |
 | `stats.rs` | `RunningStats`, `Integrator`, `SeriesStats` |
+| `alarm.rs` | `Alarm`, `Limits`: threshold alarms on the main reading |
 | `stream.rs` | `MeasurementStream` |
 | `clock.rs` | `Clock` |
 | `replay.rs` | `Replay`: the file format, its reader and writer, playback |
