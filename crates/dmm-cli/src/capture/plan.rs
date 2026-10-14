@@ -5,6 +5,7 @@
 //! an issue does not wait for a release. The maintainer pastes a few steps into
 //! the thread and the reporter runs them with `capture --plan`.
 
+use super::report::from_yaml;
 use super::{CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID};
 use dmm_lib::flags::Flag;
 use dmm_lib::protocol::{Expect, Need, RangeExpect, ValueExpect};
@@ -65,7 +66,7 @@ pub(crate) fn load(path: &str) -> Result<Vec<CaptureStep>, Box<dyn std::error::E
 }
 
 fn parse(path: &str, yaml: &str) -> Result<Vec<CaptureStep>, String> {
-    let plan: Plan = serde_yaml_ng::from_str(yaml).map_err(|e| format!("{path}: {e}"))?;
+    let plan: Plan = from_yaml(yaml).map_err(|e| format!("{path}: {e}"))?;
     if plan.steps.is_empty() {
         return Err(format!("{path}: the plan lists no steps"));
     }

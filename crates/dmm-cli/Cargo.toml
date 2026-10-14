@@ -21,7 +21,7 @@ chrono.workspace = true
 ctrlc = "3"
 log.workspace = true
 console = "0.16"
-serde_yaml_ng.workspace = true
+serde-saphyr.workspace = true
 csv.workspace = true
 
 [dev-dependencies]

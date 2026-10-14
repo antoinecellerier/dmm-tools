@@ -2,8 +2,10 @@
 //! and however it travelled, and keeping their meter's address out of what
 //! triage prints.
 
-use super::super::report::CaptureReport;
+use super::super::report::{CaptureReport, from_yaml};
 use dmm_lib::protocol::registry::{self, SelectableDevice};
+use serde::Deserialize;
+use serde::de::IgnoredAny;
 use std::borrow::Cow;
 use std::path::Path;
 
@@ -15,22 +17,37 @@ pub(super) fn load(path: &Path) -> Result<CaptureReport, String> {
     let not_a_report = || format!("{shown}: not a capture report");
     let text = String::from_utf8(bytes).map_err(|_| not_a_report())?;
     let text = unescape_utf8(&text);
-    let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(&text).map_err(|_| not_a_report())?;
-    if value.get("tool_version").is_none() {
-        // A plan is a step list too, and the file a reporter would most
-        // likely mix up with their report.
-        return Err(if value.get("steps").is_some() {
-            format!("{shown}: a capture plan, not a report; pass it as --plan beside the report")
-        } else {
-            not_a_report()
-        });
-    }
-    let mut report: CaptureReport =
-        serde_yaml_ng::from_value(value).map_err(|e| format!("{shown}: {e}"))?;
+    let mut report: CaptureReport = match from_yaml(&text) {
+        Ok(report) => report,
+        // Which keys the file has picks the message. Typed, not through a
+        // generic value, which would read an old report's `drive: on` as a
+        // boolean.
+        Err(e) => match from_yaml::<Keys>(&text) {
+            Ok(Keys {
+                tool_version: Some(_),
+                ..
+            }) => return Err(format!("{shown}: {e}")),
+            // A plan is a step list too, and the file a reporter would most
+            // likely mix up with their report.
+            Ok(Keys { steps: Some(_), .. }) => {
+                return Err(format!(
+                    "{shown}: a capture plan, not a report; pass it as --plan beside the report"
+                ));
+            }
+            _ => return Err(not_a_report()),
+        },
+    };
     for step in &mut report.steps {
         step.normalize_legacy();
     }
     Ok(report)
+}
+
+/// The two keys that tell a report from a plan or anything else.
+#[derive(Deserialize)]
+struct Keys {
+    tool_version: Option<IgnoredAny>,
+    steps: Option<IgnoredAny>,
 }
 
 /// The meter to decode with: `--device` as typed, else the report's own.

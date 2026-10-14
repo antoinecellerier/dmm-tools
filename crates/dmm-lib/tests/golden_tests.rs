@@ -131,7 +131,7 @@ fn discover_golden_files(dir: &Path) -> Vec<PathBuf> {
 fn load_case(path: &Path) -> GoldenTestCase {
     let yaml_str = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    serde_yaml_ng::from_str(&yaml_str)
+    serde_saphyr::from_str(&yaml_str)
         .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()))
 }
 
@@ -253,7 +253,7 @@ fn ut804_fixtures_read_the_same_as_a_ut71cde() {
 #[test]
 #[should_panic(expected = "unknown flag name \"auto_rnage\"")]
 fn unknown_fixture_flag_names_fail() {
-    let case: GoldenTestCase = serde_yaml_ng::from_str(
+    let case: GoldenTestCase = serde_saphyr::from_str(
         "raw_hex: \"02 31 20 20 35 2E 36 37 38 00 00 30 30 30\"\n\
          mode: DC V\n\
          value: \"5.678\"\n\

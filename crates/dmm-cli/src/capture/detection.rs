@@ -965,7 +965,7 @@ mod tests {
     fn a_report_without_the_section_still_loads() {
         let yaml = "date: '2026-01-01'\ntool_version: test\ndevice_name: UT61E+\n\
                     supported: true\nsteps: []\n";
-        let report: super::super::CaptureReport = serde_yaml_ng::from_str(yaml).unwrap();
+        let report: super::super::CaptureReport = super::super::report::from_yaml(yaml).unwrap();
         assert!(report.detection.is_none());
     }
 }

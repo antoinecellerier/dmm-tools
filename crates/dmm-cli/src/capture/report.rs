@@ -611,11 +611,49 @@ pub(crate) fn save_report(
     report: &CaptureReport,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let yaml = serde_yaml_ng::to_string(report)?;
+    let yaml = to_yaml(report)?;
     // Atomic write (.tmp + fsync + rename), so a crash mid-write doesn't
     // corrupt the existing report.
     dmm_shared::write_atomic(std::path::Path::new(path), yaml.as_bytes())?;
     Ok(())
+}
+
+/// `value` as the YAML a report or plan file holds.
+///
+/// Every string stays on one line: frame hex runs to thousands of
+/// characters and is grepped, so no folding into `>` blocks. Strings a
+/// YAML 1.1 reader would type otherwise (`'on'`, a date) are quoted, so
+/// older builds and other tools read them back as strings.
+pub(crate) fn to_yaml<T: Serialize>(value: &T) -> Result<String, serde_saphyr::SerializeError> {
+    serde_saphyr::to_string_with_options(
+        value,
+        serde_saphyr::ser_options! { prefer_block_scalars: false },
+    )
+}
+
+/// A report or plan file's YAML as `T`.
+///
+/// Errors stay one line without the source snippet: they follow a file
+/// name, and a quoted report line can carry a meter's Bluetooth address.
+///
+/// No cap on how much the file holds: a long run's report passes the
+/// parser's default node count, and limits that grow with the file's
+/// length guard nothing once it is in memory. The depth and alias limits,
+/// which bound the work a small hostile file can cause, stay.
+pub(crate) fn from_yaml<T: serde::de::DeserializeOwned>(
+    yaml: &str,
+) -> Result<T, serde_saphyr::Error> {
+    serde_saphyr::from_str_with_options(
+        yaml,
+        serde_saphyr::options! {
+            with_snippet: false,
+            budget: serde_saphyr::budget! {
+                max_events: usize::MAX,
+                max_nodes: usize::MAX,
+                max_total_scalar_bytes: usize::MAX,
+            },
+        },
+    )
 }
 
 /// Insert or replace a step result in the report.
@@ -694,7 +732,7 @@ pub(super) fn load_or_create_report(
     let output_path = capture_path(output_override, device_id, plan_path);
 
     let report = match std::fs::read_to_string(&output_path) {
-        Ok(contents) => match serde_yaml_ng::from_str::<CaptureReport>(&contents) {
+        Ok(contents) => match from_yaml::<CaptureReport>(&contents) {
             Ok(mut r) => {
                 for step in &mut r.steps {
                     step.normalize_legacy();
@@ -893,9 +931,8 @@ mod tests {
         let mut m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
         m.flags = all_set;
 
-        let yaml = serde_yaml_ng::to_string(&SampleData::from_measurement(&m).flags).unwrap();
-        let parsed: std::collections::BTreeMap<String, bool> =
-            serde_yaml_ng::from_str(&yaml).unwrap();
+        let yaml = to_yaml(&SampleData::from_measurement(&m).flags).unwrap();
+        let parsed: std::collections::BTreeMap<String, bool> = from_yaml(&yaml).unwrap();
 
         assert_eq!(parsed.len(), StatusFlags::COUNT);
         for (name, _) in all_set.as_pairs() {
@@ -942,7 +979,7 @@ mod tests {
         let yaml = "hold: true\nrel: false\nauto_range: true\nmin: false\nmax: false\n\
                     low_battery: false\nhv_warning: false\ndc: true\npeak_min: false\n\
                     peak_max: false\n";
-        let flags: SampleFlags = serde_yaml_ng::from_str(yaml).unwrap();
+        let flags: SampleFlags = from_yaml(yaml).unwrap();
         assert!(flags.hold);
         assert!(!flags.void, "missing fields default to false");
     }
@@ -1130,14 +1167,14 @@ mod tests {
         ];
         let sample = SampleData::from_measurement(&m);
 
-        let yaml = serde_yaml_ng::to_string(&sample).unwrap();
+        let yaml = to_yaml(&sample).unwrap();
         assert_eq!(
             yaml.matches("elapsed_secs").count(),
             1,
             "elapsed_secs: None must be omitted: {yaml}"
         );
 
-        let parsed: SampleData = serde_yaml_ng::from_str(&yaml).unwrap();
+        let parsed: SampleData = from_yaml(&yaml).unwrap();
         assert_eq!(parsed.aux.len(), 2);
         assert_eq!(parsed.aux[0].label, "Frequency");
         assert_eq!(parsed.aux[0].value, "50.01");
@@ -1160,9 +1197,9 @@ mod tests {
             (0x00, 0x00),
             (0x00, 0x00, 0x00),
         ));
-        let yaml = serde_yaml_ng::to_string(&sample).unwrap();
+        let yaml = to_yaml(&sample).unwrap();
         assert!(!yaml.contains("aux"), "empty aux must be omitted: {yaml}");
-        let parsed: SampleData = serde_yaml_ng::from_str(&yaml).unwrap();
+        let parsed: SampleData = from_yaml(&yaml).unwrap();
         assert!(parsed.aux.is_empty());
     }
 
@@ -1236,7 +1273,7 @@ mod tests {
         let yaml = "date: '2026-01-01'\ntool_version: test\ndevice_name: UT61E+\n\
                     supported: true\nsteps:\n- id: dcv\n  instruction: test\n  \
                     status: captured\n";
-        let report: CaptureReport = serde_yaml_ng::from_str(yaml).unwrap();
+        let report: CaptureReport = from_yaml(yaml).unwrap();
         assert_eq!(report.steps.len(), 1);
         assert!(report.init_frames.is_empty());
         assert!(report.steps[0].frames.is_empty());
@@ -1254,7 +1291,7 @@ mod tests {
             steps: vec![StepResult::new("dcv", "test", StepStatus::Captured)],
             ..CaptureReport::default()
         };
-        let yaml = serde_yaml_ng::to_string(&report).unwrap();
+        let yaml = to_yaml(&report).unwrap();
         for key in [
             "frames",
             "diagnostics",
@@ -1278,7 +1315,7 @@ mod tests {
             feature: false,
             baud: None,
         };
-        let yaml = serde_yaml_ng::to_string(&record).unwrap();
+        let yaml = to_yaml(&record).unwrap();
         assert!(yaml.contains("dir: rx"), "got {yaml}");
         assert!(!yaml.contains("feature"), "got {yaml}");
         assert!(!yaml.contains("baud"), "got {yaml}");
@@ -1295,14 +1332,13 @@ mod tests {
             bytes: Vec::new(),
             baud: Some(19200),
         };
-        let yaml = serde_yaml_ng::to_string(&FrameRecord::from(&event)).unwrap();
+        let yaml = to_yaml(&FrameRecord::from(&event)).unwrap();
         assert!(yaml.contains("feature: true"), "got {yaml}");
         assert!(yaml.contains("baud: 19200"), "got {yaml}");
 
-        let old: FrameRecord = serde_yaml_ng::from_str(
-            "at_ms: 3\ndir: tx\nhex: 00 00 4B 00 00 03 00 00 00 00\nfeature: true\n",
-        )
-        .unwrap();
+        let old: FrameRecord =
+            from_yaml("at_ms: 3\ndir: tx\nhex: 00 00 4B 00 00 03 00 00 00 00\nfeature: true\n")
+                .unwrap();
         assert!(old.feature);
         assert_eq!(old.baud, None);
     }
@@ -1341,7 +1377,7 @@ mod tests {
     /// confirm steps they already confirmed.
     #[test]
     fn legacy_screen_text_normalizes_into_the_new_fields() {
-        let mut step: StepResult = serde_yaml_ng::from_str(
+        let mut step: StepResult = from_yaml(
             "id: dcv\ninstruction: test\nstatus: captured\nscreen: 'confirmed: 5.678 V [AUTO]'\n",
         )
         .unwrap();
@@ -1351,10 +1387,8 @@ mod tests {
         assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
         assert_eq!(step.screen, None);
 
-        let mut step: StepResult = serde_yaml_ng::from_str(
-            "id: dcv\ninstruction: test\nstatus: captured\nscreen: 5.68 V\n",
-        )
-        .unwrap();
+        let mut step: StepResult =
+            from_yaml("id: dcv\ninstruction: test\nstatus: captured\nscreen: 5.68 V\n").unwrap();
         step.normalize_legacy();
         assert_eq!(step.confirmed, Some(false));
         assert_eq!(step.lcd.as_deref(), Some("5.68 V"));
@@ -1366,8 +1400,7 @@ mod tests {
     /// samples — serializes exactly as it did before the fields existed.
     #[test]
     fn unconfirmed_steps_omit_the_confirmation_fields() {
-        let yaml = serde_yaml_ng::to_string(&StepResult::new("dcv", "test", StepStatus::Captured))
-            .unwrap();
+        let yaml = to_yaml(&StepResult::new("dcv", "test", StepStatus::Captured)).unwrap();
         for key in ["confirmed", "lcd", "confirmed_by", "screen"] {
             assert!(!yaml.contains(key), "{key} must be omitted: {yaml}");
         }
@@ -1509,7 +1542,7 @@ mod tests {
         let yaml = "date: '2026-01-01'\ntool_version: test\ndevice_name: UT61E+\n\
                     supported: true\nsteps:\n- id: dcv\n  instruction: test\n  \
                     status: captured\n";
-        let report: CaptureReport = serde_yaml_ng::from_str(yaml).unwrap();
+        let report: CaptureReport = from_yaml(yaml).unwrap();
         assert_eq!(report.tier, None);
         assert_eq!(report.core_semantics, None);
         assert!(report.gate_failures.is_empty());
@@ -1523,10 +1556,10 @@ mod tests {
             gate_failures: vec!["ohm".to_string()],
             ..CaptureReport::default()
         };
-        let yaml = serde_yaml_ng::to_string(&report).unwrap();
+        let yaml = to_yaml(&report).unwrap();
         assert!(yaml.contains("tier: trusted"), "{yaml}");
         assert!(yaml.contains("core_semantics: failed"), "{yaml}");
-        let parsed: CaptureReport = serde_yaml_ng::from_str(&yaml).unwrap();
+        let parsed: CaptureReport = from_yaml(&yaml).unwrap();
         assert_eq!(parsed.tier, Some(Tier::Trusted));
         assert_eq!(parsed.gate_failures, vec!["ohm".to_string()]);
     }
@@ -1600,26 +1633,38 @@ mod tests {
     fn capture_report_serde_roundtrip() {
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
         let sample = SampleData::from_measurement(&m);
+        let long_hex = vec!["AB"; 70].join(" ");
 
         let report = CaptureReport {
             date: "2026-01-01T00:00:00+00:00".to_string(),
             tool_version: "0.2.0-dev (abc1234)".to_string(),
             device_name: "UT61E+".to_string(),
             transport_name: Some("CP2110".to_string()),
-            transport_info: Some("CP2110 part=0x0a firmware=10".to_string()),
+            // Strings a plain scalar would turn into null, a boolean or a
+            // folded block come back as written.
+            transport_info: Some(String::new()),
             supported: true,
+            init_frames: vec![FrameRecord {
+                at_ms: 0,
+                dir: FrameDir::Rx,
+                hex: long_hex.clone(),
+                feature: false,
+                baud: None,
+            }],
+            drive: Some(super::super::drive::Drive::On),
             steps: vec![StepResult {
                 samples: vec![sample],
                 confirmed: Some(false),
-                lcd: Some("5.68 V".to_string()),
+                lcd: Some("~".to_string()),
                 confirmed_by: Some(ConfirmedBy::Inline),
+                error: Some("null".to_string()),
                 ..StepResult::new("dcv", "Set meter to DC V", StepStatus::Captured)
             }],
             ..CaptureReport::default()
         };
 
-        let yaml = serde_yaml_ng::to_string(&report).unwrap();
-        let parsed: CaptureReport = serde_yaml_ng::from_str(&yaml).unwrap();
+        let yaml = to_yaml(&report).unwrap();
+        let parsed: CaptureReport = from_yaml(&yaml).unwrap();
 
         assert_eq!(parsed.date, report.date);
         assert_eq!(parsed.device_name, report.device_name);
@@ -1627,9 +1672,43 @@ mod tests {
         assert_eq!(parsed.steps.len(), 1);
         assert_eq!(parsed.steps[0].samples.len(), 1);
         assert_eq!(parsed.steps[0].samples[0].value, "5.678");
+        assert_eq!(parsed.steps[0].samples[0].mode_byte, "0x02");
+        assert_eq!(parsed.steps[0].samples[0].display_raw, "  5.678");
         assert_eq!(parsed.steps[0].confirmed, Some(false));
-        assert_eq!(parsed.steps[0].lcd.as_deref(), Some("5.68 V"));
+        assert_eq!(parsed.steps[0].lcd.as_deref(), Some("~"));
+        assert_eq!(parsed.steps[0].error.as_deref(), Some("null"));
         assert_eq!(parsed.steps[0].confirmed_by, Some(ConfirmedBy::Inline));
+        assert_eq!(parsed.transport_info.as_deref(), Some(""));
+        assert_eq!(parsed.drive, Some(super::super::drive::Drive::On));
+        assert!(yaml.contains(&format!("hex: {long_hex}\n")), "{yaml}");
+        assert_eq!(to_yaml(&parsed).unwrap(), yaml);
+    }
+
+    /// A long run's report, every step at its frame cap, reads back: past
+    /// the parser's default 250 000 nodes.
+    #[test]
+    fn a_full_report_reads_back() {
+        let frames: Vec<FrameRecord> = (0..super::super::step::MAX_FRAMES_PER_STEP as u64)
+            .map(|at_ms| FrameRecord {
+                at_ms,
+                dir: FrameDir::Rx,
+                hex: "AB CD 10".to_string(),
+                feature: false,
+                baud: None,
+            })
+            .collect();
+        let report = CaptureReport {
+            steps: (0..100)
+                .map(|i| StepResult {
+                    frames: frames.clone(),
+                    ..StepResult::new(&format!("s{i}"), "x", StepStatus::Captured)
+                })
+                .collect(),
+            ..CaptureReport::default()
+        };
+        let parsed: CaptureReport = from_yaml(&to_yaml(&report).unwrap()).unwrap();
+        assert_eq!(parsed.steps.len(), 100);
+        assert_eq!(parsed.steps[99].frames.len(), frames.len());
     }
 
     #[test]
@@ -1645,7 +1724,7 @@ mod tests {
             ..CaptureReport::default()
         };
 
-        let yaml = serde_yaml_ng::to_string(&report).unwrap();
+        let yaml = to_yaml(&report).unwrap();
         // Optional None fields should not appear in output
         assert!(!yaml.contains("transport_name"));
         assert!(!yaml.contains("transport_info"));
@@ -1653,7 +1732,7 @@ mod tests {
         assert!(!yaml.contains("samples"));
 
         // Parse back
-        let parsed: CaptureReport = serde_yaml_ng::from_str(&yaml).unwrap();
+        let parsed: CaptureReport = from_yaml(&yaml).unwrap();
         assert!(parsed.transport_name.is_none());
         assert!(parsed.transport_info.is_none());
         assert!(parsed.steps[0].samples.is_empty());
@@ -1661,16 +1740,16 @@ mod tests {
 
     #[test]
     fn step_status_serde() {
-        let yaml = serde_yaml_ng::to_string(&StepStatus::Captured).unwrap();
+        let yaml = to_yaml(&StepStatus::Captured).unwrap();
         assert!(yaml.contains("captured"));
 
-        let yaml = serde_yaml_ng::to_string(&StepStatus::Skipped).unwrap();
+        let yaml = to_yaml(&StepStatus::Skipped).unwrap();
         assert!(yaml.contains("skipped"));
 
-        let yaml = serde_yaml_ng::to_string(&StepStatus::Timeout).unwrap();
+        let yaml = to_yaml(&StepStatus::Timeout).unwrap();
         assert!(yaml.contains("timeout"));
 
-        let yaml = serde_yaml_ng::to_string(&StepStatus::Error).unwrap();
+        let yaml = to_yaml(&StepStatus::Error).unwrap();
         assert!(yaml.contains("error"));
     }
 
@@ -1696,7 +1775,7 @@ mod tests {
         save_report(&report, &path).unwrap();
 
         let contents = std::fs::read_to_string(&path).unwrap();
-        let parsed: CaptureReport = serde_yaml_ng::from_str(&contents).unwrap();
+        let parsed: CaptureReport = from_yaml(&contents).unwrap();
         assert_eq!(parsed.device_name, "UT61E+");
 
         // Cleanup

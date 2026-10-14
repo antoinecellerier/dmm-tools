@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&taken).unwrap(), "an earlier run\n");
         let saved = dir.join("capture-no-response-2.yaml");
         let report: CaptureReport =
-            serde_yaml_ng::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+            super::report::from_yaml(&std::fs::read_to_string(&saved).unwrap()).unwrap();
         assert!(report.no_response);
         assert!(report.steps.is_empty());
         assert_eq!(report.device_id.as_deref(), Some("ut804"));

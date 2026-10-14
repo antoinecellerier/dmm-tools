@@ -30,7 +30,7 @@ pub(crate) fn cmd_triage(
     args: &TriageArgs,
     named_device: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let report = load::load(&args.report)?;
+    let report = load::load(&args.report).map_err(|e| load::scrub_addresses(&e))?;
     let device = load::device(named_device, &report)?;
     let plan = args.plan.as_deref().map(super::plan::load).transpose()?;
     let triage = Triage::new(&report, device, plan);
