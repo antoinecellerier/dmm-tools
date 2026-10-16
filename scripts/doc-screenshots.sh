@@ -366,8 +366,7 @@ report() {
 		echo "$asset: $(identify -format '%wx%h' "$old") -> $size, resized"
 		return
 	fi
-	delta="$(compare -metric AE "$old" "$new" null: 2>&1 || true)"
-	delta="${delta%%[^0-9]*}"
+	delta="$(differing_pixels "$old" "$new")"
 	if [ "$delta" = 0 ]; then
 		echo "$asset: unchanged, $size"
 		return 1
@@ -383,7 +382,7 @@ report() {
 # outside_version_band <old> <new> <row> — how many pixels differ once the
 # version label's band on `row` is blanked in both.
 outside_version_band() {
-	local old="$1" new="$2" top bottom width right delta f
+	local old="$1" new="$2" top bottom width right f
 	read -r top bottom <<<"$3"
 	width="$(identify -format '%w' "$new")"
 	right=$((width - VERSION_RIGHT))
@@ -391,8 +390,18 @@ outside_version_band() {
 		convert "${!f}" -fill black \
 			-draw "rectangle $((right - VERSION_BAND_W)),$top $right,$bottom" "$TMP/band-$f.png"
 	done
-	delta="$(compare -metric AE "$TMP/band-old.png" "$TMP/band-new.png" null: 2>&1 || true)"
-	echo "${delta%%[^0-9]*}"
+	differing_pixels "$TMP/band-old.png" "$TMP/band-new.png"
+}
+
+# differing_pixels <a> <b> — how many pixels differ in any colour channel.
+# Counted rather than read off `compare -metric AE`, which ImageMagick 7.1.2
+# reports as a fraction (0.37 for one pixel), and whose exit status is 0 for
+# one pixel too. The precision keeps a count past a million out of exponent
+# notation.
+differing_pixels() {
+	convert "$1" "$2" -alpha off -compose difference -composite \
+		-separate -evaluate-sequence max -threshold 0 \
+		-precision 16 -format '%[fx:int(mean*w*h+0.5)]' info:
 }
 
 ## Scenes ####################################################################
@@ -614,7 +623,7 @@ main() {
 		cmd_list
 		return 0
 	fi
-	require Xvfb xdotool import convert compare identify python3 cargo
+	require Xvfb xdotool import convert identify python3 cargo
 	[ -x "$GUI" ] || die "missing $GUI"
 	TMP="$(mktemp -d "${TMPDIR:-/tmp}/doc-screenshots.XXXXXX")"
 	trap 'rm -rf "$TMP"; "$GUI" stop >/dev/null 2>&1 || true' EXIT
