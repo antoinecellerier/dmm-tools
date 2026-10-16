@@ -52,7 +52,8 @@ fn scenes(script: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Every `assets/*.png` the README and the docs show, by file name.
+/// Every `assets/` picture the README and the docs show, by file name: a WebP,
+/// or a PNG its scene has not changed since the switch to WebP.
 fn pictures_in_the_docs() -> BTreeSet<String> {
     let root = repo_root();
     let mut docs = vec![root.join("README.md")];
@@ -74,12 +75,23 @@ fn pictures_in_the_docs() -> BTreeSet<String> {
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
                 .collect();
-            if name.ends_with(".png") && !NOT_A_SCREENSHOT.contains(&name.as_str()) {
+            if (name.ends_with(".png") || name.ends_with(".webp"))
+                && !NOT_A_SCREENSHOT.contains(&name.as_str())
+            {
                 found.insert(name);
             }
         }
     }
     found
+}
+
+/// A picture's name without its extension, as the script's `SCENES` table
+/// names it.
+fn stem(file: &str) -> &str {
+    Path::new(file)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or(file)
 }
 
 #[test]
@@ -89,7 +101,10 @@ fn every_picture_in_the_docs_has_a_scene() {
         .into_iter()
         .map(|(asset, _)| asset)
         .collect();
-    let shown = pictures_in_the_docs();
+    let shown: BTreeSet<String> = pictures_in_the_docs()
+        .iter()
+        .map(|file| stem(file).to_string())
+        .collect();
 
     let unshown: Vec<&String> = staged.difference(&shown).collect();
     assert!(
@@ -101,6 +116,26 @@ fn every_picture_in_the_docs_has_a_scene() {
         unstaged.is_empty(),
         "the docs show {unstaged:?}, which no scene in {SCRIPT} regenerates — add a scene or drop the picture"
     );
+}
+
+/// The script swaps a picture's PNG for a WebP when its scene changes it, and
+/// rewrites the links with it; a link left on the old file, or both files
+/// committed, is a swap half done.
+#[test]
+fn every_picture_in_the_docs_is_in_assets_once() {
+    let assets = repo_root().join("assets");
+    for file in pictures_in_the_docs() {
+        assert!(
+            assets.join(&file).is_file(),
+            "the docs show assets/{file}, which does not exist — point the link at the picture's file in assets/"
+        );
+        let picture = stem(&file);
+        assert!(
+            !(assets.join(format!("{picture}.png")).is_file()
+                && assets.join(format!("{picture}.webp")).is_file()),
+            "assets/ holds {picture} as both PNG and WebP — keep the WebP and drop the PNG"
+        );
+    }
 }
 
 #[test]

@@ -7,20 +7,24 @@
 # assets/replays/, so a picture shows a real session rather than the mock.
 #
 # Usage:
-#   scripts/doc-screenshots.sh list          # the asset each scene writes
+#   scripts/doc-screenshots.sh list          # the picture each scene writes
 #   scripts/doc-screenshots.sh all           # every scene
-#   scripts/doc-screenshots.sh gui-settings.png [...]   # the scenes that
-#                                                       # write these pictures
+#   scripts/doc-screenshots.sh gui-settings [...]   # the scenes that
+#                                                   # write these pictures
+#
+# Pictures are lossless WebP. One still committed as a PNG stays one until its
+# scene changes it; the WebP then replaces it and the links in README.md and
+# docs/ follow, so git never stores the same picture twice.
 #
 # Session time is frozen at each scene's preseed instant (see `launch`), so a
 # rerun stages exactly the same frame. Each capture prints the pixel difference
 # against the committed file and leaves that file alone when there is none,
-# since a rewritten PNG carries a new timestamp. On a -dev version it also
+# since a rewritten file would show up as modified. On a -dev version it also
 # leaves it alone when only the top bar's version label differs, so the bump
 # after a release doesn't flag every picture; a release run, on the release
 # version, refreshes the pictures that show it. Xvfb is not guaranteed to
 # render identically across driver versions, so a small delta is still
-# possible — look at the PNGs before committing them.
+# possible — look at the pictures before committing them.
 set -euo pipefail
 
 # Byte semantics for the [0-9] classes below, and a stable number format in
@@ -148,29 +152,32 @@ TRIGGERS_VIEW='# view: {"window":60.0,"start":0.0,"envelope":60.0,"references":[
 # reference line and its trigger markers.
 THEMES_VIEW='# view: {"window":30.0,"mean":true,"references":[1.0],"references_shown":true}'
 
-# asset written -> the function that stages it.
+# picture written -> the function that stages it.
 SCENES=(
-	"gui-wide-layout.png scene_wide"
-	"gui-narrow-layout.png scene_narrow"
-	"gui-reading-controls.png scene_reading_controls"
-	"gui-graph-overlays.png scene_overlays"
-	"gui-graph-triggers.png scene_overlays"
-	"gui-graph-series.png scene_series"
-	"gui-big-meter.png scene_big_meter"
-	"gui-minimal-meter-wide.png scene_minimal_meter"
-	"gui-minimal-meter-narrow.png scene_minimal_meter"
-	"gui-settings.png scene_settings"
-	"gui-theme-dark.png scene_themes"
-	"gui-theme-light.png scene_themes"
-	"gui-theme-high-contrast.png scene_themes"
-	"gui-theme-colorblind.png scene_themes"
-	"gui-theme-bubble-gum.png scene_themes"
-	"gui-theme-desert.png scene_themes"
-	"gui-theme-midnight.png scene_themes"
-	"gui-theme-phosphor.png scene_themes"
-	"gui-color-customization.png scene_color_customization"
-	"gui-connection-help.png scene_connection_help"
+	"gui-wide-layout scene_wide"
+	"gui-narrow-layout scene_narrow"
+	"gui-reading-controls scene_reading_controls"
+	"gui-graph-overlays scene_overlays"
+	"gui-graph-triggers scene_overlays"
+	"gui-graph-series scene_series"
+	"gui-big-meter scene_big_meter"
+	"gui-minimal-meter-wide scene_minimal_meter"
+	"gui-minimal-meter-narrow scene_minimal_meter"
+	"gui-settings scene_settings"
+	"gui-theme-dark scene_themes"
+	"gui-theme-light scene_themes"
+	"gui-theme-high-contrast scene_themes"
+	"gui-theme-colorblind scene_themes"
+	"gui-theme-bubble-gum scene_themes"
+	"gui-theme-desert scene_themes"
+	"gui-theme-midnight scene_themes"
+	"gui-theme-phosphor scene_themes"
+	"gui-color-customization scene_color_customization"
+	"gui-connection-help scene_connection_help"
 )
+
+# Pixel-exact WebP, at the encoder's slowest and smallest setting.
+WEBP_LOSSLESS=(-define webp:lossless=true -define webp:method=6 -quality 100)
 
 # A frame at the pictures' size under software GL, with room to spare.
 FRAME_GAP=0.1
@@ -326,16 +333,36 @@ shot() {
 	fi
 }
 
-# capture <asset> [crop] [version row] — shoot, report the delta, move into
-# assets/ unless no pixel changed: a PNG carries the time it was written, so an
-# identical picture would still show up as modified in git. A picture showing
-# the top bar names the rows its version label is on (VERSION_ROW_*).
+# capture <picture> [crop] [version row] — shoot, report the delta, write the
+# WebP into assets/ unless no pixel changed: an identical picture written again
+# would still show up as modified in git. A picture showing the top bar names
+# the rows its version label is on (VERSION_ROW_*).
 capture() {
-	local asset="$1" crop="${2:-}" row="${3:-}"
-	shot "$TMP/$asset" "$crop"
-	if report "$asset" "$TMP/$asset" "$row"; then
-		mv "$TMP/$asset" "$ASSETS/$asset"
+	local picture="$1" crop="${2:-}" row="${3:-}"
+	shot "$TMP/$picture.png" "$crop"
+	report "$picture" "$TMP/$picture.png" "$row" || return 0
+	convert "$TMP/$picture.png" "${WEBP_LOSSLESS[@]}" "$ASSETS/$picture.webp"
+	[ "$(differing_pixels "$TMP/$picture.png" "$ASSETS/$picture.webp")" = 0 ] ||
+		die "$picture.webp does not decode to the shot — is ImageMagick's WebP lossless?"
+	if [ -f "$ASSETS/$picture.png" ]; then
+		relink "$picture"
+		rm "$ASSETS/$picture.png"
+		echo "$picture: now WebP"
 	fi
+}
+
+# committed <picture> — the file it is committed as: the PNG it has kept since
+# before the switch to WebP, or its WebP.
+committed() {
+	if [ -f "$ASSETS/$1.png" ]; then echo "$ASSETS/$1.png"; else echo "$ASSETS/$1.webp"; fi
+}
+
+# relink <picture> — point the links in README.md and docs/ at its WebP. The
+# `.png` after the name keeps pictures whose names share a prefix apart.
+relink() {
+	local docs=()
+	mapfile -t docs < <(grep -lF "assets/$1.png" "$ROOT/README.md" "$ROOT"/docs/*.md || true)
+	((${#docs[@]} == 0)) || sed -i "s|assets/$1\\.png|assets/$1.webp|g" "${docs[@]}"
 }
 
 # fit <width> <height> — resize and echo the geometry the window settled on.
@@ -356,7 +383,8 @@ fit() {
 # Fails when not one pixel differs, or on a -dev version when every one that
 # does is in the version label's band on `row` ("<top> <bottom>").
 report() {
-	local asset="$1" new="$2" row="${3:-}" old="$ASSETS/$1" size delta
+	local asset="$1" new="$2" row="${3:-}" old size delta
+	old="$(committed "$asset")"
 	size="$(identify -format '%wx%h' "$new")"
 	if [ ! -f "$old" ]; then
 		echo "$asset: new, $size"
@@ -419,7 +447,7 @@ scene_wide() {
 		'# marker: 8018 2 wifi off' \
 		'# marker: 9998 3 e-Paper display refreshing')" 160.5
 	park
-	capture gui-wide-layout.png "" "$VERSION_ROW_WIDE"
+	capture gui-wide-layout "" "$VERSION_ROW_WIDE"
 }
 
 # The hero's session and window in a window too narrow for two columns. The
@@ -430,7 +458,7 @@ scene_narrow() {
 	launch_file "$(staged dcma-boot-refresh "$NARROW_VIEW")" 160.5
 	"$GUI" resize 1000 1280 >/dev/null
 	park
-	capture gui-narrow-layout.png "1000x1280+0+0" "$VERSION_ROW_WRAPPED"
+	capture gui-narrow-layout "1000x1280+0+0" "$VERSION_ROW_WRAPPED"
 }
 
 # The reading with a flag lit and the remote-control buttons under it, from the
@@ -441,7 +469,7 @@ scene_reading_controls() {
 	write_settings
 	launch dcmv-hold-rel 14
 	park
-	capture gui-reading-controls.png "$READING_CROP"
+	capture gui-reading-controls "$READING_CROP"
 }
 
 # Two graph pictures of one session: the overlays that read the last refresh
@@ -453,11 +481,11 @@ scene_overlays() {
 	write_settings
 	launch_file "$(staged dcma-boot-refresh "$OVERLAYS_VIEW")" 178
 	park
-	capture gui-graph-overlays.png "$GRAPH_CROP"
+	capture gui-graph-overlays "$GRAPH_CROP"
 	"$GUI" stop >/dev/null
 	launch_file "$(staged dcma-boot-refresh "$TRIGGERS_VIEW")" 178
 	park
-	capture gui-graph-triggers.png "$GRAPH_CROP"
+	capture gui-graph-triggers "$GRAPH_CROP"
 }
 
 # A meter sending two parts of one reading, so the graph draws two traces:
@@ -468,7 +496,7 @@ scene_series() {
 	write_settings
 	launch acdcv-cell 100
 	park
-	capture gui-graph-series.png "$GRAPH_CROP"
+	capture gui-graph-series "$GRAPH_CROP"
 }
 
 # Big meter on a UT181A frame, which carries sub-values: the reading scaled to
@@ -484,7 +512,7 @@ scene_big_meter() {
 	# next from a different point, and a different picture.
 	"$GUI" settle >/dev/null
 	geometry="$(fit "$BIG_METER_W" "$BIG_METER_H")"
-	capture gui-big-meter.png "$geometry+0+0" "$VERSION_ROW_WRAPPED"
+	capture gui-big-meter "$geometry+0+0" "$VERSION_ROW_WRAPPED"
 }
 
 # Ctrl+B again drops the top bar and the buttons: the reading and its mode
@@ -499,13 +527,13 @@ scene_minimal_meter() {
 	launch ut181a-temp-t1-t2 60
 	minimal_mode
 	geometry="$(fit "$MINIMAL_WIDE_W" "$MINIMAL_WIDE_H")"
-	capture gui-minimal-meter-wide.png "$geometry+0+0"
+	capture gui-minimal-meter-wide "$geometry+0+0"
 	"$GUI" stop >/dev/null
 	write_settings
 	launch dcma-boot-refresh 166
 	minimal_mode
 	geometry="$(fit "$MINIMAL_NARROW_W" "$MINIMAL_NARROW_H")"
-	capture gui-minimal-meter-narrow.png "$geometry+0+0"
+	capture gui-minimal-meter-narrow "$geometry+0+0"
 	export VERIFY_GUI_GEOMETRY="$ROOT_GEOMETRY"
 }
 
@@ -523,12 +551,12 @@ minimal_mode() {
 # selected, every row live and at its default. A recording would pin the
 # Device row instead.
 scene_settings() {
-	no_meter_or_skip gui-settings.png || return 0
+	no_meter_or_skip gui-settings || return 0
 	write_settings '{"device_family": "auto"}'
 	launch_without_meter
 	click "$GEAR_X" "$GEAR_Y"
 	park
-	capture gui-settings.png "$SETTINGS_CROP" "$VERSION_ROW_WIDE"
+	capture gui-settings "$SETTINGS_CROP" "$VERSION_ROW_WIDE"
 }
 
 # One graph picture per colour preset and per named theme, with THEMES_VIEW's
@@ -537,14 +565,14 @@ scene_settings() {
 scene_themes() {
 	local entry asset preset
 	for entry in \
-		'gui-theme-dark.png {"theme": "Dark", "color_preset": "Default"}' \
-		'gui-theme-light.png {"theme": "Light", "color_preset": "Default"}' \
-		'gui-theme-high-contrast.png {"theme": "Dark", "color_preset": "HighContrast"}' \
-		'gui-theme-colorblind.png {"theme": "Dark", "color_preset": "ColorblindSafe"}' \
-		'gui-theme-bubble-gum.png {"named_theme": "Bubble Gum"}' \
-		'gui-theme-desert.png {"named_theme": "Desert"}' \
-		'gui-theme-midnight.png {"named_theme": "Midnight"}' \
-		'gui-theme-phosphor.png {"named_theme": "Phosphor"}'; do
+		'gui-theme-dark {"theme": "Dark", "color_preset": "Default"}' \
+		'gui-theme-light {"theme": "Light", "color_preset": "Default"}' \
+		'gui-theme-high-contrast {"theme": "Dark", "color_preset": "HighContrast"}' \
+		'gui-theme-colorblind {"theme": "Dark", "color_preset": "ColorblindSafe"}' \
+		'gui-theme-bubble-gum {"named_theme": "Bubble Gum"}' \
+		'gui-theme-desert {"named_theme": "Desert"}' \
+		'gui-theme-midnight {"named_theme": "Midnight"}' \
+		'gui-theme-phosphor {"named_theme": "Phosphor"}'; do
 		asset="${entry%% *}"
 		preset="${entry#* }"
 		write_settings "$preset"
@@ -556,7 +584,7 @@ scene_themes() {
 
 # Per-colour editing: the swatch grid expanded, with one swatch's picker open.
 scene_color_customization() {
-	no_meter_or_skip gui-color-customization.png || return 0
+	no_meter_or_skip gui-color-customization || return 0
 	write_settings '{"device_family": "auto"}'
 	launch_without_meter
 	click "$GEAR_X" "$GEAR_Y"
@@ -566,12 +594,12 @@ scene_color_customization() {
 	# The section animates open.
 	"$GUI" settle >/dev/null
 	click "$CROSSHAIR_SWATCH_X" "$CROSSHAIR_SWATCH_Y"
-	capture gui-color-customization.png "$COLOR_CROP"
+	capture gui-color-customization "$COLOR_CROP"
 }
 
 # The help shown when nothing answers on either link.
 scene_connection_help() {
-	no_meter_or_skip gui-connection-help.png || return 0
+	no_meter_or_skip gui-connection-help || return 0
 	write_settings '{"device_family": "auto"}'
 	launch_without_meter
 	# The failure is not instant: the open path scans for a Bluetooth adapter
@@ -581,13 +609,14 @@ scene_connection_help() {
 	# the meter…" — and the app logs it as an error.
 	"$GUI" wait-log "UI: error:" 60 >/dev/null
 	park
-	capture gui-connection-help.png "$HELP_CROP"
+	capture gui-connection-help "$HELP_CROP"
 }
 
 ## Driver ####################################################################
 
 scene_for() {
-	local asset="$1" entry
+	local asset="${1%.png}" entry
+	asset="${asset%.webp}"
 	for entry in "${SCENES[@]}"; do
 		[ "${entry%% *}" = "$asset" ] && {
 			echo "${entry#* }"
@@ -618,12 +647,15 @@ cmd_list() {
 }
 
 main() {
-	[ $# -gt 0 ] || die "usage: $(basename "$0") {list | all | <asset.png>…}"
+	[ $# -gt 0 ] || die "usage: $(basename "$0") {list | all | <picture>…}"
 	if [ "$1" = list ]; then
 		cmd_list
 		return 0
 	fi
 	require Xvfb xdotool import convert identify python3 cargo
+	# Captured whole: grep -q quitting early could SIGPIPE convert under pipefail.
+	[[ "$(convert -list format)" =~ WEBP\*?\ +WEBP\ +[r-]w ]] ||
+		die "this ImageMagick cannot write WebP — ask the user to install its WebP support"
 	[ -x "$GUI" ] || die "missing $GUI"
 	TMP="$(mktemp -d "${TMPDIR:-/tmp}/doc-screenshots.XXXXXX")"
 	trap 'rm -rf "$TMP"; "$GUI" stop >/dev/null 2>&1 || true' EXIT

@@ -33,7 +33,7 @@ DOCS = [
     "docs/supported-devices.md",
 ]
 SHIPPED = set(DOCS) | {"LICENSE"}
-IMAGES = {".png", ".svg", ".jpg", ".jpeg", ".gif"}
+IMAGES = {".png", ".webp", ".svg", ".jpg", ".jpeg", ".gif"}
 CODE_BACKGROUND = "#f6f8fa"  # GitHub's
 # Added to pandoc's default page style. Its template makes language-tagged
 # (highlighted) code blocks transparent.
