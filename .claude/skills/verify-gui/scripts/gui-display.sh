@@ -310,7 +310,7 @@ cmd_type() {
 # Capture the display until two captures in a row are identical, `seconds` at
 # most: a key, click or resize has been drawn once nothing moves any more.
 cmd_settle() {
-	require import compare
+	require import convert
 	local limit="${1:-5}" prev="$STATE/settle-$$-a.png" cur="$STATE/settle-$$-b.png" i delta
 	[[ "$limit" =~ ^[1-9][0-9]?$ ]] || die "usage: settle [seconds]   (1-99, default 5)"
 	need_display >/dev/null
@@ -320,8 +320,11 @@ cmd_settle() {
 	for ((i = 0; i < limit * 5; i++)); do
 		sleep "$SETTLE_POLL"
 		onx import -window root "$cur" || die "import failed — is the private display up?"
-		delta="$(compare -metric AE "$prev" "$cur" null: 2>&1 || true)"
-		if [ "${delta%%[^0-9]*}" = 0 ]; then
+		# The largest channel difference, not `compare -metric AE`: ImageMagick
+		# 7.1.2 reports AE as a fraction, 0.004 for one pixel one level off.
+		delta="$(convert "$prev" "$cur" -alpha off -compose difference -composite \
+			-separate -evaluate-sequence max -format '%[max]' info:)"
+		if [ "$delta" = 0 ]; then
 			rm -f "$prev" "$cur"
 			echo "settled"
 			return 0
