@@ -402,7 +402,7 @@ mod tests {
         }
         app.last_measurement = Some(m);
 
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
         let wide = super::super::meter_fit::is_wide(width);
         let mut columns = None;
@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn the_window_size_is_kept_only_when_the_user_picked_it() {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
 
         track(
             &mut app,

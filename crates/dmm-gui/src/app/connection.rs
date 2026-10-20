@@ -971,7 +971,7 @@ mod tests {
             msg_tx,
             ctrl_rx,
             cmd_rx,
-            ctx: egui::Context::default(),
+            ctx: crate::app::styled_context(),
             selected: None,
             query_name: false,
             sample_interval_ms: 10,

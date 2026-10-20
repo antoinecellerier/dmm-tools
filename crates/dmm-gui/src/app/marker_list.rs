@@ -1040,7 +1040,7 @@ mod tests {
                 m.timestamp = t0 + Duration::from_millis(i * 10);
                 app.capture.recording.push(&m, 0);
             }
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let frame = |app: &mut App| {
                 let mut out = ctx.run_ui(
                     egui::RawInput {
@@ -1340,7 +1340,7 @@ mod tests {
             send(&mut app, "DC V", Instant::now());
             Self {
                 app,
-                ctx: egui::Context::default(),
+                ctx: crate::app::styled_context(),
                 seconds: 0.0,
             }
         }

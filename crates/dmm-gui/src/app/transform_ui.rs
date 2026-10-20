@@ -281,7 +281,7 @@ mod tests {
             dmm_lib::flags::StatusFlags::default(),
         ));
 
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(width, 600.0));
         let mut nodes: Vec<(egui::accesskit::NodeId, Node)> = Vec::new();

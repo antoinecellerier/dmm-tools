@@ -180,7 +180,7 @@ mod tests {
     /// Two frames of What's New as a `version` build shows it, in the
     /// viewport's default size, and the accessibility nodes of the last one.
     fn changelog_nodes(version: &str) -> Vec<egui::accesskit::Node> {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(520.0, 480.0));
         let mut cache = CommonMarkCache::default();

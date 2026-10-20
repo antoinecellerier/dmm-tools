@@ -3937,7 +3937,7 @@ fn graph_with_a_minute_of_data() -> Graph {
 /// live either, which is what the old handler did on the first tick.
 #[test]
 fn plain_wheel_over_the_plot_leaves_the_graph_alone() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     let window = g.time_window_secs;
     gesture_frame(&mut g, &ctx, over_plot(), &[]);
@@ -3956,7 +3956,7 @@ fn plain_wheel_over_the_plot_leaves_the_graph_alone() {
 /// sample snapping the view back.
 #[test]
 fn ctrl_wheel_over_the_plot_zooms_and_leaves_live() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     let window = g.time_window_secs;
     gesture_frame(&mut g, &ctx, over_plot(), &[]);
@@ -3978,7 +3978,7 @@ fn ctrl_wheel_over_the_plot_zooms_and_leaves_live() {
 /// panel or a modal the graph must not move.
 #[test]
 fn ctrl_wheel_off_the_plot_changes_nothing() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     let window = g.time_window_secs;
     gesture_frame(&mut g, &ctx, off_plot(), &[]);
@@ -4034,7 +4034,7 @@ fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
 
 #[test]
 fn m_and_x_toggle_the_mean_and_the_envelope() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     graph_frame(&mut g, &ctx, key_press(egui::Key::M));
     assert!(g.show_mean, "M did not draw the mean line");
@@ -4052,7 +4052,7 @@ fn m_and_x_toggle_the_mean_and_the_envelope() {
 /// has nothing to toggle until they are on.
 #[test]
 fn t_waits_for_the_reference_lines() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     let crossings = g.show_crossings;
     graph_frame(&mut g, &ctx, key_press(egui::Key::T));
@@ -4072,7 +4072,7 @@ fn t_waits_for_the_reference_lines() {
 /// field their values are typed into — nothing is drawn until one is.
 #[test]
 fn r_opens_the_reference_field_and_takes_the_caret_to_it() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     graph_frame(&mut g, &ctx, key_press(egui::Key::R));
     assert!(g.show_ref_line, "R did not switch the reference lines on");
@@ -4088,7 +4088,7 @@ fn r_opens_the_reference_field_and_takes_the_caret_to_it() {
 /// placed in the values field types there instead.
 #[test]
 fn a_focused_field_keeps_the_overlay_keys() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     graph_frame(&mut g, &ctx, key_press(egui::Key::R));
     graph_frame(&mut g, &ctx, key_press(egui::Key::M));
@@ -4105,7 +4105,7 @@ fn a_focused_field_keeps_the_overlay_keys() {
 /// forgotten placing.
 #[test]
 fn c_clears_the_cursors_on_the_way_off() {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     graph_frame(&mut g, &ctx, key_press(egui::Key::C));
     assert!(g.cursors_active, "C did not switch the cursors on");
@@ -4294,7 +4294,7 @@ fn clicking_a_flag_reports_its_marker() {
     let (mut g, t0) = graph_over(30);
     let markers = marked(&[t0 + Duration::from_secs(25)]);
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     ctx.enable_accesskit();
     // One frame; where the flag labelled for marker 1 was drawn.
     let frame = |g: &mut Graph, events: Vec<egui::Event>| {
@@ -4393,7 +4393,7 @@ fn mark_from_menu(
     x: f32,
     between: impl FnOnce(&mut Graph),
 ) -> Option<(Instant, f64)> {
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     ctx.enable_accesskit();
     menu_frame(g, &ctx, vec![]);
     let tree = menu_frame(g, &ctx, vec![]);
@@ -4450,7 +4450,7 @@ fn the_menu_marks_a_reading_in_view() {
 #[test]
 fn esc_closes_the_menu_and_leaves_no_focus() {
     let (mut g, _) = graph_over(30);
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     ctx.enable_accesskit();
     menu_frame(&mut g, &ctx, vec![]);
     let tree = menu_frame(&mut g, &ctx, vec![]);
@@ -4577,7 +4577,7 @@ fn a_wide_window_draws_about_as_much_as_a_narrow_one() {
     let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(960.0, 500.0));
     let mut vertices = |window: f64| {
         g.time_window_secs = window;
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut count = 0;
         // The axes settle on the first frame.
         for _ in 0..2 {
@@ -5072,7 +5072,7 @@ fn assert_moved(now: &PatternFrame, before: &PatternFrame, dx: f32) {
 fn dashes_move_with_the_data_in_live_view() {
     let (mut g, t0) = patterned_graph(751);
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let mut last = pattern_frame(&mut g, &ctx, &tc);
     // Steps of one sample and of several, past a few anchors.
     for (step, n) in [(1, 1), (1, 7), (7, 6), (13, 3)] {
@@ -5093,7 +5093,7 @@ fn dashes_move_with_the_data_in_live_view() {
 fn dashes_move_with_the_view_both_ways() {
     let (mut g, _) = patterned_graph(1500);
     let tc = ThemeColors::new(false, ColorPreset::Default, &PaletteOverrides::default());
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     g.live = false;
     g.view_center = 30.0;
     let start = pattern_frame(&mut g, &ctx, &tc);
@@ -5114,7 +5114,7 @@ fn dashes_move_with_the_view_both_ways() {
 #[test]
 fn toolbar_fields_leave_its_height_alone() {
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
-    let ctx = egui::Context::default();
+    let ctx = crate::app::styled_context();
     let height = |g: &mut Graph| {
         let mut h = 0.0;
         // The second frame: the first lays out the fonts.

@@ -587,7 +587,7 @@ mod tests {
     /// OS they are pinning. `Nix` is the `Ctrl` rendering — the one the docs
     /// and the literal list below describe.
     fn nix_context() -> egui::Context {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.set_os(egui::os::OperatingSystem::Nix);
         ctx
     }
@@ -724,7 +724,7 @@ mod tests {
     /// still claim a bare Ctrl.
     #[test]
     fn mac_rows_use_cmd() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.set_os(egui::os::OperatingSystem::Mac);
         // egui asks the fonts whether they can draw `⌘`, and fonts only
         // exist inside a pass.

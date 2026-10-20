@@ -836,7 +836,7 @@ mod tests {
 
         // Whatever the window and the GPU spent starting is behind us.
         let connected_at = Instant::now();
-        app.connect(&egui::Context::default());
+        app.connect(&crate::app::styled_context());
         let (origin, at) = app.clock.wall_origin().expect("the Connect pins it");
         assert_eq!(at, recorded);
         assert!(
@@ -849,7 +849,7 @@ mod tests {
         // A Disconnect/Connect keeps the origin, so the recording resumes
         // where the session has got to rather than starting again.
         app.disconnect();
-        app.connect(&egui::Context::default());
+        app.connect(&crate::app::styled_context());
         assert_eq!(app.clock.wall_origin().expect("still pinned").0, origin);
         app.disconnect();
     }
@@ -876,7 +876,7 @@ mod tests {
             .expect("a well-formed recording"),
         );
         app.replay = Some(source);
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         app.connect(&ctx);
         app.disconnect();
         assert_eq!(app.replay_markers.len(), 3);
@@ -941,7 +941,7 @@ mod tests {
             .expect("a well-formed recording"),
         );
         app.replay = Some(source);
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         app.connect(&ctx);
         app.disconnect();
         assert_eq!(app.replay_markers.len(), 3);
@@ -978,7 +978,7 @@ mod tests {
             .expect("a well-formed recording"),
         );
         app.replay = Some(source);
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         app.connect(&ctx);
         app.disconnect();
         let (start, _) = app.clock.wall_origin().expect("the Connect pins it");

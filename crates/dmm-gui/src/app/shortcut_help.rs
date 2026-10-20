@@ -524,7 +524,7 @@ mod tests {
     /// down to 300x200 and stay a dialog rather than a sliver.
     #[test]
     fn the_help_fits_a_short_window() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut app = help_app();
         let roomy = Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0));
         for _ in 0..3 {
@@ -548,7 +548,7 @@ mod tests {
     /// keys, so without this the lower grids stay unreachable.
     #[test]
     fn arrow_down_scrolls_the_help() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut app = help_app();
         let screen = short_window();
@@ -570,7 +570,7 @@ mod tests {
     /// modal — scrolling must not hand one of them the keyboard.
     #[test]
     fn arrow_keys_keep_focus_on_the_close_button() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         let screen = short_window();
@@ -601,7 +601,7 @@ mod tests {
     #[test]
     fn the_help_shows_no_scrollbar_when_it_fits() {
         let height_at = |screen: Rect| {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let mut app = help_app();
             for _ in 0..3 {
                 run_frame(&ctx, &mut app, screen, vec![]);
@@ -621,7 +621,7 @@ mod tests {
     /// help closed near its end came back there, "General" already gone.
     #[test]
     fn the_help_opens_at_the_top_again() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut app = help_app();
         app.shortcut_help.focus_pending = true;
@@ -681,7 +681,7 @@ mod tests {
     /// Modal heights for one, two and three columns, read off a one-column
     /// help so the windows built from them follow font changes.
     fn modal_heights() -> [f32; 3] {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut app = help_app();
         let tall = Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 2000.0));
         for _ in 0..3 {
@@ -746,7 +746,7 @@ mod tests {
     #[test]
     fn the_help_uses_two_columns_in_a_short_wide_window() {
         let screen = window_for(2, 1425.0);
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut app = help_app();
         let frame = settled_help(&ctx, &mut app, screen);
@@ -770,7 +770,7 @@ mod tests {
     #[test]
     fn the_help_uses_three_columns_in_a_very_wide_window() {
         let screen = window_for(3, 2000.0);
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut app = help_app();
         let frame = settled_help(&ctx, &mut app, screen);
@@ -792,7 +792,7 @@ mod tests {
     #[test]
     fn the_help_layout_settles() {
         for (columns, screen) in [(2, window_for(2, 1425.0)), (3, window_for(3, 2000.0))] {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let mut app = help_app();
             settled_help(&ctx, &mut app, screen);
             let settled = modal_rect(&ctx);
@@ -810,7 +810,7 @@ mod tests {
     fn the_help_reflows_on_resize() {
         let wide = window_for(3, 2000.0);
         let at_width = |width| Rect::from_min_size(Pos2::ZERO, vec2(width, wide.height()));
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut app = help_app();
         let mut columns_at = |screen| {
             for _ in 0..3 {

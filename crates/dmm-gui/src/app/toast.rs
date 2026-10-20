@@ -201,7 +201,7 @@ mod tests {
 
     impl ToastRun {
         fn new(w: f32, h: f32) -> Self {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             ctx.enable_accesskit();
             Self {
                 app: App::from_settings(Settings::default(), dmm_lib::Clock::real()),
@@ -487,7 +487,7 @@ mod tests {
     /// matters is whether the glyph lands on the replacement's atlas rect.
     #[test]
     fn the_glyphs_have_fonts() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.set_fonts(crate::app::appearance::font_definitions());
         let font = egui::FontId::proportional(14.0);
         let atlas_rect = |ui: &egui::Ui, text: &str| {

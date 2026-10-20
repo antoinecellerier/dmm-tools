@@ -571,7 +571,7 @@ timestamp,mode,value,unit,range,flags,marker,note
 
     /// Import `path` and run frames until it is in.
     fn import(app: &mut App, path: PathBuf) {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         app.import_file(path);
         for _ in 0..10_000 {
             app.step_import(&ctx);
@@ -662,7 +662,7 @@ timestamp,mode,value,unit,range,flags,marker,note
         app.settings.shared.device_family = "mock".to_string();
         let path = file("then-connect.csv", CSV);
         import(&mut app, path.clone());
-        app.connect(&egui::Context::default());
+        app.connect(&crate::app::styled_context());
         app.disconnect();
         assert!(app.imported.is_none());
         assert!(app.markers.is_empty());
@@ -726,7 +726,7 @@ timestamp,mode,value,unit,range,flags,marker,note
         }
         let mut app = app();
         let path = file("large.csv", &text);
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         app.import_file(path.clone());
         while matches!(app.import_job, Some(ImportJob::Loading(_))) {
             app.step_import(&ctx);
@@ -933,7 +933,7 @@ mod connect_tests {
         let path =
             std::env::temp_dir().join(format!("dmm-gui-import-{}-connect.csv", std::process::id()));
         std::fs::write(&path, super::tests_support::CSV).expect("write");
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         app.import_file(path.clone());
         while app.import_job.is_some() {
             app.step_import(&ctx);

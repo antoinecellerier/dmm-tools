@@ -721,7 +721,7 @@ mod tests {
             let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
             // A meter's readings, so the Replay… entry is enabled.
             app.capture.history_layout.device_id = Some("ut61eplus");
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             ctx.enable_accesskit();
             Self {
                 app,
@@ -932,7 +932,7 @@ mod tests {
     /// replacement character's, as the toast's glyph test does.
     #[test]
     fn the_menu_arrow_has_a_glyph() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.set_fonts(crate::app::appearance::font_definitions());
         let font = egui::FontId::proportional(14.0);
         let atlas_rect = |ui: &egui::Ui, text: &str| {

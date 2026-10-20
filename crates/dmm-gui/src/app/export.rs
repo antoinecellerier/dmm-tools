@@ -977,7 +977,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(outcome).expect("the channel is open");
         app.export = Some(PendingExport::Writing(rx));
-        app.poll_export(&egui::Context::default());
+        app.poll_export(&crate::app::styled_context());
     }
 
     /// The request of the export waiting on its dialog, taken out of the
@@ -1083,7 +1083,7 @@ mod tests {
     #[test]
     fn a_dismissed_or_failed_dialog_releases_the_pin() {
         let mut app = app_holding(0, 0, &[0, 0]);
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
 
         let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
         tx.send(Ok(None)).expect("the app listens");
@@ -1121,7 +1121,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
         drop(tx);
         app.export = Some(PendingExport::Writing(rx));
-        app.poll_export(&egui::Context::default());
+        app.poll_export(&crate::app::styled_context());
         assert!(app.export.is_none());
         assert!(app.toast.take().is_some_and(|t| t.is_error));
         assert!(app.begin_export(ExportFormat::Csv).is_ok());

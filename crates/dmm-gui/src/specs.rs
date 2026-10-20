@@ -438,7 +438,7 @@ mod tests {
     /// `fields` picked.
     fn panel_texts(spec: &SpecInfo, expanded: bool, fields: SpecFields) -> Vec<String> {
         let (texts, _) = panel_frame(
-            &egui::Context::default(),
+            &crate::app::styled_context(),
             spec,
             expanded,
             fields,
@@ -622,7 +622,7 @@ mod tests {
     /// flips the saved setting.
     #[test]
     fn a_click_on_the_heading_is_reported() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let fields = SpecFields::default();
         let (texts, toggled) = panel_frame(&ctx, &spec(DC_BAND), true, fields, Vec::new());
         assert!(!toggled);
@@ -644,7 +644,7 @@ mod tests {
     #[test]
     fn the_title_is_level_with_the_fields() {
         let (texts, _) = panel_frame(
-            &egui::Context::default(),
+            &crate::app::styled_context(),
             &spec(DC_BAND),
             true,
             SpecFields::default(),

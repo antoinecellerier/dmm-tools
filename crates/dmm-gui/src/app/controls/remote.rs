@@ -438,7 +438,7 @@ mod tests {
     /// (`Fonts::has_glyph` can't tell; see `.claude/rules/gui.md`).
     #[test]
     fn the_carets_have_glyphs() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.set_fonts(crate::app::appearance::font_definitions());
         let font = egui::FontId::proportional(14.0);
         let atlas_rect = |ui: &egui::Ui, text: &str| {
@@ -570,7 +570,7 @@ mod tests {
             unit,
             dmm_lib::flags::StatusFlags::default(),
         ));
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
             egui::CentralPanel::default().show(ui, |ui| {

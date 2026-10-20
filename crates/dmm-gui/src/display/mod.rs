@@ -1829,7 +1829,7 @@ mod tests {
     /// every cell is still its own natural height, so vertical alignment
     /// only becomes meaningful once the grid has settled.
     fn layout_aux_rows(m: &Measurement, font_size: f32) -> Vec<AuxRowRects> {
-        let ctx = eframe::egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let mut rects = Vec::new();
         for _ in 0..3 {
@@ -1889,7 +1889,7 @@ mod tests {
         over.value = MeasuredValue::Overload;
         over.elapsed_secs = Some(12);
         m.aux_values = vec![aux("Frequency", "50.01", "Hz"), over];
-        let ctx = eframe::egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let mut job = LayoutJob::default();
         let mut weak = Color32::TRANSPARENT;
@@ -1930,7 +1930,7 @@ mod tests {
     /// inside the limits as past either one, so nothing after it moves.
     #[test]
     fn the_limit_badge_keeps_its_room() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let m = Measurement::test_fixture(MeasuredValue::Normal(5.0), "V", StatusFlags::default());
         let width = |alarm: Option<Zone>, alarm_set: bool| {
@@ -1963,7 +1963,7 @@ mod tests {
     /// (`horizontal_wrapped` under the reading) over the inline one (a
     /// `horizontal` after the value and a separator).
     fn layout_readout_row(value_size: f32, wrapped: bool) -> [egui::Rect; 3] {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let m = Measurement::test_fixture(
             MeasuredValue::Normal(50.001),
@@ -2056,7 +2056,7 @@ mod tests {
     /// The grid as drawn: run a few frames, as the grid sizes its columns
     /// from the frame before, and return the last frame's rect.
     fn drawn_grid(m: &Measurement, font_size: f32) -> egui::Rect {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let mut rect = egui::Rect::NOTHING;
         for _ in 0..3 {
@@ -2073,7 +2073,7 @@ mod tests {
     }
 
     fn grid_metrics(m: &Measurement, font_size: f32) -> (AuxGridMetrics, Vec2) {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let mut metrics = None;
         let mut min_cell = Vec2::ZERO;
@@ -2137,7 +2137,7 @@ mod tests {
     /// left the value hanging under the grid and the mode line.
     #[test]
     fn the_beside_row_centres_value_sub_values_and_mode() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         for rows in [2, 4] {
             let m = reading_with_rows(rows, 0);
@@ -2298,7 +2298,7 @@ mod tests {
     /// disagreement makes each pass undo the one before.
     #[test]
     fn both_one_row_layouts_measure_the_same_line() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let m = reading_with_rows(2, 0);
         let offered = two_choices();
@@ -2342,7 +2342,7 @@ mod tests {
     /// discarded frame counted against the fit's re-measure passes.
     #[test]
     fn switching_to_beside_keeps_the_grid() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let m = reading_with_rows(2, 0);
         // A discarded frame is run again inside the same `run_ui`, so it
@@ -2626,7 +2626,7 @@ mod tests {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         for layout in LAYOUTS {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| {
                 draw_reading(ui, layout, &m, ReadoutChoices::default())
             });
@@ -2654,7 +2654,7 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         let choices = [choice(0x5111, "DC V", true)];
         for layout in LAYOUTS {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| {
                 draw_reading(ui, layout, &m, modes(&choices))
             });
@@ -2682,7 +2682,7 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         let choices = two_choices();
         for layout in LAYOUTS {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| {
                 draw_reading(ui, layout, &m, modes(&choices))
             });
@@ -2716,7 +2716,7 @@ mod tests {
     /// font cap is exercised — an 80 px readout must not open an 80 px list.
     #[test]
     fn picking_another_mode_reports_its_id() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
@@ -2762,7 +2762,7 @@ mod tests {
     /// Re-picking the live mode sends nothing to the meter.
     #[test]
     fn picking_the_live_mode_is_not_a_pick() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let tc = crate::settings::Settings::default().theme_colors(true);
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
@@ -2802,7 +2802,7 @@ mod tests {
     fn the_range_readout_stays_a_label_without_choices() {
         let m = ranged_reading();
         for choices in [vec![], vec![choice(2, "22V", true)]] {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| {
                 draw_reading(ui, "two-line", &m, ranges(&choices))
             });
@@ -2829,7 +2829,7 @@ mod tests {
         let m = ranged_reading();
         let choices = range_choices();
         for layout in LAYOUTS {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| {
                 draw_reading(ui, layout, &m, ranges(&choices))
             });
@@ -2847,7 +2847,7 @@ mod tests {
     fn the_single_line_layouts_show_no_range_without_choices() {
         let m = ranged_reading();
         for layout in ["inline", "compact"] {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| {
                 draw_reading(ui, layout, &m, modes(&two_choices()))
             });
@@ -2877,7 +2877,7 @@ mod tests {
             keys: &[],
         };
         for layout in LAYOUTS {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, both));
             let mode = node_id_labelled(&f.nodes, "Mode")
                 .unwrap_or_else(|| panic!("{layout}: no mode combo"));
@@ -2898,7 +2898,7 @@ mod tests {
             range: &ranges,
             keys: &[],
         };
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, both);
 
         run_frame(&ctx, vec![], &mut draw);
@@ -2912,7 +2912,7 @@ mod tests {
     /// `Setting::Range`, so the caller knows which setting to switch.
     #[test]
     fn picking_a_range_reports_its_id() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let m = ranged_reading();
         let choices = range_choices();
         let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, ranges(&choices));
@@ -2934,7 +2934,7 @@ mod tests {
     /// Re-picking the marked entry sends nothing to the meter.
     #[test]
     fn picking_the_live_range_is_not_a_pick() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let m = ranged_reading();
         let choices = range_choices();
         let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, ranges(&choices));
@@ -3014,12 +3014,12 @@ mod tests {
             )
         };
 
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let f = open_with_keyboard(&ctx, &mut draw);
         let live = node_id_labelled(&f.nodes, LIVE).expect("live entry");
         assert_eq!(f.focus, Some(live), "keyboard open");
 
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let f = run_frame(&ctx, vec![], &mut draw);
         let combo = centre(
             &node_with_role(&f.nodes, Role::ComboBox)
@@ -3038,7 +3038,7 @@ mod tests {
     #[test]
     fn arrow_down_then_enter_picks_the_next_entry() {
         let (m, choices, tc) = keyboard_fixture();
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
@@ -3083,7 +3083,7 @@ mod tests {
     #[test]
     fn home_end_and_arrow_up_stay_within_the_list() {
         let (m, choices, tc) = keyboard_fixture();
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
@@ -3118,7 +3118,7 @@ mod tests {
     #[test]
     fn escape_closes_the_list_without_a_pick() {
         let (m, choices, tc) = keyboard_fixture();
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
@@ -3152,7 +3152,7 @@ mod tests {
     fn tab_closes_the_list_without_a_pick() {
         let (m, choices, tc) = keyboard_fixture();
         for modifiers in [egui::Modifiers::NONE, egui::Modifiers::SHIFT] {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let mut draw = |ui: &mut Ui| {
                 show_reading_sized(
                     ui,
@@ -3227,7 +3227,7 @@ mod tests {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         for layout in LAYOUTS {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, keys(KEYS)));
             assert_eq!(f.picked, None, "{layout}: drawing is not picking");
             let (_, combo) = node_with_role(&f.nodes, Role::ComboBox)
@@ -3245,7 +3245,7 @@ mod tests {
         let mut draw = draw_with_keys("V");
         let marked = format!("{LIVE_CHOICE_MARK} V");
         for (entry, command) in [(marked.as_str(), "volts"), ("   Ω", "ohms")] {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             let f = run_frame(&ctx, vec![], &mut draw);
             let combo = centre(&node_with_role(&f.nodes, Role::ComboBox).expect("combo").1);
             click(&ctx, combo, &mut draw);
@@ -3267,7 +3267,7 @@ mod tests {
     #[test]
     fn opening_the_key_list_with_no_live_key_focuses_the_first() {
         let mut draw = draw_with_keys("A");
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         let f = open_with_keyboard(&ctx, &mut draw);
         let first = node_id_labelled(&f.nodes, "   V").expect("first entry, unmarked");
         assert_eq!(f.focus, Some(first));

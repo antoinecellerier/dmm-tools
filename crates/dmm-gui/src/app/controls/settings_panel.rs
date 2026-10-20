@@ -685,7 +685,7 @@ mod tests {
             app.update_check = UpdateCheck::new(Tag::parse("v9.9.9"));
             Self {
                 app,
-                ctx: egui::Context::default(),
+                ctx: crate::app::styled_context(),
                 screen: Rect::from_min_size(Pos2::ZERO, vec2(w, h)),
                 seconds: 0.0,
             }

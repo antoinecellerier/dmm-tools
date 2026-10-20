@@ -1101,6 +1101,16 @@ impl eframe::App for App {
     }
 }
 
+/// A context with the app's own styles, for headless tests: laid out on
+/// egui's defaults instead, a test measures text sizes the window never
+/// shows.
+#[cfg(test)]
+pub(crate) fn styled_context() -> egui::Context {
+    let ctx = egui::Context::default();
+    appearance::install_text_styles(&ctx);
+    ctx
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1345,7 +1355,7 @@ mod tests {
         h: f32,
         mut draw: impl FnMut(&mut App, &mut egui::Ui),
     ) -> Vec<(NodeId, Node)> {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
         let mut nodes = Vec::new();

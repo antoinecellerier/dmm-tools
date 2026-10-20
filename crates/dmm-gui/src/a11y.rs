@@ -313,7 +313,7 @@ mod tests {
             (ResizeAxis::Horizontal, egui::Key::ArrowLeft, -20.0),
             (ResizeAxis::Horizontal, egui::Key::ArrowUp, 0.0),
         ] {
-            let ctx = egui::Context::default();
+            let ctx = crate::app::styled_context();
             ctx.begin_pass(egui::RawInput {
                 events: vec![arrow(key)],
                 ..Default::default()
@@ -326,7 +326,7 @@ mod tests {
     /// Unfocused handle never resizes, whatever is pressed.
     #[test]
     fn arrow_resize_ignores_unfocused_handle() {
-        let ctx = egui::Context::default();
+        let ctx = crate::app::styled_context();
         ctx.begin_pass(egui::RawInput {
             events: vec![arrow(egui::Key::ArrowUp)],
             ..Default::default()
