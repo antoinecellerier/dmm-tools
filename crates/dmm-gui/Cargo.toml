@@ -9,7 +9,7 @@ description = "GUI application for USB and Bluetooth digital multimeters"
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
 dmm-shared = { path = "../dmm-shared" }
-eframe = { version = "0.36", features = ["glow", "wgpu"] }
+eframe = { version = "0.37", features = ["glow", "wgpu"] }
 egui_commonmark = "0.25"
 egui_plot = "0.37"
 raw-window-handle = "0.6"
