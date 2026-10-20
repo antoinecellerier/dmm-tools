@@ -200,7 +200,7 @@ Logging software:
 - [FlukeView Forms](https://www.fluke.com/en-us/product/fluke-software/fluke-fvf-sc2-flukeview-forms-software)
 - [UNI-T UT61E software (lygte-info review)](https://lygte-info.dk/review/DMMUNI-T%20UT61E%20UK.html)
 - [curioustech UT181A Windows app](https://www.curioustech.net/ut181a.html)
-- [QtDMM](https://github.com/jhol/qtdmm)
+- [QtDMM](https://github.com/qtdmm/qtdmm)
 - [UT61E-Toolkit](https://github.com/Jakeler/UT61E-Toolkit)
 - [ut61e_plus_logger](https://github.com/kevontheweb/ut61e_plus_logger)
 
