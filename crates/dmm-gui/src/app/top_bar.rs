@@ -41,9 +41,9 @@ impl App {
 
         // Cache left/right group widths from the previous frame to decide
         // whether both fit on one row.
-        let left_id = egui::Id::new("top_bar_left_w");
-        let right_id = egui::Id::new("top_bar_right_w");
-        let link_id = egui::Id::new("top_bar_link_w");
+        let left_id = egui::Id::unique("top_bar_left_w");
+        let right_id = egui::Id::unique("top_bar_right_w");
+        let link_id = egui::Id::unique("top_bar_link_w");
         let cached_left: f32 = ui.data(|d| d.get_temp(left_id)).unwrap_or(300.0);
         let cached_right: f32 = ui.data(|d| d.get_temp(right_id)).unwrap_or(200.0);
         // What the link suffix would add. Cached apart from the row's own

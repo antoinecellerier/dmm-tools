@@ -213,7 +213,7 @@ impl App {
         // The header's id, kept from the frame before: `CollapsingHeader`
         // makes it inside a `ui.vertical` of its own, so it can't be worked
         // out here, but it doesn't change from one frame to the next.
-        let header_key = ui.id().with("customize_colors_header");
+        let header_key = ui.scope_id().with("customize_colors_header");
         let header_id: Option<egui::Id> = ui.data(|d| d.get_temp(header_key));
         let clip = ui.clip_rect();
         let collapsing = egui::CollapsingHeader::new("Customize colors")
@@ -447,7 +447,7 @@ fn parse_hex(text: &str) -> Option<egui::Color32> {
 /// Where a swatch whose relink button was just pressed waits to take focus
 /// back on the next frame.
 fn relink_refocus_id() -> egui::Id {
-    egui::Id::new("color_relink_refocus")
+    egui::Id::unique("color_relink_refocus")
 }
 
 /// Render a color edit button with label. Returns true if the color was
@@ -762,6 +762,24 @@ fn color_edit(
             // Write back to Color32 and persist Hsva for next frame.
             color = egui::Color32::from(hsva);
             ui.ctx().data_mut(|d| d.insert_temp(hsva_cache_key, hsva));
+
+            // The focus lock filter set below only takes effect on the
+            // *next* frame because of its `had_focus_last_frame` gate. Cover
+            // the first frame by resetting `focus_direction` if any arrow is
+            // held — here, before the popup's own menu arrow navigation runs
+            // after this closure, which a reset after `show` came too late
+            // to stop.
+            let any_arrow_down = ui.ctx().input(|i| {
+                i.key_down(egui::Key::ArrowLeft)
+                    || i.key_down(egui::Key::ArrowRight)
+                    || i.key_down(egui::Key::ArrowUp)
+                    || i.key_down(egui::Key::ArrowDown)
+            });
+            let focused = ui.ctx().memory(|m| m.focused());
+            if any_arrow_down && focused.is_some_and(|id| id != btn_response.id) {
+                ui.ctx()
+                    .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+            }
         });
 
     let is_open_now = egui::Popup::is_id_open(ui.ctx(), popup_id);
@@ -787,20 +805,6 @@ fn color_edit(
                     },
                 );
             });
-            // `set_focus_lock_filter` only takes effect on the *next*
-            // frame because of its `had_focus_last_frame` gate. Cover the
-            // first-frame case by also resetting `focus_direction` if any
-            // arrow is held this frame.
-            let any_arrow_down = ui.ctx().input(|i| {
-                i.key_down(egui::Key::ArrowLeft)
-                    || i.key_down(egui::Key::ArrowRight)
-                    || i.key_down(egui::Key::ArrowUp)
-                    || i.key_down(egui::Key::ArrowDown)
-            });
-            if any_arrow_down {
-                ui.ctx()
-                    .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
-            }
         }
     }
     if was_open && !is_open_now {
@@ -822,6 +826,92 @@ fn color_edit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn key(key: egui::Key, pressed: bool) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// A lone Background swatch, one frame at a time, a second apart.
+    struct Swatch {
+        ctx: egui::Context,
+        overrides: PaletteOverrides,
+        colors: ThemeColors,
+        seconds: f64,
+    }
+
+    impl Swatch {
+        fn frame(&mut self, events: Vec<egui::Event>) {
+            self.seconds += 1.0;
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(800.0, 600.0),
+                )),
+                events,
+                time: Some(self.seconds),
+                ..Default::default()
+            };
+            let (overrides, colors) = (&mut self.overrides, &self.colors);
+            let mut out = self.ctx.run_ui(raw, |ui| {
+                color_edit(ui, PaletteField::Background, overrides, colors, colors);
+            });
+            out.textures_delta.clear();
+        }
+
+        fn focused_rect(&self) -> Option<egui::Rect> {
+            let id = self.ctx.memory(|m| m.focused())?;
+            Some(self.ctx.read_response(id)?.rect)
+        }
+    }
+
+    /// An arrow held on the frame a picker slider takes focus adjusts the
+    /// slider and leaves focus on it: egui's own arrow navigation, in the
+    /// popup and in menus, must not move it to a neighbour.
+    #[test]
+    fn an_arrow_on_a_newly_focused_slider_keeps_focus_there() {
+        let mut swatch = Swatch {
+            ctx: crate::app::styled_context(),
+            overrides: PaletteOverrides::default(),
+            colors: crate::settings::Settings::default().theme_colors(true),
+            seconds: 0.0,
+        };
+        swatch.frame(vec![]);
+        swatch.frame(vec![key(egui::Key::Tab, true), key(egui::Key::Tab, false)]);
+        swatch.frame(vec![
+            key(egui::Key::Enter, true),
+            key(egui::Key::Enter, false),
+        ]);
+        swatch.frame(vec![]);
+        // Tab to the saturation-value square.
+        let mut square = None;
+        for _ in 0..12 {
+            swatch.frame(vec![key(egui::Key::Tab, true), key(egui::Key::Tab, false)]);
+            if let Some(rect) = swatch.focused_rect()
+                && rect.width() >= 50.0
+                && (rect.width() - rect.height()).abs() < 2.0
+            {
+                square = Some(rect);
+                break;
+            }
+        }
+        let square = square.expect("Tab reaches the saturation-value square");
+        swatch.frame(vec![key(egui::Key::ArrowUp, true)]);
+        swatch.frame(vec![]);
+        swatch.frame(vec![key(egui::Key::ArrowUp, false)]);
+        swatch.frame(vec![]);
+        assert_eq!(swatch.focused_rect(), Some(square));
+        assert_ne!(
+            swatch.overrides,
+            PaletteOverrides::default(),
+            "the arrow moved the colour"
+        );
+    }
 
     #[test]
     fn the_hex_field_reads_what_it_writes_and_what_is_pasted() {

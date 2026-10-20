@@ -52,18 +52,42 @@ pub(super) struct UiColorKey {
 /// than at ~20 call sites. `apply_zoom` scales on top of this.
 pub(super) const SMALL_TEXT_SIZE: f32 = 11.0;
 
-/// Raise egui's small text style to the 11 pt floor.
+/// Button padding and row height, as egui had them before 0.37 doubled the
+/// padding: the meter's buttons stay four to a line in the side panel and
+/// the graph toolbar fits a narrow window.
+const BUTTON_PADDING: egui::Vec2 = egui::vec2(4.0, 1.0);
+const ROW_HEIGHT: f32 = 18.0;
+
+/// Widget corners as egui drew them before 0.37 rounded them to 6 pt.
+fn compact_corners(visuals: &mut egui::Visuals) {
+    let w = &mut visuals.widgets;
+    for state in [
+        &mut w.noninteractive,
+        &mut w.inactive,
+        &mut w.active,
+        &mut w.open,
+    ] {
+        state.corner_radius = egui::CornerRadius::same(2);
+    }
+    w.hovered.corner_radius = egui::CornerRadius::same(3);
+}
+
+/// Raise egui's small text style to the 11 pt floor and keep the compact
+/// button spacing and corners.
 ///
-/// `all_styles_mut`, not `style_mut`: egui 0.36 keeps a separate `Style` per
+/// `all_styles_mut`, not `style_mut`: egui keeps a separate `Style` per
 /// theme, and `apply_theme` switches between them with `set_visuals`, which
-/// replaces only `style.visuals` and leaves `text_styles` alone. Setting just
-/// the active theme's style would leave the other theme at 9 pt.
-pub(super) fn install_text_styles(ctx: &egui::Context) {
+/// replaces only `style.visuals` and leaves the rest alone. Setting just the
+/// active theme's style would leave the other theme at 9 pt.
+pub(super) fn install_styles(ctx: &egui::Context) {
     ctx.all_styles_mut(|style| {
         style.text_styles.insert(
             egui::TextStyle::Small,
             egui::FontId::new(SMALL_TEXT_SIZE, egui::FontFamily::Proportional),
         );
+        style.spacing.button_padding = BUTTON_PADDING;
+        style.spacing.interact_size.y = ROW_HEIGHT;
+        compact_corners(&mut style.visuals);
     });
 }
 
@@ -189,11 +213,13 @@ impl App {
         if self.applied.theme != Some(target) {
             // Only on change: set_visuals every frame resets egui's internal
             // panel state (resize positions, scroll offsets).
-            ctx.set_visuals(if dark {
+            let mut visuals = if dark {
                 egui::Visuals::dark()
             } else {
                 egui::Visuals::light()
-            });
+            };
+            compact_corners(&mut visuals);
+            ctx.set_visuals(visuals);
             self.applied.theme = Some(target);
             self.applied.ui_colors = None; // force reapply on top of new base
         }
@@ -560,7 +586,8 @@ mod tests {
             let style = ctx.global_style();
             let w = &style.visuals.widgets;
             assert_eq!(
-                w.inactive.fg_stroke.color, stock.widgets.inactive.fg_stroke.color,
+                w.inactive.fg_stroke.color,
+                crate::theme::default_button_text(dark),
                 "dark={dark}"
             );
             assert_eq!(
@@ -800,13 +827,26 @@ mod tests {
         );
     }
 
+    /// `apply_theme` puts egui's stock visuals back, so it has to set the
+    /// compact corners again or a theme change brings back egui's 6 pt ones.
+    #[test]
+    fn widget_corners_stay_compact_through_a_theme_change() {
+        for dark in [true, false] {
+            let (ctx, _app) = themed_app(dark, PaletteOverrides::default());
+            let widgets = &ctx.global_style().visuals.widgets;
+            let same = egui::CornerRadius::same;
+            assert_eq!(widgets.inactive.corner_radius, same(2), "dark: {dark}");
+            assert_eq!(widgets.hovered.corner_radius, same(3), "dark: {dark}");
+        }
+    }
+
     /// Both themes, because egui keeps a `Style` per theme and `apply_theme`
     /// swaps between them: raising only the active one would leave `.small()`
     /// at egui's 9 pt after the first theme switch.
     #[test]
     fn small_text_style_meets_the_font_size_floor_in_both_themes() {
         let ctx = egui::Context::default();
-        install_text_styles(&ctx);
+        install_styles(&ctx);
         for theme in [egui::Theme::Dark, egui::Theme::Light] {
             let style = ctx.style_of(theme);
             assert_eq!(
@@ -814,6 +854,8 @@ mod tests {
                 SMALL_TEXT_SIZE,
                 "{theme:?} small text style is below the 11 pt floor"
             );
+            assert_eq!(style.spacing.button_padding, BUTTON_PADDING, "{theme:?}");
+            assert_eq!(style.spacing.interact_size.y, ROW_HEIGHT, "{theme:?}");
         }
     }
 }

@@ -276,7 +276,7 @@ impl App {
         // Tab navigation skip widgets in the layers below — i.e. it actually
         // traps keyboard focus inside the dialog. Window does not do this.
         let modal_response =
-            egui::Modal::new(egui::Id::new("shortcut_help_modal")).show(ctx, |ui| {
+            egui::Modal::new(egui::Id::unique("shortcut_help_modal")).show(ctx, |ui| {
                 ui.set_max_width(if columns > 1 {
                     let n = columns as f32;
                     n * COLUMN_WIDTH + (n - 1.0) * gap.x
@@ -513,7 +513,7 @@ mod tests {
     }
 
     fn modal_rect(ctx: &egui::Context) -> Rect {
-        egui::AreaState::load(ctx, Id::new("shortcut_help_modal"))
+        egui::AreaState::load(ctx, Id::unique("shortcut_help_modal"))
             .expect("the modal registers an area")
             .rect()
     }

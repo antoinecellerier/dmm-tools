@@ -3892,6 +3892,7 @@ fn wheel_event(modifiers: egui::Modifiers) -> egui::Event {
         // pass instead of smoothing it out over the next few.
         delta: egui::vec2(0.0, 4.0),
         phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
         modifiers,
     }
 }

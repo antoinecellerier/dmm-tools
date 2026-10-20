@@ -337,7 +337,7 @@ fn show_aux_rows(
     let mut rects: Vec<AuxRowRects> = Vec::with_capacity(m.aux_values.len());
     // A grid rather than a stack of horizontal rows so labels, digits and
     // timestamps line up in columns however long the individual strings are.
-    ui.scope_builder(UiBuilder::new().id(id), |ui| {
+    ui.scope_builder(UiBuilder::new().scope_id(id), |ui| {
         Grid::new("aux_rows")
             .num_columns(3)
             .spacing([aux_column_gap(size), AUX_ROW_GAP])
@@ -359,7 +359,7 @@ fn show_aux_rows(
 
 /// The id every layout gives the sub-value grid drawn into `ui`.
 fn aux_grid_id(ui: &Ui) -> Id {
-    ui.id().with("aux_rows")
+    ui.scope_id().with("aux_rows")
 }
 
 /// The reading's digits, led by its own name when it has one ("DC" beside an
@@ -643,15 +643,18 @@ fn show_dropdown(
             // taller content down rather than over the row above (the quirk
             // noted on the sub-value grid). Start that row at the box's own
             // height — egui's text-or-icon height plus the button padding —
-            // so a big-meter readout stays centred beside its label.
-            let box_height = row_height.max(spacing.icon_width) + 2.0 * spacing.button_padding.y;
+            // so a big-meter readout stays centred beside its label. No
+            // vertical padding: the box is the label's height, so it also
+            // sits level in a wrapped row, which aligns tops.
+            spacing.button_padding.y = 0.0;
+            let box_height = row_height.max(spacing.icon_width);
             spacing.interact_size.y = spacing.interact_size.y.max(box_height);
             // The interactive colour, not the label's weak one: this is a
             // control, and it has to clear the text contrast bar as one.
             let text_color = ui.visuals().text_color();
-            let combo = |combo: ComboBox| {
-                combo
-                    .width(0.0)
+            // Called through the type, as in `device_dropdown`.
+            let combo = |combo| {
+                ComboBox::width(combo, 0.0)
                     // egui's default cap scrolls a list of ten keys; let it
                     // grow to the window, scrolling only when the window is
                     // shorter.
@@ -736,11 +739,11 @@ pub(crate) fn choice_entry_text(text: &str, live: bool) -> String {
 /// elsewhere. The mechanisms are the ones `color_edit` uses for its picker:
 /// a was-open flag to see the open and close transitions, consumed keys plus
 /// a cancelled focus move, and a focus lock filter on the entry.
-pub(crate) fn listbox_dropdown<R>(
+pub(crate) fn listbox_dropdown<'a, R>(
     ui: &mut Ui,
     id_salt: &'static str,
     layout: impl Fn() -> usize,
-    combo: impl FnOnce(ComboBox) -> ComboBox,
+    combo: impl FnOnce(ComboBox<'a>) -> ComboBox<'a>,
     add_entries: impl FnOnce(&mut Ui, bool) -> Option<R>,
 ) -> (Response, Option<R>) {
     let ctx = ui.ctx().clone();
@@ -1625,7 +1628,7 @@ pub fn show_reading_large(
         .then(|| no_reading.layout_ratios(ui))
         .flatten();
     let ratios = own_ratios.as_ref().unwrap_or(ratios);
-    let last_id = ui.id().with("big_meter_last_fit");
+    let last_id = ui.scope_id().with("big_meter_last_fit");
     let last: Option<LastFit> = ui.data(|d| d.get_temp(last_id));
     // Laid out at the size drawn last, scaled from there: text does not
     // scale exactly, but at the size it was laid out at the estimate is the

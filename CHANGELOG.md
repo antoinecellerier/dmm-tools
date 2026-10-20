@@ -6,6 +6,7 @@
 
 - **An alarm marks each reading that crosses a low or high limit**
 - **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
+- **Tab no longer stops on the graph's axes** — they were two Tab stops with no focus ring.
 
 ### CLI
 

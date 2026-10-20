@@ -9,9 +9,12 @@ description = "GUI application for USB and Bluetooth digital multimeters"
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
 dmm-shared = { path = "../dmm-shared" }
-eframe = { version = "0.36", features = ["glow", "wgpu"] }
-egui_commonmark = "0.25"
-egui_plot = "0.37"
+eframe = { version = "0.37", features = ["glow", "wgpu"] }
+# egui 0.37 stopped bundling the emoji fonts that draw our symbols (⚠ ✔ ↗ ▶ ⊞);
+# without them each OS draws its own, colour emoji included.
+egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
+egui_commonmark = "0.26"
+egui_plot = "0.38"
 raw-window-handle = "0.6"
 chrono.workspace = true
 csv.workspace = true

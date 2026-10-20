@@ -136,7 +136,7 @@ pub fn show_specs(
     );
     response.widget_info(|| {
         egui::WidgetInfo::labeled(
-            egui::WidgetType::CollapsingHeader,
+            egui::Role::DisclosureTriangle,
             ui.is_enabled(),
             "Specifications",
         )

@@ -118,7 +118,7 @@ fn marker_flags(ui: &Ui, markers: &[(f32, u32, &str)], plot: egui::Rect) -> Vec<
 /// The plot's right-click menu. One plot, so one id, known before the plot
 /// is drawn.
 fn plot_menu_id() -> egui::Id {
-    egui::Id::new("main_plot_menu")
+    egui::Id::unique("main_plot_menu")
 }
 
 /// One marker's flag on the plot: the line it points at, where its tag is
@@ -2019,13 +2019,12 @@ impl Graph {
             let response = ui
                 .interact(
                     flag.rect,
-                    ui.id().with(("marker_flag", flag.number)),
+                    ui.scope_id().with(("marker_flag", flag.number)),
                     egui::Sense::CLICK,
                 )
                 .on_hover_text(&edit)
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
-            response
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &edit));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &edit));
             if response.clicked() {
                 clicked = Some(flag.number);
             }

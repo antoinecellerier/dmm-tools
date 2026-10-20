@@ -54,7 +54,7 @@ use crate::settings::{
     DeferredSave, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, SaveDue, Settings, ThemeChoice,
     ThemeMode,
 };
-use appearance::{UiColorKey, font_definitions, frame_panel, install_text_styles, on_frame};
+use appearance::{UiColorKey, font_definitions, frame_panel, install_styles, on_frame};
 use capture::Capture;
 use connection::RemoteCommand;
 use connection_issue::ConnectionIssue;
@@ -437,7 +437,7 @@ impl App {
         settings: Settings,
         cli: crate::CliOverrides,
     ) -> Self {
-        install_text_styles(&cc.egui_ctx);
+        install_styles(&cc.egui_ctx);
         cc.egui_ctx.set_fonts(font_definitions());
         // Asked once, here: the display handle says which backend the window
         // actually got, where `WAYLAND_DISPLAY` only says which one is on
@@ -957,10 +957,12 @@ impl eframe::App for App {
         // Dynamic minimum window size derived from actual rendered content.
         // Reading dimensions come from cached ratios × minimum big meter
         // font size; top bar widths come from previous-frame measurements.
-        let bar_left_w: f32 =
-            ctx.data(|d| d.get_temp(egui::Id::new("top_bar_left_w")).unwrap_or(300.0));
+        let bar_left_w: f32 = ctx.data(|d| {
+            d.get_temp(egui::Id::unique("top_bar_left_w"))
+                .unwrap_or(300.0)
+        });
         let bar_right_w: f32 = ctx.data(|d| {
-            d.get_temp(egui::Id::new("top_bar_right_w"))
+            d.get_temp(egui::Id::unique("top_bar_right_w"))
                 .unwrap_or(120.0)
         });
         let bar_min_w = bar_left_w.max(bar_right_w) + 16.0;
@@ -1003,7 +1005,7 @@ impl eframe::App for App {
             self.show_meter_only(ui, &ctx, minimal);
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
-            let reading_panel = egui::Panel::left("reading_panel")
+            let reading_panel = egui::Panel::left(layout::READING_PANEL)
                 .default_size(self.settings.reading_panel_width)
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
@@ -1018,8 +1020,8 @@ impl eframe::App for App {
             // action. Paint a focus ring and wire up Left/Right arrow keys
             // to resize the panel, consistent with the recording-panel
             // divider. The handle id is derived from the panel id — see
-            // `resize_widget_id` at `panel.rs:36` in egui 0.36 for the salt.
-            let reading_panel_id = egui::Id::new("reading_panel");
+            // `resize_widget_id` at `panel.rs:36` in egui 0.37 for the salt.
+            let reading_panel_id = layout::reading_panel_id(ui);
             let reading_panel_resize_id = reading_panel_id.with("__resize");
             crate::a11y::set_accessible_label(
                 ui,
@@ -1081,7 +1083,7 @@ impl eframe::App for App {
         if self.capture.recording.active {
             ctx.request_repaint_after(RECORDING_LABEL_TICK);
         }
-        self.track_layout(&ctx);
+        self.track_layout(ui);
         // Last, so a change made this frame is seen this frame. A paused or
         // disconnected app draws nothing by itself, so a pending save asks
         // for the frame it is due in.
@@ -1102,12 +1104,12 @@ impl eframe::App for App {
 }
 
 /// A context with the app's own styles, for headless tests: laid out on
-/// egui's defaults instead, a test measures text sizes the window never
-/// shows.
+/// egui's defaults instead, a test measures spacing and text sizes the
+/// window never shows.
 #[cfg(test)]
 pub(crate) fn styled_context() -> egui::Context {
     let ctx = egui::Context::default();
-    appearance::install_text_styles(&ctx);
+    appearance::install_styles(&ctx);
     ctx
 }
 

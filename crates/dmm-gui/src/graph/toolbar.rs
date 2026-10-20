@@ -72,9 +72,9 @@ fn group_caption(ui: &mut Ui, text: &str) {
 ///
 /// The chips are `selectable_label`s whose visible text is just the
 /// sub-value's name, so a screen reader would otherwise announce a **Plot:**
-/// chip and a **Show:** chip identically ("T2, button"). egui 0.36 never
-/// calls AccessKit's `set_description`, so the hover text cannot carry the
-/// distinction — it has to be in the name.
+/// chip and a **Show:** chip identically ("T2, button"). egui passes the
+/// hover text on only as the description, which a screen reader reads after
+/// the name if at all, so the distinction has to be in the name.
 /// `series` is the chip's series by name: a sub-value's label, or the name
 /// the meter gives its main reading; `None` for an unnamed main reading.
 pub(super) fn series_chip_label(series: Option<&str>) -> String {

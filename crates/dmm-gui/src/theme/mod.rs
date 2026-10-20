@@ -250,9 +250,8 @@ const PRESET_DEFAULT: PresetColors = PresetColors {
     // Light is egui's gray(80). Dark is *not* egui's gray(140): that sits
     // 5.12:1 on gray(27), leaving no room for a secondary tier that still
     // clears AA — 135 would be a tier in name only. gray(180) is 8.31:1, and
-    // it is the grey egui already uses for button text
-    // (`widgets.inactive.fg_stroke`), so labels now match the buttons beside
-    // them.
+    // it is the grey button captions keep (`default_button_text`), so labels
+    // match the buttons beside them.
     text: ColorPair::new(Color32::from_gray(180), Color32::from_gray(80)),
     // Paired with the text above as the dimmer of two visible tiers: 135 vs
     // 180 on gray(27) reads as secondary and still clears AA at 4.79:1
@@ -530,6 +529,17 @@ fn egui_visuals(dark: bool) -> egui::Visuals {
     }
 }
 
+/// The caption a button gets when the user has set no text colour: egui's,
+/// except dark mode keeps the gray(180) egui used before 0.37 brightened it
+/// to gray(215), so it still matches the Default palette's labels.
+pub(crate) fn default_button_text(dark: bool) -> Color32 {
+    if dark {
+        Color32::from_gray(180)
+    } else {
+        egui_visuals(dark).widgets.inactive.fg_stroke.color
+    }
+}
+
 /// WCAG 2.1 relative luminance of an sRGB colour.
 fn luminance(c: Color32) -> f64 {
     fn lin(c: u8) -> f64 {
@@ -693,15 +703,13 @@ impl ThemeColors {
     ///
     /// No override slot and no `PaletteField`, like `button_hover_active`: it
     /// follows the text colour, but only once the user has actually customised
-    /// it. Left alone it returns the caption colour egui itself ships — read
-    /// from `Visuals` rather than copied as a literal, so it keeps tracking
-    /// egui across upgrades (light captions stay egui's gray(60), not the
-    /// palette's gray(80) label text).
+    /// it. Left alone it returns [`default_button_text`] (light captions stay
+    /// egui's gray(60), not the palette's gray(80) label text).
     pub(crate) fn button_text(&self) -> Color32 {
         if self.overrides.text.is_some() {
             self.text()
         } else {
-            egui_visuals(self.dark).widgets.inactive.fg_stroke.color
+            default_button_text(self.dark)
         }
     }
 
@@ -1473,11 +1481,11 @@ mod tests {
         }
     }
 
-    /// Button captions and emphasised text stay on the values egui ships
-    /// until the user customises Text. Compared against `Visuals`, never a
-    /// literal, so the fallback keeps tracking whatever egui ships.
+    /// Button captions and emphasised text stay on their defaults until the
+    /// user customises Text: [`default_button_text`], and egui's own value
+    /// for emphasis, read from `Visuals` so it keeps tracking egui.
     #[test]
-    fn button_and_strong_text_track_egui_when_unset() {
+    fn button_and_strong_text_keep_their_defaults_when_unset() {
         for preset in [
             ColorPreset::Default,
             ColorPreset::HighContrast,
@@ -1488,8 +1496,8 @@ mod tests {
                 let stock = egui_visuals(dark);
                 assert_eq!(
                     tc.button_text(),
-                    stock.widgets.inactive.fg_stroke.color,
-                    "{preset:?} dark={dark}: button captions left egui's value"
+                    default_button_text(dark),
+                    "{preset:?} dark={dark}: button captions left the default"
                 );
                 assert_eq!(
                     tc.strong_text(),
@@ -1559,7 +1567,7 @@ mod tests {
             let stock = egui_visuals(dark);
             assert_eq!(
                 tc.button_text(),
-                stock.widgets.inactive.fg_stroke.color,
+                default_button_text(dark),
                 "dark={dark}: a background override moved the button caption"
             );
             assert_eq!(

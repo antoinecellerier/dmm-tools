@@ -14,6 +14,15 @@ use crate::settings::DEFAULT_WINDOW_SIZE;
 use crate::specs;
 use std::time::Instant;
 
+/// The wide layout's resizable reading panel, as `Panel::left` names it.
+pub(super) const READING_PANEL: &str = "reading_panel";
+
+/// The id egui keeps the reading panel's state under when it is shown in
+/// `ui`: the panel's salt under `ui`'s scope, the way `Panel` derives it.
+pub(super) fn reading_panel_id(ui: &Ui) -> egui::Id {
+    ui.scope_id().with_salt(egui::IdSalt::new(READING_PANEL))
+}
+
 /// Which of the two multi-panel layouts the reading column is rendered in.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum ContentLayout {
@@ -194,7 +203,10 @@ impl App {
     ///   window would cramp the next launch's full layout;
     /// - the maximized state on macOS after launch, which winit only reports
     ///   when the window is created.
-    pub(super) fn track_layout(&mut self, ctx: &egui::Context) {
+    ///
+    /// `ui` is the one the reading panel is shown in, whose id it is under.
+    pub(super) fn track_layout(&mut self, ui: &Ui) {
+        let ctx = ui.ctx();
         let (maximized, fullscreen, minimized) = ctx.input(|i| {
             let v = i.viewport();
             (v.maximized, v.fullscreen, v.minimized)
@@ -219,7 +231,7 @@ impl App {
             }
         }
         // egui stores the panel's state when a drag ends, not during it.
-        if let Some(panel) = egui::PanelState::load(ctx, egui::Id::new("reading_panel")) {
+        if let Some(panel) = egui::PanelState::load(ctx, reading_panel_id(ui)) {
             let width = panel.outer_rect.width().round();
             if width.is_finite() && width != self.settings.reading_panel_width {
                 self.settings.reading_panel_width = width;
@@ -420,7 +432,7 @@ mod tests {
                         app.show_settings_panel(ui);
                     });
                     columns = Some(if wide {
-                        let reading = egui::Panel::left("reading_panel")
+                        let reading = egui::Panel::left(READING_PANEL)
                             .default_size(SIDE_PANEL_DEFAULT_WIDTH)
                             .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                             .resizable(true)
@@ -465,7 +477,11 @@ mod tests {
             column.content_size.y,
             column.inner_rect.height(),
         );
-        assert_eq!(column.state.offset, egui::Vec2::ZERO, "{name} is scrolled");
+        assert_eq!(
+            column.state.clamped_offset(),
+            egui::Vec2::ZERO,
+            "{name} is scrolled"
+        );
     }
 
     /// The Markers list takes only the room the recording panel has, with a
@@ -565,7 +581,7 @@ mod tests {
                 viewports: std::iter::once((egui::ViewportId::ROOT, info.clone())).collect(),
                 ..Default::default()
             };
-            let mut out = ctx.run_ui(raw, |ui| app.track_layout(ui.ctx()));
+            let mut out = ctx.run_ui(raw, |ui| app.track_layout(ui));
             out.textures_delta.clear();
         }
     }
@@ -577,6 +593,38 @@ mod tests {
             minimized: Some(false),
             ..Default::default()
         }
+    }
+
+    /// The width is read from the state egui keeps under the panel's own id,
+    /// which nothing checks at compile time: egui 0.37 moved panel ids under
+    /// the parent ui's scope, and the width silently stopped being kept.
+    #[test]
+    fn the_reading_panel_width_is_kept() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let ctx = crate::app::styled_context();
+        let width = app.settings.reading_panel_width + 40.0;
+        for _ in 0..2 {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1200.0, 800.0),
+                )),
+                viewports: std::iter::once((egui::ViewportId::ROOT, normal())).collect(),
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(raw, |ui| {
+                egui::Panel::left(READING_PANEL)
+                    .default_size(width)
+                    .resizable(true)
+                    .frame(egui::Frame::NONE)
+                    // Filled, as the reading column fills it: an empty panel
+                    // shrinks to its minimum.
+                    .show(ui, |ui| ui.allocate_space(ui.available_size()));
+                app.track_layout(ui);
+            });
+            out.textures_delta.clear();
+        }
+        assert_eq!(app.settings.reading_panel_width, width);
     }
 
     /// A resized window is kept in OS logical points whatever the UI zoom;

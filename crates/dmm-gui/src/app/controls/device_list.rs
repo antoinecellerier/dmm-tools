@@ -133,15 +133,16 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
         - 2.0 * ui.spacing().menu_margin.sum().y;
     let height = below.max(MIN_DEVICE_LIST_ROWS * row);
 
-    let combo = |combo: ComboBox| {
-        combo
-            .selected_text(label)
-            // On its own row, the box would otherwise widen past a narrow
-            // panel for a long name; the hover text gives it whole.
+    let shape = || list().columns.len();
+    // Called through the type: a `combo: ComboBox` annotation makes the
+    // closure generic over the box's lifetime, which egui 0.37's borrowed
+    // text no longer satisfies. On its own row, the box would otherwise widen
+    // past a narrow panel for a long name; the hover text gives it whole.
+    let combo = |combo| {
+        ComboBox::selected_text(combo, label)
             .wrap_mode(TextWrapMode::Truncate)
             .height(height)
     };
-    let shape = || list().columns.len();
     let (response, picked) = listbox_dropdown(ui, "device", shape, combo, |ui, was_open| {
         let DeviceListLayout {
             groups,

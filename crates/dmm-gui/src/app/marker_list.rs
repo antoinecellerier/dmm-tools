@@ -597,7 +597,7 @@ impl App {
                 // be mixed with a count of the rows drawn before it.
                 let ui = &mut ui.new_child(
                     egui::UiBuilder::new()
-                        .id(egui::Id::new(("log_row", at)))
+                        .scope_id(egui::Id::unique(("log_row", at)))
                         .max_rect(egui::Rect::from_min_size(
                             origin + egui::vec2(0.0, geometry.top(r)),
                             egui::vec2(width, geometry.height(r) - row_spacing),
@@ -641,13 +641,13 @@ impl App {
                                         egui::pos2(tip.x, body.top()),
                                         body.max,
                                     ),
-                                    egui::Id::new(("marker_add", s.measurement.timestamp)),
+                                    egui::Id::unique(("marker_add", s.measurement.timestamp)),
                                     egui::Sense::CLICK,
                                 )
                                 .on_hover_text(&add)
                                 .on_hover_cursor(egui::CursorIcon::PointingHand);
                             response.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &add)
+                                egui::WidgetInfo::labeled(egui::Role::Button, true, &add)
                             });
                             let stroke = egui::Stroke::new(
                                 if response.hovered() { 1.5 } else { 1.0 },
@@ -679,7 +679,7 @@ impl App {
                 // Keyed by the reading, not the number: numbers start
                 // over once the list empties, and a new marker must not
                 // inherit an old note's undo history.
-                let id = egui::Id::new(("marker_note", at));
+                let id = egui::Id::unique(("marker_note", at));
                 let on_graph = graph.holds(at);
                 // One per marker row, and every marker row is drawn, in order.
                 let Some((text, tag)) = labels.next() else {
@@ -730,7 +730,7 @@ impl App {
                         let (body, tip) = tag_shape(slot, galley.size().x);
                         let response = ui.interact(
                             egui::Rect::from_min_max(egui::pos2(tip.x, body.top()), body.max),
-                            egui::Id::new(("marker_tag", at)),
+                            egui::Id::unique(("marker_tag", at)),
                             egui::Sense::click(),
                         );
                         let painter = ui.painter();
@@ -751,11 +751,7 @@ impl App {
                         );
                         painter.galley(body.center() - galley.size() / 2.0, galley, tag_text);
                         response.widget_info(|| {
-                            egui::WidgetInfo::labeled(
-                                egui::WidgetType::Button,
-                                ui.is_enabled(),
-                                &show,
-                            )
+                            egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), &show)
                         });
                         response
                     };
@@ -874,8 +870,8 @@ impl App {
             // sight, and bring the one they land on into view.
             crate::a11y::scroll_to_focus(ui);
         });
-        list.following =
-            output.state.offset.y + output.inner_rect.height() >= output.content_size.y - 1.0;
+        list.following = output.state.clamped_offset().y + output.inner_rect.height()
+            >= output.content_size.y - 1.0;
 
         if let Some(at) = reveal {
             self.graph.reveal(at);
@@ -1405,7 +1401,7 @@ mod tests {
             self.app
                 .markers
                 .iter()
-                .find(|m| egui::Id::new(("marker_note", m.at)) == focused)
+                .find(|m| egui::Id::unique(("marker_note", m.at)) == focused)
                 .map(|m| m.number)
         }
 

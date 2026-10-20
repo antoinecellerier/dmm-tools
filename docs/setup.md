@@ -172,7 +172,7 @@ xattr -dr com.apple.quarantine .
 ### "No meter found over USB or Bluetooth"
 
 The GUI puts the steps for your platform on screen as its [connection
-help](../assets/gui-connection-help.png); the full list is:
+help](../assets/gui-connection-help.webp); the full list is:
 
 - Verify the USB cable is plugged in
 - **Linux:** `lsusb | grep -iE '10c4:ea80|1a86:e429|1a86:e008|0820:0001'` — one of the cables should be listed. If missing, try another port; if listed but still not found, check the udev rule (see above)

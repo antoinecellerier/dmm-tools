@@ -304,7 +304,7 @@ mod tests {
     /// Focused handle: the axis arrows produce ±step, off-axis arrows produce 0.
     #[test]
     fn arrow_resize_deltas() {
-        let id = egui::Id::new("handle");
+        let id = egui::Id::unique("handle");
         for (axis, key, want) in [
             (ResizeAxis::Vertical, egui::Key::ArrowUp, 20.0),
             (ResizeAxis::Vertical, egui::Key::ArrowDown, -20.0),
@@ -331,7 +331,7 @@ mod tests {
             events: vec![arrow(egui::Key::ArrowUp)],
             ..Default::default()
         });
-        let delta = arrow_resize(&ctx, egui::Id::new("handle"), ResizeAxis::Vertical, 20.0);
+        let delta = arrow_resize(&ctx, egui::Id::unique("handle"), ResizeAxis::Vertical, 20.0);
         assert_eq!(delta, 0.0);
     }
 }

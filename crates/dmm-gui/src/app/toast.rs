@@ -120,7 +120,7 @@ impl App {
         let offset = egui::vec2(-TOAST_MARGIN, anchor_top - content.top() + TOAST_MARGIN);
 
         let mut dismissed = false;
-        egui::Area::new(egui::Id::new("toast"))
+        egui::Area::new(egui::Id::unique("toast"))
             .order(egui::Order::Foreground)
             .anchor(egui::Align2::RIGHT_TOP, offset)
             .show(ctx, |ui| {
@@ -270,12 +270,12 @@ mod tests {
         /// window's minimum width.
         fn bar_left_width(&self) -> f32 {
             self.ctx
-                .data(|d| d.get_temp(Id::new("top_bar_left_w")))
+                .data(|d| d.get_temp(Id::unique("top_bar_left_w")))
                 .expect("the bar caches its left width every frame")
         }
 
         fn toast_rect(&self) -> Rect {
-            egui::AreaState::load(&self.ctx, Id::new("toast"))
+            egui::AreaState::load(&self.ctx, Id::unique("toast"))
                 .expect("a visible toast registers an area")
                 .rect()
         }

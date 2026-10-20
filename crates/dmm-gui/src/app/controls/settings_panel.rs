@@ -175,7 +175,7 @@ const ZOOM_FOLLOW_FRAMES: u8 = 3;
 /// The zoom last seen by the settings panel, and the frames left to follow
 /// the Zoom row for.
 fn zoom_follow_id() -> egui::Id {
-    egui::Id::new("settings_zoom_follow")
+    egui::Id::unique("settings_zoom_follow")
 }
 
 /// How tall the scrolling settings rows may be, given the window height and
@@ -649,13 +649,15 @@ mod tests {
     use crate::app::update_check::{Tag, UpdateCheck};
     use crate::settings::Settings;
     use eframe::egui::scroll_area::ScrollAreaOutput;
-    use eframe::egui::{Id, Pos2, Rect, vec2};
+    use eframe::egui::{Pos2, Rect, vec2};
 
     /// The settings rows laid out under the real bar row.
     struct SettingsFrame {
         ctx: egui::Context,
         /// Where the bar row ends: the rows must start below it.
         bar_bottom: f32,
+        /// The whole top panel: the bar row, the rows and the frame around them.
+        panel: Rect,
         scrolled: ScrollAreaOutput<()>,
         /// The AccessKit tree, empty unless the run enabled it.
         nodes: Vec<(egui::accesskit::NodeId, egui::accesskit::Node)>,
@@ -698,6 +700,7 @@ mod tests {
         /// A frame `secs` after the previous one.
         fn frame_after(&mut self, secs: f64, events: Vec<egui::Event>) -> SettingsFrame {
             let mut bar_bottom = 0.0;
+            let mut panel = Rect::NOTHING;
             let mut scrolled = None;
             let app = &mut self.app;
             self.seconds += secs;
@@ -716,12 +719,15 @@ mod tests {
                 |ui| {
                     // As the app does at the start of every frame.
                     app.apply_zoom(ui.ctx());
-                    egui::Panel::top("top_bar").show(ui, |ui| {
-                        let ctx = ui.ctx().clone();
-                        app.show_top_bar(ui, &ctx);
-                        bar_bottom = ui.min_rect().bottom();
-                        scrolled = app.show_settings_panel(ui);
-                    });
+                    panel = egui::Panel::top("top_bar")
+                        .show(ui, |ui| {
+                            let ctx = ui.ctx().clone();
+                            app.show_top_bar(ui, &ctx);
+                            bar_bottom = ui.min_rect().bottom();
+                            scrolled = app.show_settings_panel(ui);
+                        })
+                        .response
+                        .rect;
                 },
             );
             out.textures_delta.clear();
@@ -733,6 +739,7 @@ mod tests {
             SettingsFrame {
                 ctx: self.ctx.clone(),
                 bar_bottom,
+                panel,
                 scrolled: scrolled.expect("the settings are open"),
                 nodes,
                 focus,
@@ -1006,11 +1013,10 @@ mod tests {
     #[test]
     fn a_short_window_keeps_the_settings_panel_off_the_rest_of_it() {
         let frame = settings_panel(400.0, 220.0);
-        let panel = egui::PanelState::load(&frame.ctx, Id::new("top_bar")).expect("the panel ran");
         // The floor wins at this height, so the panel is the bar row, the
         // rows' cap, the two separators and the frame's margin — and the
         // rest of the window is left to the central panel.
-        let bottom = panel.outer_rect.bottom();
+        let bottom = frame.panel.bottom();
         assert!(
             bottom <= frame.bar_bottom + SETTINGS_MIN_HEIGHT + 32.0,
             "settings panel took {bottom} pt of a 220 pt window (bar ends at {})",
@@ -1049,8 +1055,7 @@ mod tests {
     fn a_tall_window_shows_every_row_with_nothing_scrolled() {
         // Tall enough for every row, wrapped at this width.
         let frame = settings_panel(400.0, 1200.0);
-        let panel = egui::PanelState::load(&frame.ctx, Id::new("top_bar")).expect("the panel ran");
-        let height = panel.outer_rect.height();
+        let height = frame.panel.height();
         assert!(
             height > SETTINGS_MIN_HEIGHT + 40.0,
             "settings panel is only {height} pt tall in a 1200 pt window"
@@ -1067,7 +1072,7 @@ mod tests {
             frame.scrolled.content_size.y,
             inner.height()
         );
-        assert_eq!(frame.scrolled.state.offset, egui::Vec2::ZERO);
+        assert_eq!(frame.scrolled.state.clamped_offset(), egui::Vec2::ZERO);
     }
 
     /// egui scrolls to a focused widget only when assistive tech asks, so
@@ -1096,7 +1101,7 @@ mod tests {
             };
             let inner = frame.scrolled.inner_rect;
             let content = Rect::from_min_size(
-                inner.min - frame.scrolled.state.offset,
+                inner.min - frame.scrolled.state.unclamped_offset(),
                 frame.scrolled.content_size,
             );
             // Only the rows are the scroller's business; the bar row's
@@ -1106,7 +1111,7 @@ mod tests {
                 continue;
             }
             rows_focused += 1;
-            scrolled_down |= frame.scrolled.state.offset.y > 0.0;
+            scrolled_down |= frame.scrolled.state.clamped_offset().y > 0.0;
             assert!(
                 response.rect.top() >= inner.top() - 1.0
                     && response.rect.bottom() <= inner.bottom() + 1.0,
@@ -1310,7 +1315,7 @@ mod tests {
         run.ctx.enable_accesskit();
         run.frame(vec![]);
         let frame = run.frame(vec![]);
-        assert_eq!(frame.scrolled.state.offset, egui::Vec2::ZERO);
+        assert_eq!(frame.scrolled.state.clamped_offset(), egui::Vec2::ZERO);
         let header = node_bounds(&frame, "Customize colors");
         run.click(Pos2::new(
             ((header.x0 + header.x1) / 2.0) as f32,
@@ -1323,7 +1328,7 @@ mod tests {
         let frame = run.frame(vec![]);
         let inner = frame.scrolled.inner_rect;
         assert!(
-            frame.scrolled.state.offset.y > 0.0,
+            frame.scrolled.state.clamped_offset().y > 0.0,
             "nothing scrolled: content {:?} in {inner:?}",
             frame.scrolled.content_size
         );

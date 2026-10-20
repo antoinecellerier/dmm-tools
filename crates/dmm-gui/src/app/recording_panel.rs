@@ -317,7 +317,7 @@ impl App {
         let mut cancel = false;
         // egui::Modal rather than Window: it sets the modal layer, which traps
         // keyboard focus inside the dialog.
-        let modal = egui::Modal::new(egui::Id::new("confirm_discard_modal")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("confirm_discard_modal")).show(ctx, |ui| {
             ui.set_max_width(380.0);
             let (heading, text) = discard_prompt(action, unexported, markers);
             ui.heading(heading);
@@ -623,7 +623,7 @@ impl App {
             self.take_graph_actions();
 
             let sep = ui.separator();
-            let sep_id = ui.id().with("rec_resize");
+            let sep_id = ui.scope_id().with("rec_resize");
             let sep_response = ui
                 .interact(
                     sep.rect.expand2(egui::vec2(0.0, 4.0)),
@@ -1363,6 +1363,7 @@ mod tests {
                     unit: egui::MouseWheelUnit::Point,
                     delta: egui::vec2(0.0, delta),
                     phase: egui::TouchPhase::Move,
+                    source: egui::MouseWheelSource::Wheel,
                     modifiers: Modifiers::NONE,
                 };
                 run.frame(0.1, vec![egui::Event::PointerMoved(over_log), wheel]);

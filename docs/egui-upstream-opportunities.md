@@ -1,8 +1,8 @@
 # egui upstream opportunities
 
 Catalogue of accessibility, focus, and modal/popup gaps observed while
-implementing the `dmm-gui` accessibility pass against
-**egui 0.36.2** + **AccessKit 0.24** + **egui_plot 0.37**. Each entry
+implementing the `dmm-gui` accessibility pass, checked against
+**egui 0.37.0** + **AccessKit 0.25.1** + **egui_plot 0.38.0**. Each entry
 captures the symptom we hit, the root cause in the egui source (with
 `file:line`), and a concrete suggested fix worth raising upstream.
 
@@ -13,9 +13,9 @@ Each section is self-contained — copy and paste it into a GitHub issue
 and add a minimal repro.
 
 All file references resolve under
-`~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/egui-0.36.2/src/`
+`~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/egui-0.37.0/src/`
 unless otherwise noted. Every entry was re-verified against these versions
-on 2026-09-08; the **Where:** line numbers are for them.
+on 2026-10-20; the **Where:** line numbers are for them.
 
 **Local wrapper layer.** The recurring workaround patterns are
 encapsulated as two extension traits in `crates/dmm-gui/src/a11y.rs`:
@@ -78,16 +78,16 @@ shipped in egui 0.35, so nothing is gated on it any more.
 | 16 | `Modal::should_close` Escape carve-out | — | Not started | Issue-first (B) |
 | 8b | Rename `egui_wants_keyboard_input` | — | Not started | Issue-first (B) |
 | 14 | `top_modal_layer` one-frame staleness | — | Not started | Issue-first (B) |
-| 20 | Hover text as AccessKit description | — | Not started | Issue-first (B) |
+| 20 | Hover text as AccessKit description | — | Shipped in egui 0.37 | Issue-first (B) |
 | 4b | `accesskit_only` `widget_info` variant | — | Not started | Issue-first (D) |
-| 5 | Public landmark helper | — | Not started | Issue-first (D) |
+| 5 | Public landmark helper | — | Partly shipped in egui 0.37 (`UiBuilder::accessibility_role`) | Issue-first (D) |
 | 6b | Persistent AccessKit label API | — | Not started | Issue-first (D) |
-| 7 | `egui_plot::Plot` accessibility | — | Not started | Issue-first (D) |
+| 7 | `egui_plot::Plot` accessibility | — | Partly fixed in egui_plot 0.38 (axes not focusable) | Issue-first (D) |
 | 17 | `Popup::modal(true)` | — | Not started | Issue-first (D) |
 | 18 | Color-slider keyboard support | — | Not started | Issue-first (D) |
-| 19 | `Panel` resize handle a11y | — | Not started | Issue-first (D) |
+| 19 | `Panel` resize handle a11y | — | Partly shipped in egui 0.37 (AccessKit splitter, egui #8557) | Issue-first (D) |
 
-_Last updated: 2026-09-30._
+_Last updated: 2026-10-20._
 
 ## Table of contents
 
@@ -128,10 +128,10 @@ _Last updated: 2026-09-30._
 **Status:** Not started — Issue-first (B). The `set_value`-not-`set_label`
 branch may be intentional; confirm intent before a PR.
 
-**Where:** `response.rs:962-968`
+**Where:** `response.rs:1021-1027`
 
 ```rust
-if let Some(label) = info.label {
+if let Some(label) = info.label.filter(|label| !label.is_empty()) {
     if matches!(builder.role(), Role::Label) {
         builder.set_value(label);   // <-- value, not label
     } else {
@@ -164,25 +164,25 @@ where `set_label` works. See `show_top_bar_right` in
 ### 2. `Button` cannot carry a non-Button AccessKit role
 
 **Status:** **Queued next** — Direct PR; #8130 has merged, so the gate is
-lifted. Add `Button::color_swatch`/`role`. Plumbing exists:
-`WidgetType::ColorButton → Role::ColorWell` already in `response.rs`.
+lifted. Add `Button::color_swatch`/`role`. Plumbing is simpler since 0.37:
+`WidgetType` is a deprecated alias of `egui::Role` (`lib.rs:659`) and
+`WidgetInfo` carries the role, which `response.rs:1016` sets as is.
 
-**Where:** `response.rs:949`, `widgets/button.rs:391-403`
+**Where:** `response.rs:1016`, `widgets/button.rs:381-393`
 
-The `Button` widget always emits `WidgetType::Button` and so always
-ends up as `Role::Button`. There is no builder method to set a
-different `WidgetType` / role.
+The `Button` widget always emits `Role::Button`. There is no builder
+method to set a different role.
 
 **Symptom.** A `Button::new("").fill(color)` used as a color swatch
-loses the `Role::ColorWell` that `color_edit_button_srgba` emits via
-`WidgetType::ColorButton`. AT users hear "button" instead of "color
-picker".
+loses the `Role::ColorWell` that `color_edit_button_srgba` emits
+(named "Color", with the hex value, `widgets/color_picker.rs:154-159`).
+AT users hear "button" instead of "color picker".
 
 **Workaround we used.** None — accepted the regression so we could
 build a keyboard-navigable color popup (see issue #18 below). See
 `crates/dmm-gui/src/app/controls/colors.rs` (`color_edit`).
 
-**Suggested fix.** Add `Button::role(WidgetType)` (or, more
+**Suggested fix.** Add `Button::role(Role)` (or, more
 specifically, `Button::color_swatch(Color32) -> Self` since color
 buttons are the obvious case).
 
@@ -196,7 +196,7 @@ first contribution, as `Button::selected: Option<bool>`. The local
 in the app now goes through `Button::selectable`, which sets both the
 selected widget info and the `SELECTED_CLASS` style class.
 
-**Where:** `widgets/button.rs:391-403`, `response.rs:975-981`
+**Where:** `widgets/button.rs:381-393`, `response.rs:1034-1043`
 
 `WidgetInfo::selected` is read into `builder.set_toggled(...)`. Before
 #8130, plain `Button` (`atom_ui` path) never set `info.selected`, so a
@@ -226,7 +226,7 @@ document `accesskit_node_builder` as the supported post-hoc setter = Direct
 duplicate-`OutputEvent::Clicked` foot-gun; **4b** new `accesskit_only`
 `widget_info` variant (the actual fix) = Issue-first (D).
 
-**Where:** `response.rs:869-894`
+**Where:** `response.rs:951-988`
 
 Calling `Response::widget_info` twice on the same response — once
 implicitly by the widget itself, once explicitly by the caller —
@@ -250,21 +250,27 @@ post-hoc state setter, OR add an `accesskit_only` variant of
 
 ### 5. No public landmark helper; `ui.scope` ids are unstable
 
-**Status:** Not started — Issue-first (D). New public landmark concept;
-align on shape first.
+**Status:** Partly shipped in egui 0.37 — Issue-first (D) for the rest.
+`UiBuilder::accessibility_role(Role)` and `accessibility_label`
+(`ui_builder.rs:209-225`) now set the scope's role and name when it is
+created, which removes the `GenericContainer` collision below. The stable id
+is still open.
 
-**Where:** `ui.rs:209-321`, `ui.rs:251-260`, `ui.rs:317-319`
+**Where:** `ui.rs:210-335`, `ui.rs:254-262`, `ui.rs:319-332`
 
-`ui.scope` derives its child id from
-`parent.id.with("child").with(next_auto_id_salt)`, where
+`ui.scope` derives its child's AccessKit node id (`unique_id`) from
+`parent.scope_id.with(IdSalt::new("child")).with(next_auto_id_salt)`, where
 `next_auto_id_salt` is a running counter inside the parent. If the
 parent's child layout changes (e.g. an `if connected { ... } else {
 ... }` swaps in a different number of widgets), every scope's id
-flips.
+flips. An explicit `id_salt` replaces only the `"child"` salt; the counter
+stays, and only `UiBuilder::scope_id(Id)` gives a counter-free node id.
 
-`new_child` also writes `Role::GenericContainer` to the scope's
-AccessKit node, which then collides with anything the caller writes
-via `set_role` later (last-writer-wins).
+Before 0.37, `new_child` wrote `Role::GenericContainer` to the scope's
+AccessKit node, which then collided with anything the caller wrote
+via `set_role` later (last-writer-wins). It now writes the builder's
+`accessibility_role`, falling back to the `UiKind`'s role or
+`GenericContainer`.
 
 **Symptom.** We wrap the connection-status row in `ui.scope(...)` +
 `ctx.accesskit_node_builder(scope.id, |b| b.set_role(Role::Status))`.
@@ -274,8 +280,8 @@ the auto-salt counter, which assigns a different id to the scope,
 which makes Orca lose track of the `Role::Status` landmark.
 
 **Workaround.** Use `ui.scope_builder(UiBuilder::new().id_salt("status_landmark"), ...)`
-with an explicit id salt so the id is stable across sibling-count
-changes. Encapsulated locally as `Ui::landmark(id_salt, role,
+with an explicit id salt, which keeps the scope's `scope_id` stable across
+sibling-count changes but not its node id (above). Encapsulated locally as `Ui::landmark(id_salt, role,
 add_contents)` (see `UiA11yExt` in `crates/dmm-gui/src/a11y.rs`); the
 signature directly prefigures the proposed upstream API below.
 
@@ -287,8 +293,8 @@ ui.landmark(accesskit::Role::Toolbar, |ui| { ... });
 UiBuilder::new().landmark(accesskit::Role::Status)
 ```
 
-that picks a stable id_salt internally and writes the role without
-the `Role::GenericContainer` collision.
+that picks a stable id internally and writes the role (the second half is
+what 0.37's `accessibility_role` now does).
 
 ---
 
@@ -300,7 +306,7 @@ document the per-frame re-apply contract on `accesskit_node_builder` = Direct
 re-apply burden; **6b** persistent-label API (the actual fix) =
 Issue-first (D).
 
-**Where:** `context.rs:600-632`
+**Where:** `context.rs:651-689`
 
 `Context::accesskit_node_builder` writes into
 `this_pass.accesskit_state`, which is initialised fresh every frame.
@@ -323,21 +329,22 @@ formatted label string in `ctx.data` and re-issue `set_label` +
 
 ### 7. `egui_plot::Plot` is opaque to assistive tech
 
-**Status:** Not started — Issue-first (D). Cross-crate (egui_plot), large
-new API surface.
+**Status:** Partly fixed in egui_plot 0.38 — Issue-first (D) for the rest.
+Cross-crate (egui_plot), large new API surface. 0.38 allocates the axis
+responses with `Sense::DRAG` (or hover) and no `FOCUSABLE`, so the axes are
+no longer Tab stops (`plot.rs:868-875`); the plot itself is unchanged.
 
-**Where:** `egui_plot` 0.37.0: `plot.rs:859`, `:871` (axis responses),
-`:1629` (the plot rect).
+**Where:** `egui_plot` 0.38.0: `plot.rs:880`, `:892` (axis responses),
+`:1650` (the plot rect).
 
-The `Plot` widget renders a focusable interactive surface but exposes
-no AccessKit label, role, or description. Each axis allocates a
-focusable drag response, with no label and no focus ring.
+The `Plot` widget renders a focusable interactive surface (default sense
+`click_and_drag`, `plot.rs:195`) but exposes no AccessKit label, role, or
+description.
 
-**Symptom.** A user Tab-walking the GUI hits the plot and several
-axis Tab stops with no AT feedback at all. We worked around this by
-calling `accesskit_node_builder` on the plot response id after
-`plot.show()` returns, but the axis Tab stops remain unlabelled —
-their ids are not exposed to the caller.
+**Symptom.** A user Tab-walking the GUI hits the plot with no AT feedback
+at all. We worked around this by calling `accesskit_node_builder` on the
+plot response id after `plot.show()` returns. Up to egui_plot 0.37 each
+axis was also an unlabelled Tab stop whose id the caller could not reach.
 
 **Workaround.** See `crates/dmm-gui/src/graph/render.rs` (search for
 `a11y_label`).
@@ -347,8 +354,6 @@ their ids are not exposed to the caller.
   `Plot::accesskit_description(impl Into<String>) -> Self`.
 - Default the plot widget's role to `accesskit::Role::Graphic` /
   `Role::Figure` so it at least appears in flat-review.
-- Either suppress focusability on the per-axis drag responses, or
-  expose their ids and a way to label them.
 
 ---
 
@@ -362,7 +367,7 @@ their ids are not exposed to the caller.
 foot-gun; **8b** rename the misleadingly-named existing method = separate
 deprecation, Issue-first (B).
 
-**Where:** `context.rs:2986-2988`
+**Where:** `context.rs:3485-3487`
 
 The name reads as "is a text input focused" but the implementation is
 "is *any* widget focused". Every custom keyboard shim that wants to
@@ -389,7 +394,7 @@ the minimap-focused branch *before* the guard. See
 **Status:** Not started — Issue-first (B). Changes `focus_direction`
 handling for every focusable widget.
 
-**Where:** `memory/mod.rs:570-621`, `:623-628`
+**Where:** `memory/mod.rs:569-633`, `:635-640`
 
 `Focus::begin_pass` walks pending input events at the *start* of the
 frame and sets `focus_direction` from arrow-key events. `end_pass`
@@ -422,7 +427,7 @@ keyboard navigation.
 **Status:** Not started — Issue-first (B). Changes bare-Escape
 focus-clearing globally.
 
-**Where:** `memory/mod.rs:599-602` (the `Key::Escape` arm in
+**Where:** `memory/mod.rs:598-601` (the `Key::Escape` arm in
 `Focus::begin_pass`)
 
 Bare Escape unconditionally clears `focused_widget`, even when a
@@ -447,7 +452,7 @@ or expose a setting that lets the consumer opt out.
 body as a let-chain and added a redundant `focused.id == id` test; the gate
 is the same.
 
-**Where:** `memory/mod.rs:903-911`
+**Where:** `memory/mod.rs:908-916`
 
 ```rust
 pub fn set_focus_lock_filter(&mut self, id: Id, event_filter: EventFilter) {
@@ -472,8 +477,10 @@ popup.
 
 **Workaround.** Cover the one-frame hole by also calling
 `memory.move_focus(FocusDirection::None)` if any arrow is held this
-frame. See `crates/dmm-gui/src/app/controls/colors.rs` (search for
-`set_focus_lock_filter`).
+frame, at the end of the popup's content: since 0.37 `Popup::menu` runs
+its own arrow navigation after the content, so a reset after `show`
+comes too late. See `crates/dmm-gui/src/app/controls/colors.rs` (search
+for `any_arrow_down`).
 
 **Suggested fix.** Drop the `had_focus_last_frame` gate, or make
 `request_focus` also set `had_focus_last_frame` to true so the gate
@@ -486,7 +493,7 @@ passes immediately.
 **Status:** Not started — Direct PR. Additive `Memory::with_temp` borrow
 accessor mirroring `get_temp`.
 
-**Where:** `util/id_type_map.rs:446-449`
+**Where:** `util/id_type_map.rs:446-451`
 
 ```rust
 /// The call clones the value (if found), so make sure it is cheap to clone!
@@ -528,9 +535,11 @@ so consumers can borrow without cloning.
 
 **Status:** Not started — Issue-first (B). Touches modal focus-surrender
 semantics in `create_widget`. 0.36 routed the `allows_interaction` test
-through an `interested_in_focus` local; the behaviour is unchanged.
+through an `interested_in_focus` local; 0.37 calls `Memory::ignore_focus`
+(`memory/mod.rs:946-952`) instead of `surrender_focus`, which also drops the
+widget from the Tab cycle. The focus is cleared the same way.
 
-**Where:** `context.rs:1256-1258`, `:1274-1277`
+**Where:** `context.rs:1525-1527`, `:1543-1546`
 
 ```rust
 let interested_in_focus = w.enabled
@@ -539,13 +548,13 @@ let interested_in_focus = w.enabled
 // ...
 if allow_focus && !interested_in_focus {
     // Not interested or allowed input:
-    self.memory_mut(|mem| mem.surrender_focus(w.id));
+    self.memory_mut(|mem| mem.ignore_focus(w.id));
 }
 ```
 
 `Memory::create_widget` is called for every widget every frame. When
 a `top_modal_layer` is set, every widget *below* the layer fails
-`allows_interaction` and has its focus surrendered — even if the
+`allows_interaction` and has its focus cleared — even if the
 caller just called `request_focus(below_layer_id)` to restore focus
 after closing the modal.
 
@@ -557,13 +566,13 @@ close requires a deferred one-shot that waits until
 **Workaround.** See `crates/dmm-gui/src/app/mod.rs` —
 `ShortcutHelp::restore_focus: Option<Id>` field plus a check at the
 start of `ui()` that fires once the modal layer is gone. The close
-paths set it: `crates/dmm-gui/src/app/shortcut_help.rs:257` for the
+paths set it: `crates/dmm-gui/src/app/shortcut_help.rs:404` for the
 modal's own close, `crates/dmm-gui/src/app/shortcuts.rs:552` for the
 Close shortcut.
 
 **Suggested fix.** Either:
 - add `Memory::request_focus_after_modal(id)` that survives
-  `surrender_focus` while the modal layer is committed, or
+  `ignore_focus` while the modal layer is committed, or
 - key the surrender check on whether the widget has *ever* held focus
   rather than wiping unconditionally, or
 - have `Modal::show` automatically restore focus to the widget that
@@ -579,7 +588,7 @@ accessor) are mutually-exclusive alternatives — exposing the accessor only
 makes sense if you decide *not* to de-stale, so the choice itself is the
 design decision. Present both options in the Issue.
 
-**Where:** `memory/mod.rs:640`, `:691-696`, `:995-997`
+**Where:** `memory/mod.rs:652`, `:696-702`, `:1022-1024`
 
 `Memory::set_modal_layer` writes `top_modal_layer_current_frame`, but
 `top_modal_layer()` reads from `top_modal_layer`, which is only
@@ -605,7 +614,7 @@ unless the caller knows to defer.
 a deferred one-shot (additive `Modal::initial_focus` builder). That timing
 leans on #14's `top_modal_layer` staleness — if a deferred one-shot is not
 enough, this folds into the #14 Issue rather than shipping alone. Unchanged
-as of egui 0.36.2 — `containers/modal.rs` is byte-identical to 0.34.1, and the
+as of egui 0.37.0 — `containers/modal.rs` is byte-identical to 0.34.1, and the
 builder is still `new`/`default_area`/`frame`/`backdrop_color`/`area` with no
 focus API.
 
@@ -656,9 +665,11 @@ Escape).
 
 **Status:** Not started — Issue-first (D). New `Popup::modal` behavior +
 open-transition API. 0.36 added an unrelated `Popup::interactable(bool)`
-(`popup.rs:378`); the modal and open-transition gaps stand.
+(`popup.rs:404`); 0.37 added Up/Down/Left focus moves inside `Popup::menu`
+popups (`MenuState::handle_keyboard`, `containers/menu.rs:233-287`, called at
+`popup.rs:653-655`). The modal and open-transition gaps stand.
 
-**Where:** `containers/popup.rs:378`, `:624-626`, contrast with
+**Where:** `containers/popup.rs:404`, `:692-694`, contrast with
 `containers/modal.rs:85`, `:155-157`
 
 `Modal::show` calls `Memory::set_modal_layer` so Tab focus stays
@@ -666,7 +677,7 @@ inside it. `Popup::menu` does not — Tab from a focused widget inside
 a popup escapes to the layer below, which is rarely what you want.
 `Popup` does close on bare Escape, but it reads the key with a
 non-consuming `ctx.input(|i| i.key_pressed(Key::Escape))`
-(`popup.rs:625`), so the same press still reaches `Focus::begin_pass` and any
+(`popup.rs:693`), so the same press still reaches `Focus::begin_pass` and any
 enclosing `Modal`; `Modal::should_close` consumes it instead
 (`modal.rs:155-157`).
 
@@ -696,9 +707,10 @@ semantics make it impossible to distinguish.
 
 **Status:** Not started — Issue-first (D). Biggest gap: keybinding design +
 making private sliders public. 0.36 reworked the swatch painting
-(`show_srgba_unmultiplied`) but added no keyboard handling.
+(`show_srgba_unmultiplied`) and 0.37 the slider gradients (textures), but
+neither added keyboard handling.
 
-**Where:** `widgets/color_picker.rs:138, 202`
+**Where:** `widgets/color_picker.rs:190, 248`
 
 `color_slider_1d` and `color_slider_2d` are the actual hue (1D
 gradient) and saturation/value (2D square) widgets behind
@@ -740,35 +752,39 @@ rect-shape heuristic.
 
 ### 19. `Panel` resize handles are silent and have no public id
 
-**Status:** Not started — Issue-first (D). Multiple decisions: expose handle
-id, built-in keyboard resize, focus indicator, response type. 0.36 merged
-`SidePanel` and `TopBottomPanel` into one `Panel` type; the handle id is still
+**Status:** Partly shipped in egui 0.37 — Issue-first (D) for the rest.
+Multiple decisions: expose handle id, built-in keyboard resize, focus
+indicator, response type. 0.37 made the handle an AccessKit `Role::Splitter`
+named "Resize panel", its value the panel size as a fraction of the available
+space, and applies AccessKit `Increment`/`Decrement`/`SetValue` requests
+(egui issue #8557). Arrow keys still do nothing. The handle id is still
 computed by a private `Panel::resize_id` over a private `resize_id_source`
-field, so callers cannot ask for it. The salt is unchanged, so replicating it
-still works.
+field, so callers cannot ask for it; the salt is unchanged, but the panel id
+it salts is now `parent_ui.scope_id().with_salt(id_salt)` rather than a root
+id.
 
-**Where:** `containers/panel.rs:35-37` (the `__resize` salt), `:942-944`,
-`:999`, `:1092`; `sense.rs:81-83` (`click_and_drag` includes FOCUSABLE)
+**Where:** `containers/panel.rs:36-38` (the `__resize` salt), `:967-976`
+(private `resize_id` and panel `id`), `:1031`, `:1151` (the handles),
+`:1189-1258` (the AccessKit splitter); `sense.rs:81-83` (`click_and_drag`
+includes FOCUSABLE)
 
 `Panel::left(..).resizable(true)` allocates an internal resize handle.
 The handle is focusable (`Sense::click_and_drag → FOCUSABLE`) but:
-- it has no AccessKit label — panel handles never call `widget_info`, so they
-  do not even reach the `WidgetType::ResizeHandle → Role::Splitter` mapping
-  that `response.rs:954` already provides and `containers/window.rs:1085`
-  already uses,
-- it has no keyboard resize binding (only mouse drag works),
+- it has no keyboard resize binding (mouse drag and AccessKit actions
+  only),
 - it has no visible focus indicator (its own paint overdraws the
   default focus rect),
 - its id is private — the `__resize` salt is an internal
   implementation detail that we have to replicate to attach a label
   and a keyboard handler.
 
-**Symptom.** Our left-panel resize handle is a Tab stop with no
-feedback whatsoever for keyboard / AT users.
+**Symptom.** Our left-panel resize handle is a Tab stop that arrow keys
+do not move and that shows no sign of holding focus.
 
 **Workaround.** Replicate the internal id salt:
 ```rust
-let reading_panel_resize_id = Id::new("reading_panel").with("__resize");
+let reading_panel_id = layout::reading_panel_id(ui);
+let reading_panel_resize_id = reading_panel_id.with("__resize");
 ```
 and use `egui::PanelState::load` + `data_mut().insert_persisted` to
 move the panel boundary in response to Left/Right arrow presses on
@@ -779,7 +795,7 @@ silently.
 - Expose the resize handle id via the `Panel` builder (make
   `resize_id`/`resize_id_source` public), OR
 - add built-in keyboard resize (Arrow keys when focused) AND a
-  visible focus indicator AND an AccessKit label, OR
+  visible focus indicator, OR
 - include the handle id in what `Panel::show` returns, alongside the inner
   content.
 
@@ -789,30 +805,30 @@ silently.
 
 ### 20. Hover text never reaches AccessKit
 
-**Status:** Not started — Issue-first (B). Every tooltip would start being
-spoken, which changes what screen-reader users hear across every egui app;
-confirm the maintainers want it before a PR. Found 2026-09-30 against the
-versions above.
+**Status:** **Shipped in egui 0.37.** `on_hover_text` and
+`on_hover_text_at_pointer` now set the tooltip as the AccessKit description,
+and as the name when the widget has none (`describe_for_accessibility`).
+Only a widget that already has an AccessKit node is described
+(`Context::has_accesskit_node`, `context.rs:4215`), and
+`on_disabled_hover_text` still sets nothing. Found 2026-09-30 against
+egui 0.36.2, where hover text reached sighted users only.
 
-**Where:** `response.rs:727-735` (`on_hover_text` shows a `Label` in a
-tooltip and nothing else), `response.rs:926` (`fill_accesskit_node_from_widget_info`
-sets role, label and value, never a description); AccessKit 0.24.1 has
-`Node::set_description` (`accesskit` `lib.rs:1917`). No call to it exists
-under `egui-0.36.2/src/`.
+**Where:** `response.rs:766-795` (both hover-text calls),
+`response.rs:797-816` (`describe_for_accessibility`), `response.rs:831-839`
+(`on_disabled_hover_text`, tooltip only); AccessKit 0.25.1
+`Node::set_description` (`accesskit` `lib.rs:2109`).
 
-**Symptom.** `on_hover_text` reaches sighted users only: a control whose
-meaning lives in its tooltip is unexplained to a screen reader. Our graph
+**Symptom (egui 0.36).** `on_hover_text` reached sighted users only: a control whose
+meaning lives in its tooltip was unexplained to a screen reader. Our graph
 toolbar's **Plot:** and **Show:** chips would announce identically ("T2,
 button") if their group lived only in the hover text.
 
 **Workaround we used.** Fold the distinction into the accessible name:
 `series_chip_label` and `overlay_chip_label` in
 `crates/dmm-gui/src/graph/toolbar.rs` name the chips "Plot \<name\>" and
-"Show \<name\> trace". A local `a11y_description` helper in
-`ResponseA11yExt`, mirroring `on_hover_text`, could set the description
-through `accesskit_node_builder` wherever the tooltip carries real
-information.
+"Show \<name\> trace". The names stay: with 0.37 the tooltip arrives
+as the description, but the name is still what has to tell the chips apart.
 
 **Suggested fix.** Have `on_hover_text` (and `on_disabled_hover_text`) also
-set the node's AccessKit description from the text, or add an opt-in
-`Response::on_hover_text_described(text)` that does both.
+set the node's AccessKit description from the text. 0.37 did this for
+`on_hover_text`; `on_disabled_hover_text` remains.

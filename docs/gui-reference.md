@@ -21,7 +21,7 @@ and remote control of digital multimeters over USB or Bluetooth.
 
 [Connecting](#connecting) · [Top Bar](#top-bar) · [Reading Display](#reading-display) · [Remote Control](#remote-control) · [Graph](#graph) · [Statistics](#statistics) · [Recording](#recording) · [Specifications](#specifications) · [Scale](#scale) · [Layout Modes](#layout-modes) · [Settings](#settings) · [Keyboard Shortcuts](#keyboard-shortcuts) · [Command-Line Options](#command-line-options) · [Accessibility](#accessibility) · [Appendix](#appendix)
 
-![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](../assets/gui-wide-layout.png)
+![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](../assets/gui-wide-layout.webp)
 
 ## Connecting
 
@@ -44,7 +44,7 @@ GitHub, where you can report feedback.
 
 Help is shown automatically when connection fails:
 
-![Connection help in the left column: "No meter found over USB or Bluetooth" above a section of steps for each link](../assets/gui-connection-help.png)
+![Connection help in the left column: "No meter found over USB or Bluetooth" above a section of steps for each link](../assets/gui-connection-help.webp)
 
 - **No meter found:** one section per link that was searched, each with its
   steps (Linux: udev rule install; Windows: Device Manager guidance to check
@@ -91,7 +91,7 @@ top-right corner in every layout and expire on their own.
 
 ## Reading Display
 
-![Reading display with the HOLD flag lit beside the mode and range, and the remote-control buttons under it](../assets/gui-reading-controls.png)
+![Reading display with the HOLD flag lit beside the mode and range, and the remote-control buttons under it](../assets/gui-reading-controls.webp)
 
 - Primary value in large monospace font, as the meter displays it
 - Unit shown adjacent (e.g. "V", "mV", "kΩ")
@@ -151,7 +151,7 @@ dropdown, moves to the next scenario.
 
 ## Graph
 
-![Graph over one refresh cycle of a battery-powered sensor: the mean of the window, and cursors A and B reading the cycle's length, current spread and charge](../assets/gui-graph-overlays.png)
+![Graph over one refresh cycle of a battery-powered sensor: the mean of the window, and cursors A and B reading the cycle's length, current spread and charge](../assets/gui-graph-overlays.webp)
 
 Three components stacked vertically: toolbar, main plot, and minimap.
 
@@ -171,7 +171,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **Triggers** | (requires Ref) Diamond markers where data crosses a reference line |
 | **Cursors** | Click to place cursor A, click again for cursor B. Shows ΔT, ΔV, and ∫ (integral, for current/voltage modes only). |
 
-![The same session with the boot sequence picked off the minimap instead of the live end: a diamond at each crossing of the 1 mA reference line, and a 60 s Min/Max envelope holding the boot's 108 mA peak](../assets/gui-graph-triggers.png)
+![The same session with the boot sequence picked off the minimap instead of the live end: a diamond at each crossing of the 1 mA reference line, and a 60 s Min/Max envelope holding the boot's 108 mA peak](../assets/gui-graph-triggers.webp)
 
 ### Main Plot
 
@@ -206,7 +206,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - The minimap, the cursors, the Mean/Min/Max/Ref overlays and the
   visible-window statistics follow the plotted series, on the left axis
 
-![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.png)
+![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.webp)
 
 Two cases the graph does not draw faithfully: a connection loss entirely
 inside a continuing overload is absorbed into the band instead of splitting
@@ -441,14 +441,14 @@ Two-column layout with a resizable left sidebar (180–400px):
 
 ### Narrow Layout (< 900px)
 
-![Narrow layout — reading, controls, compact specifications, statistics, graph and recording stacked in one column](../assets/gui-narrow-layout.png)
+![Narrow layout — reading, controls, compact specifications, statistics, graph and recording stacked in one column](../assets/gui-narrow-layout.webp)
 
 Single-column stack: reading, controls, help, specifications (compact),
 statistics, graph, recording.
 
 ### Big Meter Mode
 
-![Big meter mode — a UT181A reading scaled to fill the window, with its frequency and period, the mode line and the remote-control buttons](../assets/gui-big-meter.png)
+![Big meter mode — a UT181A reading scaled to fill the window, with its frequency and period, the mode line and the remote-control buttons](../assets/gui-big-meter.webp)
 
 Activated when both graph and recording panels are hidden (via settings
 or the toggle). The reading display scales to fill the available space —
@@ -465,9 +465,9 @@ too small to show the **⊞** button, **Ctrl+B** is the way out. **Scale** and
 **Alarm** turn on and off there with the values set in the normal layout,
 which has their fields.
 
-![Minimal mode in a wide, short window: a UT181A's T1 reading with T2 beside it, then the mode selector](../assets/gui-minimal-meter-wide.png)
+![Minimal mode in a wide, short window: a UT181A's T1 reading with T2 beside it, then the mode selector](../assets/gui-minimal-meter-wide.webp)
 
-![Minimal mode in a narrow window: the mode and range selectors under the reading](../assets/gui-minimal-meter-narrow.png)
+![Minimal mode in a narrow window: the mode and range selectors under the reading](../assets/gui-minimal-meter-narrow.webp)
 
 If all panels are already hidden via settings, **⊞** restores all panels
 to their defaults.
@@ -476,7 +476,7 @@ to their defaults.
 
 Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Linux (XDG config dir under the `dmm-tools` project name; macOS and Windows use the equivalent platform-specific location).
 
-![The settings panel open above the reading and graph, with the device, connection, interval, buffer, panel, zoom, window, theme, colour and graph-line rows](../assets/gui-settings.png)
+![The settings panel open above the reading and graph, with the device, connection, interval, buffer, panel, zoom, window, theme, colour and graph-line rows](../assets/gui-settings.webp)
 
 | Setting | Default | Description |
 |---|---|---|
@@ -517,8 +517,8 @@ System. Switching presets resets their per-color overrides.
 
 | | |
 |---|---|
-| ![The graph in the Default preset, dark theme](../assets/gui-theme-dark.png) | ![The graph in the Default preset, light theme](../assets/gui-theme-light.png) |
-| ![The graph in the High Contrast preset](../assets/gui-theme-high-contrast.png) | ![The graph in the Colorblind preset](../assets/gui-theme-colorblind.png) |
+| ![The graph in the Default preset, dark theme](../assets/gui-theme-dark.webp) | ![The graph in the Default preset, light theme](../assets/gui-theme-light.webp) |
+| ![The graph in the High Contrast preset](../assets/gui-theme-high-contrast.webp) | ![The graph in the Colorblind preset](../assets/gui-theme-colorblind.webp) |
 
 **Named themes.** Picked on the **Theme** row, each in its own mode.
 
@@ -531,8 +531,8 @@ System. Switching presets resets their per-color overrides.
 
 | | |
 |---|---|
-| ![The graph in the Bubble Gum theme](../assets/gui-theme-bubble-gum.png) | ![The graph in the Desert theme](../assets/gui-theme-desert.png) |
-| ![The graph in the Midnight theme](../assets/gui-theme-midnight.png) | ![The graph in the Phosphor theme](../assets/gui-theme-phosphor.png) |
+| ![The graph in the Bubble Gum theme](../assets/gui-theme-bubble-gum.webp) | ![The graph in the Desert theme](../assets/gui-theme-desert.webp) |
+| ![The graph in the Midnight theme](../assets/gui-theme-midnight.webp) | ![The graph in the Phosphor theme](../assets/gui-theme-phosphor.webp) |
 
 **Per-color editing.** Expand **Customize colors** for a swatch per color;
 click one for a picker, whose hex field copies or takes a pasted `#RRGGBB`.
@@ -544,7 +544,7 @@ colors can be set in `settings.json` — see [Color fields](#color-fields).
 **Save as theme…** writes the colors on screen to a theme file; one saved in
 your themes folder joins the **Theme** row.
 
-![The Customize colors swatch rows with one swatch's picker open, showing its RGB values, saturation square, hue strip and hex field](../assets/gui-color-customization.png)
+![The Customize colors swatch rows with one swatch's picker open, showing its RGB values, saturation square, hue strip and hex field](../assets/gui-color-customization.webp)
 
 ### Theme files
 
@@ -673,7 +673,6 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 - There is no per-sample keyboard navigation inside the graph — you can't step from one data point to the next and hear each value spoken. Use the Statistics panel for min/max/average and the Recording panel's sample list for point-level readings; the sample list is a scrollable text log that screen readers read row by row, for the rows scrolled into view.
 - Graph measurement cursors (A/B) can only be placed by clicking on the plot.
 - In the **Customize colors** popup, the RGBA fields need Enter to enter edit mode, then Up/Down to change the value; mouse drag remains the fastest way to pick a color.
-- The graph plot's X and Y axes are separate Tab stops that don't show a focus ring.
 
 ## Appendix
 

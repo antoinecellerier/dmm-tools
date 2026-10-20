@@ -196,3 +196,8 @@ beside 140 no dimmer tone clears 4.5:1, and 180 keeps two distinct tiers
 **The stock presets stay egui's own.** Text and Accent reach egui's own
 painting only once customized, and only High Contrast pins Border (3:1), so the
 presets follow egui's defaults as egui changes them.
+
+**Density beats egui's new geometry.** Button padding, row height and widget
+corners stay as egui drew them before 0.37, and so do dark button captions
+(gray(180), matching the labels): 0.37's roomier buttons rewrapped the reading
+controls and clipped the graph toolbar at narrow widths.
