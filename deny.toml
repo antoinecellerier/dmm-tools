@@ -20,6 +20,12 @@ ignore = [
     # ttf-parser is unmaintained; it comes in via winit's client-side
     # decorations on Wayland. Unblocked when winit switches font parsers.
     { id = "RUSTSEC-2026-0192", reason = "transitive via winit, no upgrade path" },
+    # zbus 6 folded zvariant, zvariant_derive and zbus_names into itself; they
+    # come in via eframe's Linux accessibility (accesskit_unix, atspi), which
+    # still needs zbus 5. Unblocked when accesskit_unix moves to zbus 6.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant, transitive via accesskit_unix, no upgrade path" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names, transitive via accesskit_unix, no upgrade path" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, transitive via accesskit_unix, no upgrade path" },
 ]
 
 [licenses]
