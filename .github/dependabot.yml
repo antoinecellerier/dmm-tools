@@ -9,6 +9,10 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # egui and its companion crates release in lockstep, and one built on a
+      # different egui than the rest fails to compile, so they move together.
+      egui:
+        patterns: ["eframe", "egui*"]
       minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
