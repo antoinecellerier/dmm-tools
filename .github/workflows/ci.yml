@@ -19,6 +19,9 @@ jobs:
   check:
     name: Check & Test
     runs-on: ubuntu-latest
+    # A hung runner otherwise holds the job for GitHub's 6 h default; the
+    # slowest job so far took 13 min.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -57,6 +60,7 @@ jobs:
           - name: macOS
             os: macos-latest
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -93,6 +97,7 @@ jobs:
   deny:
     name: Dependency policy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable

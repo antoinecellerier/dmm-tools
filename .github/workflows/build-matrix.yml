@@ -77,6 +77,9 @@ jobs:
   docs:
     name: Package docs
     runs-on: ubuntu-latest
+    # A hung runner otherwise holds the job for GitHub's 6 h default; the
+    # slowest job so far took 13 min.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - name: Install pandoc
@@ -120,6 +123,7 @@ jobs:
     name: Build (${{ matrix.name }})
     needs: [targets, docs]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     env:
       ARCHIVE: ${{ inputs.archive-prefix }}-${{ matrix.slug }}
     strategy:
