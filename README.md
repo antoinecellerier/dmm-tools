@@ -10,6 +10,8 @@ Read, record and remote-control a digital multimeter from a desktop app, over it
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
+**Contents:** [GUI](#gui) · [CLI](#cli) · [Supported devices](#supported-devices) · [Quick start](#quick-start) · [Documentation](#documentation) · [License](#license)
+
 ![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence, two cursors read its duration and charge, and markers name its stages](assets/gui-wide-layout.webp)
 
 ## [GUI](docs/gui-reference.md)
