@@ -453,6 +453,10 @@ impl Protocol for Ut61PlusProtocol {
         Ok(None)
     }
 
+    fn entry_named(&self, name: &str) -> Option<&'static SelectableDevice> {
+        device_for_reported_name(name)
+    }
+
     /// Get Name, answered, ahead of 0x5D, as UNI-T's app sends it: a UT60BT
     /// is reported to ignore 0x5D until it has answered 0x5F (family spec
     /// §6.4). The wait is `get_name`'s, a few frames of at most 2 s each.

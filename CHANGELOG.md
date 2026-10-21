@@ -9,12 +9,14 @@
 ### GUI
 
 - **An alarm marks each reading that crosses a low or high limit**
+- **A UT61+ meter naming another model than the one selected says so** — its readings used the selected model's tables without a word.
 - **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
 - **Tab no longer stops on the graph's axes** — they were two Tab stops with no focus ring.
 
 ### CLI
 
 - **`read --alarm-high` and `--alarm-low` warn when a reading crosses a limit** — and mark it in CSV, JSON and replay output.
+- **`info`, `capture` and `read --format replay` warn when a UT61+ meter names another model than `--device`**
 - **The mock follows `dmm-gui`'s Mock mode setting** — without `--mock-mode`, `dmm-cli` cycled through every scenario.
 
 ### Bug fixes

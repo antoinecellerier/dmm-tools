@@ -780,6 +780,16 @@ pub trait Protocol: Send {
         Ok(None)
     }
 
+    /// The registry entry a name from [`Protocol::get_name`] names, for a
+    /// family whose name identifies the model; [`crate::Dmm`] compares it
+    /// with the model this protocol was opened as.
+    ///
+    /// Default `None`: no name, or one that names no entry. OWON meters check
+    /// their model code in `init` instead.
+    fn entry_named(&self, _name: &str) -> Option<&'static registry::SelectableDevice> {
+        None
+    }
+
     /// Whether the meter wants [`Protocol::get_name`] answered before `init`
     /// starts it on `transport`. [`crate::Dmm`] asks, or uses the name it
     /// already has, then runs `init`; the protocol keeps no name of its own.

@@ -152,6 +152,9 @@ pub(crate) struct ConnectedMeter {
     /// Sub-value slots this meter family can report, from its profile.
     /// Fixes the CSV export's aux column count for the whole recording.
     pub(crate) max_aux_values: usize,
+    /// The entry the meter's own name names, when it is not the one opened
+    /// ([`dmm_lib::Dmm::named_other_model`]).
+    pub(crate) named_other: Option<&'static SelectableDevice>,
 }
 
 #[cfg(test)]
@@ -169,6 +172,7 @@ impl ConnectedMeter {
             supported_commands: Vec::new(),
             meter_keys: MeterKeys::NONE,
             max_aux_values: 0,
+            named_other: None,
         }
     }
 }
@@ -248,6 +252,7 @@ fn establish_connection<T: Transport>(
     } else {
         dmm.known_name().map(str::to_owned)
     };
+    let named_other = dmm.named_other_model();
     let _ = msg_tx.send(DmmMessage::Connected(ConnectedMeter {
         name: name.filter(|n| !n.is_empty()),
         model_name,
@@ -258,6 +263,7 @@ fn establish_connection<T: Transport>(
         supported_commands: cmds,
         meter_keys,
         max_aux_values,
+        named_other,
     }));
     ctx.request_repaint();
 }

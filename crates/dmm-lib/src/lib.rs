@@ -16,7 +16,7 @@ pub mod transport;
 pub use clock::Clock;
 
 use error::{Error, Result};
-use log::{debug, info};
+use log::{debug, info, warn};
 use protocol::Protocol;
 use protocol::registry::{self, SelectableDevice, Selection};
 use std::time::{Duration, Instant};
@@ -246,8 +246,29 @@ impl<T: Transport> Dmm<T> {
         let name = self.protocol.get_name(&self.transport)?;
         if name.is_some() {
             self.name.clone_from(&name);
+            // Once per session: the name is asked once.
+            if let (Some(name), Some(entry)) = (&name, self.named_other_model()) {
+                warn!(
+                    "the meter reports {name:?}, not the {} it was opened as; open it with \
+                     --device {}",
+                    self.protocol.profile().model_name,
+                    entry.id
+                );
+            }
         }
         Ok(name)
+    }
+
+    /// The entry the meter's own name names when it is not the model this
+    /// session was opened as: a UT161E opened as a UT61E+ shows the UT61E+'s
+    /// fuses, a UT61E+ opened as a UT61B+ reads with the wrong range tables.
+    /// `None` until the meter has given its name, and for a name no entry
+    /// claims (a model the registry lacks still reads with the tables chosen).
+    pub fn named_other_model(&self) -> Option<&'static SelectableDevice> {
+        let named = self.protocol.entry_named(self.name.as_deref()?)?;
+        // Entries sharing a model share its protocol profile.
+        let opened = self.protocol.profile().model_name;
+        ((named.new_protocol)().profile().model_name != opened).then_some(named)
     }
 
     /// The name the meter already gave on this link, without asking it: for
@@ -952,6 +973,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A name that names another entry than the one opened is told apart
+    /// once the meter has given it; its own name, or one no entry claims, is
+    /// not.
+    #[test]
+    fn a_name_naming_another_model_is_flagged() {
+        const ACK: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
+        let other = |model: &str, name: &str| {
+            let transport = MockTransport::new(vec![
+                ACK.to_vec(),
+                crate::protocol::framing::test_frame_be16(name.as_bytes()),
+            ]);
+            let entry = registry::find_device(model).expect("registry entry");
+            let mut dmm = Dmm::new(transport, (entry.new_protocol)()).unwrap();
+            assert_eq!(dmm.named_other_model().map(|d| d.id), None, "unasked");
+            dmm.get_name().unwrap();
+            dmm.named_other_model().map(|d| d.id)
+        };
+        assert_eq!(other("ut61eplus", "UT161E"), Some("ut161e"));
+        assert_eq!(other("ut61b+", "UT61E+"), Some("ut61eplus"));
+        assert_eq!(other("ut161e", "UT161E"), None);
+        assert_eq!(other("ut61eplus", "UT61E+"), None);
+        assert_eq!(other("ut61eplus", "UT99X"), None);
     }
 
     /// What a UT61E+ session's `init` writes on `link`: nothing on a cable,
