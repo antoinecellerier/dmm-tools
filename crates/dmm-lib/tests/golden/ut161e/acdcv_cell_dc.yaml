@@ -1,0 +1,11 @@
+# AC+DC V, the DC cell
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step acdcv).
+raw_hex: "19 30 20 30 2E 30 30 31 34 00 01 30 30 30"
+mode: "AC+DC V"
+value: "0.0014"
+unit: "V"
+range_label: "2.2V"
+flags:
+  auto_range: true
+  dc: true
+aux: []

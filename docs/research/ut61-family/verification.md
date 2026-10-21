@@ -73,8 +73,8 @@ families are in the [verification backlog](../../verification-backlog.md).
 - UT61E+ A range byte 0, never sent ([§5.5][s55]) — decides the placeholder
   `20A` at index 0 of `ut61e_plus.rs`'s current tables. Needs any A frame
   with byte 0. (#6)
-- The UT61D+ and UT161 tables, [DEDUCED] from the shapes in [§9][s9] — a first
-  `capture --unverified` confirms them. Needs a UT61D+ or a UT161. (#7)
+- The UT61D+ and UT161D tables, [DEDUCED] from the shapes in [§9][s9] — a
+  first `capture --unverified` confirms them. Needs a UT61D+ or a UT161D. (#7)
 
 ## Readings with a signal
 
@@ -94,6 +94,13 @@ families are in the [verification backlog](../../verification-backlog.md).
 - Temperature: how °C and °F fill the display field, and the deck's range
   bytes 0 and 1 ([§5.6][s56]) — decides `temp_c`/`temp_f`. Needs a K-type
   thermocouple, steps `temp` and `tempf`. (#7)
+
+## The UT161E
+
+- Capacitance, NCV, hFE, continuity and shorted-lead DC V and Ω, and the
+  SELECT, Hz/% and Peak presses its failed gate left unrun — decides
+  `UT161E_UNRUN` and the Verified flip. Needs `capture --steps` with the six
+  gate steps and these, leads shorted when asked; `command light`. (#7)
 
 ## UT60BT and UT202BT
 
@@ -161,7 +168,7 @@ a later manual or UNI-T's word.
 
 ## Detection
 
-- The UT61D+ and UT161 reported names and the UT60BT and UT202BT rows:
+- The UT61D+, UT161B and UT161D reported names and the UT60BT and UT202BT rows:
   [Device auto-detection](../../verification-backlog.md#device-auto-detection).
 
 [e25]: ../ut61eplus/reverse-engineered-protocol.md#25-mode-byte-values--vendor

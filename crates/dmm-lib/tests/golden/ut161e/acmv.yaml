@@ -1,0 +1,9 @@
+# AC mV 114.88 mV, open leads
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step acmv).
+raw_hex: "01 30 20 31 31 34 2E 38 38 02 01 30 34 30"
+mode: "AC mV"
+value: "114.88"
+unit: "mV"
+range_label: "220mV"
+flags: {}
+aux: []

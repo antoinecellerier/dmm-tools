@@ -1,0 +1,9 @@
+# Diode open leads, .OL
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step diode).
+raw_hex: "08 30 20 2E 4F 4C 20 20 20 04 04 30 34 30"
+mode: "Diode"
+value: "OL"
+unit: "V"
+range_label: "Diode"
+flags: {}
+aux: []

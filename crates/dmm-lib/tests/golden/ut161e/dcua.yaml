@@ -1,0 +1,10 @@
+# DC µA, nothing connected
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step dcua).
+raw_hex: "0C 30 20 20 20 30 2E 30 30 00 00 30 30 30"
+mode: "DC µA"
+value: "0"
+unit: "µA"
+range_label: "220µA"
+flags:
+  auto_range: true
+aux: []

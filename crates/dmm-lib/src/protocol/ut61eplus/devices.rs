@@ -158,7 +158,8 @@ pub(crate) static UT161E: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
-    detection_verified: &[],
+    // Issue #7.
+    detection_verified: &[cp2110::NAME],
     bluetooth_names: &[],
 };
 

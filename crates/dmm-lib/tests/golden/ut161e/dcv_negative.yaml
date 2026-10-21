@@ -1,0 +1,10 @@
+# DC V -1.5906 V, leads reversed on a battery, auto-ranging
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step dcv_negative).
+raw_hex: "02 30 2D 31 2E 35 39 30 36 03 01 30 30 31"
+mode: "DC V"
+value: "-1.5906"
+unit: "V"
+range_label: "2.2V"
+flags:
+  auto_range: true
+aux: []

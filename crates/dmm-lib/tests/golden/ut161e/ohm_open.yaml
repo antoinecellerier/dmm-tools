@@ -1,0 +1,10 @@
+# Ω open leads, OL on the 220MΩ rung
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step ohm).
+raw_hex: "06 36 20 20 4F 4C 2E 20 20 04 04 30 30 30"
+mode: "Ω"
+value: "OL"
+unit: "MΩ"
+range_label: "220MΩ"
+flags:
+  auto_range: true
+aux: []

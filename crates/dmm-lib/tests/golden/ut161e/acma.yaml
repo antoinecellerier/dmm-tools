@@ -1,0 +1,10 @@
+# AC mA 0.339 mA, nothing connected
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step acma).
+raw_hex: "0F 30 20 20 30 2E 33 33 39 00 00 30 30 30"
+mode: "AC mA"
+value: "0.339"
+unit: "mA"
+range_label: "22mA"
+flags:
+  auto_range: true
+aux: []

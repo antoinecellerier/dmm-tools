@@ -1,0 +1,13 @@
+# AC+DC V, the AC cell (flag3 bit 3), shown as the AC sub-value
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step acdcv).
+raw_hex: "19 30 20 30 2E 30 36 31 30 00 01 30 30 38"
+mode: "AC+DC V"
+value: ""
+unit: "V"
+range_label: "2.2V"
+flags:
+  auto_range: true
+aux:
+  - label: "AC"
+    value: "0.0610"
+    unit: "V"

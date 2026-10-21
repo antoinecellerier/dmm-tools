@@ -1,0 +1,9 @@
+# hFE OL, passed through while turning the dial
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step dcua).
+raw_hex: "12 30 20 20 4F 4C 20 20 20 04 04 30 34 30"
+mode: "hFE"
+value: "OL"
+unit: "β"
+range_label: "1000β"
+flags: {}
+aux: []

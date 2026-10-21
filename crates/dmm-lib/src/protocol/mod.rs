@@ -931,7 +931,9 @@ mod tests {
     }
 
     /// The UT61+/UT161 step list is shared, so the siblings would inherit the
-    /// UT61E+'s hardware history unless `verified_if` gates it.
+    /// UT61E+'s hardware history unless `verified_if` gates it. A partly
+    /// verified sibling has run some of it, so only the experimental ones
+    /// are held to none.
     #[test]
     fn ut61_siblings_declare_nothing_verified() {
         for (id, stability, steps) in all_steps() {
@@ -942,8 +944,8 @@ mod tests {
                 );
                 continue;
             }
-            let ut61_sibling =
-                (d_family(id) == Some(DeviceFamily::Ut61EPlus)) && !stability.is_verified();
+            let ut61_sibling = (d_family(id) == Some(DeviceFamily::Ut61EPlus))
+                && stability == Stability::Experimental;
             if ut61_sibling {
                 assert!(
                     steps.iter().all(|s| !s.verified),

@@ -1,0 +1,10 @@
+# AC µA 3.51 µA, nothing connected
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step acua).
+raw_hex: "0D 30 20 20 20 33 2E 35 31 00 00 30 30 30"
+mode: "AC µA"
+value: "3.51"
+unit: "µA"
+range_label: "220µA"
+flags:
+  auto_range: true
+aux: []

@@ -1,0 +1,10 @@
+# LPF V on open leads reading high on entry, HV warning lit, manual 1000V rung
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step lpfv).
+raw_hex: "18 33 20 20 20 38 31 2E 31 00 00 30 35 30"
+mode: "LPF V"
+value: "81.1"
+unit: "V"
+range_label: "1000V"
+flags:
+  hv_warning: true
+aux: []

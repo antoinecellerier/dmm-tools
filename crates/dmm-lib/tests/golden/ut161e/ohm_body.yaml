@@ -1,0 +1,10 @@
+# Ω 1.2156 MΩ, body resistance, auto-ranging on the 2.2MΩ rung
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step ohm_body).
+raw_hex: "06 34 20 31 2E 32 31 35 36 02 04 30 30 30"
+mode: "Ω"
+value: "1.2156"
+unit: "MΩ"
+range_label: "2.2MΩ"
+flags:
+  auto_range: true
+aux: []

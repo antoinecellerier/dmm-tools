@@ -110,6 +110,12 @@ Binary comparison of the UT161E installer vs UT61E+ Software V2.02:
 - options.xml: `<Model>` tag differs
 - No functional difference whatsoever
 
+On the wire the UT161E matches the UT61E+ [VERIFIED] (issue #7, CP2110,
+@frixit, 2026-10-21): Get Name answers `UT161E`, and its frames in 18 modes
+(0x00-0x08, 0x0C-0x12, 0x18, 0x19) carry only mode, range and flag bytes our
+UT61E+ has sent, including LPF V's high open-lead entry on the 1000V rung.
+HOLD, REL, MIN/MAX, RANGE and AUTO moved their flags as on the E+.
+
 ### 2.3 Secondary-display frame — [VENDOR + VENDOR-DOC + MANUAL]
 
 A clamp meter with a second display sends it in a frame of its own: the
@@ -786,6 +792,7 @@ have confirmed is tagged [VERIFIED] where sections 3-6 and 9 state it.
 |--------|--------|--------|
 | Identical protocol across all 6 models | **VENDOR** | Zero model conditionals in code |
 | UT161 = UT61+ (binary-identical software) | **VENDOR** | 67/69 files match |
+| UT161E frames = UT61E+ frames | **VERIFIED** | Issue #7 capture, 18 modes |
 | Shared VID/PID/baud/framing | **VENDOR** | Shared CP2110.dll |
 | Shared command set | **VENDOR** | Shared CustomDmm.dll |
 | 6,000 vs 22,000 count displays | **MANUAL** | UT61+ Series manual |

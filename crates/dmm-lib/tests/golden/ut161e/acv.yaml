@@ -1,0 +1,10 @@
+# AC V open leads, auto-ranging
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step acv).
+raw_hex: "00 30 20 30 2E 30 35 31 32 00 00 30 30 30"
+mode: "AC V"
+value: "0.0512"
+unit: "V"
+range_label: "2.2V"
+flags:
+  auto_range: true
+aux: []

@@ -1,0 +1,10 @@
+# Duty %, no signal
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step duty).
+raw_hex: "05 30 20 20 20 20 30 2E 30 04 04 30 30 30"
+mode: "Duty %"
+value: "0"
+unit: "%"
+range_label: "Duty"
+flags:
+  auto_range: true
+aux: []

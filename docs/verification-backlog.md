@@ -41,7 +41,8 @@ with, and how well that probe is backed:
 |---|---|---|---|
 | UT61E+ | `AB CD 03 5F 01 DA` (Get Name) | ack `AB CD 04 FF 00 02 7B`, then an ASCII name frame | Verified through the detector on our UT61E+ (CP2110, and Bluetooth through a UT-D07B) |
 | UT61B+ | same | same, the name being `UT61B+` | Verified over CH9329 ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)) |
-| UT61D+, UT161B/D/E | same | same, the name being the model | Unverified; no report has named one of these meters |
+| UT161E | same | same, the name being `UT161E` | Verified over CP2110 ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
+| UT61D+, UT161B/D | same | same, the name being the model | Unverified; no report has named one of these meters |
 | UT60BT, UT202BT | same, over their built-in Bluetooth | same, the name being `UT60BT` or `UT202BT` | Unverified; a community UT60BT's `UT60BT` reply is on record (ut61-family approach doc), nothing for the UT202BT |
 | UT181A | `AB CD 04 00 05 01 0A 00` (SET_MONITOR) | 2-byte-LE frames, type `0x02`, payload ≥ 31 bytes | Reply verified on hardware ([PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8), [#5](https://github.com/antoinecellerier/dmm-tools/issues/5)), never through the detector |
 | UT171 | `AB CD 04 00 0A 01 0F 00` (connect) | 2-byte-LE frames, type `0x02`, 16- or 22-byte payload | Deduced from the vendor traces, unverified |
@@ -93,7 +94,7 @@ with, and how well that probe is backed:
   start recording) is out, and whether a UT181A ever starts recording under `auto`
   (reasoned, not observed; likelier behind a UT-D07B, see
   [Connection](#connection)) — decides the probe order. Needs a reply timed. (#5)
-- The UT61D+ and UT161B/D/E reported names: an unrecognised one falls back to
+- The UT61D+ and UT161B/D reported names: an unrecognised one falls back to
   the UT61E+ tables and is logged, and a reporter's `RUST_LOG=dmm_lib=debug`
   output turns it into a registry alias. (#7)
 - Whether a VC-890 answers `0x5E` on the first attempt: the vendor software
