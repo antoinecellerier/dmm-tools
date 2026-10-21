@@ -261,7 +261,8 @@ impl<T: Transport> Dmm<T> {
 
     /// The entry the meter's own name names when it is not the model this
     /// session was opened as: a UT161E opened as a UT61E+ shows the UT61E+'s
-    /// fuses, a UT61E+ opened as a UT61B+ reads with the wrong range tables.
+    /// fuses, a UT61E+ opened as a UT61B+ reads with the wrong range tables,
+    /// an OWON meter opened as another model has its keys refused.
     /// `None` until the meter has given its name, and for a name no entry
     /// claims (a model the registry lacks still reads with the tables chosen).
     pub fn named_other_model(&self) -> Option<&'static SelectableDevice> {

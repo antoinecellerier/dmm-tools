@@ -309,6 +309,12 @@ impl Model {
     pub(super) fn for_code(code: u8) -> Option<&'static Model> {
         MODELS.iter().copied().find(|m| m.code == code)
     }
+
+    /// The model whose name this is, as `get_name` gives it; `None` for the
+    /// name of a code no entry carries.
+    pub(super) fn named(name: &str) -> Option<&'static Model> {
+        MODELS.iter().copied().find(|m| m.name == name)
+    }
 }
 
 /// Why a model code's meter cannot be read here, for the codes OWON's

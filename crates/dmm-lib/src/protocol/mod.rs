@@ -784,8 +784,8 @@ pub trait Protocol: Send {
     /// family whose name identifies the model; [`crate::Dmm`] compares it
     /// with the model this protocol was opened as.
     ///
-    /// Default `None`: no name, or one that names no entry. OWON meters check
-    /// their model code in `init` instead.
+    /// Default `None`: a family whose names do not map one-to-one onto
+    /// entries leaves it, so a correctly picked meter is never warned about.
     fn entry_named(&self, _name: &str) -> Option<&'static registry::SelectableDevice> {
         None
     }

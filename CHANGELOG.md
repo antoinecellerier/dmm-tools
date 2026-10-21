@@ -9,7 +9,7 @@
 ### GUI
 
 - **An alarm marks each reading that crosses a low or high limit**
-- **A UT61+ meter naming another model than the one selected says so** — its readings used the selected model's tables without a word.
+- **A UT61+ or OWON meter naming another model than the one selected says so** — the GUI said nothing.
 - **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
 - **Tab no longer stops on the graph's axes** — they were two Tab stops with no focus ring.
 

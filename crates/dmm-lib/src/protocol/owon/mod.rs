@@ -31,6 +31,7 @@ mod model;
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::registry::{self, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
@@ -95,7 +96,7 @@ fn name_for(code: u8) -> String {
 }
 
 /// Why keys stay off for `confirmed` on an entry opened as `opened`; `None`
-/// when they go out. Both the connect warning and every refused key say it.
+/// when they go out. Every refused key says it.
 fn keys_off(opened: &Model, confirmed: Confirmation) -> Option<String> {
     match confirmed {
         Confirmation::Matches | Confirmation::NoInfo => None,
@@ -299,12 +300,10 @@ impl Protocol for OwonProtocol {
             self.confirmed,
             Confirmation::Matches | Confirmation::Other(_)
         );
-        // Once per connect; an unknown code was reported already.
-        if let Confirmation::Other(_) = self.confirmed
-            && let Some(why) = keys_off(self.model, self.confirmed)
-        {
-            warn!("owon: {why}");
-        }
+        // A code naming another entry is the session's warning to give
+        // (`Dmm::named_other_model`, through `entry_named`), as for any
+        // family whose name names its model; the refused keys say why they
+        // are off. An unknown code was reported already.
         if self.confirmed == Confirmation::NoInfo
             && let Some(key) = self.model.keys.iter().find(|k| k.needs_confirmed)
         {
@@ -410,6 +409,15 @@ impl Protocol for OwonProtocol {
             .info_characteristic()
             .and_then(Fff2::parse)
             .map(|info| name_for(info.code)))
+    }
+
+    /// One entry per model code, so the code's model names it. A model
+    /// sending the other frame is left out: `init` refuses the connect with
+    /// the same advice, and a warning first would only repeat it.
+    fn entry_named(&self, name: &str) -> Option<&'static SelectableDevice> {
+        Model::named(name)
+            .filter(|model| model.frame == self.model.frame)
+            .and_then(|model| registry::find_device(model.id))
     }
 
     fn name_before_init(&self, transport: &dyn Transport) -> bool {
@@ -793,10 +801,20 @@ mod tests {
         assert_eq!(meter.inner.written.borrow().len(), 1);
     }
 
-    /// FFF2 naming another of the six: init says which and how to open
-    /// it, and every key is refused unsent, saying the same.
+    /// FFF2 naming another of the six: the session names it, and every key
+    /// is refused unsent, saying which and how to open it.
     #[test]
     fn a_mismatched_model_code_is_named_and_keys_are_refused() {
+        let named = |opened: &'static Model| {
+            let meter = Meter::new(Some(&B41_INFO), Vec::new());
+            let dmm = crate::Dmm::new(meter, Box::new(proto(opened))).unwrap();
+            dmm.named_other_model().map(|d| d.id)
+        };
+        assert_eq!(named(&model::B35), Some("b41t+"));
+        assert_eq!(named(&model::B41), None);
+        // The other frame: init refuses it, so no warning goes first.
+        assert!(proto(&model::CMS101).entry_named(model::B41.name).is_none());
+
         let meter = Meter::new(Some(&B41_INFO), Vec::new());
         let mut proto = proto(&model::B35);
         let (done, reports) = capture_reports(|| proto.init(&meter));
