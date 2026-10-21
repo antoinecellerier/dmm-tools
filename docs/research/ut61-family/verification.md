@@ -99,8 +99,8 @@ families are in the [verification backlog](../../verification-backlog.md).
 
 - Capacitance, NCV, hFE, continuity and shorted-lead DC V and Ω, and the
   SELECT, Hz/% and Peak presses its failed gate left unrun — decides
-  `UT161E_UNRUN` and the Verified flip. Needs `capture --steps` with the six
-  gate steps and these, leads shorted when asked; `command light`. (#7)
+  `UT161E_UNRUN` and the Verified flip. Needs `capture --unverified`, leads
+  shorted when asked, and `command light`. (#7)
 
 ## UT60BT and UT202BT
 
