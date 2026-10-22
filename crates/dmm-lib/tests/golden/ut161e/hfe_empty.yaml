@@ -1,0 +1,9 @@
+# hFE 0 with the transistor socket empty
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step hfe).
+raw_hex: "12 30 20 20 20 20 20 30 20 00 00 30 34 30"
+mode: "hFE"
+value: "0"
+unit: "β"
+range_label: "1000β"
+flags: {}
+aux: []

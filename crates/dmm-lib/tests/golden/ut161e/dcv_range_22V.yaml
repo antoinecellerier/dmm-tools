@@ -1,0 +1,9 @@
+# DC V -0.000 V on the manual 22V rung, open leads
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step dcv_ranges/range:22V).
+raw_hex: "02 31 2D 20 30 2E 30 30 30 00 00 30 34 30"
+mode: "DC V"
+value: "-0"
+unit: "V"
+range_label: "22V"
+flags: {}
+aux: []

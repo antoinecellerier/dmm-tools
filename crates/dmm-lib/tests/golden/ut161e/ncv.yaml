@@ -1,0 +1,9 @@
+# NCV detection level 1 (a single dash), flag3 bit 0 set
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step ncv).
+raw_hex: "14 30 20 20 20 20 20 2D 20 04 04 30 34 31"
+mode: "NCV"
+value: "NCV:1"
+unit: ""
+range_label: ""
+flags: {}
+aux: []

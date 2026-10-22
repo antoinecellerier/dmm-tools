@@ -30,9 +30,12 @@ families are in the [verification backlog](../../verification-backlog.md).
 
 ## Flag settings
 
-- Peak in AC µA, AC mA, AC A, AC+DC V and LPF V on our UT61E+ — only AC V
-  and AC mV have entered it, DC V ignores it ([§6.1][s61], [UT61E+ spec
-  §2.7][e27]); decides `AC_PEAK_MODES`. Needs `set peak p-max` in each.
+- Peak in AC+DC V and LPF V — AC V, AC mV and, on a UT161E, AC µA, mA and A
+  enter it, DC V ignores it ([§6.1][s61], [UT61E+ spec §2.7][e27]); decides
+  `AC_PEAK_MODES`. Needs `command peak` in each, as `set peak` offers neither.
+- REL and MIN/MAX in hFE, refused on a UT161E with the socket empty (`0 β`,
+  [§6.2][s62]) — decides `REL_DEAD` and `MINMAX_DEAD`. Needs a transistor in
+  the socket, then `set rel on` and `set minmax max`. (#7)
 - 0x4D on a UT61B+, which has no Peak: ignored or answered with an error
   ([§6][s6]) — confirms `choices` offering none there. Needs `dmm-cli
   --device ut61b+ command peak` under `RUST_LOG=dmm_lib=debug`. (#7)
@@ -61,7 +64,7 @@ families are in the [verification backlog](../../verification-backlog.md).
 - UT61B+ capacitance rungs 1-4 and 6, pinned between rungs 0 and 5
   ([§5.4][s54]) — the unit changes along the ladder, so a wrong rung is a 1000x
   error. Needs a capacitor per decade: RANGE does nothing there. (#7)
-- The Hz rungs above 0 ([§5.9][s59]), the deck's labels, none seen on a
+- The Hz rungs above 1 ([§5.9][s59]), the deck's labels, none seen on a
   meter — the MHz ones most (E+ bytes 5-7, 6,000-count byte 5). Needs a
   signal generator reaching each. (#6, #7)
 - Frequency from the UT61B+'s V~ position, `0.0` at index 0 ([§5.9][s59]) —
@@ -97,10 +100,9 @@ families are in the [verification backlog](../../verification-backlog.md).
 
 ## The UT161E
 
-- Capacitance, NCV, hFE, continuity and shorted-lead DC V and Ω, and the
-  SELECT, Hz/% and Peak presses its failed gate left unrun — decides
-  `UT161E_UNRUN` and the Verified flip. Needs `capture --unverified`, leads
-  shorted when asked, and `command light`. (#7)
+- AC+DC V above 2.2V: after RANGE the display took 22V resolution while the
+  range byte stayed 0x30 ([§2.2][s22]) — decides whether it needs handling of
+  its own. Needs a 9 V battery in AC+DC V on auto, then RANGE, ~10 s. (#7)
 
 ## UT60BT and UT202BT
 
@@ -174,6 +176,7 @@ a later manual or UNI-T's word.
 [e25]: ../ut61eplus/reverse-engineered-protocol.md#25-mode-byte-values--vendor
 [e27]: ../ut61eplus/reverse-engineered-protocol.md#27-flag-bytes--vendor
 [s10]: reverse-engineered-protocol.md#10-cross-reference-with-community-sources-community
+[s22]: reverse-engineered-protocol.md#22-ut61-vs-ut161--vendor
 [s23]: reverse-engineered-protocol.md#23-secondary-display-frame--vendor--vendor-doc--manual
 [s3]: reverse-engineered-protocol.md#3-available-modes-per-model--manual--vendor--vendor-doc
 [s31]: reverse-engineered-protocol.md#31-function-dial-positions-and-cycle-rings--manual

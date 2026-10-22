@@ -79,7 +79,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
 | `ut161b` |  | UT161B (experimental) |
 | `ut161d` |  | UT161D (experimental) |
-| `ut161e` | `ut161` | UT161E (partly verified) |
+| `ut161e` | `ut161` | UT161E (verified) |
 | `ut60bt` |  | UT60BT (experimental) |
 | `ut202bt` |  | UT202BT (experimental) |
 | `ut8802` | `ut8802n` | UT8802 (experimental) |

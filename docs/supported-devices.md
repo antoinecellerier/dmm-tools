@@ -43,13 +43,13 @@ meter on, long-press USB/Hz until the S icon shows.
 | UT61E+ | 22000 | ✅ Verified | our reference meter |
 | UT61B+ | 6000 | ✅ Verified ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)) | 10 A max current |
 | UT61D+ | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | adds temperature and LoZ AC V |
-| UT161E | 22000 | 🟡 Partly verified ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61E+ |
+| UT161E | 22000 | ✅ Verified ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61E+ |
 | UT161D | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61D+ |
 | UT161B | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61B+ |
 
 All six share one protocol and differ only in their mode and range tables.
-The UT61D+, UT161B and UT161D tables come from the manuals, and the UT161E
-has a few modes left to run; [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) lists the modes that need a capture.
+The UT61D+, UT161B and UT161D tables come from the manuals; [#7](https://github.com/antoinecellerier/dmm-tools/issues/7)
+lists the modes that need a capture.
 
 ## UT60BT / UT202BT
 

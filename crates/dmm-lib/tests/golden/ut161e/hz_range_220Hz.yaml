@@ -1,0 +1,10 @@
+# Frequency 50.0 Hz, auto-ranging on rung 1 (220Hz), one decimal
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step hz).
+raw_hex: "04 31 20 20 20 35 30 2E 30 00 04 30 30 30"
+mode: "Hz"
+value: "50"
+unit: "Hz"
+range_label: "220Hz"
+flags:
+  auto_range: true
+aux: []

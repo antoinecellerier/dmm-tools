@@ -549,16 +549,15 @@ mod tests {
     /// from two captures reported in issue #19 (2026-09-09 and 2026-09-10),
     /// the UT804 from one reporter's meter (issue #16), which walked every
     /// dial position on 2026-09-18, and the ZT-5B from one reporter's two
-    /// captures (issue #31, 2026-10-03). The UT181A has run for its main
-    /// modes only, and the UT161E from one capture (issue #7, 2026-10-21) for
-    /// all but capacitance and the keys a failed gate never pressed, so both
-    /// are PartlyVerified (see their profiles). Everything else must
-    /// stay flagged so the GUI shows the EXPERIMENTAL badge and links to the
+    /// captures (issue #31, 2026-10-03), and the UT161E from one reporter's two
+    /// captures (issue #7, both 2026-10-21). The UT181A has run for its main
+    /// modes only, so it is PartlyVerified (see its profile). Everything else
+    /// must stay flagged so the GUI shows the EXPERIMENTAL badge and links to the
     /// verification issue.
     #[test]
     fn only_hardware_backed_models_are_verified() {
-        const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804", "zt5b"];
-        const PARTLY_VERIFIED: &[&str] = &["ut181a", "ut161e"];
+        const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut161e", "ut804", "zt5b"];
+        const PARTLY_VERIFIED: &[&str] = &["ut181a"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

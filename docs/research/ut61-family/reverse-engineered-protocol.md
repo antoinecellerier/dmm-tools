@@ -111,10 +111,24 @@ Binary comparison of the UT161E installer vs UT61E+ Software V2.02:
 - No functional difference whatsoever
 
 On the wire the UT161E matches the UT61E+ [VERIFIED] (issue #7, CP2110,
-@frixit, 2026-10-21): Get Name answers `UT161E`, and its frames in 18 modes
-(0x00-0x08, 0x0C-0x12, 0x18, 0x19) carry only mode, range and flag bytes our
-UT61E+ has sent, including LPF V's high open-lead entry on the 1000V rung.
-HOLD, REL, MIN/MAX, RANGE and AUTO moved their flags as on the E+.
+@frixit, two runs on 2026-10-21): Get Name answers `UT161E`, and its frames
+in 20 modes (0x00-0x09, 0x0C-0x12, 0x14, 0x18, 0x19) carry only mode, range
+and flag bytes our UT61E+ has sent, including LPF V's high open-lead entry
+on the 1000V rung. HOLD, REL, MIN/MAX, Peak, RANGE, AUTO, SELECT and Hz/%
+moved their flags or mode as on the E+, and the backlight key toggles.
+
+One press differed. In AC+DC V on manual 2.2V, RANGE took the display to
+the 22V rung's three decimals while the range byte stayed 0x30, on all
+three frames before auto came back:
+
+```
+19 30 20 20 30 2E 30 31 33 00 00 30 34 31   DC "  0.013"
+19 30 20 20 30 2E 31 33 30 00 00 30 34 39   AC "  0.130"
+```
+
+The DC reading jumped about tenfold, as on our UT61E+, so the meter did
+change range; our UT61E+ sent 0x31 there on all four of its runs. Whether
+the UT161E's byte follows later, or on auto above 2.2 V, is [UNVERIFIED].
 
 ### 2.3 Secondary-display frame — [VENDOR + VENDOR-DOC + MANUAL]
 
@@ -573,8 +587,10 @@ models, 10 Hz–220 MHz on the UT61E+); the protocol deck gives the rungs:
 
 The 6,000-count ladder counts to 9,999, and its top rung (9.999 MHz) stops
 short of the manual's 10.00 MHz. Rung 0 fits both UT61B+ Hz/%-position
-frames (`0.00`, `49.98`) and the UT61E+'s (`0.00`); no other rung has been
-seen on a meter. From the UT61B+'s V~ position the same index 0 came with
+frames (`0.00`, `49.98`) and the UT61E+'s (`0.00`). Rung 1 is 220 Hz on the
+22,000-count models [VERIFIED]: `49.9` on our UT61E+ (2026-10-08) and `50.0`
+on a UT161E (issue #7), one decimal each. No other rung has been seen on a
+meter. From the UT61B+'s V~ position the same index 0 came with
 `0.0`, one decimal, on 2026-09-09; the manual's AC remarks give the
 6,000-count models 0.1 Hz resolution on the AC positions, which fits, and
 whether the range byte leaves 0 there above 99.99 Hz is [UNVERIFIED].
@@ -660,7 +676,8 @@ walks off → MAX → MIN, one press per step; the ring never comes back to off
 ExitMinMax (0x42) is what leaves. MIN/MAX locks the range, as recording
 does, and ExitMinMax leaves it locked: a 2026-09-10 `ohm_ranges` capture on
 our UT61E+ entered MIN/MAX on auto and ended manually ranged. PeakMinMax
-(0x4D) walks P-MAX → P-MIN the same way in AC V, and ExitPeak (0x4E) leaves.
+(0x4D) walks P-MAX → P-MIN the same way in AC V, and in AC µA, AC mA and AC
+A on a UT161E (issue #7), and ExitPeak (0x4E) leaves.
 Hold (0x4A) and Rel (0x48) each toggle on one press.
 
 ### 6.2 Which modes take which command — [VERIFIED] (UT61E+ and UT61B+)
@@ -792,7 +809,7 @@ have confirmed is tagged [VERIFIED] where sections 3-6 and 9 state it.
 |--------|--------|--------|
 | Identical protocol across all 6 models | **VENDOR** | Zero model conditionals in code |
 | UT161 = UT61+ (binary-identical software) | **VENDOR** | 67/69 files match |
-| UT161E frames = UT61E+ frames | **VERIFIED** | Issue #7 capture, 18 modes |
+| UT161E frames = UT61E+ frames | **VERIFIED** | Issue #7 captures, 20 modes; one AC+DC V range byte differs (§2.2) |
 | Shared VID/PID/baud/framing | **VENDOR** | Shared CP2110.dll |
 | Shared command set | **VENDOR** | Shared CustomDmm.dll |
 | 6,000 vs 22,000 count displays | **MANUAL** | UT61+ Series manual |

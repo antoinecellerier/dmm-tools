@@ -1,0 +1,10 @@
+# Ω 0.45 Ω with the probe tips together, auto-ranging on the 220Ω rung
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step ohm_short).
+raw_hex: "06 30 20 20 20 30 2E 34 35 00 00 30 30 30"
+mode: "Ω"
+value: "0.45"
+unit: "Ω"
+range_label: "220Ω"
+flags:
+  auto_range: true
+aux: []

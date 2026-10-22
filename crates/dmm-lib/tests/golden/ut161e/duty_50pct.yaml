@@ -1,0 +1,10 @@
+# Duty 50.1 % on a 50 Hz signal
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step duty).
+raw_hex: "05 30 20 20 20 35 30 2E 31 00 04 30 30 30"
+mode: "Duty %"
+value: "50.1"
+unit: "%"
+range_label: "Duty"
+flags:
+  auto_range: true
+aux: []

@@ -4,7 +4,7 @@
 
 ### Devices
 
-- **The UT161E is listed as partly verified** — thanks to [@frixit](https://github.com/frixit) for the capture ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)).
+- **The UT161E is verified** — thanks to [@frixit](https://github.com/frixit) for the captures ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)).
 
 ### GUI
 

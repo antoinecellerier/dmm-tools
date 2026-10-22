@@ -1,0 +1,9 @@
+# Continuity 0.60 Ω with the probe tips together, a fixed range
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step continuity).
+raw_hex: "07 30 20 20 20 30 2E 36 30 04 04 30 34 30"
+mode: "Continuity"
+value: "0.6"
+unit: "Ω"
+range_label: "Cont"
+flags: {}
+aux: []

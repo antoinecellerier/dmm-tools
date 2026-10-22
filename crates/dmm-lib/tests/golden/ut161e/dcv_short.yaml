@@ -1,0 +1,10 @@
+# DC V -0.0000 V with the probe tips together, auto-ranging
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step dcv_short).
+raw_hex: "02 30 2D 30 2E 30 30 30 30 00 00 30 30 31"
+mode: "DC V"
+value: "-0"
+unit: "V"
+range_label: "2.2V"
+flags:
+  auto_range: true
+aux: []

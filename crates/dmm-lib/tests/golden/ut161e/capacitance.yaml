@@ -1,0 +1,10 @@
+# Capacitance 0.013 nF on open leads, auto-ranging on the 22nF rung
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step capacitance).
+raw_hex: "09 30 20 20 30 2E 30 31 33 04 04 30 30 30"
+mode: "Capacitance"
+value: "0.013"
+unit: "nF"
+range_label: "22nF"
+flags:
+  auto_range: true
+aux: []

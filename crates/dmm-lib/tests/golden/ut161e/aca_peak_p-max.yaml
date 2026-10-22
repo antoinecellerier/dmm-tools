@@ -1,0 +1,10 @@
+# AC A with Peak sent once: P-MAX, 20A at range byte 1
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step aca/peak:p-max).
+raw_hex: "11 31 20 20 30 2E 31 39 38 00 00 30 34 34"
+mode: "AC A"
+value: "0.198"
+unit: "A"
+range_label: "20A"
+flags:
+  peak_max: true
+aux: []

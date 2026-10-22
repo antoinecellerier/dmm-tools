@@ -59,28 +59,7 @@ pub struct Ut61PlusProtocol {
     /// after 500 ms as UNI-T's app does, and a command leaves it held. A
     /// replay records each reading's own frame, so it plays none back.
     secondary: Option<AuxValue>,
-    /// Capture steps this model has not run on hardware, though its
-    /// stability marks the rest of the shared list verified.
-    unrun_steps: &'static [&'static str],
 }
-
-/// The UT161E's capture steps no meter has run in full. One report in issue
-/// #7 (@frixit, CP2110, 2026-10-21) ran the rest of the list and every frame
-/// matched the UT61E+'s in layout, range byte and flags; it skipped the first
-/// six, and capacitance captured the diode position it was left on. The
-/// gate those two shorted-lead steps decide failed, so no step was swept:
-/// AC V and Hz stay open for the SELECT, Hz/% and Peak presses their sweeps
-/// make.
-const UT161E_UNRUN: &[&str] = &[
-    "dcv_short",
-    "ohm_short",
-    "continuity",
-    "capacitance",
-    "acv",
-    "hz",
-    "ncv",
-    "hfe",
-];
 
 impl Default for Ut61PlusProtocol {
     fn default() -> Self {
@@ -96,14 +75,13 @@ impl Ut61PlusProtocol {
             "UNI-T UT61E+",
             Stability::Verified,
             SpecModel::Ut61ePlus,
-            &[],
         )
     }
 
     /// Create a protocol instance for a specific model name.
     ///
     /// Recognized model strings (case-insensitive):
-    /// - "ut61e+" (Verified), "ut161e" (PartlyVerified) -> UT61E+ table
+    /// - "ut61e+" (Verified), "ut161e" (Verified) -> UT61E+ table
     /// - "ut61b+" (Verified), "ut161b" -> UT61B+ table
     /// - "ut61d+", "ut161d" -> UT61D+ table
     /// - "ut60bt", "ut202bt" -> their own tables
@@ -115,26 +93,26 @@ impl Ut61PlusProtocol {
     ///
     /// Returns `None` if the model string is not recognized.
     pub fn for_model(model: &str) -> Option<Self> {
-        // (table, reported model name, stability, manual spec tables, capture
-        // steps not run on hardware)
-        let (table, model_name, stability, specs, unrun): (Box<dyn DeviceTable>, _, _, _, &[&str]) =
+        // (table, reported model name, stability, manual spec tables)
+        let (table, model_name, stability, specs): (Box<dyn DeviceTable>, _, _, _) =
             match model.to_lowercase().as_str() {
                 "ut61e+" => (
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
                     "UNI-T UT61E+",
                     Stability::Verified,
                     SpecModel::Ut61ePlus,
-                    &[],
                 ),
-                // Partly verified by one capture in issue #7; what it left
-                // unrun is in `UT161E_UNRUN` and the family's
-                // `verification.md`.
+                // Verified by two captures reported in issue #7 (@frixit,
+                // CP2110), both 2026-10-21: its frames carried the UT61E+'s
+                // mode, range and flag bytes except after one AC+DC V range
+                // press (family spec §2.2), and the second run passed the
+                // gate and drove every command. What is left open on this
+                // model is in `docs/research/ut61-family/verification.md`.
                 "ut161e" => (
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
                     "UNI-T UT161E",
-                    Stability::PartlyVerified,
+                    Stability::Verified,
                     SpecModel::Ut161e,
-                    UT161E_UNRUN,
                 ),
                 // Verified by three captures reported in issue #19,
                 // 2026-09-09 to 2026-09-11: every mode its dial reaches
@@ -147,48 +125,40 @@ impl Ut61PlusProtocol {
                     "UNI-T UT61B+",
                     Stability::Verified,
                     SpecModel::Ut61bPlus,
-                    &[],
                 ),
                 "ut161b" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT161B",
                     Stability::Experimental,
                     SpecModel::Ut161b,
-                    &[],
                 ),
                 "ut61d+" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
                     "UNI-T UT61D+",
                     Stability::Experimental,
                     SpecModel::Ut61dPlus,
-                    &[],
                 ),
                 "ut161d" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
                     "UNI-T UT161D",
                     Stability::Experimental,
                     SpecModel::Ut161d,
-                    &[],
                 ),
                 "ut60bt" => (
                     Box::new(tables::ut60bt::Ut60btTable::new()),
                     "UNI-T UT60BT",
                     Stability::Experimental,
                     SpecModel::Untranscribed,
-                    &[],
                 ),
                 "ut202bt" => (
                     Box::new(tables::ut202bt::Ut202btTable::new()),
                     "UNI-T UT202BT",
                     Stability::Experimental,
                     SpecModel::Untranscribed,
-                    &[],
                 ),
                 _ => return None,
             };
-        Some(Self::with_profile(
-            table, model_name, stability, specs, unrun,
-        ))
+        Some(Self::with_profile(table, model_name, stability, specs))
     }
 
     fn with_profile(
@@ -196,7 +166,6 @@ impl Ut61PlusProtocol {
         model_name: &'static str,
         stability: Stability,
         specs: SpecModel,
-        unrun_steps: &'static [&'static str],
     ) -> Self {
         // One sub-value each: a model's secondary display (family spec §2.3),
         // and the AC component of AC+DC V on a model whose dial reaches it
@@ -221,7 +190,6 @@ impl Ut61PlusProtocol {
             dial: cycle::DialState::default(),
             streaming: false,
             secondary: None,
-            unrun_steps,
             profile: DeviceProfile {
                 family_name: "UT61+/UT161",
                 model_name,
@@ -497,12 +465,12 @@ impl Protocol for Ut61PlusProtocol {
             return steps;
         }
 
-        // The list is shared by the whole UT61+/UT161 family; the UT61E+ and
-        // the UT61B+ have run every step of it (the B+ in issue #19), the
-        // UT161E all but its `unrun_steps` (issue #7). A step a model has not
-        // run must not ride on this flag — the two ladder steps were held back
-        // that way for the B+ until it walked them on 2026-09-11.
-        let hw = self.profile.stability != Stability::Experimental;
+        // The list is shared by the whole UT61+/UT161 family; the UT61E+, the
+        // UT61B+ (issue #19) and the UT161E (issue #7) have run every step of
+        // it. A step a verified model has not run must not ride on this flag —
+        // the two ladder steps were held back that way for the B+ until it
+        // walked them on 2026-09-11.
+        let hw = self.profile.stability == Stability::Verified;
         // Every step on this meter takes three samples and shares that
         // hardware history, the gate steps included.
         let mark = |s: CaptureStep| s.samples(3).verified_if(hw);
@@ -681,9 +649,6 @@ impl Protocol for Ut61PlusProtocol {
             if let Some(step) = steps.iter_mut().find(|s| s.id == *id) {
                 step.instruction = instruction;
             }
-        }
-        for step in &mut steps {
-            step.verified &= !self.unrun_steps.contains(&step.id);
         }
         // The list names every mode in the family; a model's dial table says
         // which it reaches (spec §2.1: temperature and LoZ are UT61D+/UT161D
@@ -2607,9 +2572,8 @@ mod tests {
     /// A step is verified where it has *run*, which is not the same as its
     /// family being verified: the UT61B+ reached `Stability::Verified` before
     /// the two ladder steps existed and was asked for them until it walked
-    /// them (issue #19, 2026-09-11). Both verified models have now run every
-    /// step they declare, so `capture --unverified` asks them for nothing, and
-    /// the partly verified UT161E for exactly what its run skipped (issue #7).
+    /// them (issue #19, 2026-09-11). The verified models have now run every
+    /// step they declare, so `capture --unverified` asks them for nothing.
     #[test]
     fn verified_models_are_asked_for_nothing() {
         let unverified = |model: &str| -> Vec<&'static str> {
@@ -2631,7 +2595,11 @@ mod tests {
             "the UT61B+ has run every step it declares: {:?}",
             unverified("ut61b+")
         );
-        assert_eq!(unverified("ut161e"), UT161E_UNRUN);
+        assert!(
+            unverified("ut161e").is_empty(),
+            "the UT161E has run every step it declares: {:?}",
+            unverified("ut161e")
+        );
     }
 
     /// The modes where a press leaves the flag where it was offer nothing to

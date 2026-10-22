@@ -1,0 +1,10 @@
+# AC mA with Peak sent once: P-MAX
+# Captured 2026-10-21 from a UT161E over CP2110 (issue #7, 0.8.0 f747d48 report from @frixit, step acma/peak:p-max).
+raw_hex: "0F 30 20 20 30 2E 33 35 38 00 00 30 34 34"
+mode: "AC mA"
+value: "0.358"
+unit: "mA"
+range_label: "22mA"
+flags:
+  peak_max: true
+aux: []
