@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.9.0 — Graph Analysis and Alarms
+
+Alarms flag readings that leave set limits, in the GUI and `dmm-cli read`. The graph gains a histogram, standard deviation and a right-click menu for reference lines, cursors and alarm limits. The UT161E is verified.
 
 ### Devices
 
@@ -37,6 +39,8 @@
 ### Internal
 
 - **Release and dev build downloads carry the version in their name** — such as `dmm-tools-v0.9.0-linux-x86_64.tar.gz`; every release used the same names.
+
+**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.8.0...v0.9.0
 
 ## v0.8.0 — Bluetooth and Four New Meter Brands
 
