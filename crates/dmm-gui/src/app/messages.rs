@@ -1053,7 +1053,7 @@ mod tests {
         assert!(!app.graph.show_mean, "the cursor's reading has not played");
         play(&mut app, 100);
         assert!(app.graph.show_mean);
-        assert!(app.graph.cursors_active);
+        assert!(app.graph.cursors.active);
         assert!(app.replay_view.is_none(), "applied once");
     }
 

@@ -196,7 +196,7 @@ impl Graph {
 
             ui.add_space(6.0);
 
-            let (y_label, y_tooltip) = if self.y_axis_fixed {
+            let (y_label, y_tooltip) = if self.y_axis.fixed {
                 (
                     "Y:Fixed",
                     "Using fixed Y-axis bounds — click to auto-scale to visible data",
@@ -207,16 +207,16 @@ impl Graph {
                     "Auto-scaling Y to visible data — click to enter fixed bounds",
                 )
             };
-            // The chip has already flipped the flag, so `self.y_axis_fixed`
+            // The chip has already flipped the flag, so `self.y_axis.fixed`
             // below reads "fixed mode was just switched on".
-            if toggle_chip(ui, &mut self.y_axis_fixed, y_label, y_tooltip) && self.y_axis_fixed {
+            if toggle_chip(ui, &mut self.y_axis.fixed, y_label, y_tooltip) && self.y_axis.fixed {
                 self.pin_y_axes_to_view();
             }
-            if self.y_axis_fixed {
+            if self.y_axis.fixed {
                 let field_width = 50.0;
                 let changed_min = text_field(
                     ui,
-                    self.y_min.text_mut(),
+                    self.y_axis.min.text_mut(),
                     field_width,
                     "Y axis minimum",
                     "Lower bound of the fixed Y axis",
@@ -229,17 +229,17 @@ impl Graph {
                 );
                 let changed_max = text_field(
                     ui,
-                    self.y_max.text_mut(),
+                    self.y_axis.max.text_mut(),
                     field_width,
                     "Y axis maximum",
                     "Upper bound of the fixed Y axis",
                 )
                 .changed();
-                if changed_min && self.y_min.parse() {
-                    self.y_user_set = true;
+                if changed_min && self.y_axis.min.parse() {
+                    self.y_axis.user_set = true;
                 }
-                if changed_max && self.y_max.parse() {
-                    self.y_user_set = true;
+                if changed_max && self.y_axis.max.parse() {
+                    self.y_axis.user_set = true;
                 }
             }
 
@@ -335,13 +335,13 @@ impl Graph {
             }
             if chip(
                 ui,
-                self.cursors_active,
+                self.cursors.active,
                 "Cursors",
                 "Click the graph to place two cursors (C)",
             ) {
-                self.toggle_cursors();
+                self.cursors.toggle();
             }
-            if self.cursors_active {
+            if self.cursors.active {
                 if let Some(figures) = self.cursor_readout() {
                     let color = tc.graph_cursor_delta();
                     const GAP: f32 = 6.0;
@@ -388,7 +388,7 @@ impl Graph {
     /// to B, written as Statistics writes the visible window's. `None` until
     /// both cursors are placed.
     pub(super) fn cursor_readout(&mut self) -> Option<Vec<String>> {
-        let (ta, tb) = (self.cursor_a?, self.cursor_b?);
+        let (ta, tb) = (self.cursors.a?, self.cursors.b?);
         let (stats, integral) = self.cursor_figures()?;
         let unit = &self.current_unit;
         let dv = match (self.nearest_point(ta), self.nearest_point(tb)) {
@@ -551,22 +551,11 @@ impl Graph {
     /// they come on: the field is where the lines are actually chosen, and
     /// on an empty one the chip alone draws nothing.
     ///
-    /// Shared by the **Ref** chip and its key, as [`Graph::toggle_cursors`]
+    /// Shared by the **Ref** chip and its key, as [`super::MeasureCursors::toggle`]
     /// is — the two paths would otherwise be free to drift apart.
     pub(super) fn toggle_ref_lines(&mut self) {
         self.show_ref_line = !self.show_ref_line;
         self.focus_ref_field = self.show_ref_line;
-    }
-
-    /// Flip the measurement cursors, dropping any placed cursor when they go
-    /// off so that switching them back on starts a fresh measurement.
-    pub(super) fn toggle_cursors(&mut self) {
-        self.cursors_active = !self.cursors_active;
-        if !self.cursors_active {
-            self.cursor_a = None;
-            self.cursor_b = None;
-            self.cursor_next_is_b = false;
-        }
     }
 
     /// A **Show:** chip was clicked: flip its trace, and leave the choice for

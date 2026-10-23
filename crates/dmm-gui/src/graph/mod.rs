@@ -40,7 +40,7 @@ mod tests;
 
 use dmm_lib::stats::RunningStats;
 use eframe::egui::{self, Ui};
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
 use crate::markers::{Marker, Markers};
@@ -51,7 +51,7 @@ use breaks::Breaks;
 use field::{NumberField, NumberListField};
 use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
-use view::BoxZoom;
+use view::{BoxZoom, YAxis};
 
 /// Maximum number of sub-value traces the graph keeps beside the plotted
 /// series, in its unit or another.
@@ -289,6 +289,62 @@ pub struct PlotSample<'a> {
     pub overlays: &'a [(&'a str, &'a str, Option<f64>)],
 }
 
+/// The measurement cursors: two vertical lines with a ΔT/ΔV readout, at
+/// times in seconds from the origin.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct MeasureCursors {
+    /// A click on the plot places a cursor.
+    pub(crate) active: bool,
+    /// Each cursor's time; `None` until placed.
+    a: Option<f64>,
+    b: Option<f64>,
+    /// Which cursor the next click places.
+    next_is_b: bool,
+}
+
+impl MeasureCursors {
+    /// Both cursors' times, once both are placed while the cursors are on.
+    fn pair(&self) -> Option<(f64, f64)> {
+        self.active.then_some((self.a?, self.b?))
+    }
+
+    /// The placed cursors' times, none while the cursors are off.
+    fn placed(&self) -> impl Iterator<Item = f64> {
+        let shown = if self.active {
+            [self.a, self.b]
+        } else {
+            [None, None]
+        };
+        shown.into_iter().flatten()
+    }
+
+    /// Place the next cursor at `t`; the click after places the other.
+    fn place(&mut self, t: f64) {
+        if self.next_is_b {
+            self.b = Some(t);
+        } else {
+            self.a = Some(t);
+        }
+        self.next_is_b = !self.next_is_b;
+    }
+
+    /// Drop both cursors; the next click places A.
+    fn clear(&mut self) {
+        self.a = None;
+        self.b = None;
+        self.next_is_b = false;
+    }
+
+    /// Flip the cursors, dropping any placed cursor when they go off so that
+    /// switching them back on starts a fresh measurement.
+    fn toggle(&mut self) {
+        self.active = !self.active;
+        if !self.active {
+            self.clear();
+        }
+    }
+}
+
 /// Time window presets.
 pub const TIME_WINDOWS: &[(f64, &str)] = &[
     (5.0, "5s"),
@@ -390,17 +446,8 @@ pub struct Graph {
     /// The interruption since the last plotted point, if any, which the
     /// next one records as its break.
     breaks: Breaks,
-    /// When true, Y axis uses fixed min/max instead of auto-scaling.
-    pub y_axis_fixed: bool,
-    /// Fixed Y-axis bounds, as typed and as parsed.
-    y_min: NumberField,
-    y_max: NumberField,
-    /// Whether the user has manually set Y-axis values this session.
-    y_user_set: bool,
-    /// Each right axis's range while `y_axis_fixed`, by unit, as its axis
-    /// has to frame it: kept, like the fields, when Y:Auto is picked, and
-    /// dropped by [`Graph::release_y_pins`]. A unit with none fits its data.
-    y_pins: BTreeMap<String, (f64, f64)>,
+    /// Fixed Y ranges, while **Y:Fixed** is on.
+    y_axis: YAxis,
     /// This frame's right axes, by unit, for a box zoom to pin each to its
     /// share of the box: see [`Graph::apply_bbox_zoom`].
     axis_maps: Vec<(String, AxisMap)>,
@@ -438,13 +485,7 @@ pub struct Graph {
     /// Set when the lines are switched on, by the chip or by its key: the
     /// field appears empty, and nothing is drawn until a value is typed.
     focus_ref_field: bool,
-    /// Measurement cursors: two vertical lines with ΔT/ΔV readout.
-    pub cursors_active: bool,
-    /// Cursor positions in seconds from origin. None = not yet placed.
-    cursor_a: Option<f64>,
-    cursor_b: Option<f64>,
-    /// Which cursor to place next on click.
-    cursor_next_is_b: bool,
+    pub(crate) cursors: MeasureCursors,
     /// The minimap's whole-session trace, bucketed at whatever width its
     /// strip last asked for. `None` until the strip first draws, and again
     /// whenever the buckets stop meaning what they did — see `clear` and
@@ -517,11 +558,7 @@ impl Graph {
             last_heard: None,
             main_missing_frames: 0,
             breaks: Breaks::default(),
-            y_axis_fixed: false,
-            y_min: NumberField::new("-1", -1.0),
-            y_max: NumberField::new("1", 1.0),
-            y_user_set: false,
-            y_pins: BTreeMap::new(),
+            y_axis: YAxis::default(),
             axis_maps: Vec::new(),
             plot_rect: None,
             plot_transform: None,
@@ -537,10 +574,7 @@ impl Graph {
             show_crossings: true,
             ref_lines: NumberListField::default(),
             focus_ref_field: false,
-            cursors_active: false,
-            cursor_a: None,
-            cursor_b: None,
-            cursor_next_is_b: false,
+            cursors: MeasureCursors::default(),
             minimap_level: None,
             pushed_total: 0,
             history_epoch: 0,
@@ -914,7 +948,7 @@ impl Graph {
             missing_frames: self.main_missing_frames,
         };
         if self.overlays[i].unit != unit {
-            self.release_y_pins();
+            self.y_axis.release();
         }
         self.main_missing_frames = incoming_missing;
         self.current_series = series.map(str::to_owned);
@@ -1020,10 +1054,8 @@ impl Graph {
         // — the trace lands far outside the plot and the graph just looks
         // empty, with the old numbers still on the axis. `clear()` and
         // `reset_view()` both release these for the same reason.
-        self.release_y_pins();
-        self.cursor_a = None;
-        self.cursor_b = None;
-        self.cursor_next_is_b = false;
+        self.y_axis.release();
+        self.cursors.clear();
         self.box_zoom = None;
         self.minimap_level = None;
         self.restart_sequence();
@@ -1041,7 +1073,7 @@ impl Graph {
         {
             // A range fixed for the old unit means nothing in the new one,
             // nor when the unit comes back: the axis fits its data again.
-            self.y_pins.remove(&o.unit);
+            self.y_axis.pins.remove(&o.unit);
             o.unit = unit.to_string();
             o.points.clear();
             o.missing_frames = 0;
@@ -1291,10 +1323,8 @@ impl Graph {
         self.origin = None;
         self.live = true;
         self.view_center = 0.0;
-        self.release_y_pins();
-        self.cursor_a = None;
-        self.cursor_b = None;
-        self.cursor_next_is_b = false;
+        self.y_axis.release();
+        self.cursors.clear();
         self.minimap_drag = MinimapDrag::None;
         self.box_zoom = None;
         self.minimap_level = None;
@@ -1597,9 +1627,7 @@ impl Graph {
     /// The history readings between the cursors, both included, once both
     /// are placed.
     fn cursor_range(&self) -> Option<std::ops::Range<usize>> {
-        let (true, Some(a), Some(b)) = (self.cursors_active, self.cursor_a, self.cursor_b) else {
-            return None;
-        };
+        let (a, b) = self.cursors.pair()?;
         let (start, end) = self.visible_index_range(a.min(b), a.max(b));
         Some(start..end)
     }
@@ -1669,11 +1697,7 @@ impl Graph {
             .values()
             .iter()
             .filter(|_| self.show_ref_line);
-        let cursors = [self.cursor_a, self.cursor_b]
-            .into_iter()
-            .flatten()
-            .filter(|_| self.cursors_active)
-            .filter_map(|t| self.nearest_point(t));
+        let cursors = self.cursors.placed().filter_map(|t| self.nearest_point(t));
         mean.map(|m| line(m, tc.graph_mean(), 1.0, LineStyle::dashed_loose()))
             .into_iter()
             .chain(refs.map(|&v| line(v, tc.graph_ref(), 1.0, LineStyle::dashed_dense())))

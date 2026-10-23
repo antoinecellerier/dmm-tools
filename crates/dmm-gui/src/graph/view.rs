@@ -5,8 +5,47 @@
 
 use eframe::egui::{self, Ui};
 use egui_plot::PlotTransform;
+use std::collections::BTreeMap;
 
+use super::field::NumberField;
 use super::{Graph, TIME_WINDOWS};
+
+/// The Y axes' fixed ranges, used while **Y:Fixed** is on.
+pub(super) struct YAxis {
+    /// The axes keep fixed ranges instead of fitting the data.
+    pub(super) fixed: bool,
+    /// The plotted unit's fixed bounds, as typed and as parsed.
+    pub(super) min: NumberField,
+    pub(super) max: NumberField,
+    /// Whether the user has set the bounds this session.
+    pub(super) user_set: bool,
+    /// Each right axis's range while `fixed`, by unit, as its axis has to
+    /// frame it: kept, like the fields, when Y:Auto is picked, and dropped
+    /// by [`YAxis::release`]. A unit with none fits its data.
+    pub(super) pins: BTreeMap<String, (f64, f64)>,
+}
+
+impl Default for YAxis {
+    fn default() -> Self {
+        Self {
+            fixed: false,
+            min: NumberField::new("-1", -1.0),
+            max: NumberField::new("1", 1.0),
+            user_set: false,
+            pins: BTreeMap::new(),
+        }
+    }
+}
+
+impl YAxis {
+    /// Back to auto Y on every axis, forgetting the fixed ranges: the scale
+    /// they were chosen for is gone, or the user asked for the default view.
+    pub(super) fn release(&mut self) {
+        self.fixed = false;
+        self.user_set = false;
+        self.pins.clear();
+    }
+}
 
 /// A Shift+drag box zoom in progress, in screen pixels.
 #[derive(Debug, Clone, Copy)]
@@ -94,7 +133,7 @@ impl Graph {
             self.show_crossings = !self.show_crossings;
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::C)) {
-            self.toggle_cursors();
+            self.cursors.toggle();
         }
     }
 
@@ -254,9 +293,9 @@ impl Graph {
     /// ([`Graph::fitted_targets`]).
     pub(super) fn secondary_targets(&self, x_min: f64, x_max: f64) -> Vec<(String, (f64, f64))> {
         let mut targets = self.fitted_targets(&self.drawn_units(), x_min, x_max);
-        if self.y_axis_fixed {
+        if self.y_axis.fixed {
             for (unit, range) in &mut targets {
-                if let Some(pin) = self.y_pins.get(unit) {
+                if let Some(pin) = self.y_axis.pins.get(unit) {
                     *range = *pin;
                 }
             }
@@ -323,8 +362,8 @@ impl Graph {
         x_max: f64,
         with_overlays: bool,
     ) -> Option<(f64, f64)> {
-        if self.y_axis_fixed {
-            return Some((self.y_min.value(), self.y_max.value()));
+        if self.y_axis.fixed {
+            return Some((self.y_axis.min.value(), self.y_axis.max.value()));
         }
         self.y_min_max_padded(x_min, x_max, with_overlays)
     }
@@ -334,15 +373,7 @@ impl Graph {
     pub fn reset_view(&mut self) {
         self.live = true;
         self.view_center = 0.0;
-        self.release_y_pins();
-    }
-
-    /// Back to auto Y on every axis, forgetting the fixed ranges: the scale
-    /// they were chosen for is gone, or the user asked for the default view.
-    pub(super) fn release_y_pins(&mut self) {
-        self.y_axis_fixed = false;
-        self.y_user_set = false;
-        self.y_pins.clear();
+        self.y_axis.release();
     }
 
     /// Fix every axis at the range it shows now, as the **Y:Fixed** chip
@@ -354,25 +385,25 @@ impl Graph {
     /// they come back where they were.
     pub(super) fn pin_y_axes_to_view(&mut self) {
         let (view_min, view_max) = self.view_bounds();
-        if !self.y_user_set {
+        if !self.y_axis.user_set {
             // With the overlays included, so pinning the axis doesn't jump
             // the view the moment Y:Fixed is pressed.
             if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max, true) {
-                self.y_min.set(y_lo);
-                self.y_max.set(y_hi);
+                self.y_axis.min.set(y_lo);
+                self.y_axis.max.set(y_hi);
             }
-            self.y_pins.clear();
+            self.y_axis.pins.clear();
         }
         let targets = self.fitted_targets(&self.axis_units(), view_min, view_max);
         for (unit, target) in targets {
-            self.y_pins.entry(unit).or_insert(target);
+            self.y_axis.pins.entry(unit).or_insert(target);
         }
     }
 
     /// True when the view has been zoomed or panned away from the default
     /// live + auto-Y state. Used to enable/disable the Reset Zoom button.
     pub fn is_view_zoomed(&self) -> bool {
-        !self.live || self.y_axis_fixed
+        !self.live || self.y_axis.fixed
     }
 
     /// Shift the view by `time_delta` seconds. The sign convention matches
@@ -428,12 +459,12 @@ impl Graph {
         self.live = false;
         self.view_center = view_center;
         self.time_window_secs = time_window.max(MIN_TIME_WINDOW_SECS);
-        self.y_axis_fixed = true;
-        self.y_min.set(y_min);
-        self.y_max.set(y_max);
-        self.y_user_set = true;
+        self.y_axis.fixed = true;
+        self.y_axis.min.set(y_min);
+        self.y_axis.max.set(y_max);
+        self.y_axis.user_set = true;
         // Each right axis to its share of the box, on this frame's map.
-        self.y_pins = self
+        self.y_axis.pins = self
             .axis_maps
             .iter()
             .map(|(unit, map)| {
@@ -572,18 +603,13 @@ impl Graph {
         }
 
         // Cursor placement on click — snap to nearest data point
-        if self.cursors_active
+        if self.cursors.active
             && plot_response.clicked()
             && let Some(pos) = plot_response.interact_pointer_pos()
         {
             let click_t = transform.value_from_position(pos).x;
             if let Some((snapped_t, _)) = self.nearest_point(click_t) {
-                if self.cursor_next_is_b {
-                    self.cursor_b = Some(snapped_t);
-                } else {
-                    self.cursor_a = Some(snapped_t);
-                }
-                self.cursor_next_is_b = !self.cursor_next_is_b;
+                self.cursors.place(snapped_t);
             }
         }
     }

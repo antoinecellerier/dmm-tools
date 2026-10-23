@@ -13,7 +13,7 @@ use super::axes::{self, AxisMap};
 use super::minimap::bucket_secs;
 use super::pattern::{DASH_GAP, PatternKey, Patterns, SegmentedLine, TimedHLine, anchor_layout};
 use super::time::{MIN_GRID_SPACING, format_time_axis_label, time_marks};
-use super::{GapKind, Graph, OverlaySeries, SegmentsAndGaps};
+use super::{GapKind, Graph, MeasureCursors, OverlaySeries, SegmentsAndGaps};
 use crate::markers::Markers;
 use crate::theme::ThemeColors;
 
@@ -737,9 +737,7 @@ struct OverlayLabelData {
     ref_values: Vec<f64>,
     /// The alarm limits drawn, in the plotted unit, with their names.
     limit_lines: Vec<(f64, &'static str)>,
-    cursors_active: bool,
-    cursor_a: Option<f64>,
-    cursor_b: Option<f64>,
+    cursors: MeasureCursors,
     cursor_va: Option<f64>,
     cursor_vb: Option<f64>,
     /// The plotted series' visible segments as drawn, which cursor readouts
@@ -1431,11 +1429,13 @@ impl Graph {
         } else {
             Vec::new()
         };
-        let cursors_active = self.cursors_active;
-        let cursor_a = self.cursor_a;
-        let cursor_b = self.cursor_b;
-        let cursor_va = cursor_a.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
-        let cursor_vb = cursor_b.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
+        let cursors = self.cursors;
+        let cursor_va = cursors
+            .a
+            .and_then(|t| self.nearest_point(t).map(|(_, v)| v));
+        let cursor_vb = cursors
+            .b
+            .and_then(|t| self.nearest_point(t).map(|(_, v)| v));
         let mean_value = self.visible_stats().and_then(|s| s.avg());
 
         let cursor_unit = self.current_unit.clone();
@@ -1704,8 +1704,8 @@ impl Graph {
             }
 
             // Measurement cursors (vertical + horizontal Y-value lines)
-            if cursors_active {
-                if let Some(t) = cursor_a {
+            if cursors.active {
+                if let Some(t) = cursors.a {
                     plot_ui.vline(VLine::new("", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_va {
@@ -1715,7 +1715,7 @@ impl Graph {
                         egui_plot::LineStyle::dashed_dense(),
                     ));
                 }
-                if let Some(t) = cursor_b {
+                if let Some(t) = cursors.b {
                     plot_ui.vline(VLine::new("", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_vb {
@@ -1751,9 +1751,7 @@ impl Graph {
             show_ref,
             ref_values,
             limit_lines,
-            cursors_active,
-            cursor_a,
-            cursor_b,
+            cursors,
             cursor_va,
             cursor_vb,
             trace: response.inner,
@@ -2090,17 +2088,11 @@ impl Graph {
         };
 
         // The vertical lines a mean or reference label steps aside from.
-        let cursor_times = [data.cursor_a, data.cursor_b];
         let line_xs: Vec<f32> = data
             .marker_times
             .iter()
             .copied()
-            .chain(
-                cursor_times
-                    .into_iter()
-                    .flatten()
-                    .filter(|_| data.cursors_active),
-            )
+            .chain(data.cursors.placed())
             .map(|t| screen(t, 0.0).x)
             .filter(|&x| plot_rect.x_range().contains(x))
             .collect();
@@ -2131,10 +2123,10 @@ impl Graph {
             )
         };
         // Cursor labels
-        if data.cursors_active {
+        if data.cursors.active {
             for (name, t, value) in [
-                ("A", data.cursor_a, data.cursor_va),
-                ("B", data.cursor_b, data.cursor_vb),
+                ("A", data.cursors.a, data.cursor_va),
+                ("B", data.cursors.b, data.cursor_vb),
             ] {
                 let Some(t) = t else { continue };
                 let y_val = value.unwrap_or(0.0);

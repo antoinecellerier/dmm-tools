@@ -87,11 +87,11 @@ fn unit_change_clears_history() {
 fn unit_change_releases_the_pinned_y_range() {
     let mut g = Graph::new();
     g.push(150.0, Instant::now(), "Ω", "Ω", None);
-    g.y_axis_fixed = true;
-    g.y_user_set = true;
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
     g.push(0.22, Instant::now(), "Ω", "kΩ", None);
-    assert!(!g.y_axis_fixed);
-    assert!(!g.y_user_set);
+    assert!(!g.y_axis.fixed);
+    assert!(!g.y_axis.user_set);
 }
 
 /// A brief over-range excursion leaves no hole in the timestamps, so
@@ -707,7 +707,7 @@ fn minimap_scale_ignores_the_pinned_y_range() {
     }
     // Pin a narrow band, as a Shift-drag box zoom does.
     g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
-    assert!(g.y_axis_fixed);
+    assert!(g.y_axis.fixed);
     assert_eq!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
 
     let (lo, hi) = g.y_range_for_view_auto(0.0, 1.0, true).expect("auto range");
@@ -724,15 +724,15 @@ fn mode_change_releases_the_pinned_y_range() {
     let mut g = Graph::new();
     g.push(5.0, Instant::now(), "DC V", "V", None);
     g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
-    assert!(g.y_axis_fixed);
+    assert!(g.y_axis.fixed);
     assert_eq!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
 
     g.push(1000.0, Instant::now(), "Ohm", "Ω", None);
     assert!(
-        !g.y_axis_fixed,
+        !g.y_axis.fixed,
         "mode change must release the fixed Y range"
     );
-    assert!(!g.y_user_set);
+    assert!(!g.y_axis.user_set);
     assert_ne!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
 }
 
@@ -744,7 +744,7 @@ fn same_mode_keeps_the_pinned_y_range() {
     g.push(5.0, Instant::now(), "DC V", "V", None);
     g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
     g.push(5.05, Instant::now(), "DC V", "V", None);
-    assert!(g.y_axis_fixed);
+    assert!(g.y_axis.fixed);
     assert_eq!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
 }
 
@@ -958,17 +958,17 @@ fn bbox_to_view_degenerate_does_not_panic() {
 fn apply_bbox_zoom_sets_state() {
     let mut g = Graph::new();
     assert!(g.live);
-    assert!(!g.y_axis_fixed);
+    assert!(!g.y_axis.fixed);
     g.apply_bbox_zoom((10.0, 5.0), (20.0, 2.0));
     assert!(!g.live);
-    assert!(g.y_axis_fixed);
-    assert!(g.y_user_set);
+    assert!(g.y_axis.fixed);
+    assert!(g.y_axis.user_set);
     assert!((g.view_center - 15.0).abs() < 1e-9);
     assert!((g.time_window_secs - 10.0).abs() < 1e-9);
-    assert!((g.y_min.value() - 2.0).abs() < 1e-9);
-    assert!((g.y_max.value() - 5.0).abs() < 1e-9);
-    assert_eq!(g.y_min.text(), "2.0000");
-    assert_eq!(g.y_max.text(), "5.0000");
+    assert!((g.y_axis.min.value() - 2.0).abs() < 1e-9);
+    assert!((g.y_axis.max.value() - 5.0).abs() < 1e-9);
+    assert_eq!(g.y_axis.min.text(), "2.0000");
+    assert_eq!(g.y_axis.max.text(), "5.0000");
 }
 
 #[test]
@@ -984,11 +984,11 @@ fn reset_view_restores_live_and_auto_y() {
     let mut g = Graph::new();
     g.apply_bbox_zoom((10.0, 5.0), (20.0, 2.0));
     assert!(!g.live);
-    assert!(g.y_axis_fixed);
+    assert!(g.y_axis.fixed);
     g.reset_view();
     assert!(g.live);
-    assert!(!g.y_axis_fixed);
-    assert!(!g.y_user_set);
+    assert!(!g.y_axis.fixed);
+    assert!(!g.y_axis.user_set);
     assert_eq!(g.view_center, 0.0);
 }
 
@@ -1605,7 +1605,7 @@ fn is_view_zoomed_reflects_state() {
     g.live = false;
     assert!(g.is_view_zoomed());
     g.live = true;
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = true;
     assert!(g.is_view_zoomed());
 }
 
@@ -2145,8 +2145,8 @@ fn a_series_change_to_another_unit_swaps_the_traces() {
         vec!["Main (V)", "Frequency (Hz)", "Period (ms)"],
         "Hz and ms on axes of their own"
     );
-    g.y_axis_fixed = true;
-    g.y_user_set = true;
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
 
     push_vac_hz(&mut g, at(3), Some("Frequency"), 233.0, (50.1, "Hz"));
     assert_eq!(g.current_series.as_deref(), Some("Frequency"));
@@ -2166,7 +2166,7 @@ fn a_series_change_to_another_unit_swaps_the_traces() {
     );
     assert_eq!(g.origin, Some(t0), "the time axis stays where it was");
     assert!(
-        !g.y_axis_fixed && !g.y_user_set,
+        !g.y_axis.fixed && !g.y_axis.user_set,
         "a volt range means nothing in Hz"
     );
 
@@ -2439,10 +2439,10 @@ fn the_histogram_shows_while_on_and_its_trace_is_drawn() {
 #[test]
 fn the_cursor_readout_covers_the_readings_between_the_cursors() {
     let mut g = graph_with_a_minute_of_data();
-    g.cursors_active = true;
-    g.cursor_a = Some(2.0);
+    g.cursors.active = true;
+    g.cursors.a = Some(2.0);
     assert_eq!(g.cursor_readout(), None, "one cursor placed");
-    g.cursor_b = Some(1.0);
+    g.cursors.b = Some(1.0);
     let figures = g.cursor_readout().expect("both cursors placed");
     assert_eq!(figures[0], "\u{0394}T=1.00 s");
     assert_eq!(
@@ -2526,9 +2526,9 @@ fn cursor_figures_follow_the_readings_between_the_cursors() {
         g.push(v, t0 + Duration::from_millis(i * 100), "DC V", "V", None);
     };
     let place_cursors = |g: &mut Graph, a: f64, b: f64| {
-        g.cursors_active = true;
-        g.cursor_a = Some(a);
-        g.cursor_b = Some(b);
+        g.cursors.active = true;
+        g.cursors.a = Some(a);
+        g.cursors.b = Some(b);
     };
     let stats = |g: &mut Graph| g.cursor_figures().expect("both cursors placed").0;
     let key = |g: &Graph| g.cursor_figures.as_ref().map(|f| f.key);
@@ -2572,9 +2572,9 @@ fn the_histogram_is_binned_again_only_when_its_readings_change() {
     graph_frame(&mut g, &ctx, vec![]);
     assert_eq!(g.histogram.as_ref().map(|b| b.key), key, "nothing changed");
 
-    g.cursors_active = true;
-    g.cursor_a = Some(1.0);
-    g.cursor_b = Some(2.0);
+    g.cursors.active = true;
+    g.cursors.a = Some(1.0);
+    g.cursors.b = Some(2.0);
     graph_frame(&mut g, &ctx, vec![]);
     assert_ne!(
         g.histogram.as_ref().map(|b| b.key),
@@ -2758,12 +2758,12 @@ fn fixing_y_pins_every_axis_where_it_is() {
     let mut g = graph_with_hz();
     let (x_min, x_max) = g.view_bounds();
     let before = g.secondary_targets(x_min, x_max);
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = true;
     g.pin_y_axes_to_view();
     assert_eq!(g.secondary_targets(x_min, x_max), before);
 
-    g.y_axis_fixed = false;
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = false;
+    g.y_axis.fixed = true;
     g.pin_y_axes_to_view();
     assert_eq!(g.secondary_targets(x_min, x_max), before, "no growth");
 }
@@ -2776,9 +2776,9 @@ fn fixing_y_in_a_narrow_window_pins_the_shed_axes() {
     let (x_min, x_max) = g.view_bounds();
     let fitted = g.secondary_targets(x_min, x_max);
     g.fit_axes_to(100.0);
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = true;
     g.pin_y_axes_to_view();
-    assert_eq!(g.y_pins.len(), fitted.len());
+    assert_eq!(g.y_axis.pins.len(), fitted.len());
 }
 
 /// A view restored with a fixed range fixes the left axis only; pressing
@@ -2786,15 +2786,15 @@ fn fixing_y_in_a_narrow_window_pins_the_shed_axes() {
 #[test]
 fn y_fixed_after_a_restored_range_pins_the_right_axes() {
     let mut g = graph_with_hz();
-    g.y_axis_fixed = true;
-    g.y_user_set = true;
-    g.y_min.set(200.0);
-    g.y_max.set(260.0);
-    g.y_axis_fixed = false;
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    g.y_axis.min.set(200.0);
+    g.y_axis.max.set(260.0);
+    g.y_axis.fixed = false;
+    g.y_axis.fixed = true;
     g.pin_y_axes_to_view();
-    assert_eq!((g.y_min.value(), g.y_max.value()), (200.0, 260.0));
-    assert!(g.y_pins.contains_key("Hz"));
+    assert_eq!((g.y_axis.min.value(), g.y_axis.max.value()), (200.0, 260.0));
+    assert!(g.y_axis.pins.contains_key("Hz"));
 }
 
 /// A sub-value stepping to another unit drops its axis's fixed range: it
@@ -2802,9 +2802,9 @@ fn y_fixed_after_a_restored_range_pins_the_right_axes() {
 #[test]
 fn a_unit_step_drops_its_axis_pin() {
     let mut g = graph_with_hz();
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = true;
     g.pin_y_axes_to_view();
-    assert!(g.y_pins.contains_key("Hz"));
+    assert!(g.y_axis.pins.contains_key("Hz"));
     push_vac_hz(
         &mut g,
         Instant::now() + Duration::from_secs(3),
@@ -2812,8 +2812,8 @@ fn a_unit_step_drops_its_axis_pin() {
         230.0,
         (1.001, "kHz"),
     );
-    assert!(!g.y_pins.contains_key("Hz"));
-    assert!(g.y_pins.contains_key("ms"), "the others keep theirs");
+    assert!(!g.y_axis.pins.contains_key("Hz"));
+    assert!(g.y_axis.pins.contains_key("ms"), "the others keep theirs");
 }
 
 /// A box zoom pins each right axis to its share of the box, through the
@@ -2851,9 +2851,9 @@ fn a_box_zoom_pins_every_axis_to_its_share() {
 #[test]
 fn a_swap_into_another_unit_releases_every_pin() {
     let mut g = graph_with_hz();
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = true;
     g.pin_y_axes_to_view();
-    assert!(!g.y_pins.is_empty());
+    assert!(!g.y_axis.pins.is_empty());
     push_vac_hz(
         &mut g,
         Instant::now() + Duration::from_secs(3),
@@ -2861,8 +2861,8 @@ fn a_swap_into_another_unit_releases_every_pin() {
         230.0,
         (50.0, "Hz"),
     );
-    assert!(!g.y_axis_fixed);
-    assert!(g.y_pins.is_empty());
+    assert!(!g.y_axis.fixed);
+    assert!(g.y_axis.pins.is_empty());
 }
 
 /// With right axes, the hover lists every series at the hovered time, the
@@ -4423,14 +4423,18 @@ fn c_clears_the_cursors_on_the_way_off() {
     let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     graph_frame(&mut g, &ctx, key_press(egui::Key::C));
-    assert!(g.cursors_active, "C did not switch the cursors on");
-    g.cursor_a = Some(1.0);
-    g.cursor_b = Some(2.0);
-    g.cursor_next_is_b = true;
+    assert!(g.cursors.active, "C did not switch the cursors on");
+    g.cursors.a = Some(1.0);
+    g.cursors.b = Some(2.0);
+    g.cursors.next_is_b = true;
     graph_frame(&mut g, &ctx, key_press(egui::Key::C));
-    assert!(!g.cursors_active, "C did not switch the cursors off");
-    assert_eq!((g.cursor_a, g.cursor_b), (None, None), "a cursor survived");
-    assert!(!g.cursor_next_is_b, "the next-click side survived");
+    assert!(!g.cursors.active, "C did not switch the cursors off");
+    assert_eq!(
+        (g.cursors.a, g.cursors.b),
+        (None, None),
+        "a cursor survived"
+    );
+    assert!(!g.cursors.next_is_b, "the next-click side survived");
 }
 
 /// The export history is cut to this, so it has to move exactly when the
@@ -4643,7 +4647,7 @@ fn clicking_a_flag_reports_its_marker() {
     frame(&mut g, vec![egui::Event::PointerMoved(at), button(false)]);
     assert_eq!(g.take_clicked_marker(), Some(1));
     assert!(
-        g.cursor_a.is_none(),
+        g.cursors.a.is_none(),
         "the click is the flag's, not the plot's"
     );
 }
@@ -5296,11 +5300,11 @@ fn patterned_graph(samples: u32) -> (Graph, Instant) {
     let t0 = Instant::now();
     push_patterned(&mut g, t0, 0, samples);
     // After the first sample, whose new mode lets go of a pinned axis.
-    g.y_axis_fixed = true;
-    g.y_user_set = true;
-    g.y_min.set(-2.0);
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    g.y_axis.min.set(-2.0);
     // The traces stay in the lower half, clear of the key.
-    g.y_max.set(6.0);
+    g.y_axis.max.set(6.0);
     (g, t0)
 }
 
@@ -5455,6 +5459,6 @@ fn toolbar_fields_leave_its_height_alone() {
     assert_eq!(height(&mut g), plain, "Min/Max window field");
     g.show_ref_line = true;
     assert_eq!(height(&mut g), plain, "reference values field");
-    g.y_axis_fixed = true;
+    g.y_axis.fixed = true;
     assert_eq!(height(&mut g), plain, "fixed Y bounds fields");
 }
