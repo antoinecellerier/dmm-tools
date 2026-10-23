@@ -34,7 +34,7 @@ mod view;
 mod view_state;
 
 pub(crate) use limits::{LimitSide, WatchedLimits};
-pub(crate) use menu::MenuAction;
+pub(crate) use menu::{MenuAction, ReadingDigits};
 pub(crate) use view_state::ViewState;
 
 #[cfg(test)]
@@ -292,6 +292,23 @@ pub struct PlotSample<'a> {
     pub overlays: &'a [(&'a str, &'a str, Option<f64>)],
 }
 
+/// One of the two measurement cursors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Cursor {
+    A,
+    B,
+}
+
+impl Cursor {
+    /// The cursor's letter, as its line is labelled.
+    fn name(self) -> &'static str {
+        match self {
+            Self::A => "A",
+            Self::B => "B",
+        }
+    }
+}
+
 /// The measurement cursors: two vertical lines with a ΔT/ΔV readout, at
 /// times in seconds from the origin.
 #[derive(Debug, Clone, Copy, Default)]
@@ -342,18 +359,37 @@ impl MeasureCursors {
         self.next_is_b = !self.next_is_b;
     }
 
-    /// Switch the cursors on with A at `t`; the next click places B.
-    fn place_a(&mut self, t: f64) {
-        self.active = true;
-        self.a = Some(t);
-        self.next_is_b = true;
+    /// The time of cursor `which`, while the cursors are on.
+    fn at(&self, which: Cursor) -> Option<f64> {
+        let t = match which {
+            Cursor::A => self.a,
+            Cursor::B => self.b,
+        };
+        t.filter(|_| self.active)
     }
 
-    /// Switch the cursors on with B at `t`; the next click places A.
-    fn place_b(&mut self, t: f64) {
+    /// Switch the cursors on with `which` at `t`; the next click places
+    /// the other one.
+    fn set(&mut self, which: Cursor, t: f64) {
         self.active = true;
-        self.b = Some(t);
-        self.next_is_b = false;
+        match which {
+            Cursor::A => self.a = Some(t),
+            Cursor::B => self.b = Some(t),
+        }
+        self.next_is_b = which == Cursor::A;
+    }
+
+    /// Drop cursor `which`; the next click places it again. With the last
+    /// one gone the cursors go off, as the chip leaves them.
+    fn remove(&mut self, which: Cursor) {
+        match which {
+            Cursor::A => self.a = None,
+            Cursor::B => self.b = None,
+        }
+        self.next_is_b = which == Cursor::B;
+        if self.a.is_none() && self.b.is_none() {
+            *self = Self::default();
+        }
     }
 
     /// Drop both cursors; the next click places A.
@@ -1547,13 +1583,15 @@ impl Graph {
     }
 
     /// Combined render: toolbar + main graph + minimap, with `markers` on
-    /// both and the alarm's `limits` on the main graph.
+    /// both and the alarm's `limits` on the main graph; `digits` names a
+    /// reading in its menu.
     pub fn show(
         &mut self,
         ui: &mut Ui,
         tc: &ThemeColors,
         markers: &Markers,
         limits: Option<WatchedLimits>,
+        digits: ReadingDigits,
     ) {
         self.handle_keyboard(ui.ctx());
         // Before the toolbar, whose Show: chips say which units have no axis.
@@ -1579,7 +1617,7 @@ impl Graph {
                     ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width() - p.size, main_height),
                         egui::Layout::top_down(egui::Align::Min),
-                        |ui| self.show_main(ui, tc, markers, limits),
+                        |ui| self.show_main(ui, tc, markers, limits, digits),
                     );
                     let (area, _) = ui
                         .allocate_exact_size(egui::vec2(p.size, main_height), egui::Sense::hover());
@@ -1596,7 +1634,7 @@ impl Graph {
             self.histogram_divider(ui, rect, p);
         } else {
             ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
-                self.show_main(ui, tc, markers, limits);
+                self.show_main(ui, tc, markers, limits, digits);
             });
         }
         ui.add_space(4.0);

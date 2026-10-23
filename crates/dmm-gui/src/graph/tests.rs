@@ -9,6 +9,10 @@ use super::*;
 use crate::settings::{ColorPreset, PaletteOverrides};
 use std::time::Duration;
 
+/// A reading's digits, for a graph drawn without the app: none, so the
+/// menu names a reading by its value on the trace.
+const NO_DIGITS: ReadingDigits = &|_, _| None;
+
 #[test]
 fn new_graph_is_empty() {
     let g = Graph::new();
@@ -2615,7 +2619,7 @@ fn tab_reaches_the_strip_divider_before_the_minimap() {
             events,
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show(ui, &tc, &markers, None));
+        let mut out = ctx.run_ui(input, |ui| g.show(ui, &tc, &markers, None, NO_DIGITS));
         out.textures_delta.clear();
         let focused = out.platform_output.accesskit_update.and_then(|update| {
             let focus = update.focus;
@@ -2655,7 +2659,7 @@ fn dragging_the_divider_resizes_the_histogram() {
             ..Default::default()
         };
         let markers = crate::markers::Markers::default();
-        let mut out = ctx.run_ui(input, |ui| g.show(ui, &tc, &markers, None));
+        let mut out = ctx.run_ui(input, |ui| g.show(ui, &tc, &markers, None, NO_DIGITS));
         out.textures_delta.clear();
         out.platform_output.accesskit_update.and_then(|update| {
             update
@@ -4226,7 +4230,13 @@ fn gesture_frame(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events
     input.events.push(egui::Event::PointerMoved(pointer));
     input.events.extend_from_slice(events);
     let mut output = ctx.run_ui(input, |ui| {
-        g.show_main(ui, &tc, &crate::markers::Markers::default(), None)
+        g.show_main(
+            ui,
+            &tc,
+            &crate::markers::Markers::default(),
+            None,
+            NO_DIGITS,
+        )
     });
     // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
     output.textures_delta.clear();
@@ -4341,7 +4351,15 @@ fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
             events,
             ..Default::default()
         },
-        |ui| g.show(ui, &tc, &crate::markers::Markers::default(), None),
+        |ui| {
+            g.show(
+                ui,
+                &tc,
+                &crate::markers::Markers::default(),
+                None,
+                NO_DIGITS,
+            )
+        },
     );
     // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
     output.textures_delta.clear();
@@ -4622,7 +4640,7 @@ fn clicking_a_flag_reports_its_marker() {
             events,
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None));
+        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None, NO_DIGITS));
         out.textures_delta.clear();
         out.platform_output.accesskit_update.and_then(|update| {
             update
@@ -4654,8 +4672,13 @@ fn clicking_a_flag_reports_its_marker() {
 
 // ── The plot's right-click menu ─────────────────────────────────────────────
 
-/// The markers and alarm limits a menu test's graph is drawn with.
-type MenuScene = (crate::markers::Markers, Option<super::WatchedLimits>);
+/// The markers, the alarm limits and the meter's digits for every main
+/// reading a menu test's graph is drawn with.
+type MenuScene = (
+    crate::markers::Markers,
+    Option<super::WatchedLimits>,
+    Option<String>,
+);
 
 thread_local! {
     /// What the menu tests' graph is drawn with, set by the test that needs
@@ -4675,8 +4698,11 @@ fn menu_frame(
         events,
         ..Default::default()
     };
-    let mut out = MENU_SCENE.with_borrow(|(markers, limits)| {
-        ctx.run_ui(input, |ui| g.show_main(ui, &tc, markers, *limits))
+    let mut out = MENU_SCENE.with_borrow(|(markers, limits, shown)| {
+        // The meter's digits for its main reading; none for a sub-value.
+        let digits = |_, series: Option<&str>| series.is_none().then(|| shown.clone()).flatten();
+        let digits: ReadingDigits = &digits;
+        ctx.run_ui(input, |ui| g.show_main(ui, &tc, markers, *limits, digits))
     });
     out.textures_delta.clear();
     out.platform_output
@@ -4714,7 +4740,7 @@ fn menu_click(g: &mut Graph, ctx: &egui::Context, pos: egui::Pos2, button: egui:
 }
 
 /// Right-click at `x` across the plot (0 its left edge, 1 its right), then
-/// pick "Add marker here"; what the graph asks to mark. `between` runs after
+/// pick "Mark the reading at …"; what the graph asks to mark. `between` runs after
 /// the menu opens, before the pick.
 fn mark_from_menu(
     g: &mut Graph,
@@ -4725,7 +4751,7 @@ fn mark_from_menu(
         egui::pos2(plot.left() + x * plot.width(), plot.center().y)
     });
     between(g);
-    pick_entry(g, &ctx, |l| l == "Add marker here");
+    pick_entry(g, &ctx, |l| l.starts_with("Mark the reading at "));
     g.take_menu_action().map(|action| match action {
         super::MenuAction::Mark(at, value) => (at, value),
         other => panic!("not a mark: {other:?}"),
@@ -4745,13 +4771,15 @@ fn open_menu(g: &mut Graph, at: impl FnOnce(egui::Rect) -> egui::Pos2) -> egui::
     ctx
 }
 
-/// The labels of the open menu's entries.
+/// The labels of the open menu's entries, top to bottom.
 fn menu_entries(g: &mut Graph, ctx: &egui::Context) -> Vec<String> {
-    menu_frame(g, ctx, vec![])
+    let mut entries: Vec<(f64, String)> = menu_frame(g, ctx, vec![])
         .iter()
         .filter(|(_, n)| n.role() == egui::accesskit::Role::Button)
-        .filter_map(|(_, n)| n.label().map(str::to_owned))
-        .collect()
+        .filter_map(|(_, n)| Some((n.bounds()?.y0, n.label()?.to_owned())))
+        .collect();
+    entries.sort_by(|a, b| a.0.total_cmp(&b.0));
+    entries.into_iter().map(|(_, label)| label).collect()
 }
 
 /// Click the open menu's entry whose label passes `label`.
@@ -4767,7 +4795,7 @@ fn height_at(g: &Graph, pos: egui::Pos2) -> f64 {
     g.plot_transform.expect("drawn").value_from_position(pos).y
 }
 
-/// "Add marker here" marks the reading nearest the right-click.
+/// "Mark the reading" marks the reading nearest the right-click.
 #[test]
 fn the_menu_marks_the_reading_right_clicked() {
     let (mut g, t0) = graph_over(30);
@@ -4836,6 +4864,42 @@ fn esc_closes_the_menu_and_leaves_no_focus() {
     assert!(g.take_menu_action().is_none());
 }
 
+/// The reading's entries name it by its time, and "Copy" by the digits it
+/// copies: the meter's where the app has them, else the trace's value.
+#[test]
+fn the_menu_names_the_reading() {
+    let (mut g, _) = graph_over(30);
+    let right = |plot: egui::Rect| egui::pos2(plot.left() + 0.98 * plot.width(), plot.center().y);
+    let ctx = open_menu(&mut g, right);
+    let entries = menu_entries(&mut g, &ctx);
+    for entry in [
+        "Mark the reading at 30.0 s",
+        "Copy 1.0000",
+        "Put a cursor on the reading at 30.0 s",
+    ] {
+        assert!(
+            entries.contains(&entry.to_string()),
+            "{entry} in {entries:?}"
+        );
+    }
+
+    MENU_SCENE.set((Default::default(), None, Some(" 1.000".to_string())));
+    let ctx = open_menu(&mut g, right);
+    pick_entry(&mut g, &ctx, |l| l == "Copy 1.000");
+    assert_eq!(
+        g.take_menu_action(),
+        Some(super::MenuAction::Copy("1.000".to_string()))
+    );
+
+    // A sub-value chosen, but no reading of it plotted yet: the trace is
+    // still the main reading's, and so are the digits.
+    g.set_series_options(&[("AC", "V")], Instant::now());
+    g.selected_series = Some("AC".to_string());
+    let ctx = open_menu(&mut g, right);
+    let entries = menu_entries(&mut g, &ctx);
+    assert!(entries.contains(&"Copy 1.000".to_string()), "{entries:?}");
+}
+
 /// "Add reference line" draws one at the height right-clicked, rounded, and
 /// switches the lines on without taking the caret into their field.
 #[test]
@@ -4890,9 +4954,25 @@ fn the_menu_removes_the_reference_line_under_the_pointer() {
         .iter()
         .filter(|l| l.starts_with("Remove reference line"))
         .collect();
-    assert_eq!(remove, [&format!("Remove reference line at {v} V")]);
+    assert_eq!(remove, [&format!("Remove reference line {v} V")]);
     pick_entry(&mut g, &ctx, |l| l.starts_with("Remove reference line"));
     assert_eq!(g.ref_lines.values(), [v + 1000.0]);
+
+    // A line added from the menu: right-clicked again in the same place,
+    // the menu offers no second one at its height.
+    let ctx = open_menu(&mut g, |_| at);
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Add reference line"));
+    let ctx = open_menu(&mut g, |_| at);
+    let entries = menu_entries(&mut g, &ctx);
+    assert!(
+        entries
+            .iter()
+            .any(|l| l.starts_with("Remove reference line"))
+    );
+    assert!(
+        !entries.iter().any(|l| l.starts_with("Add reference line")),
+        "{entries:?}"
+    );
 
     let ctx = open_menu(&mut g, |_| at + egui::vec2(0.0, 20.0));
     assert!(
@@ -4903,24 +4983,53 @@ fn the_menu_removes_the_reference_line_under_the_pointer() {
     );
 }
 
-/// The cursors go on the reading right-clicked, A or B as picked, and
-/// "Remove cursors" switches them off.
+/// The cursor entries follow the cursors placed: one puts the first, then
+/// one puts the missing cursor and one moves each placed one, so picking the
+/// same entry twice makes a pair rather than moving the cursor just put.
 #[test]
-fn the_menu_places_and_removes_the_cursors() {
+fn the_menus_cursor_entries_follow_the_cursors_placed() {
     let (mut g, _) = graph_over(30);
     let right = |plot: egui::Rect| egui::pos2(plot.left() + 0.98 * plot.width(), plot.center().y);
     let left = |plot: egui::Rect| egui::pos2(plot.left() + 0.02 * plot.width(), plot.center().y);
-    let ctx = open_menu(&mut g, right);
-    assert!(!menu_entries(&mut g, &ctx).contains(&"Remove cursors".into()));
+    let cursor_entries = |g: &mut Graph, at: fn(egui::Rect) -> egui::Pos2| {
+        let ctx = open_menu(g, at);
+        let entries = menu_entries(g, &ctx)
+            .into_iter()
+            .filter(|l| l.contains("cursor"))
+            .collect::<Vec<_>>();
+        (ctx, entries)
+    };
 
-    let ctx = open_menu(&mut g, right);
-    pick_entry(&mut g, &ctx, |l| l == "Place cursor B here");
+    let (ctx, entries) = cursor_entries(&mut g, right);
+    assert_eq!(entries, ["Put a cursor on the reading at 30.0 s"]);
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Put a cursor"));
     assert!(g.cursors.active);
-    assert_eq!((g.cursors.a, g.cursors.b), (None, Some(30.0)));
-    let ctx = open_menu(&mut g, left);
-    pick_entry(&mut g, &ctx, |l| l == "Place cursor A here");
-    assert_eq!((g.cursors.a, g.cursors.b), (Some(20.0), Some(30.0)));
-    assert!(g.cursors.next_is_b, "a click moves the other one, B");
+    assert_eq!((g.cursors.a, g.cursors.b), (Some(30.0), None));
+
+    let (ctx, entries) = cursor_entries(&mut g, left);
+    assert_eq!(
+        entries,
+        [
+            "Put cursor B on the reading at 20.0 s",
+            "Move cursor A to the reading at 20.0 s",
+            "Remove cursors",
+        ]
+    );
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Put cursor B"));
+    assert_eq!((g.cursors.a, g.cursors.b), (Some(30.0), Some(20.0)));
+    assert!(!g.cursors.next_is_b, "a click moves the other one, A");
+
+    let (ctx, entries) = cursor_entries(&mut g, |plot| plot.center());
+    assert_eq!(
+        entries,
+        [
+            "Move cursor A to the reading at 25.0 s",
+            "Move cursor B to the reading at 25.0 s",
+            "Remove cursors",
+        ]
+    );
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Move cursor A"));
+    assert_eq!((g.cursors.a, g.cursors.b), (Some(25.0), Some(20.0)));
 
     let ctx = open_menu(&mut g, right);
     pick_entry(&mut g, &ctx, |l| l == "Remove cursors");
@@ -4928,11 +5037,44 @@ fn the_menu_places_and_removes_the_cursors() {
     assert_eq!((g.cursors.a, g.cursors.b), (None, None));
 }
 
+/// "Remove cursor" is offered over a cursor's line; the last one removed
+/// switches the cursors off.
+#[test]
+fn the_menu_removes_the_cursor_under_the_pointer() {
+    let (mut g, _) = graph_over(30);
+    g.cursors.set(super::Cursor::A, 25.0);
+    g.cursors.set(super::Cursor::B, 22.0);
+    let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(3.0, 0.0));
+    let entries = menu_entries(&mut g, &ctx);
+    assert!(
+        entries.contains(&"Move cursor B to the reading at 25.0 s".to_string()),
+        "{entries:?}"
+    );
+    assert!(
+        !entries.iter().any(|l| l.starts_with("Move cursor A")),
+        "A is on that reading already: {entries:?}"
+    );
+    pick_entry(&mut g, &ctx, |l| l == "Remove cursor A");
+    assert!(g.cursors.active);
+    assert_eq!((g.cursors.a, g.cursors.b), (None, Some(22.0)));
+    assert!(!g.cursors.next_is_b, "a click puts A back");
+
+    let ctx = open_menu(&mut g, |plot| plot.center());
+    assert!(
+        !menu_entries(&mut g, &ctx)
+            .iter()
+            .any(|l| l.starts_with("Remove cursor ")),
+        "no cursor under the pointer"
+    );
+    g.cursors.remove(super::Cursor::B);
+    assert!(!g.cursors.active, "the last one gone");
+}
+
 /// "Delete marker" is offered over a marker's line, and only there.
 #[test]
 fn the_menu_deletes_the_marker_under_the_pointer() {
     let (mut g, t0) = graph_over(30);
-    MENU_SCENE.set((marked(&[t0 + Duration::from_secs(25)]), None));
+    MENU_SCENE.set((marked(&[t0 + Duration::from_secs(25)]), None, None));
     // The 10 s window from 20 s to 30 s: the marker halfway across.
     let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(3.0, 0.0));
     pick_entry(&mut g, &ctx, |l| l == "Delete marker 1");
@@ -4964,9 +5106,9 @@ fn the_menu_sets_and_removes_alarm_limits() {
         limits: dmm_lib::alarm::Limits::check(None, Some(v)).unwrap(),
         scaled: false,
     };
-    MENU_SCENE.set((crate::markers::Markers::default(), Some(watched)));
+    MENU_SCENE.set((crate::markers::Markers::default(), Some(watched), None));
     let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(0.0, 2.0));
-    pick_entry(&mut g, &ctx, |l| l == "Remove alarm high limit");
+    pick_entry(&mut g, &ctx, |l| l == "Remove alarm high");
     assert_eq!(
         g.take_menu_action(),
         Some(super::MenuAction::ClearLimit(super::LimitSide::High))
@@ -5149,7 +5291,7 @@ fn a_wide_window_draws_about_as_much_as_a_narrow_one() {
                 screen_rect: Some(screen),
                 ..Default::default()
             };
-            let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None));
+            let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None, NO_DIGITS));
             out.textures_delta.clear();
             count = ctx
                 .tessellate(out.shapes, out.pixels_per_point)
@@ -5585,7 +5727,7 @@ fn pattern_frame(g: &mut Graph, ctx: &egui::Context, tc: &ThemeColors) -> Patter
             screen_rect: Some(gesture_screen()),
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, tc, &markers, None));
+        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, tc, &markers, None, NO_DIGITS));
         out.textures_delta.clear();
         shapes = out.shapes;
     }

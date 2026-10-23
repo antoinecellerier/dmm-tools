@@ -191,10 +191,10 @@ in a narrow graph.
   the time axis's row carrying its number and as much of its note as fits,
   in place of any time label it covers; click a
   flag to write its note
-- Right-click the plot to mark or copy the reading nearest the click, draw a
-  reference line or set an [alarm](#alarm) limit at the height clicked, or put
-  cursor A or B on that reading; over a marker, a reference line or a limit
-  the menu also deletes it
+- Right-click the plot to mark or copy the reading nearest the click, put or
+  move a cursor on it, or draw a reference line or set an [alarm](#alarm)
+  limit at the Y value clicked; over a marker, a cursor, a reference line or a
+  limit the menu also removes it
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range
@@ -244,6 +244,7 @@ more toolbar groups:
 | **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region, every Y axis included. Release to apply; press Escape to cancel. |
 | **Double-click** | Return to live mode with auto Y |
 | **Click** (cursors active) | Place cursor A or B, snapping to nearest data point |
+| **Right-click** | The menu for the reading and Y value clicked; see [Main Plot](#main-plot) |
 
 The graph's keys are listed under [Keyboard Shortcuts](#keyboard-shortcuts).
 

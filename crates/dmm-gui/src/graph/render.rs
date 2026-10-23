@@ -13,7 +13,7 @@ use super::axes::{self, AxisMap};
 use super::menu::plot_menu_id;
 use super::minimap::bucket_secs;
 use super::pattern::{DASH_GAP, PatternKey, Patterns, SegmentedLine, TimedHLine, anchor_layout};
-use super::time::{MIN_GRID_SPACING, format_time_axis_label, time_marks};
+use super::time::{MIN_GRID_SPACING, format_pointer_time, format_time_axis_label, time_marks};
 use super::{GapKind, Graph, MeasureCursors, OverlaySeries, SegmentsAndGaps};
 use crate::markers::Markers;
 use crate::theme::ThemeColors;
@@ -1218,6 +1218,7 @@ impl Graph {
         tc: &ThemeColors,
         markers: &Markers,
         limits: Option<super::WatchedLimits>,
+        digits: super::ReadingDigits,
     ) {
         let (view_min, view_max) = self.view_bounds();
         let marker_color = tc.graph_marker();
@@ -1493,13 +1494,7 @@ impl Graph {
                     return None;
                 }
                 let t = point.x;
-                let time_label = if t < 60.0 {
-                    format!("{t:.1} s")
-                } else {
-                    let m = (t / 60.0).floor();
-                    let s = t % 60.0;
-                    format!("{m:.0}m {s:.1}s")
-                };
+                let time_label = format_pointer_time(t);
                 // Inside a band there is no measured value to report, and
                 // `Span` can't be hovered itself (its geometry is None), so
                 // this is where the condition gets named. It is also the only
@@ -1795,6 +1790,7 @@ impl Graph {
             &response.transform,
             &in_view,
             &overlay.limit_lines,
+            digits,
         );
         self.update_plot_a11y_label(ui, response.response.id, y_min, y_max, in_view.len());
         // Draw a focus ring on the main plot body when it's keyboard-focused.

@@ -254,7 +254,7 @@ With nothing recorded the log lists only markers, though the graph's full readin
 
 **Complexity:** Low
 
-The plot's right-click menu only offers **Add marker here**. Candidates: **Delete marker N** when right-clicking a flag (flags are widgets of their own over the plot, so each needs its menu and a way to report the delete), **Place cursor here**, and **Back to live** / **Reset zoom**, which repeat the double-click and `End`.
+The plot's right-click menu works on the point clicked and on the marker, reference line or limit line under it. Candidates: the same menu on a marker's flag (flags are widgets of their own over the plot, so each needs its menu), and **Back to live** / **Reset zoom**, which repeat the double-click and `End`.
 
 Neither the menu nor the log row's `+` is reachable from the keyboard, so only `N` and `Ctrl+N` mark readings without a pointer. Opening the menu with `Shift+F10` or the Menu key on the focused plot would give the keyboard a way to earlier readings. The menu also searches only the plotted series: where only sub-values are drawn it has no reading to offer.
 

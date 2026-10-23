@@ -63,6 +63,24 @@ pub(super) fn nice_time_interval(span: f64) -> f64 {
     raw.ceil()
 }
 
+/// A time on the plot as the crosshair names it, to a tenth of a second:
+/// `42.3 s`, `1m 12.4s`, `2h 0m 5.0s`. Rounded before it is split, so
+/// 119.97 s reads `2m 0.0s`, never `1m 60.0s`.
+pub(super) fn format_pointer_time(t: f64) -> String {
+    let tenths = (t * 10.0).round();
+    let t = tenths / 10.0;
+    if t < 60.0 {
+        return format!("{t:.1} s");
+    }
+    let s = (tenths % 600.0) / 10.0;
+    let m = (tenths / 600.0).floor();
+    if m < 60.0 {
+        format!("{m:.0}m {s:.1}s")
+    } else {
+        format!("{:.0}h {:.0}m {s:.1}s", (m / 60.0).floor(), m % 60.0)
+    }
+}
+
 /// Format a time value in seconds as a readable label.
 pub(super) fn format_time_label(secs: f64) -> String {
     if secs < 60.0 {
@@ -143,6 +161,16 @@ mod tests {
         assert_eq!(format_time_axis_label(9.5, 0.5), "9.5 s");
         assert_eq!(format_time_axis_label(9.2, 0.2), "9.2 s");
         assert_eq!(format_time_axis_label(9.1, 0.1), "9.1 s");
+    }
+
+    #[test]
+    fn pointer_times_round_before_they_split() {
+        assert_eq!(format_pointer_time(42.34), "42.3 s");
+        assert_eq!(format_pointer_time(59.97), "1m 0.0s");
+        assert_eq!(format_pointer_time(72.4), "1m 12.4s");
+        assert_eq!(format_pointer_time(119.97), "2m 0.0s");
+        assert_eq!(format_pointer_time(7205.0), "2h 0m 5.0s");
+        assert_eq!(format_pointer_time(3599.96), "1h 0m 0.0s");
     }
 
     #[test]

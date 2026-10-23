@@ -13,7 +13,7 @@ use super::toast::Toast;
 use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
 use crate::graph::MenuAction;
-use crate::recording::BufferRole;
+use crate::recording::{BufferRole, Recording};
 use crate::settings::{GraphLines, MIN_RECORDING_HEIGHT};
 
 /// The arrow segment of the Export… split button (U+23F7, in egui's icon
@@ -163,6 +163,23 @@ pub(super) struct RecordingPanel {
     /// The Export… menu opened this frame; its first entry still has to be
     /// given the focus — see `show_export_menu`.
     export_menu_focus_pending: bool,
+}
+
+/// The digits the meter showed for its reading taken at `at`, of the
+/// sub-value `label` or of the main reading on `None`, as Export… writes
+/// them; `None` once `recording` no longer holds the reading. What the
+/// graph's menu offers to copy.
+fn reading_digits(recording: &Recording, at: Instant, label: Option<&str>) -> Option<String> {
+    let m = &recording.sample_at(at)?.measurement;
+    let digits = match label {
+        None => m.value_export_str(),
+        Some(label) => m
+            .aux_values
+            .iter()
+            .find(|a| a.label == label)?
+            .value_export_str(),
+    };
+    Some(digits.into_owned())
 }
 
 impl App {
@@ -616,7 +633,7 @@ impl App {
         self.take_clicked_marker();
         match self.graph.take_menu_action() {
             Some(MenuAction::Mark(at, value)) => self.mark_from_graph(at, value),
-            Some(MenuAction::Copy(at, value)) => self.copy_reading(ctx, at, value),
+            Some(MenuAction::Copy(text)) => self.copy_reading(ctx, text),
             Some(MenuAction::DeleteMarker(number)) => {
                 self.markers.remove(number);
             }
@@ -641,24 +658,8 @@ impl App {
         }
     }
 
-    /// Put the reading taken at `at` on the clipboard, as the plotted series
-    /// shows it: the meter's digits, as Export… writes them, where the buffer
-    /// still holds the reading; else `value`, the graph's.
-    fn copy_reading(&mut self, ctx: &egui::Context, at: Instant, value: f64) {
-        let sample = self.capture.recording.sample_at(at).map(|s| &s.measurement);
-        let plotted = self.graph.selected_series_offer().map(|(label, _)| label);
-        let digits = match (sample, plotted) {
-            (Some(m), None) => Some(m.value_export_str().into_owned()),
-            (Some(m), Some(label)) => m
-                .aux_values
-                .iter()
-                .find(|a| a.label == label)
-                .map(|a| a.value_export_str().into_owned()),
-            (None, _) => None,
-        };
-        let text = digits
-            .filter(|d| !d.is_empty())
-            .unwrap_or_else(|| format!("{value:.prec$}", prec = self.graph.decimals(true)));
+    /// Put `text`, a reading's digits, on the clipboard and say so.
+    fn copy_reading(&mut self, ctx: &egui::Context, text: String) {
         ctx.copy_text(text.clone());
         self.toast = Some(Toast::info(format!("Copied {text}")));
     }
@@ -676,7 +677,9 @@ impl App {
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                 let limits = self.watched_limits();
-                self.graph.show(ui, &tc, &self.markers, limits);
+                let recording = &self.capture.recording;
+                let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
+                self.graph.show(ui, &tc, &self.markers, limits, &digits);
             });
             self.take_graph_actions(ui.ctx());
 
@@ -722,7 +725,9 @@ impl App {
             self.show_recording_section(ui, compact);
         } else if self.settings.show_graph {
             let limits = self.watched_limits();
-            self.graph.show(ui, &tc, &self.markers, limits);
+            let recording = &self.capture.recording;
+            let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
+            self.graph.show(ui, &tc, &self.markers, limits, &digits);
             self.take_graph_actions(ui.ctx());
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
@@ -761,9 +766,10 @@ mod tests {
         );
     }
 
-    /// What "Copy reading" puts on the clipboard for the reading taken at
-    /// `at` while `plotted` is drawn: the clipboard's text, and the toast.
-    fn copy_from_menu(plotted: Option<&str>) -> (Option<String>, Option<String>) {
+    /// The digits the graph's menu offers to copy are the meter's, for the
+    /// series plotted, as Export… writes them.
+    #[test]
+    fn the_menu_copies_the_meters_digits() {
         use dmm_lib::flags::StatusFlags;
         use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
@@ -783,29 +789,35 @@ mod tests {
             .expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
-        app.graph.select_series(plotted);
-        app.graph.request(MenuAction::Copy(at, 0.5));
+        let recording = &app.capture.recording;
+        assert_eq!(
+            reading_digits(recording, at, None).as_deref(),
+            Some("5.678"),
+            "the fixture's digits"
+        );
+        assert_eq!(
+            reading_digits(recording, at, Some("Max")).as_deref(),
+            Some("9.876")
+        );
+        assert_eq!(reading_digits(recording, at, Some("Min")), None);
+        let later = at + std::time::Duration::from_secs(1);
+        assert_eq!(reading_digits(recording, later, None), None);
+
+        app.graph.request(MenuAction::Copy("5.678".to_string()));
         let ctx = crate::app::styled_context();
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
             app.take_graph_actions(ui.ctx());
         });
         out.textures_delta.clear();
         let copied = out.platform_output.commands.iter().find_map(|c| match c {
-            egui::OutputCommand::CopyText(text) => Some(text.clone()),
+            egui::OutputCommand::CopyText(text) => Some(text.as_str()),
             _ => None,
         });
-        (copied, app.toast.map(|t| t.message))
-    }
-
-    /// "Copy reading" copies the plotted series' digits, as Export… writes
-    /// them, and says what it copied.
-    #[test]
-    fn copy_reading_takes_the_plotted_series_digits() {
-        let (copied, toast) = copy_from_menu(None);
-        assert_eq!(copied.as_deref(), Some("5.678"), "the fixture's digits");
-        assert_eq!(toast.as_deref(), Some("Copied 5.678"));
-        let (copied, _) = copy_from_menu(Some("Max"));
-        assert_eq!(copied.as_deref(), Some("9.876"));
+        assert_eq!(copied, Some("5.678"));
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some("Copied 5.678")
+        );
     }
 
     /// A **Show:** chip click lands in the settings and saves them; turning

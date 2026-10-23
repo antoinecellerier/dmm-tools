@@ -153,6 +153,7 @@ fn graph_mouse(ui: &mut egui::Ui) {
             ("Scroll wheel", "Scroll the panel"),
             ("Double-click", "Reset to live follow + auto Y"),
             ("Click (cursors on)", "Place cursor A / B at nearest point"),
+            ("Right-click", "Mark, copy, cursors, reference lines, alarm"),
             ("Minimap drag", "Jump to time / resize viewport"),
         ]),
     );
