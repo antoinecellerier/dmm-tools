@@ -2424,6 +2424,43 @@ fn the_cursor_readout_covers_the_readings_between_the_cursors() {
     );
 }
 
+/// A solid line is drawn a segment at a time, so a staircase too fine for
+/// epaint's mitred joins keeps its width: one segment per straight run, a
+/// dot rounding each corner, and a dot for a lone point, as egui_plot draws
+/// it.
+#[test]
+fn a_solid_line_draws_one_segment_per_straight_run() {
+    use super::pattern::SegmentedLine;
+    use egui_plot::{Line, PlotBounds, PlotItem, PlotPoints, PlotTransform};
+    let frame = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 100.0));
+    let bounds = PlotBounds::from_min_max([0.0, 0.0], [10.0, 10.0]);
+    let transform = PlotTransform::new(frame, bounds, false);
+    let ctx = crate::app::styled_context();
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let shapes_of = |points: Vec<[f64; 2]>| {
+            let mut shapes = Vec::new();
+            let line =
+                SegmentedLine::new(Line::new("", PlotPoints::new(points)), egui::Color32::RED);
+            line.shapes(ui, &transform, &mut shapes);
+            shapes
+        };
+        let staircase = shapes_of(vec![[1.0, 1.0], [1.1, 1.0], [1.2, 2.0], [1.3, 2.0]]);
+        let count = |is: fn(&egui::Shape) -> bool| staircase.iter().filter(|s| is(s)).count();
+        let segments = count(|s| matches!(s, egui::Shape::LineSegment { .. }));
+        let joins = count(|s| matches!(s, egui::Shape::Circle(_)));
+        assert_eq!((segments, joins, staircase.len()), (3, 2, 5));
+        let flat = shapes_of(vec![[0.0, 1.0], [1.0, 1.0], [2.0, 1.0], [3.0, 1.0]]);
+        assert_eq!(flat.len(), 1, "a straight run is one segment, no corner");
+        let back = shapes_of(vec![[1.0, 1.0], [3.0, 1.0], [2.0, 1.0]]);
+        assert_eq!(back.len(), 3, "doubling back keeps its corner");
+        assert!(matches!(
+            shapes_of(vec![[5.0, 5.0]])[..],
+            [egui::Shape::Circle(_)]
+        ));
+    });
+    out.textures_delta.clear();
+}
+
 /// Over-range readings count with the readings they fell between: after a
 /// range's first reading up to the one after its last, or up to now after
 /// the newest, never the stretch before the first.

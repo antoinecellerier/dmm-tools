@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use super::axes::{self, AxisMap};
 use super::minimap::bucket_secs;
-use super::pattern::{DASH_GAP, PatternKey, Patterns, TimedHLine, anchor_layout};
+use super::pattern::{DASH_GAP, PatternKey, Patterns, SegmentedLine, TimedHLine, anchor_layout};
 use super::time::format_time_axis_label;
 use super::{GapKind, Graph, OverlaySeries, SegmentsAndGaps};
 use crate::markers::Markers;
@@ -1622,10 +1622,11 @@ impl Graph {
                 .iter()
                 .map(|s| if levels { stepped(&thin(s)) } else { thin(s) })
                 .collect();
-            for seg in &drawn_trace {
-                plot_ui.line(
-                    Line::new(main_name.clone(), PlotPoints::new(seg.clone())).color(line_color),
-                );
+            for seg in drawn_trace.iter().filter(|s| !s.is_empty()) {
+                plot_ui.add(SegmentedLine::new(
+                    Line::new(main_name.clone(), PlotPoints::new(seg.clone())),
+                    line_color,
+                ));
             }
 
             // No data: two dashed edges, no fill.

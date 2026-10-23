@@ -371,6 +371,125 @@ fn clip_for(transform: &PlotTransform, stroke: Stroke) -> Rect {
     transform.frame().expand(2.0 * stroke.width)
 }
 
+/// A solid egui_plot line drawn one segment at a time, without joins.
+///
+/// epaint mitres the joins of a path, and where a path's segments are
+/// shorter than the stroke is wide — a meter's staircase of repeated readings
+/// over a long window — the mitred corners cross and fold the stroke onto
+/// itself, so stretches of the line draw as a hairline. Separate segments
+/// keep their width, and a dot the stroke's width at each join rounds the
+/// corner their square ends would notch.
+///
+/// Everything but the drawing is the wrapped [`Line`]'s, as for
+/// [`PatternedLine`].
+pub(super) struct SegmentedLine<'a> {
+    line: Line<'a>,
+    stroke: Stroke,
+}
+
+impl<'a> SegmentedLine<'a> {
+    pub(super) fn new(line: Line<'a>, color: Color32) -> Self {
+        Self {
+            line: line.color(color),
+            // egui_plot's default line width.
+            stroke: Stroke::new(1.5, color),
+        }
+    }
+}
+
+impl PlotItem for SegmentedLine<'_> {
+    fn shapes(&self, _ui: &Ui, transform: &PlotTransform, shapes: &mut Vec<Shape>) {
+        let PlotGeometry::Points(points) = PlotItem::geometry(&self.line) else {
+            return;
+        };
+        let mut stroke = self.stroke;
+        if PlotItem::highlighted(&self.line) {
+            stroke.width *= 2.0;
+        }
+        let clip = clip_for(transform, stroke);
+        // A point in the middle of a straight run adds neither a segment nor
+        // a corner: a meter's repeated readings draw long flat runs of them.
+        let mut screen: Vec<Pos2> = Vec::with_capacity(points.len());
+        for p in points.iter().map(|p| transform.position_from_point(p)) {
+            if let [.., a, b] = screen[..]
+                && runs_straight_on(a, b, p)
+            {
+                screen.pop();
+            }
+            screen.push(p);
+        }
+        if let [only] = screen[..] {
+            shapes.push(Shape::circle_filled(only, stroke.width / 2.0, stroke.color));
+        }
+        for pair in screen.windows(2) {
+            if clip.intersects(Rect::from_two_pos(pair[0], pair[1])) {
+                shapes.push(Shape::line_segment([pair[0], pair[1]], stroke));
+            }
+        }
+        for &join in screen.iter().skip(1).take(screen.len().saturating_sub(2)) {
+            if clip.contains(join) {
+                shapes.push(Shape::circle_filled(join, stroke.width / 2.0, stroke.color));
+            }
+        }
+    }
+
+    fn initialize(&mut self, x_range: RangeInclusive<f64>) {
+        PlotItem::initialize(&mut self.line, x_range);
+    }
+
+    fn color(&self) -> Color32 {
+        self.stroke.color
+    }
+
+    fn geometry(&self) -> PlotGeometry<'_> {
+        PlotItem::geometry(&self.line)
+    }
+
+    fn bounds(&self) -> PlotBounds {
+        PlotItem::bounds(&self.line)
+    }
+
+    fn base(&self) -> &PlotItemBase {
+        PlotItem::base(&self.line)
+    }
+
+    fn base_mut(&mut self) -> &mut PlotItemBase {
+        PlotItem::base_mut(&mut self.line)
+    }
+
+    fn find_closest(&self, point: Pos2, transform: &PlotTransform) -> Option<ClosestElem> {
+        PlotItem::find_closest(&self.line, point, transform)
+    }
+
+    fn on_hover(
+        &self,
+        plot_area_response: &egui::Response,
+        elem: ClosestElem,
+        shapes: &mut Vec<Shape>,
+        cursors: &mut Vec<Cursor>,
+        plot: &PlotConfig<'_>,
+        label_formatter: Option<&LabelFormatterFn<'_>>,
+    ) {
+        PlotItem::on_hover(
+            &self.line,
+            plot_area_response,
+            elem,
+            shapes,
+            cursors,
+            plot,
+            label_formatter,
+        );
+    }
+}
+
+/// Whether `c` carries on from `a` through `b` in the same direction, so `b`
+/// is no corner. Doubling back is a corner, however straight.
+fn runs_straight_on(a: Pos2, b: Pos2, c: Pos2) -> bool {
+    let (ab, bc) = (b - a, c - b);
+    let cross = ab.x * bc.y - ab.y * bc.x;
+    cross.abs() <= 1e-3 * ab.length() * bc.length() && ab.dot(bc) > 0.0
+}
+
 /// An egui_plot line drawn with a pattern carried by [`DashPhases`].
 ///
 /// Everything but the drawing — hover, the crosshair's snapping, bounds —
@@ -406,15 +525,15 @@ impl<'a> Patterns<'a> {
         key: PatternKey,
         starts_here: bool,
     ) {
-        let line = line.color(color);
-        if style == LineStyle::Solid {
-            plot_ui.line(line);
-            return;
-        }
         // `PlotUi::add` would keep an empty line, which `PlotUi::line` drops.
         if matches!(PlotItem::geometry(&line), PlotGeometry::Points(p) if p.is_empty()) {
             return;
         }
+        if style == LineStyle::Solid {
+            plot_ui.add(SegmentedLine::new(line, color));
+            return;
+        }
+        let line = line.color(color);
         plot_ui.add(PatternedLine {
             line,
             // egui_plot's default line width.
