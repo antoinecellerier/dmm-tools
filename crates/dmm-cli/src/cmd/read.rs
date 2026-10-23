@@ -568,8 +568,14 @@ impl<'a> Run<'a> {
                 .filter(|u| !u.is_empty())
                 .map(|u| format!(" {u}"))
                 .unwrap_or_default();
+            // σ needs two samples; a one-reading summary leaves it out.
+            let sd = session
+                .stats
+                .std_dev()
+                .map(|sd| format!(" | σ: {}{unit_suffix}", style(format!("{sd:.4}")).cyan()))
+                .unwrap_or_default();
             eprintln!(
-                "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Avg: {}{unit_suffix}",
+                "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Avg: {}{unit_suffix}{sd}",
                 style("---").dim(),
                 session.stats.count,
                 style(format!("{min:.4}")).cyan(),

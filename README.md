@@ -43,7 +43,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 107.95 mA
 4.01 mA
 
---- 5 samples | Min: 0.0000 mA | Max: 107.9500 mA | Avg: 49.0920 mA
+--- 5 samples | Min: 0.0000 mA | Max: 107.9500 mA | Avg: 49.0920 mA | σ: 52.1319 mA
 ```
 <!-- /snippet -->
 

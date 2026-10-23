@@ -9,6 +9,7 @@
 ### GUI
 
 - **An alarm marks each reading that crosses a low or high limit**
+- **Statistics show the standard deviation (σ)** — for the session and the visible window.
 - **A UT61+ or OWON meter naming another model than the one selected says so** — the GUI said nothing.
 - **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
 - **Tab no longer stops on the graph's axes** — they were two Tab stops with no focus ring.
@@ -16,6 +17,7 @@
 ### CLI
 
 - **`read --alarm-high` and `--alarm-low` warn when a reading crosses a limit** — and mark it in CSV, JSON and replay output.
+- **`read`'s summary line adds the standard deviation (σ)**
 - **`info`, `capture` and `read --format replay` warn when a UT61+ meter names another model than `--device`**
 - **The mock follows `dmm-gui`'s Mock mode setting** — without `--mock-mode`, `dmm-cli` cycled through every scenario.
 

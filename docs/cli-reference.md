@@ -268,12 +268,13 @@ AC 0.4406 V [AUTO]
 DC 0.0264 V [AUTO]
 AC 0.3376 V [AUTO]
 
---- 3 samples | Min: 0.0264 V | Max: 1.6112 V | Avg: 0.6140 V
+--- 3 samples | Min: 0.0264 V | Max: 1.6112 V | Avg: 0.6140 V | σ: 0.8682 V
 ```
 <!-- /snippet -->
 
-When the session ends, a summary line (sample count, min, max, average, each
-with its unit) is printed to stderr. When `--integrate` is active, the total
+When the session ends, a summary line (sample count, min, max, average and,
+from two samples, standard deviation σ, each with its unit) is printed to
+stderr. When `--integrate` is active, the total
 integral is also shown.
 
 Statistics and the integral cover a single mode and unit: if either changes

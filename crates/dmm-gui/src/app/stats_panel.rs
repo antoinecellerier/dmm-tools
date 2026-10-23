@@ -13,6 +13,8 @@ struct FormattedStatsGroup {
     min: String,
     max: String,
     avg: String,
+    /// Sample standard deviation, written like the average.
+    sd: String,
     count: u64,
     /// Formatted integral string (e.g. "   0.2925 mAh"), or None if not integrable.
     integral: Option<String>,
@@ -71,6 +73,7 @@ impl FormattedStats {
                 min: fmt_in(unit, s.min, point),
                 max: fmt_in(unit, s.max, point),
                 avg: fmt_in(unit, s.avg(), mean),
+                sd: fmt_in(unit, s.std_dev(), mean),
                 count: s.count,
                 integral: fmt_integral(integral),
             }
@@ -105,12 +108,33 @@ fn show_stat_rows(
     ui.label(styled(format!("Min:{}", group.min), mono.clone()));
     ui.label(styled(format!("Max:{}", group.max), mono.clone()));
     ui.label(styled(format!("Avg:{}", group.avg), mono.clone()));
+    // Padded to the other captions' width so the figures line up.
+    ui.label(styled(format!("  \u{3c3}:{}", group.sd), mono.clone()));
     ui.label(styled(
         format!("Count: {}", group.count),
         egui::FontId::proportional(font_size),
     ));
     if let Some(int) = &group.integral {
         ui.label(styled(format!("\u{222b}:{int}"), mono));
+    }
+}
+
+/// The compact layout's figures, one unwrapping label each, so a narrow
+/// column wraps between two figures rather than between a caption and its
+/// value.
+fn compact_figures(
+    ui: &mut Ui,
+    figures: impl IntoIterator<Item = String>,
+    font_size: f32,
+    color: Option<Color32>,
+) {
+    for text in figures {
+        let rich = RichText::new(text).font(egui::FontId::monospace(font_size));
+        let rich = match color {
+            Some(c) => rich.color(c),
+            None => rich,
+        };
+        ui.add(egui::Label::new(rich).extend());
     }
 }
 
@@ -155,33 +179,39 @@ impl App {
         if compact {
             ui.horizontal_wrapped(|ui| {
                 let session = &formatted.session;
-                ui.label(
-                    RichText::new(format!(
-                        "Min:{}  Max:{}  Avg:{}  ({})",
-                        session.min, session.max, session.avg, session.count,
-                    ))
-                    .font(egui::FontId::monospace(main_font)),
+                compact_figures(
+                    ui,
+                    [
+                        format!("Min:{}", session.min),
+                        format!("Max:{}", session.max),
+                        format!("Avg:{}", session.avg),
+                        format!("\u{3c3}:{}", session.sd),
+                        format!("({})", session.count),
+                    ],
+                    main_font,
+                    None,
                 );
                 self.reset_button(ui, sub_font);
             });
 
             if let Some(vis) = &formatted.visible {
-                let vis_line = if let Some(vint) = &vis.integral {
-                    format!(
-                        "Visible: Min:{} Max:{} Avg:{} ({})  \u{222b}:{vint}",
-                        vis.min, vis.max, vis.avg, vis.count,
-                    )
-                } else {
-                    format!(
-                        "Visible: Min:{} Max:{} Avg:{} ({})",
-                        vis.min, vis.max, vis.avg, vis.count,
-                    )
-                };
-                ui.label(
-                    RichText::new(vis_line)
-                        .font(egui::FontId::monospace(sub_font))
-                        .color(ui.visuals().weak_text_color()),
-                );
+                let weak = ui.visuals().weak_text_color();
+                ui.horizontal_wrapped(|ui| {
+                    compact_figures(
+                        ui,
+                        [
+                            format!("Visible: Min:{}", vis.min),
+                            format!("Max:{}", vis.max),
+                            format!("Avg:{}", vis.avg),
+                            format!("\u{3c3}:{}", vis.sd),
+                            format!("({})", vis.count),
+                        ]
+                        .into_iter()
+                        .chain(vis.integral.as_ref().map(|vint| format!("\u{222b}:{vint}"))),
+                        sub_font,
+                        Some(weak),
+                    );
+                });
             }
             if let Some(int) = &formatted.session.integral {
                 ui.label(
@@ -247,7 +277,7 @@ impl App {
             .add(egui::Button::new(
                 RichText::new("Reset").font(egui::FontId::proportional(font_size)),
             ))
-            .on_hover_text("Reset Min / Max / Avg / integral and alarm counters")
+            .on_hover_text("Reset Min / Max / Avg / \u{3c3} / integral and alarm counters")
             .clicked()
         {
             self.capture.session.reset();
@@ -305,8 +335,8 @@ mod tests {
             None,
         );
         let vis = formatted.visible.expect("levels in view");
-        let figures = [&vis.min, &vis.max, &vis.avg].map(|s| s.trim().to_string());
-        assert_eq!(figures, ["0", "3", "1.7"]);
+        let figures = [&vis.min, &vis.max, &vis.avg, &vis.sd].map(|s| s.trim().to_string());
+        assert_eq!(figures, ["0", "3", "1.7", "1.5"]);
         assert_eq!(
             vis.min.len(),
             formatted.session.min.len(),

@@ -2,7 +2,8 @@ use crate::measurement::{MeasuredValue, Measurement};
 use log::debug;
 use std::time::{Duration, Instant};
 
-/// Tracks min/max/avg statistics for a series of measurements.
+/// Tracks min/max/avg/standard-deviation statistics for a series of
+/// measurements.
 ///
 /// Used by both CLI and GUI to accumulate running statistics
 /// over measurement values.
@@ -10,8 +11,13 @@ use std::time::{Duration, Instant};
 pub struct RunningStats {
     pub min: Option<f64>,
     pub max: Option<f64>,
-    sum: f64,
     pub count: u64,
+    /// Sums of each value's offset from the first, and of its square, which
+    /// keep the mean and variance accurate for a small spread on a large
+    /// offset.
+    shift: f64,
+    shifted_sum: f64,
+    shifted_squares: f64,
 }
 
 impl RunningStats {
@@ -19,26 +25,51 @@ impl RunningStats {
         Self {
             min: None,
             max: None,
-            sum: 0.0,
             count: 0,
+            shift: 0.0,
+            shifted_sum: 0.0,
+            shifted_squares: 0.0,
         }
     }
 
-    /// Record a new value, updating min/max/sum/count.
+    /// Record a new value, updating min/max/count and the sums. A value
+    /// that is not finite is left out: it has no place in a mean or a spread,
+    /// and as the first value, the offset every other is taken from, it would
+    /// turn them all to NaN.
+    /// Inlined: the GUI calls it per sample over a whole visible window.
+    #[inline]
     pub fn push(&mut self, value: f64) {
+        if !value.is_finite() {
+            return;
+        }
         self.min = Some(self.min.map_or(value, |m: f64| m.min(value)));
         self.max = Some(self.max.map_or(value, |m: f64| m.max(value)));
-        self.sum += value;
+        if self.count == 0 {
+            self.shift = value;
+        }
         self.count += 1;
+        let d = value - self.shift;
+        self.shifted_sum += d;
+        self.shifted_squares += d * d;
     }
 
     /// Return the average, or `None` if no values have been pushed.
     pub fn avg(&self) -> Option<f64> {
         if self.count > 0 {
-            Some(self.sum / self.count as f64)
+            Some(self.shift + self.shifted_sum / self.count as f64)
         } else {
             None
         }
+    }
+
+    /// Return the sample standard deviation (n − 1), or `None` below two
+    /// values.
+    pub fn std_dev(&self) -> Option<f64> {
+        (self.count >= 2).then(|| {
+            let n = self.count as f64;
+            let m2 = self.shifted_squares - self.shifted_sum * self.shifted_sum / n;
+            (m2.max(0.0) / (n - 1.0)).sqrt()
+        })
     }
 
     /// Reset all statistics to the initial empty state.
@@ -400,6 +431,62 @@ mod tests {
         assert!(s.max.is_none());
         assert!(s.avg().is_none());
         assert_eq!(s.count, 0);
+    }
+
+    #[test]
+    fn std_dev_needs_two_values() {
+        let mut s = RunningStats::new();
+        assert!(s.std_dev().is_none());
+        s.push(5.0);
+        assert!(s.std_dev().is_none());
+        s.push(5.0);
+        assert_eq!(s.std_dev(), Some(0.0));
+    }
+
+    #[test]
+    fn std_dev_is_the_sample_deviation() {
+        let mut s = RunningStats::new();
+        for v in [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0] {
+            s.push(v);
+        }
+        // Sum of squared deviations from the mean 5 is 32, over n − 1 = 7.
+        let expected = (32.0f64 / 7.0).sqrt();
+        assert!((s.std_dev().unwrap() - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn std_dev_holds_on_a_large_offset() {
+        // A 5 V rail moving in the fifth digit.
+        let mut s = RunningStats::new();
+        for i in 0..10_000 {
+            s.push(5.0 + if i % 2 == 0 { 1e-5 } else { -1e-5 });
+        }
+        let sd = s.std_dev().unwrap();
+        assert!((sd - 1e-5).abs() < 1e-9, "{sd}");
+    }
+
+    #[test]
+    fn non_finite_values_are_left_out() {
+        let mut s = RunningStats::new();
+        s.push(f64::INFINITY);
+        s.push(f64::NAN);
+        s.push(1.0);
+        s.push(3.0);
+        assert_eq!(s.count, 2);
+        assert_eq!(s.avg(), Some(2.0));
+        assert!((s.std_dev().unwrap() - 2f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn reset_clears_std_dev() {
+        let mut s = RunningStats::new();
+        s.push(1.0);
+        s.push(3.0);
+        s.reset();
+        assert!(s.std_dev().is_none());
+        s.push(10.0);
+        s.push(10.0);
+        assert_eq!(s.std_dev(), Some(0.0));
     }
 
     #[test]

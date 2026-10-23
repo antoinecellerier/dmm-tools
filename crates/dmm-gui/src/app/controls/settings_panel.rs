@@ -486,7 +486,7 @@ impl App {
                 ui,
                 &mut self.settings.show_stats,
                 "Statistics",
-                "Show Min / Max / Avg / integral for the live session",
+                "Show Min / Max / Avg / \u{3c3} / integral for the live session",
             ) | setting_checkbox(
                 ui,
                 &mut self.settings.show_recording,

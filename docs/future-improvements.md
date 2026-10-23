@@ -43,14 +43,6 @@ Use cases: power measurement (voltage + current simultaneously), differential me
 
 ## Data Analysis
 
-### Standard deviation in statistics
-
-**Complexity:** Low
-
-Add standard deviation to the existing min/max/avg statistics panel using an incremental algorithm (Welford's method). No extra memory required.
-
-Use cases: noise assessment, measurement stability evaluation.
-
 ### Histogram / distribution view
 
 **Complexity:** Medium

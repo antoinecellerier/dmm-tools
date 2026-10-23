@@ -237,7 +237,8 @@ A thin strip below the main plot showing the full capture history.
 
 ## Statistics
 
-- **Min**, **Max**, **Avg** values in monospace with fixed-width formatting
+- **Min**, **Max**, **Avg** and **σ** (sample standard deviation) in monospace
+  with fixed-width formatting
 - **Count** — number of samples
 - **Int** — cumulative time-integral (shown only for current and voltage modes).
   For current modes, displays charge in Ah/mAh/µAh. For voltage modes, V·s.
@@ -246,9 +247,9 @@ A thin strip below the main plot showing the full capture history.
   set
 - **Reset** button — clears statistics, integral and alarm counts
 - Stats persist across reconnects (use Clear for full reset)
-- In wide layout, a second row shows **visible window stats** — min/max/avg
-  computed only over the current graph viewport
-- Min/Max/Avg/Count/∫ track the meter's main reading whatever the graph is
+- A second row shows **visible window stats** — the same figures over the
+  current graph viewport only
+- Min/Max/Avg/σ/Count/∫ track the meter's main reading whatever the graph is
   plotting; the visible-window row follows the plotted series and is
   captioned with its unit
 - With a software [scale](#scale) active, all of these follow the scaled
