@@ -27,7 +27,7 @@ backlog](verification-backlog.md).
 | UT-D09 | CP2110 | `10C4:EA80` | both ways | UT61+/UT161, UT171, UT8802/UT8803, Voltcraft VC-880/VC650BT/VC-890, older UT181A units | UT61E+ |
 | UT-D09 | CH9329 | `1A86:E429` | both ways | sold for UT181A, UT171, UT243 | UT181A (two units), UT61B+ |
 | UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per UNI-T's accessory page | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
-| BU-86X kit (BC-86X cable) | — | `0820:0001` | both ways | Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM525s, BM521s per Brymen's manuals | — untested |
+| BU-86X kit (BC-86X cable) | — | `0820:0001` | both ways | Brymen BM869s, BM867s, BM829s, BM827s, BM822s, BM821s, BM525s, BM521s per Brymen's manuals; Minipa ET-2517A and ET-2615A per Minipa's manual | — untested |
 | UT-D02 | RS232 level converter | — | both ways | serial port, not USB; not supported | — |
 | UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per UNI-T's page | UT61E+ ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
 | UT-D07A | Bluetooth LE | — | both ways | UT171, UT181 series per UNI-T's page (also UT71, which auto-detection does not look for over Bluetooth yet) | — untested ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
@@ -215,10 +215,10 @@ function.
 | BM869s | 50000 (500000 DC V) | 🧪 Experimental ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)) | VFD V and Hz; T1, T2 and T1-T2 temperature |
 | BM867s | 50000 (500000 DC V) | 🧪 Experimental ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)) | no VFD or temperature |
 | BM829s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | AutoCheck, dBm, EF; T1, T2 and T1-T2 temperature |
-| BM827s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | EF and T1; no AutoCheck or dBm |
+| BM827s / Minipa ET-2517A | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | EF and T1; no AutoCheck or dBm |
 | BM822s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | no REC, CREST, nS, EF or temperature |
 | BM821s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | as the BM822s, with average-sensing AC |
-| BM525s | 9999 (6000 in some functions) | 🧪 Experimental ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) | data logging, up to 87000 readings; T1, T2 and T1-T2 temperature |
+| BM525s / Minipa ET-2615A | 9999 (6000 in some functions) | 🧪 Experimental ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) | data logging, up to 87000 readings; T1, T2 and T1-T2 temperature |
 | BM521s | 9999 (6000 in some functions) | 🧪 Experimental ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) | data logging, up to 10800 readings; T1 only |
 
 Not run on a meter yet: the decoding comes from Brymen's protocol sheets,

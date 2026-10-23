@@ -170,6 +170,19 @@ one is used, and a fact without either is tagged [UNVERIFIED]. Every fact in
 §13 cites a community file (and line where it has one) at the commit or
 fetch date above, or a re-read of a vendor source.
 
+### Opened 2026-10-23
+
+The user opened two more sources on **2026-10-23**, for issue #36:
+
+- **Minipa's ET-2517A/ET-2615A manual**
+  ([PDF](https://www.minipaelectric.com.br/images/Manual/ET-2517A-2615A-1102-BR.pdf)),
+  for the cable those rebrands use (`verification.md`, Cable).
+- **SidineiSantosSousa's BM525s captures** in
+  [brymen-dmm-dotnet](https://github.com/SidineiSantosSousa/brymen-dmm-dotnet)
+  at `bf63997`: `docs/protocol/captures/` and `test-vectors.json` only,
+  replayed through our decoder. The repository's protocol write-up and code
+  were not opened.
+
 ## Methodology
 
 1. **Acquisition.** The sheets, the BM520s zip, the manuals and the three

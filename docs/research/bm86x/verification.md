@@ -29,9 +29,9 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 - The cable's strings, whether its serial is printable, and whether its
   release number reads as a firmware version (§2, §13.2) — decides the
   transport info. Needs `lsusb -v -d 0820:0001`. (#34–#36)
-- Which cable a BM820s or BM520s needs: its manual names the BU-82X on p.13
-  and the BU-86X on p.20 (§1.2, §13.3) — decides the entries' links. Needs a
-  BM82x or BM52x read on a BU-86X. (#35, #36)
+- Which cable a BM820s or BM520s needs: BU-82X on p.13 of Brymen's manual,
+  BU-86X on its p.20 and in Minipa's ET-2517A/ET-2615A manual (§1.2, §13.3)
+  — decides the entries' links. Needs a BM82x or BM52x on a BU-86X. (#35, #36)
 
 ## Requests and model bytes
 
