@@ -1476,6 +1476,9 @@ impl Graph {
             // the right button opens the plot's menu instead.
             .allow_zoom(Vec2b::FALSE)
             .allow_boxed_zoom(false)
+            // Its drag-an-axis zoom would show a resize cursor over the axes
+            // and jitter the view the per-frame `reset` pins back.
+            .allow_axis_zoom_drag(false)
             .allow_scroll(Vec2b::new(false, false))
             .allow_double_click_reset(false)
             .reset()

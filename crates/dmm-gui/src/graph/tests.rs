@@ -5180,6 +5180,70 @@ fn an_axis_opens_the_menu_for_what_it_measures() {
     );
 }
 
+/// The axes are no zoom handles: egui_plot's drag-an-axis zoom is off, so
+/// hovering one shows no resize cursor and dragging it leaves the view.
+#[test]
+fn dragging_an_axis_leaves_the_view() {
+    let (mut g, _) = graph_over(30);
+    let ctx = crate::app::styled_context();
+    ctx.enable_accesskit();
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let markers = crate::markers::Markers::default();
+    let frame = |g: &mut Graph, events: Vec<egui::Event>| {
+        let input = egui::RawInput {
+            screen_rect: Some(gesture_screen()),
+            events,
+            ..Default::default()
+        };
+        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None, NO_DIGITS));
+        out.textures_delta.clear();
+        out.platform_output
+    };
+    frame(&mut g, vec![]);
+    let tree = frame(&mut g, vec![])
+        .accesskit_update
+        .map(|update| update.nodes)
+        .unwrap_or_default();
+    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    let bounds = *g.plot_transform.expect("drawn").bounds();
+    for (axis, from, to) in [
+        (
+            "value",
+            egui::pos2(plot.left() - 20.0, plot.center().y),
+            egui::pos2(plot.left() - 20.0, plot.center().y + 40.0),
+        ),
+        (
+            "time",
+            egui::pos2(plot.center().x, plot.bottom() + 8.0),
+            egui::pos2(plot.center().x + 40.0, plot.bottom() + 8.0),
+        ),
+    ] {
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let hover = frame(&mut g, vec![egui::Event::PointerMoved(from)]);
+        assert!(
+            !matches!(
+                hover.cursor_icon,
+                egui::CursorIcon::ResizeHorizontal | egui::CursorIcon::ResizeVertical
+            ),
+            "{axis} axis: {:?}",
+            hover.cursor_icon
+        );
+        frame(&mut g, vec![button(from, true)]);
+        frame(&mut g, vec![egui::Event::PointerMoved(to)]);
+        assert_eq!(
+            *g.plot_transform.expect("drawn").bounds(),
+            bounds,
+            "mid-drag on the {axis} axis"
+        );
+        frame(&mut g, vec![button(to, false)]);
+    }
+}
+
 /// Right-clicked, a marker's flag offers that marker's deletion alone; a
 /// click still opens its note.
 #[test]
