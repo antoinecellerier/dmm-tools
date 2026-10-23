@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bug fixes
+
+- **Dashes on a Brymen display read as no reading, not an EF level** — a BM82x showed a field level after a range or function change, other models a warning.
+
 ## v0.9.0 — Graph Analysis and Alarms
 
 Alarms flag readings that leave set limits, in the GUI and `dmm-cli read`. The graph gains a histogram, standard deviation and a right-click menu for reference lines, cursors and alarm limits. The UT161E is verified.

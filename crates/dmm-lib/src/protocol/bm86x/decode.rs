@@ -119,6 +119,7 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
         Shown::Overload => (MeasuredValue::Overload, None),
         Shown::Field(level) => (MeasuredValue::NcvLevel(level), None),
         Shown::Word(word) | Shown::Unread(word) => (MeasuredValue::NoReading(word), None),
+        Shown::Pending => (MeasuredValue::NoReading("---"), None),
     };
     Ok(Measurement {
         mode,
@@ -188,6 +189,8 @@ enum Shown {
     Field(u8),
     /// A word the manuals show (spec §7.3).
     Word(&'static str),
+    /// Dashes beside a unit: nothing measured yet (spec §7.3).
+    Pending,
     /// Something no source shows, already reported.
     Unread(&'static str),
 }
@@ -242,12 +245,15 @@ fn main_shown(
         "C_Er" => Shown::Word("C_Er"),
         // AutoCheck with no input, LoZ lit (BM820s manual p.6).
         "Auto" if lit.has(Ann::LoZ) => Shown::Word(AUTO),
-        // Dashes where a temperature would be.
+        // Dashes where a temperature would be, or beside a unit: nothing
+        // measured yet, the latter for a moment after a range or function
+        // change (#35, spec §7.3).
         _ if dashes && letter => Shown::Word("---"),
-        // The field strength, the minus counted with the dashes after it
-        // (BM820s manual p.13); how many light at each strength is open
-        // (spec §7.3).
-        _ if dashes && series.detects_fields() => {
+        _ if dashes && lit.among(MAIN_UNITS).next().is_some() => Shown::Pending,
+        // The field strength, the minus counted with the dashes after it,
+        // nothing else lit (BM820s manual p.13); how many light at each
+        // strength is open (spec §7.3).
+        _ if dashes && series.detects_fields() && !lit.has(Ann::Ac1) && !lit.has(Ann::Dc1) => {
             let marks = main.text.chars().filter(|c| *c == '-').count();
             Shown::Field(u8::try_from(marks).unwrap_or(u8::MAX))
         }
@@ -460,12 +466,23 @@ fn low_impedance(mode: &str) -> Option<&'static str> {
     })
 }
 
+/// The main display's unit annunciators.
+const MAIN_UNITS: [Ann; 8] = [
+    Ann::V1,
+    Ann::A1,
+    Ann::Ohm1,
+    Ann::Farad1,
+    Ann::Hz1,
+    Ann::Siemens1,
+    Ann::Duty1,
+    Ann::Db,
+];
+
 /// The function what is lit shows, by the first rule that matches (spec
 /// §8.1, §8.2); `None` for a combination no source gives. `letter` is the
 /// temperature unit in the digits.
 fn function(lit: Lit, letter: Option<char>) -> Option<Function> {
     use Ann::*;
-    const UNITS: [Ann; 8] = [V1, A1, Ohm1, Farad1, Hz1, Siemens1, Duty1, Db];
     let coupling = match (lit.has(Dc1), lit.has(Ac1)) {
         (false, false) => Coupling::None,
         (true, false) => Coupling::Dc,
@@ -480,7 +497,7 @@ fn function(lit: Lit, letter: Option<char>) -> Option<Function> {
         } else {
             Base::Fahrenheit
         };
-        if lit.among(UNITS).next().is_some() {
+        if lit.among(MAIN_UNITS).next().is_some() {
             return None;
         }
         return match (lit.has(Ann::T1), lit.has(Ann::T2)) {
@@ -493,10 +510,10 @@ fn function(lit: Lit, letter: Option<char>) -> Option<Function> {
     // The reference impedance, shown for a second as dBm starts ("600" with
     // Ω and dBm lit; BM860s manual p.7, BM820s manual p.8, spec §8.2
     // `0x2080`).
-    if lit.among(UNITS).eq([Ohm1, Db]) {
+    if lit.among(MAIN_UNITS).eq([Ohm1, Db]) {
         return Some(named("dBm reference", Base::Ohm));
     }
-    Some(match lit.one_of(UNITS)? {
+    Some(match lit.one_of(MAIN_UNITS)? {
         Db => named("dBm", Base::Dbm),
         Hz1 if lit.has(Vfd) => named("VFD Hz", Base::Hertz),
         V1 if lit.has(Vfd) && coupling == Coupling::Ac => named("VFD AC V", Base::Volt),
@@ -618,6 +635,11 @@ fn secondary(
     let (value, display_raw) = match (sub.number, sub.word.as_str()) {
         (Some(v), _) => (MeasuredValue::Normal(v), Some(sub.text.clone())),
         (None, "0L") => (MeasuredValue::Overload, None),
+        // Dashes, or a blank row with a point, beside its unit: nothing
+        // measured yet, as for a moment after a range or function change
+        // (#35, spec §7.3).
+        (None, word) if !word.is_empty() && word.chars().all(|c| c == '-') => return None,
+        (None, "") if sub.text == "." => return None,
         _ => {
             report("secondary display");
             return None;
@@ -948,8 +970,10 @@ pub(super) mod tests {
         let m = quiet(&lcd("  ---C", BLANK, &[T1]));
         assert_eq!(m.mode, "T1");
         assert!(matches!(m.value, MeasuredValue::NoReading("---")));
-        // Dashes with no letter are no word the BM860s manual shows.
-        reported(&lcd("  --- ", BLANK, &[Dc1, V1]), "display text");
+        // Beside a unit, nothing measured yet (#35).
+        let m = quiet(&lcd("  --- ", BLANK, &[Dc1, V1]));
+        assert_eq!(m.mode, "DC V");
+        assert!(matches!(m.value, MeasuredValue::NoReading("---")));
     }
 
     /// The dBm figures (BM860s manual p.7-8): m is part of the label.
@@ -1659,11 +1683,91 @@ pub(super) mod tests {
             reports.iter().any(|r| r.contains("display text")),
             "{reports:?}"
         );
-        reported_as(
-            &lcd_on(Series::Bm52x, " ---", true, BLANK, false, &[Dc1, V1]),
+        let (_, reports) = decoded_as(
+            &lcd_on(Series::Bm52x, " ---", true, BLANK, false, &[]),
             Series::Bm52x,
-            "display text",
         );
+        assert!(
+            reports.iter().any(|r| r.contains("display text")),
+            "{reports:?}"
+        );
+    }
+
+    /// Dashes beside a unit, or a blank small display with a point: nothing
+    /// measured yet, for a moment after a range or function change (#35).
+    /// No reading, and never EF, which lights no unit (BM820s manual p.13).
+    #[test]
+    fn dashes_beside_a_unit_are_no_reading() {
+        for series in BM820_SERIES {
+            let m = quiet_as(&lcd8(series, "-.---", "0.025", &[Hz1, Ac2, V2]), series);
+            assert_eq!((m.mode.as_ref(), m.unit.as_ref()), ("Hz", "Hz"));
+            assert!(matches!(m.value, MeasuredValue::NoReading("---")));
+            assert_eq!(m.aux_values.len(), 1);
+            for sub in ["-.---", " .   "] {
+                let m = quiet_as(&lcd8(series, "0.115", sub, &[Ac1, V1, Hz2]), series);
+                assert_eq!(m.mode, "AC V", "{sub:?}");
+                assert_eq!(normal(&m), Some(0.115), "{sub:?}");
+                assert!(m.aux_values.is_empty(), "{sub:?}");
+            }
+            // A small display blank, point and all, beside its unit is no
+            // state any source shows.
+            reported_as(
+                &lcd8(series, "0.115", BLANK, &[Ac1, V1, Hz2]),
+                series,
+                "secondary display",
+            );
+            // Dashes beside a unit no function lights alone.
+            reported_as(
+                &lcd8(series, "----", BLANK, &[A1]),
+                series,
+                "function annunciators",
+            );
+        }
+        // EF lights nothing beside its dashes (BM820s manual p.13).
+        let (m, reports) = decoded_as(&lcd8(Series::Bm82x, "----", BLANK, &[Ac1]), Series::Bm82x);
+        assert!(
+            !matches!(m.value, MeasuredValue::NcvLevel(_)),
+            "{:?}",
+            m.value
+        );
+        assert!(
+            reports.iter().any(|r| r.contains("display text")),
+            "{reports:?}"
+        );
+    }
+
+    /// An ET-2517A's (BM827s) replies right after a range or function
+    /// change, report IDs left out (#35).
+    #[test]
+    fn et2517a_replies_after_a_change() {
+        let s = Series::Bm82x;
+        let reply = |hex: &str| -> Vec<u8> {
+            hex.split(' ')
+                .map(|b| u8::from_str_radix(b, 16).unwrap())
+                .collect()
+        };
+        // RANGE pressed in Hz V~: AC V, dashes beside the small Hz.
+        let m = quiet_as(
+            &reply("00 10 00 AF BF CB EF 00 50 40 40 40 00 01 20 06 82 82 82 82 00 00 00 00"),
+            s,
+        );
+        assert_eq!((m.mode.as_ref(), normal(&m)), ("AC V", Some(0.28)));
+        assert!(m.aux_values.is_empty());
+        // The small display blank but for a point, beside Hz.
+        let m = quiet_as(
+            &reply("00 10 00 AF BF E4 6F 00 00 10 00 00 00 01 20 00 82 82 82 82 00 00 00 00"),
+            s,
+        );
+        assert_eq!((m.mode.as_ref(), normal(&m)), ("AC V", Some(0.46)));
+        assert!(m.aux_values.is_empty());
+        // SELECT to Hz on the main display: dashes there, AC V on the small.
+        let m = quiet_as(
+            &reply("00 00 00 50 40 40 40 40 BF AF CB 6D 10 10 00 00 82 82 82 82 10 00 00 00"),
+            s,
+        );
+        assert_eq!(m.mode, "Hz");
+        assert!(matches!(m.value, MeasuredValue::NoReading("---")));
+        assert_eq!(m.aux_values.len(), 1);
     }
 
     /// The logging models' words (BM820s manual p.14-16), in the manual's

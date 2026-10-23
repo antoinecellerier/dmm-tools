@@ -70,7 +70,7 @@ pub(super) struct Readout {
     /// "rE-0". Empty for a blank row.
     pub(super) word: String,
     /// The meter's own text: the sign, the lit characters and the point,
-    /// the blanks around them dropped.
+    /// the blanks around them dropped; "." for a blank row with its point.
     pub(super) text: String,
     /// The number `text` is, when every lit cell is a digit and they stand
     /// together.
@@ -95,7 +95,7 @@ pub(super) fn read(cells: &[Cell], negative: bool) -> Readout {
     let Some((first, last)) = lit else {
         return Readout {
             word,
-            text: String::new(),
+            text: if point.is_some() { "." } else { "" }.to_string(),
             number: None,
             odd,
         };

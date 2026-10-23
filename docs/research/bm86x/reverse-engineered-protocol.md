@@ -651,7 +651,18 @@ entry of its own and draws as 0; "S" draws as 5 [INFERRED: same segments].
 | t0.05 … | logging interval (BM820s manual p.15) | renders [VENDOR] |
 | LEFt, Strt, PAUS, Cont, StoP | logging (BM820s manual p.15-16) | "LEFt", "5trt", "PAU5", "Cont", "5toP" [VENDOR] |
 | P.001-P.999 | Recall session page (BM820s manual p.16) | renders [VENDOR] |
-| dashes | EF field strength (BM820s manual p.12); the figures show four and five marks, a short one where the minus sits and then three or four dashes (p.13) [KNOWN]; how many light at each strength is [UNVERIFIED] | "-" renders [VENDOR] |
+| dashes | EF field strength (BM820s manual p.12) [KNOWN]. The figures (p.13) show a short mark where the minus sits, then three or four dashes, with no point, no annunciator and a blank small display [KNOWN]. How many marks light at each strength is [UNVERIFIED] | "-" renders [VENDOR] |
+
+Dashes beside a lit unit appear in no manual. A BM827s (Minipa ET-2517A)
+shows them for 0.3-1 s after RANGE or SELECT, before the reading: `-.---`
+beside Hz, on either display. Around a manual range and the start of REC,
+its small display is instead blank but for its point, beside Hz. To the
+eye, the LCD showed `0.000 Hz` throughout. This is per @SidineiSantosSousa,
+from their own tool on the BU-86X (#35); whether the BM86x and BM52x do the
+same is [UNVERIFIED]. Brymen's programs draw the dashes and the point as
+they are. Their recorder drops a sample whose main or small display reads
+only "." (Bs8252x sigfix `:2220-2246`, `:2415-2440`), and has no case for
+dashes [VENDOR].
 
 The logging models also show bare numbers (BM820s manual p.15-17) [KNOWN]:
 after LEFt, the memory points left, and on SELECT, while logging or in

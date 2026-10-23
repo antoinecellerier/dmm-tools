@@ -117,11 +117,14 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 - How the meter draws InEr's I and C_Er's `_` (§7.3, §13.5) — `?nEr` and
   `1nEr` both read as InEr. Needs `iner`, and the self-test at power-on.
   (#34–#36)
-- "E.F.": which digits and points light, and how many marks each field
-  strength lights (§7.3) — the points go unread, the minus and dashes are
-  counted. Needs `ef`, `ncv`. (#35)
-- What dBm shows with the leads open, in no manual (§11.6) — on a BM82x
-  a row of dashes there reads as the EF field. Needs `dbm`. (#34, #35)
+- "E.F.": which digits and points light, how many marks each field
+  strength lights, and whether any annunciator lights with them (§7.3) —
+  dashes read as the field only with nothing else lit. Needs `ef`, `ncv`. (#35)
+- What dBm shows with the leads open, in no manual (§11.6) — dashes beside
+  dBm read as no reading, not EF. Needs `dbm`. (#34, #35)
+- Whether a BM86x or BM52x also shows dashes beside a unit after RANGE or
+  SELECT (§7.3) — decides whether those stay silent there. Needs `hz_acv` and
+  `manual_range`. (#34, #36)
 - AutoCheck's Ω with the continuity symbol, read as LoZ Ω, and any other
   function with LoZ, reported (§6.5, §11.3) — decides `low_impedance`. Needs
   the `autocheck` steps. (#35, #36)
