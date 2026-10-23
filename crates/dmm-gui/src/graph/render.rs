@@ -1813,10 +1813,8 @@ impl Graph {
             digits,
         );
         self.update_plot_a11y_label(ui, response.response.id, y_min, y_max, in_view.len());
-        // Draw a focus ring on the main plot body when it's keyboard-focused.
-        // Note: egui_plot also allocates separate focusable responses for the
-        // X and Y axes — those receive Tab but don't draw a focus indicator.
-        // Making those invisible to Tab would require patching egui_plot.
+        // Draw a focus ring on the main plot body when it's keyboard-focused,
+        // the plot's one Tab stop: egui_plot's axes take no focus.
         crate::a11y::paint_focus_ring(ui, &response.response);
     }
 
