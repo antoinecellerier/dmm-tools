@@ -151,7 +151,7 @@ impl Graph {
     /// Render the toolbar. Row 1: time presets, LIVE, Y-axis, Reset Zoom.
     /// Row 2, present only for meters that send sub-values: the boxed
     /// **Plot:** series selector and **Show:** trace toggles. Row 3: the
-    /// analysis overlays (Mean, Min/Max, Ref, Cursors).
+    /// analysis overlays (Mean, Min/Max, Histogram, Ref, Cursors).
     ///
     /// The series controls get a row of their own rather than sharing one
     /// with the analysis toggles: inline, nothing distinguished the two kinds
@@ -302,6 +302,8 @@ impl Graph {
                         .color(ui.visuals().weak_text_color()),
                 );
             }
+            let hover = self.histogram_hover();
+            toggle_chip(ui, &mut self.show_histogram, "Histogram", hover);
             if chip(
                 ui,
                 self.show_ref_line,
@@ -335,37 +337,41 @@ impl Graph {
                 ui,
                 self.cursors_active,
                 "Cursors",
-                "Click the graph to place two cursors and read Δt / Δv / integral (C)",
+                "Click the graph to place two cursors (C)",
             ) {
                 self.toggle_cursors();
             }
             if self.cursors_active {
-                if let (Some(ta), Some(tb)) = (self.cursor_a, self.cursor_b) {
-                    let dt = (tb - ta).abs();
-                    let va = self.nearest_point(ta).map(|(_, v)| v);
-                    let vb = self.nearest_point(tb).map(|(_, v)| v);
-                    let dv = match (va, vb) {
-                        (Some(a), Some(b)) => {
-                            format!("{:.prec$}", (b - a).abs(), prec = self.decimals(true))
+                if let Some(figures) = self.cursor_readout() {
+                    let color = tc.graph_cursor_delta();
+                    const GAP: f32 = 6.0;
+                    let galleys: Vec<_> = figures
+                        .into_iter()
+                        .map(|text| {
+                            egui::WidgetText::from(egui::RichText::new(text).color(color).strong())
+                                .into_galley(
+                                    ui,
+                                    Some(egui::TextWrapMode::Extend),
+                                    f32::INFINITY,
+                                    egui::TextStyle::Body,
+                                )
+                        })
+                        .collect();
+                    // The readout stays together: on the chips' row while it
+                    // fits there, else on a row of its own, and only a window
+                    // too narrow for that splits it, between two figures.
+                    let between = GAP + 2.0 * ui.spacing().item_spacing.x;
+                    let width = galleys.iter().map(|g| g.size().x).sum::<f32>()
+                        + between * galleys.len().saturating_sub(1) as f32;
+                    if width > ui.available_size_before_wrap().x {
+                        ui.end_row();
+                    }
+                    for (k, galley) in galleys.into_iter().enumerate() {
+                        if k > 0 {
+                            ui.add_space(GAP);
                         }
-                        _ => crate::NO_DATA.to_string(),
-                    };
-                    let unit = &self.current_unit;
-                    let delta_color = tc.graph_cursor_delta();
-
-                    let integral_str = self
-                        .cursor_integral(ta, tb)
-                        .and_then(|raw| dmm_lib::stats::integral_display(raw, unit))
-                        .map(|(value, disp_unit)| format!("  \u{222b}={value:.4} {disp_unit}"))
-                        .unwrap_or_default();
-
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "\u{0394}T={dt:.2} s  \u{0394}={dv} {unit}{integral_str}"
-                        ))
-                        .color(delta_color)
-                        .strong(),
-                    );
+                        ui.add(egui::Label::new(galley));
+                    }
                 } else {
                     ui.label(
                         egui::RichText::new("click graph to place cursors")
@@ -375,6 +381,39 @@ impl Graph {
                 }
             }
         });
+    }
+
+    /// The cursor readout: ΔT and Δ between the cursors, the integral where
+    /// the unit has one, then the mean, σ and count of the readings from A
+    /// to B, written as Statistics writes the visible window's. `None` until
+    /// both cursors are placed.
+    pub(super) fn cursor_readout(&mut self) -> Option<Vec<String>> {
+        let (ta, tb) = (self.cursor_a?, self.cursor_b?);
+        let (stats, integral) = self.cursor_figures()?;
+        let unit = &self.current_unit;
+        let dv = match (self.nearest_point(ta), self.nearest_point(tb)) {
+            (Some((_, a)), Some((_, b))) => {
+                format!("{:.prec$}", (b - a).abs(), prec = self.decimals(true))
+            }
+            _ => crate::NO_DATA.to_string(),
+        };
+        let mean_decimals = self.decimals(false);
+        let figure = |v: Option<f64>| match v {
+            Some(v) => format!("{v:.mean_decimals$} {unit}"),
+            None => crate::NO_DATA.to_string(),
+        };
+        let integral = integral
+            .and_then(|raw| dmm_lib::stats::integral_display(raw, unit))
+            .map(|(value, disp_unit)| format!("\u{222b}={value:.4} {disp_unit}"));
+        let figures = [
+            Some(format!("\u{0394}T={:.2} s", (tb - ta).abs())),
+            Some(format!("\u{0394}={dv} {unit}")),
+            integral,
+            Some(format!("Avg={}", figure(stats.avg()))),
+            Some(format!("\u{3c3}={}", figure(stats.std_dev()))),
+            Some(format!("Count={}", stats.count)),
+        ];
+        Some(figures.into_iter().flatten().collect())
     }
 
     /// Chips choosing which series the graph plots: the meter's main reading

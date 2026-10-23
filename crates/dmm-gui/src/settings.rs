@@ -1,3 +1,4 @@
+use crate::graph::histogram;
 use crate::theme::ThemeColors;
 use crate::theme::links;
 use crate::theme::named::{self, NamedTheme, ThemeCatalog};
@@ -443,6 +444,10 @@ pub struct Settings {
     /// The recording panel's height under the graph, as dragged. The layout
     /// fits it to the window without changing it.
     pub recording_height: f32,
+    /// The graph's histogram strip width and band height, as dragged. The
+    /// graph fits each to its room without changing it.
+    pub histogram_width: f32,
+    pub histogram_height: f32,
     /// Sub-value traces switched off with the graph's **Show:** chips, by
     /// label. Remembered, unlike the plotted series: hiding a trace loses no
     /// reading, and its chip still lists it, unlit.
@@ -491,6 +496,8 @@ impl Default for Settings {
             window_maximized: false,
             reading_panel_width: SIDE_PANEL_DEFAULT_WIDTH,
             recording_height: DEFAULT_RECORDING_HEIGHT,
+            histogram_width: histogram::STRIP_WIDTH,
+            histogram_height: histogram::BAND_HEIGHT,
             hidden_series: BTreeSet::new(),
             overrides: Overrides::default(),
             user_themes: Arc::default(),
@@ -590,6 +597,8 @@ impl Settings {
             .reading_panel_width
             .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
         self.recording_height = self.recording_height.max(MIN_RECORDING_HEIGHT);
+        self.histogram_width = self.histogram_width.max(histogram::MIN_STRIP_WIDTH);
+        self.histogram_height = self.histogram_height.max(histogram::MIN_BAND_HEIGHT);
     }
 
     /// Write the settings to the user's config file. Nothing isolates that
@@ -830,6 +839,8 @@ mod tests {
             window_maximized: true,
             reading_panel_width: 300.0,
             recording_height: 200.0,
+            histogram_width: 120.0,
+            histogram_height: 70.0,
             hidden_series: BTreeSet::from(["Period".to_string()]),
             overrides: Overrides::default(),
             user_themes: Arc::default(),
@@ -864,6 +875,8 @@ mod tests {
         assert!(deserialized.window_maximized);
         assert_eq!(deserialized.reading_panel_width, 300.0);
         assert_eq!(deserialized.recording_height, 200.0);
+        assert_eq!(deserialized.histogram_width, 120.0);
+        assert_eq!(deserialized.histogram_height, 70.0);
     }
 
     #[test]
@@ -919,6 +932,11 @@ mod tests {
         s.sanitize();
         assert_eq!(s.window_size, Some([5000.0, 3000.0]), "eframe clamps it");
         assert_eq!(s.reading_panel_width, SIDE_PANEL_MIN_WIDTH);
+        let mut s: Settings =
+            serde_json::from_str(r#"{"histogram_width":0,"histogram_height":-5}"#).unwrap();
+        s.sanitize();
+        assert_eq!(s.histogram_width, histogram::MIN_STRIP_WIDTH);
+        assert_eq!(s.histogram_height, histogram::MIN_BAND_HEIGHT);
     }
 
     /// The settings row only offers sane sizes, but the file is editable by

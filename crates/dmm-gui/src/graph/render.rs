@@ -40,32 +40,23 @@ const MIN_KEY_FONT_SIZE: f32 = 11.0;
 /// Width of the line sample drawn at the left of each key row.
 const KEY_SAMPLE_WIDTH: f32 = 24.0;
 
-/// Shapes for one key row's line sample, matching how `egui_plot` renders the
-/// same `LineStyle` on the plot — otherwise the key would promise a dash
-/// pattern the trace doesn't use.
-fn key_line_sample(
+/// Shapes for a line from `a` to `b`, matching how `egui_plot` renders the
+/// same `LineStyle` on the plot — otherwise the plot key, or the histogram a
+/// line crosses, would promise a dash pattern the plot doesn't use.
+pub(super) fn styled_line(
     a: egui::Pos2,
     b: egui::Pos2,
-    color: egui::Color32,
+    stroke: egui::Stroke,
     style: egui_plot::LineStyle,
 ) -> Vec<egui::Shape> {
-    const WIDTH: f32 = 1.5;
     match style {
-        egui_plot::LineStyle::Solid => {
-            vec![egui::Shape::line_segment(
-                [a, b],
-                egui::Stroke::new(WIDTH, color),
-            )]
-        }
+        egui_plot::LineStyle::Solid => vec![egui::Shape::line_segment([a, b], stroke)],
         egui_plot::LineStyle::Dotted { spacing } => {
-            egui::Shape::dotted_line(&[a, b], color, spacing, WIDTH)
+            egui::Shape::dotted_line(&[a, b], stroke.color, spacing, stroke.width)
         }
-        egui_plot::LineStyle::Dashed { length } => egui::Shape::dashed_line(
-            &[a, b],
-            egui::Stroke::new(WIDTH, color),
-            length,
-            length * DASH_GAP,
-        ),
+        egui_plot::LineStyle::Dashed { length } => {
+            egui::Shape::dashed_line(&[a, b], stroke, length, length * DASH_GAP)
+        }
     }
 }
 
@@ -1027,10 +1018,10 @@ impl Graph {
                 KeyStyle::Plotted => (tc.graph_line(), egui_plot::LineStyle::Solid),
                 KeyStyle::Overlay(k) => Self::overlay_color_and_style(tc, *k, solid),
             };
-            painter.extend(key_line_sample(
+            painter.extend(styled_line(
                 egui::pos2(rect.left() + PAD, mid),
                 egui::pos2(rect.left() + PAD + KEY_SAMPLE_WIDTH, mid),
-                color,
+                egui::Stroke::new(1.5, color),
                 line_style,
             ));
             painter.galley(
@@ -1313,6 +1304,32 @@ impl Graph {
         let (y_min, y_max) = self
             .y_range_for_view(view_min, view_max, true)
             .unwrap_or((-1.0, 1.0));
+
+        // Binned over the Y range drawn, so the strip's bars sit at the
+        // heights of the values they count, into bins sized for the plot's
+        // extent they span, last frame's until it has one. Counted by bins,
+        // a plot settling by a pixel doesn't bin it again.
+        if let Some(place) = self.histogram_place {
+            let plot = self.plot_rect.unwrap_or(ui.available_rect_before_wrap());
+            let cursors = self.cursor_range();
+            let key = super::HistogramKey {
+                view: self.readings_key(vis_start..vis_end),
+                interval: cursors.clone().map(|r| self.readings_key(r)),
+                overloads: (
+                    self.overloads_in(vis_start..vis_end),
+                    cursors.map(|r| self.overloads_in(r)),
+                ),
+                range: (y_min, y_max),
+                bins: super::histogram::target_bins(match place.dock {
+                    super::histogram::Dock::Side => plot.height(),
+                    super::histogram::Dock::Below => plot.width(),
+                }),
+                decimals: (self.decimals(true), self.decimals(false)),
+            };
+            self.bin_histogram(key, vis_start..vis_end);
+        } else {
+            self.histogram = None;
+        }
 
         let right = self.right_axes(ui, (view_min, view_max), (y_min, y_max));
         self.axis_maps.clone_from(&right.maps);
@@ -1710,6 +1727,7 @@ impl Graph {
 
         self.dash_phases = phases.into_inner();
         self.plot_rect = Some(response.response.rect);
+        self.plot_transform = Some(response.transform);
         if let Some((time_label, name, t, overload)) = hover_hit.take() {
             let lines = hover_lines(&hover_series, &name, t, overload, point_decimals);
             show_hover_readout(&response.response, &time_label, &hover_series, &lines);
@@ -1859,6 +1877,7 @@ impl Graph {
     ) {
         use std::hash::{Hash, Hasher};
         let last_value = self.history.back().map(|p| p.value);
+        let spoken_histogram = self.histogram.as_ref().map_or("", |b| b.spoken.as_str());
         // Only the traces actually drawn are spoken: a sub-value the user
         // switched off is not on screen, so announcing it would describe a
         // graph that isn't there.
@@ -1897,6 +1916,7 @@ impl Graph {
             // cache — otherwise the band appears with no spoken counterpart.
             self.pending_break.is_some().hash(&mut h);
             markers_in_view.hash(&mut h);
+            spoken_histogram.hash(&mut h);
             h.finish()
         };
         if sig != self.a11y_label_sig {
@@ -1951,7 +1971,7 @@ impl Graph {
                 n => format!(" {n} markers in view."),
             };
             self.a11y_label = format!(
-                "Measurement plot{of_series}. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples.{also}{markers} {}. {}.",
+                "Measurement plot{of_series}. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples.{also}{markers}{spoken_histogram} {}. {}.",
                 self.time_window_secs,
                 y_min,
                 y_max,

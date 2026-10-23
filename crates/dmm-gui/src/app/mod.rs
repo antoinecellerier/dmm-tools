@@ -505,6 +505,7 @@ impl App {
         // One setting bounds both stores of the sample stream.
         graph.set_max_points(settings.max_samples);
         graph.hide_overlays(&settings.hidden_series);
+        graph.histogram_sizes = (settings.histogram_width, settings.histogram_height);
         let capture = Capture::new(settings.max_samples);
         let initial_device = named_device(&settings.shared.device_family);
         Self {

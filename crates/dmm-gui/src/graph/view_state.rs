@@ -27,6 +27,8 @@ pub(crate) struct ViewState {
     pub(crate) y: Option<YRange>,
     #[serde(skip_serializing_if = "is_false")]
     pub(crate) mean: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub(crate) histogram: bool,
     /// The Min/Max envelope's window, seconds, when it is shown.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) envelope: Option<f64>,
@@ -92,6 +94,7 @@ impl Graph {
                 max: self.y_max.value(),
             }),
             mean: self.show_mean,
+            histogram: self.show_histogram,
             envelope: self.show_envelope.then(|| self.envelope_window.value()),
             references: self.ref_lines.values().to_vec(),
             references_shown: self.show_ref_line,
@@ -132,6 +135,7 @@ impl Graph {
             _ => self.y_axis_fixed = false,
         }
         self.show_mean = view.mean;
+        self.show_histogram = view.histogram;
         self.show_envelope = view.envelope.is_some_and(|w| usable(&w));
         if let Some(window) = view.envelope.filter(usable) {
             self.envelope_window.restore(window);
@@ -263,6 +267,7 @@ mod screenshot_views {
             start: Some(0.0),
             y: Some(YRange { min: 0.0, max: 1.0 }),
             mean: true,
+            histogram: true,
             envelope: Some(1.0),
             references: vec![1.0],
             references_shown: true,

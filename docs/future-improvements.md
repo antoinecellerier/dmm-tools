@@ -43,19 +43,11 @@ Use cases: power measurement (voltage + current simultaneously), differential me
 
 ## Data Analysis
 
-### Histogram / distribution view
-
-**Complexity:** Medium
-
-Toggleable panel showing a live histogram of recorded values with bin count, mean, and standard deviation. Reveals measurement distribution, noise characteristics, and outliers at a glance.
-
-Use cases: stability assessment ("is this 5V rail actually stable?"), QA workflows, metrology.
-
 ### Allan deviation
 
 **Complexity:** Low-medium
 
-Compute and display Allan deviation (ADEV) — the standard metric for measurement stability vs. averaging time. Shows how long to average for a given precision.
+Compute and display Allan deviation (ADEV) — the standard metric for measurement stability vs. averaging time. Shows how long to average for a given precision. Open question: whether it docks beside the trace as the histogram does (`graph/histogram.rs`), its result cached on the readings as the histogram's is.
 
 Use cases: precision measurement, oscillator characterization, sensor evaluation.
 
@@ -340,7 +332,7 @@ Use cases: a frequency held at 49.5–50.5 Hz while the voltage beside it auto-s
 
 **Complexity:** Medium
 
-The graph draws every series against time. Plotting one recorded series against another — V against Hz, or the two thermocouples of a UT181A against each other — shows how one quantity follows the other rather than how each varies. Open questions: pairing samples that arrive at different times (nearest frame, as the hover does), and showing time on the trace, with a colour ramp or markers along it.
+The graph draws every series against time. Plotting one recorded series against another — V against Hz, or the two thermocouples of a UT181A against each other — shows how one quantity follows the other rather than how each varies. Open questions: pairing samples that arrive at different times (nearest frame, as the hover does), showing time on the trace, with a colour ramp or markers along it, and whether it docks under the minimap beside the trace, as the histogram can, or replaces it.
 
 Use cases: a supply's output voltage against its load current; a sensor's reading against temperature.
 

@@ -153,23 +153,26 @@ dropdown, moves to the next scenario.
 
 ![Graph over one refresh cycle of a battery-powered sensor: the mean of the window, and cursors A and B reading the cycle's length, current spread and charge](../assets/gui-graph-overlays.webp)
 
-Three components stacked vertically: toolbar, main plot, and minimap.
+The toolbar sits above the main plot, and the minimap below it. The
+[histogram](#histogram), when on, sits beside the plot, or under the minimap
+in a narrow graph.
 
 ### Toolbar
 
 | Control | Description |
 |---|---|
 | **5s, 10s, 30s, 1m, 5m, 10m** | Time window presets |
-| **LIVE** | Auto-scroll to latest data (filled when active) |
-| **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values. Fixed holds every axis where it is; the values set the left one |
-| **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading, under its own name where it has one: **DC** in the UT61E+'s AC+DC V; **T1** or **T2**, **Relative** or **Peak Max** on a UT181A) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching keeps the graph: the two series change places with their past, and the left Y axis moves to the new series' unit. If the meter stops sending the chosen sub-value, the graph returns to **Main**, which kept its past too. |
-| **Show:** | One chip per sub-value: click to draw or hide its trace beside the plotted series. Up to four units are drawn at once; a chip past that is greyed out until another unit is hidden. Hidden traces are still recorded, and stay hidden at the next launch. |
-| **Mean** | Dashed horizontal line at visible window average, labeled with value |
-| **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
-| **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
-| **Triggers** | (requires Ref) Diamond markers where data crosses a reference line |
-| **Cursors** | Click to place cursor A, click again for cursor B. Shows ΔT, ΔV, and ∫ (integral, for current/voltage modes only). |
+| **LIVE** | Follow the newest readings (filled when active) |
+| **Y:Auto / Y:Fixed** | Fit the Y axis to the data, or hold it at the min/max typed; Fixed holds every axis, the values set the left one |
+| **Reset Zoom** | Return to live follow with auto Y (enabled once the view is zoomed or paused) |
+| **Plot:** | Which series the graph draws; see [Several Series](#several-series) |
+| **Show:** | Which sub-values are drawn beside it; see [Several Series](#several-series) |
+| **Mean** | Dashed line at the visible window's average, labelled with its value |
+| **Min/Max** | Band between the rolling min and max over a set window (default 1 s) |
+| **Histogram** | How the visible readings spread; see [Histogram](#histogram) |
+| **Ref** | Horizontal lines at the values typed (comma, semicolon or space separated) |
+| **Triggers** | Diamonds where the trace crosses a reference line (needs Ref) |
+| **Cursors** | Click to place cursor A, again for B; reads ΔT, ΔV, ∫ (current and voltage modes) and the average, σ and count of the readings from A to B |
 
 ![The same session with the boot sequence picked off the minimap instead of the live end: a diamond at each crossing of the 1 mA reference line, and a 60 s Min/Max envelope holding the boot's 108 mA peak](../assets/gui-graph-triggers.webp)
 
@@ -193,26 +196,42 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range
   crossing a decade (Ω→kΩ)
-- Sub-values are drawn beside the plotted series as dashed or dotted lines,
-  named in a key in the plot's top-left corner; the toolbar's **Show:** chips
-  pick which. Each keeps going where the plotted series is over range
-- A sub-value in another unit, such as a UT181A's frequency and period beside
-  its AC voltage, gets a Y axis of its own on the right, with ticks in round
-  steps of its unit on the same gridlines (a step of 2.5 labels every other
-  gridline, so labels stay round), and the key names every unit.
-  Each axis's ticks take its line's colour where that colour reads as text.
-  Two or more right axes share one column, each gridline's values stacked in
-  key order. A narrow window drops the right axes until it is widened
-- The minimap, the cursors, the Mean/Min/Max/Ref overlays and the
-  visible-window statistics follow the plotted series, on the left axis
-
-![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.webp)
 
 Two cases the graph does not draw faithfully: a connection loss entirely
 inside a continuing overload is absorbed into the band instead of splitting
 it, and several dropouts between the same two readings collapse into one gap.
 
-### Mouse Interactions
+#### Several Series
+
+![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.webp)
+
+Meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) get two
+more toolbar groups:
+
+- **Plot:** picks the series the graph draws: **Main** (the meter's reading,
+  under its own name where it has one: **DC** in the UT61E+'s AC+DC V; **T1**
+  or **T2**, **Relative** or **Peak Max** on a UT181A) or a sub-value. It
+  shows with a software [scale](#scale) too, offering **Raw**. Switching
+  keeps the graph: the two series change places with their past, and the
+  left Y axis moves to the new series' unit. If the meter stops sending the
+  chosen sub-value, the graph returns to **Main**, which kept its past too.
+- **Show:** has one chip per sub-value, drawing or hiding its trace beside
+  the plotted series. Up to four units are drawn at once; a chip past that is
+  greyed out until another unit is hidden. Hidden traces are still recorded,
+  and stay hidden at the next launch.
+- Sub-values are drawn as dashed or dotted lines, named in a key in the plot's
+  top-left corner. Each keeps going where the plotted series is over range.
+- A sub-value in another unit, such as a UT181A's frequency and period beside
+  its AC voltage, gets a Y axis of its own on the right, with ticks in round
+  steps of its unit on the same gridlines (a step of 2.5 labels every other
+  gridline, so labels stay round), and the key names every unit. Each axis's
+  ticks take its line's colour where that colour reads as text. Two or more
+  right axes share one column, each gridline's values stacked in key order.
+  A narrow window drops the right axes until it is widened.
+- The minimap, the cursors, the Mean/Min/Max/Ref overlays, the histogram and
+  the visible-window statistics follow the plotted series, on the left axis.
+
+#### Mouse and Keys
 
 | Action | Effect |
 |---|---|
@@ -222,6 +241,32 @@ it, and several dropouts between the same two readings collapse into one gap.
 | **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region, every Y axis included. Release to apply; press Escape to cancel. |
 | **Double-click** | Return to live mode with auto Y |
 | **Click** (cursors active) | Place cursor A or B, snapping to nearest data point |
+
+The graph's keys are listed under [Keyboard Shortcuts](#keyboard-shortcuts).
+
+### Histogram
+
+![A UT61E+ on a mains outlet with the histogram beside the plot: a minute of readings spread over 238–240.5 V, and the cursors' outline over a 20 s sag sitting below the rest](../assets/gui-graph-histogram.webp)
+
+How the plotted series' visible readings spread, turned on by the
+**Histogram** chip or `H`.
+
+- A strip right of the plot shares its Y axis; in a graph too narrow for it, a
+  band under the minimap has a value axis of its own.
+- Each bar's length is its percentage of the readings, on the scale beside
+  it. Bars are a whole number of the meter's steps, one step each once there
+  are enough readings.
+- Hover a bar for its readings and count.
+- The share of readings beyond the Y axis shows at the end they lie past:
+  `↑` and `↓` at the strip's top and bottom, `←` and `→` at the band's ends.
+  Over-range readings show as `OL` at the top or right end, as a share of
+  every reading.
+- The mean, reference, alarm and cursor lines carry across it.
+- With both cursors placed, an outline in the cursor colour shows the readings
+  from A to B on the same bins, as percentages of its own readings; its shares
+  beyond the axis follow `A–B`.
+- Drag the edge it shares with the plot or minimap to resize it, or Tab to
+  that edge and use the arrow keys.
 
 ### Minimap
 
@@ -425,11 +470,11 @@ top bar stays in place. The mouse wheel scrolls; `Ctrl` + wheel zooms the
 graph.
 
 The window reopens at the size it was left, maximized if it was, and the
-sidebar and the graph/recording divider where they were dragged. A size set
-in big meter mode or fullscreen is not kept. To start from the default
-layout again, remove `window_size`, `window_maximized`,
-`reading_panel_width` and `recording_height` from
-[`settings.json`](#settings).
+sidebar, the graph/recording divider and the histogram where they were
+dragged. A size set in big meter mode or fullscreen is not kept. To start
+from the default layout again, remove `window_size`, `window_maximized`,
+`reading_panel_width`, `recording_height`, `histogram_width` and
+`histogram_height` from [`settings.json`](#settings).
 
 ### Wide Layout (≥ 900px)
 
@@ -607,6 +652,7 @@ shows the macOS spelling.
 | `End` | Jump to live mode |
 | `M` | Toggle the mean line |
 | `X` | Toggle the min/max band |
+| `H` | Toggle the histogram |
 | `R` | Toggle reference lines, and put the caret in the values field |
 | `T` | Toggle trigger markers (needs reference lines on) |
 | `C` | Toggle cursors |

@@ -49,6 +49,9 @@ ASSETS="$ROOT/assets"
 #                         and an OL blip at each boot and refresh; unused
 #   ut181a-temp-t1-t2     a UT181A frame with two temperature readings,
 #                         T1 the value and T2 its sub-value
+#   acv-mains             a UT61E+ on a mains outlet in AC V for 97 s,
+#                         sagging to about 238.6 V at 10–30 s and peaking
+#                         near 240 V at 45–65 s
 REPLAYS="$ASSETS/replays"
 
 # A state dir of our own so a verify-gui session in another terminal keeps its
@@ -148,6 +151,11 @@ OVERLAYS_VIEW='# view: {"window":30.0,"mean":true,"cursors":{"a":149.182,"b":170
 # whole-window 60 s envelope showing the boot's peak and floor, where the 1 s
 # default just shadows the trace.
 TRIGGERS_VIEW='# view: {"window":60.0,"start":0.0,"envelope":60.0,"references":[1.0],"references_shown":true}'
+# The mains session from 5 s to 65 s, over the sag and the climb after it,
+# with its histogram, and cursors over the sag — A on the reading at
+# 8.835 s, B on the one at 29.998 s — so the A–B outline sits below the
+# view's spread.
+HISTOGRAM_VIEW='# view: {"window":60.0,"start":5.0,"histogram":true,"cursors":{"a":8.835,"b":29.998}}'
 # One per colour preset, live: the palette on a trace, a mean line, a
 # reference line and its trigger markers.
 THEMES_VIEW='# view: {"window":30.0,"mean":true,"references":[1.0],"references_shown":true}'
@@ -159,6 +167,7 @@ SCENES=(
 	"gui-reading-controls scene_reading_controls"
 	"gui-graph-overlays scene_overlays"
 	"gui-graph-triggers scene_overlays"
+	"gui-graph-histogram scene_histogram"
 	"gui-graph-series scene_series"
 	"gui-big-meter scene_big_meter"
 	"gui-minimal-meter-wide scene_minimal_meter"
@@ -486,6 +495,16 @@ scene_overlays() {
 	launch_file "$(staged dcma-boot-refresh "$TRIGGERS_VIEW")" 178
 	park
 	capture gui-graph-triggers "$GRAPH_CROP"
+}
+
+# The histogram beside the plot on a mains outlet's AC voltage, the A–B
+# outline over the sag. The preseed is the recording's last reading, past
+# the moments the view shows, so the app puts the view back.
+scene_histogram() {
+	write_settings
+	launch_file "$(staged acv-mains "$HISTOGRAM_VIEW")" 97.478
+	park
+	capture gui-graph-histogram "$GRAPH_CROP"
 }
 
 # A meter sending two parts of one reading, so the graph draws two traces:

@@ -2,6 +2,7 @@
 //! the min/max envelope, reference-line crossings and cursor readouts.
 
 use std::collections::VecDeque;
+use std::ops::Range;
 use std::time::Instant;
 
 use dmm_lib::stats::RunningStats;
@@ -12,7 +13,8 @@ impl Graph {
     /// Compute the time-integral over the visible window, in unit·seconds.
     pub fn visible_integral(&self) -> Option<f64> {
         let (x_min, x_max) = self.view_bounds();
-        self.cursor_integral(x_min, x_max)
+        let (start, end) = self.visible_index_range(x_min, x_max);
+        self.integral_over(start..end)
     }
 
     /// Elapsed time (seconds) between the first and last data point in the
@@ -38,14 +40,16 @@ impl Graph {
     pub fn visible_stats(&self) -> Option<RunningStats> {
         let (x_min, x_max) = self.view_bounds();
         let (start, end) = self.visible_index_range(x_min, x_max);
-        if start >= end {
-            return None;
-        }
+        (start < end).then(|| self.stats_over(start..end))
+    }
+
+    /// Min/max/avg/σ of the history readings `range`.
+    pub(super) fn stats_over(&self, range: Range<usize>) -> RunningStats {
         let mut stats = RunningStats::new();
-        for i in start..end {
-            stats.push(self.history[i].value);
+        for point in self.history.range(range) {
+            stats.push(point.value);
         }
-        Some(stats)
+        stats
     }
 
     /// Build min/max envelope using a trailing sliding window.
@@ -222,23 +226,20 @@ impl Graph {
         best.map(|(_, t, v)| (t, v))
     }
 
-    /// Compute the time-integral between two cursor positions using the trapezoidal
-    /// rule. Returns the raw integral in unit·seconds, or `None` if fewer than 2
-    /// data points exist in the range. Skips intervals the trace breaks
-    /// across: a silence past the gap threshold, or an overload.
+    /// Compute the time-integral over the history readings `range` using the
+    /// trapezoidal rule. Returns the raw integral in unit·seconds, or `None`
+    /// if fewer than 2 data points exist in the range. Skips intervals the
+    /// trace breaks across: a silence past the gap threshold, or an overload.
     ///
     /// Deliberately not `dmm_lib::stats::Integrator`: this recomputes from
     /// scratch every frame over an arbitrary window, and the integrator warns
     /// the first time it skips an interval — which would fire once per frame.
-    pub(super) fn cursor_integral(&self, ta: f64, tb: f64) -> Option<f64> {
-        let (t_start, t_end) = if ta <= tb { (ta, tb) } else { (tb, ta) };
-        let (start, end) = self.visible_index_range(t_start, t_end);
+    pub(super) fn integral_over(&self, range: Range<usize>) -> Option<f64> {
         let mut integral = 0.0;
         let mut prev: Option<(Instant, f64, f64)> = None; // (time, secs, value)
         let mut has_pair = false;
 
-        for i in start..end {
-            let point = &self.history[i];
+        for point in self.history.range(range) {
             let t = self.elapsed_secs(point.time);
             // An overload breaks the series even when the samples either side
             // of it are adjacent in time — integrating across it would credit

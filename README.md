@@ -17,7 +17,7 @@ Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 ## [GUI](docs/gui-reference.md)
 
 - Live reading with the meter's flags, sub-values and range specifications, and buttons to switch mode, range, HOLD, REL and MIN/MAX from the screen
-- Time-series graph with sub-values, a minimap, cursors, mean and min/max overlays, and reference lines with threshold triggers
+- Time-series graph with sub-values, a minimap, cursors, mean and min/max overlays, a histogram of the readings' spread, and reference lines with threshold triggers
 - Recording for hours at a time, with notes on marked moments, exported as CSV, JSON or a replay file and imported again
 - Alarms on a low or high limit for unattended runs, each crossing marked
 - Software scale, offset and unit relabel for clamps, shunts and sensors

@@ -132,6 +132,7 @@ fn graph_keys(ui: &mut egui::Ui) {
             ("End", "Jump to live"),
             ("M", "Toggle the mean line"),
             ("X", "Toggle the min/max band"),
+            ("H", "Toggle the histogram"),
             ("R", "Toggle reference lines, and type the values"),
             ("T", "Toggle trigger markers (with Ref on)"),
             ("C", "Toggle cursors"),

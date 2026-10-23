@@ -61,7 +61,7 @@ impl Graph {
             self.live = true;
         }
 
-        // The analysis overlays. Mean and Min/Max are plain flags; the Ref
+        // The analysis overlays. Mean, Min/Max and Histogram are plain flags; the Ref
         // and Cursors chips do more than flip one, so key and click share
         // the one method. The toolbar is drawn later in the same frame,
         // where the chips pick the new state up.
@@ -70,6 +70,9 @@ impl Graph {
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::X)) {
             self.show_envelope = !self.show_envelope;
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::H)) {
+            self.show_histogram = !self.show_histogram;
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::R)) {
             self.toggle_ref_lines();

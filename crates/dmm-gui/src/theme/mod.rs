@@ -1195,6 +1195,34 @@ mod tests {
         }
     }
 
+    /// The histogram on the plot background: its bars are graphics (3:1),
+    /// its corner shares text (4.5:1) in the text colour and, for the
+    /// cursors' period, the cursor colour; the hovered bar's outline, in the
+    /// strongest text colour, stands on a halo of the background, which is
+    /// what it has to stand off: a pale theme's bars can match it.
+    #[test]
+    fn histogram_colours_meet_contrast_on_the_plot_area() {
+        let mut failures = Vec::new();
+        for (label, dark, preset, base) in every_palette() {
+            let tc = ThemeColors::new(dark, preset, &base);
+            let bg = tc.plot_background();
+            for (name, fg, ground, least) in [
+                ("bars", tc.graph_line(), bg, 3.0),
+                ("corner text", tc.text(), bg, 4.5),
+                ("A–B text", tc.graph_cursor(), bg, 4.5),
+                ("hover outline", tc.strong_text(), bg, 3.0),
+            ] {
+                let ratio = contrast(fg, ground);
+                if ratio < least {
+                    failures.push(format!(
+                        "{label}: {name} {fg:?} on {ground:?} is {ratio:.2}:1"
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
     /// Overlay traces are graphical elements on the plot area, so
     /// `.claude/rules/gui.md` asks for 3:1 against it — in every preset and
     /// both themes, the case that historically broke light mode.

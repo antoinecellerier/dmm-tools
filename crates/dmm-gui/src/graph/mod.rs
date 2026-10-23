@@ -19,6 +19,7 @@
 mod analysis;
 mod axes;
 mod field;
+pub(crate) mod histogram;
 mod level;
 mod limits;
 mod minimap;
@@ -35,6 +36,7 @@ pub(crate) use view_state::ViewState;
 #[cfg(test)]
 mod tests;
 
+use dmm_lib::stats::RunningStats;
 use eframe::egui::{self, Ui};
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::time::Instant;
@@ -81,6 +83,60 @@ const SERIES_DROP_FRAMES: u32 = 3;
 const LEFT_AXIS_ROOM: f32 = 60.0;
 const MIN_PLOT_WIDTH: f32 = 240.0;
 const RIGHT_AXIS_ROOM: f32 = 90.0;
+/// The narrowest plot the histogram strip is put beside: narrower, the strip
+/// would take a fifth of a small screen's plot, and the histogram goes under
+/// the minimap instead. The strip narrows to its least before it moves.
+const MIN_PLOT_BESIDE_STRIP: f32 = 400.0;
+// A plot roomy enough for the strip leaves the right axes their column.
+const _: () = assert!(MIN_PLOT_BESIDE_STRIP >= MIN_PLOT_WIDTH + RIGHT_AXIS_ROOM);
+
+/// A run of history readings, which a figure computed over them is kept
+/// against while the readings stay the same: the history's epoch, then the
+/// sequence numbers of the first reading and one past the last. Readings
+/// only arrive at the back and leave from the front, so the same numbers in
+/// the same epoch are the same readings.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ReadingsKey(u64, u64, u64);
+
+/// What a histogram is binned from: the visible readings, those between the
+/// cursors, the Y range, the bins it is cut into, and the decimals it
+/// writes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HistogramKey {
+    view: ReadingsKey,
+    interval: Option<ReadingsKey>,
+    /// Over-range readings among the view's and the interval's, which an
+    /// overload still going on adds to without a new reading.
+    overloads: (u32, Option<u32>),
+    range: (f64, f64),
+    bins: usize,
+    decimals: (usize, usize),
+}
+
+/// What a graph `width` wide leaves the histogram strip beside a plot of
+/// [`MIN_PLOT_BESIDE_STRIP`].
+fn strip_room(width: f32) -> f32 {
+    width - LEFT_AXIS_ROOM - MIN_PLOT_BESIDE_STRIP
+}
+
+/// A histogram kept with what it was binned from and what a screen reader
+/// hears of it, both redone only when what it is binned from changes.
+#[derive(Debug, Clone)]
+struct BinnedHistogram {
+    key: HistogramKey,
+    /// `None` with no Y range to bin over.
+    hist: Option<histogram::Histogram>,
+    spoken: String,
+}
+
+/// The cursor readout's figures, kept with the readings they cover: the
+/// readings between the cursors, and their integral.
+#[derive(Debug, Clone)]
+struct CursorFigures {
+    key: ReadingsKey,
+    stats: RunningStats,
+    integral: Option<f64>,
+}
 
 /// Why a sub-value's unit gets no Y axis: see [`Graph::axis_refusal`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +195,9 @@ struct DataPoint {
     /// the band starts at `break_last_sample`, a gap before it. See
     /// `push_break`.
     break_band_late: bool,
+    /// Over-range readings since the trace began, up to this point: the
+    /// histogram counts those between two points as the difference.
+    overloads_before: u64,
 }
 
 /// One point of a sub-value trace, at the time of the frame that carried it.
@@ -336,6 +395,9 @@ pub struct Graph {
     /// Timestamp of the newest overload sample while a break is open: where
     /// the over-range band ends.
     pending_break_since: Option<Instant>,
+    /// Over-range readings since the trace began, for the next point's
+    /// `overloads_before`.
+    overloads_total: u64,
     /// Timestamp of the newest sample while a break is open, an overload or
     /// a word shown instead of a reading.
     ///
@@ -364,6 +426,21 @@ pub struct Graph {
     /// The main plot's area at the last frame, where the marker flags are
     /// placed while the time labels they cover are chosen.
     plot_rect: Option<egui::Rect>,
+    /// The main plot's transform at the last frame, which the histogram
+    /// strip reads its bar heights from.
+    plot_transform: Option<egui_plot::PlotTransform>,
+    /// Show the histogram pane.
+    pub show_histogram: bool,
+    /// Where the pane goes this frame, `None` while it is off, the main
+    /// trace is hidden or the window is too short: see [`histogram::place`].
+    histogram_place: Option<histogram::Placement>,
+    /// This frame's bins, cut by `show_main` over its Y range.
+    histogram: Option<BinnedHistogram>,
+    /// The strip's width and the band's height as last dragged. The app sets
+    /// them from its settings at start, and saves them when
+    /// [`Graph::take_histogram_resize`] reports a drag.
+    pub(crate) histogram_sizes: (f32, f32),
+    histogram_resized: bool,
     /// Show mean line overlay.
     pub show_mean: bool,
     /// Show min/max envelope band.
@@ -396,6 +473,10 @@ pub struct Graph {
     /// an identity across eviction: `history[0]` is
     /// `pushed_total - history.len()`. The level's bands are dropped by it.
     pushed_total: u64,
+    /// Bumped whenever the history is replaced or restarts, when sequence
+    /// numbers start over on other readings: see [`ReadingsKey`].
+    history_epoch: u64,
+    cursor_figures: Option<CursorFigures>,
     /// Current minimap drag state.
     minimap_drag: MinimapDrag,
     /// Press origin (screen pixels) when a Shift+drag bbox-zoom is in progress.
@@ -458,6 +539,7 @@ impl Graph {
             pending_break: None,
             pending_data_loss: false,
             pending_break_since: None,
+            overloads_total: 0,
             pending_heard_until: None,
             pending_band_from: None,
             y_axis_fixed: false,
@@ -467,6 +549,12 @@ impl Graph {
             y_pins: BTreeMap::new(),
             axis_maps: Vec::new(),
             plot_rect: None,
+            plot_transform: None,
+            show_histogram: false,
+            histogram_place: None,
+            histogram: None,
+            histogram_sizes: (histogram::STRIP_WIDTH, histogram::BAND_HEIGHT),
+            histogram_resized: false,
             show_mean: false,
             show_envelope: false,
             envelope_window: NumberField::new("1", 1.0),
@@ -480,6 +568,8 @@ impl Graph {
             cursor_next_is_b: false,
             minimap_level: None,
             pushed_total: 0,
+            history_epoch: 0,
+            cursor_figures: None,
             minimap_drag: MinimapDrag::None,
             bbox_zoom_start_px: None,
             bbox_zoom_current_px: None,
@@ -828,6 +918,7 @@ impl Graph {
                     break_last_sample: None,
                     break_had_data_loss: false,
                     break_band_late: false,
+                    overloads_before: 0,
                 }),
                 None => pending = Some(GapKind::NoData),
             }
@@ -835,6 +926,7 @@ impl Graph {
         self.pending_break = pending;
         self.pending_data_loss = false;
         self.pending_break_since = None;
+        self.overloads_total = 0;
         self.pending_heard_until = None;
         self.pending_band_from = None;
 
@@ -856,7 +948,7 @@ impl Graph {
         self.main_missing_frames = incoming_missing;
         self.current_series = series.map(str::to_owned);
         self.minimap_level = None;
-        self.pushed_total = self.history.len() as u64;
+        self.restart_sequence();
         self.last_display_raw = None;
         true
     }
@@ -921,6 +1013,14 @@ impl Graph {
         };
     }
 
+    /// Number the history's readings from its first: it was replaced or
+    /// restarted, and figures cached on the old numbers are for other
+    /// readings.
+    fn restart_sequence(&mut self) {
+        self.pushed_total = self.history.len() as u64;
+        self.history_epoch += 1;
+    }
+
     /// Restart each kept trace whose unit moved in this frame (a frequency
     /// auto-ranging Hz→kHz): it drops its points, as the plotted series does
     /// on a decade step, and restarts alone. The series being plotted is
@@ -956,7 +1056,7 @@ impl Graph {
         self.bbox_zoom_start_px = None;
         self.bbox_zoom_current_px = None;
         self.minimap_level = None;
-        self.pushed_total = 0;
+        self.restart_sequence();
         self.last_display_raw = None;
         self.silences.clear();
         self.main_missing_frames = 0;
@@ -965,6 +1065,7 @@ impl Graph {
         self.pending_break = None;
         self.pending_data_loss = false;
         self.pending_break_since = None;
+        self.overloads_total = 0;
         self.pending_heard_until = None;
         self.pending_band_from = None;
         self.dash_phases = pattern::DashPhases::default();
@@ -1041,6 +1142,7 @@ impl Graph {
             break_last_sample: band_from.or(last_overload),
             break_had_data_loss: std::mem::take(&mut self.pending_data_loss),
             break_band_late: band_from.is_some(),
+            overloads_before: self.overloads_total,
         };
         self.pending_heard_until = None;
         // Everything the minimap's level needs, decided against the point
@@ -1180,6 +1282,7 @@ impl Graph {
         // over range.
         self.pending_break_since = Some(timestamp);
         self.pending_heard_until = Some(timestamp);
+        self.overloads_total += 1;
         match self.pending_break {
             None => self.pending_break = Some(GapKind::Overload),
             // Only `push_data_loss` marks a loss, so this gap is the word's.
@@ -1250,6 +1353,7 @@ impl Graph {
         self.pending_break = None;
         self.pending_data_loss = false;
         self.pending_break_since = None;
+        self.overloads_total = 0;
         self.pending_heard_until = None;
         self.pending_band_from = None;
         self.silences.clear();
@@ -1270,7 +1374,7 @@ impl Graph {
         self.bbox_zoom_start_px = None;
         self.bbox_zoom_current_px = None;
         self.minimap_level = None;
-        self.pushed_total = 0;
+        self.restart_sequence();
         self.dash_phases = pattern::DashPhases::default();
     }
 
@@ -1452,15 +1556,272 @@ impl Graph {
         limits: Option<WatchedLimits>,
     ) {
         self.handle_keyboard(ui.ctx());
-        self.fit_axes_to(ui.available_width());
+        // Before the toolbar, whose Show: chips say which units have no axis.
+        let width = ui.available_width();
+        self.fit_axes_to(width);
         self.show_toolbar(ui, tc);
-        let minimap_reserve = MINIMAP_HEIGHT + 30.0;
-        let main_height = (ui.available_height() - minimap_reserve).max(60.0);
-        ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
-            self.show_main(ui, tc, markers, limits);
-        });
+        let room = ui.available_height() - (MINIMAP_HEIGHT + 30.0);
+        // After the toolbar, so a click on the Histogram chip lays the pane
+        // out in the frame it lands in.
+        self.histogram_place = self
+            .histogram_shown()
+            .then(|| histogram::place(width, strip_room(width), room, self.histogram_sizes));
+        let place = self.histogram_place;
+        let band_room = match place {
+            Some(p) if p.dock == histogram::Dock::Below => p.size + histogram::DIVIDER,
+            _ => 0.0,
+        };
+        let main_height = (room - band_room).max(60.0);
+        if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Side) {
+            let area = ui
+                .horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width() - p.size, main_height),
+                        egui::Layout::top_down(egui::Align::Min),
+                        |ui| self.show_main(ui, tc, markers, limits),
+                    );
+                    let (area, _) = ui
+                        .allocate_exact_size(egui::vec2(p.size, main_height), egui::Sense::hover());
+                    self.paint_histogram(ui, area, tc, limits);
+                    area
+                })
+                .inner;
+            // The divider spans the strip's bars, which stand beside the plot.
+            let y = self.plot_rect.map_or(area.y_range(), |plot| plot.y_range());
+            let rect =
+                egui::Rect::from_x_y_ranges(area.left()..=area.left() + histogram::DIVIDER, y);
+            // Here, after the plot and before the minimap, so Tab reaches it
+            // in the order it stands on screen.
+            self.histogram_divider(ui, rect, p);
+        } else {
+            ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
+                self.show_main(ui, tc, markers, limits);
+            });
+        }
         ui.add_space(4.0);
         self.show_minimap(ui, tc, markers);
+        if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Below) {
+            let (rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), histogram::DIVIDER),
+                egui::Sense::hover(),
+            );
+            let (area, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), p.size),
+                egui::Sense::hover(),
+            );
+            self.paint_histogram(ui, area, tc, limits);
+            self.histogram_divider(ui, rect, p);
+        }
+    }
+
+    /// The histogram's divider at `rect`, keeping the size it is dragged to.
+    fn histogram_divider(&mut self, ui: &Ui, rect: egui::Rect, place: histogram::Placement) {
+        if let Some(size) = histogram::divider(ui, rect, place) {
+            match place.dock {
+                histogram::Dock::Side => self.histogram_sizes.0 = size,
+                histogram::Dock::Below => self.histogram_sizes.1 = size,
+            }
+            self.histogram_resized = true;
+        }
+    }
+
+    /// The histogram's sizes when a divider moved since the last call, for
+    /// the settings to keep.
+    pub(crate) fn take_histogram_resize(&mut self) -> Option<(f32, f32)> {
+        std::mem::take(&mut self.histogram_resized).then_some(self.histogram_sizes)
+    }
+
+    /// Whether the histogram is drawn: its chip is on and the plotted trace
+    /// it bins is shown.
+    fn histogram_shown(&self) -> bool {
+        self.show_histogram && !self.main_hidden
+    }
+
+    /// The least height the histogram's band takes under the minimap in a
+    /// graph `width` wide, divider included, and 0 with no band: the layout
+    /// reserves it, so a short column scrolls rather than squash the band.
+    /// Not the height dragged, which [`histogram::place`] gives up to fit.
+    pub(crate) fn histogram_band_height(&self, width: f32) -> f32 {
+        if self.histogram_shown() && !histogram::docks_beside(strip_room(width)) {
+            histogram::MIN_BAND_HEIGHT + histogram::DIVIDER
+        } else {
+            0.0
+        }
+    }
+
+    /// What the Histogram chip says when hovered: why nothing shows while it
+    /// is on and the plotted trace is hidden.
+    pub(super) fn histogram_hover(&self) -> &'static str {
+        if self.show_histogram && self.main_hidden {
+            "Show the plotted trace to see its histogram, or click to turn it off"
+        } else {
+            "Show how the visible readings spread (H)"
+        }
+    }
+
+    /// The key of the history readings `range`.
+    fn readings_key(&self, range: std::ops::Range<usize>) -> ReadingsKey {
+        let first = self.pushed_total.saturating_sub(self.history.len() as u64);
+        ReadingsKey(
+            self.history_epoch,
+            first + range.start as u64,
+            first + range.end as u64,
+        )
+    }
+
+    /// The history readings between the cursors, both included, once both
+    /// are placed.
+    fn cursor_range(&self) -> Option<std::ops::Range<usize>> {
+        let (true, Some(a), Some(b)) = (self.cursors_active, self.cursor_a, self.cursor_b) else {
+            return None;
+        };
+        let (start, end) = self.visible_index_range(a.min(b), a.max(b));
+        Some(start..end)
+    }
+
+    /// The readings between the cursors and their integral, computed again
+    /// only when those readings change: a static period, paused or behind
+    /// the newest reading, costs a pass once rather than every frame the
+    /// mouse moves. `None` until both cursors are placed.
+    pub(super) fn cursor_figures(&mut self) -> Option<(RunningStats, Option<f64>)> {
+        let range = self.cursor_range()?;
+        let key = self.readings_key(range.clone());
+        if self.cursor_figures.as_ref().is_none_or(|f| f.key != key) {
+            self.cursor_figures = Some(CursorFigures {
+                key,
+                stats: self.stats_over(range.clone()),
+                integral: self.integral_over(range),
+            });
+        }
+        self.cursor_figures
+            .as_ref()
+            .map(|f| (f.stats.clone(), f.integral))
+    }
+
+    /// The plot's horizontal lines, carried across the histogram in the
+    /// order and styles `show_main` draws them: the mean, the reference
+    /// lines, the alarm limits, then the readings at the cursors.
+    fn histogram_lines(
+        &self,
+        hist: &histogram::Histogram,
+        tc: &ThemeColors,
+        limits: Option<WatchedLimits>,
+    ) -> Vec<histogram::Line> {
+        use egui_plot::LineStyle;
+        let line = |value, color, width, style| histogram::Line {
+            value,
+            stroke: egui::Stroke::new(width, color),
+            style,
+        };
+        let mean = self.show_mean.then(|| hist.mean()).flatten();
+        let refs = self
+            .ref_lines
+            .values()
+            .iter()
+            .filter(|_| self.show_ref_line);
+        let cursors = [self.cursor_a, self.cursor_b]
+            .into_iter()
+            .flatten()
+            .filter(|_| self.cursors_active)
+            .filter_map(|t| self.nearest_point(t));
+        mean.map(|m| line(m, tc.graph_mean(), 1.0, LineStyle::dashed_loose()))
+            .into_iter()
+            .chain(refs.map(|&v| line(v, tc.graph_ref(), 1.0, LineStyle::dashed_dense())))
+            .chain(
+                self.limit_lines(limits)
+                    .into_iter()
+                    .map(|(v, _)| line(v, tc.status_error(), 2.0, LineStyle::dotted_loose())),
+            )
+            .chain(
+                cursors
+                    .map(|(_, v)| line(v, tc.graph_cursor_dim(), 1.0, LineStyle::dashed_dense())),
+            )
+            .collect()
+    }
+
+    /// Over-range readings among the history readings `range`: from its
+    /// first reading to the one after its last, or to now after the newest.
+    fn overloads_in(&self, range: std::ops::Range<usize>) -> u32 {
+        let before = |i: usize| {
+            self.history
+                .get(i)
+                .map_or(self.overloads_total, |p| p.overloads_before)
+        };
+        let (start, end) = (before(range.start), before(range.end));
+        u32::try_from(end.saturating_sub(start)).unwrap_or(u32::MAX)
+    }
+
+    /// Bin the history readings `view` for the histogram, unless `key` is
+    /// what they were last binned from, with those between the cursors.
+    fn bin_histogram(&mut self, key: HistogramKey, view: std::ops::Range<usize>) {
+        if self.histogram.as_ref().is_some_and(|b| b.key == key) {
+            return;
+        }
+        let values = self.history.range(view).map(|p| p.value);
+        let hist =
+            histogram::Histogram::new(values, key.range, key.bins, key.decimals).map(|hist| {
+                let mut hist = hist.with_overloads(key.overloads.0);
+                if let Some(range) = self.cursor_range() {
+                    let overloads = key.overloads.1.unwrap_or(0);
+                    hist.count_interval(self.history.range(range).map(|p| p.value), overloads);
+                }
+                hist
+            });
+        let spoken = hist
+            .as_ref()
+            .map(|h| h.spoken(&self.current_unit))
+            .unwrap_or_default();
+        self.histogram = Some(BinnedHistogram { key, hist, spoken });
+    }
+
+    /// This frame's histogram, while one is drawn.
+    fn histogram(&self) -> Option<&histogram::Histogram> {
+        self.histogram.as_ref()?.hist.as_ref()
+    }
+
+    /// Paint this frame's histogram into `area`, in the dock picked for it.
+    fn paint_histogram(
+        &self,
+        ui: &Ui,
+        area: egui::Rect,
+        tc: &ThemeColors,
+        limits: Option<WatchedLimits>,
+    ) {
+        let (Some(hist), Some(place), Some(plot), Some(transform)) = (
+            self.histogram(),
+            self.histogram_place,
+            self.plot_rect,
+            self.plot_transform.as_ref(),
+        ) else {
+            return;
+        };
+        let colors = histogram::HistogramColors {
+            bar: tc.graph_line(),
+            cursor: tc.graph_cursor(),
+            background: tc.plot_background(),
+            text: ui.visuals().weak_text_color(),
+        };
+        let lines = self.histogram_lines(hist, tc, limits);
+        let unit = self.current_unit.as_str();
+        match place.dock {
+            histogram::Dock::Side => {
+                histogram::paint_side(ui, area, plot, transform, hist, &lines, unit, &colors);
+            }
+            histogram::Dock::Below => {
+                let bounds = transform.bounds();
+                histogram::paint_below(
+                    ui,
+                    area,
+                    plot.x_range(),
+                    (bounds.min()[1], bounds.max()[1]),
+                    hist,
+                    &lines,
+                    unit,
+                    &colors,
+                );
+            }
+        }
     }
 
     /// The markers on readings between `x_min` and `x_max` seconds from the

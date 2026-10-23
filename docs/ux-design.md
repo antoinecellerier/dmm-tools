@@ -127,6 +127,15 @@ shorter ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
 A change of mode or unit clears the graph: the old and new scales are
 incompatible.
 
+**The histogram shares the plot's Y axis.** Each bar sits at the height of
+the readings it counts, so a second level or an outlier lines up with the
+stretch of trace that made it, and the view picks what is binned. Under a
+plot too narrow to give up the strip's width it moves under the minimap, on
+an axis of its own (`graph/histogram.rs`). The cursors' period is outlined
+on the same bins, each bar its share of its own readings rather than a
+count: a period shorter than the view would draw as a sliver, and one longer
+or apart from it would overflow.
+
 **The plot key is a key.** It toggles nothing: egui_plot's legend loses its
 show/hide state while the view is pinned every frame (`paint_plot_key` in
 `graph/render.rs`), so the **Show:** chips are the control.

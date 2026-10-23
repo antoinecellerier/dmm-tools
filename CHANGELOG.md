@@ -9,7 +9,9 @@
 ### GUI
 
 - **An alarm marks each reading that crosses a low or high limit**
+- **A histogram shows how the visible readings spread** — `H` toggles it; drag its edge to resize it.
 - **Statistics show the standard deviation (σ)** — for the session and the visible window.
+- **Cursors read the average, σ and count of the readings between them** — and the histogram outlines how they spread.
 - **A UT61+ or OWON meter naming another model than the one selected says so** — the GUI said nothing.
 - **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
 - **Tab no longer stops on the graph's axes** — they were two Tab stops with no focus ring.

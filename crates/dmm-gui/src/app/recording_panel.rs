@@ -132,7 +132,7 @@ fn noun(n: usize) -> &'static str {
 /// divider and the recording panel's 40 px floor, plus the item spacing
 /// between them. `MINIMAP_HEIGHT` is private to `crate::graph`, so the sum is
 /// written out here rather than derived.
-pub(super) const MIN_SPLIT_HEIGHT: f32 = 240.0;
+const MIN_SPLIT_HEIGHT: f32 = 240.0;
 
 /// What the discard prompt is asking to go ahead with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -569,7 +569,7 @@ impl App {
     /// scroll area is the viewport rather than what is left of the window, so
     /// the height is allocated explicitly: the rest of the viewport while the
     /// column fits — content then equals viewport and no scrollbar appears —
-    /// and [`MIN_SPLIT_HEIGHT`] once it doesn't, so the graph stays usable and
+    /// and [`App::min_split_height`] once it doesn't, so the graph stays usable and
     /// the column scrolls instead. `floor()` keeps a fractional viewport from
     /// spilling the content a hair past it and raising a scrollbar on a window
     /// that fits.
@@ -583,7 +583,10 @@ impl App {
             .id_salt("graph_column")
             .auto_shrink([false, true])
             .show(ui, |ui| {
-                let height = ui.available_height().max(MIN_SPLIT_HEIGHT).floor();
+                let height = ui
+                    .available_height()
+                    .max(self.min_split_height(ui.available_width()))
+                    .floor();
                 ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
                     self.show_graph_recording_split(ui, false);
                 });
@@ -591,10 +594,31 @@ impl App {
             })
     }
 
+    /// The least height the graph + recording split takes in a column
+    /// `width` wide: [`MIN_SPLIT_HEIGHT`], and the histogram's band at its
+    /// least when the graph shows one, so a short window scrolls the column rather than
+    /// squash the graph.
+    pub(super) fn min_split_height(&self, width: f32) -> f32 {
+        let band = if self.settings.show_graph {
+            self.graph.histogram_band_height(width)
+        } else {
+            0.0
+        };
+        MIN_SPLIT_HEIGHT + band
+    }
+
     /// What the graph asked of the app this frame: its marker actions, and a
-    /// **Show:** chip the user clicked, which the settings remember.
+    /// **Show:** chip the user clicked or a histogram size dragged, which the
+    /// settings remember.
     fn take_graph_actions(&mut self) {
         self.take_graph_marker_actions();
+        if let Some(sizes) = self.graph.take_histogram_resize() {
+            (
+                self.settings.histogram_width,
+                self.settings.histogram_height,
+            ) = sizes;
+            self.settings_save.schedule(std::time::Instant::now());
+        }
         if let Some((label, hidden)) = self.graph.take_trace_choice() {
             if hidden {
                 self.settings.hidden_series.insert(label);
@@ -678,6 +702,30 @@ mod tests {
     use crate::settings::Settings;
     use eframe::egui::{Pos2, Rect, vec2};
     use std::time::Instant;
+
+    /// A histogram band under the minimap raises the split's floor by its
+    /// least height, so a short column scrolls rather than squash it, but not
+    /// by a height dragged larger; a strip beside the plot, or no histogram,
+    /// leaves the floor alone.
+    #[test]
+    fn a_histogram_band_raises_the_split_floor() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        assert_eq!(app.min_split_height(400.0), MIN_SPLIT_HEIGHT);
+        app.graph.show_histogram = true;
+        app.graph.histogram_sizes.1 = 400.0;
+        let least = crate::graph::histogram::MIN_BAND_HEIGHT;
+        let floor = app.min_split_height(400.0);
+        assert!(floor > MIN_SPLIT_HEIGHT + least, "{floor}");
+        assert!(
+            floor < MIN_SPLIT_HEIGHT + least * 2.0,
+            "not the height dragged: {floor}"
+        );
+        assert_eq!(
+            app.min_split_height(2000.0),
+            MIN_SPLIT_HEIGHT,
+            "beside the plot"
+        );
+    }
 
     /// A **Show:** chip click lands in the settings and saves them; turning
     /// it back on forgets it.

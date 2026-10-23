@@ -827,6 +827,31 @@ mod tests {
         );
     }
 
+    /// The arrows the histogram counts readings beyond its axis with, ↑ ↓
+    /// beside the plot and ← → under the minimap, draw from the bundled
+    /// faces rather than as the replacement box.
+    #[test]
+    fn the_arrows_have_glyphs() {
+        let ctx = crate::app::styled_context();
+        ctx.set_fonts(font_definitions());
+        let font = egui::FontId::proportional(12.0);
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let atlas_rect = |text: &str| {
+                let galley = ui.painter().layout_no_wrap(
+                    text.to_string(),
+                    font.clone(),
+                    egui::Color32::PLACEHOLDER,
+                );
+                galley.rows[0].row.glyphs[0].uv_rect
+            };
+            let replacement = atlas_rect("\u{25FB}");
+            for arrow in ["\u{2191}", "\u{2193}", "\u{2190}", "\u{2192}"] {
+                assert_ne!(atlas_rect(arrow), replacement, "{arrow:?}");
+            }
+        });
+        out.textures_delta.clear();
+    }
+
     /// `apply_theme` puts egui's stock visuals back, so it has to set the
     /// compact corners again or a theme change brings back egui's 6 pt ones.
     #[test]

@@ -6,7 +6,6 @@
 use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, RichText, Ui};
 
-use super::recording_panel::MIN_SPLIT_HEIGHT;
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
@@ -124,9 +123,12 @@ impl App {
             // column's scroller is the viewport rather than what is left of
             // the window, so give it an explicit height: the rest of the
             // viewport while the column fits — content then equals viewport
-            // and no scrollbar appears — and `MIN_SPLIT_HEIGHT` once it
+            // and no scrollbar appears — and its least height once it
             // doesn't, so the graph stays usable and the column scrolls.
-            let height = ui.available_height().max(MIN_SPLIT_HEIGHT).floor();
+            let height = ui
+                .available_height()
+                .max(self.min_split_height(ui.available_width()))
+                .floor();
             ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
                 self.show_graph_recording_split(ui, true);
             });
