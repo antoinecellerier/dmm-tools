@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::time::Instant;
 
 use super::axes::{self, AxisMap};
+use super::menu::plot_menu_id;
 use super::minimap::bucket_secs;
 use super::pattern::{DASH_GAP, PatternKey, Patterns, SegmentedLine, TimedHLine, anchor_layout};
 use super::time::{MIN_GRID_SPACING, format_time_axis_label, time_marks};
@@ -104,12 +105,6 @@ fn marker_flags(ui: &Ui, markers: &[(f32, u32, &str)], plot: egui::Rect) -> Vec<
         })
     };
     layout_marker_flags(markers, plot, flag_height(ui), width_of)
-}
-
-/// The plot's right-click menu. One plot, so one id, known before the plot
-/// is drawn.
-fn plot_menu_id() -> egui::Id {
-    egui::Id::unique("main_plot_menu")
 }
 
 /// One marker's flag on the plot: the line it points at, where its tag is
@@ -1802,69 +1797,6 @@ impl Graph {
         // X and Y axes — those receive Tab but don't draw a focus indicator.
         // Making those invisible to Tab would require patching egui_plot.
         crate::a11y::paint_focus_ring(ui, &response.response);
-    }
-
-    /// The plot's right-click menu. What it offers to mark is the reading
-    /// nearest the right-click, fixed as the menu opens: by the time the
-    /// entry is picked the pointer is on the menu, and a live view has moved.
-    ///
-    /// Keyboard handling follows the Export… menu: the entry takes the focus
-    /// as the menu opens, and Tab or Esc close it. The focus then goes
-    /// nowhere rather than to the plot, where it would turn the graph's keys
-    /// off.
-    fn show_context_menu(&mut self, plot: &egui::Response, transform: &PlotTransform) {
-        let ctx = plot.ctx.clone();
-        if plot.secondary_clicked()
-            && let Some(pos) = plot.interact_pointer_pos()
-        {
-            self.menu_reading = self.nearest_reading_in_view(transform.value_from_position(pos).x);
-        }
-        let popup_id = plot_menu_id();
-        let was_open = egui::Popup::is_id_open(&ctx, popup_id);
-        if was_open {
-            let leave = ctx.input_mut(|i| {
-                i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)
-                    | i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab)
-                    | i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
-            });
-            if leave {
-                egui::Popup::close_id(&ctx, popup_id);
-                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
-            }
-        }
-        // Asked again the frame after it opens: the right-click that opened
-        // it is a click outside the entry, which surrenders its focus.
-        let focus_again = std::mem::take(&mut self.menu_focus_pending);
-        let can_mark = self.menu_reading.is_some();
-        let mut entry_id = None;
-        let mut picked = false;
-        egui::Popup::context_menu(plot).id(popup_id).show(|ui| {
-            let add = ui
-                .add_enabled(can_mark, egui::Button::new("Add marker here"))
-                .on_disabled_hover_text("No reading in view to mark");
-            if !was_open || focus_again {
-                add.request_focus();
-            }
-            picked = was_open && add.clicked();
-            crate::a11y::paint_focus_ring(ui, &add);
-            entry_id = Some(add.id);
-        });
-        if picked {
-            // Enter and Space click without a pointer click, which is the
-            // only thing a menu closes on by itself.
-            egui::Popup::close_id(&ctx, popup_id);
-            self.mark_request = self.menu_reading.take();
-        }
-        let is_open = egui::Popup::is_id_open(&ctx, popup_id);
-        if !was_open && is_open {
-            self.menu_focus_pending = true;
-        }
-        if was_open
-            && !is_open
-            && let Some(id) = entry_id
-        {
-            ctx.memory_mut(|m| m.surrender_focus(id));
-        }
     }
 
     /// Set an AccessKit label on the plot that summarizes current state so

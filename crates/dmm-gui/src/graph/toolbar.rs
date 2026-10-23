@@ -558,6 +558,21 @@ impl Graph {
         self.focus_ref_field = self.show_ref_line;
     }
 
+    /// Draw a reference line at `v` too, switching the lines on: the plot's
+    /// menu. Lines switched off with the chip come back with it, as the chip
+    /// would bring them. The caret stays where it was: the value is chosen.
+    pub(super) fn add_ref_line(&mut self, v: f64) {
+        if !self.ref_lines.values().contains(&v) {
+            self.ref_lines.push(v);
+        }
+        self.show_ref_line = true;
+    }
+
+    /// Stop drawing the reference line at `v`: the plot's menu.
+    pub(super) fn remove_ref_line(&mut self, v: f64) {
+        self.ref_lines.remove(v);
+    }
+
     /// A **Show:** chip was clicked: flip its trace, and leave the choice for
     /// the settings to remember ([`Graph::take_trace_choice`]).
     ///

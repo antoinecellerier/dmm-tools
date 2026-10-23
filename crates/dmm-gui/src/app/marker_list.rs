@@ -10,6 +10,7 @@ use std::time::Instant;
 use super::toast::Toast;
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
+use crate::graph::MenuAction;
 use crate::markers::{Marker, NOTE_MAX_CHARS};
 use crate::recording::{BufferRole, Sample};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
@@ -361,7 +362,7 @@ impl App {
         if let Some(number) = self.graph.take_clicked_marker() {
             self.open_marker_note(number);
         }
-        if let Some((at, value)) = self.graph.take_mark_request() {
+        if let Some(MenuAction::Mark(at, value)) = self.graph.take_menu_action() {
             // The sample's line when the buffer has it; otherwise all the
             // graph knows, its trace's value — without the meter's own
             // digits, its flags or its sub-values.

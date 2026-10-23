@@ -77,6 +77,9 @@ impl NumberField {
     }
 }
 
+/// What separates the numbers of a [`NumberListField`].
+const SEPARATORS: [char; 3] = [',', ';', ' '];
+
 /// A list of numbers the user types, separated by commas, semicolons or
 /// spaces.
 #[derive(Debug, Default)]
@@ -105,13 +108,38 @@ impl NumberListField {
             .join(", ");
     }
 
+    /// Add `v` at the end of the draft, keeping what is typed there as it
+    /// is typed.
+    pub(super) fn push(&mut self, v: f64) {
+        let kept = self.text.trim_end_matches(SEPARATORS);
+        self.text = if kept.is_empty() {
+            v.to_string()
+        } else {
+            format!("{kept}, {v}")
+        };
+        self.parse();
+    }
+
+    /// Take every entry that reads `v` out of the draft, keeping the others
+    /// as they are typed, unparsed ones included.
+    pub(super) fn remove(&mut self, v: f64) {
+        self.text = self
+            .text
+            .split(SEPARATORS)
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && s.parse::<f64>().ok() != Some(v))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.parse();
+    }
+
     /// Re-read the draft after an edit. Entries that don't parse are dropped
     /// rather than held, so a trailing separator or a half-typed number just
     /// doesn't draw a line yet.
     pub(super) fn parse(&mut self) {
         self.values = self
             .text
-            .split([',', ';', ' '])
+            .split(SEPARATORS)
             .filter_map(|s| s.trim().parse::<f64>().ok())
             .collect();
     }
@@ -120,6 +148,22 @@ impl NumberListField {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A value added or removed leaves the rest of the draft as typed.
+    #[test]
+    fn a_list_keeps_its_draft_around_an_edit() {
+        let mut f = NumberListField::default();
+        f.push(3.29);
+        assert_eq!(f.text_mut().as_str(), "3.29");
+        f.text_mut().push_str("; 5.00 x, ");
+        f.parse();
+        f.push(12.0);
+        assert_eq!(f.text_mut().as_str(), "3.29; 5.00 x, 12");
+        assert_eq!(f.values(), [3.29, 5.0, 12.0]);
+        f.remove(5.0);
+        assert_eq!(f.text_mut().as_str(), "3.29, x, 12");
+        assert_eq!(f.values(), [3.29, 12.0]);
+    }
 
     /// The value the graph draws from only moves when the draft is a number:
     /// clearing the field to retype it must not snap the axis to zero.

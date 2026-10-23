@@ -190,8 +190,10 @@ in a narrow graph.
 - [Markers](#recording) shown as dotted vertical lines, each with a flag in
   the time axis's row carrying its number and as much of its note as fits,
   in place of any time label it covers; click a
-  flag to write its note. Right-click the plot and pick **Add marker here** to
-  mark the reading nearest the click
+  flag to write its note
+- Right-click the plot to mark the reading nearest the click, draw a
+  reference line at the height clicked, or put cursor A or B on that reading;
+  over a reference line the menu also removes it
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range

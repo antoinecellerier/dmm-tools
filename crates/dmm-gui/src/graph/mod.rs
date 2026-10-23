@@ -24,6 +24,7 @@ mod field;
 pub(crate) mod histogram;
 mod level;
 mod limits;
+mod menu;
 mod minimap;
 mod pattern;
 mod render;
@@ -33,6 +34,7 @@ mod view;
 mod view_state;
 
 pub(crate) use limits::WatchedLimits;
+pub(crate) use menu::MenuAction;
 pub(crate) use view_state::ViewState;
 
 #[cfg(test)]
@@ -50,6 +52,7 @@ use axes::AxisMap;
 use breaks::Breaks;
 use field::{NumberField, NumberListField};
 use level::MinimapLevel;
+use menu::MenuPoint;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
 use view::{BoxZoom, YAxis};
 
@@ -339,6 +342,20 @@ impl MeasureCursors {
         self.next_is_b = !self.next_is_b;
     }
 
+    /// Switch the cursors on with A at `t`; the next click places B.
+    fn place_a(&mut self, t: f64) {
+        self.active = true;
+        self.a = Some(t);
+        self.next_is_b = true;
+    }
+
+    /// Switch the cursors on with B at `t`; the next click places A.
+    fn place_b(&mut self, t: f64) {
+        self.active = true;
+        self.b = Some(t);
+        self.next_is_b = false;
+    }
+
     /// Drop both cursors; the next click places A.
     fn clear(&mut self) {
         self.a = None;
@@ -537,10 +554,9 @@ pub struct Graph {
     minimap_drag: MinimapDrag,
     /// The Shift+drag box zoom in progress, if any.
     box_zoom: Option<BoxZoom>,
-    /// The reading nearest the right-click that opened the plot's menu, and
-    /// its value: what "Add marker here" marks, fixed as the menu opens.
-    menu_reading: Option<(Instant, f64)>,
-    /// Put the focus on the menu's entry again next frame.
+    /// What the plot's right-click menu was opened on.
+    menu: Option<MenuPoint>,
+    /// Put the focus on the menu's first entry again next frame.
     menu_focus_pending: bool,
 
     // -- Requests for the app, collected by the take_* methods --
@@ -550,9 +566,9 @@ pub struct Graph {
     /// The marker whose flag was clicked this frame, for the app to open its
     /// note — see [`Graph::take_clicked_marker`].
     clicked_marker: Option<u32>,
-    /// The reading "Add marker here" was picked for — see
-    /// [`Graph::take_mark_request`].
-    mark_request: Option<(Instant, f64)>,
+    /// What the plot's menu asked of the app — see
+    /// [`Graph::take_menu_action`].
+    menu_action: Option<MenuAction>,
     histogram_resized: bool,
 }
 
@@ -613,11 +629,11 @@ impl Graph {
             a11y_label_sig: 0,
             minimap_drag: MinimapDrag::None,
             box_zoom: None,
-            menu_reading: None,
+            menu: None,
             menu_focus_pending: false,
             trace_choice: None,
             clicked_marker: None,
-            mark_request: None,
+            menu_action: None,
             histogram_resized: false,
         }
     }
@@ -1880,10 +1896,10 @@ impl Graph {
         self.clicked_marker.take()
     }
 
-    /// The reading "Add marker here" was picked for since the last call,
-    /// with its value on the trace.
-    pub(crate) fn take_mark_request(&mut self) -> Option<(Instant, f64)> {
-        self.mark_request.take()
+    /// What an entry picked in the plot's menu since the last call asks of
+    /// the app.
+    pub(crate) fn take_menu_action(&mut self) -> Option<MenuAction> {
+        self.menu_action.take()
     }
 
     /// Whether the graph still shows the reading taken at `at`.

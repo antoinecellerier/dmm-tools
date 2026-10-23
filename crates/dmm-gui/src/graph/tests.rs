@@ -4712,20 +4712,49 @@ fn mark_from_menu(
     x: f32,
     between: impl FnOnce(&mut Graph),
 ) -> Option<(Instant, f64)> {
+    let ctx = open_menu(g, |plot| {
+        egui::pos2(plot.left() + x * plot.width(), plot.center().y)
+    });
+    between(g);
+    pick_entry(g, &ctx, |l| l == "Add marker here");
+    g.take_menu_action().map(|action| match action {
+        super::MenuAction::Mark(at, value) => (at, value),
+    })
+}
+
+/// Right-click the plot at the point `at` picks in its rect; the context,
+/// with the menu open.
+fn open_menu(g: &mut Graph, at: impl FnOnce(egui::Rect) -> egui::Pos2) -> egui::Context {
     let ctx = crate::app::styled_context();
     ctx.enable_accesskit();
     menu_frame(g, &ctx, vec![]);
     let tree = menu_frame(g, &ctx, vec![]);
     let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
-    let at = egui::pos2(plot.left() + x * plot.width(), plot.center().y);
-    menu_click(g, &ctx, at, egui::PointerButton::Secondary);
+    menu_click(g, &ctx, at(plot), egui::PointerButton::Secondary);
     assert!(egui::Popup::is_any_open(&ctx), "the menu opened");
-    between(g);
-    let tree = menu_frame(g, &ctx, vec![]);
-    let entry = node_rect(&tree, |l| l == "Add marker here").expect("the entry");
-    menu_click(g, &ctx, entry.center(), egui::PointerButton::Primary);
-    assert!(!egui::Popup::is_any_open(&ctx), "picking closes it");
-    g.take_mark_request()
+    ctx
+}
+
+/// The labels of the open menu's entries.
+fn menu_entries(g: &mut Graph, ctx: &egui::Context) -> Vec<String> {
+    menu_frame(g, ctx, vec![])
+        .iter()
+        .filter(|(_, n)| n.role() == egui::accesskit::Role::Button)
+        .filter_map(|(_, n)| n.label().map(str::to_owned))
+        .collect()
+}
+
+/// Click the open menu's entry whose label passes `label`.
+fn pick_entry(g: &mut Graph, ctx: &egui::Context, label: impl Fn(&str) -> bool) {
+    let tree = menu_frame(g, ctx, vec![]);
+    let entry = node_rect(&tree, label).expect("the entry");
+    menu_click(g, ctx, entry.center(), egui::PointerButton::Primary);
+    assert!(!egui::Popup::is_any_open(ctx), "picking closes it");
+}
+
+/// The value the plot's Y axis has at `pos`, as last drawn.
+fn height_at(g: &Graph, pos: egui::Pos2) -> f64 {
+    g.plot_transform.expect("drawn").value_from_position(pos).y
 }
 
 /// "Add marker here" marks the reading nearest the right-click.
@@ -4794,7 +4823,135 @@ fn esc_closes_the_menu_and_leaves_no_focus() {
         ctx.memory(|m| m.focused()).is_none(),
         "nothing keeps the focus"
     );
-    assert!(g.take_mark_request().is_none());
+    assert!(g.take_menu_action().is_none());
+}
+
+/// "Add reference line" draws one at the height right-clicked, rounded, and
+/// switches the lines on without taking the caret into their field.
+#[test]
+fn the_menu_adds_a_reference_line_where_clicked() {
+    let (mut g, _) = graph_over(30);
+    let mut at = egui::Pos2::ZERO;
+    let ctx = open_menu(&mut g, |plot| {
+        at = plot.center() - egui::vec2(0.0, plot.height() / 4.0);
+        at
+    });
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Add reference line at "));
+    assert!(g.show_ref_line);
+    assert!(!g.focus_ref_field, "the value is chosen already");
+    let &[v] = g.ref_lines.values() else {
+        panic!("one line: {:?}", g.ref_lines.values());
+    };
+    let pixel = (height_at(&g, at) - height_at(&g, at + egui::vec2(0.0, 1.0))).abs();
+    assert!(
+        (v - height_at(&g, at)).abs() <= pixel,
+        "{v} is where clicked"
+    );
+    assert_eq!(g.ref_lines.text_mut().as_str(), v.to_string());
+    assert!(g.take_menu_action().is_none());
+}
+
+/// Switched off with the chip, the lines come back with the one added.
+#[test]
+fn a_line_added_brings_back_the_hidden_ones() {
+    let (mut g, _) = graph_over(30);
+    g.ref_lines.set(&[0.5]);
+    let ctx = open_menu(&mut g, |plot| plot.center());
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Add reference line at "));
+    assert!(g.show_ref_line);
+    assert_eq!(g.ref_lines.values().len(), 2);
+    assert_eq!(g.ref_lines.values()[0], 0.5);
+}
+
+/// "Remove reference line" is offered over a line, and only there.
+#[test]
+fn the_menu_removes_the_reference_line_under_the_pointer() {
+    let (mut g, _) = graph_over(30);
+    g.show_ref_line = true;
+    let ctx = crate::app::styled_context();
+    menu_frame(&mut g, &ctx, vec![]);
+    let at = egui::pos2(400.0, 250.0);
+    let v = height_at(&g, at);
+    g.ref_lines.set(&[v, v + 1000.0]);
+
+    let ctx = open_menu(&mut g, |_| at + egui::vec2(0.0, 3.0));
+    let entries = menu_entries(&mut g, &ctx);
+    let remove: Vec<_> = entries
+        .iter()
+        .filter(|l| l.starts_with("Remove reference line"))
+        .collect();
+    assert_eq!(remove, [&format!("Remove reference line at {v} V")]);
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Remove reference line"));
+    assert_eq!(g.ref_lines.values(), [v + 1000.0]);
+
+    let ctx = open_menu(&mut g, |_| at + egui::vec2(0.0, 20.0));
+    assert!(
+        !menu_entries(&mut g, &ctx)
+            .iter()
+            .any(|l| l.starts_with("Remove reference line")),
+        "nothing under the pointer"
+    );
+}
+
+/// The cursors go on the reading right-clicked, A or B as picked, and
+/// "Remove cursors" switches them off.
+#[test]
+fn the_menu_places_and_removes_the_cursors() {
+    let (mut g, _) = graph_over(30);
+    let right = |plot: egui::Rect| egui::pos2(plot.left() + 0.98 * plot.width(), plot.center().y);
+    let left = |plot: egui::Rect| egui::pos2(plot.left() + 0.02 * plot.width(), plot.center().y);
+    let ctx = open_menu(&mut g, right);
+    assert!(!menu_entries(&mut g, &ctx).contains(&"Remove cursors".into()));
+
+    let ctx = open_menu(&mut g, right);
+    pick_entry(&mut g, &ctx, |l| l == "Place cursor B here");
+    assert!(g.cursors.active);
+    assert_eq!((g.cursors.a, g.cursors.b), (None, Some(30.0)));
+    let ctx = open_menu(&mut g, left);
+    pick_entry(&mut g, &ctx, |l| l == "Place cursor A here");
+    assert_eq!((g.cursors.a, g.cursors.b), (Some(20.0), Some(30.0)));
+    assert!(g.cursors.next_is_b, "a click moves the other one, B");
+
+    let ctx = open_menu(&mut g, right);
+    pick_entry(&mut g, &ctx, |l| l == "Remove cursors");
+    assert!(!g.cursors.active);
+    assert_eq!((g.cursors.a, g.cursors.b), (None, None));
+}
+
+/// The arrows walk the entries that can be picked and Enter picks one.
+#[test]
+fn the_menu_answers_the_arrows() {
+    let (mut g, _) = graph_over(30);
+    let ctx = open_menu(&mut g, |plot| plot.center());
+    menu_frame(&mut g, &ctx, vec![]);
+    let key = |key| {
+        [true, false].map(|pressed| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        })
+    };
+    menu_frame(&mut g, &ctx, key(egui::Key::ArrowDown).to_vec());
+    menu_frame(&mut g, &ctx, vec![]);
+    menu_frame(&mut g, &ctx, key(egui::Key::Enter).to_vec());
+    menu_frame(&mut g, &ctx, vec![]);
+    assert!(!egui::Popup::is_any_open(&ctx), "Enter picked");
+    assert!(g.take_menu_action().is_none(), "not the first entry");
+    assert_eq!(g.ref_lines.values().len(), 1, "the second");
+}
+
+/// A trace restarted under the open menu — here a decade step — takes the
+/// menu with it: its heights and times were the old trace's.
+#[test]
+fn a_restart_closes_the_menu() {
+    let (mut g, t0) = graph_over(30);
+    let ctx = open_menu(&mut g, |plot| plot.center());
+    g.push(1.0, t0 + Duration::from_secs(31), "DC V", "mV", None);
+    menu_frame(&mut g, &ctx, vec![]);
+    assert!(!egui::Popup::is_any_open(&ctx));
+    assert!(g.menu.is_none());
 }
 
 /// A noisy line with samples every `step` seconds, from a fixed seed.
