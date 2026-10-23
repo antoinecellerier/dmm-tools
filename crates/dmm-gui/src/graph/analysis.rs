@@ -10,13 +10,6 @@ use dmm_lib::stats::RunningStats;
 use super::{GapKind, Graph};
 
 impl Graph {
-    /// Compute the time-integral over the visible window, in unit·seconds.
-    pub fn visible_integral(&self) -> Option<f64> {
-        let (x_min, x_max) = self.view_bounds();
-        let (start, end) = self.visible_index_range(x_min, x_max);
-        self.integral_over(start..end)
-    }
-
     /// Elapsed time (seconds) between the first and last data point in the
     /// visible window. Returns `None` if fewer than 2 points are visible.
     pub fn visible_data_span_secs(&self) -> Option<f64> {
@@ -37,10 +30,9 @@ impl Graph {
     /// Min/max/avg over the visible window, or `None` when no point is
     /// visible. The same accumulator the session block uses, so both stats
     /// groups are computed and formatted identically.
-    pub fn visible_stats(&self) -> Option<RunningStats> {
-        let (x_min, x_max) = self.view_bounds();
-        let (start, end) = self.visible_index_range(x_min, x_max);
-        (start < end).then(|| self.stats_over(start..end))
+    pub fn visible_stats(&mut self) -> Option<RunningStats> {
+        let (stats, _) = self.visible_figures();
+        (stats.count > 0).then_some(stats)
     }
 
     /// Min/max/avg/σ of the history readings `range`.

@@ -826,6 +826,33 @@ fn visible_stats_cover_only_the_visible_window() {
     assert_eq!(s.count, 2);
 }
 
+/// The visible window's figures are kept while the readings in view stay
+/// the same, the view moving over them included, and computed again when
+/// one enters it.
+#[test]
+fn visible_figures_follow_the_readings_in_view() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for (i, v) in [1.0, 2.0, 3.0].iter().enumerate() {
+        g.push(*v, t0 + Duration::from_secs(i as u64), "DC V", "V", None);
+    }
+    g.live = false;
+    g.time_window_secs = 10.0;
+    g.view_center = 5.0;
+    assert_eq!(g.visible_stats().map(|s| s.count), Some(3));
+    let key = g.visible_figures.as_ref().map(|f| f.key);
+    g.view_center = 4.5;
+    assert_eq!(g.visible_stats().map(|s| s.count), Some(3));
+    assert_eq!(
+        g.visible_figures.as_ref().map(|f| f.key),
+        key,
+        "same readings"
+    );
+    g.push(4.0, t0 + Duration::from_secs(3), "DC V", "V", None);
+    let s = g.visible_stats().expect("four in view");
+    assert_eq!((s.count, s.max), (4, Some(4.0)));
+}
+
 #[test]
 fn visible_stats_none_when_window_holds_no_sample() {
     let mut g = Graph::new();

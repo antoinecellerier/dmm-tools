@@ -157,13 +157,13 @@ impl App {
             .map(|(value, unit)| (value, unit, self.capture.session.integrator.elapsed_secs()));
         // The visible block reports what the graph draws, which is not the
         // main reading's unit when a sub-value is plotted.
+        // Before the unit is borrowed: the graph keeps them between frames.
+        let (visible_stats, visible_raw) = self.graph.visible_figures();
+        let visible_stats = (visible_stats.count > 0).then_some(visible_stats);
         let visible_unit = self.graph.plotted_unit();
-        let visible_integral = self
-            .graph
-            .visible_integral()
+        let visible_integral = visible_raw
             .and_then(|raw| stats::integral_display(raw, visible_unit))
             .map(|(value, unit)| (value, unit, self.graph.visible_data_span_secs()));
-        let visible_stats = self.graph.visible_stats();
         let formatted = FormattedStats::new(
             &self.capture.session.stats,
             visible_stats.as_ref(),

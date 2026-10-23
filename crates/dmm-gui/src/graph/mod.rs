@@ -129,10 +129,10 @@ struct BinnedHistogram {
     spoken: String,
 }
 
-/// The cursor readout's figures, kept with the readings they cover: the
-/// readings between the cursors, and their integral.
+/// Figures over a run of readings, kept with the readings they cover: their
+/// statistics and integral.
 #[derive(Debug, Clone)]
-struct CursorFigures {
+struct RangeFigures {
     key: ReadingsKey,
     stats: RunningStats,
     integral: Option<f64>,
@@ -476,7 +476,10 @@ pub struct Graph {
     /// Bumped whenever the history is replaced or restarts, when sequence
     /// numbers start over on other readings: see [`ReadingsKey`].
     history_epoch: u64,
-    cursor_figures: Option<CursorFigures>,
+    /// The cursor readout's figures and the visible window's, computed
+    /// again only when the readings they cover change.
+    cursor_figures: Option<RangeFigures>,
+    visible_figures: Option<RangeFigures>,
     /// Current minimap drag state.
     minimap_drag: MinimapDrag,
     /// Press origin (screen pixels) when a Shift+drag bbox-zoom is in progress.
@@ -570,6 +573,7 @@ impl Graph {
             pushed_total: 0,
             history_epoch: 0,
             cursor_figures: None,
+            visible_figures: None,
             minimap_drag: MinimapDrag::None,
             bbox_zoom_start_px: None,
             bbox_zoom_current_px: None,
@@ -1686,17 +1690,42 @@ impl Graph {
     /// mouse moves. `None` until both cursors are placed.
     pub(super) fn cursor_figures(&mut self) -> Option<(RunningStats, Option<f64>)> {
         let range = self.cursor_range()?;
+        let cached = self.cursor_figures.take();
+        let figures = self.figures_over(range, cached);
+        let out = (figures.stats.clone(), figures.integral);
+        self.cursor_figures = Some(figures);
+        Some(out)
+    }
+
+    /// The visible window's statistics and integral (in unit·seconds),
+    /// computed again only when the readings in view change: the panel and
+    /// the mean line read them every frame, and a still view costs one pass,
+    /// not one a frame.
+    pub(crate) fn visible_figures(&mut self) -> (RunningStats, Option<f64>) {
+        let (x_min, x_max) = self.view_bounds();
+        let (start, end) = self.visible_index_range(x_min, x_max);
+        let cached = self.visible_figures.take();
+        let figures = self.figures_over(start..end, cached);
+        let out = (figures.stats.clone(), figures.integral);
+        self.visible_figures = Some(figures);
+        out
+    }
+
+    /// The figures over the history readings `range`: `cached` while it
+    /// covers the same readings, else computed afresh.
+    fn figures_over(
+        &self,
+        range: std::ops::Range<usize>,
+        cached: Option<RangeFigures>,
+    ) -> RangeFigures {
         let key = self.readings_key(range.clone());
-        if self.cursor_figures.as_ref().is_none_or(|f| f.key != key) {
-            self.cursor_figures = Some(CursorFigures {
+        cached
+            .filter(|f| f.key == key)
+            .unwrap_or_else(|| RangeFigures {
                 key,
                 stats: self.stats_over(range.clone()),
                 integral: self.integral_over(range),
-            });
-        }
-        self.cursor_figures
-            .as_ref()
-            .map(|f| (f.stats.clone(), f.integral))
+            })
     }
 
     /// The plot's horizontal lines, carried across the histogram in the
