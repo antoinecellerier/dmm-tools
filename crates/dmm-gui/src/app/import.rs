@@ -307,6 +307,9 @@ impl App {
     /// on a thread of its own and taken in over the next frames.
     pub(super) fn import_file(&mut self, path: PathBuf) {
         self.disconnect();
+        // The file stands in for the meter, so a failed connect has nothing
+        // left to explain; the next Connect reports afresh.
+        self.connection.last_error = None;
         self.reset_session_for_import();
         info!("importing {}", path.display());
         let base = self.clock.now();
@@ -545,6 +548,7 @@ pub(super) fn file_name(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::connection_issue::ConnectionIssue;
     use crate::settings::Settings;
 
     /// Three readings, a dial turn from DC V to Ω on the third, a marker on
@@ -667,6 +671,21 @@ timestamp,mode,value,unit,range,flags,marker,note
         assert!(app.imported.is_none());
         assert!(app.markers.is_empty());
         assert_eq!(app.capture.recording.export_samples().len(), 0);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// A file imported after a failed connect stands in for the meter: the
+    /// troubleshooting notice goes with it.
+    #[test]
+    fn an_import_drops_the_connection_notice() {
+        let mut app = app();
+        app.connection.last_error = Some(ConnectionIssue::DeviceNotFound {
+            bluetooth_searched: true,
+        });
+        assert!(app.connection_notice().is_some());
+        let path = file("after-failure.csv", CSV);
+        import(&mut app, path.clone());
+        assert!(app.connection_notice().is_none());
         let _ = std::fs::remove_file(path);
     }
 
