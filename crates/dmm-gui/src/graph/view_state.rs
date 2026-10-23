@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-use super::Graph;
+use super::{Graph, MeasureCursors};
 
 /// What an export saves of the view. Every field is optional on the way in,
 /// so a view from an older or newer version still applies what it can.
@@ -154,17 +154,11 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         let held = |t: f64| (t.is_finite() && (data_min..=data_max).contains(&t)).then_some(t);
         match view.cursors {
-            Some(Cursors { a, b }) => {
-                self.cursors.active = true;
-                self.cursors.a = a.and_then(|t| held(t - shift));
-                self.cursors.b = b.and_then(|t| held(t - shift));
-                self.cursors.next_is_b = self.cursors.a.is_some() && self.cursors.b.is_none();
-            }
-            None => {
-                self.cursors.active = false;
-                self.cursors.a = None;
-                self.cursors.b = None;
-            }
+            Some(Cursors { a, b }) => self.cursors.restore(
+                a.and_then(|t| held(t - shift)),
+                b.and_then(|t| held(t - shift)),
+            ),
+            None => self.cursors = MeasureCursors::default(),
         }
     }
 }
@@ -253,6 +247,21 @@ mod tests {
         assert!(g.cursors.active);
         assert_eq!(g.cursors.a, None, "a cursor past the readings is dropped");
         assert!(g.live, "no start: the view follows the newest reading");
+    }
+
+    /// A view without cursors starts the next measurement afresh: switched
+    /// back on, the first click places A even if only A was placed before.
+    #[test]
+    fn a_view_without_cursors_starts_the_next_at_a() {
+        let t0 = Instant::now();
+        let mut g = graph_from(t0, 10);
+        g.cursors.toggle();
+        g.cursors.place(2.0);
+        g.apply_view_state(&ViewState::default(), t0);
+        assert!(!g.cursors.active);
+        g.cursors.toggle();
+        g.cursors.place(4.0);
+        assert_eq!((g.cursors.a, g.cursors.b), (Some(4.0), None));
     }
 }
 

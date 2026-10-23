@@ -318,6 +318,17 @@ impl MeasureCursors {
         shown.into_iter().flatten()
     }
 
+    /// Switch the cursors on with A and B at `a` and `b`. With only A
+    /// placed, the next click places B, as if A had just been clicked.
+    fn restore(&mut self, a: Option<f64>, b: Option<f64>) {
+        *self = Self {
+            active: true,
+            a,
+            b,
+            next_is_b: a.is_some() && b.is_none(),
+        };
+    }
+
     /// Place the next cursor at `t`; the click after places the other.
     fn place(&mut self, t: f64) {
         if self.next_is_b {
