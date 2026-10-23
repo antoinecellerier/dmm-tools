@@ -66,6 +66,8 @@ pub(super) struct MenuPoint {
     marker: Option<u32>,
     /// The cursor whose line is under the pointer.
     cursor: Option<Cursor>,
+    /// Where the menu was opened, which decides its entries.
+    scope: MenuScope,
     /// Whether the alarm's limits can be set here: the alarm judges the
     /// main reading, so not while a sub-value is plotted, nor on a level.
     limits_apply: bool,
@@ -75,6 +77,37 @@ pub(super) struct MenuPoint {
     /// unit's decade step, another series plotted — the times and heights
     /// above are another trace's, and the menu closes unpicked.
     epoch: u64,
+}
+
+/// Where the menu was opened: the plot offers everything; the value axis
+/// what is done at a value, the time axis what is done to a reading, a
+/// marker's flag that marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MenuScope {
+    Plot,
+    Value,
+    Time,
+    Flag(u32),
+}
+
+impl MenuScope {
+    /// Whether the reading's entries are offered: mark, copy, cursors.
+    fn offers_reading(self) -> bool {
+        matches!(self, Self::Plot | Self::Time)
+    }
+
+    /// Whether the value's are: reference lines, alarm limits.
+    fn offers_value(self) -> bool {
+        matches!(self, Self::Plot | Self::Value)
+    }
+}
+
+/// What opens the menu besides the plot body: the click areas laid over the
+/// axes' strips beside and under it, and the marker flag right-clicked.
+pub(super) struct MenuOpeners {
+    pub(super) value: egui::Response,
+    pub(super) time: egui::Response,
+    pub(super) flag: Option<u32>,
 }
 
 /// What an entry of the plot's menu asks of the app, which holds what it
@@ -256,6 +289,7 @@ impl Graph {
             ref_line,
             marker,
             cursor,
+            scope: MenuScope::Plot,
             limits_apply: !self.levels && self.current_series.is_none(),
             limit,
             epoch: self.history_epoch,
@@ -273,16 +307,28 @@ impl Graph {
     pub(super) fn show_context_menu(
         &mut self,
         plot: &egui::Response,
+        openers: &MenuOpeners,
         transform: &PlotTransform,
         in_view: &[(f64, &Marker)],
         limit_lines: &[(f64, LimitSide)],
         digits: ReadingDigits,
     ) {
         let ctx = plot.ctx.clone();
-        if plot.secondary_clicked()
-            && let Some(pos) = plot.interact_pointer_pos()
+        let scope = if plot.secondary_clicked() {
+            Some(MenuScope::Plot)
+        } else if openers.value.secondary_clicked() {
+            Some(MenuScope::Value)
+        } else if openers.time.secondary_clicked() {
+            Some(MenuScope::Time)
+        } else {
+            openers.flag.map(MenuScope::Flag)
+        };
+        let opened = scope.is_some();
+        if let Some(scope) = scope
+            && let Some(pos) = ctx.pointer_interact_pos()
         {
-            self.menu = Some(self.menu_point(pos, transform, in_view, limit_lines, digits));
+            let point = self.menu_point(pos, transform, in_view, limit_lines, digits);
+            self.menu = Some(MenuPoint { scope, ..point });
         }
         let popup_id = plot_menu_id();
         let was_open = egui::Popup::is_id_open(&ctx, popup_id);
@@ -312,109 +358,133 @@ impl Graph {
         let focus_again = std::mem::take(&mut self.menu_focus_pending);
         let mut entry_ids = Vec::new();
         let mut picked = None;
-        egui::Popup::context_menu(plot).id(popup_id).show(|ui| {
-            let reading = menu.reading.as_ref();
-            let has_reading = reading.is_some();
-            // Two groups, each under a muted heading naming what its entries
-            // act on — the reading nearest the click, the height clicked —
-            // so the entries are verbs alone. A screen reader walks the
-            // entries, not the headings: each is named in full for it.
-            let mut entries: Vec<(egui::Response, Pick)> = Vec::new();
-            let mut entry = |ui: &mut egui::Ui, enabled, short: String, spoken: String, pick| {
-                let response = ui
-                    .add_enabled(enabled, egui::Button::new(short))
-                    .on_disabled_hover_text(NO_READING)
-                    .a11y_label(&spoken);
-                entries.push((response, pick));
-            };
+        // One menu, opened from the plot or the axes' strips or a flag, at
+        // the pointer; a click on the plot closes it, as a context menu's
+        // own does.
+        let open = if opened {
+            Some(egui::SetOpenCommand::Bool(true))
+        } else if plot.clicked() {
+            Some(egui::SetOpenCommand::Bool(false))
+        } else {
+            None
+        };
+        egui::Popup::menu(plot)
+            .id(popup_id)
+            .open_memory(open)
+            .at_pointer_fixed()
+            .show(|ui| {
+                let reading = menu.reading.as_ref();
+                let has_reading = reading.is_some();
+                // Two groups, each under a muted heading naming what its entries
+                // act on — the reading nearest the click, the height clicked —
+                // so the entries are verbs alone. A screen reader walks the
+                // entries, not the headings: each is named in full for it.
+                let mut entries: Vec<(egui::Response, Pick)> = Vec::new();
+                let mut entry =
+                    |ui: &mut egui::Ui, enabled, short: String, spoken: String, pick| {
+                        let response = ui
+                            .add_enabled(enabled, egui::Button::new(short))
+                            .on_disabled_hover_text(NO_READING)
+                            .a11y_label(&spoken);
+                        entries.push((response, pick));
+                    };
 
-            let the_reading = match reading {
-                Some(r) => format!("the reading at {}", r.time),
-                None => "a reading".to_string(),
-            };
-            match reading {
-                Some(r) => heading(ui, "Reading at", Some(&r.time)),
-                None => heading(ui, NO_READING, None),
-            }
-            entry(
-                ui,
-                has_reading,
-                "Mark".to_string(),
-                format!("Mark {the_reading}"),
-                Pick::Mark,
-            );
-            let copy = reading.map_or("Copy".to_string(), |r| format!("Copy {}", r.digits));
-            entry(ui, has_reading, copy.clone(), copy, Pick::Copy);
-            if let Some(number) = menu.marker {
-                let label = format!("Delete marker {number}");
-                entry(ui, true, label.clone(), label, Pick::DeleteMarker(number));
-            }
-            for (short, preposition, which) in cursor_entries(cursors, reading_secs) {
-                let spoken = format!("{short} {preposition} {the_reading}");
-                entry(ui, has_reading, short, spoken, Pick::SetCursor(which));
-            }
-            if let Some(which) = menu.cursor {
-                let label = format!("Remove cursor {}", which.name());
-                entry(ui, true, label.clone(), label, Pick::RemoveCursor(which));
-            }
-            if cursors.placed().next().is_some() {
-                let label = "Remove cursors".to_string();
-                entry(ui, true, label.clone(), label, Pick::RemoveCursors);
-            }
+                if let MenuScope::Flag(number) = menu.scope {
+                    let label = format!("Delete marker {number}");
+                    entry(ui, true, label.clone(), label, Pick::DeleteMarker(number));
+                }
+                if menu.scope.offers_reading() {
+                    let the_reading = match reading {
+                        Some(r) => format!("the reading at {}", r.time),
+                        None => "a reading".to_string(),
+                    };
+                    match reading {
+                        Some(r) => heading(ui, "Reading at", Some(&r.time)),
+                        None => heading(ui, NO_READING, None),
+                    }
+                    entry(
+                        ui,
+                        has_reading,
+                        "Mark".to_string(),
+                        format!("Mark {the_reading}"),
+                        Pick::Mark,
+                    );
+                    let copy = reading.map_or("Copy".to_string(), |r| format!("Copy {}", r.digits));
+                    entry(ui, has_reading, copy.clone(), copy, Pick::Copy);
+                    if let Some(number) = menu.marker {
+                        let label = format!("Delete marker {number}");
+                        entry(ui, true, label.clone(), label, Pick::DeleteMarker(number));
+                    }
+                    for (short, preposition, which) in cursor_entries(cursors, reading_secs) {
+                        let spoken = format!("{short} {preposition} {the_reading}");
+                        entry(ui, has_reading, short, spoken, Pick::SetCursor(which));
+                    }
+                    if let Some(which) = menu.cursor {
+                        let label = format!("Remove cursor {}", which.name());
+                        entry(ui, true, label.clone(), label, Pick::RemoveCursor(which));
+                    }
+                    if cursors.placed().next().is_some() {
+                        let label = "Remove cursors".to_string();
+                        entry(ui, true, label.clone(), label, Pick::RemoveCursors);
+                    }
+                }
+                if menu.scope == MenuScope::Plot {
+                    ui.separator();
+                }
+                if menu.scope.offers_value() {
+                    let height = with_unit(menu.y, &unit);
+                    heading(ui, "At", Some(&height));
+                    // Not over a line at that very height, where it would add none.
+                    if menu.ref_line != Some(menu.y) {
+                        let spoken = format!("Add reference line at {height}");
+                        entry(
+                            ui,
+                            true,
+                            "Add reference line".to_string(),
+                            spoken,
+                            Pick::AddRefLine,
+                        );
+                    }
+                    if let Some(v) = menu.ref_line {
+                        let label = format!("Remove reference line {}", with_unit(v, &unit));
+                        entry(ui, true, label.clone(), label, Pick::RemoveRefLine(v));
+                    }
+                    if menu.limits_apply {
+                        for side in [LimitSide::High, LimitSide::Low] {
+                            let short = format!("Set alarm {}", side.name().to_lowercase());
+                            let spoken = format!("{short} at {height}");
+                            entry(ui, true, short, spoken, Pick::SetLimit(side));
+                        }
+                        if let Some(side) = menu.limit {
+                            let label = format!("Remove alarm {}", side.name().to_lowercase());
+                            entry(ui, true, label.clone(), label, Pick::ClearLimit(side));
+                        }
+                    }
+                }
 
-            ui.separator();
-            let height = with_unit(menu.y, &unit);
-            heading(ui, "At", Some(&height));
-            // Not over a line at that very height, where it would add none.
-            if menu.ref_line != Some(menu.y) {
-                let spoken = format!("Add reference line at {height}");
-                entry(
-                    ui,
-                    true,
-                    "Add reference line".to_string(),
-                    spoken,
-                    Pick::AddRefLine,
-                );
-            }
-            if let Some(v) = menu.ref_line {
-                let label = format!("Remove reference line {}", with_unit(v, &unit));
-                entry(ui, true, label.clone(), label, Pick::RemoveRefLine(v));
-            }
-            if menu.limits_apply {
-                for side in [LimitSide::High, LimitSide::Low] {
-                    let short = format!("Set alarm {}", side.name().to_lowercase());
-                    let spoken = format!("{short} at {height}");
-                    entry(ui, true, short, spoken, Pick::SetLimit(side));
+                let enabled: Vec<egui::Response> = entries
+                    .iter()
+                    .filter(|(entry, _)| entry.enabled())
+                    .map(|(entry, _)| entry.clone())
+                    .collect();
+                if (!was_open || focus_again)
+                    && let Some(first) = enabled.first()
+                {
+                    first.request_focus();
                 }
-                if let Some(side) = menu.limit {
-                    let label = format!("Remove alarm {}", side.name().to_lowercase());
-                    entry(ui, true, label.clone(), label, Pick::ClearLimit(side));
+                for (entry, pick) in &entries {
+                    // Menu entries have no frame, so egui's focus styling is a
+                    // fill too faint to find; ring the focused one.
+                    crate::a11y::paint_focus_ring(ui, entry);
+                    if was_open && entry.clicked() {
+                        picked = Some(*pick);
+                    }
+                    entry_ids.push(entry.id);
                 }
-            }
-
-            let enabled: Vec<egui::Response> = entries
-                .iter()
-                .filter(|(entry, _)| entry.enabled())
-                .map(|(entry, _)| entry.clone())
-                .collect();
-            if (!was_open || focus_again)
-                && let Some(first) = enabled.first()
-            {
-                first.request_focus();
-            }
-            for (entry, pick) in &entries {
-                // Menu entries have no frame, so egui's focus styling is a
-                // fill too faint to find; ring the focused one.
-                crate::a11y::paint_focus_ring(ui, entry);
-                if was_open && entry.clicked() {
-                    picked = Some(*pick);
-                }
-                entry_ids.push(entry.id);
-            }
-            // A disabled entry cannot take the focus, so it is not a stop
-            // for the arrows either: Down would strand the focus on it.
-            crate::display::navigate_choice_entries(ui.ctx(), &enabled);
-        });
+                // A disabled entry cannot take the focus, so it is not a stop
+                // for the arrows either: Down would strand the focus on it.
+                crate::display::navigate_choice_entries(ui.ctx(), &enabled);
+            });
         if let Some(pick) = picked {
             // Enter and Space click without a pointer click, which is the
             // only thing a menu closes on by itself.

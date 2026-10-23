@@ -5146,6 +5146,65 @@ fn no_alarm_entries_off_the_main_reading() {
     assert!(!has_alarm(&mut g), "a level");
 }
 
+/// Right-clicked on an axis, the menu offers what that axis measures: the
+/// value axis what is done at a value, the time axis what is done to a
+/// reading.
+#[test]
+fn an_axis_opens_the_menu_for_what_it_measures() {
+    let (mut g, _) = graph_over(30);
+    let on_value_axis = |plot: egui::Rect| egui::pos2(plot.left() - 20.0, plot.center().y);
+    let ctx = open_menu(&mut g, on_value_axis);
+    let entries = menu_entries(&mut g, &ctx);
+    assert!(
+        entries
+            .iter()
+            .any(|l| l.starts_with("Add reference line at "))
+    );
+    assert!(entries.iter().any(|l| l.starts_with("Set alarm high at ")));
+    assert!(
+        !entries.iter().any(|l| l.contains("the reading")),
+        "{entries:?}"
+    );
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Add reference line at "));
+    assert_eq!(g.ref_lines.values().len(), 1);
+
+    let on_time_axis = |plot: egui::Rect| egui::pos2(plot.center().x, plot.bottom() + 8.0);
+    let ctx = open_menu(&mut g, on_time_axis);
+    let entries = menu_entries(&mut g, &ctx);
+    assert!(entries.contains(&"Mark the reading at 25.0 s".to_string()));
+    assert!(
+        !entries
+            .iter()
+            .any(|l| l.contains("reference line") || l.contains("alarm")),
+        "{entries:?}"
+    );
+}
+
+/// Right-clicked, a marker's flag offers that marker's deletion alone; a
+/// click still opens its note.
+#[test]
+fn a_flag_opens_the_menu_for_its_marker() {
+    let (mut g, t0) = graph_over(30);
+    MENU_SCENE.set((marked(&[t0 + Duration::from_secs(25)]), None, None));
+    let ctx = crate::app::styled_context();
+    ctx.enable_accesskit();
+    menu_frame(&mut g, &ctx, vec![]);
+    let tree = menu_frame(&mut g, &ctx, vec![]);
+    let flag = node_rect(&tree, |l| l == "Write marker 1's note").expect("the flag");
+    menu_click(&mut g, &ctx, flag.center(), egui::PointerButton::Secondary);
+    let entries: Vec<String> = menu_entries(&mut g, &ctx)
+        .into_iter()
+        .filter(|l| !l.starts_with("Write marker"))
+        .collect();
+    assert_eq!(entries, ["Delete marker 1"], "the flag's own button aside");
+    pick_entry(&mut g, &ctx, |l| l == "Delete marker 1");
+    assert_eq!(
+        g.take_menu_action(),
+        Some(super::MenuAction::DeleteMarker(1))
+    );
+    assert_eq!(g.take_clicked_marker(), None, "not the note's click");
+}
+
 /// The arrows walk the entries that can be picked and Enter picks one.
 #[test]
 fn the_menu_answers_the_arrows() {

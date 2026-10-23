@@ -194,7 +194,9 @@ in a narrow graph.
 - Right-click the plot to mark or copy the reading nearest the click, put or
   move a cursor on it, or draw a reference line or set an [alarm](#alarm)
   limit at the Y value clicked; over a marker, a cursor, a reference line or a
-  limit the menu also removes it
+  limit the menu also removes it. On the value axis it offers only what is
+  done at a value, on the time axis only what is done to a reading, and on a
+  marker's flag that marker's deletion
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range

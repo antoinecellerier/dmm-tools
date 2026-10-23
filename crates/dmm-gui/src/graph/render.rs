@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::time::Instant;
 
 use super::axes::{self, AxisMap};
-use super::menu::plot_menu_id;
+use super::menu::{MenuOpeners, plot_menu_id};
 use super::minimap::bucket_secs;
 use super::pattern::{DASH_GAP, PatternKey, Patterns, SegmentedLine, TimedHLine, anchor_layout};
 use super::time::{MIN_GRID_SPACING, format_pointer_time, format_time_axis_label, time_marks};
@@ -1456,8 +1456,16 @@ impl Graph {
         // The readout under the pointer would cover the menu's entry, which
         // opens where the pointer is.
         let menu_open = egui::Popup::is_id_open(ui.ctx(), plot_menu_id());
+        // The plot's whole area, axes included, as egui_plot is about to
+        // allocate it: the axes' strips around the plot body take the menu's
+        // right-click too.
+        let plot_height = ui.available_height().max(60.0);
+        let complete_rect = egui::Rect::from_min_size(
+            ui.cursor().min,
+            egui::vec2(ui.available_size_before_wrap().x, plot_height),
+        );
         let mut plot = Plot::new("main_plot")
-            .height(ui.available_height().max(60.0))
+            .height(plot_height)
             .allow_drag(Vec2b::new(allow_plot_x_drag, false))
             // handle_interaction owns the Ctrl+wheel zoom: it reads the same
             // `zoom_delta` egui_plot would, so leaving egui_plot's own zoom on
@@ -1767,7 +1775,10 @@ impl Graph {
         )
         .into_iter()
         .collect();
-        let (clicked_marker, flags) = Self::paint_marker_flags(
+        // Before the flags, which sit in the time axis's row and must stay
+        // on top of it for their clicks.
+        let mut openers = Self::axis_strips(ui, complete_rect, response.response.rect);
+        let (flag_click, flags) = Self::paint_marker_flags(
             ui,
             &response.transform,
             response.response.rect,
@@ -1775,7 +1786,12 @@ impl Graph {
             marker_color,
             tc.plot_background(),
         );
-        self.clicked_marker = clicked_marker;
+        self.clicked_marker = flag_click
+            .filter(|&(_, button)| button == egui::PointerButton::Primary)
+            .map(|(number, _)| number);
+        openers.flag = flag_click
+            .filter(|&(_, button)| button == egui::PointerButton::Secondary)
+            .map(|(number, _)| number);
         taken.extend(flags);
         Self::paint_overlay_labels(
             ui,
@@ -1787,6 +1803,7 @@ impl Graph {
         self.handle_interaction(ui, &response.response, &response.transform);
         self.show_context_menu(
             &response.response,
+            &openers,
             &response.transform,
             &in_view,
             &overlay.limit_lines,
@@ -1920,8 +1937,9 @@ impl Graph {
     /// Each marker's flag at the bottom of the plot: a tag in the marker
     /// colour pointing up at its line, with the number and as much of the
     /// note as fits, in the plot background's colour. Returns the number of
-    /// the marker whose flag was clicked, and each flag's point, the part in
-    /// the plot, which the overlay labels keep off.
+    /// the marker whose flag was clicked, with the button — the primary
+    /// opens its note, the secondary its menu — and each flag's point, the
+    /// part in the plot, which the overlay labels keep off.
     ///
     /// A flag takes clicks but not the keyboard focus: the plot would gain a
     /// Tab stop per marker, and the Recording panel's log already has one.
@@ -1932,7 +1950,7 @@ impl Graph {
         in_view: &[(f64, &crate::markers::Marker)],
         color: egui::Color32,
         text_color: egui::Color32,
-    ) -> (Option<u32>, Vec<egui::Rect>) {
+    ) -> (Option<(u32, egui::PointerButton)>, Vec<egui::Rect>) {
         if in_view.is_empty() {
             return (None, Vec::new());
         }
@@ -1980,7 +1998,9 @@ impl Graph {
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
             response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &edit));
             if response.clicked() {
-                clicked = Some(flag.number);
+                clicked = Some((flag.number, egui::PointerButton::Primary));
+            } else if response.secondary_clicked() {
+                clicked = Some((flag.number, egui::PointerButton::Secondary));
             }
             // Only the point reaches into the plot.
             rects.push(egui::Rect::from_min_max(
@@ -1989,6 +2009,32 @@ impl Graph {
             ));
         }
         (clicked, rects)
+    }
+
+    /// Click areas over the left value axis and the time axis, beside and
+    /// under `plot` in `complete`, for the menu to open from: egui_plot's own
+    /// axis widgets only hover. Clicks only, so neither is a Tab stop.
+    fn axis_strips(ui: &Ui, complete: egui::Rect, plot: egui::Rect) -> MenuOpeners {
+        let strip = |rect: egui::Rect, salt: &str| {
+            ui.interact(rect, ui.scope_id().with(salt), egui::Sense::CLICK)
+        };
+        MenuOpeners {
+            value: strip(
+                egui::Rect::from_min_max(
+                    egui::pos2(complete.left(), plot.top()),
+                    egui::pos2(plot.left(), plot.bottom()),
+                ),
+                "value_axis_menu",
+            ),
+            time: strip(
+                egui::Rect::from_min_max(
+                    egui::pos2(plot.left(), plot.bottom()),
+                    egui::pos2(plot.right(), complete.bottom()),
+                ),
+                "time_axis_menu",
+            ),
+            flag: None,
+        }
     }
 
     /// Paint text labels for overlays (mean, reference lines, cursors) using the
