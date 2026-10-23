@@ -1,0 +1,19 @@
+# AC V 239.6 V mains on the 1000V range, auto-ranging, HV warning lit, recorded 2026-10-23 from a UT61E+
+# From a dmm-cli replay of a mains outlet switched off, on and off (measurements-UT61E+-AC-V-2026-10-23_14-31-20-ac-off-on-off.replay), not a capture report.
+raw_hex: "00 33 20 20 32 33 39 2E 36 00 04 30 31 30"
+mode: "AC V"
+value: "239.6"
+unit: "V"
+range_label: "1000V"
+resolution: "0.1V"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: true
+  dc: false
+  peak_min: false
+  peak_max: false

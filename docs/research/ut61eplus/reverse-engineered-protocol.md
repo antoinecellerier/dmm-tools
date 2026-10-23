@@ -549,7 +549,7 @@ AUTO flag is cleared (range locked) for the duration of MIN/MAX mode.
 
 | Bit | Mask | Flag | Status | Evidence |
 |-----|------|------|--------|----------|
-| 0 | 0x01 | **HV warning** | **[VERIFIED]** | Set at 31V on DC V (manual: >30V). DmmData offset 0x3d — stored but not displayed by PC UI. |
+| 0 | 0x01 | **HV warning** | **[VERIFIED]** | Set at 31V on DC V (manual: >30V), and with 239 V mains on AC V, AC+DC V and Hz (recorded 2026-10-23). DmmData offset 0x3d — stored but not displayed by PC UI. |
 | 1 | 0x02 | **Low battery** | **[VERIFIED]** | Intermittent on real device. DmmData offset 0x3c — passed to a UI indicator widget. |
 | 2 | 0x04 | **!AUTO** (inverted) | **[VERIFIED]** | DmmData offset 0x3b. Bit CLEAR = auto-range ON. DMM.exe hides "AUTO" label when set. |
 | 3 | 0x08 | **APO** (auto power-off) | **[VENDOR-DOC]** | The deck names it `APO_flag`. Stored at DmmData offset 0x3a; never read by PC UI. Never seen set (below). |
@@ -710,7 +710,7 @@ What is still open is in [verification.md](verification.md), not here.
 | Byte15 bit1 = UI indicator widget | **VENDOR** | DMM.exe passes to widget method |
 | Byte15 bits 0,3 = stored, not displayed | **VENDOR** | DMM.exe never reads back |
 | Bar graph bytes (12-13) not used by vendor | **VENDOR** | No reads in display function |
-| Byte15 bit0 = HV warning | **VERIFIED** | Set at 31V on DC V (real device) |
+| Byte15 bit0 = HV warning | **VERIFIED** | Set at 31V on DC V, and at mains on AC V, AC+DC V and Hz (real device) |
 | Byte15 bit1 = Low Battery | **VERIFIED** | Observed intermittently on real device |
 | Byte15 bit3 = APO | **VENDOR-DOC** | Protocol deck; never seen set |
 | Bar graph position encoding (bytes 12-13) | **VERIFIED** | `byte12*10 + byte13` decimal, real device |

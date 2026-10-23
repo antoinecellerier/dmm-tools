@@ -1,0 +1,19 @@
+# Frequency 50.0 Hz of mains on the 220Hz range, auto-ranging, HV warning lit, recorded 2026-10-23 from a UT61E+
+# From a dmm-cli replay of a mains outlet switched on and off (measurements-UT61E+-Hz-2026-10-23_14-35-45-on-off-on-off.replay), not a capture report.
+raw_hex: "04 31 20 20 20 35 30 2E 30 00 04 30 31 30"
+mode: "Hz"
+value: "50"
+unit: "Hz"
+range_label: "220Hz"
+resolution: "0.01Hz~0.01MHz"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: true
+  dc: false
+  peak_min: false
+  peak_max: false

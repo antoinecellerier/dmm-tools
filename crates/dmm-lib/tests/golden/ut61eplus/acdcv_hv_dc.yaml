@@ -1,0 +1,20 @@
+# AC+DC V on mains, the DC component 0.5 V on the 1000V range, auto-ranging, HV warning lit, recorded 2026-10-23 from a UT61E+
+# From a dmm-cli replay of a mains outlet (measurements-UT61E+-AC+DC-V-2026-10-23_15-03-05-acdc-mains.replay), not a capture report.
+raw_hex: "19 33 20 20 20 20 30 2E 35 00 01 30 31 30"
+mode: "AC+DC V"
+value: "0.5"
+unit: "V"
+range_label: "1000V"
+resolution: "0.1V"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: true
+  dc: true
+  peak_min: false
+  peak_max: false
+aux: []
