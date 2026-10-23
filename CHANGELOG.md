@@ -9,28 +9,30 @@
 ### GUI
 
 - **An alarm marks each reading that crosses a low or high limit**
-- **A histogram shows how the visible readings spread** — `H` toggles it; drag its edge to resize it.
+- **A histogram shows how the visible readings spread** — `H` toggles it.
+- **The graph's right-click menu sets reference lines, cursors and alarm limits** — and copies a reading or deletes a marker.
 - **Statistics show the standard deviation (σ)** — for the session and the visible window.
 - **Cursors read the average, σ and count of the readings between them** — and the histogram outlines how they spread.
-- **The graph's right-click menu sets reference lines, cursors and alarm limits** — and copies a reading.
-- **A UT61+ or OWON meter naming another model than the one selected says so** — the GUI said nothing.
+- **A meter naming another model than the one picked gets a warning** — on a UT61+ or OWON.
 - **Clicking Scale turns scaling on and off, keeping the factor** — it opened the fields, and Off cleared them.
-- **Tab no longer stops on the graph's axes** — they were two Tab stops with no focus ring.
+- **The time axis is labelled in clock steps, such as 15 s** — its steps jumped from 10 s to 100 s, leaving a narrow graph one label.
+- **Tab skips the graph's axes, and dragging one leaves the view alone** — they were Tab stops without a focus ring, and a drag jittered the view.
 
 ### CLI
 
 - **`read --alarm-high` and `--alarm-low` warn when a reading crosses a limit** — and mark it in CSV, JSON and replay output.
 - **`read`'s summary line adds the standard deviation (σ)**
-- **`info`, `capture` and `read --format replay` warn when a UT61+ meter names another model than `--device`**
+- **A UT61+ meter naming another model than `--device` gets a warning** — from `info`, `capture` and `read --format replay`.
 - **The mock follows `dmm-gui`'s Mock mode setting** — without `--mock-mode`, `dmm-cli` cycled through every scenario.
 
 ### Bug fixes
 
-- **Bluetooth no longer crashes Windows scans near some devices or hangs macOS connects**
-- **Dashed and dotted graph lines move with the data** — their pattern crawled along the curve as readings arrived or the view was dragged.
-- **The graph's line keeps its width over a long window** — where a reading repeats between display updates, stretches of it drew as a hairline.
+- **Bluetooth no longer crashes Windows scans or hangs macOS connects** — the crash came near some devices.
 - **The mock's readings carry only the digits its display shows** — statistics and exports showed digits the simulated meter never displayed.
-- **Clicking a marker's flag puts the cursor in its note**
+- **Import… clears the help left by a failed Connect**
+- **Clicking a marker's flag lets you type its note at once**
+- **The graph's line keeps its width over a long window** — where a reading repeats between display updates, stretches of it drew as a hairline.
+- **Dashed and dotted graph lines move with the data** — their pattern crawled along the curve as readings arrived or the view was dragged.
 
 ### Internal
 
