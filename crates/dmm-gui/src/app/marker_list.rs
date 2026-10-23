@@ -837,7 +837,12 @@ impl App {
                     if !ui.clip_rect().contains_rect(response.rect) {
                         response.scroll_to_me(None);
                     }
-                    list.focus = None;
+                    // Asked again next frame after a click — a marker's flag,
+                    // the row's +: egui takes the focus back from a note on
+                    // a click outside it, the next time it reads the note.
+                    if !ui.input(|i| i.pointer.any_click()) {
+                        list.focus = None;
+                    }
                 }
                 if response.gained_focus() {
                     list.editing = Some(NoteEdit {
@@ -1441,6 +1446,30 @@ mod tests {
         run.reading();
         run.frame_held(vec![key(Key::N, Modifiers::NONE, true), text("n")]);
         assert_eq!(numbers(&run.app), [1], "a repeat is not a press");
+    }
+
+    /// A note opened by a click — a marker's flag on the graph — keeps the
+    /// focus: the click landed outside the note, which egui answers by
+    /// taking the focus back the frame the note asks for it.
+    #[test]
+    fn a_note_opened_by_a_click_keeps_the_focus() {
+        let mut run = Run::new();
+        run.frame(vec![key(Key::N, Modifiers::NONE, false), text("n")]);
+        let at = Pos2::new(790.0, 390.0);
+        let button = |pressed| Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        // The click lands as the note is asked for: a flag's click is
+        // answered in the frame it is read, before the log is drawn.
+        run.app.open_marker_note(1);
+        run.frame_held(vec![Event::PointerMoved(at), button(true), button(false)]);
+        run.frame(vec![]);
+        assert_eq!(run.note_focused(), Some(1));
+        run.frame(vec![text("load on")]);
+        assert_eq!(run.note(1), "load on");
     }
 
     /// Ctrl+N, a note, Enter: the note is kept and the keys are the app's
