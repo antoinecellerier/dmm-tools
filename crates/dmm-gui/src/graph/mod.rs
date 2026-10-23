@@ -357,26 +357,75 @@ pub const TIME_WINDOWS: &[(f64, &str)] = &[
 
 /// Real-time scrolling graph with minimap navigation.
 pub struct Graph {
+    // -- Recorded trace --
     history: VecDeque<DataPoint>,
     /// Points the history keeps before the oldest are dropped. Shared with
     /// the recording buffer through the Buffer size setting, and changed
     /// under a running session by [`Graph::set_max_points`].
     max_points: usize,
+    /// Samples pushed since the trace last restarted, so that a point keeps
+    /// an identity across eviction: `history[0]` is
+    /// `pushed_total - history.len()`. The level's bands are dropped by it.
+    pushed_total: u64,
+    /// Bumped whenever the history is replaced or restarts, when sequence
+    /// numbers start over on other readings: see [`ReadingsKey`].
+    history_epoch: u64,
+    origin: Option<Instant>,
     /// Sub-value traces, each point at its own frame's time: the ones in the
     /// plotted unit drawn, the others kept (see [`Graph::drawn`]).
     overlays: Vec<OverlaySeries>,
+    /// The interruption since the last plotted point, if any, which the
+    /// next one records as its break.
+    breaks: Breaks,
+    /// Stretches in which no frame of any kind arrived for longer than the gap
+    /// threshold in force at the time, oldest first, as (last frame before,
+    /// first frame after).
+    ///
+    /// A trace breaks for want of data only across one of these — not merely
+    /// because two of its own points are far apart. A meter that sends a
+    /// reading's parts in turn (the UT61E+'s AC+DC V, answering every 0.67 s)
+    /// spaces each part's points wider than the threshold while it never goes
+    /// quiet at all. Judged when the silence ends, against the interval the
+    /// readings were taken at: a sample interval changed later does not turn
+    /// the spacing of a slower stretch into gaps after the fact. There are
+    /// only as many as the meter had real silences.
+    silences: VecDeque<(Instant, Instant)>,
+    /// Timestamp of the newest frame of any kind: a point, a frame of
+    /// sub-values only, an overload or a word shown instead of a reading.
+    last_heard: Option<Instant>,
+    /// Gap detection threshold in seconds.
+    gap_threshold_secs: f64,
+    /// The threshold the silence since the last frame is judged by: the
+    /// largest in force since that frame, so the stretch across a change to a
+    /// shorter interval, which began at the slower one, is no gap.
+    silence_threshold_secs: f64,
+    /// Frames of sub-values only since the last point of the plotted series;
+    /// see [`Graph::stopped_for`].
+    main_missing_frames: u32,
+
+    // -- Plotted series --
     current_mode: Option<String>,
     current_unit: String,
+    /// Label of the series `history` was recorded from; `None` for the main
+    /// reading. Distinct from `selected_series`: this one only moves when a
+    /// sample actually arrives for the new choice.
+    current_series: Option<String>,
     /// The meter's name for its main reading, from the latest sample; `None`
     /// for [`MAIN_SERIES`].
     main_label: Option<&'static str>,
     /// The plotted series is a level, from the latest point: see
     /// [`PlotSample::levels`].
     levels: bool,
-    /// Label of the series `history` was recorded from; `None` for the main
-    /// reading. Distinct from `selected_series`: this one only moves when a
-    /// sample actually arrives for the new choice.
-    current_series: Option<String>,
+    /// Last `display_raw` string from the latest pushed measurement, kept
+    /// for the a11y plot summary so screen readers hear the same digits the
+    /// sighted user sees (e.g. "1.234 mV" instead of the raw f64 value
+    /// printed at fixed precision, which mis-scales auto-range readings).
+    last_display_raw: Option<String>,
+
+    // -- Series choice: the toolbar's Plot: and Show: groups --
+    /// Sub-values the meter is sending, with their resolved units, in the
+    /// order first offered. Drives the toolbar's selector.
+    series_options: Vec<SeriesOption>,
     /// Which series the toolbar is asking for. Session-only — a selection is
     /// about the meter's current mode, so persisting it across restarts would
     /// silently plot a sub-value the next session may not even have. Dropped
@@ -394,81 +443,22 @@ pub struct Graph {
     /// remembered labels can name another mode's main reading: a UT181A
     /// hiding its T2 sub-value must still draw T2 where T2 is the main one.
     main_hidden: bool,
-    /// A **Show:** chip the user clicked since the last call, with whether
-    /// it is now hidden — see [`Graph::take_trace_choice`].
-    trace_choice: Option<(String, bool)>,
     /// Sub-value lines drawn solid rather than dashed and dotted, as the
     /// user chose in Settings → Graph lines.
     pub(crate) solid_lines: bool,
-    /// How many units' axes fit the graph's width, from the last frame: see
-    /// [`Graph::axis_units`].
-    axis_room: usize,
-    /// Sub-values the meter is sending, with their resolved units, in the
-    /// order first offered. Drives the toolbar's selector.
-    series_options: Vec<SeriesOption>,
-    /// Last `display_raw` string from the latest pushed measurement, kept
-    /// for the a11y plot summary so screen readers hear the same digits the
-    /// sighted user sees (e.g. "1.234 mV" instead of the raw f64 value
-    /// printed at fixed precision, which mis-scales auto-range readings).
-    last_display_raw: Option<String>,
-    origin: Option<Instant>,
+
+    // -- View --
     /// Time window width in seconds for the main view.
     pub time_window_secs: f64,
     /// When true, main graph auto-scrolls to latest data.
     pub live: bool,
     /// User-controlled view center (seconds from origin). Used when not live.
     view_center: f64,
-    /// Gap detection threshold in seconds.
-    gap_threshold_secs: f64,
-    /// The threshold the silence since the last frame is judged by: the
-    /// largest in force since that frame, so the stretch across a change to a
-    /// shorter interval, which began at the slower one, is no gap.
-    silence_threshold_secs: f64,
-    /// Stretches in which no frame of any kind arrived for longer than the gap
-    /// threshold in force at the time, oldest first, as (last frame before,
-    /// first frame after).
-    ///
-    /// A trace breaks for want of data only across one of these — not merely
-    /// because two of its own points are far apart. A meter that sends a
-    /// reading's parts in turn (the UT61E+'s AC+DC V, answering every 0.67 s)
-    /// spaces each part's points wider than the threshold while it never goes
-    /// quiet at all. Judged when the silence ends, against the interval the
-    /// readings were taken at: a sample interval changed later does not turn
-    /// the spacing of a slower stretch into gaps after the fact. There are
-    /// only as many as the meter had real silences.
-    silences: VecDeque<(Instant, Instant)>,
-    /// Timestamp of the newest frame of any kind: a point, a frame of
-    /// sub-values only, an overload or a word shown instead of a reading.
-    last_heard: Option<Instant>,
-    /// Frames of sub-values only since the last point of the plotted series;
-    /// see [`Graph::stopped_for`].
-    main_missing_frames: u32,
-    /// The interruption since the last plotted point, if any, which the
-    /// next one records as its break.
-    breaks: Breaks,
     /// Fixed Y ranges, while **Y:Fixed** is on.
     y_axis: YAxis,
-    /// This frame's right axes, by unit, for a box zoom to pin each to its
-    /// share of the box: see [`Graph::apply_bbox_zoom`].
-    axis_maps: Vec<(String, AxisMap)>,
-    /// The main plot's area at the last frame, where the marker flags are
-    /// placed while the time labels they cover are chosen.
-    plot_rect: Option<egui::Rect>,
-    /// The main plot's transform at the last frame, which the histogram
-    /// strip reads its bar heights from.
-    plot_transform: Option<egui_plot::PlotTransform>,
-    /// Show the histogram pane.
-    pub show_histogram: bool,
-    /// Where the pane goes this frame, `None` while it is off, the main
-    /// trace is hidden or the window is too short: see [`histogram::place`].
-    histogram_place: Option<histogram::Placement>,
-    /// This frame's bins, cut by `show_main` over its Y range.
-    histogram: Option<BinnedHistogram>,
-    /// The strip's width and the band's height as last dragged. The app sets
-    /// them from its settings at start, and saves them when
-    /// [`Graph::take_histogram_resize`] reports a drag.
-    pub(crate) histogram_sizes: (f32, f32),
-    histogram_resized: bool,
+    pub(crate) cursors: MeasureCursors,
+
+    // -- Guide lines --
     /// Show mean line overlay.
     pub show_mean: bool,
     /// Show min/max envelope band.
@@ -485,45 +475,74 @@ pub struct Graph {
     /// Set when the lines are switched on, by the chip or by its key: the
     /// field appears empty, and nothing is drawn until a value is typed.
     focus_ref_field: bool,
-    pub(crate) cursors: MeasureCursors,
+
+    // -- Histogram pane --
+    /// Show the histogram pane.
+    pub show_histogram: bool,
+    /// The strip's width and the band's height as last dragged. The app sets
+    /// them from its settings at start, and saves them when
+    /// [`Graph::take_histogram_resize`] reports a drag.
+    pub(crate) histogram_sizes: (f32, f32),
+    /// Where the pane goes this frame, `None` while it is off, the main
+    /// trace is hidden or the window is too short: see [`histogram::place`].
+    histogram_place: Option<histogram::Placement>,
+
+    // -- Carried from the last frame --
+    /// How many units' axes fit the graph's width, from the last frame: see
+    /// [`Graph::axis_units`].
+    axis_room: usize,
+    /// This frame's right axes, by unit, for a box zoom to pin each to its
+    /// share of the box: see [`Graph::apply_bbox_zoom`].
+    axis_maps: Vec<(String, AxisMap)>,
+    /// The main plot's area at the last frame, where the marker flags are
+    /// placed while the time labels they cover are chosen.
+    plot_rect: Option<egui::Rect>,
+    /// The main plot's transform at the last frame, which the histogram
+    /// strip reads its bar heights from.
+    plot_transform: Option<egui_plot::PlotTransform>,
+    /// Where the dashed and dotted lines' patterns stand, so they move with
+    /// the data: see [`pattern`].
+    dash_phases: pattern::DashPhases,
+
+    // -- Caches, redone when what they cover changes --
+    /// The cursor readout's figures and the visible window's, computed
+    /// again only when the readings they cover change.
+    cursor_figures: Option<RangeFigures>,
+    visible_figures: Option<RangeFigures>,
+    /// This frame's bins, cut by `show_main` over its Y range.
+    histogram: Option<BinnedHistogram>,
     /// The minimap's whole-session trace, bucketed at whatever width its
     /// strip last asked for. `None` until the strip first draws, and again
     /// whenever the buckets stop meaning what they did — see `clear` and
     /// `set_sample_interval_ms`.
     minimap_level: Option<MinimapLevel>,
-    /// Samples pushed since the trace last restarted, so that a point keeps
-    /// an identity across eviction: `history[0]` is
-    /// `pushed_total - history.len()`. The level's bands are dropped by it.
-    pushed_total: u64,
-    /// Bumped whenever the history is replaced or restarts, when sequence
-    /// numbers start over on other readings: see [`ReadingsKey`].
-    history_epoch: u64,
-    /// The cursor readout's figures and the visible window's, computed
-    /// again only when the readings they cover change.
-    cursor_figures: Option<RangeFigures>,
-    visible_figures: Option<RangeFigures>,
-    /// Current minimap drag state.
-    minimap_drag: MinimapDrag,
-    /// The Shift+drag box zoom in progress, if any.
-    box_zoom: Option<BoxZoom>,
     /// Cached AccessKit label for the plot — rebuilt only when state changes.
     a11y_label: String,
     /// Signature of the state used to build `a11y_label`, for change detection.
     a11y_label_sig: u64,
-    /// The marker whose flag was clicked this frame, for the app to open its
-    /// note — see [`Graph::take_clicked_marker`].
-    clicked_marker: Option<u32>,
+
+    // -- Gestures in progress --
+    /// Current minimap drag state.
+    minimap_drag: MinimapDrag,
+    /// The Shift+drag box zoom in progress, if any.
+    box_zoom: Option<BoxZoom>,
     /// The reading nearest the right-click that opened the plot's menu, and
     /// its value: what "Add marker here" marks, fixed as the menu opens.
     menu_reading: Option<(Instant, f64)>,
+    /// Put the focus on the menu's entry again next frame.
+    menu_focus_pending: bool,
+
+    // -- Requests for the app, collected by the take_* methods --
+    /// A **Show:** chip the user clicked since the last call, with whether
+    /// it is now hidden — see [`Graph::take_trace_choice`].
+    trace_choice: Option<(String, bool)>,
+    /// The marker whose flag was clicked this frame, for the app to open its
+    /// note — see [`Graph::take_clicked_marker`].
+    clicked_marker: Option<u32>,
     /// The reading "Add marker here" was picked for — see
     /// [`Graph::take_mark_request`].
     mark_request: Option<(Instant, f64)>,
-    /// Put the focus on the menu's entry again next frame.
-    menu_focus_pending: bool,
-    /// Where the dashed and dotted lines' patterns stand, so they move with
-    /// the data: see [`pattern`].
-    dash_phases: pattern::DashPhases,
+    histogram_resized: bool,
 }
 
 impl Graph {
@@ -534,39 +553,32 @@ impl Graph {
             // handful of times over an afternoon instead.
             history: VecDeque::with_capacity(1024),
             max_points: DEFAULT_MAX_SAMPLES,
+            pushed_total: 0,
+            history_epoch: 0,
+            origin: None,
             overlays: Vec::new(),
+            breaks: Breaks::default(),
+            silences: VecDeque::new(),
+            last_heard: None,
+            gap_threshold_secs: GAP_MINIMUM_SECS,
+            silence_threshold_secs: GAP_MINIMUM_SECS,
+            main_missing_frames: 0,
             current_mode: None,
             current_unit: String::new(),
             current_series: None,
             main_label: None,
             levels: false,
+            last_display_raw: None,
+            series_options: Vec::new(),
             selected_series: None,
             hidden_overlays: HashSet::new(),
             main_hidden: false,
-            trace_choice: None,
             solid_lines: false,
-            axis_room: MAX_AXES,
-            series_options: Vec::new(),
-            last_display_raw: None,
-            origin: None,
             time_window_secs: 60.0,
             live: true,
             view_center: 0.0,
-            gap_threshold_secs: GAP_MINIMUM_SECS,
-            silence_threshold_secs: GAP_MINIMUM_SECS,
-            silences: VecDeque::new(),
-            last_heard: None,
-            main_missing_frames: 0,
-            breaks: Breaks::default(),
             y_axis: YAxis::default(),
-            axis_maps: Vec::new(),
-            plot_rect: None,
-            plot_transform: None,
-            show_histogram: false,
-            histogram_place: None,
-            histogram: None,
-            histogram_sizes: (histogram::STRIP_WIDTH, histogram::BAND_HEIGHT),
-            histogram_resized: false,
+            cursors: MeasureCursors::default(),
             show_mean: false,
             show_envelope: false,
             envelope_window: NumberField::new("1", 1.0),
@@ -574,21 +586,28 @@ impl Graph {
             show_crossings: true,
             ref_lines: NumberListField::default(),
             focus_ref_field: false,
-            cursors: MeasureCursors::default(),
-            minimap_level: None,
-            pushed_total: 0,
-            history_epoch: 0,
+            show_histogram: false,
+            histogram_sizes: (histogram::STRIP_WIDTH, histogram::BAND_HEIGHT),
+            histogram_place: None,
+            axis_room: MAX_AXES,
+            axis_maps: Vec::new(),
+            plot_rect: None,
+            plot_transform: None,
+            dash_phases: pattern::DashPhases::default(),
             cursor_figures: None,
             visible_figures: None,
-            minimap_drag: MinimapDrag::None,
-            box_zoom: None,
+            histogram: None,
+            minimap_level: None,
             a11y_label: String::new(),
             a11y_label_sig: 0,
-            clicked_marker: None,
+            minimap_drag: MinimapDrag::None,
+            box_zoom: None,
             menu_reading: None,
-            mark_request: None,
             menu_focus_pending: false,
-            dash_phases: pattern::DashPhases::default(),
+            trace_choice: None,
+            clicked_marker: None,
+            mark_request: None,
+            histogram_resized: false,
         }
     }
 
