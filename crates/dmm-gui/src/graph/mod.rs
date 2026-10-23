@@ -33,7 +33,7 @@ mod toolbar;
 mod view;
 mod view_state;
 
-pub(crate) use limits::WatchedLimits;
+pub(crate) use limits::{LimitSide, WatchedLimits};
 pub(crate) use menu::MenuAction;
 pub(crate) use view_state::ViewState;
 

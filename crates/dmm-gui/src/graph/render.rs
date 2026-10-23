@@ -731,7 +731,7 @@ struct OverlayLabelData {
     show_ref: bool,
     ref_values: Vec<f64>,
     /// The alarm limits drawn, in the plotted unit, with their names.
-    limit_lines: Vec<(f64, &'static str)>,
+    limit_lines: Vec<(f64, super::LimitSide)>,
     cursors: MeasureCursors,
     cursor_va: Option<f64>,
     cursor_vb: Option<f64>,
@@ -1790,7 +1790,12 @@ impl Graph {
             taken,
         );
         self.handle_interaction(ui, &response.response, &response.transform);
-        self.show_context_menu(&response.response, &response.transform, &in_view);
+        self.show_context_menu(
+            &response.response,
+            &response.transform,
+            &in_view,
+            &overlay.limit_lines,
+        );
         self.update_plot_a11y_label(ui, response.response.id, y_min, y_max, in_view.len());
         // Draw a focus ring on the main plot body when it's keyboard-focused.
         // Note: egui_plot also allocates separate focusable responses for the
@@ -2101,11 +2106,10 @@ impl Graph {
             refs.dedup();
             levels.extend(refs.into_iter().map(|v| (v, level_text(v), data.ref_color)));
         }
-        levels.extend(
-            data.limit_lines
-                .iter()
-                .map(|&(v, name)| (v, format!("{name}: {}", level_text(v)), data.limit_color)),
-        );
+        levels.extend(data.limit_lines.iter().map(|&(v, side)| {
+            let name = side.name();
+            (v, format!("{name}: {}", level_text(v)), data.limit_color)
+        }));
         let mut levels: Vec<_> = levels
             .into_iter()
             .map(|(v, text, color)| (screen(data.view_max, v).y, layout(text, color), color))

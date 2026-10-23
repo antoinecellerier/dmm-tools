@@ -78,8 +78,9 @@ impl Hysteresis {
         })
     }
 
-    /// `"0.05"` or `"1%"` for a banner, `None` for the automatic band.
-    fn describe(&self) -> Option<String> {
+    /// `"0.05"` or `"1%"` for a banner, `None` for the automatic band: the
+    /// text [`Hysteresis::parse`] reads back to this band.
+    pub fn describe(&self) -> Option<String> {
         match self {
             Self::Auto => None,
             Self::Absolute(v) => Some(format!("{v}")),
@@ -169,6 +170,22 @@ impl Limits {
         Self {
             low: self.low.map(|v| v / mult),
             high: self.high.map(|v| v / mult),
+        }
+    }
+
+    /// The limits in base units for ones in `unit`, as [`Limits::in_unit`]
+    /// gives them back: `mV` turns 5000 into 5. Rounded to 15 significant
+    /// digits, past which the scaling only adds noise: 3.29 mV is 0.00329,
+    /// not 0.0032900000000000003.
+    pub fn from_unit(&self, unit: &str, scaled: bool) -> Self {
+        let mult = if scaled { 1.0 } else { si_prefix(unit).1 };
+        let base = |v: f64| {
+            let v = v * mult;
+            format!("{v:.14e}").parse().unwrap_or(v)
+        };
+        Self {
+            low: self.low.map(base),
+            high: self.high.map(base),
         }
     }
 
@@ -718,5 +735,18 @@ mod tests {
             l.describe(Hysteresis::Percent(1.0)),
             "above 5 or below 0.5, hysteresis 1%"
         );
+    }
+
+    #[test]
+    fn limits_convert_back_from_the_shown_unit() {
+        let shown = Limits::check(Some(3.29), Some(4321.0)).unwrap();
+        let base = shown.from_unit("mV", false);
+        assert_eq!((base.low, base.high), (Some(0.00329), Some(4.321)));
+        let kohm = Limits::check(None, Some(4.7))
+            .unwrap()
+            .from_unit("kΩ", false);
+        assert_eq!(kohm.high, Some(4700.0));
+        assert_eq!(shown.from_unit("mV", true), shown);
+        assert_eq!(base.in_unit("mV", false).from_unit("mV", false), base);
     }
 }

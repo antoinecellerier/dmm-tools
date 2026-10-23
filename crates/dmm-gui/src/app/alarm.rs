@@ -5,7 +5,8 @@
 //! With the reading rather than on the graph's toolbar: the alarm judges the
 //! main reading whatever the graph plots, its verdict shows on the reading
 //! and in Statistics, and an unattended run in the big meter has no graph.
-//! The graph only draws the limits it is handed (`watched_limits`).
+//! The graph draws the limits it is handed (`watched_limits`), and its menu
+//! sets or removes one at a height (`set_limit_from_graph`).
 //!
 //! The rules — base units, the quantity bound, what counts as a breach — are
 //! `dmm_lib::alarm`'s, shared with `dmm-cli read --alarm-*`. Session-only,
@@ -18,7 +19,7 @@ use super::controls::remote::{SplitChip, row_field};
 use super::marker_list::log_line;
 use super::toast::Toast;
 use crate::display::ReadingState;
-use crate::graph::WatchedLimits;
+use crate::graph::{LimitSide, WatchedLimits};
 use dmm_lib::alarm::{Alarm, Breach, Hysteresis, HysteresisError, LimitError, Limits};
 use dmm_lib::measurement::Measurement;
 use eframe::egui::{self, RichText, Ui};
@@ -93,11 +94,15 @@ fn parse_limits(low: &str, high: &str, band: &str) -> Result<(Limits, Hysteresis
             "Invalid hysteresis: must be zero or more".to_string()
         }
     })?;
-    let band = band.check(&limits).map_err(|_| {
-        "Invalid hysteresis: a percentage of a limit of 0 is 0; type a value instead".to_string()
-    })?;
+    let band = band
+        .check(&limits)
+        .map_err(|_| PERCENT_OF_ZERO.to_string())?;
     Ok((limits, band))
 }
+
+/// Why a percentage band can't go with the limits.
+const PERCENT_OF_ZERO: &str =
+    "Invalid hysteresis: a percentage of a limit of 0 is 0; type a value instead";
 
 /// Tooltip on the hysteresis field.
 const BAND_HOVER: &str = "How far back the reading must come before a limit alarms again: a value, or a percentage such as 1%. Blank: automatic";
@@ -295,6 +300,53 @@ impl App {
         }
     }
 
+    /// Set one limit from the graph's menu at `value`, in the plotted unit,
+    /// or remove it on `None`. The other limit and the band stay as the
+    /// alarm in force has them, unless that alarm is idle on another
+    /// quantity, whose limits mean nothing here: a fresh alarm starts. While
+    /// an alarm is in force, text typed in the row and not applied stays out
+    /// of it; with the alarm off, the row's limits and band are the ones Off
+    /// kept for the next Apply, and stay if they make a pair. The row is then
+    /// written with the limits and band in force.
+    pub(super) fn set_limit_from_graph(&mut self, side: LimitSide, value: Option<f64>) {
+        let fresh = (Limits::default(), Hysteresis::Auto);
+        let (current, band) = match &self.alarm {
+            Some(a) if a.idle().is_none() => (a.limits(), a.hysteresis()),
+            Some(_) => fresh,
+            None => {
+                let editor = &self.alarm_editor;
+                parse_limits(&editor.low, &editor.high, &editor.band).unwrap_or(fresh)
+            }
+        };
+        let shown = Limits {
+            low: value,
+            high: None,
+        };
+        let value = shown
+            .from_unit(self.graph.plotted_unit(), self.alarm_scaled())
+            .low;
+        let (low, high) = match side {
+            LimitSide::Low => (value, current.high),
+            LimitSide::High => (current.low, value),
+        };
+        let limits = match Limits::check(low, high) {
+            Ok(limits) => limits,
+            Err(e) => {
+                self.toast = Some(Toast::error(limit_message(e)));
+                return;
+            }
+        };
+        let Ok(band) = band.check(&limits) else {
+            self.toast = Some(Toast::error(PERCENT_OF_ZERO));
+            return;
+        };
+        self.set_limits(limits, band);
+        let draft = |v: Option<f64>| v.map_or_else(String::new, |v| v.to_string());
+        self.alarm_editor.low = draft(limits.low);
+        self.alarm_editor.high = draft(limits.high);
+        self.alarm_editor.band = band.describe().unwrap_or_default();
+    }
+
     /// Judge one reading, as shown, against the limits; `scaled` says
     /// whether it went through a software transform — the live session's,
     /// or none for a reading imported as the file holds it.
@@ -343,6 +395,7 @@ impl App {
 mod tests {
     use super::parse_limits;
     use crate::app::App;
+    use crate::graph::LimitSide;
     use crate::settings::Settings;
     use dmm_lib::alarm::{Hysteresis, Limits};
     use dmm_lib::flags::StatusFlags;
@@ -459,6 +512,94 @@ mod tests {
         assert_eq!(app.reading_state().alarm, Some(dmm_lib::alarm::Zone::Above));
         assert!(app.check_imported(&reading(&app, 4.0, "V")).is_none());
         assert!(app.check_imported(&reading(&app, 6.0, "V")).is_some());
+    }
+
+    /// The graph's menu sets a limit at a height in the plotted unit, keeps
+    /// the other limit and the band, and writes the row to match.
+    #[test]
+    fn the_graph_sets_a_limit_in_the_plotted_unit() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::manual());
+        app.set_limits(
+            Limits::check(Some(1.0), None).unwrap(),
+            Hysteresis::Percent(1.0),
+        );
+        let m = reading(&app, 4900.0, "mV");
+        app.capture
+            .ingest(m, &app.transform, &mut app.graph, &app.connection);
+        app.set_limit_from_graph(LimitSide::High, Some(3290.0));
+        let alarm = app.alarm.as_ref().expect("an alarm");
+        assert_eq!(
+            alarm.limits(),
+            Limits::check(Some(1.0), Some(3.29)).unwrap()
+        );
+        assert_eq!(alarm.hysteresis(), Hysteresis::Percent(1.0));
+        assert_eq!(
+            (
+                app.alarm_editor.low.as_str(),
+                app.alarm_editor.high.as_str()
+            ),
+            ("1", "3.29")
+        );
+        assert_eq!(app.alarm_editor.band, "1%");
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some("Alarm on: above 3.29 or below 1, hysteresis 1%")
+        );
+
+        app.set_limit_from_graph(LimitSide::Low, None);
+        let alarm = app.alarm.as_ref().expect("still on");
+        assert_eq!(alarm.limits(), Limits::check(None, Some(3.29)).unwrap());
+        assert_eq!(app.alarm_editor.low, "");
+        app.set_limit_from_graph(LimitSide::High, None);
+        assert!(app.alarm.is_none(), "no limit left");
+    }
+
+    /// With the alarm off, the graph's menu keeps the row's other limit and
+    /// band, as Off kept them for the next Apply.
+    #[test]
+    fn the_graph_keeps_what_off_kept() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::manual());
+        app.alarm_editor.set_drafts("1", "5");
+        app.alarm_editor.band = "1%".to_string();
+        app.apply_alarm_fields();
+        app.set_limits(Limits::default(), Hysteresis::Auto);
+        app.set_limit_from_graph(LimitSide::High, Some(4.0));
+        let alarm = app.alarm.as_ref().expect("an alarm");
+        assert_eq!(alarm.limits(), Limits::check(Some(1.0), Some(4.0)).unwrap());
+        assert_eq!(alarm.hysteresis(), Hysteresis::Percent(1.0));
+        assert_eq!(app.alarm_editor.low, "1");
+        assert_eq!(app.alarm_editor.band, "1%");
+    }
+
+    /// A low at or above the high in force is refused with the row's words.
+    #[test]
+    fn the_graph_cannot_cross_the_limits() {
+        let mut app = app_with_high_limit(5.0);
+        app.set_limit_from_graph(LimitSide::Low, Some(6.0));
+        assert_eq!(app.alarm.as_ref().unwrap().limits().low, None);
+        let toast = app.toast.as_ref().expect("a toast");
+        assert!(toast.is_error);
+        assert!(
+            toast.message.contains("low limit must be below"),
+            "{}",
+            toast.message
+        );
+    }
+
+    /// An alarm idle on another quantity has limits in another unit: a limit
+    /// set from the graph starts afresh, on the automatic band, and the row
+    /// says so.
+    #[test]
+    fn the_graph_starts_afresh_over_an_idle_alarm() {
+        let mut app = app_with_high_limit(5.0);
+        assert!(app.check_alarm(&reading(&app, 4.0, "V"), false).is_none());
+        assert!(app.check_alarm(&reading(&app, 12.0, "kΩ"), false).is_none());
+        app.alarm_editor.band = "5%".to_string();
+        app.set_limit_from_graph(LimitSide::Low, Some(2.0));
+        let alarm = app.alarm.as_ref().expect("an alarm");
+        assert_eq!(alarm.limits(), Limits::check(Some(2.0), None).unwrap());
+        assert_eq!(alarm.hysteresis(), Hysteresis::Auto);
+        assert_eq!(app.alarm_editor.band, "");
     }
 
     /// Off stops the alarm and the graph's lines with it.

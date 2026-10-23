@@ -4654,11 +4654,13 @@ fn clicking_a_flag_reports_its_marker() {
 
 // ── The plot's right-click menu ─────────────────────────────────────────────
 
+/// The markers and alarm limits a menu test's graph is drawn with.
+type MenuScene = (crate::markers::Markers, Option<super::WatchedLimits>);
+
 thread_local! {
-    /// The markers the menu tests' graph is drawn with, set by the test that
-    /// needs them: the helpers below draw a frame each from several places.
-    static MENU_MARKERS: std::cell::RefCell<crate::markers::Markers> =
-        std::cell::RefCell::default();
+    /// What the menu tests' graph is drawn with, set by the test that needs
+    /// it: the helpers below draw a frame each from several places.
+    static MENU_SCENE: std::cell::RefCell<MenuScene> = std::cell::RefCell::default();
 }
 
 /// One frame of the main graph with AccessKit on; the tree it produced.
@@ -4673,8 +4675,9 @@ fn menu_frame(
         events,
         ..Default::default()
     };
-    let mut out = MENU_MARKERS
-        .with_borrow(|markers| ctx.run_ui(input, |ui| g.show_main(ui, &tc, markers, None)));
+    let mut out = MENU_SCENE.with_borrow(|(markers, limits)| {
+        ctx.run_ui(input, |ui| g.show_main(ui, &tc, markers, *limits))
+    });
     out.textures_delta.clear();
     out.platform_output
         .accesskit_update
@@ -4929,7 +4932,7 @@ fn the_menu_places_and_removes_the_cursors() {
 #[test]
 fn the_menu_deletes_the_marker_under_the_pointer() {
     let (mut g, t0) = graph_over(30);
-    MENU_MARKERS.set(marked(&[t0 + Duration::from_secs(25)]));
+    MENU_SCENE.set((marked(&[t0 + Duration::from_secs(25)]), None));
     // The 10 s window from 20 s to 30 s: the marker halfway across.
     let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(3.0, 0.0));
     pick_entry(&mut g, &ctx, |l| l == "Delete marker 1");
@@ -4945,6 +4948,60 @@ fn the_menu_deletes_the_marker_under_the_pointer() {
             .any(|l| l.starts_with("Delete marker")),
         "no marker under the pointer"
     );
+}
+
+/// The alarm's entries set a limit at the height clicked, and remove the
+/// limit under the pointer.
+#[test]
+fn the_menu_sets_and_removes_alarm_limits() {
+    let (mut g, _) = graph_over(30);
+    let ctx = open_menu(&mut g, |plot| plot.center());
+    pick_entry(&mut g, &ctx, |l| l.starts_with("Set alarm high at "));
+    let Some(super::MenuAction::SetLimit(super::LimitSide::High, v)) = g.take_menu_action() else {
+        panic!("a high limit");
+    };
+    let watched = super::WatchedLimits {
+        limits: dmm_lib::alarm::Limits::check(None, Some(v)).unwrap(),
+        scaled: false,
+    };
+    MENU_SCENE.set((crate::markers::Markers::default(), Some(watched)));
+    let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(0.0, 2.0));
+    pick_entry(&mut g, &ctx, |l| l == "Remove alarm high limit");
+    assert_eq!(
+        g.take_menu_action(),
+        Some(super::MenuAction::ClearLimit(super::LimitSide::High))
+    );
+}
+
+/// The alarm judges the main reading: no limit is set from a sub-value's
+/// trace, nor from a level's.
+#[test]
+fn no_alarm_entries_off_the_main_reading() {
+    let has_alarm = |g: &mut Graph| {
+        let ctx = open_menu(g, |plot| plot.center());
+        menu_entries(g, &ctx)
+            .iter()
+            .any(|l| l.starts_with("Set alarm"))
+    };
+    let (mut g, t0) = graph_over(30);
+    assert!(has_alarm(&mut g));
+    g.set_series_options(&[("AC", "V")], t0 + Duration::from_secs(30));
+    g.selected_series = Some("AC".to_string());
+    assert!(
+        has_alarm(&mut g),
+        "picked, but the trace is the main one till AC comes"
+    );
+    push_acdc_plotting_ac(&mut g, t0 + Duration::from_secs(31), None, Some(0.5));
+    assert!(!has_alarm(&mut g), "a sub-value");
+    g.selected_series = None;
+    assert!(
+        !has_alarm(&mut g),
+        "the main reading picked back, its trace not in yet"
+    );
+
+    let (mut g, _) = graph_over(30);
+    g.levels = true;
+    assert!(!has_alarm(&mut g), "a level");
 }
 
 /// The arrows walk the entries that can be picked and Enter picks one.

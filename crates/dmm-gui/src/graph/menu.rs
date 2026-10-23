@@ -1,13 +1,13 @@
 //! The plot's right-click menu: what can be done at the point clicked —
-//! mark or copy its reading, draw a reference line at its height, put a
-//! cursor on it — and the removal of what lies under the pointer: a marker,
-//! a reference line.
+//! mark or copy its reading, draw a reference line or set an alarm limit at
+//! its height, put a cursor on it — and the removal of what lies under the
+//! pointer: a marker, a reference line, a limit.
 
 use eframe::egui;
 use egui_plot::{PlotPoint, PlotTransform};
 use std::time::Instant;
 
-use super::Graph;
+use super::{Graph, LimitSide};
 use crate::markers::Marker;
 
 /// How near the pointer, in screen pixels, a line must pass for the menu to
@@ -35,6 +35,11 @@ pub(super) struct MenuPoint {
     ref_line: Option<f64>,
     /// The number of the marker whose line is under the pointer.
     marker: Option<u32>,
+    /// Whether the alarm's limits can be set here: the alarm judges the
+    /// main reading, so not while a sub-value is plotted, nor on a level.
+    limits_apply: bool,
+    /// The alarm limit whose line is under the pointer.
+    limit: Option<LimitSide>,
     /// The history the menu was opened over. Once restarted — a clear, a
     /// unit's decade step, another series plotted — the times and heights
     /// above are another trace's, and the menu closes unpicked.
@@ -51,6 +56,10 @@ pub(crate) enum MenuAction {
     Copy(Instant, f64),
     /// Delete the marker of that number.
     DeleteMarker(u32),
+    /// Set that alarm limit at that height, in the plotted unit.
+    SetLimit(LimitSide, f64),
+    /// Remove that alarm limit.
+    ClearLimit(LimitSide),
 }
 
 /// An entry picked, applied once the menu is drawn.
@@ -64,6 +73,8 @@ enum Pick {
     CursorA,
     CursorB,
     RemoveCursors,
+    SetLimit(LimitSide),
+    ClearLimit(LimitSide),
 }
 
 /// `y` rounded to the coarsest decimal step finer than `units_per_px`, the
@@ -90,6 +101,15 @@ pub(super) fn round_to_pixel(y: f64, units_per_px: f64, levels: bool) -> f64 {
         .map_or(rounded, |v| v + 0.0)
 }
 
+/// Of `lines`, each with its distance from the pointer in screen pixels,
+/// the nearest, if near enough to be the one under it.
+fn under_pointer<T>(lines: impl Iterator<Item = (T, f32)>) -> Option<T> {
+    lines
+        .filter(|&(_, distance)| distance <= NEAR_PX)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(line, _)| line)
+}
+
 /// `v` with `unit` after it, as the menu's entries name a height.
 fn with_unit(v: f64, unit: &str) -> String {
     if unit.is_empty() {
@@ -100,47 +120,49 @@ fn with_unit(v: f64, unit: &str) -> String {
 }
 
 impl Graph {
-    /// What the menu opened at `pos` offers, over the markers `in_view`.
+    /// What the menu opened at `pos` offers, over the markers `in_view` and
+    /// the alarm's `limit_lines`.
     fn menu_point(
         &self,
         pos: egui::Pos2,
         transform: &PlotTransform,
         in_view: &[(f64, &Marker)],
+        limit_lines: &[(f64, LimitSide)],
     ) -> MenuPoint {
         let at = transform.value_from_position(pos);
         let units_per_px =
             (at.y - transform.value_from_position(pos + egui::vec2(0.0, 1.0)).y).abs();
         let screen_y = |v: f64| transform.position_from_point(&PlotPoint::new(at.x, v)).y;
-        let ref_line = self
-            .show_ref_line
-            .then(|| self.ref_lines.values())
-            .into_iter()
-            .flatten()
-            .map(|&v| (v, (screen_y(v) - pos.y).abs()))
-            .filter(|&(_, distance)| distance <= NEAR_PX)
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(v, _)| v);
-        let marker = in_view
-            .iter()
-            .map(|&(x, m)| {
-                let screen_x = transform.position_from_point(&PlotPoint::new(x, at.y)).x;
-                (m.number, (screen_x - pos.x).abs())
-            })
-            .filter(|&(_, distance)| distance <= NEAR_PX)
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(number, _)| number);
+        let ref_values = self.show_ref_line.then(|| self.ref_lines.values());
+        let ref_line = under_pointer(
+            ref_values
+                .into_iter()
+                .flatten()
+                .map(|&v| (v, (screen_y(v) - pos.y).abs())),
+        );
+        let limit = under_pointer(
+            limit_lines
+                .iter()
+                .map(|&(v, side)| (side, (screen_y(v) - pos.y).abs())),
+        );
+        let marker = under_pointer(in_view.iter().map(|&(x, m)| {
+            let screen_x = transform.position_from_point(&PlotPoint::new(x, at.y)).x;
+            (m.number, (screen_x - pos.x).abs())
+        }));
         MenuPoint {
             reading: self.nearest_reading_in_view(at.x),
             y: round_to_pixel(at.y, units_per_px, self.levels),
             ref_line,
             marker,
+            limits_apply: !self.levels && self.current_series.is_none(),
+            limit,
             epoch: self.history_epoch,
         }
     }
 
     /// The plot's right-click menu, in groups: the reading, the reference
-    /// lines, the cursors. What each entry acts on is fixed as the menu
-    /// opens ([`MenuPoint`]).
+    /// lines, the cursors, the alarm. What each entry acts on is fixed as
+    /// the menu opens ([`MenuPoint`]).
     ///
     /// Keyboard handling follows the Export… menu: the first entry that can
     /// be picked takes the focus as the menu opens, the arrows move it, and
@@ -151,12 +173,13 @@ impl Graph {
         plot: &egui::Response,
         transform: &PlotTransform,
         in_view: &[(f64, &Marker)],
+        limit_lines: &[(f64, LimitSide)],
     ) {
         let ctx = plot.ctx.clone();
         if plot.secondary_clicked()
             && let Some(pos) = plot.interact_pointer_pos()
         {
-            self.menu = Some(self.menu_point(pos, transform, in_view));
+            self.menu = Some(self.menu_point(pos, transform, in_view, limit_lines));
         }
         let popup_id = plot_menu_id();
         let was_open = egui::Popup::is_id_open(&ctx, popup_id);
@@ -231,6 +254,23 @@ impl Graph {
             }
             if cursors_on {
                 entries.push((ui.button("Remove cursors"), Pick::RemoveCursors));
+            }
+            if menu.limits_apply {
+                ui.separator();
+                for side in [LimitSide::High, LimitSide::Low] {
+                    let name = side.name().to_lowercase();
+                    entries.push((
+                        ui.button(format!("Set alarm {name} at {}", with_unit(menu.y, &unit))),
+                        Pick::SetLimit(side),
+                    ));
+                }
+                if let Some(side) = menu.limit {
+                    let name = side.name().to_lowercase();
+                    entries.push((
+                        ui.button(format!("Remove alarm {name} limit")),
+                        Pick::ClearLimit(side),
+                    ));
+                }
             }
 
             let enabled: Vec<egui::Response> = entries
@@ -310,6 +350,8 @@ impl Graph {
             // Off, as the chip leaves them: kept on, the next click on the
             // plot would place A again.
             Pick::RemoveCursors => self.cursors.toggle(),
+            Pick::SetLimit(side) => self.menu_action = Some(MenuAction::SetLimit(side, menu.y)),
+            Pick::ClearLimit(side) => self.menu_action = Some(MenuAction::ClearLimit(side)),
         }
     }
 }

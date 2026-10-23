@@ -620,6 +620,8 @@ impl App {
             Some(MenuAction::DeleteMarker(number)) => {
                 self.markers.remove(number);
             }
+            Some(MenuAction::SetLimit(side, value)) => self.set_limit_from_graph(side, Some(value)),
+            Some(MenuAction::ClearLimit(side)) => self.set_limit_from_graph(side, None),
             None => {}
         }
         if let Some(sizes) = self.graph.take_histogram_resize() {

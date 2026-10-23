@@ -192,8 +192,9 @@ in a narrow graph.
   in place of any time label it covers; click a
   flag to write its note
 - Right-click the plot to mark or copy the reading nearest the click, draw a
-  reference line at the height clicked, or put cursor A or B on that reading;
-  over a marker or a reference line the menu also deletes it
+  reference line or set an [alarm](#alarm) limit at the height clicked, or put
+  cursor A or B on that reading; over a marker, a reference line or a limit
+  the menu also deletes it
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range
@@ -417,7 +418,9 @@ Its **▸** opens three fields:
 
 **Apply**, or Enter in a field, sets the limits; **Off** stops the alarm and
 keeps them for the next **Apply**. Clicking **Alarm** itself does the same in
-one click, on and off; with no limit typed, it opens the fields.
+one click, on and off; with no limit typed, it opens the fields. The graph's
+right-click menu sets either limit at the Y value clicked, or removes the one
+under the pointer, keeping the other. Setting limits restarts the alarm count.
 
 A reading that crosses a limit is marked, with the limit in the marker's
 note, and [Statistics](#statistics) counts the alarms. While
