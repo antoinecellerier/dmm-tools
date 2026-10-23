@@ -8,6 +8,16 @@ use egui_plot::PlotTransform;
 
 use super::{Graph, TIME_WINDOWS};
 
+/// A Shift+drag box zoom in progress, in screen pixels.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct BoxZoom {
+    /// Where the drag was pressed.
+    start: egui::Pos2,
+    /// The pointer's latest position, kept so the release frame still has an
+    /// endpoint even when hover_pos()/interact_pos() momentarily return None.
+    current: egui::Pos2,
+}
+
 /// The 10% breathing room the auto Y range leaves around the data.
 ///
 /// Shared with the minimap, which pads the extremes its bucket level already
@@ -447,9 +457,8 @@ impl Graph {
             ui.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down()));
         let escape_pressed = ui.input(|i| i.key_pressed(egui::Key::Escape));
 
-        if self.bbox_zoom_start_px.is_some() && escape_pressed {
-            self.bbox_zoom_start_px = None;
-            self.bbox_zoom_current_px = None;
+        if escape_pressed {
+            self.box_zoom = None;
         }
 
         // Start: Shift held and primary just went down over the plot. We
@@ -457,47 +466,48 @@ impl Graph {
         // also work from live mode, and we drop out of live on release.
         if shift_held
             && primary_pressed
-            && self.bbox_zoom_start_px.is_none()
+            && self.box_zoom.is_none()
             && let Some(pos) = plot_response.hover_pos()
         {
-            self.bbox_zoom_start_px = Some(pos);
-            self.bbox_zoom_current_px = Some(pos);
+            self.box_zoom = Some(BoxZoom {
+                start: pos,
+                current: pos,
+            });
         }
 
         // Track the pointer each frame while the drag is live. Fall back to
         // the global interact_pos when the cursor leaves the plot hover area.
-        if self.bbox_zoom_start_px.is_some()
+        if let Some(zoom) = &mut self.box_zoom
             && let Some(pos) = plot_response
                 .hover_pos()
                 .or_else(|| ui.input(|i| i.pointer.interact_pos()))
         {
-            self.bbox_zoom_current_px = Some(pos);
+            zoom.current = pos;
         }
 
         // Finish: primary released while a bbox-zoom drag was active.
-        if self.bbox_zoom_start_px.is_some() && !primary_down {
-            if let (Some(start), Some(end)) = (self.bbox_zoom_start_px, self.bbox_zoom_current_px) {
-                // Clamp to the plot rect so dragging outside the axes still
-                // produces a zoom bounded by what's visible.
-                let plot_rect = plot_response.rect;
-                let start_c = plot_rect.clamp(start);
-                let end_c = plot_rect.clamp(end);
-                let rect_px = egui::Rect::from_two_pos(start_c, end_c);
-                const MIN_DRAG_PX: f32 = 5.0;
-                if rect_px.width() >= MIN_DRAG_PX && rect_px.height() >= MIN_DRAG_PX {
-                    let p0 = transform.value_from_position(rect_px.left_top());
-                    let p1 = transform.value_from_position(rect_px.right_bottom());
-                    self.apply_bbox_zoom((p0.x, p0.y), (p1.x, p1.y));
-                }
+        if let Some(zoom) = self.box_zoom
+            && !primary_down
+        {
+            // Clamp to the plot rect so dragging outside the axes still
+            // produces a zoom bounded by what's visible.
+            let plot_rect = plot_response.rect;
+            let start_c = plot_rect.clamp(zoom.start);
+            let end_c = plot_rect.clamp(zoom.current);
+            let rect_px = egui::Rect::from_two_pos(start_c, end_c);
+            const MIN_DRAG_PX: f32 = 5.0;
+            if rect_px.width() >= MIN_DRAG_PX && rect_px.height() >= MIN_DRAG_PX {
+                let p0 = transform.value_from_position(rect_px.left_top());
+                let p1 = transform.value_from_position(rect_px.right_bottom());
+                self.apply_bbox_zoom((p0.x, p0.y), (p1.x, p1.y));
             }
-            self.bbox_zoom_start_px = None;
-            self.bbox_zoom_current_px = None;
+            self.box_zoom = None;
             return;
         }
 
         // Draw the rubber-band rectangle while the drag is in progress.
-        if let (Some(start), Some(current)) = (self.bbox_zoom_start_px, self.bbox_zoom_current_px) {
-            let rect = egui::Rect::from_two_pos(start, current);
+        if let Some(zoom) = self.box_zoom {
+            let rect = egui::Rect::from_two_pos(zoom.start, zoom.current);
             let visuals = ui.visuals();
             let fill = visuals.selection.bg_fill.linear_multiply(0.25);
             let stroke = egui::Stroke::new(1.0_f32, crate::a11y::focus_ring_color(visuals));

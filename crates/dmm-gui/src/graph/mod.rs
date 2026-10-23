@@ -51,6 +51,7 @@ use breaks::Breaks;
 use field::{NumberField, NumberListField};
 use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
+use view::BoxZoom;
 
 /// Maximum number of sub-value traces the graph keeps beside the plotted
 /// series, in its unit or another.
@@ -462,12 +463,8 @@ pub struct Graph {
     visible_figures: Option<RangeFigures>,
     /// Current minimap drag state.
     minimap_drag: MinimapDrag,
-    /// Press origin (screen pixels) when a Shift+drag bbox-zoom is in progress.
-    bbox_zoom_start_px: Option<egui::Pos2>,
-    /// Latest pointer position during an in-progress bbox-zoom drag. Tracked
-    /// separately so the release frame still has a valid endpoint even when
-    /// hover_pos()/interact_pos() momentarily return None.
-    bbox_zoom_current_px: Option<egui::Pos2>,
+    /// The Shift+drag box zoom in progress, if any.
+    box_zoom: Option<BoxZoom>,
     /// Cached AccessKit label for the plot — rebuilt only when state changes.
     a11y_label: String,
     /// Signature of the state used to build `a11y_label`, for change detection.
@@ -550,8 +547,7 @@ impl Graph {
             cursor_figures: None,
             visible_figures: None,
             minimap_drag: MinimapDrag::None,
-            bbox_zoom_start_px: None,
-            bbox_zoom_current_px: None,
+            box_zoom: None,
             a11y_label: String::new(),
             a11y_label_sig: 0,
             clicked_marker: None,
@@ -1028,8 +1024,7 @@ impl Graph {
         self.cursor_a = None;
         self.cursor_b = None;
         self.cursor_next_is_b = false;
-        self.bbox_zoom_start_px = None;
-        self.bbox_zoom_current_px = None;
+        self.box_zoom = None;
         self.minimap_level = None;
         self.restart_sequence();
         self.last_display_raw = None;
@@ -1301,8 +1296,7 @@ impl Graph {
         self.cursor_b = None;
         self.cursor_next_is_b = false;
         self.minimap_drag = MinimapDrag::None;
-        self.bbox_zoom_start_px = None;
-        self.bbox_zoom_current_px = None;
+        self.box_zoom = None;
         self.minimap_level = None;
         self.restart_sequence();
         self.dash_phases = pattern::DashPhases::default();

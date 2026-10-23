@@ -1294,7 +1294,7 @@ impl Graph {
         let main_name = self.plotted_series_name();
 
         let shift_held = ui.input(|i| i.modifiers.shift);
-        let bbox_active = self.bbox_zoom_start_px.is_some();
+        let bbox_active = self.box_zoom.is_some();
         // Plain drag-to-pan is allowed even in live mode — starting a drag
         // drops out of live (see handle_interaction). Bbox and shift-drag
         // always suppress the built-in pan.
