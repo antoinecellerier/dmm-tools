@@ -28,6 +28,7 @@
 - **Bluetooth no longer crashes Windows scans near some devices or hangs macOS connects**
 - **Dashed and dotted graph lines move with the data** — their pattern crawled along the curve as readings arrived or the view was dragged.
 - **The graph's line keeps its width over a long window** — where a reading repeats between display updates, stretches of it drew as a hairline.
+- **The mock's readings carry only the digits its display shows** — statistics and exports showed digits the simulated meter never displayed.
 
 ### Internal
 

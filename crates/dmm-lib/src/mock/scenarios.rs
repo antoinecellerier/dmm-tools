@@ -106,6 +106,11 @@ fn dcv_value(t: f64, duration: f64) -> MeasuredValue {
     MeasuredValue::Normal(5.0 + 3.0 * (t / duration * TAU).sin())
 }
 
+/// The AC V scenarios' period: no whole number of tenths of a second, so
+/// the mock, read about every 100 ms, lands on new points of the sine each
+/// cycle instead of the same fifty, which a histogram would show as a comb.
+const AC_DURATION_SECS: f64 = 10.37;
+
 fn acv_value(t: f64, duration: f64) -> MeasuredValue {
     // Two sine cycles per duration.
     MeasuredValue::Normal(120.0 + 2.0 * (t / duration * 2.0 * TAU).sin())
@@ -317,7 +322,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             unit: "V",
             range_label: "220V",
             range_max: 220.0,
-            duration_secs: 10.0,
+            duration_secs: AC_DURATION_SECS,
             value_fn: acv_value,
             aux: &[],
             main_label: None,
@@ -430,7 +435,7 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             unit: "V",
             range_label: "220V",
             range_max: 220.0,
-            duration_secs: 10.0,
+            duration_secs: AC_DURATION_SECS,
             value_fn: acv_value,
             aux: ACV_HZ_AUX,
             main_label: None,

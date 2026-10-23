@@ -465,7 +465,7 @@ impl MockProtocol {
         specs
             .iter()
             .map(|spec| {
-                let value = (spec.value_fn)(elapsed, duration);
+                let value = Self::as_displayed((spec.value_fn)(elapsed, duration));
                 AuxValue {
                     label: Cow::Borrowed(spec.label),
                     display_raw: Self::format_display(&value),
@@ -488,19 +488,35 @@ impl MockProtocol {
             .as_secs_f64()
     }
 
+    /// Decimals the display writes `v` with: enough to fill its 7 chars.
+    fn display_decimals(v: f64) -> usize {
+        let abs = v.abs();
+        if abs >= 100.0 {
+            2
+        } else if abs >= 10.0 {
+            3
+        } else {
+            4
+        }
+    }
+
+    /// `value` as the display shows it: a meter sends the reading it
+    /// displays, in steps of its last digit, never the waveform behind it.
+    fn as_displayed(value: MeasuredValue) -> MeasuredValue {
+        match value {
+            MeasuredValue::Normal(v) => {
+                let scale = 10f64.powi(Self::display_decimals(v) as i32);
+                MeasuredValue::Normal((v * scale).round() / scale)
+            }
+            other => other,
+        }
+    }
+
     /// Format a value as a 7-char right-justified display string matching real meter format.
     fn format_display(value: &MeasuredValue) -> Option<String> {
         match value {
             MeasuredValue::Normal(v) => {
-                // Format with enough decimals to fill 7 chars
-                let abs = v.abs();
-                let decimals = if abs >= 100.0 {
-                    2
-                } else if abs >= 10.0 {
-                    3
-                } else {
-                    4
-                };
+                let decimals = Self::display_decimals(*v);
                 let mut s = format!("{v:>7.*}", decimals);
                 // Clamp to exactly 7 chars — real meter display is always 7
                 s.truncate(7);
@@ -574,7 +590,7 @@ impl Protocol for MockProtocol {
             self.state.aux_elapsed(elapsed),
             scenario.duration_secs,
         );
-        let value = self.state.apply(raw);
+        let value = Self::as_displayed(self.state.apply(raw));
         let range_raw = self.reported_range();
 
         let measurement = Measurement {
@@ -1444,6 +1460,26 @@ mod tests {
         assert!(!m.flags.peak_max);
     }
 
+    /// A reading is what the display shows, in steps of its last digit, as
+    /// a meter sends it: never the waveform's value behind the digits.
+    #[test]
+    fn readings_carry_only_the_digits_shown() {
+        let mut dmm = open_mock_mode(MockMode::AcVHz).unwrap();
+        for _ in 0..5 {
+            let m = dmm.request_measurement().unwrap();
+            let shown: f64 = m.display_raw.as_deref().unwrap().trim().parse().unwrap();
+            assert!(
+                matches!(m.value, MeasuredValue::Normal(v) if v == shown),
+                "{shown}"
+            );
+            for a in &m.aux_values {
+                let shown: f64 = a.display_raw.as_deref().unwrap().trim().parse().unwrap();
+                let as_shown = matches!(a.value, MeasuredValue::Normal(v) if v == shown);
+                assert!(as_shown, "{}: {shown}", a.label);
+            }
+        }
+    }
+
     #[test]
     fn acv_hz_emits_frequency_and_period_sub_values() {
         let mut dmm = open_mock_mode(MockMode::AcVHz).unwrap();
@@ -1464,13 +1500,14 @@ mod tests {
                 a.label
             );
         }
-        // Period must be the reciprocal of the frequency it sits next to.
+        // Period must be the reciprocal of the frequency it sits next to, to
+        // the last digit each display shows.
         let (hz, ms) = match (&m.aux_values[0].value, &m.aux_values[1].value) {
             (MeasuredValue::Normal(hz), MeasuredValue::Normal(ms)) => (*hz, *ms),
             other => panic!("expected Normal sub-values, got {other:?}"),
         };
         assert!(
-            (ms - 1000.0 / hz).abs() < 1e-9,
+            (ms - 1000.0 / hz).abs() < 1e-3,
             "period {ms} ms should be 1000/{hz}"
         );
     }
