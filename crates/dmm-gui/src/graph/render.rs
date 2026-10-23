@@ -1790,7 +1790,7 @@ impl Graph {
             taken,
         );
         self.handle_interaction(ui, &response.response, &response.transform);
-        self.show_context_menu(&response.response, &response.transform);
+        self.show_context_menu(&response.response, &response.transform, &in_view);
         self.update_plot_a11y_label(ui, response.response.id, y_min, y_max, in_view.len());
         // Draw a focus ring on the main plot body when it's keyboard-focused.
         // Note: egui_plot also allocates separate focusable responses for the

@@ -193,7 +193,7 @@ in a narrow graph.
   flag to write its note
 - Right-click the plot to mark or copy the reading nearest the click, draw a
   reference line at the height clicked, or put cursor A or B on that reading;
-  over a reference line the menu also removes it
+  over a marker or a reference line the menu also deletes it
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range
@@ -333,7 +333,8 @@ A thin strip below the main plot showing the full capture history.
   the cursor in its note, and clicking a marker's flag on the graph opens its
   note. To mark an earlier reading, hover its row and click the `+` that
   appears, or use the plot's right-click menu. A marker's row ends with its
-  number, note and `×` to delete it; `Enter` keeps a note, `Esc` puts back
+  number, note and `×` to delete it (or right-click its line on the plot);
+  `Enter` keeps a note, `Esc` puts back
   what it said before. Pressing the number, or clicking or typing in the
   note, scrolls the graph to the marker
 - The graph's readings and a recording each hold up to the configured

@@ -4654,6 +4654,13 @@ fn clicking_a_flag_reports_its_marker() {
 
 // ── The plot's right-click menu ─────────────────────────────────────────────
 
+thread_local! {
+    /// The markers the menu tests' graph is drawn with, set by the test that
+    /// needs them: the helpers below draw a frame each from several places.
+    static MENU_MARKERS: std::cell::RefCell<crate::markers::Markers> =
+        std::cell::RefCell::default();
+}
+
 /// One frame of the main graph with AccessKit on; the tree it produced.
 fn menu_frame(
     g: &mut Graph,
@@ -4666,9 +4673,8 @@ fn menu_frame(
         events,
         ..Default::default()
     };
-    let mut out = ctx.run_ui(input, |ui| {
-        g.show_main(ui, &tc, &crate::markers::Markers::default(), None)
-    });
+    let mut out = MENU_MARKERS
+        .with_borrow(|markers| ctx.run_ui(input, |ui| g.show_main(ui, &tc, markers, None)));
     out.textures_delta.clear();
     out.platform_output
         .accesskit_update
@@ -4917,6 +4923,28 @@ fn the_menu_places_and_removes_the_cursors() {
     pick_entry(&mut g, &ctx, |l| l == "Remove cursors");
     assert!(!g.cursors.active);
     assert_eq!((g.cursors.a, g.cursors.b), (None, None));
+}
+
+/// "Delete marker" is offered over a marker's line, and only there.
+#[test]
+fn the_menu_deletes_the_marker_under_the_pointer() {
+    let (mut g, t0) = graph_over(30);
+    MENU_MARKERS.set(marked(&[t0 + Duration::from_secs(25)]));
+    // The 10 s window from 20 s to 30 s: the marker halfway across.
+    let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(3.0, 0.0));
+    pick_entry(&mut g, &ctx, |l| l == "Delete marker 1");
+    assert_eq!(
+        g.take_menu_action(),
+        Some(super::MenuAction::DeleteMarker(1))
+    );
+
+    let ctx = open_menu(&mut g, |plot| plot.center() + egui::vec2(20.0, 0.0));
+    assert!(
+        !menu_entries(&mut g, &ctx)
+            .iter()
+            .any(|l| l.starts_with("Delete marker")),
+        "no marker under the pointer"
+    );
 }
 
 /// The arrows walk the entries that can be picked and Enter picks one.

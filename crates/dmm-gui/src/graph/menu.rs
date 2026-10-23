@@ -1,12 +1,14 @@
 //! The plot's right-click menu: what can be done at the point clicked —
 //! mark or copy its reading, draw a reference line at its height, put a
-//! cursor on it — and the removal of what lies under the pointer.
+//! cursor on it — and the removal of what lies under the pointer: a marker,
+//! a reference line.
 
 use eframe::egui;
 use egui_plot::{PlotPoint, PlotTransform};
 use std::time::Instant;
 
 use super::Graph;
+use crate::markers::Marker;
 
 /// How near the pointer, in screen pixels, a line must pass for the menu to
 /// offer its removal.
@@ -31,6 +33,8 @@ pub(super) struct MenuPoint {
     y: f64,
     /// The reference line under the pointer.
     ref_line: Option<f64>,
+    /// The number of the marker whose line is under the pointer.
+    marker: Option<u32>,
     /// The history the menu was opened over. Once restarted — a clear, a
     /// unit's decade step, another series plotted — the times and heights
     /// above are another trace's, and the menu closes unpicked.
@@ -45,6 +49,8 @@ pub(crate) enum MenuAction {
     Mark(Instant, f64),
     /// Put that reading on the clipboard.
     Copy(Instant, f64),
+    /// Delete the marker of that number.
+    DeleteMarker(u32),
 }
 
 /// An entry picked, applied once the menu is drawn.
@@ -52,6 +58,7 @@ pub(crate) enum MenuAction {
 enum Pick {
     Mark,
     Copy,
+    DeleteMarker(u32),
     AddRefLine,
     RemoveRefLine(f64),
     CursorA,
@@ -93,8 +100,13 @@ fn with_unit(v: f64, unit: &str) -> String {
 }
 
 impl Graph {
-    /// What the menu opened at `pos` offers.
-    fn menu_point(&self, pos: egui::Pos2, transform: &PlotTransform) -> MenuPoint {
+    /// What the menu opened at `pos` offers, over the markers `in_view`.
+    fn menu_point(
+        &self,
+        pos: egui::Pos2,
+        transform: &PlotTransform,
+        in_view: &[(f64, &Marker)],
+    ) -> MenuPoint {
         let at = transform.value_from_position(pos);
         let units_per_px =
             (at.y - transform.value_from_position(pos + egui::vec2(0.0, 1.0)).y).abs();
@@ -108,10 +120,20 @@ impl Graph {
             .filter(|&(_, distance)| distance <= NEAR_PX)
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(v, _)| v);
+        let marker = in_view
+            .iter()
+            .map(|&(x, m)| {
+                let screen_x = transform.position_from_point(&PlotPoint::new(x, at.y)).x;
+                (m.number, (screen_x - pos.x).abs())
+            })
+            .filter(|&(_, distance)| distance <= NEAR_PX)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(number, _)| number);
         MenuPoint {
             reading: self.nearest_reading_in_view(at.x),
             y: round_to_pixel(at.y, units_per_px, self.levels),
             ref_line,
+            marker,
             epoch: self.history_epoch,
         }
     }
@@ -124,12 +146,17 @@ impl Graph {
     /// be picked takes the focus as the menu opens, the arrows move it, and
     /// Tab or Esc close the menu. The focus then goes nowhere rather than to
     /// the plot, where it would turn the graph's keys off.
-    pub(super) fn show_context_menu(&mut self, plot: &egui::Response, transform: &PlotTransform) {
+    pub(super) fn show_context_menu(
+        &mut self,
+        plot: &egui::Response,
+        transform: &PlotTransform,
+        in_view: &[(f64, &Marker)],
+    ) {
         let ctx = plot.ctx.clone();
         if plot.secondary_clicked()
             && let Some(pos) = plot.interact_pointer_pos()
         {
-            self.menu = Some(self.menu_point(pos, transform));
+            self.menu = Some(self.menu_point(pos, transform, in_view));
         }
         let popup_id = plot_menu_id();
         let was_open = egui::Popup::is_id_open(&ctx, popup_id);
@@ -171,6 +198,12 @@ impl Graph {
                     .on_disabled_hover_text("No reading in view to copy"),
                 Pick::Copy,
             ));
+            if let Some(number) = menu.marker {
+                entries.push((
+                    ui.button(format!("Delete marker {number}")),
+                    Pick::DeleteMarker(number),
+                ));
+            }
             ui.separator();
             entries.push((
                 ui.button(format!(
@@ -261,6 +294,7 @@ impl Graph {
             Pick::Copy => {
                 self.menu_action = menu.reading.map(|(at, v)| MenuAction::Copy(at, v));
             }
+            Pick::DeleteMarker(number) => self.menu_action = Some(MenuAction::DeleteMarker(number)),
             Pick::AddRefLine => self.add_ref_line(menu.y),
             Pick::RemoveRefLine(v) => self.remove_ref_line(v),
             Pick::CursorA => {

@@ -617,6 +617,9 @@ impl App {
         match self.graph.take_menu_action() {
             Some(MenuAction::Mark(at, value)) => self.mark_from_graph(at, value),
             Some(MenuAction::Copy(at, value)) => self.copy_reading(ctx, at, value),
+            Some(MenuAction::DeleteMarker(number)) => {
+                self.markers.remove(number);
+            }
             None => {}
         }
         if let Some(sizes) = self.graph.take_histogram_resize() {
