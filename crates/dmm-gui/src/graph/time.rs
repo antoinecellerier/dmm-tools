@@ -1,4 +1,54 @@
-//! Formatting seconds-from-origin values for the time axis and the minimap.
+//! Formatting seconds-from-origin values for the time axis and the minimap,
+//! and the steps the time axis is gridded in.
+
+use egui_plot::{GridInput, GridMark};
+
+/// Points between the time axis's labels, at least: egui_plot shows labels
+/// from 60 points apart and at full strength from 80.
+const TIME_LABEL_SPACING: f64 = 80.0;
+
+/// The least spacing the main plot draws gridlines at, which egui_plot
+/// hands a grid spacer as `base_step_size`: the plot sets it from here.
+pub(super) const MIN_GRID_SPACING: f32 = 8.0;
+
+/// Steps a time axis is gridded and labelled in, in seconds: 1, 2 and 5
+/// times the decades under a second, then the steps a clock is read in.
+fn clock_steps() -> impl Iterator<Item = f64> {
+    (-3..0)
+        .flat_map(|e| [1.0, 2.0, 5.0].map(|m| m * 10f64.powi(e)))
+        .chain([
+            1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0,
+            7200.0, 10800.0, 21600.0, 43200.0, 86400.0,
+        ])
+}
+
+/// The time axis's gridline steps for `seconds_per_point`, finest first:
+/// labels at the first clock step [`TIME_LABEL_SPACING`] points apart, and
+/// lines at the two clock steps under it that divide it evenly.
+pub(super) fn time_steps(seconds_per_point: f64) -> [f64; 3] {
+    let wanted = seconds_per_point * TIME_LABEL_SPACING;
+    let label = clock_steps()
+        .find(|&s| s >= wanted)
+        .unwrap_or_else(|| (wanted / 86400.0).ceil() * 86400.0);
+    let finer = |step: f64| {
+        clock_steps()
+            .filter(|&s| s < step * (1.0 - 1e-9))
+            .filter(|&s| ((step / s) - (step / s).round()).abs() < 1e-6)
+            .last()
+            .unwrap_or(step)
+    };
+    let mid = finer(label);
+    [finer(mid), mid, label]
+}
+
+/// The main plot's time grid for egui_plot, on [`time_steps`]. Its own
+/// decade steps jump from 10 s to 100 s, so a window of 70–100 s on a
+/// narrow plot had its 10 s labels hidden and kept one.
+pub(super) fn time_marks(input: GridInput) -> Vec<GridMark> {
+    // `base_step_size` spans the plot's least grid spacing.
+    let seconds_per_point = input.base_step_size / f64::from(MIN_GRID_SPACING);
+    egui_plot::uniform_grid_spacer(move |_| time_steps(seconds_per_point))(input)
+}
 
 /// Choose a nice round interval for time axis labels.
 pub(super) fn nice_time_interval(span: f64) -> f64 {
@@ -41,8 +91,10 @@ pub(super) fn format_time_axis_label(value: f64, step_size: f64) -> String {
     // spacer), show enough decimals to resolve adjacent marks. clamp to 1
     // so a rounding step like 0.5 (non-power-of-10) still gets at least
     // one decimal of precision.
+    // Up, not to nearest: a 0.05 s step needs two decimals, or 9.05 s and
+    // 9.10 s both read "9.1 s".
     let sec_decimals: usize = if step_size > 0.0 && step_size < 1.0 {
-        ((-step_size.log10()).round() as i64).clamp(1, 6) as usize
+        ((-step_size.log10() - 1e-9).ceil() as i64).clamp(1, 6) as usize
     } else {
         0
     };
@@ -72,5 +124,36 @@ pub(super) fn format_time_axis_label(value: f64, step_size: f64) -> String {
         } else {
             format!("{h:.0}h {m:.0}m {sec:.sec_decimals$}s")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Labels at round clock steps at least 80 points apart, never the 1 s,
+    /// 10 s, 100 s decades: a 97 s window on a 553-point plot is labelled
+    /// every 15 s, with lines every 5 s and 1 s.
+    /// Neighbouring labels never read the same: a step's decimals resolve
+    /// it, 0.05 s steps included.
+    #[test]
+    fn sub_second_labels_tell_their_steps_apart() {
+        assert_eq!(format_time_axis_label(9.05, 0.05), "9.05 s");
+        assert_eq!(format_time_axis_label(9.1, 0.05), "9.10 s");
+        assert_eq!(format_time_axis_label(9.5, 0.5), "9.5 s");
+        assert_eq!(format_time_axis_label(9.2, 0.2), "9.2 s");
+        assert_eq!(format_time_axis_label(9.1, 0.1), "9.1 s");
+    }
+
+    #[test]
+    fn time_labels_fall_on_clock_steps() {
+        assert_eq!(time_steps(97.0 / 553.0), [1.0, 5.0, 15.0]);
+        assert_eq!(time_steps(60.0 / 1100.0), [0.5, 1.0, 5.0]);
+        assert_eq!(time_steps(600.0 / 553.0), [30.0, 60.0, 120.0]);
+        let short = time_steps(3.0 / 553.0);
+        for (got, want) in short.into_iter().zip([0.05, 0.1, 0.5]) {
+            assert!((got - want).abs() < 1e-12, "{short:?}");
+        }
+        assert_eq!(time_steps(7.0 * 86400.0 / 553.0)[2], 2.0 * 86400.0);
     }
 }

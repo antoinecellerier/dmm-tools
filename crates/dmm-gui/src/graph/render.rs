@@ -12,7 +12,7 @@ use std::time::Instant;
 use super::axes::{self, AxisMap};
 use super::minimap::bucket_secs;
 use super::pattern::{DASH_GAP, PatternKey, Patterns, SegmentedLine, TimedHLine, anchor_layout};
-use super::time::format_time_axis_label;
+use super::time::{MIN_GRID_SPACING, format_time_axis_label, time_marks};
 use super::{GapKind, Graph, OverlaySeries, SegmentsAndGaps};
 use crate::markers::Markers;
 use crate::theme::ThemeColors;
@@ -1538,6 +1538,10 @@ impl Graph {
                     point.y
                 ))
             });
+        // egui_plot's own range, set here as `time_marks` reckons with it.
+        plot = plot
+            .grid_spacing(egui::Rangef::new(MIN_GRID_SPACING, 300.0))
+            .x_grid_spacer(time_marks);
         if levels {
             plot = plot.y_grid_spacer(whole_number_marks);
         } else if let Some(step) = grid_step {
