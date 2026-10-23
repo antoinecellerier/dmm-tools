@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use dmm_lib::stats::RunningStats;
 
-use super::{GapKind, Graph};
+use super::Graph;
 
 impl Graph {
     /// Elapsed time (seconds) between the first and last data point in the
@@ -260,17 +260,19 @@ impl Graph {
     /// disconnects mid-overload leaves a band covering the samples we actually
     /// received instead of one that grows forever.
     pub(super) fn pending_overload_span(&self) -> Option<(f64, f64)> {
-        if self.pending_break != Some(GapKind::Overload) {
+        if !self.breaks.overloaded() {
             return None;
         }
         let trace_end = self.history.back().map(|p| self.elapsed_secs(p.time))?;
         // After a word shown instead of a reading, the band starts at the
         // first OL sample instead (`push_break`).
         let start = self
-            .pending_band_from
+            .breaks
+            .band_from
             .map_or(trace_end, |t| self.elapsed_secs(t));
         let end = self
-            .pending_break_since
+            .breaks
+            .last_overload
             .map(|t| self.elapsed_secs(t))
             .unwrap_or(start);
         Some((start, end.max(start)))

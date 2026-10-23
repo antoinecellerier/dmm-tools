@@ -162,7 +162,7 @@ impl Graph {
         // mapping and its drag clamping. Otherwise time visibly freezes for
         // the duration of the excursion, which is exactly when the band being
         // drawn needs somewhere to grow into.
-        let x_max = match self.pending_heard_until {
+        let x_max = match self.breaks.heard_until {
             Some(t) => x_max.max(self.elapsed_secs(t)),
             None => x_max,
         };

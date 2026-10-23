@@ -1919,7 +1919,7 @@ impl Graph {
             self.last_display_raw.as_deref().unwrap_or("").hash(&mut h);
             // The over-range state is announced below, so it has to bust the
             // cache — otherwise the band appears with no spoken counterpart.
-            self.pending_break.is_some().hash(&mut h);
+            self.breaks.kind.is_some().hash(&mut h);
             markers_in_view.hash(&mut h);
             spoken_histogram.hash(&mut h);
             h.finish()
@@ -1954,9 +1954,7 @@ impl Graph {
                 // plotted value — which is stale by definition while the
                 // meter has nothing to measure. The band is otherwise a
                 // purely visual cue.
-                _ if self.pending_break == Some(GapKind::Overload) => {
-                    "currently over range".to_string()
-                }
+                _ if self.breaks.overloaded() => "currently over range".to_string(),
                 (Some(raw), _) => format!("last reading {} {unit}", raw.trim()),
                 (None, Some(v)) => {
                     format!("last reading {v:.prec$} {unit}", prec = self.decimals(true))

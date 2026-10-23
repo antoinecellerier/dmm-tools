@@ -1865,7 +1865,7 @@ fn an_overlay_only_frame_leaves_an_open_break_alone() {
     push_acdc(&mut g, at(0), Some(1.0), None);
     g.push_break(at(500));
     push_acdc(&mut g, at(700), None, Some(0.1));
-    assert_eq!(g.pending_break, Some(GapKind::Overload));
+    assert_eq!(g.breaks.kind, Some(GapKind::Overload));
     push_acdc(&mut g, at(900), Some(1.0), None);
     assert_eq!(g.visible_gaps(), vec![(0.0, 0.9, GapKind::Overload)]);
 }

@@ -3,6 +3,7 @@
 //!
 //! The concerns live in submodules — [`view`] (what slice is shown and the
 //! gestures that move it), [`toolbar`], [`render`] (the main plot),
+//! [`breaks`] (the interruption the trace is in before its next point),
 //! [`pattern`] (its dashed and dotted lines), [`axes`] (the Y axes of sub-values in other units), [`minimap`], [`level`] (the minimap's bucketed trace), [`analysis`]
 //! (visible-slice statistics), [`field`] (the toolbar's text-edit buffers and
 //! the values they parse to) and [`time`] (axis label formatting) — all of
@@ -18,6 +19,7 @@
 
 mod analysis;
 mod axes;
+mod breaks;
 mod field;
 pub(crate) mod histogram;
 mod level;
@@ -45,6 +47,7 @@ use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
 use crate::theme::ThemeColors;
 use axes::AxisMap;
+use breaks::Breaks;
 use field::{NumberField, NumberListField};
 use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
@@ -383,32 +386,9 @@ pub struct Graph {
     /// Frames of sub-values only since the last point of the plotted series;
     /// see [`Graph::stopped_for`].
     main_missing_frames: u32,
-    /// A non-plottable sample arrived since the last plotted point, so the
-    /// next one starts a new segment. Time-based gap detection can't see
-    /// this: an over-range excursion shorter than the threshold leaves no
-    /// time hole.
-    pending_break: Option<GapKind>,
-    /// A genuine dropout happened during the open interruption: the link
-    /// went down, or acquisition was stopped. Distinct from the meter simply
-    /// not sending — see `push_data_loss`.
-    pending_data_loss: bool,
-    /// Timestamp of the newest overload sample while a break is open: where
-    /// the over-range band ends.
-    pending_break_since: Option<Instant>,
-    /// Over-range readings since the trace began, for the next point's
-    /// `overloads_before`.
-    overloads_total: u64,
-    /// Timestamp of the newest sample while a break is open, an overload or
-    /// a word shown instead of a reading.
-    ///
-    /// These carry a timestamp like any other; they just have no plottable
-    /// value. Keeping the newest one lets the live view follow the present
-    /// while the meter sends them, instead of freezing at the last plotted
-    /// point.
-    pending_heard_until: Option<Instant>,
-    /// Timestamp of the first overload sample of a break that began with a
-    /// word shown instead of a reading: where the band starts.
-    pending_band_from: Option<Instant>,
+    /// The interruption since the last plotted point, if any, which the
+    /// next one records as its break.
+    breaks: Breaks,
     /// When true, Y axis uses fixed min/max instead of auto-scaling.
     pub y_axis_fixed: bool,
     /// Fixed Y-axis bounds, as typed and as parsed.
@@ -539,12 +519,7 @@ impl Graph {
             silences: VecDeque::new(),
             last_heard: None,
             main_missing_frames: 0,
-            pending_break: None,
-            pending_data_loss: false,
-            pending_break_since: None,
-            overloads_total: 0,
-            pending_heard_until: None,
-            pending_band_from: None,
+            breaks: Breaks::default(),
             y_axis_fixed: false,
             y_min: NumberField::new("-1", -1.0),
             y_max: NumberField::new("1", 1.0),
@@ -760,10 +735,8 @@ impl Graph {
             Some(value) => {
                 self.levels = sample.levels;
                 let last = self.history.back().map(|p| p.time);
-                if self.stopped_for(self.main_missing_frames, last, now)
-                    && self.pending_break.is_none()
-                {
-                    self.pending_break = Some(GapKind::NoData);
+                if self.stopped_for(self.main_missing_frames, last, now) {
+                    self.breaks.gap();
                 }
                 self.main_missing_frames = 0;
                 self.push_point(value, now, display_raw);
@@ -905,7 +878,7 @@ impl Graph {
             });
             prev = Some(p.time);
         }
-        if let (Some(_), Some(time)) = (self.pending_break, prev) {
+        if let (Some(_), Some(time)) = (self.breaks.kind, prev) {
             outgoing.push_back(OverlayPoint { time, value: None });
         }
         while outgoing.len() > self.max_points.max(1) {
@@ -927,12 +900,10 @@ impl Graph {
                 None => pending = Some(GapKind::NoData),
             }
         }
-        self.pending_break = pending;
-        self.pending_data_loss = false;
-        self.pending_break_since = None;
-        self.overloads_total = 0;
-        self.pending_heard_until = None;
-        self.pending_band_from = None;
+        self.breaks = Breaks {
+            kind: pending,
+            ..Breaks::default()
+        };
 
         self.overlays[i] = OverlaySeries {
             label: self
@@ -1064,14 +1035,7 @@ impl Graph {
         self.last_display_raw = None;
         self.silences.clear();
         self.main_missing_frames = 0;
-        // A break still open belongs to the trace that ended: the new one
-        // has no point before its first to break from.
-        self.pending_break = None;
-        self.pending_data_loss = false;
-        self.pending_break_since = None;
-        self.overloads_total = 0;
-        self.pending_heard_until = None;
-        self.pending_band_from = None;
+        self.breaks = Breaks::default();
         self.dash_phases = pattern::DashPhases::default();
     }
 
@@ -1137,18 +1101,7 @@ impl Graph {
         // One short of the bound: this sample is about to take the last slot.
         self.evict_to(self.max_points.saturating_sub(1));
 
-        let band_from = self.pending_band_from.take();
-        let last_overload = self.pending_break_since.take();
-        let point = DataPoint {
-            time: now,
-            value,
-            break_before: self.pending_break.take(),
-            break_last_sample: band_from.or(last_overload),
-            break_had_data_loss: std::mem::take(&mut self.pending_data_loss),
-            break_band_late: band_from.is_some(),
-            overloads_before: self.overloads_total,
-        };
-        self.pending_heard_until = None;
+        let point = self.breaks.point(now, value);
         // Everything the minimap's level needs, decided against the point
         // before this one exactly as `build_segments_for_range` decides it for
         // a consecutive pair — so appending and rebuilding cannot disagree.
@@ -1281,21 +1234,7 @@ impl Graph {
     /// three.
     pub fn push_break(&mut self, timestamp: Instant) {
         self.heard(timestamp);
-        // Updated on every overload sample, not just the first: they close
-        // the band and advance the live view for as long as the meter stays
-        // over range.
-        self.pending_break_since = Some(timestamp);
-        self.pending_heard_until = Some(timestamp);
-        self.overloads_total += 1;
-        match self.pending_break {
-            None => self.pending_break = Some(GapKind::Overload),
-            // Only `push_data_loss` marks a loss, so this gap is the word's.
-            Some(GapKind::NoData) if !self.pending_data_loss => {
-                self.pending_break = Some(GapKind::Overload);
-                self.pending_band_from = Some(timestamp);
-            }
-            Some(_) => {}
-        }
+        self.breaks.overload(timestamp);
     }
 
     /// Record that the meter showed a word instead of a reading ("Auto" with
@@ -1309,12 +1248,7 @@ impl Graph {
     /// dropout mid-overload takes (`gap_entries`).
     pub fn push_no_reading(&mut self, timestamp: Instant) {
         self.heard(timestamp);
-        self.pending_heard_until = Some(timestamp);
-        if self.pending_break == Some(GapKind::Overload) {
-            self.pending_data_loss = true;
-            return;
-        }
-        self.pending_break = Some(GapKind::NoData);
+        self.breaks.no_reading(timestamp);
     }
 
     /// Record that data was genuinely lost — the link dropped, or
@@ -1331,10 +1265,7 @@ impl Graph {
     /// time: a loss says nothing about when the next point comes, and with no
     /// timestamp of its own the call has no other time to put it at.
     pub fn push_data_loss(&mut self) {
-        self.pending_data_loss = true;
-        if self.pending_break.is_none() {
-            self.pending_break = Some(GapKind::NoData);
-        }
+        self.breaks.mark_data_loss();
         for o in &mut self.overlays {
             if let Some(&OverlayPoint {
                 time,
@@ -1354,12 +1285,7 @@ impl Graph {
         // next sample refreshes the offer.
         self.overlays.clear();
         self.current_series = None;
-        self.pending_break = None;
-        self.pending_data_loss = false;
-        self.pending_break_since = None;
-        self.overloads_total = 0;
-        self.pending_heard_until = None;
-        self.pending_band_from = None;
+        self.breaks = Breaks::default();
         self.silences.clear();
         self.last_heard = None;
         self.main_missing_frames = 0;
@@ -1775,7 +1701,7 @@ impl Graph {
         let before = |i: usize| {
             self.history
                 .get(i)
-                .map_or(self.overloads_total, |p| p.overloads_before)
+                .map_or(self.breaks.overloads, |p| p.overloads_before)
         };
         let (start, end) = (before(range.start), before(range.end));
         u32::try_from(end.saturating_sub(start)).unwrap_or(u32::MAX)
