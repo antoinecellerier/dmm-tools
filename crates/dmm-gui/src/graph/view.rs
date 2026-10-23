@@ -602,9 +602,11 @@ impl Graph {
             self.reset_view();
         }
 
-        // Cursor placement on click — snap to nearest data point
+        // Cursor placement on click — snap to nearest data point. Not the
+        // click that closes the plot's menu: that one only dismisses it.
         if self.cursors.active
             && plot_response.clicked()
+            && !egui::Popup::is_id_open(ui.ctx(), super::menu::plot_menu_id())
             && let Some(pos) = plot_response.interact_pointer_pos()
         {
             let click_t = transform.value_from_position(pos).x;

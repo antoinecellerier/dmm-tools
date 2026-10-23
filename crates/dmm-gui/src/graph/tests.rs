@@ -5092,6 +5092,23 @@ fn the_menu_deletes_the_marker_under_the_pointer() {
     );
 }
 
+/// With the cursors on, the click that closes the menu places none; the
+/// next click does.
+#[test]
+fn the_click_closing_the_menu_places_no_cursor() {
+    let (mut g, _) = graph_over(30);
+    g.cursors.active = true;
+    let ctx = open_menu(&mut g, |plot| plot.center());
+    let tree = menu_frame(&mut g, &ctx, vec![]);
+    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    let elsewhere = egui::pos2(plot.left() + 0.8 * plot.width(), plot.top() + 10.0);
+    menu_click(&mut g, &ctx, elsewhere, egui::PointerButton::Primary);
+    assert!(!egui::Popup::is_any_open(&ctx), "the click closed it");
+    assert_eq!(g.cursors.at(super::Cursor::A), None);
+    menu_click(&mut g, &ctx, elsewhere, egui::PointerButton::Primary);
+    assert!(g.cursors.at(super::Cursor::A).is_some());
+}
+
 /// The alarm's entries set a limit at the height clicked, and remove the
 /// limit under the pointer.
 #[test]
