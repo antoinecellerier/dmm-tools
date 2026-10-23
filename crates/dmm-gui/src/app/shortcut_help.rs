@@ -595,27 +595,22 @@ mod tests {
         );
     }
 
-    /// Given the room, the modal is what it always was: no scrolling, no
-    /// scrollbar. The scroller's id is nested inside the modal and can't be
-    /// rebuilt from here, so this reads the modal's height instead — on a
-    /// 900 pt screen it has to be the height it takes on one that cannot
-    /// clip it, and well short of the cap the screen puts on it.
+    /// Given the room, nothing scrolls: a 900 pt window shows the whole help,
+    /// in one column or two as the platform's fonts make it (macOS needs
+    /// two). The scroller's id is nested inside the modal
+    /// and can't be rebuilt from here, so this reads the modal's height
+    /// instead: short of the cap the screen puts on it.
     #[test]
     fn the_help_shows_no_scrollbar_when_it_fits() {
-        let height_at = |screen: Rect| {
-            let ctx = crate::app::styled_context();
-            let mut app = help_app();
-            for _ in 0..3 {
-                run_frame(&ctx, &mut app, screen, vec![]);
-            }
-            modal_rect(&ctx).height()
-        };
-        let roomy = height_at(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0)));
-        let unclipped = height_at(Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 2000.0)));
-        assert_eq!(roomy, unclipped, "the 900 pt window cut the help short");
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 900.0));
+        let ctx = crate::app::styled_context();
+        let mut app = help_app();
+        settled_help(&ctx, &mut app, screen);
+        assert_whole_and_centred(&ctx, screen);
+        let height = modal_rect(&ctx).height();
         assert!(
-            roomy > 400.0 && roomy < 900.0 - SCREEN_MARGIN,
-            "the help is {roomy} tall: neither the whole list nor short of the cap"
+            height > 400.0,
+            "the help is {height} tall: not the whole list"
         );
     }
 
