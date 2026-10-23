@@ -380,11 +380,13 @@ impl App {
         }
     }
 
-    /// The limits the graph draws: only while the alarm watches the main
-    /// reading's quantity — bound to it, and not idle on another's.
+    /// The limits the graph draws, on the main reading's trace only: not
+    /// while the alarm is idle on another quantity. Before a reading binds
+    /// it, the next one will, and the trace on screen stands for it: limits
+    /// set after a replay ends, or while paused, draw as the other lines do.
     pub(super) fn watched_limits(&self) -> Option<WatchedLimits> {
         let alarm = self.alarm.as_ref()?;
-        (alarm.quantity().is_some() && alarm.idle().is_none()).then(|| WatchedLimits {
+        alarm.idle().is_none().then(|| WatchedLimits {
             limits: alarm.limits(),
             scaled: self.alarm_scaled(),
         })
@@ -606,9 +608,10 @@ mod tests {
     #[test]
     fn no_limits_turn_the_alarm_off() {
         let mut app = app_with_high_limit(5.0);
-        assert!(
-            app.watched_limits().is_none(),
-            "no lines before a reading binds it"
+        assert_eq!(
+            app.watched_limits().map(|w| w.limits.high),
+            Some(Some(5.0)),
+            "drawn before a reading binds it"
         );
         assert!(app.check_alarm(&reading(&app, 4.0, "V"), false).is_none());
         assert_eq!(app.watched_limits().map(|w| w.limits.high), Some(Some(5.0)));

@@ -428,7 +428,7 @@ under the pointer, keeping the other. Setting limits restarts the alarm count.
 A reading that crosses a limit is marked, with the limit in the marker's
 note, and [Statistics](#statistics) counts the alarms. While
 the reading is out it turns the error colour with a **HI LIMIT** or
-**LO LIMIT** badge, and the graph draws the limits as dotted lines. The band
+**LO LIMIT** badge. The graph draws the limits as dotted lines. The band
 keeps a reading hovering at a limit to one alarm; overloads don't count.
 
 Limits are in the base unit (V, A, Ω, …), as the [scale](#scale)'s factor

@@ -25,8 +25,8 @@ impl LimitSide {
     }
 }
 
-/// The limits of an alarm bound to the main reading's quantity and judging
-/// it now, handed to the graph each frame it draws.
+/// The limits of an alarm not idle on another quantity, handed to the graph
+/// each frame it draws.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct WatchedLimits {
     /// In base units, or the scale's unit when `scaled`.
@@ -38,12 +38,15 @@ pub(crate) struct WatchedLimits {
 
 impl Graph {
     /// The limit lines to draw, in the plotted unit, with their names: none
-    /// while a sub-value is plotted, a trace the alarm doesn't judge.
+    /// while a sub-value or a level is plotted, traces the alarm doesn't
+    /// judge.
     pub(super) fn limit_lines(&self, watched: Option<WatchedLimits>) -> Vec<(f64, LimitSide)> {
         let Some(watched) = watched else {
             return Vec::new();
         };
-        if self.selected_series_offer().is_some() {
+        // The series the history holds, which a sub-value just picked, or
+        // the main reading picked back, becomes only with its first reading.
+        if self.current_series.is_some() || self.levels {
             return Vec::new();
         }
         let limits = watched.limits.in_unit(&self.current_unit, watched.scaled);
@@ -70,6 +73,11 @@ mod tests {
         assert_eq!(
             g.limit_lines(Some(watched)),
             vec![(5000.0, LimitSide::High)]
+        );
+        g.levels = true;
+        assert!(
+            g.limit_lines(Some(watched)).is_empty(),
+            "no lines on levels"
         );
     }
 }
