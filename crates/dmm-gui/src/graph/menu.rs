@@ -1,6 +1,6 @@
 //! The plot's right-click menu: what can be done at the point clicked —
-//! mark its reading, draw a reference line at its height, put a cursor on
-//! it — and the removal of what lies under the pointer.
+//! mark or copy its reading, draw a reference line at its height, put a
+//! cursor on it — and the removal of what lies under the pointer.
 
 use eframe::egui;
 use egui_plot::{PlotPoint, PlotTransform};
@@ -43,12 +43,15 @@ pub(super) struct MenuPoint {
 pub(crate) enum MenuAction {
     /// Mark the reading taken then, of that value on the trace.
     Mark(Instant, f64),
+    /// Put that reading on the clipboard.
+    Copy(Instant, f64),
 }
 
 /// An entry picked, applied once the menu is drawn.
 #[derive(Debug, Clone, Copy)]
 enum Pick {
     Mark,
+    Copy,
     AddRefLine,
     RemoveRefLine(f64),
     CursorA,
@@ -163,6 +166,11 @@ impl Graph {
                     .on_disabled_hover_text("No reading in view to mark"),
                 Pick::Mark,
             ));
+            entries.push((
+                ui.add_enabled(has_reading, egui::Button::new("Copy reading"))
+                    .on_disabled_hover_text("No reading in view to copy"),
+                Pick::Copy,
+            ));
             ui.separator();
             entries.push((
                 ui.button(format!(
@@ -237,12 +245,21 @@ impl Graph {
         }
     }
 
+    /// Ask what an entry of the menu asks, as if picked.
+    #[cfg(test)]
+    pub(crate) fn request(&mut self, action: MenuAction) {
+        self.menu_action = Some(action);
+    }
+
     /// Do what the entry picked says, at the point the menu was opened on.
     fn apply_pick(&mut self, pick: Pick, menu: &MenuPoint) {
         let reading_secs = menu.reading.map(|(at, _)| self.elapsed_secs(at));
         match pick {
             Pick::Mark => {
                 self.menu_action = menu.reading.map(|(at, v)| MenuAction::Mark(at, v));
+            }
+            Pick::Copy => {
+                self.menu_action = menu.reading.map(|(at, v)| MenuAction::Copy(at, v));
             }
             Pick::AddRefLine => self.add_ref_line(menu.y),
             Pick::RemoveRefLine(v) => self.remove_ref_line(v),

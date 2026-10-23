@@ -10,7 +10,6 @@ use std::time::Instant;
 use super::toast::Toast;
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
-use crate::graph::MenuAction;
 use crate::markers::{Marker, NOTE_MAX_CHARS};
 use crate::recording::{BufferRole, Sample};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
@@ -357,25 +356,28 @@ impl App {
     }
 
     /// What the graph asked of the markers this frame: the note of a flag
-    /// that was clicked, or a marker on the reading its menu offered.
-    pub(super) fn take_graph_marker_actions(&mut self) {
+    /// that was clicked.
+    pub(super) fn take_clicked_marker(&mut self) {
         if let Some(number) = self.graph.take_clicked_marker() {
             self.open_marker_note(number);
         }
-        if let Some(MenuAction::Mark(at, value)) = self.graph.take_menu_action() {
-            // The sample's line when the buffer has it; otherwise all the
-            // graph knows, its trace's value — without the meter's own
-            // digits, its flags or its sub-values.
-            let reading = match self.capture.recording.sample_at(at) {
-                Some(s) => log_line(&s.measurement),
-                None => format!(
-                    "{:>10} {}",
-                    format!("{value:.prec$}", prec = self.graph.decimals(true)),
-                    self.graph.plotted_unit()
-                ),
-            };
-            self.mark_reading(at, reading, true);
-        }
+    }
+
+    /// The plot's menu asked for a marker on the reading taken at `at`, of
+    /// `value` on the trace.
+    pub(super) fn mark_from_graph(&mut self, at: Instant, value: f64) {
+        // The sample's line when the buffer has it; otherwise all the
+        // graph knows, its trace's value — without the meter's own
+        // digits, its flags or its sub-values.
+        let reading = match self.capture.recording.sample_at(at) {
+            Some(s) => log_line(&s.measurement),
+            None => format!(
+                "{:>10} {}",
+                format!("{value:.prec$}", prec = self.graph.decimals(true)),
+                self.graph.plotted_unit()
+            ),
+        };
+        self.mark_reading(at, reading, true);
     }
 
     /// A marker's flag was clicked on the graph: put the cursor in its note,

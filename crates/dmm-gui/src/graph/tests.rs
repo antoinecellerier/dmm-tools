@@ -4719,6 +4719,7 @@ fn mark_from_menu(
     pick_entry(g, &ctx, |l| l == "Add marker here");
     g.take_menu_action().map(|action| match action {
         super::MenuAction::Mark(at, value) => (at, value),
+        other => panic!("not a mark: {other:?}"),
     })
 }
 
@@ -4938,8 +4939,10 @@ fn the_menu_answers_the_arrows() {
     menu_frame(&mut g, &ctx, key(egui::Key::Enter).to_vec());
     menu_frame(&mut g, &ctx, vec![]);
     assert!(!egui::Popup::is_any_open(&ctx), "Enter picked");
-    assert!(g.take_menu_action().is_none(), "not the first entry");
-    assert_eq!(g.ref_lines.values().len(), 1, "the second");
+    assert!(
+        matches!(g.take_menu_action(), Some(super::MenuAction::Copy(..))),
+        "the second entry"
+    );
 }
 
 /// A trace restarted under the open menu — here a decade step — takes the

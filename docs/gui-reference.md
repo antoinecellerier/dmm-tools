@@ -191,7 +191,7 @@ in a narrow graph.
   the time axis's row carrying its number and as much of its note as fits,
   in place of any time label it covers; click a
   flag to write its note
-- Right-click the plot to mark the reading nearest the click, draw a
+- Right-click the plot to mark or copy the reading nearest the click, draw a
   reference line at the height clicked, or put cursor A or B on that reading;
   over a reference line the menu also removes it
 - Timeline is continuous across reconnects (data is not cleared)

@@ -5,12 +5,14 @@
 
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 use log::info;
+use std::time::Instant;
 
 use super::capture::CaptureLayout;
 use super::export::{ExportFormat, NO_WIRE_FORMAT};
 use super::toast::Toast;
 use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
+use crate::graph::MenuAction;
 use crate::recording::BufferRole;
 use crate::settings::{GraphLines, MIN_RECORDING_HEIGHT};
 
@@ -610,8 +612,13 @@ impl App {
     /// What the graph asked of the app this frame: its marker actions, and a
     /// **Show:** chip the user clicked or a histogram size dragged, which the
     /// settings remember.
-    fn take_graph_actions(&mut self) {
-        self.take_graph_marker_actions();
+    fn take_graph_actions(&mut self, ctx: &egui::Context) {
+        self.take_clicked_marker();
+        match self.graph.take_menu_action() {
+            Some(MenuAction::Mark(at, value)) => self.mark_from_graph(at, value),
+            Some(MenuAction::Copy(at, value)) => self.copy_reading(ctx, at, value),
+            None => {}
+        }
         if let Some(sizes) = self.graph.take_histogram_resize() {
             (
                 self.settings.histogram_width,
@@ -629,6 +636,28 @@ impl App {
         }
     }
 
+    /// Put the reading taken at `at` on the clipboard, as the plotted series
+    /// shows it: the meter's digits, as Export… writes them, where the buffer
+    /// still holds the reading; else `value`, the graph's.
+    fn copy_reading(&mut self, ctx: &egui::Context, at: Instant, value: f64) {
+        let sample = self.capture.recording.sample_at(at).map(|s| &s.measurement);
+        let plotted = self.graph.selected_series_offer().map(|(label, _)| label);
+        let digits = match (sample, plotted) {
+            (Some(m), None) => Some(m.value_export_str().into_owned()),
+            (Some(m), Some(label)) => m
+                .aux_values
+                .iter()
+                .find(|a| a.label == label)
+                .map(|a| a.value_export_str().into_owned()),
+            (None, _) => None,
+        };
+        let text = digits
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| format!("{value:.prec$}", prec = self.graph.decimals(true)));
+        ctx.copy_text(text.clone());
+        self.toast = Some(Toast::info(format!("Copied {text}")));
+    }
+
     /// Render the graph+recording area with a resizable drag separator between them.
     pub(super) fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
         // Built before `self.graph` is borrowed mutably below: the palette
@@ -644,7 +673,7 @@ impl App {
                 let limits = self.watched_limits();
                 self.graph.show(ui, &tc, &self.markers, limits);
             });
-            self.take_graph_actions();
+            self.take_graph_actions(ui.ctx());
 
             let sep = ui.separator();
             let sep_id = ui.scope_id().with("rec_resize");
@@ -689,7 +718,7 @@ impl App {
         } else if self.settings.show_graph {
             let limits = self.watched_limits();
             self.graph.show(ui, &tc, &self.markers, limits);
-            self.take_graph_actions();
+            self.take_graph_actions(ui.ctx());
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
         }
@@ -727,21 +756,69 @@ mod tests {
         );
     }
 
+    /// What "Copy reading" puts on the clipboard for the reading taken at
+    /// `at` while `plotted` is drawn: the clipboard's text, and the toast.
+    fn copy_from_menu(plotted: Option<&str>) -> (Option<String>, Option<String>) {
+        use dmm_lib::flags::StatusFlags;
+        use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let at = Instant::now();
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.234), "V", StatusFlags::default());
+        m.timestamp = at;
+        m.aux_values = vec![AuxValue {
+            label: "Max".into(),
+            value: MeasuredValue::Normal(9.876),
+            unit: "".into(),
+            display_raw: Some(" 9.876".to_string()),
+            elapsed_secs: None,
+        }];
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(super::super::connection::DmmMessage::Measurement(m))
+            .expect("the channel is open");
+        app.connection.rx = Some(rx);
+        app.drain_messages();
+        app.graph.select_series(plotted);
+        app.graph.request(MenuAction::Copy(at, 0.5));
+        let ctx = crate::app::styled_context();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            app.take_graph_actions(ui.ctx());
+        });
+        out.textures_delta.clear();
+        let copied = out.platform_output.commands.iter().find_map(|c| match c {
+            egui::OutputCommand::CopyText(text) => Some(text.clone()),
+            _ => None,
+        });
+        (copied, app.toast.map(|t| t.message))
+    }
+
+    /// "Copy reading" copies the plotted series' digits, as Export… writes
+    /// them, and says what it copied.
+    #[test]
+    fn copy_reading_takes_the_plotted_series_digits() {
+        let (copied, toast) = copy_from_menu(None);
+        assert_eq!(copied.as_deref(), Some("5.678"), "the fixture's digits");
+        assert_eq!(toast.as_deref(), Some("Copied 5.678"));
+        let (copied, _) = copy_from_menu(Some("Max"));
+        assert_eq!(copied.as_deref(), Some("9.876"));
+    }
+
     /// A **Show:** chip click lands in the settings and saves them; turning
     /// it back on forgets it.
     #[test]
     fn a_hidden_trace_is_remembered() {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let ctx = crate::app::styled_context();
         app.graph.click_overlay_chip("Period".to_string());
-        app.take_graph_actions();
+        app.take_graph_actions(&ctx);
         assert!(app.settings.hidden_series.contains("Period"));
         assert!(app.settings_save.take_pending());
 
-        app.take_graph_actions();
+        app.take_graph_actions(&ctx);
         assert!(!app.settings_save.take_pending(), "no click, no save");
 
         app.graph.click_overlay_chip("Period".to_string());
-        app.take_graph_actions();
+        app.take_graph_actions(&ctx);
         assert!(app.settings.hidden_series.is_empty());
         assert!(app.settings_save.take_pending());
     }
