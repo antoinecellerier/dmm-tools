@@ -608,6 +608,21 @@ Measured throughput (2026-03-18, CLI `--interval-ms` over 10 s):
 
 The configured delay adds on top of the ~100 ms wire round-trip time.
 
+**Display update cadence** [VERIFIED]: polled back to back (a response
+every ~97 ms), the display bytes (5-11) change on a fixed beat set by the
+mode: 300 ms in AC V, AC mV, DC V, DC mV, Ω, capacitance and continuity
+(every third response, now and then the fourth as the beat slides against
+the polls), and 400 ms in DC mA (every fourth); longer runs are whole
+multiples, where the digits held. Fitted to the change times, AC V gives
+300.0 ms and DC mA 399.9 ms, with nearly every change on the beat. The
+responses in between repeat the display bytes, while the bar graph
+(12-13) can still move. Over the UT-D07B, which sends a reading about
+every 315 ms (`ut-d07b/reverse-engineered-protocol.md`), the AC mV digits
+changed on almost every reading. Measured from the UT61E+ recordings in
+`assets/replays/` and our captures of 2026-09-07 to 2026-10-08 (cable),
+and the UT-D07B recordings of 2026-09-29; DC mA from the replays alone,
+other modes [UNVERIFIED].
+
 ### 2.9 Implementation Quirks — [VERIFIED]
 
 - **Byte-at-a-time delivery:** CP2110 at 9600 baud delivers response

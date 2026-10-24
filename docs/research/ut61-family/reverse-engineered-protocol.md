@@ -117,6 +117,13 @@ and flag bytes our UT61E+ has sent, including LPF V's high open-lead entry
 on the 1000V rung. HOLD, REL, MIN/MAX, Peak, RANGE, AUTO, SELECT and Hz/%
 moved their flags or mode as on the E+, and the backlight key toggles.
 
+Polled every ~47 ms, the UT161E's digits change on the UT61E+'s 300 ms
+beat ([UT61E+ spec §2.8](../ut61eplus/reverse-engineered-protocol.md#28-sampling-rate--verified))
+in AC V, AC mV, DC V and DC mV: fitted to the change times by mode
+byte, 299.5–300.5 ms with every change within 30 ms of the beat (both
+issue #7 runs, 12–35 changes per mode). Other modes changed too rarely
+to fit [UNVERIFIED].
+
 One press differed. In AC+DC V on manual 2.2V, RANGE took the display to
 the 22V rung's three decimals while the range byte stayed 0x30, on all
 three frames before auto came back:

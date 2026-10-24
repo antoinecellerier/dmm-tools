@@ -236,9 +236,16 @@ line for them (issue #5, CH9329 / UT-D09; dmm-tools shows the bit as
 `LEAD ERR`). Which LCD warning, if any, goes with it is [UNVERIFIED].
 
 The meter sends a measurement frame every 100 ms; the main reading
-changes at most every 500 ms (2 Sa/s), the frames in between repeat it.
-On the temperature dial the reading changed every 700–900 ms instead,
-both thermocouples at once (2026-09-28 capture).
+changes on a fixed beat set by the mode, and the frames in between
+repeat it: 500 ms (2 Sa/s) in V DC, V DC REL, capacitance and
+continuity, 550 ms in V AC (and its Hz, LPF, dBV and dBm variants),
+mV AC and mV DC, 600 ms in mA DC and A DC, and 700 ms in pulse width.
+Fitted to the change times, grouped by the frames' mode word, most runs
+had every change within 40 ms of the beat (@diego351's captures of
+2026-09-27 and 2026-09-28, issue #5, 10–39 changes per run). mV AC+DC
+gave 650 ms on a single run of 12 changes [UNVERIFIED]. On the
+temperature dial the reading changed every 700–900 ms instead, both
+thermocouples at once (2026-09-28 capture).
 
 ### 5.2 Value Encoding
 
@@ -301,8 +308,8 @@ from @diego351's meter and a 31-byte V DC payload (`0x3111`: 6 + 13 + 12)
 from @alexander-magon's (PR #8), both on the CH9329 (UT-D09) cable.
 The bargraph is not the displayed value (241.02 VAC beside a 239.22 VAC
 main reading): it is the meter's fast sample, which changes on every
-100 ms frame while the main reading holds for 500 ms (2026-09-27
-capture, Ω and mV readings with a drifting input).
+100 ms frame while the main reading holds for 500 ms or more (§5.1;
+2026-09-27 capture, Ω and mV readings with a drifting input).
 
 What the aux slots hold depends on the mode word (2026-09-27 capture,
 every variant below seen on a real meter):
