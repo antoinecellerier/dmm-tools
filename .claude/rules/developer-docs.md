@@ -6,6 +6,7 @@ paths:
   - "docs/adding-devices.md"
   - "docs/protocol.md"
   - "docs/future-improvements.md"
+  - "docs/future-improvements-ruled-out.md"
 ---
 
 # Developer doc rules

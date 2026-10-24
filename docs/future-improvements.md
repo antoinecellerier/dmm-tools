@@ -1,6 +1,6 @@
 # Future Improvements
 
-Ideas for features that would add meaningful value to the tool. Organized by category with rough complexity estimates. None of these are committed — they're here to capture intent and help prioritize.
+Ideas for features that would add meaningful value to the tool. Organized by category with rough complexity estimates. None of these are committed — they're here to capture intent and help prioritize. Ideas looked into and set aside, with the reasons, are in [future-improvements-ruled-out.md](future-improvements-ruled-out.md).
 
 Contributions and feedback welcome via [GitHub Issues](https://github.com/antoinecellerier/dmm-tools/issues).
 
@@ -335,16 +335,6 @@ Use cases: a frequency held at 49.5–50.5 Hz while the voltage beside it auto-s
 The graph draws every series against time. Plotting one recorded series against another — V against Hz, or the two thermocouples of a UT181A against each other — shows how one quantity follows the other rather than how each varies. Open questions: pairing samples that arrive at different times (nearest frame, as the hover does), showing time on the trace, with a colour ramp or markers along it, and whether it docks under the minimap beside the trace, as the histogram can, or replaces it.
 
 Use cases: a supply's output voltage against its load current; a sensor's reading against temperature.
-
-### Sampling in step with streaming meters
-
-**Complexity:** Medium
-
-A meter with `Delivery::Streamed` is read continuously, and a sample interval keeps the frame nearest each tick. At **Every reading** (0 ms) each frame is kept, repeats included: a UT181A sends a frame every 100 ms but changes its reading every 500 ms, so each reading lands about five times. A repeated frame and a new reading of the same value arrive as identical bytes, so nothing can drop the repeats afterwards.
-
-A design should sample once per meter update by default; a UT181A's changes land on fixed 500 ms boundaries once one is seen. It must cope with irregular updates (the UT181A's temperature dial: every 700–900 ms). The graph's gap detector and the **Buffer size** estimate assume today's frame rate and would have to change with it.
-
-Use cases: a CSV whose rows are the meter's readings, not its frames. Raised by @diego351's UT181A at 2 Sa/s ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
 
 ### Measurement rate display
 
