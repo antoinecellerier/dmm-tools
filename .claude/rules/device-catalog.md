@@ -18,7 +18,10 @@ supported yet. The general rules are in `docs-user-facing.md`.
   distinguishes the model from its siblings, nothing about the protocol.
 - Status is the registry's `Stability::label()` words, capitalised, with
   their emoji, and nothing else: `✅ Verified`, `🟡 Partly verified` or
-  `🧪 Experimental`.
+  `🧪 Experimental`. A registry entry that covers several models (a Brymen
+  series, whose meters send nothing to tell them apart) lends its label only
+  to the models that have run; the others stay `🧪 Experimental`, as an
+  untested UT61+ sibling does.
 - Status links the verification issue for the last two, and for a Verified
   model whose evidence is a reporter's issue; Notes never carry the evidence.
 - The README's device table uses the same words and emoji.
