@@ -8,7 +8,7 @@
 
 ### Bug fixes
 
-- **Dashes on a Brymen display read as no reading, not an EF level** — a BM82x showed a field level after a range or function change, other models a warning.
+- **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 
 ## v0.9.0 — Graph Analysis and Alarms
 

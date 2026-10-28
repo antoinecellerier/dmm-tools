@@ -74,7 +74,9 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
   APO time, 17 or 30 minutes. (#34–#36)
 - What a reading request gets during logging's 50 % power-down (§11.6) —
   settles §11.6. Needs a BM52x logging at 30 s or more, read after 4.2
-  minutes. (#36)
+  minutes. A main display blank but for its point beside a unit now reads
+  as no reading without a warning, so a trace shows it, the warnings won't.
+  (#36)
 
 ## Display
 

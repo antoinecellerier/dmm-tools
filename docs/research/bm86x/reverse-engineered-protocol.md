@@ -693,7 +693,9 @@ beside Hz, on either display. Around a manual range and the start of REC,
 its small display is instead blank but for its point, beside Hz. To the
 eye, the LCD showed `0.000 Hz` throughout. This is per @SidineiSantosSousa,
 from their own tool on the BU-86X (#35); whether the BM86x and BM52x do the
-same is [UNVERIFIED]. Brymen's programs draw the dashes and the point as
+same is [UNVERIFIED]. A BM525s's main display read blank but for its point,
+beside D%, for a moment going into a logging session, per #36's capture.
+Brymen's programs draw the dashes and the point as
 they are. Their recorder drops a sample whose main or small display reads
 only "." (Bs8252x sigfix `:2220-2246`, `:2415-2440`), and has no case for
 dashes [VENDOR].

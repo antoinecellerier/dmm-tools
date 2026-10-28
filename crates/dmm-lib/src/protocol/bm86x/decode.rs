@@ -250,6 +250,10 @@ fn main_shown(
         // change (#35, spec §7.3).
         _ if dashes && letter => Shown::Word("---"),
         _ if dashes && lit.among(MAIN_UNITS).next().is_some() => Shown::Pending,
+        // Blank but for a point, beside a unit: the same, as a BM525s
+        // showed going into a logging session (#36); Brymen's recorder
+        // drops such a sample (spec §7.3).
+        "" if main.text == "." && lit.among(MAIN_UNITS).next().is_some() => Shown::Pending,
         // The field strength, the minus counted with the dashes after it,
         // nothing else lit (BM820s manual p.13); how many light at each
         // strength is open (spec §7.3).
@@ -1768,6 +1772,25 @@ pub(super) mod tests {
         assert_eq!(m.mode, "Hz");
         assert!(matches!(m.value, MeasuredValue::NoReading("---")));
         assert_eq!(m.aux_values.len(), 1);
+    }
+
+    /// An ET-2615A's (BM525s) main display blank but for its point,
+    /// beside D%, going into a logging session; report IDs left out (#36).
+    #[test]
+    fn et2615a_main_blank_but_for_its_point() {
+        let reply = "00 00 00 00 10 00 00 00 00 00 00 00 00 00 04 00 52 52 52 52 10 00 00 00"
+            .split(' ')
+            .map(|b| u8::from_str_radix(b, 16).unwrap())
+            .collect::<Vec<u8>>();
+        let m = quiet_as(&reply, Series::Bm52x);
+        assert_eq!(m.mode, "Duty %");
+        assert!(matches!(m.value, MeasuredValue::NoReading("---")));
+        // Beside no unit it is still reported.
+        let (_, reports) = decoded_as(&lcd8(Series::Bm52x, " .   ", BLANK, &[]), Series::Bm52x);
+        assert!(
+            reports.iter().any(|r| r.contains("display text")),
+            "{reports:?}"
+        );
     }
 
     /// The logging models' words (BM820s manual p.14-16), in the manual's
