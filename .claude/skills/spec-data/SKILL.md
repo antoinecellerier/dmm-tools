@@ -127,7 +127,7 @@ Delegate to an Opus agent, one meter per commit (`lib: <model> readings carry th
    ```bash
    (cd references/specs-review && cargo run -q -p dmm-lib --example dump_specs -- --format html --pages-dir pages/<id> --marks ../<family>/specs-work/provenance.json <id> > <id>.html)
    ```
-   Give the user the path. The sheet shows each manual table beside its page render (continuation pages included), with cells coloured by provenance. The user's corrections go into the Rust table and `verified.json`; then run step 1 again.
+   Add `--general-pages N[,N]` (before `<id>`) for pages that hold no table but that the tables draw on, such as a general-specifications overload list; render them in step 2 too. Give the user the path. The sheet shows each manual table beside its page render (continuation pages included), with cells coloured by provenance. The user's corrections go into the Rust table and `verified.json`; then run step 1 again.
 3. Have a fresh Opus reviewer check committed objects only, without editing:
    - the mapping: which reading picks which row;
    - every row against the renders;

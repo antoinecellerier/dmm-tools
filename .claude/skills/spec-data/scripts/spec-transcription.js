@@ -65,7 +65,7 @@ function transcribePrompt(m, who) {
   const order = who === 'b'
     ? '\nWork through the pages in REVERSE order (last spec page first) while reading, but write the tables in manual order.'
     : ''
-  return `You are transcribing the electrical specification tables of the UNI-T ${m.name} multimeter from its user manual into JSON. This data ships in an app: exactness matters more than speed, and nothing may be guessed. Work alone; do not look for other transcriptions (other files under ${m.work} are off limits).${order}
+  return `You are transcribing the electrical specification tables of the ${m.name} multimeter from its user manual into JSON. This data ships in an app: exactness matters more than speed, and nothing may be guessed. Work alone; do not look for other transcriptions (other files under ${m.work} are off limits).${order}
 
 ${tools(m, who)}
 
@@ -90,7 +90,7 @@ const ADJ = {
 }
 
 function adjudicatePrompt(m) {
-  return `You adjudicate two blind transcriptions of the UNI-T ${m.name} manual's specification tables, then cross-check the result. Exactness matters more than speed; nothing may be guessed.
+  return `You adjudicate two blind transcriptions of the ${m.name} manual's specification tables, then cross-check the result. Exactness matters more than speed; nothing may be guessed.
 
 ${tools(m, 'adj')}
 

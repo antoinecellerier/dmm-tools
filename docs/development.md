@@ -101,8 +101,11 @@ cargo run -p dmm-lib --example dump_specs -- --format html \
 ```
 
 `--marks` is optional: a JSON file of notes that highlights the cells it
-names, such as a transcription's `provenance.json`. Its format and the JSON
-shape are in the header of `crates/dmm-lib/examples/dump_specs.rs`.
+names, such as a transcription's `provenance.json`. `--general-pages 19` is
+optional too: it shows those pages once at the top, for the general
+specifications the tables draw on, such as an overload list. The marks
+format and the JSON shape are in the header of
+`crates/dmm-lib/examples/dump_specs.rs`.
 
 ## Triaging a capture report
 

@@ -12,7 +12,9 @@
 //!   resolution, accuracy: [{freq_range, accuracy}]}]}]}`. One device.
 //! - `html`: a review sheet, each table laid out as the manual prints it,
 //!   beside the render of its manual page (`--pages-dir`), with the cells
-//!   listed in `--marks` highlighted. One device.
+//!   listed in `--marks` highlighted. One device. `--general-pages 19,20`
+//!   puts those pages' renders at the top, once: the general
+//!   specifications the tables draw on, such as an overload list.
 //!
 //! `--marks FILE` is a JSON object mapping `"<table> / <range> / <field>"`,
 //! or `"<table> / <field>"` for the whole table, to a note. The field is
@@ -29,6 +31,8 @@
 //!   cargo run -p dmm-lib --example dump_specs -- --format json ut61b+
 //!   cargo run -p dmm-lib --example dump_specs -- --format html \
 //!       --pages-dir pages --marks marks.json ut61eplus > sheet.html
+//!   cargo run -p dmm-lib --example dump_specs -- --format html \
+//!       --pages-dir pages --general-pages 19 bm82x > sheet.html
 
 use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::specs::{AccuracyBand, ModeSpecInfo, SpecSheetRow, SpecSheetTable};
@@ -38,7 +42,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 const USAGE: &str = "usage: dump_specs [--format text|json|html] [--pages-dir DIR] \
-                     [--marks FILE] [DEVICE_ID...]";
+                     [--general-pages N,N...] [--marks FILE] [DEVICE_ID...]";
 
 #[derive(Clone, Copy, PartialEq)]
 enum Format {
@@ -50,6 +54,7 @@ enum Format {
 struct Options {
     format: Format,
     pages_dir: Option<String>,
+    general_pages: Vec<u16>,
     marks: Option<String>,
     ids: Vec<String>,
 }
@@ -58,6 +63,7 @@ fn parse_args() -> Result<Options, String> {
     let mut o = Options {
         format: Format::Text,
         pages_dir: None,
+        general_pages: Vec::new(),
         marks: None,
         ids: Vec::new(),
     };
@@ -74,6 +80,12 @@ fn parse_args() -> Result<Options, String> {
                 }
             }
             "--pages-dir" => o.pages_dir = Some(value()?),
+            "--general-pages" => {
+                o.general_pages = value()?
+                    .split(',')
+                    .map(|p| p.trim().parse().map_err(|_| format!("bad page {p:?}")))
+                    .collect::<Result<_, _>>()?
+            }
             "--marks" => o.marks = Some(value()?),
             "-h" | "--help" => {
                 println!("{USAGE}");
@@ -83,8 +95,13 @@ fn parse_args() -> Result<Options, String> {
             _ => o.ids.push(arg),
         }
     }
-    if o.format != Format::Html && (o.pages_dir.is_some() || o.marks.is_some()) {
-        return Err("--pages-dir and --marks apply to --format html only".into());
+    if o.format != Format::Html
+        && (o.pages_dir.is_some() || o.marks.is_some() || !o.general_pages.is_empty())
+    {
+        return Err("--pages-dir, --general-pages and --marks apply to --format html only".into());
+    }
+    if !o.general_pages.is_empty() && o.pages_dir.is_none() {
+        return Err("--general-pages needs --pages-dir".into());
     }
     Ok(o)
 }
@@ -146,7 +163,14 @@ fn run() -> Result<(), String> {
         let model = protocol.profile().model_name;
         print!(
             "{}",
-            to_html(dev, model, &sheet, o.pages_dir.as_deref(), &marks)
+            to_html(
+                dev,
+                model,
+                &sheet,
+                o.pages_dir.as_deref(),
+                &o.general_pages,
+                &marks
+            )
         );
     }
     Ok(())
@@ -558,6 +582,7 @@ header p, .page-no { color: var(--muted); }
 section { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; }
 .cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
 .img { flex: 1 1 45%; min-width: 280px; }
+.general .img { flex: 0 1 calc(50% - 8px); }
 .img img { width: 100%; border: 1px solid var(--line); background: #ffffff; }
 .tbl { flex: 1 1 45%; min-width: 280px; overflow-x: auto; }
 table { border-collapse: collapse; }
@@ -582,9 +607,26 @@ fn to_html(
     model: &str,
     sheet: &[SpecSheetTable],
     pages_dir: Option<&str>,
+    general_pages: &[u16],
     marks: &Marks,
 ) -> String {
     let mut body = String::new();
+    if let Some(dir) = pages_dir.filter(|_| !general_pages.is_empty()) {
+        let heading = pages_label(general_pages);
+        let _ = writeln!(
+            body,
+            "<section>\n<h2>General specifications <span class=page-no>{heading}</span></h2>\n\
+             <div class=\"cols general\">"
+        );
+        for &p in general_pages {
+            let img = esc(&page_image(dir, p));
+            let _ = writeln!(
+                body,
+                "<div class=img><a href=\"{img}\"><img src=\"{img}\" alt=\"PDF page {p}\"></a></div>"
+            );
+        }
+        body.push_str("</div>\n</section>\n");
+    }
     // The parts of a split manual table follow each other and share a name.
     let tables: Vec<&[SpecSheetTable]> = sheet.chunk_by(|a, b| a.name == b.name).collect();
     let count = tables.len();
@@ -653,6 +695,20 @@ fn to_html(
     out
 }
 
+/// "PDF p. 19", or "PDF pp. 19, 20" for several pages.
+fn pages_label(pages: &[u16]) -> String {
+    match pages {
+        [p] => format!("PDF p. {p}"),
+        many => format!(
+            "PDF pp. {}",
+            many.iter()
+                .map(u16::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
 /// One manual table: its heading and page render, then its parts stacked
 /// in one table, then its notes. The renders of the pages before
 /// `next_page` follow the table's own, as its remarks may run onto them.
@@ -667,16 +723,7 @@ fn html_section(
     let key = |field: &str| vec![format!("{name} / {field}")];
     let mut pages: Vec<u16> = parts.iter().map(|t| t.page).collect();
     pages.dedup();
-    let page = match pages.as_slice() {
-        [p] => format!("PDF p. {p}"),
-        many => format!(
-            "PDF pp. {}",
-            many.iter()
-                .map(u16::to_string)
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    };
+    let page = pages_label(&pages);
     let _ = write!(
         out,
         "<section>\n<h2><span{}>{}</span> <span class=page-no><span{}>{}</span></span></h2>\n\
