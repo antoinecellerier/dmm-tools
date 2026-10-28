@@ -462,6 +462,14 @@ the Default preset).
 
 Use cases: matching a bench's colour conventions, high-contrast setups, colour-vision needs beyond the two stock themes.
 
+### Localization
+
+**Complexity:** High
+
+Translate the GUI, the shared help text, the library's labels and user-facing errors, and optionally the CLI's prose and the user docs, using Fluent. Data formats, logs and the capture tooling stay English. The design, its scope and its costs are in [localization-design.md](localization-design.md). The first ask came in [issue #35](https://github.com/antoinecellerier/dmm-tools/issues/35), where a reporter wrapped `capture` to translate its prompts into Brazilian Portuguese.
+
+Use cases: users who don't read English comfortably, meters sold under local brands in non-English markets.
+
 ### Session notes in exports
 
 **Complexity:** Low
