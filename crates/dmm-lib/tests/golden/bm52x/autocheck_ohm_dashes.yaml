@@ -1,0 +1,11 @@
+# AutoCheck Ω while it autoranges: dashes and a point beside kΩ, LoZ lit
+# Captured 2026-10-28 from a Brymen BM525s (Minipa ET-2615A) over BU-86X (issue #36, @SidineiSantosSousa, 0.9.0 6749b6a report, step autocheck_ohm).
+raw_hex: "00 00 10 50 40 40 40 00 EE 23 47 63 00 A0 00 FC 52 52 52 52 1F 00 00 00"
+mode: "LoZ Ω"
+value: "---"
+unit: "kΩ"
+range_label: ""
+flags:
+  auto_range: true
+  loz: true
+aux: []

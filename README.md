@@ -1,6 +1,6 @@
 # dmm-tools
 
-Open-source logging, graphing and remote-control software for UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen, EEVblog and Voltcraft multimeters and clamp meters, over USB and Bluetooth, on Linux, Windows, macOS and Raspberry Pi.
+Open-source logging, graphing and remote-control software for UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog and Voltcraft multimeters and clamp meters, over USB and Bluetooth, on Linux, Windows, macOS and Raspberry Pi.
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
@@ -118,7 +118,8 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | Brymen BM869s/BM867s | 🧪 Experimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
 | Brymen BM827s (Minipa ET-2517A) | 🟡 Partly verified | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
 | Brymen BM829s/BM822s/BM821s | 🧪 Experimental | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
-| Brymen BM525s/BM521s (Minipa ET-2615A) | 🧪 Experimental | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
+| Brymen BM525s (Minipa ET-2615A) | 🟡 Partly verified | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
+| Brymen BM521s | 🧪 Experimental | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
 | OWON OW18B/OW16B | — | 🧪 Experimental (built in) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
 | OWON OW18E | — | 🧪 Experimental (built in) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
 | OWON B33 | — | 🧪 Experimental (built in) | [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) |

@@ -1,0 +1,12 @@
+# CREST MIN (P-MIN) at DC V
+# Captured 2026-10-28 from a Brymen BM525s (Minipa ET-2615A) over BU-86X (issue #36, @SidineiSantosSousa, 0.9.0 6749b6a report, step crest_min).
+raw_hex: "00 28 80 DB CB 6D E9 00 00 00 00 00 00 00 20 00 52 52 52 52 50 00 00 00"
+mode: "DC V"
+value: "-2.253"
+unit: "V"
+range_label: ""
+flags:
+  auto_range: true
+  peak_min: true
+  dc: true
+aux: []

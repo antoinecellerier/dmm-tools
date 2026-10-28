@@ -1,0 +1,10 @@
+# Ω through the body, autoranged to MΩ
+# Captured 2026-10-28 from a Brymen BM525s (Minipa ET-2615A) over BU-86X (issue #36, @SidineiSantosSousa, 0.9.0 6749b6a report, step ohm_body).
+raw_hex: "00 00 00 BF EF EF E4 00 00 00 00 00 00 60 00 0C 52 52 52 52 1F 00 00 00"
+mode: "Ω"
+value: "0.884"
+unit: "MΩ"
+range_label: ""
+flags:
+  auto_range: true
+aux: []

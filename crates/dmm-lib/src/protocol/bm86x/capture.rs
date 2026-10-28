@@ -1,8 +1,9 @@
 //! The capture steps, worded from the BM860s manual and the BM820s/BM520s
 //! manual.
 //!
-//! A BM827s has run the BM82x steps in [`BM827S_RAN`] (#35); nothing else
-//! here has run on a meter. The BM860s manual draws the BM869s
+//! A BM827s has run the BM82x steps in [`BM827S_RAN`] (#35) and a BM525s
+//! the BM52x steps in [`BM525S_RAN`] (#36); nothing else here has run on a
+//! meter. The BM860s manual draws the BM869s
 //! (p.1); its steps follow the dial from VFD round to the current
 //! positions (p.6-12), with the keys (p.13-14) at DCV, the gate first and
 //! the Beep-Jack warning (p.14) last. The BM820s/BM520s manual draws the
@@ -101,6 +102,55 @@ const BM827S_RAN: &[&str] = &[
     "cap",
     "diode",
     "dcma",
+    "acma",
+];
+
+/// The BM52x steps @SidineiSantosSousa's BM525s (Minipa ET-2615A) ran on
+/// 0.9.0 with the readings the steps ask for (#36), through a piped run, so
+/// none confirmed on the LCD; their `autocheck_ac` read mains. Not here:
+/// AC+DC V, T2 and the two-probe steps, the µA and A steps, InEr, logging
+/// and Recall, which the run did not reach as worded.
+const BM525S_RAN: &[&str] = &[
+    "dcv",
+    "dcv_short",
+    "dcv_negative",
+    "ohm_ol",
+    "ohm_body",
+    "ohm_short",
+    "autocheck",
+    "autocheck_dc",
+    "autocheck_ac",
+    "autocheck_ohm",
+    "acv",
+    "hz_acv",
+    "dcv_acv",
+    "hold",
+    "rel",
+    "manual_range",
+    "range_auto",
+    "rec",
+    "rec_max",
+    "rec_min",
+    "rec_max_min",
+    "crest_max",
+    "crest_min",
+    "crest_max_min",
+    "dcmv",
+    "dcmv_acmv",
+    "acdcmv",
+    "logic_hz",
+    "duty",
+    "acmv",
+    "hz_acmv",
+    "cont",
+    "ns",
+    "t1_open",
+    "t1",
+    "temp_unit",
+    "cap",
+    "diode",
+    "dcma",
+    "acdcma",
     "acma",
 ];
 
@@ -820,12 +870,12 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
         CaptureStep::basic(
             "t1_t2",
             pick(
-                "Temperature: add a second thermocouple in ΩV (+) and COM (−) and press RANGE \
-                 until the main display shows T1 and the small one T2 (BM829s only; skip if \
-                 your meter lacks it, or with only one)",
-                "Temperature: add a second thermocouple in ΩV (+) and COM (−) and press RANGE \
-                 until the main display shows T1 and the small one T2 (BM525s only; skip if \
-                 your meter lacks it, or with only one)",
+                "Temperature: press RANGE until the main display shows T1 and the small one T2; \
+                 a second thermocouple in ΩV (+) and COM (−) is optional, as an empty input \
+                 shows dashes (BM829s only; skip if your meter lacks it)",
+                "Temperature: press RANGE until the main display shows T1 and the small one T2; \
+                 a second thermocouple in ΩV (+) and COM (−) is optional, as an empty input \
+                 shows dashes (BM525s only; skip if your meter lacks it)",
             ),
         )
         .needs(&[Need::Thermocouple])
@@ -833,10 +883,10 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
         CaptureStep::basic(
             "t1_minus_t2",
             pick(
-                "Temperature, both thermocouples in: press RANGE until T1-T2 shows (BM829s \
-                 only; skip if your meter lacks it, or with only one)",
-                "Temperature, both thermocouples in: press RANGE until T1-T2 shows (BM525s \
-                 only; skip if your meter lacks it, or with only one)",
+                "Temperature: press RANGE until T1-T2 shows (BM829s only; skip if your meter \
+                 lacks it)",
+                "Temperature: press RANGE until T1-T2 shows (BM525s only; skip if your meter \
+                 lacks it)",
             ),
         )
         .needs(&[Need::Thermocouple])
@@ -991,7 +1041,11 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
     }
     list.into_iter()
         .map(|s| {
-            let ran = series == Series::Bm82x && BM827S_RAN.contains(&s.id);
+            let ran = match series {
+                Series::Bm82x => BM827S_RAN.contains(&s.id),
+                Series::Bm52x => BM525S_RAN.contains(&s.id),
+                Series::Bm86x => false,
+            };
             s.verified_if(ran)
         })
         .collect()
@@ -1061,20 +1115,30 @@ mod tests {
         }
     }
 
-    /// Only the BM82x steps a BM827s ran are verified, each of them a step
-    /// of the list; the BM86x and BM52x have run nothing.
+    /// Only the steps a BM827s and a BM525s ran are verified, each of them a
+    /// step of its list; the BM86x has run nothing.
     #[test]
-    fn only_what_the_bm827s_ran_is_verified() {
-        let steps = bm82x();
-        let verified: Vec<&str> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
-        assert_eq!(verified.len(), BM827S_RAN.len(), "{verified:?}");
-        assert!(BM827S_RAN.iter().all(|id| verified.contains(id)));
-        for id in ["hold", "ef", "iner", "dcua", "dca", "acdcma", "autocheck"] {
-            assert!(!verified.contains(&id), "{id}");
+    fn only_what_ran_is_verified() {
+        for (steps, ran, not) in [
+            (
+                bm82x(),
+                BM827S_RAN,
+                &["hold", "ef", "iner", "dcua", "dca", "acdcma", "autocheck"][..],
+            ),
+            (
+                bm52x(),
+                BM525S_RAN,
+                &["acdcv", "t2", "t1_t2", "dcua", "dca", "iner", "recall"][..],
+            ),
+        ] {
+            let verified: Vec<&str> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
+            assert_eq!(verified.len(), ran.len(), "{verified:?}");
+            assert!(ran.iter().all(|id| verified.contains(id)));
+            for id in not {
+                assert!(!verified.contains(id), "{id}");
+            }
         }
-        for steps in [bm86x(), bm52x()] {
-            assert!(steps.iter().all(|s| !s.verified));
-        }
+        assert!(bm86x().iter().all(|s| !s.verified));
     }
 
     /// Never the leads on mains: a live wire is for the non-contact EF

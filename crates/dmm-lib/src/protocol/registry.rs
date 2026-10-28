@@ -84,10 +84,12 @@ pub struct SelectableDevice {
 
 impl SelectableDevice {
     /// [`Self::display_name`] without a leading brand, for a list that already
-    /// shows the brand as a heading: "VC-880" under Voltcraft.
+    /// shows the brand as a heading: "VC-880" under Voltcraft. The brand is
+    /// the heading's first name, the maker's: "Brymen" under "Brymen / Minipa".
     pub fn model_name(&self) -> &'static str {
+        let maker = self.brand.name().split(" / ").next().unwrap_or_default();
         self.display_name
-            .strip_prefix(self.brand.name())
+            .strip_prefix(maker)
             .and_then(|rest| rest.strip_prefix(' '))
             .unwrap_or(self.display_name)
     }
@@ -131,7 +133,8 @@ impl Brand {
     /// The brand as a list heading shows it.
     pub fn name(self) -> &'static str {
         match self {
-            Brand::Brymen => "Brymen",
+            // Minipa sells some of them under its own names.
+            Brand::Brymen => "Brymen / Minipa",
             Brand::Eevblog => "EEVblog",
             Brand::Owon => "OWON",
             Brand::UniT => "UNI-T",
@@ -472,6 +475,10 @@ mod tests {
         assert_eq!(find_device("121gw").unwrap().model_name(), "121GW");
         assert_eq!(find_device("ut61eplus").unwrap().model_name(), "UT61E+");
         assert_eq!(find_device("zt5b").unwrap().model_name(), "ZT-5B / V05B");
+        assert_eq!(
+            find_device("bm52x").unwrap().model_name(),
+            "BM525s/BM521s / ET-2615A"
+        );
     }
 
     #[test]
@@ -550,16 +557,17 @@ mod tests {
     /// the UT804 from one reporter's meter (issue #16), which walked every
     /// dial position on 2026-09-18, and the ZT-5B from one reporter's two
     /// captures (issue #31, 2026-10-03), and the UT161E from one reporter's two
-    /// captures (issue #7, both 2026-10-21). The UT181A, and the Brymen BM82x
-    /// from one reporter's BM827s (issue #35, 2026-10-27 and 2026-10-28), have
-    /// run for their main modes only, so they are PartlyVerified (see their
-    /// profiles). Everything else
+    /// captures (issue #7, both 2026-10-21). The UT181A, the Brymen BM82x
+    /// from one reporter's BM827s (issue #35, 2026-10-27 and 2026-10-28) and
+    /// the Brymen BM52x from the same reporter's BM525s (issue #36,
+    /// 2026-10-28) have run for their main modes only, so they are
+    /// PartlyVerified (see their profiles). Everything else
     /// must stay flagged so the GUI shows the EXPERIMENTAL badge and links to the
     /// verification issue.
     #[test]
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut161e", "ut804", "zt5b"];
-        const PARTLY_VERIFIED: &[&str] = &["ut181a", "bm82x"];
+        const PARTLY_VERIFIED: &[&str] = &["ut181a", "bm82x", "bm52x"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

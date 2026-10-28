@@ -1,0 +1,10 @@
+# Capacitance, leads open
+# Captured 2026-10-28 from a Brymen BM525s (Minipa ET-2615A) over BU-86X (issue #36, @SidineiSantosSousa, 0.9.0 6749b6a report, step cap).
+raw_hex: "00 00 00 AF BF AF A0 00 00 00 00 00 00 00 09 00 52 52 52 52 10 00 00 00"
+mode: "Capacitance"
+value: "0.01"
+unit: "nF"
+range_label: ""
+flags:
+  auto_range: true
+aux: []

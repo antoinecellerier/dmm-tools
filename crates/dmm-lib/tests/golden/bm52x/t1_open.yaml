@@ -1,0 +1,9 @@
+# T1 with no thermocouple: dashes beside °C
+# Captured 2026-10-28 from a Brymen BM525s (Minipa ET-2615A) over BU-86X (issue #36, @SidineiSantosSousa, 0.9.0 6749b6a report, step t1_open).
+raw_hex: "00 00 01 40 40 40 0F 00 00 00 00 00 00 00 00 00 52 52 52 52 00 00 00 00"
+mode: "T1"
+value: "---"
+unit: "°C"
+range_label: ""
+flags: {}
+aux: []

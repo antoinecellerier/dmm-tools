@@ -4,8 +4,8 @@ Scope: the Brymen meters that use the BU-86X optical USB cable — the BM860s
 series (BM867s, BM869s), the BM820s series (BM821s, BM822s, BM827s,
 BM829s) and the BM520s mobile-logging series (BM521s, BM525s) — from the
 USB device to the LCD-segment reply and the BM520s logged-memory download.
-The live readings of all three series are implemented, experimentally; the
-memory download is not. This pair of documents records
+The live readings of all three series are implemented, a BM827s and a
+BM525s partly verified; the memory download is not. This pair of documents records
 what the meters and the cable do on the wire. Every fact in §1-11 of the spec
 comes from vendor sources; §13 compares them with community sources, opened
 2026-09-27 after §1-12 were committed.
@@ -244,7 +244,7 @@ Resolved disagreements:
    9-byte reads put it at byte 10; the BM820 example and BM520-ML Table 1
    at byte 11. Bs8252x indexes byte 10 as the report ID and bytes 11-14 as
    the secondary digits. Recorded as the stronger reading; a BM827s
-   confirmed it (#35).
+   (#35) and a BM525s (#36) confirmed it.
 2. **BM860 secondary point** (spec §9.1): the example's hex sets 7p, its
    figure lights 8p and its caption reads 60.11. Fig 1 and Bs86x both put
    7p after digit 7, so the example, not the labels, is inconsistent.
@@ -301,6 +301,8 @@ As used in `reverse-engineered-protocol.md`:
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter
 - **[HARDWARE]** — seen on a real meter: a BM827s (Minipa ET-2517A) on a
-  BU-86X, Windows 11, through `dmm-cli` 0.9.0 captures (#35)
+  BU-86X, Windows 11, through `dmm-cli` 0.9.0 captures (#35), or a BM525s
+  (Minipa ET-2615A) on a BU-86X, Windows, through a `dmm-cli` 0.9.0
+  capture (#36)
 - **[COMMUNITY]** — stated in or implied by a community source, spec §13
   only; not a vendor fact

@@ -49,7 +49,7 @@ pub(crate) static BM86X: SelectableDevice = SelectableDevice {
 
 pub(crate) static BM82X: SelectableDevice = SelectableDevice {
     id: Series::Bm82x.id(),
-    display_name: "Brymen BM829s/BM827s/BM822s/BM821s",
+    display_name: "Brymen BM829s/BM827s/BM822s/BM821s / ET-2517A",
     brand: Brand::Brymen,
     aliases: &[
         "bm829s",
@@ -60,6 +60,8 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
         "brymen-bm827s",
         "brymen-bm822s",
         "brymen-bm821s",
+        // Minipa's BM827s (#35).
+        "et-2517a",
     ],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
@@ -77,15 +79,23 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
 
 pub(crate) static BM52X: SelectableDevice = SelectableDevice {
     id: Series::Bm52x.id(),
-    display_name: "Brymen BM525s/BM521s",
+    display_name: "Brymen BM525s/BM521s / ET-2615A",
     brand: Brand::Brymen,
-    aliases: &["bm525s", "bm521s", "brymen-bm525s", "brymen-bm521s"],
+    aliases: &[
+        "bm525s",
+        "bm521s",
+        "brymen-bm525s",
+        "brymen-bm521s",
+        // Minipa's BM525s (#36).
+        "et-2615a",
+    ],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
     family: DeviceFamily::Bm52x,
     new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm52x, BM52X.display_name)),
     fingerprint: Some(&FINGERPRINT_52),
     manual_url: Some(BM820S_520S_MANUAL),
+    // A BM525s reads on the BU-86X (#36).
     links: &[bu86x::NAME],
     detection_verified: &[],
     bluetooth_names: &[],

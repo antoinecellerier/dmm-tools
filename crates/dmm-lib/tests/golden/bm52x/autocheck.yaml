@@ -1,0 +1,11 @@
+# AutoCheck idle: Auto on the main display, LoZ lit
+# Captured 2026-10-28 from a Brymen BM525s (Minipa ET-2615A) over BU-86X (issue #36, @SidineiSantosSousa, 0.9.0 6749b6a report, step autocheck).
+raw_hex: "00 00 10 EE 23 47 63 00 00 00 00 00 00 00 00 00 52 52 52 52 10 00 00 00"
+mode: "Auto V"
+value: "Auto"
+unit: ""
+range_label: ""
+flags:
+  auto_range: true
+  loz: true
+aux: []

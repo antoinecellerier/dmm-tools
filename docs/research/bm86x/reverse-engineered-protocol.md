@@ -18,7 +18,10 @@ their READMEs, and the two user manuals, except those tagged [HARDWARE]:
 @SidineiSantosSousa's BM827s, sold as the Minipa ET-2517A, read through a
 BU-86X cable on Windows 11 by `dmm-cli` 0.9.0 captures
 ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35),
-2026-10-27 and 2026-10-28). What that reporter saw with their own tool is
+2026-10-27 and 2026-10-28), and their BM525s, sold as the Minipa ET-2615A,
+through a BU-86X cable on Windows by a `dmm-cli` 0.9.0 capture
+([#36](https://github.com/antoinecellerier/dmm-tools/issues/36),
+2026-10-28). What that reporter saw with their own tool is
 said so, untagged. §13 compares them with community sources, and the checks a meter still has
 to answer are in [verification.md](verification.md). The approach doc
 beside it records the sources, the method and the clean-room boundary.
@@ -96,8 +99,8 @@ Confidence levels:
 - **[INFERRED]** — deduction from the above, reason given
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter (checks in [verification.md](verification.md))
-- **[HARDWARE]** — seen on a real meter: a BM827s (#35), see the
-  introduction
+- **[HARDWARE]** — seen on a real meter: a BM827s (#35) or a BM525s
+  (#36), see the introduction
 - **[COMMUNITY]** — stated in or implied by a community source, §13 only
   (opened 2026-09-27); not a vendor fact
 
@@ -139,7 +142,7 @@ see §13.8.
 All [KNOWN]. The BM820s manual contradicts itself; Brymen's program for the
 BM820s and BM520s names only BC-86X, so three sources to one point to the
 BU-86X kit [INFERRED]. A BM827s reads through the BU-86X kit, its cable
-labelled "BC-86X" [HARDWARE]; whether a BU-82X exists, or works, is
+labelled "BC-86X", and a BM525s through a BU-86X cable [HARDWARE]; whether a BU-82X exists, or works, is
 [UNVERIFIED].
 Community: see §13.3.
 That a BU-86X kit contains the BC-86X cable is [INFERRED from the names]:
@@ -189,8 +192,9 @@ spec's scope.
 enumerating as 0x0082:0x0001 [VENDOR]. The sheets' "0x82" is the programs'
 value short of one hex digit; whether it is a typo or shorthand is not
 stated [INFERRED]. The cable enumerates as 0x0820:0x0001 with release
-number 0x8603, which the About box would show as "86.03" [HARDWARE]; its
-strings read "Brymen" and "Superior DMM", per the #35 reporter's own tool.
+number 0x8603, which the About box would show as "86.03", with a BM827s
+and with a BM525s [HARDWARE]; its strings read "Brymen" and "Superior
+DMM", per the #35 reporter's own tool.
 Community: see §13.2.
 
 **Report shape** [INFERRED from the Windows HID class convention: one
@@ -303,7 +307,8 @@ updates 5 times a second nominal, 1.25 in the BM860s 500000-count mode
 BM820s (BM820s manual p.13) [KNOWN]. A BM827s on one open handle, asked
 again as soon as each reply arrives, answers about 180 ms after the request
 with one reading on the display, REC included, and about 770 ms with DC V
-or DC mV on the main display and AC on the small one [HARDWARE]. So its
+or DC mV on the main display and AC on the small one [HARDWARE]. A BM525s
+answers the same way, about 190 ms and 780 ms [HARDWARE]. So a
 reply waits for the next measurement, and REC's 20/s does not speed the
 replies up. How a BM860s's replies follow its rates is [UNVERIFIED].
 
@@ -312,7 +317,10 @@ draws one. Asked back to back, 2 of about 2,560 requests went unanswered
 [HARDWARE]. The longer the gap before a request, the more are dropped: 2 of
 40 after 100 ms, 11 of 40 after 200 or 300 ms, 19 of 40 after 500 ms, none
 back to back, and waiting 2.5 s does not bring the reply, per the #35
-reporter's own tool. Community: see §13.4.
+reporter's own tool. A BM525s asked back to back answered every request
+except during the capture's InEr, logging and Recall steps, where it
+stopped answering for 12 s to 100 s at a time [HARDWARE]; what its LCD
+showed then is [UNVERIFIED]. Community: see §13.4.
 
 ### 3.4 No meter, meter off
 
@@ -388,8 +396,9 @@ ID (Bs8252x `:21836-21861`, `:22207-22424`) [VENDOR]: it decodes the BM820
 Table 1 layout. Read with that decoder, the BM820 example's secondary
 display comes out as " 0.12" instead of 50.12 (§9.2). A BM827s sends the
 BM820 Table 1 layout: read that way, its small display gives 12.61 mV beside
-60.01 Hz [HARDWARE]. The example and the BM520-ML table look like a
-drafting error [INFERRED]; a BM520s's layout is [UNVERIFIED]. Community: see
+60.01 Hz [HARDWARE]. A BM525s sends it too: its small display gives
+1.234 V beside 999.7 Hz [HARDWARE]. The example and the BM520-ML table
+look like a drafting error [INFERRED]. Community: see
 §13.2.
 
 ---
@@ -534,13 +543,21 @@ before the symbol in this sheet.
 The map encodes no dial position, function code or range code (BM820 p.1)
 [KNOWN].
 
-On a BM827s [HARDWARE], bytes 2 and 25-27 read `00`. Byte 18 reads `00`,
+On a BM827s and a BM525s [HARDWARE], bytes 2 and 25-27 read `00`. Byte 18 reads `00`,
 `06`, `07`, `0C`, `0D`, `8C`, `CC`, `EC`, `FC` or `F6`: bit 3 is set in
 places with mV, Ω, continuity or mA and clear with V, Hz, nS, capacitance,
 diode or temperature, so it does not mark mV. The low half of byte 24 reads
 `0`, `1`, `3`, `7` or `F`, and the high half of byte 18 `8`, `C`, `E` or
 `F` in AC mV and MΩ readings, a run like a bar filling. What these bits
 carry is [UNVERIFIED].
+
+On a BM525s [HARDWARE], byte 18 reads `06` or `07` in V, `0C` or `0D` in
+mV, Ω, continuity and mA, `FC` at OL, and `00` in AutoCheck idle, Hz, duty,
+nS, temperature, capacitance, diode, CREST and with a reading on the small
+display. Its bit 0 is set with a negative reading. The low half of byte 24
+reads `F` with a large reading and `0` near zero. The reporter of #36 first
+saw byte 18 follow the function. A bar graph with its own sign would
+explain both bytes [UNVERIFIED].
 
 ### 6.2 Digits and decimal points
 
@@ -592,7 +609,7 @@ neither is in the data [INFERRED from the map]. Community: see §13.5.
 | 3.2 | ⑤ ▭ | the dash of "MAX-MIN" [INFERRED by ⑤]; so MAX, MIN and the dash are separate segments [INFERRED from the map]; a BM827s lights it with 3.0 and 3.3 in REC's and CREST's MAX-MIN [HARDWARE] |
 | 3.7, 3.6 | Hi, Lo | none found in the BM820s manual text, 2026-09-27 |
 | 4.6, 4.5 | △, % | the "△%" pair left of the main display; △ is relative zero [INFERRED as in §5.5], lit by a BM827s after △ is pressed [HARDWARE]; "%": none found in the manual text, 2026-09-27 |
-| 4.4 | LoZ | lit in AutoCheck (p.7) |
+| 4.4 | LoZ | lit in AutoCheck (p.7); a BM525s lights it in AutoCheck, and in AutoCheck Ω lights Ω without the continuity symbol [HARDWARE] |
 | 4.2 | LPF | none found in the manual text, 2026-09-27 |
 | 4.1 | ④ ▭ | the dash between T1 and T2 [INFERRED by ④] |
 | 9.4 | @ | none found in the manual text, 2026-09-27 |
@@ -692,9 +709,11 @@ shows them for 0.3-1 s after RANGE or SELECT, before the reading: `-.---`
 beside Hz, on either display. Around a manual range and the start of REC,
 its small display is instead blank but for its point, beside Hz. To the
 eye, the LCD showed `0.000 Hz` throughout. This is per @SidineiSantosSousa,
-from their own tool on the BU-86X (#35); whether the BM86x and BM52x do the
-same is [UNVERIFIED]. A BM525s's main display read blank but for its point,
-beside D%, for a moment going into a logging session, per #36's capture.
+from their own tool on the BU-86X (#35). A BM525s shows dashes, with or
+without a point, beside Ω, kΩ or MΩ while AutoCheck Ω ranges [HARDWARE],
+and its main display read blank but for its point, beside D%, for a moment
+going into a logging session [HARDWARE]. Whether the BM86x does the same is
+[UNVERIFIED].
 Brymen's programs draw the dashes and the point as
 they are. Their recorder drops a sample whose main or small display reads
 only "." (Bs8252x sigfix `:2220-2246`, `:2415-2440`), and has no case for
@@ -1086,7 +1105,8 @@ absence in every "only" list [INFERRED]. The backlight is "Models 525s,
 521s, 829s only" (BM820s manual p.13) [KNOWN], so the 821s, 822s and 827s
 have none. Whether the 821s and
 822s offer DC+AC current is not addressed (BM820s manual p.12)
-[UNVERIFIED].
+[UNVERIFIED]. A BM525s's REC steps MAX, MIN and MAX-MIN, AVG never lit
+[HARDWARE].
 
 ### 11.2 BM860s dial (BM869s drawn, BM860s manual p.1)
 
@@ -1126,7 +1146,8 @@ ACV + Hz first and the figure Hz + ACV first (p.6) [UNVERIFIED].
 a BM827s showed DC alone, DC with AC on the small display, and AC with Hz on
 the small display, never ⎓ and ~ together on the main display [HARDWARE];
 whether its SELECT order lacks that state, as its AC-only TRMS (§11.1)
-suggests, is [UNVERIFIED].
+suggests, is [UNVERIFIED]. A BM525s at A mA showed ⎓ and ~ together, with
+AC on the small display [HARDWARE].
 
 ### 11.4 Keys
 
@@ -1170,9 +1191,10 @@ the BM820s (BM860s manual p.13; BM820s manual p.13) [KNOWN].
 ### 11.6 Messages and APO
 
 - Messages: see §7.3. Open-thermocouple indication, "OPEn" or "E" codes:
-  none found in either manual, 2026-09-26 [KNOWN]. A BM827s at T1 with
-  nothing plugged in shows three dashes and the unit letter, `---C`
-  [HARDWARE] (`---F` in °F, per the #35 reporter's own tool).
+  none found in either manual, 2026-09-26 [KNOWN]. A BM827s and a BM525s
+  at T1 with nothing plugged in show three dashes and the unit letter,
+  `---C` [HARDWARE]; a BM525s at T2 shows `---F` in °F [HARDWARE] (and a
+  BM827s at T1, per the #35 reporter's own tool).
 - dBm with the leads open: none found in either manual, 2026-09-30; every
   dBm figure has the leads on an AC source (BM860s manual p.7, p.9; BM820s
   manual p.7, p.9) [KNOWN].

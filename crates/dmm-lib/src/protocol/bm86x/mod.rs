@@ -86,14 +86,17 @@ impl Series {
 
     /// How far real meters have confirmed the series. A BM827s has run the
     /// BM82x's main modes, REC and CREST on 0.9.0 (#35); HOLD, EF, InEr, µA,
-    /// A and auto-detection after a restart have not run on one, so
-    /// PartlyVerified keeps the warning and the badge linking to the issue.
-    /// The catalog keeps the BM829s, BM822s and BM821s Experimental until
-    /// one runs. No BM86x or BM52x has run the tool.
+    /// A and auto-detection after a restart have not run on one. A BM525s
+    /// has run the BM52x's main modes, AutoCheck, HOLD, REC and CREST
+    /// (#36); AC+DC V, T2, µA, A, InEr, logging, Recall and auto-detection
+    /// after a restart have not. PartlyVerified keeps the warning and the
+    /// badge linking to the issue. The catalog keeps the BM829s, BM822s,
+    /// BM821s and BM521s Experimental until one runs. No BM86x has run the
+    /// tool.
     const fn stability(self) -> Stability {
         match self {
-            Series::Bm82x => Stability::PartlyVerified,
-            Series::Bm86x | Series::Bm52x => Stability::Experimental,
+            Series::Bm82x | Series::Bm52x => Stability::PartlyVerified,
+            Series::Bm86x => Stability::Experimental,
         }
     }
 
@@ -334,7 +337,7 @@ mod tests {
             (
                 Series::Bm82x,
                 DeviceFamily::Bm82x,
-                "Brymen BM829s/BM827s/BM822s/BM821s",
+                "Brymen BM829s/BM827s/BM822s/BM821s / ET-2517A",
                 &[
                     "bm829s",
                     "BM827s",
@@ -344,14 +347,21 @@ mod tests {
                     "brymen-bm827s",
                     "brymen-bm822s",
                     "brymen-bm821s",
+                    "ET-2517A",
                 ],
                 &FINGERPRINT_82,
             ),
             (
                 Series::Bm52x,
                 DeviceFamily::Bm52x,
-                "Brymen BM525s/BM521s",
-                &["bm525s", "BM521s", "brymen-bm525s", "brymen-bm521s"],
+                "Brymen BM525s/BM521s / ET-2615A",
+                &[
+                    "bm525s",
+                    "BM521s",
+                    "brymen-bm525s",
+                    "brymen-bm521s",
+                    "ET-2615A",
+                ],
                 &FINGERPRINT_52,
             ),
         ] {

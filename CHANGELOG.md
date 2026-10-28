@@ -4,7 +4,7 @@
 
 ### Devices
 
-- **The Brymen BM827s (Minipa ET-2517A) is partly verified** — thanks to [@SidineiSantosSousa](https://github.com/SidineiSantosSousa) for the captures ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)).
+- **The Brymen BM827s (Minipa ET-2517A) and BM525s (Minipa ET-2615A) are partly verified** — thanks to [@SidineiSantosSousa](https://github.com/SidineiSantosSousa) for the captures ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)).
 
 ### Bug fixes
 
