@@ -1,0 +1,13 @@
+# Hz on the main display at mains frequency, AC mV on the small one
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step hz_acmv).
+raw_hex: "00 00 00 6F BF AF A0 40 A0 DB 6F A0 90 10 00 00 82 82 82 82 10 00 00 00"
+mode: "Hz"
+value: "60.01"
+unit: "Hz"
+range_label: ""
+flags:
+  auto_range: true
+aux:
+  - label: "AC"
+    value: "12.61"
+    unit: "mV"

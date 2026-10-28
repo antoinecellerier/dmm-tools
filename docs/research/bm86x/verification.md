@@ -14,53 +14,55 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 
 - A few seconds of `RUST_LOG=dmm_lib=trace dmm-cli --device <id> debug`, in
   DC V reading negative (leads reversed on a battery), then Ω with leads open
-  — settles most items below, the report descriptor included. (#34–#36)
-- A first confirmed report per series — gates its spec tables, which the two
-  manuals carry. (#34–#36)
+  — settles most items below, the report descriptor included. (#34, #36)
+- A first confirmed report for the BM86x and BM52x — gates their spec
+  tables, which the two manuals carry; a BM827s has run the BM82x (#35), so
+  its tables can be transcribed. (#34–#36)
 
 ## Cable
 
-- The VID:PID the cable enumerates with, 0x0820:0x0001 in Brymen's programs,
-  0x82/0x01 in the sheets (§2, §13.2) — decides `transport::bu86x`'s match.
-  Needs `lsusb` with the cable plugged in. (#34–#36)
 - The report descriptor: 8-byte input and 3-byte output reports, unnumbered
-  (§2, §13.2) — decides whether `input_payload` drops a leading `00`. Needs
-  the first report's trace. (#34–#36)
-- The cable's strings, whether its serial is printable, and whether its
-  release number reads as a firmware version (§2, §13.2) — decides the
+  (§2, §13.2) — decides whether `input_payload` drops a leading `00` on
+  Linux and macOS; Windows reads a BM827s (#35). Needs the first report's
+  trace there. (#34–#36)
+- Whether the cable's serial is printable (§2, §13.2) — decides the
   transport info. Needs `lsusb -v -d 0820:0001`. (#34–#36)
-- Which cable a BM820s or BM520s needs: BU-82X on p.13 of Brymen's manual,
-  BU-86X on its p.20 and in Minipa's ET-2517A/ET-2615A manual (§1.2, §13.3)
-  — decides the entries' links. Needs a BM82x or BM52x on a BU-86X. (#35, #36)
 
 ## Requests and model bytes
 
-- Whether a BM52x answers `82 66` too, as Brymen's programs expect (§3.1, D1
-  in §13.3) — settles §3.1; a named BM52x is asked `52 66` alone. Needs an
-  `auto` trace with a BM52x: detection sends `86 66`, `82 66`, `52 66`. (#36)
-- What a meter does with another series' request (§3.1, §13.3 D1, §13.6) —
-  decides what detection's order costs. Needs `auto` traces on a BM82x and a
-  BM52x, and `--device bm82x` on a BM86x. (#34–#36)
+- Whether a BM52x answers `82 66` too, as Brymen's programs expect and the
+  #36 reporter's own tool saw (§3.1, D1 in §13.3) — settles §3.1; a named
+  BM52x is asked `52 66` alone. Needs an `auto` trace with a BM52x:
+  detection sends `86 66`, `82 66`, `52 66`. (#36)
+- What a BM82x or BM52x does with `86 66`, and a BM86x with `82 66` (§3.1,
+  §13.3 D1, §13.6) — decides what detection's order costs. Needs `auto`
+  traces on a BM82x and a BM52x, and `--device bm82x` on a BM86x. (#34–#36)
 - Bytes 20-22 on a BM86x, "don't care" on the BM860 sheet, `86` in community
   captures (§4.2, §13.3) — detection needs four `86`, a named read byte 23
   alone. Needs any BM86x trace. (#34)
 - Whether any byte tells the models of a series apart (§4.2) — decides one
   entry per series. Needs traces from two models of one series. (#34–#36)
-- The "don't care" bytes: BM860s 2 and 24-27; BM820s/BM520s 2, 18, 24 bits
-  3-0 and 25-27 (§4.1, §5.1, §6.1, §13.3) — decides whether they stay
-  silent. Needs traces across functions, Ω included. (#34–#36)
+- The "don't care" bytes: BM860s 2 and 24-27; BM520s 2, 18, 24 bits 3-0
+  and 25-27; a BM827s's byte 18 and byte 24's low half vary (§4.1, §5.1,
+  §6.1, §13.3) — decides whether they stay silent or carry the bar. Needs
+  traces across functions, Ω included, and a reading swept up a range.
+  (#34–#36)
 
 ## Timing and replies
 
-- Whether a reply waits for a fresh measurement or comes from a frame the
-  cable holds, and its rate against the 5, 1.25 and 20/s displays (§1.2, §3.3,
-  §13.4) — settles §3.3. Needs DC V, `counts_500000` and `rec`. (#34–#36)
-- Whether one open handle can be polled back to back, as Brymen's programs do,
-  or must be reopened per reading, as the sheets' flowchart does (§3.2, §13.4)
-  — settles §3.2. Needs the first report's trace. (#34–#36)
-- A BM86x at 500000 counts (1.25/s) against detection's three 600 ms windows,
+- Whether a BM86x or BM52x reply waits for a fresh measurement, as a
+  BM827s's does, and its rate against the 5, 1.25 and 20/s displays (§1.2,
+  §3.3, §13.4) — settles §3.3. Needs DC V, `counts_500000` and `rec`. (#34,
+  #36)
+- A BM86x at 500000 counts (1.25/s), or a BM82x answering after about 770 ms
+  with AC on the small display, against detection's three 600 ms windows,
   and whether a new request cancels a pending one (§3.3) — decides whether
-  `auto` finds it. Needs `auto` after `counts_500000`. (#34)
+  `auto` finds it. Needs `auto` after `counts_500000`, or after `dcv_acv` on
+  a BM82x. (#34, #35)
+- Requests dropped after an idle gap: a BM827s drops up to half after
+  500 ms, each costing `reply::read`'s 4 s wait (§3.3) — decides whether a
+  read re-sends, which `read --interval-ms` and the GUI's interval need. Needs
+  `read --interval-ms 1000` on a BM82x, and any BM86x or BM52x. (#34–#36)
 - Capacitance replies slower than the 4 s wait (§3.3) — decide `REPLY_WAIT`
   and whether a late reply is taken for the next one's: the drain drops only
   what has arrived. Needs `cap` on a large capacitor, then `auto`. (#34–#36)
@@ -76,9 +78,10 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 
 ## Display
 
-- The minus segments, 4.7 and 12.4 on the BM860s, 4.7 and 9.5 on the
-  BM820s/BM520s (§5.3, §6.3, §13.5) — decides the sign. Needs
-  `dcv_negative`. (#34–#36)
+- The minus segments, 4.7 and 12.4 on the BM860s, and the small display's
+  9.5 on the BM820s/BM520s; a BM827s's 4.7 is confirmed (§5.3, §6.3, §13.5)
+  — decides the sign. Needs `dcv_negative` on a BM86x, and a negative
+  small-display reading. (#34–#36)
 - The BM860s secondary point: the sheet's hex sets 7p, its figure 8p (§9.1,
   §13.5) — decides where the sub-value's point goes. Needs `hz_acv`, noting
   the LCD. (#34)
@@ -86,28 +89,27 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
   (§9.1) — such a reply reads as an unknown function. Needs `acv`. (#34)
 - The 500000-count digits and points (§5.2) — decides the six-digit read.
   Needs `counts_500000`, noting the LCD. (#34)
-- Report II's ID at byte 10 and the small display at 11-14, as BM820 Table 1
-  has it, not the sheet's example (§4.3, §13.2) — decides the BM820 map.
-  Needs `hz_acv` on a BM82x or BM52x. (#35, #36)
+- Report II's ID at byte 10 on a BM52x, as a BM827s sends it, not the
+  BM520-ML table's byte 11 (§4.3, §13.2) — decides the BM520 map. Needs
+  `hz_acv` on a BM52x. (#36)
 - The small display's own C or F on a temperature, and DC② and T1② there,
   read as sub-values though no manual figure shows them (§6.2, §6.5) — decides
   `secondary`. Needs `t1_t2` and the V steps. (#35, #36)
 - T1 + T2 against T1 − T2: both T bits read as T1-T2, the dash silent (§8.2;
   the community disagrees, §13.5) — decides the mode. Needs `t1_t2` and
   `t1_minus_t2`. (#34–#36)
-- What an open thermocouple shows, in neither manual (§11.6) — dashes with
-  the unit letter read as no reading. Needs `t1_open`. (#34–#36)
-- △ read as REL (§5.5, §6.5, §13.5) — confirms the `rel` flag. Needs `rel`.
-  (#34–#36)
+- What an open thermocouple shows on a BM86x or BM52x, in neither manual;
+  a BM827s shows `---C` (§11.6) — dashes with the unit letter read as no
+  reading. Needs `t1_open`. (#34, #36)
+- △ read as REL on a BM86x, as a BM827s lights it (§5.5, §6.5, §13.5) —
+  confirms the `rel` flag. Needs `rel`. (#34)
 - Silent segments: BM860s bar scale, ③, ④, the "1" by 1g; BM820s Hi, Lo, LPF,
-  @, "%" by △, small D%, MAX-MIN dash (§5.3-§5.5, §6.5) — which become flags.
-  Needs `acv`, `dcv_negative`, `rel`, `t1_minus_t2`, `rec_max_min`. (#34–#36)
-- Byte 18 bit 3 on the BM820s/BM520s, the programs' "mV" variant, "don't
-  care" in the sheet (§8.1) — decides whether it stays silent. Needs `dcmv`
-  and `acmv`. (#35, #36)
+  @, "%" by △, small D% (§5.3-§5.5, §6.5) — which become flags. Needs `acv`,
+  `dcv_negative`, `rel`, `t1_minus_t2`. (#34–#36)
 - Where the bar graph is: no byte of either map carries it (§5.4, §6.4;
-  bytes 2 and 24 candidates, §13.5) — decides a bar graph. Needs a reading
-  near full scale. (#34–#36)
+  bytes 2 and 24 candidates, §13.5); on a BM827s byte 24's low half and
+  byte 18's high half fill in steps (§6.1) — decides a bar graph. Needs a
+  reading swept up a range, the bar noted. (#34–#36)
 - Small-display bits no BM820s manual function lights (§6.5): 14.4
   read as the loop percentage; Ω②, F②, S② and a number beside D%② reported
   and dropped — decides `secondary`. Needs captures across functions. (#35, #36)
@@ -117,9 +119,11 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 - How the meter draws InEr's I and C_Er's `_` (§7.3, §13.5) — `?nEr` and
   `1nEr` both read as InEr. Needs `iner`, and the self-test at power-on.
   (#34–#36)
-- "E.F.": which digits and points light, how many marks each field
-  strength lights, and whether any annunciator lights with them (§7.3) —
-  dashes read as the field only with nothing else lit. Needs `ef`, `ncv`. (#35)
+- "E.F.": whether the meter answers at all while it shows (the #35
+  reporter's own tool got nothing), which digits and points light, how many
+  marks each field strength lights, and whether any annunciator lights with
+  them (§7.3) — dashes read as the field only with nothing else lit. Needs
+  `ef`, `ncv`. (#35)
 - What dBm shows with the leads open, in no manual (§11.6) — dashes beside
   dBm read as no reading, not EF. Needs `dbm`. (#34, #35)
 - Whether a BM86x or BM52x also shows dashes beside a unit after RANGE or
@@ -143,9 +147,13 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 
 ## Manuals
 
-- The BM867s, 821s, 822s and 827s dials, DC+AC current on the 821s/822s, the
-  VFD SELECT order and the "1V range" Hz sensitivity (§11.1-§11.3) — decides
-  the capture steps. Needs those meters, or a later manual. (#34, #35)
+- The BM867s, 821s, 822s and 827s dials, DC+AC current on the 821s/822s and
+  827s (a BM827s's SELECT never showed it, §11.3), the VFD SELECT order and
+  the "1V range" Hz sensitivity (§11.1-§11.3) — decides the capture steps.
+  Needs those meters, or a later manual. (#34, #35)
+- Which unit the A mA position shows with the leads open and the red lead in
+  A, mA or A (§11.3, §11.5) — decides the `dca` steps' expectations. Needs
+  `dca`, the LCD noted. (#34–#36)
 
 ## Models
 

@@ -1,0 +1,9 @@
+# nS with the leads open
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step ns).
+raw_hex: "00 00 00 AF BF AF 6D 00 00 00 00 00 00 00 0A 00 82 82 82 82 00 00 00 00"
+mode: "nS"
+value: "0.05"
+unit: "nS"
+range_label: ""
+flags: {}
+aux: []

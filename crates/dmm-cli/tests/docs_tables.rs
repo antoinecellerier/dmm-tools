@@ -99,6 +99,14 @@ fn hardware_families() -> Vec<(&'static str, Vec<&'static str>)> {
         .collect()
 }
 
+/// The display name and each model it lists: "Brymen BM829s/BM827s" names
+/// the BM829s and the BM827s too. "UT71C/D/E" abbreviates, so a piece too
+/// short to stand alone does not count.
+fn listed_models(display_name: &str) -> impl Iterator<Item = &str> {
+    let models = display_name.rsplit(' ').next().unwrap_or(display_name);
+    std::iter::once(display_name).chain(models.split('/').filter(|m| m.len() > 3))
+}
+
 #[test]
 fn cli_reference_device_table_matches_the_registry() {
     let relative = "docs/cli-reference.md";
@@ -126,7 +134,8 @@ fn cli_reference_device_table_matches_the_registry() {
 ///
 /// The rule is per protocol family, not per device, because those abbreviations
 /// mean a model need not appear under its own display name: a family counts as
-/// listed when the block names it (its `family_name`) or any one of its models.
+/// listed when the block names it (its `family_name`) or any one of its models,
+/// including one model of an entry that lists several ("Brymen BM829s/BM827s").
 /// Every verification issue must be linked, so a new experimental family cannot
 /// ship without a row pointing readers at where to help.
 #[test]
@@ -135,7 +144,11 @@ fn readme_device_table_names_every_family_and_issue() {
     let block = &text[block];
     for (family_name, models) in hardware_families() {
         assert!(
-            block.contains(family_name) || models.iter().any(|m| block.contains(m)),
+            block.contains(family_name)
+                || models
+                    .iter()
+                    .flat_map(|m| listed_models(m))
+                    .any(|m| block.contains(m)),
             "README device table names neither the {family_name} family nor any of its models {models:?}"
         );
     }

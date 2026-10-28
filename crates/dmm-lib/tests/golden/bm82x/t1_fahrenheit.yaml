@@ -1,0 +1,9 @@
+# T1 in °F, a type-K thermocouple at room temperature
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step temp_unit).
+raw_hex: "00 00 01 AF A8 AF 4E 00 00 00 00 00 00 00 00 00 82 82 82 82 00 00 00 00"
+mode: "T1"
+value: "70"
+unit: "°F"
+range_label: ""
+flags: {}
+aux: []

@@ -243,8 +243,8 @@ Resolved disagreements:
 1. **Report II position** (spec §4.3): BM820 Table 1, BM860, MRAD and the
    9-byte reads put it at byte 10; the BM820 example and BM520-ML Table 1
    at byte 11. Bs8252x indexes byte 10 as the report ID and bytes 11-14 as
-   the secondary digits. Recorded as the stronger reading; still open for
-   hardware.
+   the secondary digits. Recorded as the stronger reading; a BM827s
+   confirmed it (#35).
 2. **BM860 secondary point** (spec §9.1): the example's hex sets 7p, its
    figure lights 8p and its caption reads 60.11. Fig 1 and Bs86x both put
    7p after digit 7, so the example, not the labels, is inconsistent.
@@ -300,6 +300,7 @@ As used in `reverse-engineered-protocol.md`:
 - **[INFERRED]** — deduction from the above, reason given
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter
-- **[HARDWARE]** — seen on a real meter: none yet
+- **[HARDWARE]** — seen on a real meter: a BM827s (Minipa ET-2517A) on a
+  BU-86X, Windows 11, through `dmm-cli` 0.9.0 captures (#35)
 - **[COMMUNITY]** — stated in or implied by a community source, spec §13
   only; not a vendor fact

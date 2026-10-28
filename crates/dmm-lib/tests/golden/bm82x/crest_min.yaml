@@ -1,0 +1,12 @@
+# CREST on MIN: C and MIN lit, a negative peak
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step crest_min).
+raw_hex: "00 28 80 BF EF A0 ED 00 00 00 00 00 00 00 20 00 82 82 82 82 50 00 00 00"
+mode: "DC V"
+value: "-0.819"
+unit: "V"
+range_label: ""
+flags:
+  auto_range: true
+  peak_min: true
+  dc: true
+aux: []

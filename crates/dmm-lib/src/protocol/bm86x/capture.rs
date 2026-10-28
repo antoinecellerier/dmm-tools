@@ -1,7 +1,8 @@
 //! The capture steps, worded from the BM860s manual and the BM820s/BM520s
 //! manual.
 //!
-//! Nothing here has run on a meter. The BM860s manual draws the BM869s
+//! A BM827s has run the BM82x steps in [`BM827S_RAN`] (#35); nothing else
+//! here has run on a meter. The BM860s manual draws the BM869s
 //! (p.1); its steps follow the dial from VFD round to the current
 //! positions (p.6-12), with the keys (p.13-14) at DCV, the gate first and
 //! the Beep-Jack warning (p.14) last. The BM820s/BM520s manual draws the
@@ -57,6 +58,51 @@ const REC_MAX_MIN: &[(Flag, bool)] = &[
     (Flag::Avg, false),
 ];
 const INPUT_WARNING: &[(Flag, bool)] = &[(Flag::LeadError, true)];
+
+/// The BM82x steps @SidineiSantosSousa's BM827s (Minipa ET-2517A) ran on
+/// 0.9.0 with the readings the steps ask for (#35). Their `dcv_acv` run
+/// sampled a blank small display, but the gate steps they confirmed on the
+/// LCD were in that state. Not here: HOLD, EF, InEr and the µA and A steps,
+/// which the run did not reach as worded; the AC+DC current steps, which
+/// the BM827s showed as DC with AC on the small display; and what the
+/// BM827s lacks (spec §11.1).
+const BM827S_RAN: &[&str] = &[
+    "dcv",
+    "dcv_short",
+    "dcv_negative",
+    "ohm_ol",
+    "ohm_body",
+    "ohm_short",
+    "acv",
+    "hz_acv",
+    "dcv_acv",
+    "rel",
+    "manual_range",
+    "range_auto",
+    "rec",
+    "rec_max",
+    "rec_min",
+    "rec_max_min",
+    "rec_avg",
+    "crest_max",
+    "crest_min",
+    "crest_max_min",
+    "dcmv",
+    "dcmv_acmv",
+    "logic_hz",
+    "duty",
+    "acmv",
+    "hz_acmv",
+    "cont",
+    "ns",
+    "t1_open",
+    "t1",
+    "temp_unit",
+    "cap",
+    "diode",
+    "dcma",
+    "acma",
+];
 
 /// The BM869s and BM867s.
 pub(super) fn bm86x() -> Vec<CaptureStep> {
@@ -821,7 +867,7 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             "acdcua",
             pick(
                 "µA position: press SELECT until the main display shows ⎓ and ~ both (skip if \
-                 SELECT never shows it; it may be missing on the BM821s and BM822s)",
+                 SELECT never shows it; it may be missing on the BM821s, BM822s and BM827s)",
                 "µA position: press SELECT until the main display shows ⎓ and ~ both",
             ),
         )
@@ -842,8 +888,8 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             "acdcma",
             pick(
                 "A mA position, lead in mA µA: press SELECT until the main display shows ⎓ and \
-                 ~ both (skip if SELECT never shows it; it may be \
-                 missing on the BM821s and BM822s)",
+                 ~ both (skip if SELECT never shows it; it may be missing on the BM821s, BM822s \
+                 and BM827s)",
                 "A mA position, lead in mA µA: press SELECT until the main display shows ⎓ and \
                  ~ both",
             ),
@@ -865,8 +911,8 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             "acdca",
             pick(
                 "A mA position, lead in A: press SELECT until the main display shows ⎓ and ~ \
-                 both (skip if SELECT never shows it; it may be \
-                 missing on the BM821s and BM822s)",
+                 both (skip if SELECT never shows it; it may be missing on the BM821s, BM822s \
+                 and BM827s)",
                 "A mA position, lead in A: press SELECT until the main display shows ⎓ and ~ \
                  both",
             ),
@@ -943,7 +989,12 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             .expect(Expect::mode("Recall").value(ValueExpect::NoReading)),
         ]);
     }
-    list
+    list.into_iter()
+        .map(|s| {
+            let ran = series == Series::Bm82x && BM827S_RAN.contains(&s.id);
+            s.verified_if(ran)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -998,16 +1049,31 @@ mod tests {
     }
 
     #[test]
-    fn the_gate_leads_and_nothing_is_verified() {
+    fn the_gate_leads_and_ids_are_unique() {
         for (steps, _) in series() {
             assert!(steps[..6].iter().all(|s| s.gate));
             assert!(steps[6..].iter().all(|s| !s.gate));
-            assert!(steps.iter().all(|s| !s.verified));
             assert!(steps.iter().all(|s| s.command.is_none()), "no remote keys");
             let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
             ids.sort_unstable();
             ids.dedup();
             assert_eq!(ids.len(), steps.len(), "ids are unique");
+        }
+    }
+
+    /// Only the BM82x steps a BM827s ran are verified, each of them a step
+    /// of the list; the BM86x and BM52x have run nothing.
+    #[test]
+    fn only_what_the_bm827s_ran_is_verified() {
+        let steps = bm82x();
+        let verified: Vec<&str> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
+        assert_eq!(verified.len(), BM827S_RAN.len(), "{verified:?}");
+        assert!(BM827S_RAN.iter().all(|id| verified.contains(id)));
+        for id in ["hold", "ef", "iner", "dcua", "dca", "acdcma", "autocheck"] {
+            assert!(!verified.contains(&id), "{id}");
+        }
+        for steps in [bm86x(), bm52x()] {
+            assert!(steps.iter().all(|s| !s.verified));
         }
     }
 

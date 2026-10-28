@@ -116,7 +116,8 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | EEVblog 121GW | — | 🧪 Experimental (built in) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
 | Brymen BM788BT/BM787BT | — | 🧪 Experimental (built in) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
 | Brymen BM869s/BM867s | 🧪 Experimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
-| Brymen BM829s/BM827s/BM822s/BM821s (Minipa ET-2517A) | 🧪 Experimental | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
+| Brymen BM827s (Minipa ET-2517A) | 🟡 Partly verified | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
+| Brymen BM829s/BM822s/BM821s | 🧪 Experimental | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
 | Brymen BM525s/BM521s (Minipa ET-2615A) | 🧪 Experimental | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
 | OWON OW18B/OW16B | — | 🧪 Experimental (built in) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
 | OWON OW18E | — | 🧪 Experimental (built in) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |

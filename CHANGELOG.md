@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Devices
+
+- **The Brymen BM827s (Minipa ET-2517A) is partly verified** — thanks to [@SidineiSantosSousa](https://github.com/SidineiSantosSousa) for the captures ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)).
+
 ### Bug fixes
 
 - **Dashes on a Brymen display read as no reading, not an EF level** — a BM82x showed a field level after a range or function change, other models a warning.

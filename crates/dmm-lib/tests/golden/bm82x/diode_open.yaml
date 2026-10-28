@@ -1,0 +1,9 @@
+# Diode with the leads open: .0L, diod on the small display
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step diode).
+raw_hex: "00 00 00 10 AF 07 00 00 E3 20 63 E3 00 00 20 00 82 82 82 82 00 00 00 00"
+mode: "Diode"
+value: "OL"
+unit: "V"
+range_label: ""
+flags: {}
+aux: []

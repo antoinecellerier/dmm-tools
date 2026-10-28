@@ -48,8 +48,8 @@ impl Series {
 
     /// The series code, sent in the request and returned in the model bytes
     /// (spec §3.1, §4.2). A BM52x is asked with its own sheet's `52`, which a
-    /// BM525s answers (spec §13.3), not the `82` Brymen's programs send it;
-    /// whether it answers `82` too is open.
+    /// BM525s answers (spec §13.3), not the `82` Brymen's programs send it,
+    /// though one reporter's BM525s answered `82` too (#36).
     pub(super) const fn code(self) -> u8 {
         match self {
             Series::Bm86x => 0x86,
@@ -81,6 +81,19 @@ impl Series {
             Series::Bm86x => 34,
             Series::Bm82x => 35,
             Series::Bm52x => 36,
+        }
+    }
+
+    /// How far real meters have confirmed the series. A BM827s has run the
+    /// BM82x's main modes, REC and CREST on 0.9.0 (#35); HOLD, EF, InEr, µA,
+    /// A and auto-detection after a restart have not run on one, so
+    /// PartlyVerified keeps the warning and the badge linking to the issue.
+    /// The catalog keeps the BM829s, BM822s and BM821s Experimental until
+    /// one runs. No BM86x or BM52x has run the tool.
+    const fn stability(self) -> Stability {
+        match self {
+            Series::Bm82x => Stability::PartlyVerified,
+            Series::Bm86x | Series::Bm52x => Stability::Experimental,
         }
     }
 
@@ -123,7 +136,7 @@ impl Bm86xProtocol {
             profile: DeviceProfile {
                 family_name: series.family_name(),
                 model_name,
-                stability: Stability::Experimental,
+                stability: series.stability(),
                 // The meter takes no keys over the cable (spec §1.2, §11.4).
                 supported_commands: &[],
                 // The secondary display (spec §5.2, §6.2).
@@ -359,7 +372,7 @@ mod tests {
             let profile = proto.profile();
             assert_eq!(profile.model_name, entry.display_name);
             assert_eq!(profile.max_aux_values, 1);
-            assert_eq!(profile.stability, Stability::Experimental);
+            assert_eq!(profile.stability, series.stability());
             assert!(profile.supported_commands.is_empty());
             assert!(std::ptr::eq(entry.fingerprint.unwrap(), fingerprint));
             assert_eq!(fingerprint.family, family);

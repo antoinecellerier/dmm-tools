@@ -11,11 +11,15 @@ as 7-segment patterns, and function, unit, prefix, sign and decimal point as
 annunciator bits, in one layout for the BM860s and another for the BM820s
 and BM520s. The BM521s and BM525s also answer three commands that page out
 their logged memory. The live readings of all three series are
-implemented, experimentally (`crates/dmm-lib/src/protocol/bm86x/`); the
-memory download is not. No meter from this group has been on
-our bench: every fact in §1-11 comes from Brymen's protocol documents,
-Brymen's two Windows programs and their READMEs, and the two user manuals;
-§13 compares them with community sources, and the checks a meter still has
+implemented (`crates/dmm-lib/src/protocol/bm86x/`); the memory download is
+not. No meter from this group has been on our bench. The facts in §1-11
+come from Brymen's protocol documents, Brymen's two Windows programs and
+their READMEs, and the two user manuals, except those tagged [HARDWARE]:
+@SidineiSantosSousa's BM827s, sold as the Minipa ET-2517A, read through a
+BU-86X cable on Windows 11 by `dmm-cli` 0.9.0 captures
+([#35](https://github.com/antoinecellerier/dmm-tools/issues/35),
+2026-10-27 and 2026-10-28). What that reporter saw with their own tool is
+said so, untagged. §13 compares them with community sources, and the checks a meter still has
 to answer are in [verification.md](verification.md). The approach doc
 beside it records the sources, the method and the clean-room boundary.
 
@@ -92,7 +96,8 @@ Confidence levels:
 - **[INFERRED]** — deduction from the above, reason given
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter (checks in [verification.md](verification.md))
-- **[HARDWARE]** — seen on a real meter: none yet
+- **[HARDWARE]** — seen on a real meter: a BM827s (#35), see the
+  introduction
 - **[COMMUNITY]** — stated in or implied by a community source, §13 only
   (opened 2026-09-27); not a vendor fact
 
@@ -133,7 +138,9 @@ see §13.8.
 
 All [KNOWN]. The BM820s manual contradicts itself; Brymen's program for the
 BM820s and BM520s names only BC-86X, so three sources to one point to the
-BU-86X kit [INFERRED]; which cable a BM820s actually needs is [UNVERIFIED].
+BU-86X kit [INFERRED]. A BM827s reads through the BU-86X kit, its cable
+labelled "BC-86X" [HARDWARE]; whether a BU-82X exists, or works, is
+[UNVERIFIED].
 Community: see §13.3.
 That a BU-86X kit contains the BC-86X cable is [INFERRED from the names]:
 the manuals name the kit, the READMEs the cable.
@@ -181,17 +188,20 @@ spec's scope.
 **VID:PID.** The programs match 0x0820:0x0001 and would not open a device
 enumerating as 0x0082:0x0001 [VENDOR]. The sheets' "0x82" is the programs'
 value short of one hex digit; whether it is a typo or shorthand is not
-stated [INFERRED]. The value the cable enumerates with is [UNVERIFIED]; the
-programs' value is the stronger evidence, since they run against real
-cables. Community: see §13.2.
+stated [INFERRED]. The cable enumerates as 0x0820:0x0001 with release
+number 0x8603, which the About box would show as "86.03" [HARDWARE]; its
+strings read "Brymen" and "Superior DMM", per the #35 reporter's own tool.
+Community: see §13.2.
 
 **Report shape** [INFERRED from the Windows HID class convention: one
 whole report per `ReadFile`/`WriteFile`, the report-ID byte first, `00`
 when the device does not number its reports]: input reports are 8 data
 bytes and output reports 3, unnumbered. The sheets' "Report ID= I", "II",
 "III" name the three reads, not three IDs. On the USB wire the reports then
-carry no ID byte. The HID report descriptor, endpoints and polling interval
-are not given in any source [UNVERIFIED]. Community: see §13.2.
+carry no ID byte. On Windows the cable's reports are 9 bytes in and 4 out,
+per the #35 reporter's own tool, and three of its reads make a reply
+[HARDWARE]. The HID report descriptor, endpoints and polling interval are
+not given in any source [UNVERIFIED]. Community: see §13.2.
 
 ## 3. Requests and timing
 
@@ -214,8 +224,10 @@ series' code, 2026-09-26. What the programs imply [INFERRED]: Bs82-52x
 serves both series with `82 66` for live readings, and both programs gate
 the memory import on an `82 66` reply whose byte 23 is `52` (§10.4). So
 Brymen's programs expect a BM521s or BM525s to answer `82 66`, with `52` in
-byte 23. Whether it also answers `52 66`, as its own sheet says, and whether
-a BM860s answers `82 66` or a BM820s `86 66`, are [UNVERIFIED]. Bs86x sends
+byte 23. A BM827s answers `82 66` with `82` in bytes 20-23 [HARDWARE]. It
+does not answer `52 66`, and a BM525s answers `82 66` as well as `52 66`,
+per the reporters' own tools (#35, #36). Whether a BM860s answers `82 66`,
+or a BM820s or BM520s `86 66`, is [UNVERIFIED]. Bs86x sends
 its `82 66` probe to whatever is on the cable, a BM860s included (§10.4)
 [VENDOR]. Community: see §13.3.
 
@@ -288,8 +300,19 @@ So a reply waits for the meter's next measurement, and in capacitance can
 take longer than the programs' 4 s [INFERRED from the READMEs]. The display
 updates 5 times a second nominal, 1.25 in the BM860s 500000-count mode
 (BM860s manual p.17; BM820s manual p.19), and REC runs at "fast 20/s" on the
-BM820s (BM820s manual p.13) [KNOWN]. How the reply rate relates to these is
-[UNVERIFIED]. Community: see §13.4.
+BM820s (BM820s manual p.13) [KNOWN]. A BM827s on one open handle, asked
+again as soon as each reply arrives, answers about 180 ms after the request
+with one reading on the display, REC included, and about 770 ms with DC V
+or DC mV on the main display and AC on the small one [HARDWARE]. So its
+reply waits for the next measurement, and REC's 20/s does not speed the
+replies up. How a BM860s's replies follow its rates is [UNVERIFIED].
+
+A BM827s sometimes drops a request: no reply comes, and the next request
+draws one. Asked back to back, 2 of about 2,560 requests went unanswered
+[HARDWARE]. The longer the gap before a request, the more are dropped: 2 of
+40 after 100 ms, 11 of 40 after 200 or 300 ms, 19 of 40 after 500 ms, none
+back to back, and waiting 2.5 s does not bring the reply, per the #35
+reporter's own tool. Community: see §13.4.
 
 ### 3.4 No meter, meter off
 
@@ -363,9 +386,11 @@ replies with IDs at 1, 10, 19 and 28 all show [INFERRED]. Bs8252x reads
 the secondary digits from bytes 11-14 and skips byte 10 (R[9]) as a report
 ID (Bs8252x `:21836-21861`, `:22207-22424`) [VENDOR]: it decodes the BM820
 Table 1 layout. Read with that decoder, the BM820 example's secondary
-display comes out as " 0.12" instead of 50.12 (§9.2). The meter's layout is
-[UNVERIFIED]; the example and the BM520-ML table look like a drafting error
-[INFERRED]. Community: see §13.2.
+display comes out as " 0.12" instead of 50.12 (§9.2). A BM827s sends the
+BM820 Table 1 layout: read that way, its small display gives 12.61 mV beside
+60.01 Hz [HARDWARE]. The example and the BM520-ML table look like a
+drafting error [INFERRED]; a BM520s's layout is [UNVERIFIED]. Community: see
+§13.2.
 
 ---
 
@@ -509,6 +534,14 @@ before the symbol in this sheet.
 The map encodes no dial position, function code or range code (BM820 p.1)
 [KNOWN].
 
+On a BM827s [HARDWARE], bytes 2 and 25-27 read `00`. Byte 18 reads `00`,
+`06`, `07`, `0C`, `0D`, `8C`, `CC`, `EC`, `FC` or `F6`: bit 3 is set in
+places with mV, Ω, continuity or mA and clear with V, Hz, nS, capacitance,
+diode or temperature, so it does not mark mV. The low half of byte 24 reads
+`0`, `1`, `3`, `7` or `F`, and the high half of byte 18 `8`, `C`, `E` or
+`F` in AC mV and MΩ readings, a run like a bar filling. What these bits
+carry is [UNVERIFIED].
+
 ### 6.2 Digits and decimal points
 
 - **Main display**: digits 1-4; points 1P-3P drawn after digits 1-3.
@@ -537,8 +570,9 @@ and Bs8252x reading them as main and sub "-" (Bs8252x `:21986-22424`)
 [VENDOR]. Bs8252x also keeps a separate "sub negative" flag, taken from
 12.4, which is the 5P point; its recorder uses that flag (Bs8252x
 `:21610`, `:10862`, `:11158`) [VENDOR]; that this is a leftover from the
-BM860 decoder, where 12.4 is the sub minus, is [INFERRED]. Community: see
-§13.5.
+BM860 decoder, where 12.4 is the sub minus, is [INFERRED]. A BM827s lights
+4.7 with −21.99 V on its LCD [HARDWARE]; 9.5 has not been seen lit.
+Community: see §13.5.
 
 ### 6.4 Bar graph
 
@@ -555,16 +589,16 @@ neither is in the data [INFERRED from the map]. Community: see §13.5.
 | Bit | Label | Meaning per the manual |
 |---|---|---|
 | 3.0, 3.3, 3.1 | MAX, MIN, AVG | REC and CREST readouts (BM820s manual p.13) |
-| 3.2 | ⑤ ▭ | the dash of "MAX-MIN" [INFERRED by ⑤]; so MAX, MIN and the dash are separate segments [INFERRED from the map] |
+| 3.2 | ⑤ ▭ | the dash of "MAX-MIN" [INFERRED by ⑤]; so MAX, MIN and the dash are separate segments [INFERRED from the map]; a BM827s lights it with 3.0 and 3.3 in REC's and CREST's MAX-MIN [HARDWARE] |
 | 3.7, 3.6 | Hi, Lo | none found in the BM820s manual text, 2026-09-27 |
-| 4.6, 4.5 | △, % | the "△%" pair left of the main display; △ is relative zero [INFERRED as in §5.5]; "%": none found in the manual text, 2026-09-27 |
+| 4.6, 4.5 | △, % | the "△%" pair left of the main display; △ is relative zero [INFERRED as in §5.5], lit by a BM827s after △ is pressed [HARDWARE]; "%": none found in the manual text, 2026-09-27 |
 | 4.4 | LoZ | lit in AutoCheck (p.7) |
 | 4.2 | LPF | none found in the manual text, 2026-09-27 |
 | 4.1 | ④ ▭ | the dash between T1 and T2 [INFERRED by ④] |
 | 9.4 | @ | none found in the manual text, 2026-09-27 |
 | 14.4 | %4~20mA | a %4-20mA function: none found in the BM820s manual, 2026-09-27 (the current functions, p.12, list none); the segment is in the map |
 | 15.3 | ② D% | — |
-| 24.7-24.4 | [H], [C], [R], [AUTO] | HOLD, CREST, REC, auto-ranging (p.13-14); Recall lights R and C together (p.16) |
+| 24.7-24.4 | [H], [C], [R], [AUTO] | HOLD, CREST, REC, auto-ranging (p.13-14); Recall lights R and C together (p.16); a BM827s lights 24.5 in REC, 24.6 in CREST, and 24.4 until RANGE is pressed [HARDWARE] |
 
 [KNOWN] for the labels (BM820 p.1). The disabled Bs8252x reader rejects a
 reply with 9.4 (@) set, with both 15.7 and 15.6 (sub m and µ) set, or with
@@ -642,7 +676,7 @@ entry of its own and draws as 0; "S" draws as 5 [INFERRED: same segments].
 
 | Word | Where (manual) [KNOWN] | What the programs' tables make of it |
 |---|---|---|
-| OL, .OL | open diode or reverse bias, both series (BM860s manual p.10; BM820s manual p.11-12) | "0L"; the recorder treats any value containing "L" as overload (Bs86x sigfix `:1600-1640`, `:1760`) [VENDOR] |
+| OL, .OL | open diode or reverse bias, both series (BM860s manual p.10; BM820s manual p.11-12); a BM827s in diode with the leads open sends `.0L`, diod on the small display [HARDWARE] | "0L"; the recorder treats any value containing "L" as overload (Bs86x sigfix `:1600-1640`, `:1760`) [VENDOR] |
 | InEr | Beep-Jack warning (BM860s manual p.14; BM820s manual p.14) | "?nEr" [VENDOR], or "1nEr" if the meter draws I as b c [INFERRED]; how it draws I is [UNVERIFIED] |
 | diod | secondary display, diode (BM860s manual p.10; BM820s manual p.11) | renders [VENDOR]; but both programs blank the secondary panel when no secondary unit bit is set (§8.2) [VENDOR] |
 | Auto | AutoCheck idle and on the secondary display (BM820s manual p.6) | Bs8252x renders it; Bs86x has no "u" [VENDOR] (the BM860s has no AutoCheck [KNOWN, §11.1]) |
@@ -1086,7 +1120,11 @@ ACV + Hz first and the figure Hz + ACV first (p.6) [UNVERIFIED].
 | A mA ⎓ Hz | DC → DC + AC → DC+AC + AC → AC + Hz | p.12 |
 | µA ⎓ Hz | same sequence | p.12 |
 
-[KNOWN]. The 821s, 822s and 827s dials are not drawn [UNVERIFIED].
+[KNOWN]. The 821s, 822s and 827s dials are not drawn [UNVERIFIED]. At A mA
+a BM827s showed DC alone, DC with AC on the small display, and AC with Hz on
+the small display, never ⎓ and ~ together on the main display [HARDWARE];
+whether its SELECT order lacks that state, as its AC-only TRMS (§11.1)
+suggests, is [UNVERIFIED].
 
 ### 11.4 Keys
 
@@ -1130,7 +1168,9 @@ the BM820s (BM860s manual p.13; BM820s manual p.13) [KNOWN].
 ### 11.6 Messages and APO
 
 - Messages: see §7.3. Open-thermocouple indication, "OPEn" or "E" codes:
-  none found in either manual, 2026-09-26 [KNOWN].
+  none found in either manual, 2026-09-26 [KNOWN]. A BM827s at T1 with
+  nothing plugged in shows three dashes and the unit letter, `---C`
+  [HARDWARE] (`---F` in °F, per the #35 reporter's own tool).
 - dBm with the leads open: none found in either manual, 2026-09-30; every
   dBm figure has the leads on an AC source (BM860s manual p.7, p.9; BM820s
   manual p.7, p.9) [KNOWN].

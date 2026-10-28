@@ -57,7 +57,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | **Brymen** |  |  |
 | `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | BM788BT/BM787BT (experimental) |
 | `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | BM869s/BM867s (experimental) |
-| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | BM829s/BM827s/BM822s/BM821s (experimental) |
+| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | BM829s/BM827s/BM822s/BM821s (partly verified) |
 | `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s` | BM525s/BM521s (experimental) |
 | **EEVblog** |  |  |
 | `121gw` | `eevblog121gw`, `eevblog-121gw` | 121GW (experimental) |
