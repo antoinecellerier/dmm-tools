@@ -16,8 +16,7 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
   DC V reading negative (leads reversed on a battery), then Ω with leads open
   — settles most items below, the report descriptor included. (#34, #36)
 - A first confirmed report for the BM86x — gates its spec tables, which
-  its manual carries; a BM827s (#35) and a BM525s (#36) have run the BM82x
-  and BM52x, so their tables can be transcribed. (#34)
+  its manual carries. (#34)
 
 ## Cable
 

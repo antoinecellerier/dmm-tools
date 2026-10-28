@@ -406,7 +406,8 @@ Input Z and notes in the full panel. When no spec data is available
 configured). If neither specs nor manual URL exist, nothing renders.
 
 **Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804,
-ZT-5B / V05B, and Mock (the UT61E+'s figures; none in its temperature modes).
+ZT-5B / V05B, the Brymen BM820s and BM520s series (Minipa ET-2517A,
+ET-2615A), and Mock (the UT61E+'s figures; none in its temperature modes).
 Other devices show only the Manual link.
 
 ## Alarm

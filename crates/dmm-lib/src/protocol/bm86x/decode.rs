@@ -435,7 +435,7 @@ const MODE_T1: &str = "T1";
 const MODE_T2: &str = "T2";
 const LABEL_T1: &str = "T1";
 const LABEL_T2: &str = "T2";
-const LABEL_AC: &str = "AC";
+pub(super) const LABEL_AC: &str = "AC";
 
 /// A voltage or current reading's mode.
 fn coupled(coupling: Coupling, unit: &'static str) -> &'static str {
@@ -820,7 +820,7 @@ pub(super) mod tests {
         data
     }
 
-    const BLANK: &str = "    ";
+    pub(crate) const BLANK: &str = "    ";
 
     fn decoded_as(data: &[u8], series: Series) -> (Measurement, Vec<String>) {
         let (m, reports) = capture_reports(|| decode(data, series));
@@ -1333,7 +1333,7 @@ pub(super) mod tests {
 
     const BM820_SERIES: [Series; 2] = [Series::Bm82x, Series::Bm52x];
 
-    fn lcd8(series: Series, main: &str, sub: &str, anns: &[Ann]) -> Vec<u8> {
+    pub(crate) fn lcd8(series: Series, main: &str, sub: &str, anns: &[Ann]) -> Vec<u8> {
         lcd_on(series, main, false, sub, false, anns)
     }
 

@@ -17,9 +17,10 @@ fn manual_link(ui: &mut Ui, url: &str, font_size: f32, color: Color32) {
 }
 
 /// An accuracy as the manual prints it: a figure as `±(0.1%+5)`, a word
-/// accuracy ("Not Specified", "Only for reference") as it stands.
+/// accuracy ("Not Specified", "Only for reference") as it stands. So does a
+/// response in dB ("3dB"): a bandwidth limit, not a tolerance either side.
 fn accuracy_text(accuracy: &str) -> String {
-    if accuracy.starts_with(|c: char| c.is_ascii_digit()) {
+    if accuracy.starts_with(|c: char| c.is_ascii_digit()) && !accuracy.ends_with("dB") {
         format!("\u{00B1}({accuracy})")
     } else {
         accuracy.to_string()
@@ -754,6 +755,13 @@ mod tests {
     fn a_figure_is_wrapped_in_plus_minus() {
         assert_eq!(accuracy_text("0.4%+30"), "\u{00B1}(0.4%+30)");
         assert_eq!(accuracy_text("2.5%"), "\u{00B1}(2.5%)");
+    }
+
+    /// The Brymen BM820s manual's "3dB" bounds the frequency response at
+    /// the top of a band; a ± would read as a tolerance either side.
+    #[test]
+    fn a_db_response_stands_as_printed() {
+        assert_eq!(accuracy_text("3dB"), "3dB");
     }
 
     /// "Not Specified", "Only for reference" and "reference only" are words

@@ -12,6 +12,7 @@
 //! - `glyph.rs`: the seven-segment characters and what a row shows
 //! - `decode.rs`: the lit segments → `Measurement`
 //! - `capture.rs`: the capture steps
+//! - `specs.rs`: the BM820s and BM520s manual's spec tables
 //! - `devices.rs`: the registry entries
 
 mod capture;
@@ -20,6 +21,7 @@ pub(crate) mod devices;
 mod glyph;
 mod map;
 mod reply;
+mod specs;
 
 use crate::error::Result;
 use crate::measurement::Measurement;
@@ -27,6 +29,7 @@ use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Protocol, Stability,
 };
+use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 use log::debug;
 
@@ -119,6 +122,13 @@ impl Series {
     const fn logs(self) -> bool {
         matches!(self, Series::Bm52x)
     }
+
+    /// The spec tables of the BM820s/520s manual, which covers both series
+    /// (`specs.rs`). The BM860s has a manual of its own, whose tables wait
+    /// on a first report from one.
+    const fn has_specs(self) -> bool {
+        matches!(self, Series::Bm82x | Series::Bm52x)
+    }
 }
 
 /// Report what in reply `data` no spec section covers.
@@ -186,6 +196,27 @@ impl Protocol for Bm86xProtocol {
             Series::Bm82x => capture::bm82x(),
             Series::Bm52x => capture::bm52x(),
         }
+    }
+
+    fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        if !self.series.has_specs() {
+            return None;
+        }
+        specs::row(m).map(|row| &row.spec)
+    }
+
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
+        if !self.series.has_specs() {
+            return None;
+        }
+        specs::table(m).map(|(table, _)| &table.mode)
+    }
+
+    fn spec_sheet(&self) -> Vec<SpecSheetTable> {
+        if !self.series.has_specs() {
+            return Vec::new();
+        }
+        specs::ALL.iter().map(|t| t.sheet_table()).collect()
     }
 }
 

@@ -6,6 +6,10 @@
 
 - **The Brymen BM827s (Minipa ET-2517A) and BM525s (Minipa ET-2615A) are partly verified** — thanks to [@SidineiSantosSousa](https://github.com/SidineiSantosSousa) for the captures ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)).
 
+### GUI
+
+- **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
+
 ### Bug fixes
 
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.

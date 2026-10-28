@@ -183,6 +183,34 @@ The user opened two more sources on **2026-10-23**, for issue #36:
   replayed through our decoder. The repository's protocol write-up and code
   were not opened.
 
+### Spec tables, 2026-10-28
+
+The BM820s and BM520s spec tables (`bm86x/specs.rs`) are transcribed from
+the BM820s/BM520s manual (source 6), "Specifications" on PDF pp.19-23
+(printed 18-22), one section for all six models. They are cross-checked
+against:
+
+- **Minipa's ET-2517A/ET-2615A manual** (above), its specifications; where
+  it prints another figure, the tables keep Brymen's and a comment names
+  Minipa's.
+- **Brymen's six product pages**, fetched 2026-10-28:
+  [BM821s](http://www.brymen.com/PD02BM820s_821s.html),
+  [BM822s](http://www.brymen.com/PD02BM820s_822s.html),
+  [BM827s](http://www.brymen.com/PD02BM820s_827s.html),
+  [BM829s](http://www.brymen.com/PD02BM820s_829s.html),
+  [BM521s](http://www.brymen.com/PD02BM520s_521s.html) and
+  [BM525s](http://www.brymen.com/PD02BM520s_525s.html).
+
+| Source | File (under `references/bm86x/`) | SHA-256 |
+|---|---|---|
+| Minipa manual | `manuals/Minipa-ET-2517A-2615A-manual-BR.pdf` | `8f0c1ee82b00ab2a59e399f1a44bd9a5e7e2ddb3112823d3690c4af44f268dc4` |
+| BM821s page | `specs-work/PD02BM820s_821s.html` | `25f3f5e930618b638b63a65852b3c65c76bcd43b54d938c45b7fad9c560d7758` |
+| BM822s page | `specs-work/PD02BM820s_822s.html` | `0f0c14baea645a66cfec7c26d0b4bc931e4b25185f211fb90e5d4f9a5e21dbf5` |
+| BM827s page | `specs-work/PD02BM820s_827s.html` | `3402166b7d1d7128ac9d25404be8893492b1e0314f682340519cc289b8db48db` |
+| BM829s page | `specs-work/PD02BM820s_829s.html` | `ec549c25014de1b0a0da376cfc08f4350b1e05cbef4c2ab6485207dfd1bcac24` |
+| BM521s page | `specs-work/PD02BM520s_521s.html` | `4035aedf231b4f8809932014846d736ef9b72757a599151ed0ac68c89de919fc` |
+| BM525s page | `specs-work/PD02BM520s_525s.html` | `60c019df5364f8c4702fc14408981e018c421000f129466c535df9bc27f8c7ad` |
+
 ## Methodology
 
 1. **Acquisition.** The sheets, the BM520s zip, the manuals and the three

@@ -356,6 +356,14 @@ Every family's spec data carries each mode's overload protection ("1000V", "Fuse
 
 Use cases: knowing what an input survives before probing, and which fuse to buy after one blows.
 
+### Notes for one range
+
+**Complexity:** Medium
+
+Notes belong to a table part, which covers several ranges, so a note the manual gives for one range shows on all of them, prefixed with the range it means: the UT61E+ shows "600Ω: accuracy + test-lead short-circuit resistance" on every Ω range, and a Brymen BM820s shows the 60.00MΩ temperature coefficient on 6.000MΩ. Give `SpecInfo` notes of its own, shown under the range's accuracy, move every family's range-prefixed notes onto their rows without the prefix, and teach `dump_specs`, `specs_tool.py compare` and the `/spec-data` notes step where a note lives.
+
+Use cases: a panel that shows only the remarks that apply to the reading.
+
 ### Frequency and duty specs from the dial position
 
 **Complexity:** Medium
