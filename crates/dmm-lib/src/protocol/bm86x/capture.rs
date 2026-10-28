@@ -63,10 +63,10 @@ const INPUT_WARNING: &[(Flag, bool)] = &[(Flag::LeadError, true)];
 /// The BM82x steps @SidineiSantosSousa's BM827s (Minipa ET-2517A) ran on
 /// 0.9.0 with the readings the steps ask for (#35). Their `dcv_acv` run
 /// sampled a blank small display, but the gate steps they confirmed on the
-/// LCD were in that state. Not here: HOLD, EF, InEr and the µA and A steps,
-/// which the run did not reach as worded; the AC+DC current steps, which
-/// the BM827s showed as DC with AC on the small display; and what the
-/// BM827s lacks (spec §11.1).
+/// LCD were in that state. EF and InEr count with the meter silent while
+/// E.F. or InEr showed on its LCD (spec §3.3). Not here: HOLD, which the
+/// run did not reach as worded; and the AC+DC current steps and what else
+/// the BM827s lacks (spec §11.1, §11.3).
 const BM827S_RAN: &[&str] = &[
     "dcv",
     "dcv_short",
@@ -101,8 +101,14 @@ const BM827S_RAN: &[&str] = &[
     "temp_unit",
     "cap",
     "diode",
+    "dcua",
+    "acua",
     "dcma",
     "acma",
+    "dca",
+    "aca",
+    "ef",
+    "iner",
 ];
 
 /// The BM52x steps @SidineiSantosSousa's BM525s (Minipa ET-2615A) ran on
@@ -464,12 +470,16 @@ pub(super) fn bm86x() -> Vec<CaptureStep> {
              small one Hz",
         )
         .expect(Expect::mode("AC A")),
-        // Beep-Jack input warning (p.14).
+        // Beep-Jack input warning (p.14). A BM827s fell silent while InEr
+        // showed (#35), and a BM525s at this step too (#36), so the step
+        // waits for Enter and says a silent meter is a valid result.
         CaptureStep::basic(
             "iner",
             "Red lead still in A: set the dial to V⎓, leads open (the meter beeps and shows \
-             InEr)",
+             InEr), then Enter. If the meter stops answering, \"No response from meter.\" \
+             shows within a minute: that is a valid result.",
         )
+        .wait_for_enter()
         .expect(
             Expect::new()
                 .flags(INPUT_WARNING)
@@ -601,20 +611,26 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
     ]);
     if !logs {
         // EF, non-contact only: the probe-contact mode touches a live
-        // conductor (p.12-13).
+        // conductor (p.12-13). A BM827s sends nothing while E.F. shows
+        // (#35), so the steps say a silent meter is a valid result; the
+        // expectation stays for a meter that answers.
         list.extend([
             CaptureStep::basic(
                 "ef",
                 "V⎓ position: hold HOLD (EF) for one second or more, away from any wire (E.F. \
-                 shows), then Enter (BM827s and BM829s only; skip if your meter lacks it).",
+                 shows), then Enter. If the meter stops answering, \"No response from meter.\" \
+                 shows within a minute: that is a valid result (BM827s and BM829s only; skip if \
+                 your meter lacks it).",
             )
             .wait_for_enter()
             .expect(Expect::mode("EF")),
             CaptureStep::basic(
                 "ncv",
                 "EF: hold the top of the meter near a live wire, probe tips away from it, \
-                 without touching it (dashes show), then Enter. Hold HOLD for one second or more \
-                 afterwards to leave EF (BM827s and BM829s only; skip if your meter lacks it).",
+                 without touching it (dashes show), then Enter. If the meter stops answering, \
+                 \"No response from meter.\" shows within a minute: that is a valid result. Hold \
+                 HOLD for one second or more afterwards to leave EF (BM827s and BM829s only; \
+                 skip if your meter lacks it).",
             )
             .needs(&[Need::LiveWire])
             .wait_for_enter()
@@ -917,7 +933,7 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             "acdcua",
             pick(
                 "µA position: press SELECT until the main display shows ⎓ and ~ both (skip if \
-                 SELECT never shows it; it may be missing on the BM821s, BM822s and BM827s)",
+                 SELECT never shows it: the BM827s lacks it, and the BM821s and BM822s may)",
                 "µA position: press SELECT until the main display shows ⎓ and ~ both",
             ),
         )
@@ -938,8 +954,8 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             "acdcma",
             pick(
                 "A mA position, lead in mA µA: press SELECT until the main display shows ⎓ and \
-                 ~ both (skip if SELECT never shows it; it may be missing on the BM821s, BM822s \
-                 and BM827s)",
+                 ~ both (skip if SELECT never shows it: the BM827s lacks it, and the BM821s and \
+                 BM822s may)",
                 "A mA position, lead in mA µA: press SELECT until the main display shows ⎓ and \
                  ~ both",
             ),
@@ -961,8 +977,8 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             "acdca",
             pick(
                 "A mA position, lead in A: press SELECT until the main display shows ⎓ and ~ \
-                 both (skip if SELECT never shows it; it may be missing on the BM821s, BM822s \
-                 and BM827s)",
+                 both (skip if SELECT never shows it: the BM827s lacks it, and the BM821s and \
+                 BM822s may)",
                 "A mA position, lead in A: press SELECT until the main display shows ⎓ and ~ \
                  both",
             ),
@@ -974,12 +990,16 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
              small one Hz",
         )
         .expect(Expect::mode("AC A")),
-        // Beep-Jack input warning (p.14).
+        // Beep-Jack input warning (p.14). A BM827s fell silent while InEr
+        // showed (#35), and a BM525s at this step too (#36), so the step
+        // waits for Enter and says a silent meter is a valid result.
         CaptureStep::basic(
             "iner",
             "Red lead still in A: set the dial to V⎓, leads open (the meter beeps and shows \
-             InEr)",
+             InEr), then Enter. If the meter stops answering, \"No response from meter.\" \
+             shows within a minute: that is a valid result.",
         )
+        .wait_for_enter()
         .expect(
             Expect::new()
                 .flags(INPUT_WARNING)
@@ -1123,7 +1143,7 @@ mod tests {
             (
                 bm82x(),
                 BM827S_RAN,
-                &["hold", "ef", "iner", "dcua", "dca", "acdcma", "autocheck"][..],
+                &["hold", "ncv", "acdcua", "acdcma", "acdca", "autocheck"][..],
             ),
             (
                 bm52x(),

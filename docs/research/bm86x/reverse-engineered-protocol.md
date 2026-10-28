@@ -320,7 +320,12 @@ back to back, and waiting 2.5 s does not bring the reply, per the #35
 reporter's own tool. A BM525s asked back to back answered every request
 except during the capture's InEr, logging and Recall steps, where it
 stopped answering for 12 s to 100 s at a time [HARDWARE]; what its LCD
-showed then is [UNVERIFIED]. Community: see §13.4.
+showed then is [UNVERIFIED]. A BM827s sends nothing while E.F. shows: 10
+requests went unanswered with E.F. on its LCD [HARDWARE]. At InEr, which it
+beeped for, 7 requests went unanswered over 20 s, and the step's one reply
+was an A mA reading [HARDWARE], taken before the dial reached V⎓ [INFERRED
+from its digits]; so it most likely sends nothing while InEr shows.
+Community: see §13.4.
 
 ### 3.4 No meter, meter off
 
@@ -694,10 +699,10 @@ entry of its own and draws as 0; "S" draws as 5 [INFERRED: same segments].
 | Word | Where (manual) [KNOWN] | What the programs' tables make of it |
 |---|---|---|
 | OL, .OL | open diode or reverse bias, both series (BM860s manual p.10; BM820s manual p.11-12); a BM827s in diode with the leads open sends `.0L`, diod on the small display [HARDWARE] | "0L"; the recorder treats any value containing "L" as overload (Bs86x sigfix `:1600-1640`, `:1760`) [VENDOR] |
-| InEr | Beep-Jack warning (BM860s manual p.14; BM820s manual p.14) | "?nEr" [VENDOR], or "1nEr" if the meter draws I as b c [INFERRED]; how it draws I is [UNVERIFIED] |
+| InEr | Beep-Jack warning (BM860s manual p.14; BM820s manual p.14); a BM827s fell silent while it showed (§3.3) [HARDWARE] | "?nEr" [VENDOR], or "1nEr" if the meter draws I as b c [INFERRED]; how it draws I is [UNVERIFIED] |
 | diod | secondary display, diode (BM860s manual p.10; BM820s manual p.11) | renders [VENDOR]; but both programs blank the secondary panel when no secondary unit bit is set (§8.2) [VENDOR] |
 | Auto | AutoCheck idle and on the secondary display (BM820s manual p.6) | Bs8252x renders it; Bs86x has no "u" [VENDOR] (the BM860s has no AutoCheck [KNOWN, §11.1]) |
-| E.F. | EF ready, BM827s/BM829s (BM820s manual p.12) | E and F render; with more than one point bit set no point code matches and no point is printed [VENDOR]; which digits and points the meter uses is [UNVERIFIED] |
+| E.F. | EF ready, BM827s/BM829s (BM820s manual p.12); a BM827s sends nothing while it shows (§3.3) [HARDWARE] | E and F render; with more than one point bit set no point code matches and no point is printed [VENDOR]; which digits and points the meter uses is [UNVERIFIED] |
 | rE-O, C_Er | power-on self-diagnosis (BM860s manual p.15; BM820s manual p.17) | "rE-0"; "C?Er" [VENDOR] |
 | t0.05 … | logging interval (BM820s manual p.15) | renders [VENDOR] |
 | LEFt, Strt, PAUS, Cont, StoP | logging (BM820s manual p.15-16) | "LEFt", "5trt", "PAU5", "Cont", "5toP" [VENDOR] |
@@ -815,7 +820,8 @@ sigfix `:7682-7919`) [VENDOR]:
 | Bs8252x sub | 16.2 | 16.3 | 15.7 | 15.6 | 15.2 | `:22470-22490` |
 
 [VENDOR]. Exactly one bit must be set; two or more give no prefix
-[VENDOR]. The prefix is shown beside the value, not multiplied into it: k
+[VENDOR]. A BM827s lights 17.7 with A (17.4) at µA, 17.6 with A at mA,
+and A alone at A [HARDWARE]. The prefix is shown beside the value, not multiplied into it: k
 3, M 6, m −3, µ −6 ("u"), n −9 (Bs86x `FUN_004a70e0`, `@ 0x4a7115`)
 [VENDOR].
 
@@ -1143,11 +1149,11 @@ ACV + Hz first and the figure Hz + ACV first (p.6) [UNVERIFIED].
 | µA ⎓ Hz | same sequence | p.12 |
 
 [KNOWN]. The 821s, 822s and 827s dials are not drawn [UNVERIFIED]. At A mA
-a BM827s showed DC alone, DC with AC on the small display, and AC with Hz on
-the small display, never ⎓ and ~ together on the main display [HARDWARE];
-whether its SELECT order lacks that state, as its AC-only TRMS (§11.1)
-suggests, is [UNVERIFIED]. A BM525s at A mA showed ⎓ and ~ together, with
-AC on the small display [HARDWARE].
+a BM827s's SELECT gives DC alone, DC with AC on the small display, and AC
+with Hz on the small display, never ⎓ and ~ together on the main display,
+so it has no DC+AC current [HARDWARE]. At A mA its unit follows the jack:
+A with the red lead in A, mA in mA µA [HARDWARE]. A BM525s at A mA showed
+⎓ and ~ together, with AC on the small display [HARDWARE].
 
 ### 11.4 Keys
 

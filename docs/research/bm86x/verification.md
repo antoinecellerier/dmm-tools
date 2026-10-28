@@ -61,8 +61,9 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
   read re-sends, which `read --interval-ms` and the GUI's interval need. Needs
   `read --interval-ms 1000` on a BM82x, and any BM86x or BM52x. (#34–#36)
 - What a BM525s shows while it stops answering: 12 s to 100 s at the
-  `iner`, `log_left`, `log_start` and `recall` steps (§3.3) — decides whether
-  those steps expect no reply. Needs those steps run at a terminal. (#36)
+  `iner`, `log_left`, `log_start` and `recall` steps; a BM827s fell silent
+  while InEr showed (§3.3) — decides whether the logging steps expect no
+  reply. Needs those steps run at a terminal. (#36)
 - Capacitance replies slower than the 4 s wait (§3.3) — decide `REPLY_WAIT`
   and whether a late reply is taken for the next one's: the drain drops only
   what has arrived. Needs `cap` on a large capacitor, then `auto`. (#34–#36)
@@ -115,14 +116,13 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 
 ## Words
 
-- How the meter draws InEr's I and C_Er's `_` (§7.3, §13.5) — `?nEr` and
-  `1nEr` both read as InEr. Needs `iner`, and the self-test at power-on.
-  (#34–#36)
-- "E.F.": whether the meter answers at all while it shows (the #35
-  reporter's own tool got nothing), which digits and points light, how many
-  marks each field strength lights, and whether any annunciator lights with
-  them (§7.3) — dashes read as the field only with nothing else lit. Needs
-  `ef`, `ncv`. (#35)
+- How the meter draws InEr's I and C_Er's `_`, if it sends them; a BM827s
+  fell silent while InEr showed (§3.3, §7.3, §13.5) — `?nEr` and `1nEr` both
+  read as InEr. Needs `iner` on a BM86x or BM52x, and the self-test. (#34–#36)
+- "E.F." on a BM829s: whether it answers while E.F. shows, as a BM827s does
+  not (§3.3), and if so which digits, points, field-strength marks and
+  annunciators light (§7.3) — dashes read as the field only with nothing else
+  lit. Needs `ef`, `ncv`. (#35)
 - What dBm shows with the leads open, in no manual (§11.6) — dashes beside
   dBm read as no reading, not EF. Needs `dbm`. (#34, #35)
 - Whether a BM86x also shows dashes beside a unit after RANGE or SELECT
@@ -146,14 +146,14 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 
 ## Manuals
 
-- The BM867s, 821s, 822s and 827s dials, DC+AC current on the 821s/822s and
-  827s (a BM827s's SELECT never showed it, §11.3), the VFD SELECT order and
-  the "1V range" Hz sensitivity (§11.1-§11.3) — decides the capture steps.
-  Needs those meters, or a later manual. (#34, #35)
-- Which unit the A mA position shows with the leads open and the red lead in
-  A, mA or A; a BM827s and a BM525s sent mA with the dial left at A mA
-  (§11.3, §11.5) — decides the `dca` steps' expectations. Needs `dca`, the
-  dial turned after the lead moves, the LCD noted. (#34–#36)
+- The BM867s, 821s, 822s and 827s dials, DC+AC current on the 821s/822s (a
+  BM827s has none, §11.3), the VFD SELECT order and the "1V range" Hz
+  sensitivity (§11.1-§11.3) — decides the capture steps. Needs those meters,
+  or a later manual. (#34, #35)
+- Which unit a BM86x's or a BM525s's A mA position shows with the red lead
+  in A: the BM525s sent mA with the dial left at A mA, where a BM827s follows
+  the jack (§11.3, §11.5) — decides the `dca` steps' expectations. Needs
+  `dca`, the dial turned after the lead moves, the LCD noted. (#34, #36)
 
 ## Models
 

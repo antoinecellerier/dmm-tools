@@ -1,0 +1,13 @@
+# AC A with the leads open and the red lead in A, Hz on the small display
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step aca).
+raw_hex: "00 10 00 BF AF AF 6F 00 BF AF AF AF 00 01 10 0C 82 82 82 82 10 00 00 00"
+mode: "AC A"
+value: "0.006"
+unit: "A"
+range_label: ""
+flags:
+  auto_range: true
+aux:
+  - label: "Frequency"
+    value: "0.000"
+    unit: "Hz"

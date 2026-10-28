@@ -1,0 +1,11 @@
+# DC A with the leads open and the red lead in A: A alone, no prefix
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step dca).
+raw_hex: "00 20 00 BF AF AF A0 00 00 00 00 00 00 00 10 0C 82 82 82 82 10 00 00 00"
+mode: "DC A"
+value: "0.001"
+unit: "A"
+range_label: ""
+flags:
+  auto_range: true
+  dc: true
+aux: []

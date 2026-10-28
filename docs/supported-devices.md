@@ -221,9 +221,9 @@ function.
 | BM525s / Minipa ET-2615A | 9999 (6000 in some functions) | 🟡 Partly verified ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) | data logging, up to 87000 readings; T1, T2 and T1-T2 temperature |
 | BM521s | 9999 (6000 in some functions) | 🧪 Experimental ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)) | data logging, up to 10800 readings; T1 only |
 
-A BM827s (Minipa ET-2517A) has run the main modes, REC and CREST
-([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)); HOLD, EF,
-µA and A current and auto-detection are still to confirm. A BM525s (Minipa
+A BM827s (Minipa ET-2517A) has run the main modes, REC, CREST, EF and µA
+and A current ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35));
+HOLD and auto-detection are still to confirm. A BM525s (Minipa
 ET-2615A) has run the main modes, AutoCheck, HOLD, REC and CREST
 ([#36](https://github.com/antoinecellerier/dmm-tools/issues/36)); AC+DC V,
 T2, µA and A current, logging and auto-detection are still to confirm. No

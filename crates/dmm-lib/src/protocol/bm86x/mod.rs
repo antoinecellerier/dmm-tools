@@ -88,8 +88,8 @@ impl Series {
     }
 
     /// How far real meters have confirmed the series. A BM827s has run the
-    /// BM82x's main modes, REC and CREST on 0.9.0 (#35); HOLD, EF, InEr, µA,
-    /// A and auto-detection after a restart have not run on one. A BM525s
+    /// BM82x's main modes, REC, CREST, EF, InEr, µA and A on 0.9.0 (#35);
+    /// HOLD and auto-detection after a restart have not run on one. A BM525s
     /// has run the BM52x's main modes, AutoCheck, HOLD, REC and CREST
     /// (#36); AC+DC V, T2, µA, A, InEr, logging, Recall and auto-detection
     /// after a restart have not. PartlyVerified keeps the warning and the

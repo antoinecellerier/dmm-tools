@@ -1,0 +1,11 @@
+# DC µA with the leads open, 600.0 µA range: µ (17.7) lit with A
+# Captured 2026-10-28 from a Brymen BM827s (Minipa ET-2517A) over BU-86X (issue #35, @SidineiSantosSousa, 0.9.0 6749b6a report, step dcua).
+raw_hex: "00 20 00 AF AF BF A0 00 00 00 00 00 00 00 90 0C 82 82 82 82 10 00 00 00"
+mode: "DC µA"
+value: "0.1"
+unit: "µA"
+range_label: ""
+flags:
+  auto_range: true
+  dc: true
+aux: []
