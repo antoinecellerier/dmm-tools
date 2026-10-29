@@ -55,69 +55,69 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 |---|---|---|
 | `auto` |  | [Detect the connected meter](detection-design.md) (default) |
 | **ANENG** |  |  |
-| `an9002` | `an-9002` | AN9002 (experimental) |
 | `an999s` | `an-999s` | AN999S (experimental) |
+| `an9002` | `an-9002` | AN9002 (experimental) |
 | `st207` |  | ST207 (experimental) |
 | `v05b` |  | V05B (verified) |
 | **Brymen** |  |  |
-| `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | BM788BT/BM787BT (experimental) |
-| `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | BM869s/BM867s (experimental) |
-| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | BM829s/BM827s/BM822s/BM821s (partly verified) |
 | `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s` | BM525s/BM521s (partly verified) |
+| `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | BM788BT/BM787BT (experimental) |
+| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | BM829s/BM827s/BM822s/BM821s (partly verified) |
+| `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | BM869s/BM867s (experimental) |
 | **BSIDE** |  |  |
-| `bside-zt300ab` |  | ZT-300AB (experimental) |
-| `bside-zt5bq` |  | ZT-5BQ (experimental) |
 | `bside-zt5b` |  | ZT-5B (verified) |
+| `bside-zt5bq` |  | ZT-5BQ (experimental) |
+| `bside-zt300ab` |  | ZT-300AB (experimental) |
 | **EEVblog** |  |  |
 | `121gw` | `eevblog121gw`, `eevblog-121gw` | 121GW (experimental) |
 | **Minipa** |  |  |
 | `et2517a` | `et-2517a` | ET-2517A (partly verified) |
 | `et2615a` | `et-2615a` | ET-2615A (partly verified) |
 | **OWON** |  |  |
-| `ow18b` | `ow16b`, `owon-ow18b`, `owon-ow16b` | OW18B/OW16B (experimental) |
-| `ow18e` | `owon-ow18e` | OW18E (experimental) |
 | `b33` | `b33t`, `b33+`, `b33t+`, `owon-b33` | B33 (experimental) |
 | `b35t+` | `b35+`, `owon-b35t+` | B35T+ (experimental) |
 | `b41t+` | `b41t`, `owon-b41t+` | B41T+ (experimental) |
 | `cm2100b` | `owon-cm2100b` | CM2100B (experimental) |
-| `cms101` | `owon-cms101` | CMS101 (experimental) |
 | `cms061` | `owon-cms061` | CMS061 (experimental) |
+| `cms101` | `owon-cms101` | CMS101 (experimental) |
+| `ow18b` | `ow16b`, `owon-ow18b`, `owon-ow16b` | OW18B/OW16B (experimental) |
+| `ow18e` | `owon-ow18e` | OW18E (experimental) |
 | `ow65b` | `owon-ow65b` | OW65B (experimental) |
 | `ow67b` | `owon-ow67b` | OW67B (experimental) |
 | `ow69b` | `owon-ow69b` | OW69B (experimental) |
 | **UNI-T** |  |  |
-| `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (verified) |
+| `ut60bt` |  | UT60BT (experimental) |
 | `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (verified) |
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
+| `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (verified) |
+| `ut71ab` | `ut71a`, `ut71b` | UT71A/B (experimental) |
+| `ut71cde` | `ut71c`, `ut71d`, `ut71e` | UT71C/D/E (experimental) |
 | `ut161b` |  | UT161B (experimental) |
 | `ut161d` |  | UT161D (experimental) |
 | `ut161e` | `ut161` | UT161E (verified) |
-| `ut60bt` |  | UT60BT (experimental) |
-| `ut202bt` |  | UT202BT (experimental) |
-| `ut8802` | `ut8802n` | UT8802 (experimental) |
-| `ut8803` | `ut8803e` | UT8803 (experimental) |
-| `ut803` |  | UT803 (experimental) |
-| `ut804` |  | UT804 (verified) |
-| `ut71ab` | `ut71a`, `ut71b` | UT71A/B (experimental) |
-| `ut71cde` | `ut71c`, `ut71d`, `ut71e` | UT71C/D/E (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (partly verified) |
-| `ut217b` |  | UT217B (experimental) |
+| `ut202bt` |  | UT202BT (experimental) |
 | `ut217a` |  | UT217A (experimental) |
+| `ut217b` |  | UT217B (experimental) |
+| `ut803` |  | UT803 (experimental) |
+| `ut804` |  | UT804 (verified) |
+| `ut8802` | `ut8802n` | UT8802 (experimental) |
+| `ut8803` | `ut8803e` | UT8803 (experimental) |
 | **Voltcraft** |  |  |
-| `vc880` | `vc-880` | VC-880 (experimental) |
 | `vc650bt` | `vc-650bt` | VC650BT (experimental) |
-| `vc890` | `vc-890` | VC-890 (experimental) |
-| `vc920` | `vc-920`, `vc940`, `vc-940`, `vc960`, `vc-960` | VC920/VC940/VC960 (experimental) |
 | `vc871` | `vc-871` | VC871 (experimental) |
+| `vc880` | `vc-880` | VC-880 (experimental) |
+| `vc890` | `vc-890` | VC-890 (experimental) |
 | `vc891` | `vc-891` | VC891 (experimental) |
 | `vc915` | `vc-915` | VC915 (experimental) |
+| `vc920` | `vc-920`, `vc940`, `vc-940`, `vc960`, `vc-960` | VC920/VC940/VC960 (experimental) |
 | `vc925pv` | `vc-925pv` | VC925 PV (experimental) |
 | **ZOYI / ZOTEK** |  |  |
+| `zt5b` | `zt-5b` | ZT-5B (verified) |
+| `zt5bq` | `zt-5bq` | ZT-5BQ (experimental) |
 | `zt300ab` | `zt-300ab` | ZT-300AB (experimental) |
 | `zt5566se` | `zt-5566se`, `zt5566s`, `zt-5566s` | ZT-5566SE (experimental) |
-| `zt5bq` | `zt-5bq` | ZT-5BQ (experimental) |
-| `zt5b` | `zt-5b` | ZT-5B (verified) |
 | **Simulated** |  |  |
 | `mock` |  | Mock UT61E+ (no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B (no hardware required) |

@@ -865,14 +865,14 @@ mod tests {
         run.app.settings.shared.device_family = "ut61eplus".to_string();
         open_device_list(&mut run);
         let frame = run.frame(press(egui::Key::ArrowDown));
-        assert!(focused_on_entry(&frame, "UNI-T UT61B+"));
+        assert!(focused_on_entry(&frame, "UNI-T UT71A/B"));
         let frame = run.frame(press(egui::Key::ArrowRight));
         assert!(
-            focused_on_entry(&frame, "Voltcraft VC650BT"),
+            focused_on_entry(&frame, "Voltcraft VC891"),
             "Right left the row"
         );
         let frame = run.frame(press(egui::Key::ArrowLeft));
-        assert!(focused_on_entry(&frame, "UNI-T UT61B+"));
+        assert!(focused_on_entry(&frame, "UNI-T UT71A/B"));
     }
 
     /// Enter picks the focused meter: saved as the device, the list closed
@@ -885,7 +885,7 @@ mod tests {
         run.frame(press(egui::Key::ArrowDown));
         run.frame(press(egui::Key::Enter));
         let frame = run.frame(vec![]);
-        assert_eq!(run.app.settings.shared.device_family, "ut61b+");
+        assert_eq!(run.app.settings.shared.device_family, "ut71ab");
         assert!(!device_list_open(&frame), "the list stayed open");
         let (id, node) = frame
             .nodes
@@ -894,7 +894,7 @@ mod tests {
                 n.role() == egui::accesskit::Role::ComboBox && n.label() == Some("Device")
             })
             .expect("the Device box, named for a screen reader");
-        assert_eq!(node.value(), Some("UNI-T UT61B+"));
+        assert_eq!(node.value(), Some("UNI-T UT71A/B"));
         assert_eq!(frame.focus, Some(*id), "focus did not return to the box");
     }
 

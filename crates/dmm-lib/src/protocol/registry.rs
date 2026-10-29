@@ -291,19 +291,48 @@ pub fn without_brand(name: &str) -> &str {
 }
 
 /// The device lists' rows grouped by brand: brands in [`Brand`]'s order, each
-/// with its rows in registry order, which keeps related models together and
-/// a brand's own meters ahead of the ones it sells under another maker's
-/// entry. Brands with no row are left out.
+/// with its rows in model name order ([`model_sort_key`]), so a reader finds
+/// the name on their meter's case without knowing our families. Registry
+/// order stays detection's. Brands with no row are left out.
 pub fn brand_groups() -> Vec<(Brand, Vec<Listing>)> {
     Brand::ALL
         .into_iter()
         .map(|brand| {
-            let rows = listings().filter(|l| l.brand() == brand);
-            let (own, sold): (Vec<_>, Vec<_>) = rows.partition(|l| l.sold_as.is_none());
-            (brand, own.into_iter().chain(sold).collect::<Vec<_>>())
+            let mut rows: Vec<_> = listings().filter(|l| l.brand() == brand).collect();
+            rows.sort_by_cached_key(|l| model_sort_key(l.model_name()));
+            (brand, rows)
         })
         .filter(|(_, rows)| !rows.is_empty())
         .collect()
+}
+
+/// A piece of a model name as [`model_sort_key`] compares it.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum NamePart {
+    Number(u64),
+    Letter(char),
+}
+
+/// A model name as a reader looks it up: letters alphabetically whatever
+/// their case, each run of digits by its value so the UT61E+ comes before the
+/// UT161E, and punctuation and spaces left out so the VC-880 sits between the
+/// VC871 and the VC891.
+fn model_sort_key(model: &str) -> Vec<NamePart> {
+    let mut key = Vec::new();
+    let mut chars = model.chars().peekable();
+    while let Some(c) = chars.next() {
+        if let Some(digit) = c.to_digit(10) {
+            let mut n = u64::from(digit);
+            while let Some(digit) = chars.peek().and_then(|c| c.to_digit(10)) {
+                n = n.saturating_mul(10).saturating_add(u64::from(digit));
+                chars.next();
+            }
+            key.push(NamePart::Number(n));
+        } else if c.is_ascii_alphabetic() {
+            key.push(NamePart::Letter(c.to_ascii_lowercase()));
+        }
+    }
+    key
 }
 
 /// Generic factory for protocols that implement `Default`.
@@ -623,6 +652,55 @@ mod tests {
         assert_eq!(grouped.len(), all.len());
         for id in all {
             assert!(grouped.contains(&id), "{id} not grouped");
+        }
+    }
+
+    #[test]
+    fn model_names_sort_by_number_value_ignoring_punctuation() {
+        let mut names = [
+            "UT161E",
+            "UT8802",
+            "UT61E+",
+            "UT60BT",
+            "UT71C/D/E",
+            "UT61B+",
+            "UT804",
+        ];
+        names.sort_by_cached_key(|n| model_sort_key(n));
+        assert_eq!(
+            names,
+            [
+                "UT60BT",
+                "UT61B+",
+                "UT61E+",
+                "UT71C/D/E",
+                "UT161E",
+                "UT804",
+                "UT8802"
+            ]
+        );
+        let mut names = ["VC-890", "VC891", "VC650BT", "VC-880", "VC871"];
+        names.sort_by_cached_key(|n| model_sort_key(n));
+        assert_eq!(names, ["VC650BT", "VC871", "VC-880", "VC-890", "VC891"]);
+        let mut names = ["ZT-5566SE", "ZT-5BQ", "ZT-300AB", "ZT-5B", "zt-5a"];
+        names.sort_by_cached_key(|n| model_sort_key(n));
+        assert_eq!(names, ["zt-5a", "ZT-5B", "ZT-5BQ", "ZT-300AB", "ZT-5566SE"]);
+        // A leading zero is the same value: the CMS061 before the CMS101.
+        assert!(model_sort_key("CMS061") < model_sort_key("CMS101"));
+    }
+
+    #[test]
+    fn brand_groups_list_rows_in_model_name_order() {
+        for (brand, rows) in brand_groups() {
+            let keys: Vec<_> = rows
+                .iter()
+                .map(|l| model_sort_key(l.model_name()))
+                .collect();
+            assert!(
+                keys.windows(2).all(|w| w[0] <= w[1]),
+                "{brand:?}: {:?}",
+                rows.iter().map(|l| l.model_name()).collect::<Vec<_>>()
+            );
         }
     }
 

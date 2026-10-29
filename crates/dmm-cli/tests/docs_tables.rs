@@ -201,7 +201,9 @@ fn cli_reference_tags_default_experimental_and_mock() {
     );
     assert!(table.contains("| UT61E+ (verified) |"), "{table}");
     assert!(
-        table.contains("| **Voltcraft** |  |  |\n| `vc880` | `vc-880` | VC-880 (experimental) |"),
+        table.contains(
+            "| **Voltcraft** |  |  |\n| `vc650bt` | `vc-650bt` | VC650BT (experimental) |"
+        ),
         "{table}"
     );
     assert_eq!(table.matches("default").count(), 1, "{table}");

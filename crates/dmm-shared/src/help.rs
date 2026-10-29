@@ -606,7 +606,7 @@ mod tests {
         }
         assert_eq!(seen, registry::listings().count());
         assert!(
-            help.contains("\n  Voltcraft\n    vc880         VC-880"),
+            help.contains("\n  Voltcraft\n    vc650bt       VC650BT"),
             "{help}"
         );
         assert!(help.contains("\n  UNI-T\n"), "{help}");
