@@ -74,7 +74,12 @@ fn main() {
             ..
         }
     ) {
-        open::note_picked(&device_id);
+        let by = if device_named {
+            open::PickedBy::Flag
+        } else {
+            open::PickedBy::Settings
+        };
+        open::note_picked(&device_id, by);
     }
     let selection = match registry::resolve_selection(&device_id) {
         Some(s) => s,

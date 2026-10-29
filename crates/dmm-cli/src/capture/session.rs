@@ -79,15 +79,12 @@ pub(super) fn verify_meter(
         }
     };
 
-    match &reported {
-        Some(name) => eprintln!("Device: {}", style(name).bold()),
-        // The model the run was started for, said so it is not read as the
-        // meter's own answer.
-        None => eprintln!(
-            "Device: {} (the meter does not report a name)",
-            style(crate::open::meter_name(device)).bold()
-        ),
+    // The meter the run was started for, then the meter's own name: a
+    // detected meter was named by the open already.
+    if let Some(line) = crate::open::picked_line() {
+        eprintln!("{line}");
     }
+    crate::open::print_reported_name(reported.as_deref(), |line| eprintln!("{line}"));
     let stability = dmm.profile().stability;
     let (headline, detail) = status_banner(stability);
     if stability.is_verified() {

@@ -18,6 +18,7 @@
 
 - **`--help` lists each brand's own model names, such as `ut217a`, under its brand**
 - **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
+- **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 
 ### Bug fixes

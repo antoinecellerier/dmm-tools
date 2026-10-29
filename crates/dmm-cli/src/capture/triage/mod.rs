@@ -188,9 +188,13 @@ impl<'a> Triage<'a> {
         let transport = r.transport_name.as_deref().unwrap_or("unknown link");
         match self.device {
             Some(d) => out.push_str(&format!(
-                "Device: {} ({}) over {transport}; the meter named itself {:?}\n",
+                "Device: {} ({}){} over {transport}; the meter named itself {:?}\n",
                 d.id,
                 d.display_name(),
+                r.picked_as
+                    .as_deref()
+                    .map(|id| format!(", picked as {id}"))
+                    .unwrap_or_default(),
                 r.device_name
             )),
             None => out.push_str(&format!(

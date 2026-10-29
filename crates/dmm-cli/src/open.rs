@@ -8,13 +8,14 @@ use dmm_shared::help::{ConnectedAdapters, LinksSearched};
 use std::sync::OnceLock;
 
 /// Print a "no response" warning with device-specific activation instructions.
-pub(crate) fn print_no_response_help(device: &SelectableDevice) {
+pub(crate) fn print_no_response_help(device: &'static SelectableDevice) {
     eprintln!(
-        "{} No response from meter. Check that --device {} is correct \
-         and that data transmission is enabled.",
+        "{} No response from meter. Check that it is the {} and that data \
+         transmission is enabled.",
         style("Warning:").yellow(),
-        device.id,
+        meter_name(device),
     );
+    print_picked();
     eprintln!("{}", style(device.activation_instructions).dim());
 }
 
@@ -48,6 +49,7 @@ fn print_not_found_help(links: LinksSearched<'_>) {
             .yellow()
             .bold()
     );
+    print_picked();
     print_setup_sections(links);
 }
 
@@ -62,21 +64,71 @@ pub(crate) type BoxedDmm = dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>;
 /// where the opener could hand it to them, and a run only ever opens one meter.
 pub(crate) static AUTO_DETECTED: OnceLock<dmm_lib::detect::Detected> = OnceLock::new();
 
-/// The row the user picked, from `--device` or the settings file; unset
-/// under Auto-detect. Set once, before anything is opened.
-static PICKED: OnceLock<registry::Listing> = OnceLock::new();
+/// Where the meter a run opens was named.
+#[derive(Clone, Copy)]
+pub(crate) enum PickedBy {
+    /// `--device` on the command line.
+    Flag,
+    /// The settings file's `device_family`, which dmm-gui writes when a
+    /// device is picked or Auto-detect finds one.
+    Settings,
+    /// The `# device:` line of the file being played back.
+    Recording,
+}
+
+/// The row the user picked, and where; unset under Auto-detect. Set once,
+/// before anything is opened.
+static PICKED: OnceLock<(registry::Listing, PickedBy)> = OnceLock::new();
 
 /// Record the pick `device` names, so the run calls the meter by it.
-pub(crate) fn note_picked(device: &str) {
+pub(crate) fn note_picked(device: &str, by: PickedBy) {
     if let Some(listing) = registry::resolve_listing(device) {
-        let _ = PICKED.set(listing);
+        let _ = PICKED.set((listing, by));
     }
 }
 
 /// The row this run calls `device` by: the user's pick when it opens
 /// `device`, else the maker's ([`registry::connected_listing`]).
 pub(crate) fn meter_listing(device: &'static SelectableDevice) -> registry::Listing {
-    registry::connected_listing(PICKED.get().copied(), device)
+    let picked = PICKED.get().map(|&(listing, _)| listing);
+    registry::connected_listing(picked, device)
+}
+
+/// The line that says which meter the run was told to open, and where it was
+/// told: a meter saved by dmm-gui opens with no `--device` in sight, and a
+/// wrong one would otherwise only show as a cable or meter that never
+/// answers. `None` under Auto-detect.
+pub(crate) fn picked_line() -> Option<String> {
+    let &(listing, by) = PICKED.get()?;
+    Some(selected_line(listing, by))
+}
+
+/// [`picked_line`] for `listing`, picked `by`.
+fn selected_line(listing: registry::Listing, by: PickedBy) -> String {
+    let name = listing.display_name();
+    match by {
+        PickedBy::Flag => format!("Selected: {name} (--device {})", listing.id()),
+        PickedBy::Settings => {
+            format!("Selected: {name} (saved by dmm-gui; pass --device auto to detect the meter)")
+        }
+        PickedBy::Recording => format!("Selected: {name} (named by the recording)"),
+    }
+}
+
+/// Print the name the meter reported for itself through `print`, or that it
+/// reported none — many meters never do, so that is no fault.
+pub(crate) fn print_reported_name(reported: Option<&str>, print: impl Fn(String)) {
+    match reported.filter(|n| !n.is_empty()) {
+        Some(name) => print(format!("Reported name: {}", style(name).bold())),
+        None => print(format!("Reported name: {}", style("(none)").dim())),
+    }
+}
+
+/// Print [`picked_line`], when there is one, under a failed open's headline.
+fn print_picked() {
+    if let Some(line) = picked_line() {
+        eprintln!("{line}");
+    }
 }
 
 /// Brand and model, as this run calls `device`.
@@ -357,6 +409,7 @@ fn open_error_help(
                 .yellow()
                 .bold()
             );
+            print_picked();
             for (instructions, names) in
                 dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
             {
@@ -464,4 +517,28 @@ pub(crate) fn open_mock_device(
         return Err(format!("--device {} is not simulated", selection_id(selection)).into());
     };
     Ok(dmm_lib::mock::open_simulated(device, mode, clock)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The line names the meter by the name it was picked by, and says
+    /// where: a pick saved by dmm-gui is the one a user forgets.
+    #[test]
+    fn the_selected_line_says_where_the_meter_was_picked() {
+        let et2517a = registry::resolve_listing("et-2517a").expect("a registry row");
+        assert_eq!(
+            selected_line(et2517a, PickedBy::Flag),
+            "Selected: Minipa ET-2517A (--device et2517a)"
+        );
+        assert_eq!(
+            selected_line(et2517a, PickedBy::Settings),
+            "Selected: Minipa ET-2517A (saved by dmm-gui; pass --device auto to detect the meter)"
+        );
+        assert_eq!(
+            selected_line(et2517a, PickedBy::Recording),
+            "Selected: Minipa ET-2517A (named by the recording)"
+        );
+    }
 }

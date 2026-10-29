@@ -36,6 +36,12 @@ use report::{
 };
 use session::{run_batch_review, run_freeform_captures, run_protocol_capture, verify_meter};
 
+/// The id the run was picked by, when it is not the entry's own.
+fn picked_as(device: &'static dmm_lib::protocol::registry::SelectableDevice) -> Option<String> {
+    let id = crate::open::meter_listing(device).id();
+    (id != device.id).then(|| id.to_string())
+}
+
 pub(crate) fn cmd_capture(
     args: CaptureArgs,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
@@ -94,6 +100,7 @@ pub(crate) fn cmd_capture(
 
     populate_report_metadata(&mut report, &mut dmm, device_name, supported);
     report.device_id = Some(device.id.to_string());
+    report.picked_as = picked_as(device);
     report.plan = plan_path.clone();
     report.unverified_only = unverified_only;
     // Everything on the wire so far is the detection probe (when the meter
@@ -285,6 +292,7 @@ fn save_no_response(
     // to put here; "unknown" is what a nameless meter's report says too.
     populate_report_metadata(&mut report, dmm, "unknown".to_string(), supported);
     report.device_id = Some(device.id.to_string());
+    report.picked_as = picked_as(device);
     report.no_response = true;
     let events = {
         let mut recorder = recording::lock(recorder);

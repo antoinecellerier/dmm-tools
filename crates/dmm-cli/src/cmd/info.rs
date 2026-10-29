@@ -1,6 +1,6 @@
 //! `info`: the meter's name, what detection found, and the link it answered on.
 
-use crate::open::{AUTO_DETECTED, open_with_help};
+use crate::open::{AUTO_DETECTED, open_with_help, picked_line, print_reported_name};
 use console::style;
 use dmm_lib::protocol::registry::Selection;
 
@@ -10,24 +10,16 @@ pub(crate) fn cmd_info(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut dmm, _device) = open_with_help(selection, opts)?;
     // The name detection got, if it ran: the session keeps it.
-    match dmm.get_name()? {
-        Some(ref n) => println!("Device: {}", style(n).bold()),
-        None => println!("Device: {}", style("(name not supported)").dim()),
+    let reported = dmm.get_name()?;
+    // Which meter the readings are decoded as: the one picked, and where,
+    // or the one detection found. The meter's own name follows, the clue
+    // when the two disagree.
+    if let Some(line) = picked_line() {
+        println!("{line}");
+    } else if let Some(detected) = AUTO_DETECTED.get() {
+        println!("Detected: {}", style(detected.device.display_name()).bold());
     }
-    // Which tables are in use is only in question when the user named no
-    // meter, so the line is only there when they didn't.
-    if let Some(detected) = AUTO_DETECTED.get() {
-        let reported = match &detected.reported_name {
-            Some(name) if !detected.device.answers_to(name) => {
-                format!(" (the meter reports {name:?})")
-            }
-            _ => String::new(),
-        };
-        println!(
-            "Detected: {}{reported}",
-            style(detected.device.display_name()).bold()
-        );
-    }
+    print_reported_name(reported.as_deref(), |line| println!("{line}"));
 
     println!("Transport: {}", dmm.transport().transport_name());
     if let Ok(info) = dmm.transport().transport_info() {

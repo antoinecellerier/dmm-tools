@@ -31,6 +31,11 @@ pub(crate) struct CaptureReport {
     /// otherwise only holds the name the meter reports for itself.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub device_id: Option<String>,
+    /// The id the run was picked by when it names the meter under another
+    /// brand's name (`ut217a` for a run on the `cms061` entry); absent when
+    /// it is `device_id`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub picked_as: Option<String>,
     /// The plan file whose steps this run followed, in place of the device's
     /// own list.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -1281,6 +1286,21 @@ mod tests {
         assert!(!report.steps[0].needs_attention);
         assert_eq!(report.wire_events_dropped, 0);
         assert_eq!(report.device_id, None);
+        assert_eq!(report.picked_as, None);
+    }
+
+    /// A run picked under another brand's name keeps that name beside the
+    /// entry it decoded with.
+    #[test]
+    fn a_picked_name_round_trips() {
+        let report = CaptureReport {
+            device_id: Some("cms061".to_string()),
+            picked_as: Some("ut217a".to_string()),
+            ..CaptureReport::default()
+        };
+        let back: CaptureReport = from_yaml(&to_yaml(&report).unwrap()).unwrap();
+        assert_eq!(back.picked_as.as_deref(), Some("ut217a"));
+        assert_eq!(back.device_id.as_deref(), Some("cms061"));
     }
 
     /// The new fields must stay out of a report that has nothing to put in
@@ -1298,6 +1318,7 @@ mod tests {
             "needs_attention",
             "wire_events_dropped",
             "device_id",
+            "picked_as",
             "tier",
             "core_semantics",
             "gate_failures",

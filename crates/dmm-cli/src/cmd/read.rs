@@ -244,7 +244,7 @@ fn read_replay(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let replay = dmm_shared::replay::load(path)?;
     // The file names its meter, by the row it was recorded under.
-    crate::open::note_picked(replay.listing.id());
+    crate::open::note_picked(replay.listing.id(), crate::open::PickedBy::Recording);
     // On screen the pace is the point; into a file it is only a wait.
     if clock.is_real() && !matches!(destination, output::Destination::Stdout) {
         eprintln!("{}", style(PACED_REPLAY_HINT).dim());
