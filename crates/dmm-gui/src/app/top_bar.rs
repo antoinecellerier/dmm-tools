@@ -275,8 +275,7 @@ impl App {
                             Some((name, m.stability, m.feedback_url.clone()))
                         })
                 } else {
-                    self.selected_profile
-                        .as_ref()
+                    self.selected_profile()
                         .filter(|p| !p.stability.is_verified())
                         .map(|p| {
                             let name = self

@@ -466,8 +466,7 @@ impl App {
     /// a picked meter short of verified. Auto-detect names no meter, so there
     /// is no protocol to warn about until one answers.
     fn experimental_link(&self) -> Option<(String, String)> {
-        self.selected_profile
-            .as_ref()
+        self.selected_profile()
             .filter(|p| !p.stability.is_verified())
             .map(|profile| {
                 (

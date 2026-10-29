@@ -208,9 +208,36 @@ impl SettingChoices {
 /// detection is a better answer to that than quietly opening the meter whose
 /// tables happen to be the library's fallback.
 fn named_device(family: &str) -> Option<&'static registry::SelectableDevice> {
-    match registry::resolve_selection(family) {
-        Some(registry::Selection::Device(d)) => Some(d),
-        Some(registry::Selection::Auto) | None => None,
+    // `auto` names no row, so Auto-detect resolves to none.
+    registry::resolve_listing(family).map(|l| l.device)
+}
+
+/// The selected device as `device_family` names it, resolved once per value
+/// of that field.
+///
+/// Keyed on the value itself, so any write to the field, wherever it
+/// happens, is picked up by the next read: nothing has to remember to
+/// refresh it, and it cannot go stale. A read costs comparing that short
+/// string; the registry and the protocol factory run only when it changed.
+#[derive(Default)]
+struct SelectedDevice {
+    family: String,
+    listing: Option<registry::Listing>,
+    /// Two render paths need it every frame, and building a protocol to read
+    /// it allocates — the UT61E+ factory lowercases its model string, boxes a
+    /// device table and reserves an rx buffer.
+    profile: Option<dmm_lib::protocol::DeviceProfile>,
+}
+
+impl SelectedDevice {
+    fn for_family(family: &str) -> Self {
+        // `auto` names no row, so Auto-detect resolves to none.
+        let listing = registry::resolve_listing(family);
+        Self {
+            family: family.to_string(),
+            listing,
+            profile: listing.map(|l| *(l.device.new_protocol)().profile()),
+        }
     }
 }
 
@@ -400,18 +427,9 @@ pub struct App {
     /// the settings as an override, so nothing about a playback is saved.
     replay: Option<crate::ReplaySource>,
 
-    /// Profile of the selected device, refreshed only when the selection
-    /// changes. Two render paths need it every frame, and building a protocol
-    /// to read it allocates — the UT61E+ factory lowercases its model string,
-    /// boxes a device table and reserves an rx buffer.
-    ///
-    /// `None` under Auto-detect: no meter is named, so there is no profile to
-    /// describe until one answers — what the connection then reports stands
-    /// in ([`Connection::detected`]).
-    selected_profile: Option<dmm_lib::protocol::DeviceProfile>,
-    /// Device id the cached profile belongs to, [`registry::AUTO_DEVICE_ID`]
-    /// when none is selected.
-    selected_profile_id: &'static str,
+    /// What `settings.shared.device_family` names, read through
+    /// [`Self::selection`].
+    selection: std::cell::RefCell<SelectedDevice>,
     recording_panel: RecordingPanel,
     first_frame: bool,
     /// The window is a native Wayland surface, where the compositor owns
@@ -512,7 +530,7 @@ impl App {
         graph.hide_overlays(&settings.hidden_series);
         graph.histogram_sizes = (settings.histogram_width, settings.histogram_height);
         let capture = Capture::new(settings.max_samples);
-        let initial_device = named_device(&settings.shared.device_family);
+        let selection = SelectedDevice::for_family(&settings.shared.device_family);
         Self {
             settings,
             settings_open: false,
@@ -541,8 +559,7 @@ impl App {
             marker_list: marker_list::MarkerList::default(),
             clock,
             replay: None,
-            selected_profile: initial_device.map(|d| *(d.new_protocol)().profile()),
-            selected_profile_id: initial_device.map_or(registry::AUTO_DEVICE_ID, |d| d.id),
+            selection: std::cell::RefCell::new(selection),
             recording_panel: RecordingPanel::default(),
             first_frame: true,
             // Only `App::new` has a window to ask; tests build without one.
@@ -559,18 +576,27 @@ impl App {
         }
     }
 
-    /// Re-read the selected device's profile if the selection changed.
-    ///
-    /// Called once per frame instead of at each use: the two render paths
-    /// that need it (`show_connection_help`, the status landmark) run every
-    /// repaint, and `(new_protocol)()` allocates.
-    fn refresh_selected_profile(&mut self) {
-        let device = self.selected_device();
-        let id = device.map_or(registry::AUTO_DEVICE_ID, |d| d.id);
-        if self.selected_profile_id != id {
-            self.selected_profile = device.map(|d| *(d.new_protocol)().profile());
-            self.selected_profile_id = id;
+    /// The selected device's row and profile, resolved again only when
+    /// `device_family` changed since the last read ([`SelectedDevice`]).
+    fn selection(
+        &self,
+    ) -> (
+        Option<registry::Listing>,
+        Option<dmm_lib::protocol::DeviceProfile>,
+    ) {
+        let family = &self.settings.shared.device_family;
+        let mut selection = self.selection.borrow_mut();
+        if selection.family != *family {
+            *selection = SelectedDevice::for_family(family);
         }
+        (selection.listing, selection.profile)
+    }
+
+    /// Profile of the selected device. `None` under Auto-detect: no meter is
+    /// named, so there is no profile to describe until one answers — what
+    /// the connection then reports stands in ([`Connection::detected`]).
+    fn selected_profile(&self) -> Option<dmm_lib::protocol::DeviceProfile> {
+        self.selection().1
     }
 
     /// Set the pause state and tell the acquisition thread about it.
@@ -669,14 +695,13 @@ impl App {
     /// The meter the user named, or `None` when the one on the cable is to be
     /// identified instead.
     fn selected_device(&self) -> Option<&'static registry::SelectableDevice> {
-        named_device(&self.settings.shared.device_family)
+        self.selection().0.map(|l| l.device)
     }
 
     /// [`Self::selected_device`] by the name the user picked it by: the UNI-T
     /// UT217A, not the OWON CMS061 entry it opens.
     fn picked_listing(&self) -> Option<registry::Listing> {
-        // `auto` names no row, so Auto-detect resolves to none.
-        registry::resolve_listing(&self.settings.shared.device_family)
+        self.selection().0
     }
 
     /// The row the session calls its meter by, the counterpart of
@@ -885,7 +910,6 @@ impl eframe::App for App {
             ctx.memory_mut(|m| m.request_focus(target));
             self.shortcut_help.restore_focus = None;
         }
-        self.refresh_selected_profile();
         self.poll_theme_scan();
         self.poll_theme_save();
         self.apply_theme(&ctx);
@@ -1348,8 +1372,7 @@ mod tests {
     fn auto_detect_carries_no_profile_until_a_meter_answers() {
         let mut app = app(registry::AUTO_DEVICE_ID, "");
         assert!(app.selected_device().is_none());
-        assert!(app.selected_profile.is_none());
-        assert_eq!(app.selected_profile_id, registry::AUTO_DEVICE_ID);
+        assert!(app.selected_profile().is_none());
         assert!(app.active_device().is_none(), "nothing connected yet");
 
         // What `DmmMessage::Connected` does: the meter that answered is the
@@ -1359,10 +1382,8 @@ mod tests {
 
         // And picking a model back out of the picker restores its profile.
         app.settings.shared.device_family = "ut61b+".to_string();
-        app.refresh_selected_profile();
-        assert_eq!(app.selected_profile_id, "ut61b+");
         assert_eq!(
-            app.selected_profile.map(|p| p.display_name()),
+            app.selected_profile().map(|p| p.display_name()),
             Some("UNI-T UT61B+"),
             "the picked model outranks the connected one"
         );
