@@ -116,6 +116,17 @@ The hashes of the product pages and datasheets are in `SOURCE.txt`.
    manual, downloaded by
    the assistant from `https://asset.conrad.com/media10/add/160267/c1/-/GL/<id>/<id>-GL.pdf`.
    The later app manual bundled in the app (VAPP) was read from the APK.
+9. **UNI-T's UT217 files**, for spec §9.4's UT217A/UT217B note
+   (2026-10-29, after #45 reported a UT217A whose firmware names the
+   CMS061): the product page `https://meters.uni-trend.com.cn/content/1359.html`,
+   its zh/en manual and its app "UT217系列示波钳表V1.2.2", downloaded by the
+   assistant from that page's links. The manual's PDF title files it as
+   "UNI-T(外购厂商来料)", incoming material from an outside vendor. The
+   app, "Smart Meter" (`com.meter.smart` 1.2.2), was compared with iMeter
+   by package, signer and strings only, not decompiled: it is signed with
+   the same OWON certificate (SHA-256 `94790743…8a955`), is built from the
+   same `owon_imeter` Dart package, and carries the FFF0 service and
+   `_cms101Keys`.
 
 | Source | File (under `references/owon/`) | SHA-256 |
 |---|---|---|
@@ -133,6 +144,8 @@ The hashes of the product pages and datasheets are in `SOURCE.txt`.
 | VC-APP | `voltcraft/002576866ML04.pdf` | `fd3b16f75d323936e9d54ec65f261dcec2858feb27493341b0e46082f9d186b8` |
 | VC831-UM | `voltcraft/002576864ML00.pdf` | `5c8c75acb6f98882b37f8a81ebc8b006d6bfc8423eecbc7c9e7d326c338367bc` |
 | VC851-UM | `voltcraft/002576865ML00.pdf` | `e91045360f14167614e3d0dc128e73f528cde85941508825f841f714ea779de6` |
+| UT217 manual | `ut217/UT217_Series_Manual_zh_en.pdf` | `42b40623ee525db0aeca5a2de7e653d2296958908016a0ebcf92defaae54ff83` |
+| UT217 app | `ut217/UT217_app_V1.2.2.zip` | `38265f4d4e36b19b48dfe38e176402413cf7efcb9d1fbe14c85f9a0e10a958e0` |
 
 The quick guides, the datasheets and the other Conrad files are in
 `SOURCE.txt`.

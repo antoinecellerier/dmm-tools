@@ -9,7 +9,7 @@ B41T(+), OW16B, OW18B, OW18E and CM2100B, issues
 [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) (B41T+) and
 [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) (CM2100B) — and
 the 15-byte meters (§10), issues
-[#45](https://github.com/antoinecellerier/dmm-tools/issues/45) (CMS101/CMS061),
+[#45](https://github.com/antoinecellerier/dmm-tools/issues/45) (CMS101/CMS061, UNI-T UT217B/UT217A),
 [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) (OW65B),
 [#47](https://github.com/antoinecellerier/dmm-tools/issues/47) (Voltcraft VC871/OW67B),
 [#48](https://github.com/antoinecellerier/dmm-tools/issues/48) (Voltcraft VC891/OW69B) and
@@ -215,8 +215,9 @@ and each still wants a capture of our own.
   two frames whole in their notifications before it trusts either frame
   kind. Needs the gate steps on each.
 - FFF2 byte 0 per 15-byte model: 101, 61, 65, 67, 69, 87, 89, 91, 92 by the
-  app's names ([§10.1](reverse-engineered-protocol.md#101-models)) —
-  decides which entry detection opens. Needs `dmm-cli info` on each.
+  app's names ([§10.1](reverse-engineered-protocol.md#101-models)), and
+  whether a UT217B/UT217A sends 101/61 (§9.4) — decides which entry
+  detection opens. Needs `dmm-cli info` on each.
 - The advertised name of a Voltcraft meter out of the box: "BDM", "VC871",
   "VC891", "VCxxx" or "VC8xx_1" (§2; Windows listed a VC871 as "VC871",
   §14.4) — decides the entries' names, "BDM", "VC8" and "VC9" today. Needs

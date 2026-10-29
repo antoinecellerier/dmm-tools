@@ -191,8 +191,11 @@ and nothing else's (`UT513Manager`). All frames start `AB CD` and end in a
     length excluding the sum, which is little-endian on the UT251C+ and
     big-endian on the UT275A.
 
+The UT217A and UT217B are OWON's CMS061 and CMS101, supported as those
+([research/owon](owon/reverse-engineered-protocol.md#94-the-15-byte-meters)).
+
 The app has no code, asset or resource naming the UT343E, UT620E, UT281F,
-UT217A/B, UT677A+/C, UT253A/B/C, UT252C, UT251A+, UT267C, UT513E/G,
+UT677A+/C, UT253A/B/C, UT252C, UT251A+, UT267C, UT513E/G,
 UT515A+/C or UT516E: no source for their protocols is known.
 
 ---

@@ -1,4 +1,4 @@
-# OWON Bluetooth multimeters (B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B, CMS101, CMS061, OW65B, OW67B, OW69B; Voltcraft VC871, VC891, VC915, VC925 PV): Reverse-Engineered Protocol Specification
+# OWON Bluetooth multimeters (B33, B35T+, B41T+, OW16B, OW18B, OW18E, CM2100B, CMS101, CMS061, OW65B, OW67B, OW69B; Voltcraft VC871, VC891, VC915, VC925 PV; UNI-T UT217A, UT217B): Reverse-Engineered Protocol Specification
 
 What OWON's Bluetooth LE multimeters send and accept. After a connection the
 meter notifies 6-byte frames on characteristic FFF4: a 16-bit function/range
@@ -749,9 +749,18 @@ OW67B = VC871 and OW69B = VC891 by their panels, keys, dials, menus and
 spec tables [INFERRED from comparing the manuals]; the VC915 and VC925 PV
 are a 20000-count IP65 design of their own.
 
+UNI-T's UT217A = CMS061 and UT217B = CMS101: the UT217 manual's English
+text, keys, Bluetooth steps ("BDM"), spec tables, oscilloscope figures,
+size and weight are CMS061-UM's, and its jaws (31 and 38 mm) split 600 A
+and 1000 A as the CMS061 and CMS101 do [INFERRED from comparing the
+manuals]. UNI-T files the manual as material from an outside vendor, and
+its UT217 app is OWON's (approach, source 9) [VENDOR, UNI-T]. UNI-T's
+product page gives 20000 counts for both. The model code a UT217 sends on
+FFF2 is [UNVERIFIED].
+
 | | CMS101, CMS061 | OW65B | OW67B, VC871 | OW69B, VC891 | VC915 | VC925 PV |
 |---|---|---|---|---|---|---|
-| Counts | not stated; ranges in 20000 steps | 6000 | 60000 | 60000 | 20000 | 20000 |
+| Counts | not stated; ranges in 20000 steps (20000 per UNI-T's UT217 page) | 6000 | 60000 | 60000 | 20000 | 20000 |
 | Bluetooth on | hold Tab⇌ (BLE) | hold SETUP (BLE) | hold < (BLE), about 2 s on the VC871 | hold < (BLE), about 2 s on the VC891 | hold < (BLE) about 2 s | hold < (BLE) about 2 s |
 | Bluetooth off | not stated | hold SETUP | not stated ("switchable" on the VC871) | not stated ("switchable" on the VC891) | not stated | not stated |
 | Bluetooth idle-off | not stated | not stated | 5 min (OW67) | not stated | not stated | not stated |

@@ -5,7 +5,7 @@
 Most supported meters talk over a USB cable; the UT-D07
 Bluetooth adapters serve the meters listed for them below, and the UT60BT,
 UT202BT, ZOTEK meters, EEVblog 121GW, Brymen BM788BT/BM787BT, OWON's meters
-and the Voltcraft VC871, VC891, VC915 and VC925 PV have Bluetooth built in. The tool works out which link and which
+(UNI-T's UT217A and UT217B among them) and the Voltcraft VC871, VC891, VC915 and VC925 PV have Bluetooth built in. The tool works out which link and which
 meter are attached from the bytes the meter sends ([how](detection-design.md)),
 so the default `auto` device needs no setup beyond switching the meter's data
 transmission on, as listed per family below.
@@ -237,7 +237,9 @@ the cable BU-82X on one page and BU-86X in its accessory list
 ## OWON / Voltcraft VC871 / VC891 / VC915 / VC925 PV
 
 Handheld (B33, B35T+, B41T+, OW16B, OW18B, OW18E, OW65B, OW67B, OW69B and
-the Voltcraft meters) and clamp meters (CM2100B, CMS101, CMS061).
+the Voltcraft meters) and clamp meters (CM2100B, CMS101, CMS061; UNI-T
+sells the CMS101 and CMS061 as the UT217B and UT217A, per UNI-T's
+[UT217 manual](https://meters.uni-trend.com.cn/static/upload/file/20250801/1754017016517212.pdf)).
 Bluetooth built in, no cable; the meter shows up as "BDM", or as "Lilliput"
 on some systems (B35T+, B41T+), and a Voltcraft meter may show up under its
 model name
@@ -256,8 +258,8 @@ Voltcraft meters, until the Bluetooth symbol shows.
 | B35T+ | 6000 | 🧪 Experimental ([#42](https://github.com/antoinecellerier/dmm-tools/issues/42)) | hFE and a mV position |
 | B41T+ | 22000 | 🧪 Experimental ([#43](https://github.com/antoinecellerier/dmm-tools/issues/43)) | a mV position; no hFE |
 | CM2100B | 19999 | 🧪 Experimental ([#44](https://github.com/antoinecellerier/dmm-tools/issues/44)) | clamp: 2 A, 20 A and 100 A positions; NCV, ZERO; no temperature |
-| CMS101 | — | 🧪 Experimental ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 1000 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
-| CMS061 | — | 🧪 Experimental ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 600 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
+| CMS101 / UNI-T UT217B | 20000 | 🧪 Experimental ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 1000 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
+| CMS061 / UNI-T UT217A | 20000 | 🧪 Experimental ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)) | clamp, 600 A; oscilloscope mode; NCV, inrush; second display as a sub-value |
 | OW65B | 6000 | 🧪 Experimental ([#46](https://github.com/antoinecellerier/dmm-tools/issues/46)) | LoZ, 4-20 mA; second display as a sub-value |
 | OW67B | 60000 | 🧪 Experimental ([#47](https://github.com/antoinecellerier/dmm-tools/issues/47)) | AC, DC and USB power; LoZ, 4-20 mA, peak; second display as a sub-value |
 | OW69B | 60000 | 🧪 Experimental ([#48](https://github.com/antoinecellerier/dmm-tools/issues/48)) | AC+DC V, low-pass; LoZ, 4-20 mA, peak; second display as a sub-value |
@@ -269,7 +271,8 @@ Voltcraft meters, until the Bluetooth symbol shows.
 Not run on a meter yet: the decoding and the remote keys come from OWON's
 and Voltcraft's apps, OWON's PC software and the manuals. The meter reports
 its model when it connects, which picks its entry; the OW16B opens as the
-OW18B's, `ow18b`, which code it reports is still to confirm
+OW18B's, `ow18b`, and the UT217B and UT217A are expected to open as
+`cms101` and `cms061`; which codes they report is still to confirm
 ([open checks](research/owon/verification.md)).
 
 ## Not supported yet
