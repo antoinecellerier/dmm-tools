@@ -79,7 +79,8 @@ impl<T: Transport> Dmm<T> {
         let profile = protocol.profile();
         info!(
             "connected to {} ({})",
-            profile.model_name, profile.family_name
+            profile.display_name(),
+            profile.family_name
         );
         let clock = Clock::real();
         let mut dmm = Self {
@@ -251,7 +252,7 @@ impl<T: Transport> Dmm<T> {
                 warn!(
                     "the meter reports {name:?}, not the {} it was opened as; open it with \
                      --device {}",
-                    self.protocol.profile().model_name,
+                    self.protocol.profile().display_name(),
                     entry.id
                 );
             }
@@ -267,9 +268,7 @@ impl<T: Transport> Dmm<T> {
     /// claims (a model the registry lacks still reads with the tables chosen).
     pub fn named_other_model(&self) -> Option<&'static SelectableDevice> {
         let named = self.protocol.entry_named(self.name.as_deref()?)?;
-        // Entries sharing a model share its protocol profile.
-        let opened = self.protocol.profile().model_name;
-        ((named.new_protocol)().profile().model_name != opened).then_some(named)
+        (named.id != self.protocol.profile().id).then_some(named)
     }
 
     /// The name the meter already gave on this link, without asking it: for
@@ -549,7 +548,7 @@ mod tests {
 
     const BYTE_METER: protocol::DeviceProfile = protocol::DeviceProfile {
         family_name: "test",
-        model_name: "byte meter",
+        id: "byte-meter",
         stability: protocol::Stability::Verified,
         supported_commands: &[],
         max_aux_values: 0,

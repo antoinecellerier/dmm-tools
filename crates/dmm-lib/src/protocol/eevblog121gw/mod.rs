@@ -117,7 +117,7 @@ impl Eevblog121gwProtocol {
             rx_buf: Vec::with_capacity(64),
             profile: DeviceProfile {
                 family_name: "121GW",
-                model_name: "EEVblog 121GW",
+                id: "121gw",
                 stability: Stability::Experimental,
                 supported_commands: &COMMANDS,
                 // The secondary display, or in the VA modes its two
@@ -414,7 +414,7 @@ mod tests {
         assert_eq!(entry.family, DeviceFamily::Eevblog121gw);
         assert_eq!(entry.display_name(), "EEVblog 121GW");
         let proto = (entry.new_protocol)();
-        assert_eq!(proto.profile().model_name, entry.display_name());
+        assert_eq!(proto.profile().id, entry.id);
         assert!(std::ptr::eq(entry.fingerprint.unwrap(), &FINGERPRINT));
     }
 

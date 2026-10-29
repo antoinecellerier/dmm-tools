@@ -44,7 +44,7 @@ pub(crate) const MOCK_ID: &str = "mock-zt5b";
 /// detected and never looked for over Bluetooth.
 pub(crate) static MOCK_ZT5B: SelectableDevice = SelectableDevice {
     id: MOCK_ID,
-    model: "Mock ZT-5B (simulated)",
+    model: "Mock ZT-5B",
     brand: Brand::Simulated,
     sold_as: &[],
     aliases: &[],
@@ -582,7 +582,7 @@ impl MockZt5b {
         let driver = ZotekProtocol::new_zt5b();
         let profile = DeviceProfile {
             family_name: "mock",
-            model_name: "Mock ZT-5B",
+            id: "mock-zt5b",
             // As the UT61E+ mock: a simulation needs no hardware run, and
             // the GUI shows no EXPERIMENTAL badge for it.
             stability: Stability::Verified,

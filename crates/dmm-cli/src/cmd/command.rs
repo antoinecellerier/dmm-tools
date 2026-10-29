@@ -36,12 +36,12 @@ fn print_available_commands(
         eprintln!(
             "{} No remote commands implemented yet for {}.",
             style("Note:").yellow(),
-            profile.model_name,
+            profile.display_name(),
         );
     } else {
         println!(
             "Available commands for {}:",
-            style(profile.model_name).bold()
+            style(profile.display_name()).bold()
         );
         for cmd in profile.supported_commands {
             println!("  {cmd}");

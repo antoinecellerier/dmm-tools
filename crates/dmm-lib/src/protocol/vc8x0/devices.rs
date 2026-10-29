@@ -47,7 +47,7 @@ pub(crate) static VC650BT: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION, // same protocol as VC-880
     family: DeviceFamily::Vc880,
-    new_protocol: || Box::new(Vc880Protocol::for_model("Voltcraft VC650BT")),
+    new_protocol: || Box::new(Vc880Protocol::for_model("vc650bt")),
     fingerprint: Some(&VC880_FINGERPRINT),
     manual_url: Some(
         "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",

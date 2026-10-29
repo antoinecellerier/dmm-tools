@@ -73,7 +73,7 @@ impl Bm78xbtProtocol {
             rx_buf: Vec::with_capacity(512),
             profile: DeviceProfile {
                 family_name: "BM78xBT",
-                model_name: "Brymen BM788BT/BM787BT",
+                id: "bm78xbt",
                 stability: Stability::Experimental,
                 // r4 has no key or function command (spec §7.1).
                 supported_commands: &[],
@@ -295,7 +295,7 @@ mod tests {
             );
         }
         let proto = (entry.new_protocol)();
-        assert_eq!(proto.profile().model_name, entry.display_name());
+        assert_eq!(proto.profile().id, entry.id);
         assert_eq!(proto.profile().max_aux_values, 0);
         assert_eq!(proto.profile().verification_issue, Some(33));
         assert!(std::ptr::eq(entry.fingerprint.unwrap(), &FINGERPRINT));

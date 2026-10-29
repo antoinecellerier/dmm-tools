@@ -192,7 +192,7 @@ impl Ut171Protocol {
             rx_buf: Vec::with_capacity(128),
             profile: DeviceProfile {
                 family_name: "UT171",
-                model_name: "UNI-T UT171",
+                id: "ut171",
                 stability: Stability::Experimental,
                 supported_commands: UT171_COMMANDS,
                 max_aux_values: 1,

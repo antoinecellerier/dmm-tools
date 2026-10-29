@@ -21,7 +21,7 @@ pub struct SelectableDevice {
     /// Settings/CLI identifier (e.g., "ut61eplus", "ut61b+", "mock").
     pub id: &'static str,
     /// The model, as the device lists show it under its brand (e.g.,
-    /// "UT61E+", "Mock (simulated)"); [`Self::display_name`] adds the brand.
+    /// "UT61E+", "Mock UT61E+"); [`Self::display_name`] adds the brand.
     pub model: &'static str,
     /// The maker's name on the meter's case, which the device lists group by.
     pub brand: Brand,
@@ -471,7 +471,7 @@ mod tests {
     #[test]
     fn find_device_mock() {
         let d = find_device("mock").unwrap();
-        assert_eq!(d.display_name(), "Mock (simulated)");
+        assert_eq!(d.display_name(), "Mock UT61E+");
         assert!(!d.requires_hardware);
     }
 
@@ -621,7 +621,7 @@ mod tests {
         assert_eq!(name("zt5b"), "ZOTEK ZT-5B");
         assert_eq!(name("bside-zt5b"), "BSIDE ZT-5B");
         assert_eq!(name("vc871"), "Voltcraft VC871");
-        assert_eq!(name("mock"), "Mock (simulated)");
+        assert_eq!(name("mock"), "Mock UT61E+");
         assert_eq!(find_device("cms061").unwrap().display_name(), "OWON CMS061");
     }
 
@@ -636,7 +636,7 @@ mod tests {
         assert_eq!(model("v05b"), "V05B");
         assert_eq!(model("bm52x"), "BM525s/BM521s");
         assert_eq!(model("et2615a"), "ET-2615A");
-        assert_eq!(model("mock"), "Mock (simulated)");
+        assert_eq!(model("mock"), "Mock UT61E+");
     }
 
     /// A meter answers to its bare model, and a recording made before the
@@ -701,22 +701,16 @@ mod tests {
             let protocol = (device.new_protocol)();
             let profile = protocol.profile();
             assert!(!profile.family_name.is_empty(), "device {}", device.id);
-            assert!(!profile.model_name.is_empty(), "device {}", device.id);
         }
     }
 
-    /// Several models share a device table. Each registry entry must still
-    /// report its own model, or a UT161E introduces itself as a UT61E+ and the
-    /// user never learns which meter the readings were decoded as.
+    /// Several models share a device table. Each registry entry's protocol
+    /// must still carry its own id, or a UT161E introduces itself as a UT61E+
+    /// and the user never learns which meter the readings were decoded as.
     #[test]
-    fn distinct_devices_report_distinct_model_names() {
-        let mut seen: Vec<(&str, &str)> = Vec::new();
+    fn each_factory_builds_its_own_entrys_protocol() {
         for device in DEVICES {
-            let model = (device.new_protocol)().profile().model_name;
-            if let Some((other, _)) = seen.iter().find(|(_, m)| *m == model) {
-                panic!("devices {other} and {} both report {model:?}", device.id);
-            }
-            seen.push((device.id, model));
+            assert_eq!((device.new_protocol)().profile().id, device.id);
         }
     }
 

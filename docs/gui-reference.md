@@ -34,8 +34,8 @@ a UT61+/UT161 beep once.
 The other choices are every supported model under its brand's heading, a
 meter sold under several brands' names listed under each (see
 [supported devices](supported-devices.md)), and under **Simulated**: **Mock
-(simulated)**, which generates synthetic measurements without hardware, and
-**Mock ZT-5B (simulated)**, which simulates a ZOTEK meter ([what its keys
+UT61E+**, which generates synthetic measurements without hardware, and
+**Mock ZT-5B**, which simulates a ZOTEK meter ([what its keys
 do](cli-reference.md#zotek-mock)); picking one skips detection. The
 selection persists across sessions and requires a reconnect to take effect.
 When the connected protocol is not fully verified, an orange

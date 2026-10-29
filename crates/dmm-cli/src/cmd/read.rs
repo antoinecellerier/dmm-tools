@@ -688,7 +688,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     };
     // The profile's name, which the CSV comment and the JSON metadata carry,
     // is the family's — `meter_name` is what this meter answers to.
-    let model_name = dmm.profile().model_name;
+    let model_name = dmm.profile().display_name();
     let tick = Duration::from_millis(interval_ms);
     let first_marker = next_marker_number(markers.iter().map(|m| m.number));
     let mut run = Run::open(

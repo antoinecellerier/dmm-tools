@@ -80,9 +80,7 @@ impl ZotekProtocol {
             layout,
             profile: DeviceProfile {
                 family_name: "ZOTEK",
-                // Brand and model, as the registry names the entry.
-                model_name: crate::protocol::registry::find_device(layout.id)
-                    .map_or(layout.name, |d| d.display_name()),
+                id: layout.id,
                 stability: Stability::Experimental,
                 supported_commands: keys::commands(layout),
                 max_aux_values: layout.max_aux_values,
@@ -150,7 +148,7 @@ impl Protocol for ZotekProtocol {
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // The meter streams once connected; no app writes anything first
         // (spec §3).
-        debug!("zotek: init ({}, listen only)", self.profile.model_name);
+        debug!("zotek: init ({}, listen only)", self.profile.id);
         Ok(())
     }
 
@@ -340,7 +338,7 @@ mod tests {
             assert_eq!(entry.model, layout.name);
             assert_eq!(entry.family, DeviceFamily::Zotek);
             let proto = (entry.new_protocol)();
-            assert_eq!(proto.profile().model_name, entry.display_name());
+            assert_eq!(proto.profile().id, entry.id);
         }
     }
 

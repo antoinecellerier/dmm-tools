@@ -164,7 +164,7 @@ fn run_get<T: dmm_lib::transport::Transport>(
     setting: Option<Setting>,
     format: SettingsFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let model_name = dmm.profile().model_name;
+    let model_name = dmm.profile().display_name();
     let reading = dmm.request_measurement()?;
 
     let Some(setting) = setting else {
@@ -220,7 +220,7 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
     choice: Option<String>,
     switch_timeout: Duration,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let model_name = dmm.profile().model_name;
+    let model_name = dmm.profile().display_name();
     let reading = dmm.request_measurement()?;
     let choices = dmm.choices(setting, &reading);
 

@@ -160,7 +160,7 @@ fn run() -> Result<(), String> {
             Some(path) => Marks::load(path)?,
             None => Marks::default(),
         };
-        let model = protocol.profile().model_name;
+        let model = protocol.profile().display_name();
         print!(
             "{}",
             to_html(

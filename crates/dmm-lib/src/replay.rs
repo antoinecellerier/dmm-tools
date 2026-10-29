@@ -1234,7 +1234,7 @@ mod tests {
             dmm.get_name().expect("the file's model"),
             Some("UT61E+".to_string())
         );
-        assert_eq!(dmm.profile().model_name, "UNI-T UT61E+");
+        assert_eq!(dmm.profile().id, "ut61eplus");
         assert!(
             !dmm.capture_steps().is_empty(),
             "a replay shows the family's own capture steps"

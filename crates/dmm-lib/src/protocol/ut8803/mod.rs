@@ -152,7 +152,7 @@ impl Ut8803Protocol {
             rx_buf: Vec::with_capacity(128),
             profile: DeviceProfile {
                 family_name: "UT8803",
-                model_name: "UNI-T UT8803",
+                id: "ut8803",
                 stability: Stability::Experimental,
                 supported_commands: UT8803_COMMANDS,
                 max_aux_values: 0,

@@ -36,7 +36,7 @@ pub(crate) static BM86X: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION,
     family: DeviceFamily::Bm86x,
-    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm86x, BM86X.display_name())),
+    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm86x)),
     fingerprint: Some(&FINGERPRINT_86),
     manual_url: Some(
         "http://www.brymen.com/images/ProductsList/BM860s_List/BM860s-manual-2-033Ed2-ES636-Print1.pdf",
@@ -72,7 +72,7 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION,
     family: DeviceFamily::Bm82x,
-    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm82x, BM82X.display_name())),
+    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm82x)),
     fingerprint: Some(&FINGERPRINT_82),
     manual_url: Some(BM820S_520S_MANUAL),
     // The manual names the BU-86X once and the BU-82X once, Brymen's
@@ -98,7 +98,7 @@ pub(crate) static BM52X: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION,
     family: DeviceFamily::Bm52x,
-    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm52x, BM52X.display_name())),
+    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm52x)),
     fingerprint: Some(&FINGERPRINT_52),
     manual_url: Some(BM820S_520S_MANUAL),
     // A BM525s reads on the BU-86X (#36).

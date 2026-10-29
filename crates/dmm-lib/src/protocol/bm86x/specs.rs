@@ -2022,7 +2022,7 @@ mod tests {
         let mut listed_reached = HashSet::new();
         let mut modes = HashSet::new();
         for series in BM820_SERIES {
-            let proto = Bm86xProtocol::new(series, "test");
+            let proto = Bm86xProtocol::new(series);
             for m in accepted_readings(series) {
                 modes.insert(m.mode.to_string());
                 let listed: Vec<(usize, &str)> = lists
@@ -2621,9 +2621,9 @@ mod tests {
         assert_eq!(bm82x[0].name, "DC Voltage");
         assert!(sheet("bm86x").is_empty());
         let m = decode::decode(&reply::tests::bm820_example(0x82), Series::Bm82x).unwrap();
-        let bm86x = Bm86xProtocol::new(Series::Bm86x, "test");
+        let bm86x = Bm86xProtocol::new(Series::Bm86x);
         assert!(bm86x.spec_info(&m).is_none() && bm86x.mode_spec_info(&m).is_none());
-        let bm82x = Bm86xProtocol::new(Series::Bm82x, "test");
+        let bm82x = Bm86xProtocol::new(Series::Bm82x);
         assert_eq!(bm82x.spec_info(&m).unwrap().accuracy.len(), 5);
     }
 }

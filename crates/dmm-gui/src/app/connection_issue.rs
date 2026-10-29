@@ -472,7 +472,7 @@ impl App {
                     format!(
                         "{} Report feedback.",
                         dmm_shared::help::experimental_warning(
-                            profile.model_name,
+                            profile.display_name(),
                             profile.stability
                         )
                     ),

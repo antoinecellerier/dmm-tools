@@ -275,7 +275,7 @@ impl App {
                     self.selected_profile
                         .as_ref()
                         .filter(|p| !p.stability.is_verified())
-                        .map(|p| (p.model_name.to_string(), p.stability, p.feedback_url()))
+                        .map(|p| (p.display_name().to_string(), p.stability, p.feedback_url()))
                 };
                 if let Some((model_name, stability, url)) = badge {
                     ui.hyperlink_to(

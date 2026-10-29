@@ -78,7 +78,7 @@ impl Ut181aProtocol {
             last_range_raw: None,
             profile: DeviceProfile {
                 family_name: "UT181A",
-                model_name: "UNI-T UT181A",
+                id: "ut181a",
                 // A real meter has sent 58 of the 79 mode words, every one but
                 // 21 REL words, and all four measurement formats, and taken
                 // SET_MODE, SET_RANGE, HOLD, SET_MIN_MAX and REL (issue #5,

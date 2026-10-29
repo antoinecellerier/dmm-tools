@@ -207,7 +207,10 @@ pub enum Delivery {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceProfile {
     pub family_name: &'static str,
-    pub model_name: &'static str,
+    /// The registry id of the entry this protocol was built for: what the
+    /// binaries look its name up by, and how a meter's own name is told from
+    /// the model it was opened as.
+    pub id: &'static str,
     pub stability: Stability,
     pub supported_commands: &'static [&'static str],
     /// Most sub-values one frame can carry (`Measurement::aux_values`). Sizes the
@@ -272,6 +275,13 @@ impl MeterKeys {
 const REPO_ISSUES_URL: &str = "https://github.com/antoinecellerier/dmm-tools/issues";
 
 impl DeviceProfile {
+    /// Brand and model, as the registry names the entry this protocol was
+    /// built for; its id when no entry carries it (a protocol built in a
+    /// test).
+    pub fn display_name(&self) -> &'static str {
+        registry::find_device(self.id).map_or(self.id, |d| d.display_name())
+    }
+
     /// URL for verification feedback — links to the device-specific issue if available,
     /// otherwise the general issues page.
     pub fn feedback_url(&self) -> String {

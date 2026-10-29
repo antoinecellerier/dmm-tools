@@ -93,12 +93,12 @@ impl Ut61PlusProtocol {
     ///
     /// Returns `None` if the model string is not recognized.
     pub fn for_model(model: &str) -> Option<Self> {
-        // (table, reported model name, stability, manual spec tables)
-        let (table, model_name, stability, specs): (Box<dyn DeviceTable>, _, _, _) =
+        // (table, the entry's registry id, stability, manual spec tables)
+        let (table, id, stability, specs): (Box<dyn DeviceTable>, _, _, _) =
             match model.to_lowercase().as_str() {
                 "ut61e+" => (
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
-                    "UNI-T UT61E+",
+                    "ut61eplus",
                     Stability::Verified,
                     SpecModel::Ut61ePlus,
                 ),
@@ -110,7 +110,7 @@ impl Ut61PlusProtocol {
                 // model is in `docs/research/ut61-family/verification.md`.
                 "ut161e" => (
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
-                    "UNI-T UT161E",
+                    "ut161e",
                     Stability::Verified,
                     SpecModel::Ut161e,
                 ),
@@ -122,48 +122,48 @@ impl Ut61PlusProtocol {
                 // model is in `docs/research/ut61-family/verification.md`.
                 "ut61b+" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
-                    "UNI-T UT61B+",
+                    "ut61b+",
                     Stability::Verified,
                     SpecModel::Ut61bPlus,
                 ),
                 "ut161b" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
-                    "UNI-T UT161B",
+                    "ut161b",
                     Stability::Experimental,
                     SpecModel::Ut161b,
                 ),
                 "ut61d+" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
-                    "UNI-T UT61D+",
+                    "ut61d+",
                     Stability::Experimental,
                     SpecModel::Ut61dPlus,
                 ),
                 "ut161d" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
-                    "UNI-T UT161D",
+                    "ut161d",
                     Stability::Experimental,
                     SpecModel::Ut161d,
                 ),
                 "ut60bt" => (
                     Box::new(tables::ut60bt::Ut60btTable::new()),
-                    "UNI-T UT60BT",
+                    "ut60bt",
                     Stability::Experimental,
                     SpecModel::Untranscribed,
                 ),
                 "ut202bt" => (
                     Box::new(tables::ut202bt::Ut202btTable::new()),
-                    "UNI-T UT202BT",
+                    "ut202bt",
                     Stability::Experimental,
                     SpecModel::Untranscribed,
                 ),
                 _ => return None,
             };
-        Some(Self::with_profile(table, model_name, stability, specs))
+        Some(Self::with_profile(table, id, stability, specs))
     }
 
     fn with_profile(
         table: Box<dyn DeviceTable>,
-        model_name: &'static str,
+        id: &'static str,
         stability: Stability,
         specs: SpecModel,
     ) -> Self {
@@ -176,10 +176,10 @@ impl Ut61PlusProtocol {
         // not: the UT61B+ is decoded correctly everywhere it was looked at,
         // and its range rungs above the ones auto-ranging reached are still
         // open there. The UT60BT and UT202BT have issues of their own.
-        let verification_issue = match model_name {
-            "UNI-T UT61E+" => None,
-            "UNI-T UT60BT" => Some(26),
-            "UNI-T UT202BT" => Some(27),
+        let verification_issue = match id {
+            "ut61eplus" => None,
+            "ut60bt" => Some(26),
+            "ut202bt" => Some(27),
             _ => Some(7),
         };
         let supported_commands = table.commands();
@@ -192,7 +192,7 @@ impl Ut61PlusProtocol {
             secondary: None,
             profile: DeviceProfile {
                 family_name: "UT61+/UT161",
-                model_name,
+                id,
                 stability,
                 supported_commands,
                 max_aux_values,
@@ -3176,10 +3176,7 @@ raw_payload=14"#
     /// 2026-09-25), which pick their own tables.
     #[test]
     fn the_bluetooth_meters_names_pick_their_own_tables() {
-        for (name, id, model) in [
-            ("UT60BT", "ut60bt", "UNI-T UT60BT"),
-            ("UT202BT", "ut202bt", "UNI-T UT202BT"),
-        ] {
+        for (name, id) in [("UT60BT", "ut60bt"), ("UT202BT", "ut202bt")] {
             assert_eq!(
                 recognised(&test_frame_be16(name.as_bytes())),
                 Some(Evidence::Model {
@@ -3188,7 +3185,7 @@ raw_payload=14"#
                 })
             );
             let device = registry::find_device(id).expect("registry entry");
-            assert_eq!((device.new_protocol)().profile().model_name, model);
+            assert_eq!((device.new_protocol)().profile().id, id);
         }
         // Range byte 0 of DC V is 999.9 mV on a UT60BT, 9.999 V on a UT202BT.
         let payload = make_payload(0x02, 0, b" 12.345", (0, 0), (0, 0, 0));

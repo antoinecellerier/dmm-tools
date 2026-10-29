@@ -143,12 +143,12 @@ pub(crate) struct Bm86xProtocol {
 }
 
 impl Bm86xProtocol {
-    pub(crate) fn new(series: Series, model_name: &'static str) -> Self {
+    pub(crate) fn new(series: Series) -> Self {
         Self {
             series,
             profile: DeviceProfile {
                 family_name: series.family_name(),
-                model_name,
+                id: series.id(),
                 stability: series.stability(),
                 // The meter takes no keys over the cable (spec §1.2, §11.4).
                 supported_commands: &[],
@@ -276,7 +276,7 @@ mod tests {
     use reply::tests::{ScriptedCable, bm820_example, example_reports};
 
     fn proto() -> Bm86xProtocol {
-        Bm86xProtocol::new(Series::Bm86x, "Brymen BM869s/BM867s")
+        Bm86xProtocol::new(Series::Bm86x)
     }
 
     /// The example with the main V set, as three reports.
@@ -315,7 +315,7 @@ mod tests {
             let reports: Vec<Vec<u8>> = reply.chunks(8).map(<[u8]>::to_vec).collect();
             let request = reply::request(series.code());
             let cable = ScriptedCable::new(request, reports, Vec::new());
-            let mut proto = Bm86xProtocol::new(series, "test");
+            let mut proto = Bm86xProtocol::new(series);
             let m = proto.request_measurement(&cable).unwrap();
             assert_eq!(m.mode, "AC V", "{series:?}");
             assert_eq!(m.display_raw.as_deref(), Some("380.1"), "{series:?}");
@@ -350,7 +350,7 @@ mod tests {
             (Series::Bm82x, 35),
             (Series::Bm52x, 36),
         ] {
-            let proto = Bm86xProtocol::new(series, "test");
+            let proto = Bm86xProtocol::new(series);
             assert_eq!(proto.profile().verification_issue, Some(issue));
         }
     }
@@ -411,7 +411,7 @@ mod tests {
             }
             let proto = (entry.new_protocol)();
             let profile = proto.profile();
-            assert_eq!(profile.model_name, entry.display_name());
+            assert_eq!(profile.id, entry.id);
             assert_eq!(profile.max_aux_values, 1);
             assert_eq!(profile.stability, series.stability());
             assert!(profile.supported_commands.is_empty());

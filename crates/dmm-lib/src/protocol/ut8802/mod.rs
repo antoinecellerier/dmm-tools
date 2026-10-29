@@ -114,7 +114,7 @@ impl Ut8802Protocol {
             rx_buf: Vec::with_capacity(128),
             profile: DeviceProfile {
                 family_name: "UT8802",
-                model_name: "UNI-T UT8802",
+                id: "ut8802",
                 stability: Stability::Experimental,
                 supported_commands: UT8802_COMMANDS,
                 max_aux_values: 0,

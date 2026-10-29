@@ -188,7 +188,7 @@ impl OwonProtocol {
             model,
             profile: DeviceProfile {
                 family_name: "OWON",
-                model_name: model.display_name(),
+                id: model.id,
                 stability: Stability::Experimental,
                 supported_commands: model.commands,
                 max_aux_values: model.frame.max_aux_values(),
@@ -1092,7 +1092,7 @@ mod tests {
             let proto = (entry.new_protocol)();
             let profile = proto.profile();
             assert_eq!(profile.family_name, "OWON");
-            assert_eq!(profile.model_name, entry.display_name());
+            assert_eq!(profile.id, entry.id);
             assert_eq!(profile.stability, Stability::Experimental);
             assert_eq!(profile.supported_commands, m.commands);
             assert_eq!(profile.max_aux_values, m.frame.max_aux_values());

@@ -290,7 +290,7 @@ impl Vc8x0Model for Vc880Model {
     fn profile() -> DeviceProfile {
         DeviceProfile {
             family_name: "VC880",
-            model_name: "Voltcraft VC-880",
+            id: "vc880",
             stability: Stability::Experimental,
             supported_commands: COMMANDS,
             max_aux_values: 0,
@@ -351,12 +351,13 @@ pub(crate) type Vc880Protocol = Vc8x0Protocol<Vc880Model>;
 impl Vc880Protocol {
     /// Build the protocol for one specific model of the family.
     ///
-    /// The VC650BT speaks the same protocol, but it has to report its own name
-    /// — otherwise a user who selected the VC650BT sees "Voltcraft VC-880" in
-    /// the header and can't tell whether the right device was picked.
-    pub(crate) fn for_model(model_name: &'static str) -> Self {
+    /// The VC650BT speaks the same protocol, but it has to carry its own
+    /// entry's id — otherwise a user who selected the VC650BT sees "Voltcraft
+    /// VC-880" in the header and can't tell whether the right device was
+    /// picked.
+    pub(crate) fn for_model(id: &'static str) -> Self {
         Self::with_profile(DeviceProfile {
-            model_name,
+            id,
             ..Vc880Model::profile()
         })
     }

@@ -318,7 +318,7 @@ impl MockProtocol {
             dial: cycle::DialState::default(),
             profile: DeviceProfile {
                 family_name: "mock",
-                model_name: "Mock UT61E+",
+                id: "mock",
                 // Verified so the GUI doesn't show the EXPERIMENTAL badge —
                 // mock behavior is deterministic and needs no hardware validation.
                 stability: Stability::Verified,
@@ -986,8 +986,8 @@ mod tests {
         let clock = Clock::manual();
         for device in registry::DEVICES.iter().filter(|d| !d.requires_hardware) {
             let mut dmm = open_simulated(device, None, clock.clone()).unwrap();
-            let expected = (device.new_protocol)().profile().model_name;
-            assert_eq!(dmm.profile().model_name, expected, "{}", device.id);
+            let expected = (device.new_protocol)().profile().id;
+            assert_eq!(dmm.profile().id, expected, "{}", device.id);
             assert_eq!(dmm.request_measurement().unwrap().timestamp, clock.now());
         }
         let ohm = open_simulated(
@@ -1170,7 +1170,7 @@ mod tests {
         let dmm = open_mock().unwrap();
         let profile = dmm.profile();
         assert_eq!(profile.family_name, "mock");
-        assert_eq!(profile.model_name, "Mock UT61E+");
+        assert_eq!(profile.id, "mock");
         assert_eq!(profile.stability, Stability::Verified);
         assert!(profile.supported_commands.contains(&"hold"));
         assert!(profile.supported_commands.contains(&"rel"));

@@ -46,14 +46,7 @@ fn cli_reference_table() -> String {
         for row in rows {
             let aliases: Vec<String> = row.aliases().iter().map(|a| format!("`{a}`")).collect();
             let tag = dmm_shared::help::device_tag(row.device, true).expect("every row is tagged");
-            // A name that already ends in a parenthetical — the mock's
-            // "Mock (simulated)" — takes the tag inside it instead of growing
-            // a second bracketed group.
-            let name = row.model_name();
-            let description = match name.strip_suffix(')') {
-                Some(head) => format!("{head}, {tag})"),
-                None => format!("{name} ({tag})"),
-            };
+            let description = format!("{} ({tag})", row.model_name());
             table.push_str(&format!(
                 "\n| `{}` | {} | {description} |",
                 row.id(),
@@ -194,8 +187,7 @@ fn cli_reference_table_lists_every_id_and_alias() {
 
 /// `--help` and the reference table tag devices the same way; a mismatch
 /// would have a user reading "verified" in the docs and a yellow warning
-/// on the terminal. The mock also checks the tags land inside a display
-/// name that already carries a parenthetical.
+/// on the terminal.
 #[test]
 fn cli_reference_tags_default_experimental_and_mock() {
     let table = cli_reference_table();
@@ -215,7 +207,7 @@ fn cli_reference_tags_default_experimental_and_mock() {
     assert!(table.contains("| UT171A/B/C (experimental) |"), "{table}");
     assert!(table.contains("| UT181A (partly verified) |"), "{table}");
     assert!(
-        table.contains("| Mock (simulated, no hardware required) |"),
+        table.contains("| Mock UT61E+ (no hardware required) |"),
         "{table}"
     );
 }

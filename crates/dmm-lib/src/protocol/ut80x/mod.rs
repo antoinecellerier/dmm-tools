@@ -865,18 +865,13 @@ pub(crate) struct Ut80xProtocol {
 }
 
 impl Ut80xProtocol {
-    fn new(
-        model: Model,
-        model_name: &'static str,
-        stability: Stability,
-        verification_issue: u16,
-    ) -> Self {
+    fn new(model: Model, id: &'static str, stability: Stability, verification_issue: u16) -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
             model,
             profile: DeviceProfile {
                 family_name: "UT803/UT804",
-                model_name,
+                id,
                 stability,
                 supported_commands: COMMANDS,
                 max_aux_values: 0,
@@ -887,33 +882,23 @@ impl Ut80xProtocol {
     }
 
     pub(crate) fn new_ut803() -> Self {
-        Self::new(Model::Ut803, "UNI-T UT803", Stability::Experimental, 15)
+        Self::new(Model::Ut803, "ut803", Stability::Experimental, 15)
     }
 
     pub(crate) fn new_ut804() -> Self {
-        Self::new(Model::Ut804, "UNI-T UT804", Stability::Verified, 16)
+        Self::new(Model::Ut804, "ut804", Stability::Verified, 16)
     }
 
     pub(crate) fn new_ut71ab() -> Self {
-        Self::new(Model::Ut71Ab, "UNI-T UT71A/B", Stability::Experimental, 22)
+        Self::new(Model::Ut71Ab, "ut71ab", Stability::Experimental, 22)
     }
 
     pub(crate) fn new_ut71cde() -> Self {
-        Self::new(
-            Model::Ut71Cde,
-            "UNI-T UT71C/D/E",
-            Stability::Experimental,
-            22,
-        )
+        Self::new(Model::Ut71Cde, "ut71cde", Stability::Experimental, 22)
     }
 
     pub(crate) fn new_vc920() -> Self {
-        Self::new(
-            Model::Vc920,
-            "Voltcraft VC920/VC940/VC960",
-            Stability::Experimental,
-            23,
-        )
+        Self::new(Model::Vc920, "vc920", Stability::Experimental, 23)
     }
 
     /// The manual table for reading `m`, decoded again from the payload:
@@ -976,7 +961,7 @@ impl Protocol for Ut80xProtocol {
             Model::Ut804 | Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => {
                 debug!(
                     "ut80x: init ({}, the transport's 2400 baud)",
-                    self.profile.model_name
+                    self.profile.id
                 );
             }
             // The UT803 talks at 19200 (spec §1.2), which the transport's
@@ -1620,7 +1605,7 @@ mod tests {
             Box::new(Ut80xProtocol::new_ut71cde()),
             Box::new(Ut80xProtocol::new_vc920()),
         ] {
-            let name = proto.profile().model_name;
+            let name = proto.profile().id;
             for bytes in not_packets {
                 assert!(proto.parse_payload(bytes).is_err(), "{name}: {bytes:02X?}");
             }
@@ -1666,7 +1651,7 @@ mod tests {
             Ut80xProtocol::new_vc920(),
         ] {
             proto.init(&mock).unwrap();
-            let name = proto.profile().model_name;
+            let name = proto.profile().id;
             assert!(mock.bauds.borrow().is_empty(), "{name}");
             assert!(mock.written.borrow().is_empty(), "{name}");
         }
@@ -1842,7 +1827,7 @@ mod tests {
             "fast_mode",
         ];
         for proto in handheld_protocols() {
-            let name = proto.profile().model_name;
+            let name = proto.profile().id;
             let steps = proto.capture_steps();
             let ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
             assert_eq!(ids, expected, "{name}");

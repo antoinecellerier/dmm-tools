@@ -1323,7 +1323,7 @@ mod tests {
         app.refresh_selected_profile();
         assert_eq!(app.selected_profile_id, "ut61b+");
         assert_eq!(
-            app.selected_profile.map(|p| p.model_name),
+            app.selected_profile.map(|p| p.display_name()),
             Some("UNI-T UT61B+"),
             "the picked model outranks the connected one"
         );

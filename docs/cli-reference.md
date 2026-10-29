@@ -119,8 +119,8 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `zt5bq` | `zt-5bq` | ZT-5BQ (experimental) |
 | `zt5b` | `zt-5b` | ZT-5B (verified) |
 | **Simulated** |  |  |
-| `mock` |  | Mock (simulated, no hardware required) |
-| `mock-zt5b` |  | Mock ZT-5B (simulated, no hardware required) |
+| `mock` |  | Mock UT61E+ (no hardware required) |
+| `mock-zt5b` |  | Mock ZT-5B (no hardware required) |
 <!-- devices:end -->
 
 **Experimental** families were reverse-engineered from vendor software and

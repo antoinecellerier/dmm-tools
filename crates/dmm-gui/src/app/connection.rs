@@ -127,9 +127,8 @@ pub(crate) struct ConnectedMeter {
     /// The name the meter gave for itself, when it was asked or had already
     /// said. `None` when it gave none.
     pub(crate) name: Option<String>,
-    /// Model the connected protocol reports. Names the meter in the
-    /// experimental warning, where the registry entry's display name would
-    /// be second-hand.
+    /// Brand and model of the entry the connected protocol was built for.
+    /// Names the meter in the experimental warning.
     pub(crate) model_name: String,
     /// Registry entry behind that protocol — what detection settled on, or
     /// the entry the user picked. Under Auto-detect it is the only thing
@@ -241,7 +240,7 @@ fn establish_connection<T: Transport>(
     // Read before `get_name`, which borrows the device mutably.
     let max_aux_values = profile.max_aux_values;
     let meter_keys = profile.meter_keys;
-    let model_name = profile.model_name.to_string();
+    let model_name = profile.display_name().to_string();
     // A replay's transport reports the link its file was recorded over.
     let link = dmm.transport().link();
     let device = detected.as_ref().map(|d| d.device).or(selected);
