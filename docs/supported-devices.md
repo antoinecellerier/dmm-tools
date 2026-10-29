@@ -86,7 +86,7 @@ off.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| UT803 | 6000 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) | |
+| UT803 | 6000 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) | also sold as [Tenma 72-1016](https://www.farnell.com/datasheets/92084.pdf) |
 | UT804 | 40000 | ✅ Verified ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) | |
 
 A reporter's UT804 has confirmed every dial position, auto-detection and
@@ -105,8 +105,8 @@ turns it off.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT71A | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | no temperature or 4-20 mA %; SEND key |
-| UT71B | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds °C/°F and 4-20 mA % |
-| UT71C / UT71D | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | |
+| UT71B | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds °C/°F and 4-20 mA %; also sold as [Tenma 72-7730A](https://www.farnell.com/datasheets/1653479.pdf) |
+| UT71C / UT71D | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | UT71D also sold as [Tenma 72-7732A](https://www.farnell.com/datasheets/1653479.pdf) |
 | UT71E | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds power (W); one V≂ position |
 | VC920 / VC960 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | resistance 4000 counts; AC V to 750 V |
 | VC940 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | as VC920, adds power (W) |
@@ -130,7 +130,7 @@ Communication → ON; the UT181A forgets this at power-off.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT171A/B/C | — | 🧪 Experimental ([#4](https://github.com/antoinecellerier/dmm-tools/issues/4)) | not yet run on a meter |
-| UT181A | — | 🟡 Partly verified ([#5](https://github.com/antoinecellerier/dmm-tools/issues/5)) | logging meter |
+| UT181A | — | 🟡 Partly verified ([#5](https://github.com/antoinecellerier/dmm-tools/issues/5)) | logging meter; also sold as [Tenma 72-3540](https://www.farnell.com/datasheets/2163316.pdf) |
 
 Two reporters have run the UT181A over the CH9329 cable, one through every
 dial position: readings in every mode, MIN/MAX, REL, Peak, COMP and remote
@@ -214,7 +214,7 @@ function.
 |---|---|---|---|
 | BM869s | 50000 (500000 DC V) | 🧪 Experimental ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)) | VFD V and Hz; T1, T2 and T1-T2 temperature |
 | BM867s | 50000 (500000 DC V) | 🧪 Experimental ([#34](https://github.com/antoinecellerier/dmm-tools/issues/34)) | no VFD or temperature |
-| BM829s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | AutoCheck, dBm, EF; T1, T2 and T1-T2 temperature |
+| BM829s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | AutoCheck, dBm, EF; T1, T2 and T1-T2 temperature; also sold as [Elma BM829s](https://www.hitma-handmeters.nl/media/4995/catalog/mw/leveranciersdoc%20%28hitma%20stempel%29/Datasheet%20Elma%20BM%20829S.pdf) |
 | BM827s / Minipa ET-2517A | 9999 (6000 in some functions) | 🟡 Partly verified ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | EF and T1; no AutoCheck or dBm |
 | BM822s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | no REC, CREST, nS, EF or temperature |
 | BM821s | 9999 (6000 in some functions) | 🧪 Experimental ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)) | as the BM822s, with average-sensing AC |
@@ -251,7 +251,7 @@ Voltcraft meters, until the Bluetooth symbol shows.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| OW18B | 5999 | 🧪 Experimental ([#39](https://github.com/antoinecellerier/dmm-tools/issues/39)) | NCV; hFE or a mV position, depending on the unit |
+| OW18B | 5999 | 🧪 Experimental ([#39](https://github.com/antoinecellerier/dmm-tools/issues/39)) | NCV; hFE or a mV position, depending on the unit; also sold as [Multicomp Pro MP730026](https://farnell.com/datasheets/4486196.pdf) |
 | OW16B | 5999 | 🧪 Experimental ([#39](https://github.com/antoinecellerier/dmm-tools/issues/39)) | NCV; hFE in place of µA on some units |
 | OW18E | 19999 | 🧪 Experimental ([#40](https://github.com/antoinecellerier/dmm-tools/issues/40)) | NCV; hFE or a mV position, depending on the unit |
 | B33 | 3999 | 🧪 Experimental ([#41](https://github.com/antoinecellerier/dmm-tools/issues/41)) | no ℉ or Max/Min |

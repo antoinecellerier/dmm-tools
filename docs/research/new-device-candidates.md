@@ -457,13 +457,51 @@ the same transport.
 
 ---
 
+## Rebrands of Supported Meters
+
+Meters sold under another brand's name that are a supported model. A
+house brand's (Tenma, Multicomp Pro, Elma) is an "also sold as" note in
+[supported-devices.md](../supported-devices.md) and the model's
+verification issue until someone reports owning one; then it becomes a row
+of its own in the device lists. Surveyed 2026-10-29 (notes and archived
+sources in `references/rebrands-2026-10-29/`); availability from
+distributors' search snippets, undated.
+
+| Sold as | Is | Evidence | Available |
+|---|---|---|---|
+| Tenma 72-7730A | UNI-T UT71B | Tenma's [manual](https://www.farnell.com/datasheets/1653479.pdf) is the UT71 manual, names swapped | stock running out |
+| Tenma 72-7732A | UNI-T UT71D | same manual: 40000 counts, 9999 stores, no power function | no longer made |
+| Tenma 72-1016 | UNI-T UT803 | Tenma's [manual](https://www.farnell.com/datasheets/92084.pdf) repeats the UT803's USB section | no longer made |
+| Tenma 72-3540 | UNI-T UT181A | Farnell's [datasheet](https://www.farnell.com/datasheets/2163316.pdf) matches UNI-T's spec table | in stock (US) |
+| Multicomp Pro MP730026 | OWON OW18B | Farnell's [datasheet](https://farnell.com/datasheets/4486196.pdf) matches the OW18 manual's table and accessories | in stock; its Android app was pulled from Play |
+| Elma BM829s | Brymen BM829s | Elma's datasheet names its cable for the BM 52x/82x/86x | Elma's catalogue |
+
+The USB cables of the Tenma meters are not named, so whether they carry
+UNI-T's bridge chips is [UNVERIFIED]. Leads, not confirmed:
+
+- Elma BM821s (Elma's catalogue), BM525s and BM869s (no longer Elma's;
+  resellers): Brymen's model names only.
+- Multicomp Pro MP730624 as the OWON OW18E: a selector guide's specs only.
+- Tenma 72-7730 and 72-7732, without the A: sigrok and TestController
+  only.
+- Tenma 72-13570 (UT71D-like, USB and Bluetooth, size differs), 72-13620
+  (UT8803-like, ranges differ), 72-13625 (UT8802N-like, a reseller's table),
+  72-8720 and 72-14620 (UT804-like, bar graph, impedance and weight
+  differ).
+- Greenlee DM-860A as the BM869s: community posts only; Greenlee's DMSC-9U
+  cable is not shown to be the BU-86X. DML-430A carries the BM525s's
+  logging figures.
+
+None found, 2026-10-29: rebrands of the UT61E+/B+/D+, UT161, UT60BT,
+UT202BT or UT171; ZOTEK meters beyond ZOYI, BSIDE and ANENG; OWON meters
+under Lilliput, ELIT, NTL, PeakTech or Velleman; a UEi-branded 121GW.
+
 ## Not Yet Investigated
 
 | Model | Brand | Type | Transport | Notes |
 |-------|-------|------|-----------|-------|
 | **UT612** | UNI-T | LCR meter | USB HID (`10C4:EA80`) | ES51919 chipset, TX-only, CP2110 transport. [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612). Popularity moderate for its niche: 9 amazon.de ratings (#25 LCR Meters), two reviews at 36k views (2026-10-06) |
 | **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | CH9325 (UT-D04 cable), ES51966A chipset. Discontinued at retailers; popularity low (EEVblog thread 4k reads, best video 7.4k views, 2026-10-06) |
-| **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04), per sigrok only. The supported UT71 decoder covers them ([research/ut71](ut71/reverse-engineered-protocol.md)); a Tenma would be named as a UT71 |
 | **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). A "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf) is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). The [UT804+ page](https://instruments.uni-trend.com.cn/cate/143.html) lists software but no protocol document. The "UT804接口协议" on the [UT800 series page](https://instruments.uni-trend.com.cn/cate/140.html), read 2026-09-19, describes the UT804 alone (its first digit runs 0-4, a 40000-count display), so whether the UT804+ speaks a protocol we support is still open. UNI-T lists it as current while marking the UT800 series obsolete; one video found (680 views, 2026-10-06) |
 | **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. Its Ω ladder is not the supported UT202BT's ([research/ut61-family](ut61-family/reverse-engineered-protocol.md#ut202bt-9999-counts)). The Bluetooth transport carries it; it needs a registry entry and a capture. No sales figure of its own: AliExpress sells it only in listings shared with the UT202BT (38 sold, 2026-10-06) |
 | **UT117C, UT197 / UT197PV, UT219PV** | UNI-T | Not recorded | Bluetooth LE, built in (ISSC) | One polled `AB CD` frame with a 2-byte length and ASCII readings, a field layout per model (Bluetooth section above). The iDMM2.0 app is the only source |

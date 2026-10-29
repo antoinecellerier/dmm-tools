@@ -157,9 +157,9 @@ captures (spec §13) narrow many of these; each still wants a reporter's meter.
 
 ## Models
 
-- Whether TestController's Elma BM525s, BM821s, BM829s and BM869s (§13.8)
-  are these meters — decides Elma aliases. Needs an Elma unit's trace.
-  (#34–#36)
+- Whether the Elma BM525s, BM821s, BM829s and BM869s (§13.8; Elma's
+  BM829s datasheet names its cable for the series, [rebrands](../new-device-candidates.md#rebrands-of-supported-meters))
+  are these meters — decides Elma rows. Needs an Elma unit's trace. (#34–#36)
 
 ## Detection
 
