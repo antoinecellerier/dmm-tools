@@ -34,5 +34,12 @@ point, not a fourth reference. The general rules are in
 - One device row per verification issue and status, brand first in the Meter cell;
   columns Meter, USB, Bluetooth, Issue. A Bluetooth status says "(adapter)"
   or "(built in)"; `—` marks a link the meter is not supported over.
+- Row order, so the table opens on what hardware confirmed and keeps a
+  brand's series together: brands, then each brand's series (its rows in one
+  `docs/supported-devices.md` section), then rows, each ranked by best status
+  (✅ over 🟡 over 🧪), then by how many links have that status, 🧪 counting
+  none, then by name with numbers by value (UT61E+ before UT161E; a series
+  by its first row). A status change can move a row, its series and its
+  brand.
 - The screenshot is refreshed at a release whose changelog changes what the
   picture shows.

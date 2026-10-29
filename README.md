@@ -97,40 +97,40 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | UNI-T UT61B+ | ✅ Verified | 🧪 Experimental (adapter) | [#19](https://github.com/antoinecellerier/dmm-tools/issues/19) |
 | UNI-T UT161E | ✅ Verified | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
 | UNI-T UT61D+, UT161B/D | 🧪 Experimental | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
+| UNI-T UT804 | ✅ Verified | — | [#16](https://github.com/antoinecellerier/dmm-tools/issues/16) |
+| UNI-T UT803 | 🧪 Experimental | — | [#15](https://github.com/antoinecellerier/dmm-tools/issues/15) |
+| UNI-T UT181A | 🟡 Partly verified | 🧪 Experimental (adapter) | [#5](https://github.com/antoinecellerier/dmm-tools/issues/5) |
+| UNI-T UT171A/B/C | 🧪 Experimental | 🧪 Experimental (adapter) | [#4](https://github.com/antoinecellerier/dmm-tools/issues/4) |
 | UNI-T UT60BT | — | 🧪 Experimental (built in) | [#26](https://github.com/antoinecellerier/dmm-tools/issues/26) |
 | UNI-T UT202BT | — | 🧪 Experimental (built in) | [#27](https://github.com/antoinecellerier/dmm-tools/issues/27) |
-| UNI-T UT171A/B/C | 🧪 Experimental | 🧪 Experimental (adapter) | [#4](https://github.com/antoinecellerier/dmm-tools/issues/4) |
-| UNI-T UT181A | 🟡 Partly verified | 🧪 Experimental (adapter) | [#5](https://github.com/antoinecellerier/dmm-tools/issues/5) |
 | UNI-T UT71A/B, UT71C/D/E | 🧪 Experimental | 🧪 Experimental (adapter) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
-| UNI-T UT803 | 🧪 Experimental | — | [#15](https://github.com/antoinecellerier/dmm-tools/issues/15) |
-| UNI-T UT804 | ✅ Verified | — | [#16](https://github.com/antoinecellerier/dmm-tools/issues/16) |
 | UNI-T UT8802, UT8802N | 🧪 Experimental | — | [#12](https://github.com/antoinecellerier/dmm-tools/issues/12) |
 | UNI-T UT8803, UT8803E | 🧪 Experimental | — | [#3](https://github.com/antoinecellerier/dmm-tools/issues/3) |
-| Voltcraft VC-880, VC650BT | 🧪 Experimental | — | [#13](https://github.com/antoinecellerier/dmm-tools/issues/13) |
-| Voltcraft VC-890 | 🧪 Experimental | — | [#14](https://github.com/antoinecellerier/dmm-tools/issues/14) |
-| Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
+| ZOTEK ZT-5B (ANENG V05B) | — | ✅ Verified (built in) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
+| ZOTEK ZT-5BQ (ANENG ST207) | — | 🧪 Experimental (built in) | [#30](https://github.com/antoinecellerier/dmm-tools/issues/30) |
 | ZOTEK ZT-300AB (ANENG AN9002) | — | 🧪 Experimental (built in) | [#28](https://github.com/antoinecellerier/dmm-tools/issues/28) |
 | ZOTEK ZT-5566SE (ANENG AN999S) | — | 🧪 Experimental (built in) | [#29](https://github.com/antoinecellerier/dmm-tools/issues/29) |
-| ZOTEK ZT-5BQ (ANENG ST207) | — | 🧪 Experimental (built in) | [#30](https://github.com/antoinecellerier/dmm-tools/issues/30) |
-| ZOTEK ZT-5B (ANENG V05B) | — | ✅ Verified (built in) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
-| EEVblog 121GW | — | 🧪 Experimental (built in) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
-| Brymen BM788BT/BM787BT | — | 🧪 Experimental (built in) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
-| Brymen BM869s/BM867s | 🧪 Experimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
-| Brymen BM827s (Minipa ET-2517A) | 🟡 Partly verified | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
-| Brymen BM829s/BM822s/BM821s | 🧪 Experimental | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
 | Brymen BM525s (Minipa ET-2615A) | 🟡 Partly verified | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
+| Brymen BM827s (Minipa ET-2517A) | 🟡 Partly verified | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
 | Brymen BM521s | 🧪 Experimental | — | [#36](https://github.com/antoinecellerier/dmm-tools/issues/36) |
-| OWON OW18B/OW16B | — | 🧪 Experimental (built in) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
-| OWON OW18E | — | 🧪 Experimental (built in) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
+| Brymen BM829s/BM822s/BM821s | 🧪 Experimental | — | [#35](https://github.com/antoinecellerier/dmm-tools/issues/35) |
+| Brymen BM869s/BM867s | 🧪 Experimental | — | [#34](https://github.com/antoinecellerier/dmm-tools/issues/34) |
+| Brymen BM788BT/BM787BT | — | 🧪 Experimental (built in) | [#33](https://github.com/antoinecellerier/dmm-tools/issues/33) |
+| EEVblog 121GW | — | 🧪 Experimental (built in) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
 | OWON B33 | — | 🧪 Experimental (built in) | [#41](https://github.com/antoinecellerier/dmm-tools/issues/41) |
 | OWON B35T+ | — | 🧪 Experimental (built in) | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
 | OWON B41T+ | — | 🧪 Experimental (built in) | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
 | OWON CM2100B | — | 🧪 Experimental (built in) | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
 | OWON CMS101/CMS061 (UNI-T UT217B/UT217A) | — | 🧪 Experimental (built in) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON OW18B/OW16B | — | 🧪 Experimental (built in) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
+| OWON OW18E | — | 🧪 Experimental (built in) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
 | OWON OW65B | — | 🧪 Experimental (built in) | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |
 | OWON OW67B (Voltcraft VC871) | — | 🧪 Experimental (built in) | [#47](https://github.com/antoinecellerier/dmm-tools/issues/47) |
 | OWON OW69B (Voltcraft VC891) | — | 🧪 Experimental (built in) | [#48](https://github.com/antoinecellerier/dmm-tools/issues/48) |
+| Voltcraft VC-880, VC650BT | 🧪 Experimental | — | [#13](https://github.com/antoinecellerier/dmm-tools/issues/13) |
+| Voltcraft VC-890 | 🧪 Experimental | — | [#14](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 | Voltcraft VC915/VC925 PV | — | 🧪 Experimental (built in) | [#49](https://github.com/antoinecellerier/dmm-tools/issues/49) |
+| Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
 <!-- devices:end -->
 
 ✅ = modes and commands confirmed on real hardware, short of a few localized checks. 🟡 = connection and the main modes confirmed, whole modes or commands still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.
