@@ -18,14 +18,14 @@ pub(crate) fn cmd_info(
     // meter, so the line is only there when they didn't.
     if let Some(detected) = AUTO_DETECTED.get() {
         let reported = match &detected.reported_name {
-            Some(name) if name != detected.device.display_name => {
+            Some(name) if !detected.device.answers_to(name) => {
                 format!(" (the meter reports {name:?})")
             }
             _ => String::new(),
         };
         println!(
             "Detected: {}{reported}",
-            style(detected.device.display_name).bold()
+            style(detected.device.display_name()).bold()
         );
     }
 

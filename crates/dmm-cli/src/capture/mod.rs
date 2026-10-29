@@ -222,7 +222,7 @@ pub(crate) fn cmd_capture(
             eprintln!(
                 "Covered {covered} of {} unverified steps for {}.",
                 unverified_ids.len(),
-                device.display_name
+                device.display_name()
             );
         }
         (covered, unverified_ids.len())

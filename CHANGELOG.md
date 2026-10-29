@@ -5,10 +5,18 @@
 ### Devices
 
 - **The Brymen BM827s (Minipa ET-2517A) and BM525s (Minipa ET-2615A) are partly verified** — thanks to [@SidineiSantosSousa](https://github.com/SidineiSantosSousa) for the captures ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35), [#36](https://github.com/antoinecellerier/dmm-tools/issues/36)).
+- **The UNI-T UT217A and UT217B are supported experimentally, as the OWON CMS061 and CMS101**
 
 ### GUI
 
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
+- **The Device list shows each brand's own model names** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
+- **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
+
+### CLI
+
+- **`--help` lists each brand's own model names, such as `ut217a`, under its brand**
+- **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 
 ### Bug fixes
 

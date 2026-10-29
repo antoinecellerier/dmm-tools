@@ -65,13 +65,13 @@ fn detected_device_to_save(
 ///
 /// `saved` splits the settings selection, which now names the meter that
 /// answered, from a `--device auto` run, which detects for this session only.
-fn detected_toast(display_name: &str, reported: &str, saved: bool) -> String {
-    let mut msg = format!("Detected {display_name}");
-    // The reported name earns its place only when it is not the name already
+fn detected_toast(device: &registry::SelectableDevice, reported: &str, saved: bool) -> String {
+    let mut msg = format!("Detected {}", device.display_name());
+    // The reported name earns its place only when it is not the model already
     // on screen: a UT61E+ answers "UT61E+". A model no entry claims falls back
     // to the UT61E+ tables, and then the name is the whole story — it is what
     // the user has to quote to get an alias added.
-    if !reported.is_empty() && !reported.eq_ignore_ascii_case(display_name) {
+    if !reported.is_empty() && !device.answers_to(reported) {
         msg.push_str(&format!(" (the meter reports \"{reported}\")"));
     }
     if saved {
@@ -121,7 +121,7 @@ impl App {
             self.settings.save();
         }
         self.toast = Some(Toast::info(detected_toast(
-            device.display_name,
+            device,
             reported,
             to_save.is_some(),
         )));
@@ -468,7 +468,7 @@ impl App {
                             if !told {
                                 self.toast = Some(Toast::error(named_after_detection_toast(
                                     &reported,
-                                    named.display_name,
+                                    named.display_name(),
                                     saved,
                                 )));
                             }
@@ -477,8 +477,8 @@ impl App {
                             if !told {
                                 self.toast = Some(Toast::error(other_model_toast(
                                     &reported,
-                                    picked.display_name,
-                                    named.display_name,
+                                    picked.display_name(),
+                                    named.display_name(),
                                 )));
                             }
                         }
@@ -1113,15 +1113,16 @@ mod tests {
     /// UT61E+ reports its own display name, so quoting it back adds nothing.
     #[test]
     fn the_toast_says_what_was_saved() {
+        let device = |id| registry::find_device(id).expect("a registry entry");
         assert_eq!(
-            detected_toast("UT61E+", "UT61E+", true),
-            "Detected UT61E+, saved as your device. \
+            detected_toast(device("ut61eplus"), "UT61E+", true),
+            "Detected UNI-T UT61E+, saved as your device. \
              Pick Auto-detect in Settings to probe again."
         );
         // A family that never reports a name says only what it is.
         assert_eq!(
-            detected_toast("UT8803", "", true),
-            "Detected UT8803, saved as your device. \
+            detected_toast(device("ut8803"), "", true),
+            "Detected UNI-T UT8803, saved as your device. \
              Pick Auto-detect in Settings to probe again."
         );
     }
@@ -1131,14 +1132,15 @@ mod tests {
     /// quotes when reporting it.
     #[test]
     fn the_toast_names_a_model_that_differs_from_the_entry() {
+        let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
         assert_eq!(
-            detected_toast("UT61E+", "UT216XD", true),
-            "Detected UT61E+ (the meter reports \"UT216XD\"), saved as your device. \
+            detected_toast(ut61eplus, "UT216XD", true),
+            "Detected UNI-T UT61E+ (the meter reports \"UT216XD\"), saved as your device. \
              Pick Auto-detect in Settings to probe again."
         );
         assert_eq!(
-            detected_toast("UT61E+", "UT216XD", false),
-            "Detected UT61E+ (the meter reports \"UT216XD\")"
+            detected_toast(ut61eplus, "UT216XD", false),
+            "Detected UNI-T UT61E+ (the meter reports \"UT216XD\")"
         );
     }
 
@@ -1147,7 +1149,7 @@ mod tests {
     fn the_toast_under_a_command_line_auto_only_names_the_meter() {
         let mut app = app(registry::AUTO_DEVICE_ID, true);
         app.remember_detected_device(Some("ut61eplus"), "UT61E+");
-        assert_eq!(toast_text(&app), Some("Detected UT61E+"));
+        assert_eq!(toast_text(&app), Some("Detected UNI-T UT61E+"));
         assert_eq!(
             app.settings.shared.device_family,
             registry::AUTO_DEVICE_ID,
@@ -1188,7 +1190,7 @@ mod tests {
         assert_eq!(
             connect(Some("ut161e")).as_deref(),
             Some(
-                "The meter reports \"UT161E\", not the UT61E+ selected. Choose UT161E or \
+                "The meter reports \"UT161E\", not the UNI-T UT61E+ selected. Choose UNI-T UT161E or \
                  Auto-detect in Settings."
             )
         );
@@ -1230,7 +1232,7 @@ mod tests {
         assert_eq!(
             toast_text(&app),
             Some(
-                "The meter reports \"UT161E\", saved as your device: reconnect to read it as a UT161E."
+                "The meter reports \"UT161E\", saved as your device: reconnect to read it as a UNI-T UT161E."
             )
         );
     }
@@ -1483,7 +1485,7 @@ mod tests {
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
         assert_eq!(
             app.capture.history_layout.device.as_deref(),
-            Some(ut181a.display_name)
+            Some(ut181a.display_name())
         );
         assert_eq!(app.capture.history_layout.device_id, Some("ut181a"));
         assert_eq!(app.capture.history_layout.experimental, Some(true));
@@ -1529,7 +1531,7 @@ mod tests {
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
         assert_eq!(
             app.capture.history_layout.device.as_deref(),
-            Some(ut181a.display_name)
+            Some(ut181a.display_name())
         );
     }
 
@@ -1547,11 +1549,11 @@ mod tests {
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
         assert_eq!(
             app.capture.recording_layout.device.as_deref(),
-            Some(ut61eplus.display_name)
+            Some(ut61eplus.display_name())
         );
         assert_eq!(
             app.capture.history_layout.device.as_deref(),
-            Some(ut181a.display_name)
+            Some(ut181a.display_name())
         );
         assert_eq!(app.capture.recording.recording_samples().len(), 2);
         assert_eq!(app.capture.recording.history_samples().len(), 1);
@@ -1570,7 +1572,7 @@ mod tests {
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
         assert_eq!(
             app.capture.history_layout.device.as_deref(),
-            Some(ut61eplus.display_name)
+            Some(ut61eplus.display_name())
         );
     }
 

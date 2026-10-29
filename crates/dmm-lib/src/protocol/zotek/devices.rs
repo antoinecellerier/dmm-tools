@@ -9,7 +9,7 @@
 
 use super::{FINGERPRINT, ZotekProtocol, layout};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{Brand, SelectableDevice};
+use crate::protocol::registry::{Brand, SelectableDevice, SoldAs};
 
 /// The ZOTEK meters have the radio built in and no cable.
 const LINKS: &[&str] = &[crate::BLUETOOTH];
@@ -47,9 +47,23 @@ Note: the meter switches off after 15 minutes idle; press NCV before turning it 
 
 pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
     id: layout::ZT300AB.id,
-    display_name: layout::ZT300AB.name,
+    model: layout::ZT300AB.name,
     brand: Brand::Zotek,
-    aliases: &["zt-300ab", "an9002", "an-9002"],
+    sold_as: &[
+        SoldAs {
+            brand: Brand::Aneng,
+            id: "an9002",
+            model: "AN9002",
+            aliases: &["an-9002"],
+        },
+        SoldAs {
+            brand: Brand::Bside,
+            id: "bside-zt300ab",
+            model: "ZT-300AB",
+            aliases: &[],
+        },
+    ],
+    aliases: &["zt-300ab"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_ZT300AB,
     family: DeviceFamily::Zotek,
@@ -63,11 +77,19 @@ pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
 
 pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
     id: layout::ZT5566SE.id,
-    display_name: layout::ZT5566SE.name,
+    model: layout::ZT5566SE.name,
     brand: Brand::Zotek,
+    // ANENG's AN999S matches the S and SE (spec §1). BSIDE sells the plain
+    // ZT-5566, not listed: its manual documents Bluetooth only as a speaker.
+    sold_as: &[SoldAs {
+        brand: Brand::Aneng,
+        id: "an999s",
+        model: "AN999S",
+        aliases: &["an-999s"],
+    }],
     // Not the plain ZT-5566: its manual documents Bluetooth only as a
     // speaker.
-    aliases: &["zt-5566se", "zt5566s", "zt-5566s", "an999s", "an-999s"],
+    aliases: &["zt-5566se", "zt5566s", "zt-5566s"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_ZT5566SE,
     family: DeviceFamily::Zotek,
@@ -81,9 +103,23 @@ pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
 
 pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
     id: layout::ZT5BQ.id,
-    display_name: layout::ZT5BQ.name,
+    model: layout::ZT5BQ.name,
     brand: Brand::Zotek,
-    aliases: &["zt-5bq", "st207"],
+    sold_as: &[
+        SoldAs {
+            brand: Brand::Aneng,
+            id: "st207",
+            model: "ST207",
+            aliases: &[],
+        },
+        SoldAs {
+            brand: Brand::Bside,
+            id: "bside-zt5bq",
+            model: "ZT-5BQ",
+            aliases: &[],
+        },
+    ],
+    aliases: &["zt-5bq"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_ZT5BQ,
     family: DeviceFamily::Zotek,
@@ -97,9 +133,23 @@ pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
 
 pub(crate) static ZT5B: SelectableDevice = SelectableDevice {
     id: layout::ZT5B.id,
-    display_name: layout::ZT5B.name,
+    model: layout::ZT5B.name,
     brand: Brand::Zotek,
-    aliases: &["zt-5b", "v05b"],
+    sold_as: &[
+        SoldAs {
+            brand: Brand::Aneng,
+            id: "v05b",
+            model: "V05B",
+            aliases: &[],
+        },
+        SoldAs {
+            brand: Brand::Bside,
+            id: "bside-zt5b",
+            model: "ZT-5B",
+            aliases: &[],
+        },
+    ],
+    aliases: &["zt-5b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_ZT5B,
     family: DeviceFamily::Zotek,

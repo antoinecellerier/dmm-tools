@@ -25,8 +25,9 @@ Note: this setting resets on power cycle.";
 
 pub(crate) static UT181A: SelectableDevice = SelectableDevice {
     id: "ut181a",
-    display_name: "UT181A",
+    model: "UT181A",
     brand: Brand::UniT,
+    sold_as: &[],
     aliases: &["ut181"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

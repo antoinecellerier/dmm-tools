@@ -81,7 +81,7 @@ pub(super) struct Model {
 pub(super) static OW18B: Model = Model {
     code: 18,
     id: "ow18b",
-    name: "OWON OW18B/OW16B",
+    name: "OW18B/OW16B",
     frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
@@ -95,7 +95,7 @@ pub(super) static OW18B: Model = Model {
 pub(super) static OW18E: Model = Model {
     code: 20,
     id: "ow18e",
-    name: "OWON OW18E",
+    name: "OW18E",
     frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
@@ -109,7 +109,7 @@ pub(super) static OW18E: Model = Model {
 pub(super) static B33: Model = Model {
     code: 33,
     id: "b33",
-    name: "OWON B33",
+    name: "B33",
     frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: false,
@@ -123,7 +123,7 @@ pub(super) static B33: Model = Model {
 pub(super) static B35: Model = Model {
     code: 35,
     id: "b35t+",
-    name: "OWON B35T+",
+    name: "B35T+",
     frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: false,
@@ -137,7 +137,7 @@ pub(super) static B35: Model = Model {
 pub(super) static B41: Model = Model {
     code: 41,
     id: "b41t+",
-    name: "OWON B41T+",
+    name: "B41T+",
     frame: FrameKind::Six,
     function13: Function13::Open,
     rmr: true,
@@ -152,7 +152,7 @@ pub(super) static B41: Model = Model {
 pub(super) static CM2100B: Model = Model {
     code: 21,
     id: "cm2100b",
-    name: "OWON CM2100B",
+    name: "CM2100B",
     frame: FrameKind::Six,
     function13: Function13::Ncv,
     rmr: false,
@@ -168,7 +168,7 @@ pub(super) static CM2100B: Model = Model {
 pub(super) static CMS101: Model = Model {
     code: 101,
     id: "cms101",
-    name: "OWON CMS101",
+    name: "CMS101",
     frame: FrameKind::Fifteen,
     function13: Function13::Ncv,
     rmr: false,
@@ -182,7 +182,7 @@ pub(super) static CMS101: Model = Model {
 pub(super) static CMS061: Model = Model {
     code: 61,
     id: "cms061",
-    name: "OWON CMS061",
+    name: "CMS061",
     frame: FrameKind::Fifteen,
     function13: Function13::Ncv,
     rmr: false,
@@ -196,7 +196,7 @@ pub(super) static CMS061: Model = Model {
 pub(super) static OW65B: Model = Model {
     code: 65,
     id: "ow65b",
-    name: "OWON OW65B",
+    name: "OW65B",
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -212,7 +212,7 @@ pub(super) static OW65B: Model = Model {
 pub(super) static OW67B: Model = Model {
     code: 67,
     id: "ow67b",
-    name: "OWON OW67B",
+    name: "OW67B",
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -226,7 +226,7 @@ pub(super) static OW67B: Model = Model {
 pub(super) static OW69B: Model = Model {
     code: 69,
     id: "ow69b",
-    name: "OWON OW69B",
+    name: "OW69B",
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -240,7 +240,7 @@ pub(super) static OW69B: Model = Model {
 pub(super) static VC871: Model = Model {
     code: 87,
     id: "vc871",
-    name: "Voltcraft VC871",
+    name: "VC871",
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -254,7 +254,7 @@ pub(super) static VC871: Model = Model {
 pub(super) static VC891: Model = Model {
     code: 89,
     id: "vc891",
-    name: "Voltcraft VC891",
+    name: "VC891",
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -268,7 +268,7 @@ pub(super) static VC891: Model = Model {
 pub(super) static VC915: Model = Model {
     code: 91,
     id: "vc915",
-    name: "Voltcraft VC915",
+    name: "VC915",
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -282,7 +282,7 @@ pub(super) static VC915: Model = Model {
 pub(super) static VC925PV: Model = Model {
     code: 92,
     id: "vc925pv",
-    name: "Voltcraft VC925 PV",
+    name: "VC925 PV",
     frame: FrameKind::Fifteen,
     function13: Function13::Open,
     rmr: false,
@@ -310,9 +310,18 @@ impl Model {
         MODELS.iter().copied().find(|m| m.code == code)
     }
 
+    /// Brand and model, as the registry names this model's entry: what
+    /// messages call the meter.
+    pub(super) fn display_name(&self) -> &'static str {
+        crate::protocol::registry::find_device(self.id).map_or(self.name, |d| d.display_name())
+    }
+
     /// The model whose name this is, as `get_name` gives it; `None` for the
     /// name of a code no entry carries.
     pub(super) fn named(name: &str) -> Option<&'static Model> {
+        // A recording made before the names dropped their brand reports
+        // "OWON CMS101".
+        let name = crate::protocol::registry::without_brand(name);
         MODELS.iter().copied().find(|m| m.name == name)
     }
 }

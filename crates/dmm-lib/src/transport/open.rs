@@ -144,7 +144,7 @@ fn check_cable(device: &SelectableDevice, bridge: &'static str) -> Result<()> {
     }
     Err(Error::WrongCable {
         cable: bridge,
-        model: device.display_name,
+        model: device.display_name(),
     })
 }
 
@@ -175,7 +175,7 @@ pub(crate) fn open_bluetooth_only(
         }
     };
     Err(Error::BluetoothOnly {
-        model: entry.display_name,
+        model: entry.display_name(),
         activation: entry.activation_instructions,
         miss,
     })
@@ -489,7 +489,7 @@ mod tests {
                     cable: named,
                     model,
                 }) => {
-                    assert_eq!((named, model), (cable, device(id).display_name));
+                    assert_eq!((named, model), (cable, device(id).display_name()));
                 }
                 other => panic!("{id} on {cable}: {other:?}"),
             }
@@ -663,7 +663,7 @@ mod tests {
                 miss,
                 ..
             }) => {
-                assert_eq!(model, "UT60BT");
+                assert_eq!(model, "UNI-T UT60BT");
                 assert_eq!(activation, ut60bt.activation_instructions);
                 miss
             }

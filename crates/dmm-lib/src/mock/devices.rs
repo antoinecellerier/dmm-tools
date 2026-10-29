@@ -12,8 +12,9 @@ pub(crate) const ACTIVATION: &str = "No setup required \u{2014} this is a simula
 /// its id: the scenario picker shows only while this entry is selected.
 pub static MOCK: SelectableDevice = SelectableDevice {
     id: "mock",
-    display_name: "Mock (simulated)",
+    model: "Mock (simulated)",
     brand: Brand::Simulated,
+    sold_as: &[],
     aliases: &[],
     requires_hardware: false,
     activation_instructions: ACTIVATION,

@@ -80,7 +80,9 @@ impl ZotekProtocol {
             layout,
             profile: DeviceProfile {
                 family_name: "ZOTEK",
-                model_name: layout.name,
+                // Brand and model, as the registry names the entry.
+                model_name: crate::protocol::registry::find_device(layout.id)
+                    .map_or(layout.name, |d| d.display_name()),
                 stability: Stability::Experimental,
                 supported_commands: keys::commands(layout),
                 max_aux_values: layout.max_aux_values,
@@ -335,10 +337,10 @@ mod tests {
     fn every_layout_id_is_its_registry_entrys() {
         for layout in layout::LAYOUTS {
             let entry = registry::find_device(layout.id).expect("registry entry");
-            assert_eq!(entry.display_name, layout.name);
+            assert_eq!(entry.model, layout.name);
             assert_eq!(entry.family, DeviceFamily::Zotek);
             let proto = (entry.new_protocol)();
-            assert_eq!(proto.profile().model_name, layout.name);
+            assert_eq!(proto.profile().model_name, entry.display_name());
         }
     }
 

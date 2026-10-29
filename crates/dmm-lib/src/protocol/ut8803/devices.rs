@@ -17,8 +17,9 @@ pub(crate) const ACTIVATION: &str = "\
 
 pub(crate) static UT8803: SelectableDevice = SelectableDevice {
     id: "ut8803",
-    display_name: "UT8803",
+    model: "UT8803",
     brand: Brand::UniT,
+    sold_as: &[],
     aliases: &["ut8803e"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

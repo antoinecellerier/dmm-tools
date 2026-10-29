@@ -24,7 +24,7 @@ assumed, the sections below state what holds today.
 - A UT61+ never sends a byte unsolicited. `0x5F` gets the ack `AB CD 04 FF 00 02 7B` in
   36–83 ms and the ASCII name frame in 144–191 ms, on both bridges
   (`references/ut61eplus/captures-2026-09-07/`, `references/ut61b-plus/`). The name picks the
-  exact registry entry: `UT61E+` and `UT61B+` are the entries' `display_name`s.
+  exact registry entry: `UT61E+` and `UT61B+` are the entries' `model`s.
 - CP2110 can deliver one UART byte per HID report
   (`references/ut61eplus/captures-2026-09-07/ut61eplus-verify.yaml`, taken before read
   coalescing): a probe must accumulate bytes rather than expect a whole frame per read.
@@ -143,7 +143,7 @@ bridges' (see [Bridges and adapters](#bridges-and-adapters)).
 ## Names and the registry
 
 A name frame resolves through `protocol/ut61eplus`'s `device_for_reported_name(name)`, which
-matches `display_name` then aliases, case-insensitively, across the UT61+/UT161 entries only. An
+matches `model` then aliases, case-insensitively, across the UT61+/UT161 entries only. An
 unrecognised name falls back to `ut61eplus`, keeps the reported name on `Detected`, and warns:
 a UT61D+ or a UT161x still reads, with UT61E+ tables, and the user is told which name to
 report so an alias can absorb it.

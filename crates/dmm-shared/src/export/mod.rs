@@ -186,11 +186,13 @@ struct JsonAuxValue<'a> {
     elapsed_secs: Option<u32>,
 }
 
-/// The name an export opens with: the meter, the mode it stayed in and the
-/// moment the recording started, as
+/// The name an export opens with: the meter's model, the mode it stayed in
+/// and the moment the recording started, as
 /// `measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv`, so a folder of exports
-/// sorts by meter and by run. A recording that crossed a function switch has
-/// no one mode and leaves that segment out.
+/// sorts by meter and by run. The brand is left out: the model alone tells a
+/// user's meters apart, and the file's own `device` field names both. A
+/// recording that crossed a function switch has no one mode and leaves that
+/// segment out.
 pub fn default_name(
     model: &str,
     mode: Option<&str>,
@@ -202,7 +204,7 @@ pub fn default_name(
         .unwrap_or_default();
     format!(
         "measurements-{}-{mode}{}.{extension}",
-        file_safe(model),
+        file_safe(dmm_lib::protocol::registry::without_brand(model)),
         start.format("%Y-%m-%d_%H-%M-%S"),
     )
 }
@@ -254,6 +256,11 @@ mod tests {
     fn a_name_carries_the_meter_the_mode_and_the_start() {
         assert_eq!(
             default_name("UT61E+", Some("DC V"), start(), "csv"),
+            "measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv"
+        );
+        // The brand stays in the file; the name carries the model.
+        assert_eq!(
+            default_name("UNI-T UT61E+", Some("DC V"), start(), "csv"),
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv"
         );
         // A recording with no one mode keeps meter and time, nothing between.

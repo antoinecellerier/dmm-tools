@@ -311,7 +311,7 @@ pub(crate) struct Layout {
 pub(crate) static ZT300AB: Layout = Layout {
     type_byte: 3,
     id: "zt300ab",
-    name: "ZT-300AB / AN9002",
+    name: "ZT-300AB",
     digits: Digits::Split,
     bits: &[
         bit(3, 3, Meaning::Continuity),
@@ -358,7 +358,7 @@ pub(crate) static ZT300AB: Layout = Layout {
 pub(crate) static ZT5566SE: Layout = Layout {
     type_byte: 4,
     id: "zt5566se",
-    name: "ZT-5566SE / AN999S",
+    name: "ZT-5566SE",
     digits: Digits::Wide,
     bits: &[
         // `vfc`, never set in the community log (§11.4).
@@ -412,7 +412,7 @@ pub(crate) static ZT5566SE: Layout = Layout {
 pub(crate) static ZT5BQ: Layout = Layout {
     type_byte: 1,
     id: "zt5bq",
-    name: "ZT-5BQ / ST207",
+    name: "ZT-5BQ",
     digits: Digits::Split,
     bits: &[
         bit(3, 3, Meaning::Continuity),
@@ -453,7 +453,7 @@ pub(crate) static ZT5BQ: Layout = Layout {
 pub(crate) static ZT5B: Layout = Layout {
     type_byte: 2,
     id: "zt5b",
-    name: "ZT-5B / V05B",
+    name: "ZT-5B",
     digits: Digits::Split,
     bits: &[
         bit(3, 3, Meaning::Continuity),

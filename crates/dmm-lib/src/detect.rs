@@ -257,8 +257,8 @@ fn detect_among(
                 warn!(
                     "detect: the meter on {bridge} advertises itself as a {}, but its own reply \
                      identifies the {model}; using the {model} tables",
-                    advertised.display_name,
-                    model = detected.device.display_name
+                    advertised.display_name(),
+                    model = detected.device.display_name()
                 );
             }
             return Ok(announce(detected, bridge));
@@ -289,11 +289,11 @@ fn detect_among(
 /// Log the one INFO line the whole detection produces.
 fn announce(detected: Detected, bridge: &'static str) -> Detected {
     match &detected.reported_name {
-        Some(name) if name != detected.device.display_name => info!(
+        Some(name) if !detected.device.answers_to(name) => info!(
             "detected {} over {bridge} (the meter reports {name:?})",
-            detected.device.display_name
+            detected.device.display_name()
         ),
-        _ => info!("detected {} over {bridge}", detected.device.display_name),
+        _ => info!("detected {} over {bridge}", detected.device.display_name()),
     }
     detected
 }
@@ -484,7 +484,7 @@ fn family_fallback(
             format!(
                 "{unnamed}; falling back to the {} tables, the model its Bluetooth name \
                  advertises",
-                device.display_name
+                device.display_name()
             ),
         ),
         None => {
@@ -493,7 +493,7 @@ fn family_fallback(
                 device,
                 format!(
                     "{unnamed}; falling back to the {} tables",
-                    device.display_name
+                    device.display_name()
                 ),
             )
         }
@@ -938,7 +938,7 @@ mod tests {
         assert_eq!(
             why,
             "detect: a ut61eplus frame arrived on CP2110 but the meter never named its model; \
-             falling back to the UT61E+ tables"
+             falling back to the UNI-T UT61E+ tables"
         );
         let ut60bt = registry::find_device("ut60bt");
         let (device, why) = family_fallback(found, ut60bt, crate::BLUETOOTH);
@@ -946,7 +946,7 @@ mod tests {
         assert_eq!(
             why,
             "detect: a ut61eplus frame arrived on Bluetooth but the meter never named its model; \
-             falling back to the UT60BT tables, the model its Bluetooth name advertises"
+             falling back to the UNI-T UT60BT tables, the model its Bluetooth name advertises"
         );
     }
 
@@ -1124,7 +1124,7 @@ mod tests {
         meter.info = Some(vec![0x29, 0xFF, 0x00, 0x01, 0x02, 0x00]);
         let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
         assert_eq!(detected.device.id, "b41t+");
-        assert_eq!(detected.reported_name.as_deref(), Some("OWON B41T+"));
+        assert_eq!(detected.reported_name.as_deref(), Some("B41T+"));
         assert!(meter.inner.written.borrow().is_empty());
 
         // With no model code read, two frames in a row open the B35T+. Each

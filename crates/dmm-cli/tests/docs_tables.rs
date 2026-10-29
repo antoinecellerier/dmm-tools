@@ -41,22 +41,22 @@ fn cli_reference_table() -> String {
         "\n| `{}` |  | [Detect the connected meter](detection-design.md) (default) |",
         registry::AUTO_DEVICE_ID
     ));
-    for (brand, devices) in registry::brand_groups() {
+    for (brand, rows) in registry::brand_groups() {
         table.push_str(&format!("\n| **{}** |  |  |", brand.name()));
-        for device in devices {
-            let aliases: Vec<String> = device.aliases.iter().map(|a| format!("`{a}`")).collect();
-            let tag = dmm_shared::help::device_tag(device, true).expect("every row is tagged");
+        for row in rows {
+            let aliases: Vec<String> = row.aliases().iter().map(|a| format!("`{a}`")).collect();
+            let tag = dmm_shared::help::device_tag(row.device, true).expect("every row is tagged");
             // A name that already ends in a parenthetical — the mock's
             // "Mock (simulated)" — takes the tag inside it instead of growing
             // a second bracketed group.
-            let name = device.model_name();
+            let name = row.model_name();
             let description = match name.strip_suffix(')') {
                 Some(head) => format!("{head}, {tag})"),
                 None => format!("{name} ({tag})"),
             };
             table.push_str(&format!(
                 "\n| `{}` | {} | {description} |",
-                device.id,
+                row.id(),
                 aliases.join(", ")
             ));
         }
@@ -86,10 +86,10 @@ fn hardware_families() -> Vec<(&'static str, Vec<&'static str>)> {
             continue;
         }
         match families.iter_mut().find(|(f, _, _)| *f == device.family) {
-            Some((_, _, models)) => models.push(device.display_name),
+            Some((_, _, models)) => models.push(device.display_name()),
             None => {
                 let family_name = (device.new_protocol)().profile().family_name;
-                families.push((device.family, family_name, vec![device.display_name]));
+                families.push((device.family, family_name, vec![device.display_name()]));
             }
         }
     }

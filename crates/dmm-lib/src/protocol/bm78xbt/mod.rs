@@ -284,7 +284,7 @@ mod tests {
     fn the_registry_entry_is_this_familys() {
         let entry = registry::find_device(ID).expect("registry entry");
         assert_eq!(entry.family, DeviceFamily::Bm78xbt);
-        assert_eq!(entry.display_name, "Brymen BM788BT/BM787BT");
+        assert_eq!(entry.display_name(), "Brymen BM788BT/BM787BT");
         assert_eq!(entry.bluetooth_names, ["BM78xBT"]);
         assert_eq!(entry.links, [crate::BLUETOOTH]);
         for alias in ["bm788bt", "BM787BT", "brymen-bm788bt", "brymen-bm787bt"] {
@@ -295,7 +295,7 @@ mod tests {
             );
         }
         let proto = (entry.new_protocol)();
-        assert_eq!(proto.profile().model_name, entry.display_name);
+        assert_eq!(proto.profile().model_name, entry.display_name());
         assert_eq!(proto.profile().max_aux_values, 0);
         assert_eq!(proto.profile().verification_issue, Some(33));
         assert!(std::ptr::eq(entry.fingerprint.unwrap(), &FINGERPRINT));

@@ -24,8 +24,9 @@ const ACTIVATION: &str = "\
 
 pub(crate) static UT171: SelectableDevice = SelectableDevice {
     id: "ut171",
-    display_name: "UT171A/B/C",
+    model: "UT171A/B/C",
     brand: Brand::UniT,
+    sold_as: &[],
     aliases: &["ut171a", "ut171b", "ut171c"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

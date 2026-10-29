@@ -11,7 +11,7 @@
 use super::model;
 use super::{FINGERPRINT, OwonProtocol};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{Brand, SelectableDevice};
+use crate::protocol::registry::{Brand, SelectableDevice, SoldAs};
 
 /// OWON's meters have the radio built in and no cable.
 const LINKS: &[&str] = &[crate::BLUETOOTH];
@@ -135,8 +135,9 @@ const VC925_MANUAL: &str = "https://asset.conrad.com/media10/add/160267/c1/-/gl/
 
 pub(crate) static OW18B: SelectableDevice = SelectableDevice {
     id: model::OW18B.id,
-    display_name: model::OW18B.name,
+    model: model::OW18B.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["ow16b", "owon-ow18b", "owon-ow16b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_OW,
@@ -151,8 +152,9 @@ pub(crate) static OW18B: SelectableDevice = SelectableDevice {
 
 pub(crate) static OW18E: SelectableDevice = SelectableDevice {
     id: model::OW18E.id,
-    display_name: model::OW18E.name,
+    model: model::OW18E.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["owon-ow18e"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_OW,
@@ -167,8 +169,9 @@ pub(crate) static OW18E: SelectableDevice = SelectableDevice {
 
 pub(crate) static B33: SelectableDevice = SelectableDevice {
     id: model::B33.id,
-    display_name: model::B33.name,
+    model: model::B33.name,
     brand: Brand::Owon,
+    sold_as: &[],
     // Which code a T or "+" variant sends is open (spec §1).
     aliases: &["b33t", "b33+", "b33t+", "owon-b33"],
     requires_hardware: true,
@@ -184,8 +187,9 @@ pub(crate) static B33: SelectableDevice = SelectableDevice {
 
 pub(crate) static B35T_PLUS: SelectableDevice = SelectableDevice {
     id: model::B35.id,
-    display_name: model::B35.name,
+    model: model::B35.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["b35+", "owon-b35t+"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_B35_B41,
@@ -200,8 +204,9 @@ pub(crate) static B35T_PLUS: SelectableDevice = SelectableDevice {
 
 pub(crate) static B41T_PLUS: SelectableDevice = SelectableDevice {
     id: model::B41.id,
-    display_name: model::B41.name,
+    model: model::B41.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["b41t", "owon-b41t+"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_B35_B41,
@@ -216,8 +221,9 @@ pub(crate) static B41T_PLUS: SelectableDevice = SelectableDevice {
 
 pub(crate) static CM2100B: SelectableDevice = SelectableDevice {
     id: model::CM2100B.id,
-    display_name: model::CM2100B.name,
+    model: model::CM2100B.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["owon-cm2100b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_CM2100B,
@@ -232,8 +238,15 @@ pub(crate) static CM2100B: SelectableDevice = SelectableDevice {
 
 pub(crate) static CMS101: SelectableDevice = SelectableDevice {
     id: model::CMS101.id,
-    display_name: model::CMS101.name,
+    model: model::CMS101.name,
     brand: Brand::Owon,
+    // UNI-T's UT217 manual is the CMS's (spec §9.4).
+    sold_as: &[SoldAs {
+        brand: Brand::UniT,
+        id: "ut217b",
+        model: "UT217B",
+        aliases: &[],
+    }],
     aliases: &["owon-cms101"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_CMS,
@@ -248,8 +261,14 @@ pub(crate) static CMS101: SelectableDevice = SelectableDevice {
 
 pub(crate) static CMS061: SelectableDevice = SelectableDevice {
     id: model::CMS061.id,
-    display_name: model::CMS061.name,
+    model: model::CMS061.name,
     brand: Brand::Owon,
+    sold_as: &[SoldAs {
+        brand: Brand::UniT,
+        id: "ut217a",
+        model: "UT217A",
+        aliases: &[],
+    }],
     aliases: &["owon-cms061"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_CMS,
@@ -264,8 +283,9 @@ pub(crate) static CMS061: SelectableDevice = SelectableDevice {
 
 pub(crate) static OW65B: SelectableDevice = SelectableDevice {
     id: model::OW65B.id,
-    display_name: model::OW65B.name,
+    model: model::OW65B.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["owon-ow65b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_OW65B,
@@ -280,8 +300,9 @@ pub(crate) static OW65B: SelectableDevice = SelectableDevice {
 
 pub(crate) static OW67B: SelectableDevice = SelectableDevice {
     id: model::OW67B.id,
-    display_name: model::OW67B.name,
+    model: model::OW67B.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["owon-ow67b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_OW67B,
@@ -296,8 +317,9 @@ pub(crate) static OW67B: SelectableDevice = SelectableDevice {
 
 pub(crate) static OW69B: SelectableDevice = SelectableDevice {
     id: model::OW69B.id,
-    display_name: model::OW69B.name,
+    model: model::OW69B.name,
     brand: Brand::Owon,
+    sold_as: &[],
     aliases: &["owon-ow69b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_OW69B,
@@ -312,8 +334,9 @@ pub(crate) static OW69B: SelectableDevice = SelectableDevice {
 
 pub(crate) static VC871: SelectableDevice = SelectableDevice {
     id: model::VC871.id,
-    display_name: model::VC871.name,
+    model: model::VC871.name,
     brand: Brand::Voltcraft,
+    sold_as: &[],
     aliases: &["vc-871"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_VC871_VC891,
@@ -328,8 +351,9 @@ pub(crate) static VC871: SelectableDevice = SelectableDevice {
 
 pub(crate) static VC891: SelectableDevice = SelectableDevice {
     id: model::VC891.id,
-    display_name: model::VC891.name,
+    model: model::VC891.name,
     brand: Brand::Voltcraft,
+    sold_as: &[],
     aliases: &["vc-891"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_VC871_VC891,
@@ -344,8 +368,9 @@ pub(crate) static VC891: SelectableDevice = SelectableDevice {
 
 pub(crate) static VC915: SelectableDevice = SelectableDevice {
     id: model::VC915.id,
-    display_name: model::VC915.name,
+    model: model::VC915.name,
     brand: Brand::Voltcraft,
+    sold_as: &[],
     aliases: &["vc-915"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_VC915_VC925,
@@ -360,8 +385,9 @@ pub(crate) static VC915: SelectableDevice = SelectableDevice {
 
 pub(crate) static VC925PV: SelectableDevice = SelectableDevice {
     id: model::VC925PV.id,
-    display_name: model::VC925PV.name,
+    model: model::VC925PV.name,
     brand: Brand::Voltcraft,
+    sold_as: &[],
     aliases: &["vc-925pv"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_VC915_VC925,

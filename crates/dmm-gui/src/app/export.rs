@@ -288,7 +288,7 @@ impl App {
             .export_layout()
             .device
             .clone()
-            .or_else(|| self.active_device().map(|d| d.display_name.into()))
+            .or_else(|| self.active_device().map(|d| d.display_name().into()))
             .unwrap_or(UNKNOWN_DEVICE.into());
         // A replay is refused now rather than after the user picked a path:
         // the mock synthesises its readings, so a sample of it has no frame.

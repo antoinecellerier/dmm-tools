@@ -208,8 +208,8 @@ fn unicode_display_width(s: &str) -> usize {
 
 fn dump_text(dev: &SelectableDevice, sheet: &[SpecSheetTable]) {
     let name = match COUNTS.iter().find(|(id, _)| *id == dev.id) {
-        Some((_, counts)) => format!("{} ({counts} counts)", dev.display_name),
-        None => dev.display_name.to_string(),
+        Some((_, counts)) => format!("{} ({counts} counts)", dev.display_name()),
+        None => dev.display_name().to_string(),
     };
     let title = format!("{} \u{2014} Specification Data", name);
     let title_len = unicode_display_width(&title);
@@ -348,7 +348,7 @@ fn to_json(dev: &SelectableDevice, sheet: &[SpecSheetTable]) -> Value {
             })
         })
         .collect();
-    json!({"model": dev.display_name, "tables": tables})
+    json!({"model": dev.display_name(), "tables": tables})
 }
 
 // --- html ---
@@ -644,8 +644,8 @@ fn to_html(
          <title>{} spec sheet</title>\n<style>{CSS}</style>\n</head>\n<body>\n\
          <header>\n<h1>{} — specification sheet</h1>\n<p>Device <code>{}</code>, \
          model {}, {count} tables.",
-        esc(dev.display_name),
-        esc(dev.display_name),
+        esc(dev.display_name()),
+        esc(dev.display_name()),
         esc(dev.id),
         esc(model),
     );

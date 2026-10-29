@@ -77,7 +77,7 @@ pub(crate) fn cmd_read(
             interval_ms,
             out,
             destination,
-            device.display_name,
+            device.display_name(),
             count,
             Some(device),
             integrate,
@@ -103,7 +103,7 @@ pub(crate) fn cmd_read(
         // Not hardware, so the selection names a registry entry — `auto` is a
         // cable to open and never lands here.
         let meter_name = opened_device(selection)
-            .map_or_else(|| selection_id(selection), |device| device.display_name);
+            .map_or_else(|| selection_id(selection), |device| device.display_name());
         // No timeout to warn about: the mock always answers.
         run_read_loop(
             &mut dmm,
@@ -292,7 +292,7 @@ fn read_replay(
         destination,
         // The meter the file names, as the registry spells it — the name the
         // recording's own meter reported stays in the `# model:` line.
-        replay.device.display_name,
+        replay.device.display_name(),
         count,
         // A gap in the recording plays back as timeouts, and they are not a
         // quiet meter: there is no `--device` to check and nothing on the

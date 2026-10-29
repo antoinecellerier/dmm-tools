@@ -14,8 +14,9 @@ const LINKS: &[&str] = &[cp2110::NAME];
 
 pub(crate) static UT8802: SelectableDevice = SelectableDevice {
     id: "ut8802",
-    display_name: "UT8802",
+    model: "UT8802",
     brand: Brand::UniT,
+    sold_as: &[],
     aliases: &["ut8802n"],
     requires_hardware: true,
     activation_instructions: ut8803::devices::ACTIVATION, // same setup as UT8803

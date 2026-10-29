@@ -21,8 +21,9 @@ const ACTIVATION: &str = "\
 
 pub(crate) static VC880: SelectableDevice = SelectableDevice {
     id: "vc880",
-    display_name: "Voltcraft VC-880",
+    model: "VC-880",
     brand: Brand::Voltcraft,
+    sold_as: &[],
     aliases: &["vc-880"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
@@ -39,8 +40,9 @@ pub(crate) static VC880: SelectableDevice = SelectableDevice {
 
 pub(crate) static VC650BT: SelectableDevice = SelectableDevice {
     id: "vc650bt",
-    display_name: "Voltcraft VC650BT",
+    model: "VC650BT",
     brand: Brand::Voltcraft,
+    sold_as: &[],
     aliases: &["vc-650bt"],
     requires_hardware: true,
     activation_instructions: ACTIVATION, // same protocol as VC-880
@@ -57,8 +59,9 @@ pub(crate) static VC650BT: SelectableDevice = SelectableDevice {
 
 pub(crate) static VC890: SelectableDevice = SelectableDevice {
     id: "vc890",
-    display_name: "Voltcraft VC-890",
+    model: "VC-890",
     brand: Brand::Voltcraft,
+    sold_as: &[],
     aliases: &["vc-890"],
     requires_hardware: true,
     activation_instructions: ACTIVATION, // same activation as VC-880

@@ -412,9 +412,9 @@ mod tests {
     fn the_registry_entry_is_this_familys() {
         let entry = registry::find_device(ID).expect("registry entry");
         assert_eq!(entry.family, DeviceFamily::Eevblog121gw);
-        assert_eq!(entry.display_name, "EEVblog 121GW");
+        assert_eq!(entry.display_name(), "EEVblog 121GW");
         let proto = (entry.new_protocol)();
-        assert_eq!(proto.profile().model_name, entry.display_name);
+        assert_eq!(proto.profile().model_name, entry.display_name());
         assert!(std::ptr::eq(entry.fingerprint.unwrap(), &FINGERPRINT));
     }
 

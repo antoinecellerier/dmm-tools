@@ -85,7 +85,7 @@ pub(super) fn verify_meter(
         // meter's own answer.
         None => eprintln!(
             "Device: {} (the meter does not report a name)",
-            style(device.display_name).bold()
+            style(device.display_name()).bold()
         ),
     }
     let stability = dmm.profile().stability;

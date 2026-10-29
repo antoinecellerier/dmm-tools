@@ -368,7 +368,7 @@ mod tests {
             (
                 Series::Bm82x,
                 DeviceFamily::Bm82x,
-                "Brymen BM829s/BM827s/BM822s/BM821s / ET-2517A",
+                "Brymen BM829s/BM827s/BM822s/BM821s",
                 &[
                     "bm829s",
                     "BM827s",
@@ -385,7 +385,7 @@ mod tests {
             (
                 Series::Bm52x,
                 DeviceFamily::Bm52x,
-                "Brymen BM525s/BM521s / ET-2615A",
+                "Brymen BM525s/BM521s",
                 &[
                     "bm525s",
                     "BM521s",
@@ -399,7 +399,7 @@ mod tests {
             let entry = registry::find_device(series.id()).expect("registry entry");
             assert!(std::ptr::eq(entry, devices::entry(series)));
             assert_eq!(entry.family, family);
-            assert_eq!(entry.display_name, name);
+            assert_eq!(entry.display_name(), name);
             assert_eq!(entry.links, [crate::transport::bu86x::NAME]);
             assert!(entry.bluetooth_names.is_empty());
             for alias in aliases {
@@ -411,7 +411,7 @@ mod tests {
             }
             let proto = (entry.new_protocol)();
             let profile = proto.profile();
-            assert_eq!(profile.model_name, entry.display_name);
+            assert_eq!(profile.model_name, entry.display_name());
             assert_eq!(profile.max_aux_values, 1);
             assert_eq!(profile.stability, series.stability());
             assert!(profile.supported_commands.is_empty());

@@ -680,7 +680,7 @@ mod tests {
     fn the_device_help_offers_auto() {
         let help = build_device_help();
         assert!(
-            help.contains("auto         Detect the connected meter (default)"),
+            help.contains("auto          Detect the connected meter (default)"),
             "{help}"
         );
         assert!(

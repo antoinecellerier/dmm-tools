@@ -842,7 +842,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
                             format_args!(
                                 "{name:?}, using the {} tables, the model its Bluetooth name \
                                  advertises",
-                                device.display_name
+                                device.display_name()
                             ),
                         );
                         Evidence::Model {
@@ -883,8 +883,8 @@ const FALLBACK_ID: &str = devices::UT61EPLUS.id;
 /// Only [`DeviceFamily::Ut61EPlus`] entries are considered: the name frame is
 /// that family's alone, so matching the whole registry would let a meter that
 /// happens to report "mock" or "UT171" pick an entry whose framing it does not
-/// speak. `display_name` first, then aliases, both case-insensitive — the
-/// display names are exactly what the meters send.
+/// speak. The model first, then aliases, both case-insensitive — the models
+/// are exactly what the meters send.
 fn device_for_reported_name(name: &str) -> Option<&'static SelectableDevice> {
     let wanted = name.trim().to_lowercase();
     let family = || {
@@ -894,7 +894,7 @@ fn device_for_reported_name(name: &str) -> Option<&'static SelectableDevice> {
             .filter(|d| d.family == DeviceFamily::Ut61EPlus)
     };
     family()
-        .find(|d| d.display_name.to_lowercase() == wanted)
+        .find(|d| d.model.to_lowercase() == wanted)
         .or_else(|| family().find(|d| d.aliases.iter().any(|a| a.to_lowercase() == wanted)))
 }
 
@@ -3091,8 +3091,8 @@ raw_payload=14"#
             .iter()
             .filter(|d| d.family == DeviceFamily::Ut61EPlus)
         {
-            let found = device_for_reported_name(device.display_name)
-                .unwrap_or_else(|| panic!("{} does not round-trip", device.display_name));
+            let found = device_for_reported_name(device.model)
+                .unwrap_or_else(|| panic!("{} does not round-trip", device.display_name()));
             assert_eq!(found.id, device.id);
         }
     }
@@ -3165,7 +3165,7 @@ raw_payload=14"#
         assert_eq!(
             reports,
             [
-                "ut61eplus: unrecognised model name: \"UT216XD\", using the UT60BT tables, the \
+                "ut61eplus: unrecognised model name: \"UT216XD\", using the UNI-T UT60BT tables, the \
               model its Bluetooth name advertises"
             ]
         );

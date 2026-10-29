@@ -104,8 +104,8 @@ fn keys_off(opened: &Model, confirmed: Confirmation) -> Option<String> {
             "{} ({}), not the {} it was opened as, so remote keys are off; choose Auto-detect \
              or --device {}",
             reports_code(model.code),
-            model.name,
-            opened.name,
+            model.display_name(),
+            opened.display_name(),
             model.id
         )),
         Confirmation::Unknown(code) => Some(format!(
@@ -144,7 +144,7 @@ fn other_frame(opened: &Model, sent: FrameKind) -> String {
         "the meter sends OWON's {} frames, not the {} frames of the {} it was opened as; {fix}",
         sent.name(),
         opened.frame.name(),
-        opened.name
+        opened.display_name()
     )
 }
 
@@ -188,7 +188,7 @@ impl OwonProtocol {
             model,
             profile: DeviceProfile {
                 family_name: "OWON",
-                model_name: model.name,
+                model_name: model.display_name(),
                 stability: Stability::Experimental,
                 supported_commands: model.commands,
                 max_aux_values: model.frame.max_aux_values(),
@@ -248,9 +248,9 @@ impl OwonProtocol {
                         "{} ({}), which sends OWON's {} frame, not the {} it was opened as; \
                          choose Auto-detect or --device {}",
                         reports_code(model.code),
-                        model.name,
+                        model.display_name(),
                         model.frame.name(),
-                        self.model.name,
+                        self.model.display_name(),
                         model.id
                     ),
                     value,
@@ -290,7 +290,7 @@ impl Protocol for OwonProtocol {
             None => {
                 debug!(
                     "owon: no device information read; keys follow the {}",
-                    self.model.name
+                    self.model.display_name()
                 );
                 Confirmation::NoInfo
             }
@@ -760,12 +760,12 @@ mod tests {
         };
         assert_eq!(
             named(Some(&B41_INFO), &mut proto),
-            (true, Some("OWON B41T+".to_string()))
+            (true, Some("B41T+".to_string()))
         );
         let ow18b = [0x12, 0x63, 0x04, 0x00, 0x09, 0x00];
         assert_eq!(
             named(Some(&ow18b), &mut proto),
-            (true, Some("OWON OW18B/OW16B".to_string()))
+            (true, Some("OW18B/OW16B".to_string()))
         );
         assert_eq!(
             named(Some(&info(223)), &mut proto),
@@ -814,6 +814,13 @@ mod tests {
         assert_eq!(named(&model::B41), None);
         // The other frame: init refuses it, so no warning goes first.
         assert!(proto(&model::CMS101).entry_named(model::B41.name).is_none());
+        // A replay from before the names dropped their brand.
+        assert_eq!(
+            proto(&model::CMS101)
+                .entry_named("OWON CMS061")
+                .map(|d| d.id),
+            Some("cms061")
+        );
 
         let meter = Meter::new(Some(&B41_INFO), Vec::new());
         let mut proto = proto(&model::B35);
@@ -1002,7 +1009,7 @@ mod tests {
         let meter = Meter::new(Some(&info(87)), vec![stream.clone(), stream]);
         let detected = crate::detect::detect_device(&meter, crate::BLUETOOTH).unwrap();
         assert_eq!(detected.device.id, "vc871");
-        assert_eq!(detected.reported_name.as_deref(), Some("Voltcraft VC871"));
+        assert_eq!(detected.reported_name.as_deref(), Some("VC871"));
         let mut dmm = crate::Dmm::from_detected(meter, &detected).unwrap();
         let m = dmm.request_measurement().unwrap();
         assert_eq!(m.raw_payload.len(), 15);
@@ -1051,12 +1058,14 @@ mod tests {
         let mut issues = Vec::new();
         for m in model::MODELS {
             let entry = registry::find_device(m.id).expect("registry entry");
-            assert_eq!(entry.display_name, m.name);
+            assert_eq!(entry.model, m.name);
             assert_eq!(entry.family, DeviceFamily::Owon);
             assert_eq!(entry.links, [crate::BLUETOOTH]);
             let names: &[&str] = match m.frame {
                 FrameKind::Six => &["BDM", "LILLIPUT"],
-                FrameKind::Fifteen if m.name.starts_with("Voltcraft") => &["BDM", "VC8", "VC9"],
+                FrameKind::Fifteen if entry.brand == registry::Brand::Voltcraft => {
+                    &["BDM", "VC8", "VC9"]
+                }
                 FrameKind::Fifteen => &["BDM"],
             };
             assert_eq!(entry.bluetooth_names, names, "{}", m.id);
@@ -1083,7 +1092,7 @@ mod tests {
             let proto = (entry.new_protocol)();
             let profile = proto.profile();
             assert_eq!(profile.family_name, "OWON");
-            assert_eq!(profile.model_name, m.name);
+            assert_eq!(profile.model_name, entry.display_name());
             assert_eq!(profile.stability, Stability::Experimental);
             assert_eq!(profile.supported_commands, m.commands);
             assert_eq!(profile.max_aux_values, m.frame.max_aux_values());
@@ -1107,15 +1116,8 @@ mod tests {
         assert_eq!(
             names,
             [
-                "OWON CMS101",
-                "OWON CMS061",
-                "OWON OW65B",
-                "OWON OW67B",
-                "OWON OW69B",
-                "Voltcraft VC871",
-                "Voltcraft VC891",
-                "Voltcraft VC915",
-                "Voltcraft VC925 PV"
+                "CMS101", "CMS061", "OW65B", "OW67B", "OW69B", "VC871", "VC891", "VC915",
+                "VC925 PV"
             ]
         );
         for (alias, id) in [
@@ -1153,7 +1155,7 @@ mod tests {
             recognise(&frame, &probing(Some(&B41_INFO))),
             Some(Evidence::Model {
                 id: "b41t+",
-                reported_name: Some("OWON B41T+".to_string()),
+                reported_name: Some("B41T+".to_string()),
             })
         );
         assert_eq!(recognise(&frame[..5], &probing(Some(&B41_INFO))), None);
@@ -1188,7 +1190,7 @@ mod tests {
         assert_eq!(recognise(&VC871_STREAM[0][..14], &probing), None);
         let vc871 = Some(Evidence::Model {
             id: "vc871",
-            reported_name: Some("Voltcraft VC871".to_string()),
+            reported_name: Some("VC871".to_string()),
         });
         assert_eq!(recognise(&VC871_STREAM[0], &probing), vc871);
         assert_eq!(recognise(&[0x2B; 15], &probing), vc871);

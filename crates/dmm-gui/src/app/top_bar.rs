@@ -89,7 +89,7 @@ impl App {
             });
             let device_label = imported_meter.clone().unwrap_or_else(|| {
                 self.active_device()
-                    .map_or("Auto-detect", |d| d.display_name)
+                    .map_or("Auto-detect", |d| d.display_name())
                     .to_string()
             });
             ui.label(RichText::new(device_label).strong());

@@ -12,9 +12,11 @@ const MAX_DEVICE_COLUMNS: usize = 4;
 const MIN_DEVICE_LIST_ROWS: f32 = 8.0;
 
 /// Splits groups `heights` tall, kept whole and in order, into at most `k`
-/// columns, the tallest as short as it can be. Returns each column's range
-/// of groups; a tie goes to the split whose earlier columns are taller, so
-/// the eye reads down the long ones first.
+/// columns, the tallest as short as it can be, then the next tallest, and so
+/// on: one tall group sets the tallest column alone, and the rest still
+/// spread evenly. Returns each column's range of groups; a tie goes to the
+/// split whose earlier columns are taller, so the eye reads down the long
+/// ones first.
 fn pack_columns(heights: &[usize], k: usize) -> Vec<std::ops::Range<usize>> {
     /// Every way to cut `n` groups into `k` non-empty runs, as the index
     /// each run after the first starts at.
@@ -38,12 +40,14 @@ fn pack_columns(heights: &[usize], k: usize) -> Vec<std::ops::Range<usize>> {
         let ends = cuts.iter().copied().chain(std::iter::once(n));
         starts.zip(ends).map(|(a, b)| a..b).collect()
     };
-    let tallest = |ranges: &[std::ops::Range<usize>]| {
-        ranges
+    // The column heights, tallest first, compared in that order.
+    let tallest_first = |ranges: &[std::ops::Range<usize>]| {
+        let mut columns: Vec<usize> = ranges
             .iter()
             .map(|r| heights[r.clone()].iter().sum::<usize>())
-            .max()
-            .unwrap_or(0)
+            .collect();
+        columns.sort_unstable_by(|a, b| b.cmp(a));
+        columns
     };
     splits
         .iter()
@@ -51,14 +55,14 @@ fn pack_columns(heights: &[usize], k: usize) -> Vec<std::ops::Range<usize>> {
         // Reversed, the latest cuts come first, and `min_by_key` keeps the
         // first of equals: the taller columns lead.
         .rev()
-        .min_by_key(|ranges| tallest(ranges))
+        .min_by_key(|ranges| tallest_first(ranges))
         .unwrap_or_default()
 }
 
 /// How the open **Device** list lays out: the brand groups and the columns
 /// they are spread over, as many as the window has room for.
 struct DeviceListLayout {
-    groups: Vec<(registry::Brand, Vec<&'static registry::SelectableDevice>)>,
+    groups: Vec<(registry::Brand, Vec<registry::Listing>)>,
     columns: Vec<std::ops::Range<usize>>,
     col_w: f32,
     gap: f32,
@@ -80,8 +84,8 @@ impl DeviceListLayout {
         let padding = 2.0 * style.spacing.button_padding.x;
         let col_w = groups
             .iter()
-            .flat_map(|(brand, devices)| {
-                let entries = devices.iter().map(|d| {
+            .flat_map(|(brand, rows)| {
+                let entries = rows.iter().map(|d| {
                     measure(&crate::display::choice_entry_text(d.model_name(), true)) + padding
                 });
                 std::iter::once(measure(brand.name())).chain(entries)
@@ -123,9 +127,7 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
     let list = || list.get_or_init(|| DeviceListLayout::new(&ctx, &style));
 
     // Below the button and no further: a list taller than that scrolls,
-    // where egui would slide it up over the button. egui also caps it at
-    // the `default_area_size` its popups are first measured in (400 pt),
-    // which four columns fit; a narrower window scrolls within that.
+    // where egui would slide it up over the button.
     let row = ui.spacing().interact_size.y;
     let below = ctx.content_rect().bottom()
         - ui.cursor().top()
@@ -153,7 +155,7 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
         let mut picked = None;
         // Every entry in reading order, and the column each sits in (none
         // for Auto-detect, which spans them).
-        let mut entries = Vec::with_capacity(registry::DEVICES.len() + 1);
+        let mut entries = Vec::with_capacity(registry::listings().count() + 1);
         let mut add = |ui: &mut Ui, id: &'static str, text: &str, full: &str, hover: &str| {
             let live = id == selected_id;
             let entry = ui
@@ -185,14 +187,15 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
             for (c, range) in columns.iter().enumerate() {
                 let layout = Layout::top_down_justified(Align::LEFT);
                 ui.allocate_ui_with_layout(vec2(*col_w, 0.0), layout, |ui| {
-                    for (i, (brand, devices)) in groups[range.clone()].iter().enumerate() {
+                    for (i, (brand, rows)) in groups[range.clone()].iter().enumerate() {
                         if i > 0 {
                             ui.add_space(ui.spacing().item_spacing.y * 2.0);
                         }
                         ui.label(RichText::new(brand.name()).color(ui.visuals().weak_text_color()));
-                        for d in devices {
-                            let hover = format!("Talk to a {}", d.display_name);
-                            let entry = add(ui, d.id, d.model_name(), d.display_name, &hover);
+                        for row in rows {
+                            let hover = format!("Talk to a {}", row.display_name());
+                            let entry =
+                                add(ui, row.id(), row.model_name(), row.display_name(), &hover);
                             entries.push((entry, Some(c)));
                         }
                     }
@@ -255,6 +258,11 @@ mod tests {
         // Three: UNI-T alone cannot be beaten, so the split puts the rest
         // either side of it.
         assert_eq!(pack_columns(&heights, 3), vec![0..3, 3..4, 4..7]);
+        // Today's brands, ANENG to Simulated: UNI-T sets the tallest column
+        // alone, and Minipa goes beside OWON rather than piling up first.
+        let heights = [5, 5, 4, 2, 3, 12, 19, 9, 5, 3];
+        assert_eq!(pack_columns(&heights, 4), vec![0..4, 4..6, 6..7, 7..10]);
+        assert_eq!(pack_columns(&heights, 3), vec![0..6, 6..7, 7..10]);
         // More columns than groups: one group each.
         assert_eq!(pack_columns(&[1, 1], 4), vec![0..1, 1..2]);
         // A tie goes to the taller columns first.

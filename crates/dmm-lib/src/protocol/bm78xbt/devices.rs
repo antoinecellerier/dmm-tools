@@ -26,8 +26,9 @@ If the meter is not found or its connection password was changed, ",
 
 pub(crate) static BM78XBT: SelectableDevice = SelectableDevice {
     id: ID,
-    display_name: "Brymen BM788BT/BM787BT",
+    model: "BM788BT/BM787BT",
     brand: Brand::Brymen,
+    sold_as: &[],
     aliases: &["bm788bt", "bm787bt", "brymen-bm788bt", "brymen-bm787bt"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

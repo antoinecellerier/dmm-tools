@@ -473,12 +473,13 @@ fn closing_line(check: &DetectionCheck, device: &SelectableDevice) -> (String, b
     }
     let keep = format!(
         " \u{2014} keep using --device {}, or pick {} in dmm-gui.",
-        device.id, device.display_name
+        device.id,
+        device.display_name()
     );
     let picked = check.device_id.as_deref().and_then(registry::find_device);
     match picked {
         Some(picked) if picked.id == device.id => {
-            let name = picked.display_name;
+            let name = picked.display_name();
             let Some(read_back) = &check.read_back else {
                 return (format!("Auto-detection found {name}."), false);
             };
@@ -502,7 +503,7 @@ fn closing_line(check: &DetectionCheck, device: &SelectableDevice) -> (String, b
         Some(picked) => (
             format!(
                 "Auto-detection picked {} for this meter{keep}",
-                picked.display_name
+                picked.display_name()
             ),
             true,
         ),
@@ -837,7 +838,7 @@ mod tests {
         let mut check = DetectionCheck::new(DetectionOutcome::Found);
         check.device_id = Some("ut61eplus".to_string());
         let (line, advice) = closing_line(&check, ut61eplus());
-        assert_eq!(line, "Auto-detection found UT61E+.");
+        assert_eq!(line, "Auto-detection found UNI-T UT61E+.");
         assert!(!advice);
 
         let ut71 = registry::find_device("ut71cde").unwrap();
@@ -845,7 +846,7 @@ mod tests {
         let (line, advice) = closing_line(&check, ut71);
         assert!(advice);
         assert!(
-            line.starts_with("Auto-detection picked UT804 for this meter"),
+            line.starts_with("Auto-detection picked UNI-T UT804 for this meter"),
             "{line}"
         );
         assert!(line.contains("--device ut71cde"), "{line}");
@@ -942,7 +943,7 @@ mod tests {
         let (line, advice) = closing_line(&check, ut61eplus());
         assert_eq!(
             line,
-            format!("Auto-detection found UT61E+ and read {summary}.")
+            format!("Auto-detection found UNI-T UT61E+ and read {summary}.")
         );
         assert!(!advice);
 

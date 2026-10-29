@@ -189,7 +189,9 @@ impl<'a> Triage<'a> {
         match self.device {
             Some(d) => out.push_str(&format!(
                 "Device: {} ({}) over {transport}; the meter named itself {:?}\n",
-                d.id, d.display_name, r.device_name
+                d.id,
+                d.display_name(),
+                r.device_name
             )),
             None => out.push_str(&format!(
                 "Device: none named, so nothing is parsed again (pass --device); \

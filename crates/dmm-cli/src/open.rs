@@ -114,10 +114,11 @@ fn note_detected(detected: dmm_lib::detect::Detected) -> &'static dmm_lib::detec
     // Either way the line ends with the exact option that skips the probe next
     // time, so the user never has to look the id up.
     let note = match &detected.reported_name {
-        Some(name) if name != device.display_name => format!(
+        Some(name) if !device.answers_to(name) => format!(
             " (the meter reports {name:?}; using {} tables \u{2014} pass --device {} to keep them, \
              or another id to override)",
-            device.display_name, device.id
+            device.display_name(),
+            device.id
         ),
         _ => format!(
             " (pass --device {} or pick it in dmm-gui to skip detection next time)",
@@ -126,7 +127,7 @@ fn note_detected(detected: dmm_lib::detect::Detected) -> &'static dmm_lib::detec
     };
     eprintln!(
         "{}",
-        style(format!("Detected {}{note}", device.display_name)).dim()
+        style(format!("Detected {}{note}", device.display_name())).dim()
     );
     detected
 }

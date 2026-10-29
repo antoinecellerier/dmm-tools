@@ -31,10 +31,11 @@ default, works out which meter is connected from its replies
 **Device**; pick **Auto-detect** again after swapping meters. The probe makes
 a UT61+/UT161 beep once.
 
-The other choices are every supported model, grouped by brand (see
+The other choices are every supported model under its brand's heading, a
+meter sold under several brands' names listed under each (see
 [supported devices](supported-devices.md)), and under **Simulated**: **Mock
 (simulated)**, which generates synthetic measurements without hardware, and
-**Mock ZT-5B / V05B (simulated)**, which simulates a ZOTEK meter ([what its keys
+**Mock ZT-5B (simulated)**, which simulates a ZOTEK meter ([what its keys
 do](cli-reference.md#zotek-mock)); picking one skips detection. The
 selection persists across sessions and requires a reconnect to take effect.
 When the connected protocol is not fully verified, an orange
@@ -406,7 +407,7 @@ Input Z and notes in the full panel. When no spec data is available
 configured). If neither specs nor manual URL exist, nothing renders.
 
 **Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804,
-ZT-5B / V05B, the Brymen BM820s and BM520s series (Minipa ET-2517A,
+ZT-5B (ANENG V05B), the Brymen BM820s and BM520s series (Minipa ET-2517A,
 ET-2615A), and Mock (the UT61E+'s figures; none in its temperature modes).
 Other devices show only the Manual link.
 

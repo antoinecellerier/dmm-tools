@@ -184,7 +184,7 @@ impl ConnectionIssue {
             && let Some(device) = selected.filter(|d| d.bluetooth_only())
         {
             return Self::BluetoothOnlyUnreachable {
-                model: device.display_name,
+                model: device.display_name(),
                 activation: device.activation_instructions,
                 error: err.to_string(),
             };
@@ -445,7 +445,8 @@ impl App {
                      If this is the wrong device, change it in Settings (\u{2699}), or pick Auto-detect there.\n\
                      Otherwise, enable data transmission:\n\
                      {}",
-                    entry.display_name, entry.activation_instructions
+                    entry.display_name(),
+                    entry.activation_instructions
                 ),
                 None => "No meter answered \u{2014} switch on the meter's data \n\
                          transmission, or pick the model in Settings (\u{2699})."
@@ -644,11 +645,11 @@ mod tests {
         use dmm_lib::error::{BluetoothOnlyMiss, Error};
         let ut60bt = registry::find_device("ut60bt").expect("registry entry");
         let own_steps = LinksSearched::BluetoothOnly {
-            model: ut60bt.display_name,
+            model: ut60bt.display_name(),
             activation: ut60bt.activation_instructions,
         };
         let missed = |miss| Error::BluetoothOnly {
-            model: ut60bt.display_name,
+            model: ut60bt.display_name(),
             activation: ut60bt.activation_instructions,
             miss,
         };
@@ -657,7 +658,7 @@ mod tests {
         let issue = ConnectionIssue::from_error(&missed(BluetoothOnlyMiss::NotInRange), None, None);
         let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BluetoothOnlyNotFound);
-        assert_eq!(n.title, "No UT60BT found over Bluetooth");
+        assert_eq!(n.title, "No UNI-T UT60BT found over Bluetooth");
         assert_eq!(n.sections, own_steps.sections());
         assert!(
             n.help_text().contains("Long press SEL"),
@@ -682,7 +683,7 @@ mod tests {
         assert_eq!(n.title, "Bluetooth not searched");
         assert_eq!(
             n.body,
-            "UT60BT connects over Bluetooth only, and Bluetooth is switched off. \
+            "UNI-T UT60BT connects over Bluetooth only, and Bluetooth is switched off. \
              Tick \"Look for Bluetooth devices\" in Settings (\u{2699})."
         );
         assert!(n.sections.is_empty());
@@ -844,7 +845,7 @@ mod tests {
     fn meters_sharing_activation_steps_are_listed_together() {
         let help = not_identified_help("CP2110", false);
         assert!(
-            help.contains("UT61E+, UT61B+, UT61D+, UT161B, UT161D, UT161E"),
+            help.contains("UNI-T UT61E+, UT61B+, UT61D+, UT161B, UT161D, UT161E"),
             "got {help}"
         );
         assert_eq!(

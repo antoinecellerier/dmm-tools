@@ -54,13 +54,25 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | Value | Aliases | Description |
 |---|---|---|
 | `auto` |  | [Detect the connected meter](detection-design.md) (default) |
-| **Brymen / Minipa** |  |  |
+| **ANENG** |  |  |
+| `an9002` | `an-9002` | AN9002 (experimental) |
+| `an999s` | `an-999s` | AN999S (experimental) |
+| `st207` |  | ST207 (experimental) |
+| `v05b` |  | V05B (verified) |
+| **Brymen** |  |  |
 | `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | BM788BT/BM787BT (experimental) |
 | `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | BM869s/BM867s (experimental) |
-| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s`, `et-2517a` | BM829s/BM827s/BM822s/BM821s / ET-2517A (partly verified) |
-| `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s`, `et-2615a` | BM525s/BM521s / ET-2615A (partly verified) |
+| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | BM829s/BM827s/BM822s/BM821s (partly verified) |
+| `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s` | BM525s/BM521s (partly verified) |
+| **BSIDE** |  |  |
+| `bside-zt300ab` |  | ZT-300AB (experimental) |
+| `bside-zt5bq` |  | ZT-5BQ (experimental) |
+| `bside-zt5b` |  | ZT-5B (verified) |
 | **EEVblog** |  |  |
 | `121gw` | `eevblog121gw`, `eevblog-121gw` | 121GW (experimental) |
+| **Minipa** |  |  |
+| `et2517a` | `et-2517a` | ET-2517A (partly verified) |
+| `et2615a` | `et-2615a` | ET-2615A (partly verified) |
 | **OWON** |  |  |
 | `ow18b` | `ow16b`, `owon-ow18b`, `owon-ow16b` | OW18B/OW16B (experimental) |
 | `ow18e` | `owon-ow18e` | OW18E (experimental) |
@@ -90,6 +102,8 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut71cde` | `ut71c`, `ut71d`, `ut71e` | UT71C/D/E (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (partly verified) |
+| `ut217b` |  | UT217B (experimental) |
+| `ut217a` |  | UT217A (experimental) |
 | **Voltcraft** |  |  |
 | `vc880` | `vc-880` | VC-880 (experimental) |
 | `vc650bt` | `vc-650bt` | VC650BT (experimental) |
@@ -99,14 +113,14 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `vc891` | `vc-891` | VC891 (experimental) |
 | `vc915` | `vc-915` | VC915 (experimental) |
 | `vc925pv` | `vc-925pv` | VC925 PV (experimental) |
-| **ZOTEK / ZOYI / BSIDE / ANENG** |  |  |
-| `zt300ab` | `zt-300ab`, `an9002`, `an-9002` | ZT-300AB / AN9002 (experimental) |
-| `zt5566se` | `zt-5566se`, `zt5566s`, `zt-5566s`, `an999s`, `an-999s` | ZT-5566SE / AN999S (experimental) |
-| `zt5bq` | `zt-5bq`, `st207` | ZT-5BQ / ST207 (experimental) |
-| `zt5b` | `zt-5b`, `v05b` | ZT-5B / V05B (verified) |
+| **ZOYI / ZOTEK** |  |  |
+| `zt300ab` | `zt-300ab` | ZT-300AB (experimental) |
+| `zt5566se` | `zt-5566se`, `zt5566s`, `zt-5566s` | ZT-5566SE (experimental) |
+| `zt5bq` | `zt-5bq` | ZT-5BQ (experimental) |
+| `zt5b` | `zt-5b` | ZT-5B (verified) |
 | **Simulated** |  |  |
 | `mock` |  | Mock (simulated, no hardware required) |
-| `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
+| `mock-zt5b` |  | Mock ZT-5B (simulated, no hardware required) |
 <!-- devices:end -->
 
 **Experimental** families were reverse-engineered from vendor software and
@@ -120,7 +134,7 @@ The `mock` device generates synthetic measurements without hardware, cycling
 through the scenarios listed under [Mock modes](#mock-modes); `--mock-mode`
 pins one. It supports `read`, `command`, `get` and `set`.
 
-The `mock-zt5b` device simulates a ZT-5B / V05B, to try the ZOTEK remote keys
+The `mock-zt5b` device simulates a ZOTEK ZT-5B, to try the ZOTEK remote keys
 without a meter. It supports `read` and `command`, sends about 2.6 readings a
 second, and starts on the `Auto` word each run; [ZOTEK mock](#zotek-mock)
 lists what its keys do.

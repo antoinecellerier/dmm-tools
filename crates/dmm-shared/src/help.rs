@@ -45,20 +45,31 @@ pub fn version_label(version: &str, git_hash: &str) -> String {
 /// `intro` is the only part that differs between the binaries — the CLI's is
 /// bare, the GUI's notes that the flag overrides saved settings.
 pub fn device_help(intro: &str) -> String {
-    let mut help = String::with_capacity(intro.len() + registry::DEVICES.len() * 48 + 160);
+    let rows = registry::listings().count();
+    let mut help = String::with_capacity(intro.len() + rows * 48 + 160);
     help.push_str(intro);
     help.push_str("\n\nDevices:\n");
+    // The names line up past the longest id.
+    let width = registry::listings()
+        .map(|l| l.id().len())
+        .max()
+        .unwrap_or(0);
     // Leads the list: it is what the flag does when nothing names a meter, and
     // the one value the registry does not carry.
     help.push_str(&format!(
-        "  {:<12} {AUTO_DESCRIPTION} (default)\n",
+        "  {:<width$} {AUTO_DESCRIPTION} (default)\n",
         registry::AUTO_DEVICE_ID
     ));
-    for (brand, devices) in registry::brand_groups() {
+    for (brand, rows) in registry::brand_groups() {
         help.push_str(&format!("\n  {}\n", brand.name()));
-        for d in devices {
-            let tag = device_tag(d, false).map_or(String::new(), |t| format!(" ({t})"));
-            help.push_str(&format!("    {:<12} {}{}\n", d.id, d.model_name(), tag));
+        for row in rows {
+            let tag = device_tag(row.device, false).map_or(String::new(), |t| format!(" ({t})"));
+            help.push_str(&format!(
+                "    {:<width$} {}{}\n",
+                row.id(),
+                row.model_name(),
+                tag
+            ));
         }
     }
     help.push_str(
@@ -90,11 +101,8 @@ pub fn with_completion_values(mut cmd: clap::Command) -> clap::Command {
         cmd = cmd.mut_subcommand(name, with_completion_values);
     }
     let devices =
-        std::iter::once(PossibleValue::new(registry::AUTO_DEVICE_ID).help(AUTO_DESCRIPTION)).chain(
-            registry::DEVICES
-                .iter()
-                .map(|d| PossibleValue::new(d.id).help(d.display_name)),
-        );
+        std::iter::once(PossibleValue::new(registry::AUTO_DEVICE_ID).help(AUTO_DESCRIPTION))
+            .chain(registry::listings().map(|l| PossibleValue::new(l.id()).help(l.display_name())));
     let modes = MockMode::ALL
         .iter()
         .map(|m| PossibleValue::new(m.label()).help(m.description()));
@@ -156,21 +164,35 @@ pub fn short_name(link: Link) -> &'static str {
 /// Several entries share one instruction block — every UT61+/UT161 model, the
 /// UT8802 and the UT8803 — so a list per device would print the same four
 /// lines six times over. Registry order is kept, and a group is named by the
-/// display names that share it.
+/// meters that share it, the brand once per run of its models: "UNI-T UT61E+,
+/// UT61B+".
 pub fn activation_groups(
     devices: &[&'static SelectableDevice],
 ) -> Vec<(&'static str, Vec<&'static str>)> {
-    let mut groups: Vec<(&'static str, Vec<&'static str>)> = Vec::new();
-    for device in devices {
+    let mut groups: Vec<(&'static str, Vec<&'static SelectableDevice>)> = Vec::new();
+    for &device in devices {
         match groups
             .iter_mut()
             .find(|(instructions, _)| *instructions == device.activation_instructions)
         {
-            Some((_, names)) => names.push(device.display_name),
-            None => groups.push((device.activation_instructions, vec![device.display_name])),
+            Some((_, members)) => members.push(device),
+            None => groups.push((device.activation_instructions, vec![device])),
         }
     }
     groups
+        .into_iter()
+        .map(|(instructions, members)| {
+            let names = members
+                .iter()
+                .enumerate()
+                .map(|(i, d)| match i.checked_sub(1).map(|p| members[p].brand) {
+                    Some(brand) if brand == d.brand => d.model,
+                    _ => d.display_name(),
+                })
+                .collect();
+            (instructions, names)
+        })
+        .collect()
 }
 
 /// The cable link, in both the long and the short form.
@@ -531,7 +553,7 @@ mod tests {
         };
         let devices = values(&cmd, "device");
         assert_eq!(devices[0], registry::AUTO_DEVICE_ID);
-        assert_eq!(devices.len(), registry::DEVICES.len() + 1);
+        assert_eq!(devices.len(), registry::listings().count() + 1);
         let read = cmd.find_subcommand_mut("read").unwrap();
         assert_eq!(values(read, "mock_mode").len(), MockMode::ALL.len());
     }
@@ -544,12 +566,16 @@ mod tests {
         // it leads, being what a user who names nothing gets.
         let listing = help.split("Devices:\n").nth(1).expect("device list");
         assert!(
-            listing.starts_with("  auto         Detect the connected meter (default)\n"),
+            listing.starts_with("  auto          Detect the connected meter (default)\n"),
             "{listing}"
         );
-        for d in registry::DEVICES {
-            assert!(help.contains(d.id), "missing {}", d.id);
-            assert!(help.contains(d.model_name()), "missing {}", d.display_name);
+        for row in registry::listings() {
+            assert!(help.contains(row.id()), "missing {}", row.id());
+            assert!(
+                help.contains(row.model_name()),
+                "missing {}",
+                row.display_name()
+            );
         }
         assert!(help.contains("Also accepts aliases"));
     }
@@ -571,17 +597,19 @@ mod tests {
             let Some(entry) = line.strip_prefix("    ") else {
                 continue;
             };
-            let (_, devices) = brand.as_ref().expect("an entry before any heading");
+            let (_, rows) = brand.as_ref().expect("an entry before any heading");
             let id = entry.split_whitespace().next().unwrap();
-            let device = devices.iter().find(|d| d.id == id).expect(line);
-            assert!(entry.contains(device.model_name()), "{line}");
+            let row = rows.iter().find(|l| l.id() == id).expect(line);
+            assert!(entry.contains(row.model_name()), "{line}");
             seen += 1;
         }
-        assert_eq!(seen, registry::DEVICES.len());
+        assert_eq!(seen, registry::listings().count());
         assert!(
-            help.contains("\n  Voltcraft\n    vc880        VC-880"),
+            help.contains("\n  Voltcraft\n    vc880         VC-880"),
             "{help}"
         );
+        assert!(help.contains("\n  UNI-T\n"), "{help}");
+        assert!(help.contains("    ut217a        UT217A"), "{help}");
     }
 
     /// Both binaries render these lines verbatim, so the header and the empty
@@ -678,7 +706,7 @@ mod tests {
     fn ut60bt() -> LinksSearched<'static> {
         let device = registry::find_device("ut60bt").expect("registry entry");
         LinksSearched::BluetoothOnly {
-            model: device.display_name,
+            model: device.display_name(),
             activation: device.activation_instructions,
         }
     }
@@ -688,7 +716,10 @@ mod tests {
     #[test]
     fn a_bluetooth_only_meter_gets_its_own_steps() {
         let links = ut60bt();
-        assert_eq!(links.not_found_title(), "No UT60BT found over Bluetooth");
+        assert_eq!(
+            links.not_found_title(),
+            "No UNI-T UT60BT found over Bluetooth"
+        );
         let text = links.sections()[0].text();
         assert!(
             text.starts_with(
@@ -800,7 +831,7 @@ mod tests {
         assert_eq!(named.len(), devices.len());
         let ut61 = groups
             .iter()
-            .find(|(_, names)| names.contains(&"UT61E+"))
+            .find(|(_, names)| names.contains(&"UNI-T UT61E+"))
             .expect("the UT61E+ is on the CP2110");
         assert!(ut61.1.contains(&"UT61B+"), "{:?}", ut61.1);
         assert!(ut61.0.contains("USB/Hz"), "{}", ut61.0);

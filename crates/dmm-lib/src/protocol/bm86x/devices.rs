@@ -8,7 +8,7 @@
 
 use super::{Bm86xProtocol, FINGERPRINT_52, FINGERPRINT_82, FINGERPRINT_86, Series};
 use crate::protocol::DeviceFamily;
-use crate::protocol::registry::{Brand, SelectableDevice};
+use crate::protocol::registry::{Brand, SelectableDevice, SoldAs};
 use crate::transport::bu86x;
 
 /// One text for the three series, so the help for a silent cable prints it
@@ -29,13 +29,14 @@ const BM820S_520S_MANUAL: &str =
 
 pub(crate) static BM86X: SelectableDevice = SelectableDevice {
     id: Series::Bm86x.id(),
-    display_name: "Brymen BM869s/BM867s",
+    model: "BM869s/BM867s",
     brand: Brand::Brymen,
+    sold_as: &[],
     aliases: &["bm869s", "bm867s", "brymen-bm869s", "brymen-bm867s"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
     family: DeviceFamily::Bm86x,
-    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm86x, BM86X.display_name)),
+    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm86x, BM86X.display_name())),
     fingerprint: Some(&FINGERPRINT_86),
     manual_url: Some(
         "http://www.brymen.com/images/ProductsList/BM860s_List/BM860s-manual-2-033Ed2-ES636-Print1.pdf",
@@ -49,8 +50,15 @@ pub(crate) static BM86X: SelectableDevice = SelectableDevice {
 
 pub(crate) static BM82X: SelectableDevice = SelectableDevice {
     id: Series::Bm82x.id(),
-    display_name: "Brymen BM829s/BM827s/BM822s/BM821s / ET-2517A",
+    model: "BM829s/BM827s/BM822s/BM821s",
     brand: Brand::Brymen,
+    // Minipa's BM827s (#35).
+    sold_as: &[SoldAs {
+        brand: Brand::Minipa,
+        id: "et2517a",
+        model: "ET-2517A",
+        aliases: &["et-2517a"],
+    }],
     aliases: &[
         "bm829s",
         "bm827s",
@@ -60,13 +68,11 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
         "brymen-bm827s",
         "brymen-bm822s",
         "brymen-bm821s",
-        // Minipa's BM827s (#35).
-        "et-2517a",
     ],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
     family: DeviceFamily::Bm82x,
-    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm82x, BM82X.display_name)),
+    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm82x, BM82X.display_name())),
     fingerprint: Some(&FINGERPRINT_82),
     manual_url: Some(BM820S_520S_MANUAL),
     // The manual names the BU-86X once and the BU-82X once, Brymen's
@@ -79,20 +85,20 @@ pub(crate) static BM82X: SelectableDevice = SelectableDevice {
 
 pub(crate) static BM52X: SelectableDevice = SelectableDevice {
     id: Series::Bm52x.id(),
-    display_name: "Brymen BM525s/BM521s / ET-2615A",
+    model: "BM525s/BM521s",
     brand: Brand::Brymen,
-    aliases: &[
-        "bm525s",
-        "bm521s",
-        "brymen-bm525s",
-        "brymen-bm521s",
-        // Minipa's BM525s (#36).
-        "et-2615a",
-    ],
+    // Minipa's BM525s (#36).
+    sold_as: &[SoldAs {
+        brand: Brand::Minipa,
+        id: "et2615a",
+        model: "ET-2615A",
+        aliases: &["et-2615a"],
+    }],
+    aliases: &["bm525s", "bm521s", "brymen-bm525s", "brymen-bm521s"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,
     family: DeviceFamily::Bm52x,
-    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm52x, BM52X.display_name)),
+    new_protocol: || Box::new(Bm86xProtocol::new(Series::Bm52x, BM52X.display_name())),
     fingerprint: Some(&FINGERPRINT_52),
     manual_url: Some(BM820S_520S_MANUAL),
     // A BM525s reads on the BU-86X (#36).

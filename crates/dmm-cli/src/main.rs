@@ -314,7 +314,7 @@ fn main() {
                 print_setup_sections(LinksSearched::BluetoothAt(address));
             } else if let Some(device) = unreachable_bluetooth_only(&*e, selection) {
                 print_setup_sections(LinksSearched::BluetoothOnly {
-                    model: device.display_name,
+                    model: device.display_name(),
                     activation: device.activation_instructions,
                 });
             } else if bluetooth_switched_off(&*e) {

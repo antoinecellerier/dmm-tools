@@ -77,8 +77,8 @@ fn wrong_series(series: Series, other: Series, reply: &[u8]) -> Error {
     Error::invalid_response(
         format!(
             "the meter on the cable is a {}, not a {}; choose Auto-detect or --device {}",
-            devices::entry(other).display_name,
-            devices::entry(series).display_name,
+            devices::entry(other).display_name(),
+            devices::entry(series).display_name(),
             other.id()
         ),
         reply,
@@ -256,7 +256,7 @@ pub(super) mod tests {
                         "{message}"
                     );
                     assert!(
-                        message.contains(devices::entry(other).display_name),
+                        message.contains(devices::entry(other).display_name()),
                         "{message}"
                     );
                     assert_eq!(raw, reply);

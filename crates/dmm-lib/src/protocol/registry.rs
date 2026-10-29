@@ -20,12 +20,17 @@ use crate::mock;
 pub struct SelectableDevice {
     /// Settings/CLI identifier (e.g., "ut61eplus", "ut61b+", "mock").
     pub id: &'static str,
-    /// Human-readable display name (e.g., "UT61E+", "Mock (simulated)").
-    pub display_name: &'static str,
-    /// The name on the meter's case, which the device lists group by.
+    /// The model, as the device lists show it under its brand (e.g.,
+    /// "UT61E+", "Mock (simulated)"); [`Self::display_name`] adds the brand.
+    pub model: &'static str,
+    /// The maker's name on the meter's case, which the device lists group by.
     pub brand: Brand,
     /// Additional strings that resolve to this entry (case-insensitive).
     pub aliases: &'static [&'static str],
+    /// The same meter under other brands' names, each a row of its own in
+    /// the device lists. Nothing on the wire tells them from this entry, so
+    /// they open it.
+    pub sold_as: &'static [SoldAs],
     /// Whether this device requires USB hardware.
     pub requires_hardware: bool,
     /// User-facing instructions for enabling data transmission.
@@ -83,15 +88,24 @@ pub struct SelectableDevice {
 }
 
 impl SelectableDevice {
-    /// [`Self::display_name`] without a leading brand, for a list that already
-    /// shows the brand as a heading: "VC-880" under Voltcraft. The brand is
-    /// the heading's first name, the maker's: "Brymen" under "Brymen / Minipa".
-    pub fn model_name(&self) -> &'static str {
-        let maker = self.brand.name().split(" / ").next().unwrap_or_default();
-        self.display_name
-            .strip_prefix(maker)
-            .and_then(|rest| rest.strip_prefix(' '))
-            .unwrap_or(self.display_name)
+    /// Brand and model, as the app names the meter: "UNI-T UT61E+".
+    pub fn display_name(&self) -> &'static str {
+        full_names().get(self.id).map_or(self.model, String::as_str)
+    }
+
+    /// The entry under its maker's name, as detection names it.
+    pub fn listing(&'static self) -> Listing {
+        Listing {
+            device: self,
+            sold_as: None,
+        }
+    }
+
+    /// Whether `reported`, the name a meter gave for itself, is this entry's
+    /// model. A recording made before the names dropped their brand reports
+    /// "OWON CMS101", which still counts.
+    pub fn answers_to(&self, reported: &str) -> bool {
+        without_brand(reported.trim()).eq_ignore_ascii_case(self.model)
     }
 
     /// A meter with the radio built in, looked for by its own names over
@@ -101,16 +115,108 @@ impl SelectableDevice {
     }
 }
 
+/// A name another brand sells a [`SelectableDevice`]'s meter under
+/// ([`SelectableDevice::sold_as`]).
+pub struct SoldAs {
+    /// The brand on this meter's case, whose heading lists it.
+    pub brand: Brand,
+    /// Settings/CLI identifier, unique across the registry.
+    pub id: &'static str,
+    /// The model, as the device lists show it under its brand ("UT217A").
+    pub model: &'static str,
+    /// Additional strings that resolve to this name (case-insensitive).
+    pub aliases: &'static [&'static str],
+}
+
+/// A row of the device lists: an entry under its maker's name, or under a
+/// name another brand sells it as. Opening it opens [`Self::device`].
+#[derive(Clone, Copy)]
+pub struct Listing {
+    pub device: &'static SelectableDevice,
+    /// The other brand's name, `None` for the maker's.
+    pub sold_as: Option<&'static SoldAs>,
+}
+
+impl Listing {
+    /// The id settings and `--device` name this row by.
+    pub fn id(&self) -> &'static str {
+        self.sold_as.map_or(self.device.id, |s| s.id)
+    }
+
+    /// The brand whose heading lists this row.
+    pub fn brand(&self) -> Brand {
+        self.sold_as.map_or(self.device.brand, |s| s.brand)
+    }
+
+    /// The model, as the row reads under its brand's heading.
+    pub fn model_name(&self) -> &'static str {
+        self.sold_as.map_or(self.device.model, |s| s.model)
+    }
+
+    /// Brand and model, as the app names the meter: "UNI-T UT217A".
+    pub fn display_name(&self) -> &'static str {
+        full_names()
+            .get(self.id())
+            .map_or(self.model_name(), String::as_str)
+    }
+
+    /// Additional strings that resolve to this row.
+    pub fn aliases(&self) -> &'static [&'static str] {
+        self.sold_as.map_or(self.device.aliases, |s| s.aliases)
+    }
+
+    /// The ids and aliases that resolve to this row.
+    fn names(&self) -> impl Iterator<Item = &'static str> {
+        std::iter::once(self.id()).chain(self.aliases().iter().copied())
+    }
+}
+
+impl std::fmt::Debug for Listing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Listing({:?})", self.id())
+    }
+}
+
+/// Every row's brand and model by its id, built once so a display name is a
+/// `&'static str` like the model it is made from. A simulated device, which
+/// names no brand, has none and goes by its model.
+fn full_names() -> &'static std::collections::HashMap<&'static str, String> {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<&str, String>> =
+        std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        listings()
+            .filter_map(|l| {
+                let prefix = l.brand().prefix()?;
+                Some((l.id(), format!("{prefix} {}", l.model_name())))
+            })
+            .collect()
+    })
+}
+
+/// Every row of the device lists: each entry, then the names it is sold
+/// under, in registry order.
+pub fn listings() -> impl Iterator<Item = Listing> {
+    DEVICES.iter().copied().flat_map(|device| {
+        std::iter::once(device.listing()).chain(device.sold_as.iter().map(move |s| Listing {
+            device,
+            sold_as: Some(s),
+        }))
+    })
+}
+
 /// Whose name a meter carries, as the device lists group them.
 ///
 /// Declared in display order: alphabetical, so a reader finds a brand without
 /// knowing ours, with the simulated devices last. It is the brand on the case,
 /// not the protocol family: the Voltcraft VC871 runs OWON's frame and lists
-/// under Voltcraft.
+/// under Voltcraft, and the UNI-T UT217A, OWON's CMS061, under UNI-T.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Brand {
+    Aneng,
     Brymen,
+    Bside,
     Eevblog,
+    Minipa,
     Owon,
     UniT,
     Voltcraft,
@@ -120,9 +226,12 @@ pub enum Brand {
 
 impl Brand {
     /// Every brand, in display order.
-    pub const ALL: [Brand; 7] = [
+    pub const ALL: [Brand; 10] = [
+        Brand::Aneng,
         Brand::Brymen,
+        Brand::Bside,
         Brand::Eevblog,
+        Brand::Minipa,
         Brand::Owon,
         Brand::UniT,
         Brand::Voltcraft,
@@ -133,30 +242,54 @@ impl Brand {
     /// The brand as a list heading shows it.
     pub fn name(self) -> &'static str {
         match self {
-            // Minipa sells some of them under its own names.
-            Brand::Brymen => "Brymen / Minipa",
+            Brand::Aneng => "ANENG",
+            Brand::Brymen => "Brymen",
+            Brand::Bside => "BSIDE",
             Brand::Eevblog => "EEVblog",
+            Brand::Minipa => "Minipa",
             Brand::Owon => "OWON",
             Brand::UniT => "UNI-T",
             Brand::Voltcraft => "Voltcraft",
-            // ZOTEK makes them; they are sold under all four names.
-            Brand::Zotek => "ZOTEK / ZOYI / BSIDE / ANENG",
+            // ZOTEK makes them and sells them under both names.
+            Brand::Zotek => "ZOYI / ZOTEK",
             Brand::Simulated => "Simulated",
+        }
+    }
+
+    /// The name a display name starts with, the maker's where the heading
+    /// carries two; `None` for the simulated devices, which name no brand.
+    fn prefix(self) -> Option<&'static str> {
+        match self {
+            Brand::Zotek => Some("ZOTEK"),
+            Brand::Simulated => None,
+            brand => Some(brand.name()),
         }
     }
 }
 
-/// [`DEVICES`] grouped by brand, for the device lists: brands in [`Brand`]'s
-/// order, each with its entries in registry order, which keeps related
-/// models together. Brands with no entry are left out.
-pub fn brand_groups() -> Vec<(Brand, Vec<&'static SelectableDevice>)> {
+/// `name` without the brand a display name starts with: "UNI-T UT61E+" is
+/// "UT61E+". Any other name comes back whole.
+pub fn without_brand(name: &str) -> &str {
+    Brand::ALL
+        .into_iter()
+        .filter_map(|b| b.prefix())
+        .find_map(|prefix| name.strip_prefix(prefix)?.strip_prefix(' '))
+        .unwrap_or(name)
+}
+
+/// The device lists' rows grouped by brand: brands in [`Brand`]'s order, each
+/// with its rows in registry order, which keeps related models together and
+/// a brand's own meters ahead of the ones it sells under another maker's
+/// entry. Brands with no row are left out.
+pub fn brand_groups() -> Vec<(Brand, Vec<Listing>)> {
     Brand::ALL
         .into_iter()
         .map(|brand| {
-            let entries = DEVICES.iter().copied().filter(|d| d.brand == brand);
-            (brand, entries.collect::<Vec<_>>())
+            let rows = listings().filter(|l| l.brand() == brand);
+            let (own, sold): (Vec<_>, Vec<_>) = rows.partition(|l| l.sold_as.is_none());
+            (brand, own.into_iter().chain(sold).collect::<Vec<_>>())
         })
-        .filter(|(_, entries)| !entries.is_empty())
+        .filter(|(_, rows)| !rows.is_empty())
         .collect()
 }
 
@@ -263,20 +396,23 @@ pub fn find_device(id: &str) -> Option<&'static SelectableDevice> {
 }
 
 /// Resolve a device string: tries exact ID match, then case-insensitive alias match.
+/// A name another brand sells the meter under resolves to the entry it opens.
 ///
 /// Matching stays exact: the verify-gui skill opens any `mock-*` name without
 /// asking, safe only while no looser match can reach a hardware entry.
 pub fn resolve_device(s: &str) -> Option<&'static SelectableDevice> {
-    let lower = s.to_lowercase();
+    resolve_listing(s).map(|l| l.device)
+}
+
+/// Resolve a device string the way [`resolve_device`] does, to the row it
+/// names: "ut217a" is the UNI-T UT217A, opening the OWON CMS061's entry.
+pub fn resolve_listing(s: &str) -> Option<Listing> {
     // Try exact ID match first
-    if let Some(d) = DEVICES.iter().copied().find(|d| d.id == lower) {
-        return Some(d);
+    if let Some(l) = listings().find(|l| l.id().eq_ignore_ascii_case(s)) {
+        return Some(l);
     }
     // Try aliases (case-insensitive)
-    DEVICES
-        .iter()
-        .copied()
-        .find(|d| d.aliases.iter().any(|a| a.to_lowercase() == lower))
+    listings().find(|l| l.names().any(|a| a.eq_ignore_ascii_case(s)))
 }
 
 /// Resolve a device string the same way [`resolve_device`] does, but with
@@ -328,14 +464,14 @@ mod tests {
     #[test]
     fn find_device_by_id() {
         let d = find_device("ut61eplus").unwrap();
-        assert_eq!(d.display_name, "UT61E+");
+        assert_eq!(d.display_name(), "UNI-T UT61E+");
         assert!(d.requires_hardware);
     }
 
     #[test]
     fn find_device_mock() {
         let d = find_device("mock").unwrap();
-        assert_eq!(d.display_name, "Mock (simulated)");
+        assert_eq!(d.display_name(), "Mock (simulated)");
         assert!(!d.requires_hardware);
     }
 
@@ -383,17 +519,12 @@ mod tests {
     /// did would shadow detection and be unreachable by its own name.
     #[test]
     fn no_device_answers_to_auto() {
-        for device in DEVICES {
-            assert!(
-                !device.id.eq_ignore_ascii_case(AUTO_DEVICE_ID),
-                "device id {:?} collides with {AUTO_DEVICE_ID:?}",
-                device.id
-            );
-            for alias in device.aliases {
+        for listing in listings() {
+            for name in listing.names() {
                 assert!(
-                    !alias.eq_ignore_ascii_case(AUTO_DEVICE_ID),
-                    "alias {alias:?} of {} collides with {AUTO_DEVICE_ID:?}",
-                    device.id
+                    !name.eq_ignore_ascii_case(AUTO_DEVICE_ID),
+                    "{name:?} of {} collides with {AUTO_DEVICE_ID:?}",
+                    listing.id()
                 );
             }
         }
@@ -440,50 +571,112 @@ mod tests {
     }
 
     #[test]
-    fn brand_groups_cover_every_device_once() {
+    fn brand_groups_cover_every_row_once() {
         let grouped: Vec<&str> = brand_groups()
             .into_iter()
-            .flat_map(|(_, entries)| entries.into_iter().map(|d| d.id))
+            .flat_map(|(_, rows)| rows.into_iter().map(|l| l.id()))
             .collect();
-        assert_eq!(grouped.len(), DEVICES.len());
-        for device in DEVICES {
-            assert!(grouped.contains(&device.id), "{} not grouped", device.id);
+        let all: Vec<&str> = listings().map(|l| l.id()).collect();
+        assert_eq!(grouped.len(), all.len());
+        for id in all {
+            assert!(grouped.contains(&id), "{id} not grouped");
         }
     }
 
-    /// Under its heading an entry is known by its model name alone, so two
-    /// of one brand must not share it.
+    /// Under its heading a row is known by its model name alone, so two of
+    /// one brand must not share it.
     #[test]
     fn model_names_are_unique_within_a_brand() {
-        for (brand, entries) in brand_groups() {
-            let mut names: Vec<&str> = entries.iter().map(|d| d.model_name()).collect();
+        for (brand, rows) in brand_groups() {
+            let mut names: Vec<&str> = rows.iter().map(|l| l.model_name()).collect();
             assert!(names.iter().all(|n| !n.is_empty()), "{brand:?}: {names:?}");
             names.sort_unstable();
             names.dedup();
-            assert_eq!(
-                names.len(),
-                entries.len(),
-                "{brand:?}: duplicate model name"
-            );
+            assert_eq!(names.len(), rows.len(), "{brand:?}: duplicate model name");
         }
+    }
+
+    /// The model alone is what a heading's row shows, so it never repeats
+    /// the brand the display name adds.
+    #[test]
+    fn models_leave_the_brand_out() {
+        for listing in listings() {
+            let model = listing.model_name();
+            for brand in Brand::ALL {
+                let prefix = brand.prefix().unwrap_or("Simulated");
+                assert!(
+                    !model.to_lowercase().starts_with(&prefix.to_lowercase()),
+                    "{}: {model:?}",
+                    listing.id()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn display_name_is_brand_and_model() {
+        let name = |id| resolve_listing(id).unwrap().display_name();
+        assert_eq!(name("ut61eplus"), "UNI-T UT61E+");
+        assert_eq!(name("ut217a"), "UNI-T UT217A");
+        assert_eq!(name("zt5b"), "ZOTEK ZT-5B");
+        assert_eq!(name("bside-zt5b"), "BSIDE ZT-5B");
+        assert_eq!(name("vc871"), "Voltcraft VC871");
+        assert_eq!(name("mock"), "Mock (simulated)");
+        assert_eq!(find_device("cms061").unwrap().display_name(), "OWON CMS061");
     }
 
     #[test]
     fn model_name_drops_the_brand() {
-        assert_eq!(find_device("vc880").unwrap().model_name(), "VC-880");
-        assert_eq!(find_device("vc871").unwrap().model_name(), "VC871");
-        assert_eq!(find_device("121gw").unwrap().model_name(), "121GW");
-        assert_eq!(find_device("ut61eplus").unwrap().model_name(), "UT61E+");
-        assert_eq!(find_device("zt5b").unwrap().model_name(), "ZT-5B / V05B");
+        let model = |id| resolve_listing(id).unwrap().model_name();
+        assert_eq!(model("vc880"), "VC-880");
+        assert_eq!(model("vc871"), "VC871");
+        assert_eq!(model("121gw"), "121GW");
+        assert_eq!(model("ut61eplus"), "UT61E+");
+        assert_eq!(model("zt5b"), "ZT-5B");
+        assert_eq!(model("v05b"), "V05B");
+        assert_eq!(model("bm52x"), "BM525s/BM521s");
+        assert_eq!(model("et2615a"), "ET-2615A");
+        assert_eq!(model("mock"), "Mock (simulated)");
+    }
+
+    /// A meter answers to its bare model, and a recording made before the
+    /// names dropped their brand still answers to the branded one.
+    #[test]
+    fn a_reported_name_with_or_without_its_brand_is_the_model() {
+        let cms101 = find_device("cms101").unwrap();
+        assert!(cms101.answers_to("CMS101"));
+        assert!(cms101.answers_to("OWON CMS101"));
+        assert!(!cms101.answers_to("CMS061"));
+        assert!(find_device("ut61eplus").unwrap().answers_to("ut61e+"));
+    }
+
+    #[test]
+    fn without_brand_leaves_the_model() {
+        assert_eq!(without_brand("UNI-T UT61E+"), "UT61E+");
+        assert_eq!(without_brand("ZOTEK ZT-5B"), "ZT-5B");
+        assert_eq!(without_brand("Mock UT61E+"), "Mock UT61E+");
+        assert_eq!(without_brand("Mock (simulated)"), "Mock (simulated)");
+    }
+
+    /// A sold-as name lists under its own brand and opens the maker's entry.
+    #[test]
+    fn a_sold_as_name_opens_the_makers_entry() {
+        let ut217a = resolve_listing("ut217a").unwrap();
+        assert_eq!(ut217a.display_name(), "UNI-T UT217A");
+        assert_eq!(ut217a.brand(), Brand::UniT);
+        assert_eq!(ut217a.device.id, "cms061");
+        assert_eq!(resolve_device("UT217A").unwrap().id, "cms061");
+        assert_eq!(resolve_listing("an-9002").unwrap().id(), "an9002");
+        assert_eq!(resolve_device("an-9002").unwrap().id, "zt300ab");
         assert_eq!(
-            find_device("bm52x").unwrap().model_name(),
-            "BM525s/BM521s / ET-2615A"
+            resolve_listing("cms061").unwrap().display_name(),
+            "OWON CMS061"
         );
     }
 
     #[test]
     fn all_ids_unique() {
-        let mut ids: Vec<&str> = DEVICES.iter().map(|d| d.id).collect();
+        let mut ids: Vec<&str> = listings().map(|l| l.id()).collect();
         let len_before = ids.len();
         ids.sort();
         ids.dedup();
@@ -492,23 +685,12 @@ mod tests {
 
     #[test]
     fn no_alias_conflicts_with_ids() {
-        let ids: Vec<&str> = DEVICES.iter().map(|d| d.id).collect();
-        for device in DEVICES {
-            for alias in device.aliases {
-                // An alias should not be another device's primary ID
-                // (it's fine if it's its own ID, but aliases shouldn't
-                // create ambiguity with other entries' primary IDs)
-                let alias_lower = alias.to_lowercase();
-                for &id in &ids {
-                    if id == device.id {
-                        continue;
-                    }
-                    assert_ne!(
-                        alias_lower, id,
-                        "alias '{}' for device '{}' conflicts with device ID '{}'",
-                        alias, device.id, id
-                    );
-                }
+        // Every id and alias answers for its own row and no other, so no
+        // name shadows another row's.
+        for listing in listings() {
+            for name in listing.names() {
+                let found = resolve_listing(name).map(|l| l.id());
+                assert_eq!(found, Some(listing.id()), "{name:?}");
             }
         }
     }
@@ -666,10 +848,14 @@ mod tests {
     /// hardware.
     #[test]
     fn a_mock_name_never_names_hardware() {
-        for device in DEVICES {
-            for name in std::iter::once(&device.id).chain(device.aliases) {
+        for listing in listings() {
+            for name in listing.names() {
                 if name.to_lowercase().starts_with("mock") {
-                    assert!(!device.requires_hardware, "{} answers {name}", device.id);
+                    assert!(
+                        !listing.device.requires_hardware,
+                        "{} answers {name}",
+                        listing.id()
+                    );
                 }
             }
         }

@@ -14,8 +14,9 @@ Note: the meter switches off after 30 minutes; set APO.oF in SETUP to disable th
 
 pub(crate) static EEVBLOG_121GW: SelectableDevice = SelectableDevice {
     id: ID,
-    display_name: "EEVblog 121GW",
+    model: "121GW",
     brand: Brand::Eevblog,
+    sold_as: &[],
     aliases: &["eevblog121gw", "eevblog-121gw"],
     requires_hardware: true,
     activation_instructions: ACTIVATION,

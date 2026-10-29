@@ -58,6 +58,10 @@ pub(super) const SMALL_TEXT_SIZE: f32 = 11.0;
 const BUTTON_PADDING: egui::Vec2 = egui::vec2(4.0, 1.0);
 const ROW_HEIGHT: f32 = 18.0;
 
+/// The height egui first measures a popup in, past any window: each popup
+/// caps itself, the **Device** list at the room below its button.
+const POPUP_MEASURE_HEIGHT: f32 = 4000.0;
+
 /// Widget corners as egui drew them before 0.37 rounded them to 6 pt.
 fn compact_corners(visuals: &mut egui::Visuals) {
     let w = &mut visuals.widgets;
@@ -72,8 +76,9 @@ fn compact_corners(visuals: &mut egui::Visuals) {
     w.hovered.corner_radius = egui::CornerRadius::same(3);
 }
 
-/// Raise egui's small text style to the 11 pt floor and keep the compact
-/// button spacing and corners.
+/// Raise egui's small text style to the 11 pt floor, keep the compact
+/// button spacing and corners, and let a popup be measured as tall as the
+/// window.
 ///
 /// `all_styles_mut`, not `style_mut`: egui keeps a separate `Style` per
 /// theme, and `apply_theme` switches between them with `set_visuals`, which
@@ -87,6 +92,10 @@ pub(super) fn install_styles(ctx: &egui::Context) {
         );
         style.spacing.button_padding = BUTTON_PADDING;
         style.spacing.interact_size.y = ROW_HEIGHT;
+        // egui measures a popup's first frame in this size and keeps it, so
+        // at its 400 pt the **Device** list's scroll area never grew past
+        // that, whatever height it asked for. The window still bounds it.
+        style.spacing.default_area_size.y = POPUP_MEASURE_HEIGHT;
         compact_corners(&mut style.visuals);
     });
 }

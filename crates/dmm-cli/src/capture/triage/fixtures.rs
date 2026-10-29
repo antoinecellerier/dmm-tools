@@ -41,7 +41,7 @@ pub(super) fn render(triage: &Triage) -> String {
             out.push_str("# TODO: what this frame shows.\n");
             out.push_str(&format!(
                 "# Captured {date} from a {} over {link} (issue #TODO, {version} report, step {}).\n",
-                device.display_name,
+                device.display_name(),
                 step.id()
             ));
             out.push_str(&fixture(&SampleData::from_measurement(m), with_aux));
@@ -110,7 +110,7 @@ mod tests {
         assert!(
             text.contains(
                 "--- ut61eplus/dcv_range_2.2V_2.yaml\n# TODO: what this frame shows.\n\
-                 # Captured 2026-10-03 from a UT61E+ over CP2110 (issue #TODO, 0.8.0-dev test report, step dcv/range:2.2V).\n\
+                 # Captured 2026-10-03 from a UNI-T UT61E+ over CP2110 (issue #TODO, 0.8.0-dev test report, step dcv/range:2.2V).\n\
                  raw_hex: \"02 31 20 30 2E 30 30 30 32 00 00 30 30 30\"\n\
                  mode: \"DC V\"\nvalue: \"0.0002\"\nunit: \"V\"\nrange_label: \"22V\"\n\
                  flags:\n  auto_range: true\n"

@@ -281,10 +281,12 @@ impl App {
             // What the selection resolves to, not what the file spells: an
             // alias, or an id no entry answers to, would otherwise leave the
             // row with nothing marked while the session opened something.
-            let selected_id = self
+            // A name another brand sells the meter under marks its own row.
+            let selected = self
                 .selected_device()
-                .map_or(registry::AUTO_DEVICE_ID, |d| d.id);
-            let name = registry::find_device(selected_id).map_or("Auto-detect", |d| d.display_name);
+                .and_then(|_| registry::resolve_listing(&self.settings.shared.device_family));
+            let selected_id = selected.map_or(registry::AUTO_DEVICE_ID, |l| l.id());
+            let name = selected.map_or("Auto-detect", |l| l.display_name());
             let label = if has_override {
                 format!("{name} (--device)")
             } else {
@@ -843,7 +845,7 @@ mod tests {
         let frame = open_device_list(&mut run);
         assert!(device_list_open(&frame), "Space did not open the list");
         assert!(
-            focused_on(&frame, "UT61E+"),
+            focused_on(&frame, "UNI-T UT61E+"),
             "focus is not on the selected meter"
         );
     }
@@ -856,14 +858,14 @@ mod tests {
         run.app.settings.shared.device_family = "ut61eplus".to_string();
         open_device_list(&mut run);
         let frame = run.frame(press(egui::Key::ArrowDown));
-        assert!(focused_on(&frame, "UT61B+"));
+        assert!(focused_on(&frame, "UNI-T UT61B+"));
         let frame = run.frame(press(egui::Key::ArrowRight));
         assert!(
             focused_on(&frame, "Voltcraft VC650BT"),
             "Right left the row"
         );
         let frame = run.frame(press(egui::Key::ArrowLeft));
-        assert!(focused_on(&frame, "UT61B+"));
+        assert!(focused_on(&frame, "UNI-T UT61B+"));
     }
 
     /// Enter picks the focused meter: saved as the device, the list closed
@@ -885,7 +887,7 @@ mod tests {
                 n.role() == egui::accesskit::Role::ComboBox && n.label() == Some("Device")
             })
             .expect("the Device box, named for a screen reader");
-        assert_eq!(node.value(), Some("UT61B+"));
+        assert_eq!(node.value(), Some("UNI-T UT61B+"));
         assert_eq!(frame.focus, Some(*id), "focus did not return to the box");
     }
 
@@ -901,7 +903,7 @@ mod tests {
         assert_eq!(run.app.settings.shared.device_family, "ut61eplus");
         assert!(!device_list_open(&frame), "the list stayed open");
         assert!(
-            focused_on(&frame, "UT61E+"),
+            focused_on(&frame, "UNI-T UT61E+"),
             "focus did not return to the box"
         );
     }

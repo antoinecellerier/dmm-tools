@@ -71,7 +71,7 @@ impl CaptureLayout {
         extra_slots: usize,
     ) -> Self {
         Self {
-            device: meter.map(|d| d.display_name.into()),
+            device: meter.map(|d| d.display_name().into()),
             // Only a meter's frames can be replayed, so the mock names no
             // device here and the export offers no replay file for it.
             device_id: meter.filter(|d| d.requires_hardware).map(|d| d.id),
@@ -189,7 +189,7 @@ impl Capture {
         // meter's. A file names one meter, so another one starts another
         // history.
         let meter = connection.detected();
-        if meter.map(|d| d.display_name) != self.history_layout.device.as_deref() {
+        if meter.map(|d| d.display_name()) != self.history_layout.device.as_deref() {
             self.recording.clear_history();
         }
         if let Some(start) = graph.first_point_time() {

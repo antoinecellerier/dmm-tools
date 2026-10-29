@@ -251,7 +251,10 @@ knows the family at compile time.
 
 **The registry is the only device list.** Names, aliases, activation help, links, manual URLs and
 protocol factories live in `SelectableDevice` entries beside each family's code. The binaries
-consume the registry and match on no family, so a new device needs no app code.
+consume the registry and match on no family, so a new device needs no app code. An entry is one
+meter the tool can open and tell apart; the same meter sold under another brand's name is a
+`SoldAs` on it, a row of its own under that brand in the device lists that opens the entry, so
+each brand lists the names on its own meters.
 
 **One settings type for both binaries.** `SharedSettings` is one Rust type: the GUI flattens it into
 its own `Settings`, so the file stays flat, and the CLI reads the same file into it and ignores the
