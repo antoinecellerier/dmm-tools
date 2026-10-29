@@ -112,6 +112,10 @@ fn link_from_token(token: &str) -> Option<Link> {
 pub struct Replay {
     /// The meter the recording was made from, resolved against the registry.
     pub device: &'static SelectableDevice,
+    /// The row the `# device:` line names, so a meter recorded under another
+    /// brand's name keeps it on playback: `ut217a` plays back as the UNI-T
+    /// UT217A, decoded as [`Self::device`].
+    pub listing: registry::Listing,
     /// The `# recorded:` value, verbatim. This crate has no date library, so
     /// the binaries — which do — turn it into a wall time and hand it back
     /// through [`Clock::with_wall_origin`].
@@ -153,7 +157,7 @@ impl Replay {
     /// Parse a replay file's text.
     pub fn parse(text: &str) -> Result<Self> {
         let mut seen_magic = false;
-        let mut device: Option<&'static SelectableDevice> = None;
+        let mut device: Option<registry::Listing> = None;
         let mut recorded: Option<String> = None;
         let mut model: Option<String> = None;
         let mut link = RECORDED_LINK_DEFAULT;
@@ -177,7 +181,7 @@ impl Replay {
             if let Some(comment) = line.strip_prefix('#') {
                 let comment = comment.trim();
                 if let Some(value) = comment.strip_prefix("device:") {
-                    device = Some(resolve_device(line_no, value.trim())?);
+                    device = Some(resolve_listing(line_no, value.trim())?);
                 } else if let Some(value) = comment.strip_prefix("recorded:") {
                     recorded = Some(value.trim().to_string());
                 } else if let Some(value) = comment.strip_prefix("model:") {
@@ -202,9 +206,10 @@ impl Replay {
         if !seen_magic {
             return Err(at(1, format!("first line must be `{MAGIC}`")));
         }
-        let Some(device) = device else {
+        let Some(listing) = device else {
             return Err(Error::Replay("no `# device:` line".to_string()));
         };
+        let device = listing.device;
         let recorded = match recorded {
             Some(r) if !r.is_empty() => r,
             _ => return Err(Error::Replay("no `# recorded:` line".to_string())),
@@ -216,6 +221,7 @@ impl Replay {
         samples.shrink_to_fit();
         Ok(Self {
             device,
+            listing,
             recorded,
             model,
             link,
@@ -392,15 +398,16 @@ fn at(line_no: usize, message: String) -> Error {
     Error::Replay(format!("line {line_no}: {message}"))
 }
 
-/// Resolve a `# device:` value to its registry entry.
+/// Resolve a `# device:` value to its registry row.
 ///
 /// Exact id only: a replay file is written by this project, so the aliases
 /// that exist to be forgiving about a hand-typed `--device` would only widen
 /// what a file can claim to be.
-fn resolve_device(line_no: usize, id: &str) -> Result<&'static SelectableDevice> {
-    let Some(device) = registry::find_device(id) else {
+fn resolve_listing(line_no: usize, id: &str) -> Result<registry::Listing> {
+    let Some(listing) = registry::find_listing(id) else {
         return Err(at(line_no, format!("unknown device `{id}`")));
     };
+    let device = listing.device;
     if !device.requires_hardware {
         // The mock synthesises its readings, so it has no `parse_payload` to
         // play bytes back through.
@@ -409,7 +416,7 @@ fn resolve_device(line_no: usize, id: &str) -> Result<&'static SelectableDevice>
             format!("`{id}` is not a meter, so it has no frames to replay"),
         ));
     }
-    Ok(device)
+    Ok(listing)
 }
 
 /// A `# marker:` line, from the line as written so the note keeps its own
@@ -840,6 +847,16 @@ mod tests {
         assert!(message.contains("dmm-replay 1"), "got {message}");
         // An empty file is the same complaint, not a panic.
         assert!(rejects("").contains("dmm-replay 1"));
+    }
+
+    /// A meter recorded under another brand's name plays back under it,
+    /// decoded by the entry that name opens.
+    #[test]
+    fn a_sold_as_id_names_the_replay() {
+        let text = three_frames().replace("# device: ut61eplus", "# device: ut217a");
+        let replay = Replay::parse(&text).expect("a replay");
+        assert_eq!(replay.listing.display_name(), "UNI-T UT217A");
+        assert_eq!(replay.device.id, "cms061");
     }
 
     #[test]

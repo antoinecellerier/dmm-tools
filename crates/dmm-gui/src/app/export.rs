@@ -288,7 +288,7 @@ impl App {
             .export_layout()
             .device
             .clone()
-            .or_else(|| self.active_device().map(|d| d.display_name().into()))
+            .or_else(|| self.active_listing().map(|l| l.display_name().into()))
             .unwrap_or(UNKNOWN_DEVICE.into());
         // A replay is refused now rather than after the user picked a path:
         // the mock synthesises its readings, so a sample of it has no frame.
@@ -433,9 +433,9 @@ impl App {
     /// provenance falls back. `None` for the mock, which has no wire format.
     pub(super) fn replay_device_id(&self) -> Option<&'static str> {
         self.export_layout().device_id.or_else(|| {
-            self.active_device()
-                .filter(|d| d.requires_hardware)
-                .map(|d| d.id)
+            self.active_listing()
+                .filter(|l| l.device.requires_hardware)
+                .map(|l| l.id())
         })
     }
 
@@ -805,7 +805,6 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(DmmMessage::Connected(ConnectedMeter {
             name: Some("UT181A".to_string()),
-            model_name: "UNI-T UT181A".to_string(),
             stability: Stability::Experimental,
             ..ConnectedMeter::test_fixture(Some("ut181a"))
         }))

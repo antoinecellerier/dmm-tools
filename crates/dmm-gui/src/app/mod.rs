@@ -293,6 +293,11 @@ impl Connection {
         self.meter.as_ref().and_then(|m| m.device)
     }
 
+    /// The row the connected meter goes by ([`ConnectedMeter::listing`]).
+    pub(super) fn listing(&self) -> Option<registry::Listing> {
+        self.meter.as_ref().and_then(|m| m.listing)
+    }
+
     /// How far the connected protocol is verified; `Verified` while nothing
     /// is connected, so no badge shows.
     pub(super) fn stability(&self) -> dmm_lib::protocol::Stability {
@@ -665,6 +670,19 @@ impl App {
     /// identified instead.
     fn selected_device(&self) -> Option<&'static registry::SelectableDevice> {
         named_device(&self.settings.shared.device_family)
+    }
+
+    /// [`Self::selected_device`] by the name the user picked it by: the UNI-T
+    /// UT217A, not the OWON CMS061 entry it opens.
+    fn picked_listing(&self) -> Option<registry::Listing> {
+        // `auto` names no row, so Auto-detect resolves to none.
+        registry::resolve_listing(&self.settings.shared.device_family)
+    }
+
+    /// The row the session calls its meter by, the counterpart of
+    /// [`Self::active_device`]: the pick, else the connected meter's.
+    fn active_listing(&self) -> Option<registry::Listing> {
+        self.picked_listing().or(self.connection.listing())
     }
 
     /// The meter this session is actually talking about: the one the user
@@ -1301,6 +1319,27 @@ mod tests {
         assert!(named_device("AUTO").is_none());
         assert!(named_device("no such meter").is_none());
         assert!(named_device("").is_none());
+    }
+
+    /// A meter picked by another brand's name is called by it, before it
+    /// answers and once it has.
+    #[test]
+    fn a_meter_picked_by_another_brands_name_keeps_it() {
+        let mut app = app("ut217a", "");
+        assert_eq!(app.selected_device().map(|d| d.id), Some("cms061"));
+        let name = |app: &App| app.active_listing().map(|l| l.display_name());
+        assert_eq!(name(&app), Some("UNI-T UT217A"));
+        let cms061 = registry::find_device("cms061").expect("a registry entry");
+        app.connection.meter = Some(ConnectedMeter {
+            listing: Some(registry::connected_listing(app.picked_listing(), cms061)),
+            ..ConnectedMeter::test_fixture(Some("cms061"))
+        });
+        assert_eq!(name(&app), Some("UNI-T UT217A"));
+
+        // Picked anew while that meter is still connected: the pick names
+        // the session, as it does for `active_device`.
+        app.settings.shared.device_family = "ut61eplus".to_string();
+        assert_eq!(name(&app), Some("UNI-T UT61E+"));
     }
 
     /// Auto-detect has no profile of its own, so nothing may assume one: the

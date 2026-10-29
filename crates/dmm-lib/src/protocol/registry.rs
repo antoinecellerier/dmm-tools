@@ -101,6 +101,19 @@ impl SelectableDevice {
         }
     }
 
+    /// The entry's row under `brand`: the maker's, or the name `brand` sells
+    /// it as; `None` when that brand doesn't sell it.
+    pub fn listing_under(&'static self, brand: Brand) -> Option<Listing> {
+        if brand == self.brand {
+            return Some(self.listing());
+        }
+        let sold_as = self.sold_as.iter().find(|s| s.brand == brand)?;
+        Some(Listing {
+            device: self,
+            sold_as: Some(sold_as),
+        })
+    }
+
     /// Whether `reported`, the name a meter gave for itself, is this entry's
     /// model. A recording made before the names dropped their brand reports
     /// "OWON CMS101", which still counts.
@@ -404,6 +417,36 @@ pub fn resolve_device(s: &str) -> Option<&'static SelectableDevice> {
     resolve_listing(s).map(|l| l.device)
 }
 
+/// The row a connected meter goes by: the one whose tables decode it.
+///
+/// `opened` is the entry decoding the meter. The user's pick (`picked`,
+/// `None` under Auto-detect) keeps its name while it opens `opened`; a pick
+/// of another entry, as a saved one under a replay, gives way to `opened`'s
+/// maker's name. A meter that names another model keeps this name too: its
+/// readings are still `opened`'s, and [`named_under_pick`] is what the
+/// warning offers instead.
+pub fn connected_listing(picked: Option<Listing>, opened: &'static SelectableDevice) -> Listing {
+    picked
+        .filter(|p| p.device.id == opened.id)
+        .unwrap_or(opened.listing())
+}
+
+/// The row to offer for `named`, the model a meter names when it is not the
+/// one picked: under the picked brand when that brand sells it — a UNI-T
+/// UT217A pick on a meter reporting the CMS101's code is offered the UNI-T
+/// UT217B — else under its maker's name.
+pub fn named_under_pick(picked: Option<Listing>, named: &'static SelectableDevice) -> Listing {
+    picked
+        .and_then(|p| named.listing_under(p.brand()))
+        .unwrap_or(named.listing())
+}
+
+/// The row whose id is exactly `id`, as a file written by this project names
+/// it: no aliases.
+pub fn find_listing(id: &str) -> Option<Listing> {
+    listings().find(|l| l.id() == id)
+}
+
 /// Resolve a device string the way [`resolve_device`] does, to the row it
 /// names: "ut217a" is the UNI-T UT217A, opening the OWON CMS061's entry.
 pub fn resolve_listing(s: &str) -> Option<Listing> {
@@ -648,6 +691,34 @@ mod tests {
         assert!(cms101.answers_to("OWON CMS101"));
         assert!(!cms101.answers_to("CMS061"));
         assert!(find_device("ut61eplus").unwrap().answers_to("ut61e+"));
+    }
+
+    #[test]
+    fn a_connected_meter_keeps_the_picked_name_while_the_pick_decodes_it() {
+        let row = |id| resolve_listing(id).unwrap();
+        let entry = |id| find_device(id).unwrap();
+        // Auto-detect: the entry that answered, by its maker's name.
+        assert_eq!(connected_listing(None, entry("cms061")).id(), "cms061");
+        // A pick keeps its own name.
+        assert_eq!(
+            connected_listing(Some(row("ut217a")), entry("cms061")).id(),
+            "ut217a"
+        );
+        // A pick that opened something else gives way to what opened.
+        assert_eq!(
+            connected_listing(Some(row("ut217a")), entry("ut61eplus")).id(),
+            "ut61eplus"
+        );
+        // The model a meter names instead is offered under the picked brand.
+        assert_eq!(
+            named_under_pick(Some(row("ut217a")), entry("cms101")).id(),
+            "ut217b"
+        );
+        assert_eq!(
+            named_under_pick(Some(row("an9002")), entry("cms101")).id(),
+            "cms101"
+        );
+        assert_eq!(named_under_pick(None, entry("cms101")).id(), "cms101");
     }
 
     #[test]

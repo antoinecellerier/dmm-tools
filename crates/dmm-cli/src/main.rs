@@ -63,6 +63,19 @@ fn main() {
         settings.as_ref(),
         registry::AUTO_DEVICE_ID,
     );
+    // A replay or an import names its own meter; a saved pick is not it.
+    if !matches!(
+        &cli.command,
+        Cmd::Read {
+            replay: Some(_),
+            ..
+        } | Cmd::Read {
+            import: Some(_),
+            ..
+        }
+    ) {
+        open::note_picked(&device_id);
+    }
     let selection = match registry::resolve_selection(&device_id) {
         Some(s) => s,
         None => {
@@ -314,7 +327,7 @@ fn main() {
                 print_setup_sections(LinksSearched::BluetoothAt(address));
             } else if let Some(device) = unreachable_bluetooth_only(&*e, selection) {
                 print_setup_sections(LinksSearched::BluetoothOnly {
-                    model: device.display_name(),
+                    model: open::meter_name(device),
                     activation: device.activation_instructions,
                 });
             } else if bluetooth_switched_off(&*e) {

@@ -3,7 +3,7 @@
 //! and the recording — in that order, and the stores it is kept in.
 
 use dmm_lib::measurement::{MainLabel, Measurement};
-use dmm_lib::protocol::registry::SelectableDevice;
+use dmm_lib::protocol::registry;
 use dmm_lib::stats::SeriesStats;
 use dmm_lib::transform::Transform;
 use dmm_lib::transport::Link;
@@ -61,20 +61,21 @@ pub(super) struct CaptureLayout {
 }
 
 impl CaptureLayout {
-    /// The layout for samples from `meter`, as Record and the history's
-    /// first reading both latch it.
+    /// The layout for samples from `meter`, by the name the session calls it,
+    /// as Record and the history's first reading both latch it.
     pub(super) fn new(
-        meter: Option<&'static SelectableDevice>,
+        meter: Option<registry::Listing>,
         experimental: Option<bool>,
         link: Option<Link>,
         aux_slots: usize,
         extra_slots: usize,
     ) -> Self {
         Self {
-            device: meter.map(|d| d.display_name().into()),
+            device: meter.map(|l| l.display_name().into()),
             // Only a meter's frames can be replayed, so the mock names no
-            // device here and the export offers no replay file for it.
-            device_id: meter.filter(|d| d.requires_hardware).map(|d| d.id),
+            // device here and the export offers no replay file for it. A
+            // replay file keeps the name the meter was picked by.
+            device_id: meter.filter(|l| l.device.requires_hardware).map(|l| l.id()),
             experimental,
             link,
             aux_slots,
@@ -184,12 +185,13 @@ impl Capture {
         graph: &Graph,
         connection: &Connection,
     ) -> bool {
-        // `detected`, not the selection: a device picked in Settings takes
-        // effect at the next connect, and this reading may still be the old
-        // meter's. A file names one meter, so another one starts another
-        // history.
-        let meter = connection.detected();
-        if meter.map(|d| d.display_name()) != self.history_layout.device.as_deref() {
+        // The connected meter's row, not the selection: a device picked in
+        // Settings takes effect at the next connect, and this reading may
+        // still be the old meter's. A file names one meter, so another one
+        // starts another history. Compared by the name `CaptureLayout::new`
+        // latches, which both mocks have though neither has a device id.
+        let meter = connection.listing();
+        if meter.map(|l| l.display_name()) != self.history_layout.device.as_deref() {
             self.recording.clear_history();
         }
         if let Some(start) = graph.first_point_time() {

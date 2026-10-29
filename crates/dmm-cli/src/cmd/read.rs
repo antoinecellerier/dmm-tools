@@ -66,7 +66,7 @@ pub(crate) fn cmd_read(
         let link = dmm.transport().link();
         let out = read_output(format, &dmm, transform, integrate, alarm.is_some(), || {
             format::ReplayHeader {
-                device: device.id.to_string(),
+                device: crate::open::meter_listing(device).id().to_string(),
                 model,
                 link,
             }
@@ -77,7 +77,7 @@ pub(crate) fn cmd_read(
             interval_ms,
             out,
             destination,
-            device.display_name(),
+            crate::open::meter_name(device),
             count,
             Some(device),
             integrate,
@@ -103,7 +103,7 @@ pub(crate) fn cmd_read(
         // Not hardware, so the selection names a registry entry — `auto` is a
         // cable to open and never lands here.
         let meter_name = opened_device(selection)
-            .map_or_else(|| selection_id(selection), |device| device.display_name());
+            .map_or_else(|| selection_id(selection), crate::open::meter_name);
         // No timeout to warn about: the mock always answers.
         run_read_loop(
             &mut dmm,
@@ -243,6 +243,8 @@ fn read_replay(
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let replay = dmm_shared::replay::load(path)?;
+    // The file names its meter, by the row it was recorded under.
+    crate::open::note_picked(replay.listing.id());
     // On screen the pace is the point; into a file it is only a wait.
     if clock.is_real() && !matches!(destination, output::Destination::Stdout) {
         eprintln!("{}", style(PACED_REPLAY_HINT).dim());
@@ -267,7 +269,7 @@ fn read_replay(
         !replay.markers.is_empty() || alarm.is_some(),
         || {
             format::ReplayHeader {
-                device: replay.device.id.to_string(),
+                device: replay.listing.id().to_string(),
                 model: replay.model.clone(),
                 // The link the file recorded: re-exporting a recording must not turn
                 // a Bluetooth session into a cable one.
@@ -292,7 +294,7 @@ fn read_replay(
         destination,
         // The meter the file names, as the registry spells it — the name the
         // recording's own meter reported stays in the `# model:` line.
-        replay.device.display_name(),
+        replay.listing.display_name(),
         count,
         // A gap in the recording plays back as timeouts, and they are not a
         // quiet meter: there is no `--device` to check and nothing on the
@@ -370,16 +372,14 @@ struct Run<'a> {
 }
 
 impl<'a> Run<'a> {
-    /// Open the output and write its header. `meter_name` is what a file the
-    /// run names itself is named after: the registry's name for the meter, so
-    /// one meter's exports all sort together, the rule the GUI's Export…
-    /// names its files by. `model_name` is what the CSV comment and the JSON
-    /// metadata carry, `view` the saved graph view passed through to JSON.
+    /// Open the output and write its header. `meter_name` is the meter's
+    /// brand and model, as this run calls it: what the CSV comment and the
+    /// JSON metadata carry, and, brand aside, what a file the run names
+    /// itself is named after, the rule the GUI's Export… names its files by.
     #[allow(clippy::too_many_arguments)]
     fn open(
         destination: output::Destination,
         meter_name: &str,
-        model_name: &str,
         out: format::Output,
         transform: &'a Transform,
         integrate: bool,
@@ -411,7 +411,7 @@ impl<'a> Run<'a> {
                 .dim()
             );
         }
-        if let Some(header) = out.header(model_name) {
+        if let Some(header) = out.header(meter_name) {
             write!(writer, "{header}")?;
         }
         // Min/Max/Avg and the integral are only meaningful within a single
@@ -686,15 +686,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         markers.sort_by_key(|m| m.offset);
         markers.into()
     };
-    // The profile's name, which the CSV comment and the JSON metadata carry,
-    // is the family's — `meter_name` is what this meter answers to.
-    let model_name = dmm.profile().display_name();
     let tick = Duration::from_millis(interval_ms);
     let first_marker = next_marker_number(markers.iter().map(|m| m.number));
     let mut run = Run::open(
         destination,
         meter_name,
-        model_name,
         out,
         transform,
         integrate,
@@ -824,7 +820,6 @@ pub(crate) fn read_import(
     let first_marker = next_marker_number(imported.markers.iter().map(|m| m.number));
     let mut run = Run::open(
         destination,
-        &device,
         &device,
         out,
         transform,

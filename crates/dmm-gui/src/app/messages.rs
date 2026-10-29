@@ -237,7 +237,7 @@ impl App {
             ctrl_rx,
             cmd_rx,
             ctx: ctx.clone(),
-            selected: device_entry,
+            selected: self.picked_listing(),
             query_name: self.settings.query_device_name,
             sample_interval_ms,
             simulated: false,
@@ -274,7 +274,7 @@ impl App {
             // No interval floor: the protocol sleeps until each frame is due,
             // and the Sample interval keeps one frame per tick of the file's
             // as it does a live meter's.
-            thread_ctx.selected = Some(replay.device);
+            thread_ctx.selected = Some(replay.listing);
             let clock = self.clock.clone();
             spawn_acquisition(
                 // A replay cannot fail once it is open, so the retry loop
@@ -475,9 +475,15 @@ impl App {
                         }
                         (Some(named), Some(picked)) => {
                             if !told {
+                                // Under the name it was picked by, and the
+                                // named model under the same brand.
+                                let pick = self.picked_listing();
+                                let named = registry::named_under_pick(pick, named);
+                                let picked =
+                                    registry::connected_listing(pick, picked).display_name();
                                 self.toast = Some(Toast::error(other_model_toast(
                                     &reported,
-                                    picked.display_name(),
+                                    picked,
                                     named.display_name(),
                                 )));
                             }
@@ -493,7 +499,10 @@ impl App {
                     if let Some(meter) = &self.connection.meter {
                         info!(
                             "UI: connected to {} (meter reports {:?})",
-                            meter.model_name, meter.name
+                            meter
+                                .listing
+                                .map_or("an unnamed meter", |l| l.display_name()),
+                            meter.name
                         );
                     }
                 }
@@ -578,7 +587,7 @@ impl App {
                     self.connection.last_error = Some(ConnectionIssue::from_error(
                         &e,
                         self.settings.overrides.adapter.as_deref(),
-                        self.selected_device(),
+                        self.picked_listing(),
                     ));
                     if self.connection.state == ConnectionState::Disconnected {
                         clear_channel = true;

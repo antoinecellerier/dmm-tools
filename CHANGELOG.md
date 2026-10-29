@@ -11,11 +11,13 @@
 
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
 - **The Device list shows each brand's own model names** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
+- **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 
 ### CLI
 
 - **`--help` lists each brand's own model names, such as `ut217a`, under its brand**
+- **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 
 ### Bug fixes

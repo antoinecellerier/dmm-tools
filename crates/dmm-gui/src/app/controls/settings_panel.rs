@@ -282,9 +282,7 @@ impl App {
             // alias, or an id no entry answers to, would otherwise leave the
             // row with nothing marked while the session opened something.
             // A name another brand sells the meter under marks its own row.
-            let selected = self
-                .selected_device()
-                .and_then(|_| registry::resolve_listing(&self.settings.shared.device_family));
+            let selected = self.picked_listing();
             let selected_id = selected.map_or(registry::AUTO_DEVICE_ID, |l| l.id());
             let name = selected.map_or("Auto-detect", |l| l.display_name());
             let label = if has_override {

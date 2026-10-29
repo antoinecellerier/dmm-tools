@@ -50,7 +50,7 @@ fn render_step_list(
     let mut out = format!(
         "{} {}\n\n",
         style("Available capture steps for").bold(),
-        style(device.display_name()).bold().cyan()
+        style(crate::open::meter_name(device)).bold().cyan()
     );
     if steps.is_empty() {
         out.push_str("  This device declares no capture steps.\n");

@@ -1,7 +1,7 @@
 use dmm_lib::detect::Detected;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
-use dmm_lib::protocol::registry::SelectableDevice;
+use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::protocol::{Choice, MeterKeys, Setting, Stability};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Link;
@@ -127,9 +127,10 @@ pub(crate) struct ConnectedMeter {
     /// The name the meter gave for itself, when it was asked or had already
     /// said. `None` when it gave none.
     pub(crate) name: Option<String>,
-    /// Brand and model of the entry the connected protocol was built for.
-    /// Names the meter in the experimental warning.
-    pub(crate) model_name: String,
+    /// The row the session calls the meter by
+    /// ([`registry::connected_listing`]): the user's pick, or the maker's name
+    /// of what answered. `None` exactly when [`Self::device`] is.
+    pub(crate) listing: Option<registry::Listing>,
     /// Registry entry behind that protocol — what detection settled on, or
     /// the entry the user picked. Under Auto-detect it is the only thing
     /// that knows which meter is on the cable.
@@ -163,7 +164,9 @@ impl ConnectedMeter {
     pub(crate) fn test_fixture(device_id: Option<&str>) -> Self {
         Self {
             name: None,
-            model_name: String::new(),
+            listing: device_id
+                .and_then(dmm_lib::protocol::registry::find_device)
+                .map(|d| d.listing()),
             device: device_id.and_then(dmm_lib::protocol::registry::find_device),
             stability: Stability::Verified,
             feedback_url: String::new(),
@@ -219,12 +222,12 @@ pub(crate) enum DmmMessage {
 /// and send a `Connected` message to the UI.
 ///
 /// `detected` is what identified the meter when nothing named it; `selected`
-/// is the entry the user picked. Exactly one of them is set, and together they
-/// tell the UI which meter it is now looking at.
+/// is the row the user picked. Exactly one of them is set, and together they
+/// tell the UI which meter it is now looking at, and by what name.
 fn establish_connection<T: Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     detected: Option<Detected>,
-    selected: Option<&'static SelectableDevice>,
+    selected: Option<registry::Listing>,
     query_name: bool,
     msg_tx: &mpsc::Sender<DmmMessage>,
     ctx: &egui::Context,
@@ -240,10 +243,12 @@ fn establish_connection<T: Transport>(
     // Read before `get_name`, which borrows the device mutably.
     let max_aux_values = profile.max_aux_values;
     let meter_keys = profile.meter_keys;
-    let model_name = profile.display_name().to_string();
     // A replay's transport reports the link its file was recorded over.
     let link = dmm.transport().link();
-    let device = detected.as_ref().map(|d| d.device).or(selected);
+    let device = detected
+        .as_ref()
+        .map(|d| d.device)
+        .or(selected.map(|l| l.device));
     // A name the meter already gave on this link — to detection, say — is
     // shown either way: it costs nothing more. Asking is what beeps.
     let name = if query_name {
@@ -254,7 +259,7 @@ fn establish_connection<T: Transport>(
     let named_other = dmm.named_other_model();
     let _ = msg_tx.send(DmmMessage::Connected(ConnectedMeter {
         name: name.filter(|n| !n.is_empty()),
-        model_name,
+        listing: device.map(|d| registry::connected_listing(selected, d)),
         device,
         stability,
         feedback_url,
@@ -273,10 +278,11 @@ pub(super) struct ThreadContext {
     pub ctrl_rx: mpsc::Receiver<ThreadControl>,
     pub cmd_rx: mpsc::Receiver<RemoteCommand>,
     pub ctx: egui::Context,
-    /// The meter the user picked, `None` when the opener detects it instead.
-    /// The opener already knows; this is how the *reporting* side learns it,
-    /// so a named meter reaches the UI as a registry entry too.
-    pub selected: Option<&'static SelectableDevice>,
+    /// The row the user picked, `None` when the opener detects the meter
+    /// instead. The opener already knows the entry; this is how the
+    /// *reporting* side learns it, so a named meter reaches the UI as a
+    /// registry entry too, under the name it was picked by.
+    pub selected: Option<registry::Listing>,
     pub query_name: bool,
     pub sample_interval_ms: u32,
     /// A simulated meter, whose interval takes the floor

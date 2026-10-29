@@ -387,7 +387,7 @@ fn parse_args() -> CliOverrides {
 
     let (device, clock) = resolve_device_and_clock(
         device,
-        replay.as_ref().map(|source| source.replay.device.id),
+        replay.as_ref().map(|source| source.replay.listing.id()),
         mock_mode.is_some(),
         args.mock_clock_scale,
         args.mock_clock_preseed,

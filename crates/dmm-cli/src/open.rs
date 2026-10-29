@@ -62,6 +62,33 @@ pub(crate) type BoxedDmm = dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>;
 /// where the opener could hand it to them, and a run only ever opens one meter.
 pub(crate) static AUTO_DETECTED: OnceLock<dmm_lib::detect::Detected> = OnceLock::new();
 
+/// The row the user picked, from `--device` or the settings file; unset
+/// under Auto-detect. Set once, before anything is opened.
+static PICKED: OnceLock<registry::Listing> = OnceLock::new();
+
+/// Record the pick `device` names, so the run calls the meter by it.
+pub(crate) fn note_picked(device: &str) {
+    if let Some(listing) = registry::resolve_listing(device) {
+        let _ = PICKED.set(listing);
+    }
+}
+
+/// The row this run calls `device` by: the user's pick when it opens
+/// `device`, else the maker's ([`registry::connected_listing`]).
+pub(crate) fn meter_listing(device: &'static SelectableDevice) -> registry::Listing {
+    registry::connected_listing(PICKED.get().copied(), device)
+}
+
+/// Brand and model, as this run calls `device`.
+pub(crate) fn meter_name(device: &'static SelectableDevice) -> &'static str {
+    meter_listing(device).display_name()
+}
+
+/// [`meter_name`] of the entry `profile` was built for.
+pub(crate) fn profile_name(profile: &dmm_lib::protocol::DeviceProfile) -> &'static str {
+    registry::find_device(profile.id).map_or_else(|| profile.display_name(), meter_name)
+}
+
 /// How the help for a silent cable ends: the way to bypass detection, and
 /// the ask that turns an unrecognised meter into a registry fix.
 const NOT_IDENTIFIED_SELF_HELP: &str = "\nIf the meter is on and transmitting but still not recognised, name it:\n  \
@@ -242,7 +269,7 @@ fn warn_if_experimental(
         "{}",
         style(format!(
             "WARNING: {}",
-            dmm_shared::help::experimental_warning(profile.display_name(), profile.stability)
+            dmm_shared::help::experimental_warning(profile_name(profile), profile.stability)
         ))
         .yellow()
         .bold()
@@ -253,7 +280,11 @@ fn warn_if_experimental(
     );
     eprintln!(
         "{}",
-        style(format!("  dmm-cli --device {} capture", device.id)).yellow()
+        style(format!(
+            "  dmm-cli --device {} capture",
+            meter_listing(device).id()
+        ))
+        .yellow()
     );
     eprintln!(
         "{}",
@@ -278,7 +309,7 @@ fn print_experimental_note(selection: Selection) {
             "{}",
             style(format!(
                 "{} Report feedback: {}",
-                dmm_shared::help::experimental_warning(profile.display_name(), profile.stability),
+                dmm_shared::help::experimental_warning(profile_name(profile), profile.stability),
                 profile.feedback_url()
             ))
             .yellow()

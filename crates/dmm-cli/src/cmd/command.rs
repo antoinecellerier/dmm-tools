@@ -36,12 +36,12 @@ fn print_available_commands(
         eprintln!(
             "{} No remote commands implemented yet for {}.",
             style("Note:").yellow(),
-            profile.display_name(),
+            crate::open::profile_name(profile),
         );
     } else {
         println!(
             "Available commands for {}:",
-            style(profile.display_name()).bold()
+            style(crate::open::profile_name(profile)).bold()
         );
         for cmd in profile.supported_commands {
             println!("  {cmd}");

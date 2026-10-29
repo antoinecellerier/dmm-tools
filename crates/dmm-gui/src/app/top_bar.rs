@@ -88,8 +88,8 @@ impl App {
                     .to_string()
             });
             let device_label = imported_meter.clone().unwrap_or_else(|| {
-                self.active_device()
-                    .map_or("Auto-detect", |d| d.display_name())
+                self.active_listing()
+                    .map_or("Auto-detect", |l| l.display_name())
                     .to_string()
             });
             ui.label(RichText::new(device_label).strong());
@@ -270,12 +270,20 @@ impl App {
                         .meter
                         .as_ref()
                         .filter(|m| !m.stability.is_verified())
-                        .map(|m| (m.model_name.clone(), m.stability, m.feedback_url.clone()))
+                        .and_then(|m| {
+                            let name = m.listing?.display_name().to_string();
+                            Some((name, m.stability, m.feedback_url.clone()))
+                        })
                 } else {
                     self.selected_profile
                         .as_ref()
                         .filter(|p| !p.stability.is_verified())
-                        .map(|p| (p.display_name().to_string(), p.stability, p.feedback_url()))
+                        .map(|p| {
+                            let name = self
+                                .picked_listing()
+                                .map_or(p.display_name(), |l| l.display_name());
+                            (name.to_string(), p.stability, p.feedback_url())
+                        })
                 };
                 if let Some((model_name, stability, url)) = badge {
                     ui.hyperlink_to(

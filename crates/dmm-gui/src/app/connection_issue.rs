@@ -136,7 +136,7 @@ impl ConnectionIssue {
     pub(super) fn from_error(
         err: &dmm_lib::error::Error,
         adapter: Option<&str>,
-        selected: Option<&'static registry::SelectableDevice>,
+        selected: Option<registry::Listing>,
     ) -> Self {
         if let dmm_lib::error::Error::AdapterNotFound(selector) = err {
             // An address is explained by the link it named, not by the USB
@@ -181,11 +181,11 @@ impl ConnectionIssue {
             };
         }
         if let dmm_lib::error::Error::Bluetooth(_) = err
-            && let Some(device) = selected.filter(|d| d.bluetooth_only())
+            && let Some(picked) = selected.filter(|l| l.device.bluetooth_only())
         {
             return Self::BluetoothOnlyUnreachable {
-                model: device.display_name(),
-                activation: device.activation_instructions,
+                model: picked.display_name(),
+                activation: picked.device.activation_instructions,
                 error: err.to_string(),
             };
         }
@@ -196,9 +196,11 @@ impl ConnectionIssue {
         } = err
         {
             return match miss {
-                dmm_lib::error::BluetoothOnlyMiss::NotInRange => {
-                    Self::BluetoothOnlyNotFound { model, activation }
-                }
+                // By the name it was picked by, when it was.
+                dmm_lib::error::BluetoothOnlyMiss::NotInRange => Self::BluetoothOnlyNotFound {
+                    model: selected.map_or(*model, |l| l.display_name()),
+                    activation,
+                },
                 // The remedy is the GUI's own switch; the library's sentence
                 // names none.
                 dmm_lib::error::BluetoothOnlyMiss::SwitchedOff => Self::BluetoothNotSearched {
@@ -437,16 +439,16 @@ impl App {
                 .connection
                 .link()
                 .map_or("link", |link| link.full_name(built_in_radio));
-            let instructions = match self.active_device() {
-                Some(entry) => format!(
+            let instructions = match self.active_listing() {
+                Some(meter) => format!(
                     "The {link} is connected but the meter \n\
                      isn't responding ({} selected).\n\
                      \n\
                      If this is the wrong device, change it in Settings (\u{2699}), or pick Auto-detect there.\n\
                      Otherwise, enable data transmission:\n\
                      {}",
-                    entry.display_name(),
-                    entry.activation_instructions
+                    meter.display_name(),
+                    meter.device.activation_instructions
                 ),
                 None => "No meter answered \u{2014} switch on the meter's data \n\
                          transmission, or pick the model in Settings (\u{2699})."
@@ -472,7 +474,8 @@ impl App {
                     format!(
                         "{} Report feedback.",
                         dmm_shared::help::experimental_warning(
-                            profile.display_name(),
+                            self.picked_listing()
+                                .map_or(profile.display_name(), |l| l.display_name()),
                             profile.stability
                         )
                     ),
@@ -670,7 +673,7 @@ mod tests {
         let stack = Error::Bluetooth("turned off on this computer".to_string());
         let n = notice_for(
             &mut app,
-            ConnectionIssue::from_error(&stack, None, Some(ut60bt)),
+            ConnectionIssue::from_error(&stack, None, Some(ut60bt.listing())),
         );
         assert_eq!(n.kind, NoticeKind::BluetoothUnreachable);
         assert_eq!(n.title, "Bluetooth: turned off on this computer");
@@ -690,7 +693,7 @@ mod tests {
 
         let ut61eplus = registry::find_device("ut61eplus").expect("registry entry");
         assert!(matches!(
-            ConnectionIssue::from_error(&stack, None, Some(ut61eplus)),
+            ConnectionIssue::from_error(&stack, None, Some(ut61eplus.listing())),
             ConnectionIssue::Other(_)
         ));
     }

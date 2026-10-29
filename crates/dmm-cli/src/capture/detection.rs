@@ -462,7 +462,7 @@ fn wait_for<T: Transport>(
 /// with the wrong tables or not at all, so the reporter is told what to keep
 /// doing. Some of those are known and can't be fixed (a UT803 never
 /// identifies, a UT71 reads as a UT804); the advice is right for them too.
-fn closing_line(check: &DetectionCheck, device: &SelectableDevice) -> (String, bool) {
+fn closing_line(check: &DetectionCheck, device: &'static SelectableDevice) -> (String, bool) {
     // Nothing was probed, so there is nothing to say about the meter.
     if check.outcome == DetectionOutcome::OpenFailed {
         let why = check.error.as_deref().unwrap_or("no reason given");
@@ -473,8 +473,8 @@ fn closing_line(check: &DetectionCheck, device: &SelectableDevice) -> (String, b
     }
     let keep = format!(
         " \u{2014} keep using --device {}, or pick {} in dmm-gui.",
-        device.id,
-        device.display_name()
+        crate::open::meter_listing(device).id(),
+        crate::open::meter_name(device)
     );
     let picked = check.device_id.as_deref().and_then(registry::find_device);
     match picked {

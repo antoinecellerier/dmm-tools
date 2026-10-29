@@ -298,7 +298,7 @@ impl App {
                 // The meter picked, or the one detection found; under
                 // Auto-detect with nothing connected there is no meter to
                 // name, and the export falls back to its own placeholder.
-                self.active_device(),
+                self.active_listing(),
                 // Only from a live connection: disconnected, `stability` is
                 // the Verified default `disconnect()` restored, and latching
                 // that marked a UT181A connected after Record as a verified

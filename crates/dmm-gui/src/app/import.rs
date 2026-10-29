@@ -209,8 +209,8 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, String
     Ok(Loaded {
         view: replay.view.clone(),
         path: PathBuf::new(),
-        device: Some(replay.device.display_name().to_string()),
-        device_id: Some(replay.device.id),
+        device: Some(replay.listing.display_name().to_string()),
+        device_id: Some(replay.listing.id()),
         link: replay.link,
         experimental,
         readings,

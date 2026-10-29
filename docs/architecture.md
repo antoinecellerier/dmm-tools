@@ -254,7 +254,8 @@ protocol factories live in `SelectableDevice` entries beside each family's code.
 consume the registry and match on no family, so a new device needs no app code. An entry is one
 meter the tool can open and tell apart; the same meter sold under another brand's name is a
 `SoldAs` on it, a row of its own under that brand in the device lists that opens the entry, so
-each brand lists the names on its own meters.
+each brand lists the names on its own meters. A session calls its meter by the row it was picked
+by, the one whose tables decode it (`registry::connected_listing`).
 
 **One settings type for both binaries.** `SharedSettings` is one Rust type: the GUI flattens it into
 its own `Settings`, so the file stays flat, and the CLI reads the same file into it and ignores the
