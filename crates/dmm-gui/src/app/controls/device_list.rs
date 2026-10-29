@@ -59,52 +59,92 @@ fn pack_columns(heights: &[usize], k: usize) -> Vec<std::ops::Range<usize>> {
         .unwrap_or_default()
 }
 
+/// The brand groups the list shows: the registry's, which never change.
+static GROUPS: std::sync::LazyLock<Vec<(registry::Brand, Vec<registry::Listing>)>> =
+    std::sync::LazyLock::new(registry::brand_groups);
+
 /// How the open **Device** list lays out: the brand groups and the columns
 /// they are spread over, as many as the window has room for.
 struct DeviceListLayout {
-    groups: Vec<(registry::Brand, Vec<registry::Listing>)>,
+    groups: &'static [(registry::Brand, Vec<registry::Listing>)],
     columns: Vec<std::ops::Range<usize>>,
     col_w: f32,
     gap: f32,
 }
 
+/// The font and spacing the list's column width is measured with, at the
+/// scale it is measured at: what the width kept between frames is keyed on.
+#[derive(Clone, PartialEq)]
+struct MeasuredWith {
+    font: egui::FontId,
+    pixels_per_point: f32,
+    padding: f32,
+}
+
+impl MeasuredWith {
+    fn of(ctx: &egui::Context, style: &egui::Style) -> Self {
+        Self {
+            font: egui::TextStyle::Button.resolve(style),
+            pixels_per_point: ctx.pixels_per_point(),
+            padding: 2.0 * style.spacing.button_padding.x,
+        }
+    }
+}
+
+/// Where egui's memory keeps the column width and what it was measured with.
+fn width_id() -> egui::Id {
+    egui::Id::unique("device-list-width")
+}
+
 impl DeviceListLayout {
-    fn new(ctx: &egui::Context, style: &egui::Style) -> Self {
-        let groups = registry::brand_groups();
-        // Column width: the widest heading or marked entry, plus a
-        // selectable's padding. Measured in the font the list draws in.
-        let font = egui::TextStyle::Button.resolve(style);
-        let measure = |text: &str| {
-            ctx.fonts_mut(|f| {
-                f.layout_no_wrap(text.to_string(), font.clone(), egui::Color32::WHITE)
-                    .size()
-                    .x
-            })
+    /// The layout for this frame. Only the column width is kept between
+    /// frames, in egui's memory: measuring every name is the costly part,
+    /// and it changes only with the font, scale and spacing. The columns
+    /// follow the window's width every frame.
+    fn current(ctx: &egui::Context, style: &egui::Style) -> Self {
+        let with = MeasuredWith::of(ctx, style);
+        let col_w = match ctx.data(|d| d.get_temp::<(MeasuredWith, f32)>(width_id())) {
+            Some((kept, col_w)) if kept == with => col_w,
+            _ => {
+                let col_w = Self::measure(ctx, &with);
+                ctx.data_mut(|d| d.insert_temp(width_id(), (with, col_w)));
+                col_w
+            }
         };
-        let padding = 2.0 * style.spacing.button_padding.x;
-        let col_w = groups
-            .iter()
-            .flat_map(|(brand, rows)| {
-                let entries = rows.iter().map(|d| {
-                    measure(&crate::display::choice_entry_text(d.model_name(), true)) + padding
-                });
-                std::iter::once(measure(brand.name())).chain(entries)
-            })
-            .fold(0.0, f32::max)
-            .ceil();
         let gap = style.spacing.item_spacing.x * 3.0;
         // The menu's frame and the room egui keeps from the window's edge.
         let margins = 4.0 * style.spacing.menu_margin.sum().x;
         let k = (((ctx.content_rect().width() - margins + gap) / (col_w + gap)).floor() as usize)
             .clamp(1, MAX_DEVICE_COLUMNS);
-        let heights: Vec<usize> = groups.iter().map(|(_, d)| d.len() + 1).collect();
-        let columns = pack_columns(&heights, k);
+        let heights: Vec<usize> = GROUPS.iter().map(|(_, d)| d.len() + 1).collect();
         Self {
-            groups,
-            columns,
+            groups: &GROUPS,
+            columns: pack_columns(&heights, k),
             col_w,
             gap,
         }
+    }
+
+    /// Column width: the widest heading or marked entry, plus a selectable's
+    /// padding. Measured in the font the list draws in.
+    fn measure(ctx: &egui::Context, with: &MeasuredWith) -> f32 {
+        let measure = |text: &str| {
+            ctx.fonts_mut(|f| {
+                f.layout_no_wrap(text.to_string(), with.font.clone(), egui::Color32::WHITE)
+                    .size()
+                    .x
+            })
+        };
+        GROUPS
+            .iter()
+            .flat_map(|(brand, rows)| {
+                let entries = rows.iter().map(|d| {
+                    measure(&crate::display::choice_entry_text(d.model_name(), true)) + with.padding
+                });
+                std::iter::once(measure(brand.name())).chain(entries)
+            })
+            .fold(0.0, f32::max)
+            .ceil()
     }
 }
 
@@ -124,7 +164,7 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
     let ctx = ui.ctx().clone();
     let style = ui.style().clone();
     let list = std::cell::OnceCell::new();
-    let list = || list.get_or_init(|| DeviceListLayout::new(&ctx, &style));
+    let list = || list.get_or_init(|| DeviceListLayout::current(&ctx, &style));
 
     // Below the button and no further: a list taller than that scrolls,
     // where egui would slide it up over the button.
@@ -247,6 +287,51 @@ fn navigate_columns(ctx: &egui::Context, entries: &[(egui::Response, Option<usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The layout a frame of a `width`-wide window gets, with a frame run
+    /// first so a zoom set before it has settled.
+    fn layout_at(ctx: &egui::Context, width: f32) -> DeviceListLayout {
+        let mut layout = None;
+        for _ in 0..2 {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width, 800.0),
+                )),
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(input, |ui| {
+                layout = Some(DeviceListLayout::current(ui.ctx(), ui.style()));
+            });
+            out.textures_delta.clear();
+        }
+        layout.expect("the frame ran")
+    }
+
+    /// The width measured once is what later frames use, while the font,
+    /// scale and spacing stay put; a zoom measures it again. The columns
+    /// follow the window either way.
+    #[test]
+    fn the_measured_width_is_kept_until_the_zoom_moves() {
+        let ctx = crate::app::styled_context();
+        let wide = layout_at(&ctx, 1600.0);
+        // A kept width stands in for measuring: prove it is the one read.
+        let (with, _) = ctx
+            .data(|d| d.get_temp::<(MeasuredWith, f32)>(width_id()))
+            .expect("the width is kept");
+        ctx.data_mut(|d| d.insert_temp(width_id(), (with, 1000.0_f32)));
+        assert_eq!(layout_at(&ctx, 1600.0).col_w, 1000.0);
+        assert_eq!(
+            layout_at(&ctx, 1600.0).columns.len(),
+            1,
+            "one 1000 pt column fits"
+        );
+
+        ctx.set_pixels_per_point(1.5);
+        let zoomed = layout_at(&ctx, 1600.0);
+        assert_ne!(zoomed.col_w, 1000.0, "a zoom measures the width again");
+        assert!(wide.columns.len() > layout_at(&ctx, 500.0).columns.len());
+    }
 
     #[test]
     fn device_columns_keep_groups_whole_and_balance_the_tallest() {
