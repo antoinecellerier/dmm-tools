@@ -38,10 +38,10 @@ UT61E+**, which generates synthetic measurements without hardware, and
 **Mock ZT-5B**, which simulates a ZOTEK meter ([what its keys
 do](cli-reference.md#zotek-mock)); picking one skips detection. The
 selection persists across sessions and requires a reconnect to take effect.
-When the connected protocol is not fully verified, an orange
-**EXPERIMENTAL** badge appears in the top bar; hovering it says how far the
-meter is verified, and clicking it opens the device's verification issue on
-GitHub, where you can report feedback.
+When the selected or connected meter is not fully verified, an orange badge
+in the top bar says how far it is: **PARTLY VERIFIED** or **EXPERIMENTAL**.
+Clicking it opens the device's verification issue on GitHub, where you can
+report feedback.
 
 Help is shown automatically when connection fails:
 
@@ -720,7 +720,7 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 
 - Every button, toggle, text field, and custom widget has a spoken name; icon-only buttons, color swatches, the graph minimap and the resize bars announce what they do instead of their glyph or color.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button, **Scale** and **Alarm** announce whether they are currently on or off — you don't have to rely on the color change. The **▸** beside **Scale** and **Alarm** announces as "Scale settings" or "Alarm settings", expanded or collapsed.
-- The **Device** list announces each meter by its full name, brand included, though a brand heading shows it once on screen.
+- The **Device** list announces each meter by its full name, brand included (a brand heading shows it once on screen), and a real meter's support level.
 - The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
 - The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled"; one past an [alarm limit](#alarm) with ", above the high limit" or ", below the low limit".
 - The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-value traces drawn beside it, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.

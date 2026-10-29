@@ -319,7 +319,7 @@ impl MockProtocol {
             profile: DeviceProfile {
                 family_name: "mock",
                 id: "mock",
-                // Verified so the GUI doesn't show the EXPERIMENTAL badge —
+                // Verified so the GUI doesn't show the stability badge —
                 // mock behavior is deterministic and needs no hardware validation.
                 stability: Stability::Verified,
                 supported_commands: MOCK_COMMANDS,

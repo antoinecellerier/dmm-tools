@@ -2,6 +2,7 @@
 //! status landmark in the middle, and the version / Help / shortcuts /
 //! settings group on the right, wrapped to a second row when it doesn't fit.
 
+use dmm_lib::protocol::Stability;
 use dmm_lib::transport::Link;
 use eframe::egui::{self, RichText, Ui};
 
@@ -200,7 +201,7 @@ impl App {
                 }
             };
 
-            // Group status indicators (dot, label, experimental badge) so the
+            // Group status indicators (dot, label, stability badge) so the
             // whole region exposes a Role::Status landmark to AT.
             //
             // Explicit id_salt: this scope sits inside a horizontal whose
@@ -258,7 +259,7 @@ impl App {
                     status.on_hover_text(&hover);
                 }
 
-                // The EXPERIMENTAL badge names a protocol, so it comes from
+                // The stability badge names a protocol, so it comes from
                 // the connected one where there is one — under Auto-detect
                 // that is the only thing that names a meter at all — and from
                 // the selected entry's profile otherwise.
@@ -286,12 +287,15 @@ impl App {
                 };
                 if let Some((model_name, stability, url)) = badge {
                     ui.hyperlink_to(
-                        RichText::new("EXPERIMENTAL").small().strong().color(orange),
+                        RichText::new(badge_text(stability))
+                            .small()
+                            .strong()
+                            .color(orange),
                         url,
                     )
                     .on_hover_text(format!(
                         "{} Click to report feedback.",
-                        dmm_shared::help::experimental_warning(&model_name, stability)
+                        dmm_shared::help::stability_warning(&model_name, stability)
                     ));
                 }
             });
@@ -523,9 +527,30 @@ fn link_tooltip(link: Option<Link>, built_in_radio: bool, replayed: bool) -> Str
     }
 }
 
+/// The badge's word for a level: [`Stability::label`] in capitals, spelled
+/// out so a frame draws a constant rather than allocating one.
+fn badge_text(stability: Stability) -> &'static str {
+    match stability {
+        Stability::Verified => "VERIFIED",
+        Stability::PartlyVerified => "PARTLY VERIFIED",
+        Stability::Experimental => "EXPERIMENTAL",
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Link, connected_status, fits_with_link, link_tooltip};
+    use super::{Link, Stability, badge_text, connected_status, fits_with_link, link_tooltip};
+
+    #[test]
+    fn the_badge_says_the_level_in_capitals() {
+        for stability in [
+            Stability::Verified,
+            Stability::PartlyVerified,
+            Stability::Experimental,
+        ] {
+            assert_eq!(badge_text(stability), stability.label().to_uppercase());
+        }
+    }
 
     #[test]
     fn the_status_names_the_link_where_there_is_one() {

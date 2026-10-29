@@ -104,8 +104,8 @@ pub(super) struct ConnectionNotice {
     /// Several hard-wrapped lines; empty while detection is still running,
     /// where there is nothing to do but wait.
     pub(super) body: String,
-    /// The experimental-support feedback link, as `(text, url)`.
-    pub(super) experimental_link: Option<(String, String)>,
+    /// The support-level feedback link, as `(text, url)`.
+    pub(super) feedback_link: Option<(String, String)>,
 }
 
 impl ConnectionNotice {
@@ -279,7 +279,7 @@ impl App {
             title,
             sections: Vec::new(),
             body,
-            experimental_link: None,
+            feedback_link: None,
         };
 
         // The probe is still running: nothing names the meter, the channel is
@@ -358,7 +358,7 @@ impl App {
                 title: links.not_found_title(),
                 sections: links.sections(),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
-                experimental_link: self.experimental_link(),
+                feedback_link: self.feedback_link(),
             })
         } else if let ConnectionIssue::BluetoothOnlyNotFound { model, activation } = issue {
             // The same notice, on the radio alone and with the meter's own
@@ -369,7 +369,7 @@ impl App {
                 title: links.not_found_title(),
                 sections: links.sections(),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
-                experimental_link: self.experimental_link(),
+                feedback_link: self.feedback_link(),
             })
         } else if let ConnectionIssue::BluetoothOnlyUnreachable {
             model,
@@ -382,7 +382,7 @@ impl App {
                 title: error.clone(),
                 sections: LinksSearched::BluetoothOnly { model, activation }.sections(),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
-                experimental_link: None,
+                feedback_link: None,
             })
         } else if let ConnectionIssue::BluetoothNotSearched { message } = issue {
             Some(notice(
@@ -399,7 +399,7 @@ impl App {
                 // The GUI cannot scan, so the way back in is a restart with
                 // the address the scan printed.
                 body: "Restart with --adapter set to the address it prints.".to_string(),
-                experimental_link: None,
+                feedback_link: None,
             })
         } else if let ConnectionIssue::BluetoothUnreachable { address, error } = issue {
             // Found, or remembered, but the link would not come up: the
@@ -409,7 +409,7 @@ impl App {
                 title: error.clone(),
                 sections: LinksSearched::BluetoothAt(address).sections(),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
-                experimental_link: None,
+                feedback_link: None,
             })
         } else if let ConnectionIssue::AdapterNotFound { help } = issue {
             Some(notice(
@@ -462,17 +462,17 @@ impl App {
         }
     }
 
-    /// The experimental-support line a "nothing found" notice ends with, for
+    /// The support-level line a "nothing found" notice ends with, for
     /// a picked meter short of verified. Auto-detect names no meter, so there
     /// is no protocol to warn about until one answers.
-    fn experimental_link(&self) -> Option<(String, String)> {
+    fn feedback_link(&self) -> Option<(String, String)> {
         self.selected_profile()
             .filter(|p| !p.stability.is_verified())
             .map(|profile| {
                 (
                     format!(
                         "{} Report feedback.",
-                        dmm_shared::help::experimental_warning(
+                        dmm_shared::help::stability_warning(
                             self.picked_listing()
                                 .map_or(profile.display_name(), |l| l.display_name()),
                             profile.stability
@@ -667,7 +667,7 @@ mod tests {
             "{}",
             n.help_text()
         );
-        assert!(n.experimental_link.is_some());
+        assert!(n.feedback_link.is_some());
 
         let stack = Error::Bluetooth("turned off on this computer".to_string());
         let n = notice_for(

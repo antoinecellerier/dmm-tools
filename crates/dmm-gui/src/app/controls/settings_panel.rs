@@ -801,11 +801,20 @@ mod tests {
             .collect()
     }
 
-    /// Whether the focused node is one named `label`: the Device box's
-    /// value and its live entry's label are the same name.
+    /// Whether the focused node is one named `label`, as its label or as its
+    /// value, which is how the Device box names the selected meter.
     fn focused_on(frame: &SettingsFrame, label: &str) -> bool {
         frame.nodes.iter().any(|(id, n)| {
             (n.label() == Some(label) || n.value() == Some(label)) && frame.focus == Some(*id)
+        })
+    }
+
+    /// Whether the focused node is the Device list's entry for `name`, its
+    /// label the name and then its support level, whatever that is.
+    fn focused_on_entry(frame: &SettingsFrame, name: &str) -> bool {
+        let prefix = format!("{name} (");
+        frame.nodes.iter().any(|(id, n)| {
+            n.label().is_some_and(|l| l.starts_with(&prefix)) && frame.focus == Some(*id)
         })
     }
 
@@ -843,7 +852,7 @@ mod tests {
         let frame = open_device_list(&mut run);
         assert!(device_list_open(&frame), "Space did not open the list");
         assert!(
-            focused_on(&frame, "UNI-T UT61E+"),
+            focused_on_entry(&frame, "UNI-T UT61E+"),
             "focus is not on the selected meter"
         );
     }
@@ -856,14 +865,14 @@ mod tests {
         run.app.settings.shared.device_family = "ut61eplus".to_string();
         open_device_list(&mut run);
         let frame = run.frame(press(egui::Key::ArrowDown));
-        assert!(focused_on(&frame, "UNI-T UT61B+"));
+        assert!(focused_on_entry(&frame, "UNI-T UT61B+"));
         let frame = run.frame(press(egui::Key::ArrowRight));
         assert!(
-            focused_on(&frame, "Voltcraft VC650BT"),
+            focused_on_entry(&frame, "Voltcraft VC650BT"),
             "Right left the row"
         );
         let frame = run.frame(press(egui::Key::ArrowLeft));
-        assert!(focused_on(&frame, "UNI-T UT61B+"));
+        assert!(focused_on_entry(&frame, "UNI-T UT61B+"));
     }
 
     /// Enter picks the focused meter: saved as the device, the list closed

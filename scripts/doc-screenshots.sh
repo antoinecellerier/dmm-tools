@@ -124,7 +124,7 @@ PARK_X=240; PARK_Y=1240
 # a blank band; 170 is about as short as it goes, since at 160 (80 logical)
 # the app hides the corner button. The wide shot needs it too: at 200 the
 # sub-value still fits under the reading.
-BIG_METER_W=900; BIG_METER_H=640
+BIG_METER_W=950; BIG_METER_H=640
 MINIMAL_WIDE_W=1200; MINIMAL_WIDE_H=170
 MINIMAL_NARROW_W=420; MINIMAL_NARROW_H=170
 # Each graph scene's state, as the `# view:` line `staged` appends: times in

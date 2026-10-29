@@ -1367,7 +1367,7 @@ mod tests {
     }
 
     /// Auto-detect has no profile of its own, so nothing may assume one: the
-    /// experimental badge and the connection help both read it every frame.
+    /// stability badge and the connection help both read it every frame.
     #[test]
     fn auto_detect_carries_no_profile_until_a_meter_answers() {
         let mut app = app(registry::AUTO_DEVICE_ID, "");

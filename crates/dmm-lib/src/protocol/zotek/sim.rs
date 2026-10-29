@@ -584,7 +584,7 @@ impl MockZt5b {
             family_name: "mock",
             id: "mock-zt5b",
             // As the UT61E+ mock: a simulation needs no hardware run, and
-            // the GUI shows no EXPERIMENTAL badge for it.
+            // the GUI shows no stability badge for it.
             stability: Stability::Verified,
             ..*driver.profile()
         };

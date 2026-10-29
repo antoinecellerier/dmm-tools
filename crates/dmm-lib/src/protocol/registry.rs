@@ -809,7 +809,7 @@ mod tests {
     /// the Brymen BM52x from the same reporter's BM525s (issue #36,
     /// 2026-10-28) have run for their main modes only, so they are
     /// PartlyVerified (see their profiles). Everything else
-    /// must stay flagged so the GUI shows the EXPERIMENTAL badge and links to the
+    /// must stay flagged so the GUI shows the stability badge and links to the
     /// verification issue.
     #[test]
     fn only_hardware_backed_models_are_verified() {

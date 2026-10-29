@@ -321,7 +321,7 @@ fn warn_if_experimental(
         "{}",
         style(format!(
             "WARNING: {}",
-            dmm_shared::help::experimental_warning(profile_name(profile), profile.stability)
+            dmm_shared::help::stability_warning(profile_name(profile), profile.stability)
         ))
         .yellow()
         .bold()
@@ -361,7 +361,7 @@ fn print_experimental_note(selection: Selection) {
             "{}",
             style(format!(
                 "{} Report feedback: {}",
-                dmm_shared::help::experimental_warning(profile_name(profile), profile.stability),
+                dmm_shared::help::stability_warning(profile_name(profile), profile.stability),
                 profile.feedback_url()
             ))
             .yellow()

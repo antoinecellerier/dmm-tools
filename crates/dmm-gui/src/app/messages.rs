@@ -700,7 +700,7 @@ impl App {
     }
 
     /// Draw the whole notice under the reading: title, steps, and the
-    /// experimental-support link where there is one.
+    /// support-level feedback link where there is one.
     ///
     /// The big-meter modes do not call this — see [`App::connection_notice`].
     pub(super) fn show_connection_help(&self, ui: &mut Ui) {
@@ -747,11 +747,9 @@ impl App {
                     .color(ui.visuals().weak_text_color()),
             );
         }
-        if let Some((text, url)) = &notice.experimental_link {
+        if let Some((text, url)) = &notice.feedback_link {
             ui.hyperlink_to(RichText::new(text).small().color(warn_color), url)
-                .on_hover_text(
-                    "Opens the GitHub issue tracker to report experimental-support feedback",
-                );
+                .on_hover_text("Opens the GitHub issue tracker to report feedback");
         }
     }
 }

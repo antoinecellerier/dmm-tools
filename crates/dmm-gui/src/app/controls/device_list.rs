@@ -59,14 +59,36 @@ fn pack_columns(heights: &[usize], k: usize) -> Vec<std::ops::Range<usize>> {
         .unwrap_or_default()
 }
 
-/// The brand groups the list shows: the registry's, which never change.
-static GROUPS: std::sync::LazyLock<Vec<(registry::Brand, Vec<registry::Listing>)>> =
-    std::sync::LazyLock::new(registry::brand_groups);
+/// A brand and its entries, each with its description: its full name and
+/// how far its support is verified, what its hover says and a screen reader
+/// announces.
+type Group = (registry::Brand, Vec<(registry::Listing, String)>);
+
+/// The brand groups the list shows: the registry's, which never change. The
+/// descriptions are built here, once, since reading a level builds a
+/// protocol; the tag is `--help`'s, so the two binaries agree.
+static GROUPS: std::sync::LazyLock<Vec<Group>> = std::sync::LazyLock::new(|| {
+    registry::brand_groups()
+        .into_iter()
+        .map(|(brand, rows)| {
+            let rows = rows
+                .into_iter()
+                .map(|l| {
+                    let name = l.display_name();
+                    let described = dmm_shared::help::device_tag(l.device, true)
+                        .map_or_else(|| name.to_string(), |tag| format!("{name} ({tag})"));
+                    (l, described)
+                })
+                .collect();
+            (brand, rows)
+        })
+        .collect()
+});
 
 /// How the open **Device** list lays out: the brand groups and the columns
 /// they are spread over, as many as the window has room for.
 struct DeviceListLayout {
-    groups: &'static [(registry::Brand, Vec<registry::Listing>)],
+    groups: &'static [Group],
     columns: Vec<std::ops::Range<usize>>,
     col_w: f32,
     gap: f32,
@@ -138,7 +160,7 @@ impl DeviceListLayout {
         GROUPS
             .iter()
             .flat_map(|(brand, rows)| {
-                let entries = rows.iter().map(|d| {
+                let entries = rows.iter().map(|(d, _)| {
                     measure(&crate::display::choice_entry_text(d.model_name(), true)) + with.padding
                 });
                 std::iter::once(measure(brand.name())).chain(entries)
@@ -232,10 +254,8 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
                             ui.add_space(ui.spacing().item_spacing.y * 2.0);
                         }
                         ui.label(RichText::new(brand.name()).color(ui.visuals().weak_text_color()));
-                        for row in rows {
-                            let hover = format!("Talk to a {}", row.display_name());
-                            let entry =
-                                add(ui, row.id(), row.model_name(), row.display_name(), &hover);
+                        for (row, described) in rows {
+                            let entry = add(ui, row.id(), row.model_name(), described, described);
                             entries.push((entry, Some(c)));
                         }
                     }
@@ -331,6 +351,30 @@ mod tests {
         let zoomed = layout_at(&ctx, 1600.0);
         assert_ne!(zoomed.col_w, 1000.0, "a zoom measures the width again");
         assert!(wide.columns.len() > layout_at(&ctx, 500.0).columns.len());
+    }
+
+    /// Every entry says how far it is verified, in `--help`'s words, and a
+    /// meter sold under another name shares its entry's level.
+    #[test]
+    fn each_entry_names_its_support_level() {
+        let described = |id: &str| {
+            GROUPS
+                .iter()
+                .flat_map(|(_, rows)| rows)
+                .find(|(l, _)| l.id() == id)
+                .map(|(_, d)| d.as_str())
+        };
+        assert_eq!(described("ut61eplus"), Some("UNI-T UT61E+ (verified)"));
+        assert_eq!(described("ut181a"), Some("UNI-T UT181A (partly verified)"));
+        assert_eq!(described("ut8803"), Some("UNI-T UT8803 (experimental)"));
+        assert_eq!(
+            described("et2517a"),
+            Some("Minipa ET-2517A (partly verified)")
+        );
+        assert_eq!(
+            described("mock"),
+            Some("Mock UT61E+ (no hardware required)")
+        );
     }
 
     #[test]

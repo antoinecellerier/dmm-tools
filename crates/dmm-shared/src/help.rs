@@ -408,7 +408,7 @@ fn bluetooth_section(closing: &'static [&'static str]) -> SetupSection {
 /// Only the claim is shared: each site appends its own call to action (the
 /// CLI a `capture` command, the GUI a link), because they differ in what the
 /// user can do next. Four hand-written spellings had drifted apart here.
-pub fn experimental_warning(model_name: &str, stability: Stability) -> String {
+pub fn stability_warning(model_name: &str, stability: Stability) -> String {
     let detail = match stability {
         Stability::Verified => "verified against real hardware",
         Stability::PartlyVerified => "some modes and commands unconfirmed on real hardware",
@@ -838,13 +838,13 @@ mod tests {
     }
 
     #[test]
-    fn experimental_warning_names_the_model_and_the_level() {
+    fn stability_warning_names_the_model_and_the_level() {
         assert_eq!(
-            experimental_warning("UNI-T UT8803", Stability::Experimental),
+            stability_warning("UNI-T UT8803", Stability::Experimental),
             "UNI-T UT8803 support is experimental (unverified against real hardware)."
         );
         assert_eq!(
-            experimental_warning("UNI-T UT181A", Stability::PartlyVerified),
+            stability_warning("UNI-T UT181A", Stability::PartlyVerified),
             "UNI-T UT181A support is partly verified (some modes and commands unconfirmed on real hardware)."
         );
     }
