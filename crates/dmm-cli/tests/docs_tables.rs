@@ -38,8 +38,9 @@ fn cli_reference_table() -> String {
     // registry entry. Its description links to the design the way the rows
     // below send a reader to `supported-devices.md`.
     table.push_str(&format!(
-        "\n| `{}` |  | [Detect the connected meter](detection-design.md) (default) |",
-        registry::AUTO_DEVICE_ID
+        "\n| `{}` |  | [{}](detection-design.md) (default) |",
+        registry::AUTO_DEVICE_ID,
+        dmm_shared::help::AUTO_DESCRIPTION
     ));
     for (brand, rows) in registry::brand_groups() {
         table.push_str(&format!("\n| **{}** |  |  |", brand.name()));

@@ -79,8 +79,9 @@ pub fn device_help(intro: &str) -> String {
     help
 }
 
-/// What `auto` does, beside it in `--help` and in a shell's completion menu.
-const AUTO_DESCRIPTION: &str = "Detect the connected meter";
+/// What `auto` does: beside it in `--help`, a shell's completion menu and the
+/// CLI reference's table, and the GUI's Auto-detect hover.
+pub const AUTO_DESCRIPTION: &str = "Detect the connected meter";
 
 /// `cmd`, with the `--device` and `--mock-mode` flags on it and its
 /// subcommands offering their values, for a completion script.

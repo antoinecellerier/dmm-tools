@@ -240,7 +240,7 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
             registry::AUTO_DEVICE_ID,
             "Auto-detect",
             "Auto-detect",
-            "Work out which meter is connected",
+            dmm_shared::help::AUTO_DESCRIPTION,
         );
         entries.push((auto, None));
         ui.add_space(ui.spacing().item_spacing.y);
