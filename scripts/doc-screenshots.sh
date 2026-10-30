@@ -100,13 +100,13 @@ COLOR_CROP="1920x666+0+424"
 HELP_CROP="478x843+0+46"
 GEAR_X=1884; GEAR_Y=22              # the settings gear, right end of the top bar
 # The band the top bar's version label is drawn in, for `report`: the bar
-# right-aligns it before Help / GitHub, so its text ends 295 px from the
-# window's right edge and the link starts 27 px later. The band stops between
+# right-aligns it before Help & Feedback, so its text ends 333 px from the
+# window's right edge and the link starts 29 px later. The band stops between
 # the two and reaches far further left than any version string. Its rows are
 # the bar's own in a wide window, its second when the bar wraps. Each picture
 # that shows the bar is cropped from the window's top left corner and runs to
 # its right edge, so window and picture coordinates agree.
-VERSION_RIGHT=282; VERSION_BAND_W=300
+VERSION_RIGHT=318; VERSION_BAND_W=300
 VERSION_ROW_WIDE="0 43"
 VERSION_ROW_WRAPPED="44 85"
 CUSTOMIZE_X=150; CUSTOMIZE_Y=532    # the "Customize colors" collapsing header

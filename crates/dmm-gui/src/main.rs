@@ -33,7 +33,7 @@ pub fn version_label() -> String {
     name = "dmm-gui",
     version = version_string(),
     about = "GUI application for USB and Bluetooth digital multimeters",
-    after_long_help = "Help / GitHub: https://github.com/antoinecellerier/dmm-tools"
+    after_long_help = dmm_shared::help::project_link_line()
 )]
 struct Args {
     /// Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]

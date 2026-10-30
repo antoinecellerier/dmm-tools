@@ -333,7 +333,7 @@ impl App {
     }
 
     /// Right side of the top bar: version label, the link to a newer release
-    /// when one is out, Help/GitHub link, keyboard shortcut help button, and
+    /// when one is out, Help & Feedback link, keyboard shortcut help button, and
     /// settings button.
     ///
     /// Items are added left-to-right so that egui's Tab order matches the
@@ -412,8 +412,8 @@ impl App {
                 .a11y_label(&format!("{} available — open its release page", tag.name()));
         }
         ui.hyperlink_to(
-            "Help / GitHub",
-            "https://github.com/antoinecellerier/dmm-tools",
+            dmm_shared::help::PROJECT_LINK_LABEL,
+            dmm_shared::help::PROJECT_URL,
         )
         .on_hover_text("Open the dmm-tools project page on GitHub");
         let shortcuts_btn = ui

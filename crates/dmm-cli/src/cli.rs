@@ -39,10 +39,13 @@ fn version_string() -> &'static str {
     name = "dmm-cli",
     version = version_string(),
     about = "CLI tool for USB and Bluetooth digital multimeters",
-    after_help = "Run with --help for the full list of supported devices and the \
-                  shared-settings file path.\n\n\
-                  Set NO_COLOR=1 to disable colored output.\n\
-                  Help / GitHub: https://github.com/antoinecellerier/dmm-tools",
+    after_help = format!(
+        "Run with --help for the full list of supported devices and the \
+         shared-settings file path.\n\n\
+         Set NO_COLOR=1 to disable colored output.\n\
+         {}",
+        dmm_shared::help::project_link_line()
+    ),
     // after_long_help is set dynamically in main() so the actual per-platform
     // settings file path appears in the output.
     after_long_help = ""
@@ -487,8 +490,9 @@ pub(crate) fn build_after_long_help() -> String {
          \x20             Use `dmm_lib=trace` for wire-level debugging.\n\
          \x20 NO_COLOR    Set to 1 to disable colored terminal output.\n\
          \n\
-         Help / GitHub: https://github.com/antoinecellerier/dmm-tools",
+         {link}",
         path = resolved_config_path_display(),
+        link = dmm_shared::help::project_link_line(),
     )
 }
 

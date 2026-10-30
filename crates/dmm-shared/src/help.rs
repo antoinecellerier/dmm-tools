@@ -38,6 +38,17 @@ pub fn version_label(version: &str, git_hash: &str) -> String {
     }
 }
 
+/// The project page, where the docs and the issue tracker are.
+pub const PROJECT_URL: &str = "https://github.com/antoinecellerier/dmm-tools";
+
+/// What both binaries call the link to [`PROJECT_URL`].
+pub const PROJECT_LINK_LABEL: &str = "Help & Feedback";
+
+/// The `--help` footer line naming the project page.
+pub fn project_link_line() -> String {
+    format!("{PROJECT_LINK_LABEL}: {PROJECT_URL}")
+}
+
 /// Long help for a `--device` flag: `intro`, then one line per known device,
 /// under its brand as the GUI's device list groups them
 /// ([`registry::brand_groups`]).

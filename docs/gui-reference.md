@@ -83,7 +83,7 @@ The top bar contains:
 - **Newer version** link — shown when a newer release is out, such as
   `v0.8.0 available ↗`, or `Newer dev build ↗` on a dev build; opens its
   release page. See [Update checks](#update-checks)
-- **Help / GitHub** link — opens the project page
+- **Help & Feedback** link — opens the project page on GitHub
 - **?** button — opens the [keyboard shortcuts](#keyboard-shortcuts) help
 - **Settings gear** — opens the settings panel
 
