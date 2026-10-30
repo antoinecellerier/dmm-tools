@@ -1,36 +1,46 @@
 # dmm-tools
 
-Open-source logging, graphing and remote-control software for UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog and Voltcraft multimeters and clamp meters, over USB and Bluetooth, on Linux, Windows, macOS and Raspberry Pi.
-
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter from a desktop app, over its USB cable or wirelessly over Bluetooth. Works with the UNI-T UT61E+, UT181A, UT161, UT71, UT60BT and UT804, the ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E and B41T+, Voltcraft VC-890 and [more](#supported-devices).
+Open-source desktop app and command-line tool to read, log, graph and remote-control digital multimeters (DMMs) and clamp meters from UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog and Voltcraft, over USB and Bluetooth, on Linux, Windows, macOS and Raspberry Pi.
 
-Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
+Works with the UNI-T UT61E+, UT181A, UT161, UT71, UT60BT and UT804, ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E and B41T+, Voltcraft VC-890 and [more](#supported-devices).
 
-**Contents:** [GUI](#gui) · [CLI](#cli) · [Supported devices](#supported-devices) · [Quick start](#quick-start) · [Documentation](#documentation) · [Feedback](#feedback) · [License](#license)
+**Contents:** [Features](#features) · [Supported devices](#supported-devices) · [Quick start](#quick-start) · [Documentation](#documentation) · [Feedback](#feedback) · [License](#license)
 
 ![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence, two cursors read its duration and charge, and markers name its stages](assets/gui-wide-layout.webp)
 
-## [GUI](docs/gui-reference.md)
+## Features
 
-- Live reading with the meter's flags, sub-values and range specifications, and buttons to switch mode, range, HOLD, REL and MIN/MAX from the screen
-- Time-series graph with sub-values, a minimap, cursors, mean and min/max overlays, a histogram of the readings' spread, and reference lines with threshold triggers
-- Recording for hours at a time, with notes on marked moments, exported as CSV, JSON or a replay file and imported again
-- Alarms on a low or high limit for unattended runs, each crossing marked
-- Software scale, offset and unit relabel for clamps, shunts and sensors
-- Big meter mode for bench-mount use
+Both the desktop app and the command-line tool:
 
-## [CLI](docs/cli-reference.md)
+- Detect which meter is connected
+- Remote-control the meter: switch mode and range, press its buttons
+- Save readings as CSV, JSON or a replay file, and open them again
+- Keep statistics: min, max, average, standard deviation and the integral over time
+- Raise an alarm when a reading crosses a limit
+- Scale, offset and relabel readings in software
 
-- Stream readings as text, CSV or JSON, at any interval
-- Switch mode, range, HOLD, REL, MIN/MAX and Peak by name, or press the meter's buttons
-- Alarms on a low or high limit, each crossing marked in the output
-- Coulomb counting / energy integration (`--integrate`)
-- Software scaling (`--scale`, `--offset`, `--unit`) for clamps, shunts and sensors
-- Guided protocol capture wizard for bug reports and verifying new meters
+### Desktop app (`dmm-gui`)
+
+The desktop app also:
+
+- Shows the live reading with the range's resolution and accuracy from the manual
+- Graphs readings live, with cursors, reference lines, a min/max envelope and a histogram
+- Records long sessions, with markers and notes on any reading
+- Fills the window with the reading in big meter mode
+
+[GUI help](docs/gui-reference.md): the full guide to the desktop app.
+
+### Command-line tool (`dmm-cli`)
+
+The command-line tool also:
+
+- Streams readings as text, CSV or JSON to the terminal, a file or another program
+- Lists and sets the meter's mode, range and flags by name, for scripts
+- Runs a guided capture to report a bug or verify a new meter
 
 <!-- snippet via=dcma-boot-refresh.replay
 dmm-cli read --interval-ms 2500 --count 5
@@ -47,46 +57,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 ```
 <!-- /snippet -->
 
-Output as JSON for scripting:
-
-<!-- snippet via=ohm.replay
-dmm-cli read --format json --count 1
--->
-```
-$ dmm-cli read --format json --count 1
-{"_metadata":{"device":"UNI-T UT61E+"}}
-{"timestamp":"2026-09-17T10:47:27.597+00:00","mode":"Ω","value":4.649,"unit":"kΩ","range":"22kΩ","display_raw":"  4.649","progress":9,"experimental":false,"flags":{"hold":false,"rel":false,"auto_range":true,"min":false,"max":false,"avg":false,"low_battery":false,"hv_warning":false,"peak_max":false,"peak_min":false,"lead_error":false,"comp":false,"record":false,"loz":false,"void":false,"dc":false}}
-
---- 1 samples | Min: 4.6490 kΩ | Max: 4.6490 kΩ | Avg: 4.6490 kΩ
-```
-<!-- /snippet -->
-
-Send remote commands, or switch the meter's mode, range, HOLD, REL, MIN/MAX and
-Peak without touching it:
-
-<!-- snippet via=mock:acv
-dmm-cli command hold
-dmm-cli set mode "AC V Hz"
-dmm-cli set range 220V
--->
-```
-$ dmm-cli command hold
-Sent hold
-
-$ dmm-cli set mode "AC V Hz"
-Meter now in AC V Hz
-
-$ dmm-cli set range 220V
-Meter now in 220V (manual range)
-```
-<!-- /snippet -->
-
-The connected meter is detected automatically; `--device` pins a model:
-
-```
-$ dmm-cli --device ut8803 capture
-WARNING: UNI-T UT8803 support is experimental (unverified against real hardware).
-```
+[CLI help](docs/cli-reference.md): the full guide to the command-line tool.
 
 ## Supported devices
 
