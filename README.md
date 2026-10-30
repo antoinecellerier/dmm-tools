@@ -10,7 +10,7 @@ Read, record and remote-control a digital multimeter from a desktop app, over it
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
-**Contents:** [GUI](#gui) · [CLI](#cli) · [Supported devices](#supported-devices) · [Quick start](#quick-start) · [Documentation](#documentation) · [License](#license)
+**Contents:** [GUI](#gui) · [CLI](#cli) · [Supported devices](#supported-devices) · [Quick start](#quick-start) · [Documentation](#documentation) · [Feedback](#feedback) · [License](#license)
 
 ![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence, two cursors read its duration and charge, and markers name its stages](assets/gui-wide-layout.webp)
 
@@ -135,9 +135,9 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 
 ✅ = modes and commands confirmed on real hardware, short of a few localized checks. 🟡 = connection and the main modes confirmed, whole modes or commands still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.
 
-Bluetooth "adapter" is UNI-T's UT-D07A/B add-on; "built in" needs no adapter. Each issue collects hardware reports for its row; reports on the adapter itself go to [#25](https://github.com/antoinecellerier/dmm-tools/issues/25).
+Bluetooth "adapter" is UNI-T's UT-D07A/B add-on; "built in" needs no adapter. Post what works and what doesn't on your meter's issue.
 
-Cables, Bluetooth adapters, what to switch on and what each model has confirmed are in [supported devices](docs/supported-devices.md). Your model is not listed? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues) with its details.
+Cables, Bluetooth adapters, what to switch on and what each model has confirmed are in [supported devices](docs/supported-devices.md). Your meter isn't listed? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues/new) with its model and how it connects.
 
 ## Quick start
 
@@ -168,6 +168,10 @@ For users:
 - [Changelog](CHANGELOG.md)
 
 For contributors: [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, protocol captures and code changes; the [development guide](docs/development.md), [architecture](docs/architecture.md), [protocol details](docs/protocol.md), [UX design](docs/ux-design.md) and [adding a device](docs/adding-devices.md).
+
+## Feedback
+
+Bugs, ideas, questions, or something in the app or the docs that confused you: [open an issue](https://github.com/antoinecellerier/dmm-tools/issues/new). How a meter in the [device table](#supported-devices) works for you goes on its row's issue. [What to include in a bug report](CONTRIBUTING.md#bug-reports).
 
 ## License
 

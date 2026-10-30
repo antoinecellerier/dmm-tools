@@ -1,5 +1,9 @@
 # Contributing
 
+## Feedback
+
+Bugs, ideas, questions, or something in the app or the docs that confused you: [open an issue](https://github.com/antoinecellerier/dmm-tools/issues/new). Results for a meter that has a verification issue (linked from [supported devices](docs/supported-devices.md)) go there.
+
 ## Bug reports
 
 When filing a bug report, please include:
