@@ -50,7 +50,9 @@ then the look, set once, whose expanding Customize colors grows the panel at
 its foot (`show_settings_rows` in `app/controls/settings_panel.rs`).
 
 **Zoom steps like a browser's.** Ctrl+Plus, Ctrl+Minus and Ctrl+0 walk
-non-linear levels (`ZOOM_LEVELS` in `app/appearance.rs`); 100% is the OS scale.
+non-linear levels (`ZOOM_LEVELS` in `app/appearance.rs`); 100% is the scale
+of the monitor the window is on, so a window dragged between monitors follows
+each one's.
 
 **Big meter and minimal modes.** With the graph and recording hidden the
 reading fills the window, for a bench display or a presentation; minimal mode

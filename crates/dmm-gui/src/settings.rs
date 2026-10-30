@@ -400,7 +400,8 @@ pub struct Settings {
     /// Hide window decorations (title bar, borders).
     #[serde(default)]
     pub hide_decorations: bool,
-    /// UI zoom level as percentage relative to OS default (100 = OS default).
+    /// UI zoom level as a percentage of the scale of the monitor the window
+    /// is on (100 = that monitor's scale).
     pub zoom_pct: u32,
     /// Delay between measurement requests in milliseconds (0 = fastest possible).
     pub sample_interval_ms: u32,

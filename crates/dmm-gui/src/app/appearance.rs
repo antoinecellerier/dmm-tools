@@ -411,17 +411,13 @@ impl App {
     ];
 
     pub(super) fn apply_zoom(&mut self, ctx: &egui::Context) {
-        // Capture OS default pixels_per_point on first call
-        if self.applied.os_ppp.is_none() {
-            self.applied.os_ppp = Some(ctx.pixels_per_point());
-        }
-        let Some(os_ppp) = self.applied.os_ppp else {
-            return;
-        };
-        let target_ppp = os_ppp * self.settings.zoom_pct as f32 / 100.0;
-        // Only update when changed — setting ppp every frame resets panel resize state
-        if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {
-            ctx.set_pixels_per_point(target_ppp);
+        // A zoom factor, not pixels per point: egui multiplies it by the
+        // monitor's scale each frame, so a window dragged to a monitor with
+        // another scale follows it.
+        let zoom = self.settings.zoom_pct as f32 / 100.0;
+        // Only update when changed — setting it every frame resets panel resize state
+        if (ctx.zoom_factor() - zoom).abs() > 0.001 {
+            ctx.set_zoom_factor(zoom);
         }
     }
 
@@ -497,6 +493,36 @@ mod tests {
         app.apply_theme(&ctx);
         app.apply_color_overrides(&ctx);
         (ctx, app)
+    }
+
+    /// The zoom setting scales whichever monitor the window is on: dragged
+    /// from a 166 % monitor to a 100 % one, the window drops to the new
+    /// monitor's scale instead of keeping the one it started on.
+    #[test]
+    fn the_zoom_follows_the_monitor_scale() {
+        let settings = Settings {
+            zoom_pct: 150,
+            ..Settings::default()
+        };
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        let ctx = crate::app::styled_context();
+        for native in [1.66, 1.0, 2.0] {
+            let mut raw = egui::RawInput::default();
+            raw.viewports
+                .entry(egui::ViewportId::ROOT)
+                .or_default()
+                .native_pixels_per_point = Some(native);
+            // Twice: a zoom set during a pass applies from the next one.
+            for _ in 0..2 {
+                let mut out = ctx.run_ui(raw.clone(), |ui| app.apply_zoom(ui.ctx()));
+                out.textures_delta.clear();
+            }
+            assert!(
+                (ctx.pixels_per_point() - native * 1.5).abs() < 1e-4,
+                "{} on a {native} monitor",
+                ctx.pixels_per_point(),
+            );
+        }
     }
 
     /// The colours egui draws warning and error text with are the palette's,

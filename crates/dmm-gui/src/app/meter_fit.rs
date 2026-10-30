@@ -211,6 +211,22 @@ pub(super) fn grow_request(
     Some(target)
 }
 
+/// The minimum window size to send this frame, if any: on the first frame,
+/// and again only when the size or the pixels per point move. egui-winit
+/// turns the size into physical pixels at the scale it is sent at, so a zoom
+/// or a move to a monitor with another scale needs it sent again.
+pub(super) fn min_size_request(
+    min_size: egui::Vec2,
+    pixels_per_point: f32,
+    last: &mut Option<(egui::Vec2, f32)>,
+) -> Option<egui::Vec2> {
+    if last.is_some_and(|(s, ppp)| !size_moved(s, min_size) && ppp == pixels_per_point) {
+        return None;
+    }
+    *last = Some((min_size, pixels_per_point));
+    Some(min_size)
+}
+
 /// Half a pixel of tolerance: sub-pixel jitter in the cached top-bar widths
 /// is not a change.
 pub(super) fn size_moved(a: egui::Vec2, b: egui::Vec2) -> bool {
@@ -364,6 +380,36 @@ mod tests {
             grow_request(small, min, &mut last),
             Some(min),
             "too small again at the first size"
+        );
+    }
+
+    /// The minimum window size goes out once, then again when it moves or
+    /// when the scale it was turned into pixels at changes.
+    #[test]
+    fn the_minimum_size_is_resent_when_the_scale_changes() {
+        let min = egui::vec2(400.0, 300.0);
+        let mut last = None;
+        assert_eq!(
+            min_size_request(min, 1.66, &mut last),
+            Some(min),
+            "first frame"
+        );
+        assert_eq!(min_size_request(min, 1.66, &mut last), None, "next frame");
+        assert_eq!(
+            min_size_request(min + egui::vec2(0.3, 0.0), 1.66, &mut last),
+            None,
+            "sub-pixel jitter in the minimum"
+        );
+        assert_eq!(
+            min_size_request(min, 1.0, &mut last),
+            Some(min),
+            "dragged to a 100 % monitor"
+        );
+        let bigger = min + egui::vec2(20.0, 0.0);
+        assert_eq!(
+            min_size_request(bigger, 1.0, &mut last),
+            Some(bigger),
+            "the minimum grew"
         );
     }
 

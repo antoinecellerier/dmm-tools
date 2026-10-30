@@ -153,15 +153,14 @@ struct WhatsNew {
 /// egui and the windowing system charge for on every call.
 #[derive(Default)]
 struct AppliedChrome {
-    /// OS default pixels_per_point, captured on first frame.
-    os_ppp: Option<f32>,
     /// Last applied theme (to avoid re-setting every frame).
     theme: Option<ThemeMode>,
     /// Last applied UI chrome colors, to avoid per-frame Visuals mutation.
     ui_colors: Option<UiColorKey>,
-    /// Last minimum window size pushed to the windowing system, so the
-    /// viewport command is only re-sent when it actually changes.
-    min_size: Option<egui::Vec2>,
+    /// Last minimum window size pushed to the windowing system, and the
+    /// pixels per point it was sent at, so the viewport command is only
+    /// re-sent when either changes.
+    min_size: Option<(egui::Vec2, f32)>,
     /// Window size and grow target of the last request sent while the window
     /// was below its minimum.
     grow_request: Option<(egui::Vec2, egui::Vec2)>,
@@ -1022,15 +1021,13 @@ impl eframe::App for App {
         // ratios, big-meter mode — are stable across the vast majority of
         // frames, and a viewport command sent every repaint is the same class
         // of mistake .claude/rules/gui.md calls out for set_visuals() and
-        // set_pixels_per_point(). Half a pixel of tolerance keeps sub-pixel
-        // jitter in the cached widths from re-triggering it.
-        if self
-            .applied
-            .min_size
-            .is_none_or(|prev| meter_fit::size_moved(prev, min_size))
-        {
-            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min_size));
-            self.applied.min_size = Some(min_size);
+        // set_zoom_factor().
+        if let Some(min) = meter_fit::min_size_request(
+            min_size,
+            ctx.pixels_per_point(),
+            &mut self.applied.min_size,
+        ) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min));
         }
         // If the window is smaller than the new minimum (e.g. after exiting
         // minimal mode), grow it to fit. Once per change: a tiling window
