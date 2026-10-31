@@ -789,9 +789,47 @@ table-temperature = Temperature
 # Used by: Mock UT61E+, UT161E, UT61E+
 table-transistor-magnification = Transistor Magnification
 
+## Specification accuracy bands, beside an accuracy in the
+## Specifications panel: the condition it holds under, or an accuracy the manual
+## gives in words. Keep every number, sign and ± exactly; a decimal comma is
+## fine (0,6). A translation that changes, drops or adds a number is shown in
+## English. Bands that are numbers and units only are not listed.
+
+# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
+# In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
+band-3d-khz-plus-2d = 3d/kHz+2d
+# Used by: Mock UT61E+, UT161E, UT61E+
+# In: AC Voltage
+band-40hz-100hz-lpf = 40Hz~100Hz (LPF)
+# Used by: UT803
+# In: B. AC Voltage
+band-50khz-100khz = >50kHZ–100kHz
+# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
+# In: DC AC & AC+DC AC Voltage
+band-dc-50hz-60hz = DC, 50Hz ~ 60Hz
+# Used by: UT181A
+# In: (7) Resistance
+band-in-rel-state = In REL state
+# Used by: UT804
+# In: B. AC Voltage (AC+DC measurement is available); I. Frequency
+band-not-specified = Not Specified
+# Used by: UT181A, UT804
+# In: (9) Capacitance; H. Capacitance
+band-not-specified-2 = Not specified
+# Used by: UT181A
+# In: (1) AC Voltage; (3) AC Voltage + DC Voltage
+band-only-for-reference = Only for reference
+# Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
+# In: AC Voltage; DC AC & AC+DC AC Voltage
+band-unspec-d = Unspec’d
+# Used by: UT804
+# In: A. DC Voltage
+band-under-rel-mode = under REL mode
+
 ## Specification inputs: a table's input impedance or overload
-## protection. Every number and unit must stay: a translation that changes,
-## drops or adds one is shown in English.
+## protection. Keep every number, sign and ± exactly; a decimal comma is fine
+## (0,6). A translation that changes, drops or adds a number is shown in
+## English.
 
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: 11 tables
@@ -868,8 +906,9 @@ input-initially-approx-3-0kohm-165pf-nominal = Initially approx. 3.0kΩ, 165pF n
 
 ## Specification notes, under a table in the Specifications panel, from
 ## the meter's manual. Keep the exact sense, comparisons and qualifiers such as
-## "typical" included. Every number and unit must stay: a translation that
-## changes, drops or adds one is shown in English.
+## "typical" included. Keep every number, sign and ± exactly; a decimal comma
+## is fine (0,6). A translation that changes, drops or adds a number is shown
+## in English.
 
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current

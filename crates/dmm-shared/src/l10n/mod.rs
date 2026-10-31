@@ -32,12 +32,14 @@ mod lib_names;
 mod pseudo;
 
 pub use lang::{EN_US, Language, find, languages, resolve};
-pub use lib_index::{LIB_RESOURCES, is_units_only, spec_numbers};
+pub use lib_index::{LIB_RESOURCES, is_units_only};
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// Developer switch for the padding pseudo-locale (any non-empty value): it
 /// lengthens every message to find layouts that can't take a longer
@@ -186,6 +188,9 @@ pub struct Localizer {
     /// files from the override folder sees it without asking.
     format_failure: log::Level,
     pseudo: bool,
+    /// The spec texts whose translation keeps their numbers, by message
+    /// ID, checked on first use ([`Localizer::spec_text`]).
+    spec_texts: OnceLock<HashMap<String, String>>,
 }
 
 impl Localizer {
@@ -211,6 +216,7 @@ impl Localizer {
             load_report,
             format_failure: problem_level(options),
             pseudo: options.pseudo,
+            spec_texts: OnceLock::new(),
         }
     }
 

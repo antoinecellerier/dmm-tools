@@ -106,7 +106,7 @@ The en-US `lib.ftl` is generated:
 
 **English text is the lookup key.** dmm-lib's strings and stored data don't change. The library gains only `all_labels()` and the enumerator. Translators decide label by label, abbreviations and flags included. One lookup serves the whole reading area, so labels don't come out half-translated. A translator may keep "DC V" and "HOLD" as the meter prints them.
 
-**Spec numbers survive translation.** A translated spec note must contain the same numbers and units as its English source, compared with spacing normalised: "About 10MΩ" may become "Environ 10 MΩ". The check runs when translations load, and a note that fails it is shown in English. The check can't catch a flipped comparison or a lost "typical", so the specifications panel also shows the English note on hover.
+**Spec numbers survive translation.** A translated spec note, input (impedance or overload protection) or accuracy band ("In REL state", "Not Specified") must carry the same numbers as its English, in any order, since a translation may reorder clauses. Each number keeps its sign, its ± and the unit symbol after it, compared with spacing dropped: "About 10MΩ" may become "Environ 10 MΩ", but "-40°C" may not become "40°C". A comma between digits reads as a decimal point, so "0,6" matches "0.6"; regrouped thousands ("1 000") don't match, and the English shows. Each message is checked once, the first time a localizer is asked for spec text, and one that fails is shown in English. The check can't catch a flipped comparison or a lost "typical", so the specifications panel shows the English on hover wherever the text differs. `Localizer::spec_text` in `crates/dmm-shared/src/l10n/lib_index.rs` holds the rules.
 
 ## Library run-time text
 

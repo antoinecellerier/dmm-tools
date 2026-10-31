@@ -92,16 +92,25 @@ meter's key names, menu items and display text as the meter prints them."
             "Specification table names, in the Specifications panel, as the
 meter's manual titles them. Keep the manual's numbering: (1), A."
         }
+        TextKind::Band => {
+            "Specification accuracy bands, beside an accuracy in the
+Specifications panel: the condition it holds under, or an accuracy the manual
+gives in words. Keep every number, sign and ± exactly; a decimal comma is
+fine (0,6). A translation that changes, drops or adds a number is shown in
+English. Bands that are numbers and units only are not listed."
+        }
         TextKind::Input => {
             "Specification inputs: a table's input impedance or overload
-protection. Every number and unit must stay: a translation that changes,
-drops or adds one is shown in English."
+protection. Keep every number, sign and ± exactly; a decimal comma is fine
+(0,6). A translation that changes, drops or adds a number is shown in
+English."
         }
         TextKind::Note => {
             "Specification notes, under a table in the Specifications panel, from
 the meter's manual. Keep the exact sense, comparisons and qualifiers such as
-\"typical\" included. Every number and unit must stay: a translation that
-changes, drops or adds one is shown in English."
+\"typical\" included. Keep every number, sign and ± exactly; a decimal comma
+is fine (0,6). A translation that changes, drops or adds a number is shown
+in English."
         }
     }
 }
@@ -293,18 +302,25 @@ fn qualified(label: &str, qualifiers: &[(&str, &str)], modes: &HashSet<&str>) ->
     })
 }
 
-/// The spec tables each note and input sits under, by name.
+/// The spec tables each note, input and band sits under, by name.
 fn tables() -> BTreeMap<(TextKind, &'static str), BTreeSet<&'static str>> {
     let mut out: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
     for device in registry::DEVICES {
         for table in (device.new_protocol)().spec_sheet() {
             let mode = table.mode;
             let inputs = [mode.input_impedance, mode.overload_protection];
+            let bands = table
+                .rows
+                .iter()
+                .flat_map(|row| row.spec.accuracy)
+                .flat_map(|b| b.freq_range.into_iter().chain([b.accuracy]))
+                .map(|t| (TextKind::Band, t));
             let texts = inputs
                 .into_iter()
                 .flatten()
                 .map(|t| (TextKind::Input, t))
-                .chain(mode.notes.iter().map(|n| (TextKind::Note, *n)));
+                .chain(mode.notes.iter().map(|n| (TextKind::Note, *n)))
+                .chain(bands);
             for key in texts {
                 out.entry(key).or_default().insert(table.name);
             }

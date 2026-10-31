@@ -255,9 +255,9 @@ what is translated and what stays English. Two environment variables help
 while working on them:
 
 - `DMM_TOOLS_PSEUDO_LOCALE=1` turns every message into an accented,
-  ~40% longer, bracketed version of itself. Layouts that can't take a
-  longer language show up, and text without brackets never went through
-  the translations.
+  ~40% longer, bracketed version of itself, numbers and the units after
+  them kept as written. Layouts that can't take a longer language show
+  up, and text without brackets never went through the translations.
 - `DMM_TOOLS_L10N_DIR=<dir>` loads `<dir>/<locale>/…` over the built-in
   files, message by message, so a translation can be tried without
   rebuilding; mistakes in those files are logged as errors, which show

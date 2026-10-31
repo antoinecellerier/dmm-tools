@@ -1,7 +1,9 @@
 use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
+use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Color32, RichText, Ui};
+use std::borrow::Cow;
 
 use crate::settings::SpecFields;
 
@@ -16,32 +18,66 @@ fn manual_link(ui: &mut Ui, l10n: &Localizer, url: &str, font_size: f32, color: 
     .on_hover_text(tr!(l10n, "specs-manual.hover"));
 }
 
+/// Spec text `english` of `kind` in `l10n`'s language, or as the library
+/// wrote it when `l10n` is `None`. A translation shows only where it keeps
+/// the English's numbers ([`Localizer::spec_text`]).
+fn spec_text<'a>(l10n: Option<&'a Localizer>, kind: TextKind, english: &'a str) -> Cow<'a, str> {
+    match l10n {
+        Some(l10n) => l10n.spec_text(kind, english),
+        None => Cow::Borrowed(english),
+    }
+}
+
+/// The English of spec text drawn translated, for its hover: the guard on
+/// numbers can't catch a flipped comparison or a lost "typical". `None`
+/// where the text is drawn as the library wrote it.
+fn english_hover(shown: &str, english: &str) -> Option<String> {
+    (shown != english).then(|| english.to_string())
+}
+
+/// Put `english` on `response`'s hover, where there is one.
+fn hover_english(response: egui::Response, english: Option<String>) {
+    if let Some(english) = english {
+        response.on_hover_text(english);
+    }
+}
+
 /// An accuracy as the manual prints it: a figure as `±(0.1%+5)`, a word
-/// accuracy ("Not Specified", "Only for reference") as it stands. So does a
-/// response in dB ("3dB"): a bandwidth limit, not a tolerance either side.
-fn accuracy_text(accuracy: &str) -> String {
+/// accuracy ("Not Specified", "Only for reference") as it stands, in
+/// `l10n`'s language ([`spec_text`]). So does a response in dB ("3dB"): a
+/// bandwidth limit, not a tolerance either side.
+fn accuracy_text(l10n: Option<&Localizer>, accuracy: &str) -> String {
     if accuracy.starts_with(|c: char| c.is_ascii_digit()) && !accuracy.ends_with("dB") {
         format!("\u{00B1}({accuracy})")
     } else {
-        accuracy.to_string()
+        spec_text(l10n, TextKind::Band, accuracy).into_owned()
     }
 }
 
 /// Build a compact single-line accuracy string from the spec's accuracy bands.
 /// For a single band: `±(0.1%+5)`. For multiple bands: first band only with its
-/// frequency range appended, e.g. `±(0.1%+5) 45Hz~1kHz`.
+/// frequency range appended, e.g. `±(0.1%+5) 45Hz~1kHz`. In `l10n`'s
+/// language, or as the library wrote it for `None`.
 ///
 /// Returns `None` when the spec carries no accuracy bands — modes such as
 /// continuity and diode have no accuracy figure in the manual and ship an
 /// empty slice.
-fn compact_accuracy_str(spec: &SpecInfo) -> Option<String> {
+fn compact_accuracy_str(l10n: Option<&Localizer>, spec: &SpecInfo) -> Option<String> {
     let (first, rest) = spec.accuracy.split_first()?;
     if rest.is_empty() {
-        Some(accuracy_text(first.accuracy))
+        Some(accuracy_text(l10n, first.accuracy))
     } else {
-        let freq = first.freq_range.unwrap_or("");
-        Some(format!("{} {freq}", accuracy_text(first.accuracy)))
+        let freq = spec_text(l10n, TextKind::Band, first.freq_range.unwrap_or(""));
+        Some(format!("{} {freq}", accuracy_text(l10n, first.accuracy)))
     }
+}
+
+/// The English of the one-line summary's accuracy, for its hover, where the
+/// summary shows it translated; `None` with the accuracy turned off.
+fn summary_hover(l10n: &Localizer, spec: Option<&SpecInfo>, fields: SpecFields) -> Option<String> {
+    let spec = spec.filter(|_| fields.accuracy)?;
+    let english = compact_accuracy_str(None, spec)?;
+    english_hover(&compact_accuracy_str(Some(l10n), spec)?, &english)
 }
 
 /// How a one-line summary captions its figures.
@@ -80,7 +116,7 @@ fn build_spec_parts(
         );
     }
     if fields.accuracy
-        && let Some(accuracy) = compact_accuracy_str(spec)
+        && let Some(accuracy) = compact_accuracy_str(Some(l10n), spec)
     {
         parts.push(
             match captions {
@@ -241,15 +277,26 @@ fn show_specs_body(
             _ if !fields.accuracy => {}
             [] => {}
             [single] => {
-                let accuracy = accuracy_text(single.accuracy);
+                let accuracy = accuracy_text(Some(l10n), single.accuracy);
                 let figure = RichText::new(tr!(l10n, "specs-accuracy", accuracy = &accuracy))
                     .font(egui::FontId::proportional(main_font));
-                match single.freq_range {
+                // The figure and its qualifier, for the hover.
+                let line = |l10n| match single.freq_range {
+                    Some(freq) => format!(
+                        "{}  {}",
+                        accuracy_text(l10n, single.accuracy),
+                        spec_text(l10n, TextKind::Band, freq)
+                    ),
+                    None => accuracy_text(l10n, single.accuracy),
+                };
+                let english = english_hover(&line(Some(l10n)), &line(None));
+                let response = match single.freq_range {
                     // A lone band keeps its qualifier (LPF V's "40Hz~100Hz
                     // (LPF)"), dimmed as in the band list. One label at one
                     // size, so the row keeps a plain label's height and the
                     // two parts share a baseline.
                     Some(freq) => {
+                        let freq = l10n.spec_text(TextKind::Band, freq);
                         let mut job = egui::text::LayoutJob::default();
                         let style = ui.style();
                         let font = egui::FontSelection::Default;
@@ -258,12 +305,11 @@ fn show_specs_body(
                             .font(egui::FontId::proportional(main_font))
                             .color(weak)
                             .append_to(&mut job, style, font, egui::Align::BOTTOM);
-                        ui.label(job);
+                        ui.label(job)
                     }
-                    None => {
-                        ui.label(figure);
-                    }
-                }
+                    None => ui.label(figure),
+                };
+                hover_english(response, english);
             }
             bands => {
                 ui.label(
@@ -271,12 +317,20 @@ fn show_specs_body(
                         .font(egui::FontId::proportional(main_font)),
                 );
                 for band in bands {
-                    let freq = band.freq_range.unwrap_or(crate::NO_DATA);
-                    ui.label(
-                        RichText::new(format!("  {freq}  {}", accuracy_text(band.accuracy)))
+                    let line = |l10n| {
+                        let freq = band.freq_range.map_or(Cow::Borrowed(crate::NO_DATA), |f| {
+                            spec_text(l10n, TextKind::Band, f)
+                        });
+                        format!("{freq}  {}", accuracy_text(l10n, band.accuracy))
+                    };
+                    let shown = line(Some(l10n));
+                    let english = english_hover(&shown, &line(None));
+                    let response = ui.label(
+                        RichText::new(format!("  {shown}"))
                             .font(egui::FontId::proportional(sub_font))
                             .color(weak),
                     );
+                    hover_english(response, english);
                 }
             }
         }
@@ -287,18 +341,24 @@ fn show_specs_body(
         if fields.input_impedance
             && let Some(z) = ms.input_impedance
         {
-            ui.label(
-                RichText::new(tr!(l10n, "specs-input-impedance", impedance = z))
+            let shown = l10n.spec_text(TextKind::Input, z);
+            let english = english_hover(&shown, z);
+            let response = ui.label(
+                RichText::new(tr!(l10n, "specs-input-impedance", impedance = shown))
                     .font(egui::FontId::proportional(main_font)),
             );
+            hover_english(response, english);
         }
         if fields.notes {
             for note in ms.notes {
-                ui.label(
-                    RichText::new(*note)
+                let shown = l10n.spec_text(TextKind::Note, note);
+                let english = english_hover(&shown, note);
+                let response = ui.label(
+                    RichText::new(shown)
                         .font(egui::FontId::proportional(sub_font))
                         .color(weak),
                 );
+                hover_english(response, english);
             }
         }
     }
@@ -327,11 +387,12 @@ pub fn show_specs_compact(
         // The separator's own spaces set the gap before the link.
         ui.spacing_mut().item_spacing.x = 0.0;
         if let Some(line) = summary_line(&parts, "  ", manual_url.is_some()) {
-            ui.label(
+            let response = ui.label(
                 RichText::new(line)
                     .font(egui::FontId::proportional(sub_font))
                     .color(weak),
             );
+            hover_english(response, summary_hover(l10n, spec, fields));
         }
         if let Some(url) = manual_url {
             manual_link(ui, l10n, url, sub_font, weak);
@@ -357,11 +418,12 @@ pub fn show_specs_inline(
         // The separator's own spaces set the gap before the link.
         ui.spacing_mut().item_spacing.x = 0.0;
         if let Some(line) = summary_line(&parts, LINK_SEPARATOR, manual_url.is_some()) {
-            ui.label(
+            let response = ui.label(
                 RichText::new(line)
                     .font(egui::FontId::proportional(font_size))
                     .color(weak),
             );
+            hover_english(response, summary_hover(l10n, spec, fields));
         }
         if let Some(url) = manual_url {
             manual_link(ui, l10n, url, font_size, weak);
@@ -430,6 +492,20 @@ mod tests {
         fields: SpecFields,
         events: Vec<egui::Event>,
     ) -> (Vec<(String, Pos2)>, bool) {
+        let english = crate::l10n::english();
+        panel_frame_in(ctx, &english, spec, expanded, fields, events, 0.0)
+    }
+
+    /// [`panel_frame`] in `l10n`'s language, at `time` seconds.
+    fn panel_frame_in(
+        ctx: &egui::Context,
+        l10n: &Localizer,
+        spec: &SpecInfo,
+        expanded: bool,
+        fields: SpecFields,
+        events: Vec<egui::Event>,
+        time: f64,
+    ) -> (Vec<(String, Pos2)>, bool) {
         fn collect(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {
             match shape {
                 egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.pos)),
@@ -443,13 +519,14 @@ mod tests {
                 vec2(COLUMN_WIDTH, 600.0),
             )),
             events,
+            time: Some(time),
             ..Default::default()
         };
         let mut toggled = false;
         let mut out = ctx.run_ui(input, |ui| {
             toggled = show_specs(
                 ui,
-                &crate::l10n::english(),
+                l10n,
                 Some(spec),
                 Some(&AC_MODE),
                 Some("https://example.com/manual"),
@@ -465,6 +542,157 @@ mod tests {
             collect(&clipped.shape, &mut texts);
         }
         (texts, toggled)
+    }
+
+    /// A French spec text translation: the note and the LPF band keep their
+    /// numbers, the impedance changes its own, and a word accuracy is
+    /// translated.
+    fn french() -> Localizer {
+        use dmm_shared::l10n::{Language, Options, Resource};
+        static FRENCH: Language = Language {
+            id: "fr",
+            native_name: "Français",
+            reviewed: true,
+        };
+        let lib = Resource {
+            locale: "fr",
+            path: "lib.ftl",
+            source: "note-shorted-leads-residual-10-digits = Cordons en court-circuit : \
+                     résidu ≤10 points\n\
+                     input-about-10mohm = Environ 100 MΩ\n\
+                     band-40hz-100hz-lpf = 40 Hz~100 Hz (filtre)\n\
+                     band-only-for-reference = Pour référence\n",
+        };
+        let resources = [crate::l10n::resources(), vec![lib]].concat();
+        Localizer::new(&FRENCH, &resources, &Options::default())
+    }
+
+    const LPF_BAND: &[AccuracyBand] = &[AccuracyBand {
+        freq_range: Some("40Hz~100Hz (LPF)"),
+        accuracy: "3.0%+50",
+    }];
+
+    /// Spec text whose translation keeps its numbers is drawn translated;
+    /// one that changed a number is drawn in English.
+    #[test]
+    fn spec_text_is_drawn_translated_where_its_numbers_hold() {
+        let ctx = crate::app::styled_context();
+        let l10n = french();
+        let (texts, _) = panel_frame_in(
+            &ctx,
+            &l10n,
+            &spec(LPF_BAND),
+            true,
+            SpecFields::default(),
+            Vec::new(),
+            0.0,
+        );
+        let texts: Vec<String> = texts.into_iter().map(|(t, _)| t).collect();
+        for shown in [
+            "Cordons en court-circuit : résidu ≤10 points",
+            "Input Z  About 10M\u{03A9}",
+            "Accuracy  \u{00B1}(3.0%+50)  40 Hz~100 Hz (filtre)",
+        ] {
+            assert!(
+                texts.iter().any(|t| t == shown),
+                "no {shown:?} in {texts:?}"
+            );
+        }
+    }
+
+    /// Where the text drawn differs from the English, the English is on
+    /// hover; where it doesn't, there is no hover.
+    #[test]
+    fn translated_spec_text_has_the_english_on_hover() {
+        let ctx = crate::app::styled_context();
+        let l10n = french();
+        let frame = |events, time| {
+            let (texts, _) = panel_frame_in(
+                &ctx,
+                &l10n,
+                &spec(LPF_BAND),
+                true,
+                SpecFields::default(),
+                events,
+                time,
+            );
+            texts
+        };
+        let texts = frame(Vec::new(), 0.0);
+        let at = |line: &str| {
+            texts
+                .iter()
+                .find(|(text, _)| text == line)
+                .map(|(_, at)| *at + vec2(4.0, 4.0))
+                .unwrap_or_else(|| panic!("no {line:?} in {texts:?}"))
+        };
+        let note = at("Cordons en court-circuit : résidu ≤10 points");
+        let input = at("Input Z  About 10M\u{03A9}");
+        let hover = |pos, start: f64| {
+            let mut texts = Vec::new();
+            // The pointer comes to rest there; the tooltip follows once
+            // it has been still a while.
+            for i in 1..=4 {
+                let events = if i == 1 {
+                    vec![egui::Event::PointerMoved(pos)]
+                } else {
+                    Vec::new()
+                };
+                texts = frame(events, start + f64::from(i));
+            }
+            texts.into_iter().map(|(t, _)| t).collect::<Vec<_>>()
+        };
+        let shown = hover(note, 0.0);
+        assert!(
+            shown.iter().any(|t| t == AC_MODE.notes[0]),
+            "no English note in {shown:?}"
+        );
+        let shown = hover(input, 10.0);
+        assert!(
+            !shown.iter().any(|t| t == "About 10M\u{03A9}"),
+            "an English input drew its English hover: {shown:?}"
+        );
+    }
+
+    /// The one-line summary carries the English of a translated band on
+    /// hover, and English needs none.
+    #[test]
+    fn the_summary_hover_carries_the_english_band() {
+        let fields = SpecFields::default();
+        let l10n = french();
+        // A lone band's summary is its figure alone, nothing translated.
+        assert_eq!(summary_hover(&l10n, Some(&spec(LPF_BAND)), fields), None);
+        const WORD_FIRST: &[AccuracyBand] = &[
+            AccuracyBand {
+                freq_range: Some("10k~100kHz"),
+                accuracy: "Only for reference",
+            },
+            AccuracyBand {
+                freq_range: Some("45~1kHz"),
+                accuracy: "0.6%+30",
+            },
+        ];
+        assert_eq!(
+            compact_accuracy_str(Some(&l10n), &spec(WORD_FIRST)).as_deref(),
+            Some("Pour référence 10k~100kHz")
+        );
+        assert_eq!(
+            summary_hover(&l10n, Some(&spec(WORD_FIRST)), fields).as_deref(),
+            Some("Only for reference 10k~100kHz")
+        );
+        let no_accuracy = SpecFields {
+            accuracy: false,
+            ..fields
+        };
+        assert_eq!(
+            summary_hover(&l10n, Some(&spec(WORD_FIRST)), no_accuracy),
+            None
+        );
+        let english = crate::l10n::english();
+        assert_eq!(
+            summary_hover(&english, Some(&spec(WORD_FIRST)), fields),
+            None
+        );
     }
 
     /// The text the full panel draws for `spec`, unfolded or folded, with
@@ -693,10 +921,6 @@ mod tests {
     /// LPF V's one band holds only from 40Hz to 100Hz; the panel says so.
     #[test]
     fn a_lone_band_keeps_its_qualifier() {
-        const LPF_BAND: &[AccuracyBand] = &[AccuracyBand {
-            freq_range: Some("40Hz~100Hz (LPF)"),
-            accuracy: "3.0%+50",
-        }];
         let texts = panel_texts(&spec(LPF_BAND), true, SpecFields::default());
         assert!(
             texts
@@ -719,7 +943,7 @@ mod tests {
     /// index into it.
     #[test]
     fn empty_accuracy_yields_no_string() {
-        assert_eq!(compact_accuracy_str(&spec(&[])), None);
+        assert_eq!(compact_accuracy_str(None, &spec(&[])), None);
     }
 
     #[test]
@@ -782,7 +1006,7 @@ mod tests {
     #[test]
     fn single_band_has_no_frequency_suffix() {
         assert_eq!(
-            compact_accuracy_str(&spec(DC_BAND)).as_deref(),
+            compact_accuracy_str(None, &spec(DC_BAND)).as_deref(),
             Some("\u{00B1}(0.1%+5)")
         );
     }
@@ -790,22 +1014,22 @@ mod tests {
     #[test]
     fn multi_band_appends_first_frequency_range() {
         assert_eq!(
-            compact_accuracy_str(&spec(AC_BANDS)).as_deref(),
+            compact_accuracy_str(None, &spec(AC_BANDS)).as_deref(),
             Some("\u{00B1}(0.5%+30) 45Hz~1kHz")
         );
     }
 
     #[test]
     fn a_figure_is_wrapped_in_plus_minus() {
-        assert_eq!(accuracy_text("0.4%+30"), "\u{00B1}(0.4%+30)");
-        assert_eq!(accuracy_text("2.5%"), "\u{00B1}(2.5%)");
+        assert_eq!(accuracy_text(None, "0.4%+30"), "\u{00B1}(0.4%+30)");
+        assert_eq!(accuracy_text(None, "2.5%"), "\u{00B1}(2.5%)");
     }
 
     /// The Brymen BM820s manual's "3dB" bounds the frequency response at
     /// the top of a band; a ± would read as a tolerance either side.
     #[test]
     fn a_db_response_stands_as_printed() {
-        assert_eq!(accuracy_text("3dB"), "3dB");
+        assert_eq!(accuracy_text(None, "3dB"), "3dB");
     }
 
     /// "Not Specified", "Only for reference" and "reference only" are words
@@ -813,7 +1037,7 @@ mod tests {
     #[test]
     fn a_word_accuracy_stands_as_printed() {
         for word in ["Not Specified", "Only for reference", "reference only"] {
-            assert_eq!(accuracy_text(word), word);
+            assert_eq!(accuracy_text(None, word), word);
         }
         const WORD_FIRST: &[AccuracyBand] = &[
             AccuracyBand {
@@ -826,7 +1050,7 @@ mod tests {
             },
         ];
         assert_eq!(
-            compact_accuracy_str(&spec(WORD_FIRST)).as_deref(),
+            compact_accuracy_str(None, &spec(WORD_FIRST)).as_deref(),
             Some("Only for reference 10k~100kHz")
         );
     }

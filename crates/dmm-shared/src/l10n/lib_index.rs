@@ -34,10 +34,11 @@ pub const LIB_RESOURCES: &[Resource] = &[
 
 /// Unit symbols, without prefix. With [`PREFIXES`] they are what stays as
 /// it is in every language: a label whose letters are nothing but these
-/// ("200mV", "-40~1000°C", "kΩ") is not translated, and a spec note keeps
+/// ("200mV", "-40~1000°C", "kΩ") is not translated, and a spec text keeps
 /// every number with its unit ([`spec_numbers`]). `°C` and `°F` count as
 /// one symbol each; the Ohm sign is listed beside the Greek capital omega
-/// the library writes, so a translation using either still matches.
+/// the library writes, and [`spec_numbers`] reads it as that omega, so a
+/// translation using either still matches.
 const UNITS: &[&str] = &[
     "V", "A", "Ω", "\u{2126}", "Hz", "F", "S", "W", "VA", "Wh", "Ah", "s", "dB", "dBm", "dBV",
     "°C", "°F",
@@ -46,12 +47,47 @@ const UNITS: &[&str] = &[
 /// The SI prefixes a [`UNITS`] symbol may take, `u` standing in for `µ`.
 const PREFIXES: &[&str] = &["p", "n", "µ", "u", "m", "k", "M", "G"];
 
+/// Time units a spec text writes after a number, beside [`UNITS`]' `s`:
+/// "30 s", "5 min", "2 h". `sec` reads as `s`. Units after a number only,
+/// as [`spec_unit`] reads them: a label of these is still words.
+const TIME_UNITS: &[&str] = &["min", "h", "sec"];
+
+/// What a unit after a number may end in to say which current it is:
+/// "1.5VDC", "3VAC", or as French writes them "V CC", "V CA". A spec text
+/// compares the unit without it, so "1.5VDC" and "1,5 V CC" agree.
+const CURRENT_KINDS: &[&str] = &["DC", "AC", "CC", "CA"];
+
 /// Whether `word` is a unit symbol, with or without an SI prefix.
-fn is_unit(word: &str) -> bool {
+fn is_symbol(word: &str) -> bool {
     UNITS.contains(&word)
         || PREFIXES
             .iter()
             .any(|p| word.strip_prefix(p).is_some_and(|u| UNITS.contains(&u)))
+}
+
+/// The unit `word` is when it follows a number, as a spec text compares
+/// it: a unit symbol with or without an SI prefix, or a time unit
+/// ([`TIME_UNITS`], `sec` read as `s`), less any current kind written onto
+/// it ([`CURRENT_KINDS`]): "mVDC" is `mV`. `None` for any other word.
+fn spec_unit(word: &str) -> Option<&str> {
+    fn unit(w: &str) -> Option<&str> {
+        if w == "sec" {
+            Some("s")
+        } else {
+            (is_symbol(w) || TIME_UNITS.contains(&w)).then_some(w)
+        }
+    }
+    unit(word).or_else(|| {
+        CURRENT_KINDS
+            .iter()
+            .find_map(|k| word.strip_suffix(k).and_then(unit))
+    })
+}
+
+/// Whether `word` is a unit when it follows a number ([`spec_unit`]): the
+/// pseudo-locale leaves such a word as it is written.
+pub(super) fn is_unit(word: &str) -> bool {
+    spec_unit(word).is_some()
 }
 
 /// The runs of letters in `text`, a `°` joining the letters after it.
@@ -60,52 +96,114 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
         .filter(|w| !w.is_empty())
 }
 
-/// Whether every word of `text` is a unit symbol ([`UNITS`]): "200mV",
-/// "4-20mA", "°C". Such a label has nothing to translate, so `lib.ftl`
-/// leaves it out and its lookup falls back to the English. "AC", "Auto" and
-/// "DC V" are words some languages translate, so they are listed.
+/// Whether every word of `text` is a unit symbol ([`UNITS`]) or a bare SI
+/// prefix whose unit comes later: "200mV", "4-20mA", "°C", "10k~100kHz".
+/// Such a label has nothing to translate, so `lib.ftl` leaves it out and its
+/// lookup falls back to the English. "AC", "Auto" and "DC V" are words some
+/// languages translate, so they are listed.
 pub fn is_units_only(text: &str) -> bool {
-    words(text).all(is_unit)
+    words(text).all(|w| is_symbol(w) || PREFIXES.contains(&w))
 }
 
-/// The numbers of `text`, each with the unit symbol or `%` right after it,
-/// spacing dropped: "About 10 MΩ" gives `["10MΩ"]`, the same as
-/// "About 10MΩ". A translated spec note must give the same numbers as its
-/// English (in any order: compare them sorted), or it is not shown.
+/// The kinds of spec text a translation may only show with the English's
+/// numbers ([`Localizer::spec_text`]).
+const GUARDED: [TextKind; 3] = [TextKind::Band, TextKind::Input, TextKind::Note];
+
+/// The numbers of `text`, each with its sign and the unit or `%` right
+/// after it, spacing dropped: "About 10 MΩ" gives `["10MΩ"]`, the same as
+/// "About 10MΩ".
 ///
-/// A number is digits with `.` decimals ("0.44"); a sign or `±` is not part
-/// of it.
-pub fn spec_numbers(text: &str) -> Vec<String> {
+/// - A number is digits with decimals after a `.` or, as many languages
+///   write it, a `,` followed by a digit: "0,6" gives "0.6". No separator
+///   groups thousands: "1 000" is two numbers, "1" and "000".
+/// - A `-`, `−` or `+` right before the digits is its sign when nothing
+///   word-like comes before it: "-40°C", "≈-1.2V" and "> +1.5V" carry one,
+///   while "4-20mA" is a span and "0.5%+3" a sum.
+/// - A `±` belongs to the number after it, spaces allowed ("± 0.5" gives
+///   "±0.5"); one before anything else ("±(0.5%+3)") is a number of its own.
+/// - The unit is the SI symbol or time unit [`spec_unit`] reads: "1.5VDC"
+///   gives "1.5V", as do "1.5 V DC" and "1,5 V CC" (the current's word
+///   after the unit is a word of its own, not compared), and "5 min" gives
+///   "5min", which "5 h" does not.
+/// - The Ohm sign reads as the Greek capital omega.
+fn spec_numbers(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let digit = |i: usize| chars.get(i).is_some_and(char::is_ascii_digit);
     let mut out = Vec::new();
-    let mut rest = text;
-    while let Some(start) = rest.find(|c: char| c.is_ascii_digit()) {
-        rest = &rest[start..];
-        let digits = |s: &str| s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
-        let mut end = digits(rest);
-        // `.` followed by a digit continues the number.
-        while rest[end..].starts_with('.')
-            && rest[end + 1..].starts_with(|c: char| c.is_ascii_digit())
-        {
-            end += 1 + digits(&rest[end + 1..]);
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '±' {
+            let mut j = i + 1;
+            while chars.get(j).is_some_and(|c| c.is_whitespace()) {
+                j += 1;
+            }
+            if !digit(j) {
+                out.push("±".to_string());
+            }
+            i += 1;
+            continue;
         }
-        let mut number = rest[..end].to_string();
-        rest = &rest[end..];
-        let after_space = rest
-            .strip_prefix(|c: char| c.is_whitespace())
-            .unwrap_or(rest);
-        if let Some(r) = after_space.strip_prefix('%') {
+        if !digit(i) {
+            i += 1;
+            continue;
+        }
+        let mut number = String::new();
+        // The sign or ± before the digits, read back past any spaces a
+        // ± may have.
+        let mut back = i;
+        while back > 0 && chars[back - 1].is_whitespace() {
+            back -= 1;
+        }
+        if back > 0 && chars[back - 1] == '±' {
+            number.push('±');
+        } else if i > 0 && matches!(chars[i - 1], '-' | '\u{2212}' | '+') {
+            let spans = i > 1
+                && (chars[i - 2].is_alphanumeric() || matches!(chars[i - 2], '%' | ')' | '.'));
+            if !spans {
+                number.push(if chars[i - 1] == '+' { '+' } else { '-' });
+            }
+        }
+        while digit(i) {
+            number.push(chars[i]);
+            i += 1;
+            // A point or comma followed by a digit continues the number.
+            if matches!(chars.get(i), Some('.' | ',')) && digit(i + 1) {
+                number.push('.');
+                i += 1;
+            }
+        }
+        let mut after = i;
+        while chars.get(after).is_some_and(|c| c.is_whitespace()) {
+            after += 1;
+        }
+        if chars.get(after) == Some(&'%') {
             number.push('%');
-            rest = r;
-        } else if let Some(unit) = words(after_space)
-            .next()
-            .filter(|w| after_space.starts_with(*w) && is_unit(w))
-        {
-            number.push_str(unit);
-            rest = &after_space[unit.len()..];
+            i = after + 1;
+        } else {
+            let rest: String = chars[after..].iter().collect();
+            if let Some((word, unit)) = words(&rest)
+                .next()
+                .filter(|w| rest.starts_with(*w))
+                .and_then(|w| spec_unit(w).map(|u| (w, u)))
+            {
+                number.push_str(&unit.replace('\u{2126}', "Ω"));
+                i = after + word.chars().count();
+            }
         }
         out.push(number);
     }
     out
+}
+
+/// Whether `translated` carries the numbers of `english` ([`spec_numbers`]),
+/// in any order.
+fn same_numbers(english: &str, translated: &str) -> bool {
+    let sorted = |text| {
+        let mut numbers = spec_numbers(text);
+        numbers.sort();
+        numbers
+    };
+    sorted(english) == sorted(translated)
 }
 
 /// The kind an ID names: its prefix before the first `-` that leaves a
@@ -225,11 +323,13 @@ impl Localizer {
     ///
     /// A [`TextKind::Toggle`] state named after a flag (MAX, P-MIN) is that
     /// flag's name ([`Localizer::flag`]): `lib.ftl` lists only on and off.
+    /// Spec notes, inputs and bands go through [`Localizer::spec_text`].
     pub fn label<'a>(&'a self, kind: TextKind, english: &'a str) -> Cow<'a, str> {
         if self.plain_english() {
             return Cow::Borrowed(english);
         }
         let found = match kind {
+            kind if GUARDED.contains(&kind) => return self.spec_text(kind, english),
             TextKind::Mode => self.mode_label(english),
             TextKind::Toggle => Flag::ALL
                 .into_iter()
@@ -240,6 +340,55 @@ impl Localizer {
             kind => self.listed(kind, english),
         };
         found.unwrap_or(Cow::Borrowed(english))
+    }
+
+    /// Spec text `english` of `kind` in this language: a note, an input
+    /// (impedance or overload protection) or an accuracy band.
+    ///
+    /// A translation shows only if it carries the English's numbers, each
+    /// with its sign, ± and unit ([`spec_numbers`]), in any order: one that
+    /// changes, drops or adds a number is shown in English, as is text
+    /// `lib.ftl` doesn't list. Each message is checked once, the first time
+    /// any spec text is asked for, and the verdicts kept. Other kinds are
+    /// [`Localizer::label`]'s.
+    pub fn spec_text<'a>(&'a self, kind: TextKind, english: &'a str) -> Cow<'a, str> {
+        if self.plain_english() || !GUARDED.contains(&kind) {
+            return self.label(kind, english);
+        }
+        index()
+            .labels
+            .get(&kind)
+            .and_then(|ids| ids.get(english))
+            .and_then(|id| self.checked_spec_texts().get(id))
+            .map_or(Cow::Borrowed(english), |t| Cow::Borrowed(t.as_str()))
+    }
+
+    /// Each [`GUARDED`] message's text in this language, by ID, where it
+    /// differs from the English and keeps its numbers.
+    fn checked_spec_texts(&self) -> &HashMap<String, String> {
+        self.spec_texts.get_or_init(|| {
+            let mut out = HashMap::new();
+            for kind in GUARDED {
+                for (english, id) in index().labels.get(&kind).into_iter().flatten() {
+                    let Some(text) = self.lookup(id, &[]) else {
+                        continue;
+                    };
+                    if text == english.as_str() {
+                        continue;
+                    }
+                    if same_numbers(english, &text) {
+                        out.insert(id.clone(), text.into_owned());
+                    } else {
+                        log::warn!(
+                            "l10n: {}: `{id}` changes the numbers of {english:?}: \
+                             showing the English",
+                            self.language.id
+                        );
+                    }
+                }
+            }
+            out
+        })
     }
 
     /// `english`'s own message in this language, `None` when `lib.ftl` lacks
@@ -326,7 +475,7 @@ mod tests {
         );
         assert_eq!(
             spec_numbers("10A continuous; >10A to 20A: 30s max, 5 min cool-down"),
-            ["10A", "10A", "20A", "30s", "5"]
+            ["10A", "10A", "20A", "30s", "5min"]
         );
         assert_eq!(
             spec_numbers("60.00MΩ: tempco 0.6× accuracy/°C @(0°C ~ 18°C or 28°C ~ 45°C)"),
@@ -338,7 +487,7 @@ mod tests {
         );
         assert_eq!(
             spec_numbers("600Ω ref, typical: ACmV -42.22 to -02.22dBm"),
-            ["600Ω", "42.22", "02.22dBm"]
+            ["600Ω", "-42.22", "-02.22dBm"]
         );
         assert_eq!(
             spec_numbers("4mA shows 0 %, 20mA shows 100 %"),
@@ -347,6 +496,87 @@ mod tests {
         // A word that only starts like a unit is not one.
         assert_eq!(spec_numbers("2 digits, 3 Max"), ["2", "3"]);
         assert!(spec_numbers("no numbers. Here").is_empty());
+    }
+
+    #[test]
+    fn spec_numbers_keep_signs_and_plus_minus() {
+        assert_eq!(spec_numbers("-40°C to 0°C"), ["-40°C", "0°C"]);
+        assert_eq!(spec_numbers("−40 °C"), ["-40°C"]);
+        assert_eq!(spec_numbers("Open circuit ≈-1.2V"), ["-1.2V"]);
+        assert_eq!(spec_numbers("> +1.5VDC or < -1.0VDC"), ["+1.5V", "-1.0V"]);
+        assert_eq!(spec_numbers("-40~-10°C"), ["-40", "-10°C"]);
+        assert_eq!(spec_numbers("±0.5% typical"), ["±0.5%"]);
+        assert_eq!(spec_numbers("± 0.5 %"), ["±0.5%"]);
+        assert_eq!(spec_numbers("±(0.5%+3)"), ["±", "0.5%", "3"]);
+        // A dash between numbers is a span, a plus after one a sum.
+        assert_eq!(spec_numbers("4-20mA"), ["4", "20mA"]);
+        assert_eq!(spec_numbers("0.5%+3"), ["0.5%", "3"]);
+        assert_eq!(spec_numbers("T1-T2"), ["1", "2"]);
+    }
+
+    #[test]
+    fn spec_numbers_read_a_decimal_comma_and_the_ohm_sign() {
+        assert_eq!(spec_numbers("0,6× la précision"), ["0.6"]);
+        assert_eq!(spec_numbers("Environ 10 M\u{2126}"), ["10MΩ"]);
+        // A comma before a space separates, and nothing groups thousands.
+        assert_eq!(spec_numbers("60.00mV, 600.0mV"), ["60.00mV", "600.0mV"]);
+        assert_eq!(spec_numbers("1 000V"), ["1", "000V"]);
+    }
+
+    #[test]
+    fn a_translation_must_keep_the_numbers() {
+        let english = "60.00MΩ: tempco 0.6× accuracy/°C @(0°C ~ 18°C or -10°C)";
+        for kept in [
+            "60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou -10 °C)",
+            "(-10°C, 18°C ~ 0°C) 0.6× 60.00MΩ",
+        ] {
+            assert!(same_numbers(english, kept), "{kept}");
+        }
+        for changed in [
+            "60.00MΩ: 0.5× @(0°C ~ 18°C or -10°C)",
+            "60.00MΩ: 0.6× @(0°C ~ 18°C or 10°C)",
+            "60.00MΩ: 0.6× @(0°C ~ 18°C)",
+            "60.00MΩ: 0.6× @(0°C ~ 18°C or -10°C) 2",
+            "60.00kΩ: 0.6× @(0°C ~ 18°C or -10°C)",
+        ] {
+            assert!(!same_numbers(english, changed), "{changed}");
+        }
+        assert!(!same_numbers("±0.5%", "0.5%"));
+        assert!(!same_numbers("1000V", "1 000V"));
+    }
+
+    /// The unit is the SI symbol: a current's DC or AC, run onto it or a
+    /// word after it, is not compared.
+    #[test]
+    fn a_unit_compares_without_its_current() {
+        let english = "> +1.5VDC or < -1.0VDC, 3VAC, 200mVDC";
+        for kept in [
+            "> +1,5 V CC ou < -1,0 V CC, 3 V CA, 200 mV CC",
+            "> +1.5 V DC or < -1.0 V DC, 3 V AC, 200 mV DC",
+            "> +1,5 VCC ou < -1,0 VCC, 3 VCA, 200 mVCC",
+        ] {
+            assert!(same_numbers(english, kept), "{kept}");
+        }
+        assert_eq!(spec_numbers("3 VCA"), ["3V"]);
+        assert!(!same_numbers("3VAC", "3 mV CA"));
+        assert!(!same_numbers("3VAC", "3 A CA"));
+        // A word that only ends like a current is not a unit.
+        assert_eq!(spec_numbers("2 DC"), ["2"]);
+    }
+
+    /// Time units count as units, so a translation can't change one for
+    /// another.
+    #[test]
+    fn time_units_are_units() {
+        assert_eq!(
+            spec_numbers("10min, 2 h, 30 s, 5 ms"),
+            ["10min", "2h", "30s", "5ms"]
+        );
+        assert!(same_numbers("10 min", "10min"));
+        assert!(same_numbers("30 sec", "30 s"));
+        assert!(!same_numbers("10min", "10 h"));
+        assert!(!same_numbers("30 s", "30 ms"));
+        assert!(!same_numbers("10min", "10"));
     }
 
     #[test]
@@ -465,6 +695,106 @@ mod tests {
         assert_eq!(l.label(TextKind::Mode, "AC V peak"), "V CA peak");
         // Text that doesn't come apart stays English whole.
         assert_eq!(l.label(TextKind::Mode, "LPF Nonsense"), "LPF Nonsense");
+    }
+
+    /// A French `lib.ftl` translating spec text: some translations keep
+    /// their English's numbers, some don't.
+    fn french_specs() -> Localizer {
+        let ids = |kind: TextKind, english: &str| index().labels[&kind][english].clone();
+        let note = ids(
+            TextKind::Note,
+            "Lo-Z threshold: > +1.5VDC or < -1.0VDC nominal",
+        );
+        let open = ids(TextKind::Note, "Open circuit ≈-1.2V");
+        let tempco = ids(
+            TextKind::Note,
+            "60.00MΩ: tempco 0.6× accuracy/°C @(0°C ~ 18°C or 28°C ~ 45°C)",
+        );
+        let input = ids(TextKind::Input, "About 10MΩ");
+        let band = ids(TextKind::Band, "In REL state");
+        let lpf = ids(TextKind::Band, "40Hz~100Hz (LPF)");
+        let source = format!(
+            "{note} = Seuil Lo-Z : > 1,5 VCC ou < -1,0 VCC nominal\n\
+             {open} = Circuit ouvert ≈-1,2 V\n\
+             {tempco} = 60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou 28 °C ~ 45 °C)\n\
+             {input} = Environ 10 MΩ\n\
+             {band} = En mode REL\n\
+             {lpf} = 40 Hz~1000 Hz (LPF)\n"
+        );
+        let resources = [
+            LIB_RESOURCES,
+            &[Resource {
+                locale: "fr",
+                path: "lib.ftl",
+                source: Box::leak(source.into_boxed_str()),
+            }],
+        ]
+        .concat();
+        Localizer::new(&FRENCH, &resources, &Options::default())
+    }
+
+    #[test]
+    fn spec_text_shows_a_translation_that_keeps_its_numbers() {
+        let l = french_specs();
+        assert_eq!(
+            l.spec_text(TextKind::Note, "Open circuit ≈-1.2V"),
+            "Circuit ouvert ≈-1,2 V"
+        );
+        assert_eq!(
+            l.spec_text(
+                TextKind::Note,
+                "60.00MΩ: tempco 0.6× accuracy/°C @(0°C ~ 18°C or 28°C ~ 45°C)"
+            ),
+            "60,00 MΩ : coefficient 0,6× la précision/°C @(0 °C ~ 18 °C ou 28 °C ~ 45 °C)"
+        );
+        assert_eq!(l.spec_text(TextKind::Input, "About 10MΩ"), "Environ 10 MΩ");
+        assert_eq!(l.spec_text(TextKind::Band, "In REL state"), "En mode REL");
+        // `label` takes the same guard.
+        assert_eq!(l.label(TextKind::Input, "About 10MΩ"), "Environ 10 MΩ");
+    }
+
+    #[test]
+    fn spec_text_shows_the_english_where_a_number_changed() {
+        let l = french_specs();
+        // The + of +1.5 is gone.
+        let english = "Lo-Z threshold: > +1.5VDC or < -1.0VDC nominal";
+        assert_eq!(l.spec_text(TextKind::Note, english), english);
+        assert_eq!(l.label(TextKind::Note, english), english);
+        // 100Hz became 1000 Hz.
+        assert_eq!(
+            l.spec_text(TextKind::Band, "40Hz~100Hz (LPF)"),
+            "40Hz~100Hz (LPF)"
+        );
+        // Text lib.ftl doesn't list, and untranslated text, stay English.
+        assert_eq!(l.spec_text(TextKind::Band, "45Hz~1kHz"), "45Hz~1kHz");
+        assert_eq!(l.spec_text(TextKind::Input, "1000V"), "1000V");
+    }
+
+    #[test]
+    fn english_spec_text_borrows_its_input() {
+        let l = Localizer::en_us(LIB_RESOURCES);
+        let english = String::from("About 10MΩ");
+        assert!(matches!(
+            l.spec_text(TextKind::Input, &english),
+            Cow::Borrowed(s) if std::ptr::eq(s, english.as_str())
+        ));
+    }
+
+    /// The pseudo-locale keeps numbers and the units after them, so every
+    /// listed spec text passes the guard and shows bracketed.
+    #[test]
+    fn pseudo_spec_text_passes_the_guard() {
+        let options = Options {
+            pseudo: true,
+            ..Options::default()
+        };
+        let l = Localizer::new(&EN_US, LIB_RESOURCES, &options);
+        for kind in GUARDED {
+            for english in index().labels[&kind].keys() {
+                let shown = l.spec_text(kind, english);
+                assert!(shown.starts_with('['), "{kind:?} {english:?}: {shown}");
+            }
+        }
     }
 
     /// A binary that doesn't list `lib.ftl` shows the English, without the

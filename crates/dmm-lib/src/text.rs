@@ -42,6 +42,10 @@ pub enum TextKind {
     Activation,
     /// A specification table's name ("(1) AC Voltage").
     Table,
+    /// A specification row's accuracy band: the condition it holds under
+    /// ("In REL state", "40Hz~100Hz (LPF)") and its accuracy, which a manual
+    /// may give in words ("Not Specified").
+    Band,
     /// A specification table's input impedance or overload protection.
     Input,
     /// A note under a specification table.
@@ -49,7 +53,7 @@ pub enum TextKind {
 }
 
 impl TextKind {
-    pub const ALL: [TextKind; 12] = [
+    pub const ALL: [TextKind; 13] = [
         TextKind::Mode,
         TextKind::Qualifier,
         TextKind::Range,
@@ -60,6 +64,7 @@ impl TextKind {
         TextKind::Model,
         TextKind::Activation,
         TextKind::Table,
+        TextKind::Band,
         TextKind::Input,
         TextKind::Note,
     ];
@@ -77,6 +82,7 @@ impl TextKind {
             TextKind::Model => "model",
             TextKind::Activation => "activation",
             TextKind::Table => "table",
+            TextKind::Band => "band",
             TextKind::Input => "input",
             TextKind::Note => "note",
         }
@@ -112,8 +118,8 @@ mod tests {
     #[test]
     fn all_lists_every_kind() {
         let every = every_kind!(
-            Mode, Qualifier, Range, Aux, Toggle, Key, KeyHover, Model, Activation, Table, Input,
-            Note,
+            Mode, Qualifier, Range, Aux, Toggle, Key, KeyHover, Model, Activation, Table, Band,
+            Input, Note,
         );
         let all: BTreeSet<TextKind> = TextKind::ALL.into_iter().collect();
         assert_eq!(all.len(), TextKind::ALL.len(), "ALL repeats a kind");
@@ -203,6 +209,10 @@ mod list {
                 }
                 for note in mode.notes {
                     out.add(TextKind::Note, *note, id);
+                }
+                for band in table.rows.iter().flat_map(|row| row.spec.accuracy) {
+                    out.add(TextKind::Band, band.freq_range.unwrap_or_default(), id);
+                    out.add(TextKind::Band, band.accuracy, id);
                 }
             }
         }
@@ -336,6 +346,7 @@ mod list {
                 TextKind::Model,
                 TextKind::Key,
                 TextKind::Table,
+                TextKind::Band,
                 TextKind::Input,
                 TextKind::Note,
             ] {
