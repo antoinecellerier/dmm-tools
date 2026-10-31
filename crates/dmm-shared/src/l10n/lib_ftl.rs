@@ -9,7 +9,9 @@
 //! maintainer — edit its English to the library's new text to keep its ID
 //! and translations, or delete it. Comments are rewritten every time.
 
-use super::lib_index::{LibEntry, is_units_only, kind_of_id, lib_entries};
+use super::lib_index::{
+    LibEntry, is_units_only, kind_of_id, lib_entries, split_qualifier, unqualify,
+};
 use dmm_lib::protocol::registry;
 use dmm_lib::text::{TextKind, all_texts};
 use fluent_syntax::ast::{
@@ -40,7 +42,9 @@ shows and is how the app finds it: edit it only to follow a change in the
 library, keeping the ID to keep its translations.
 
 Numbers and unit symbols stay as they are in every language. Labels made of
-nothing else (200mV, kΩ, °C) are not listed: they always show as they are.";
+nothing else (200mV, kΩ, °C) are not listed: they always show as they are.
+Nor are modes made of a qualifier around another mode (LPF AC V): the
+qualifier is listed once.";
 
 /// The `##` comment opening each kind's section: what it is, where it
 /// shows, how to translate it.
@@ -50,6 +54,11 @@ fn section(kind: TextKind) -> &'static str {
             "Measurement modes: beside the reading, in the mode menu, the graph
 and the statistics. Keep each as short as the meter prints it; you may keep
 abbreviations such as DC V, LPF or REL as they are."
+        }
+        TextKind::Qualifier => {
+            "Mode qualifiers: a word around a mode's name for a low-pass filter, a
+held peak or a relative reading, around any of the modes above. $mode is the
+mode, already translated: put it where your language puts it."
         }
         TextKind::Range => {
             "Ranges: beside the reading and in the range menu. Ranges that are a
@@ -137,7 +146,7 @@ fn plan(
         }
         if !wanted_set.contains(&(kind, text)) {
             problems.push(format!(
-                "`{id}` = {text:?}: the library no longer shows this {} text. \
+                "`{id}` = {text:?}: not {} text lib.ftl lists any more. \
                  Edit its English to the library's new text to keep its ID and \
                  translations, or delete it.",
                 kind.name()
@@ -251,11 +260,36 @@ fn slug_of(
 /// What `all_texts` lists that `lib.ftl` carries, with the registry ids of
 /// the devices using each.
 fn wanted() -> BTreeMap<(TextKind, String), BTreeSet<&'static str>> {
-    all_texts()
-        .entries()
-        .filter(|(_, text, _)| !is_units_only(text))
+    let all = all_texts();
+    let of = |kind| {
+        all.entries()
+            .filter(move |(k, _, _)| *k == kind)
+            .map(|(_, text, _)| text)
+    };
+    let modes: HashSet<&str> = of(TextKind::Mode).collect();
+    let qualifiers: Vec<(&str, &str)> = of(TextKind::Qualifier)
+        .filter_map(split_qualifier)
+        .collect();
+    all.entries()
+        .filter(|(kind, text, _)| {
+            !is_units_only(text)
+                && !(*kind == TextKind::Mode && qualified(text, &qualifiers, &modes))
+        })
         .map(|(kind, text, by)| ((kind, text.to_string()), by.clone()))
         .collect()
+}
+
+/// Whether mode `label` is a qualifier around a mode the library lists,
+/// a unit-only one, or another such: what [`Localizer::label`] can take
+/// apart.
+///
+/// [`Localizer::label`]: crate::l10n::Localizer::label
+fn qualified(label: &str, qualifiers: &[(&str, &str)], modes: &HashSet<&str>) -> bool {
+    qualifiers.iter().any(|&q| {
+        unqualify(q, label).is_some_and(|mode| {
+            modes.contains(mode) || is_units_only(mode) || qualified(mode, qualifiers, modes)
+        })
+    })
 }
 
 /// The spec tables each note and input sits under, by name.
@@ -324,16 +358,51 @@ fn render(
                 listing(&names, NAMED_TABLES, "tables", "; ")
             ));
         }
+        let elements = match split_qualifier(&p.text) {
+            Some((before, after)) if p.kind == TextKind::Qualifier => {
+                comment.push("$mode is the mode, already translated.".to_string());
+                qualifier_pattern(before, after)
+            }
+            _ => escape(&p.text),
+        };
         body.push(Entry::Message(Message {
             id: Identifier { name: p.id.clone() },
-            value: Some(Pattern {
-                elements: escape(&p.text),
-            }),
+            value: Some(Pattern { elements }),
             attributes: vec![],
             comment: Some(Comment { content: comment }),
         }));
     }
     fluent_syntax::serializer::serialize(&Resource { body })
+}
+
+/// A qualifier's pattern: `before`, the `$mode` variable, `after`. Both are
+/// a word and a space, which need no escaping; anything else is a library
+/// change this would have to learn.
+fn qualifier_pattern(before: &str, after: &str) -> Vec<PatternElement<String>> {
+    for part in [before, after] {
+        assert!(
+            !part.contains(['{', '}', '\n']),
+            "qualifier text {part:?} needs escaping"
+        );
+    }
+    assert!(!before.starts_with([' ', '[', '*', '.']) && !after.ends_with(' '));
+    let text = |value: &str| {
+        (!value.is_empty()).then(|| PatternElement::TextElement {
+            value: value.to_string(),
+        })
+    };
+    let mode = PatternElement::Placeable {
+        expression: Expression::Inline(InlineExpression::VariableReference {
+            id: Identifier {
+                name: "mode".to_string(),
+            },
+        }),
+    };
+    text(before)
+        .into_iter()
+        .chain([mode])
+        .chain(text(after))
+        .collect()
 }
 
 /// A string literal placeable holding `s`. Literals hold their source form,

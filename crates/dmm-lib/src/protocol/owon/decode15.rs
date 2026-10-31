@@ -23,6 +23,7 @@ use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::unknown_mode;
 use crate::protocol::unrecognised::report_unknown;
+use crate::text::qualify;
 use log::debug;
 use std::borrow::Cow;
 
@@ -346,11 +347,16 @@ fn mode(
     };
     match (status & LPF != 0, status & PEAK != 0) {
         (false, false) => Cow::Borrowed(base),
-        (true, false) => Cow::Owned(format!("LPF {base}")),
-        (false, true) => Cow::Owned(format!("Peak {base}")),
-        (true, true) => Cow::Owned(format!("LPF Peak {base}")),
+        (true, false) => Cow::Owned(qualify(LPF_MODE, base)),
+        (false, true) => Cow::Owned(qualify(PEAK_MODE, base)),
+        (true, true) => Cow::Owned(qualify(LPF_MODE, &qualify(PEAK_MODE, base))),
     }
 }
+
+/// What the LPF and PEAK status bits put around a mode's name
+/// ([`crate::text::TextKind::Qualifier`]).
+const LPF_MODE: &str = "LPF {mode}";
+const PEAK_MODE: &str = "Peak {mode}";
 
 /// The sub-display (spec §10.2-10.5, §10.7). On the VC871 under REL, MAX or
 /// MIN it shows the main display's function, with its own prefix and
@@ -412,6 +418,8 @@ pub(super) fn all_labels(model: &Model, out: &mut crate::text::Labels) {
     use crate::text::TextKind;
     use std::cell::Cell;
     let by = model.id;
+    out.add(TextKind::Qualifier, LPF_MODE, by);
+    out.add(TextKind::Qualifier, PEAK_MODE, by);
     let bits = [OSC, INRUSH, USB, DC, AC, LPF, PEAK];
     let statuses = (0..1u32 << bits.len()).map(|set| {
         (bits.iter().enumerate())

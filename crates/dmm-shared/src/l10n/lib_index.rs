@@ -6,11 +6,16 @@
 //! whose English is the lookup key. Each language's `lib.ftl` translates
 //! those IDs. Labels made only of numbers and unit symbols are left out
 //! ([`is_units_only`]) and always show as the library wrote them.
+//!
+//! A mode label a family builds by putting a qualifier around another mode
+//! ("LPF Peak AC V") is not listed either: the qualifier is, once, as a
+//! message taking the translated mode as `$mode` ([`TextKind::Qualifier`]),
+//! and the lookup takes the label apart ([`Localizer::label`]).
 
-use super::{Localizer, Resource};
-use dmm_lib::text::TextKind;
-use fluent_bundle::FluentResource;
+use super::{Arg, Localizer, Resource};
+use dmm_lib::text::{MODE_SLOT, TextKind};
 use fluent_bundle::concurrent::FluentBundle;
+use fluent_bundle::{FluentArgs, FluentResource};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -55,7 +60,6 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
 /// "4-20mA", "°C". Such a label has nothing to translate, so `lib.ftl`
 /// leaves it out and its lookup falls back to the English. "AC", "Auto" and
 /// "DC V" are words some languages translate, so they are listed.
-#[cfg(test)]
 pub(crate) fn is_units_only(text: &str) -> bool {
     words(text).all(is_unit)
 }
@@ -144,9 +148,14 @@ pub(crate) fn lib_entries(source: &str) -> Vec<LibEntry> {
     bundle.set_use_isolating(false);
     // A repeated ID keeps its first message, as everywhere else.
     let _ = bundle.add_resource(resource);
+    // A qualifier's English is its pattern, the mode slot standing in for
+    // `$mode`.
+    let mut slot = FluentArgs::new();
+    slot.set("mode", MODE_SLOT);
     ids.into_iter()
         .map(|id| {
-            let text = super::format(&bundle, &id, None).map(Cow::into_owned);
+            let args = (kind_of_id(&id) == Some(TextKind::Qualifier)).then_some(&slot);
+            let text = super::format(&bundle, &id, args).map(Cow::into_owned);
             LibEntry {
                 kind: kind_of_id(&id),
                 id,
@@ -156,17 +165,43 @@ pub(crate) fn lib_entries(source: &str) -> Vec<LibEntry> {
         .collect()
 }
 
-/// (kind, English) → message ID, from the embedded en-US `lib.ftl`.
-type Index = HashMap<TextKind, HashMap<String, String>>;
+/// A qualifier pattern's text before and after its mode slot, `None` for
+/// a pattern without one.
+pub(crate) fn split_qualifier(pattern: &str) -> Option<(&str, &str)> {
+    pattern.split_once(MODE_SLOT)
+}
+
+/// The mode `label` puts qualifier `(before, after)` around, `None` when
+/// it doesn't.
+pub(crate) fn unqualify<'t>((before, after): (&str, &str), label: &'t str) -> Option<&'t str> {
+    let mode = label.strip_prefix(before)?.strip_suffix(after)?;
+    (!mode.is_empty()).then_some(mode)
+}
+
+/// What the embedded en-US `lib.ftl` maps English to.
+#[derive(Default)]
+struct Index {
+    /// (kind, English) → message ID.
+    labels: HashMap<TextKind, HashMap<String, String>>,
+    /// Each qualifier's text before and after its mode, with its ID.
+    qualifiers: Vec<(String, String, String)>,
+}
 
 fn index() -> &'static Index {
     static INDEX: OnceLock<Index> = OnceLock::new();
     INDEX.get_or_init(|| {
-        let mut index = Index::new();
+        let mut index = Index::default();
         for entry in lib_entries(LIB_RESOURCES[0].source) {
-            if let (Some(kind), Some(text)) = (entry.kind, entry.text) {
-                index.entry(kind).or_default().insert(text, entry.id);
+            let (Some(kind), Some(text)) = (entry.kind, entry.text) else {
+                continue;
+            };
+            if kind == TextKind::Qualifier
+                && let Some((before, after)) = split_qualifier(&text)
+            {
+                let id = entry.id.clone();
+                index.qualifiers.push((before.into(), after.into(), id));
             }
+            index.labels.entry(kind).or_default().insert(text, entry.id);
         }
         index
     })
@@ -179,15 +214,43 @@ impl Localizer {
     /// English borrows `english` without a lookup. Text `lib.ftl` doesn't
     /// list (unit-only labels, the library's `Unknown(0x..)` fallbacks) and
     /// text this binary has no messages for come back unchanged.
+    ///
+    /// A mode `lib.ftl` lacks is tried as a qualifier around a mode it has,
+    /// or around a unit-only one, which stays as it is: "LPF Peak AC V" is
+    /// the LPF qualifier around the Peak qualifier around "AC V".
     pub fn label<'a>(&'a self, kind: TextKind, english: &'a str) -> Cow<'a, str> {
         if self.plain_english() {
             return Cow::Borrowed(english);
         }
-        index()
-            .get(&kind)
-            .and_then(|by_text| by_text.get(english))
-            .and_then(|id| self.lookup(id, &[]))
-            .unwrap_or(Cow::Borrowed(english))
+        let found = match kind {
+            TextKind::Mode => self.mode_label(english),
+            kind => self.listed(kind, english),
+        };
+        found.unwrap_or(Cow::Borrowed(english))
+    }
+
+    /// `english`'s own message in this language, `None` when `lib.ftl` lacks
+    /// it or this binary has no messages for it.
+    fn listed(&self, kind: TextKind, english: &str) -> Option<Cow<'_, str>> {
+        let id = index().labels.get(&kind)?.get(english)?;
+        self.lookup(id, &[])
+    }
+
+    /// Mode `english` in this language, through qualifiers where it has no
+    /// message of its own; `None` when it doesn't come apart into messages
+    /// and unit-only modes.
+    fn mode_label<'a>(&'a self, english: &'a str) -> Option<Cow<'a, str>> {
+        if let Some(found) = self.listed(TextKind::Mode, english) {
+            return Some(found);
+        }
+        for (before, after, id) in &index().qualifiers {
+            if let Some(mode) = unqualify((before, after), english)
+                && let Some(mode) = self.mode_label(mode)
+            {
+                return self.lookup(id, &[("mode", Arg::from(mode))]);
+            }
+        }
+        is_units_only(english).then_some(Cow::Borrowed(english))
     }
 }
 
@@ -333,6 +396,55 @@ mod tests {
         let pseudo = l.label(TextKind::Mode, "Capacitance");
         assert!(pseudo.starts_with('[') && pseudo.ends_with(']'), "{pseudo}");
         assert_eq!(l.label(TextKind::Range, "200mV"), "200mV");
+    }
+
+    /// A language without its own `lib.ftl`: every lookup goes through the
+    /// messages, en-US's.
+    fn untranslated() -> Localizer {
+        Localizer::new(&FRENCH, LIB_RESOURCES, &Options::default())
+    }
+
+    /// Every label the library lists comes back from the en-US messages as
+    /// the library wrote it, a composed mode through its qualifiers.
+    #[test]
+    fn every_label_reads_back_through_the_messages() {
+        let l = untranslated();
+        let all = dmm_lib::text::all_texts();
+        for (kind, text, _) in all.entries() {
+            if kind == TextKind::Qualifier {
+                continue;
+            }
+            if kind == TextKind::Mode {
+                assert_eq!(l.mode_label(text).as_deref(), Some(text));
+            } else if !is_units_only(text) {
+                assert_eq!(l.listed(kind, text).as_deref(), Some(text));
+            }
+        }
+    }
+
+    #[test]
+    fn qualifiers_translate_once_and_may_move() {
+        let resources = [
+            LIB_RESOURCES,
+            &[Resource {
+                locale: "fr",
+                path: "lib.ftl",
+                source: "mode-ac-v = V CA\nqualifier-lpf-mode = { $mode } filtré\n\
+                         qualifier-peak-mode = { $mode } crête\n",
+            }],
+        ]
+        .concat();
+        let l = Localizer::new(&FRENCH, &resources, &Options::default());
+        assert_eq!(l.label(TextKind::Mode, "LPF AC V"), "V CA filtré");
+        assert_eq!(
+            l.label(TextKind::Mode, "LPF Peak AC V"),
+            "V CA crête filtré"
+        );
+        // A unit-only mode stays; a qualifier this language lacks is English.
+        assert_eq!(l.label(TextKind::Mode, "Peak °C"), "°C crête");
+        assert_eq!(l.label(TextKind::Mode, "AC V peak"), "V CA peak");
+        // Text that doesn't come apart stays English whole.
+        assert_eq!(l.label(TextKind::Mode, "LPF Nonsense"), "LPF Nonsense");
     }
 
     /// A binary that doesn't list `lib.ftl` shows the English, without the

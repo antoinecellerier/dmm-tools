@@ -192,7 +192,7 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 - Implement `Protocol::capture_steps()`, the device's guided verification workflow: a `CaptureStep` per mode, flag state and remote command the device supports (the rules are in Phase 6). Someone without the device can then define exactly what needs verifying, and someone with it can run `capture` without understanding the protocol
 - Where the parser meets data its spec doesn't cover — display text, a mode or range code, an undefined bit, a frame type — call `protocol::unrecognised::report_unknown`, which asks the user for a report once per session; documented values, benign or not, stay silent
 - Write unit tests using `MockTransport` with byte sequences from the RE phase. Golden files wait for a hardware capture ([Golden file tests](development.md#golden-file-tests))
-- List every label the parser can build in the family's `all_labels` (`crates/dmm-lib/src/text.rs` says what goes there), then regenerate `i18n/en-US/lib.ftl` with `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit it ([Translations](development.md#translations))
+- List every label the parser can build in the family's `all_labels`, a word it puts around other modes as one qualifier pattern (`crates/dmm-lib/src/text.rs` says what goes there), then regenerate `i18n/en-US/lib.ftl` with `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit it ([Translations](development.md#translations))
 
 ### Specification data
 

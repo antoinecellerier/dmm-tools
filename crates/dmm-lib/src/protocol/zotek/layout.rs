@@ -13,6 +13,7 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::unknown_mode;
+use crate::text::qualify;
 use log::debug;
 use std::borrow::Cow;
 
@@ -872,13 +873,17 @@ fn coupling_documented(function: Function, coupling: Coupling) -> bool {
     !(function.coupled() && coupling == Coupling::Both)
 }
 
+/// What PEAK puts after a mode's name
+/// ([`crate::text::TextKind::Qualifier`]).
+const PEAK_MODE: &str = "{mode} peak";
+
 /// The mode of a reading in `function`, other than none, with PEAK lit or
 /// not.
 fn mode_name(function: Function, coupling: Coupling, peak: bool) -> Cow<'static, str> {
     // PEAK says the reading is a held peak, not whether a maximum or a
     // minimum (spec §7.2, §11.2).
     if peak && function != Function::Ncv {
-        Cow::Owned(format!("{} peak", function.mode(coupling)))
+        Cow::Owned(qualify(PEAK_MODE, function.mode(coupling)))
     } else {
         Cow::Borrowed(function.mode(coupling))
     }
@@ -898,6 +903,7 @@ const SECONDARY_PERCENT: &str = "Duty";
 pub(super) fn all_labels(layout: &Layout, by: &'static str, out: &mut crate::text::Labels) {
     use crate::text::TextKind;
     let couplings = [Coupling::None, Coupling::Dc, Coupling::Ac, Coupling::Both];
+    out.add(TextKind::Qualifier, PEAK_MODE, by);
     for function in Function::ALL {
         for coupling in couplings {
             if function == Function::None {

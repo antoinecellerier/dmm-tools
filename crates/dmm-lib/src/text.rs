@@ -7,6 +7,11 @@
 //! matters because one English word can be a mode on one meter and a
 //! sub-value on another, and a translator may want different words for each.
 //!
+//! A family that builds a mode label by putting a fixed word around another
+//! mode ("LPF AC V") takes the word from a [`TextKind::Qualifier`] pattern
+//! and lists the pattern, so an app can translate the word once rather than
+//! every combination.
+//!
 //! [`all_texts`] lists every such string, for the app side to keep its
 //! translation catalogue complete. Fallbacks the library builds from bytes it
 //! did not recognise (`Unknown(0x..)`, `range 3`) are not listed: they stay
@@ -18,6 +23,9 @@ pub enum TextKind {
     /// A measurement mode, `Measurement::mode`, and the mode choices a meter
     /// offers ("DC V", "Capacitance").
     Mode,
+    /// A word a family puts around a mode's label, as a pattern with
+    /// [`MODE_SLOT`] for the mode: "LPF {mode}" makes "LPF AC V" of "AC V".
+    Qualifier,
     /// A range, `Measurement::range_label`, and the range choices ("Auto").
     Range,
     /// A sub-value's label, `AuxValue::label` ("Frequency").
@@ -41,8 +49,9 @@ pub enum TextKind {
 }
 
 impl TextKind {
-    pub const ALL: [TextKind; 11] = [
+    pub const ALL: [TextKind; 12] = [
         TextKind::Mode,
+        TextKind::Qualifier,
         TextKind::Range,
         TextKind::Aux,
         TextKind::Toggle,
@@ -59,6 +68,7 @@ impl TextKind {
     pub fn name(self) -> &'static str {
         match self {
             TextKind::Mode => "mode",
+            TextKind::Qualifier => "qualifier",
             TextKind::Range => "range",
             TextKind::Aux => "aux",
             TextKind::Toggle => "toggle",
@@ -70,6 +80,44 @@ impl TextKind {
             TextKind::Input => "input",
             TextKind::Note => "note",
         }
+    }
+}
+
+/// Where a [`TextKind::Qualifier`] pattern puts the mode.
+pub const MODE_SLOT: &str = "{mode}";
+
+/// The mode label qualifier `pattern` makes of `mode`.
+pub(crate) fn qualify(pattern: &str, mode: &str) -> String {
+    pattern.replacen(MODE_SLOT, mode, 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TextKind;
+    use std::collections::BTreeSet;
+
+    /// The kinds named once, as an exhaustive `match` and as a list: a kind
+    /// added to [`TextKind`] fails to compile here until it is named.
+    macro_rules! every_kind {
+        ($($kind:ident),* $(,)?) => {{
+            let _exhaustive = |k: TextKind| match k {
+                $(TextKind::$kind)|* => {}
+            };
+            [$(TextKind::$kind),*]
+        }};
+    }
+
+    /// [`TextKind::ALL`] is kept by hand; a kind it leaves out would get no
+    /// IDs in the generated `lib.ftl`.
+    #[test]
+    fn all_lists_every_kind() {
+        let every = every_kind!(
+            Mode, Qualifier, Range, Aux, Toggle, Key, KeyHover, Model, Activation, Table, Input,
+            Note,
+        );
+        let all: BTreeSet<TextKind> = TextKind::ALL.into_iter().collect();
+        assert_eq!(all.len(), TextKind::ALL.len(), "ALL repeats a kind");
+        assert_eq!(all, every.into_iter().collect());
     }
 }
 
@@ -307,6 +355,24 @@ mod list {
                 .collect();
             for device in registry::DEVICES {
                 assert!(with_modes.contains(device.id), "{}", device.id);
+            }
+        }
+
+        /// Each qualifier is a word around exactly one mode slot.
+        #[test]
+        fn qualifiers_hold_one_mode_slot_and_a_word() {
+            use crate::text::{MODE_SLOT, qualify};
+            let all = all_texts();
+            let qualifiers: Vec<&str> = all
+                .entries()
+                .filter(|(kind, _, _)| *kind == TextKind::Qualifier)
+                .map(|(_, text, _)| text)
+                .collect();
+            assert!(!qualifiers.is_empty());
+            for q in qualifiers {
+                assert_eq!(q.matches(MODE_SLOT).count(), 1, "{q:?}");
+                assert!(q.len() > MODE_SLOT.len(), "{q:?}");
+                assert_eq!(qualify(q, "DC V"), q.replace(MODE_SLOT, "DC V"));
             }
         }
 

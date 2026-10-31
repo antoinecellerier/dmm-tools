@@ -7,6 +7,7 @@ use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{check_len, unknown_mode16};
+use crate::text::qualify;
 use log::debug;
 use std::borrow::Cow;
 use std::sync::OnceLock;
@@ -71,12 +72,12 @@ fn compose_mode_name(mode: u16) -> Cow<'static, str> {
             0x4 => " T2-T1",
             _ => "",
         };
-        let rel = if n0 == 0x2 { " REL" } else { "" };
-        return if arrangement.is_empty() && rel.is_empty() {
+        let name = if arrangement.is_empty() {
             Cow::Borrowed(family)
         } else {
-            Cow::Owned(format!("{family}{arrangement}{rel}"))
+            Cow::Owned(format!("{family}{arrangement}"))
         };
+        return with_rel(name, n0);
     }
 
     let family = match n3 {
@@ -152,13 +153,25 @@ fn compose_mode_name(mode: u16) -> Cow<'static, str> {
         _ => "",
     };
 
-    let rel = if n0 == 0x2 { " REL" } else { "" };
-
-    // When no variant or rel suffix, return the static family string directly
-    if variant.is_empty() && rel.is_empty() {
+    let name = if variant.is_empty() {
         Cow::Borrowed(family)
     } else {
-        Cow::Owned(format!("{family}{variant}{rel}"))
+        Cow::Owned(format!("{family}{variant}"))
+    };
+    with_rel(name, n0)
+}
+
+/// What REL (nibble 0 = 2) puts after a mode word's name
+/// ([`crate::text::TextKind::Qualifier`]). The variants before it are part
+/// of the mode word's name, each a mode of its own.
+const REL_MODE: &str = "{mode} REL";
+
+/// `name` with [`REL_MODE`] when nibble 0 says REL.
+fn with_rel(name: Cow<'static, str>, n0: u16) -> Cow<'static, str> {
+    if n0 == 0x2 {
+        Cow::Owned(qualify(REL_MODE, &name))
+    } else {
+        name
     }
 }
 
@@ -449,6 +462,7 @@ const COMP_LOW: &str = "COMP Low";
 #[cfg(any(test, feature = "test-support"))]
 pub(super) fn all_labels(out: &mut crate::text::Labels, by: &'static str) {
     use crate::text::TextKind;
+    out.add(TextKind::Qualifier, REL_MODE, by);
     for word in mode::known_words() {
         out.add(TextKind::Mode, decode_mode_word(word), by);
         for range in (0..=u8::MAX).filter(|&range| mode::is_known_range(word, range)) {

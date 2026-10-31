@@ -94,6 +94,8 @@ On its first library lookup, `l10n` reads the en-US `lib.ftl` and builds a map f
 
 **Unit-only labels are not listed.** A label whose letters are all unit symbols and SI prefixes, such as "200mV", "-40~1000°C" or "kΩ", has nothing to translate: unit symbols stay as they are. It gets no message, and its lookup returns the English. That leaves out almost every range, and modes such as "mA". Words printed beside a unit, such as "AC", "DC", "Auto" and "REL", are listed, because some languages translate them. The symbol list is in `crates/dmm-shared/src/l10n/lib_index.rs`, which spec notes check their numbers against too.
 
+**Mode qualifiers are translated once.** Some families build a mode by putting a word around another: "LPF" and "Peak" before it on OWON's meters, "peak" after it on ZOTEK's, "REL" after it on the UT181A. Their decoders accept every combination, most of which no real meter shows, and translators shouldn't face each one. The family takes the word from one pattern ("LPF {mode}") and lists it as a qualifier, which `lib.ftl` carries once as a message with a `$mode` variable that a translator may move. The modes it composes are left out. The lookup tries a mode whole, then as a qualifier around a mode it can look up: "LPF Peak AC V" is LPF around Peak around "AC V".
+
 The en-US `lib.ftl` is generated:
 
 - A `test-support` enumerator in dmm-lib lists every string with its kind. Device names and activation steps come from the registry, notes from the spec tables, and labels from a new per-family `all_labels()`.

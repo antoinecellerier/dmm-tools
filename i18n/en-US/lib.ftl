@@ -9,6 +9,8 @@
 ###
 ### Numbers and unit symbols stay as they are in every language. Labels made of
 ### nothing else (200mV, kΩ, °C) are not listed: they always show as they are.
+### Nor are modes made of a qualifier around another mode (LPF AC V): the
+### qualifier is listed once.
 
 
 ## Measurement modes: beside the reading, in the mode menu, the graph
@@ -25,8 +27,6 @@ mode-a-ac = A AC
 mode-a-ac-hz = A AC Hz
 # Used by: UT181A
 mode-a-ac-peak = A AC Peak
-# Used by: UT181A
-mode-a-ac-rel = A AC REL
 # Used by: UT171A/B/C
 mode-a-ac-plus-dc = A AC+DC
 # Used by: UT171A/B/C, UT181A
@@ -34,33 +34,19 @@ mode-a-dc = A DC
 # Used by: UT181A
 mode-a-dc-ac-plus-dc = A DC AC+DC
 # Used by: UT181A
-mode-a-dc-ac-plus-dc-rel = A DC AC+DC REL
-# Used by: UT181A
 mode-a-dc-peak = A DC Peak
-# Used by: UT181A
-mode-a-dc-rel = A DC REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-a-peak = A peak
 # Used by: 42 meters
 mode-ac-a = AC A
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ac-a-peak = AC A peak
 # Used by: 44 meters
 mode-ac-v = AC V
 # Used by: Mock UT61E+
 mode-ac-v-hz = AC V Hz
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ac-v-peak = AC V peak
 # Used by: 121GW
 mode-ac-va = AC VA
 # Used by: 27 meters
 mode-ac-ma = AC mA
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ac-ma-peak = AC mA peak
 # Used by: 23 meters
 mode-ac-mv = AC mV
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ac-mv-peak = AC mV peak
 # Used by: 121GW
 mode-ac-mva = AC mVA
 # Used by: 9 meters
@@ -77,8 +63,6 @@ mode-ac-power-w = AC power W
 mode-ac-power-wh = AC power Wh
 # Used by: 26 meters
 mode-ac-ua = AC µA
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ac-ua-peak = AC µA peak
 # Used by: 121GW
 mode-ac-uva = AC µVA
 # Used by: 16 meters
@@ -107,10 +91,6 @@ mode-capacitance = Capacitance
 mode-capacitance-d = Capacitance D
 # Used by: UT8803
 mode-capacitance-r = Capacitance R
-# Used by: UT181A
-mode-capacitance-rel = Capacitance REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-capacitance-peak = Capacitance peak
 # Used by: 8 meters
 mode-clamp-ac-a = Clamp AC A
 # Used by: 8 meters
@@ -125,26 +105,16 @@ mode-compass = Compass
 mode-continuity = Continuity
 # Used by: UT181A
 mode-continuity-open = Continuity (open)
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-continuity-peak = Continuity peak
 # Used by: 42 meters
 mode-dc-a = DC A
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-dc-a-peak = DC A peak
 # Used by: 44 meters
 mode-dc-v = DC V
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-dc-v-peak = DC V peak
 # Used by: 121GW
 mode-dc-va = DC VA
 # Used by: 28 meters
 mode-dc-ma = DC mA
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-dc-ma-peak = DC mA peak
 # Used by: 27 meters
 mode-dc-mv = DC mV
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-dc-mv-peak = DC mV peak
 # Used by: 121GW
 mode-dc-mva = DC mVA
 # Used by: 9 meters
@@ -161,22 +131,14 @@ mode-dc-power-w = DC power W
 mode-dc-power-wh = DC power Wh
 # Used by: 27 meters
 mode-dc-ua = DC µA
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-dc-ua-peak = DC µA peak
 # Used by: 121GW
 mode-dc-uva = DC µVA
 # Used by: 45 meters
 mode-diode = Diode
 # Used by: UT181A
 mode-diode-alarm = Diode Alarm
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-diode-peak = Diode peak
 # Used by: 44 meters
 mode-duty-pct = Duty %
-# Used by: UT181A
-mode-duty-pct-rel = Duty % REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-duty-pct-peak = Duty % peak
 # Used by: BM829s/BM827s/BM822s/BM821s
 mode-ef = EF
 # Used by: BM788BT/BM787BT
@@ -189,10 +151,6 @@ mode-frequency = Frequency
 mode-hv-ac-v = HV AC V
 # Used by: 9 meters
 mode-hv-dc-v = HV DC V
-# Used by: UT181A
-mode-hz-rel = Hz REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-hz-peak = Hz peak
 # Used by: UT8803
 mode-inductance = Inductance
 # Used by: UT8803
@@ -201,226 +159,6 @@ mode-inductance-q = Inductance Q
 mode-inductance-r = Inductance R
 # Used by: 22 meters
 mode-inrush = Inrush
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-inrush-peak = Inrush peak
-# Used by: 9 meters
-mode-lpf-4-20ma = LPF 4-20mA
-# Used by: 9 meters
-mode-lpf-a = LPF A
-# Used by: 9 meters
-mode-lpf-ac-a = LPF AC A
-# Used by: 9 meters
-mode-lpf-ac-v = LPF AC V
-# Used by: 9 meters
-mode-lpf-ac-power-a = LPF AC power A
-# Used by: 9 meters
-mode-lpf-ac-power-ah = LPF AC power Ah
-# Used by: 9 meters
-mode-lpf-ac-power-v = LPF AC power V
-# Used by: 9 meters
-mode-lpf-ac-power-va = LPF AC power VA
-# Used by: 9 meters
-mode-lpf-ac-power-w = LPF AC power W
-# Used by: 9 meters
-mode-lpf-ac-power-wh = LPF AC power Wh
-# Used by: 9 meters
-mode-lpf-ac-plus-dc-v = LPF AC+DC V
-# Used by: 9 meters
-mode-lpf-angle = LPF Angle
-# Used by: 9 meters
-mode-lpf-capacitance = LPF Capacitance
-# Used by: 9 meters
-mode-lpf-compass = LPF Compass
-# Used by: 9 meters
-mode-lpf-continuity = LPF Continuity
-# Used by: 9 meters
-mode-lpf-dc-a = LPF DC A
-# Used by: 9 meters
-mode-lpf-dc-v = LPF DC V
-# Used by: 9 meters
-mode-lpf-dc-power-a = LPF DC power A
-# Used by: 9 meters
-mode-lpf-dc-power-ah = LPF DC power Ah
-# Used by: 9 meters
-mode-lpf-dc-power-v = LPF DC power V
-# Used by: 9 meters
-mode-lpf-dc-power-va = LPF DC power VA
-# Used by: 9 meters
-mode-lpf-dc-power-w = LPF DC power W
-# Used by: 9 meters
-mode-lpf-dc-power-wh = LPF DC power Wh
-# Used by: 9 meters
-mode-lpf-diode = LPF Diode
-# Used by: 9 meters
-mode-lpf-duty-pct = LPF Duty %
-# Used by: 9 meters
-mode-lpf-hv-ac-v = LPF HV AC V
-# Used by: 9 meters
-mode-lpf-hv-dc-v = LPF HV DC V
-# Used by: 9 meters
-mode-lpf-hz = LPF Hz
-# Used by: 9 meters
-mode-lpf-inrush = LPF Inrush
-# Used by: 9 meters
-mode-lpf-motor = LPF Motor
-# Used by: 9 meters
-mode-lpf-motor-1-2-3 = LPF Motor 1-2-3
-# Used by: 9 meters
-mode-lpf-motor-3-2-1 = LPF Motor 3-2-1
-# Used by: CMS061, CMS101
-mode-lpf-ncv = LPF NCV
-# Used by: 9 meters
-mode-lpf-peak-4-20ma = LPF Peak 4-20mA
-# Used by: 9 meters
-mode-lpf-peak-ac-a = LPF Peak AC A
-# Used by: 9 meters
-mode-lpf-peak-ac-v = LPF Peak AC V
-# Used by: 9 meters
-mode-lpf-peak-ac-power-a = LPF Peak AC power A
-# Used by: 9 meters
-mode-lpf-peak-ac-power-ah = LPF Peak AC power Ah
-# Used by: 9 meters
-mode-lpf-peak-ac-power-v = LPF Peak AC power V
-# Used by: 9 meters
-mode-lpf-peak-ac-power-va = LPF Peak AC power VA
-# Used by: 9 meters
-mode-lpf-peak-ac-power-w = LPF Peak AC power W
-# Used by: 9 meters
-mode-lpf-peak-ac-power-wh = LPF Peak AC power Wh
-# Used by: 9 meters
-mode-lpf-peak-ac-plus-dc-v = LPF Peak AC+DC V
-# Used by: 9 meters
-mode-lpf-peak-angle = LPF Peak Angle
-# Used by: 9 meters
-mode-lpf-peak-capacitance = LPF Peak Capacitance
-# Used by: 9 meters
-mode-lpf-peak-compass = LPF Peak Compass
-# Used by: 9 meters
-mode-lpf-peak-continuity = LPF Peak Continuity
-# Used by: 9 meters
-mode-lpf-peak-dc-a = LPF Peak DC A
-# Used by: 9 meters
-mode-lpf-peak-dc-v = LPF Peak DC V
-# Used by: 9 meters
-mode-lpf-peak-dc-power-a = LPF Peak DC power A
-# Used by: 9 meters
-mode-lpf-peak-dc-power-ah = LPF Peak DC power Ah
-# Used by: 9 meters
-mode-lpf-peak-dc-power-v = LPF Peak DC power V
-# Used by: 9 meters
-mode-lpf-peak-dc-power-va = LPF Peak DC power VA
-# Used by: 9 meters
-mode-lpf-peak-dc-power-w = LPF Peak DC power W
-# Used by: 9 meters
-mode-lpf-peak-dc-power-wh = LPF Peak DC power Wh
-# Used by: 9 meters
-mode-lpf-peak-diode = LPF Peak Diode
-# Used by: 9 meters
-mode-lpf-peak-duty-pct = LPF Peak Duty %
-# Used by: 9 meters
-mode-lpf-peak-hv-ac-v = LPF Peak HV AC V
-# Used by: 9 meters
-mode-lpf-peak-hv-dc-v = LPF Peak HV DC V
-# Used by: 9 meters
-mode-lpf-peak-hz = LPF Peak Hz
-# Used by: 9 meters
-mode-lpf-peak-inrush = LPF Peak Inrush
-# Used by: 9 meters
-mode-lpf-peak-motor = LPF Peak Motor
-# Used by: 9 meters
-mode-lpf-peak-motor-1-2-3 = LPF Peak Motor 1-2-3
-# Used by: 9 meters
-mode-lpf-peak-motor-3-2-1 = LPF Peak Motor 3-2-1
-# Used by: CMS061, CMS101
-mode-lpf-peak-ncv = LPF Peak NCV
-# Used by: 9 meters
-mode-lpf-peak-power-a = LPF Peak Power A
-# Used by: 9 meters
-mode-lpf-peak-power-ah = LPF Peak Power Ah
-# Used by: 9 meters
-mode-lpf-peak-power-v = LPF Peak Power V
-# Used by: 9 meters
-mode-lpf-peak-power-va = LPF Peak Power VA
-# Used by: 9 meters
-mode-lpf-peak-power-w = LPF Peak Power W
-# Used by: 9 meters
-mode-lpf-peak-power-wh = LPF Peak Power Wh
-# Used by: 9 meters
-mode-lpf-peak-power-factor = LPF Peak Power factor
-# Used by: 9 meters
-mode-lpf-peak-scope = LPF Peak Scope
-# Used by: 9 meters
-mode-lpf-peak-solar = LPF Peak Solar
-# Used by: 9 meters
-mode-lpf-peak-time = LPF Peak Time
-# Used by: 9 meters
-mode-lpf-peak-usb-power-a = LPF Peak USB power A
-# Used by: 9 meters
-mode-lpf-peak-usb-power-ah = LPF Peak USB power Ah
-# Used by: 9 meters
-mode-lpf-peak-usb-power-v = LPF Peak USB power V
-# Used by: 9 meters
-mode-lpf-peak-usb-power-va = LPF Peak USB power VA
-# Used by: 9 meters
-mode-lpf-peak-usb-power-w = LPF Peak USB power W
-# Used by: 9 meters
-mode-lpf-peak-usb-power-wh = LPF Peak USB power Wh
-# Used by: 9 meters
-mode-lpf-peak-hfe = LPF Peak hFE
-# Used by: 9 meters
-mode-lpf-peak-degc = LPF Peak °C
-# Used by: 9 meters
-mode-lpf-peak-degf = LPF Peak °F
-# Used by: 9 meters
-mode-lpf-peak-ohm = LPF Peak Ω
-# Used by: 9 meters
-mode-lpf-power-a = LPF Power A
-# Used by: 9 meters
-mode-lpf-power-ah = LPF Power Ah
-# Used by: 9 meters
-mode-lpf-power-v = LPF Power V
-# Used by: 9 meters
-mode-lpf-power-va = LPF Power VA
-# Used by: 9 meters
-mode-lpf-power-w = LPF Power W
-# Used by: 9 meters
-mode-lpf-power-wh = LPF Power Wh
-# Used by: 9 meters
-mode-lpf-power-factor = LPF Power factor
-# Used by: 9 meters
-mode-lpf-scope = LPF Scope
-# Used by: 9 meters
-mode-lpf-solar = LPF Solar
-# Used by: 9 meters
-mode-lpf-time = LPF Time
-# Used by: 9 meters
-mode-lpf-usb-power-a = LPF USB power A
-# Used by: 9 meters
-mode-lpf-usb-power-ah = LPF USB power Ah
-# Used by: 9 meters
-mode-lpf-usb-power-v = LPF USB power V
-# Used by: 9 meters
-mode-lpf-usb-power-va = LPF USB power VA
-# Used by: 9 meters
-mode-lpf-usb-power-w = LPF USB power W
-# Used by: 9 meters
-mode-lpf-usb-power-wh = LPF USB power Wh
-# Used by: 9 meters
-mode-lpf-v = LPF V
-# Used by: 9 meters
-mode-lpf-hfe = LPF hFE
-# Used by: 121GW
-mode-lpf-ma = LPF mA
-# Used by: 121GW
-mode-lpf-mv = LPF mV
-# Used by: 9 meters
-mode-lpf-degc = LPF °C
-# Used by: 9 meters
-mode-lpf-degf = LPF °F
-# Used by: 121GW
-mode-lpf-ua = LPF µA
-# Used by: 9 meters
-mode-lpf-ohm = LPF Ω
 # Used by: BM788BT/BM787BT
 mode-line-hz = Line Hz
 # Used by: 8 meters
@@ -445,110 +183,6 @@ mode-motor-1-2-3 = Motor 1-2-3
 mode-motor-3-2-1 = Motor 3-2-1
 # Used by: 20 meters
 mode-ncv = NCV
-# Used by: 9 meters
-mode-peak-4-20ma = Peak 4-20mA
-# Used by: 9 meters
-mode-peak-ac-a = Peak AC A
-# Used by: 9 meters
-mode-peak-ac-v = Peak AC V
-# Used by: 9 meters
-mode-peak-ac-power-a = Peak AC power A
-# Used by: 9 meters
-mode-peak-ac-power-ah = Peak AC power Ah
-# Used by: 9 meters
-mode-peak-ac-power-v = Peak AC power V
-# Used by: 9 meters
-mode-peak-ac-power-va = Peak AC power VA
-# Used by: 9 meters
-mode-peak-ac-power-w = Peak AC power W
-# Used by: 9 meters
-mode-peak-ac-power-wh = Peak AC power Wh
-# Used by: 9 meters
-mode-peak-ac-plus-dc-v = Peak AC+DC V
-# Used by: 9 meters
-mode-peak-angle = Peak Angle
-# Used by: 9 meters
-mode-peak-capacitance = Peak Capacitance
-# Used by: 9 meters
-mode-peak-compass = Peak Compass
-# Used by: 9 meters
-mode-peak-continuity = Peak Continuity
-# Used by: 9 meters
-mode-peak-dc-a = Peak DC A
-# Used by: 9 meters
-mode-peak-dc-v = Peak DC V
-# Used by: 9 meters
-mode-peak-dc-power-a = Peak DC power A
-# Used by: 9 meters
-mode-peak-dc-power-ah = Peak DC power Ah
-# Used by: 9 meters
-mode-peak-dc-power-v = Peak DC power V
-# Used by: 9 meters
-mode-peak-dc-power-va = Peak DC power VA
-# Used by: 9 meters
-mode-peak-dc-power-w = Peak DC power W
-# Used by: 9 meters
-mode-peak-dc-power-wh = Peak DC power Wh
-# Used by: 9 meters
-mode-peak-diode = Peak Diode
-# Used by: 9 meters
-mode-peak-duty-pct = Peak Duty %
-# Used by: 9 meters
-mode-peak-hv-ac-v = Peak HV AC V
-# Used by: 9 meters
-mode-peak-hv-dc-v = Peak HV DC V
-# Used by: 9 meters
-mode-peak-hz = Peak Hz
-# Used by: 9 meters
-mode-peak-inrush = Peak Inrush
-# Used by: 9 meters
-mode-peak-motor = Peak Motor
-# Used by: 9 meters
-mode-peak-motor-1-2-3 = Peak Motor 1-2-3
-# Used by: 9 meters
-mode-peak-motor-3-2-1 = Peak Motor 3-2-1
-# Used by: CMS061, CMS101
-mode-peak-ncv = Peak NCV
-# Used by: 9 meters
-mode-peak-power-a = Peak Power A
-# Used by: 9 meters
-mode-peak-power-ah = Peak Power Ah
-# Used by: 9 meters
-mode-peak-power-v = Peak Power V
-# Used by: 9 meters
-mode-peak-power-va = Peak Power VA
-# Used by: 9 meters
-mode-peak-power-w = Peak Power W
-# Used by: 9 meters
-mode-peak-power-wh = Peak Power Wh
-# Used by: 9 meters
-mode-peak-power-factor = Peak Power factor
-# Used by: 9 meters
-mode-peak-scope = Peak Scope
-# Used by: 9 meters
-mode-peak-solar = Peak Solar
-# Used by: 9 meters
-mode-peak-time = Peak Time
-# Used by: 9 meters
-mode-peak-usb-power-a = Peak USB power A
-# Used by: 9 meters
-mode-peak-usb-power-ah = Peak USB power Ah
-# Used by: 9 meters
-mode-peak-usb-power-v = Peak USB power V
-# Used by: 9 meters
-mode-peak-usb-power-va = Peak USB power VA
-# Used by: 9 meters
-mode-peak-usb-power-w = Peak USB power W
-# Used by: 9 meters
-mode-peak-usb-power-wh = Peak USB power Wh
-# Used by: 9 meters
-mode-peak-hfe = Peak hFE
-# Used by: 9 meters
-mode-peak-degc = Peak °C
-# Used by: 9 meters
-mode-peak-degf = Peak °F
-# Used by: 9 meters
-mode-peak-ohm = Peak Ω
 # Used by: UT71A/B, UT71C/D/E, UT804, VC920/VC940/VC960
 mode-power = Power
 # Used by: 9 meters
@@ -567,8 +201,6 @@ mode-power-wh = Power Wh
 mode-power-factor = Power factor
 # Used by: 121GW, UT181A
 mode-pulse-width = Pulse Width
-# Used by: UT181A
-mode-pulse-width-rel = Pulse Width REL
 # Used by: BM525s/BM521s
 mode-recall = Recall
 # Used by: UT8802, UT8803
@@ -616,19 +248,11 @@ mode-v-ac-hz = V AC Hz
 # Used by: UT181A
 mode-v-ac-lpf = V AC LPF
 # Used by: UT181A
-mode-v-ac-lpf-rel = V AC LPF REL
-# Used by: UT181A
 mode-v-ac-peak = V AC Peak
-# Used by: UT181A
-mode-v-ac-rel = V AC REL
 # Used by: UT181A
 mode-v-ac-dbv = V AC dBV
 # Used by: UT181A
-mode-v-ac-dbv-rel = V AC dBV REL
-# Used by: UT181A
 mode-v-ac-dbm = V AC dBm
-# Used by: UT181A
-mode-v-ac-dbm-rel = V AC dBm REL
 # Used by: UT171A/B/C
 mode-v-ac-plus-dc = V AC+DC
 # Used by: UT171A/B/C, UT181A
@@ -636,13 +260,7 @@ mode-v-dc = V DC
 # Used by: UT181A
 mode-v-dc-ac-plus-dc = V DC AC+DC
 # Used by: UT181A
-mode-v-dc-ac-plus-dc-rel = V DC AC+DC REL
-# Used by: UT181A
 mode-v-dc-peak = V DC Peak
-# Used by: UT181A
-mode-v-dc-rel = V DC REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-v-peak = V peak
 # Used by: UT171A/B/C
 mode-vfc = VFC
 # Used by: BM788BT/BM787BT, BM869s/BM867s
@@ -659,8 +277,6 @@ mode-ma-ac = mA AC
 mode-ma-ac-hz = mA AC Hz
 # Used by: UT181A
 mode-ma-ac-peak = mA AC Peak
-# Used by: UT181A
-mode-ma-ac-rel = mA AC REL
 # Used by: UT171A/B/C
 mode-ma-ac-plus-dc = mA AC+DC
 # Used by: UT171A/B/C, UT181A
@@ -668,25 +284,15 @@ mode-ma-dc = mA DC
 # Used by: UT181A
 mode-ma-dc-ac-plus-dc = mA DC AC+DC
 # Used by: UT181A
-mode-ma-dc-ac-plus-dc-rel = mA DC AC+DC REL
-# Used by: UT181A
 mode-ma-dc-peak = mA DC Peak
-# Used by: UT181A
-mode-ma-dc-rel = mA DC REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ma-peak = mA peak
 # Used by: UT171A/B/C, UT181A
 mode-mv-ac = mV AC
 # Used by: UT181A
 mode-mv-ac-ac-plus-dc = mV AC AC+DC
 # Used by: UT181A
-mode-mv-ac-ac-plus-dc-rel = mV AC AC+DC REL
-# Used by: UT181A
 mode-mv-ac-hz = mV AC Hz
 # Used by: UT181A
 mode-mv-ac-peak = mV AC Peak
-# Used by: UT181A
-mode-mv-ac-rel = mV AC REL
 # Used by: UT171A/B/C
 mode-mv-ac-plus-dc = mV AC+DC
 # Used by: UT171A/B/C, UT181A
@@ -694,43 +300,23 @@ mode-mv-dc = mV DC
 # Used by: UT181A
 mode-mv-dc-peak = mV DC Peak
 # Used by: UT181A
-mode-mv-dc-rel = mV DC REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-mv-peak = mV peak
-# Used by: UT181A
-mode-ns-rel = nS REL
-# Used by: UT181A
-mode-degc-rel = °C REL
-# Used by: UT181A
 mode-degc-t1-t2 = °C T1-T2
 # Used by: UT181A
 mode-degc-t2 = °C T2
 # Used by: UT181A
-mode-degc-t2-rel = °C T2 REL
-# Used by: UT181A
 mode-degc-t2-t1 = °C T2-T1
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-degc-peak = °C peak
-# Used by: UT181A
-mode-degf-rel = °F REL
 # Used by: UT181A
 mode-degf-t1-t2 = °F T1-T2
 # Used by: UT181A
 mode-degf-t2 = °F T2
 # Used by: UT181A
-mode-degf-t2-rel = °F T2 REL
-# Used by: UT181A
 mode-degf-t2-t1 = °F T2-T1
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-degf-peak = °F peak
 # Used by: UT171A/B/C, UT181A
 mode-ua-ac = µA AC
 # Used by: UT181A
 mode-ua-ac-hz = µA AC Hz
 # Used by: UT181A
 mode-ua-ac-peak = µA AC Peak
-# Used by: UT181A
-mode-ua-ac-rel = µA AC REL
 # Used by: UT171A/B/C
 mode-ua-ac-plus-dc = µA AC+DC
 # Used by: UT171A/B/C, UT181A
@@ -738,17 +324,24 @@ mode-ua-dc = µA DC
 # Used by: UT181A
 mode-ua-dc-ac-plus-dc = µA DC AC+DC
 # Used by: UT181A
-mode-ua-dc-ac-plus-dc-rel = µA DC AC+DC REL
-# Used by: UT181A
 mode-ua-dc-peak = µA DC Peak
+
+## Mode qualifiers: a word around a mode's name for a low-pass filter, a
+## held peak or a relative reading, around any of the modes above. $mode is the
+## mode, already translated: put it where your language puts it.
+
+# Used by: 9 meters
+# $mode is the mode, already translated.
+qualifier-lpf-mode = LPF { $mode }
+# Used by: 9 meters
+# $mode is the mode, already translated.
+qualifier-peak-mode = Peak { $mode }
 # Used by: UT181A
-mode-ua-dc-rel = µA DC REL
+# $mode is the mode, already translated.
+qualifier-mode-rel = { $mode } REL
 # Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ua-peak = µA peak
-# Used by: UT181A
-mode-ohm-rel = Ω REL
-# Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-mode-ohm-peak = Ω peak
+# $mode is the mode, already translated.
+qualifier-mode-peak = { $mode } peak
 
 ## Ranges: beside the reading and in the range menu. Ranges that are a
 ## number and a unit only are not listed.
