@@ -23,6 +23,7 @@ mod lang;
 #[cfg(test)]
 mod lib_ftl;
 mod lib_index;
+mod lib_names;
 mod pseudo;
 
 pub use lang::{EN_US, Language, find, languages, resolve};

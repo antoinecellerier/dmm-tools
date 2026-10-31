@@ -663,11 +663,14 @@ mod tests {
     use super::*;
 
     /// Every message this crate looks up exists in en-US with the variables
-    /// it is given, and every message in `shared.ftl` is used.
+    /// it is given, and every message in its hand-written files is used.
+    /// The generated `lib.ftl` is looked up by text, not by `tr!`.
     #[test]
     fn the_shared_messages_match_their_uses() {
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let problems = crate::l10n::check::check(&src, RESOURCES, &["shared.ftl"]);
+        let resources = [RESOURCES, crate::l10n::LIB_RESOURCES].concat();
+        let owned = ["shared.ftl", "lib-names.ftl"];
+        let problems = crate::l10n::check::check(&src, &resources, &owned);
         assert!(problems.is_empty(), "{problems:#?}");
     }
 

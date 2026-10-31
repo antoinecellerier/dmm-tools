@@ -18,7 +18,10 @@ use std::sync::OnceLock;
 /// The library's text: the generated `lib.ftl` and the hand-written
 /// `lib-names.ftl`, in every language the binaries ship. A binary that draws
 /// library text lists these with its own resources.
-pub const LIB_RESOURCES: &[Resource] = &[crate::ftl!("en-US", "lib.ftl")];
+pub const LIB_RESOURCES: &[Resource] = &[
+    crate::ftl!("en-US", "lib.ftl"),
+    crate::ftl!("en-US", "lib-names.ftl"),
+];
 
 /// Unit symbols, without prefix. With [`PREFIXES`] they are what stays as
 /// it is in every language: a label whose letters are nothing but these
