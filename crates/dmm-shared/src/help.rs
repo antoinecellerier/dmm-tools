@@ -394,6 +394,16 @@ impl LinksSearched<'_> {
     }
 }
 
+/// The title for a link where detection ran and no meter answered it.
+///
+/// No full stop, like [`LinksSearched::not_found_title`]. Not the same
+/// claim as [`NO_RESPONSE`]: here nothing was identified, there the meter in
+/// use has gone quiet.
+pub const NO_METER_ANSWERED: &str = "No meter answered";
+
+/// The title for a meter that was picked or found and is not answering.
+pub const NO_RESPONSE: &str = "No response from meter";
+
 fn usb_section() -> SetupSection {
     SetupSection {
         link: USB_CABLE,

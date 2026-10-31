@@ -424,7 +424,7 @@ impl App {
             // meter's fit cache keys on.
             Some(notice(
                 NoticeKind::NotIdentified,
-                "No meter answered".to_string(),
+                dmm_shared::help::NO_METER_ANSWERED.to_string(),
                 help.clone(),
             ))
         } else {
@@ -450,13 +450,13 @@ impl App {
                     meter.display_name(),
                     meter.device.activation_instructions
                 ),
-                None => "No meter answered \u{2014} switch on the meter's data \n\
-                         transmission, or pick the model in Settings (\u{2699})."
+                None => "Switch on the meter's data transmission, \n\
+                         or pick the model in Settings (\u{2699})."
                     .to_string(),
             };
             Some(notice(
                 NoticeKind::NoResponse,
-                "No response from meter".to_string(),
+                dmm_shared::help::NO_RESPONSE.to_string(),
                 instructions,
             ))
         }

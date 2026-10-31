@@ -10,9 +10,9 @@ use std::sync::OnceLock;
 /// Print a "no response" warning with device-specific activation instructions.
 pub(crate) fn print_no_response_help(device: &'static SelectableDevice) {
     eprintln!(
-        "{} No response from meter. Check that it is the {} and that data \
-         transmission is enabled.",
+        "{} {}. Check that it is the {} and that data transmission is enabled.",
         style("Warning:").yellow(),
+        dmm_shared::help::NO_RESPONSE,
         meter_name(device),
     );
     print_picked();
@@ -403,7 +403,8 @@ fn open_error_help(
             eprintln!(
                 "{}",
                 style(format!(
-                    "No meter answered over the {}.",
+                    "{} over the {}.",
+                    dmm_shared::help::NO_METER_ANSWERED,
                     dmm_lib::transport::bridge_link_name(bridge, built_in_radio)
                 ))
                 .yellow()

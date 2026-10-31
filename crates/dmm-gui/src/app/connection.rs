@@ -57,8 +57,12 @@ impl std::fmt::Display for RemoteCommand {
 const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 
 /// What the UI records as the failure once that threshold is crossed.
-pub(super) const NO_RESPONSE: &str = "No response from meter \u{2014} check device selection and \
-                                      data transmission";
+pub(super) fn no_response() -> String {
+    format!(
+        "{} \u{2014} check device selection and data transmission",
+        dmm_shared::help::NO_RESPONSE
+    )
+}
 
 /// How often a paused thread wakes to look for work.
 ///
