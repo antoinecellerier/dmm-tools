@@ -31,10 +31,14 @@ impl App {
         }
 
         let version = env!("CARGO_PKG_VERSION");
+        // The title is the only text of the window's own: the notes are the
+        // changelog, in English. Built here in the root each frame, it
+        // follows the app's language, so the window's closure needs no
+        // localizer.
         let title = if version.contains("-dev") {
-            "What's New (Unreleased)".to_string()
+            dmm_shared::tr!(self.l10n, "whats-new-title-unreleased").into_owned()
         } else {
-            format!("What's New in v{version}")
+            dmm_shared::tr!(self.l10n, "whats-new-title", version = version).into_owned()
         };
 
         let closed = Arc::clone(&self.whats_new.closed);

@@ -1,7 +1,7 @@
 ### The top bar: the meter's name and the connection buttons on the left,
 ### the connection status in the middle, and the version, Help & Feedback,
 ### shortcuts and settings buttons on the right
-### (docs/images/gui-main.png).
+### (assets/gui-wide-layout.webp).
 ###
 ### The bar is one row on a wide window: keep these short. $keys is a
 ### keyboard shortcut as this computer writes it, e.g. Ctrl+O or ⌘O.

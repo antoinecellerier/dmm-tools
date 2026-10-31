@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
@@ -9,9 +11,9 @@ use crate::app::App;
 /// A context key's tooltip: like every remote button's, it promises a press
 /// and nothing more — the key's own words when the meter has no key of that
 /// name to press.
-fn context_key_hover(key: &dmm_lib::protocol::MeterKey) -> String {
+fn context_key_hover(l10n: &Localizer, key: &dmm_lib::protocol::MeterKey) -> String {
     key.hover.map_or_else(
-        || format!("Press the meter's {} key", key.label),
+        || tr!(l10n, "remote-press-key", key = key.label).into_owned(),
         str::to_string,
     )
 }
@@ -246,6 +248,8 @@ impl App {
         };
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         let active_color = tc.accent();
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
 
         // Collected rather than acted on inside the closure, which holds
         // `has_cmd`'s borrow of `self`.
@@ -267,21 +271,16 @@ impl App {
             // Simple toggle commands: label, active flag, command, tooltip.
             // Tooltips are phrased to be device-agnostic — they describe
             // the generic DMM behavior, not model-specific details.
-            for &(label, active, cmd, tooltip) in &[
-                ("HOLD", hold, "hold", "Freeze the current reading"),
-                (
-                    "REL",
-                    rel,
-                    "rel",
-                    "Show readings relative to the current value",
-                ),
+            for (label, active, cmd, tooltip) in [
+                ("HOLD", hold, "hold", tr!(l10n, "remote-hold.hover")),
+                ("REL", rel, "rel", tr!(l10n, "remote-rel.hover")),
                 (
                     "RANGE",
                     manual_range,
                     "range",
-                    "Press RANGE (manual range, one step)",
+                    tr!(l10n, "remote-range.hover"),
                 ),
-                ("AUTO", auto, "auto", "Return the meter to auto-range"),
+                ("AUTO", auto, "auto", tr!(l10n, "remote-auto.hover")),
             ] {
                 if !has_cmd(cmd) {
                     continue;
@@ -302,20 +301,20 @@ impl App {
             // MIN/MAX and Peak: clicking always cycles (never exits), matching
             // the real device's short-press behavior. A separate "x" button
             // exits the mode (like the real device's long-press).
-            for &(label, active, cycle_cmd, exit_cmd, tooltip) in &[
+            for (label, active, cycle_cmd, exit_cmd, tooltip) in [
                 (
                     "MIN/MAX",
                     min_max,
                     "minmax",
                     "exit_minmax",
-                    "Record minimum, maximum, and average readings — click to cycle, × to exit",
+                    tr!(l10n, "remote-min-max.hover"),
                 ),
                 (
                     "PEAK",
                     peak,
                     "peak",
                     "exit_peak",
-                    "Capture peak minimum and maximum — click to cycle, × to exit",
+                    tr!(l10n, "remote-peak.hover"),
                 ),
             ] {
                 if !has_cmd(cycle_cmd) {
@@ -334,11 +333,10 @@ impl App {
                         .font(egui::FontId::proportional(font_size * 0.8))
                         .color(active_color);
                     let x_btn = egui::Button::new(x_text).min_size(egui::Vec2::ZERO);
-                    let exit_label = format!("Exit {label} mode");
                     let x_resp = ui
                         .add(x_btn)
-                        .on_hover_text(exit_label.clone())
-                        .a11y_label(&exit_label);
+                        .on_hover_text(tr!(l10n, "remote-exit.hover", mode = label))
+                        .a11y_label(&tr!(l10n, "remote-exit.a11y", mode = label));
                     if x_resp.clicked() {
                         self.send_command(exit_cmd);
                     }
@@ -356,7 +354,7 @@ impl App {
                 let text = RichText::new(key.label).font(egui::FontId::proportional(font_size));
                 if ui
                     .add(egui::Button::new(text))
-                    .on_hover_text(context_key_hover(key))
+                    .on_hover_text(context_key_hover(l10n, key))
                     .clicked()
                 {
                     self.send_command(key.command);
@@ -365,13 +363,9 @@ impl App {
             }
 
             // Non-toggle commands
-            for &(label, cmd, tooltip) in &[
-                (
-                    "SELECT",
-                    "select",
-                    "Cycle through the secondary functions of the current dial position",
-                ),
-                ("LIGHT", "light", "Toggle the meter's backlight"),
+            for (label, cmd, tooltip) in [
+                ("SELECT", "select", tr!(l10n, "remote-select.hover")),
+                ("LIGHT", "light", tr!(l10n, "remote-light.hover")),
             ] {
                 if !has_cmd(cmd) {
                     continue;
@@ -618,7 +612,7 @@ mod tests {
     #[test]
     fn a_context_key_tooltip_says_how_the_meter_does_it() {
         assert_eq!(
-            super::context_key_hover(&ZERO_IN_FARADS[0]),
+            super::context_key_hover(&crate::l10n::english(), &ZERO_IN_FARADS[0]),
             "Press the meter's ZERO key"
         );
         let long_press = dmm_lib::protocol::MeterKey {
@@ -626,7 +620,7 @@ mod tests {
             ..ZERO_IN_FARADS[0]
         };
         assert_eq!(
-            super::context_key_hover(&long_press),
+            super::context_key_hover(&crate::l10n::english(), &long_press),
             "Hold the meter's REL key"
         );
     }

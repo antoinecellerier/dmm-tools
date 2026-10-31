@@ -1,4 +1,5 @@
-### The graph (docs/images/gui-main.png): the rows of chips over it, the
+### The graph (assets/gui-wide-layout.webp, assets/gui-graph-series.webp,
+### assets/gui-graph-histogram.webp): the rows of chips over it, the
 ### plot with its hover readout and the labels it draws on its lines, the
 ### histogram beside or under it, the minimap under it, and the menu its
 ### right-click opens.

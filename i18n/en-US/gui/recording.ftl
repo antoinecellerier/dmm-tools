@@ -1,4 +1,4 @@
-### The recording panel under the graph (docs/images/gui-main.png): its
+### The recording panel under the graph (assets/gui-wide-layout.webp): its
 ### Record, Stop and Discard buttons beside Import… and Export…, the count
 ### of samples recorded, the line saying what Export… saves while nothing
 ### is recorded, and the messages its buttons show when they are done; the

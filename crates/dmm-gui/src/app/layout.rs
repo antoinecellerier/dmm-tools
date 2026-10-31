@@ -302,7 +302,7 @@ impl App {
         if spec.is_some() || mode_spec.is_some() {
             render_fn(ui, spec, mode_spec, manual_url, scale);
         } else if let Some(url) = manual_url {
-            specs::show_manual_only(ui, url, scale);
+            specs::show_manual_only(ui, &self.l10n, url, scale);
         }
     }
 
@@ -313,9 +313,10 @@ impl App {
         let fields = self.settings.spec_fields;
         let heading = self.settings.theme_colors(ui.visuals().dark_mode).heading();
         let mut toggled = false;
+        let l10n = &self.l10n;
         self.show_specs_with(ui, scale, |ui, spec, mode_spec, manual_url, scale| {
             toggled = specs::show_specs(
-                ui, spec, mode_spec, manual_url, scale, expanded, fields, heading,
+                ui, l10n, spec, mode_spec, manual_url, scale, expanded, fields, heading,
             );
         });
         if toggled {
@@ -328,7 +329,7 @@ impl App {
     pub(super) fn show_specs_section_inline(&self, ui: &mut Ui, scale: f32) {
         let fields = self.settings.spec_fields;
         self.show_specs_with(ui, scale, |ui, spec, _, manual_url, scale| {
-            specs::show_specs_inline(ui, spec, manual_url, scale, fields);
+            specs::show_specs_inline(ui, &self.l10n, spec, manual_url, scale, fields);
         });
     }
 
@@ -336,7 +337,7 @@ impl App {
     fn show_specs_section_compact(&self, ui: &mut Ui) {
         let fields = self.settings.spec_fields;
         self.show_specs_with(ui, 1.0, |ui, spec, _, manual_url, _| {
-            specs::show_specs_compact(ui, spec, manual_url, fields);
+            specs::show_specs_compact(ui, &self.l10n, spec, manual_url, fields);
         });
     }
 }

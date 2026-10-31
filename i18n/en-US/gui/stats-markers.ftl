@@ -1,4 +1,4 @@
-### The Statistics panel (docs/images/gui-main.png): in a wide window, the
+### The Statistics panel (assets/gui-wide-layout.webp): in a wide window, the
 ### figures of the meter's main reading since the last Reset, one per row
 ### under a heading, then those of the samples the graph shows, under
 ### Visible; in a narrow one, each block on a line of its own over the

@@ -20,6 +20,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui/shortcuts.ftl"),
     dmm_shared::ftl!("en-US", "gui/reading.ftl"),
     dmm_shared::ftl!("en-US", "gui/alarm-scale.ftl"),
+    dmm_shared::ftl!("en-US", "gui/specs-remote.ftl"),
 ];
 
 /// Everything the GUI shows: the shared help, the library's text and
