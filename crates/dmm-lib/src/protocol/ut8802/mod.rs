@@ -1017,12 +1017,12 @@ raw_payload=7"#
 
     #[test]
     fn every_positions_labels_are_listed() {
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         let protocol = Ut8802Protocol::new();
         for &(position, _, _, _) in POSITION_TABLE {
             let payload = make_payload(position, [1, 2, 3, 4, 5], 1, 0, 0, 0);
             let m = parse_measurement(&payload).unwrap();
-            crate::text::assert_listed(&all, &protocol, &m, devices::UT8802.id);
+            crate::text::assert_listed(all, &protocol, &m, devices::UT8802.id);
         }
     }
 }

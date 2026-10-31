@@ -1992,8 +1992,8 @@ raw_payload=30"#
     #[test]
     fn the_listed_labels_are_the_quiet_readings() {
         use crate::text::TextKind;
-        let all = crate::text::all_texts();
-        crate::text::assert_golden_listed(&all, "ut181a");
+        let all = crate::text::listed();
+        crate::text::assert_golden_listed(all, "ut181a");
         let protocol = super::super::Ut181aProtocol::new();
         let mut payloads = documented_payloads();
         for word in mode::known_words() {
@@ -2007,7 +2007,7 @@ raw_payload=30"#
             let (m, reports) = parse_reporting(payload);
             let m = m.unwrap();
             if reports.is_empty() {
-                crate::text::assert_listed(&all, &protocol, &m, "ut181a");
+                crate::text::assert_listed(all, &protocol, &m, "ut181a");
                 read.insert((TextKind::Mode, m.mode.to_string()));
                 read.insert((TextKind::Range, m.range_label.to_string()));
                 for aux in &m.aux_values {

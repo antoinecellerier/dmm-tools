@@ -1415,11 +1415,11 @@ raw_payload=15"#
 
     #[test]
     fn the_documented_payloads_labels_are_listed() {
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         let protocol = Ut171Protocol::new();
         for payload in documented_payloads() {
             let m = parse_measurement(&payload).unwrap();
-            crate::text::assert_listed(&all, &protocol, &m, devices::UT171.id);
+            crate::text::assert_listed(all, &protocol, &m, devices::UT171.id);
         }
     }
 }

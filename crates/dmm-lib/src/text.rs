@@ -76,7 +76,7 @@ impl TextKind {
 #[cfg(any(test, feature = "test-support"))]
 pub use list::{Labels, all_texts};
 #[cfg(test)]
-pub(crate) use list::{assert_golden_listed, assert_listed};
+pub(crate) use list::{assert_golden_listed, assert_listed, listed};
 
 #[cfg(any(test, feature = "test-support"))]
 mod list {
@@ -168,6 +168,13 @@ mod list {
         model
             .split(|c: char| !c.is_ascii_alphabetic())
             .any(|w| w.len() >= 3 && w.chars().any(|c| c.is_ascii_lowercase()))
+    }
+
+    /// [`all_texts`], built once for the family tests that check against it.
+    #[cfg(test)]
+    pub(crate) fn listed() -> &'static Labels {
+        static LISTED: std::sync::OnceLock<Labels> = std::sync::OnceLock::new();
+        LISTED.get_or_init(all_texts)
     }
 
     /// Panic unless every label of each golden fixture under
@@ -285,6 +292,21 @@ mod list {
                 TextKind::Note,
             ] {
                 assert!(kinds.contains(&kind), "nothing of kind {kind:?}");
+            }
+        }
+
+        /// Every meter shows at least one mode, so a device no family's
+        /// `all_labels` lists under a mode is a device it forgot.
+        #[test]
+        fn every_device_has_its_modes_listed() {
+            let all = all_texts();
+            let with_modes: BTreeSet<&str> = all
+                .entries()
+                .filter(|(kind, _, _)| *kind == TextKind::Mode)
+                .flat_map(|(_, _, by)| by.iter().copied())
+                .collect();
+            for device in registry::DEVICES {
+                assert!(with_modes.contains(device.id), "{}", device.id);
             }
         }
 

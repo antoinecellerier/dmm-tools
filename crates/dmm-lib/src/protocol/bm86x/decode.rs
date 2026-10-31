@@ -685,6 +685,125 @@ fn flags(lit: Lit, report: &impl Fn(&'static str)) -> StatusFlags {
     }
 }
 
+/// Every label a reply of `series` decodes to without a report: the
+/// modes the main display's words name, the function, prefix and LoZ modes
+/// of every combination of the annunciators those read that the series'
+/// map has, and the secondary display's labels likewise.
+#[cfg(any(test, feature = "test-support"))]
+pub(super) fn all_labels(series: Series, out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    use std::cell::Cell;
+    let by = series.id();
+    let map = series.map();
+    let has = |ann: Ann| map.annunciators.iter().any(|(a, _)| *a == ann);
+    // Every combination of the annunciators of `anns` the map has.
+    let subsets = |anns: &[Ann]| {
+        let anns: Vec<Ann> = anns.iter().copied().filter(|&a| has(a)).collect();
+        (0..1u32 << anns.len()).map(move |set| {
+            Lit::of(
+                (anns.iter().enumerate())
+                    .filter(|&(i, _)| set & 1 << i != 0)
+                    .map(|(_, &a)| a),
+            )
+        })
+    };
+    let reported = Cell::new(false);
+    let report = |_: &'static str| reported.set(true);
+    let shows = |word: &str, number: Option<f64>| Readout {
+        word: word.to_string(),
+        text: word.to_string(),
+        number,
+        odd: None,
+    };
+    let letters = [None, Some('C'), Some('F')];
+
+    // Recall, and the words that name the mode whatever else is lit: the
+    // AutoCheck idle, the field strength and a Recall page (spec §7.3).
+    if series.logs() && has(Ann::Record) && has(Ann::Crest) {
+        out.add(TextKind::Mode, MODE_RECALL, by);
+    }
+    for word in [AUTO, "EF", "P1"] {
+        for lit in subsets(&[Ann::LoZ]) {
+            reported.set(false);
+            let shown = main_shown(&shows(word, None), false, lit, series, &report);
+            if let (Some(mode), false) = (shown.mode(), reported.get()) {
+                out.add(TextKind::Mode, mode, by);
+            }
+        }
+    }
+
+    // The functions, by what is lit (spec §8.1-§8.3).
+    let function_anns: Vec<Ann> = MAIN_UNITS
+        .into_iter()
+        .chain([
+            Ann::Dc1,
+            Ann::Ac1,
+            Ann::Vfd,
+            Ann::Continuity,
+            Ann::T1,
+            Ann::T2,
+            Ann::LoZ,
+        ])
+        .collect();
+    let prefixes = [Ann::Nano1, Ann::Micro1, Ann::Milli1, Ann::Kilo1, Ann::Mega1];
+    let prefixes: Vec<Option<Ann>> = std::iter::once(None)
+        .chain(prefixes.into_iter().filter(|&a| has(a)).map(Some))
+        .collect();
+    for lit in subsets(&function_anns) {
+        for letter in letters {
+            if function(lit, letter).is_none() {
+                continue;
+            }
+            for prefix in &prefixes {
+                let lit = lit.with(*prefix);
+                let Some(function) = function(lit, letter) else {
+                    continue;
+                };
+                reported.set(false);
+                let Some(unit) = unit(function.base, main_prefix(lit, &report)) else {
+                    continue;
+                };
+                let mode = match function.mode {
+                    Mode::Named(mode) => mode,
+                    Mode::Coupled(coupling) => coupled(coupling, unit),
+                };
+                let mode = if lit.has(Ann::LoZ) {
+                    low_impedance(mode)
+                } else {
+                    Some(mode)
+                };
+                if let (Some(mode), false) = (mode, reported.get()) {
+                    out.add(TextKind::Mode, mode, by);
+                }
+            }
+        }
+    }
+
+    // The secondary display beside a number (spec §5.1, §6.1).
+    let secondary_anns = [
+        Ann::Hz2,
+        Ann::V2,
+        Ann::A2,
+        Ann::T2Sub,
+        Ann::T1Sub,
+        Ann::Loop,
+        Ann::Ohm2,
+        Ann::Farad2,
+        Ann::Siemens2,
+        Ann::Ac2,
+        Ann::Dc2,
+    ];
+    for lit in subsets(&secondary_anns) {
+        for letter in letters {
+            reported.set(false);
+            let aux = secondary(lit, &shows("1", Some(1.0)), letter, &report);
+            if let (Some(aux), false) = (aux, reported.get()) {
+                out.add(TextKind::Aux, aux.label, by);
+            }
+        }
+    }
+}
+
 /// Every mode the decoder names, for the capture-step test.
 #[cfg(test)]
 pub(super) const MODES: [&str; 35] = [
@@ -1856,5 +1975,112 @@ pub(super) mod tests {
         );
         assert_eq!(live.mode, "AC V");
         assert!(live.flags.record);
+    }
+
+    /// The list holds exactly the labels of the replies each series decodes
+    /// without a report, over every combination of up to three of the
+    /// annunciators the functions read with each prefix, each word that
+    /// names a mode, and up to two of the secondary display's; its modes are
+    /// [`MODES`]; and the golden readings' labels are in it.
+    #[test]
+    fn the_listed_labels_are_the_quiet_replies() {
+        use crate::text::TextKind;
+        use std::collections::BTreeSet;
+        let all = crate::text::listed();
+        crate::text::assert_golden_listed(all, "bm52x");
+        crate::text::assert_golden_listed(all, "bm82x");
+        let up_to = |anns: &[Ann], most: usize| -> Vec<Vec<Ann>> {
+            let mut sets = vec![Vec::new()];
+            for &ann in anns {
+                let longer: Vec<Vec<Ann>> = (sets.iter())
+                    .filter(|set| set.len() < most)
+                    .map(|set| set.iter().copied().chain([ann]).collect())
+                    .collect();
+                sets.extend(longer);
+            }
+            sets
+        };
+        let mut modes = BTreeSet::new();
+        for series in Series::ALL {
+            let map = series.map();
+            let present = |anns: &[Ann]| -> Vec<Ann> {
+                (anns.iter().copied())
+                    .filter(|a| map.annunciators.iter().any(|(m, _)| m == a))
+                    .collect()
+            };
+            // Right-aligned in `len` cells, a point taking none.
+            let row = |text: &str, len: usize| {
+                let width = len + text.matches('.').count();
+                format!("{text:>width$}")
+            };
+            let (main_len, sub_len) = (map.main.digits.len(), map.secondary.digits.len());
+            let digits = |len: usize| "1".repeat(len);
+            let lettered = |len: usize, letter: char| format!("{}{letter}", "1".repeat(len - 1));
+            let entry = crate::protocol::registry::find_device(series.id()).unwrap();
+            let protocol = (entry.new_protocol)();
+            let mut read = BTreeSet::new();
+            let mut take = |data: Vec<u8>| {
+                let (m, reports) = decoded_as(&data, series);
+                if reports.is_empty() {
+                    crate::text::assert_listed(all, protocol.as_ref(), &m, series.id());
+                    read.insert((TextKind::Mode, m.mode.to_string()));
+                    for aux in &m.aux_values {
+                        read.insert((TextKind::Aux, aux.label.to_string()));
+                    }
+                }
+            };
+            let blank = row("", sub_len);
+            take(lcd8(series, &digits(main_len), &blank, &[Record, Crest]));
+            for word in ["Auto", "EF", "P.001"] {
+                for anns in [&[][..], &[LoZ]] {
+                    take(lcd8(series, &row(word, main_len), &blank, &present(anns)));
+                }
+            }
+            let function_anns = present(&[
+                V1, A1, Ohm1, Farad1, Hz1, Siemens1, Duty1, Db, Dc1, Ac1, Vfd, Continuity, T1, T2,
+                LoZ,
+            ]);
+            let prefixes = present(&[Nano1, Micro1, Milli1, Kilo1, Mega1]);
+            let prefixes = std::iter::once(None).chain(prefixes.into_iter().map(Some));
+            let prefixes: Vec<Option<Ann>> = prefixes.collect();
+            let mains = [
+                digits(main_len),
+                lettered(main_len, 'C'),
+                lettered(main_len, 'F'),
+            ];
+            for anns in up_to(&function_anns, 3) {
+                for prefix in &prefixes {
+                    let lit: Vec<Ann> = anns.iter().copied().chain(*prefix).collect();
+                    for main in &mains {
+                        take(lcd8(series, main, &blank, &lit));
+                    }
+                }
+            }
+            let secondary_anns = present(&[
+                Hz2, V2, A2, T2Sub, T1Sub, Loop, Ohm2, Farad2, Siemens2, Ac2, Dc2,
+            ]);
+            let subs = [
+                digits(sub_len),
+                lettered(sub_len, 'C'),
+                lettered(sub_len, 'F'),
+            ];
+            for anns in up_to(&secondary_anns, 2) {
+                for (main, probe) in [
+                    (digits(main_len), None),
+                    (lettered(main_len, 'C'), Some(T1)),
+                ] {
+                    for sub in &subs {
+                        let lit: Vec<Ann> =
+                            anns.iter().copied().chain(probe).chain([Dc1, V1]).collect();
+                        take(lcd8(series, &main, sub, &lit));
+                    }
+                }
+            }
+            let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
+            assert_eq!(all.of_device(series.id(), &kinds), read, "{}", series.id());
+            modes.extend(all.of_device(series.id(), &[TextKind::Mode]));
+        }
+        let modes: BTreeSet<&str> = modes.iter().map(|(_, mode)| mode.as_str()).collect();
+        assert_eq!(modes, MODES.into_iter().collect());
     }
 }

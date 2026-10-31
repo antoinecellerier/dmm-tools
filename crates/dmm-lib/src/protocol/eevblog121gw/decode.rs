@@ -1159,13 +1159,13 @@ mod tests {
     #[test]
     fn the_listed_labels_are_the_quiet_packets() {
         use crate::text::TextKind;
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         let protocol = super::super::Eevblog121gwProtocol::new();
         let mut read = std::collections::BTreeSet::new();
         let mut take = |p: &[u8]| {
             let (m, reports) = decoded(p);
             if reports.is_empty() {
-                crate::text::assert_listed(&all, &protocol, &m, ID);
+                crate::text::assert_listed(all, &protocol, &m, ID);
                 read.insert((TextKind::Mode, m.mode.to_string()));
                 read.extend(
                     (!m.range_label.is_empty())

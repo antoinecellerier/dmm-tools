@@ -61,6 +61,13 @@ pub(crate) static MOCK_ZT5B: SelectableDevice = SelectableDevice {
     bluetooth_names: &[],
 };
 
+/// Every label the simulated meter's packets can decode to: the ZT-5B
+/// layout's, which the real decoder reads them with.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    super::layout::all_labels(&ZT5B, MOCK_ID, out);
+}
+
 /// What the simulated meter is set to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Function {
@@ -1106,5 +1113,33 @@ mod tests {
         assert_eq!(text(-0.0001, 3), "0.000");
         assert!(number(10_000.0, 0).is_none());
         assert!(number(f64::NAN, 1).is_none());
+    }
+
+    /// Every function's readings, HOLD included, carry listed labels.
+    #[test]
+    fn the_readings_labels_are_listed() {
+        let all = crate::text::listed();
+        // Offers no choices: the readings are what is checked.
+        let protocol = MockZt5b::default();
+        let keys = [
+            "auto_function",
+            "capacitance",
+            "hz",
+            "diode_continuity",
+            "ncv",
+            "temp_unit",
+        ];
+        for key in keys {
+            let (mut mock, clock) = mock();
+            press(&mut mock, key);
+            for step in 0..120 {
+                clock.advance(secs(0.25));
+                let m = read(&mut mock);
+                crate::text::assert_listed(all, &protocol, &m, MOCK_ID);
+                if step == 60 {
+                    press(&mut mock, "hold");
+                }
+            }
+        }
     }
 }

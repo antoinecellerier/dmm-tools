@@ -862,14 +862,14 @@ mod tests {
     #[test]
     fn the_listed_labels_are_the_quiet_readings() {
         use crate::text::TextKind;
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         let protocol = super::super::Bm78xbtProtocol::new();
         let mut read = std::collections::BTreeSet::new();
         for main in 0..=u8::MAX {
             for sub in 0..=u8::MAX {
                 let (m, reports) = decoded(&with(main, sub, 1, |_| {}));
                 if reports.is_empty() {
-                    crate::text::assert_listed(&all, &protocol, &m, super::super::ID);
+                    crate::text::assert_listed(all, &protocol, &m, super::super::ID);
                     read.insert((TextKind::Mode, m.mode.to_string()));
                 }
             }

@@ -3934,8 +3934,8 @@ raw_payload=11"#
     #[test]
     fn the_listed_labels_are_the_accepted_readings() {
         use crate::text::TextKind;
-        let all = crate::text::all_texts();
-        crate::text::assert_golden_listed(&all, "ut804");
+        let all = crate::text::listed();
+        crate::text::assert_golden_listed(all, "ut804");
         let models = [
             Model::Ut803,
             Model::Ut804,

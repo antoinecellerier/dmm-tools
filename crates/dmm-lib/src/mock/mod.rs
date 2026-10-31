@@ -851,6 +851,34 @@ impl CycleMeter for MockProtocol {
     }
 }
 
+/// Every label the simulated devices show: each mock scenario's mode,
+/// range and sub-value labels, the UT61E+ rungs a manual range renames it
+/// to, and [`cycle::all_choice_labels`] with each scenario live; and the
+/// simulated ZT-5B's.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    let by = devices::MOCK.id;
+    for scenario in scenarios() {
+        out.add(TextKind::Mode, scenario.mode, by);
+        out.add(TextKind::Range, scenario.range_label, by);
+        for aux in scenario.aux {
+            out.add(TextKind::Aux, aux.label, by);
+        }
+        let mock = MockProtocol::with_mode(scenario.id);
+        if let Some(mode) = MockProtocol::table_mode(scenario.mode_raw) {
+            // The range byte is a nibble (UT61+ family spec §2.4).
+            for range in 0..=0x0F {
+                if let Some(info) = mock.table.range_info(mode, range) {
+                    out.add(TextKind::Range, info.label, by);
+                }
+            }
+        }
+        cycle::all_choice_labels(&mock, [scenario.mode_raw], by, out);
+    }
+    zotek::sim::all_labels(out);
+}
+
 /// Create a mock Dmm instance pinned to a specific mode.
 pub fn open_mock_mode(mode: MockMode) -> Result<Dmm<NullTransport>> {
     open_mock_clocked(Some(mode), Clock::real())
@@ -2083,5 +2111,32 @@ mod tests {
             assert_eq!(MockMode::from_choice_id(id), Some(*mode), "{mode:?}");
         }
         assert_eq!(MockMode::from_choice_id(MockMode::ALL.len() as u16), None);
+    }
+
+    /// Every scenario's readings, on each rung and in each flag state its
+    /// choices offer, and the choices themselves, carry listed labels.
+    #[test]
+    fn every_scenarios_labels_are_listed() {
+        let all = crate::text::listed();
+        let transport = NullTransport;
+        for &mode in MockMode::ALL {
+            let mut proto = MockProtocol::with_mode(mode);
+            let m = proto.request_measurement(&transport).unwrap();
+            crate::text::assert_listed(all, &proto, &m, devices::MOCK.id);
+            for setting in [
+                Setting::Range,
+                Setting::Hold,
+                Setting::Rel,
+                Setting::MinMax,
+                Setting::Peak,
+            ] {
+                for choice in proto.choices(setting, &m) {
+                    proto.select(&transport, setting, choice.id).unwrap();
+                    let m = proto.request_measurement(&transport).unwrap();
+                    crate::text::assert_listed(all, &proto, &m, devices::MOCK.id);
+                }
+                proto = MockProtocol::with_mode(mode);
+            }
+        }
     }
 }

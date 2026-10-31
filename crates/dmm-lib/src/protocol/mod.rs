@@ -72,6 +72,8 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     bm78xbt::all_labels(out);
     zotek::all_labels(out);
     owon::all_labels(out);
+    bm86x::all_labels(out);
+    crate::mock::all_labels(out);
 }
 
 /// Whether `mode` is the `Unknown(0x..)` fallback a parser writes for a mode

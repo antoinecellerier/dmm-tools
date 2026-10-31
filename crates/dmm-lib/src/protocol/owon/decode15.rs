@@ -863,14 +863,14 @@ pub(crate) mod tests {
     #[test]
     fn the_listed_labels_are_the_quiet_frames() {
         use crate::text::TextKind;
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         let protocol = |model: &Model| {
             let entry = crate::protocol::registry::find_device(model.id).unwrap();
             (entry.new_protocol)()
         };
         for v in VECTORS {
             let m = quiet(&v, &VC871);
-            crate::text::assert_listed(&all, protocol(&VC871).as_ref(), &m, VC871.id);
+            crate::text::assert_listed(all, protocol(&VC871).as_ref(), &m, VC871.id);
         }
         let bits = [OSC, INRUSH, USB, DC, AC, LPF, PEAK];
         for model in [&VC871, &OW69B] {
@@ -879,7 +879,7 @@ pub(crate) mod tests {
             let mut take = |p: [u8; 15]| {
                 let (m, reports) = reported(&p, model);
                 if reports.is_empty() {
-                    crate::text::assert_listed(&all, protocol.as_ref(), &m, model.id);
+                    crate::text::assert_listed(all, protocol.as_ref(), &m, model.id);
                     read.insert((TextKind::Mode, m.mode.to_string()));
                     for aux in &m.aux_values {
                         read.insert((TextKind::Aux, aux.label.to_string()));

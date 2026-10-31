@@ -3679,16 +3679,16 @@ raw_payload=14"#
 
     #[test]
     fn the_golden_readings_labels_are_listed() {
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         for device in ["ut61eplus", "ut161e", "ut61b+"] {
-            crate::text::assert_golden_listed(&all, device);
+            crate::text::assert_golden_listed(all, device);
         }
     }
 
     #[test]
     fn every_models_dial_and_secondary_labels_are_listed() {
         use crate::text::TextKind;
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         // A frame in every mode each model's table names, at its first
         // range, as a main and as a secondary display.
         for model in ["ut61e+", "ut61b+", "ut61d+", "ut60bt", "ut202bt"] {
@@ -3702,7 +3702,7 @@ raw_payload=14"#
                 };
                 let frame = main_frame(mode as u8, 0x30 | range, b"  0.000");
                 let m = parse_measurement(&frame, protocol.table.as_ref()).unwrap();
-                crate::text::assert_listed(&all, &protocol, &m, by);
+                crate::text::assert_listed(all, &protocol, &m, by);
                 if protocol.table.has_secondary_display() {
                     let label = secondary_label(mode);
                     assert!(all.contains(TextKind::Aux, label), "{model} {label}");

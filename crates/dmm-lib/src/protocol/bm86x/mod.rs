@@ -268,6 +268,14 @@ fn recognise(buf: &[u8], series: Series) -> Option<Evidence> {
     })
 }
 
+/// Every label each series' replies decode to ([`decode::all_labels`]).
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    for series in Series::ALL {
+        decode::all_labels(series, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

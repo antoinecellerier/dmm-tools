@@ -1656,14 +1656,14 @@ pub(crate) mod test_support {
     /// Panic unless every label of `protocol`'s readings in each function
     /// at each of its ranges, and of the choices they offer, is listed.
     pub(crate) fn assert_labels_listed<M: Vc8x0Model>(protocol: &Vc8x0Protocol<M>) {
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         for &(function, ..) in M::FUNCTION_TABLE {
             let rungs = M::range_table(function).len().max(1) as u8;
             for range in 0x30..0x30 + rungs {
                 let status = zero_status::<M>();
                 let payload = make_payload::<M>(function, range, b"  1.234", &status);
                 let m = parse_measurement::<M>(&payload).unwrap();
-                crate::text::assert_listed(&all, protocol, &m, protocol.profile.id);
+                crate::text::assert_listed(all, protocol, &m, protocol.profile.id);
             }
         }
     }

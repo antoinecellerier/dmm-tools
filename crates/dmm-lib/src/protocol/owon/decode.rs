@@ -650,7 +650,7 @@ mod tests {
     fn the_listed_labels_are_the_quiet_frames() {
         use super::super::model::FrameKind;
         use crate::text::TextKind;
-        let all = crate::text::all_texts();
+        let all = crate::text::listed();
         for model in MODELS.iter().filter(|m| m.frame == FrameKind::Six) {
             let entry = crate::protocol::registry::find_device(model.id).unwrap();
             let protocol = (entry.new_protocol)();
@@ -660,7 +660,7 @@ mod tests {
                 let [lo, hi] = gear.to_le_bytes();
                 let (m, reports) = reported(&[lo, hi, 0x00, 0x00, 1, 0x00], model);
                 if reports.is_empty() {
-                    crate::text::assert_listed(&all, protocol.as_ref(), &m, model.id);
+                    crate::text::assert_listed(all, protocol.as_ref(), &m, model.id);
                     read.insert((TextKind::Mode, m.mode.into_owned()));
                 }
             }

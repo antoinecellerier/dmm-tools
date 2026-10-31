@@ -145,6 +145,18 @@ impl Lit {
             .fold(0, |lit, (ann, _)| lit | ann.flag()))
     }
 
+    /// `anns` lit and nothing else, for the label list.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(super) fn of(anns: impl IntoIterator<Item = Ann>) -> Self {
+        Lit(anns.into_iter().fold(0, |lit, ann| lit | ann.flag()))
+    }
+
+    /// These and `ann` lit, for the label list.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(super) fn with(self, ann: Option<Ann>) -> Self {
+        Lit(self.0 | ann.map_or(0, Ann::flag))
+    }
+
     pub(super) fn has(self, ann: Ann) -> bool {
         self.0 & ann.flag() != 0
     }

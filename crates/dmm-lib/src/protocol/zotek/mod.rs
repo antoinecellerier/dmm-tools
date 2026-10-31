@@ -266,7 +266,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     for layout in layout::LAYOUTS {
-        layout::all_labels(layout, out);
+        layout::all_labels(layout, layout.id, out);
     }
 }
 

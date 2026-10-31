@@ -888,15 +888,15 @@ fn mode_name(function: Function, coupling: Coupling, peak: bool) -> Cow<'static,
 const SECONDARY_HERTZ: &str = "Frequency";
 const SECONDARY_PERCENT: &str = "Duty";
 
-/// Every label `layout`'s packets are decoded to: each function's mode with
+/// Every label `layout`'s packets are decoded to, as used by device `by`:
+/// each function's mode with
 /// every coupling the decoder takes without a report, plain and with PEAK
 /// lit; and its secondary display's labels where it has those units. The
 /// function list is the decoder's, not narrowed to the annunciators the
 /// layout has.
 #[cfg(any(test, feature = "test-support"))]
-pub(super) fn all_labels(layout: &Layout, out: &mut crate::text::Labels) {
+pub(super) fn all_labels(layout: &Layout, by: &'static str, out: &mut crate::text::Labels) {
     use crate::text::TextKind;
-    let by = layout.id;
     let couplings = [Coupling::None, Coupling::Dc, Coupling::Ac, Coupling::Both];
     for function in Function::ALL {
         for coupling in couplings {
@@ -2077,8 +2077,8 @@ mod tests {
     /// listed labels; as do the ZT-5B's golden readings.
     #[test]
     fn the_labels_of_every_function_drawn_are_listed() {
-        let all = crate::text::all_texts();
-        crate::text::assert_golden_listed(&all, "zt5b");
+        let all = crate::text::listed();
+        crate::text::assert_golden_listed(all, "zt5b");
         let digits = b"1234".map(|c| Cell {
             glyph: Glyph::from_segments(segments(char::from(c))),
             dp: false,
@@ -2115,7 +2115,7 @@ mod tests {
                             };
                             let (m, reports) = reported(&packet);
                             if reports.is_empty() {
-                                crate::text::assert_listed(&all, protocol.as_ref(), &m, layout.id);
+                                crate::text::assert_listed(all, protocol.as_ref(), &m, layout.id);
                                 decoded += 1;
                             }
                         }
