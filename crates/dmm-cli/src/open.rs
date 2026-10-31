@@ -12,7 +12,7 @@ pub(crate) fn print_no_response_help(device: &'static SelectableDevice) {
     eprintln!(
         "{} {}. Check that it is the {} and that data transmission is enabled.",
         style("Warning:").yellow(),
-        dmm_shared::help::english().no_response(),
+        crate::l10n::get().help().no_response(),
         meter_name(device),
     );
     print_picked();
@@ -26,7 +26,7 @@ pub(crate) fn print_no_response_help(device: &'static SelectableDevice) {
 /// run or URLs to open are dimmed to keep the prose that explains them in the
 /// foreground.
 pub(crate) fn print_setup_sections(links: LinksSearched<'_>) {
-    let help = dmm_shared::help::english();
+    let help = crate::l10n::get().help();
     for section in help.sections(&links) {
         eprintln!();
         let link = style(&section.link).bold().to_string();
@@ -49,7 +49,7 @@ fn print_not_found_help(links: LinksSearched<'_>) {
         "{}",
         style(format!(
             "{}.",
-            dmm_shared::help::english().not_found_title(&links)
+            crate::l10n::get().help().not_found_title(&links)
         ))
         .yellow()
         .bold()
@@ -326,7 +326,9 @@ fn warn_if_experimental(
         "{}",
         style(format!(
             "WARNING: {}",
-            dmm_shared::help::english().stability_warning(profile_name(profile), profile.stability)
+            crate::l10n::get()
+                .help()
+                .stability_warning(profile_name(profile), profile.stability)
         ))
         .yellow()
         .bold()
@@ -366,7 +368,8 @@ fn print_experimental_note(selection: Selection) {
             "{}",
             style(format!(
                 "{} Report feedback: {}",
-                dmm_shared::help::english()
+                crate::l10n::get()
+                    .help()
                     .stability_warning(profile_name(profile), profile.stability),
                 profile.feedback_url()
             ))
@@ -410,7 +413,7 @@ fn open_error_help(
                 "{}",
                 style(format!(
                     "{} over the {}.",
-                    dmm_shared::help::english().no_meter_answered(),
+                    crate::l10n::get().help().no_meter_answered(),
                     dmm_lib::transport::bridge_link_name(bridge, built_in_radio)
                 ))
                 .yellow()
@@ -452,7 +455,7 @@ fn open_error_help(
             if listed {
                 eprintln!();
             }
-            for line in dmm_shared::help::english().adapter_lines(&adapters) {
+            for line in crate::l10n::get().help().adapter_lines(&adapters) {
                 eprintln!("{}", style(line).yellow());
             }
             if listed {
@@ -461,7 +464,7 @@ fn open_error_help(
                     style(format!("Use {ADAPTER_SELECTOR} to select one.")).dim()
                 );
             }
-            if let Some(hint) = dmm_shared::help::english().colonless_address_hint(detail) {
+            if let Some(hint) = crate::l10n::get().help().colonless_address_hint(detail) {
                 eprintln!("\n{}", style(hint).yellow());
             }
             "adapter not found".into()

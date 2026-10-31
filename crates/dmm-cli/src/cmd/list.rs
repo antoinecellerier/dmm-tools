@@ -110,14 +110,16 @@ mod tests {
     /// listing must not offer steps for it.
     #[test]
     fn a_listing_that_skipped_the_radio_offers_no_bluetooth_steps() {
-        let links: Vec<String> = dmm_shared::help::english()
+        let links: Vec<String> = crate::l10n::get()
+            .help()
             .sections(&links_searched(false))
             .into_iter()
             .map(|s| s.link)
             .collect();
         assert_eq!(links, ["USB cable"]);
         assert_eq!(
-            dmm_shared::help::english()
+            crate::l10n::get()
+                .help()
                 .sections(&links_searched(true))
                 .len(),
             if dmm_lib::BLUETOOTH_SUPPORTED { 2 } else { 1 }

@@ -341,7 +341,7 @@ fn refuse_clock_on_hardware(
     clock: &dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if requires_hardware(selection) && !clock.is_real() {
-        return Err(dmm_shared::help::english().mock_clock_mock_only().into());
+        return Err(crate::l10n::get().help().mock_clock_mock_only().into());
     }
     Ok(())
 }
@@ -890,7 +890,7 @@ mod tests {
                 .expect_err("a hardware device must refuse a virtual clock");
             assert_eq!(
                 err.to_string(),
-                dmm_shared::help::english().mock_clock_mock_only()
+                crate::l10n::get().help().mock_clock_mock_only()
             );
             assert!(refuse_clock_on_hardware(hardware, &dmm_lib::Clock::real()).is_ok());
         }

@@ -3,6 +3,7 @@ mod choice;
 mod cli;
 mod cmd;
 mod format;
+mod l10n;
 mod open;
 mod output;
 #[cfg(test)]
@@ -26,6 +27,9 @@ use open::{
 };
 
 fn main() {
+    // First: the language decides every line printed from here on, `--help`
+    // included.
+    l10n::init(None, "");
     // Build CLI with registry-generated --device long_help and a dynamic
     // after_long_help that resolves the actual per-platform settings path.
     let mut cmd = Cli::command();
@@ -48,6 +52,8 @@ fn main() {
         return;
     }
     dmm_shared::logging::init();
+    // Built before the logger, so what loading it found waits until now.
+    l10n::get().log_load_report();
 
     // Whether the meter was named on the command line, as opposed to coming
     // from the settings file or from detection. Only `read --replay` asks.
@@ -338,8 +344,12 @@ fn main() {
             } else if bluetooth_switched_off(&*e) {
                 eprintln!(
                     "{}",
-                    style(dmm_shared::help::english().cli_bluetooth_off_hint(cli.no_bluetooth))
-                        .yellow()
+                    style(
+                        crate::l10n::get()
+                            .help()
+                            .cli_bluetooth_off_hint(cli.no_bluetooth)
+                    )
+                    .yellow()
                 );
             }
         }

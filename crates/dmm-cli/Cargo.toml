@@ -25,6 +25,7 @@ serde-saphyr.workspace = true
 csv.workspace = true
 
 [dev-dependencies]
+dmm-shared = { path = "../dmm-shared", features = ["test-support"] }
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
 # Only to build the HID error a pulled cable raises, in a test; no features
 # beyond the ones dmm-lib already enables.
