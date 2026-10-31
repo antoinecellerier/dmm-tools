@@ -205,9 +205,10 @@ Code: `crates/dmm-shared/src/lib.rs`, `export/`.
 ### Translation
 
 Each binary holds a `Localizer`, a handle rather than a global, built from the Fluent files compiled
-into it. Text is translated where it is shown: the library's strings, exports, settings and logs
-stay English (see [localization-design.md](localization-design.md)). A message a language lacks
-falls back to English alone, and `LC_ALL=C` always means English.
+into it. Text is translated where it is shown: exports, settings and logs stay English, and so do
+the library's strings, which the apps look up by kind and English text in a `lib.ftl` generated
+from the library as they draw them (see [localization-design.md](localization-design.md)). A
+message a language lacks falls back to English alone, and `LC_ALL=C` always means English.
 
 Code: `crates/dmm-shared/src/l10n/`, `i18n/`.
 
@@ -365,7 +366,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/read.rs` | Reading an export back |
 | `replay.rs` | What `--replay` opens |
 | `help.rs` | Help and version text both binaries print |
-| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale |
+| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator |
 | `logging.rs` | The logger both binaries install |
 
 ### dmm-cli

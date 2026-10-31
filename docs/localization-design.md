@@ -90,7 +90,9 @@ Each kind of library text is translated by the mechanism that fits it:
 - **Enum labels.** `Flag`, `Link` and `Stability` are enums, so their labels translate by variant, through an exhaustive `match`.
 - **Strings.** Mode, range and aux labels, device names, activation steps and spec notes are strings. The apps look them up the way gettext does, by their English text plus the kind of text the caller is drawing.
 
-When the apps start, `l10n` reads the en-US `lib.ftl` and builds a map from (kind, English text) to message ID. The kind matters: "Hz" is a mode on one meter and a sub-value on another, and translators may want different words for each. IDs are readable (`mode-capacitance`, `aux-period`). A string with no letters, such as "Ω", gets a numbered ID. Lookup is case-sensitive. A label read from a replay or an import is found the same way as a live one.
+On its first library lookup, `l10n` reads the en-US `lib.ftl` and builds a map from (kind, English text) to message ID. The kind matters: "Capacitance" is a mode on one meter and a sub-value on another, and translators may want different words for each. IDs are readable (`mode-capacitance`, `aux-period`), never hashed. Activation steps all start alike, so theirs name the first meter that shows them (`activation-ut181a`). Lookup is case-sensitive. A label read from a replay or an import is found the same way as a live one.
+
+**Unit-only labels are not listed.** A label whose letters are all unit symbols and SI prefixes, such as "200mV", "-40~1000°C" or "kΩ", has nothing to translate: unit symbols stay as they are. It gets no message, and its lookup returns the English. That leaves out almost every range, and modes such as "mA". Words printed beside a unit, such as "AC", "DC", "Auto" and "REL", are listed, because some languages translate them. The symbol list is in `crates/dmm-shared/src/l10n/lib_index.rs`, which spec notes check their numbers against too.
 
 The en-US `lib.ftl` is generated:
 

@@ -63,6 +63,7 @@ Each brief carries the decisions plus:
 - behaviour keyed on the model; `report_unknown` for data the spec doesn't cover, never a silent skip;
 - instruction text from this model's manual, never a sibling's;
 - placeholder Bluetooth addresses and serials in tests and docs, never the user's;
+- every label the parser builds listed in the family's `all_labels`, and `i18n/en-US/lib.ftl` regenerated with `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and committed;
 - its own `CARGO_TARGET_DIR=~/.cache/dmm-<task>`, deleted when done;
 - review fixes as `--fixup` commits on the commit they fix, then `git rebase -x 'cargo check --workspace --all-targets' <base>` over the series before handing back — replayed picks skip the hook, which still gates the tip.
 

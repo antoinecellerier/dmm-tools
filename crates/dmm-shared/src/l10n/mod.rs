@@ -20,9 +20,13 @@
 #[cfg(any(test, feature = "test-support"))]
 pub mod check;
 mod lang;
+#[cfg(test)]
+mod lib_ftl;
+mod lib_index;
 mod pseudo;
 
 pub use lang::{EN_US, Language, find, languages, resolve};
+pub use lib_index::{LIB_RESOURCES, spec_numbers};
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
@@ -172,6 +176,9 @@ pub struct Localizer {
     bundles: Vec<FluentBundle<FluentResource>>,
     /// What loading the resources found, for [`Localizer::log_load_report`].
     load_report: Vec<(log::Level, String)>,
+    /// The level a message failing to format logs at: a translator trying
+    /// files from the override folder sees it without asking.
+    format_failure: log::Level,
     pseudo: bool,
 }
 
@@ -196,6 +203,7 @@ impl Localizer {
             language,
             bundles,
             load_report,
+            format_failure: problem_level(options),
             pseudo: options.pseudo,
         }
     }
@@ -228,20 +236,34 @@ impl Localizer {
     /// catches; release builds show the id rather than nothing.
     #[doc(hidden)]
     pub fn message<'a>(&'a self, id: &str, args: &[(&str, Arg<'_>)]) -> Cow<'a, str> {
+        self.lookup(id, args).unwrap_or_else(|| {
+            debug_assert!(
+                false,
+                "`{id}`: no en-US message, or it failed to format (see the log)"
+            );
+            Cow::Owned(id.to_string())
+        })
+    }
+
+    /// [`Localizer::message`], `None` where en-US lacks the message too or
+    /// fails to format it.
+    fn lookup<'a>(&'a self, id: &str, args: &[(&str, Arg<'_>)]) -> Option<Cow<'a, str>> {
         let args = fluent_args(args);
         let text = self
             .bundles
             .iter()
-            .find_map(|b| format(b, id, args.as_ref()));
-        let Some(text) = text else {
-            debug_assert!(false, "no en-US message `{id}`");
-            return Cow::Owned(id.to_string());
-        };
-        if self.pseudo {
+            .find_map(|b| format_at(b, id, args.as_ref(), self.format_failure))?;
+        Some(if self.pseudo {
             Cow::Owned(pseudo::bracket(&text))
         } else {
             text
-        }
+        })
+    }
+
+    /// Whether this localizer shows the English as written: en-US without
+    /// the pseudo-locale.
+    fn plain_english(&self) -> bool {
+        self.language.id == EN_US.id && !self.pseudo
     }
 }
 

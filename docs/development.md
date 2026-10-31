@@ -267,6 +267,13 @@ while working on them:
 `LC_ALL=C` always means English, whatever else the environment says; the
 test helpers and the screenshot scripts rely on it.
 
+`i18n/en-US/lib.ftl` is generated from the library's text: its labels, meter
+keys, activation steps and spec tables. After changing any of them, run
+`UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit the file; the
+test fails until then. It only adds messages. One whose English the library
+no longer shows fails the test by name: correct its English to the new text
+to keep its ID and translations, or delete it.
+
 ## Hidden flags
 
 These contributor flags are left out of `--help`.
