@@ -261,6 +261,15 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         })
 }
 
+/// Every label each layout's packets are decoded to
+/// ([`layout::all_labels`]), under the registry id named for it.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    for layout in layout::LAYOUTS {
+        layout::all_labels(layout, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

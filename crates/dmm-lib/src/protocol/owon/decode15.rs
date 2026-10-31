@@ -402,6 +402,57 @@ fn sub_value(
     }
 }
 
+/// Every label a 15-byte frame decodes to on `model`: [`mode`] over each
+/// function code it documents, every combination of the status bits
+/// [`mode`] reads, and Motor's texts; and [`sub_value`]'s label for every
+/// main and sub-display function code and REL, MIN and MAX, where it
+/// reports nothing.
+#[cfg(any(test, feature = "test-support"))]
+pub(super) fn all_labels(model: &Model, out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    use std::cell::Cell;
+    let by = model.id;
+    let bits = [OSC, INRUSH, USB, DC, AC, LPF, PEAK];
+    let statuses = (0..1u32 << bits.len()).map(|set| {
+        (bits.iter().enumerate())
+            .filter(|&(i, _)| set & 1 << i != 0)
+            .fold(0, |status, (_, bit)| status | bit)
+    });
+    // [`mode`] reads the value on Motor alone.
+    let motor: Vec<MeasuredValue> = (MOTOR_TEXTS.iter().map(|&t| MeasuredValue::NoReading(t)))
+        .chain([MeasuredValue::Normal(0.0)])
+        .collect();
+    let number = [MeasuredValue::Normal(0.0)];
+    // The function code is bits 6-10 of a G24 (spec §10.3).
+    let codes = 0..=0x1F;
+    for f in codes.clone() {
+        let Some(main) = function_of(f, model) else {
+            continue;
+        };
+        let values = if f == code::MOTOR {
+            &motor[..]
+        } else {
+            &number
+        };
+        for status in statuses.clone() {
+            for value in values {
+                out.add(TextKind::Mode, mode(Some(&main), f, value, status), by);
+            }
+        }
+        for sub in codes.clone() {
+            for status in [0, REL, MIN, MAX].map(u32::from) {
+                let mut p = [0u8; FRAME_LEN];
+                p[6..9].copy_from_slice(&(u32::from(sub) << 6).to_le_bytes()[..3]);
+                let reported = Cell::new(false);
+                let aux = sub_value(&p, f, status, model, &|_| reported.set(true));
+                if !reported.get() {
+                    out.add(TextKind::Aux, aux.label, by);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::super::frame15::tests::VECTORS;
@@ -801,6 +852,64 @@ pub(crate) mod tests {
                 matches!(decode(&p, &VC871), Err(Error::InvalidResponse { .. })),
                 "{len}"
             );
+        }
+    }
+
+    /// The list holds exactly the labels of the frames the VC871 and the
+    /// OW69B decode without a report: every function code under every
+    /// combination of the status bits that name the mode, Motor's texts,
+    /// and every sub-display function under REL, MIN and MAX; and the
+    /// VC871's captured frames' labels.
+    #[test]
+    fn the_listed_labels_are_the_quiet_frames() {
+        use crate::text::TextKind;
+        let all = crate::text::all_texts();
+        let protocol = |model: &Model| {
+            let entry = crate::protocol::registry::find_device(model.id).unwrap();
+            (entry.new_protocol)()
+        };
+        for v in VECTORS {
+            let m = quiet(&v, &VC871);
+            crate::text::assert_listed(&all, protocol(&VC871).as_ref(), &m, VC871.id);
+        }
+        let bits = [OSC, INRUSH, USB, DC, AC, LPF, PEAK];
+        for model in [&VC871, &OW69B] {
+            let protocol = protocol(model);
+            let mut read = std::collections::BTreeSet::new();
+            let mut take = |p: [u8; 15]| {
+                let (m, reports) = reported(&p, model);
+                if reports.is_empty() {
+                    crate::text::assert_listed(&all, protocol.as_ref(), &m, model.id);
+                    read.insert((TextKind::Mode, m.mode.to_string()));
+                    for aux in &m.aux_values {
+                        read.insert((TextKind::Aux, aux.label.to_string()));
+                    }
+                }
+            };
+            for f in 0..32 {
+                for set in 0..1u32 << bits.len() {
+                    let status = (bits.iter().enumerate())
+                        .filter(|&(i, _)| set & 1 << i != 0)
+                        .fold(0, |status, (_, bit)| status | bit);
+                    // Motor's - - -, 1-2-3 and 3-2-1; a count elsewhere.
+                    for v in [1, 2, 3] {
+                        take(frame(g24(f, 4, 0, false), v, 0, 0, status));
+                    }
+                }
+                for sub in 0..32 {
+                    for status in [0, REL, MIN, MAX].map(u32::from) {
+                        take(frame(
+                            g24(f, 4, 0, true),
+                            1,
+                            g24(sub, 4, 0, false),
+                            1,
+                            status,
+                        ));
+                    }
+                }
+            }
+            let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
+            assert_eq!(all.of_device(model.id, &kinds), read, "{}", model.id);
         }
     }
 }

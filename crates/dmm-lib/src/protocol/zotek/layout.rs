@@ -595,6 +595,27 @@ pub(super) enum Function {
 }
 
 impl Function {
+    /// Every function, in code order, for the label list.
+    #[cfg(any(test, feature = "test-support"))]
+    const ALL: [Function; 16] = [
+        Function::None,
+        Function::Volts,
+        Function::Millivolts,
+        Function::Amps,
+        Function::Milliamps,
+        Function::Microamps,
+        Function::Ohms,
+        Function::Continuity,
+        Function::Diode,
+        Function::Capacitance,
+        Function::Frequency,
+        Function::Duty,
+        Function::Celsius,
+        Function::Fahrenheit,
+        Function::Ncv,
+        Function::Inrush,
+    ];
+
     /// The mode name, in the vocabulary the other families use.
     fn mode(self, coupling: Coupling) -> &'static str {
         let coupled = |names: [&'static str; 4]| match coupling {
@@ -845,6 +866,59 @@ impl Layout {
     }
 }
 
+/// Whether `coupling` is one a source documents for `function`: both AC
+/// and DC lit on a volt or amp function is not.
+fn coupling_documented(function: Function, coupling: Coupling) -> bool {
+    !(function.coupled() && coupling == Coupling::Both)
+}
+
+/// The mode of a reading in `function`, other than none, with PEAK lit or
+/// not.
+fn mode_name(function: Function, coupling: Coupling, peak: bool) -> Cow<'static, str> {
+    // PEAK says the reading is a held peak, not whether a maximum or a
+    // minimum (spec §7.2, §11.2).
+    if peak && function != Function::Ncv {
+        Cow::Owned(format!("{} peak", function.mode(coupling)))
+    } else {
+        Cow::Borrowed(function.mode(coupling))
+    }
+}
+
+/// The secondary display's sub-value labels, by the unit lit beside it.
+const SECONDARY_HERTZ: &str = "Frequency";
+const SECONDARY_PERCENT: &str = "Duty";
+
+/// Every label `layout`'s packets are decoded to: each function's mode with
+/// every coupling the decoder takes without a report, plain and with PEAK
+/// lit; and its secondary display's labels where it has those units. The
+/// function list is the decoder's, not narrowed to the annunciators the
+/// layout has.
+#[cfg(any(test, feature = "test-support"))]
+pub(super) fn all_labels(layout: &Layout, out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    let by = layout.id;
+    let couplings = [Coupling::None, Coupling::Dc, Coupling::Ac, Coupling::Both];
+    for function in Function::ALL {
+        for coupling in couplings {
+            if function == Function::None {
+                // Named only while the display shows a word, never peaked.
+                out.add(TextKind::Mode, function.mode(coupling), by);
+            } else if coupling_documented(function, coupling) {
+                for peak in [false, true] {
+                    out.add(TextKind::Mode, mode_name(function, coupling, peak), by);
+                }
+            }
+        }
+    }
+    let has = |meaning| layout.bits.iter().any(|b| b.meaning == meaning);
+    if has(Meaning::SecondaryHertz) {
+        out.add(TextKind::Aux, SECONDARY_HERTZ, by);
+    }
+    if has(Meaning::SecondaryPercent) {
+        out.add(TextKind::Aux, SECONDARY_PERCENT, by);
+    }
+}
+
 /// The secondary display as a sub-value, where its unit is lit (spec
 /// §6.3, §7.4): the frequency in V, the duty cycle in frequency.
 fn secondary(
@@ -868,13 +942,13 @@ fn secondary(
                 unrecognised.report("secondary annunciators");
             }
             let unit = if lit.secondary_kilo { "kHz" } else { "Hz" };
-            ("Frequency", unit)
+            (SECONDARY_HERTZ, unit)
         }
         (false, true) => {
             if lit.secondary_kilo {
                 unrecognised.report("secondary annunciators");
             }
-            ("Duty", "%")
+            (SECONDARY_PERCENT, "%")
         }
     };
     // Nothing drawn: no sub-value, whatever unit is lit.
@@ -1013,7 +1087,7 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
     };
 
     let coupling = lit.coupling();
-    if function.coupled() && coupling == Coupling::Both {
+    if !coupling_documented(function, coupling) {
         unrecognised.report("ac/dc annunciators");
     }
     let mode: Cow<'static, str> = match (function, &value) {
@@ -1022,12 +1096,7 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
             unrecognised.report("function annunciators");
             unknown_mode(Function::None as u8)
         }
-        // PEAK says the reading is a held peak, not whether a maximum or a
-        // minimum (spec §7.2, §11.2).
-        _ if lit.peak && function != Function::Ncv => {
-            Cow::Owned(format!("{} peak", function.mode(coupling)))
-        }
-        _ => Cow::Borrowed(function.mode(coupling)),
+        _ => mode_name(function, coupling, lit.peak),
     };
     let peak_bit = if lit.peak { 0x40 } else { 0 };
     let unit_text = match (function, unit) {
@@ -1972,6 +2041,88 @@ mod tests {
             let mut packet: Vec<u8> = (0..len).map(|_| pseudo_random(&mut seed) as u8).collect();
             packet[..3].copy_from_slice(&[0x5A, 0xA5, type_byte]);
             let _ = capture_reports(|| decode(&packet));
+        }
+    }
+
+    /// A new function fails to compile here until it has its place in
+    /// [`Function::ALL`].
+    #[test]
+    fn function_all_holds_every_function_in_code_order() {
+        let place = |function: Function| match function {
+            Function::None => 0,
+            Function::Volts => 1,
+            Function::Millivolts => 2,
+            Function::Amps => 3,
+            Function::Milliamps => 4,
+            Function::Microamps => 5,
+            Function::Ohms => 6,
+            Function::Continuity => 7,
+            Function::Diode => 8,
+            Function::Capacitance => 9,
+            Function::Frequency => 10,
+            Function::Duty => 11,
+            Function::Celsius => 12,
+            Function::Fahrenheit => 13,
+            Function::Ncv => 14,
+            Function::Inrush => 15,
+        };
+        for (i, &function) in Function::ALL.iter().enumerate() {
+            assert_eq!(place(function), i, "{function:?}");
+            assert_eq!(function as usize, i, "{function:?}");
+        }
+    }
+
+    /// Every function each split-digit layout lights, alone, with each of
+    /// its prefixes, either coupling and PEAK, decodes without a report to
+    /// listed labels; as do the ZT-5B's golden readings.
+    #[test]
+    fn the_labels_of_every_function_drawn_are_listed() {
+        let all = crate::text::all_texts();
+        crate::text::assert_golden_listed(&all, "zt5b");
+        let digits = b"1234".map(|c| Cell {
+            glyph: Glyph::from_segments(segments(char::from(c))),
+            dp: false,
+        });
+        for layout in LAYOUTS.iter().filter(|l| l.digits == Digits::Split) {
+            let entry = crate::protocol::registry::find_device(layout.id).unwrap();
+            let protocol = (entry.new_protocol)();
+            let meanings: Vec<Meaning> = layout.bits.iter().map(|b| b.meaning).collect();
+            let functions = meanings.iter().filter(|m| {
+                matches!(
+                    m,
+                    Meaning::Unit(_) | Meaning::Diode | Meaning::Continuity | Meaning::Inrush
+                )
+            });
+            let prefixes: Vec<Option<Meaning>> = std::iter::once(None)
+                .chain(
+                    meanings
+                        .iter()
+                        .filter(|m| matches!(m, Meaning::Prefix(..)))
+                        .map(|&m| Some(m)),
+                )
+                .collect();
+            let mut decoded = 0;
+            for &function in functions {
+                for prefix in &prefixes {
+                    for coupling in [None, Some(Meaning::Ac), Some(Meaning::Dc)] {
+                        for peak in [None, Some(Meaning::Peak)] {
+                            let lit: Vec<Meaning> = [Some(function), *prefix, coupling, peak]
+                                .into_iter()
+                                .flatten()
+                                .collect();
+                            let Some(packet) = layout.draw(&digits, false, &lit) else {
+                                continue;
+                            };
+                            let (m, reports) = reported(&packet);
+                            if reports.is_empty() {
+                                crate::text::assert_listed(&all, protocol.as_ref(), &m, layout.id);
+                                decoded += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            assert!(decoded > 10, "{}: {decoded}", layout.id);
         }
     }
 }

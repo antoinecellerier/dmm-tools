@@ -83,6 +83,19 @@ pub(super) fn function_of(function: u8, model: &Model) -> Option<(&'static str, 
     })
 }
 
+/// Every label a 6-byte frame decodes to on `model`: the mode of each
+/// function code it documents. The frame names no range and carries no
+/// sub-value.
+#[cfg(any(test, feature = "test-support"))]
+pub(super) fn all_labels(model: &Model, out: &mut crate::text::Labels) {
+    // The function code is bits 6-9 of the function/range word (spec §6.1).
+    for code in 0..=0x0F {
+        if let Some((mode, _)) = function_of(code, model) {
+            out.add(crate::text::TextKind::Mode, mode, model.id);
+        }
+    }
+}
+
 /// Status bits 0-5 (spec §6.6), the same in the 15-byte frame (spec §10.2).
 pub(super) const HOLD: u16 = 0x0001;
 pub(super) const REL: u16 = 0x0002;
@@ -628,6 +641,31 @@ mod tests {
                 matches!(decode(&p, &B35), Err(Error::InvalidResponse { .. })),
                 "{len}"
             );
+        }
+    }
+
+    /// The list holds exactly the modes of the frames each 6-byte model
+    /// decodes without a report, over every function code.
+    #[test]
+    fn the_listed_labels_are_the_quiet_frames() {
+        use super::super::model::FrameKind;
+        use crate::text::TextKind;
+        let all = crate::text::all_texts();
+        for model in MODELS.iter().filter(|m| m.frame == FrameKind::Six) {
+            let entry = crate::protocol::registry::find_device(model.id).unwrap();
+            let protocol = (entry.new_protocol)();
+            let mut read = std::collections::BTreeSet::new();
+            for code in 0..=0x0F_u16 {
+                let gear = 0xF000 | code << 6 | 4 << 3;
+                let [lo, hi] = gear.to_le_bytes();
+                let (m, reports) = reported(&[lo, hi, 0x00, 0x00, 1, 0x00], model);
+                if reports.is_empty() {
+                    crate::text::assert_listed(&all, protocol.as_ref(), &m, model.id);
+                    read.insert((TextKind::Mode, m.mode.into_owned()));
+                }
+            }
+            let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
+            assert_eq!(all.of_device(model.id, &kinds), read, "{}", model.id);
         }
     }
 }

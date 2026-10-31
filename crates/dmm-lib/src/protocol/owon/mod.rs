@@ -482,6 +482,17 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
     }
 }
 
+/// Every label each model's frames decode to, by its frame kind.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    for model in model::MODELS {
+        match model.frame {
+            FrameKind::Six => decode::all_labels(model, out),
+            FrameKind::Fifteen => decode15::all_labels(model, out),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
