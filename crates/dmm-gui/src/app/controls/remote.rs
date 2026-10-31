@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
@@ -29,7 +31,7 @@ const OPEN: &str = "\u{25BE}";
 /// The body does the same in every layout; the big meter, which has no
 /// room for the row, leaves the caret out.
 pub(in crate::app) struct SplitChip<'a> {
-    pub(in crate::app) name: &'a str,
+    pub(in crate::app) name: Cow<'a, str>,
     /// In force: the chip's fill.
     pub(in crate::app) active: bool,
     /// There are values to switch on, or it is on: else the body opens the
@@ -38,9 +40,11 @@ pub(in crate::app) struct SplitChip<'a> {
     /// Whether the row is open; `None` where there is no row (the big meter).
     pub(in crate::app) open: Option<bool>,
     /// The body's hover text.
-    pub(in crate::app) hover: &'a str,
+    pub(in crate::app) hover: Cow<'a, str>,
+    /// The caret's name for a screen reader: "Scale settings".
+    pub(in crate::app) fields_name: Cow<'a, str>,
     /// The caret's hover text: what the fields take.
-    pub(in crate::app) fields_hover: &'a str,
+    pub(in crate::app) fields_hover: Cow<'a, str>,
     /// The greyed body's hover: where the row can be opened.
     pub(in crate::app) unready_hover: String,
 }
@@ -57,7 +61,7 @@ pub(in crate::app) enum ChipClick {
 
 impl SplitChip<'_> {
     fn body_label(&self, font_size: f32) -> RichText {
-        RichText::new(self.name).font(egui::FontId::proportional(font_size))
+        RichText::new(self.name.as_ref()).font(egui::FontId::proportional(font_size))
     }
 
     fn caret_label(open: bool, font_size: f32) -> RichText {
@@ -89,7 +93,7 @@ impl SplitChip<'_> {
     /// Place the chip where the caller's row has its cursor.
     ///
     /// Spoken as two controls: the body by its name, `active` as selected,
-    /// and the caret as "<name> settings", expanded or collapsed.
+    /// and the caret by its `fields_name`, expanded or collapsed.
     pub(in crate::app) fn show(&self, ui: &mut Ui, font_size: f32) -> ChipClick {
         let r = ui.visuals().widgets.inactive.corner_radius;
         let (body_radius, caret_radius) = if self.open.is_some() {
@@ -117,7 +121,7 @@ impl SplitChip<'_> {
                     .selected(self.active)
                     .corner_radius(body_radius),
             )
-            .on_hover_text(self.hover)
+            .on_hover_text(self.hover.as_ref())
             .on_disabled_hover_text(&self.unready_hover);
         let caret = self.open.map(|open| {
             ui.spacing_mut().item_spacing.x = gap;
@@ -127,8 +131,8 @@ impl SplitChip<'_> {
                         .selected(self.active)
                         .corner_radius(caret_radius),
                 )
-                .on_hover_text(self.fields_hover)
-                .a11y_label(&format!("{} settings", self.name));
+                .on_hover_text(self.fields_hover.as_ref())
+                .a11y_label(&self.fields_name);
             ui.ctx()
                 .accesskit_node_builder(caret.id, |builder| builder.set_expanded(open));
             caret

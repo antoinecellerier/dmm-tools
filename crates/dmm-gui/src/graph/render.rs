@@ -2219,8 +2219,9 @@ impl Graph {
             levels.extend(refs.into_iter().map(|v| (v, level_text(v), data.ref_color)));
         }
         levels.extend(data.limit_lines.iter().map(|&(v, side)| {
-            let name = side.name();
-            (v, format!("{name}: {}", level_text(v)), data.limit_color)
+            let side = super::menu::side_arg(side);
+            let label = tr!(l10n, "alarm-limit-line", side = side, value = level_text(v));
+            (v, label.into_owned(), data.limit_color)
         }));
         let mut levels: Vec<_> = levels
             .into_iter()

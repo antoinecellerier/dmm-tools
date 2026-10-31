@@ -15,16 +15,6 @@ pub(crate) enum LimitSide {
     High,
 }
 
-impl LimitSide {
-    /// The limit's name, as its line's label writes it.
-    pub(super) fn name(self) -> &'static str {
-        match self {
-            Self::Low => "Low",
-            Self::High => "High",
-        }
-    }
-}
-
 /// The limits of an alarm not idle on another quantity, handed to the graph
 /// each frame it draws.
 #[derive(Debug, Clone, Copy, PartialEq)]

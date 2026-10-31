@@ -293,8 +293,9 @@ fn heading(ui: &mut egui::Ui, text: &str, value: Option<&str>) {
     ui.add_space(FOCUS_RING_REACH);
 }
 
-/// The alarm limit `side` as the menu's messages select on it.
-fn side_arg(side: LimitSide) -> &'static str {
+/// The alarm limit `side` as the menu's messages, and the limit lines'
+/// labels, select on it.
+pub(super) fn side_arg(side: LimitSide) -> &'static str {
     match side {
         LimitSide::Low => "low",
         LimitSide::High => "high",

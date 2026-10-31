@@ -20,10 +20,10 @@ use super::marker_list::log_line;
 use super::toast::Toast;
 use crate::display::ReadingState;
 use crate::graph::{LimitSide, WatchedLimits};
-use crate::l10n::english;
 use dmm_lib::alarm::{Alarm, Breach, Hysteresis, LimitError, Limits};
 use dmm_lib::measurement::Measurement;
-use dmm_shared::input;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::{input, tr};
 use eframe::egui::{self, RichText, Ui};
 
 /// Draft text for the two limits, kept apart from the alarm in force: the
@@ -56,58 +56,57 @@ impl AlarmEditor {
     }
 }
 
-/// Tooltip on the chip's caret.
-const ALARM_HOVER: &str = "Set the limits";
-
-/// The chip's name.
-const ALARM_NAME: &str = "Alarm";
-
 /// Why a pair of drafts was not applied.
-fn limit_message(e: LimitError) -> String {
-    let field = match e {
-        LimitError::NotFinite => "limit",
-        LimitError::LowNotBelowHigh => "limits",
-    };
-    format!("Invalid {field}: {}", input::limit_error(&english(), e))
+fn limit_message(l10n: &Localizer, e: LimitError) -> String {
+    let reason = input::limit_error(l10n, e);
+    match e {
+        LimitError::NotFinite => tr!(l10n, "alarm-invalid-limit", reason = reason),
+        LimitError::LowNotBelowHigh => tr!(l10n, "alarm-invalid-limits", reason = reason),
+    }
+    .into_owned()
 }
 
-/// A draft as a limit: blank is no limit, anything else must be a number.
-fn parse_draft(text: &str, name: &str) -> Result<Option<f64>, String> {
+/// The draft for the `side` limit as a limit: blank is no limit, anything
+/// else must be a number.
+fn parse_draft(l10n: &Localizer, text: &str, side: LimitSide) -> Result<Option<f64>, String> {
     let text = text.trim();
     if text.is_empty() {
         return Ok(None);
     }
     text.parse().map(Some).map_err(|_| {
-        format!(
-            "Invalid {name} limit: {}",
-            input::not_a_number(&english(), text)
-        )
+        let reason = input::not_a_number(l10n, text);
+        match side {
+            LimitSide::Low => tr!(l10n, "alarm-invalid-low", reason = reason),
+            LimitSide::High => tr!(l10n, "alarm-invalid-high", reason = reason),
+        }
+        .into_owned()
     })
 }
 
 /// The drafts as a pair of limits and their band, or the toast saying which
 /// field to fix.
-fn parse_limits(low: &str, high: &str, band: &str) -> Result<(Limits, Hysteresis), String> {
-    let low = parse_draft(low, "low")?;
-    let high = parse_draft(high, "high")?;
-    let limits = Limits::check(low, high).map_err(limit_message)?;
+fn parse_limits(
+    l10n: &Localizer,
+    low: &str,
+    high: &str,
+    band: &str,
+) -> Result<(Limits, Hysteresis), String> {
+    let low = parse_draft(l10n, low, LimitSide::Low)?;
+    let high = parse_draft(l10n, high, LimitSide::High)?;
+    let limits = Limits::check(low, high).map_err(|e| limit_message(l10n, e))?;
     let band = Hysteresis::parse(band).map_err(|e| {
-        format!(
-            "Invalid hysteresis: {}",
-            input::hysteresis_error(&english(), e, band.trim())
-        )
+        let reason = input::hysteresis_error(l10n, e, band.trim());
+        tr!(l10n, "alarm-invalid-band", reason = reason).into_owned()
     })?;
-    let band = band.check(&limits).map_err(|_| percent_of_zero())?;
+    let band = band.check(&limits).map_err(|_| percent_of_zero(l10n))?;
     Ok((limits, band))
 }
 
 /// Why a percentage band can't go with the limits.
-fn percent_of_zero() -> String {
-    format!("Invalid hysteresis: {}", input::percent_of_zero(&english()))
+fn percent_of_zero(l10n: &Localizer) -> String {
+    let reason = input::percent_of_zero(l10n);
+    tr!(l10n, "alarm-invalid-band", reason = reason).into_owned()
 }
-
-/// Tooltip on the hysteresis field.
-const BAND_HOVER: &str = "How far back the reading must come before a limit alarms again: a value, or a percentage such as 1%. Blank: automatic";
 
 /// A reading that breached a limit, waiting for its marker at the end of the
 /// frame's drain.
@@ -115,6 +114,8 @@ pub(super) struct PendingBreach {
     at: std::time::Instant,
     wall_time: chrono::DateTime<chrono::Local>,
     reading: String,
+    /// In English whatever the app's language, as the library words it:
+    /// the note is data, written into recordings and exports as it is.
     note: String,
 }
 
@@ -146,15 +147,16 @@ impl App {
     }
 
     /// The **Alarm** chip: filled while an alarm is set.
-    pub(super) fn alarm_chip(&self, ctx: &egui::Context) -> SplitChip<'static> {
+    pub(super) fn alarm_chip(&self, ctx: &egui::Context) -> SplitChip<'_> {
         let active = self.alarm.is_some();
         SplitChip {
-            name: ALARM_NAME,
+            name: tr!(self.l10n, "alarm-chip"),
             active,
             ready: active || !self.alarm_editor.is_blank(),
             open: (!self.meter_only()).then_some(self.alarm_editor.open),
-            hover: "Turn the alarm on or off",
-            fields_hover: ALARM_HOVER,
+            hover: tr!(self.l10n, "alarm-chip.hover"),
+            fields_name: tr!(self.l10n, "alarm-settings.a11y"),
+            fields_hover: tr!(self.l10n, "alarm-settings.hover"),
             unready_hover: self.chip_setup_hint(ctx),
         }
     }
@@ -178,7 +180,7 @@ impl App {
     /// the chip's body.
     fn apply_alarm_fields(&mut self) {
         let editor = &self.alarm_editor;
-        match parse_limits(&editor.low, &editor.high, &editor.band) {
+        match parse_limits(&self.l10n, &editor.low, &editor.high, &editor.band) {
             Ok((limits, band)) => self.set_limits(limits, band),
             // The alarm in force, if any, keeps running.
             Err(message) => self.toast = Some(Toast::error(message)),
@@ -216,19 +218,22 @@ impl App {
             .filter(|_| self.alarm_scaled());
         let idle = alarm.and_then(|a| a.idle());
         let unit = alarm.and_then(|a| a.limits_unit(relabel));
+        let l10n = &self.l10n;
         let status = match (idle, unit) {
             (Some(idle), _) => Some((
-                format!("idle: {idle}"),
+                tr!(l10n, "alarm-idle", unit = idle).into_owned(),
                 tc.status_warning(),
-                format!(
-                    "Waiting: the readings are in {idle}, the limits in {}",
-                    alarm.and_then(|a| a.quantity()).unwrap_or_default()
+                tr!(
+                    l10n,
+                    "alarm-idle.hover",
+                    unit = idle,
+                    limits = alarm.and_then(|a| a.quantity()).unwrap_or_default(),
                 ),
             )),
             (None, Some(unit)) => Some((
                 unit.to_string(),
                 ui.visuals().weak_text_color(),
-                "The unit the limits are in".to_string(),
+                tr!(l10n, "alarm-unit.hover"),
             )),
             // No alarm bound yet: the unit a limit typed now would be in,
             // from the reading on screen, so "121" is known to mean volts
@@ -241,7 +246,7 @@ impl App {
                     (
                         unit.to_string(),
                         ui.visuals().weak_text_color(),
-                        "The unit the limits are in, from the reading on screen".to_string(),
+                        tr!(l10n, "alarm-unit-from-reading.hover"),
                     )
                 }),
         };
@@ -253,28 +258,40 @@ impl App {
         let editor = &mut self.alarm_editor;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
-            let mut field = |ui: &mut Ui, caption, text, hint, focus| {
+            let mut field = |ui: &mut Ui, caption: &str, text, hint: &str, focus| {
                 let (resp, committed) = row_field(ui, &font, scale, caption, text, hint, focus);
                 apply |= committed;
                 resp
             };
             let focus = std::mem::take(&mut editor.focus);
-            field(ui, "Low", &mut editor.low, "none", focus);
-            field(ui, "High", &mut editor.high, "none", false);
+            let none = tr!(l10n, "alarm-no-limit");
+            field(ui, &tr!(l10n, "alarm-low"), &mut editor.low, &none, focus);
+            field(ui, &tr!(l10n, "alarm-high"), &mut editor.high, &none, false);
             // Right after the limits it qualifies, so a wrapped row keeps the
             // unit on their line.
             if let Some((text, color, hover)) = status {
                 ui.label(RichText::new(text).font(font.clone()).color(color))
                     .on_hover_text(hover);
             }
-            field(ui, "\u{b1}", &mut editor.band, "auto", false).on_hover_text(BAND_HOVER);
+            field(
+                ui,
+                "\u{b1}",
+                &mut editor.band,
+                &tr!(l10n, "alarm-band"),
+                false,
+            )
+            .on_hover_text(tr!(l10n, "alarm-band.hover"));
             apply |= ui
-                .add(egui::Button::new(RichText::new("Apply").font(font.clone())))
-                .on_hover_text("Turn the alarm on with these limits")
+                .add(egui::Button::new(
+                    RichText::new(tr!(l10n, "alarm-apply")).font(font.clone()),
+                ))
+                .on_hover_text(tr!(l10n, "alarm-apply.hover"))
                 .clicked();
             off |= ui
-                .add(egui::Button::new(RichText::new("Off").font(font.clone())))
-                .on_hover_text("Turn the alarm off")
+                .add(egui::Button::new(
+                    RichText::new(tr!(l10n, "alarm-off")).font(font.clone()),
+                ))
+                .on_hover_text(tr!(l10n, "alarm-off.hover"))
                 .clicked();
         });
 
@@ -294,11 +311,16 @@ impl App {
     pub(super) fn set_limits(&mut self, limits: Limits, band: Hysteresis) {
         if limits.is_empty() {
             if self.alarm.take().is_some() {
-                self.toast = Some(Toast::info("Alarm off"));
+                self.toast = Some(Toast::info(tr!(self.l10n, "alarm-off-toast")));
             }
         } else {
             self.alarm = Some(Alarm::new(limits, band));
-            self.toast = Some(Toast::info(format!("Alarm on: {}", limits.describe(band))));
+            let limits = self.l10n.alarm_limits(&limits, band);
+            self.toast = Some(Toast::info(tr!(
+                self.l10n,
+                "alarm-on-toast",
+                limits = limits
+            )));
         }
     }
 
@@ -317,7 +339,7 @@ impl App {
             Some(_) => fresh,
             None => {
                 let editor = &self.alarm_editor;
-                parse_limits(&editor.low, &editor.high, &editor.band).unwrap_or(fresh)
+                parse_limits(&self.l10n, &editor.low, &editor.high, &editor.band).unwrap_or(fresh)
             }
         };
         let shown = Limits {
@@ -334,12 +356,12 @@ impl App {
         let limits = match Limits::check(low, high) {
             Ok(limits) => limits,
             Err(e) => {
-                self.toast = Some(Toast::error(limit_message(e)));
+                self.toast = Some(Toast::error(limit_message(&self.l10n, e)));
                 return;
             }
         };
         let Ok(band) = band.check(&limits) else {
-            self.toast = Some(Toast::error(percent_of_zero()));
+            self.toast = Some(Toast::error(percent_of_zero(&self.l10n)));
             return;
         };
         self.set_limits(limits, band);
@@ -358,7 +380,7 @@ impl App {
             // Out before the alarm saw it cross: said, not marked. In the
             // error style all the same, as the badge and the reading are:
             // the reading is past a limit, which is no good news.
-            self.toast = Some(Toast::error(breach.note()));
+            self.toast = Some(Toast::error(self.l10n.breach_note(&breach)));
             return None;
         }
         Some(PendingBreach::new(m, &breach))
@@ -397,9 +419,9 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_limits;
     use crate::app::App;
     use crate::graph::LimitSide;
+    use crate::l10n::english;
     use crate::settings::Settings;
     use dmm_lib::alarm::{Hysteresis, Limits};
     use dmm_lib::flags::StatusFlags;
@@ -447,6 +469,14 @@ mod tests {
 
         app.clear_session();
         assert_eq!(app.alarm.as_ref().unwrap().high_count, 0);
+    }
+
+    fn parse_limits(
+        low: &str,
+        high: &str,
+        band: &str,
+    ) -> Result<(dmm_lib::alarm::Limits, Hysteresis), String> {
+        super::parse_limits(&english(), low, high, band)
     }
 
     #[test]

@@ -650,12 +650,11 @@ impl App {
     /// set up: the layout with a row for its fields.
     pub(super) fn chip_setup_hint(&self, ctx: &egui::Context) -> String {
         if !self.settings.show_graph && !self.settings.show_recording {
-            "Show the graph or recording in Settings first".to_string()
+            dmm_shared::tr!(self.l10n, "alarm-scale-setup-in-settings").into_owned()
         } else {
-            format!(
-                "Set up in the normal layout first ({})",
-                shortcuts::Shortcut::CycleBigMeter.keys(ctx)
-            )
+            let keys = shortcuts::Shortcut::CycleBigMeter.keys(ctx);
+            dmm_shared::tr!(self.l10n, "alarm-scale-setup-in-normal-layout", keys = keys)
+                .into_owned()
         }
     }
 
@@ -1177,7 +1176,7 @@ mod tests {
     /// ends at what is meant to stay as it is: library labels, model names,
     /// numbers with units. Two above the Linux count: macOS draws a
     /// Minimise row in the shortcut help.
-    const UNTRANSLATED_CEILING: usize = 80;
+    const UNTRANSLATED_CEILING: usize = 72;
 
     /// Every distinct text the whole app draws or names to a screen reader
     /// in `scene`, under the pseudo-locale, that has a letter outside the

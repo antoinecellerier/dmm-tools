@@ -13,14 +13,14 @@
 //! always on screen so an active transform can always be turned back off.
 
 use dmm_lib::transform::{FactorError, RAW_LABEL, Transform};
-use dmm_shared::input;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::{input, tr};
 use eframe::egui::{self, RichText, Ui};
 
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
 use super::controls::remote::{SplitChip, row_field};
 use super::toast::Toast;
-use crate::l10n::english;
 
 /// Draft text for the three fields, kept apart from the applied
 /// [`Transform`]: the row commits on Apply or Enter only, so a half-typed
@@ -46,12 +46,6 @@ impl TransformEditor {
     }
 }
 
-/// Tooltip on the chip's caret.
-const SCALE_HOVER: &str = "Set the scale";
-
-/// The chip's name.
-const SCALE_NAME: &str = "Scale";
-
 /// Turn the three draft strings into a [`Transform`].
 ///
 /// Empty means "leave this alone": no scale is ×1, no offset is +0, no unit
@@ -59,10 +53,33 @@ const SCALE_NAME: &str = "Scale";
 /// this row's — a zero scale is rejected rather than accepted as a flat line,
 /// because it destroys the reading and is far more likely a half-typed "0.01"
 /// than a deliberate choice.
-fn parse_transform_fields(scale: &str, offset: &str, unit: &str) -> Result<Transform, String> {
-    let scale = parse_field(scale, "scale", 1.0, Transform::check_scale)?;
-    let offset = parse_field(offset, "offset", 0.0, Transform::check_offset)?;
+fn parse_transform_fields(
+    l10n: &Localizer,
+    scale: &str,
+    offset: &str,
+    unit: &str,
+) -> Result<Transform, String> {
+    let scale = parse_field(l10n, scale, Field::Scale, 1.0, Transform::check_scale)?;
+    let offset = parse_field(l10n, offset, Field::Offset, 0.0, Transform::check_offset)?;
     Ok(Transform::linear(scale, offset, Some(unit.to_string())))
+}
+
+/// The row's two numeric fields, for the toast that names one.
+#[derive(Clone, Copy)]
+enum Field {
+    Scale,
+    Offset,
+}
+
+impl Field {
+    /// Why the field's text was refused, framed with the field's name.
+    fn invalid(self, l10n: &Localizer, reason: std::borrow::Cow<'_, str>) -> String {
+        match self {
+            Field::Scale => tr!(l10n, "scale-invalid-factor", reason = reason),
+            Field::Offset => tr!(l10n, "scale-invalid-offset", reason = reason),
+        }
+        .into_owned()
+    }
 }
 
 /// Parse one numeric field and put it through `check`, naming the field in
@@ -70,8 +87,9 @@ fn parse_transform_fields(scale: &str, offset: &str, unit: &str) -> Result<Trans
 /// blank field means, and is taken as-is: it is this row's own default, not
 /// something the user typed.
 fn parse_field(
+    l10n: &Localizer,
     text: &str,
-    name: &str,
+    field: Field,
     empty: f64,
     check: fn(f64) -> Result<f64, FactorError>,
 ) -> Result<f64, String> {
@@ -84,8 +102,8 @@ fn parse_field(
     // way to tell why.
     let value = text
         .parse::<f64>()
-        .map_err(|_| format!("Invalid {name}: {}", input::not_a_number(&english(), text)))?;
-    check(value).map_err(|e| format!("Invalid {name}: {}", input::factor_error(&english(), e)))
+        .map_err(|_| field.invalid(l10n, input::not_a_number(l10n, text)))?;
+    check(value).map_err(|e| field.invalid(l10n, input::factor_error(l10n, e)))
 }
 
 impl App {
@@ -93,15 +111,16 @@ impl App {
     /// remote buttons, which is why a caller sitting it next to them draws a
     /// rule in between: those mirror and drive the meter's own state, this
     /// one changes nothing on the meter at all.
-    pub(super) fn scale_chip(&self, ctx: &egui::Context) -> SplitChip<'static> {
+    pub(super) fn scale_chip(&self, ctx: &egui::Context) -> SplitChip<'_> {
         let active = !self.transform.is_identity();
         SplitChip {
-            name: SCALE_NAME,
+            name: tr!(self.l10n, "scale-chip"),
             active,
             ready: active || !self.transform_editor.is_blank(),
             open: (!self.meter_only()).then_some(self.transform_editor.open),
-            hover: "Turn scaling on or off",
-            fields_hover: SCALE_HOVER,
+            hover: tr!(self.l10n, "scale-chip.hover"),
+            fields_name: tr!(self.l10n, "scale-settings.a11y"),
+            fields_hover: tr!(self.l10n, "scale-settings.hover"),
             unready_hover: self.chip_setup_hint(ctx),
         }
     }
@@ -125,6 +144,7 @@ impl App {
     /// the chip's body.
     fn apply_transform_fields(&mut self) {
         match parse_transform_fields(
+            &self.l10n,
             &self.transform_editor.scale,
             &self.transform_editor.offset,
             &self.transform_editor.unit,
@@ -163,22 +183,45 @@ impl App {
         let mut apply = false;
         let mut off = false;
         let focus = std::mem::take(&mut self.transform_editor.focus);
+        let l10n = &self.l10n;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
             let editor = &mut self.transform_editor;
-            let mut field = |ui: &mut Ui, sign, text, hint, focus| {
+            let mut field = |ui: &mut Ui, sign, text, hint: &str, focus| {
                 apply |= row_field(ui, &font, scale, sign, text, hint, focus).1;
             };
-            field(ui, "\u{D7}", &mut editor.scale, "Scale factor", focus);
-            field(ui, "+", &mut editor.offset, "Offset", false);
-            field(ui, "\u{2192}", &mut editor.unit, "Unit label", false);
+            field(
+                ui,
+                "\u{D7}",
+                &mut editor.scale,
+                &tr!(l10n, "scale-factor"),
+                focus,
+            );
+            field(
+                ui,
+                "+",
+                &mut editor.offset,
+                &tr!(l10n, "scale-offset"),
+                false,
+            );
+            field(
+                ui,
+                "\u{2192}",
+                &mut editor.unit,
+                &tr!(l10n, "scale-unit"),
+                false,
+            );
             apply |= ui
-                .add(egui::Button::new(RichText::new("Apply").font(font.clone())))
-                .on_hover_text("Apply these values to every reading from now on")
+                .add(egui::Button::new(
+                    RichText::new(tr!(l10n, "scale-apply")).font(font.clone()),
+                ))
+                .on_hover_text(tr!(l10n, "scale-apply.hover"))
                 .clicked();
             off |= ui
-                .add(egui::Button::new(RichText::new("Off").font(font.clone())))
-                .on_hover_text("Stop scaling and show the meter's own reading again")
+                .add(egui::Button::new(
+                    RichText::new(tr!(l10n, "scale-off")).font(font.clone()),
+                ))
+                .on_hover_text(tr!(l10n, "scale-off.hover"))
                 .clicked();
         });
 
@@ -202,11 +245,7 @@ impl App {
         if new == self.transform {
             return;
         }
-        let mut message = if new.is_identity() {
-            "Scaling off".to_string()
-        } else {
-            format!("Scaling readings: {}", new.describe())
-        };
+        let identity = new.is_identity();
         // Without a relabel the `Raw` sub-value shares the plotted unit, so
         // it is overlaid by default — and a ×100 companion squeezes the
         // scaled trace into a flat line against the auto-fit Y range. Start
@@ -217,8 +256,8 @@ impl App {
         }
         self.transform = new;
         self.clear_session();
-        if self.capture.recording.active {
-            message.push_str(" \u{2014} recording continues with scaled values");
+        let recording = self.capture.recording.active;
+        if recording {
             // A scale switched on mid-capture still needs its trailing CSV
             // column. Only grows: switching back off leaves the group empty
             // rather than shifting every column the file already promised.
@@ -231,9 +270,19 @@ impl App {
         // Limits typed against the old unit would judge the new one: a high
         // limit of 5 meant for volts becomes 5 A under a clamp scale. The
         // alarm stops instead, its fields kept for Apply.
-        if self.alarm.take().is_some() {
-            message.push_str(" \u{2014} alarm off; set its limits again in the new unit");
-        }
+        let alarm = self.alarm.take().is_some();
+        let also = match (recording, alarm) {
+            (true, true) => "both",
+            (true, false) => "recording",
+            (false, true) => "alarm",
+            (false, false) => "none",
+        };
+        let message = if identity {
+            tr!(self.l10n, "scale-off-toast", also = also)
+        } else {
+            let transform = self.transform.describe();
+            tr!(self.l10n, "scale-on", transform = transform, also = also)
+        };
         self.toast = Some(Toast::info(message));
     }
 }
@@ -355,14 +404,14 @@ mod tests {
     /// The 10 mV/A clamp: ×100, no offset, relabelled to amps.
     #[test]
     fn parse_transform_fields_reads_a_clamp_factor() {
-        let t = parse_transform_fields("100", "", "A").expect("valid");
+        let t = parse_transform_fields(&crate::l10n::english(), "100", "", "A").expect("valid");
         assert_eq!(t, Transform::linear(100.0, 0.0, Some("A".to_string())));
         assert_eq!(t.describe(), "\u{D7}100 \u{2192} A");
     }
 
     #[test]
     fn an_empty_unit_field_means_no_relabel() {
-        let t = parse_transform_fields("2", "0.5", "  ").expect("valid");
+        let t = parse_transform_fields(&crate::l10n::english(), "2", "0.5", "  ").expect("valid");
         assert_eq!(t, Transform::linear(2.0, 0.5, None));
         assert_eq!(t.unit, None);
     }
@@ -371,21 +420,23 @@ mod tests {
     /// scaling on.
     #[test]
     fn all_empty_fields_are_the_identity() {
-        let t = parse_transform_fields("", "", "").expect("valid");
+        let t = parse_transform_fields(&crate::l10n::english(), "", "", "").expect("valid");
         assert!(t.is_identity());
     }
 
     #[test]
     fn a_zero_or_unparsable_scale_is_rejected_by_name() {
         for bad in ["0", "abc", "inf", "1,5"] {
-            let err = parse_transform_fields(bad, "", "").expect_err("rejected");
+            let err =
+                parse_transform_fields(&crate::l10n::english(), bad, "", "").expect_err("rejected");
             assert!(err.contains("scale"), "{bad:?} gave {err:?}");
         }
     }
 
     #[test]
     fn an_unparsable_offset_is_rejected_by_name() {
-        let err = parse_transform_fields("", "abc", "").expect_err("rejected");
+        let err =
+            parse_transform_fields(&crate::l10n::english(), "", "abc", "").expect_err("rejected");
         assert!(err.contains("offset"), "{err:?}");
     }
 
@@ -434,7 +485,7 @@ mod tests {
     /// A negative scale is a legitimate probe polarity flip, not an error.
     #[test]
     fn a_negative_scale_is_accepted() {
-        let t = parse_transform_fields("-1", "", "").expect("valid");
+        let t = parse_transform_fields(&crate::l10n::english(), "-1", "", "").expect("valid");
         assert_eq!(t, Transform::linear(-1.0, 0.0, None));
     }
 
@@ -449,6 +500,39 @@ mod tests {
         assert!(app.alarm.is_none());
         assert!(app.watched_limits().is_none());
         let toast = app.toast.as_ref().expect("a toast");
-        assert!(toast.message.contains("alarm off"), "{}", toast.message);
+        assert_eq!(
+            toast.message,
+            "Scaling readings: \u{D7}100 \u{2192} A \u{2014} alarm off; set its limits again in the new unit"
+        );
+    }
+
+    /// The toast says each thing the change brings with it, in one
+    /// sentence: a recording going on, and the alarm turned off.
+    #[test]
+    fn the_scale_toast_says_what_came_with_it() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.capture.recording.active = true;
+        app.set_transform(Transform::linear(2.0, 0.5, None));
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some("Scaling readings: \u{D7}2 + 0.5 \u{2014} recording continues with scaled values")
+        );
+        let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).unwrap();
+        app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
+        app.set_transform(Transform::default());
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some(
+                "Scaling off \u{2014} recording continues with scaled values \u{2014} alarm off; \
+                 set its limits again in the new unit"
+            )
+        );
+        app.capture.recording.active = false;
+        app.set_transform(Transform::linear(3.0, 0.0, None));
+        app.set_transform(Transform::default());
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some("Scaling off")
+        );
     }
 }
