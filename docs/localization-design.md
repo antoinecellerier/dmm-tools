@@ -1,6 +1,6 @@
 # Localization Design
 
-> **Status: proposal.** Nothing here is implemented. Every user-facing string is still an English literal where it is used.
+> **Status: in progress.** The localizer is in place (`dmm_shared::l10n`); the apps' text is still English literals where it is used.
 
 This proposal would let dmm-gui and dmm-cli speak the user's language using [Fluent](https://projectfluent.org/). The first request came in [issue #35](https://github.com/antoinecellerier/dmm-tools/issues/35). A reporter whose Brymen meters are sold in Brazil under the Minipa brand ran `capture` through their own wrapper, which rewrote its prompts into Brazilian Portuguese. Because the wrapper piped stdio, the review step and `detect` were skipped. The reporter named the capture flow as the place translation helps most, and offered to contribute and review a pt-BR translation. This proposal leaves the capture tooling in English (see [Ruled out](#ruled-out)), so it serves that audience but not the case that prompted the request.
 
@@ -61,7 +61,11 @@ On top of that, the clap `--help` text is about 160 lines. Merging strings that 
 
 ## Fluent in the apps
 
-A new `l10n` module in `dmm-shared` holds the loader, the language choice and the shared messages, because both binaries must agree on them. Resources go in `i18n/<locale>/{shared,gui,cli,lib}.ftl`, with `en-US` as the reference. The plan is plain `fluent-bundle` behind a small loader. The alternatives are `i18n-embed` with `i18n-embed-fl`, whose `fl!` macro checks message IDs at compile time, and `fluent-templates`. A trial build with `cargo tree` should settle the choice.
+An `l10n` module in `dmm-shared` holds the loader, the language choice and the shared messages, because both binaries must agree on them. Resources go in `i18n/<locale>/`, one file per screen area, with `en-US` as the reference.
+
+**Plain `fluent-bundle`.** It adds a dozen crates and reads several files per language into one bundle. `i18n-embed` with `i18n-embed-fl` checks message IDs at compile time, but adds over forty crates, fails `cargo deny` on an unmaintained dependency, and takes one file per crate. `fluent-templates` loads into a static and finds a broken file only at run time. In place of `fl!`, `tr!` takes only a literal ID, and a test checks every ID and variable used against the en-US files.
+
+**Translations can be tried without a build.** `DMM_TOOLS_L10N_DIR` points at a folder whose `<locale>/` files load over the built-in ones, and a folder for a new locale makes that language selectable. A translator can then check their work in a release binary.
 
 **A localizer handle, not a global.** The GUI keeps the localizer in its app state, and the CLI creates one at startup. Switching language replaces the GUI's handle. Each test builds its own handle pinned to en-US or the pseudo-locale, so tests running in parallel don't race on shared state.
 
@@ -77,7 +81,7 @@ A `language` field in `SharedSettings` (none means follow the system) is shared 
 
 Without a setting, `sys-locale` reports the system language: the UI language on Windows, the preferred-languages list on macOS, and the locale variables on Unix. On Unix it returns `LANGUAGE` first and reduces `C.UTF-8` to "C", so it can't apply gettext's C-locale rule itself.
 
-**C locale means English.** On Unix, the app takes the first non-empty value of `LC_ALL`, `LC_MESSAGES` and `LANG`, as gettext does. If that value is `C` or `POSIX` (including `C.UTF-8`), the app uses en-US and ignores `LANGUAGE`. Only otherwise does it ask `sys-locale`. Scripts, cron jobs and the screenshot pipeline set `LC_ALL=C` and need English, even on Debian and Ubuntu desktops, which set `LANGUAGE`.
+**C locale means English.** The app takes the first non-empty value of `LC_ALL`, `LC_MESSAGES` and `LANG`, as gettext does, on every platform: the test helpers rely on it on the macOS and Windows runners too. If that value is `C` or `POSIX` (including `C.UTF-8`), the app uses en-US and ignores `LANGUAGE`; on Linux and the BSDs, where these variables are the system's language, so does finding none of the three set, as glibc does. Only otherwise does it ask `sys-locale`, skipping any `C` or `POSIX` in its list. Scripts, cron jobs and the screenshot pipeline set `LC_ALL=C` and need English, even on Debian and Ubuntu desktops, which set `LANGUAGE`.
 
 ## Library fixed text
 

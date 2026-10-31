@@ -17,7 +17,7 @@ Protocol internals are `pub(crate)`: consumers use `Dmm` and the registry.
 
 **`dmm-shared`** holds what the two binaries must agree on and `dmm-lib` must not carry: the
 settings file, durable writes, what an export holds and is called, what `--replay` opens, the help
-text and the default log levels. Device, protocol and transport code stays in `dmm-lib`. Anything
+text, the translations and the default log levels. Device, protocol and transport code stays in `dmm-lib`. Anything
 one binary alone needs stays in that binary.
 
 **`dmm-cli`** is a `clap` binary, and **`dmm-gui`** an `eframe`/`egui` one. Neither holds protocol
@@ -202,6 +202,15 @@ same way (see **One settings type for both binaries**).
 
 Code: `crates/dmm-shared/src/lib.rs`, `export/`.
 
+### Translation
+
+Each binary holds a `Localizer`, a handle rather than a global, built from the Fluent files compiled
+into it. Text is translated where it is shown: the library's strings, exports, settings and logs
+stay English (see [localization-design.md](localization-design.md)). A message a language lacks
+falls back to English alone, and `LC_ALL=C` always means English.
+
+Code: `crates/dmm-shared/src/l10n/`, `i18n/`.
+
 ### CLI
 
 One module per subcommand under `cmd/`, except `capture`, which has a module of its own,
@@ -356,6 +365,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/read.rs` | Reading an export back |
 | `replay.rs` | What `--replay` opens |
 | `help.rs` | Help and version text both binaries print |
+| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale |
 | `logging.rs` | The logger both binaries install |
 
 ### dmm-cli

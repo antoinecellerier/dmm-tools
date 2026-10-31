@@ -27,6 +27,7 @@
 pub mod export;
 pub mod help;
 pub mod input;
+pub mod l10n;
 pub mod logging;
 pub mod replay;
 

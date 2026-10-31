@@ -247,6 +247,26 @@ keyboard or click tests never touch your live desktop session or your
 The subcommands and what each one waits for are in the `verify-gui` skill
 (`.claude/skills/verify-gui/SKILL.md`). Always finish with `stop`.
 
+## Translations
+
+The apps' words live in Fluent files under `i18n/<locale>/`, with `en-US`
+as the reference; [localization-design.md](localization-design.md) explains
+what is translated and what stays English. Two environment variables help
+while working on them:
+
+- `DMM_TOOLS_PSEUDO_LOCALE=1` turns every message into an accented,
+  ~40% longer, bracketed version of itself. Layouts that can't take a
+  longer language show up, and text without brackets never went through
+  the translations.
+- `DMM_TOOLS_L10N_DIR=<dir>` loads `<dir>/<locale>/…` over the built-in
+  files, message by message, so a translation can be tried without
+  rebuilding; mistakes in those files are logged as errors, which show
+  without `RUST_LOG`. A folder for a locale the apps don't ship makes that
+  language selectable.
+
+`LC_ALL=C` always means English, whatever else the environment says; the
+test helpers and the screenshot scripts rely on it.
+
 ## Hidden flags
 
 These contributor flags are left out of `--help`.
