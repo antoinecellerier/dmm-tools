@@ -660,6 +660,40 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
     None
 }
 
+/// Every label the parser and the choice lists produce: the readings'
+/// ([`parse::all_labels`]), and the off/on states of the flag settings each
+/// spec §6 word offers. The mode and range choices are words and rungs the
+/// readings name already.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    let by = devices::UT181A.id;
+    parse::all_labels(out, by);
+    for word in mode::known_words() {
+        for choice in mode::mode_choices(word) {
+            out.add(TextKind::Mode, choice.label, by);
+        }
+        for choice in mode::range_choices(word, 0, true) {
+            out.add(TextKind::Range, choice.label, by);
+        }
+        let settings = [
+            FlagSetting::Hold,
+            FlagSetting::Rel,
+            FlagSetting::MinMax,
+            FlagSetting::Peak,
+        ];
+        for setting in settings {
+            for &state in Ut181aProtocol::flag_states(setting, word) {
+                out.add(
+                    TextKind::Toggle,
+                    Ut181aProtocol::flag_label(setting, state),
+                    by,
+                );
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::parse::tests::{hex, make_payload, make_relative_payload, minmax_payload};

@@ -430,6 +430,46 @@ pub(super) fn lookup_range_label(mode_word: u16, range: u8) -> &'static str {
     }
 }
 
+/// The sub-values the relative format carries beside the difference.
+const REFERENCE: &str = "Reference";
+const ABSOLUTE: &str = "Absolute";
+/// The sub-values the MIN/MAX format carries beside the live reading.
+const MAX: &str = "Max";
+const AVERAGE: &str = "Average";
+const MIN: &str = "Min";
+/// The sub-value the peak format carries beside the highest peak.
+const PEAK_MIN: &str = "Peak Min";
+/// The limits of the normal format's COMP extension.
+const COMP_HIGH: &str = "COMP High";
+const COMP_LOW: &str = "COMP Low";
+
+/// Every label a reading takes: each spec §6 word's name, its range labels,
+/// the sub-value labels [`aux_labels`] names for it, and those of the
+/// formats and the COMP extension.
+#[cfg(any(test, feature = "test-support"))]
+pub(super) fn all_labels(out: &mut crate::text::Labels, by: &'static str) {
+    use crate::text::TextKind;
+    for word in mode::known_words() {
+        out.add(TextKind::Mode, decode_mode_word(word), by);
+        for range in (0..=u8::MAX).filter(|&range| mode::is_known_range(word, range)) {
+            out.add(TextKind::Range, lookup_range_label(word, range), by);
+        }
+        let (aux1, aux2) = aux_labels(word);
+        // A positional label is reported wherever it is used.
+        for label in [aux1, aux2] {
+            if label != POSITIONAL_AUX.0 && label != POSITIONAL_AUX.1 {
+                out.add(TextKind::Aux, label, by);
+            }
+        }
+    }
+    let formats = [
+        REFERENCE, ABSOLUTE, MAX, AVERAGE, MIN, PEAK_MIN, COMP_HIGH, COMP_LOW,
+    ];
+    for label in formats {
+        out.add(TextKind::Aux, label, by);
+    }
+}
+
 /// Parse a UT181A measurement payload (type 0x02 packet).
 ///
 /// Common header (after type byte):
@@ -656,7 +696,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                 let result_str = if comp_result == 0 { "PASS" } else { "FAIL" };
                 let high_v = high_float as f64;
                 aux.push(make_aux(
-                    "COMP High",
+                    COMP_HIGH,
                     MeasuredValue::Normal(high_v),
                     unit.clone(),
                     Some(format!("{high_v:.dp$}")),
@@ -666,7 +706,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                 if let Some(low_float) = low_float {
                     let low_v = low_float as f64;
                     aux.push(make_aux(
-                        "COMP Low",
+                        COMP_LOW,
                         MeasuredValue::Normal(low_v),
                         unit.clone(),
                         Some(format!("{low_v:.dp$}")),
@@ -697,8 +737,8 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             let (abs_val, abs_disp, abs_unit) = parse_full_value(&data[26..])?;
 
             let aux = vec![
-                make_aux("Reference", ref_val, ref_unit, ref_disp, None),
-                make_aux("Absolute", abs_val, abs_unit, abs_disp, None),
+                make_aux(REFERENCE, ref_val, ref_unit, ref_disp, None),
+                make_aux(ABSOLUTE, abs_val, abs_unit, abs_disp, None),
             ];
             // Main value = delta (matches meter display)
             (rel_val, rel_disp, rel_unit, aux)
@@ -730,9 +770,9 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             let unit = parse_unit_string(&data[32..40]);
 
             let aux = vec![
-                make_aux("Max", max_val, unit.clone(), max_disp, Some(max_ts)),
-                make_aux("Average", avg_val, unit.clone(), avg_disp, Some(avg_ts)),
-                make_aux("Min", min_val, unit.clone(), min_disp, Some(min_ts)),
+                make_aux(MAX, max_val, unit.clone(), max_disp, Some(max_ts)),
+                make_aux(AVERAGE, avg_val, unit.clone(), avg_disp, Some(avg_ts)),
+                make_aux(MIN, min_val, unit.clone(), min_disp, Some(min_ts)),
             ];
             (cur_val, cur_disp, unit, aux)
         }
@@ -752,7 +792,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             let (pmax_val, pmax_disp, pmax_unit) = parse_full_value(data)?;
             let (pmin_val, pmin_disp, pmin_unit) = parse_full_value(&data[13..])?;
 
-            let aux = vec![make_aux("Peak Min", pmin_val, pmin_unit, pmin_disp, None)];
+            let aux = vec![make_aux(PEAK_MIN, pmin_val, pmin_unit, pmin_disp, None)];
             (pmax_val, pmax_disp, pmax_unit, aux)
         }
 
@@ -1571,10 +1611,8 @@ raw_payload=30"#
         }
     }
 
-    /// The captured payloads and frames shaped as the spec documents them
-    /// report nothing: a report there would warn every user of the meter.
-    #[test]
-    fn documented_frames_report_nothing() {
+    /// The captured payloads, and frames shaped as the spec documents them.
+    fn documented_payloads() -> Vec<Vec<u8>> {
         let mut payloads = vec![
             real_frame_temp_dual_probe(),
             real_frame_vac_hz(),
@@ -1639,8 +1677,14 @@ raw_payload=30"#
             let low = (comp_mode < 2).then_some(1.0);
             payloads.push(comp_payload(comp_mode, result, 0x0F, 10.0, low));
         }
+        payloads
+    }
 
-        for payload in &payloads {
+    /// The documented payloads report nothing: a report there would warn
+    /// every user of the meter.
+    #[test]
+    fn documented_frames_report_nothing() {
+        for payload in &documented_payloads() {
             let (m, reports) = parse_reporting(payload);
             assert!(m.is_ok(), "{payload:02X?}: {m:?}");
             assert!(reports.is_empty(), "{payload:02X?}: {reports:?}");
@@ -1940,5 +1984,39 @@ raw_payload=30"#
                 .collect();
             assert_eq!(reports, expected);
         }
+    }
+
+    /// The list holds exactly the labels of the readings parsed without a
+    /// report: the documented payloads, and every spec §6 word with both
+    /// sub-values on every rung; and the golden readings' labels.
+    #[test]
+    fn the_listed_labels_are_the_quiet_readings() {
+        use crate::text::TextKind;
+        let all = crate::text::all_texts();
+        crate::text::assert_golden_listed(&all, "ut181a");
+        let protocol = super::super::Ut181aProtocol::new();
+        let mut payloads = documented_payloads();
+        for word in mode::known_words() {
+            for range in 0..=top_rung(word) {
+                let v = full_value(1.5, 0x10, VDC);
+                payloads.push(frame(0x06, 0x01, word, range, &[&v, &v, &v]));
+            }
+        }
+        let mut read = std::collections::BTreeSet::new();
+        for payload in &payloads {
+            let (m, reports) = parse_reporting(payload);
+            let m = m.unwrap();
+            if reports.is_empty() {
+                crate::text::assert_listed(&all, &protocol, &m, "ut181a");
+                read.insert((TextKind::Mode, m.mode.to_string()));
+                read.insert((TextKind::Range, m.range_label.to_string()));
+                for aux in &m.aux_values {
+                    read.insert((TextKind::Aux, aux.label.to_string()));
+                }
+            }
+        }
+        read.remove(&(TextKind::Range, String::new()));
+        let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
+        assert_eq!(all.of_device("ut181a", &kinds), read);
     }
 }

@@ -63,6 +63,7 @@ pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
 pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     ut61eplus::all_labels(out);
     ut171::all_labels(out);
+    ut181a::all_labels(out);
     ut8802::all_labels(out);
     ut8803::all_labels(out);
     ut80x::all_labels(out);
