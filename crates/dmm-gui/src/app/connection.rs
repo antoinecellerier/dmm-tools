@@ -188,10 +188,11 @@ pub(crate) enum DmmMessage {
     /// Link lost mid-acquisition; the thread is about to start reconnecting.
     Disconnected(dmm_lib::error::Error),
     /// Reconnect attempt in progress — `attempt` is 1-based.
-    /// `last_error` is the most recent reconnect failure, if any.
+    /// `last_error` is the previous attempt's failure, if any, carried whole
+    /// so the UI words it in its own language.
     Reconnecting {
         attempt: u32,
-        last_error: Option<String>,
+        last_error: Option<dmm_lib::error::Error>,
     },
     /// A library failure, carried whole rather than pre-formatted: the UI
     /// classifies it by [`ErrorKind`] and by variant, which a message string
@@ -540,12 +541,14 @@ where
                 // up on the same adapter.
                 drop(dmm);
                 let mut attempt: u32 = 0;
-                let mut last_error: Option<String> = None;
+                // Each failure goes out with the next attempt's message, which
+                // the UI keeps until the one after.
+                let mut last_error: Option<dmm_lib::error::Error> = None;
                 loop {
                     attempt += 1;
                     let _ = msg_tx.send(DmmMessage::Reconnecting {
                         attempt,
-                        last_error: last_error.clone(),
+                        last_error: last_error.take(),
                     });
                     ctx.request_repaint();
 
@@ -582,7 +585,7 @@ where
                         }
                         Err(err) => {
                             warn!("background thread: reconnect attempt {attempt} failed: {err}");
-                            last_error = Some(err.to_string());
+                            last_error = Some(err);
                         }
                     }
                 }

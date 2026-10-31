@@ -174,16 +174,24 @@ fn named_link(link: &str) -> String {
 
 /// The cables [`Error::NoTransportFound`] looked for, with their IDs.
 fn looked_for(cables: &[&str]) -> String {
-    let ids: Vec<String> = cables
-        .iter()
-        .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
-        .map(|kt| format!("{} {:#06x}:{:#06x}", kt.name, kt.vid, kt.pid))
-        .collect();
+    let ids = cable_ids(cables);
     if ids.is_empty() {
         String::new()
     } else {
-        format!(" (looked for {})", ids.join(", "))
+        format!(" (looked for {ids})")
     }
+}
+
+/// `cables`, by the names [`Error::NoTransportFound`] carries, each with its
+/// USB IDs as that message lists them: `CP2110 0x10c4:0xea80, …`. Empty
+/// when none is a known cable. For an app that words the message itself.
+pub fn cable_ids(cables: &[&str]) -> String {
+    cables
+        .iter()
+        .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
+        .map(|kt| format!("{} {:#06x}:{:#06x}", kt.name, kt.vid, kt.pid))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn bluetooth_clause(searched: &bool) -> &'static str {

@@ -274,7 +274,8 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
         // the user can do about it.
         return Err(match e {
             dmm_lib::error::Error::CommandRejected(detail) => format!(
-                "the meter refused {label}: {detail} \u{2014} {}",
+                "the meter refused {label}: {} \u{2014} {}",
+                crate::l10n::get().rejected(&detail),
                 switch_hint(setting)
             )
             .into(),

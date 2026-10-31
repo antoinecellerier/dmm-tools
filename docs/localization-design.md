@@ -114,7 +114,7 @@ Some library errors build their English message at run time with `format!`, so t
 
 | Group | Errors | Treatment |
 |---|---|---|
-| Developer diagnostics | invalid response, checksum mismatch, unknown mode byte, replay parse, HID | Stay English |
+| Developer diagnostics | invalid response, checksum mismatch, unknown mode byte, replay parse, HID | Lead-in translated, detail stays English |
 | Already structured | `Timeout`, `LinkLost`, `AdapterNotFound`, `UnknownDevice`, `DeviceNotIdentified`, `WrongCable`, `NoTransportFound`, `BluetoothOnly` | Translated by variant and fields |
 | Built from sentences | `UnsupportedCommand`, `CommandRejected`, `Bluetooth`, about 30 messages, many in `protocol/cycle.rs` | Gain a reason enum |
 
@@ -124,7 +124,7 @@ The reason enum's details:
 - Button names (RANGE, SELECT) inside a reason stay as the meter prints them.
 - Mode labels inside a reason go through the lookup in [Library fixed text](#library-fixed-text).
 
-The library's `Display` stays the English rendering, used by logs and by library users without Fluent. `dmm-shared` renders each reason through Fluent. One test renders sample reasons through en-US and checks that the result matches `Display`.
+The library's `Display` stays the English rendering, used by logs and by library users without Fluent. `dmm-shared` renders each error and reason through the hand-written `lib-errors.ftl`. One test renders sample reasons through en-US and checks that the result matches `Display`.
 
 **Structure, not sentences.** The renderer is an exhaustive `match`, so a reason added without a message fails to compile. Matching on error text would fail silently instead.
 

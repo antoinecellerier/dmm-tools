@@ -324,7 +324,7 @@ fn main() {
 
     if let Err(e) = result {
         error!("{e}");
-        let msg = e.to_string();
+        let msg = l10n::error_text(&*e);
         // The activation instructions belong to one meter, so they are only
         // printed once one is settled on: the one named, or the one detection
         // found before the meter went quiet.

@@ -134,7 +134,7 @@ fn command_failed_toast(
     command: &RemoteCommand,
     error: &dmm_lib::error::Error,
 ) -> String {
-    let error = error.to_string();
+    let error = l10n.error(error);
     match command {
         RemoteCommand::Named(name) => {
             tr!(
@@ -611,7 +611,7 @@ impl App {
                     last_error,
                 } => {
                     self.connection.reconnect_attempt = attempt;
-                    self.connection.reconnect_last_error = last_error;
+                    self.connection.reconnect_last_error = last_error.map(|e| self.l10n.error(&e));
                 }
                 DmmMessage::Measurement(m) => {
                     self.connection.last_error = None;
@@ -731,17 +731,16 @@ impl App {
             ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
                 ui.add(
                     egui::Label::new(
-                        RichText::new(format!(
-                            "{ERROR_GLYPH} {}",
-                            dmm_lib::transport::LateReadings::TITLE
-                        ))
-                        .color(warn_color),
+                        RichText::new(format!("{ERROR_GLYPH} {}", self.l10n.late_readings_title()))
+                            .color(warn_color),
                     )
                     .wrap(),
                 );
             });
         });
-        ui.add(egui::Label::new(RichText::new(notice.advice()).small()).wrap());
+        ui.add(
+            egui::Label::new(RichText::new(self.l10n.late_readings_advice(notice)).small()).wrap(),
+        );
         if let Some(command) = &notice.command {
             ui.add_space(4.0);
             // Copy follows the command's last word, on that line when there

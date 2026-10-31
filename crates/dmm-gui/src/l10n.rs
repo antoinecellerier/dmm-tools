@@ -18,9 +18,15 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui/graph.ftl"),
 ];
 
-/// Everything the GUI shows: the shared help and its own messages.
+/// Everything the GUI shows: the shared help, the library's text and
+/// errors, and its own messages.
 pub(crate) fn resources() -> Vec<Resource> {
-    [dmm_shared::help::RESOURCES, GUI].concat()
+    [
+        dmm_shared::help::RESOURCES,
+        dmm_shared::l10n::LIB_RESOURCES,
+        GUI,
+    ]
+    .concat()
 }
 
 /// The localizer for `setting` (the settings file's `language`, empty to

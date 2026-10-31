@@ -261,7 +261,7 @@ pub(super) struct Connection {
     /// Reconnect attempt count (0 = not reconnecting). Populated from the
     /// background thread while the state is `Reconnecting`.
     pub(super) reconnect_attempt: u32,
-    /// Last reconnect failure message, if any.
+    /// Last reconnect failure message, if any, worded as it arrived.
     pub(super) reconnect_last_error: Option<String>,
     rx: Option<mpsc::Receiver<DmmMessage>>,
     ctrl_tx: Option<mpsc::Sender<ThreadControl>>,

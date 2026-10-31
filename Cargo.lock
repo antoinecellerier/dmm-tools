@@ -1190,6 +1190,7 @@ dependencies = [
  "env_logger",
  "fluent-bundle",
  "fluent-syntax",
+ "hidapi",
  "log",
  "serde",
  "serde_json",

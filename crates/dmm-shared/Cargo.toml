@@ -23,6 +23,7 @@ unic-langid = "0.9.6"
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
+hidapi = { version = "2.6", default-features = false } # builds an `Error::Hid` for the error tests
 
 [features]
 # The message scan the binaries' tests run over their sources (l10n::check).

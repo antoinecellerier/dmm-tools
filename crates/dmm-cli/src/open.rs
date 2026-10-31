@@ -444,8 +444,9 @@ fn open_error_help(
         }
         dmm_lib::error::Error::AdapterNotFound(ref detail) => {
             eprintln!(
-                "{} adapter not found: {detail}",
-                style("Error:").red().bold()
+                "{} {}",
+                style("Error:").red().bold(),
+                crate::l10n::get().error(&error)
             );
             // Only a real list is worth setting apart and worth a hint —
             // "nothing is connected" and "couldn't look" are complete on

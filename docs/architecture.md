@@ -207,8 +207,10 @@ Code: `crates/dmm-shared/src/lib.rs`, `export/`.
 Each binary holds a `Localizer`, a handle rather than a global, built from the Fluent files compiled
 into it. Text is translated where it is shown: exports, settings and logs stay English, and so do
 the library's strings, which the apps look up by kind and English text in a `lib.ftl` generated
-from the library as they draw them (see [localization-design.md](localization-design.md)). A
-message a language lacks falls back to English alone, and `LC_ALL=C` always means English.
+from the library as they draw them (see [localization-design.md](localization-design.md)). Library
+errors are worded by variant from `lib-errors.ftl`; the GUI words one when it arrives, so a notice
+or toast already on screen keeps its language after a switch. A message a language lacks falls back
+to English alone, and `LC_ALL=C` always means English.
 
 Code: `crates/dmm-shared/src/l10n/`, `i18n/`.
 

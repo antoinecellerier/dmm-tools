@@ -13,6 +13,7 @@
 //! and the lookup takes the label apart ([`Localizer::label`]).
 
 use super::{Arg, Localizer, Resource};
+use dmm_lib::flags::Flag;
 use dmm_lib::text::{MODE_SLOT, TextKind};
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource};
@@ -21,11 +22,13 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 /// The library's text: the generated `lib.ftl` and the hand-written
-/// `lib-names.ftl`, in every language the binaries ship. A binary that draws
-/// library text lists these with its own resources.
+/// `lib-names.ftl` and `lib-errors.ftl`, in every language the binaries
+/// ship. A binary that draws library text or errors lists these with its
+/// own resources.
 pub const LIB_RESOURCES: &[Resource] = &[
     crate::ftl!("en-US", "lib.ftl"),
     crate::ftl!("en-US", "lib-names.ftl"),
+    crate::ftl!("en-US", "lib-errors.ftl"),
 ];
 
 /// Unit symbols, without prefix. With [`PREFIXES`] they are what stays as
@@ -218,12 +221,20 @@ impl Localizer {
     /// A mode `lib.ftl` lacks is tried as a qualifier around a mode it has,
     /// or around a unit-only one, which stays as it is: "LPF Peak AC V" is
     /// the LPF qualifier around the Peak qualifier around "AC V".
+    ///
+    /// A [`TextKind::Toggle`] state named after a flag (MAX, P-MIN) is that
+    /// flag's name ([`Localizer::flag`]): `lib.ftl` lists only on and off.
     pub fn label<'a>(&'a self, kind: TextKind, english: &'a str) -> Cow<'a, str> {
         if self.plain_english() {
             return Cow::Borrowed(english);
         }
         let found = match kind {
             TextKind::Mode => self.mode_label(english),
+            TextKind::Toggle => Flag::ALL
+                .into_iter()
+                .find(|f| f.label() == Some(english))
+                .and_then(|f| self.flag(f))
+                .or_else(|| self.listed(kind, english)),
             kind => self.listed(kind, english),
         };
         found.unwrap_or(Cow::Borrowed(english))

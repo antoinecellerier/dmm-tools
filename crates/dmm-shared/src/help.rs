@@ -669,7 +669,7 @@ mod tests {
     fn the_shared_messages_match_their_uses() {
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let resources = [RESOURCES, crate::l10n::LIB_RESOURCES].concat();
-        let owned = ["shared.ftl", "lib-names.ftl"];
+        let owned = ["shared.ftl", "lib-names.ftl", "lib-errors.ftl"];
         let problems = crate::l10n::check::check(&src, &resources, &owned);
         assert!(problems.is_empty(), "{problems:#?}");
     }

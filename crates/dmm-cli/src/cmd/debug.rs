@@ -82,7 +82,7 @@ pub(crate) fn cmd_debug(
                 eprintln!(
                     "{} {}",
                     style(format!("[{i}]")).dim(),
-                    style(format!("error: {e}")).red()
+                    style(format!("error: {}", crate::l10n::get().error(&e))).red()
                 );
             }
         }

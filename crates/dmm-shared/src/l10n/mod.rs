@@ -19,6 +19,7 @@
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod check;
+mod errors;
 mod lang;
 #[cfg(test)]
 mod lib_ftl;

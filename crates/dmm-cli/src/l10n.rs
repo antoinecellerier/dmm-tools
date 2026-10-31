@@ -10,9 +10,10 @@ use std::sync::OnceLock;
 
 static LOCALIZER: OnceLock<Localizer> = OnceLock::new();
 
-/// Everything dmm-cli shows: the shared help and its own messages.
+/// Everything dmm-cli shows: the shared help and the library's text and
+/// errors.
 fn resources() -> Vec<Resource> {
-    dmm_shared::help::RESOURCES.to_vec()
+    [dmm_shared::help::RESOURCES, dmm_shared::l10n::LIB_RESOURCES].concat()
 }
 
 /// Pick the language from `flag` (`--lang`) and `setting` (the settings
@@ -26,6 +27,15 @@ pub(crate) fn init(flag: Option<&str>, setting: &str) {
 /// The run's localizer: English until [`init`] has run.
 pub(crate) fn get() -> &'static Localizer {
     LOCALIZER.get_or_init(|| Localizer::en_us(&resources()))
+}
+
+/// `e` as the terminal shows it: a library error in the run's language,
+/// anything else as it reads.
+pub(crate) fn error_text(e: &(dyn std::error::Error + 'static)) -> String {
+    match e.downcast_ref::<dmm_lib::error::Error>() {
+        Some(e) => get().error(e),
+        None => e.to_string(),
+    }
 }
 
 #[cfg(test)]

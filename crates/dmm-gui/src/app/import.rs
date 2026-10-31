@@ -67,13 +67,53 @@ pub(super) struct Loaded {
 
 /// Why a file did not import. `Display` is the English the log takes;
 /// [`ImportError::text`] what the toast shows, in the GUI's language.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(super) enum ImportError {
-    /// The file, then why it does not read: the system's, the reader's or
-    /// the parser's own words.
-    Read(PathBuf, String),
+    /// The file, then why it does not read.
+    Read(PathBuf, Unreadable),
     /// The loader thread panicked reading the file.
     Crashed(PathBuf),
+}
+
+/// Why a file does not read, kept as it came so that only the toast words
+/// it in the GUI's language: the log takes its English.
+#[derive(Debug)]
+pub(super) enum Unreadable {
+    /// The system's, the reader's or the parser's own words.
+    Text(String),
+    /// The library's error.
+    Library(dmm_lib::error::Error),
+}
+
+impl From<String> for Unreadable {
+    fn from(text: String) -> Self {
+        Self::Text(text)
+    }
+}
+
+impl From<dmm_lib::error::Error> for Unreadable {
+    fn from(e: dmm_lib::error::Error) -> Self {
+        Self::Library(e)
+    }
+}
+
+impl std::fmt::Display for Unreadable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text(text) => f.write_str(text),
+            Self::Library(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Unreadable {
+    /// What the toast says after the file's name, in the GUI's language.
+    fn text(&self, l10n: &Localizer) -> String {
+        match self {
+            Self::Text(text) => text.clone(),
+            Self::Library(e) => l10n.error(e),
+        }
+    }
 }
 
 impl std::fmt::Display for ImportError {
@@ -91,7 +131,7 @@ impl ImportError {
         match self {
             Self::Read(path, why) => {
                 let path = path.display().to_string();
-                tr!(l10n, "import-failed", path = path, reason = why)
+                tr!(l10n, "import-failed", path = path, reason = why.text(l10n))
             }
             Self::Crashed(path) => {
                 let path = path.display().to_string();
@@ -130,8 +170,8 @@ pub(super) struct Ingest {
 /// a replay's magic line, a JSON object, or else CSV.
 pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, ImportError> {
     use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
-    let fail = |e: String| ImportError::Read(path.to_path_buf(), e);
-    let kind = ExportKind::of_file(path).map_err(|e| fail(e.to_string()))?;
+    let fail = |e: Unreadable| ImportError::Read(path.to_path_buf(), e);
+    let kind = ExportKind::of_file(path).map_err(|e| fail(Unreadable::Text(e.to_string())))?;
     // CSV and JSON are read through, keeping no more than the session can
     // hold; a replay is parsed whole, as `--replay` parses it.
     let open = || {
@@ -141,14 +181,16 @@ pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, I
     };
     let loaded = match kind {
         ExportKind::Replay => std::fs::read_to_string(path)
-            .map_err(|e| e.to_string())
+            .map_err(|e| Unreadable::Text(e.to_string()))
             .and_then(|text| load_replay(&text, base, limit)),
         ExportKind::Json => open()
             .and_then(|file| read_json_from(file, Some(limit)))
-            .map(|i| from_export(i, base)),
+            .map(|i| from_export(i, base))
+            .map_err(Unreadable::Text),
         ExportKind::Csv => open()
             .and_then(|file| read_csv_from(file, Some(limit)))
-            .map(|i| from_export(i, base)),
+            .map(|i| from_export(i, base))
+            .map_err(Unreadable::Text),
     };
     loaded
         .map(|mut l| {
@@ -193,16 +235,16 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
 /// A replay, decoded frame by frame through its family's parser on a clock
 /// of its own that moves only as the playback sleeps on it — as fast as the
 /// frames decode, with the recording's own timestamps — never the session's.
-fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, String> {
+fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unreadable> {
     use dmm_lib::stream::{MeasurementStream, StreamEvent};
-    let replay = dmm_lib::replay::Replay::parse(text).map_err(|e| e.to_string())?;
+    let replay = dmm_lib::replay::Replay::parse(text)?;
     let recorded = dmm_shared::replay::recorded_at(&replay)?;
     let clock = dmm_lib::Clock::manual();
     // A manual clock stands still until the playback sleeps on it: its now
     // is the instant the wall origin pins.
     let start = clock.now();
     let clock = clock.with_wall_origin(SystemTime::from(recorded));
-    let mut dmm = replay.open(clock).map_err(|e| e.to_string())?;
+    let mut dmm = replay.open(clock)?;
     let experimental = !dmm.profile().stability.is_verified();
     let aux_slots = dmm.profile().max_aux_values;
     let mut readings = Vec::new();
@@ -228,7 +270,7 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, String
                 Err(e) if e.kind() == dmm_lib::error::ErrorKind::Protocol => {
                     warn!("import: a frame did not decode: {e}");
                 }
-                Err(e) => return Err(e.to_string()),
+                Err(e) => return Err(e.into()),
             }
         }
     }
@@ -585,6 +627,31 @@ mod tests {
     use super::*;
     use crate::app::connection_issue::ConnectionIssue;
     use crate::settings::Settings;
+
+    /// A library error stays whole until the toast words it, so the log
+    /// line is its English whatever the GUI's language.
+    #[test]
+    fn a_library_error_is_worded_only_for_the_toast() {
+        let e = ImportError::Read(
+            PathBuf::from("x.dmmreplay"),
+            Unreadable::Library(dmm_lib::error::Error::Timeout),
+        );
+        assert_eq!(e.to_string(), "x.dmmreplay: timeout waiting for response");
+        assert_eq!(
+            e.text(&crate::l10n::english()),
+            "Import failed: x.dmmreplay: timeout waiting for response"
+        );
+        let options = dmm_shared::l10n::Options {
+            pseudo: true,
+            ..Default::default()
+        };
+        let pseudo = Localizer::new(
+            &dmm_shared::l10n::EN_US,
+            &crate::l10n::resources(),
+            &options,
+        );
+        assert!(!e.text(&pseudo).contains("timeout waiting"));
+    }
 
     /// Three readings, a dial turn from DC V to Ω on the third, a marker on
     /// the second.

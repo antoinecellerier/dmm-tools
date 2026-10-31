@@ -26,7 +26,11 @@ pub(crate) fn cmd_list(bluetooth: bool) -> Result<(), Box<dyn std::error::Error>
     let (cables, cables_failed) = match dmm_lib::list_devices() {
         Ok(cables) => (cables, false),
         Err(e) => {
-            eprintln!("{} {e}", style("Error:").red().bold());
+            eprintln!(
+                "{} {}",
+                style("Error:").red().bold(),
+                crate::l10n::get().error(&e)
+            );
             (Vec::new(), true)
         }
     };
@@ -46,7 +50,7 @@ pub(crate) fn cmd_list(bluetooth: bool) -> Result<(), Box<dyn std::error::Error>
             // cables above still stand, so the reason goes out dim and the
             // listing ends normally.
             Err(e) => {
-                eprintln!("{}", style(e.to_string()).dim());
+                eprintln!("{}", style(crate::l10n::get().error(&e)).dim());
                 Vec::new()
             }
         }

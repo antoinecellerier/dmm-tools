@@ -744,8 +744,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 protocol_errors += 1;
                 if protocol_errors == 1 || protocol_errors.is_multiple_of(100) {
                     eprintln!(
-                        "{} {e} (skipped {protocol_errors} so far)",
-                        style("Warning:").yellow()
+                        "{} {} (skipped {protocol_errors} so far)",
+                        style("Warning:").yellow(),
+                        crate::l10n::get().error(&e)
                     );
                 }
             }

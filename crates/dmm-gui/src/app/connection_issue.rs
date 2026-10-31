@@ -181,7 +181,7 @@ impl ConnectionIssue {
         {
             return Self::BluetoothUnreachable {
                 address: address.to_string(),
-                error: err.to_string(),
+                error: l10n.error(err),
             };
         }
         if let dmm_lib::error::Error::Bluetooth(_) = err
@@ -190,7 +190,7 @@ impl ConnectionIssue {
             return Self::BluetoothOnlyUnreachable {
                 model: picked.display_name(),
                 activation: picked.device.activation_instructions,
-                error: err.to_string(),
+                error: l10n.error(err),
             };
         }
         if let dmm_lib::error::Error::BluetoothOnly {
@@ -211,7 +211,7 @@ impl ConnectionIssue {
                     message: tr!(
                         l10n,
                         "connection-bluetooth-not-searched-off",
-                        error = err.to_string(),
+                        error = l10n.error(err),
                         hint = l10n.help().gui_bluetooth_off_hint()
                     )
                     .into_owned(),
@@ -220,13 +220,13 @@ impl ConnectionIssue {
                     message: tr!(
                         l10n,
                         "connection-bluetooth-not-searched-why",
-                        error = err.to_string()
+                        error = l10n.error(err)
                     )
                     .into_owned(),
                 },
             };
         }
-        Self::Other(err.to_string())
+        Self::Other(l10n.error(err))
     }
 }
 
