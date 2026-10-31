@@ -153,12 +153,7 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
 fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, String> {
     use dmm_lib::stream::{MeasurementStream, StreamEvent};
     let replay = dmm_lib::replay::Replay::parse(text).map_err(|e| e.to_string())?;
-    let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).map_err(|e| {
-        format!(
-            "`# recorded: {}` is not an RFC 3339 date: {e}",
-            replay.recorded
-        )
-    })?;
+    let recorded = dmm_shared::replay::recorded_at(&replay)?;
     let clock = dmm_lib::Clock::manual().with_wall_origin(SystemTime::from(recorded));
     let (start, _) = clock
         .wall_origin()

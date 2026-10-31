@@ -229,7 +229,7 @@ fn device_name(name: &str) -> Option<String> {
 fn wall_time(line: usize, text: &str) -> Result<SystemTime, String> {
     DateTime::parse_from_rfc3339(text)
         .map(SystemTime::from)
-        .map_err(|e| at(line, format!("`{text}` is not an RFC 3339 time ({e})")))
+        .map_err(|e| at(line, crate::replay::not_a_date(text, e)))
 }
 
 /// A value as a CSV cell or a JSON sub-value string writes it: the meter's

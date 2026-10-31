@@ -8,12 +8,27 @@
 //! included. The fixture's other fields are what the golden test expects the
 //! frame to parse to; playback parses the frame itself.
 
-use chrono::SecondsFormat;
+use chrono::{DateTime, FixedOffset, SecondsFormat};
 use dmm_lib::error::{Error, Result};
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::{self, Replay};
 use std::path::Path;
 use std::time::Duration;
+
+/// When `replay` was recorded, from its `# recorded:` header line.
+///
+/// `dmm-lib` keeps the line as written, having no date library of its own;
+/// turning it into a session origin is the apps' job.
+pub fn recorded_at(replay: &Replay) -> std::result::Result<DateTime<FixedOffset>, String> {
+    DateTime::parse_from_rfc3339(&replay.recorded)
+        .map_err(|e| not_a_date(&format!("# recorded: {}", replay.recorded), e))
+}
+
+/// Why `text`, meant as an RFC 3339 date, was refused — a replay's header or
+/// an export's timestamp cell.
+pub(crate) fn not_a_date(text: &str, e: chrono::ParseError) -> String {
+    format!("`{text}` is not an RFC 3339 date: {e}")
+}
 
 /// Open `path` as a recording: a golden fixture when it is a `.yaml` file,
 /// else a replay file.
@@ -87,6 +102,23 @@ mod tests {
     use super::*;
     use dmm_lib::Clock;
     use std::path::PathBuf;
+
+    /// Both binaries word a bad header date with this one message.
+    #[test]
+    fn a_bad_recorded_date_names_the_header_line() {
+        let mut text = replay::header("ut61eplus", "yesterday", None, None);
+        text.push_str(&replay::sample_line(Duration::ZERO, &[0x02, 0x03]));
+        let replay = Replay::parse(&text).unwrap();
+        let err = recorded_at(&replay).unwrap_err();
+        assert!(
+            err.starts_with("`# recorded: yesterday` is not an RFC 3339 date: "),
+            "got {err}"
+        );
+        let good = replay::header("ut61eplus", "2026-10-31T10:00:00.000+01:00", None, None);
+        let replay =
+            Replay::parse(&(good + &replay::sample_line(Duration::ZERO, &[2, 3]))).unwrap();
+        assert!(recorded_at(&replay).is_ok());
+    }
 
     /// The frame of dmm-lib's `ut61eplus/dcv_battery` fixture.
     const FIXTURE: &str = "\

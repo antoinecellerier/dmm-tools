@@ -249,14 +249,8 @@ fn read_replay(
     if clock.is_real() && !matches!(destination, output::Destination::Stdout) {
         eprintln!("{}", style(PACED_REPLAY_HINT).dim());
     }
-    // dmm-lib has no date library, so the header line comes back as text.
-    let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).map_err(|e| {
-        format!(
-            "{}: `# recorded: {}` is not an RFC3339 date ({e})",
-            path.display(),
-            replay.recorded,
-        )
-    })?;
+    let recorded =
+        dmm_shared::replay::recorded_at(&replay).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
     // A copy is dated from its first frame, whose wall time the pinned
     // origin maps to when it was measured, so a copy that starts partway

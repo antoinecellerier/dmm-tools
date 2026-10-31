@@ -221,15 +221,8 @@ fn load_replay(path: PathBuf) -> ReplaySource {
             .exit()
     };
     let replay = dmm_shared::replay::load(&path).unwrap_or_else(|e| invalid(e.to_string()));
-    // dmm-lib keeps the header's date as written, having no date library of
-    // its own; turning it into a session origin is this side's job.
-    let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).unwrap_or_else(|e| {
-        invalid(format!(
-            "{}: `# recorded: {}` is not an RFC 3339 date: {e}",
-            path.display(),
-            replay.recorded
-        ))
-    });
+    let recorded = dmm_shared::replay::recorded_at(&replay)
+        .unwrap_or_else(|e| invalid(format!("{}: {e}", path.display())));
     ReplaySource {
         replay: Arc::new(replay),
         path,
