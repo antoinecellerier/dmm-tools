@@ -16,7 +16,8 @@
 use super::Localizer;
 use crate::tr;
 use dmm_lib::error::{
-    BluetoothIssue, BluetoothOnlyMiss, CharacteristicRole, Error, Rejected, Sent, Unsupported,
+    BluetoothIssue, BluetoothOnlyMiss, CharacteristicRole, Error, FrameRemedy, Rejected, Sent,
+    Unread, Unsupported, WrongMeter,
 };
 use dmm_lib::text::TextKind;
 use dmm_lib::transport::{LateReadings, Link};
@@ -35,6 +36,9 @@ impl Localizer {
             Error::Hid(hid) => tr!(self, "error-hid", detail = hid.to_string()),
             Error::InvalidResponse { message, .. } => {
                 tr!(self, "error-invalid-response", detail = message)
+            }
+            Error::WrongMeter { reason, .. } => {
+                tr!(self, "error-wrong-meter", reason = self.wrong_meter(reason))
             }
             Error::ChecksumMismatch { expected, actual } => tr!(
                 self,
@@ -57,10 +61,16 @@ impl Localizer {
                 reason = self.rejected(reason)
             ),
             Error::UnknownDevice(device) => tr!(self, "error-unknown-device", device = device),
+            Error::NotSimulated(device) => tr!(self, "error-not-simulated", device = *device),
             Error::Replay(detail) => tr!(self, "error-replay", detail = detail),
             Error::AdapterNotFound(adapter) => {
                 tr!(self, "error-adapter-not-found", adapter = adapter)
             }
+            Error::NotAnAdapter(path) => tr!(
+                self,
+                "error-adapter-not-found",
+                adapter = tr!(self, "error-not-an-adapter", path = path)
+            ),
             Error::WrongCable { cable, model } => tr!(
                 self,
                 "error-wrong-cable",
@@ -131,6 +141,78 @@ impl Localizer {
             }
         }
         .into_owned()
+    }
+
+    /// What `--adapter` named, as an adapter-not-found error and the
+    /// help beside it quote it: the selector, or a USB device's path with
+    /// why it is no cable. `None` for any other error.
+    pub fn adapter_named<'a>(&'a self, e: &'a Error) -> Option<Cow<'a, str>> {
+        match e {
+            Error::AdapterNotFound(selector) => Some(Cow::Borrowed(selector.as_str())),
+            Error::NotAnAdapter(path) => Some(tr!(self, "error-not-an-adapter", path = path)),
+            _ => None,
+        }
+    }
+
+    /// Why the meter on the link is not one the meter chosen can read, as
+    /// [`Error::WrongMeter`] carries it. Model names and ids stay as the
+    /// registry spells them.
+    fn wrong_meter<'a>(&'a self, reason: &'a WrongMeter) -> Cow<'a, str> {
+        match reason {
+            WrongMeter::OtherFrame {
+                code,
+                model,
+                frame,
+                opened,
+                id,
+            } => tr!(
+                self,
+                "error-wrong-meter-other-frame",
+                code = *code,
+                model = *model,
+                frame = *frame,
+                opened = *opened,
+                id = *id
+            ),
+            WrongMeter::OtherFrameKind {
+                sent,
+                expected,
+                opened,
+                remedy,
+            } => tr!(
+                self,
+                "error-wrong-meter-other-frame-kind",
+                sent = *sent,
+                expected = *expected,
+                opened = *opened,
+                remedy = match remedy {
+                    FrameRemedy::AutoDetect => "auto-detect",
+                    FrameRemedy::OwnModel => "own-model",
+                }
+            ),
+            WrongMeter::UnreadModel { code, why } => match why {
+                Unread::NotYet => tr!(self, "error-wrong-meter-not-yet", code = *code),
+                Unread::SignInFunctionWord => {
+                    tr!(
+                        self,
+                        "error-wrong-meter-sign-in-function-word",
+                        code = *code
+                    )
+                }
+            },
+            WrongMeter::OtherSeries { found, opened, id } => tr!(
+                self,
+                "error-wrong-meter-other-series",
+                found = *found,
+                opened = *opened,
+                id = *id
+            ),
+            WrongMeter::NoSixByteFrames => tr!(self, "error-wrong-meter-no-six-byte-frames"),
+            WrongMeter::NoFifteenByteFrames => {
+                tr!(self, "error-wrong-meter-no-fifteen-byte-frames")
+            }
+            WrongMeter::UntoldFrameKind => tr!(self, "error-wrong-meter-untold-frame-kind"),
+        }
     }
 
     /// Why a command was refused before it was sent, as
@@ -650,6 +732,49 @@ mod tests {
         })
     }
 
+    fn wrong_meter() -> Vec<WrongMeter> {
+        use WrongMeter as W;
+        chain(|last: Option<&W>| match last {
+            None => vec![W::OtherFrame {
+                code: 87,
+                model: "Voltcraft VC871",
+                frame: 15,
+                opened: "OWON B35T+",
+                id: "vc871",
+            }],
+            Some(W::OtherFrame { .. }) => chain(|last: Option<&FrameRemedy>| match last {
+                None => vec![FrameRemedy::AutoDetect],
+                Some(FrameRemedy::AutoDetect) => vec![FrameRemedy::OwnModel],
+                Some(FrameRemedy::OwnModel) => vec![],
+            })
+            .into_iter()
+            .map(|remedy| W::OtherFrameKind {
+                sent: 6,
+                expected: 15,
+                opened: "Voltcraft VC871",
+                remedy,
+            })
+            .collect(),
+            Some(W::OtherFrameKind { .. }) => chain(|last: Option<&Unread>| match last {
+                None => vec![Unread::NotYet],
+                Some(Unread::NotYet) => vec![Unread::SignInFunctionWord],
+                Some(Unread::SignInFunctionWord) => vec![],
+            })
+            .into_iter()
+            .map(|why| W::UnreadModel { code: 83, why })
+            .collect(),
+            Some(W::UnreadModel { .. }) => vec![W::OtherSeries {
+                found: "Brymen BM82x",
+                opened: "Brymen BM86x",
+                id: "bm82x",
+            }],
+            Some(W::OtherSeries { .. }) => vec![W::NoSixByteFrames],
+            Some(W::NoSixByteFrames) => vec![W::NoFifteenByteFrames],
+            Some(W::NoFifteenByteFrames) => vec![W::UntoldFrameKind],
+            Some(W::UntoldFrameKind) => vec![],
+        })
+    }
+
     fn bluetooth_only_misses() -> Vec<BluetoothOnlyMiss> {
         use BluetoothOnlyMiss as M;
         chain(|last: Option<&M>| match last {
@@ -670,7 +795,14 @@ mod tests {
                 message: "frame too short".into(),
                 raw: vec![0xAB],
             }],
-            Some(Error::InvalidResponse { .. }) => vec![Error::ChecksumMismatch {
+            Some(Error::InvalidResponse { .. }) => wrong_meter()
+                .into_iter()
+                .map(|reason| Error::WrongMeter {
+                    reason,
+                    raw: vec![0x2B],
+                })
+                .collect(),
+            Some(Error::WrongMeter { .. }) => vec![Error::ChecksumMismatch {
                 expected: 0x01a3,
                 actual: 0x0003,
             }],
@@ -679,11 +811,13 @@ mod tests {
             Some(Error::UnknownMode(_)) => unsupported().into_iter().map(Error::from).collect(),
             Some(Error::UnsupportedCommand(_)) => rejected().into_iter().map(Error::from).collect(),
             Some(Error::CommandRejected(_)) => vec![Error::UnknownDevice("ut99".into())],
-            Some(Error::UnknownDevice(_)) => {
+            Some(Error::UnknownDevice(_)) => vec![Error::NotSimulated("ut61eplus")],
+            Some(Error::NotSimulated(_)) => {
                 vec![Error::Replay("line 3: `ZZ` is not a hex byte".into())]
             }
             Some(Error::Replay(_)) => vec![Error::AdapterNotFound("12:34:56:78:9A:BC".into())],
-            Some(Error::AdapterNotFound(_)) => ["BU-86X", dmm_lib::BLUETOOTH]
+            Some(Error::AdapterNotFound(_)) => vec![Error::NotAnAdapter("/dev/hidraw3".into())],
+            Some(Error::NotAnAdapter(_)) => ["BU-86X", dmm_lib::BLUETOOTH]
                 .into_iter()
                 .map(|cable| Error::WrongCable {
                     cable,
@@ -747,6 +881,21 @@ mod tests {
             let notice = LateReadings { command };
             assert_eq!(l.late_readings_advice(&notice), notice.advice());
         }
+    }
+
+    /// The help beside an adapter-not-found error quotes what `--adapter`
+    /// named as the error does.
+    #[test]
+    fn adapter_named_quotes_the_error() {
+        let l = Localizer::en_us(LIB_RESOURCES);
+        for e in [
+            Error::AdapterNotFound("12:34:56:78:9A:BC".into()),
+            Error::NotAnAdapter("/dev/hidraw3".into()),
+        ] {
+            let named = l.adapter_named(&e).expect("an adapter error");
+            assert_eq!(format!("adapter not found: {named}"), e.to_string());
+        }
+        assert!(l.adapter_named(&Error::LinkLost).is_none());
     }
 
     /// A MIN/MAX walk's states are flag names, translated as the flags

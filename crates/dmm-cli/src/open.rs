@@ -532,8 +532,9 @@ fn open_error_help(
             print_not_found_help(LinksSearched::BluetoothAt(selector));
             OpenFailed::AdapterNotFound.into()
         }
-        dmm_lib::error::Error::AdapterNotFound(ref detail) => {
+        dmm_lib::error::Error::AdapterNotFound(_) | dmm_lib::error::Error::NotAnAdapter(_) => {
             let l = crate::l10n::get();
+            let detail = l.adapter_named(&error).unwrap_or_default();
             eprintln!("{} {}", error_label(), l.error(&error));
             // Only a real list is worth setting apart and worth a hint —
             // "nothing is connected" and "couldn't look" are complete on
@@ -550,7 +551,7 @@ fn open_error_help(
                 let hint = tr!(l, "connect-adapter-select", selector = ADAPTER_SELECTOR);
                 eprintln!("\n{}", style(hint).dim());
             }
-            if let Some(hint) = l.help().colonless_address_hint(detail) {
+            if let Some(hint) = l.help().colonless_address_hint(&detail) {
                 eprintln!("\n{}", style(hint).yellow());
             }
             OpenFailed::AdapterNotFound.into()

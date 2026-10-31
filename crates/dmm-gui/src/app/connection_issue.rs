@@ -143,16 +143,16 @@ impl ConnectionIssue {
         adapter: Option<&str>,
         selected: Option<registry::Listing>,
     ) -> Self {
-        if let dmm_lib::error::Error::AdapterNotFound(selector) = err {
+        if let Some(selector) = l10n.adapter_named(err) {
             // An address is explained by the link it named, not by the USB
             // bus — nothing on the bus could have answered it.
-            if dmm_lib::is_bluetooth_selector(selector) {
+            if dmm_lib::is_bluetooth_selector(&selector) {
                 return Self::BluetoothNotFound {
-                    address: selector.clone(),
+                    address: selector.into_owned(),
                 };
             }
             return Self::AdapterNotFound {
-                help: adapter_not_found_help(l10n, selector),
+                help: adapter_not_found_help(l10n, &selector),
             };
         }
         // The open path already worked out which links it searched; carrying
@@ -818,6 +818,20 @@ mod tests {
             panic!("expected AdapterNotFound, got {issue:?}");
         };
         assert!(help.contains("ABC123"), "got {help}");
+        // A USB device that is no cable gets the same help, quoting why.
+        let issue = ConnectionIssue::from_error(
+            &crate::l10n::english(),
+            &dmm_lib::error::Error::NotAnAdapter("/dev/hidraw3".to_string()),
+            None,
+            None,
+        );
+        let ConnectionIssue::AdapterNotFound { help } = issue else {
+            panic!("expected AdapterNotFound, got {issue:?}");
+        };
+        assert!(
+            help.contains("'/dev/hidraw3 (device exists but is not a supported USB adapter)'"),
+            "got {help}"
+        );
     }
 
     /// `DeviceNotIdentified` is an `ErrorKind::Timeout`, which would land it

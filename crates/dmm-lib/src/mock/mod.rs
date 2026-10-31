@@ -937,10 +937,7 @@ pub fn open_simulated(
         let protocol = zotek::sim::MockZt5b::new(clock.clone());
         Ok(Dmm::new(NullTransport, Box::new(protocol))?.with_clock(clock))
     } else {
-        Err(Error::UnknownDevice(format!(
-            "{} is not simulated",
-            device.id
-        )))
+        Err(Error::NotSimulated(device.id))
     }
 }
 

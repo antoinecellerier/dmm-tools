@@ -3,6 +3,7 @@
 //! (`docs/research/owon/reverse-engineered-protocol.md` §1, §4, §10.1).
 
 use super::keys::{self, Key};
+use crate::error::Unread;
 use crate::protocol::MeterKeys;
 use std::fmt;
 
@@ -26,11 +27,11 @@ impl FrameKind {
         }
     }
 
-    /// How messages name it.
-    pub(super) fn name(self) -> &'static str {
+    /// Its length in bytes, which messages name it by.
+    pub(super) fn len(self) -> u8 {
         match self {
-            FrameKind::Six => "6-byte",
-            FrameKind::Fifteen => "15-byte",
+            FrameKind::Six => 6,
+            FrameKind::Fifteen => 15,
         }
     }
 }
@@ -327,21 +328,15 @@ impl Model {
 }
 
 /// Why a model code's meter cannot be read here, for the codes OWON's
-/// programs read but no entry carries, to follow "the meter reports OWON
-/// model code N"; `None` for every other code.
-pub(super) fn unsupported_format(code: u8) -> Option<&'static str> {
+/// programs read but no entry carries; `None` for every other code.
+pub(super) fn unsupported_format(code: u8) -> Option<Unread> {
     match code {
         // The app's VC831 and VC851, which have no Bluetooth (spec §1,
         // §10.1).
-        83 | 85 => {
-            Some(", which this tool does not read yet; please open an issue with this message")
-        }
+        83 | 85 => Some(Unread::NotYet),
         // Series 55's 6-byte frame takes its sign from the function word
         // (spec §6.5).
-        55 => Some(
-            ": it sends OWON's 6-byte frame with the sign in the function word, which this tool \
-             does not read yet",
-        ),
+        55 => Some(Unread::SignInFunctionWord),
         _ => None,
     }
 }
@@ -486,12 +481,9 @@ mod tests {
     #[test]
     fn the_other_formats_are_named() {
         for code in [83, 85] {
-            assert!(
-                unsupported_format(code).is_some_and(|why| why.contains("open an issue")),
-                "{code}"
-            );
+            assert_eq!(unsupported_format(code), Some(Unread::NotYet), "{code}");
         }
-        assert!(unsupported_format(55).is_some_and(|why| why.contains("sign")));
+        assert_eq!(unsupported_format(55), Some(Unread::SignInFunctionWord));
         assert!(unsupported_format(223).is_none());
     }
 

@@ -3,8 +3,10 @@ use thiserror::Error;
 
 mod bluetooth;
 mod reason;
+mod wrong_meter;
 pub use bluetooth::{BluetoothIssue, CharacteristicRole};
 pub use reason::{Rejected, Sent, Unsupported};
+pub use wrong_meter::{FrameRemedy, Unread, WrongMeter};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -15,6 +17,16 @@ pub enum Error {
     InvalidResponse {
         message: String,
         /// Raw bytes that caused the error, for remote debugging.
+        raw: Vec<u8>,
+    },
+
+    /// The meter on the link is not one the entry it was opened as can
+    /// read; the reason says which to choose. A response the entry cannot
+    /// parse, as [`Error::InvalidResponse`] is, and worded as one.
+    #[error("invalid response: {reason}")]
+    WrongMeter {
+        reason: WrongMeter,
+        /// Raw bytes that showed it, for remote debugging.
         raw: Vec<u8>,
     },
 
@@ -42,6 +54,11 @@ pub enum Error {
     #[error("unknown device: {0}")]
     UnknownDevice(String),
 
+    /// A registry entry opened as a simulated meter that no simulation
+    /// serves; its id.
+    #[error("unknown device: {0} is not simulated")]
+    NotSimulated(&'static str),
+
     /// A replay file could not be read or makes no sense. The message names
     /// the offending line, so a hand-edited recording says where it broke.
     #[error("replay file: {0}")]
@@ -49,6 +66,11 @@ pub enum Error {
 
     #[error("adapter not found: {0}")]
     AdapterNotFound(String),
+
+    /// `--adapter` named a HID path whose device is no cable we support;
+    /// the path. Handled as [`Error::AdapterNotFound`].
+    #[error("adapter not found: {0} (device exists but is not a supported USB adapter)")]
+    NotAnAdapter(String),
 
     /// `--adapter` named a link the named meter cannot be reached through:
     /// a cable that speaks its own meters' protocol and a meter it does not
@@ -211,6 +233,14 @@ impl Error {
         }
     }
 
+    /// [`Error::WrongMeter`] for `reason`, shown by `raw`.
+    pub(crate) fn wrong_meter(reason: WrongMeter, raw: &[u8]) -> Self {
+        Self::WrongMeter {
+            reason,
+            raw: raw.to_vec(),
+        }
+    }
+
     /// Convenience constructor for InvalidResponse without raw bytes.
     pub(crate) fn invalid_response_msg(message: impl Into<String>) -> Self {
         Self::InvalidResponse {
@@ -276,11 +306,14 @@ impl Error {
             // Nothing answered the probes — the same shape as a timeout, and
             // the same cure: reconnect once transmission is enabled.
             Self::Timeout | Self::DeviceNotIdentified { .. } => ErrorKind::Timeout,
-            Self::InvalidResponse { .. } | Self::ChecksumMismatch { .. } | Self::UnknownMode(_) => {
-                ErrorKind::Protocol
-            }
+            Self::InvalidResponse { .. }
+            | Self::WrongMeter { .. }
+            | Self::ChecksumMismatch { .. }
+            | Self::UnknownMode(_) => ErrorKind::Protocol,
             Self::UnknownDevice(_)
+            | Self::NotSimulated(_)
             | Self::AdapterNotFound(_)
+            | Self::NotAnAdapter(_)
             | Self::WrongCable { .. }
             | Self::UnsupportedCommand(_)
             | Self::CommandRejected(_)
@@ -444,6 +477,60 @@ mod tests {
             ErrorKind::Protocol
         );
         assert_eq!(Error::UnknownMode(0xFF).kind(), ErrorKind::Protocol);
+        let other_series = WrongMeter::OtherSeries {
+            found: "Brymen BM82x",
+            opened: "Brymen BM86x",
+            id: "bm82x",
+        };
+        assert_eq!(
+            Error::wrong_meter(other_series, &[]).kind(),
+            ErrorKind::Protocol
+        );
+    }
+
+    /// The reasons word the remedies as the messages they replaced did.
+    #[test]
+    fn wrong_meter_reasons_read_as_invalid_responses() {
+        let read = |reason| Error::wrong_meter(reason, &[]).to_string();
+        assert_eq!(
+            read(WrongMeter::OtherFrame {
+                code: 87,
+                model: "Voltcraft VC871",
+                frame: 15,
+                opened: "OWON B35T+",
+                id: "vc871",
+            }),
+            "invalid response: the meter reports OWON model code 87 (Voltcraft VC871), which \
+             sends OWON's 15-byte frame, not the OWON B35T+ it was opened as; choose Auto-detect \
+             or --device vc871"
+        );
+        assert_eq!(
+            read(WrongMeter::OtherFrameKind {
+                sent: 6,
+                expected: 15,
+                opened: "Voltcraft VC871",
+                remedy: FrameRemedy::AutoDetect,
+            }),
+            "invalid response: the meter sends OWON's 6-byte frames, not the 15-byte frames of \
+             the Voltcraft VC871 it was opened as; choose Auto-detect"
+        );
+        assert_eq!(
+            read(WrongMeter::UnreadModel {
+                code: 55,
+                why: Unread::SignInFunctionWord,
+            }),
+            "invalid response: the meter reports OWON model code 55: it sends OWON's 6-byte \
+             frame with the sign in the function word, which this tool does not read yet"
+        );
+        assert_eq!(
+            read(WrongMeter::OtherSeries {
+                found: "Brymen BM82x",
+                opened: "Brymen BM86x",
+                id: "bm82x",
+            }),
+            "invalid response: the meter on the cable is a Brymen BM82x, not a Brymen BM86x; \
+             choose Auto-detect or --device bm82x"
+        );
     }
 
     #[test]
@@ -451,6 +538,19 @@ mod tests {
         assert_eq!(
             Error::UnknownDevice("foo".into()).kind(),
             ErrorKind::Configuration
+        );
+        // Each the variant it was carved out of.
+        assert_eq!(
+            Error::NotSimulated("ut61eplus").kind(),
+            ErrorKind::Configuration
+        );
+        assert_eq!(
+            Error::NotAnAdapter("/dev/hidraw3".into()).kind(),
+            Error::AdapterNotFound("/dev/hidraw3".into()).kind()
+        );
+        assert_eq!(
+            Error::NotAnAdapter("/dev/hidraw3".into()).to_string(),
+            "adapter not found: /dev/hidraw3 (device exists but is not a supported USB adapter)"
         );
         assert_eq!(
             Error::from(Unsupported::Command("bar".into())).kind(),

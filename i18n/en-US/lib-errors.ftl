@@ -19,6 +19,10 @@ error-hid = HID error: { $detail }
 # The meter sent something that makes no sense. $detail says what, in
 # English, for a bug report.
 error-invalid-response = invalid response: { $detail }
+# The meter on the link is not one the meter chosen can read, worded as
+# error-invalid-response. $reason is one of the "Another meter" sentences
+# below.
+error-wrong-meter = invalid response: { $reason }
 # A frame from the meter failed its check. $expected and $actual are
 # hexadecimal numbers, e.g. 0x01a3.
 error-checksum-mismatch = checksum mismatch: expected { $expected }, got { $actual }
@@ -33,12 +37,19 @@ error-command-rejected = command rejected: { $reason }
 # $device is the meter's name or ID, as typed with --device or as the
 # settings file holds it, sometimes with an explanation in English.
 error-unknown-device = unknown device: { $device }
+# A meter on a cable was opened as a simulated one. $device is its ID, e.g.
+# ut61eplus.
+error-not-simulated = unknown device: { $device } is not simulated
 # A recording could not be played back. $detail names the file or the line
 # and says what is wrong with it, in English.
 error-replay = replay file: { $detail }
 # $adapter is the value given with --adapter, sometimes with an explanation
 # in English.
 error-adapter-not-found = adapter not found: { $adapter }
+# What --adapter named, as error-adapter-not-found's $adapter and the GUI's
+# connection-adapter-not-matched quote it, when it is a USB device that is
+# no supported cable. $path is the device's path, as given with --adapter.
+error-not-an-adapter = { $path } (device exists but is not a supported USB adapter)
 # --adapter named a cable or adapter the chosen meter cannot be reached
 # through. $link is bluetooth (a Bluetooth adapter) or cable (a USB cable
 # whose name is $cable, e.g. BU-86X). $model is the meter, e.g. UNI-T
@@ -181,6 +192,45 @@ error-rejected-replay = { $command }: a replay takes no commands
 error-sent-mode = mode { $mode }
 # $range is a range.
 error-sent-range = range { $range }
+
+## Another meter: the one on the link is not one the meter chosen can
+## read. After "invalid response:". Model names (OWON B35T+, Brymen BM82x)
+## and --device's values (vc871, bm82x) stay as they are. Auto-detect is
+## the meter choice that finds the meter itself: the GUI's Device list
+## names it so, and the CLI takes it as --device auto.
+
+# An OWON meter names its model, which sends the other kind of data frame.
+# $code is OWON's model number, e.g. 87; $model the model it names, e.g.
+# Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
+# 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
+# for $model.
+error-wrong-meter-other-frame = the meter reports OWON model code { $code } ({ $model }), which sends OWON's { $frame }-byte frame, not the { $opened } it was opened as; choose Auto-detect or --device { $id }
+# An OWON meter sends the other kind of data frame and names no model.
+# $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
+# meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
+# when the user has to pick the meter's model themselves.
+error-wrong-meter-other-frame-kind =
+    { $remedy ->
+        [auto-detect] the meter sends OWON's { $sent }-byte frames, not the { $expected }-byte frames of the { $opened } it was opened as; choose Auto-detect
+       *[own-model] the meter sends OWON's { $sent }-byte frames, not the { $expected }-byte frames of the { $opened } it was opened as; choose the meter's own model
+    }
+# An OWON model this tool does not read yet. $code is OWON's model number,
+# e.g. 83. "This message" is the whole error, for the issue.
+error-wrong-meter-not-yet = the meter reports OWON model code { $code }, which this tool does not read yet; please open an issue with this message
+# An OWON model whose readings carry their sign where this tool does not
+# read it yet. $code is OWON's model number, e.g. 55.
+error-wrong-meter-sign-in-function-word = the meter reports OWON model code { $code }: it sends OWON's 6-byte frame with the sign in the function word, which this tool does not read yet
+# A Brymen meter of another series answered. $found and $opened are series,
+# e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
+error-wrong-meter-other-series = the meter on the cable is a { $found }, not a { $opened }; choose Auto-detect or --device { $id }
+# An OWON meter chosen by its model sends bytes, but never its 6-byte data
+# frame. B35 and B35T are OWON models.
+error-wrong-meter-no-six-byte-frames = the meter sends no OWON 6-byte frames; it may be an older B35 or B35T, whose 14-byte frames this tool does not read yet
+# The same for a meter whose data frame is 15 bytes long.
+error-wrong-meter-no-fifteen-byte-frames = the meter sends no OWON 15-byte frames; choose Auto-detect
+# An OWON meter that names no model sends frames of neither length. "This
+# message" is the whole error, for the issue.
+error-wrong-meter-untold-frame-kind = neither the meter's model code nor its frames show whether it sends OWON's 6- or 15-byte frames; please open an issue with this message
 
 ## Bluetooth: what the Bluetooth stack could not do. After "Bluetooth:".
 

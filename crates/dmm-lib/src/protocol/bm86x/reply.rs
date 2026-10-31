@@ -10,7 +10,7 @@
 
 use super::map::MODEL;
 use super::{Series, devices};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, WrongMeter};
 use crate::protocol::framing;
 use crate::transport::Transport;
 use log::debug;
@@ -74,13 +74,12 @@ fn other_series(buf: &[u8], series: Series) -> Option<Series> {
 /// The error for a reply of `other` read as `series`: it names the entry
 /// to use.
 fn wrong_series(series: Series, other: Series, reply: &[u8]) -> Error {
-    Error::invalid_response(
-        format!(
-            "the meter on the cable is a {}, not a {}; choose Auto-detect or --device {}",
-            devices::entry(other).display_name(),
-            devices::entry(series).display_name(),
-            other.id()
-        ),
+    Error::wrong_meter(
+        WrongMeter::OtherSeries {
+            found: devices::entry(other).display_name(),
+            opened: devices::entry(series).display_name(),
+            id: other.id(),
+        },
         reply,
     )
 }
@@ -250,7 +249,8 @@ pub(super) mod tests {
             let reports = reply.chunks(8).map(<[u8]>::to_vec).collect();
             let cable = ScriptedCable::new(request(series.code()), reports, Vec::new());
             match read(&cable, series) {
-                Err(Error::InvalidResponse { message, raw }) => {
+                Err(Error::WrongMeter { reason, raw }) => {
+                    let message = reason.to_string();
                     assert!(
                         message.contains(&format!("--device {}", other.id())),
                         "{message}"
@@ -270,7 +270,8 @@ pub(super) mod tests {
         let reports = loose.chunks(8).map(<[u8]>::to_vec).collect();
         let cable = ScriptedCable::new(request(0x82), reports, Vec::new());
         match read(&cable, Series::Bm82x) {
-            Err(Error::InvalidResponse { message, .. }) => {
+            Err(Error::WrongMeter { reason, .. }) => {
+                let message = reason.to_string();
                 assert!(message.contains("--device bm86x"), "{message}");
             }
             other => panic!("{other:?}"),

@@ -302,11 +302,7 @@ fn open_with_adapter(
         let kt = KNOWN_TRANSPORTS
             .iter()
             .find(|kt| kt.matches(dev_info))
-            .ok_or_else(|| {
-                Error::AdapterNotFound(format!(
-                    "{adapter} (device exists but is not a supported USB adapter)"
-                ))
-            })?;
+            .ok_or_else(|| Error::NotAnAdapter(adapter.to_string()))?;
 
         let path =
             CString::new(adapter).map_err(|_| Error::AdapterNotFound(adapter.to_string()))?;

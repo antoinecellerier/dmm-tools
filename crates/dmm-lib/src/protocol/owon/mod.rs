@@ -28,7 +28,7 @@ mod frame15;
 mod keys;
 mod model;
 
-use crate::error::{Error, Rejected, Result, Unsupported};
+use crate::error::{Error, FrameRemedy, Rejected, Result, Unsupported, WrongMeter};
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::registry::{self, SelectableDevice};
@@ -43,20 +43,6 @@ use std::cell::Cell;
 
 /// Log label for the read loop.
 const LOG: &str = "owon";
-
-/// What a read says when the meter sends bytes but never a frame: the
-/// older B35 and B35T send a 14-byte ASCII frame (spec §11, §14.4).
-const NO_MARKER: &str = "the meter sends no OWON 6-byte frames; it may be an older B35 or B35T, \
-     whose 14-byte frames this tool does not read yet";
-
-/// The same on a 15-byte entry: no byte 2 of `F0` (spec §10.2, §10.9).
-const NO_MARKER_15: &str = "the meter sends no OWON 15-byte frames; choose Auto-detect";
-
-/// What a read says when no known model code was read and the frames tile
-/// as neither kind ([`stream_kind`]): status bits no capture has shown, or
-/// a stream that is not OWON's.
-const UNTOLD: &str = "neither the meter's model code nor its frames show whether it sends \
-     OWON's 6- or 15-byte frames; please open an issue with this message";
 
 /// The most received bytes a no-marker report and error carry.
 const SHOWN_BYTES: usize = 64;
@@ -80,11 +66,6 @@ enum Confirmation {
     /// one, REL held on the Voltcraft meters, waits for the code
     /// ([`keys::Key::needs_confirmed`]).
     NoInfo,
-}
-
-/// How messages name a model code the meter reports.
-fn reports_code(code: u8) -> String {
-    format!("the meter reports OWON model code {code}")
 }
 
 /// The name a model code gives the meter: its entry's, or the bare code.
@@ -131,19 +112,19 @@ fn unconfirmed_refusal(key: &keys::Key) -> Rejected {
 
 /// What a read says when the frames are the other kind than the entry's,
 /// with no known model code to name the meter.
-fn other_frame(opened: &Model, sent: FrameKind) -> String {
-    let fix = match sent {
+fn other_frame(opened: &Model, sent: FrameKind) -> WrongMeter {
+    let remedy = match sent {
         // Detection opens a 6-byte stream's fallback entry.
-        FrameKind::Six => "choose Auto-detect",
+        FrameKind::Six => FrameRemedy::AutoDetect,
         // Nothing in a 15-byte frame names the model (spec §10.2).
-        FrameKind::Fifteen => "choose the meter's own model",
+        FrameKind::Fifteen => FrameRemedy::OwnModel,
     };
-    format!(
-        "the meter sends OWON's {} frames, not the {} frames of the {} it was opened as; {fix}",
-        sent.name(),
-        opened.frame.name(),
-        opened.display_name()
-    )
+    WrongMeter::OtherFrameKind {
+        sent: sent.len(),
+        expected: opened.frame.len(),
+        opened: opened.display_name(),
+        remedy,
+    }
 }
 
 /// The frame kind `buf` shows: two whole frames of it in a row, running to
@@ -218,8 +199,11 @@ impl OwonProtocol {
         };
         debug!("owon: device information: {info}");
         if let Some(why) = model::unsupported_format(info.code) {
-            return Err(Error::invalid_response(
-                format!("{}{why}", reports_code(info.code)),
+            return Err(Error::wrong_meter(
+                WrongMeter::UnreadModel {
+                    code: info.code,
+                    why,
+                },
                 value,
             ));
         }
@@ -241,16 +225,14 @@ impl OwonProtocol {
             Some(model) if std::ptr::eq(model, self.model) => Confirmation::Matches,
             // The other frame would decode to nonsense (spec §10.1).
             Some(model) if model.frame != self.model.frame => {
-                return Err(Error::invalid_response(
-                    format!(
-                        "{} ({}), which sends OWON's {} frame, not the {} it was opened as; \
-                         choose Auto-detect or --device {}",
-                        reports_code(model.code),
-                        model.display_name(),
-                        model.frame.name(),
-                        self.model.display_name(),
-                        model.id
-                    ),
+                return Err(Error::wrong_meter(
+                    WrongMeter::OtherFrame {
+                        code: model.code,
+                        model: model.display_name(),
+                        frame: model.frame.len(),
+                        opened: self.model.display_name(),
+                        id: model.id,
+                    },
                     value,
                 ));
             }
@@ -332,7 +314,7 @@ impl Protocol for OwonProtocol {
                         None => return Ok(None),
                         Some(sent) if sent != kind => {
                             let shown = &buf[..buf.len().min(SHOWN_BYTES)];
-                            return Err(Error::invalid_response(other_frame(opened, sent), shown));
+                            return Err(Error::wrong_meter(other_frame(opened, sent), shown));
                         }
                         Some(_) => kind_known.set(true),
                     }
@@ -352,21 +334,31 @@ impl Protocol for OwonProtocol {
         self.aligned = read.is_ok();
         self.kind_known = kind_known.get();
         let (lacks_marker, no_marker) = match kind {
-            FrameKind::Six => (frame::lacks_marker(&self.rx_buf), NO_MARKER),
-            FrameKind::Fifteen => (frame15::lacks_marker(&self.rx_buf), NO_MARKER_15),
+            // The older B35 and B35T send a 14-byte ASCII frame (spec §11,
+            // §14.4); a 15-byte entry has no byte 2 of `F0` (spec §10.2, §10.9).
+            FrameKind::Six => (
+                frame::lacks_marker(&self.rx_buf),
+                WrongMeter::NoSixByteFrames,
+            ),
+            FrameKind::Fifteen => (
+                frame15::lacks_marker(&self.rx_buf),
+                WrongMeter::NoFifteenByteFrames,
+            ),
         };
         let untold = !self.kind_known && self.rx_buf.len() >= 2 * frame15::FRAME_LEN;
         match read {
             Ok(frame) => self.parse_payload(&frame),
             Err(Error::Timeout) if lacks_marker || untold => {
                 let shown = &self.rx_buf[..self.rx_buf.len().min(SHOWN_BYTES)];
-                let (what, message) = if lacks_marker {
+                // Neither kind: status bits no capture has shown, or a
+                // stream that is not OWON's ([`stream_kind`]).
+                let (what, reason) = if lacks_marker {
                     ("frames without the function-word marker", no_marker)
                 } else {
-                    ("frames of neither kind", UNTOLD)
+                    ("frames of neither kind", WrongMeter::UntoldFrameKind)
                 };
                 report_unknown(self.model.id, what, format_args!("{shown:02X?}"));
-                let err = Error::invalid_response(message, shown);
+                let err = Error::wrong_meter(reason, shown);
                 self.rx_buf.clear();
                 Err(err)
             }
@@ -609,8 +601,9 @@ mod tests {
         let mut proto = proto(&model::B35);
         let (read, reports) = capture_reports(|| proto.request_measurement(&mock));
         match read {
-            Err(Error::InvalidResponse { message, raw }) => {
-                assert!(message.contains("14-byte"), "{message}");
+            Err(Error::WrongMeter { reason, raw }) => {
+                assert_eq!(reason, WrongMeter::NoSixByteFrames);
+                assert!(reason.to_string().contains("14-byte"), "{reason}");
                 assert_eq!(raw.len(), SHOWN_BYTES);
             }
             other => panic!("{other:?}"),
@@ -644,15 +637,15 @@ mod tests {
             let mut proto = proto(opened);
             let meter = MockTransport::new(pieces(&bytes, size));
             match proto.request_measurement(&meter) {
-                Err(Error::InvalidResponse { message, raw }) => {
-                    assert_eq!(message, other_frame(opened, sent));
+                Err(Error::WrongMeter { reason, raw }) => {
+                    assert_eq!(reason, other_frame(opened, sent));
                     assert_eq!(raw.len(), 2 * size, "{}", opened.id);
                 }
                 other => panic!("{}: {other:?}", opened.id),
             }
             assert!(proto.rx_buf.is_empty());
         }
-        let says = |opened, sent| other_frame(opened, sent);
+        let says = |opened, sent| other_frame(opened, sent).to_string();
         assert!(
             says(&model::VC871, FrameKind::Six)
                 .ends_with("Voltcraft VC871 it was opened as; choose Auto-detect")
@@ -670,10 +663,7 @@ mod tests {
         );
         let six = MockTransport::new(pieces(&frame::tests::stream(), 6));
         let (read, _) = capture_reports(|| vc871.request_measurement(&six));
-        assert!(
-            !matches!(read, Err(Error::InvalidResponse { .. })),
-            "{read:?}"
-        );
+        assert!(!matches!(read, Err(Error::WrongMeter { .. })), "{read:?}");
     }
 
     /// With the model code read, the frames are the code's kind: the first
@@ -707,8 +697,8 @@ mod tests {
         let mock = MockTransport::new(pieces(&odd, 6));
         let (read, reports) = capture_reports(|| proto.request_measurement(&mock));
         match read {
-            Err(Error::InvalidResponse { message, raw }) => {
-                assert_eq!(message, UNTOLD);
+            Err(Error::WrongMeter { reason, raw }) => {
+                assert_eq!(reason, WrongMeter::UntoldFrameKind);
                 assert_eq!(raw.len(), SHOWN_BYTES);
             }
             other => panic!("{other:?}"),
@@ -945,8 +935,8 @@ mod tests {
         let mut proto = proto(&model::VC915);
         let (read, reports) = capture_reports(|| proto.request_measurement(&mock));
         match read {
-            Err(Error::InvalidResponse { message, .. }) => {
-                assert!(message.contains("15-byte"), "{message}");
+            Err(Error::WrongMeter { reason, .. }) => {
+                assert_eq!(reason, WrongMeter::NoFifteenByteFrames);
             }
             other => panic!("{other:?}"),
         }
@@ -965,7 +955,8 @@ mod tests {
         ] {
             let meter = Meter::new(Some(&info(code)), Vec::new());
             match proto(opened).init(&meter) {
-                Err(Error::InvalidResponse { message, .. }) => {
+                Err(Error::WrongMeter { reason, .. }) => {
+                    let message = reason.to_string();
                     assert!(message.contains(says), "{code}: {message}");
                     assert!(message.contains(&format!("model code {code}")), "{message}");
                     assert!(message.contains(opened.name), "{message}");
@@ -999,7 +990,8 @@ mod tests {
         ] {
             let meter = Meter::new(Some(&info(code)), Vec::new());
             match proto(&model::B35).init(&meter) {
-                Err(Error::InvalidResponse { message, .. }) => {
+                Err(Error::WrongMeter { reason, .. }) => {
+                    let message = reason.to_string();
                     assert!(message.contains(says), "{code}: {message}");
                     assert!(message.contains(&code.to_string()), "{message}");
                 }
