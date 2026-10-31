@@ -40,13 +40,15 @@ fn cli_reference_table() -> String {
     table.push_str(&format!(
         "\n| `{}` |  | [{}](detection-design.md) (default) |",
         registry::AUTO_DEVICE_ID,
-        dmm_shared::help::AUTO_DESCRIPTION
+        dmm_shared::help::english().auto_description()
     ));
     for (brand, rows) in registry::brand_groups() {
         table.push_str(&format!("\n| **{}** |  |  |", brand.name()));
         for row in rows {
             let aliases: Vec<String> = row.aliases().iter().map(|a| format!("`{a}`")).collect();
-            let tag = dmm_shared::help::device_tag(row.device, true).expect("every row is tagged");
+            let tag = dmm_shared::help::english()
+                .device_tag(row.device, true)
+                .expect("every row is tagged");
             let description = format!("{} ({tag})", row.model_name());
             table.push_str(&format!(
                 "\n| `{}` | {} | {description} |",

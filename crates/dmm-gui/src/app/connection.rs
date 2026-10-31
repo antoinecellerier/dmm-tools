@@ -60,7 +60,7 @@ const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 pub(super) fn no_response() -> String {
     format!(
         "{} \u{2014} check device selection and data transmission",
-        dmm_shared::help::NO_RESPONSE
+        dmm_shared::help::english().no_response()
     )
 }
 

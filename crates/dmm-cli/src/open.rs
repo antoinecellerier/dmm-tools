@@ -12,7 +12,7 @@ pub(crate) fn print_no_response_help(device: &'static SelectableDevice) {
     eprintln!(
         "{} {}. Check that it is the {} and that data transmission is enabled.",
         style("Warning:").yellow(),
-        dmm_shared::help::NO_RESPONSE,
+        dmm_shared::help::english().no_response(),
         meter_name(device),
     );
     print_picked();
@@ -26,9 +26,11 @@ pub(crate) fn print_no_response_help(device: &'static SelectableDevice) {
 /// run or URLs to open are dimmed to keep the prose that explains them in the
 /// foreground.
 pub(crate) fn print_setup_sections(links: LinksSearched<'_>) {
-    for section in links.sections() {
+    let help = dmm_shared::help::english();
+    for section in help.sections(&links) {
         eprintln!();
-        eprintln!("{}: {}", style(section.link).bold(), section.check);
+        let link = style(&section.link).bold().to_string();
+        eprintln!("{}", help.section_label(&link, &section.check));
         for step in section.steps {
             let line = format!("  {step}");
             if step.starts_with(' ') {
@@ -45,9 +47,12 @@ pub(crate) fn print_setup_sections(links: LinksSearched<'_>) {
 fn print_not_found_help(links: LinksSearched<'_>) {
     eprintln!(
         "{}",
-        style(format!("{}.", links.not_found_title()))
-            .yellow()
-            .bold()
+        style(format!(
+            "{}.",
+            dmm_shared::help::english().not_found_title(&links)
+        ))
+        .yellow()
+        .bold()
     );
     print_picked();
     print_setup_sections(links);
@@ -321,7 +326,7 @@ fn warn_if_experimental(
         "{}",
         style(format!(
             "WARNING: {}",
-            dmm_shared::help::stability_warning(profile_name(profile), profile.stability)
+            dmm_shared::help::english().stability_warning(profile_name(profile), profile.stability)
         ))
         .yellow()
         .bold()
@@ -361,7 +366,8 @@ fn print_experimental_note(selection: Selection) {
             "{}",
             style(format!(
                 "{} Report feedback: {}",
-                dmm_shared::help::stability_warning(profile_name(profile), profile.stability),
+                dmm_shared::help::english()
+                    .stability_warning(profile_name(profile), profile.stability),
                 profile.feedback_url()
             ))
             .yellow()
@@ -404,7 +410,7 @@ fn open_error_help(
                 "{}",
                 style(format!(
                     "{} over the {}.",
-                    dmm_shared::help::NO_METER_ANSWERED,
+                    dmm_shared::help::english().no_meter_answered(),
                     dmm_lib::transport::bridge_link_name(bridge, built_in_radio)
                 ))
                 .yellow()
@@ -446,7 +452,7 @@ fn open_error_help(
             if listed {
                 eprintln!();
             }
-            for line in adapters.lines() {
+            for line in dmm_shared::help::english().adapter_lines(&adapters) {
                 eprintln!("{}", style(line).yellow());
             }
             if listed {
@@ -455,7 +461,7 @@ fn open_error_help(
                     style(format!("Use {ADAPTER_SELECTOR} to select one.")).dim()
                 );
             }
-            if let Some(hint) = dmm_shared::help::colonless_address_hint(detail) {
+            if let Some(hint) = dmm_shared::help::english().colonless_address_hint(detail) {
                 eprintln!("\n{}", style(hint).yellow());
             }
             "adapter not found".into()

@@ -723,7 +723,13 @@ impl App {
         // steps and the Bluetooth steps are never read as one list.
         for section in &notice.sections {
             ui.add_space(4.0);
-            ui.label(RichText::new(section.label()).small().strong());
+            ui.label(
+                RichText::new(
+                    dmm_shared::help::english().section_label(&section.link, &section.check),
+                )
+                .small()
+                .strong(),
+            );
             ui.label(
                 RichText::new(
                     section

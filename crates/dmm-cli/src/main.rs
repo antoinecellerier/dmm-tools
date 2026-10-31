@@ -338,7 +338,8 @@ fn main() {
             } else if bluetooth_switched_off(&*e) {
                 eprintln!(
                     "{}",
-                    style(dmm_shared::help::cli_bluetooth_off_hint(cli.no_bluetooth)).yellow()
+                    style(dmm_shared::help::english().cli_bluetooth_off_hint(cli.no_bluetooth))
+                        .yellow()
                 );
             }
         }

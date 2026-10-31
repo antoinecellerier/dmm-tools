@@ -17,8 +17,13 @@ csv.workspace = true
 env_logger.workspace = true
 log.workspace = true
 fluent-bundle = "0.16.0"
+fluent-syntax = "0.12.0" # the message scan behind test-support; already in the tree for fluent-bundle
 sys-locale = "0.3.2"
 unic-langid = "0.9.6"
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
+
+[features]
+# The message scan the binaries' tests run over their sources (l10n::check).
+test-support = []

@@ -75,7 +75,8 @@ static GROUPS: std::sync::LazyLock<Vec<Group>> = std::sync::LazyLock::new(|| {
                 .into_iter()
                 .map(|l| {
                     let name = l.display_name();
-                    let described = dmm_shared::help::device_tag(l.device, true)
+                    let described = dmm_shared::help::english()
+                        .device_tag(l.device, true)
                         .map_or_else(|| name.to_string(), |tag| format!("{name} ({tag})"));
                     (l, described)
                 })
@@ -240,7 +241,7 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
             registry::AUTO_DEVICE_ID,
             "Auto-detect",
             "Auto-detect",
-            dmm_shared::help::AUTO_DESCRIPTION,
+            &dmm_shared::help::english().auto_description(),
         );
         entries.push((auto, None));
         ui.add_space(ui.spacing().item_spacing.y);

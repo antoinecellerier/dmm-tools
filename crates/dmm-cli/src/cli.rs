@@ -45,7 +45,7 @@ fn version_string() -> &'static str {
          shared-settings file path.\n\n\
          Set NO_COLOR=1 to disable colored output.\n\
          {}",
-        dmm_shared::help::project_link_line()
+        dmm_shared::help::english().project_link_line()
     ),
     // after_long_help is set dynamically in main() so the actual per-platform
     // settings file path appears in the output.
@@ -414,7 +414,7 @@ pub(crate) enum SettingsFormat {
 
 /// Build long help text for --device from the registry.
 pub(crate) fn build_device_help() -> String {
-    dmm_shared::help::device_help("Device to connect to.")
+    dmm_shared::help::english().device_help("Device to connect to.")
 }
 
 /// The command `completions` writes a script for: the parsing one, with the
@@ -425,7 +425,7 @@ pub(crate) fn completion_command() -> clap::Command {
 
 /// Build long help text for --mock-mode from the mock's own mode table.
 fn build_mock_mode_help() -> String {
-    dmm_shared::help::mock_mode_help(
+    dmm_shared::help::english().mock_mode_help(
         "Pin the mock device to a specific measurement mode instead of \
          auto-cycling. Only effective with --device mock. Without it, the \
          settings file's mock_mode (dmm-gui's Mock mode) pins it.",
@@ -467,7 +467,7 @@ pub(crate) fn build_after_long_help() -> String {
          \n\
          {link}",
         path = resolved_config_path_display(),
-        link = dmm_shared::help::project_link_line(),
+        link = dmm_shared::help::english().project_link_line(),
     )
 }
 

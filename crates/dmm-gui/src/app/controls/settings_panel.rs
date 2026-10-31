@@ -1,7 +1,6 @@
 use crate::app::shortcuts::Shortcut;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
-use dmm_shared::help::BLUETOOTH_SETTING;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::settings::{GraphLines, SpecFields, buffer_memory_estimate, format_sample_count};
@@ -378,9 +377,12 @@ impl App {
                 "Query the meter's name after connecting — the meter will beep once",
             );
             let label = if self.settings.overrides.has_bluetooth() {
-                format!("{BLUETOOTH_SETTING} (--no-bluetooth)")
+                format!(
+                    "{} (--no-bluetooth)",
+                    dmm_shared::help::english().bluetooth_setting()
+                )
             } else {
-                BLUETOOTH_SETTING.to_string()
+                dmm_shared::help::english().bluetooth_setting().into_owned()
             };
             // No reconnect: a session already running over an adapter would
             // be dropped by one, and the setting only decides what the next
@@ -1368,7 +1370,10 @@ mod tests {
     /// label a word to a line, with the longest labels they can carry.
     #[test]
     fn the_merged_checkbox_rows_wrap_a_checkbox_at_a_time() {
-        let bluetooth = format!("{BLUETOOTH_SETTING} (--no-bluetooth)");
+        let bluetooth = format!(
+            "{} (--no-bluetooth)",
+            dmm_shared::help::english().bluetooth_setting()
+        );
         let meter = [
             "Auto-connect on start",
             "Show device name on connect (beeps)",

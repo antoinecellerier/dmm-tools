@@ -311,7 +311,7 @@ impl App {
                     )
                     .on_hover_text(format!(
                         "{} Click to report feedback.",
-                        dmm_shared::help::stability_warning(&model_name, stability)
+                        dmm_shared::help::english().stability_warning(&model_name, stability)
                     ));
                 }
             });
@@ -428,7 +428,7 @@ impl App {
                 .a11y_label(&format!("{} available — open its release page", tag.name()));
         }
         ui.hyperlink_to(
-            dmm_shared::help::PROJECT_LINK_LABEL,
+            dmm_shared::help::english().project_link(),
             dmm_shared::help::PROJECT_URL,
         )
         .on_hover_text("Open the dmm-tools project page on GitHub");
@@ -498,7 +498,7 @@ fn connected_status(name: &str, link: Option<Link>, paused: bool) -> String {
 
 /// What the link adds to the status text.
 fn link_suffix(link: Link) -> String {
-    format!(" \u{b7} {}", dmm_shared::help::short_name(link))
+    format!(" \u{b7} {}", dmm_shared::help::english().short_name(link))
 }
 
 /// What an imported file adds to the status text: its name, where a live

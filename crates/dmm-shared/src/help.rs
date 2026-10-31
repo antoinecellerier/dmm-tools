@@ -3,19 +3,24 @@
 //! The lists come from the authorities on what exists (`dmm-lib`'s registry
 //! for devices, [`MockMode::ALL`] for mock scenarios), so an addition there
 //! reaches both binaries' `--help`. The prose (setup hint, experimental
-//! warning) is here because the two copies had already drifted apart. The
-//! long name of a link stays in `dmm-lib` ([`Link::full_name`]), whose error
-//! messages use it.
+//! warning) is here because the two copies had already drifted apart, and
+//! comes from `i18n/<locale>/shared.ftl` through [`Help`], in the language
+//! of the [`Localizer`] it is built on. The long name of a link stays in
+//! `dmm-lib` ([`Link::full_name`]), whose error messages use it.
 //!
 //! The per-crate build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in
 //! rather than read here: `env!` would capture *this* crate's values, not the
 //! binary's.
 
+use crate::l10n::{Localizer, Resource};
+use crate::tr;
 use dmm_lib::list_devices;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{Stability, registry};
 use dmm_lib::transport::Link;
+use std::borrow::Cow;
+use std::sync::OnceLock;
 
 /// Version text for `--version`, with the git hash appended on dev builds.
 ///
@@ -41,58 +46,413 @@ pub fn version_label(version: &str, git_hash: &str) -> String {
 /// The project page, where the docs and the issue tracker are.
 pub const PROJECT_URL: &str = "https://github.com/antoinecellerier/dmm-tools";
 
-/// What both binaries call the link to [`PROJECT_URL`].
-pub const PROJECT_LINK_LABEL: &str = "Help & Feedback";
+/// The setup guide, which the Linux cable help points a headless machine to.
+#[cfg(target_os = "linux")]
+const SETUP_GUIDE_URL: &str =
+    "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md";
 
-/// The `--help` footer line naming the project page.
-pub fn project_link_line() -> String {
-    format!("{PROJECT_LINK_LABEL}: {PROJECT_URL}")
+/// Where Windows gets the CP2110's driver.
+#[cfg(target_os = "windows")]
+const CP2110_DRIVER_URL: &str = "https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers";
+
+/// The device catalog, which lists the Bluetooth adapters and meters.
+const CATALOG_URL: &str =
+    "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/supported-devices.md";
+
+/// The messages of [`Help`]: `i18n/<locale>/shared.ftl`, in every language
+/// the binaries ship.
+pub const RESOURCES: &[Resource] = &[crate::ftl!("en-US", "shared.ftl")];
+
+/// The help in English, for what stays English whatever the language: shell
+/// completions, and the docs' generated tables.
+pub fn english() -> Help<'static> {
+    static ENGLISH: OnceLock<Localizer> = OnceLock::new();
+    Help(ENGLISH.get_or_init(|| Localizer::en_us(RESOURCES)))
 }
 
-/// Long help for a `--device` flag: `intro`, then one line per known device,
-/// under its brand as the GUI's device list groups them
-/// ([`registry::brand_groups`]).
-///
-/// `intro` is the only part that differs between the binaries — the CLI's is
-/// bare, the GUI's notes that the flag overrides saved settings.
-pub fn device_help(intro: &str) -> String {
-    let rows = registry::listings().count();
-    let mut help = String::with_capacity(intro.len() + rows * 48 + 160);
-    help.push_str(intro);
-    help.push_str("\n\nDevices:\n");
-    // The names line up past the longest id.
-    let width = registry::listings()
-        .map(|l| l.id().len())
-        .max()
-        .unwrap_or(0);
-    // Leads the list: it is what the flag does when nothing names a meter, and
-    // the one value the registry does not carry.
-    help.push_str(&format!(
-        "  {:<width$} {AUTO_DESCRIPTION} (default)\n",
-        registry::AUTO_DEVICE_ID
-    ));
-    for (brand, rows) in registry::brand_groups() {
-        help.push_str(&format!("\n  {}\n", brand.name()));
-        for row in rows {
-            let tag = device_tag(row.device, false).map_or(String::new(), |t| format!(" ({t})"));
-            help.push_str(&format!(
-                "    {:<width$} {}{}\n",
-                row.id(),
-                row.model_name(),
-                tag
-            ));
+impl Localizer {
+    /// The help text in this localizer's language. Its resources must
+    /// include [`RESOURCES`].
+    pub fn help(&self) -> Help<'_> {
+        Help(self)
+    }
+}
+
+/// The help text both binaries print, in one language.
+#[derive(Clone, Copy)]
+pub struct Help<'a>(&'a Localizer);
+
+impl<'a> Help<'a> {
+    /// What both binaries call the link to [`PROJECT_URL`].
+    pub fn project_link(self) -> Cow<'a, str> {
+        tr!(self.0, "project-link")
+    }
+
+    /// The `--help` footer line naming the project page.
+    pub fn project_link_line(self) -> String {
+        tr!(self.0, "project-link-line", url = PROJECT_URL).into_owned()
+    }
+
+    /// Long help for a `--device` flag: `intro`, then one line per known
+    /// device, under its brand as the GUI's device list groups them
+    /// ([`registry::brand_groups`]).
+    ///
+    /// `intro` is the only part that differs between the binaries — the
+    /// CLI's is bare, the GUI's notes that the flag overrides saved settings.
+    pub fn device_help(self, intro: &str) -> String {
+        let rows = registry::listings().count();
+        let mut help = String::with_capacity(intro.len() + rows * 48 + 160);
+        help.push_str(intro);
+        help.push_str("\n\n");
+        help.push_str(&tr!(self.0, "device-list-heading"));
+        help.push('\n');
+        // The names line up past the longest id.
+        let width = registry::listings()
+            .map(|l| l.id().len())
+            .max()
+            .unwrap_or(0);
+        // Leads the list: it is what the flag does when nothing names a
+        // meter, and the one value the registry does not carry.
+        help.push_str(&format!(
+            "  {:<width$} {}\n",
+            registry::AUTO_DEVICE_ID,
+            tr!(self.0, "device-auto-default")
+        ));
+        for (brand, rows) in registry::brand_groups() {
+            help.push_str(&format!("\n  {}\n", brand.name()));
+            for row in rows {
+                let tag = self
+                    .device_tag(row.device, false)
+                    .map_or(String::new(), |t| format!(" ({t})"));
+                help.push_str(&format!(
+                    "    {:<width$} {}{}\n",
+                    row.id(),
+                    row.model_name(),
+                    tag
+                ));
+            }
+        }
+        help.push('\n');
+        help.push_str(&tr!(self.0, "device-aliases"));
+        help
+    }
+
+    /// What `auto` does: beside it in `--help`, a shell's completion menu
+    /// and the CLI reference's table, and the GUI's Auto-detect hover.
+    pub fn auto_description(self) -> Cow<'a, str> {
+        tr!(self.0, "device-auto")
+    }
+
+    /// What a device listing says beside a device's name: that it needs no
+    /// hardware, or how far its support is verified.
+    ///
+    /// `--help` leaves a verified meter untagged and `docs/cli-reference.md`'s
+    /// table tags every row, so `verified_too` asks for that meter's tag too.
+    /// Shared so the two cannot disagree about which devices are
+    /// experimental.
+    pub fn device_tag(self, device: &SelectableDevice, verified_too: bool) -> Option<Cow<'a, str>> {
+        if !device.requires_hardware {
+            return Some(tr!(self.0, "device-no-hardware"));
+        }
+        let stability = (device.new_protocol)().profile().stability;
+        (verified_too || !stability.is_verified()).then(|| self.stability(stability))
+    }
+
+    /// How far a meter's support is verified, as device lists tag it.
+    pub fn stability(self, stability: Stability) -> Cow<'a, str> {
+        match stability {
+            Stability::Verified => tr!(self.0, "stability-verified"),
+            Stability::PartlyVerified => tr!(self.0, "stability-partly-verified"),
+            Stability::Experimental => tr!(self.0, "stability-experimental"),
         }
     }
-    help.push_str(
-        "\nAlso accepts aliases: ut61e+, ut61b, ut171a, ut181, etc.\n\
-         Quote names with special characters: --device 'ut61e+'",
-    );
-    help
-}
 
-/// What `auto` does: beside it in `--help`, a shell's completion menu and the
-/// CLI reference's table, and the GUI's Auto-detect hover.
-pub const AUTO_DESCRIPTION: &str = "Detect the connected meter";
+    /// Long help for a `--mock-mode` flag: `intro`, the mode list, then
+    /// `example`.
+    ///
+    /// The list is rendered from [`MockMode::ALL`] for the same reason the
+    /// device list comes from the registry — the CLI's hardcoded copy had
+    /// fallen four modes behind the mock. `intro` and `example` differ
+    /// between the binaries: the CLI's flag sits on a subcommand, the GUI's
+    /// implies `--device mock`.
+    pub fn mock_mode_help(self, intro: &str, example: &str) -> String {
+        format!(
+            "{intro}\n\n{}\n\n{}",
+            tr!(self.0, "mock-mode-list", modes = MockMode::label_list()),
+            tr!(self.0, "mock-mode-example", example = example)
+        )
+    }
+
+    /// What both binaries answer when the clock flags meet a hardware
+    /// device.
+    ///
+    /// `--mock-clock-scale` and `--mock-clock-preseed` bend session time,
+    /// and a real meter is paced by USB: honouring them there would stamp
+    /// readings with instants the meter never produced. A replay takes them
+    /// too — its readings are already recorded, so time can be run through
+    /// them at any speed. Shared so the CLI and the GUI refuse with the same
+    /// sentence.
+    pub fn mock_clock_mock_only(self) -> Cow<'a, str> {
+        tr!(self.0, "mock-clock-mock-only")
+    }
+
+    /// The name of a transport's link
+    /// ([`dmm_lib::transport::Transport::link`]) for a status line that
+    /// already names the meter.
+    ///
+    /// "Bluetooth adapter" doubles the width of a UT61E+ label for a word
+    /// the label around it no longer needs. The long form is the library's
+    /// own [`Link::full_name`].
+    pub fn short_name(self, link: Link) -> Cow<'a, str> {
+        match link {
+            Link::UsbCable => tr!(self.0, "link-usb-cable"),
+            Link::Bluetooth => tr!(self.0, "link-bluetooth"),
+        }
+    }
+
+    /// The GUI setting that lets an open search the radio, as its checkbox
+    /// reads. The CLI reads the same saved setting, so its help names it
+    /// too.
+    pub fn bluetooth_setting(self) -> Cow<'a, str> {
+        tr!(self.0, "bluetooth-setting")
+    }
+
+    /// What turns the radio search back on in the CLI, for a meter with the
+    /// radio built in that was not looked for: `flag_given` when
+    /// `--no-bluetooth` switched it off, else the saved setting did.
+    pub fn cli_bluetooth_off_hint(self, flag_given: bool) -> Cow<'a, str> {
+        if flag_given {
+            tr!(self.0, "bluetooth-off-cli-flag")
+        } else {
+            tr!(self.0, "bluetooth-off-cli-setting")
+        }
+    }
+
+    /// The same in the GUI, where ticking the setting also clears a
+    /// `--no-bluetooth` given at start.
+    pub fn gui_bluetooth_off_hint(self) -> Cow<'a, str> {
+        tr!(self.0, "bluetooth-off-gui")
+    }
+
+    /// The line that says what was not found.
+    ///
+    /// No full stop: the CLI ends the sentence, the GUI's notice titles
+    /// carry none.
+    pub fn not_found_title(self, links: &LinksSearched<'_>) -> String {
+        match *links {
+            LinksSearched::Usb => tr!(self.0, "not-found-usb").into_owned(),
+            LinksSearched::UsbAndBluetooth => {
+                tr!(self.0, "not-found-usb-or-bluetooth").into_owned()
+            }
+            LinksSearched::BluetoothAt(address) => {
+                tr!(self.0, "not-found-bluetooth-at", address = address).into_owned()
+            }
+            LinksSearched::BluetoothOnly { model, .. } => {
+                tr!(self.0, "not-found-bluetooth-only", model = model).into_owned()
+            }
+        }
+    }
+
+    /// The sections to print under that title, in the order they are
+    /// printed.
+    pub fn sections(self, links: &LinksSearched<'_>) -> Vec<SetupSection> {
+        match *links {
+            LinksSearched::Usb => vec![self.usb_section()],
+            LinksSearched::UsbAndBluetooth => vec![
+                self.usb_section(),
+                self.bluetooth_section(vec![
+                    Step::Prose(tr!(self.0, "setup-bluetooth-catalog")),
+                    Step::Literal(CATALOG_URL),
+                ]),
+            ],
+            // No cable was looked at, so nothing about cables applies — and
+            // the address the user typed is the only thing that did not
+            // answer.
+            LinksSearched::BluetoothAt(_) => {
+                vec![self.bluetooth_section(vec![Step::Prose(tr!(self.0, "setup-bluetooth-scan"))])]
+            }
+            // No adapter to wake, and the meter named: its own steps say how
+            // to switch its radio on.
+            LinksSearched::BluetoothOnly { activation, .. } => {
+                let steps = activation
+                    .lines()
+                    .map(|l| l.to_string())
+                    .chain(self.bluetooth_host_steps().into_iter().map(Step::line))
+                    .collect();
+                vec![SetupSection {
+                    link: self.short_name(Link::Bluetooth).into_owned(),
+                    check: tr!(self.0, "setup-bluetooth-check").into_owned(),
+                    steps,
+                }]
+            }
+        }
+    }
+
+    /// A section's label line, `<link>: <check>`. `link` is passed apart
+    /// so the CLI can style it.
+    pub fn section_label(self, link: &str, check: &str) -> String {
+        tr!(self.0, "setup-label", link = link, check = check).into_owned()
+    }
+
+    /// A section as plain text, the steps indented under the label.
+    pub fn section_text(self, section: &SetupSection) -> String {
+        let mut out = self.section_label(&section.link, &section.check);
+        for step in &section.steps {
+            out.push_str("\n  ");
+            out.push_str(step);
+        }
+        out
+    }
+
+    fn usb_section(self) -> SetupSection {
+        SetupSection {
+            link: self.short_name(Link::UsbCable).into_owned(),
+            check: tr!(self.0, "setup-usb-check").into_owned(),
+            steps: self.usb_steps().into_iter().map(Step::line).collect(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn usb_steps(self) -> Vec<Step<'a>> {
+        vec![
+            Step::Prose(tr!(self.0, "setup-usb-linux-rule")),
+            Step::Literal("sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/"),
+            Step::Literal("sudo udevadm control --reload-rules"),
+            Step::Prose(tr!(self.0, "setup-usb-linux-replug")),
+            Step::Literal(SETUP_GUIDE_URL),
+        ]
+    }
+
+    #[cfg(target_os = "windows")]
+    fn usb_steps(self) -> Vec<Step<'a>> {
+        vec![
+            Step::Prose(tr!(self.0, "setup-usb-windows-open")),
+            Step::Prose(tr!(self.0, "setup-usb-windows-cp2110")),
+            Step::Prose(tr!(self.0, "setup-usb-windows-input")),
+            Step::Prose(tr!(self.0, "setup-usb-windows-warning")),
+            Step::Literal(CP2110_DRIVER_URL),
+            Step::Prose(tr!(self.0, "setup-usb-windows-nothing")),
+        ]
+    }
+
+    #[cfg(target_os = "macos")]
+    fn usb_steps(self) -> Vec<Step<'a>> {
+        vec![
+            Step::Prose(tr!(self.0, "setup-usb-macos-auto")),
+            Step::Prose(tr!(self.0, "setup-usb-macos-privacy")),
+        ]
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    fn usb_steps(self) -> Vec<Step<'a>> {
+        Vec::new()
+    }
+
+    /// The radio's section: wake the adapter (it stops advertising in
+    /// standby, and its own power switch wakes it), what this computer's
+    /// radio may need, then `closing`.
+    fn bluetooth_section(self, closing: Vec<Step<'a>>) -> SetupSection {
+        let steps = std::iter::once(Step::Prose(tr!(self.0, "setup-bluetooth-adapter")))
+            .chain(self.bluetooth_host_steps())
+            .chain(closing)
+            .map(Step::line)
+            .collect();
+        SetupSection {
+            link: self.short_name(Link::Bluetooth).into_owned(),
+            check: tr!(self.0, "setup-bluetooth-check").into_owned(),
+            steps,
+        }
+    }
+
+    /// What this computer's radio may need, adapter or not.
+    #[cfg(target_os = "macos")]
+    fn bluetooth_host_steps(self) -> Vec<Step<'a>> {
+        vec![Step::Prose(tr!(self.0, "setup-bluetooth-macos-privacy"))]
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn bluetooth_host_steps(self) -> Vec<Step<'a>> {
+        Vec::new()
+    }
+
+    /// The title for a link where detection ran and no meter answered it.
+    ///
+    /// No full stop, like [`Help::not_found_title`]. Not the same claim as
+    /// [`Help::no_response`]: here nothing was identified, there the meter
+    /// in use has gone quiet.
+    pub fn no_meter_answered(self) -> Cow<'a, str> {
+        tr!(self.0, "no-meter-answered")
+    }
+
+    /// The title for a meter that was picked or found and is not answering.
+    pub fn no_response(self) -> Cow<'a, str> {
+        tr!(self.0, "no-response")
+    }
+
+    /// The sentence both binaries use to say a protocol is not fully
+    /// verified.
+    ///
+    /// Only the claim is shared: each site appends its own call to action
+    /// (the CLI a `capture` command, the GUI a link), because they differ in
+    /// what the user can do next.
+    pub fn stability_warning(self, model_name: &str, stability: Stability) -> String {
+        let stability = match stability {
+            Stability::Verified => "verified",
+            Stability::PartlyVerified => "partly-verified",
+            Stability::Experimental => "experimental",
+        };
+        tr!(
+            self.0,
+            "stability-warning",
+            model = model_name,
+            stability = stability
+        )
+        .into_owned()
+    }
+
+    /// The lines both binaries print for what an `--adapter` selector could
+    /// have matched, header included.
+    ///
+    /// No styling and no trailing hint — the CLI tells the user to re-run
+    /// with a different `--adapter`, the GUI to restart with one, and only
+    /// the list of what is plugged in is common to both.
+    pub fn adapter_lines(self, adapters: &ConnectedAdapters) -> Vec<String> {
+        match adapters {
+            ConnectedAdapters::None => vec![tr!(self.0, "adapters-none").into_owned()],
+            ConnectedAdapters::Listed(devices) => {
+                let mut lines = Vec::with_capacity(devices.len() + 1);
+                lines.push(tr!(self.0, "adapters-heading").into_owned());
+                lines.extend(devices.iter().cloned());
+                lines
+            }
+            ConnectedAdapters::Unavailable => {
+                vec![tr!(self.0, "adapters-unavailable").into_owned()]
+            }
+        }
+    }
+
+    /// The line both binaries add when an `--adapter` value nothing matched
+    /// is twelve hex digits — a Bluetooth address without its colons, the
+    /// way Windows' Device Manager shows one.
+    ///
+    /// Only a hint: a USB cable's serial number can be the same twelve
+    /// digits, so the value is not opened as an address. `None` for any
+    /// other value, and in a build without the radio.
+    pub fn colonless_address_hint(self, selector: &str) -> Option<String> {
+        if !dmm_lib::BLUETOOTH_SUPPORTED
+            || selector.len() != 12
+            || !selector.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return None;
+        }
+        let pairs: Vec<String> = selector
+            .as_bytes()
+            .chunks(2)
+            .map(|pair| String::from_utf8_lossy(pair).to_ascii_uppercase())
+            .collect();
+        Some(tr!(self.0, "colonless-address-hint", address = pairs.join(":")).into_owned())
+    }
+}
 
 /// `cmd`, with the `--device` and `--mock-mode` flags on it and its
 /// subcommands offering their values, for a completion script.
@@ -101,7 +461,8 @@ pub const AUTO_DESCRIPTION: &str = "Detect the connected meter";
 /// hint to run `--help`; clap's possible values would replace it with its
 /// own. So they are added only to the command a script is generated from,
 /// never to the one that parses. Aliases are left out: the ids cover every
-/// device, and `ut61e+` would need quoting.
+/// device, and `ut61e+` would need quoting. In English: a completion script
+/// outlives the language it was generated in.
 pub fn with_completion_values(mut cmd: clap::Command) -> clap::Command {
     use clap::builder::{PossibleValue, PossibleValuesParser};
 
@@ -112,9 +473,9 @@ pub fn with_completion_values(mut cmd: clap::Command) -> clap::Command {
     for name in subcommands {
         cmd = cmd.mut_subcommand(name, with_completion_values);
     }
-    let devices =
-        std::iter::once(PossibleValue::new(registry::AUTO_DEVICE_ID).help(AUTO_DESCRIPTION))
-            .chain(registry::listings().map(|l| PossibleValue::new(l.id()).help(l.display_name())));
+    let auto = english().auto_description().into_owned();
+    let devices = std::iter::once(PossibleValue::new(registry::AUTO_DEVICE_ID).help(auto))
+        .chain(registry::listings().map(|l| PossibleValue::new(l.id()).help(l.display_name())));
     let modes = MockMode::ALL
         .iter()
         .map(|m| PossibleValue::new(m.label()).help(m.description()));
@@ -128,46 +489,6 @@ pub fn with_completion_values(mut cmd: clap::Command) -> clap::Command {
         }
     }
     cmd
-}
-
-/// What a device listing says beside a device's name: that it needs no
-/// hardware, or how far its support is verified.
-///
-/// `--help` leaves a verified meter untagged and `docs/cli-reference.md`'s
-/// table tags every row, so `verified_too` asks for that meter's tag too.
-/// Shared so the two cannot disagree about which devices are experimental.
-pub fn device_tag(device: &SelectableDevice, verified_too: bool) -> Option<&'static str> {
-    if !device.requires_hardware {
-        return Some("no hardware required");
-    }
-    let stability = (device.new_protocol)().profile().stability;
-    (verified_too || !stability.is_verified()).then(|| stability.label())
-}
-
-/// Long help for a `--mock-mode` flag: `intro`, the mode list, then `example`.
-///
-/// The list is rendered from [`MockMode::ALL`] for the same reason the device
-/// list comes from the registry — the CLI's hardcoded copy had fallen four
-/// modes behind the mock. `intro` and `example` differ between the binaries:
-/// the CLI's flag sits on a subcommand, the GUI's implies `--device mock`.
-pub fn mock_mode_help(intro: &str, example: &str) -> String {
-    format!(
-        "{intro}\n\nModes: {}\n\nExample: {example}",
-        MockMode::label_list()
-    )
-}
-
-/// The name of a transport's link ([`dmm_lib::transport::Transport::link`])
-/// for a status line that already names the meter.
-///
-/// "Bluetooth adapter" doubles the width of a UT61E+ label for a word the
-/// label around it no longer needs. A free function because [`Link`] is
-/// `dmm-lib`'s; the long form is its own [`Link::full_name`].
-pub fn short_name(link: Link) -> &'static str {
-    match link {
-        Link::UsbCable => USB_CABLE,
-        Link::Bluetooth => BLUETOOTH_LINK,
-    }
 }
 
 /// The meters on a bridge, grouped by the steps that switch their
@@ -207,90 +528,23 @@ pub fn activation_groups(
         .collect()
 }
 
-/// The cable link, in both the long and the short form.
-const USB_CABLE: &str = Link::UsbCable.full_name(false);
+/// One step of a setup section: prose to translate, or a command line or
+/// address that stays as written.
+enum Step<'a> {
+    Prose(Cow<'a, str>),
+    Literal(&'static str),
+}
 
-/// The radio link where the words around it already say what it is.
-const BLUETOOTH_LINK: &str = "Bluetooth";
-
-/// What the USB label line says to check, whatever the platform.
-const CABLE_CHECK: &str = "check it is plugged in and the meter is powered on.";
-
-/// What the Bluetooth label line says to check. Generic on purpose: which
-/// adapters we speak to is the catalog's business, not a message's.
-const BLUETOOTH_CHECK: &str =
-    "turn on Bluetooth on this computer and data transmission on the meter.";
-
-#[cfg(target_os = "linux")]
-const USB_STEPS: &[&str] = &[
-    "Ensure the udev rule is installed:",
-    "  sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/",
-    "  sudo udevadm control --reload-rules",
-    "Then replug the cable. On a headless machine, keep a group on the rule:",
-    "  https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md",
-];
-
-#[cfg(target_os = "windows")]
-const USB_STEPS: &[&str] = &[
-    "Open Device Manager with the cable plugged in:",
-    "- 'CP2110 USB to UART Bridge' under HID devices: no action needed.",
-    "- 'USB Input Device' under HID devices: no action needed.",
-    "- Yellow warning icon under 'Other devices': install the driver from",
-    "  https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers",
-    "- Nothing appears: try a different USB port.",
-];
-
-#[cfg(target_os = "macos")]
-const USB_STEPS: &[&str] = &[
-    "The cable should be recognized automatically (no driver needed).",
-    "If the device is not found, check System Settings > Privacy & Security > Input Monitoring.",
-];
-
-#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-const USB_STEPS: &[&str] = &[];
-
-/// The GUI setting that lets an open search the radio, as its checkbox
-/// reads. The CLI reads the same saved setting, so its help names it too.
-pub const BLUETOOTH_SETTING: &str = "Look for Bluetooth devices";
-
-/// What turns the radio search back on in the CLI, for a meter with the
-/// radio built in that was not looked for: `flag_given` when
-/// `--no-bluetooth` switched it off, else the saved setting did.
-pub fn cli_bluetooth_off_hint(flag_given: bool) -> String {
-    if flag_given {
-        "Leave out --no-bluetooth.".to_string()
-    } else {
-        format!("Tick \"{BLUETOOTH_SETTING}\" in dmm-gui's settings, which dmm-cli reads too.")
+impl Step<'_> {
+    /// The step as [`SetupSection::steps`] holds it: a command or address
+    /// starts with a space, which tells the renderers to set it apart.
+    fn line(self) -> String {
+        match self {
+            Step::Prose(text) => text.into_owned(),
+            Step::Literal(text) => format!("  {text}"),
+        }
     }
 }
-
-/// The same in the GUI, where ticking the setting also clears a
-/// `--no-bluetooth` given at start.
-pub fn gui_bluetooth_off_hint() -> String {
-    format!("Tick \"{BLUETOOTH_SETTING}\" in Settings (\u{2699}).")
-}
-
-/// The step that wakes an adapter: it stops advertising in standby, and its
-/// own power switch wakes it
-/// (docs/research/ut-d07b/reverse-engineered-protocol.md §4).
-const BLUETOOTH_ADAPTER_STEPS: &[&str] = &["If both are on, switch the adapter off and on."];
-
-/// What this computer's radio may need, adapter or not.
-const BLUETOOTH_HOST_STEPS: &[&str] = &[
-    #[cfg(target_os = "macos")]
-    "Allow Bluetooth in System Settings > Privacy & Security.",
-];
-
-/// Where the adapters and the meters that take one are listed, for the help
-/// that has no address to go on.
-const BLUETOOTH_CATALOG: &[&str] = &[
-    "Supported adapters and meters are listed in the device catalog:",
-    "  https://github.com/antoinecellerier/dmm-tools/blob/main/docs/supported-devices.md",
-];
-
-/// What to do instead when an address was named and nothing answered it: the
-/// scan is the only thing that says which addresses are live.
-const BLUETOOTH_SCAN: &[&str] = &["Run 'dmm-cli list' to scan for adapters and meters in range."];
 
 /// One link's worth of "nothing found" help: a label line, then its steps.
 ///
@@ -301,29 +555,12 @@ const BLUETOOTH_SCAN: &[&str] = &["Run 'dmm-cli list' to scan for adapters and m
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetupSection {
     /// The link, as the user names it: "USB cable", "Bluetooth".
-    pub link: &'static str,
-    /// The rest of the label line, after `<link>: `.
-    pub check: &'static str,
+    pub link: String,
+    /// The rest of the label line ([`Help::section_label`]).
+    pub check: String,
     /// One step per line, which the renderer indents. A step that starts with
     /// a space of its own is a command to run or a URL to open.
-    pub steps: Vec<&'static str>,
-}
-
-impl SetupSection {
-    /// The label line, `<link>: <check>`, for a renderer that draws it whole.
-    pub fn label(&self) -> String {
-        format!("{}: {}", self.link, self.check)
-    }
-
-    /// The section as plain text, the steps indented under the label.
-    pub fn text(&self) -> String {
-        let mut out = self.label();
-        for step in &self.steps {
-            out.push_str("\n  ");
-            out.push_str(step);
-        }
-        out
-    }
+    pub steps: Vec<String>,
 }
 
 /// Which links a failed open looked at — what the help is allowed to talk
@@ -357,106 +594,13 @@ impl LinksSearched<'_> {
             Self::Usb
         }
     }
-
-    /// The line that says what was not found.
-    ///
-    /// No full stop: the CLI ends the sentence, the GUI's notice titles carry
-    /// none.
-    pub fn not_found_title(&self) -> String {
-        match self {
-            Self::Usb => "No USB cable found".to_string(),
-            Self::UsbAndBluetooth => "No meter found over USB or Bluetooth".to_string(),
-            Self::BluetoothAt(address) => format!("No Bluetooth device found at {address}"),
-            Self::BluetoothOnly { model, .. } => format!("No {model} found over Bluetooth"),
-        }
-    }
-
-    /// The sections to print under that title, in the order they are printed.
-    pub fn sections(&self) -> Vec<SetupSection> {
-        match self {
-            Self::Usb => vec![usb_section()],
-            Self::UsbAndBluetooth => vec![usb_section(), bluetooth_section(BLUETOOTH_CATALOG)],
-            // No cable was looked at, so nothing about cables applies — and
-            // the address the user typed is the only thing that did not
-            // answer.
-            Self::BluetoothAt(_) => vec![bluetooth_section(BLUETOOTH_SCAN)],
-            // No adapter to wake, and the meter named: its own steps say how
-            // to switch its radio on.
-            Self::BluetoothOnly { activation, .. } => vec![SetupSection {
-                link: BLUETOOTH_LINK,
-                check: BLUETOOTH_CHECK,
-                steps: activation
-                    .lines()
-                    .chain(BLUETOOTH_HOST_STEPS.iter().copied())
-                    .collect(),
-            }],
-        }
-    }
 }
-
-/// The title for a link where detection ran and no meter answered it.
-///
-/// No full stop, like [`LinksSearched::not_found_title`]. Not the same
-/// claim as [`NO_RESPONSE`]: here nothing was identified, there the meter in
-/// use has gone quiet.
-pub const NO_METER_ANSWERED: &str = "No meter answered";
-
-/// The title for a meter that was picked or found and is not answering.
-pub const NO_RESPONSE: &str = "No response from meter";
-
-fn usb_section() -> SetupSection {
-    SetupSection {
-        link: USB_CABLE,
-        check: CABLE_CHECK,
-        steps: USB_STEPS.to_vec(),
-    }
-}
-
-fn bluetooth_section(closing: &'static [&'static str]) -> SetupSection {
-    SetupSection {
-        link: BLUETOOTH_LINK,
-        check: BLUETOOTH_CHECK,
-        steps: BLUETOOTH_ADAPTER_STEPS
-            .iter()
-            .chain(BLUETOOTH_HOST_STEPS)
-            .chain(closing)
-            .copied()
-            .collect(),
-    }
-}
-
-/// The sentence both binaries use to say a protocol is not fully verified.
-///
-/// Only the claim is shared: each site appends its own call to action (the
-/// CLI a `capture` command, the GUI a link), because they differ in what the
-/// user can do next. Four hand-written spellings had drifted apart here.
-pub fn stability_warning(model_name: &str, stability: Stability) -> String {
-    let detail = match stability {
-        Stability::Verified => "verified against real hardware",
-        Stability::PartlyVerified => "some modes and commands unconfirmed on real hardware",
-        Stability::Experimental => "unverified against real hardware",
-    };
-    format!("{model_name} support is {} ({detail}).", stability.label())
-}
-
-/// What both binaries answer when the clock flags meet a hardware device.
-///
-/// `--mock-clock-scale` and `--mock-clock-preseed` bend session time, and a
-/// real meter is paced by USB: honouring them there would stamp readings with
-/// instants the meter never produced. A replay takes them too — its readings
-/// are already recorded, so time can be run through them at any speed. Shared
-/// so the CLI and the GUI refuse with the same sentence. The name predates
-/// the replay and is left alone: both binaries print it by it.
-pub const MOCK_CLOCK_MOCK_ONLY: &str = "--mock-clock-scale and --mock-clock-preseed \
-                                        only apply to the mock device and to a replay. \
-                                        Re-run with --device mock or --replay, or \
-                                        without the clock flags.";
 
 /// What the bus held when an `--adapter` selector matched nothing.
 ///
-/// Both binaries print the same lines but only attach their "pick another
-/// adapter" hint when devices were actually listed. Naming the three answers
-/// keeps that decision off a line count.
+/// Both binaries print the same lines ([`Help::adapter_lines`]) but only
+/// attach their "pick another adapter" hint when devices were actually
+/// listed. Naming the three answers keeps that decision off a line count.
 pub enum ConnectedAdapters {
     /// Nothing is plugged in.
     None,
@@ -487,56 +631,18 @@ pub fn connected_adapters() -> ConnectedAdapters {
     }
 }
 
-impl ConnectedAdapters {
-    /// The lines both binaries print, header included.
-    ///
-    /// No styling and no trailing hint — the CLI tells the user to re-run with
-    /// a different `--adapter`, the GUI to restart with one, and only the list
-    /// of what is plugged in is common to both.
-    pub fn lines(&self) -> Vec<String> {
-        match self {
-            Self::None => vec!["No devices currently connected.".to_string()],
-            Self::Listed(devices) => {
-                let mut lines = Vec::with_capacity(devices.len() + 1);
-                lines.push("Connected devices:".to_string());
-                lines.extend(devices.iter().cloned());
-                lines
-            }
-            Self::Unavailable => {
-                vec!["Run 'dmm-cli list' to see connected devices.".to_string()]
-            }
-        }
-    }
-}
-
-/// The line both binaries add when an `--adapter` value nothing matched is
-/// twelve hex digits — a Bluetooth address without its colons, the way
-/// Windows' Device Manager shows one.
-///
-/// Only a hint: a USB cable's serial number can be the same twelve digits,
-/// so the value is not opened as an address. `None` for any other value, and
-/// in a build without the radio.
-pub fn colonless_address_hint(selector: &str) -> Option<String> {
-    if !dmm_lib::BLUETOOTH_SUPPORTED
-        || selector.len() != 12
-        || !selector.bytes().all(|b| b.is_ascii_hexdigit())
-    {
-        return None;
-    }
-    let pairs: Vec<String> = selector
-        .as_bytes()
-        .chunks(2)
-        .map(|pair| String::from_utf8_lossy(pair).to_ascii_uppercase())
-        .collect();
-    Some(format!(
-        "If that is a Bluetooth address, write it {}.",
-        pairs.join(":")
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every message this crate looks up exists in en-US with the variables
+    /// it is given, and every message in `shared.ftl` is used.
+    #[test]
+    fn the_shared_messages_match_their_uses() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let problems = crate::l10n::check::check(&src, RESOURCES, &["shared.ftl"]);
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
 
     #[test]
     fn release_version_has_no_hash() {
@@ -582,7 +688,7 @@ mod tests {
 
     #[test]
     fn device_help_lists_every_registry_device() {
-        let help = device_help("Device to connect to.");
+        let help = english().device_help("Device to connect to.");
         assert!(help.starts_with("Device to connect to.\n\nDevices:\n"));
         // Auto is not a registry entry, so nothing below would list it — and
         // it leads, being what a user who names nothing gets.
@@ -606,7 +712,7 @@ mod tests {
     /// heading carries the brand the name would otherwise repeat.
     #[test]
     fn device_help_groups_devices_under_their_brand() {
-        let help = device_help("x");
+        let help = english().device_help("x");
         let mut brand = None;
         let mut seen = 0;
         for line in help.split("Devices:\n").nth(1).unwrap().lines() {
@@ -639,16 +745,20 @@ mod tests {
     /// detail.
     #[test]
     fn connected_adapter_lines_match_each_outcome() {
+        let lines = |a: ConnectedAdapters| english().adapter_lines(&a);
         assert_eq!(
-            ConnectedAdapters::None.lines(),
+            lines(ConnectedAdapters::None),
             ["No devices currently connected."]
         );
         assert_eq!(
-            ConnectedAdapters::Listed(vec!["  [0] one".into(), "  [1] two".into()]).lines(),
+            lines(ConnectedAdapters::Listed(vec![
+                "  [0] one".into(),
+                "  [1] two".into()
+            ])),
             ["Connected devices:", "  [0] one", "  [1] two"]
         );
         assert_eq!(
-            ConnectedAdapters::Unavailable.lines(),
+            lines(ConnectedAdapters::Unavailable),
             ["Run 'dmm-cli list' to see connected devices."]
         );
     }
@@ -659,27 +769,31 @@ mod tests {
     #[test]
     fn a_colonless_address_is_shown_its_colon_form() {
         if !dmm_lib::BLUETOOTH_SUPPORTED {
-            assert!(colonless_address_hint("123456789abc").is_none());
+            assert!(english().colonless_address_hint("123456789abc").is_none());
             return;
         }
         assert_eq!(
-            colonless_address_hint("123456789abc").as_deref(),
+            english().colonless_address_hint("123456789abc").as_deref(),
             Some("If that is a Bluetooth address, write it 12:34:56:78:9A:BC.")
         );
-        assert!(colonless_address_hint("12:34:56:78:9A:BC").is_none());
-        assert!(colonless_address_hint("123456789AB").is_none());
-        assert!(colonless_address_hint("123456789ABCD").is_none());
-        assert!(colonless_address_hint("12345678ZABC").is_none());
-        assert!(colonless_address_hint("/dev/hidraw0").is_none());
+        assert!(
+            english()
+                .colonless_address_hint("12:34:56:78:9A:BC")
+                .is_none()
+        );
+        assert!(english().colonless_address_hint("123456789AB").is_none());
+        assert!(english().colonless_address_hint("123456789ABCD").is_none());
+        assert!(english().colonless_address_hint("12345678ZABC").is_none());
+        assert!(english().colonless_address_hint("/dev/hidraw0").is_none());
         // Twelve bytes but not hex: no pair may split a character.
-        assert!(colonless_address_hint("éééééé").is_none());
+        assert!(english().colonless_address_hint("éééééé").is_none());
     }
 
     /// The CLI's copy of this list went four modes stale; rendering it from
     /// the table is only worth it if every mode really reaches the help.
     #[test]
     fn mock_mode_help_lists_every_mode() {
-        let help = mock_mode_help("Pin the mock.", "--mock-mode dcv");
+        let help = english().mock_mode_help("Pin the mock.", "--mock-mode dcv");
         assert!(help.starts_with("Pin the mock.\n\nModes: "));
         for mode in MockMode::ALL {
             assert!(help.contains(mode.label()), "missing {}", mode.label());
@@ -698,7 +812,7 @@ mod tests {
             LinksSearched::BluetoothAt("12:34:56:78:9A:BC"),
             ut60bt(),
         ] {
-            for section in links.sections() {
+            for section in english().sections(&links) {
                 assert!(!section.link.is_empty());
                 assert!(section.check.ends_with('.'), "{}", section.check);
                 assert!(section.steps.iter().all(|line| !line.trim().is_empty()));
@@ -711,8 +825,8 @@ mod tests {
     /// radio all reach the cable section alone.
     #[test]
     fn the_sections_are_the_links_that_were_searched() {
-        let links = |l: LinksSearched| -> Vec<&'static str> {
-            l.sections().iter().map(|s| s.link).collect()
+        let links = |l: LinksSearched| -> Vec<String> {
+            english().sections(&l).into_iter().map(|s| s.link).collect()
         };
         assert_eq!(links(LinksSearched::Usb), ["USB cable"]);
         assert_eq!(
@@ -739,10 +853,10 @@ mod tests {
     fn a_bluetooth_only_meter_gets_its_own_steps() {
         let links = ut60bt();
         assert_eq!(
-            links.not_found_title(),
+            english().not_found_title(&links),
             "No UNI-T UT60BT found over Bluetooth"
         );
-        let text = links.sections()[0].text();
+        let text = english().section_text(&english().sections(&links)[0]);
         assert!(
             text.starts_with(
                 "Bluetooth: turn on Bluetooth on this computer and data transmission on the meter.\n  \
@@ -758,13 +872,16 @@ mod tests {
     /// GUI's notice title on top of that.
     #[test]
     fn the_title_names_what_was_looked_for() {
-        assert_eq!(LinksSearched::Usb.not_found_title(), "No USB cable found");
         assert_eq!(
-            LinksSearched::UsbAndBluetooth.not_found_title(),
+            english().not_found_title(&LinksSearched::Usb),
+            "No USB cable found"
+        );
+        assert_eq!(
+            english().not_found_title(&LinksSearched::UsbAndBluetooth),
             "No meter found over USB or Bluetooth"
         );
         assert_eq!(
-            LinksSearched::BluetoothAt("12:34:56:78:9A:BC").not_found_title(),
+            english().not_found_title(&LinksSearched::BluetoothAt("12:34:56:78:9A:BC")),
             "No Bluetooth device found at 12:34:56:78:9A:BC"
         );
         assert_eq!(
@@ -778,13 +895,13 @@ mod tests {
     /// catalog: the user already knows which adapter they meant.
     #[test]
     fn a_named_address_is_sent_to_the_scan() {
-        let selected = LinksSearched::BluetoothAt("4C:3C").sections();
-        let text = selected[0].text();
+        let selected = english().sections(&LinksSearched::BluetoothAt("4C:3C"));
+        let text = english().section_text(&selected[0]);
         assert!(text.contains("dmm-cli list"), "{text}");
         assert!(!text.contains("supported-devices.md"), "{text}");
 
-        let unnamed = LinksSearched::UsbAndBluetooth.sections();
-        let text = unnamed[1].text();
+        let unnamed = english().sections(&LinksSearched::UsbAndBluetooth);
+        let text = english().section_text(&unnamed[1]);
         assert!(text.contains("supported-devices.md"), "{text}");
         assert!(!text.contains("dmm-cli list"), "{text}");
     }
@@ -800,8 +917,8 @@ mod tests {
             LinksSearched::BluetoothAt("4C:3C"),
             ut60bt(),
         ] {
-            for section in links.sections() {
-                let text = section.text();
+            for section in english().sections(&links) {
+                let text = english().section_text(&section);
                 assert!(!text.contains("UT-D07"), "{text}");
             }
         }
@@ -811,13 +928,16 @@ mod tests {
     /// GUI's checkbox by the label it draws.
     #[test]
     fn each_binary_names_its_own_bluetooth_switch() {
-        assert_eq!(cli_bluetooth_off_hint(true), "Leave out --no-bluetooth.");
         assert_eq!(
-            cli_bluetooth_off_hint(false),
+            english().cli_bluetooth_off_hint(true),
+            "Leave out --no-bluetooth."
+        );
+        assert_eq!(
+            english().cli_bluetooth_off_hint(false),
             "Tick \"Look for Bluetooth devices\" in dmm-gui's settings, which dmm-cli reads too."
         );
         assert_eq!(
-            gui_bluetooth_off_hint(),
+            english().gui_bluetooth_off_hint(),
             "Tick \"Look for Bluetooth devices\" in Settings (\u{2699})."
         );
     }
@@ -826,9 +946,9 @@ mod tests {
     /// full form is the one the errors use.
     #[test]
     fn the_two_forms_of_a_link_name() {
-        assert_eq!(short_name(Link::Bluetooth), "Bluetooth");
+        assert_eq!(english().short_name(Link::Bluetooth), "Bluetooth");
         assert_eq!(Link::Bluetooth.full_name(false), "Bluetooth adapter");
-        assert_eq!(short_name(Link::UsbCable), "USB cable");
+        assert_eq!(english().short_name(Link::UsbCable), "USB cable");
         assert_eq!(Link::UsbCable.full_name(false), "USB cable");
     }
 
@@ -862,11 +982,11 @@ mod tests {
     #[test]
     fn stability_warning_names_the_model_and_the_level() {
         assert_eq!(
-            stability_warning("UNI-T UT8803", Stability::Experimental),
+            english().stability_warning("UNI-T UT8803", Stability::Experimental),
             "UNI-T UT8803 support is experimental (unverified against real hardware)."
         );
         assert_eq!(
-            stability_warning("UNI-T UT181A", Stability::PartlyVerified),
+            english().stability_warning("UNI-T UT181A", Stability::PartlyVerified),
             "UNI-T UT181A support is partly verified (some modes and commands unconfirmed on real hardware)."
         );
     }
@@ -876,7 +996,7 @@ mod tests {
     /// anything in.
     #[test]
     fn device_help_tags_mock_and_unverified_devices() {
-        let help = device_help("x");
+        let help = english().device_help("x");
         let mock_line = help
             .lines()
             .find(|l| l.trim_start().starts_with("mock"))

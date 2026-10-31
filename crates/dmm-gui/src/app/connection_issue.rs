@@ -114,7 +114,7 @@ impl ConnectionNotice {
     pub(super) fn help_text(&self) -> String {
         let mut out = String::new();
         for section in &self.sections {
-            out.push_str(&section.text());
+            out.push_str(&dmm_shared::help::english().section_text(section));
             out.push_str("\n\n");
         }
         out.push_str(&self.body);
@@ -204,7 +204,10 @@ impl ConnectionIssue {
                 // The remedy is the GUI's own switch; the library's sentence
                 // names none.
                 dmm_lib::error::BluetoothOnlyMiss::SwitchedOff => Self::BluetoothNotSearched {
-                    message: format!("{err}. {}", dmm_shared::help::gui_bluetooth_off_hint()),
+                    message: format!(
+                        "{err}. {}",
+                        dmm_shared::help::english().gui_bluetooth_off_hint()
+                    ),
                 },
                 _ => Self::BluetoothNotSearched {
                     message: format!("{err}."),
@@ -226,13 +229,17 @@ fn adapter_not_found_help(selector: &str) -> String {
     let adapters = connected_adapters();
     let mut msg = format!("No device matched --adapter '{selector}'.");
     msg.push_str("\n\n");
-    msg.push_str(&adapters.lines().join("\n"));
+    msg.push_str(
+        &dmm_shared::help::english()
+            .adapter_lines(&adapters)
+            .join("\n"),
+    );
     // An empty bus is a complete answer on its own; the other two leave the
     // user with a choice to make.
     if !matches!(adapters, ConnectedAdapters::None) {
         msg.push_str("\n\nRestart with the correct --adapter value.");
     }
-    if let Some(hint) = dmm_shared::help::colonless_address_hint(selector) {
+    if let Some(hint) = dmm_shared::help::english().colonless_address_hint(selector) {
         msg.push_str("\n\n");
         msg.push_str(&hint);
     }
@@ -355,8 +362,8 @@ impl App {
                 } else {
                     NoticeKind::UsbNotFound
                 },
-                title: links.not_found_title(),
-                sections: links.sections(),
+                title: dmm_shared::help::english().not_found_title(&links),
+                sections: dmm_shared::help::english().sections(&links),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
                 feedback_link: self.feedback_link(),
             })
@@ -366,8 +373,8 @@ impl App {
             let links = LinksSearched::BluetoothOnly { model, activation };
             Some(ConnectionNotice {
                 kind: NoticeKind::BluetoothOnlyNotFound,
-                title: links.not_found_title(),
-                sections: links.sections(),
+                title: dmm_shared::help::english().not_found_title(&links),
+                sections: dmm_shared::help::english().sections(&links),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
                 feedback_link: self.feedback_link(),
             })
@@ -380,7 +387,8 @@ impl App {
             Some(ConnectionNotice {
                 kind: NoticeKind::BluetoothUnreachable,
                 title: error.clone(),
-                sections: LinksSearched::BluetoothOnly { model, activation }.sections(),
+                sections: dmm_shared::help::english()
+                    .sections(&LinksSearched::BluetoothOnly { model, activation }),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
                 feedback_link: None,
             })
@@ -394,8 +402,8 @@ impl App {
             let links = LinksSearched::BluetoothAt(address);
             Some(ConnectionNotice {
                 kind: NoticeKind::BluetoothNotFound,
-                title: links.not_found_title(),
-                sections: links.sections(),
+                title: dmm_shared::help::english().not_found_title(&links),
+                sections: dmm_shared::help::english().sections(&links),
                 // The GUI cannot scan, so the way back in is a restart with
                 // the address the scan printed.
                 body: "Restart with --adapter set to the address it prints.".to_string(),
@@ -407,7 +415,8 @@ impl App {
             Some(ConnectionNotice {
                 kind: NoticeKind::BluetoothUnreachable,
                 title: error.clone(),
-                sections: LinksSearched::BluetoothAt(address).sections(),
+                sections: dmm_shared::help::english()
+                    .sections(&LinksSearched::BluetoothAt(address)),
                 body: "Click \"Connect\" after resolving the issue.".to_string(),
                 feedback_link: None,
             })
@@ -424,7 +433,7 @@ impl App {
             // meter's fit cache keys on.
             Some(notice(
                 NoticeKind::NotIdentified,
-                dmm_shared::help::NO_METER_ANSWERED.to_string(),
+                dmm_shared::help::english().no_meter_answered().into_owned(),
                 help.clone(),
             ))
         } else {
@@ -456,7 +465,7 @@ impl App {
             };
             Some(notice(
                 NoticeKind::NoResponse,
-                dmm_shared::help::NO_RESPONSE.to_string(),
+                dmm_shared::help::english().no_response().into_owned(),
                 instructions,
             ))
         }
@@ -472,7 +481,7 @@ impl App {
                 (
                     format!(
                         "{} Report feedback.",
-                        dmm_shared::help::stability_warning(
+                        dmm_shared::help::english().stability_warning(
                             self.picked_listing()
                                 .map_or(profile.display_name(), |l| l.display_name()),
                             profile.stability
@@ -574,7 +583,7 @@ mod tests {
         );
         assert_eq!(n.kind, NoticeKind::NoMeterFound);
         assert_eq!(n.title, "No meter found over USB or Bluetooth");
-        let links: Vec<&str> = n.sections.iter().map(|s| s.link).collect();
+        let links: Vec<&str> = n.sections.iter().map(|s| s.link.as_str()).collect();
         assert_eq!(links, ["USB cable", "Bluetooth"]);
         // The big meter shows the title alone and hands the rest to a
         // tooltip, so every step has to reach that one string.
@@ -597,7 +606,7 @@ mod tests {
         );
         assert_eq!(n.kind, NoticeKind::BluetoothNotFound);
         assert_eq!(n.title, "No Bluetooth device found at 12:34:56:78:9A:BC");
-        let links: Vec<&str> = n.sections.iter().map(|s| s.link).collect();
+        let links: Vec<&str> = n.sections.iter().map(|s| s.link.as_str()).collect();
         assert_eq!(links, ["Bluetooth"]);
         assert!(n.help_text().contains("dmm-cli list"), "{}", n.help_text());
         assert_eq!(
@@ -624,7 +633,7 @@ mod tests {
         assert_eq!(n.title, "Bluetooth: Timed out after 10s");
         assert_eq!(
             n.sections,
-            LinksSearched::BluetoothAt("12:34:56:78:9A:BC").sections()
+            dmm_shared::help::english().sections(&LinksSearched::BluetoothAt("12:34:56:78:9A:BC"))
         );
         assert_eq!(n.body, "Click \"Connect\" after resolving the issue.");
 
@@ -661,7 +670,7 @@ mod tests {
         let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BluetoothOnlyNotFound);
         assert_eq!(n.title, "No UNI-T UT60BT found over Bluetooth");
-        assert_eq!(n.sections, own_steps.sections());
+        assert_eq!(n.sections, dmm_shared::help::english().sections(&own_steps));
         assert!(
             n.help_text().contains("Long press SEL"),
             "{}",
@@ -676,7 +685,7 @@ mod tests {
         );
         assert_eq!(n.kind, NoticeKind::BluetoothUnreachable);
         assert_eq!(n.title, "Bluetooth: turned off on this computer");
-        assert_eq!(n.sections, own_steps.sections());
+        assert_eq!(n.sections, dmm_shared::help::english().sections(&own_steps));
 
         let issue =
             ConnectionIssue::from_error(&missed(BluetoothOnlyMiss::SwitchedOff), None, None);
