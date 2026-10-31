@@ -209,8 +209,11 @@ into it. Text is translated where it is shown: exports, settings and logs stay E
 the library's strings, which the apps look up by kind and English text in a `lib.ftl` generated
 from the library as they draw them (see [localization-design.md](localization-design.md)). Library
 errors are worded by variant from `lib-errors.ftl`; the GUI words one when it arrives, so a notice
-or toast already on screen keeps its language after a switch. A message a language lacks falls back
-to English alone, and `LC_ALL=C` always means English.
+or toast already on screen keeps its language after a switch. clap has no translation hook, so the
+CLI walks its command tree at start-up and swaps each command's and option's help for its message in
+`cli-help.ftl`, generated from the doc comments; clap's own words and the shell completion scripts
+stay English. A message a language lacks falls back to English alone, and `LC_ALL=C` always means
+English.
 
 Code: `crates/dmm-shared/src/l10n/`, `i18n/`.
 
@@ -368,7 +371,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/read.rs` | Reading an export back |
 | `replay.rs` | What `--replay` opens |
 | `help.rs` | Help and version text both binaries print |
-| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator |
+| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator, the `--help` walker |
 | `logging.rs` | The logger both binaries install |
 
 ### dmm-cli

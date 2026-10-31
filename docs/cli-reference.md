@@ -779,6 +779,7 @@ dmm-cli completions powershell >> $PROFILE
 |---|---|
 | `RUST_LOG` | Log filter. Unset, warnings from the meter library and errors from everything else are shown. Use `dmm_lib=trace` for wire-level debugging. |
 | `NO_COLOR` | Set to `1` to disable colored terminal output. |
+| `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG` | Language of messages and help on Linux, read in that order as gettext does: Debian and Ubuntu desktops set `LANGUAGE`, which wins over `LANG`. On macOS and Windows, the system's language applies. `C` or `POSIX` in the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set means English, whatever `LANGUAGE` says. |
 
 ## Appendix
 

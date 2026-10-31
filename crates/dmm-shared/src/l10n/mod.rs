@@ -20,7 +20,10 @@
 mod alarm;
 #[cfg(any(test, feature = "test-support"))]
 pub mod check;
+pub mod clap_help;
 mod errors;
+#[cfg(any(test, feature = "test-support"))]
+mod ftl_text;
 mod lang;
 #[cfg(test)]
 mod lib_ftl;

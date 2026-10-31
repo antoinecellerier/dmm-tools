@@ -9,8 +9,8 @@ mod output;
 #[cfg(test)]
 mod test_fixtures;
 
-use clap::{CommandFactory, FromArgMatches};
-use cli::{Cli, Cmd, build_after_long_help, build_device_help};
+use clap::FromArgMatches;
+use cli::{Cli, Cmd};
 use cmd::command::cmd_command;
 use cmd::debug::cmd_debug;
 use cmd::info::cmd_info;
@@ -33,14 +33,8 @@ fn main() {
     // included.
     l10n::init(None, "");
     let l = l10n::get();
-    // Build CLI with registry-generated --device long_help and a dynamic
-    // after_long_help that resolves the actual per-platform settings path.
-    let mut cmd = Cli::command();
-    let device_help = build_device_help();
-    cmd = cmd.mut_arg("device", |a| a.long_help(device_help));
-    cmd = cmd.after_long_help(build_after_long_help());
-    let cli =
-        Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
+    let cli = Cli::from_arg_matches_mut(&mut cli::command(l).get_matches())
+        .unwrap_or_else(|e: clap::Error| e.exit());
     // Before the settings file and the meter: a report names its own meter,
     // and `--device` as typed overrides it, never the settings file's
     // choice, which a newer build may have written. Its logger keeps what
@@ -132,7 +126,7 @@ fn main() {
                     );
                 }
                 None => {
-                    let _ = Cli::command()
+                    let _ = cli::command(l)
                         .find_subcommand_mut("completions")
                         .unwrap()
                         .print_long_help();

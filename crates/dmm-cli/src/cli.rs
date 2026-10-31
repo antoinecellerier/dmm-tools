@@ -3,13 +3,14 @@
 
 use crate::capture::StepListFormat;
 use crate::format::OutputFormat;
+use clap::builder::{PossibleValue, PossibleValuesParser, TypedValueParser, ValueParser};
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use dmm_lib::alarm::{Hysteresis, Limits};
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
 use dmm_shared::input;
-use dmm_shared::l10n::Localizer;
+use dmm_shared::l10n::{Localizer, clap_help};
 use dmm_shared::tr;
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -42,17 +43,7 @@ fn version_string() -> &'static str {
 #[command(
     name = "dmm-cli",
     version = version_string(),
-    about = "CLI tool for USB and Bluetooth digital multimeters",
-    after_help = format!(
-        "Run with --help for the full list of supported devices and the \
-         shared-settings file path.\n\n\
-         Set NO_COLOR=1 to disable colored output.\n\
-         {}",
-        crate::l10n::get().help().project_link_line()
-    ),
-    // after_long_help is set dynamically in main() so the actual per-platform
-    // settings file path appears in the output.
-    after_long_help = ""
+    about = "CLI tool for USB and Bluetooth digital multimeters"
 )]
 pub(crate) struct Cli {
     /// Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...].
@@ -109,7 +100,7 @@ pub(crate) enum Cmd {
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, the settings file's mock mode applies, else the
         /// mock cycles through all modes.
-        #[arg(long, long_help = build_mock_mode_help())]
+        #[arg(long)]
         mock_mode: Option<String>,
         /// Play back a file written by --format replay instead of opening a meter; ends with the file
         #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
@@ -178,12 +169,6 @@ pub(crate) enum Cmd {
         interval_ms: u64,
     },
     /// Generate shell completions
-    #[command(after_help = "\
-Install completions for your shell:
-  bash:  dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
-  zsh:   dmm-cli completions zsh > ~/.zfunc/_dmm-cli
-  fish:  dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
-  pwsh:  dmm-cli completions powershell >> $PROFILE")]
     Completions {
         /// Shell to generate completions for
         #[arg(value_enum)]
@@ -424,25 +409,65 @@ pub(crate) enum SettingsFormat {
     Json,
 }
 
+/// The command line as `l` words its help: the doc comments above through
+/// `cli-help.ftl` ([`dmm_shared::l10n::clap_help`]), then the help built at
+/// run time. What `main` parses with and prints `--help` from.
+pub(crate) fn command(l: &Localizer) -> clap::Command {
+    let cmd = clap_help::translate(<Cli as clap::CommandFactory>::command(), l, &values_parser);
+    with_run_time_help(cmd, l)
+}
+
+/// The parser of an argument whose possible values' help is translated: the
+/// values as `PossibleValuesParser` takes them, mapped back to the
+/// argument's type, which clap can't recover from the derive's parser. An
+/// argument that gains described values needs a line here, or the
+/// `every_described_value_has_a_parser` test fails.
+fn values_parser(id: &str, values: Vec<PossibleValue>, ignore_case: bool) -> Option<ValueParser> {
+    fn of<E: ValueEnum + Clone + Send + Sync + 'static>(
+        values: Vec<PossibleValue>,
+        ignore_case: bool,
+    ) -> ValueParser {
+        PossibleValuesParser::new(values)
+            .try_map(move |s| E::from_str(&s, ignore_case))
+            .into()
+    }
+    match id {
+        "read--format" => Some(of::<OutputFormat>(values, ignore_case)),
+        _ => None,
+    }
+}
+
+/// The help made as the run starts, in `l`'s language: the device and mock
+/// mode lists, which come from the registry and the mock, and the notes
+/// after the options, one of which names this platform's settings path.
+fn with_run_time_help(cmd: clap::Command, l: &Localizer) -> clap::Command {
+    cmd.after_help(build_after_help(l))
+        .after_long_help(build_after_long_help(l))
+        .mut_arg("device", |a| a.long_help(build_device_help(l)))
+        .mut_subcommand("read", |c| {
+            c.mut_arg("mock_mode", |a| a.long_help(build_mock_mode_help(l)))
+        })
+        .mut_subcommand("completions", |c| {
+            c.after_help(build_completions_after_help(l))
+        })
+}
+
 /// Build long help text for --device from the registry.
-pub(crate) fn build_device_help() -> String {
-    crate::l10n::get()
-        .help()
-        .device_help("Device to connect to.")
+fn build_device_help(l: &Localizer) -> String {
+    l.help().device_help(&tr!(l, "help-device-intro"))
 }
 
 /// The command `completions` writes a script for: the parsing one, with the
-/// device ids and mock modes a shell offers.
+/// device ids and mock modes a shell offers. English whatever the run
+/// speaks, as a script installed once serves every later run.
 pub(crate) fn completion_command() -> clap::Command {
     dmm_shared::help::with_completion_values(<Cli as clap::CommandFactory>::command())
 }
 
 /// Build long help text for --mock-mode from the mock's own mode table.
-fn build_mock_mode_help() -> String {
-    crate::l10n::get().help().mock_mode_help(
-        "Pin the mock device to a specific measurement mode instead of \
-         auto-cycling. Only effective with --device mock. Without it, the \
-         settings file's mock_mode (dmm-gui's Mock mode) pins it.",
+fn build_mock_mode_help(l: &Localizer) -> String {
+    l.help().mock_mode_help(
+        &tr!(l, "help-mock-mode-intro"),
         "--device mock read --mock-mode dcv",
     )
 }
@@ -456,6 +481,16 @@ fn resolved_config_path_display() -> String {
         .unwrap_or_else(|| "~/.config/dmm-tools/settings.json".to_string())
 }
 
+/// The notes after `dmm-cli -h`'s options.
+fn build_after_help(l: &Localizer) -> String {
+    format!(
+        "{}\n\n{}\n{}",
+        tr!(l, "help-see-long-help"),
+        tr!(l, "help-no-color", setting = "NO_COLOR=1"),
+        l.help().project_link_line()
+    )
+}
+
 /// Build the `after_long_help` text shown by `dmm-cli --help` (long form).
 /// Dynamic so the actual resolved settings path appears per-platform.
 ///
@@ -463,31 +498,68 @@ fn resolved_config_path_display() -> String {
 /// re-wrap `after_long_help` text, so hardcoded mid-sentence line breaks
 /// read poorly. A table-style layout with short, self-contained lines
 /// avoids the issue on any terminal width.
-pub(crate) fn build_after_long_help() -> String {
-    format!(
-        "CONFIGURATION:\n\
-         \x20 Settings file (shared with dmm-gui):\n\
-         \x20   {path}\n\
-         \n\
-         \x20 --device precedence:\n\
-         \x20   1. Command-line flag\n\
-         \x20   2. device_family from the settings file above\n\
-         \x20   3. auto \u{2014} detect the connected meter\n\
-         \n\
-         ENVIRONMENT:\n\
-         \x20 RUST_LOG    Log filter. Unset, dmm_lib warnings and all errors are shown.\n\
-         \x20             Use `dmm_lib=trace` for wire-level debugging.\n\
-         \x20 NO_COLOR    Set to 1 to disable colored terminal output.\n\
-         \n\
-         {link}",
-        path = resolved_config_path_display(),
-        link = crate::l10n::get().help().project_link_line(),
-    )
+fn build_after_long_help(l: &Localizer) -> String {
+    let mut out = format!(
+        "{}\n  {}\n    {}\n\n  {}\n",
+        tr!(l, "help-configuration"),
+        tr!(l, "help-settings-file"),
+        resolved_config_path_display(),
+        tr!(l, "help-device-precedence"),
+    );
+    let precedence = [
+        tr!(l, "help-precedence-flag"),
+        tr!(l, "help-precedence-settings"),
+        tr!(l, "help-precedence-auto"),
+    ];
+    for (n, line) in precedence.iter().enumerate() {
+        out.push_str(&format!("    {}. {line}\n", n + 1));
+    }
+    out.push_str(&format!("\n{}\n", tr!(l, "help-environment")));
+    let variables = [
+        (
+            "RUST_LOG",
+            tr!(l, "help-env-rust-log", filter = "dmm_lib=trace"),
+        ),
+        ("NO_COLOR", tr!(l, "help-env-no-color")),
+        ("LANGUAGE", tr!(l, "help-env-language")),
+        ("LC_ALL", tr!(l, "help-env-lc-all")),
+    ];
+    for (name, text) in &variables {
+        // The text's lines under each other, past the longest name.
+        for (i, line) in text.lines().enumerate() {
+            let name = if i == 0 { *name } else { "" };
+            out.push_str(&format!("  {name:<10}  {line}\n"));
+        }
+    }
+    out.push_str(&format!("\n{}", l.help().project_link_line()));
+    out
+}
+
+/// The notes after `dmm-cli completions --help`'s options: how to install
+/// each shell's script.
+fn build_completions_after_help(l: &Localizer) -> String {
+    let mut out = tr!(l, "help-completions-install").into_owned();
+    for (shell, line) in [
+        (
+            "bash",
+            "dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli",
+        ),
+        ("zsh", "dmm-cli completions zsh > ~/.zfunc/_dmm-cli"),
+        (
+            "fish",
+            "dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish",
+        ),
+        ("pwsh", "dmm-cli completions powershell >> $PROFILE"),
+    ] {
+        out.push_str(&format!("\n  {:<6} {line}", format!("{shell}:")));
+    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::FromArgMatches;
     use std::path::Path;
 
     #[test]
@@ -671,13 +743,14 @@ mod tests {
     /// not carry — so nothing else would put it in the help.
     #[test]
     fn the_device_help_offers_auto() {
-        let help = build_device_help();
+        let help = build_device_help(crate::l10n::english());
         assert!(
             help.contains("auto          Detect the connected meter (default)"),
             "{help}"
         );
         assert!(
-            build_after_long_help().contains("3. auto \u{2014} detect the connected meter"),
+            build_after_long_help(crate::l10n::english())
+                .contains("3. auto \u{2014} detect the connected meter"),
             "the precedence list still names a model as the fallback"
         );
     }
@@ -958,5 +1031,177 @@ mod tests {
         // The top level's `--device`, and `read --mock-mode`.
         assert!(script.contains("auto ut61eplus"), "no device ids");
         assert!(script.contains("dcv acv"), "no mock modes");
+    }
+
+    const CLI_HELP_PATH: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../i18n/en-US/cli-help.ftl");
+
+    const CLI_HELP_HEADER: &str = "\
+dmm-cli's --help: what each command and option does.
+
+Generated from the doc comments in crates/dmm-cli/src/cli.rs by
+`UPDATE_L10N=1 cargo test -p dmm-cli cli_help_ftl`: edit those, not this
+file. The run names each ID whose English changed. When the meaning changed
+too, delete that message from every language's cli-help.ftl, so it shows in
+English until it is translated again.
+
+IDs follow the command tree: read.about is what the read command does,
+read--interval-ms.help what its --interval-ms option does. clap wraps each
+paragraph to the terminal's width: keep a paragraph on one line. Option
+names (--device), values (auto, mock) and command lines ('dmm-cli list')
+stay as they are. clap's own words around these texts (Usage:, Options:,
+[default: …], [possible values: …]) stay English.";
+
+    /// `cli-help.ftl` holds the doc comments as they are now.
+    #[test]
+    fn cli_help_ftl_follows_the_doc_comments() {
+        use std::io::Write;
+        let path = Path::new(CLI_HELP_PATH);
+        let current = std::fs::read_to_string(path).unwrap_or_default();
+        let rendered =
+            clap_help::render(&<Cli as clap::CommandFactory>::command(), CLI_HELP_HEADER);
+        if rendered == current {
+            return;
+        }
+        let changes = clap_help::changes(&current, &rendered);
+        let summary = format!(
+            "English changed: {:?}\nadded: {:?}\nremoved: {:?}",
+            changes.changed, changes.added, changes.removed
+        );
+        if std::env::var_os("UPDATE_L10N").is_some() {
+            dmm_shared::write_atomic(path, rendered.as_bytes()).expect("write cli-help.ftl");
+            // Past the test harness's capture, so a passing run shows it.
+            let _ = writeln!(
+                std::io::stderr(),
+                "i18n/en-US/cli-help.ftl regenerated.\n{summary}"
+            );
+        } else {
+            panic!(
+                "i18n/en-US/cli-help.ftl is out of date; run \
+                 `UPDATE_L10N=1 cargo test -p dmm-cli cli_help_ftl` and commit it.\n{summary}"
+            );
+        }
+    }
+
+    /// Every option whose values say what they do has a parser the walk
+    /// can rebuild with their translated help.
+    #[test]
+    fn every_described_value_has_a_parser() {
+        let cmd = <Cli as clap::CommandFactory>::command();
+        let unmapped = clap_help::unmapped_values(cmd, &values_parser);
+        assert!(
+            unmapped.is_empty(),
+            "add {unmapped:?} to values_parser in cli.rs"
+        );
+    }
+
+    /// Every help page `cmd` prints: `-h` and `--help` at the top and for
+    /// each subcommand, hidden ones included, and `help <subcommand>`.
+    fn help_pages(cmd: &clap::Command) -> Vec<(String, String)> {
+        let names: Vec<String> = cmd
+            .get_subcommands()
+            .map(|c| c.get_name().to_string())
+            .collect();
+        let mut argvs: Vec<Vec<&str>> = vec![vec!["-h"], vec!["--help"], vec!["help"]];
+        for name in &names {
+            argvs.push(vec![name, "-h"]);
+            argvs.push(vec![name, "--help"]);
+            argvs.push(vec!["help", name]);
+        }
+        argvs
+            .into_iter()
+            .map(|argv| {
+                let line = format!("dmm-cli {}", argv.join(" "));
+                let full = std::iter::once("dmm-cli").chain(argv);
+                match cmd.clone().try_get_matches_from(full) {
+                    Ok(_) => panic!("{line} printed no help"),
+                    Err(e) => (line, e.render().to_string()),
+                }
+            })
+            .collect()
+    }
+
+    /// Walked in English, the tree prints every help page as the doc
+    /// comments alone do, byte for byte.
+    #[test]
+    fn the_english_walk_leaves_every_help_page_as_it_was() {
+        let l = crate::l10n::english();
+        let unwalked = help_pages(&with_run_time_help(
+            <Cli as clap::CommandFactory>::command(),
+            l,
+        ));
+        let walked = help_pages(&command(l));
+        assert_eq!(unwalked.len(), walked.len());
+        for (before, after) in unwalked.iter().zip(&walked) {
+            assert_eq!(before, after);
+        }
+    }
+
+    /// The values whose help translates still parse to their type, and
+    /// refuse what they always refused.
+    #[test]
+    fn a_translated_value_list_still_parses() {
+        let parse = |format: &str| {
+            command(crate::l10n::english())
+                .try_get_matches_from(["dmm-cli", "read", "--format", format])
+                .and_then(|mut m| Cli::from_arg_matches_mut(&mut m))
+        };
+        match parse("replay").map(|cli| cli.command) {
+            Ok(Cmd::Read { format, .. }) => assert_eq!(format, Some(OutputFormat::Replay)),
+            _ => panic!("expected Read"),
+        }
+        let refused = parse("yaml").err().unwrap().to_string();
+        assert!(
+            refused.contains("[possible values: text, csv, json, replay]"),
+            "{refused}"
+        );
+    }
+
+    /// Under the pseudo-locale every text the help shows went through the
+    /// translations: each walked text is one bracketed message, each text
+    /// built at run time starts with one.
+    #[test]
+    fn the_pseudo_locale_brackets_every_help_text() {
+        use dmm_shared::l10n::{EN_US, Options};
+        let options = Options {
+            pseudo: true,
+            ..Options::default()
+        };
+        let pseudo = Localizer::new(&EN_US, &crate::l10n::resources(), &options);
+        let mut problems = Vec::new();
+        let mut check = |at: String, text: Option<&clap::builder::StyledStr>, whole: bool| {
+            let Some(text) = text.map(|t| t.to_string()) else {
+                return;
+            };
+            if !text.starts_with('[') || (whole && !text.ends_with(']')) {
+                problems.push(format!("{at}: {text}"));
+            }
+        };
+        let cmd = command(&pseudo);
+        check("after_help".into(), cmd.get_after_help(), false);
+        check("after_long_help".into(), cmd.get_after_long_help(), false);
+        let mut stack = vec![(String::from("dmm-cli"), &cmd)];
+        while let Some((line, c)) = stack.pop() {
+            check(format!("{line} about"), c.get_about(), true);
+            check(format!("{line} long_about"), c.get_long_about(), true);
+            for a in c.get_arguments().filter(|a| !a.is_hide_set()) {
+                let at = format!("{line} {}", a.get_id());
+                check(format!("{at} help"), a.get_help(), true);
+                let composed = ["device", "mock_mode"].contains(&a.get_id().as_str());
+                check(format!("{at} long_help"), a.get_long_help(), !composed);
+                for v in a.get_possible_values() {
+                    check(format!("{at} {}", v.get_name()), v.get_help(), !composed);
+                }
+            }
+            for sub in c.get_subcommands().filter(|s| !s.is_hide_set()) {
+                check(
+                    format!("{line} {} after_help", sub.get_name()),
+                    sub.get_after_help(),
+                    false,
+                );
+                stack.push((format!("{line} {}", sub.get_name()), sub));
+            }
+        }
+        assert!(problems.is_empty(), "{problems:#?}");
     }
 }

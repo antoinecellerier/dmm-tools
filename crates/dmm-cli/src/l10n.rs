@@ -24,15 +24,22 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "cli/debug.ftl"),
     dmm_shared::ftl!("en-US", "cli/command.ftl"),
     dmm_shared::ftl!("en-US", "cli/settings.ftl"),
+    dmm_shared::ftl!("en-US", "cli/help.ftl"),
 ];
 
+/// What each command and option does, as `--help` says it: generated from
+/// the doc comments in `cli.rs` by the `cli_help_ftl` test, so the ID scan
+/// leaves it out of its unused check, as it does `lib.ftl`.
+const CLI_HELP: &[Resource] = &[dmm_shared::ftl!("en-US", "cli-help.ftl")];
+
 /// Everything dmm-cli shows: the shared help, the library's text and
-/// errors, and its own messages.
+/// errors, its own messages and its `--help`.
 pub(crate) fn resources() -> Vec<Resource> {
     [
         dmm_shared::help::RESOURCES,
         dmm_shared::l10n::LIB_RESOURCES,
         CLI,
+        CLI_HELP,
     ]
     .concat()
 }

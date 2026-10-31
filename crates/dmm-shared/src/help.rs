@@ -68,12 +68,16 @@ pub const RESOURCES: &[Resource] = &[crate::ftl!("en-US", "shared.ftl")];
 /// completions, and the docs' generated tables.
 pub fn english() -> Help<'static> {
     static ENGLISH: OnceLock<Localizer> = OnceLock::new();
-    Help(ENGLISH.get_or_init(|| Localizer::en_us(RESOURCES)))
+    Help(
+        ENGLISH.get_or_init(|| Localizer::en_us(&[RESOURCES, crate::l10n::LIB_RESOURCES].concat())),
+    )
 }
 
 impl Localizer {
     /// The help text in this localizer's language. Its resources must
-    /// include [`RESOURCES`].
+    /// include [`RESOURCES`] and the library's names
+    /// ([`LIB_RESOURCES`](crate::l10n::LIB_RESOURCES)), which the device
+    /// list shows.
     pub fn help(&self) -> Help<'_> {
         Help(self)
     }
@@ -119,8 +123,10 @@ impl<'a> Help<'a> {
             registry::AUTO_DEVICE_ID,
             tr!(self.0, "device-auto-default")
         ));
+        // Brands and model names are proper nouns but for the simulated
+        // ones, which the localizer translates; ids stay as typed.
         for (brand, rows) in registry::brand_groups() {
-            help.push_str(&format!("\n  {}\n", brand.name()));
+            help.push_str(&format!("\n  {}\n", self.0.brand(brand)));
             for row in rows {
                 let tag = self
                     .device_tag(row.device, false)
@@ -128,7 +134,7 @@ impl<'a> Help<'a> {
                 help.push_str(&format!(
                     "    {:<width$} {}{}\n",
                     row.id(),
-                    row.model_name(),
+                    self.0.label(TextKind::Model, row.model_name()),
                     tag
                 ));
             }

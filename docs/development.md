@@ -274,6 +274,15 @@ test fails until then. It only adds messages. One whose English the library
 no longer shows fails the test by name: correct its English to the new text
 to keep its ID and translations, or delete it.
 
+`i18n/en-US/cli-help.ftl` is generated from the doc comments in
+`crates/dmm-cli/src/cli.rs` that `dmm-cli --help` shows. After changing one,
+run `UPDATE_L10N=1 cargo test -p dmm-cli cli_help_ftl` and commit the file;
+the test fails until then. The run lists the IDs whose English changed:
+where the meaning changed too, delete those messages from the other
+languages' `cli-help.ftl`, so they show in English until translated again.
+The help the CLI builds as it runs, such as the device list and the notes
+after the options, is in `cli/help.ftl`.
+
 ## Hidden flags
 
 These contributor flags are left out of `--help`.
