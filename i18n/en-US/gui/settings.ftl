@@ -149,8 +149,14 @@ settings-zoom-reset-chip =
 # Window decorations are the title bar and border.
 settings-hide-decorations = Hide window decorations
     .hover = Borderless window — use { $keys } to toggle back
+# On Wayland the checkbox is greyed: .wayland is its hover there, and
+# settings-always-on-top-wayland the note beside it. Keep both the same as
+# shortcuts-always-on-top-toast, which Ctrl+T shows there.
 settings-always-on-top = Always on top
     .hover = Keep the window above other desktop windows ({ $keys })
+    .wayland = Not available on Wayland — right-click the title bar to keep the window above others
+# The note after the greyed checkbox on Wayland, in small grey text.
+settings-always-on-top-wayland = (Not available on Wayland — right-click the title bar to keep the window above others)
 
 ## The update check, in builds downloaded from GitHub.
 

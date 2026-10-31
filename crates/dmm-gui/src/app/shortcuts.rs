@@ -10,9 +10,12 @@
 //! toggles) are handled in `graph::view` and documented by their own grid in
 //! the modal.
 
+use std::borrow::Cow;
+
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, Key, Modifiers};
 
-use super::appearance::ALWAYS_ON_TOP_WAYLAND_HINT;
 use super::toast::Toast;
 use super::{App, ConnectionState};
 
@@ -326,41 +329,40 @@ impl Shortcut {
     /// this session, so the modal can grey the row as well as say so.
     ///
     /// `on_wayland` marks the one key the compositor makes inert.
-    fn help_row(
+    fn help_row<'a>(
         self,
         ctx: &egui::Context,
+        l10n: &'a Localizer,
         on_wayland: bool,
-    ) -> Option<(String, &'static str, bool)> {
+    ) -> Option<(String, Cow<'a, str>, bool)> {
         let action = match self {
-            Self::ConnectToggle => "Connect / Disconnect",
-            Self::TogglePause => "Pause / Resume",
-            Self::ClearSession => "Clear graph & statistics",
-            Self::ToggleRecording => "Toggle recording",
-            Self::CycleBigMeter => "Cycle big meter (off / full / minimal)",
-            Self::ToggleAlwaysOnTop if on_wayland => {
-                // Same explanation as the settings caption and the toast,
-                // so the three surfaces read alike — a test pins the tail
-                // to `ALWAYS_ON_TOP_WAYLAND_HINT`.
-                "Always on top: not available on Wayland — right-click the title bar to keep the window above others"
-            }
-            Self::ToggleAlwaysOnTop => "Toggle always on top",
-            Self::ToggleDecorations => "Toggle window decorations",
-            Self::ExportRecording => "Export CSV\u{2026}",
-            Self::ImportFile => "Import a file\u{2026}",
-            Self::AddMarker => "Add a marker at the reading on screen",
-            Self::AddMarkerAndNote => "Add a marker and write its note",
-            Self::ToggleFullscreen => "Toggle fullscreen",
+            Self::ConnectToggle => tr!(l10n, "shortcuts-connect"),
+            Self::TogglePause => tr!(l10n, "shortcuts-pause"),
+            Self::ClearSession => tr!(l10n, "shortcuts-clear"),
+            Self::ToggleRecording => tr!(l10n, "shortcuts-record"),
+            Self::CycleBigMeter => tr!(l10n, "shortcuts-big-meter"),
+            // Same explanation as the settings caption and the toast, so
+            // the three surfaces read alike — a test pins the English tail
+            // to the toast's.
+            Self::ToggleAlwaysOnTop if on_wayland => tr!(l10n, "shortcuts-always-on-top-wayland"),
+            Self::ToggleAlwaysOnTop => tr!(l10n, "shortcuts-always-on-top"),
+            Self::ToggleDecorations => tr!(l10n, "shortcuts-decorations"),
+            Self::ExportRecording => tr!(l10n, "shortcuts-export"),
+            Self::ImportFile => tr!(l10n, "shortcuts-import"),
+            Self::AddMarker => tr!(l10n, "shortcuts-add-marker"),
+            Self::AddMarkerAndNote => tr!(l10n, "shortcuts-add-marker-note"),
+            Self::ToggleFullscreen => tr!(l10n, "shortcuts-fullscreen"),
             // macOS only: elsewhere the title bar's own button is the way to
             // minimise, and a row for a key that does nothing would mislead.
             Self::Minimize if !ctx.os().is_mac() => return None,
-            Self::Minimize => "Minimise window",
-            Self::ZoomIn => "Zoom in / out",
+            Self::Minimize => tr!(l10n, "shortcuts-minimize"),
+            Self::ZoomIn => tr!(l10n, "shortcuts-zoom"),
             // Folded into the row above.
             Self::ZoomOut => return None,
-            Self::ZoomReset => "Reset zoom to 100%",
+            Self::ZoomReset => tr!(l10n, "shortcuts-zoom-reset"),
             // Ctrl+W with the help closed quits, which the Quit row says.
-            Self::Close => "Close this help",
-            Self::Quit => "Quit",
+            Self::Close => tr!(l10n, "shortcuts-close-help"),
+            Self::Quit => tr!(l10n, "shortcuts-quit"),
             // Not listed: the grid it opens *is* the documentation, and the
             // toolbar's `?` button spells the key out in its tooltip.
             Self::ToggleHelp => return None,
@@ -410,13 +412,14 @@ fn consume_fresh_key(ctx: &egui::Context, modifiers: Modifiers, key: Key) -> boo
 }
 
 /// The "General" grid of the shortcut help modal, in display order.
-pub(super) fn help_rows(
-    ctx: &egui::Context,
+pub(super) fn help_rows<'a>(
+    ctx: &'a egui::Context,
+    l10n: &'a Localizer,
     on_wayland: bool,
-) -> impl Iterator<Item = (String, &'static str, bool)> {
+) -> impl Iterator<Item = (String, Cow<'a, str>, bool)> + 'a {
     Shortcut::HELP_ORDER
         .iter()
-        .filter_map(move |s| s.help_row(ctx, on_wayland))
+        .filter_map(move |s| s.help_row(ctx, l10n, on_wayland))
 }
 
 impl App {
@@ -514,7 +517,8 @@ impl App {
                     if self.on_wayland {
                         // Flipping the setting there moved a checkbox and
                         // nothing else; say so instead.
-                        self.toast = Some(Toast::info(ALWAYS_ON_TOP_WAYLAND_HINT));
+                        self.toast =
+                            Some(Toast::info(tr!(self.l10n, "shortcuts-always-on-top-toast")));
                     } else {
                         self.settings.always_on_top = !self.settings.always_on_top;
                         self.apply_always_on_top(ctx);
@@ -611,7 +615,10 @@ mod tests {
                     | Shortcut::ToggleHelp
             );
             assert_eq!(
-                binding.shortcut.help_row(&ctx, false).is_some(),
+                binding
+                    .shortcut
+                    .help_row(&ctx, &crate::l10n::english(), false)
+                    .is_some(),
                 !folded,
                 "{:?} help row disagrees with the folded list",
                 binding.shortcut
@@ -667,10 +674,11 @@ mod tests {
     #[test]
     fn help_rows_are_the_documented_general_rows() {
         let ctx = nix_context();
-        let rows: Vec<_> = help_rows(&ctx, false).collect();
+        let l10n = crate::l10n::english();
+        let rows: Vec<_> = help_rows(&ctx, &l10n, false).collect();
         assert_eq!(
             rows.iter()
-                .map(|(key, action, _)| (key.as_str(), *action))
+                .map(|(key, action, _)| (key.as_str(), action.as_ref()))
                 .collect::<Vec<_>>(),
             vec![
                 ("Ctrl+O", "Connect / Disconnect"),
@@ -699,23 +707,31 @@ mod tests {
     #[test]
     fn wayland_annotates_only_the_always_on_top_row() {
         let ctx = nix_context();
+        let l10n = crate::l10n::english();
         let annotated = "Always on top: not available on Wayland — right-click the title bar to keep the window above others";
-        // The shared hint, minus its capital first letter.
+        // The toast's explanation, minus its capital first letter, and the
+        // settings' word for word.
+        let toast = tr!(l10n, "shortcuts-always-on-top-toast");
         assert!(
-            annotated.ends_with(&ALWAYS_ON_TOP_WAYLAND_HINT[1..]),
-            "the Ctrl+T row has drifted from ALWAYS_ON_TOP_WAYLAND_HINT"
+            annotated.ends_with(&toast[1..]),
+            "the Ctrl+T row has drifted from the toast"
         );
-        let expected: Vec<_> = help_rows(&ctx, false)
+        assert_eq!(tr!(l10n, "settings-always-on-top.wayland"), toast);
+        assert_eq!(
+            tr!(l10n, "settings-always-on-top-wayland"),
+            format!("({toast})")
+        );
+        let expected: Vec<_> = help_rows(&ctx, &l10n, false)
             .map(|(key, action, inert)| {
                 assert!(!inert, "{key} is inert off Wayland");
                 if key == "Ctrl+T" {
-                    (key, annotated, true)
+                    (key, Cow::Borrowed(annotated), true)
                 } else {
                     (key, action, false)
                 }
             })
             .collect();
-        assert_eq!(help_rows(&ctx, true).collect::<Vec<_>>(), expected);
+        assert_eq!(help_rows(&ctx, &l10n, true).collect::<Vec<_>>(), expected);
     }
 
     /// The bindings are `Modifiers::COMMAND`, so on macOS they are Cmd —
@@ -729,9 +745,12 @@ mod tests {
         ctx.set_os(egui::os::OperatingSystem::Mac);
         // egui asks the fonts whether they can draw `⌘`, and fonts only
         // exist inside a pass.
+        let l10n = crate::l10n::english();
         let mut rows = Vec::new();
         let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
-            rows = help_rows(ui.ctx(), false).collect::<Vec<_>>();
+            rows = help_rows(ui.ctx(), &l10n, false)
+                .map(|(key, action, inert)| (key, action.into_owned(), inert))
+                .collect::<Vec<_>>();
         });
         // The pass built a font atlas that a real app would upload; nothing
         // here paints, and TexturesDelta panics if it is dropped unapplied.

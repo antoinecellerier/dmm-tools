@@ -3,6 +3,8 @@
 //! that keeps it usable in a short window, and the focus bookkeeping that
 //! returns the caret to the button that opened it.
 
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText};
 
 use super::shortcuts;
@@ -81,11 +83,11 @@ fn tallest_column(heights: [f32; 3], columns: usize, gap_y: f32) -> f32 {
 /// action column work: without it egui hands the last cell the previous
 /// frame's column width — the 120 pt minimum — and a wrapping label never
 /// grows past what it is given, so every row wrapped into a narrow ribbon.
-fn help_section<'a, K: Into<String>>(
+fn help_section<K: Into<String>, A: Into<String>>(
     ui: &mut egui::Ui,
     id: &str,
     title: &str,
-    rows: impl IntoIterator<Item = (K, &'a str, bool)>,
+    rows: impl IntoIterator<Item = (K, A, bool)>,
 ) {
     egui::Grid::new(id)
         .num_columns(2)
@@ -113,59 +115,78 @@ fn help_section<'a, K: Into<String>>(
         });
 }
 
-/// The graph's own rows, with no keyboard state to them.
-fn plain<'a>(
-    rows: &'a [(&'a str, &'a str)],
-) -> impl Iterator<Item = (&'a str, &'a str, bool)> + 'a {
-    rows.iter().map(|&(key, action)| (key, action, false))
-}
-
-fn graph_keys(ui: &mut egui::Ui) {
+fn graph_keys(ui: &mut egui::Ui, l10n: &Localizer) {
+    // Key names stay as they are, like the General table's, which egui
+    // writes.
+    let rows = [
+        ("[ / ]", tr!(l10n, "shortcuts-graph-window")),
+        ("Left / Right", tr!(l10n, "shortcuts-graph-scroll")),
+        ("Home", tr!(l10n, "shortcuts-graph-start")),
+        ("End", tr!(l10n, "shortcuts-graph-live")),
+        ("M", tr!(l10n, "shortcuts-graph-mean")),
+        ("X", tr!(l10n, "shortcuts-graph-band")),
+        ("H", tr!(l10n, "shortcuts-graph-histogram")),
+        ("R", tr!(l10n, "shortcuts-graph-reference")),
+        ("T", tr!(l10n, "shortcuts-graph-triggers")),
+        ("C", tr!(l10n, "shortcuts-graph-cursors")),
+    ];
     help_section(
         ui,
         "shortcuts_graph",
-        "Graph (keys)",
-        plain(&[
-            ("[ / ]", "Shorter / longer time window"),
-            ("Left / Right", "Scroll view"),
-            ("Home", "Jump to start"),
-            ("End", "Jump to live"),
-            ("M", "Toggle the mean line"),
-            ("X", "Toggle the min/max band"),
-            ("H", "Toggle the histogram"),
-            ("R", "Toggle reference lines, and type the values"),
-            ("T", "Toggle trigger markers (with Ref on)"),
-            ("C", "Toggle cursors"),
-        ]),
+        &tr!(l10n, "shortcuts-graph-keys"),
+        rows.into_iter().map(|(key, action)| (key, action, false)),
     );
 }
 
 /// The mouse table and the closing note, which stays last in every layout.
-fn graph_mouse(ui: &mut egui::Ui) {
+fn graph_mouse(ui: &mut egui::Ui, l10n: &Localizer) {
+    // Each gesture travels with what it does, as one message.
+    let rows = [
+        (
+            tr!(l10n, "shortcuts-mouse-drag.gesture"),
+            tr!(l10n, "shortcuts-mouse-drag"),
+        ),
+        (
+            tr!(l10n, "shortcuts-mouse-box-zoom.gesture"),
+            tr!(l10n, "shortcuts-mouse-box-zoom"),
+        ),
+        (
+            tr!(l10n, "shortcuts-mouse-zoom.gesture"),
+            tr!(l10n, "shortcuts-mouse-zoom"),
+        ),
+        (
+            tr!(l10n, "shortcuts-mouse-scroll.gesture"),
+            tr!(l10n, "shortcuts-mouse-scroll"),
+        ),
+        (
+            tr!(l10n, "shortcuts-mouse-reset.gesture"),
+            tr!(l10n, "shortcuts-mouse-reset"),
+        ),
+        (
+            tr!(l10n, "shortcuts-mouse-cursor.gesture"),
+            tr!(l10n, "shortcuts-mouse-cursor"),
+        ),
+        (
+            tr!(l10n, "shortcuts-mouse-menu.gesture"),
+            tr!(l10n, "shortcuts-mouse-menu"),
+        ),
+        (
+            tr!(l10n, "shortcuts-mouse-minimap.gesture"),
+            tr!(l10n, "shortcuts-mouse-minimap"),
+        ),
+    ];
     help_section(
         ui,
         "gestures_graph",
-        "Graph (mouse)",
-        plain(&[
-            ("Drag", "Pan left / right through history"),
-            ("Shift + drag", "Zoom to bounding box (time & value)"),
-            ("Ctrl + scroll wheel", "Zoom X axis centered on cursor"),
-            ("Scroll wheel", "Scroll the panel"),
-            ("Double-click", "Reset to live follow + auto Y"),
-            ("Click (cursors on)", "Place cursor A / B at nearest point"),
-            ("Right-click", "Mark, copy, cursors, reference lines, alarm"),
-            ("Minimap drag", "Jump to time / resize viewport"),
-        ]),
+        &tr!(l10n, "shortcuts-graph-mouse"),
+        rows.into_iter()
+            .map(|(gesture, action)| (gesture, action, false)),
     );
     ui.add_space(SECTION_GAP);
     ui.label(
-        RichText::new(
-            "Graph and Space shortcuts are disabled while any widget has \
-             keyboard focus — press Escape to release it. Up/Down, PgUp/PgDn \
-             and Home/End scroll this help.",
-        )
-        .small()
-        .color(ui.visuals().weak_text_color()),
+        RichText::new(tr!(l10n, "shortcuts-note"))
+            .small()
+            .color(ui.visuals().weak_text_color()),
     );
 }
 
@@ -273,6 +294,8 @@ impl App {
         }
         let column_width = COLUMN_WIDTH.min(room.x);
         let on_wayland = self.on_wayland;
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         let mut measured = None;
         // egui::Modal (vs. egui::Window) calls `set_modal_layer`, which makes
         // Tab navigation skip widgets in the layers below — i.e. it actually
@@ -287,12 +310,13 @@ impl App {
                 });
                 ui.set_max_height(room.y);
                 ui.horizontal(|ui| {
-                    ui.heading("Keyboard & Mouse");
+                    ui.heading(tr!(l10n, "shortcuts-title"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // U+00D7: none of egui's bundled fonts has U+2715
                         // (MULTIPLICATION X), which drew a missing-glyph box.
-                        let close_btn =
-                            ui.button("\u{00D7}").a11y_label("Close keyboard shortcuts");
+                        let close_btn = ui
+                            .button("\u{00D7}")
+                            .a11y_label(&tr!(l10n, "shortcuts-close.a11y"));
                         // First focus stop: the close button. Tab/Shift+Tab
                         // walks from here through the (non-interactive) grid
                         // labels.
@@ -339,11 +363,11 @@ impl App {
                                 0 => help_section(
                                     ui,
                                     "shortcuts_app",
-                                    "General",
-                                    shortcuts::help_rows(ctx, on_wayland),
+                                    &tr!(l10n, "shortcuts-general"),
+                                    shortcuts::help_rows(ctx, l10n, on_wayland),
                                 ),
-                                1 => graph_keys(ui),
-                                _ => graph_mouse(ui),
+                                1 => graph_keys(ui, l10n),
+                                _ => graph_mouse(ui, l10n),
                             })
                             .response
                             .rect

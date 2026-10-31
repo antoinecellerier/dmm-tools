@@ -8,7 +8,6 @@ use std::borrow::Cow;
 
 use crate::settings::{GraphLines, SpecFields, buffer_memory_estimate, format_sample_count};
 
-use crate::app::appearance::ALWAYS_ON_TOP_WAYLAND_HINT;
 use crate::app::{App, BigMeterMode};
 
 use super::device_list::device_dropdown;
@@ -603,14 +602,14 @@ impl App {
                 "settings-always-on-top.hover",
                 keys = Shortcut::ToggleAlwaysOnTop.keys(ui.ctx())
             ))
-            .on_disabled_hover_text(ALWAYS_ON_TOP_WAYLAND_HINT);
+            .on_disabled_hover_text(tr!(l10n, "settings-always-on-top.wayland"));
             if response.changed() {
                 self.apply_always_on_top(ui.ctx());
                 self.settings.save();
             }
             if self.on_wayland {
                 ui.label(
-                    RichText::new(format!("({ALWAYS_ON_TOP_WAYLAND_HINT})"))
+                    RichText::new(tr!(l10n, "settings-always-on-top-wayland"))
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 );
@@ -1455,7 +1454,7 @@ mod tests {
     /// line, and ends the row: Hide window decorations comes before them.
     #[test]
     fn the_wayland_note_follows_always_on_top() {
-        let note = format!("({ALWAYS_ON_TOP_WAYLAND_HINT})");
+        let note = tr!(crate::l10n::english(), "settings-always-on-top-wayland").into_owned();
         for width in [1200.0, 700.0, 400.0] {
             let mut run = SettingsRun::new(width, 1600.0);
             run.app.on_wayland = true;
