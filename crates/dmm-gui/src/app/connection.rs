@@ -36,7 +36,7 @@ pub(crate) enum RemoteCommand {
 }
 
 impl std::fmt::Display for RemoteCommand {
-    /// The subject of the failure toast: "Command 'hold' failed: …".
+    /// The subject of the failure's log line: "Command 'hold' failed: …".
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Named(name) => write!(f, "Command '{name}'"),
@@ -58,10 +58,8 @@ const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 
 /// What the UI records as the failure once that threshold is crossed.
 pub(super) fn no_response(l10n: &dmm_shared::l10n::Localizer) -> String {
-    format!(
-        "{} \u{2014} check device selection and data transmission",
-        l10n.help().no_response()
-    )
+    let title = l10n.help().no_response();
+    dmm_shared::tr!(l10n, "connection-no-response-check", title = title).into_owned()
 }
 
 /// How often a paused thread wakes to look for work.
@@ -205,7 +203,10 @@ pub(crate) enum DmmMessage {
     /// A command the user sent was refused or could not be sent. Shown as a
     /// toast, not as a connection issue: the link is fine and the meter is
     /// still streaming, so neither the help text nor a reconnect applies.
-    CommandFailed(String),
+    CommandFailed {
+        command: RemoteCommand,
+        error: dmm_lib::error::Error,
+    },
     /// Values a setting can be switched to from where the meter sits now.
     /// Sent when the reading they depend on changes and after a successful
     /// switch; empty for families that cannot drive the setting.
@@ -444,14 +445,14 @@ where
                 RemoteCommand::Named(name) => stream.dmm_mut().send_command(name),
                 RemoteCommand::Select(setting, id) => stream.dmm_mut().select(*setting, *id),
             };
-            match (result, &cmd) {
+            match (result, cmd) {
                 (Ok(()), RemoteCommand::Select(setting, _)) => {
-                    invalidate(&mut last_keys, *setting);
+                    invalidate(&mut last_keys, setting);
                 }
                 (Ok(()), RemoteCommand::Named(_)) => {}
-                (Err(e), _) => {
-                    warn!("background thread: {cmd} failed: {e}");
-                    let _ = msg_tx.send(DmmMessage::CommandFailed(format!("{cmd} failed: {e}")));
+                (Err(error), command) => {
+                    warn!("background thread: {command} failed: {error}");
+                    let _ = msg_tx.send(DmmMessage::CommandFailed { command, error });
                     ctx.request_repaint();
                 }
             }

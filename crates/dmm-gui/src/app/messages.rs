@@ -4,6 +4,8 @@
 
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,37 +67,91 @@ fn detected_device_to_save(
 ///
 /// `saved` splits the settings selection, which now names the meter that
 /// answered, from a `--device auto` run, which detects for this session only.
-fn detected_toast(device: &registry::SelectableDevice, reported: &str, saved: bool) -> String {
-    let mut msg = format!("Detected {}", device.display_name());
+fn detected_toast(
+    l10n: &Localizer,
+    device: &registry::SelectableDevice,
+    reported: &str,
+    saved: bool,
+) -> String {
+    let meter = device.display_name();
+    let saved = if saved { "yes" } else { "no" };
     // The reported name earns its place only when it is not the model already
     // on screen: a UT61E+ answers "UT61E+". A model no entry claims falls back
     // to the UT61E+ tables, and then the name is the whole story — it is what
     // the user has to quote to get an alias added.
     if !reported.is_empty() && !device.answers_to(reported) {
-        msg.push_str(&format!(" (the meter reports \"{reported}\")"));
+        tr!(
+            l10n,
+            "connection-detected-reports",
+            meter = meter,
+            reported = reported,
+            saved = saved
+        )
+    } else {
+        tr!(l10n, "connection-detected", meter = meter, saved = saved)
     }
-    if saved {
-        msg.push_str(", saved as your device. Pick Auto-detect in Settings to probe again.");
-    }
-    msg
+    .into_owned()
 }
 
 /// What the toast says when the meter names another model than the one
 /// picked: its tables, specs and keys are the picked model's until it is
 /// chosen.
-fn other_model_toast(reported: &str, picked: &str, named: &str) -> String {
-    format!(
-        "The meter reports \"{reported}\", not the {picked} selected. Choose {named} or \
-         Auto-detect in Settings."
+fn other_model_toast(l10n: &Localizer, reported: &str, picked: &str, named: &str) -> String {
+    tr!(
+        l10n,
+        "connection-other-model",
+        reported = reported,
+        picked = picked,
+        named = named
     )
+    .into_owned()
 }
 
 /// What the toast says when detection fell back without hearing the meter's
 /// name and the session's own ask then got it: the readings use the fallback
 /// model's tables until the next connect, which opens the named one.
-fn named_after_detection_toast(reported: &str, named: &str, saved: bool) -> String {
-    let saved = if saved { ", saved as your device" } else { "" };
-    format!("The meter reports \"{reported}\"{saved}: reconnect to read it as a {named}.")
+fn named_after_detection_toast(
+    l10n: &Localizer,
+    reported: &str,
+    named: &str,
+    saved: bool,
+) -> String {
+    let saved = if saved { "yes" } else { "no" };
+    tr!(
+        l10n,
+        "connection-named-after-detection",
+        reported = reported,
+        named = named,
+        saved = saved
+    )
+    .into_owned()
+}
+
+/// What the toast says when a command the user sent failed: `command`'s
+/// subject, and the library's `error`.
+fn command_failed_toast(
+    l10n: &Localizer,
+    command: &RemoteCommand,
+    error: &dmm_lib::error::Error,
+) -> String {
+    let error = error.to_string();
+    match command {
+        RemoteCommand::Named(name) => {
+            tr!(
+                l10n,
+                "connection-command-failed",
+                command = name,
+                error = error
+            )
+        }
+        RemoteCommand::Select(setting, _) => tr!(
+            l10n,
+            "connection-switch-failed",
+            setting = setting.name(),
+            error = error
+        ),
+    }
+    .into_owned()
 }
 
 impl App {
@@ -121,6 +177,7 @@ impl App {
             self.settings.save();
         }
         self.toast = Some(Toast::info(detected_toast(
+            &self.l10n,
             device,
             reported,
             to_save.is_some(),
@@ -134,18 +191,24 @@ impl App {
     /// every sample it took, so quoting the bound would read as if the
     /// difference had been thrown away.
     pub(super) fn buffer_shrunk_toast(&mut self) {
-        let kept = format_sample_count(self.capture.recording.recording_samples().len());
-        self.toast = Some(Toast::error(format!(
-            "Recording stopped \u{2014} its {kept} samples are kept, Export\u{2026} saves them"
+        let count = self.capture.recording.recording_samples().len();
+        self.toast = Some(Toast::error(tr!(
+            self.l10n,
+            "connection-buffer-shrunk",
+            count = count,
+            kept = format_sample_count(count)
         )));
     }
 
     /// Say that the recording stopped because it filled the buffer, at the
     /// size the user configured.
     pub(super) fn buffer_full_toast(&mut self) {
-        self.toast = Some(Toast::error(format!(
-            "Recording stopped \u{2014} buffer full ({} samples)",
-            format_sample_count(self.settings.max_samples)
+        let count = self.settings.max_samples;
+        self.toast = Some(Toast::error(tr!(
+            self.l10n,
+            "connection-buffer-full",
+            count = count,
+            kept = format_sample_count(count)
         )));
     }
 
@@ -467,6 +530,7 @@ impl App {
                             self.remember_detected_device(Some(named.id), &reported);
                             if !told {
                                 self.toast = Some(Toast::error(named_after_detection_toast(
+                                    &self.l10n,
                                     &reported,
                                     named.display_name(),
                                     saved,
@@ -482,6 +546,7 @@ impl App {
                                 let picked =
                                     registry::connected_listing(pick, picked).display_name();
                                 self.toast = Some(Toast::error(other_model_toast(
+                                    &self.l10n,
                                     &reported,
                                     picked,
                                     named.display_name(),
@@ -529,7 +594,11 @@ impl App {
                     // selection to check, no USB mode to switch on, and the
                     // file carries on by itself once the gap is over.
                     if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.replay.is_none() {
-                        error!("UI: error: {}", connection::no_response(&self.l10n));
+                        // The log stays English.
+                        error!(
+                            "UI: error: {}",
+                            connection::no_response(&crate::l10n::english())
+                        );
                         self.connection.last_error =
                             Some(ConnectionIssue::Other(connection::no_response(&self.l10n)));
                         if self.connection.state == ConnectionState::Disconnected {
@@ -601,8 +670,9 @@ impl App {
                         clear_channel = true;
                     }
                 }
-                DmmMessage::CommandFailed(msg) => {
-                    self.toast = Some(Toast::error(msg));
+                DmmMessage::CommandFailed { command, error } => {
+                    let message = command_failed_toast(&self.l10n, &command, &error);
+                    self.toast = Some(Toast::error(message));
                 }
                 DmmMessage::Choices(setting, choices) => {
                     self.connection.choices.set(setting, choices);
@@ -623,7 +693,7 @@ impl App {
             error!("UI: acquisition thread exited unexpectedly");
             if self.connection.last_error.is_none() {
                 self.connection.last_error = Some(ConnectionIssue::Other(
-                    "Acquisition stopped unexpectedly \u{2014} reconnect to resume".to_string(),
+                    tr!(self.l10n, "connection-acquisition-stopped").into_owned(),
                 ));
             }
             clear_channel = true;
@@ -657,7 +727,7 @@ impl App {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
             let scroll = &ui.spacing().scroll;
             ui.add_space(scroll.bar_width + scroll.bar_outer_margin);
-            dismissed = dismiss_button(ui);
+            dismissed = dismiss_button(ui, &self.l10n);
             ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
                 ui.add(
                     egui::Label::new(
@@ -686,7 +756,9 @@ impl App {
                     .wrap()
                     .selectable(true),
                 );
-                copied = ui.small_button("Copy").clicked();
+                copied = ui
+                    .small_button(tr!(self.l10n, "connection-late-copy"))
+                    .clicked();
             });
             if copied {
                 ui.ctx().copy_text(command.clone());
@@ -696,7 +768,7 @@ impl App {
             self.connection.late_readings = None;
         }
         if copied {
-            self.toast = Some(Toast::info("Command copied"));
+            self.toast = Some(Toast::info(tr!(self.l10n, "connection-late-copied")));
         }
     }
 
@@ -758,7 +830,7 @@ impl App {
         }
         if let Some((text, url)) = &notice.feedback_link {
             ui.hyperlink_to(RichText::new(text).small().color(warn_color), url)
-                .on_hover_text("Opens the GitHub issue tracker to report feedback");
+                .on_hover_text(tr!(self.l10n, "connection-feedback.hover"));
         }
     }
 }
@@ -1131,13 +1203,13 @@ mod tests {
     fn the_toast_says_what_was_saved() {
         let device = |id| registry::find_device(id).expect("a registry entry");
         assert_eq!(
-            detected_toast(device("ut61eplus"), "UT61E+", true),
+            detected_toast(&crate::l10n::english(), device("ut61eplus"), "UT61E+", true),
             "Detected UNI-T UT61E+, saved as your device. \
              Pick Auto-detect in Settings to probe again."
         );
         // A family that never reports a name says only what it is.
         assert_eq!(
-            detected_toast(device("ut8803"), "", true),
+            detected_toast(&crate::l10n::english(), device("ut8803"), "", true),
             "Detected UNI-T UT8803, saved as your device. \
              Pick Auto-detect in Settings to probe again."
         );
@@ -1150,12 +1222,12 @@ mod tests {
     fn the_toast_names_a_model_that_differs_from_the_entry() {
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
         assert_eq!(
-            detected_toast(ut61eplus, "UT216XD", true),
+            detected_toast(&crate::l10n::english(), ut61eplus, "UT216XD", true),
             "Detected UNI-T UT61E+ (the meter reports \"UT216XD\"), saved as your device. \
              Pick Auto-detect in Settings to probe again."
         );
         assert_eq!(
-            detected_toast(ut61eplus, "UT216XD", false),
+            detected_toast(&crate::l10n::english(), ut61eplus, "UT216XD", false),
             "Detected UNI-T UT61E+ (the meter reports \"UT216XD\")"
         );
     }

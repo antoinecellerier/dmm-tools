@@ -8,7 +8,10 @@ use std::sync::{Arc, OnceLock};
 
 /// dmm-gui's own messages, one file per screen area under
 /// `i18n/<locale>/gui/`.
-const GUI: &[Resource] = &[dmm_shared::ftl!("en-US", "gui/top-bar.ftl")];
+const GUI: &[Resource] = &[
+    dmm_shared::ftl!("en-US", "gui/top-bar.ftl"),
+    dmm_shared::ftl!("en-US", "gui/connection.ftl"),
+];
 
 /// Everything the GUI shows: the shared help and its own messages.
 pub(crate) fn resources() -> Vec<Resource> {

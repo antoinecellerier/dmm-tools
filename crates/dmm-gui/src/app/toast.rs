@@ -7,6 +7,8 @@
 //! it off, and its width pushed the bar into two rows for the seconds it
 //! was up. An overlay [`egui::Area`] shows the same message in every layout.
 
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText};
 use std::time::{Duration, Instant};
 
@@ -43,10 +45,10 @@ pub(super) const ERROR_GLYPH: &str = "\u{26A0}";
 
 /// The × that closes a notice, a toast or one drawn in a panel: whether it
 /// was clicked this frame.
-pub(super) fn dismiss_button(ui: &mut egui::Ui) -> bool {
+pub(super) fn dismiss_button(ui: &mut egui::Ui, l10n: &Localizer) -> bool {
     ui.add(egui::Button::new(RichText::new("\u{00D7}").small()).frame_when_inactive(false))
-        .on_hover_text("Dismiss")
-        .a11y_label("Dismiss notification")
+        .on_hover_text(tr!(l10n, "connection-dismiss.hover"))
+        .a11y_label(&tr!(l10n, "connection-dismiss.a11y"))
         .clicked()
 }
 
@@ -146,7 +148,7 @@ impl App {
                             // so the text wraps in what is left rather than
                             // pushing the button out of the box.
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                                dismissed = dismiss_button(ui);
+                                dismissed = dismiss_button(ui, &self.l10n);
                                 ui.with_layout(
                                     egui::Layout::left_to_right(egui::Align::TOP),
                                     |ui| {

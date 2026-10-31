@@ -4,8 +4,10 @@
 //! draw it.
 
 use dmm_lib::protocol::registry;
+use dmm_lib::transport::Link;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 
 use super::{App, ConnectionState};
 
@@ -171,7 +173,7 @@ impl ConnectionIssue {
         } = err
         {
             return Self::NotIdentified {
-                help: not_identified_help(bridge, *built_in_radio),
+                help: not_identified_help(l10n, bridge, *built_in_radio),
             };
         }
         if let dmm_lib::error::Error::Bluetooth(_) = err
@@ -206,10 +208,21 @@ impl ConnectionIssue {
                 // The remedy is the GUI's own switch; the library's sentence
                 // names none.
                 dmm_lib::error::BluetoothOnlyMiss::SwitchedOff => Self::BluetoothNotSearched {
-                    message: format!("{err}. {}", l10n.help().gui_bluetooth_off_hint()),
+                    message: tr!(
+                        l10n,
+                        "connection-bluetooth-not-searched-off",
+                        error = err.to_string(),
+                        hint = l10n.help().gui_bluetooth_off_hint()
+                    )
+                    .into_owned(),
                 },
                 _ => Self::BluetoothNotSearched {
-                    message: format!("{err}."),
+                    message: tr!(
+                        l10n,
+                        "connection-bluetooth-not-searched-why",
+                        error = err.to_string()
+                    )
+                    .into_owned(),
                 },
             };
         }
@@ -226,13 +239,14 @@ impl ConnectionIssue {
 /// restart with a different `--adapter` to act on it.
 fn adapter_not_found_help(l10n: &Localizer, selector: &str) -> String {
     let adapters = connected_adapters();
-    let mut msg = format!("No device matched --adapter '{selector}'.");
+    let mut msg = tr!(l10n, "connection-adapter-not-matched", selector = selector).into_owned();
     msg.push_str("\n\n");
     msg.push_str(&l10n.help().adapter_lines(&adapters).join("\n"));
     // An empty bus is a complete answer on its own; the other two leave the
     // user with a choice to make.
     if !matches!(adapters, ConnectedAdapters::None) {
-        msg.push_str("\n\nRestart with the correct --adapter value.");
+        msg.push_str("\n\n");
+        msg.push_str(&tr!(l10n, "connection-adapter-restart"));
     }
     if let Some(hint) = l10n.help().colonless_address_hint(selector) {
         msg.push_str("\n\n");
@@ -246,13 +260,16 @@ fn adapter_not_found_help(l10n: &Localizer, selector: &str) -> String {
 ///
 /// The meters come grouped by their steps, as the CLI lists them
 /// ([`dmm_shared::help::activation_groups`]).
-fn not_identified_help(bridge: &str, built_in_radio: bool) -> String {
-    let mut msg = format!(
-        "The {} is connected but no meter identified itself.\n\n\
-         Switch on the meter's data transmission, or pick the model in \
-         Settings (\u{2699}):\n",
-        dmm_lib::transport::bridge_link_name(bridge, built_in_radio)
-    );
+fn not_identified_help(l10n: &Localizer, bridge: &str, built_in_radio: bool) -> String {
+    // The link the bridge is on, as `bridge_link_name` tells them apart.
+    let link = if bridge == dmm_lib::BLUETOOTH {
+        Link::Bluetooth
+    } else {
+        Link::UsbCable
+    };
+    let link = link_key(Some(link), built_in_radio);
+    let mut msg = tr!(l10n, "connection-not-identified", link = link).into_owned();
+    msg.push('\n');
     for (steps, names) in dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge)) {
         msg.push('\n');
         msg.push_str(&names.join(", "));
@@ -260,11 +277,23 @@ fn not_identified_help(bridge: &str, built_in_radio: bool) -> String {
         msg.push_str(steps);
         msg.push('\n');
     }
-    msg.push_str(
-        "\nAlready transmitting and still not recognised? Pick its model in Settings \
-         (\u{2699}) and please report it.\n",
-    );
+    msg.push('\n');
+    msg.push_str(&tr!(l10n, "connection-not-identified-report"));
+    msg.push('\n');
     msg
+}
+
+/// The key the messages select a link's name by: `usb`, `adapter` (a
+/// Bluetooth adapter on the meter), `radio` (the meter's own Bluetooth) or
+/// `none`, as [`Link::full_name`] names them. The top bar's hover selects
+/// by it too.
+pub(super) fn link_key(link: Option<Link>, built_in_radio: bool) -> &'static str {
+    match link {
+        Some(Link::UsbCable) => "usb",
+        Some(Link::Bluetooth) if built_in_radio => "radio",
+        Some(Link::Bluetooth) => "adapter",
+        None => "none",
+    }
 }
 
 impl App {
@@ -276,6 +305,7 @@ impl App {
     /// it, so they put `title` where the reading's placeholder goes and hand
     /// `body` to a tooltip. The normal layouts still draw every piece.
     pub(super) fn connection_notice(&self) -> Option<ConnectionNotice> {
+        let l10n = self.l10n.as_ref();
         let notice = |kind, title: String, body: String| ConnectionNotice {
             kind,
             title,
@@ -295,7 +325,7 @@ impl App {
         {
             return Some(notice(
                 NoticeKind::Detecting,
-                "Detecting the meter\u{2026}".to_string(),
+                tr!(l10n, "connection-detecting").into_owned(),
                 String::new(),
             ));
         }
@@ -306,7 +336,7 @@ impl App {
         if self.connection.ended {
             return Some(notice(
                 NoticeKind::Ended,
-                "The recording has ended".to_string(),
+                tr!(l10n, "connection-ended").into_owned(),
                 String::new(),
             ));
         }
@@ -319,7 +349,7 @@ impl App {
             if self.replay.is_some() {
                 return Some(notice(
                     NoticeKind::Waiting,
-                    "No frames in the recording here".to_string(),
+                    tr!(l10n, "connection-no-frames").into_owned(),
                     String::new(),
                 ));
             }
@@ -328,19 +358,18 @@ impl App {
             // to fit the window, and a line that grows and shrinks four times
             // a second would either re-fit on every dot or overflow by three
             // characters. The padding is invisible either way.
-            let title = format!("Waiting for meter{dots:<4}");
+            let title = tr!(l10n, "connection-waiting", dots = format!("{dots:<4}")).into_owned();
             // Under Auto-detect there is no selection to check, so the hint is
             // the other two things that make a quiet meter talk. With a family
             // selected the way out is named too: the value may have been saved
             // by a detected connect rather than picked, and the user swapping
             // meters has no reason to connect the silence to it.
             let body = if self.selected_device().is_some() {
-                "Check that the correct device is selected in Settings (\u{2699}), \
-                 or pick Auto-detect there"
+                tr!(l10n, "connection-waiting-check-selection")
             } else {
-                "Switch on the meter's data transmission, or pick the model in Settings (\u{2699})"
+                tr!(l10n, "connection-waiting-switch-on")
             };
-            return Some(notice(NoticeKind::Waiting, title, body.to_string()));
+            return Some(notice(NoticeKind::Waiting, title, body.into_owned()));
         }
 
         let issue = self.connection.last_error.as_ref()?;
@@ -359,7 +388,7 @@ impl App {
                 },
                 title: self.l10n.help().not_found_title(&links),
                 sections: self.l10n.help().sections(&links),
-                body: "Click \"Connect\" after resolving the issue.".to_string(),
+                body: tr!(l10n, "connection-click-connect").into_owned(),
                 feedback_link: self.feedback_link(),
             })
         } else if let ConnectionIssue::BluetoothOnlyNotFound { model, activation } = issue {
@@ -370,7 +399,7 @@ impl App {
                 kind: NoticeKind::BluetoothOnlyNotFound,
                 title: self.l10n.help().not_found_title(&links),
                 sections: self.l10n.help().sections(&links),
-                body: "Click \"Connect\" after resolving the issue.".to_string(),
+                body: tr!(l10n, "connection-click-connect").into_owned(),
                 feedback_link: self.feedback_link(),
             })
         } else if let ConnectionIssue::BluetoothOnlyUnreachable {
@@ -386,13 +415,13 @@ impl App {
                     .l10n
                     .help()
                     .sections(&LinksSearched::BluetoothOnly { model, activation }),
-                body: "Click \"Connect\" after resolving the issue.".to_string(),
+                body: tr!(l10n, "connection-click-connect").into_owned(),
                 feedback_link: None,
             })
         } else if let ConnectionIssue::BluetoothNotSearched { message } = issue {
             Some(notice(
                 NoticeKind::BluetoothNotSearched,
-                "Bluetooth not searched".to_string(),
+                tr!(l10n, "connection-bluetooth-not-searched").into_owned(),
                 message.clone(),
             ))
         } else if let ConnectionIssue::BluetoothNotFound { address } = issue {
@@ -403,7 +432,7 @@ impl App {
                 sections: self.l10n.help().sections(&links),
                 // The GUI cannot scan, so the way back in is a restart with
                 // the address the scan printed.
-                body: "Restart with --adapter set to the address it prints.".to_string(),
+                body: tr!(l10n, "connection-restart-with-address").into_owned(),
                 feedback_link: None,
             })
         } else if let ConnectionIssue::BluetoothUnreachable { address, error } = issue {
@@ -416,13 +445,13 @@ impl App {
                     .l10n
                     .help()
                     .sections(&LinksSearched::BluetoothAt(address)),
-                body: "Click \"Connect\" after resolving the issue.".to_string(),
+                body: tr!(l10n, "connection-click-connect").into_owned(),
                 feedback_link: None,
             })
         } else if let ConnectionIssue::AdapterNotFound { help } = issue {
             Some(notice(
                 NoticeKind::AdapterNotFound,
-                "Adapter not found".to_string(),
+                tr!(l10n, "connection-adapter-not-found").into_owned(),
                 help.clone(),
             ))
         } else if let ConnectionIssue::NotIdentified { help } = issue {
@@ -443,25 +472,18 @@ impl App {
             // Name the link the session is on: "adapter" now reads as the
             // Bluetooth one, and over a cable it never was one.
             let built_in_radio = self.active_device().is_some_and(|d| d.bluetooth_only());
-            let link = self
-                .connection
-                .link()
-                .map_or("link", |link| link.full_name(built_in_radio));
+            let link = link_key(self.connection.link(), built_in_radio);
             let instructions = match self.active_listing() {
-                Some(meter) => format!(
-                    "The {link} is connected but the meter \n\
-                     isn't responding ({} selected).\n\
-                     \n\
-                     If this is the wrong device, change it in Settings (\u{2699}), or pick Auto-detect there.\n\
-                     Otherwise, enable data transmission:\n\
-                     {}",
-                    meter.display_name(),
-                    meter.device.activation_instructions
+                Some(meter) => tr!(
+                    l10n,
+                    "connection-no-response",
+                    link = link,
+                    model = meter.display_name(),
+                    steps = meter.device.activation_instructions
                 ),
-                None => "Switch on the meter's data transmission, \n\
-                         or pick the model in Settings (\u{2699})."
-                    .to_string(),
-            };
+                None => tr!(l10n, "connection-no-response-auto"),
+            }
+            .into_owned();
             Some(notice(
                 NoticeKind::NoResponse,
                 self.l10n.help().no_response().into_owned(),
@@ -477,15 +499,13 @@ impl App {
         self.selected_profile()
             .filter(|p| !p.stability.is_verified())
             .map(|profile| {
+                let warning = self.l10n.help().stability_warning(
+                    self.picked_listing()
+                        .map_or(profile.display_name(), |l| l.display_name()),
+                    profile.stability,
+                );
                 (
-                    format!(
-                        "{} Report feedback.",
-                        self.l10n.help().stability_warning(
-                            self.picked_listing()
-                                .map_or(profile.display_name(), |l| l.display_name()),
-                            profile.stability
-                        )
-                    ),
+                    tr!(self.l10n, "connection-feedback", warning = warning).into_owned(),
                     profile.feedback_url(),
                 )
             })
@@ -851,7 +871,7 @@ mod tests {
     /// help must not send them looking at a cable.
     #[test]
     fn the_silent_link_is_named_as_the_user_sees_it() {
-        let help = not_identified_help(dmm_lib::BLUETOOTH, false);
+        let help = not_identified_help(&crate::l10n::english(), dmm_lib::BLUETOOTH, false);
         assert!(
             help.starts_with("The Bluetooth adapter is connected"),
             "got {help}"
@@ -861,7 +881,7 @@ mod tests {
         // where the adapter plugs in.
         assert!(help.contains("UT61E+"), "got {help}");
         // A meter with the radio built in answered the open: no adapter.
-        let help = not_identified_help(dmm_lib::BLUETOOTH, true);
+        let help = not_identified_help(&crate::l10n::english(), dmm_lib::BLUETOOTH, true);
         assert!(
             help.starts_with("The Bluetooth link is connected but no meter identified itself."),
             "got {help}"
@@ -894,7 +914,7 @@ mod tests {
     /// column has to fit.
     #[test]
     fn meters_sharing_activation_steps_are_listed_together() {
-        let help = not_identified_help("CP2110", false);
+        let help = not_identified_help(&crate::l10n::english(), "CP2110", false);
         assert!(
             help.contains("UNI-T UT61E+, UT61B+, UT61D+, UT161B, UT161D, UT161E"),
             "got {help}"
