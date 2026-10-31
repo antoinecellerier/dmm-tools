@@ -4,6 +4,8 @@
 //! the drag-resizable split between the graph and the recording panel.
 
 use crate::app::shortcuts::Shortcut;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 use log::info;
 use std::time::Instant;
@@ -37,11 +39,6 @@ fn export_tooltips(ctx: &egui::Context, role: BufferRole) -> (String, &'static s
     }
 }
 
-/// `n` samples, in words.
-fn sample_count(n: usize) -> String {
-    format!("{n} {}", noun(n))
-}
-
 /// What the panel says under an imported session's buttons.
 fn imported_hint(from: &super::import::ImportedFrom) -> String {
     format!(
@@ -54,12 +51,8 @@ fn imported_hint(from: &super::import::ImportedFrom) -> String {
 /// The line under the Record / Export row while nothing is recorded: what
 /// Export saves, and what Record is for — the graph's samples go with its
 /// restarts, a recording does not.
-fn history_hint(samples: usize) -> String {
-    format!(
-        "No recording. Export saves {} from the graph. \
-         Record to capture across mode changes.",
-        sample_count(samples)
-    )
+fn history_hint(l10n: &Localizer, samples: usize) -> String {
+    tr!(l10n, "recording-history-hint", count = samples).into_owned()
 }
 
 /// The prompt's heading and text before `action` loses `samples` and
@@ -275,14 +268,11 @@ impl App {
         info!("discarded a recording of {count} samples");
         let left = self.capture.recording.history_samples().len();
         let message = if left == 0 {
-            "Recording discarded".to_string()
+            tr!(self.l10n, "recording-discarded")
         } else {
-            format!(
-                "Recording discarded. Export\u{2026} saves the graph's {}.",
-                sample_count(left)
-            )
+            tr!(self.l10n, "recording-discarded-graph-keeps", count = left)
         };
-        self.toast = Some(Toast::info(message));
+        self.toast = Some(Toast::info(message.into_owned()));
     }
 
     /// Flip the recording state, remembering which meter the samples came
@@ -376,13 +366,18 @@ impl App {
     }
 
     fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         let keys = Shortcut::ToggleRecording.keys(ui.ctx());
         let (btn_label, btn_tooltip) = if self.capture.recording.active {
-            ("\u{25A0} Stop", format!("Stop recording ({keys})"))
+            (
+                tr!(l10n, "recording-stop"),
+                tr!(l10n, "recording-stop.hover", keys = &keys),
+            )
         } else {
             (
-                "\u{25CF} Record",
-                format!("Start writing live samples to the recording buffer ({keys})"),
+                tr!(l10n, "recording-record"),
+                tr!(l10n, "recording-record.hover", keys = &keys),
             )
         };
 
@@ -411,17 +406,16 @@ impl App {
             let count = self.capture.recording.recording_samples().len();
             let recorded = self.capture.recording.role() == BufferRole::Recording;
             if recorded && !imported && !self.capture.recording.active && count > 0 {
-                let discard = ui.button("Discard").on_hover_text(
-                    "Discard the recording; Export then saves samples from the graph",
-                );
+                let discard = ui
+                    .button(tr!(l10n, "recording-discard"))
+                    .on_hover_text(tr!(l10n, "recording-discard.hover"));
                 if discard.clicked() {
                     self.discard_recording();
                 }
             }
             if self.capture.recording.active {
-                let status = format!(
-                    "{} | {:.0}s",
-                    sample_count(count),
+                let seconds = format!(
+                    "{:.0}",
                     self.capture.recording.duration_secs(self.clock.now())
                 );
                 if self.capture.recording.is_full() {
@@ -429,12 +423,23 @@ impl App {
                         .settings
                         .theme_colors(ui.visuals().dark_mode)
                         .recording_full_warning();
-                    ui.label(RichText::new(format!("{status} (buffer full)")).color(warn));
+                    let status = tr!(
+                        l10n,
+                        "recording-status-full",
+                        count = count,
+                        seconds = seconds
+                    );
+                    ui.label(RichText::new(status).color(warn));
                 } else {
-                    ui.label(status);
+                    ui.label(tr!(
+                        l10n,
+                        "recording-status",
+                        count = count,
+                        seconds = seconds
+                    ));
                 }
             } else if recorded && count > 0 {
-                ui.label(sample_count(count));
+                ui.label(tr!(l10n, "recording-count", count = count));
             }
         });
 
@@ -442,7 +447,7 @@ impl App {
         let caption = match &self.imported {
             Some(from) => Some(imported_hint(from)),
             None => (self.capture.recording.role() == BufferRole::History && history > 0)
-                .then(|| history_hint(history)),
+                .then(|| history_hint(l10n, history)),
         };
         if let Some(caption) = caption {
             ui.add(
@@ -668,7 +673,8 @@ impl App {
     /// Put `text`, a reading's digits, on the clipboard and say so.
     fn copy_reading(&mut self, ctx: &egui::Context, text: String) {
         ctx.copy_text(text.clone());
-        self.toast = Some(Toast::info(format!("Copied {text}")));
+        let message = tr!(self.l10n, "recording-copied", digits = &text);
+        self.toast = Some(Toast::info(message.into_owned()));
     }
 
     /// Render the graph+recording area with a resizable drag separator between them.
@@ -698,7 +704,7 @@ impl App {
                     sep_id,
                     egui::Sense::drag(),
                 )
-                .a11y_label("Resize recording panel (Up/Down to adjust)");
+                .a11y_label(&tr!(self.l10n, "recording-resize.a11y"));
             let fit = |height: f32| {
                 height.clamp(
                     MIN_RECORDING_HEIGHT,
@@ -1128,7 +1134,12 @@ mod tests {
             run.app.capture.recording.push(&reading(), 0);
         }
         run.frame(1.0, vec![]);
-        assert!(run.shows_text(&history_hint(3)), "{:?}", history_hint(3));
+        let l10n = crate::l10n::english();
+        assert!(
+            run.shows_text(&history_hint(&l10n, 3)),
+            "{:?}",
+            history_hint(&l10n, 3)
+        );
         assert!(
             !run.shows_text("3 samples"),
             "the history has no counter of its own"
@@ -1138,21 +1149,22 @@ mod tests {
         run.app.capture.recording.push(&reading(), 0);
         run.app.toggle_recording();
         run.frame(1.0, vec![]);
-        assert!(!run.shows_text(&history_hint(1)));
+        assert!(!run.shows_text(&history_hint(&l10n, 1)));
         assert!(run.shows_text("1 sample"));
     }
 
     #[test]
     fn the_hint_counts_one_sample_as_one() {
+        let l10n = crate::l10n::english();
         assert_eq!(
-            history_hint(1),
+            history_hint(&l10n, 1),
             "No recording. Export saves 1 sample from the graph. \
              Record to capture across mode changes."
         );
         assert!(
-            history_hint(1234).starts_with("No recording. Export saves 1234 samples from"),
+            history_hint(&l10n, 1234).starts_with("No recording. Export saves 1234 samples from"),
             "{}",
-            history_hint(1234)
+            history_hint(&l10n, 1234)
         );
     }
 

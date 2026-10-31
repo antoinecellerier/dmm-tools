@@ -1074,7 +1074,7 @@ impl eframe::App for App {
             crate::a11y::set_accessible_label(
                 ui,
                 reading_panel_resize_id,
-                "Resize reading panel (Left/Right to adjust)",
+                &dmm_shared::tr!(self.l10n, "recording-reading-resize.a11y"),
             );
             if ctx.memory(|m| m.focused()) == Some(reading_panel_resize_id) {
                 let delta = crate::a11y::arrow_resize(
@@ -1180,7 +1180,7 @@ mod tests {
     /// ends at what is meant to stay as it is: library labels, model names,
     /// numbers with units. Two above the Linux count: macOS draws a
     /// Minimise row in the shortcut help.
-    const UNTRANSLATED_CEILING: usize = 172;
+    const UNTRANSLATED_CEILING: usize = 167;
 
     /// Every distinct text the whole app draws or names to a screen reader
     /// in `scene`, under the pseudo-locale, that has a letter outside the

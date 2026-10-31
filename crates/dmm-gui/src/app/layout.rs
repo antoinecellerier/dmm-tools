@@ -5,6 +5,7 @@
 
 use crate::app::shortcuts::Shortcut;
 use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
+use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 
 use super::{App, BigMeterMode};
@@ -143,35 +144,35 @@ impl App {
     pub(crate) fn big_meter_toggle_width(ui: &Ui) -> f32 {
         // Both icons are the same glyph width; measure the one shown when
         // the toggle sits on the controls row.
-        let galley =
-            egui::WidgetText::from(Self::big_meter_toggle_icon(ui.ctx(), BigMeterMode::Off).0)
-                .into_galley(
-                    ui,
-                    Some(egui::TextWrapMode::Extend),
-                    f32::INFINITY,
-                    egui::TextStyle::Button,
-                );
+        let galley = egui::WidgetText::from(Self::big_meter_toggle_icon(BigMeterMode::Off))
+            .into_galley(
+                ui,
+                Some(egui::TextWrapMode::Extend),
+                f32::INFINITY,
+                egui::TextStyle::Button,
+            );
         galley.size().x + 2.0 * ui.spacing().button_padding.x
     }
 
-    /// Icon and tooltip of the big-meter toggle in `mode`.
-    fn big_meter_toggle_icon(ctx: &egui::Context, mode: BigMeterMode) -> (RichText, String) {
-        let keys = Shortcut::CycleBigMeter.keys(ctx);
-        let (icon, tooltip) = match mode {
-            BigMeterMode::Off => (
-                "\u{229E}",
-                format!("Hide side panels and show the meter reading full-screen ({keys})"),
-            ),
-            BigMeterMode::Full | BigMeterMode::Minimal => (
-                "\u{229F}",
-                format!("Return to the normal multi-panel layout ({keys})"),
-            ),
+    /// Icon of the big-meter toggle in `mode`.
+    fn big_meter_toggle_icon(mode: BigMeterMode) -> RichText {
+        let icon = match mode {
+            BigMeterMode::Off => "\u{229E}",
+            BigMeterMode::Full | BigMeterMode::Minimal => "\u{229F}",
         };
-        (RichText::new(icon).size(14.0), tooltip)
+        RichText::new(icon).size(14.0)
     }
 
     pub(super) fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
-        let (icon, tooltip) = Self::big_meter_toggle_icon(ui.ctx(), self.big_meter_mode);
+        let icon = Self::big_meter_toggle_icon(self.big_meter_mode);
+        let keys = Shortcut::CycleBigMeter.keys(ui.ctx());
+        let tooltip = match self.big_meter_mode {
+            BigMeterMode::Off => tr!(self.l10n, "recording-big-meter-on.hover", keys = &keys),
+            BigMeterMode::Full | BigMeterMode::Minimal => {
+                tr!(self.l10n, "recording-big-meter-off.hover", keys = &keys)
+            }
+        }
+        .into_owned();
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         child.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
             let color = ui.visuals().weak_text_color();
