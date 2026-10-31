@@ -59,6 +59,12 @@ impl Localizer {
         }
     }
 
+    /// The sub-value a scaled reading keeps the meter's own reading under
+    /// ([`dmm_lib::transform::RAW_LABEL`]); [`Localizer::label`] gives it for that sub-value.
+    pub(crate) fn raw_label(&self) -> Cow<'_, str> {
+        tr!(self, "raw-label")
+    }
+
     /// A brand as the device lists head it ([`Brand::name`]): the real ones
     /// as they are, the simulated meters' heading translated.
     pub fn brand(&self, brand: Brand) -> Cow<'_, str> {
@@ -107,6 +113,7 @@ mod tests {
         for brand in Brand::ALL {
             assert_eq!(l.brand(brand), brand.name());
         }
+        assert_eq!(l.raw_label(), dmm_lib::transform::RAW_LABEL);
         let help = crate::help::english();
         for s in [
             Stability::Verified,

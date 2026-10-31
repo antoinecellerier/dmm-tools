@@ -40,7 +40,9 @@ pub(crate) use view_state::ViewState;
 #[cfg(test)]
 mod tests;
 
+use dmm_lib::measurement::MainLabel;
 use dmm_lib::stats::RunningStats;
+use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Ui};
@@ -74,7 +76,8 @@ pub(crate) const MAX_AXES: usize = 4;
 
 /// What the meter's main reading is called when the meter gives it no name
 /// of its own: on the **Plot:** chip, in the key, and as the trace drawn
-/// beside a plotted sub-value.
+/// beside a plotted sub-value. The graph's key for that trace, in English
+/// whatever the language: what is drawn is [`Graph::series_text`].
 pub(crate) const MAIN_SERIES: &str = "Main";
 
 /// Consecutive frames without a sub-value before it is no longer offered —
@@ -285,7 +288,7 @@ pub struct PlotSample<'a> {
     pub series: Option<&'a str>,
     /// The meter's name for its main reading ("DC" beside an "AC" part), or
     /// `None` for [`MAIN_SERIES`].
-    pub main_label: Option<&'static str>,
+    pub main_label: Option<MainLabel>,
     /// The plotted series is a level — an NCV reading's bars — rather than a
     /// quantity: its axis steps in whole numbers and its readouts drop the
     /// decimals.
@@ -481,7 +484,7 @@ pub struct Graph {
     current_series: Option<String>,
     /// The meter's name for its main reading, from the latest sample; `None`
     /// for [`MAIN_SERIES`].
-    main_label: Option<&'static str>,
+    main_label: Option<MainLabel>,
     /// The plotted series is a level, from the latest point: see
     /// [`PlotSample::levels`].
     levels: bool,
@@ -938,7 +941,27 @@ impl Graph {
     /// What the main reading goes by: the meter's name for it, or
     /// [`MAIN_SERIES`].
     pub(crate) fn main_name(&self) -> &'static str {
-        self.main_label.unwrap_or(MAIN_SERIES)
+        self.main_label.map_or(MAIN_SERIES, MainLabel::as_str)
+    }
+
+    /// What the main reading is called on screen: [`Graph::main_name`] in
+    /// `l10n`'s language.
+    pub(crate) fn main_text<'a>(&self, l10n: &'a Localizer) -> Cow<'a, str> {
+        match self.main_label {
+            Some(label) => l10n.main_label(label),
+            None => tr!(l10n, "graph-plot-main"),
+        }
+    }
+
+    /// What series `name` — [`Graph::main_name`] or a sub-value's label, as
+    /// the graph keys its traces and the settings remember them — is called
+    /// on screen.
+    pub(crate) fn series_text<'a>(&self, l10n: &'a Localizer, name: &'a str) -> Cow<'a, str> {
+        if name == self.main_name() {
+            self.main_text(l10n)
+        } else {
+            l10n.label(TextKind::Aux, name)
+        }
     }
 
     /// Plot `series`, in `unit`, in place of the current one by swapping the

@@ -14,7 +14,9 @@ use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
 use crate::markers::{Marker, NOTE_MAX_CHARS};
 use crate::recording::{BufferRole, Sample};
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::{MeasuredValue, Measurement, aux_summary_line};
+use dmm_lib::text::TextKind;
+use dmm_shared::l10n::Localizer;
 
 /// Why notes cannot be written now: what hides the list they are written
 /// in.
@@ -101,14 +103,25 @@ struct NoteEdit {
 ///
 /// A marker keeps its reading's line, so a marker without a sample in the log
 /// reads like one.
-pub(super) fn log_line(m: &Measurement) -> String {
-    let flags = m.flags.to_string();
+pub(super) fn log_line(l10n: &Localizer, m: &Measurement) -> String {
+    let flags: Vec<Cow<'_, str>> = m.flags.active().filter_map(|f| l10n.flag(f)).collect();
     let flags = if flags.is_empty() {
         String::new()
     } else {
-        format!(" [{flags}]")
+        format!(" [{}]", flags.join(" "))
     };
-    let summary = m.aux_summary();
+    let labels: Vec<Cow<'_, str>> = m
+        .present_aux()
+        .map(|aux| l10n.label(TextKind::Aux, &aux.label))
+        .collect();
+    let summary = aux_summary_line(m.present_aux().zip(&labels).map(|(aux, label)| {
+        (
+            label.as_ref(),
+            aux.value_str(),
+            aux.unit_or(&m.unit),
+            aux.elapsed_secs,
+        )
+    }));
     let aux = if summary.is_empty() {
         String::new()
     } else {
@@ -271,7 +284,7 @@ impl App {
             next.number,
             next.note.clone(),
             wall_time,
-            log_line(m),
+            log_line(&self.l10n, m),
         ) {
             // A marker the user put on this reading first: this one waits.
             self.replay_markers.push_front(next);
@@ -326,7 +339,7 @@ impl App {
             self.toast = Some(Toast::info(tr!(self.l10n, "markers-no-reading")));
             return;
         };
-        let (at, reading) = (m.timestamp, log_line(m));
+        let (at, reading) = (m.timestamp, log_line(&self.l10n, m));
         self.mark_reading(at, reading, write_note);
     }
 
@@ -402,7 +415,7 @@ impl App {
         // graph knows, its trace's value — without the meter's own
         // digits, its flags or its sub-values.
         let reading = match self.capture.recording.sample_at(at) {
-            Some(s) => log_line(&s.measurement),
+            Some(s) => log_line(&self.l10n, &s.measurement),
             None => format!(
                 "{:>10} {}",
                 format!("{value:.prec$}", prec = self.graph.decimals(true)),
@@ -520,7 +533,7 @@ impl App {
             .map(|&(_, i, sample)| {
                 let m = &markers[i];
                 let reading = match sample {
-                    Some(k) => log_line(&samples[k].measurement),
+                    Some(k) => log_line(&l10n, &samples[k].measurement),
                     None => m.reading.clone(),
                 };
                 let tag = if !graph.holds(m.at) {
@@ -653,8 +666,11 @@ impl App {
                         ui.set_max_width((row_rect.width() - number_width - spacing).max(0.0));
                         let label = ui.add(
                             egui::Label::new(
-                                RichText::new(format!("{time}  {}", log_line(&s.measurement)))
-                                    .font(log_font()),
+                                RichText::new(format!(
+                                    "{time}  {}",
+                                    log_line(&l10n, &s.measurement)
+                                ))
+                                .font(log_font()),
                             )
                             .truncate(),
                         );
@@ -705,7 +721,10 @@ impl App {
                             ui.painter()
                                 .galley(body.center() - plus.size() / 2.0, plus, color);
                             if response.clicked() {
-                                mark = Some((s.measurement.timestamp, log_line(&s.measurement)));
+                                mark = Some((
+                                    s.measurement.timestamp,
+                                    log_line(&l10n, &s.measurement),
+                                ));
                             }
                         }
                         continue;
@@ -955,10 +974,16 @@ mod tests {
     fn the_log_line_names_an_overload_and_an_ncv_level() {
         let mut m = Measurement::test_fixture(MeasuredValue::Overload, "V", StatusFlags::default());
         m.display_raw = Some("      0".into());
-        assert_eq!(log_line(&m).trim(), "OL V");
+        assert_eq!(log_line(&crate::l10n::english(), &m).trim(), "OL V");
         assert_eq!(m.value_export_str(), "OL");
         m.value = MeasuredValue::NcvLevel(2);
-        assert!(log_line(&m).trim().starts_with("NCV:2"), "{}", log_line(&m));
+        assert!(
+            log_line(&crate::l10n::english(), &m)
+                .trim()
+                .starts_with("NCV:2"),
+            "{}",
+            log_line(&crate::l10n::english(), &m)
+        );
         assert_eq!(m.value_export_str(), "NCV:2");
     }
 

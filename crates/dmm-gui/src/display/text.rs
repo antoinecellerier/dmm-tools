@@ -6,6 +6,7 @@ use super::ReadingState;
 use dmm_lib::alarm::Zone;
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
+use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use std::borrow::Cow;
@@ -92,7 +93,7 @@ pub(super) fn live_region_label(
             Some(label) => tr!(
                 l10n,
                 "reading-spoken-labelled",
-                label = label.as_str(),
+                label = l10n.main_label(label),
                 value = value
             ),
             None => Cow::Owned(value),
@@ -102,7 +103,7 @@ pub(super) fn live_region_label(
     // twice reads as two things.
     let mode_is_the_word = matches!(m.value, MeasuredValue::NoReading(word) if word == m.mode);
     if !m.mode.is_empty() && !mode_is_the_word {
-        phrases.push(Cow::Borrowed(&*m.mode));
+        phrases.push(l10n.label(TextKind::Mode, &m.mode));
     }
     // Sub-values sit between the mode and the flags. Whether the rows are
     // drawn under the reading or beside it depends on the window, so the
@@ -114,7 +115,7 @@ pub(super) fn live_region_label(
             &spoken_aux_value(l10n, aux),
             &spoken_unit(l10n, aux.unit_or(&m.unit)),
         );
-        let label = &*aux.label;
+        let label = l10n.label(TextKind::Aux, &aux.label);
         phrases.push(match aux.elapsed_secs {
             // The visible row ends in "@12s"; spelling it out is the only
             // way an AT user learns *when* a MIN/MAX extreme was caught,

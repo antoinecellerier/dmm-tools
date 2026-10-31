@@ -64,7 +64,7 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
 /// "4-20mA", "°C". Such a label has nothing to translate, so `lib.ftl`
 /// leaves it out and its lookup falls back to the English. "AC", "Auto" and
 /// "DC V" are words some languages translate, so they are listed.
-pub(crate) fn is_units_only(text: &str) -> bool {
+pub fn is_units_only(text: &str) -> bool {
     words(text).all(is_unit)
 }
 
@@ -236,6 +236,7 @@ impl Localizer {
                 .find(|f| f.label() == Some(english))
                 .and_then(|f| self.flag(f))
                 .or_else(|| self.listed(kind, english)),
+            TextKind::Aux if english == dmm_lib::transform::RAW_LABEL => Some(self.raw_label()),
             kind => self.listed(kind, english),
         };
         found.unwrap_or(Cow::Borrowed(english))
@@ -371,6 +372,11 @@ mod tests {
                 path: "lib.ftl",
                 source: "mode-capacitance = Capacité\n",
             }],
+            &[Resource {
+                locale: "fr",
+                path: "lib-names.ftl",
+                source: "raw-label = Brut\n",
+            }],
         ]
         .concat();
         Localizer::new(&FRENCH, &resources, &Options::default())
@@ -382,6 +388,8 @@ mod tests {
         assert_eq!(l.label(TextKind::Mode, "Capacitance"), "Capacité");
         // Another kind with the same English is another message.
         assert_eq!(l.label(TextKind::Aux, "Capacitance"), "Capacitance");
+        // A scaled reading's raw sub-value is named, not listed.
+        assert_eq!(l.label(TextKind::Aux, "Raw"), "Brut");
         // Untranslated, unlisted and unknown text stays English.
         assert_eq!(l.label(TextKind::Mode, "Diode"), "Diode");
         assert_eq!(l.label(TextKind::Range, "200mV"), "200mV");

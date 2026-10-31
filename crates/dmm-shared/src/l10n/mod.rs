@@ -32,7 +32,7 @@ mod lib_names;
 mod pseudo;
 
 pub use lang::{EN_US, Language, find, languages, resolve};
-pub use lib_index::{LIB_RESOURCES, spec_numbers};
+pub use lib_index::{LIB_RESOURCES, is_units_only, spec_numbers};
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource, FluentValue};

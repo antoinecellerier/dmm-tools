@@ -3,6 +3,7 @@
 //! settings group on the right, wrapped to a second row when it doesn't fit.
 
 use dmm_lib::protocol::Stability;
+use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
@@ -98,7 +99,7 @@ impl App {
                 self.active_listing()
                     .map_or_else(
                         || tr!(l10n, "top-bar-auto-detect"),
-                        |l| Cow::Borrowed(l.display_name()),
+                        |l| l10n.label(TextKind::Model, l.display_name()),
                     )
                     .into_owned()
             });
@@ -184,8 +185,12 @@ impl App {
                         .connection
                         .meter
                         .as_ref()
-                        .and_then(|m| m.name.clone())
-                        .unwrap_or_else(|| tr!(l10n, "top-bar-connected").into_owned());
+                        .and_then(|m| m.name.as_deref())
+                        .map_or_else(
+                            || tr!(l10n, "top-bar-connected"),
+                            |name| l10n.label(TextKind::Model, name),
+                        )
+                        .into_owned();
                     let link = self.connection.link().filter(|_| show_link);
                     link_drawn = link.is_some();
                     let text = connected_status(l10n, &name, link, self.connection.paused);
@@ -296,7 +301,8 @@ impl App {
                         .as_ref()
                         .filter(|m| !m.stability.is_verified())
                         .and_then(|m| {
-                            let name = m.listing?.display_name().to_string();
+                            let name = m.listing?.display_name();
+                            let name = l10n.label(TextKind::Model, name).into_owned();
                             Some((name, m.stability, m.feedback_url.clone()))
                         })
                 } else {
@@ -306,7 +312,8 @@ impl App {
                             let name = self
                                 .picked_listing()
                                 .map_or(p.display_name(), |l| l.display_name());
-                            (name.to_string(), p.stability, p.feedback_url())
+                            let name = l10n.label(TextKind::Model, name).into_owned();
+                            (name, p.stability, p.feedback_url())
                         })
                 };
                 if let Some((model_name, stability, url)) = badge {

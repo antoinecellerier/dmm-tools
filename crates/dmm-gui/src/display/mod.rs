@@ -4,6 +4,7 @@ use dmm_lib::alarm::Zone;
 use dmm_lib::flags::Flag;
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use dmm_lib::protocol::{Choice, MeterKey, Setting};
+use dmm_lib::text::TextKind;
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{
     Align, Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, Id, IdSalt, Key,
@@ -142,8 +143,15 @@ struct AuxCells {
     secs: Option<RichText>,
 }
 
-fn aux_cells(ui: &Ui, m: &Measurement, aux: &AuxValue, size: f32, tc: &ThemeColors) -> AuxCells {
-    let label = RichText::new(&*aux.label)
+fn aux_cells(
+    ui: &Ui,
+    l10n: &Localizer,
+    m: &Measurement,
+    aux: &AuxValue,
+    size: f32,
+    tc: &ThemeColors,
+) -> AuxCells {
+    let label = RichText::new(l10n.label(TextKind::Aux, &aux.label))
         .font(FontId::proportional(size))
         .color(ui.visuals().weak_text_color());
     // Overload in the error color, as the main value is — and the text
@@ -191,7 +199,7 @@ fn aux_cells(ui: &Ui, m: &Measurement, aux: &AuxValue, size: f32, tc: &ThemeColo
 /// The compact layout's one-line summary, `Measurement::aux_summary`'s text
 /// coloured as the grid's cells are: weak labels and timestamps, values and
 /// units in the reading colour, an overload in the error colour.
-fn aux_summary_job(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> LayoutJob {
+fn aux_summary_job(ui: &Ui, l10n: &Localizer, m: &Measurement, tc: &ThemeColors) -> LayoutJob {
     let format = |color| TextFormat {
         font_id: FontId::monospace(MIN_AUX_FONT_SIZE),
         color,
@@ -203,7 +211,7 @@ fn aux_summary_job(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> LayoutJob {
         if !job.is_empty() {
             job.append(", ", 0.0, format(weak));
         }
-        job.append(&aux.label, 0.0, format(weak));
+        job.append(&l10n.label(TextKind::Aux, &aux.label), 0.0, format(weak));
         let value_color = match aux.value {
             MeasuredValue::Overload => tc.status_error(),
             _ => tc.reading(),
@@ -257,7 +265,13 @@ pub(crate) struct AuxGridMetrics {
 impl AuxGridMetrics {
     /// Lay the cells out with a mode line at `font_size`; `None` when the
     /// measurement has no sub-values and the grid draws nothing.
-    fn measure(ui: &Ui, m: &Measurement, font_size: f32, tc: &ThemeColors) -> Option<Self> {
+    fn measure(
+        ui: &Ui,
+        l10n: &Localizer,
+        m: &Measurement,
+        font_size: f32,
+        tc: &ThemeColors,
+    ) -> Option<Self> {
         if m.aux_values.is_empty() {
             return None;
         }
@@ -280,7 +294,7 @@ impl AuxGridMetrics {
             rows: m.aux_values.len(),
         };
         for aux in &m.aux_values {
-            let cells = aux_cells(ui, m, aux, size, tc);
+            let cells = aux_cells(ui, l10n, m, aux, size, tc);
             let label = galley(cells.label.into());
             let value = galley(cells.value.into());
             let secs = cells.secs.map_or(Vec2::ZERO, |s| galley(s.into()));
@@ -327,6 +341,7 @@ impl AuxGridMetrics {
 /// exists so a test can assert the label and its value stay on one line.
 fn show_aux_rows(
     ui: &mut Ui,
+    l10n: &Localizer,
     id: Id,
     m: &Measurement,
     font_size: f32,
@@ -345,7 +360,7 @@ fn show_aux_rows(
             .spacing([aux_column_gap(size), AUX_ROW_GAP])
             .show(ui, |ui| {
                 for aux in &m.aux_values {
-                    let cells = aux_cells(ui, m, aux, size, tc);
+                    let cells = aux_cells(ui, l10n, m, aux, size, tc);
                     let label = ui.label(cells.label);
                     let value = ui.label(cells.value);
                     rects.push((label.rect, value.rect));
@@ -375,6 +390,7 @@ fn aux_grid_id(ui: &Ui) -> Id {
 /// on the line instead.
 fn value_label(
     ui: &Ui,
+    l10n: &Localizer,
     m: &Measurement,
     value_text: &str,
     font: FontId,
@@ -388,7 +404,7 @@ fn value_label(
     if let Some(label) = m.main_label.filter(|_| m.has_main_reading()) {
         let size = caption_size.max(MIN_AUX_FONT_SIZE);
         job.append(
-            label.as_str(),
+            &l10n.main_label(label),
             0.0,
             TextFormat {
                 font_id: FontId::proportional(size),
@@ -515,15 +531,18 @@ impl Dropdown {
     }
 }
 
-/// A dropdown over one setting's choices, and the setting a pick switches.
+/// A dropdown over one setting's choices, the setting a pick switches, and
+/// the kind its labels are looked up as.
 struct ChoiceReadout {
     setting: Setting,
+    kind: TextKind,
     dropdown: Dropdown,
 }
 
 /// The mode readout: which mode of the current dial position the meter is in.
 const MODE_READOUT: ChoiceReadout = ChoiceReadout {
     setting: Setting::Mode,
+    kind: TextKind::Mode,
     dropdown: Dropdown {
         id_salt: "mode_select",
         kind: DropdownKind::Mode,
@@ -534,6 +553,7 @@ const MODE_READOUT: ChoiceReadout = ChoiceReadout {
 /// meter is on, or `Auto` while it picks the rung itself.
 const RANGE_READOUT: ChoiceReadout = ChoiceReadout {
     setting: Setting::Range,
+    kind: TextKind::Range,
     dropdown: Dropdown {
         id_salt: "range_select",
         kind: DropdownKind::Range,
@@ -564,12 +584,13 @@ fn show_mode_readout(
     if mode_switch_offered(choices.mode) || choices.keys.is_empty() {
         return show_choice_readout(ui, l10n, &MODE_READOUT, &m.mode, size, choices.mode);
     }
-    let entries: Vec<(&str, bool)> = choices
+    let entries: Vec<(Cow<'_, str>, bool)> = choices
         .keys
         .iter()
-        .map(|k| (k.label, (k.applies)(m)))
+        .map(|k| (l10n.label(TextKind::Key, k.label), (k.applies)(m)))
         .collect();
-    show_dropdown(ui, l10n, &KEYS_READOUT, &m.mode, size, &entries)
+    let mode = l10n.label(TextKind::Mode, &m.mode);
+    show_dropdown(ui, l10n, &KEYS_READOUT, &mode, size, &entries)
         .map(|i| ReadoutPick::Press(choices.keys[i].command))
 }
 
@@ -623,6 +644,7 @@ fn show_choice_readout(
     size: f32,
     choices: &[Choice],
 ) -> Option<ReadoutPick> {
+    let label = l10n.label(readout.kind, label);
     if !mode_switch_offered(choices) {
         ui.label(
             RichText::new(label)
@@ -631,8 +653,11 @@ fn show_choice_readout(
         );
         return None;
     }
-    let entries: Vec<(&str, bool)> = choices.iter().map(|c| (&*c.label, c.current)).collect();
-    let picked = &choices[show_dropdown(ui, l10n, &readout.dropdown, label, size, &entries)?];
+    let entries: Vec<(Cow<'_, str>, bool)> = choices
+        .iter()
+        .map(|c| (l10n.label(readout.kind, &c.label), c.current))
+        .collect();
+    let picked = &choices[show_dropdown(ui, l10n, &readout.dropdown, &label, size, &entries)?];
     (!picked.current).then_some(ReadoutPick::Select(readout.setting, picked.id))
 }
 
@@ -655,9 +680,9 @@ fn show_dropdown(
     dropdown: &Dropdown,
     label: &str,
     size: f32,
-    entries: &[(&str, bool)],
+    entries: &[(Cow<'_, str>, bool)],
 ) -> Option<usize> {
-    let focus_on_open = entries.iter().position(|&(_, live)| live).unwrap_or(0);
+    let focus_on_open = entries.iter().position(|(_, live)| *live).unwrap_or(0);
     let popup_size = size.clamp(MIN_AUX_FONT_SIZE, MAX_CHOICE_POPUP_FONT_SIZE);
     let ctx = ui.ctx().clone();
     let row_height = ctx.fonts_mut(|f| f.row_height(&FontId::proportional(size)));
@@ -713,7 +738,8 @@ fn show_dropdown(
                     }
                     let mut picked = None;
                     let mut responses = Vec::with_capacity(entries.len());
-                    for (i, &(text, live)) in entries.iter().enumerate() {
+                    for (i, (text, live)) in entries.iter().enumerate() {
+                        let live = *live;
                         let entry = ui.selectable_label(
                             live,
                             RichText::new(choice_entry_text(text, live))
@@ -955,7 +981,8 @@ fn show_reading_line_plain(
             ui.spacing_mut().item_spacing.x = 2.0;
             draw_value(ui);
             ui.separator();
-            let mut mode = RichText::new(&*m.mode).color(ui.visuals().weak_text_color());
+            let mut mode = RichText::new(l10n.label(TextKind::Mode, &m.mode))
+                .color(ui.visuals().weak_text_color());
             if mode_size > 0.0 {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
                 mode = mode.font(FontId::proportional(mode_size));
@@ -1166,6 +1193,7 @@ fn show_reading_sized(
                     ui.spacing_mut().item_spacing.x = 2.0;
                     ui.label(value_label(
                         ui,
+                        l10n,
                         m,
                         &value_text,
                         FontId::monospace(value_size),
@@ -1180,7 +1208,7 @@ fn show_reading_sized(
                 },
             );
 
-            let _ = show_aux_rows(ui, aux_grid_id(ui), m, mode_size, tc);
+            let _ = show_aux_rows(ui, l10n, aux_grid_id(ui), m, mode_size, tc);
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(2.0);
@@ -1218,6 +1246,7 @@ fn show_reading_sized(
 /// The value and its unit, as the one-row layouts draw them.
 fn show_value_and_unit(
     ui: &mut Ui,
+    l10n: &Localizer,
     m: &Measurement,
     value_size: f32,
     tc: &ThemeColors,
@@ -1226,6 +1255,7 @@ fn show_value_and_unit(
     let (value_text, value_color) = value_display(m, tc, state);
     ui.label(value_label(
         ui,
+        l10n,
         m,
         &value_text,
         FontId::monospace(value_size),
@@ -1285,7 +1315,7 @@ fn show_reading_inline(
 
     match measurement {
         Some(m) => {
-            let draw_value = |ui: &mut Ui| show_value_and_unit(ui, m, value_size, tc, state);
+            let draw_value = |ui: &mut Ui| show_value_and_unit(ui, l10n, m, value_size, tc, state);
             let picked = if !choices.any_offered() {
                 show_reading_line_plain(ui, l10n, m, state, draw_value, mode_size, tc);
                 None
@@ -1299,7 +1329,7 @@ fn show_reading_inline(
                 .inner
             };
             let line = line(ui);
-            let _ = show_aux_rows(ui, grid_id, m, mode_size, tc);
+            let _ = show_aux_rows(ui, l10n, grid_id, m, mode_size, tc);
             (picked, line)
         }
         None => {
@@ -1345,7 +1375,7 @@ fn show_reading_beside(
 ) -> (Option<ReadoutPick>, Vec2) {
     let mode_size = value_size * MODE_SIZE_RATIO;
     let grid_id = aux_grid_id(ui);
-    let grid = AuxGridMetrics::measure(ui, m, mode_size, tc).map_or(Vec2::ZERO, |g| {
+    let grid = AuxGridMetrics::measure(ui, l10n, m, mode_size, tc).map_or(Vec2::ZERO, |g| {
         g.size(mode_size, ui.spacing().interact_size)
     });
     let value_h = ui.fonts_mut(|f| f.row_height(&FontId::monospace(value_size)));
@@ -1369,7 +1399,7 @@ fn show_reading_beside(
                             || live_region_label(l10n, Some(m), state, ""),
                             |ui| {
                                 ui.spacing_mut().item_spacing.x = 2.0;
-                                show_value_and_unit(ui, m, value_size, tc, state);
+                                show_value_and_unit(ui, l10n, m, value_size, tc, state);
                             },
                         );
                     },
@@ -1380,7 +1410,7 @@ fn show_reading_beside(
             ui.allocate_ui_with_layout(
                 vec2(ui.available_width(), grid.y),
                 Layout::top_down(Align::Min),
-                |ui| show_aux_rows(ui, grid_id, m, mode_size, tc),
+                |ui| show_aux_rows(ui, l10n, grid_id, m, mode_size, tc),
             );
             ui.separator();
             // Past the dividers, the readouts space as the line under the
@@ -1689,7 +1719,7 @@ pub fn show_reading_large(
     // size, whose glyphs are cached too, stands in before the first frame.
     let reference = last.map_or(BASE_READING_FONT_SIZE, |l| l.size);
     let grid = measurement
-        .and_then(|m| AuxGridMetrics::measure(ui, m, reference * MODE_SIZE_RATIO, tc))
+        .and_then(|m| AuxGridMetrics::measure(ui, l10n, m, reference * MODE_SIZE_RATIO, tc))
         .map(|metrics| GridFit {
             metrics,
             min_cell: ui.spacing().interact_size,
@@ -1756,6 +1786,7 @@ pub fn show_reading_compact(
                 let color = state.reading_color(tc);
                 ui.label(value_label(
                     ui,
+                    l10n,
                     m,
                     &value_text,
                     FontId::monospace(COMPACT_READING_FONT_SIZE),
@@ -1782,7 +1813,7 @@ pub fn show_reading_compact(
             // One summary line rather than the grid: the compact layout is
             // the narrow-window one, where a label/value/unit grid would
             // squeeze the reading itself.
-            let summary = aux_summary_job(ui, m, tc);
+            let summary = aux_summary_job(ui, l10n, m, tc);
             if !summary.is_empty() {
                 ui.label(summary);
             }
@@ -1824,15 +1855,15 @@ fn show_flags(
 
     // `badge_order()` puts the hazard first, and `badge_tone` paints it in the
     // error color rather than the generic warning one — this is the meter
-    // telling the user the probes are on a dangerous potential. Labels come
-    // from `Flag::label()`, the same source as `StatusFlags::Display`, so the
-    // badge, the recording panel and the CSV flags column all say "HV!".
-    // `Flag::Dc` has no label and so paints no badge.
+    // telling the user the probes are on a dangerous potential. Labels are
+    // `Flag::label()`'s in the user's language, so in English the badge, the
+    // recording panel and the CSV flags column all say "HV!". `Flag::Dc` has
+    // no label and so paints no badge.
     for (flag, label) in badge_order()
         .filter(|f| m.flags.get(*f))
-        .filter_map(|f| f.label().map(|l| (f, l)))
+        .filter_map(|f| l10n.flag(f).map(|l| (f, l)))
     {
-        badge(ui, label, badge_tone(flag, tc));
+        badge(ui, &label, badge_tone(flag, tc));
     }
     // After the meter's own badges, in the same accent as AUTO/HOLD: this is
     // the app's state, not the meter's, and it belongs at the end of the row
@@ -1909,7 +1940,7 @@ mod tests {
         for _ in 0..3 {
             rects.clear();
             let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
-                rects = show_aux_rows(ui, aux_grid_id(ui), m, font_size, &tc);
+                rects = show_aux_rows(ui, &en(), aux_grid_id(ui), m, font_size, &tc);
             });
             // See `run_frame`: epaint 0.36 debug-asserts that texture deltas
             // were applied before being dropped.
@@ -1968,7 +1999,7 @@ mod tests {
         let mut job = LayoutJob::default();
         let mut weak = Color32::TRANSPARENT;
         let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
-            job = aux_summary_job(ui, &m, &tc);
+            job = aux_summary_job(ui, &en(), &m, &tc);
             weak = ui.visuals().weak_text_color();
         });
         out.textures_delta.clear();
@@ -2146,7 +2177,7 @@ mod tests {
             let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
                 let id = aux_grid_id(ui);
                 rect = ui
-                    .scope(|ui| show_aux_rows(ui, id, m, font_size, &tc))
+                    .scope(|ui| show_aux_rows(ui, &en(), id, m, font_size, &tc))
                     .response
                     .rect;
             });
@@ -2161,7 +2192,7 @@ mod tests {
         let mut metrics = None;
         let mut min_cell = Vec2::ZERO;
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-            metrics = AuxGridMetrics::measure(ui, m, font_size, &tc);
+            metrics = AuxGridMetrics::measure(ui, &en(), m, font_size, &tc);
             min_cell = ui.spacing().interact_size;
         });
         out.textures_delta.clear();

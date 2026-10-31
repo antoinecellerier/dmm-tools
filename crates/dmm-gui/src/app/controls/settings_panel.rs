@@ -1,6 +1,7 @@
 use crate::app::shortcuts::Shortcut;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
+use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
@@ -291,7 +292,7 @@ impl App {
             let selected_id = selected.map_or(registry::AUTO_DEVICE_ID, |l| l.id());
             let name = selected.map_or_else(
                 || tr!(l10n, "settings-auto-detect"),
-                |l| Cow::Borrowed(l.display_name()),
+                |l| l10n.label(TextKind::Model, l.display_name()),
             );
             let label = if has_override {
                 tr!(l10n, "settings-device-pinned", name = name).into_owned()

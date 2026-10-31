@@ -4,6 +4,7 @@
 //! draw it.
 
 use dmm_lib::protocol::registry;
+use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use dmm_shared::l10n::Localizer;
@@ -271,10 +272,14 @@ fn not_identified_help(l10n: &Localizer, bridge: &str, built_in_radio: bool) -> 
     let mut msg = tr!(l10n, "connection-not-identified", link = link).into_owned();
     msg.push('\n');
     for (steps, names) in dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge)) {
+        let names: Vec<std::borrow::Cow<'_, str>> = names
+            .into_iter()
+            .map(|name| l10n.label(TextKind::Model, name))
+            .collect();
         msg.push('\n');
         msg.push_str(&names.join(", "));
         msg.push('\n');
-        msg.push_str(steps);
+        msg.push_str(&l10n.label(TextKind::Activation, steps));
         msg.push('\n');
     }
     msg.push('\n');
@@ -478,8 +483,8 @@ impl App {
                     l10n,
                     "connection-no-response",
                     link = link,
-                    model = meter.display_name(),
-                    steps = meter.device.activation_instructions
+                    model = l10n.label(TextKind::Model, meter.display_name()),
+                    steps = l10n.label(TextKind::Activation, meter.device.activation_instructions)
                 ),
                 None => tr!(l10n, "connection-no-response-auto"),
             }
@@ -499,11 +504,13 @@ impl App {
         self.selected_profile()
             .filter(|p| !p.stability.is_verified())
             .map(|profile| {
-                let warning = self.l10n.help().stability_warning(
-                    self.picked_listing()
-                        .map_or(profile.display_name(), |l| l.display_name()),
-                    profile.stability,
-                );
+                let model = self
+                    .picked_listing()
+                    .map_or(profile.display_name(), |l| l.display_name());
+                let warning = self
+                    .l10n
+                    .help()
+                    .stability_warning(&self.l10n.label(TextKind::Model, model), profile.stability);
                 (
                     tr!(self.l10n, "connection-feedback", warning = warning).into_owned(),
                     profile.feedback_url(),

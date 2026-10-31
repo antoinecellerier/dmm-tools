@@ -1,4 +1,5 @@
 use dmm_lib::protocol::registry;
+use dmm_lib::text::TextKind;
 use dmm_shared::help::DeviceTag;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
@@ -92,19 +93,18 @@ fn groups(l10n: &Localizer) -> Vec<Group> {
     TAGGED
         .iter()
         .map(|(brand, rows)| {
-            let rows = rows
-                .iter()
-                .map(|&(l, tag)| {
-                    let name = l.display_name();
-                    let described = help.tag_text(tag, true).map_or_else(
-                        || name.to_string(),
-                        |tag| {
-                            tr!(l10n, "settings-device-entry", name = name, tag = tag).into_owned()
-                        },
-                    );
-                    (l, described)
-                })
-                .collect();
+            let rows =
+                rows.iter()
+                    .map(|&(l, tag)| {
+                        let name = l10n.label(TextKind::Model, l.display_name());
+                        let described = match help.tag_text(tag, true) {
+                            Some(tag) => tr!(l10n, "settings-device-entry", name = name, tag = tag)
+                                .into_owned(),
+                            None => name.into_owned(),
+                        };
+                        (l, described)
+                    })
+                    .collect();
             (*brand, rows)
         })
         .collect()
@@ -119,21 +119,24 @@ struct DeviceListLayout {
     gap: f32,
 }
 
-/// The font and spacing the list's column width is measured with, at the
-/// scale it is measured at: what the width kept between frames is keyed on.
+/// The font, spacing and language the list's column width is measured
+/// with, at the scale it is measured at: what the width kept between frames
+/// is keyed on.
 #[derive(Clone, PartialEq)]
 struct MeasuredWith {
     font: egui::FontId,
     pixels_per_point: f32,
     padding: f32,
+    language: &'static str,
 }
 
 impl MeasuredWith {
-    fn of(ctx: &egui::Context, style: &egui::Style) -> Self {
+    fn of(ctx: &egui::Context, style: &egui::Style, l10n: &Localizer) -> Self {
         Self {
             font: egui::TextStyle::Button.resolve(style),
             pixels_per_point: ctx.pixels_per_point(),
             padding: 2.0 * style.spacing.button_padding.x,
+            language: l10n.language().id,
         }
     }
 }
@@ -149,11 +152,11 @@ impl DeviceListLayout {
     /// and it changes only with the font, scale and spacing. The columns
     /// follow the window's width every frame.
     fn current(ctx: &egui::Context, style: &egui::Style, l10n: &Localizer) -> Self {
-        let with = MeasuredWith::of(ctx, style);
+        let with = MeasuredWith::of(ctx, style, l10n);
         let col_w = match ctx.data(|d| d.get_temp::<(MeasuredWith, f32)>(width_id())) {
             Some((kept, col_w)) if kept == with => col_w,
             _ => {
-                let col_w = Self::measure(ctx, &with);
+                let col_w = Self::measure(ctx, l10n, &with);
                 ctx.data_mut(|d| d.insert_temp(width_id(), (with, col_w)));
                 col_w
             }
@@ -175,7 +178,7 @@ impl DeviceListLayout {
 
     /// Column width: the widest heading or marked entry, plus a selectable's
     /// padding. Measured in the font the list draws in.
-    fn measure(ctx: &egui::Context, with: &MeasuredWith) -> f32 {
+    fn measure(ctx: &egui::Context, l10n: &Localizer, with: &MeasuredWith) -> f32 {
         let measure = |text: &str| {
             ctx.fonts_mut(|f| {
                 f.layout_no_wrap(text.to_string(), with.font.clone(), egui::Color32::WHITE)
@@ -187,9 +190,10 @@ impl DeviceListLayout {
             .iter()
             .flat_map(|(brand, rows)| {
                 let entries = rows.iter().map(|(d, _)| {
-                    measure(&crate::display::choice_entry_text(d.model_name(), true)) + with.padding
+                    let name = l10n.label(TextKind::Model, d.model_name());
+                    measure(&crate::display::choice_entry_text(&name, true)) + with.padding
                 });
-                std::iter::once(measure(brand.name())).chain(entries)
+                std::iter::once(measure(&l10n.brand(*brand))).chain(entries)
             })
             .fold(0.0, f32::max)
             .ceil()
@@ -285,9 +289,11 @@ pub(super) fn device_dropdown(
                         if i > 0 {
                             ui.add_space(ui.spacing().item_spacing.y * 2.0);
                         }
-                        ui.label(RichText::new(brand.name()).color(ui.visuals().weak_text_color()));
+                        let brand = l10n.brand(*brand);
+                        ui.label(RichText::new(brand).color(ui.visuals().weak_text_color()));
                         for (row, described) in rows {
-                            let entry = add(ui, row.id(), row.model_name(), described, described);
+                            let name = l10n.label(TextKind::Model, row.model_name());
+                            let entry = add(ui, row.id(), &name, described, described);
                             entries.push((entry, Some(c)));
                         }
                     }

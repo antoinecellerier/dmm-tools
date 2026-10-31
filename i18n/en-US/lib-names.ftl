@@ -54,6 +54,12 @@ main-label-relative = Relative
 # The highest peak, beside a Peak Min one.
 main-label-peak-max = Peak Max
 
+## The sub-value under a scaled reading: the meter's own reading before
+## the scale. Below the reading, in the graph's series chips and its
+## legend.
+
+raw-label = Raw
+
 ## The device lists' heading for the simulated meters. Real brands are
 ## names and stay as they are.
 

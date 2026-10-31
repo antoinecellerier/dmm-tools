@@ -3,6 +3,7 @@
 
 use std::borrow::Cow;
 
+use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Ui};
@@ -463,14 +464,16 @@ impl Graph {
             // widgets to that role with a toggled state, so AT handling of the
             // pairing is proven.
             let main_selected = self.selected_series.is_none();
-            let main_hover = match self.main_label {
+            let main_text = self.main_text(l10n);
+            let named = self.main_label.is_some().then_some(main_text.as_ref());
+            let main_hover = match named {
                 Some(name) => tr!(l10n, "graph-plot-main-named.hover", series = name),
                 None => tr!(l10n, "graph-plot-main.hover"),
             };
             if ui
-                .selectable_label(main_selected, self.main_name())
+                .selectable_label(main_selected, main_text.as_ref())
                 .on_hover_text(main_hover)
-                .a11y_label(&series_chip_label(l10n, self.main_label))
+                .a11y_label(&series_chip_label(l10n, named))
                 .a11y_role(egui::accesskit::Role::RadioButton)
                 .clicked()
             {
@@ -479,15 +482,16 @@ impl Graph {
 
             for (i, SeriesOption { label, unit, .. }) in self.series_options.iter().enumerate() {
                 let selected = self.selected_series.as_deref() == Some(label.as_str());
+                let text = l10n.label(TextKind::Aux, label);
                 if ui
-                    .selectable_label(selected, label.as_str())
+                    .selectable_label(selected, text.as_ref())
                     .on_hover_text(tr!(
                         l10n,
                         "graph-plot-series.hover",
-                        series = label,
+                        series = text.as_ref(),
                         unit = unit
                     ))
-                    .a11y_label(&series_chip_label(l10n, Some(label)))
+                    .a11y_label(&series_chip_label(l10n, Some(&text)))
                     .a11y_role(egui::accesskit::Role::RadioButton)
                     .clicked()
                 {
@@ -537,7 +541,8 @@ impl Graph {
             group_caption(ui, &tr!(l10n, "graph-show"));
 
             for o in &self.overlays {
-                let label = o.label.as_str();
+                let label = self.series_text(l10n, &o.label);
+                let label = label.as_ref();
                 let refusal = self.axis_refusal(o);
                 let full = refusal == Some(AxisRefusal::Full);
                 let shown = !full && !self.is_hidden(o);

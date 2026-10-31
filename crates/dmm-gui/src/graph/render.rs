@@ -1,6 +1,7 @@
 //! Painting the main graph: the traces, the analysis overlays, the plot key
 //! and the accessibility summary that describes them.
 
+use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Ui, Vec2b};
@@ -931,6 +932,7 @@ impl Graph {
     /// what ties a line to its axis without leaning on colour.
     pub(super) fn key_entries(
         &self,
+        l10n: &Localizer,
         drawn: &[OverlayTrace],
         plotted_drawn: bool,
     ) -> Vec<(String, KeyStyle)> {
@@ -940,26 +942,26 @@ impl Graph {
         let with_units = drawn
             .iter()
             .any(|(_, label, _)| self.overlay_unit(label) != self.current_unit);
-        let name = |label: String, unit: &str| {
+        let name = |label: &str, unit: &str| {
+            let label = self.series_text(l10n, label);
             if with_units && !unit.is_empty() {
                 format!("{label} ({unit})")
             } else {
-                label
+                label.into_owned()
             }
         };
         let mut entries = Vec::with_capacity(drawn.len() + 1);
         if plotted_drawn {
             entries.push((
-                name(self.plotted_series_name(), &self.current_unit),
+                name(&self.plotted_series_name(), &self.current_unit),
                 KeyStyle::Plotted,
             ));
         }
-        entries.extend(drawn.iter().map(|(k, label, _)| {
-            (
-                name(label.clone(), self.overlay_unit(label)),
-                KeyStyle::Overlay(*k),
-            )
-        }));
+        entries.extend(
+            drawn.iter().map(|(k, label, _)| {
+                (name(label, self.overlay_unit(label)), KeyStyle::Overlay(*k))
+            }),
+        );
         entries
     }
 
@@ -1074,9 +1076,11 @@ impl Graph {
     }
 
     /// The series the hover lists with right axes: the plotted one, named
-    /// `main_name`, then each drawn trace, every one with its unit.
+    /// `main_name`, then each drawn trace, every one with its unit and by
+    /// its name on screen.
     fn hover_series<'a>(
         &self,
+        l10n: &Localizer,
         tc: &ThemeColors,
         main_name: &str,
         plotted: &'a [Vec<[f64; 2]>],
@@ -1089,7 +1093,7 @@ impl Graph {
             color: tc.graph_line(),
         };
         let traces = traces.iter().map(|(k, label, segments)| HoverSeries {
-            name: label.clone(),
+            name: self.series_text(l10n, label).into_owned(),
             segments: segments.as_slice(),
             unit: self.overlay_unit(label).to_string(),
             color: tc.graph_overlay(*k),
@@ -1296,10 +1300,11 @@ impl Graph {
         let env_color = tc.graph_envelope();
         let limit_color = tc.status_error();
 
-        // Every drawn line carries the name of its series, which is what the
-        // hover label reports; every helper item is named "" and falls through
-        // to the plain form.
-        let main_name = self.plotted_series_name();
+        // Every drawn line carries the name of its series as the screen
+        // shows it, which is what the hover label reports; every helper item
+        // is named "" and falls through to the plain form.
+        let plotted_name = self.plotted_series_name();
+        let main_name = self.series_text(l10n, &plotted_name).into_owned();
 
         let shift_held = ui.input(|i| i.modifiers.shift);
         let bbox_active = self.box_zoom.is_some();
@@ -1357,7 +1362,7 @@ impl Graph {
             .iter()
             .map(|(_, label, _)| map_of(label))
             .collect();
-        let key_entries = self.key_entries(&overlay_traces, !visible_segments.is_empty());
+        let key_entries = self.key_entries(l10n, &overlay_traces, !visible_segments.is_empty());
         let multi_series = !overlay_traces.is_empty();
 
         let mut y_axes = vec![self.left_axis(ui, grid_step, line_color)];
@@ -1465,7 +1470,7 @@ impl Graph {
             std::cell::RefCell::new(None);
         let hit = &hover_hit;
         let hover_series = if multi_axis {
-            self.hover_series(tc, &main_name, &visible_segments, &overlay_traces)
+            self.hover_series(l10n, tc, &main_name, &visible_segments, &overlay_traces)
         } else {
             Vec::new()
         };
@@ -1630,7 +1635,7 @@ impl Graph {
                     // once the buffer's bound starts dropping them.
                     patterns.line(
                         plot_ui,
-                        Line::new(label.clone(), PlotPoints::new(points)),
+                        Line::new(self.series_text(l10n, label), PlotPoints::new(points)),
                         color,
                         style,
                         PatternKey::Overlay(label.clone()),
@@ -1901,15 +1906,18 @@ impl Graph {
             } else {
                 let named: Vec<String> = shown_labels
                     .iter()
-                    .map(|&(label, unit)| match unit {
-                        Some(unit) => tr!(
-                            l10n,
-                            "graph-plot-a11y-also-axis",
-                            series = label,
-                            unit = unit
-                        )
-                        .into_owned(),
-                        None => label.to_string(),
+                    .map(|&(label, unit)| {
+                        let label = self.series_text(l10n, label);
+                        match unit {
+                            Some(unit) => tr!(
+                                l10n,
+                                "graph-plot-a11y-also-axis",
+                                series = label,
+                                unit = unit
+                            )
+                            .into_owned(),
+                            None => label.into_owned(),
+                        }
                     })
                     .collect();
                 let separator = tr!(l10n, "graph-plot-a11y-also-separator");
@@ -1959,8 +1967,13 @@ impl Graph {
             // The plot draws several traces at once for a multi-display
             // meter, and which one the axis belongs to is otherwise purely
             // visual — the key painted in its corner.
-            let title = match self.current_series.as_deref().or(self.main_label) {
-                Some(label) => tr!(l10n, "graph-plot-a11y-title-series", series = label),
+            let series = match (self.current_series.as_deref(), self.main_label) {
+                (Some(series), _) => Some(l10n.label(TextKind::Aux, series)),
+                (None, Some(label)) => Some(l10n.main_label(label)),
+                (None, None) => None,
+            };
+            let title = match series {
+                Some(series) => tr!(l10n, "graph-plot-a11y-title-series", series = series),
                 None => tr!(l10n, "graph-plot-a11y-title"),
             };
             let markers = match markers_in_view {

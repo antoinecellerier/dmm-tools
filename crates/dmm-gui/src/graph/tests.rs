@@ -1649,7 +1649,7 @@ fn push_acdc(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
         unit: "V",
         display_raw: None,
         series: None,
-        main_label: Some("DC"),
+        main_label: Some(dmm_lib::measurement::MainLabel::Dc),
         levels: false,
         overlays: if ac.is_some() { &overlays } else { &[] },
     });
@@ -1666,7 +1666,7 @@ fn push_acdc_plotting_ac(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<
         unit: "V",
         display_raw: None,
         series: Some("AC"),
-        main_label: Some("DC"),
+        main_label: Some(dmm_lib::measurement::MainLabel::Dc),
         levels: false,
         overlays: if dc.is_some() { &overlays } else { &[] },
     });
@@ -1782,7 +1782,7 @@ fn a_swap_keeps_the_breaks_of_both_traces() {
         unit: "V",
         display_raw: None,
         series: None,
-        main_label: Some("DC"),
+        main_label: Some(dmm_lib::measurement::MainLabel::Dc),
         levels: false,
         overlays: &[("AC", "V", None)],
     });
@@ -3145,10 +3145,14 @@ fn chip_labels_name_their_group() {
 /// Names in the key, in the order they are painted.
 fn key_names(g: &Graph) -> Vec<String> {
     let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
-    g.key_entries(&drawn, !g.all_segments().is_empty())
-        .into_iter()
-        .map(|(name, _)| name)
-        .collect()
+    g.key_entries(
+        &crate::l10n::english(),
+        &drawn,
+        !g.all_segments().is_empty(),
+    )
+    .into_iter()
+    .map(|(name, _)| name)
+    .collect()
 }
 
 /// Labels of the traces that are actually drawn.
@@ -3196,7 +3200,7 @@ fn the_key_names_the_plotted_series_then_its_overlays() {
 
     let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
     let styles: Vec<KeyStyle> = g
-        .key_entries(&drawn, true)
+        .key_entries(&crate::l10n::english(), &drawn, true)
         .into_iter()
         .map(|(_, style)| style)
         .collect();
@@ -3295,7 +3299,7 @@ fn a_remembered_label_never_hides_the_main_reading() {
             unit: "\u{00B0}C",
             display_raw: None,
             series: Some("T1"),
-            main_label: Some("T2"),
+            main_label: Some(dmm_lib::measurement::MainLabel::T2),
             levels: false,
             overlays: &[("T2", "\u{00B0}C", Some(23.0))],
         });

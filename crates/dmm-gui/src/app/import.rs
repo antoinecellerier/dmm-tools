@@ -520,7 +520,7 @@ impl App {
             {
                 let (_, _, note) = ingest.markers.pop_front().expect("peeked");
                 if index == ingest.taken {
-                    let reading = super::marker_list::log_line(&m);
+                    let reading = super::marker_list::log_line(&self.l10n, &m);
                     self.markers
                         .insert(m.timestamp, number, note, m.wall_time.into(), reading);
                 }

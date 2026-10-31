@@ -114,18 +114,19 @@ pub(super) struct PendingBreach {
     at: std::time::Instant,
     wall_time: chrono::DateTime<chrono::Local>,
     reading: String,
-    /// In English whatever the app's language, as the library words it:
-    /// the note is data, written into recordings and exports as it is.
+    /// In the app's language, as a note typed into the marker would be:
+    /// the user reads it and can edit it, and recordings and exports keep
+    /// it as it is.
     note: String,
 }
 
 impl PendingBreach {
-    fn new(m: &Measurement, breach: &Breach) -> Self {
+    fn new(l10n: &Localizer, m: &Measurement, breach: &Breach) -> Self {
         Self {
             at: m.timestamp,
             wall_time: m.wall_time.into(),
-            reading: log_line(m),
-            note: breach.note(),
+            reading: log_line(l10n, m),
+            note: l10n.breach_note(breach),
         }
     }
 }
@@ -383,7 +384,7 @@ impl App {
             self.toast = Some(Toast::error(self.l10n.breach_note(&breach)));
             return None;
         }
-        Some(PendingBreach::new(m, &breach))
+        Some(PendingBreach::new(&self.l10n, m, &breach))
     }
 
     /// Judge one imported reading, as the file holds it: as
@@ -391,7 +392,9 @@ impl App {
     /// goes unsaid — the import's progress and result toasts hold the slot.
     pub(super) fn check_imported(&mut self, m: &Measurement) -> Option<PendingBreach> {
         let breach = self.alarm.as_mut()?.check(m, false)?;
-        breach.crossing.then(|| PendingBreach::new(m, &breach))
+        breach
+            .crossing
+            .then(|| PendingBreach::new(&self.l10n, m, &breach))
     }
 
     /// Mark each breach the drain found on its reading. No toast: the badge,

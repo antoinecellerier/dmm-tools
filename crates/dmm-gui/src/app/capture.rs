@@ -2,7 +2,7 @@
 //! the software transform, the session statistics, the graph, the history
 //! and the recording — in that order, and the stores it is kept in.
 
-use dmm_lib::measurement::{MainLabel, Measurement};
+use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry;
 use dmm_lib::stats::SeriesStats;
 use dmm_lib::transform::Transform;
@@ -263,7 +263,7 @@ fn plot(graph: &mut Graph, m: &Measurement) {
         unit,
         display_raw,
         series,
-        main_label: m.main_label.map(MainLabel::as_str),
+        main_label: m.main_label,
         levels,
         overlays: &overlays,
     };

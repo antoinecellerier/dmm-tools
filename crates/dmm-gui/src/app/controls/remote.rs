@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
@@ -12,10 +13,15 @@ use crate::app::App;
 /// and nothing more — the key's own words when the meter has no key of that
 /// name to press.
 fn context_key_hover(l10n: &Localizer, key: &dmm_lib::protocol::MeterKey) -> String {
-    key.hover.map_or_else(
-        || tr!(l10n, "remote-press-key", key = key.label).into_owned(),
-        str::to_string,
-    )
+    match key.hover {
+        Some(hover) => l10n.label(TextKind::KeyHover, hover).into_owned(),
+        None => tr!(
+            l10n,
+            "remote-press-key",
+            key = l10n.label(TextKind::Key, key.label)
+        )
+        .into_owned(),
+    }
 }
 
 /// Width of the rule between the meter's buttons and the Scale chip, in
@@ -351,7 +357,8 @@ impl App {
                 if !reading.is_some_and(|m| (key.applies)(m)) {
                     continue;
                 }
-                let text = RichText::new(key.label).font(egui::FontId::proportional(font_size));
+                let text = RichText::new(l10n.label(TextKind::Key, key.label))
+                    .font(egui::FontId::proportional(font_size));
                 if ui
                     .add(egui::Button::new(text))
                     .on_hover_text(context_key_hover(l10n, key))

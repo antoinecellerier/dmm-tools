@@ -1173,14 +1173,20 @@ mod tests {
 
     /// The most strings the main scenes may draw without going through the
     /// localizer. Comes down as each panel's text moves into `i18n/`, and
-    /// ends at what is meant to stay as it is: library labels, model names,
-    /// numbers with units. Two above the Linux count: macOS draws a
-    /// Minimise row in the shortcut help.
-    const UNTRANSLATED_CEILING: usize = 70;
+    /// ends at what is meant to stay as it is: brand and model names, key
+    /// symbols, theme names, the version. Two above the Linux count: macOS
+    /// draws a Minimise row in the shortcut help.
+    const UNTRANSLATED_CEILING: usize = 40;
 
     /// Every distinct text the whole app draws or names to a screen reader
-    /// in `scene`, under the pseudo-locale, that has a letter outside the
+    /// in `scene`, under the pseudo-locale, that has a word outside the
     /// brackets the pseudo-locale puts around each message.
+    ///
+    /// Numbers and unit symbols are never translated — a reading's "22V"
+    /// range, its "V", a "0.5 s" tick — and the library's labels made of
+    /// nothing else come back from the localizer as they are, unbracketed
+    /// ([`dmm_shared::l10n::is_units_only`]); text whose words outside the
+    /// brackets are all unit symbols is not counted.
     fn untranslated_texts(scene: impl Fn(&mut App)) -> std::collections::BTreeSet<String> {
         let mut settings = Settings {
             auto_connect: false,
@@ -1198,61 +1204,81 @@ mod tests {
             &options,
         ));
         scene(&mut app);
+        let mut texts = drawn_texts(&last_frame(&mut app));
+        texts.retain(|t| {
+            let mut depth = 0usize;
+            let outside: String = t
+                .chars()
+                .filter(|&c| match c {
+                    '[' => {
+                        depth += 1;
+                        false
+                    }
+                    ']' => {
+                        depth = depth.saturating_sub(1);
+                        false
+                    }
+                    _ => depth == 0,
+                })
+                .collect();
+            outside.chars().any(|c| c.is_ascii_alphabetic())
+                && !dmm_shared::l10n::is_units_only(&outside)
+        });
+        texts
+    }
+
+    /// The fourth frame of `app` in a 1600×1000 window, AccessKit on: by
+    /// then the layout has settled.
+    fn last_frame(app: &mut App) -> egui::FullOutput {
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut frame = eframe::Frame::_new_kittest();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
-        let mut texts = std::collections::BTreeSet::new();
-        for pass in 0..4 {
-            let mut out = ctx.run_ui(
+        let mut out = None;
+        for _ in 0..4 {
+            let mut o = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(screen),
                     ..Default::default()
                 },
-                |ui| eframe::App::ui(&mut app, ui, &mut frame),
+                |ui| eframe::App::ui(app, ui, &mut frame),
             );
-            out.textures_delta.clear();
-            if pass < 3 {
-                continue;
-            }
-            fn walk(shape: &egui::Shape, texts: &mut std::collections::BTreeSet<String>) {
-                match shape {
-                    egui::Shape::Text(t) => {
-                        texts.insert(t.galley.text().to_string());
-                    }
-                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, texts)),
-                    _ => {}
+            o.textures_delta.clear();
+            out = Some(o);
+        }
+        out.expect("four frames ran")
+    }
+
+    /// Every distinct text a frame draws or names to a screen reader.
+    fn drawn_texts(out: &egui::FullOutput) -> std::collections::BTreeSet<String> {
+        fn walk(shape: &egui::Shape, texts: &mut std::collections::BTreeSet<String>) {
+            match shape {
+                egui::Shape::Text(t) => {
+                    texts.insert(t.galley.text().to_string());
                 }
-            }
-            for clipped in &out.shapes {
-                walk(&clipped.shape, &mut texts);
-            }
-            for (_, node) in out
-                .platform_output
-                .accesskit_update
-                .map(|u| u.nodes)
-                .unwrap_or_default()
-            {
-                texts.extend(node.label().map(str::to_string));
-                texts.extend(node.value().map(str::to_string));
-                texts.extend(node.description().map(str::to_string));
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, texts)),
+                _ => {}
             }
         }
-        texts.retain(|t| {
-            let mut depth = 0usize;
-            t.chars().any(|c| match c {
-                '[' => {
-                    depth += 1;
-                    false
-                }
-                ']' => {
-                    depth = depth.saturating_sub(1);
-                    false
-                }
-                c => depth == 0 && c.is_ascii_alphabetic(),
-            })
-        });
+        let mut texts = std::collections::BTreeSet::new();
+        for clipped in &out.shapes {
+            walk(&clipped.shape, &mut texts);
+        }
+        for (_, node) in a11y_nodes(out) {
+            texts.extend(node.label().map(str::to_string));
+            texts.extend(node.value().map(str::to_string));
+            texts.extend(node.description().map(str::to_string));
+        }
         texts
+    }
+
+    /// The AccessKit nodes a frame sent.
+    fn a11y_nodes(out: &egui::FullOutput) -> Vec<(NodeId, Node)> {
+        out.platform_output
+            .accesskit_update
+            .clone()
+            .map(|u| u.nodes)
+            .unwrap_or_default()
     }
 
     /// Text that never went through the localizer shows unbracketed under
@@ -1262,6 +1288,9 @@ mod tests {
         let mut found = untranslated_texts(|_| {});
         found.extend(untranslated_texts(|app| app.settings_open = true));
         found.extend(untranslated_texts(|app| app.shortcut_help.open = true));
+        found.extend(untranslated_texts(|app| {
+            app.last_measurement = Some(labelled_reading());
+        }));
         assert!(
             found.len() <= UNTRANSLATED_CEILING,
             "{} untranslated strings, the ceiling is {UNTRANSLATED_CEILING}: {found:#?}",
@@ -1271,6 +1300,140 @@ mod tests {
             found.len() + 20 > UNTRANSLATED_CEILING,
             "{} untranslated strings: lower UNTRANSLATED_CEILING to match",
             found.len()
+        );
+    }
+
+    /// A reading with a library label in every place the display has one: a
+    /// mode, a named main reading, sub-values with MIN/MAX timestamps, flags,
+    /// and a range of digits and a unit only.
+    fn labelled_reading() -> Measurement {
+        use dmm_lib::flags::StatusFlags;
+        use dmm_lib::measurement::{AuxValue, MainLabel, MeasuredValue};
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(1.234),
+            "V",
+            StatusFlags {
+                hold: true,
+                max: true,
+                low_battery: true,
+                ..StatusFlags::default()
+            },
+        );
+        m.mode = "AC+DC V".into();
+        m.range_label = "22V".into();
+        m.main_label = Some(MainLabel::Dc);
+        let aux = |label: &'static str, secs| AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(0.5),
+            unit: "".into(),
+            display_raw: Some("0.500".to_string()),
+            elapsed_secs: secs,
+        };
+        m.aux_values = vec![aux("AC", None), aux("Max", Some(3))];
+        m
+    }
+
+    /// A language whose files translate a few of the library's labels, as
+    /// a translator's `lib.ftl` and `lib-names.ftl` would.
+    fn french() -> std::sync::Arc<dmm_shared::l10n::Localizer> {
+        use dmm_shared::l10n::{Language, Localizer, Options, Resource};
+        static FRENCH: Language = Language {
+            id: "fr",
+            native_name: "Français",
+            reviewed: true,
+        };
+        let lib = Resource {
+            locale: "fr",
+            path: "lib.ftl",
+            source: "mode-v-dc = V CC\nqualifier-mode-rel = { $mode } RÉL\n\
+                     aux-max = Maxi\nkey-zero = ZÉRO\n",
+        };
+        let names = Resource {
+            locale: "fr",
+            path: "lib-names.ftl",
+            source: "flag-hold = MAINTIEN\nmain-label-dc = CC\n",
+        };
+        let resources = [crate::l10n::resources(), vec![lib, names]].concat();
+        std::sync::Arc::new(Localizer::new(&FRENCH, &resources, &Options::default()))
+    }
+
+    /// The library's labels are drawn in the app's language — a mode, one
+    /// the library composed around a qualifier, a flag, the main reading's
+    /// name, a sub-value, a key — while a trace hidden under its English
+    /// label in the settings stays hidden, and stays saved as it was.
+    #[test]
+    fn library_labels_are_drawn_in_the_apps_language() {
+        use dmm_lib::flags::StatusFlags;
+        use dmm_lib::measurement::{AuxValue, MainLabel, MeasuredValue};
+        use dmm_lib::protocol::{MeterKey, MeterKeys};
+        const ZERO: &[MeterKey] = &[MeterKey {
+            command: "zero",
+            label: "ZERO",
+            hover: None,
+            applies: |_| true,
+        }];
+        let mut settings = Settings {
+            auto_connect: false,
+            ..Settings::default()
+        };
+        settings.hidden_series.insert("Max".to_string());
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        app.l10n = french();
+        app.connection.state = ConnectionState::Connected;
+        app.connection.meter = Some(ConnectedMeter {
+            supported_commands: vec!["hold".to_string(), "zero".to_string()],
+            meter_keys: MeterKeys {
+                functions: &[],
+                context: ZERO,
+            },
+            ..ConnectedMeter::test_fixture(None)
+        });
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(1.234),
+            "V",
+            StatusFlags {
+                hold: true,
+                ..StatusFlags::default()
+            },
+        );
+        m.mode = "V DC REL".into();
+        m.range_label = "6V".into();
+        m.main_label = Some(MainLabel::Dc);
+        m.aux_values = vec![AuxValue {
+            label: "Max".into(),
+            value: MeasuredValue::Normal(9.876),
+            unit: "".into(),
+            display_raw: Some(" 9.876".to_string()),
+            elapsed_secs: None,
+        }];
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(connection::DmmMessage::Measurement(m))
+            .expect("the channel is open");
+        app.connection.rx = Some(rx);
+        app.drain_messages();
+
+        let out = last_frame(&mut app);
+        let texts = drawn_texts(&out);
+        for drawn in ["V CC RÉL", "MAINTIEN", "Maxi", "ZÉRO", "6V"] {
+            assert!(texts.contains(drawn), "no {drawn:?} in {texts:#?}");
+        }
+        assert!(
+            texts.iter().any(|t| t.starts_with("CC ")),
+            "no main reading named CC in {texts:#?}"
+        );
+        // HOLD stays: the remote button is the app's own key symbol.
+        for english in ["V DC REL", "Max", "ZERO", "DC"] {
+            assert!(!texts.contains(english), "{english:?} drawn in {texts:#?}");
+        }
+        let chip = a11y_nodes(&out)
+            .into_iter()
+            .find(|(_, n)| n.label() == Some("Show Maxi trace"))
+            .map(|(_, n)| n.toggled())
+            .expect("a Show: chip for the sub-value");
+        assert_eq!(chip, Some(egui::accesskit::Toggled::False));
+        assert_eq!(
+            app.settings.hidden_series,
+            std::collections::BTreeSet::from(["Max".to_string()])
         );
     }
 
