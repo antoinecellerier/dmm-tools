@@ -19,6 +19,8 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 
 use chrono::{DateTime, SubsecRound, TimeDelta, Utc};
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
@@ -76,18 +78,19 @@ impl Tag {
     }
 
     /// What the top bar says when it has room.
-    pub(super) fn label(&self) -> String {
+    pub(super) fn label(&self, l10n: &Localizer) -> String {
         match self {
-            Tag::Release(_) => format!("{} available \u{2197}", self.name()),
-            Tag::Dev(_) => "Newer dev build \u{2197}".to_string(),
+            Tag::Release(_) => tr!(l10n, "settings-update-release", version = self.name()),
+            Tag::Dev(_) => tr!(l10n, "settings-update-dev"),
         }
+        .into_owned()
     }
 
-    /// What it says when it is short of room.
-    pub(super) fn short_label(&self) -> String {
+    /// What it says when it is short of room: a release's tag alone.
+    pub(super) fn short_label(&self, l10n: &Localizer) -> String {
         match self {
             Tag::Release(_) => format!("{} \u{2197}", self.name()),
-            Tag::Dev(_) => "Update \u{2197}".to_string(),
+            Tag::Dev(_) => tr!(l10n, "settings-update-dev-short").into_owned(),
         }
     }
 }
@@ -464,8 +467,9 @@ mod tests {
             tag.url(),
             "https://github.com/antoinecellerier/dmm-tools/releases/tag/v0.8.0"
         );
-        assert_eq!(tag.label(), "v0.8.0 available \u{2197}");
-        assert_eq!(tag.short_label(), "v0.8.0 \u{2197}");
+        let l10n = &crate::l10n::english();
+        assert_eq!(tag.label(l10n), "v0.8.0 available \u{2197}");
+        assert_eq!(tag.short_label(l10n), "v0.8.0 \u{2197}");
         let dev = Tag::parse("dev-f5ff045").unwrap();
         assert!(dev.url().ends_with("/releases/tag/dev-f5ff045"));
     }

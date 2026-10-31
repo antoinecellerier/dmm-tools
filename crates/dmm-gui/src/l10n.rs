@@ -11,6 +11,7 @@ use std::sync::{Arc, OnceLock};
 const GUI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui/top-bar.ftl"),
     dmm_shared::ftl!("en-US", "gui/connection.ftl"),
+    dmm_shared::ftl!("en-US", "gui/settings.ftl"),
 ];
 
 /// Everything the GUI shows: the shared help and its own messages.

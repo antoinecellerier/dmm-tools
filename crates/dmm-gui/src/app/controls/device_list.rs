@@ -1,6 +1,7 @@
 use dmm_lib::protocol::registry;
 use dmm_shared::help::DeviceTag;
 use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
@@ -95,9 +96,12 @@ fn groups(l10n: &Localizer) -> Vec<Group> {
                 .iter()
                 .map(|&(l, tag)| {
                     let name = l.display_name();
-                    let described = help
-                        .tag_text(tag, true)
-                        .map_or_else(|| name.to_string(), |tag| format!("{name} ({tag})"));
+                    let described = help.tag_text(tag, true).map_or_else(
+                        || name.to_string(),
+                        |tag| {
+                            tr!(l10n, "settings-device-entry", name = name, tag = tag).into_owned()
+                        },
+                    );
                     (l, described)
                 })
                 .collect();
@@ -262,11 +266,12 @@ pub(super) fn device_dropdown(
             }
             entry
         };
+        let auto_detect = tr!(l10n, "settings-auto-detect");
         let auto = add(
             ui,
             registry::AUTO_DEVICE_ID,
-            "Auto-detect",
-            "Auto-detect",
+            &auto_detect,
+            &auto_detect,
             &l10n.help().auto_description(),
         );
         entries.push((auto, None));
@@ -294,7 +299,9 @@ pub(super) fn device_dropdown(
         navigate_choice_entries(ui.ctx(), &responses);
         picked
     });
-    response.on_hover_text(label).a11y_label("Device");
+    response
+        .on_hover_text(label)
+        .a11y_label(&tr!(l10n, "settings-device.a11y"));
     picked
 }
 

@@ -1,7 +1,10 @@
 use crate::app::shortcuts::Shortcut;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
+use std::borrow::Cow;
 
 use crate::settings::{GraphLines, SpecFields, buffer_memory_estimate, format_sample_count};
 
@@ -52,14 +55,19 @@ fn setting_checkbox(ui: &mut Ui, value: &mut bool, label: &str, tooltip: &str) -
 /// within itself only when a whole line is too narrow for it (`color_edit`
 /// says why a `ui.horizontal` can't do this). Returns whether the panel
 /// checkbox changed, and whether a field did.
-fn specs_checkboxes(ui: &mut Ui, show: &mut bool, fields: &mut SpecFields) -> (bool, bool) {
+fn specs_checkboxes(
+    ui: &mut Ui,
+    l10n: &Localizer,
+    show: &mut bool,
+    fields: &mut SpecFields,
+) -> (bool, bool) {
     // Read before a click can flip it, so the frame draws what it measured.
     let on = *show;
-    let panel_label = if on {
-        "Specifications:"
-    } else {
-        "Specifications"
-    };
+    let panel_label = tr!(
+        l10n,
+        "settings-specs",
+        fields = if on { "shown" } else { "hidden" }
+    );
     let SpecFields {
         resolution,
         accuracy,
@@ -69,29 +77,29 @@ fn specs_checkboxes(ui: &mut Ui, show: &mut bool, fields: &mut SpecFields) -> (b
     let mut field_boxes = [
         (
             resolution,
-            "Resolution",
-            "Show the resolution in the specifications",
+            tr!(l10n, "settings-specs-resolution"),
+            tr!(l10n, "settings-specs-resolution.hover"),
         ),
         (
             accuracy,
-            "Accuracy",
-            "Show the accuracy in the specifications",
+            tr!(l10n, "settings-specs-accuracy"),
+            tr!(l10n, "settings-specs-accuracy.hover"),
         ),
         (
             input_impedance,
-            "Input Z",
-            "Show the input impedance in the full Specifications panel",
+            tr!(l10n, "settings-specs-input-z"),
+            tr!(l10n, "settings-specs-input-z.hover"),
         ),
         (
             notes,
-            "Notes",
-            "Show the manual's notes in the full Specifications panel",
+            tr!(l10n, "settings-specs-notes"),
+            tr!(l10n, "settings-specs-notes.hover"),
         ),
     ];
     let shown = if on { field_boxes.len() } else { 0 };
 
-    let width = std::iter::once(panel_label)
-        .chain(field_boxes[..shown].iter().map(|(_, label, _)| *label))
+    let width = std::iter::once(&*panel_label)
+        .chain(field_boxes[..shown].iter().map(|(_, label, _)| &**label))
         .map(|label| checkbox_width(ui, label))
         .sum::<f32>()
         + ui.spacing().item_spacing.x * shown as f32;
@@ -103,12 +111,8 @@ fn specs_checkboxes(ui: &mut Ui, show: &mut bool, fields: &mut SpecFields) -> (b
         size,
         egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
         |ui| {
-            let panel_changed = setting_checkbox(
-                ui,
-                show,
-                panel_label,
-                "Show accuracy and resolution for the current mode",
-            );
+            let panel_changed =
+                setting_checkbox(ui, show, &panel_label, &tr!(l10n, "settings-specs.hover"));
             let mut fields_changed = false;
             for (value, label, tooltip) in &mut field_boxes[..shown] {
                 fields_changed |= setting_checkbox(ui, value, label, tooltip);
@@ -122,23 +126,23 @@ fn specs_checkboxes(ui: &mut Ui, show: &mut bool, fields: &mut SpecFields) -> (b
 /// A **Sample interval** chip's label: what a 0 ms interval means, and whole
 /// seconds as seconds, as the **Buffer size** row beside it keeps its
 /// labels short.
-fn interval_label(ms: u32) -> String {
+fn interval_label(l10n: &Localizer, ms: u32) -> String {
     match ms {
-        0 => "Every reading".to_string(),
+        0 => tr!(l10n, "settings-interval-every-reading").into_owned(),
         ms if ms >= 1000 && ms % 1000 == 0 => format!("{}s", ms / 1000),
         ms => format!("{ms}ms"),
     }
 }
 
 /// What a **Sample interval** chip keeps, for its tooltip.
-fn interval_tooltip(ms: u32) -> String {
-    let every = match ms {
-        0 => return "Keep every reading the meter produces, at its own pace".to_string(),
-        1000 => "a second".to_string(),
-        ms if ms % 1000 == 0 => format!("every {} s", ms / 1000),
-        ms => format!("every {ms} ms"),
+fn interval_tooltip(l10n: &Localizer, ms: u32) -> String {
+    let (unit, n) = match ms {
+        0 => return tr!(l10n, "settings-interval-every-reading.hover").into_owned(),
+        1000 => ("second", 1),
+        ms if ms % 1000 == 0 => ("seconds", ms / 1000),
+        ms => ("ms", ms),
     };
-    format!("At most one reading {every}: the one nearest each tick")
+    tr!(l10n, "settings-interval-chip.hover", unit = unit, n = n).into_owned()
 }
 
 /// What a bound of `n` samples costs, as the **Buffer size** row states it:
@@ -243,11 +247,11 @@ impl App {
     /// only the mock can be asked to run on (`main.rs` refuses them beside a
     /// hardware `--device`), so picking a meter would leave the session timing
     /// its recording and dating its exports by a clock no meter ever ran on.
-    fn device_row_pin(&self) -> Option<&'static str> {
+    fn device_row_pin<'a>(&self, l10n: &'a Localizer) -> Option<Cow<'a, str>> {
         if self.replay.is_some() {
-            Some("(restart without --replay to pick a meter)")
+            Some(tr!(l10n, "settings-device-replay"))
         } else if !self.clock.is_real() {
-            Some("(restart without the clock flags to pick a meter)")
+            Some(tr!(l10n, "settings-device-clock"))
         } else {
             None
         }
@@ -275,8 +279,10 @@ impl App {
     /// **Device**, **Mock mode** while the mock is picked, and how a
     /// connection is made.
     fn show_meter_rows(&mut self, ui: &mut Ui) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         ui.horizontal_wrapped(|ui| {
-            let pinned = self.device_row_pin();
+            let pinned = self.device_row_pin(l10n);
             let has_override = self.settings.overrides.has_device();
             // What the selection resolves to, not what the file spells: an
             // alias, or an id no entry answers to, would otherwise leave the
@@ -284,19 +290,22 @@ impl App {
             // A name another brand sells the meter under marks its own row.
             let selected = self.picked_listing();
             let selected_id = selected.map_or(registry::AUTO_DEVICE_ID, |l| l.id());
-            let name = selected.map_or("Auto-detect", |l| l.display_name());
+            let name = selected.map_or_else(
+                || tr!(l10n, "settings-auto-detect"),
+                |l| Cow::Borrowed(l.display_name()),
+            );
             let label = if has_override {
-                format!("{name} (--device)")
+                tr!(l10n, "settings-device-pinned", name = name).into_owned()
             } else {
-                name.to_string()
+                name.into_owned()
             };
             let picked = ui
                 .scope(|ui| {
                     if pinned.is_some() {
                         ui.disable();
                     }
-                    ui.label("Device:");
-                    device_dropdown(ui, &self.l10n, selected_id, &label)
+                    ui.label(tr!(l10n, "settings-device"));
+                    device_dropdown(ui, l10n, selected_id, &label)
                 })
                 .inner;
             if let Some(note) = pinned {
@@ -327,16 +336,16 @@ impl App {
                 let has_override = self.settings.overrides.has_mock_mode();
                 // "Auto" = cycle through all modes, and leads the row.
                 let auto_selected = self.settings.shared.mock_mode.is_empty();
+                let pinned = if auto_selected && has_override {
+                    "yes"
+                } else {
+                    "no"
+                };
                 let auto = std::iter::once(Chip {
                     value: String::new(),
                     selected: auto_selected,
-                    label: if auto_selected && has_override {
-                        "Auto (cycle) (--mock-mode)"
-                    } else {
-                        "Auto (cycle)"
-                    }
-                    .to_string(),
-                    tooltip: "Cycle through all synthetic modes to exercise the GUI".to_string(),
+                    label: tr!(l10n, "settings-mock-auto", pinned = pinned).into_owned(),
+                    tooltip: tr!(l10n, "settings-mock-auto.hover").into_owned(),
                 });
                 let modes = MockMode::ALL.iter().map(|mode| {
                     let mode_label = mode.label();
@@ -345,14 +354,15 @@ impl App {
                         value: mode_label.to_string(),
                         selected,
                         label: if selected && has_override {
-                            format!("{mode_label} (--mock-mode)")
+                            tr!(l10n, "settings-mock-mode-pinned", mode = mode_label).into_owned()
                         } else {
                             mode_label.to_string()
                         },
                         tooltip: mode.description().to_string(),
                     }
                 });
-                if let Some(mock_mode) = chip_row(ui, "Mock mode:", auto.chain(modes)) {
+                let caption = tr!(l10n, "settings-mock-mode");
+                if let Some(mock_mode) = chip_row(ui, &caption, auto.chain(modes)) {
                     self.settings.shared.mock_mode = mock_mode;
                     // Clear the override — user explicitly chose a mock mode
                     self.settings.overrides.mock_mode = None;
@@ -368,18 +378,19 @@ impl App {
             let changed = setting_checkbox(
                 ui,
                 &mut self.settings.auto_connect,
-                "Auto-connect on start",
-                "Open the USB connection automatically when the app launches",
+                &tr!(l10n, "settings-auto-connect"),
+                &tr!(l10n, "settings-auto-connect.hover"),
             ) | setting_checkbox(
                 ui,
                 &mut self.settings.query_device_name,
-                "Show device name on connect (beeps)",
-                "Query the meter's name after connecting — the meter will beep once",
+                &tr!(l10n, "settings-device-name"),
+                &tr!(l10n, "settings-device-name.hover"),
             );
+            let setting = l10n.help().bluetooth_setting();
             let label = if self.settings.overrides.has_bluetooth() {
-                format!("{} (--no-bluetooth)", self.l10n.help().bluetooth_setting())
+                tr!(l10n, "settings-bluetooth-pinned", setting = setting)
             } else {
-                self.l10n.help().bluetooth_setting().into_owned()
+                setting
             };
             // No reconnect: a session already running over an adapter would
             // be dropped by one, and the setting only decides what the next
@@ -388,8 +399,7 @@ impl App {
                 ui,
                 &mut self.settings.shared.bluetooth,
                 &label,
-                "Look for a Bluetooth adapter or meter in range when no USB cable answers. \
-                 Takes effect on the next connect.",
+                &tr!(l10n, "settings-bluetooth.hover"),
             );
             if bluetooth_changed {
                 // Cleared like every other row the user sets by hand: the
@@ -405,16 +415,19 @@ impl App {
     /// **Sample interval** and **Buffer size**: side by side, as the buffer's
     /// caption reckons its hours from the interval.
     fn show_data_rows(&mut self, ui: &mut Ui) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         ui.horizontal_wrapped(|ui| {
             let chips = [0u32, 100, 200, 300, 500, 1000, 2000]
                 .into_iter()
                 .map(|ms| Chip {
                     value: ms,
                     selected: self.settings.sample_interval_ms == ms,
-                    label: interval_label(ms),
-                    tooltip: interval_tooltip(ms),
+                    label: interval_label(l10n, ms),
+                    tooltip: interval_tooltip(l10n, ms),
                 });
-            if let Some(ms) = chip_row(ui, "Sample interval:", chips) {
+            let caption = tr!(l10n, "settings-sample-interval");
+            if let Some(ms) = chip_row(ui, &caption, chips) {
                 self.settings.sample_interval_ms = ms;
                 self.settings.save();
                 self.apply_sample_interval();
@@ -438,23 +451,29 @@ impl App {
                     // Every reading comes at the meter's own pace, which the
                     // estimate cannot know: it says what it assumed.
                     let pace = if interval_ms == 0 {
-                        "at 10 readings a second"
+                        "every-reading"
                     } else {
-                        "at the current sample interval"
+                        "interval"
                     };
+                    let samples = format_sample_count(n);
                     Chip {
                         value: n,
                         selected: self.settings.max_samples == n,
-                        label: format_sample_count(n),
-                        tooltip: format!(
-                            "Keep up to {} samples in the graph and for export \u{2014} {memory}, \
-                             about {span} {pace}. A stopped recording kept beside them can \
-                             take as much again",
-                            format_sample_count(n)
-                        ),
+                        tooltip: tr!(
+                            l10n,
+                            "settings-buffer-size-chip.hover",
+                            pace = pace,
+                            count = n,
+                            samples = &samples,
+                            memory = memory,
+                            span = span,
+                        )
+                        .into_owned(),
+                        label: samples,
                     }
                 });
-            if let Some(n) = chip_row(ui, "Buffer size:", chips) {
+            let caption = tr!(l10n, "settings-buffer-size");
+            if let Some(n) = chip_row(ui, &caption, chips) {
                 self.settings.max_samples = n;
                 self.settings.save();
                 // Live: the graph and the history behind Export… evict down
@@ -467,34 +486,42 @@ impl App {
             }
             let (memory, span) = buffer_cost(self.settings.max_samples, overlays, aux, interval_ms);
             ui.label(
-                RichText::new(format!("({memory}, about {span})"))
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
+                RichText::new(tr!(
+                    l10n,
+                    "settings-buffer-cost",
+                    memory = memory,
+                    span = span
+                ))
+                .small()
+                .color(ui.visuals().weak_text_color()),
             );
         });
     }
 
     /// Which panels show, and what the Specifications panel shows.
     fn show_panel_rows(&mut self, ui: &mut Ui) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         ui.horizontal_wrapped(|ui| {
             let changed = setting_checkbox(
                 ui,
                 &mut self.settings.show_graph,
-                "Graph",
-                "Show the rolling time-series plot",
+                &tr!(l10n, "settings-graph"),
+                &tr!(l10n, "settings-graph.hover"),
             ) | setting_checkbox(
                 ui,
                 &mut self.settings.show_stats,
-                "Statistics",
-                "Show Min / Max / Mean / \u{3c3} / integral for the live session",
+                &tr!(l10n, "settings-statistics"),
+                &tr!(l10n, "settings-statistics.hover"),
             ) | setting_checkbox(
                 ui,
                 &mut self.settings.show_recording,
-                "Recording",
-                "Show the recording controls and sample log",
+                &tr!(l10n, "settings-recording"),
+                &tr!(l10n, "settings-recording.hover"),
             );
             let (specs_changed, fields_changed) = specs_checkboxes(
                 ui,
+                l10n,
                 &mut self.settings.show_specs,
                 &mut self.settings.spec_fields,
             );
@@ -511,6 +538,8 @@ impl App {
     /// **Zoom** and how the window sits on the desktop, then the update
     /// check.
     fn show_window_rows(&mut self, ui: &mut Ui) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         let zoom_row = ui.horizontal_wrapped(|ui| {
             let step = Shortcut::ZoomIn.keys(ui.ctx());
             let reset = Shortcut::ZoomReset.keys(ui.ctx());
@@ -519,12 +548,24 @@ impl App {
                 selected: self.settings.zoom_pct == level,
                 label: format!("{level}%"),
                 tooltip: if level == 100 {
-                    format!("Scale the GUI to 100% ({reset}, or {step} to step)")
+                    tr!(
+                        l10n,
+                        "settings-zoom-reset-chip.hover",
+                        reset = &reset,
+                        step = &step
+                    )
                 } else {
-                    format!("Scale the GUI to {level}% ({step} to step)")
-                },
+                    tr!(
+                        l10n,
+                        "settings-zoom-chip.hover",
+                        level = level,
+                        step = &step
+                    )
+                }
+                .into_owned(),
             });
-            if let Some(level) = chip_row(ui, "Zoom:", chips) {
+            let caption = tr!(l10n, "settings-zoom");
+            if let Some(level) = chip_row(ui, &caption, chips) {
                 self.settings.zoom_pct = level;
                 self.settings.save();
             }
@@ -538,10 +579,11 @@ impl App {
             if setting_checkbox(
                 ui,
                 &mut self.settings.hide_decorations,
-                "Hide window decorations",
-                &format!(
-                    "Borderless window — use {} to toggle back",
-                    Shortcut::ToggleDecorations.keys(ui.ctx())
+                &tr!(l10n, "settings-hide-decorations"),
+                &tr!(
+                    l10n,
+                    "settings-hide-decorations.hover",
+                    keys = Shortcut::ToggleDecorations.keys(ui.ctx())
                 ),
             ) {
                 self.apply_decorations(ui.ctx());
@@ -554,11 +596,12 @@ impl App {
                 ui,
                 !self.on_wayland,
                 &mut self.settings.always_on_top,
-                "Always on top",
+                &tr!(l10n, "settings-always-on-top"),
             )
-            .on_hover_text(format!(
-                "Keep the window above other desktop windows ({})",
-                Shortcut::ToggleAlwaysOnTop.keys(ui.ctx())
+            .on_hover_text(tr!(
+                l10n,
+                "settings-always-on-top.hover",
+                keys = Shortcut::ToggleAlwaysOnTop.keys(ui.ctx())
             ))
             .on_disabled_hover_text(ALWAYS_ON_TOP_WAYLAND_HINT);
             if response.changed() {
@@ -580,9 +623,8 @@ impl App {
                 if setting_checkbox(
                     ui,
                     &mut self.settings.check_for_updates,
-                    "Check for new versions",
-                    "Once a day, ask GitHub whether a newer release is out. \
-                     GitHub sees your IP address; nothing about your meter is sent.",
+                    &tr!(l10n, "settings-check-updates"),
+                    &tr!(l10n, "settings-check-updates.hover"),
                 ) {
                     self.settings.save();
                 }
@@ -623,26 +665,29 @@ impl App {
 
         self.show_color_customization(ui);
 
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         ui.horizontal_wrapped(|ui| {
             let chips = [
                 (
                     GraphLines::Patterned,
-                    "Patterned",
-                    "Dashed and dotted sub-value lines, told apart without colour",
+                    tr!(l10n, "settings-graph-lines-patterned"),
+                    tr!(l10n, "settings-graph-lines-patterned.hover"),
                 ),
                 (
                     GraphLines::Solid,
-                    "Solid",
-                    "Continuous lines, told apart by colour and the key",
+                    tr!(l10n, "settings-graph-lines-solid"),
+                    tr!(l10n, "settings-graph-lines-solid.hover"),
                 ),
             ]
             .map(|(value, label, tooltip)| Chip {
                 value,
                 selected: self.settings.graph_lines == value,
-                label: label.to_string(),
-                tooltip: tooltip.to_string(),
+                label: label.into_owned(),
+                tooltip: tooltip.into_owned(),
             });
-            if let Some(lines) = chip_row(ui, "Graph lines:", chips) {
+            let caption = tr!(l10n, "settings-graph-lines");
+            if let Some(lines) = chip_row(ui, &caption, chips) {
                 self.settings.graph_lines = lines;
                 self.settings.save();
             }
@@ -992,6 +1037,9 @@ mod tests {
 
     #[test]
     fn interval_chips_name_what_they_keep() {
+        let l10n = &crate::l10n::english();
+        let interval_label = |ms| interval_label(l10n, ms);
+        let interval_tooltip = |ms| interval_tooltip(l10n, ms);
         assert_eq!(interval_label(0), "Every reading");
         assert_eq!(interval_label(300), "300ms");
         assert_eq!(interval_label(1000), "1s");

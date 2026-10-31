@@ -72,7 +72,7 @@ impl App {
         let notice_w = self
             .update_check
             .notice(self.settings.check_for_updates)
-            .map_or(0.0, |tag| text_width(ui, &tag.label()) + spacing);
+            .map_or(0.0, |tag| text_width(ui, &tag.label(l10n)) + spacing);
         let one_row = cached_left + link_shown_w + cached_right + notice_w + spacing < available;
 
         // Row 1: device label, action buttons, status indicator
@@ -383,7 +383,7 @@ impl App {
         let spacing = ui.spacing().item_spacing.x;
         let room = ui.available_width() - cached_width;
         let notice_text = notice.as_ref().and_then(|tag| {
-            [tag.label(), tag.short_label()]
+            [tag.label(l10n), tag.short_label(l10n)]
                 .into_iter()
                 .map(|text| {
                     let width = text_width(ui, &text) + spacing;
