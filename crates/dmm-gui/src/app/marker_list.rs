@@ -2,7 +2,9 @@
 //! and the Recording panel's log, where each marker sits among the samples
 //! at its reading and its note is written.
 
+use dmm_shared::tr;
 use eframe::egui::{self, Key, RichText, Ui};
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::time::Instant;
@@ -14,11 +16,23 @@ use crate::markers::{Marker, NOTE_MAX_CHARS};
 use crate::recording::{BufferRole, Sample};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 
-/// What `N` says when there is nothing it could mark.
-const NO_READING: &str = "No reading to mark yet";
+/// Why notes cannot be written now: what hides the list they are written
+/// in.
+#[derive(Debug, Clone, Copy)]
+enum NotesHidden {
+    BigMeter,
+    Recording,
+}
 
-/// What `N` says of a reading that already has a marker, after its number.
-const ALREADY_MARKED: &str = "is already on this reading";
+impl NotesHidden {
+    /// The selector the messages saying so take.
+    fn key(self) -> &'static str {
+        match self {
+            Self::BigMeter => "big-meter",
+            Self::Recording => "recording",
+        }
+    }
+}
 
 /// Narrower than this, a marker's number and note go on a line of their own
 /// under the reading rather than beside it.
@@ -309,7 +323,7 @@ impl App {
     /// or disconnected, that reading is the moment the user is looking at.
     pub(super) fn add_marker(&mut self, write_note: bool) {
         let Some(m) = self.last_measurement.as_ref() else {
-            self.toast = Some(Toast::info(NO_READING));
+            self.toast = Some(Toast::info(tr!(self.l10n, "markers-no-reading")));
             return;
         };
         let (at, reading) = (m.timestamp, log_line(m));
@@ -325,7 +339,7 @@ impl App {
     /// marker: the next frame's trim would take it away unseen.
     fn mark_reading(&mut self, at: Instant, reading: String, write_note: bool) {
         if !reading_held(&self.graph, &self.capture.recording, at) {
-            self.toast = Some(Toast::info(NO_READING));
+            self.toast = Some(Toast::info(tr!(self.l10n, "markers-no-reading")));
             return;
         }
         // The reading's own wall time where the buffer holds it; a point
@@ -341,16 +355,34 @@ impl App {
             // Ctrl+N opens the note already there.
             Err(number) if write_note => (number, false),
             Err(number) => {
-                self.toast = Some(Toast::info(format!("Marker {number} {ALREADY_MARKED}")));
+                self.toast = Some(Toast::info(tr!(
+                    self.l10n,
+                    "markers-already-marked",
+                    number = number
+                )));
                 return;
             }
         };
         match self.where_notes_are_written() {
             None if write_note => self.marker_list.focus = Some(number),
             None => {}
-            Some(how) => {
-                let what = if added { "added" } else { ALREADY_MARKED };
-                self.toast = Some(Toast::info(format!("Marker {number} {what}. {how}")));
+            Some(hidden) => {
+                let text = if added {
+                    tr!(
+                        self.l10n,
+                        "markers-added",
+                        number = number,
+                        hidden = hidden.key()
+                    )
+                } else {
+                    tr!(
+                        self.l10n,
+                        "markers-already-marked-hidden",
+                        number = number,
+                        hidden = hidden.key()
+                    )
+                };
+                self.toast = Some(Toast::info(text));
             }
         }
     }
@@ -385,17 +417,20 @@ impl App {
     fn open_marker_note(&mut self, number: u32) {
         match self.where_notes_are_written() {
             None => self.marker_list.focus = Some(number),
-            Some(how) => self.toast = Some(Toast::info(how)),
+            Some(hidden) => {
+                let text = tr!(self.l10n, "markers-note-hidden", hidden = hidden.key());
+                self.toast = Some(Toast::info(text));
+            }
         }
     }
 
-    /// `None` while the Recording panel is on screen; otherwise what to do
-    /// to bring it back, where notes are written.
-    fn where_notes_are_written(&self) -> Option<&'static str> {
+    /// `None` while the Recording panel is on screen; otherwise what hides
+    /// it, where notes are written.
+    fn where_notes_are_written(&self) -> Option<NotesHidden> {
         if self.big_meter_mode != BigMeterMode::Off {
-            Some("Leave big meter mode to add a note.")
+            Some(NotesHidden::BigMeter)
         } else if !self.settings.show_recording {
-            Some("Turn on Recording in Settings to add a note.")
+            Some(NotesHidden::Recording)
         } else {
             None
         }
@@ -422,6 +457,8 @@ impl App {
             // ends the edit is gone, so the edit ends here.
             self.marker_list.refollow = edit.following;
         }
+        // A handle, as the end of the log borrows the app.
+        let l10n = self.l10n.clone();
         let recording_role = self.capture.recording.role() == BufferRole::Recording;
         let (samples, recorded) = self.capture.recording.recording_slice();
         if recorded.is_empty() && self.markers.is_empty() {
@@ -446,9 +483,10 @@ impl App {
             .max(recorded.start);
         if first > recorded.start {
             ui.label(
-                RichText::new(format!(
-                    "Export to see the samples before {}.",
-                    samples[first].wall_time.format("%H:%M:%S")
+                RichText::new(tr!(
+                    l10n,
+                    "markers-log-cut",
+                    time = samples[first].wall_time.format("%H:%M:%S").to_string()
                 ))
                 .small()
                 .color(weak),
@@ -462,9 +500,7 @@ impl App {
         if max_height < line
             && let Some(n) = self.marker_list.focus.take()
         {
-            self.toast = Some(Toast::info(format!(
-                "Make the Recording panel taller to write marker {n}'s note."
-            )));
+            self.toast = Some(Toast::info(tr!(l10n, "markers-log-too-short", number = n)));
         }
 
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
@@ -478,7 +514,7 @@ impl App {
         let rows = LogRows::new(samples, first..recorded.end, &times);
         // Each marker row's reading, and what the row says of a reading the
         // graph or the recording has dropped.
-        let labels: Vec<(String, Option<&'static str>)> = rows
+        let labels: Vec<(String, Option<Cow<str>>)> = rows
             .markers
             .iter()
             .map(|&(_, i, sample)| {
@@ -488,9 +524,9 @@ impl App {
                     None => m.reading.clone(),
                 };
                 let tag = if !graph.holds(m.at) {
-                    Some("not on the graph")
+                    Some(tr!(l10n, "markers-off-graph"))
                 } else if recording_role && !recording.in_recording(m.at) {
-                    Some("not in the recording")
+                    Some(tr!(l10n, "markers-off-recording"))
                 } else {
                     None
                 };
@@ -522,7 +558,7 @@ impl App {
                             .x
                     };
                     let reading = width(text, &log_font());
-                    reading + tag.map_or(0.0, |t| spacing + width(t, &small))
+                    reading + tag.as_deref().map_or(0.0, |t| spacing + width(t, &small))
                 })
                 .fold(0.0, f32::max)
         });
@@ -637,7 +673,7 @@ impl App {
                             );
                             let plus = ui.painter().layout_no_wrap("+".into(), log_font(), color);
                             let (body, tip) = tag_shape(slot, plus.size().x);
-                            let add = format!("Add a marker at {time}");
+                            let add = tr!(l10n, "markers-add", time = time.to_string());
                             let response = ui
                                 .interact(
                                     egui::Rect::from_min_max(
@@ -647,10 +683,10 @@ impl App {
                                     egui::Id::unique(("marker_add", s.measurement.timestamp)),
                                     egui::Sense::CLICK,
                                 )
-                                .on_hover_text(&add)
+                                .on_hover_text(add.as_ref())
                                 .on_hover_cursor(egui::CursorIcon::PointingHand);
                             response.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::Role::Button, true, &add)
+                                egui::WidgetInfo::labeled(egui::Role::Button, true, add.as_ref())
                             });
                             let stroke = egui::Stroke::new(
                                 if response.hovered() { 1.5 } else { 1.0 },
@@ -690,7 +726,7 @@ impl App {
                 };
                 // The tag keeps its room: the reading is what gets cut.
                 let reading_label = |ui: &mut Ui| {
-                    let tag = tag.map(|tag| {
+                    let tag = tag.as_deref().map(|tag| {
                         egui::WidgetText::from(RichText::new(tag).small().color(weak)).into_galley(
                             ui,
                             Some(egui::TextWrapMode::Extend),
@@ -720,7 +756,7 @@ impl App {
                 // reading, and greyed once the graph has dropped the
                 // reading, with nowhere left to show it.
                 let number_button = |ui: &mut Ui| {
-                    let show = format!("Show marker {number} on the graph");
+                    let show = tr!(l10n, "markers-show", number = number);
                     let tag = |ui: &mut Ui| {
                         let (slot, _) = ui.allocate_exact_size(
                             egui::vec2(number_width, line),
@@ -754,28 +790,32 @@ impl App {
                         );
                         painter.galley(body.center() - galley.size() / 2.0, galley, tag_text);
                         response.widget_info(|| {
-                            egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), &show)
+                            egui::WidgetInfo::labeled(
+                                egui::Role::Button,
+                                ui.is_enabled(),
+                                show.as_ref(),
+                            )
                         });
                         response
                     };
                     let button = ui
                         .add_enabled(on_graph, tag)
-                        .on_hover_text(&show)
+                        .on_hover_text(show.as_ref())
                         .on_hover_cursor(egui::CursorIcon::PointingHand)
-                        .on_disabled_hover_text(format!(
-                            "Marker {number}'s reading is no longer on the graph"
-                        ))
+                        .on_disabled_hover_text(
+                            tr!(l10n, "markers-show.hover-disabled", number = number).as_ref(),
+                        )
                         .a11y_label(&show);
                     crate::a11y::paint_focus_ring(ui, &button);
                     button.clicked()
                 };
                 let delete_button = |ui: &mut Ui| {
-                    let label = format!("Delete marker {number}");
+                    let label = tr!(l10n, "markers-delete", number = number);
                     ui.add_sized(
                         [delete_width, line],
                         egui::Button::new(RichText::new("\u{00D7}").font(log_font())),
                     )
-                    .on_hover_text(&label)
+                    .on_hover_text(label.as_ref())
                     .a11y_label(&label)
                     .clicked()
                 };
@@ -783,13 +823,17 @@ impl App {
                     ui.add(
                         egui::TextEdit::singleline(note)
                             .id(id)
-                            .hint_text(RichText::new("Add a note").font(log_font()))
+                            .hint_text(RichText::new(tr!(l10n, "markers-note")).font(log_font()))
                             .font(log_font())
                             .margin(egui::Margin::symmetric(4, 0))
                             .char_limit(NOTE_MAX_CHARS)
                             .desired_width(width),
                     )
-                    .a11y_label(&format!("Note for marker {number}"))
+                    .a11y_label(&tr!(
+                        l10n,
+                        "markers-note.a11y",
+                        number = number
+                    ))
                 };
                 // number, note, ×, in that order for Tab.
                 let mut marker_column = |ui: &mut Ui, note_width: f32| {
@@ -1022,7 +1066,7 @@ mod tests {
         send(&mut app, "AC V", at + Duration::from_secs(1));
         app.mark_reading(at, "1.234 V".into(), true);
         assert!(app.markers.is_empty());
-        assert_eq!(toast(&app), Some(NO_READING));
+        assert_eq!(toast(&app), Some("No reading to mark yet"));
     }
 
     /// The log draws the rows in view, so a frame costs no more for a
@@ -1108,7 +1152,7 @@ mod tests {
         let mut app = app();
         app.add_marker(false);
         assert!(app.markers.is_empty());
-        assert_eq!(toast(&app), Some(NO_READING));
+        assert_eq!(toast(&app), Some("No reading to mark yet"));
     }
 
     /// The reading on screen is what gets marked, once.
@@ -1147,7 +1191,7 @@ mod tests {
         app.clear_session();
         app.add_marker(false);
         assert!(app.markers.is_empty());
-        assert_eq!(toast(&app), Some(NO_READING));
+        assert_eq!(toast(&app), Some("No reading to mark yet"));
     }
 
     /// With the Recording panel out of view, the toast says where notes are

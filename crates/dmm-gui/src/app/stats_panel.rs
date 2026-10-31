@@ -4,6 +4,8 @@
 
 use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::stats::{self, RunningStats};
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, Color32, RichText, Ui};
 
 use super::App;
@@ -16,7 +18,8 @@ struct FormattedStatsGroup {
     /// Sample standard deviation, written like the average.
     sd: String,
     count: u64,
-    /// Formatted integral string (e.g. "   0.2925 mAh"), or None if not integrable.
+    /// The integral's line, caption and all (e.g. "∫:    0.2925 mAh (12s)"),
+    /// or None if not integrable.
     integral: Option<String>,
 }
 
@@ -42,7 +45,9 @@ impl FormattedStats {
     /// Max are whole numbers.
     ///
     /// [`Graph::decimals`]: crate::graph::Graph::decimals
+    #[allow(clippy::too_many_arguments)]
     fn new(
+        l10n: &Localizer,
         stats: &RunningStats,
         visible: Option<&RunningStats>,
         unit: &str,
@@ -58,9 +63,24 @@ impl FormattedStats {
             }
         };
         let fmt_integral = |info: Option<(f64, &str, Option<f64>)>| -> Option<String> {
-            info.map(|(val, disp_unit, dt)| match dt {
-                Some(secs) => format!("{val:>10.4} {disp_unit} ({secs:.0}s)"),
-                None => format!("{val:>10.4} {disp_unit}"),
+            info.map(|(val, disp_unit, dt)| {
+                let value = format!("{val:>10.4}");
+                match dt {
+                    Some(secs) => tr!(
+                        l10n,
+                        "stats-integral",
+                        value = value,
+                        unit = disp_unit,
+                        seconds = format!("{secs:.0}")
+                    ),
+                    None => tr!(
+                        l10n,
+                        "stats-integral-untimed",
+                        value = value,
+                        unit = disp_unit
+                    ),
+                }
+                .into_owned()
             })
         };
         // One accumulator type on both sides, so the two groups cannot drift
@@ -85,6 +105,32 @@ impl FormattedStats {
     }
 }
 
+/// The Min, Max, Mean and σ rows of the wide layout: each caption, the
+/// space to put before it so that it ends where the widest one does, and
+/// its figure. `width` measures a caption as it is drawn: by its laid-out
+/// width, not its characters, which in another language need not be one
+/// monospace cell each.
+fn captioned_rows<'a>(
+    l10n: &'a Localizer,
+    group: &'a FormattedStatsGroup,
+    width: impl Fn(&str) -> f32,
+) -> [(std::borrow::Cow<'a, str>, f32, &'a str); 4] {
+    let captions = [
+        tr!(l10n, "stats-min"),
+        tr!(l10n, "stats-max"),
+        tr!(l10n, "stats-mean"),
+        tr!(l10n, "stats-sd"),
+    ];
+    let widths = captions.each_ref().map(|c| width(c));
+    let widest = widths.iter().copied().fold(0.0, f32::max);
+    let values = [&group.min, &group.max, &group.avg, &group.sd];
+    let mut captions = captions.into_iter();
+    std::array::from_fn(|i| {
+        let caption = captions.next().unwrap_or_default();
+        (caption, widest - widths[i], values[i].as_str())
+    })
+}
+
 /// Draw one stats group as the wide layout's stacked rows.
 ///
 /// `color` tints every row — the visible block is drawn in the weak text
@@ -93,6 +139,7 @@ impl FormattedStats {
 /// emits it right after this returns.
 fn show_stat_rows(
     ui: &mut Ui,
+    l10n: &Localizer,
     group: &FormattedStatsGroup,
     font_size: f32,
     color: Option<Color32>,
@@ -105,17 +152,40 @@ fn show_stat_rows(
         }
     };
     let mono = egui::FontId::monospace(font_size);
-    // Padded to the widest caption so the figures line up.
-    ui.label(styled(format!(" Min:{}", group.min), mono.clone()));
-    ui.label(styled(format!(" Max:{}", group.max), mono.clone()));
-    ui.label(styled(format!("Mean:{}", group.avg), mono.clone()));
-    ui.label(styled(format!("   \u{3c3}:{}", group.sd), mono.clone()));
+    // Unrounded: a width rounded up to the pixel would shift a short
+    // caption's figures right of the others'.
+    let width = |text: &str| {
+        let mut job = egui::text::LayoutJob::simple_singleline(
+            text.to_string(),
+            mono.clone(),
+            Color32::WHITE,
+        );
+        job.round_output_to_gui = false;
+        ui.fonts_mut(|f| f.layout_job(job).size().x)
+    };
+    let style = ui.style().clone();
+    let valign = ui.text_valign();
+    for (caption, pad, value) in captioned_rows(l10n, group, width) {
+        // One galley per row, as a single label was: the caption moved
+        // right by `pad`, the figure after it.
+        let mut row = egui::text::LayoutJob::default();
+        for (text, lead) in [(caption.into_owned(), pad), (value.to_string(), 0.0)] {
+            let font = egui::FontSelection::Default;
+            styled(text, mono.clone()).append_to(&mut row, &style, font, valign);
+            if let Some(last) = row.sections.last_mut()
+                && lead > 0.0
+            {
+                last.leading_space = lead;
+            }
+        }
+        ui.label(row);
+    }
     ui.label(styled(
-        format!("Count: {}", group.count),
+        tr!(l10n, "stats-count", count = group.count).into_owned(),
         egui::FontId::proportional(font_size),
     ));
     if let Some(int) = &group.integral {
-        ui.label(styled(format!("\u{222b}:{int}"), mono));
+        ui.label(styled(int.clone(), mono));
     }
 }
 
@@ -164,7 +234,10 @@ impl App {
         let visible_integral = visible_raw
             .and_then(|raw| stats::integral_display(raw, visible_unit))
             .map(|(value, unit)| (value, unit, self.graph.visible_data_span_secs()));
+        // A handle, as the Reset button below borrows the app.
+        let l10n = self.l10n.clone();
         let formatted = FormattedStats::new(
+            &l10n,
             &self.capture.session.stats,
             visible_stats.as_ref(),
             unit,
@@ -177,15 +250,21 @@ impl App {
         let sub_font = 11.0 * scale;
 
         if compact {
+            let (min, max, mean, sd) = (
+                tr!(l10n, "stats-min"),
+                tr!(l10n, "stats-max"),
+                tr!(l10n, "stats-mean"),
+                tr!(l10n, "stats-sd"),
+            );
             ui.horizontal_wrapped(|ui| {
                 let session = &formatted.session;
                 compact_figures(
                     ui,
                     [
-                        format!("Min:{}", session.min),
-                        format!("Max:{}", session.max),
-                        format!("Mean:{}", session.avg),
-                        format!("\u{3c3}:{}", session.sd),
+                        format!("{min}{}", session.min),
+                        format!("{max}{}", session.max),
+                        format!("{mean}{}", session.avg),
+                        format!("{sd}{}", session.sd),
                         format!("({})", session.count),
                     ],
                     main_font,
@@ -200,35 +279,32 @@ impl App {
                     compact_figures(
                         ui,
                         [
-                            format!("Visible: Min:{}", vis.min),
-                            format!("Max:{}", vis.max),
-                            format!("Mean:{}", vis.avg),
-                            format!("\u{3c3}:{}", vis.sd),
+                            format!("{} {min}{}", tr!(l10n, "stats-visible-caption"), vis.min),
+                            format!("{max}{}", vis.max),
+                            format!("{mean}{}", vis.avg),
+                            format!("{sd}{}", vis.sd),
                             format!("({})", vis.count),
                         ]
                         .into_iter()
-                        .chain(vis.integral.as_ref().map(|vint| format!("\u{222b}:{vint}"))),
+                        .chain(vis.integral.clone()),
                         sub_font,
                         Some(weak),
                     );
                 });
             }
             if let Some(int) = &formatted.session.integral {
-                ui.label(
-                    RichText::new(format!("\u{222b}:{int}"))
-                        .font(egui::FontId::monospace(main_font)),
-                );
+                ui.label(RichText::new(int).font(egui::FontId::monospace(main_font)));
                 self.show_integral_gap_warning(ui, sub_font);
             }
             self.show_alarm_counts(ui, main_font);
         } else {
             let heading = self.settings.theme_colors(ui.visuals().dark_mode).heading();
             ui.label(
-                RichText::new("Statistics")
+                RichText::new(tr!(l10n, "stats-heading"))
                     .font(egui::FontId::proportional(sub_font))
                     .color(heading),
             );
-            show_stat_rows(ui, &formatted.session, main_font, None);
+            show_stat_rows(ui, &l10n, &formatted.session, main_font, None);
             if formatted.session.integral.is_some() {
                 self.show_integral_gap_warning(ui, sub_font);
             }
@@ -240,12 +316,12 @@ impl App {
                 ui.add_space(4.0);
                 let weak = ui.visuals().weak_text_color();
                 ui.label(
-                    RichText::new("Visible")
+                    RichText::new(tr!(l10n, "stats-visible"))
                         .strong()
                         .font(egui::FontId::proportional(sub_font))
                         .color(heading),
                 );
-                show_stat_rows(ui, vis, sub_font, Some(weak));
+                show_stat_rows(ui, &l10n, vis, sub_font, Some(weak));
             }
         }
     }
@@ -257,27 +333,32 @@ impl App {
             return;
         };
         let limits = alarm.limits();
-        let counts: Vec<String> = [
-            limits.high.map(|_| format!("{} high", alarm.high_count)),
-            limits.low.map(|_| format!("{} low", alarm.low_count)),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        ui.label(
-            RichText::new(format!("Alarms: {}", counts.join(", ")))
-                .font(egui::FontId::proportional(font_size)),
-        )
-        .on_hover_text("Times the reading crossed each limit, each marked on the graph");
+        let which = match (limits.high, limits.low) {
+            (Some(_), Some(_)) => "both",
+            (Some(_), None) => "high",
+            (None, Some(_)) => "low",
+            // An alarm always has a limit.
+            (None, None) => return,
+        };
+        let text = tr!(
+            self.l10n,
+            "stats-alarm-counts",
+            limits = which,
+            high = alarm.high_count,
+            low = alarm.low_count
+        );
+        ui.label(RichText::new(text).font(egui::FontId::proportional(font_size)))
+            .on_hover_text(tr!(self.l10n, "stats-alarm-counts.hover").as_ref());
     }
 
     /// The session-stats reset control, identical in both layout modes.
     fn reset_button(&mut self, ui: &mut Ui, font_size: f32) {
         if ui
             .add(egui::Button::new(
-                RichText::new("Reset").font(egui::FontId::proportional(font_size)),
+                RichText::new(tr!(self.l10n, "stats-reset"))
+                    .font(egui::FontId::proportional(font_size)),
             ))
-            .on_hover_text("Reset Min / Max / Mean / \u{3c3} / integral and alarm counters")
+            .on_hover_text(tr!(self.l10n, "stats-reset.hover").as_ref())
             .clicked()
         {
             self.capture.session.reset();
@@ -297,25 +378,81 @@ impl App {
             return;
         }
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-        let limit = self.capture.session.integrator.max_dt_secs();
+        let limit = self.capture.session.integrator.max_dt_secs().to_string();
+        let count = self.capture.session.integrator.skipped_intervals;
         ui.label(
-            RichText::new(format!(
-                "\u{26A0} {} gaps >{limit}s skipped",
-                self.capture.session.integrator.skipped_intervals
-            ))
-            .font(egui::FontId::proportional(font_size))
-            .color(tc.status_warning()),
+            RichText::new(tr!(self.l10n, "stats-gaps", count = count, limit = &limit))
+                .font(egui::FontId::proportional(font_size))
+                .color(tc.status_warning()),
         )
-        .on_hover_text(format!(
-            "Stretches of more than {limit} s without a reading are not integrated: \
-             5 sample intervals, and at least 2 s. The integral is partial."
-        ));
+        .on_hover_text(tr!(self.l10n, "stats-gaps.hover", limit = &limit).as_ref());
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// In English the rows draw every figure where the space-padded text
+    /// they were drew it, in the session's font and the visible block's.
+    #[test]
+    fn the_wide_rows_draw_where_padded_text_did() {
+        fn glyphs(shape: &egui::Shape, out: &mut Vec<(char, egui::Pos2)>) {
+            match shape {
+                egui::Shape::Text(t) => {
+                    for row in &t.galley.rows {
+                        for g in &row.glyphs {
+                            if g.chr != ' ' {
+                                out.push((g.chr, t.pos + g.pos.to_vec2() + row.pos.to_vec2()));
+                            }
+                        }
+                    }
+                }
+                egui::Shape::Vec(v) => v.iter().for_each(|s| glyphs(s, out)),
+                _ => {}
+            }
+        }
+        let drawn = |draw: &dyn Fn(&mut Ui)| {
+            let ctx = crate::app::styled_context();
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| draw(ui));
+            out.textures_delta.clear();
+            let mut found = Vec::new();
+            for clipped in &out.shapes {
+                glyphs(&clipped.shape, &mut found);
+            }
+            found
+        };
+        let l10n = crate::l10n::english();
+        let group = FormattedStatsGroup {
+            min: "    1.0000 V".into(),
+            max: "    2.0000 V".into(),
+            avg: "    1.5000 V".into(),
+            sd: "    0.7071 V".into(),
+            count: 2,
+            integral: None,
+        };
+        let padded = [
+            " Min:    1.0000 V",
+            " Max:    2.0000 V",
+            "Mean:    1.5000 V",
+            "   \u{3c3}:    0.7071 V",
+        ];
+        for (size, color) in [(14.0, None), (11.0, Some(Color32::GRAY))] {
+            let rows = drawn(&|ui| show_stat_rows(ui, &l10n, &group, size, color));
+            let before = drawn(&|ui| {
+                for text in padded {
+                    let rich = RichText::new(text).font(egui::FontId::monospace(size));
+                    ui.label(match color {
+                        Some(c) => rich.color(c),
+                        None => rich,
+                    });
+                }
+                ui.label(RichText::new("Count: 2").font(egui::FontId::proportional(size)));
+            });
+            assert!(!before.is_empty());
+            assert_eq!(rows, before, "{size} pt");
+        }
+    }
 
     /// NCV levels in view: Min and Max as the whole numbers they are, the
     /// average to one decimal, and no integral for a level.
@@ -326,6 +463,7 @@ mod tests {
             levels.push(l);
         }
         let formatted = FormattedStats::new(
+            &crate::l10n::english(),
             &RunningStats::new(),
             Some(&levels),
             "",
@@ -344,5 +482,57 @@ mod tests {
         );
         // A level has no unit, so the panel finds no integral to show.
         assert_eq!(stats::integral_display(6.0, ""), None);
+    }
+
+    /// The captions are right-aligned to the widest, so the figures start
+    /// in one column, and the integral's line carries its own caption.
+    #[test]
+    fn the_wide_rows_line_up() {
+        let l10n = crate::l10n::english();
+        let mut readings = RunningStats::new();
+        for v in [1.0, 2.0] {
+            readings.push(v);
+        }
+        let formatted = FormattedStats::new(
+            &l10n,
+            &readings,
+            None,
+            "V",
+            "V",
+            (4, 4),
+            Some((3.0, "V\u{b7}s", Some(2.0))),
+            None,
+        );
+        // One cell per character, as the monospace column has them in
+        // English.
+        let rows = captioned_rows(&l10n, &formatted.session, |c| c.chars().count() as f32);
+        let rows = rows.map(|(caption, pad, value)| (caption.into_owned(), pad, value));
+        assert_eq!(
+            rows,
+            [
+                ("Min:".to_string(), 1.0, "    1.0000 V"),
+                ("Max:".to_string(), 1.0, "    2.0000 V"),
+                ("Mean:".to_string(), 0.0, "    1.5000 V"),
+                ("\u{3c3}:".to_string(), 3.0, "    0.7071 V"),
+            ]
+        );
+        assert_eq!(
+            formatted.session.integral.as_deref(),
+            Some("\u{222b}:    3.0000 V\u{b7}s (2s)")
+        );
+    }
+
+    /// One skipped gap is one gap.
+    #[test]
+    fn the_gap_warning_counts_in_the_singular() {
+        let l10n = crate::l10n::english();
+        assert_eq!(
+            tr!(l10n, "stats-gaps", count = 1u64, limit = "2"),
+            "\u{26a0} 1 gap >2s skipped"
+        );
+        assert_eq!(
+            tr!(l10n, "stats-gaps", count = 3u64, limit = "2"),
+            "\u{26a0} 3 gaps >2s skipped"
+        );
     }
 }
