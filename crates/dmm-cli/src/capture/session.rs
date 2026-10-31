@@ -80,11 +80,13 @@ pub(super) fn verify_meter(
     };
 
     // The meter the run was started for, then the meter's own name: a
-    // detected meter was named by the open already.
-    if let Some(line) = crate::open::picked_line() {
+    // detected meter was named by the open already. In English, as the
+    // rest of capture.
+    let english = crate::l10n::english();
+    if let Some(line) = crate::open::picked_line(english) {
         eprintln!("{line}");
     }
-    crate::open::print_reported_name(reported.as_deref(), |line| eprintln!("{line}"));
+    crate::open::print_reported_name(english, reported.as_deref(), |line| eprintln!("{line}"));
     let stability = dmm.profile().stability;
     let (headline, detail) = status_banner(stability);
     if stability.is_verified() {

@@ -1,9 +1,17 @@
 //! `command`: a button press sent to the meter, or the list of the ones its
 //! family implements.
+//!
+//! The command words are typed by the user and stay as they are; the lines
+//! around them are in the run's language (`cli/command.ftl`).
 
-use crate::open::{device_for_listing, open_mock_device, open_with_help, requires_hardware};
+use crate::l10n::note_label;
+use crate::open::{
+    device_for_listing, open_mock_device, open_with_help, profile_name, prose_name,
+    requires_hardware,
+};
 use console::style;
 use dmm_lib::protocol::registry::{SelectableDevice, Selection};
+use dmm_shared::tr;
 
 pub(crate) fn cmd_command(
     selection: Selection,
@@ -22,7 +30,8 @@ pub(crate) fn cmd_command(
         let mut dmm = open_mock_device(selection, None, dmm_lib::Clock::real())?;
         dmm.send_command(&action)?;
     }
-    println!("{} {action}", style("Sent").green());
+    let sent = tr!(crate::l10n::get(), "command-sent-label");
+    println!("{} {action}", style(sent).green());
     Ok(())
 }
 
@@ -32,17 +41,13 @@ fn print_available_commands(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let protocol = (device.new_protocol)();
     let profile = protocol.profile();
+    let l = crate::l10n::get();
+    let meter = prose_name(profile_name(profile));
     if profile.supported_commands.is_empty() {
-        eprintln!(
-            "{} No remote commands implemented yet for {}.",
-            style("Note:").yellow(),
-            crate::open::profile_name(profile),
-        );
+        eprintln!("{} {}", note_label(), tr!(l, "command-none", meter = meter));
     } else {
-        println!(
-            "Available commands for {}:",
-            style(crate::open::profile_name(profile)).bold()
-        );
+        let meter = style(meter).bold().to_string();
+        println!("{}", tr!(l, "command-available", meter = meter));
         for cmd in profile.supported_commands {
             println!("  {cmd}");
         }

@@ -331,14 +331,12 @@ fn format_json(
 }
 
 /// A `--format replay` reading with no meter frame behind it, by its mode:
-/// the run's closing `Error:` line. `Display` writes the English, which is
-/// what the log gets; the terminal gets [`NoFrame::text`] in the run's
-/// language ([`crate::l10n::error_text`]).
+/// the run's closing `Error:` line ([`crate::l10n::Localized`]).
 #[derive(Debug)]
 pub(crate) struct NoFrame(String);
 
-impl NoFrame {
-    pub(crate) fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
+impl crate::l10n::Localized for NoFrame {
+    fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
         tr!(
             l,
             "read-replay-no-frame",
@@ -347,13 +345,7 @@ impl NoFrame {
     }
 }
 
-impl std::fmt::Display for NoFrame {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.text(crate::l10n::english()))
-    }
-}
-
-impl std::error::Error for NoFrame {}
+crate::l10n::localized_error!(NoFrame);
 
 #[cfg(test)]
 mod tests {
@@ -894,8 +886,7 @@ mod tests {
             ..Default::default()
         };
         let pseudo = Localizer::new(&dmm_shared::l10n::EN_US, &crate::l10n::resources(), &pseudo);
-        let no_frame = e.get_ref().and_then(|e| e.downcast_ref::<NoFrame>());
-        let text = no_frame.expect("a NoFrame").text(&pseudo);
+        let text = crate::l10n::error_text(&pseudo, &e);
         assert!(text.starts_with('['), "{text}");
     }
 

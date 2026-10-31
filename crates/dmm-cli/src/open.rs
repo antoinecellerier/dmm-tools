@@ -117,33 +117,34 @@ pub(crate) fn meter_listing(device: &'static SelectableDevice) -> registry::List
 /// The line that says which meter the run was told to open, and where it was
 /// told: a meter saved by dmm-gui opens with no `--device` in sight, and a
 /// wrong one would otherwise only show as a cable or meter that never
-/// answers. `None` under Auto-detect.
-pub(crate) fn picked_line() -> Option<String> {
+/// answers. `None` under Auto-detect. In `l`'s language: capture, which
+/// stays English, passes [`crate::l10n::english`].
+pub(crate) fn picked_line(l: &Localizer) -> Option<String> {
     let &(listing, by) = PICKED.get()?;
-    Some(selected_line(listing, by))
+    Some(selected_line(l, listing, by))
 }
 
 /// [`picked_line`] for `listing`, picked `by`.
-fn selected_line(listing: registry::Listing, by: PickedBy) -> String {
+fn selected_line(l: &Localizer, listing: registry::Listing, by: PickedBy) -> String {
     let by = match by {
         PickedBy::Flag => "flag",
         PickedBy::Settings => "settings",
         PickedBy::Recording => "recording",
     };
     tr!(
-        crate::l10n::get(),
+        l,
         "connect-selected",
         by = by,
-        meter = prose_name(listing.display_name()),
+        meter = l.label(TextKind::Model, listing.display_name()),
         device = listing.id(),
     )
     .into_owned()
 }
 
 /// Print the name the meter reported for itself through `print`, or that it
-/// reported none — many meters never do, so that is no fault.
-pub(crate) fn print_reported_name(reported: Option<&str>, print: impl Fn(String)) {
-    let l = crate::l10n::get();
+/// reported none — many meters never do, so that is no fault. In `l`'s
+/// language, as [`picked_line`].
+pub(crate) fn print_reported_name(l: &Localizer, reported: Option<&str>, print: impl Fn(String)) {
     let name = match reported.filter(|n| !n.is_empty()) {
         // The meter's own text, as it sent it.
         Some(name) => style(name).bold().to_string(),
@@ -156,7 +157,7 @@ pub(crate) fn print_reported_name(reported: Option<&str>, print: impl Fn(String)
 
 /// Print [`picked_line`], when there is one, under a failed open's headline.
 fn print_picked() {
-    if let Some(line) = picked_line() {
+    if let Some(line) = picked_line(crate::l10n::get()) {
         eprintln!("{line}");
     }
 }
@@ -444,9 +445,7 @@ fn print_experimental_note(selection: Selection) {
 }
 
 /// Why an open failed, once the help printed above it has said what to try:
-/// the closing `Error:` line. `Display` writes the English, which is what
-/// the log gets; the terminal gets [`OpenFailed::text`] in the run's
-/// language ([`crate::l10n::error_text`]).
+/// the closing `Error:` line ([`crate::l10n::Localized`]).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum OpenFailed {
     NotFound,
@@ -457,9 +456,9 @@ pub(crate) enum OpenFailed {
     NotSimulated(&'static str),
 }
 
-impl OpenFailed {
-    pub(crate) fn text(self, l: &Localizer) -> Cow<'_, str> {
-        match self {
+impl crate::l10n::Localized for OpenFailed {
+    fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
+        match *self {
             Self::NotFound => tr!(l, "connect-error-not-found"),
             Self::NotIdentified => tr!(l, "connect-error-not-identified"),
             Self::AdapterNotFound => tr!(l, "connect-error-adapter-not-found"),
@@ -468,13 +467,7 @@ impl OpenFailed {
     }
 }
 
-impl std::fmt::Display for OpenFailed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.text(crate::l10n::english()))
-    }
-}
-
-impl std::error::Error for OpenFailed {}
+crate::l10n::localized_error!(OpenFailed);
 
 /// Print setup help for the failures a user can act on, and return the error
 /// to report.
@@ -633,15 +626,15 @@ mod tests {
     fn the_selected_line_says_where_the_meter_was_picked() {
         let et2517a = registry::resolve_listing("et-2517a").expect("a registry row");
         assert_eq!(
-            selected_line(et2517a, PickedBy::Flag),
+            selected_line(crate::l10n::english(), et2517a, PickedBy::Flag),
             "Selected: Minipa ET-2517A (--device et2517a)"
         );
         assert_eq!(
-            selected_line(et2517a, PickedBy::Settings),
+            selected_line(crate::l10n::english(), et2517a, PickedBy::Settings),
             "Selected: Minipa ET-2517A (saved by dmm-gui; pass --device auto to detect the meter)"
         );
         assert_eq!(
-            selected_line(et2517a, PickedBy::Recording),
+            selected_line(crate::l10n::english(), et2517a, PickedBy::Recording),
             "Selected: Minipa ET-2517A (named by the recording)"
         );
     }

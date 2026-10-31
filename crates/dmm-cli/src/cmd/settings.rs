@@ -1,19 +1,24 @@
 //! `get` and `set`: what the meter's settings can be switched to from where
 //! it sits, as a listing or JSON, and the switch itself, confirmed from the
 //! readings that follow.
+//!
+//! The prose is in the run's language (`cli/settings.ftl`). What the user
+//! types back into `set` stays as typed: the setting names, and a listing's
+//! choices with the fragment beside each, which `set` matches against the
+//! labels as the library spells them. The JSON stays as it is too.
 
 use crate::choice::{NoMatch, quote_for_shell, resolve_choice, shortest_fragment};
 use crate::cli::{SettingArg, SettingsFormat};
-use crate::open::{open_mock_device, open_with_help, requires_hardware};
+use crate::l10n::note_label;
+use crate::open::{open_mock_device, open_with_help, prose_name, requires_hardware};
 use console::style;
-use dmm_lib::error::ErrorKind;
+use dmm_lib::error::{ErrorKind, Rejected};
 use dmm_lib::protocol::registry::Selection;
 use dmm_lib::protocol::{AUTO_RANGE_ID, Choice, Setting};
+use dmm_lib::text::TextKind;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use std::time::Duration;
-
-/// The one thing a user can do about a value the meter won't take. Every
-/// failure below ends here, so they end in the same words.
-const CHECK_DIAL_HINT: &str = "check the dial position";
 
 /// How long to wait for a switched setting to show up in the measurement
 /// stream. The meter acknowledges the command before the frame carrying the
@@ -27,36 +32,23 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 /// does not name — a manual range outside the family's ladder, say.
 const UNKNOWN_LIVE: &str = "?";
 
-/// How a setting is named in a listing header and in the lines `set` prints:
-/// Title case, or the capitals the meter's own buttons carry.
-fn setting_title(setting: Setting) -> &'static str {
+/// The kind of library text `setting`'s choices are, for the lookups that
+/// put one in a sentence.
+fn choice_kind(setting: Setting) -> TextKind {
     match setting {
-        Setting::Mode => "Mode",
-        Setting::Range => "Range",
-        Setting::Hold => "HOLD",
-        Setting::Rel => "REL",
-        Setting::MinMax => "MIN/MAX",
-        Setting::Peak => "Peak",
+        Setting::Mode => TextKind::Mode,
+        Setting::Range => TextKind::Range,
+        _ => TextKind::Toggle,
     }
 }
 
-/// The same name where the sentence wants a plural ("has no switchable
-/// modes"). The button settings read as themselves.
-fn setting_plural(setting: Setting) -> &'static str {
-    match setting {
-        Setting::Mode => "modes",
-        Setting::Range => "ranges",
-        _ => setting_title(setting),
-    }
-}
-
-/// What a user can do about a value the meter won't take. A range is refused
-/// for one reason the dial does not cover: the reading is off the end of it.
-fn switch_hint(setting: Setting) -> &'static str {
-    match setting {
-        Setting::Range => "check the dial position and that the input is within the range",
-        _ => CHECK_DIAL_HINT,
-    }
+/// A choice of `setting` as a sentence names it, in the run's language.
+fn choice_text<'a>(
+    l: &'a Localizer,
+    setting: Setting,
+    label: &'a str,
+) -> std::borrow::Cow<'a, str> {
+    l.label(choice_kind(setting), label)
 }
 
 /// Whether the meter has a value to switch *to* from where it sits.
@@ -92,32 +84,43 @@ fn auto_range_rung<'a>(
 /// switch prints before exiting 0. Only the dial changes what modes and
 /// ranges a position offers; a button setting the meter lacks is not
 /// something the dial can fix, so it gets no such advice.
-fn print_nothing_to_switch(model_name: &str, setting: Option<Setting>, mode: &str) {
-    let what = setting.map_or("settings", setting_plural);
-    let advice = match setting {
-        None | Some(Setting::Mode | Setting::Range) => " \u{2014} use the dial",
-        Some(_) => "",
-    };
-    eprintln!(
-        "{} {model_name} has no switchable {what} in {mode}{advice}.",
-        style("Note:").yellow(),
+fn print_nothing_to_switch(model_name: &'static str, setting: Option<Setting>, mode: &str) {
+    let l = crate::l10n::get();
+    let note = tr!(
+        l,
+        "settings-nothing-to-switch",
+        setting = setting.map_or("all", Setting::name),
+        meter = prose_name(model_name),
+        mode = l.label(TextKind::Mode, mode),
     );
+    eprintln!("{} {note}", note_label());
+}
+
+/// Which listing a [`print_tip`] closes.
+#[derive(Clone, Copy)]
+enum Tip {
+    /// The listing of every setting, with no fragments to type.
+    ByName,
+    /// One setting's listing, its fragments in the right column.
+    RightColumn,
 }
 
 /// The dim line under a listing. Both listings end in one, so both name a
 /// switch that can actually be made — and preferably one that would change
 /// something.
-fn print_tip(lead: &str, setting: Setting, choices: &[Choice]) {
+fn print_tip(tip: Tip, setting: Setting, choices: &[Choice]) {
+    let l = crate::l10n::get();
     let example = choices.iter().find(|c| !c.current).unwrap_or(&choices[0]);
-    eprintln!(
-        "\n{}",
-        style(format!(
-            "Tip: {lead}, e.g. dmm-cli set {} {}",
-            setting.name(),
-            quote_for_shell(&shortest_fragment(choices, example))
-        ))
-        .dim()
+    let command = format!(
+        "dmm-cli set {} {}",
+        setting.name(),
+        quote_for_shell(&shortest_fragment(choices, example))
     );
+    let line = match tip {
+        Tip::ByName => tr!(l, "settings-tip-by-name", command = command),
+        Tip::RightColumn => tr!(l, "settings-tip-right-column", command = command),
+    };
+    eprintln!("\n{}", style(line).dim());
 }
 
 /// List what one setting, or every setting, reaches from where the meter sits.
@@ -181,7 +184,7 @@ fn run_get<T: dmm_lib::transport::Transport>(
                     .iter()
                     .find(|(_, choices)| choices.iter().any(|c| !c.current))
                     .unwrap_or(&offered[0]);
-                print_tip("switch one by name", *setting, choices);
+                print_tip(Tip::ByName, *setting, choices);
                 Ok(())
             }
         };
@@ -198,7 +201,7 @@ fn run_get<T: dmm_lib::transport::Transport>(
                 return Ok(());
             }
             print_choices(model_name, setting, &reading, &choices);
-            print_tip("the right column switches to it", setting, &choices);
+            print_tip(Tip::RightColumn, setting, &choices);
             Ok(())
         }
     }
@@ -231,20 +234,24 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
 
     let Some(input) = choice else {
         print_choices(model_name, setting, &reading, &choices);
-        print_tip("the right column switches to it", setting, &choices);
+        print_tip(Tip::RightColumn, setting, &choices);
         return Ok(());
     };
 
     let target = match resolve_choice(&choices, &input) {
         Ok(target) => target,
         Err(NoMatch::Ambiguous(labels)) => {
-            return Err(
-                format!("ambiguous {setting}: {input} matches {}", labels.join(", ")).into(),
-            );
+            let labels = labels.into_iter().map(String::from).collect();
+            return Err(SetFailed::Ambiguous {
+                setting,
+                input,
+                labels,
+            }
+            .into());
         }
         Err(NoMatch::Unknown) => {
             print_choices(model_name, setting, &reading, &choices);
-            return Err(format!("unknown {setting}: {input}").into());
+            return Err(SetFailed::Unknown { setting, input }.into());
         }
     };
     let (id, label) = (target.id, target.label.to_string());
@@ -273,11 +280,11 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
         // A refusal is the meter answering, not a fault: say so, and say what
         // the user can do about it.
         return Err(match e {
-            dmm_lib::error::Error::CommandRejected(detail) => format!(
-                "the meter refused {label}: {} \u{2014} {}",
-                crate::l10n::get().rejected(&detail),
-                switch_hint(setting)
-            )
+            dmm_lib::error::Error::CommandRejected(reason) => SetFailed::Refused {
+                setting,
+                choice: label,
+                reason,
+            }
             .into(),
             other => Box::<dyn std::error::Error>::from(other),
         });
@@ -326,50 +333,148 @@ fn run_set_within<T: dmm_lib::transport::Transport>(
         std::thread::sleep(POLL_INTERVAL);
     }
 
-    let still = live.map_or_else(String::new, |l| format!(" (still {l})"));
-    Err(format!(
-        "Meter did not switch{still} \u{2014} {}",
-        switch_hint(setting)
-    )
+    Err(SetFailed::NotSwitched {
+        setting,
+        still: live,
+    }
     .into())
 }
+
+/// Why `set` failed: the closing `Error:` line
+/// ([`crate::l10n::Localized`]).
+#[derive(Debug)]
+pub(crate) enum SetFailed {
+    /// `input` is a fragment of several of the setting's choices, `labels`.
+    Ambiguous {
+        setting: Setting,
+        input: String,
+        labels: Vec<String>,
+    },
+    /// `input` is a fragment of none of them.
+    Unknown { setting: Setting, input: String },
+    /// The meter would not switch to `choice`, for `reason`.
+    Refused {
+        setting: Setting,
+        choice: String,
+        reason: Rejected,
+    },
+    /// The meter took the command but never showed the choice, and is
+    /// `still` on the one it was on, when a reading said.
+    NotSwitched {
+        setting: Setting,
+        still: Option<String>,
+    },
+}
+
+impl crate::l10n::Localized for SetFailed {
+    fn text<'a>(&'a self, l: &'a Localizer) -> std::borrow::Cow<'a, str> {
+        match self {
+            // What was typed, and the labels it matches as the listing
+            // spells them: both are typed back.
+            Self::Ambiguous {
+                setting,
+                input,
+                labels,
+            } => tr!(
+                l,
+                "settings-ambiguous",
+                setting = setting.name(),
+                input = input.as_str(),
+                choices = labels.join(", "),
+            ),
+            Self::Unknown { setting, input } => tr!(
+                l,
+                "settings-unknown",
+                setting = setting.name(),
+                input = input.as_str()
+            ),
+            Self::Refused {
+                setting,
+                choice,
+                reason,
+            } => tr!(
+                l,
+                "settings-refused",
+                setting = setting.name(),
+                choice = choice_text(l, *setting, choice),
+                reason = l.rejected(reason),
+            ),
+            Self::NotSwitched {
+                setting,
+                still: Some(live),
+            } => tr!(
+                l,
+                "settings-not-switched-still",
+                setting = setting.name(),
+                live = choice_text(l, *setting, live),
+            ),
+            Self::NotSwitched {
+                setting,
+                still: None,
+            } => tr!(l, "settings-not-switched", setting = setting.name()),
+        }
+    }
+}
+
+crate::l10n::localized_error!(SetFailed);
 
 /// What `set` prints once the meter is on `label`, in that setting's own
 /// words. `now` picks between the line a switch prints and the one a meter
 /// that was already there prints, so the pair cannot drift apart.
 fn switch_message(now: bool, setting: Setting, id: u16, label: &str, range_label: &str) -> String {
-    let lead = if now { "Meter now" } else { "Meter is already" };
-    match setting {
-        Setting::Mode => format!("{lead} in {label}"),
+    let l = crate::l10n::get();
+    let case = match setting {
+        Setting::Mode => "mode",
         // "Auto" alone leaves the user guessing which rung that is.
-        Setting::Range if id == AUTO_RANGE_ID => format!("{lead} auto-ranging ({range_label})"),
-        Setting::Range => format!("{lead} in {label} (manual range)"),
-        Setting::Hold | Setting::Rel => format!("{lead} {} {label}", setting_title(setting)),
+        Setting::Range if id == AUTO_RANGE_ID => "range-auto",
+        Setting::Range => "range",
+        Setting::Hold => "hold",
+        Setting::Rel => "rel",
         // Off is not a state the meter is "in", it is one it has left.
-        Setting::MinMax | Setting::Peak if id == 0 => {
-            format!("{lead} out of {}", setting_title(setting))
-        }
-        Setting::MinMax | Setting::Peak => format!("{lead} in {label}"),
+        Setting::MinMax if id == 0 => "minmax-off",
+        Setting::MinMax => "minmax",
+        Setting::Peak if id == 0 => "peak-off",
+        Setting::Peak => "peak",
+    };
+    let choice = choice_text(l, setting, label);
+    let range = l.label(TextKind::Range, range_label);
+    if now {
+        tr!(
+            l,
+            "settings-switched",
+            case = case,
+            choice = choice,
+            range = range
+        )
+    } else {
+        tr!(
+            l,
+            "settings-already",
+            case = case,
+            choice = choice,
+            range = range
+        )
     }
+    .into_owned()
 }
 
 /// The listing a single setting gets: a header naming the meter and, for
 /// everything but the mode itself, what it is measuring.
 fn choices_listing(
-    model_name: &str,
+    model_name: &'static str,
     setting: Setting,
     reading: &dmm_lib::measurement::Measurement,
     choices: &[Choice],
 ) -> Vec<String> {
-    let header = match setting {
-        Setting::Mode => format!("Modes for {}:", style(model_name).bold()),
-        _ => format!(
-            "{} for {} in {}:",
-            setting_title(setting),
-            style(model_name).bold(),
-            reading.mode
-        ),
-    };
+    let l = crate::l10n::get();
+    let header = tr!(
+        l,
+        "settings-heading",
+        setting = setting.name(),
+        meter = style(prose_name(model_name)).bold().to_string(),
+        mode = l.label(TextKind::Mode, &reading.mode),
+    )
+    .into_owned();
     let rung = auto_range_rung(setting, choices, reading);
     let width = choices
         .iter()
@@ -381,7 +486,10 @@ fn choices_listing(
         // toward the width and misalign the column.
         let pad = " ".repeat(width - c.label.chars().count());
         let note = match rung {
-            Some(rung) if c.id == AUTO_RANGE_ID => format!("  (now {rung})"),
+            Some(rung) if c.id == AUTO_RANGE_ID => {
+                let rung = l.label(TextKind::Range, rung);
+                format!("  {}", tr!(l, "settings-auto-now", range = rung))
+            }
             _ => String::new(),
         };
         format!(
@@ -403,7 +511,7 @@ fn choices_listing(
 /// typed to reach it in a second column — so the fragment form is on screen
 /// rather than something to guess at.
 fn print_choices(
-    model_name: &str,
+    model_name: &'static str,
     setting: Setting,
     reading: &dmm_lib::measurement::Measurement,
     choices: &[Choice],
@@ -417,15 +525,18 @@ fn print_choices(
 /// behind a `*`, then what else it reaches. The labels themselves stand in
 /// for the per-setting listing's fragment column.
 fn settings_listing(
-    model_name: &str,
+    model_name: &'static str,
     reading: &dmm_lib::measurement::Measurement,
     offered: &[(Setting, Vec<Choice>)],
 ) -> Vec<String> {
-    let header = format!(
-        "Settings for {} ({}):",
-        style(model_name).bold(),
-        reading.mode
-    );
+    let l = crate::l10n::get();
+    let header = tr!(
+        l,
+        "settings-all-heading",
+        meter = style(prose_name(model_name)).bold().to_string(),
+        mode = l.label(TextKind::Mode, &reading.mode),
+    )
+    .into_owned();
     let name_width = offered
         .iter()
         .map(|(s, _)| s.name().chars().count())
@@ -444,7 +555,10 @@ fn settings_listing(
             .map(|c| c.label.as_ref())
             .collect();
         let note = match auto_range_rung(*setting, choices, reading) {
-            Some(rung) => format!("  (auto-ranging in {rung})"),
+            Some(rung) => {
+                let rung = l.label(TextKind::Range, rung);
+                format!("  {}", tr!(l, "settings-auto-in", range = rung))
+            }
             None => String::new(),
         };
         format!(
@@ -465,7 +579,7 @@ fn settings_listing(
 }
 
 fn print_settings_table(
-    model_name: &str,
+    model_name: &'static str,
     reading: &dmm_lib::measurement::Measurement,
     offered: &[(Setting, Vec<Choice>)],
 ) {
@@ -773,7 +887,7 @@ mod tests {
             .to_string();
         assert!(err.contains("the meter refused on"), "{err}");
         assert!(err.contains("HOLD did nothing in off"), "{err}");
-        assert!(err.contains(CHECK_DIAL_HINT), "{err}");
+        assert!(err.contains("check the dial position"), "{err}");
     }
 
     /// A meter that takes the command and never reports the new value fails
@@ -796,7 +910,7 @@ mod tests {
         .expect_err("never confirmed")
         .to_string();
         assert!(err.contains("Meter did not switch (still off)"), "{err}");
-        assert!(err.contains(CHECK_DIAL_HINT), "{err}");
+        assert!(err.contains("check the dial position"), "{err}");
         assert_eq!(*selected.lock().expect("poisoned"), [(Setting::Hold, 1)]);
     }
 

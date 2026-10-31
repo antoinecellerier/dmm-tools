@@ -109,6 +109,13 @@ fn main() {
         bluetooth,
     };
 
+    // Capture speaks English, its failures included.
+    let failure_l10n = if matches!(cli.command, Cmd::Capture(_)) {
+        l10n::english()
+    } else {
+        l
+    };
+
     // Device-independent commands — handle before mock/real split
     let result = match cli.command {
         Cmd::List => cmd_list(bluetooth),
@@ -340,7 +347,7 @@ fn main() {
 
     if let Err(e) = result {
         error!("{e}");
-        let msg = l10n::error_text(&*e);
+        let msg = l10n::error_text(failure_l10n, &*e);
         // The activation instructions belong to one meter, so they are only
         // printed once one is settled on: the one named, or the one detection
         // found before the meter went quiet.
@@ -349,7 +356,7 @@ fn main() {
         {
             print_no_response_help(device);
         } else {
-            eprintln!("{} {msg}", error_label());
+            eprintln!("{} {msg}", l10n::error_label_in(failure_l10n));
             if let Some(address) = unreachable_adapter(&*e, cli.adapter.as_deref()) {
                 print_setup_sections(LinksSearched::BluetoothAt(address));
             } else if let Some(device) = unreachable_bluetooth_only(&*e, selection) {

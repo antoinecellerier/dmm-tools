@@ -233,9 +233,7 @@ pub(crate) fn refuse_replay_format(
 }
 
 /// Why `read` refused its flags before opening anything, once the run
-/// knows it will: the closing `Error:` line. `Display` writes the English,
-/// which is what the log gets; the terminal gets [`Refused::text`] in the
-/// run's language ([`crate::l10n::error_text`]).
+/// knows it will: the closing `Error:` line ([`crate::l10n::Localized`]).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Refused {
     /// `--format replay` on a device that synthesises its readings; its id.
@@ -248,9 +246,9 @@ pub(crate) enum Refused {
     ImportHasNoInterval,
 }
 
-impl Refused {
-    pub(crate) fn text(self, l: &Localizer) -> Cow<'_, str> {
-        match self {
+impl crate::l10n::Localized for Refused {
+    fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
+        match *self {
             Self::ReplayNeedsMeter(device) => {
                 tr!(l, "read-replay-format-needs-meter", device = device)
             }
@@ -261,13 +259,7 @@ impl Refused {
     }
 }
 
-impl std::fmt::Display for Refused {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.text(crate::l10n::english()))
-    }
-}
-
-impl std::error::Error for Refused {}
+crate::l10n::localized_error!(Refused);
 
 /// Why `--device` is refused alongside `--replay`.
 pub(crate) fn replay_names_its_device(l: &Localizer) -> Cow<'_, str> {
