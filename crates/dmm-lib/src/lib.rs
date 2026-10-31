@@ -10,6 +10,7 @@ pub mod replay;
 pub mod specs;
 pub mod stats;
 pub mod stream;
+pub mod text;
 pub mod transform;
 pub mod transport;
 
