@@ -5,7 +5,9 @@
 use dmm_lib::protocol::Stability;
 use dmm_lib::transport::Link;
 use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
+use std::borrow::Cow;
 
 use super::shortcuts::Shortcut;
 use super::{App, ConnectionState};
@@ -37,6 +39,8 @@ impl App {
     }
 
     fn show_top_bar_inner(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         let green = tc.status_ok();
         let orange = tc.status_warning();
@@ -87,50 +91,50 @@ impl App {
                     .recording_layout
                     .device
                     .as_deref()
-                    .unwrap_or("Imported file")
-                    .to_string()
+                    .map_or_else(|| tr!(l10n, "top-bar-imported-file"), Cow::Borrowed)
+                    .into_owned()
             });
             let device_label = imported_meter.clone().unwrap_or_else(|| {
                 self.active_listing()
-                    .map_or("Auto-detect", |l| l.display_name())
-                    .to_string()
+                    .map_or_else(
+                        || tr!(l10n, "top-bar-auto-detect"),
+                        |l| Cow::Borrowed(l.display_name()),
+                    )
+                    .into_owned()
             });
             ui.label(RichText::new(device_label).strong());
             ui.separator();
 
             match &self.connection.state {
                 ConnectionState::Disconnected => {
+                    let keys = Shortcut::ConnectToggle.keys(ctx);
                     if ui
-                        .button("Connect")
-                        .on_hover_text(format!(
-                            "Open USB connection to the selected meter ({})",
-                            Shortcut::ConnectToggle.keys(ctx)
-                        ))
+                        .button(tr!(l10n, "top-bar-connect"))
+                        .on_hover_text(tr!(l10n, "top-bar-connect.hover", keys = &keys))
                         .clicked()
                     {
                         self.request_connect(ctx);
                     }
                 }
                 ConnectionState::Connected => {
+                    let keys = Shortcut::ConnectToggle.keys(ctx);
                     if ui
-                        .button("Disconnect")
-                        .on_hover_text(format!(
-                            "Close the active meter connection ({})",
-                            Shortcut::ConnectToggle.keys(ctx)
-                        ))
+                        .button(tr!(l10n, "top-bar-disconnect"))
+                        .on_hover_text(tr!(l10n, "top-bar-disconnect.hover", keys = &keys))
                         .clicked()
                     {
                         self.disconnect();
                     }
-                    let space = Shortcut::TogglePause.keys(ctx);
+                    let keys = Shortcut::TogglePause.keys(ctx);
                     let (pause_label, pause_tooltip) = if self.connection.paused {
-                        ("\u{25B6} Resume", format!("Resume acquisition ({space})"))
+                        (
+                            tr!(l10n, "top-bar-resume"),
+                            tr!(l10n, "top-bar-resume.hover", keys = &keys),
+                        )
                     } else {
                         (
-                            "\u{23F8} Pause",
-                            format!(
-                                "Halt acquisition — stops recording and graph updates ({space})"
-                            ),
+                            tr!(l10n, "top-bar-pause"),
+                            tr!(l10n, "top-bar-pause.hover", keys = &keys),
                         )
                     };
                     if ui
@@ -140,12 +144,10 @@ impl App {
                     {
                         self.set_paused(!self.connection.paused);
                     }
+                    let keys = Shortcut::ClearSession.keys(ctx);
                     if ui
-                        .button("Clear")
-                        .on_hover_text(format!(
-                            "Clear graph history and statistics ({})",
-                            Shortcut::ClearSession.keys(ctx)
-                        ))
+                        .button(tr!(l10n, "top-bar-clear"))
+                        .on_hover_text(tr!(l10n, "top-bar-clear.hover", keys = &keys))
                         .clicked()
                     {
                         self.clear_session();
@@ -153,25 +155,19 @@ impl App {
                 }
                 ConnectionState::Reconnecting => {
                     let label = self.reconnecting_label();
-                    let hover = if let Some(err) = &self.connection.reconnect_last_error {
-                        format!(
-                            "Retrying the connection automatically — click Disconnect to stop.\nLast error: {err}",
-                        )
-                    } else {
-                        "Retrying the connection automatically — click Disconnect to stop"
-                            .to_string()
+                    let hover = match &self.connection.reconnect_last_error {
+                        Some(err) => tr!(l10n, "top-bar-reconnecting-hover-error", error = err),
+                        None => tr!(l10n, "top-bar-reconnecting-hover"),
                     };
                     ui.add_enabled(false, egui::Button::new(label))
                         .on_disabled_hover_text(hover);
                     // The reconnect loop retries every 2 s indefinitely, so
                     // this is the user's only way out short of killing the
                     // app — the status tooltip above tells them to click it.
+                    let keys = Shortcut::ConnectToggle.keys(ctx);
                     if ui
-                        .button("Disconnect")
-                        .on_hover_text(format!(
-                            "Stop retrying and close the connection ({})",
-                            Shortcut::ConnectToggle.keys(ctx)
-                        ))
+                        .button(tr!(l10n, "top-bar-stop-retrying"))
+                        .on_hover_text(tr!(l10n, "top-bar-stop-retrying.hover", keys = &keys))
                         .clicked()
                     {
                         self.disconnect();
@@ -188,11 +184,11 @@ impl App {
                         .connection
                         .meter
                         .as_ref()
-                        .and_then(|m| m.name.as_deref())
-                        .unwrap_or("Connected");
+                        .and_then(|m| m.name.clone())
+                        .unwrap_or_else(|| tr!(l10n, "top-bar-connected").into_owned());
                     let link = self.connection.link().filter(|_| show_link);
                     link_drawn = link.is_some();
-                    let text = connected_status(&self.l10n, name, link, self.connection.paused);
+                    let text = connected_status(l10n, &name, link, self.connection.paused);
                     if self.connection.paused {
                         (orange, text)
                     } else {
@@ -204,13 +200,14 @@ impl App {
                     // is on, dropped first when the bar runs out of room.
                     (Some(from), Some(meter)) => {
                         link_drawn = show_link;
-                        let mut text = meter;
-                        if show_link {
-                            text.push_str(&file_suffix(&from.path));
-                        }
+                        let text = if show_link {
+                            file_status(l10n, &meter, &from.path)
+                        } else {
+                            meter
+                        };
                         (gray, text)
                     }
-                    _ => (gray, "Disconnected".to_string()),
+                    _ => (gray, tr!(l10n, "top-bar-disconnected").into_owned()),
                 },
                 ConnectionState::Reconnecting => {
                     let label = self.reconnecting_label();
@@ -235,22 +232,32 @@ impl App {
                 if self.connection.state == ConnectionState::Connected {
                     // The connected entry, live or recorded: a meter with the
                     // radio built in is on no adapter.
-                    let built_in_radio = self.connection.detected().is_some_and(|d| d.bluetooth_only());
+                    let built_in_radio = self
+                        .connection
+                        .detected()
+                        .is_some_and(|d| d.bluetooth_only());
                     hover.push(link_tooltip(
+                        l10n,
                         self.connection.link(),
                         built_in_radio,
                         self.replay.is_some(),
                     ));
                 }
                 if let Some(source) = &self.replay {
-                    hover.push(format!("Replaying {}", source.path.display()));
+                    let path = source.path.display().to_string();
+                    hover.push(tr!(l10n, "top-bar-replaying", path = path).into_owned());
                 }
                 if let Some(from) = &self.imported {
-                    hover.push(format!(
-                        "{} imported from {}",
-                        super::import::readings_noun(from.readings),
-                        from.path.display()
-                    ));
+                    let path = from.path.display().to_string();
+                    hover.push(
+                        tr!(
+                            l10n,
+                            "top-bar-imported-from",
+                            readings = from.readings,
+                            path = path
+                        )
+                        .into_owned(),
+                    );
                 }
                 let hover = hover.join("\n");
 
@@ -304,15 +311,16 @@ impl App {
                 };
                 if let Some((model_name, stability, url)) = badge {
                     ui.hyperlink_to(
-                        RichText::new(badge_text(stability))
+                        RichText::new(badge_text(l10n, stability))
                             .small()
                             .strong()
                             .color(orange),
                         url,
                     )
-                    .on_hover_text(format!(
-                        "{} Click to report feedback.",
-                        self.l10n.help().stability_warning(&model_name, stability)
+                    .on_hover_text(tr!(
+                        l10n,
+                        "top-bar-badge-hover",
+                        warning = l10n.help().stability_warning(&model_name, stability)
                     ));
                 }
             });
@@ -322,9 +330,12 @@ impl App {
             // bar: what the row needs without the link, and what the link
             // would add. Only the first reaches the window's minimum size.
             let link_w = if self.connection.state == ConnectionState::Connected {
-                link_suffix_width(ui, &self.l10n, self.connection.link())
+                link_suffix_width(ui, l10n, self.connection.link())
             } else if let Some(from) = &self.imported {
-                text_width(ui, &file_suffix(&from.path))
+                // The meter's name stands in for itself: only the difference
+                // the file makes is wanted.
+                let meter = "M";
+                text_width(ui, &file_status(l10n, meter, &from.path)) - text_width(ui, meter)
             } else {
                 0.0
             };
@@ -359,6 +370,8 @@ impl App {
     /// tab order). The cached width comes from the previous frame and
     /// self-corrects in one frame.
     fn show_top_bar_right(&mut self, ui: &mut Ui, cache_id: egui::Id) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         // The group's width without the update notice, which is what the
         // window's minimum comes from: the notice takes whatever room is
         // left, in full, shortened, or not at all, and never asks for more.
@@ -401,10 +414,12 @@ impl App {
             .frame_when_inactive(false),
         );
         let version_resp = match hidden_notice {
-            None => version_resp.a11y_label("Show release notes"),
-            Some(tag) => {
-                version_resp.a11y_label(&format!("Show release notes. {} is available", tag.name()))
-            }
+            None => version_resp.a11y_label(&tr!(l10n, "top-bar-version.a11y")),
+            Some(tag) => version_resp.a11y_label(&tr!(
+                l10n,
+                "top-bar-version-update.a11y",
+                version = tag.name()
+            )),
         };
         if version_resp.clicked() {
             if self.whats_new.open {
@@ -414,29 +429,32 @@ impl App {
                 self.open_whats_new();
             }
         }
-        const VERSION_HOVER: &str = "Show What's New — release notes for this version";
         let version_resp = match hidden_notice {
-            None => version_resp.on_hover_text(VERSION_HOVER),
-            Some(tag) => version_resp.on_hover_text(format!(
-                "{VERSION_HOVER}\n{} is available — widen the window for its link",
-                tag.name()
+            None => version_resp.on_hover_text(tr!(l10n, "top-bar-version.hover")),
+            Some(tag) => version_resp.on_hover_text(tr!(
+                l10n,
+                "top-bar-version-update.hover",
+                version = tag.name()
             )),
         };
         version_resp.on_hover_cursor(egui::CursorIcon::PointingHand);
         if let (Some(tag), Some((text, _))) = (&notice, &notice_text) {
             ui.hyperlink_to(RichText::new(text).small(), tag.url())
-                .on_hover_text(format!("Open the {} release page on GitHub", tag.name()))
-                .a11y_label(&format!("{} available — open its release page", tag.name()));
+                .on_hover_text(tr!(l10n, "top-bar-update.hover", version = tag.name()))
+                .a11y_label(&tr!(l10n, "top-bar-update.a11y", version = tag.name()));
         }
-        ui.hyperlink_to(
-            self.l10n.help().project_link(),
-            dmm_shared::help::PROJECT_URL,
-        )
-        .on_hover_text("Open the dmm-tools project page on GitHub");
+        ui.hyperlink_to(l10n.help().project_link(), dmm_shared::help::PROJECT_URL)
+            .on_hover_text(tr!(l10n, "top-bar-project-link.hover"));
+        let (keys, other) = Shortcut::help_keys(ui.ctx());
         let shortcuts_btn = ui
             .button("?")
-            .on_hover_text("Show keyboard shortcuts and mouse gestures (? or F1)")
-            .a11y_label("Keyboard shortcuts and mouse gestures");
+            .on_hover_text(tr!(
+                l10n,
+                "top-bar-shortcuts.hover",
+                keys = keys,
+                other = other
+            ))
+            .a11y_label(&tr!(l10n, "top-bar-shortcuts.a11y"));
         if shortcuts_btn.clicked() {
             let will_open = !self.shortcut_help.open;
             self.shortcut_help.open = will_open;
@@ -448,8 +466,8 @@ impl App {
 
         let settings_btn = ui
             .button("\u{2699}")
-            .on_hover_text("Show or hide the settings panel")
-            .a11y_label("Settings");
+            .on_hover_text(tr!(l10n, "top-bar-settings.hover"))
+            .a11y_label(&tr!(l10n, "top-bar-settings.a11y"));
         if settings_btn.clicked() {
             self.settings_open = !self.settings_open;
             if self.settings_open {
@@ -487,25 +505,28 @@ fn text_width(ui: &Ui, text: &str) -> f32 {
 /// `link` is `None` for a row too narrow to hold it as well — the hover says
 /// it either way.
 fn connected_status(l10n: &Localizer, name: &str, link: Option<Link>, paused: bool) -> String {
-    let mut text = name.to_string();
-    if let Some(link) = link {
-        text.push_str(&link_suffix(l10n, link));
+    let paused = if paused { "yes" } else { "no" };
+    match link {
+        Some(link) => {
+            let link = l10n.help().short_name(link);
+            tr!(
+                l10n,
+                "top-bar-status-link",
+                name = name,
+                link = link,
+                paused = paused
+            )
+        }
+        None => tr!(l10n, "top-bar-status", name = name, paused = paused),
     }
-    if paused {
-        text.push_str(" (paused)");
-    }
-    text
+    .into_owned()
 }
 
-/// What the link adds to the status text.
-fn link_suffix(l10n: &Localizer, link: Link) -> String {
-    format!(" \u{b7} {}", l10n.help().short_name(link))
-}
-
-/// What an imported file adds to the status text: its name, where a live
-/// session names its link.
-fn file_suffix(path: &std::path::Path) -> String {
-    format!(" \u{b7} {}", super::import::file_name(path))
+/// The status of an imported session: its meter, then its file's name where
+/// a live session names its link.
+fn file_status(l10n: &Localizer, meter: &str, path: &std::path::Path) -> String {
+    let file = super::import::file_name(path);
+    tr!(l10n, "top-bar-status-file", name = meter, file = file).into_owned()
 }
 
 /// What that suffix would add to the row's width, in points.
@@ -515,7 +536,12 @@ fn file_suffix(path: &std::path::Path) -> String {
 /// then stays what it was before the link existed, and with it the narrowest
 /// the window may be made.
 fn link_suffix_width(ui: &Ui, l10n: &Localizer, link: Option<Link>) -> f32 {
-    link.map_or(0.0, |link| text_width(ui, &link_suffix(l10n, link)))
+    // A stand-in name: only the difference the link makes is wanted.
+    let name = "M";
+    link.map_or(0.0, |link| {
+        text_width(ui, &connected_status(l10n, name, Some(link), false))
+            - text_width(ui, &connected_status(l10n, name, None, false))
+    })
 }
 
 /// Whether the status row has room for the link as well.
@@ -533,24 +559,35 @@ fn fits_with_link(row: f32, link: f32, available: f32) -> bool {
 /// link from the one a recording was made over — the rest of the window is
 /// deliberately identical for the two. `built_in_radio` as for
 /// [`Link::full_name`].
-fn link_tooltip(link: Option<Link>, built_in_radio: bool, replayed: bool) -> String {
-    match (link, replayed) {
-        (Some(link), false) => format!("Connected over the {}", link.full_name(built_in_radio)),
-        (Some(link), true) => format!("Recorded over the {}", link.full_name(built_in_radio)),
-        // Nothing is on the far end of a mock session, and a recording whose
-        // file names a link this build does not know says only that much.
-        (None, false) => "Mock meter, no link".to_string(),
-        (None, true) => "Recorded over an unnamed link".to_string(),
+fn link_tooltip(
+    l10n: &Localizer,
+    link: Option<Link>,
+    built_in_radio: bool,
+    replayed: bool,
+) -> String {
+    // Nothing is on the far end of a mock session, and a recording whose
+    // file names a link this build does not know says only that much.
+    let link = match link {
+        Some(Link::UsbCable) => "usb",
+        Some(Link::Bluetooth) if built_in_radio => "radio",
+        Some(Link::Bluetooth) => "adapter",
+        None => "none",
+    };
+    if replayed {
+        tr!(l10n, "top-bar-link-recorded", link = link)
+    } else {
+        tr!(l10n, "top-bar-link-live", link = link)
     }
+    .into_owned()
 }
 
-/// The badge's word for a level: [`Stability::label`] in capitals, spelled
-/// out so a frame draws a constant rather than allocating one.
-fn badge_text(stability: Stability) -> &'static str {
+/// The badge's word for a level: the level in capitals, as the meter's own
+/// annunciators are.
+fn badge_text(l10n: &Localizer, stability: Stability) -> Cow<'_, str> {
     match stability {
-        Stability::Verified => "VERIFIED",
-        Stability::PartlyVerified => "PARTLY VERIFIED",
-        Stability::Experimental => "EXPERIMENTAL",
+        Stability::Verified => tr!(l10n, "top-bar-badge-verified"),
+        Stability::PartlyVerified => tr!(l10n, "top-bar-badge-partly-verified"),
+        Stability::Experimental => tr!(l10n, "top-bar-badge-experimental"),
     }
 }
 
@@ -560,12 +597,16 @@ mod tests {
 
     #[test]
     fn the_badge_says_the_level_in_capitals() {
+        let l10n = crate::l10n::english();
         for stability in [
             Stability::Verified,
             Stability::PartlyVerified,
             Stability::Experimental,
         ] {
-            assert_eq!(badge_text(stability), stability.label().to_uppercase());
+            assert_eq!(
+                badge_text(&l10n, stability),
+                l10n.help().stability(stability).to_uppercase()
+            );
         }
     }
 
@@ -615,29 +656,32 @@ mod tests {
     #[test]
     fn the_hover_spells_the_link_out() {
         assert_eq!(
-            link_tooltip(Some(Link::UsbCable), false, false),
+            link_tooltip(&crate::l10n::english(), Some(Link::UsbCable), false, false),
             "Connected over the USB cable"
         );
         assert_eq!(
-            link_tooltip(Some(Link::Bluetooth), false, false),
+            link_tooltip(&crate::l10n::english(), Some(Link::Bluetooth), false, false),
             "Connected over the Bluetooth adapter"
         );
         assert_eq!(
-            link_tooltip(Some(Link::UsbCable), false, true),
+            link_tooltip(&crate::l10n::english(), Some(Link::UsbCable), false, true),
             "Recorded over the USB cable"
         );
-        assert_eq!(link_tooltip(None, false, false), "Mock meter, no link");
         assert_eq!(
-            link_tooltip(None, false, true),
+            link_tooltip(&crate::l10n::english(), None, false, false),
+            "Mock meter, no link"
+        );
+        assert_eq!(
+            link_tooltip(&crate::l10n::english(), None, false, true),
             "Recorded over an unnamed link"
         );
         // A meter with the radio built in, live or recorded, has no adapter.
         assert_eq!(
-            link_tooltip(Some(Link::Bluetooth), true, false),
+            link_tooltip(&crate::l10n::english(), Some(Link::Bluetooth), true, false),
             "Connected over the Bluetooth link"
         );
         assert_eq!(
-            link_tooltip(Some(Link::Bluetooth), true, true),
+            link_tooltip(&crate::l10n::english(), Some(Link::Bluetooth), true, true),
             "Recorded over the Bluetooth link"
         );
     }

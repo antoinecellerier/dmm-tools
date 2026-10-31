@@ -736,14 +736,12 @@ impl App {
     /// show this, and they were two independent formattings of the same
     /// user-facing string.
     fn reconnecting_label(&self) -> String {
-        if self.connection.reconnect_attempt > 0 {
-            format!(
-                "Reconnecting (attempt {})...",
-                self.connection.reconnect_attempt
-            )
-        } else {
-            "Reconnecting...".to_string()
+        let l10n = &self.l10n;
+        match self.connection.reconnect_attempt {
+            0 => dmm_shared::tr!(l10n, "top-bar-reconnecting"),
+            attempt => dmm_shared::tr!(l10n, "top-bar-reconnecting-attempt", attempt = attempt),
         }
+        .into_owned()
     }
 
     /// The big meter: one reading scaled to fill the window, with the command
@@ -1182,7 +1180,7 @@ mod tests {
     /// ends at what is meant to stay as it is: library labels, model names,
     /// numbers with units. Two above the Linux count: macOS draws a
     /// Minimise row in the shortcut help.
-    const UNTRANSLATED_CEILING: usize = 262;
+    const UNTRANSLATED_CEILING: usize = 252;
 
     /// Every distinct text the whole app draws or names to a screen reader
     /// in `scene`, under the pseudo-locale, that has a letter outside the

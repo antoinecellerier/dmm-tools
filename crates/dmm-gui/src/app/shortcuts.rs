@@ -315,6 +315,12 @@ impl Shortcut {
         }
     }
 
+    /// The help's two keys, `?` and F1, for the hover that names them both.
+    pub(super) fn help_keys(ctx: &egui::Context) -> (String, String) {
+        let f1 = ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::NONE, Key::F1));
+        (Self::ToggleHelp.keys(ctx), f1)
+    }
+
     /// Row in the help grid: `(keys, action, inert)`; `None` for a binding
     /// folded into another row. `inert` marks a key that does nothing in
     /// this session, so the modal can grey the row as well as say so.
