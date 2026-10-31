@@ -21,6 +21,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui/reading.ftl"),
     dmm_shared::ftl!("en-US", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("en-US", "gui/specs-remote.ftl"),
+    dmm_shared::ftl!("en-US", "gui/desktop.ftl"),
 ];
 
 /// Everything the GUI shows: the shared help, the library's text and
@@ -32,6 +33,16 @@ pub(crate) fn resources() -> Vec<Resource> {
         GUI,
     ]
     .concat()
+}
+
+/// The desktop entry's resources, in every language: all a localizer for
+/// it needs, so writing it at launch parses one small file per language.
+#[cfg(target_os = "linux")]
+pub(crate) fn desktop_resources() -> Vec<Resource> {
+    GUI.iter()
+        .filter(|r| r.path == "gui/desktop.ftl")
+        .copied()
+        .collect()
 }
 
 /// The localizer for `setting` (the settings file's `language`, empty to

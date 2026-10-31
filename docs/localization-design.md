@@ -135,7 +135,7 @@ Alarm toasts render from `Breach`'s fields, which needs no library change. Alarm
 - **Whole sentences.** A message never joins fragments. Several things that are assembled today become single messages using Fluent selectors and CLDR plural rules: the "{n} unexported {samples} and unsaved changes to {markers}" prompt, its `if n == 1` plural nouns, and the screen reader's live-region summary.
 - **Shortcuts as placeables.** Tooltips get their shortcut text from `format_shortcut` instead of a hard-coded "(Ctrl+O)". On macOS this also shows Cmd. The change lands on its own, before any extraction.
 - **egui's own words** stay English, including the modifier names `format_shortcut` returns.
-- **Easy to miss:** the file-type names in rfd's save and open dialogs, accessibility names set through `WidgetInfo`, and the `Comment` line in `assets/dmm-tools.desktop`.
+- **Easy to miss:** the file-type names in rfd's save and open dialogs, accessibility names set through `WidgetInfo`, and the `Comment` line of the Linux desktop entry: the GUI writes the entry from `assets/dmm-tools.desktop`, which stays English, adding a `Comment[<locale>]` line for each language that translates `desktop-comment`, as the desktop picks the line by its own locale, not the app's.
 
 ## Scripts, fonts and layout
 

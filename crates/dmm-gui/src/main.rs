@@ -1,6 +1,8 @@
 mod a11y;
 mod app;
 mod changelog;
+#[cfg(target_os = "linux")]
+mod desktop_entry;
 mod display;
 mod graph;
 mod l10n;
@@ -453,17 +455,7 @@ fn install_desktop_integration() {
         .ok()
         .and_then(|p| fs::canonicalize(p).ok());
     if let Some(exe_path) = exe {
-        let desktop = format!(
-            "[Desktop Entry]\n\
-             Type=Application\n\
-             Name=dmm-tools\n\
-             Comment=Real-time display and plotting for digital multimeters\n\
-             Exec={}\n\
-             Icon=dmm-tools\n\
-             Categories=Utility;Electronics;\n\
-             StartupWMClass=dmm-tools\n",
-            exe_path.display()
-        );
+        let desktop = desktop_entry::contents(&exe_path.display().to_string());
         let desktop_path = data_dir.join("applications/dmm-tools.desktop");
         write_if_changed(&desktop_path, desktop.as_bytes());
     }
