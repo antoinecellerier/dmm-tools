@@ -3,6 +3,7 @@ mod app;
 mod changelog;
 mod display;
 mod graph;
+mod l10n;
 mod markers;
 mod recording;
 mod settings;

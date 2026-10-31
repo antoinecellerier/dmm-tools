@@ -1,4 +1,6 @@
 use dmm_lib::protocol::registry;
+use dmm_shared::help::DeviceTag;
+use dmm_shared::l10n::Localizer;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
@@ -64,32 +66,50 @@ fn pack_columns(heights: &[usize], k: usize) -> Vec<std::ops::Range<usize>> {
 /// announces.
 type Group = (registry::Brand, Vec<(registry::Listing, String)>);
 
-/// The brand groups the list shows: the registry's, which never change. The
-/// descriptions are built here, once, since reading a level builds a
-/// protocol; the tag is `--help`'s, so the two binaries agree.
-static GROUPS: std::sync::LazyLock<Vec<Group>> = std::sync::LazyLock::new(|| {
+/// The brand groups the list shows: the registry's, which never change,
+/// with each entry's tag. The tags are worked out here, once, since reading
+/// a level builds a protocol.
+type Tagged = (registry::Brand, Vec<(registry::Listing, DeviceTag)>);
+
+static TAGGED: std::sync::LazyLock<Vec<Tagged>> = std::sync::LazyLock::new(|| {
     registry::brand_groups()
         .into_iter()
         .map(|(brand, rows)| {
             let rows = rows
                 .into_iter()
-                .map(|l| {
-                    let name = l.display_name();
-                    let described = dmm_shared::help::english()
-                        .device_tag(l.device, true)
-                        .map_or_else(|| name.to_string(), |tag| format!("{name} ({tag})"));
-                    (l, described)
-                })
+                .map(|l| (l, DeviceTag::of(l.device)))
                 .collect();
             (brand, rows)
         })
         .collect()
 });
 
+/// The brand groups with their descriptions in `l10n`'s language; the tag
+/// is `--help`'s, so the two binaries agree.
+fn groups(l10n: &Localizer) -> Vec<Group> {
+    let help = l10n.help();
+    TAGGED
+        .iter()
+        .map(|(brand, rows)| {
+            let rows = rows
+                .iter()
+                .map(|&(l, tag)| {
+                    let name = l.display_name();
+                    let described = help
+                        .tag_text(tag, true)
+                        .map_or_else(|| name.to_string(), |tag| format!("{name} ({tag})"));
+                    (l, described)
+                })
+                .collect();
+            (*brand, rows)
+        })
+        .collect()
+}
+
 /// How the open **Device** list lays out: the brand groups and the columns
 /// they are spread over, as many as the window has room for.
 struct DeviceListLayout {
-    groups: &'static [Group],
+    groups: Vec<Group>,
     columns: Vec<std::ops::Range<usize>>,
     col_w: f32,
     gap: f32,
@@ -124,7 +144,7 @@ impl DeviceListLayout {
     /// frames, in egui's memory: measuring every name is the costly part,
     /// and it changes only with the font, scale and spacing. The columns
     /// follow the window's width every frame.
-    fn current(ctx: &egui::Context, style: &egui::Style) -> Self {
+    fn current(ctx: &egui::Context, style: &egui::Style, l10n: &Localizer) -> Self {
         let with = MeasuredWith::of(ctx, style);
         let col_w = match ctx.data(|d| d.get_temp::<(MeasuredWith, f32)>(width_id())) {
             Some((kept, col_w)) if kept == with => col_w,
@@ -139,9 +159,10 @@ impl DeviceListLayout {
         let margins = 4.0 * style.spacing.menu_margin.sum().x;
         let k = (((ctx.content_rect().width() - margins + gap) / (col_w + gap)).floor() as usize)
             .clamp(1, MAX_DEVICE_COLUMNS);
-        let heights: Vec<usize> = GROUPS.iter().map(|(_, d)| d.len() + 1).collect();
+        let groups = groups(l10n);
+        let heights: Vec<usize> = groups.iter().map(|(_, d)| d.len() + 1).collect();
         Self {
-            groups: &GROUPS,
+            groups,
             columns: pack_columns(&heights, k),
             col_w,
             gap,
@@ -158,7 +179,7 @@ impl DeviceListLayout {
                     .x
             })
         };
-        GROUPS
+        TAGGED
             .iter()
             .flat_map(|(brand, rows)| {
                 let entries = rows.iter().map(|(d, _)| {
@@ -180,14 +201,19 @@ impl DeviceListLayout {
 /// to the nearest entry of the next column over. The list's layout is worked
 /// out only while it is open: the closed box is drawn every frame the
 /// Settings panel is.
-pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Option<&'static str> {
+pub(super) fn device_dropdown(
+    ui: &mut Ui,
+    l10n: &Localizer,
+    selected_id: &str,
+    label: &str,
+) -> Option<&'static str> {
     use crate::display::{choice_entry_text, listbox_dropdown, navigate_choice_entries};
     use egui::{Align, ComboBox, Layout, TextWrapMode, vec2};
 
     let ctx = ui.ctx().clone();
     let style = ui.style().clone();
     let list = std::cell::OnceCell::new();
-    let list = || list.get_or_init(|| DeviceListLayout::current(&ctx, &style));
+    let list = || list.get_or_init(|| DeviceListLayout::current(&ctx, &style, l10n));
 
     // Below the button and no further: a list taller than that scrolls,
     // where egui would slide it up over the button.
@@ -241,7 +267,7 @@ pub(super) fn device_dropdown(ui: &mut Ui, selected_id: &str, label: &str) -> Op
             registry::AUTO_DEVICE_ID,
             "Auto-detect",
             "Auto-detect",
-            &dmm_shared::help::english().auto_description(),
+            &l10n.help().auto_description(),
         );
         entries.push((auto, None));
         ui.add_space(ui.spacing().item_spacing.y);
@@ -322,7 +348,11 @@ mod tests {
                 ..Default::default()
             };
             let mut out = ctx.run_ui(input, |ui| {
-                layout = Some(DeviceListLayout::current(ui.ctx(), ui.style()));
+                layout = Some(DeviceListLayout::current(
+                    ui.ctx(),
+                    ui.style(),
+                    &crate::l10n::english(),
+                ));
             });
             out.textures_delta.clear();
         }
@@ -358,8 +388,9 @@ mod tests {
     /// meter sold under another name shares its entry's level.
     #[test]
     fn each_entry_names_its_support_level() {
+        let groups = groups(&crate::l10n::english());
         let described = |id: &str| {
-            GROUPS
+            groups
                 .iter()
                 .flat_map(|(_, rows)| rows)
                 .find(|(l, _)| l.id() == id)

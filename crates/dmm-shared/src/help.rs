@@ -151,11 +151,17 @@ impl<'a> Help<'a> {
     /// Shared so the two cannot disagree about which devices are
     /// experimental.
     pub fn device_tag(self, device: &SelectableDevice, verified_too: bool) -> Option<Cow<'a, str>> {
-        if !device.requires_hardware {
-            return Some(tr!(self.0, "device-no-hardware"));
+        self.tag_text(DeviceTag::of(device), verified_too)
+    }
+
+    /// [`Help::device_tag`] for a tag worked out beforehand.
+    pub fn tag_text(self, tag: DeviceTag, verified_too: bool) -> Option<Cow<'a, str>> {
+        match tag {
+            DeviceTag::NoHardware => Some(tr!(self.0, "device-no-hardware")),
+            DeviceTag::Support(stability) => {
+                (verified_too || !stability.is_verified()).then(|| self.stability(stability))
+            }
         }
-        let stability = (device.new_protocol)().profile().stability;
-        (verified_too || !stability.is_verified()).then(|| self.stability(stability))
     }
 
     /// How far a meter's support is verified, as device lists tag it.
@@ -526,6 +532,27 @@ pub fn activation_groups(
             (instructions, names)
         })
         .collect()
+}
+
+/// What a device listing tags a device with, worked out once: finding a
+/// meter's level builds its protocol, too much to do per frame for a list
+/// of every meter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceTag {
+    /// A simulated meter.
+    NoHardware,
+    /// A real meter, and how far its support is verified.
+    Support(Stability),
+}
+
+impl DeviceTag {
+    pub fn of(device: &SelectableDevice) -> Self {
+        if device.requires_hardware {
+            Self::Support((device.new_protocol)().profile().stability)
+        } else {
+            Self::NoHardware
+        }
+    }
 }
 
 /// One step of a setup section: prose to translate, or a command line or

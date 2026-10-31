@@ -356,6 +356,9 @@ impl Connection {
 
 pub struct App {
     pub(super) settings: Settings,
+    /// The language the window speaks. An `Arc` so a deferred viewport
+    /// (What's New) can carry it to its own thread.
+    pub(crate) l10n: std::sync::Arc<dmm_shared::l10n::Localizer>,
     pub(super) settings_open: bool,
     /// A read of the user's themes folder in flight, started when Settings
     /// opens; `None` once its result is taken in.
@@ -470,6 +473,9 @@ impl App {
         let update_notice = cli.update_notice.clone();
         let mut app = Self::from_cli(settings, cli);
         app.on_wayland = on_wayland;
+        // Here and not in `from_settings`, so tests speak English whatever
+        // the desktop does.
+        app.l10n = crate::l10n::from_env("");
         // Here and not in `from_settings`, so a test build can never reach
         // the network or the cache file.
         app.update_check = update_check::UpdateCheck::new(update_notice);
@@ -532,6 +538,7 @@ impl App {
         let selection = SelectedDevice::for_family(&settings.shared.device_family);
         Self {
             settings,
+            l10n: crate::l10n::english(),
             settings_open: false,
             theme_scan: None,
             theme_folder_writes: 0,
@@ -767,7 +774,7 @@ impl App {
         // `Modifiers::COMMAND`, which is Cmd on macOS.
         // The sections and the prose under them as one string: the tooltip is
         // the only place a big-meter session can read them.
-        let tooltip = notice.as_ref().map(|n| n.help_text());
+        let tooltip = notice.as_ref().map(|n| n.help_text(&self.l10n));
         let hint = notice.is_some().then(|| {
             format!(
                 "{} for details",
@@ -1168,6 +1175,109 @@ mod tests {
         // As after `--mock-mode`: the pin on screen is an override.
         settings.overrides.mock_mode = Some(String::new());
         App::from_settings(settings, dmm_lib::Clock::real())
+    }
+
+    /// The most strings the main scenes may draw without going through the
+    /// localizer. Comes down as each panel's text moves into `i18n/`, and
+    /// ends at what is meant to stay as it is: library labels, model names,
+    /// numbers with units. Two above the Linux count: macOS draws a
+    /// Minimise row in the shortcut help.
+    const UNTRANSLATED_CEILING: usize = 262;
+
+    /// Every distinct text the whole app draws or names to a screen reader
+    /// in `scene`, under the pseudo-locale, that has a letter outside the
+    /// brackets the pseudo-locale puts around each message.
+    fn untranslated_texts(scene: impl Fn(&mut App)) -> std::collections::BTreeSet<String> {
+        let mut settings = Settings {
+            auto_connect: false,
+            ..Settings::default()
+        };
+        settings.shared.device_family = "ut61eplus".to_string();
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        let options = dmm_shared::l10n::Options {
+            pseudo: true,
+            ..Default::default()
+        };
+        app.l10n = std::sync::Arc::new(dmm_shared::l10n::Localizer::new(
+            &dmm_shared::l10n::EN_US,
+            &crate::l10n::resources(),
+            &options,
+        ));
+        scene(&mut app);
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let mut frame = eframe::Frame::_new_kittest();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
+        let mut texts = std::collections::BTreeSet::new();
+        for pass in 0..4 {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |ui| eframe::App::ui(&mut app, ui, &mut frame),
+            );
+            out.textures_delta.clear();
+            if pass < 3 {
+                continue;
+            }
+            fn walk(shape: &egui::Shape, texts: &mut std::collections::BTreeSet<String>) {
+                match shape {
+                    egui::Shape::Text(t) => {
+                        texts.insert(t.galley.text().to_string());
+                    }
+                    egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, texts)),
+                    _ => {}
+                }
+            }
+            for clipped in &out.shapes {
+                walk(&clipped.shape, &mut texts);
+            }
+            for (_, node) in out
+                .platform_output
+                .accesskit_update
+                .map(|u| u.nodes)
+                .unwrap_or_default()
+            {
+                texts.extend(node.label().map(str::to_string));
+                texts.extend(node.value().map(str::to_string));
+                texts.extend(node.description().map(str::to_string));
+            }
+        }
+        texts.retain(|t| {
+            let mut depth = 0usize;
+            t.chars().any(|c| match c {
+                '[' => {
+                    depth += 1;
+                    false
+                }
+                ']' => {
+                    depth = depth.saturating_sub(1);
+                    false
+                }
+                c => depth == 0 && c.is_ascii_alphabetic(),
+            })
+        });
+        texts
+    }
+
+    /// Text that never went through the localizer shows unbracketed under
+    /// the pseudo-locale; its count may only come down.
+    #[test]
+    fn untranslated_text_only_comes_down() {
+        let mut found = untranslated_texts(|_| {});
+        found.extend(untranslated_texts(|app| app.settings_open = true));
+        found.extend(untranslated_texts(|app| app.shortcut_help.open = true));
+        assert!(
+            found.len() <= UNTRANSLATED_CEILING,
+            "{} untranslated strings, the ceiling is {UNTRANSLATED_CEILING}: {found:#?}",
+            found.len()
+        );
+        assert!(
+            found.len() + 20 > UNTRANSLATED_CEILING,
+            "{} untranslated strings: lower UNTRANSLATED_CEILING to match",
+            found.len()
+        );
     }
 
     fn choice_id_of(mode: MockMode) -> u16 {

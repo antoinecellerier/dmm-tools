@@ -296,7 +296,7 @@ impl App {
                         ui.disable();
                     }
                     ui.label("Device:");
-                    device_dropdown(ui, selected_id, &label)
+                    device_dropdown(ui, &self.l10n, selected_id, &label)
                 })
                 .inner;
             if let Some(note) = pinned {
@@ -377,12 +377,9 @@ impl App {
                 "Query the meter's name after connecting — the meter will beep once",
             );
             let label = if self.settings.overrides.has_bluetooth() {
-                format!(
-                    "{} (--no-bluetooth)",
-                    dmm_shared::help::english().bluetooth_setting()
-                )
+                format!("{} (--no-bluetooth)", self.l10n.help().bluetooth_setting())
             } else {
-                dmm_shared::help::english().bluetooth_setting().into_owned()
+                self.l10n.help().bluetooth_setting().into_owned()
             };
             // No reconnect: a session already running over an adapter would
             // be dropped by one, and the setting only decides what the next
@@ -1372,7 +1369,7 @@ mod tests {
     fn the_merged_checkbox_rows_wrap_a_checkbox_at_a_time() {
         let bluetooth = format!(
             "{} (--no-bluetooth)",
-            dmm_shared::help::english().bluetooth_setting()
+            crate::l10n::english().help().bluetooth_setting()
         );
         let meter = [
             "Auto-connect on start",

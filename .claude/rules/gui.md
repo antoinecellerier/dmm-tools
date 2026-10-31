@@ -24,6 +24,7 @@ paths:
 ## Semantics
 
 - **Pause halts acquisition entirely** — it is not a display-only freeze. The separate live-view toggle is the scroll-lock that freezes the view while data keeps arriving. Don't conflate the two.
+- **User-facing text goes through `tr!`** (`dmm_shared::tr`) on the app's localizer (`self.l10n`; a free function takes `l10n: &Localizer`). Its English goes in `i18n/en-US/gui/<area>.ftl`, in the order the screen shows it, one message per widget with its hover and accessible name as `.hover`/`.a11y` attributes, and a `#` comment wherever a translator could read it two ways or a variable needs explaining. Whole sentences, never joined fragments; counts select a plural. Library labels, units, numbers and file contents stay as they are. Tests stay English through `App::from_settings` and `crate::l10n::english()`; `untranslated_text_only_comes_down` counts what is left to extract — lower its ceiling when a commit extracts text.
 - **User-facing text says "USB cable", not chip names.** CP2110/CH9329/CH9325 are internal transport details; help text, errors, and labels should talk about the cable/connection the user can see.
 
 ## egui pitfalls learned the hard way

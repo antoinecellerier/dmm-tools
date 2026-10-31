@@ -57,10 +57,10 @@ impl std::fmt::Display for RemoteCommand {
 const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 
 /// What the UI records as the failure once that threshold is crossed.
-pub(super) fn no_response() -> String {
+pub(super) fn no_response(l10n: &dmm_shared::l10n::Localizer) -> String {
     format!(
         "{} \u{2014} check device selection and data transmission",
-        dmm_shared::help::english().no_response()
+        l10n.help().no_response()
     )
 }
 

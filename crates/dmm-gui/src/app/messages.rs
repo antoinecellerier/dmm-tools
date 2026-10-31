@@ -529,9 +529,9 @@ impl App {
                     // selection to check, no USB mode to switch on, and the
                     // file carries on by itself once the gap is over.
                     if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.replay.is_none() {
-                        error!("UI: error: {}", connection::no_response());
+                        error!("UI: error: {}", connection::no_response(&self.l10n));
                         self.connection.last_error =
-                            Some(ConnectionIssue::Other(connection::no_response()));
+                            Some(ConnectionIssue::Other(connection::no_response(&self.l10n)));
                         if self.connection.state == ConnectionState::Disconnected {
                             clear_channel = true;
                         }
@@ -585,6 +585,7 @@ impl App {
                 DmmMessage::Error(e) => {
                     error!("UI: error: {e}");
                     self.connection.last_error = Some(ConnectionIssue::from_error(
+                        &self.l10n,
                         &e,
                         self.settings.overrides.adapter.as_deref(),
                         self.picked_listing(),
@@ -725,7 +726,9 @@ impl App {
             ui.add_space(4.0);
             ui.label(
                 RichText::new(
-                    dmm_shared::help::english().section_label(&section.link, &section.check),
+                    self.l10n
+                        .help()
+                        .section_label(&section.link, &section.check),
                 )
                 .small()
                 .strong(),

@@ -4,6 +4,7 @@
 
 use dmm_lib::protocol::Stability;
 use dmm_lib::transport::Link;
+use dmm_shared::l10n::Localizer;
 use eframe::egui::{self, RichText, Ui};
 
 use super::shortcuts::Shortcut;
@@ -191,7 +192,7 @@ impl App {
                         .unwrap_or("Connected");
                     let link = self.connection.link().filter(|_| show_link);
                     link_drawn = link.is_some();
-                    let text = connected_status(name, link, self.connection.paused);
+                    let text = connected_status(&self.l10n, name, link, self.connection.paused);
                     if self.connection.paused {
                         (orange, text)
                     } else {
@@ -311,7 +312,7 @@ impl App {
                     )
                     .on_hover_text(format!(
                         "{} Click to report feedback.",
-                        dmm_shared::help::english().stability_warning(&model_name, stability)
+                        self.l10n.help().stability_warning(&model_name, stability)
                     ));
                 }
             });
@@ -321,7 +322,7 @@ impl App {
             // bar: what the row needs without the link, and what the link
             // would add. Only the first reaches the window's minimum size.
             let link_w = if self.connection.state == ConnectionState::Connected {
-                link_suffix_width(ui, self.connection.link())
+                link_suffix_width(ui, &self.l10n, self.connection.link())
             } else if let Some(from) = &self.imported {
                 text_width(ui, &file_suffix(&from.path))
             } else {
@@ -428,7 +429,7 @@ impl App {
                 .a11y_label(&format!("{} available — open its release page", tag.name()));
         }
         ui.hyperlink_to(
-            dmm_shared::help::english().project_link(),
+            self.l10n.help().project_link(),
             dmm_shared::help::PROJECT_URL,
         )
         .on_hover_text("Open the dmm-tools project page on GitHub");
@@ -485,10 +486,10 @@ fn text_width(ui: &Ui, text: &str) -> f32 {
 /// recording was made over; the mock is on none, and reads as the meter alone.
 /// `link` is `None` for a row too narrow to hold it as well — the hover says
 /// it either way.
-fn connected_status(name: &str, link: Option<Link>, paused: bool) -> String {
+fn connected_status(l10n: &Localizer, name: &str, link: Option<Link>, paused: bool) -> String {
     let mut text = name.to_string();
     if let Some(link) = link {
-        text.push_str(&link_suffix(link));
+        text.push_str(&link_suffix(l10n, link));
     }
     if paused {
         text.push_str(" (paused)");
@@ -497,8 +498,8 @@ fn connected_status(name: &str, link: Option<Link>, paused: bool) -> String {
 }
 
 /// What the link adds to the status text.
-fn link_suffix(link: Link) -> String {
-    format!(" \u{b7} {}", dmm_shared::help::english().short_name(link))
+fn link_suffix(l10n: &Localizer, link: Link) -> String {
+    format!(" \u{b7} {}", l10n.help().short_name(link))
 }
 
 /// What an imported file adds to the status text: its name, where a live
@@ -513,8 +514,8 @@ fn file_suffix(path: &std::path::Path) -> String {
 /// whether or not the link is on the bar this frame — the row's own width
 /// then stays what it was before the link existed, and with it the narrowest
 /// the window may be made.
-fn link_suffix_width(ui: &Ui, link: Option<Link>) -> f32 {
-    link.map_or(0.0, |link| text_width(ui, &link_suffix(link)))
+fn link_suffix_width(ui: &Ui, l10n: &Localizer, link: Option<Link>) -> f32 {
+    link.map_or(0.0, |link| text_width(ui, &link_suffix(l10n, link)))
 }
 
 /// Whether the status row has room for the link as well.
@@ -571,12 +572,25 @@ mod tests {
     #[test]
     fn the_status_names_the_link_where_there_is_one() {
         assert_eq!(
-            connected_status("UT61E+", Some(Link::Bluetooth), false),
+            connected_status(
+                &crate::l10n::english(),
+                "UT61E+",
+                Some(Link::Bluetooth),
+                false
+            ),
             "UT61E+ \u{b7} Bluetooth"
         );
-        assert_eq!(connected_status("UT61E+", None, false), "UT61E+");
         assert_eq!(
-            connected_status("UT61E+", Some(Link::UsbCable), true),
+            connected_status(&crate::l10n::english(), "UT61E+", None, false),
+            "UT61E+"
+        );
+        assert_eq!(
+            connected_status(
+                &crate::l10n::english(),
+                "UT61E+",
+                Some(Link::UsbCable),
+                true
+            ),
             "UT61E+ \u{b7} USB cable (paused)"
         );
     }
@@ -590,7 +604,7 @@ mod tests {
         assert!(!fits_with_link(row, link, 259.0));
         // What the render then composes at that width.
         assert_eq!(
-            connected_status("UT61E+", None, true),
+            connected_status(&crate::l10n::english(), "UT61E+", None, true),
             "UT61E+ (paused)",
             "the link goes, the state stays"
         );
