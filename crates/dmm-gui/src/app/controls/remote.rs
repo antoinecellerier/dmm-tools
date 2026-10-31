@@ -42,7 +42,7 @@ pub(in crate::app) struct SplitChip<'a> {
     /// The caret's hover text: what the fields take.
     pub(in crate::app) fields_hover: &'a str,
     /// The greyed body's hover: where the row can be opened.
-    pub(in crate::app) unready_hover: &'a str,
+    pub(in crate::app) unready_hover: String,
 }
 
 /// What a click on a [`SplitChip`] asked for.
@@ -118,7 +118,7 @@ impl SplitChip<'_> {
                     .corner_radius(body_radius),
             )
             .on_hover_text(self.hover)
-            .on_disabled_hover_text(self.unready_hover);
+            .on_disabled_hover_text(&self.unready_hover);
         let caret = self.open.map(|open| {
             ui.spacing_mut().item_spacing.x = gap;
             let caret = ui
@@ -225,8 +225,8 @@ impl App {
                 .horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = spacing;
                     (
-                        self.scale_chip().show(ui, font_size),
-                        self.alarm_chip().show(ui, font_size),
+                        self.scale_chip(ui.ctx()).show(ui, font_size),
+                        self.alarm_chip(ui.ctx()).show(ui, font_size),
                     )
                 })
                 .inner;
@@ -391,9 +391,9 @@ impl App {
             // wrapped off. On a line of their own the line break is the
             // boundary and the rule is dropped.
             let rule_width = SCALE_RULE_WIDTH * scale;
-            let chips_width = self.scale_chip().width(ui, font_size)
+            let chips_width = self.scale_chip(ui.ctx()).width(ui, font_size)
                 + spacing
-                + self.alarm_chip().width(ui, font_size);
+                + self.alarm_chip(ui.ctx()).width(ui, font_size);
             let needed = rule_width + spacing + chips_width + spacing + right_reserve;
             if placed && needed <= ui.available_size_before_wrap().x {
                 let height = ui.cursor().height();
@@ -407,8 +407,8 @@ impl App {
             } else if placed {
                 ui.end_row();
             }
-            scale_clicked = self.scale_chip().show(ui, font_size);
-            alarm_clicked = self.alarm_chip().show(ui, font_size);
+            scale_clicked = self.scale_chip(ui.ctx()).show(ui, font_size);
+            alarm_clicked = self.alarm_chip(ui.ctx()).show(ui, font_size);
         });
         self.take_app_chip_clicks(scale_clicked, alarm_clicked);
     }
@@ -476,7 +476,7 @@ mod tests {
         app.toggle_alarm();
         assert!(app.alarm.is_none());
         assert!(
-            app.alarm_chip().ready,
+            app.alarm_chip(&crate::app::styled_context()).ready,
             "the limits are kept for the next click"
         );
     }
@@ -500,10 +500,11 @@ mod tests {
     fn the_big_meter_chips_have_no_caret() {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         app.big_meter_mode = crate::app::BigMeterMode::Full;
-        let chip = app.alarm_chip();
+        let ctx = crate::app::styled_context();
+        let chip = app.alarm_chip(&ctx);
         assert_eq!((chip.open, chip.ready), (None, false));
         app.alarm_editor.set_drafts("3", "");
-        assert!(app.alarm_chip().ready);
+        assert!(app.alarm_chip(&ctx).ready);
     }
 
     /// The greyed chip names the way to a row: Ctrl+B out of the big meter,
@@ -513,11 +514,18 @@ mod tests {
     fn the_greyed_chip_names_the_way_to_its_row() {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         app.big_meter_mode = crate::app::BigMeterMode::Full;
-        assert!(app.scale_chip().unready_hover.contains("Ctrl+B"));
+        let ctx = crate::app::styled_context();
+        let chip = app.scale_chip(&ctx);
+        assert!(
+            chip.unready_hover
+                .contains(&crate::app::shortcuts::Shortcut::CycleBigMeter.keys(&ctx)),
+            "{}",
+            chip.unready_hover
+        );
         app.big_meter_mode = crate::app::BigMeterMode::Off;
         app.settings.show_graph = false;
         app.settings.show_recording = false;
-        let chip = app.scale_chip();
+        let chip = app.scale_chip(&ctx);
         assert_eq!(chip.open, None);
         assert!(
             chip.unready_hover.contains("Settings"),

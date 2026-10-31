@@ -1,3 +1,4 @@
+use crate::app::shortcuts::Shortcut;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
 use dmm_shared::help::BLUETOOTH_SETTING;
@@ -512,14 +513,16 @@ impl App {
     /// check.
     fn show_window_rows(&mut self, ui: &mut Ui) {
         let zoom_row = ui.horizontal_wrapped(|ui| {
+            let step = Shortcut::ZoomIn.keys(ui.ctx());
+            let reset = Shortcut::ZoomReset.keys(ui.ctx());
             let chips = Self::ZOOM_LEVELS.iter().map(|&level| Chip {
                 value: level,
                 selected: self.settings.zoom_pct == level,
                 label: format!("{level}%"),
                 tooltip: if level == 100 {
-                    "Scale the GUI to 100% (Ctrl+0, or Ctrl+/- to step)".to_string()
+                    format!("Scale the GUI to 100% ({reset}, or {step} to step)")
                 } else {
-                    format!("Scale the GUI to {level}% (Ctrl+/- to step)")
+                    format!("Scale the GUI to {level}% ({step} to step)")
                 },
             });
             if let Some(level) = chip_row(ui, "Zoom:", chips) {
@@ -537,7 +540,10 @@ impl App {
                 ui,
                 &mut self.settings.hide_decorations,
                 "Hide window decorations",
-                "Borderless window — use Ctrl+D to toggle back",
+                &format!(
+                    "Borderless window — use {} to toggle back",
+                    Shortcut::ToggleDecorations.keys(ui.ctx())
+                ),
             ) {
                 self.apply_decorations(ui.ctx());
                 self.settings.save();
@@ -551,7 +557,10 @@ impl App {
                 &mut self.settings.always_on_top,
                 "Always on top",
             )
-            .on_hover_text("Keep the window above other desktop windows (Ctrl+T)")
+            .on_hover_text(format!(
+                "Keep the window above other desktop windows ({})",
+                Shortcut::ToggleAlwaysOnTop.keys(ui.ctx())
+            ))
             .on_disabled_hover_text(ALWAYS_ON_TOP_WAYLAND_HINT);
             if response.changed() {
                 self.apply_always_on_top(ui.ctx());

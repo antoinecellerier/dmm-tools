@@ -18,7 +18,7 @@ use super::{App, ConnectionState};
 
 /// What a key press does, independent of the keys bound to it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Shortcut {
+pub(super) enum Shortcut {
     ConnectToggle,
     Quit,
     ClearSession,
@@ -274,13 +274,50 @@ impl Shortcut {
         Self::Quit,
     ];
 
+    /// The keys that trigger this shortcut, as this machine renders them —
+    /// for the help grid and for every tooltip that names a shortcut.
+    ///
+    /// Rendered by `ctx`, not spelled out: the bindings use
+    /// `Modifiers::COMMAND`, which is Cmd on macOS, so a literal "Ctrl+O"
+    /// would name a key macOS users don't have.
+    pub(super) fn keys(self, ctx: &egui::Context) -> String {
+        let keys = |modifiers: Modifiers, key: Key| {
+            ctx.format_shortcut(&egui::KeyboardShortcut::new(modifiers, key))
+        };
+        match self {
+            Self::ConnectToggle => keys(Modifiers::COMMAND, Key::O),
+            Self::TogglePause => keys(Modifiers::NONE, Key::Space),
+            Self::ClearSession => keys(Modifiers::COMMAND, Key::L),
+            Self::ToggleRecording => keys(Modifiers::COMMAND, Key::R),
+            Self::CycleBigMeter => keys(Modifiers::COMMAND, Key::B),
+            Self::ToggleAlwaysOnTop => keys(Modifiers::COMMAND, Key::T),
+            Self::ToggleDecorations => keys(Modifiers::COMMAND, Key::D),
+            Self::ExportRecording => keys(Modifiers::COMMAND, Key::E),
+            Self::ImportFile => keys(Modifiers::COMMAND, Key::I),
+            Self::AddMarker => keys(Modifiers::NONE, Key::N),
+            Self::AddMarkerAndNote => keys(Modifiers::COMMAND, Key::N),
+            // Two bindings, one per OS: the one this machine answers to.
+            Self::ToggleFullscreen if ctx.os().is_mac() => keys(MAC_FULLSCREEN, Key::F),
+            Self::ToggleFullscreen => keys(Modifiers::NONE, Key::F11),
+            Self::Minimize => keys(Modifiers::MAC_CMD, Key::M),
+            // One pair, named together.
+            Self::ZoomIn | Self::ZoomOut => format!("{}Plus/Minus", command_prefix(ctx)),
+            Self::ZoomReset => keys(Modifiers::COMMAND, Key::Num0),
+            // Escape is egui's own (`Modal::should_close`), so it has no
+            // binding to render — only the Ctrl+W half comes from the table.
+            Self::Close => format!("Esc / {}", keys(Modifiers::COMMAND, Key::W)),
+            Self::Quit => format!(
+                "{} / {}",
+                keys(Modifiers::COMMAND, Key::Q),
+                keys(Modifiers::COMMAND, Key::W)
+            ),
+            Self::ToggleHelp => keys(Modifiers::NONE, Key::Questionmark),
+        }
+    }
+
     /// Row in the help grid: `(keys, action, inert)`; `None` for a binding
     /// folded into another row. `inert` marks a key that does nothing in
     /// this session, so the modal can grey the row as well as say so.
-    ///
-    /// The keys are rendered by `ctx`, not spelled out here: the bindings
-    /// use `Modifiers::COMMAND`, which is Cmd on macOS, so a literal
-    /// "Ctrl+O" would name a key macOS users don't have.
     ///
     /// `on_wayland` marks the one key the compositor makes inert.
     fn help_row(
@@ -288,83 +325,41 @@ impl Shortcut {
         ctx: &egui::Context,
         on_wayland: bool,
     ) -> Option<(String, &'static str, bool)> {
-        let keys = |modifiers: Modifiers, key: Key| {
-            ctx.format_shortcut(&egui::KeyboardShortcut::new(modifiers, key))
-        };
-        let (key, action) = match self {
-            Self::ConnectToggle => (keys(Modifiers::COMMAND, Key::O), "Connect / Disconnect"),
-            Self::TogglePause => (keys(Modifiers::NONE, Key::Space), "Pause / Resume"),
-            Self::ClearSession => (keys(Modifiers::COMMAND, Key::L), "Clear graph & statistics"),
-            Self::ToggleRecording => (keys(Modifiers::COMMAND, Key::R), "Toggle recording"),
-            Self::CycleBigMeter => (
-                keys(Modifiers::COMMAND, Key::B),
-                "Cycle big meter (off / full / minimal)",
-            ),
-            Self::ToggleAlwaysOnTop => (
-                keys(Modifiers::COMMAND, Key::T),
-                if on_wayland {
-                    // Same explanation as the settings caption and the
-                    // toast, so the three surfaces read alike — a test
-                    // pins the tail to `ALWAYS_ON_TOP_WAYLAND_HINT`.
-                    "Always on top: not available on Wayland — right-click the title bar to keep the window above others"
-                } else {
-                    "Toggle always on top"
-                },
-            ),
-            Self::ToggleDecorations => (
-                keys(Modifiers::COMMAND, Key::D),
-                "Toggle window decorations",
-            ),
-            Self::ExportRecording => (keys(Modifiers::COMMAND, Key::E), "Export CSV\u{2026}"),
-            Self::ImportFile => (keys(Modifiers::COMMAND, Key::I), "Import a file\u{2026}"),
-            Self::AddMarker => (
-                keys(Modifiers::NONE, Key::N),
-                "Add a marker at the reading on screen",
-            ),
-            Self::AddMarkerAndNote => (
-                keys(Modifiers::COMMAND, Key::N),
-                "Add a marker and write its note",
-            ),
-            // Two bindings, one per OS — the row shows the one this machine
-            // answers to rather than both.
-            Self::ToggleFullscreen => (
-                if ctx.os().is_mac() {
-                    keys(MAC_FULLSCREEN, Key::F)
-                } else {
-                    keys(Modifiers::NONE, Key::F11)
-                },
-                "Toggle fullscreen",
-            ),
+        let action = match self {
+            Self::ConnectToggle => "Connect / Disconnect",
+            Self::TogglePause => "Pause / Resume",
+            Self::ClearSession => "Clear graph & statistics",
+            Self::ToggleRecording => "Toggle recording",
+            Self::CycleBigMeter => "Cycle big meter (off / full / minimal)",
+            Self::ToggleAlwaysOnTop if on_wayland => {
+                // Same explanation as the settings caption and the toast,
+                // so the three surfaces read alike — a test pins the tail
+                // to `ALWAYS_ON_TOP_WAYLAND_HINT`.
+                "Always on top: not available on Wayland — right-click the title bar to keep the window above others"
+            }
+            Self::ToggleAlwaysOnTop => "Toggle always on top",
+            Self::ToggleDecorations => "Toggle window decorations",
+            Self::ExportRecording => "Export CSV\u{2026}",
+            Self::ImportFile => "Import a file\u{2026}",
+            Self::AddMarker => "Add a marker at the reading on screen",
+            Self::AddMarkerAndNote => "Add a marker and write its note",
+            Self::ToggleFullscreen => "Toggle fullscreen",
             // macOS only: elsewhere the title bar's own button is the way to
             // minimise, and a row for a key that does nothing would mislead.
             Self::Minimize if !ctx.os().is_mac() => return None,
-            Self::Minimize => (keys(Modifiers::MAC_CMD, Key::M), "Minimise window"),
-            Self::ZoomIn => (
-                format!("{}Plus/Minus", command_prefix(ctx)),
-                "Zoom in / out",
-            ),
+            Self::Minimize => "Minimise window",
+            Self::ZoomIn => "Zoom in / out",
             // Folded into the row above.
             Self::ZoomOut => return None,
-            Self::ZoomReset => (keys(Modifiers::COMMAND, Key::Num0), "Reset zoom to 100%"),
-            // Escape is egui's own (`Modal::should_close`), so it has no
-            // binding to render — only the Ctrl+W half comes from the table.
+            Self::ZoomReset => "Reset zoom to 100%",
             // Ctrl+W with the help closed quits, which the Quit row says.
-            Self::Close => (
-                format!("Esc / {}", keys(Modifiers::COMMAND, Key::W)),
-                "Close this help",
-            ),
-            Self::Quit => (
-                format!(
-                    "{} / {}",
-                    keys(Modifiers::COMMAND, Key::Q),
-                    keys(Modifiers::COMMAND, Key::W)
-                ),
-                "Quit",
-            ),
+            Self::Close => "Close this help",
+            Self::Quit => "Quit",
             // Not listed: the grid it opens *is* the documentation, and the
             // toolbar's `?` button spells the key out in its tooltip.
             Self::ToggleHelp => return None,
         };
+        let key = self.keys(ctx);
         let inert = on_wayland && self == Self::ToggleAlwaysOnTop;
         Some((key, action, inert))
     }

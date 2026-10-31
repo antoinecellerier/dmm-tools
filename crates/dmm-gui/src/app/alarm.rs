@@ -142,7 +142,7 @@ impl App {
     }
 
     /// The **Alarm** chip: filled while an alarm is set.
-    pub(super) fn alarm_chip(&self) -> SplitChip<'static> {
+    pub(super) fn alarm_chip(&self, ctx: &egui::Context) -> SplitChip<'static> {
         let active = self.alarm.is_some();
         SplitChip {
             name: ALARM_NAME,
@@ -151,7 +151,7 @@ impl App {
             open: (!self.meter_only()).then_some(self.alarm_editor.open),
             hover: "Turn the alarm on or off",
             fields_hover: ALARM_HOVER,
-            unready_hover: self.chip_setup_hint(),
+            unready_hover: self.chip_setup_hint(ctx),
         }
     }
 

@@ -641,11 +641,14 @@ impl App {
 
     /// Where a Scale or Alarm chip greyed out in a meter-only view can be
     /// set up: the layout with a row for its fields.
-    pub(super) fn chip_setup_hint(&self) -> &'static str {
+    pub(super) fn chip_setup_hint(&self, ctx: &egui::Context) -> String {
         if !self.settings.show_graph && !self.settings.show_recording {
-            "Show the graph or recording in Settings first"
+            "Show the graph or recording in Settings first".to_string()
         } else {
-            "Set up in the normal layout first (Ctrl+B)"
+            format!(
+                "Set up in the normal layout first ({})",
+                shortcuts::Shortcut::CycleBigMeter.keys(ctx)
+            )
         }
     }
 

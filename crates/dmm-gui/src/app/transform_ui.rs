@@ -92,7 +92,7 @@ impl App {
     /// remote buttons, which is why a caller sitting it next to them draws a
     /// rule in between: those mirror and drive the meter's own state, this
     /// one changes nothing on the meter at all.
-    pub(super) fn scale_chip(&self) -> SplitChip<'static> {
+    pub(super) fn scale_chip(&self, ctx: &egui::Context) -> SplitChip<'static> {
         let active = !self.transform.is_identity();
         SplitChip {
             name: SCALE_NAME,
@@ -101,7 +101,7 @@ impl App {
             open: (!self.meter_only()).then_some(self.transform_editor.open),
             hover: "Turn scaling on or off",
             fields_hover: SCALE_HOVER,
-            unready_hover: self.chip_setup_hint(),
+            unready_hover: self.chip_setup_hint(ctx),
         }
     }
 

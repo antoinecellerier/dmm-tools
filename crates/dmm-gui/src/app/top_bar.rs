@@ -6,6 +6,7 @@ use dmm_lib::protocol::Stability;
 use dmm_lib::transport::Link;
 use eframe::egui::{self, RichText, Ui};
 
+use super::shortcuts::Shortcut;
 use super::{App, ConnectionState};
 use crate::a11y::{ResponseA11yExt, UiA11yExt};
 
@@ -100,7 +101,10 @@ impl App {
                 ConnectionState::Disconnected => {
                     if ui
                         .button("Connect")
-                        .on_hover_text("Open USB connection to the selected meter (Ctrl+O)")
+                        .on_hover_text(format!(
+                            "Open USB connection to the selected meter ({})",
+                            Shortcut::ConnectToggle.keys(ctx)
+                        ))
                         .clicked()
                     {
                         self.request_connect(ctx);
@@ -109,17 +113,23 @@ impl App {
                 ConnectionState::Connected => {
                     if ui
                         .button("Disconnect")
-                        .on_hover_text("Close the active meter connection (Ctrl+O)")
+                        .on_hover_text(format!(
+                            "Close the active meter connection ({})",
+                            Shortcut::ConnectToggle.keys(ctx)
+                        ))
                         .clicked()
                     {
                         self.disconnect();
                     }
+                    let space = Shortcut::TogglePause.keys(ctx);
                     let (pause_label, pause_tooltip) = if self.connection.paused {
-                        ("\u{25B6} Resume", "Resume acquisition (Space)")
+                        ("\u{25B6} Resume", format!("Resume acquisition ({space})"))
                     } else {
                         (
                             "\u{23F8} Pause",
-                            "Halt acquisition — stops recording and graph updates (Space)",
+                            format!(
+                                "Halt acquisition — stops recording and graph updates ({space})"
+                            ),
                         )
                     };
                     if ui
@@ -131,7 +141,10 @@ impl App {
                     }
                     if ui
                         .button("Clear")
-                        .on_hover_text("Clear graph history and statistics (Ctrl+L)")
+                        .on_hover_text(format!(
+                            "Clear graph history and statistics ({})",
+                            Shortcut::ClearSession.keys(ctx)
+                        ))
                         .clicked()
                     {
                         self.clear_session();
@@ -154,7 +167,10 @@ impl App {
                     // app — the status tooltip above tells them to click it.
                     if ui
                         .button("Disconnect")
-                        .on_hover_text("Stop retrying and close the connection (Ctrl+O)")
+                        .on_hover_text(format!(
+                            "Stop retrying and close the connection ({})",
+                            Shortcut::ConnectToggle.keys(ctx)
+                        ))
                         .clicked()
                     {
                         self.disconnect();

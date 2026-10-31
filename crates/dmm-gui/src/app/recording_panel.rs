@@ -3,6 +3,7 @@
 //! shown before a new capture or a Discard would lose unexported samples, and
 //! the drag-resizable split between the graph and the recording panel.
 
+use crate::app::shortcuts::Shortcut;
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 use log::info;
 use std::time::Instant;
@@ -22,14 +23,15 @@ const EXPORT_MENU_ARROW: &str = "\u{23F7}";
 
 /// The Export… segments' hover text, label first, then arrow: what they save
 /// for the buffer's role.
-fn export_tooltips(role: BufferRole) -> (&'static str, &'static str) {
+fn export_tooltips(ctx: &egui::Context, role: BufferRole) -> (String, &'static str) {
+    let keys = Shortcut::ExportRecording.keys(ctx);
     match role {
         BufferRole::Recording => (
-            "Save the recording as a CSV file (Ctrl+E)",
+            format!("Save the recording as a CSV file ({keys})"),
             "Save the recording as a CSV, JSON or replay file",
         ),
         BufferRole::History => (
-            "Save the samples from the graph as a CSV file (Ctrl+E)",
+            format!("Save the samples from the graph as a CSV file ({keys})"),
             "Save the samples from the graph as a CSV, JSON or replay file",
         ),
     }
@@ -374,12 +376,13 @@ impl App {
     }
 
     fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {
+        let keys = Shortcut::ToggleRecording.keys(ui.ctx());
         let (btn_label, btn_tooltip) = if self.capture.recording.active {
-            ("\u{25A0} Stop", "Stop recording (Ctrl+R)")
+            ("\u{25A0} Stop", format!("Stop recording ({keys})"))
         } else {
             (
                 "\u{25CF} Record",
-                "Start writing live samples to the recording buffer (Ctrl+R)",
+                format!("Start writing live samples to the recording buffer ({keys})"),
             )
         };
 
@@ -391,7 +394,10 @@ impl App {
             // Export… sits next to the count it saves.
             if ui
                 .button("Import\u{2026}")
-                .on_hover_text("Open an exported CSV, JSON or replay file (Ctrl+I)")
+                .on_hover_text(format!(
+                    "Open an exported CSV, JSON or replay file ({})",
+                    Shortcut::ImportFile.keys(ui.ctx())
+                ))
                 .clicked()
             {
                 self.begin_import();
@@ -456,7 +462,8 @@ impl App {
     /// The format is settled here, before the save dialog opens — see
     /// `ExportFormat` for why the dialog cannot be the one to ask.
     fn show_export_button(&mut self, ui: &mut Ui) {
-        let (label_tooltip, arrow_tooltip) = export_tooltips(self.capture.recording.role());
+        let (label_tooltip, arrow_tooltip) =
+            export_tooltips(ui.ctx(), self.capture.recording.role());
         ui.scope(|ui| {
             // The two segments touch, and only the outer corners are round,
             // so they read as one button.
@@ -1152,9 +1159,10 @@ mod tests {
     /// The hover text names what the buttons save.
     #[test]
     fn the_export_tooltips_follow_the_buffer() {
-        let (label, arrow) = export_tooltips(BufferRole::History);
+        let ctx = crate::app::styled_context();
+        let (label, arrow) = export_tooltips(&ctx, BufferRole::History);
         assert!(label.contains("from the graph") && arrow.contains("from the graph"));
-        let (label, arrow) = export_tooltips(BufferRole::Recording);
+        let (label, arrow) = export_tooltips(&ctx, BufferRole::Recording);
         assert!(label.contains("the recording") && arrow.contains("the recording"));
     }
 
