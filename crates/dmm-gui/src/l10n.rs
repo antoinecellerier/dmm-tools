@@ -14,6 +14,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui/settings.ftl"),
     dmm_shared::ftl!("en-US", "gui/colors.ftl"),
     dmm_shared::ftl!("en-US", "gui/recording.ftl"),
+    dmm_shared::ftl!("en-US", "gui/export-import.ftl"),
 ];
 
 /// Everything the GUI shows: the shared help and its own messages.

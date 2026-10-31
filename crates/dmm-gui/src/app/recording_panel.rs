@@ -11,7 +11,7 @@ use log::info;
 use std::time::Instant;
 
 use super::capture::CaptureLayout;
-use super::export::{ExportFormat, NO_WIRE_FORMAT};
+use super::export::{ExportError, ExportFormat};
 use super::toast::Toast;
 use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
@@ -25,27 +25,22 @@ const EXPORT_MENU_ARROW: &str = "\u{23F7}";
 
 /// The Export… segments' hover text, label first, then arrow: what they save
 /// for the buffer's role.
-fn export_tooltips(ctx: &egui::Context, role: BufferRole) -> (String, &'static str) {
+fn export_tooltips(l10n: &Localizer, ctx: &egui::Context, role: BufferRole) -> (String, String) {
     let keys = Shortcut::ExportRecording.keys(ctx);
-    match role {
-        BufferRole::Recording => (
-            format!("Save the recording as a CSV file ({keys})"),
-            "Save the recording as a CSV, JSON or replay file",
-        ),
-        BufferRole::History => (
-            format!("Save the samples from the graph as a CSV file ({keys})"),
-            "Save the samples from the graph as a CSV, JSON or replay file",
-        ),
-    }
+    let buffer = match role {
+        BufferRole::Recording => "recording",
+        BufferRole::History => "graph",
+    };
+    (
+        tr!(l10n, "export-button.hover", buffer = buffer, keys = &keys).into_owned(),
+        tr!(l10n, "export-menu.hover", buffer = buffer).into_owned(),
+    )
 }
 
 /// What the panel says under an imported session's buttons.
-fn imported_hint(from: &super::import::ImportedFrom) -> String {
-    format!(
-        "Imported {} from {}. Export\u{2026} saves them with your markers and view.",
-        super::import::readings_noun(from.readings),
-        super::import::file_name(&from.path)
-    )
+fn imported_hint(l10n: &Localizer, from: &super::import::ImportedFrom) -> String {
+    let file = super::import::file_name(&from.path);
+    tr!(l10n, "import-hint", count = from.readings, file = file).into_owned()
 }
 
 /// The line under the Record / Export row while nothing is recorded: what
@@ -58,66 +53,53 @@ fn history_hint(l10n: &Localizer, samples: usize) -> String {
 /// The prompt's heading and text before `action` loses `samples` and
 /// `markers` no file holds — for Discard, only those on readings that have
 /// left the graph: Export… still saves the rest, as the graph's.
-fn discard_prompt(action: DiscardFor, samples: usize, markers: usize) -> (&'static str, String) {
-    let changes = format!(
-        "unsaved changes to {markers} {}",
-        if markers == 1 { "marker" } else { "markers" }
-    );
-    let samples_noun = noun(samples);
+fn discard_prompt(
+    l10n: &Localizer,
+    action: DiscardFor,
+    samples: usize,
+    markers: usize,
+) -> (String, String) {
+    let lost = match (samples, markers) {
+        (0, _) => "markers",
+        (_, 0) => "samples",
+        _ => "both",
+    };
     let text = match action {
-        DiscardFor::Record => {
-            let lost = match (samples, markers) {
-                (0, _) => changes,
-                (n, 0) => format!("{n} unexported {samples_noun}"),
-                (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
-            };
-            // Only the recording goes: its markers stay while the graph
-            // holds their readings, and Export… saves them once it is
-            // discarded.
-            let stay = if markers > 0 {
-                " Markers stay on the graph while it holds their readings."
-            } else {
-                ""
-            };
-            format!("Starting a new recording will discard {lost}.{stay}")
-        }
-        DiscardFor::Import => {
-            let lost = match (samples, markers) {
-                (0, _) => changes,
-                (n, 0) => format!("{n} unexported {samples_noun}"),
-                (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
-            };
-            format!("Importing replaces this session and will discard {lost}.")
-        }
-        DiscardFor::Connect => {
-            let lost = match (samples, markers) {
-                (0, _) => changes,
-                (n, 0) => format!("{n} unexported {samples_noun}"),
-                (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
-            };
-            format!("Connecting ends the imported session and will discard {lost}.")
-        }
-        DiscardFor::Discard => {
-            let lost = match (samples, markers) {
-                (0, _) => format!("{changes} on readings that have left the graph"),
-                (n, 0) => format!("{n} {samples_noun} that have left the graph"),
-                (n, _) => {
-                    format!("{n} {samples_noun} that have left the graph, and {changes} on them")
-                }
-            };
-            format!("Discarding the recording will lose {lost}.")
-        }
+        DiscardFor::Record => tr!(
+            l10n,
+            "export-unsaved-record",
+            lost = lost,
+            samples = samples,
+            markers = markers
+        ),
+        DiscardFor::Import => tr!(
+            l10n,
+            "export-unsaved-import",
+            lost = lost,
+            samples = samples,
+            markers = markers
+        ),
+        DiscardFor::Connect => tr!(
+            l10n,
+            "export-unsaved-connect",
+            lost = lost,
+            samples = samples,
+            markers = markers
+        ),
+        DiscardFor::Discard => tr!(
+            l10n,
+            "export-unsaved-discard",
+            lost = lost,
+            samples = samples,
+            markers = markers
+        ),
     };
     let heading = if samples == 0 {
-        "Discard unexported markers?"
+        tr!(l10n, "export-unsaved-heading-markers")
     } else {
-        "Discard unexported samples?"
+        tr!(l10n, "export-unsaved-heading-samples")
     };
-    (heading, text)
-}
-
-fn noun(n: usize) -> &'static str {
-    if n == 1 { "sample" } else { "samples" }
+    (heading.into_owned(), text.into_owned())
 }
 
 /// Smallest height the graph + recording split is squeezed into; below it the
@@ -330,7 +312,7 @@ impl App {
         // keyboard focus inside the dialog.
         let modal = egui::Modal::new(egui::Id::unique("confirm_discard_modal")).show(ctx, |ui| {
             ui.set_max_width(380.0);
-            let (heading, text) = discard_prompt(action, unexported, markers);
+            let (heading, text) = discard_prompt(&self.l10n, action, unexported, markers);
             ui.heading(heading);
             ui.add_space(4.0);
             ui.label(text);
@@ -338,7 +320,7 @@ impl App {
             ui.horizontal(|ui| {
                 // Cancel takes focus: Enter and Space then default to the
                 // non-destructive choice.
-                let cancel_btn = ui.button("Cancel");
+                let cancel_btn = ui.button(tr!(self.l10n, "export-unsaved-cancel"));
                 if focus_pending {
                     cancel_btn.request_focus();
                 }
@@ -346,10 +328,10 @@ impl App {
                     cancel = true;
                 }
                 let confirm = match action {
-                    DiscardFor::Record => "Discard and record",
-                    DiscardFor::Discard => "Discard recording",
-                    DiscardFor::Import => "Discard and import",
-                    DiscardFor::Connect => "Discard and connect",
+                    DiscardFor::Record => tr!(self.l10n, "export-unsaved-record-confirm"),
+                    DiscardFor::Discard => tr!(self.l10n, "export-unsaved-discard-confirm"),
+                    DiscardFor::Import => tr!(self.l10n, "export-unsaved-import-confirm"),
+                    DiscardFor::Connect => tr!(self.l10n, "export-unsaved-connect-confirm"),
                 };
                 if ui.button(confirm).clicked() {
                     discard = true;
@@ -387,12 +369,10 @@ impl App {
             // First, apart from the recording's own controls: an import
             // replaces the session, where the rest act on the recording and
             // Export… sits next to the count it saves.
+            let keys = Shortcut::ImportFile.keys(ui.ctx());
             if ui
-                .button("Import\u{2026}")
-                .on_hover_text(format!(
-                    "Open an exported CSV, JSON or replay file ({})",
-                    Shortcut::ImportFile.keys(ui.ctx())
-                ))
+                .button(tr!(l10n, "import-button"))
+                .on_hover_text(tr!(l10n, "import-button.hover", keys = &keys))
                 .clicked()
             {
                 self.begin_import();
@@ -445,7 +425,7 @@ impl App {
 
         let history = self.capture.recording.history_samples().len();
         let caption = match &self.imported {
-            Some(from) => Some(imported_hint(from)),
+            Some(from) => Some(imported_hint(l10n, from)),
             None => (self.capture.recording.role() == BufferRole::History && history > 0)
                 .then(|| history_hint(l10n, history)),
         };
@@ -467,21 +447,22 @@ impl App {
     /// The format is settled here, before the save dialog opens — see
     /// `ExportFormat` for why the dialog cannot be the one to ask.
     fn show_export_button(&mut self, ui: &mut Ui) {
+        let l10n = self.l10n.clone();
         let (label_tooltip, arrow_tooltip) =
-            export_tooltips(ui.ctx(), self.capture.recording.role());
+            export_tooltips(&l10n, ui.ctx(), self.capture.recording.role());
         ui.scope(|ui| {
             // The two segments touch, and only the outer corners are round,
             // so they read as one button.
             ui.spacing_mut().item_spacing.x = 0.0;
             let radius = ui.visuals().widgets.inactive.corner_radius;
             let main = ui
-                .add(
-                    egui::Button::new("Export\u{2026}").corner_radius(egui::CornerRadius {
+                .add(egui::Button::new(tr!(l10n, "export-button")).corner_radius(
+                    egui::CornerRadius {
                         ne: 0,
                         se: 0,
                         ..radius
-                    }),
-                )
+                    },
+                ))
                 .on_hover_text(label_tooltip);
             if main.clicked() {
                 self.export_recording(ui.ctx(), ExportFormat::Csv);
@@ -495,7 +476,7 @@ impl App {
                     }),
                 )
                 .on_hover_text(arrow_tooltip)
-                .a11y_label("Export file type");
+                .a11y_label(&tr!(l10n, "export-menu.a11y"));
             self.show_export_menu(ui, &arrow);
         });
     }
@@ -533,9 +514,10 @@ impl App {
         // the request is repeated on the following frame, once the click is
         // gone; the opening frame is an invisible sizing pass anyway.
         let focus_again = std::mem::take(&mut self.recording_panel.export_menu_focus_pending);
+        let l10n = self.l10n.clone();
         let mut picked = None;
         egui::Popup::menu(arrow).id(popup_id).show(|ui| {
-            let csv = ui.button("CSV\u{2026}");
+            let csv = ui.button(tr!(l10n, "export-csv"));
             if !was_open || focus_again {
                 csv.request_focus();
             }
@@ -547,15 +529,18 @@ impl App {
                 picked = Some(ExportFormat::Csv);
             }
             let json = ui
-                .button("JSON\u{2026}")
-                .on_hover_text("One object per line, as dmm-cli read --format json prints");
+                .button(tr!(l10n, "export-json"))
+                .on_hover_text(tr!(l10n, "export-json.hover"));
             if was_open && json.clicked() {
                 picked = Some(ExportFormat::Json);
             }
             let replay = ui
-                .add_enabled(replay_possible, egui::Button::new("Replay\u{2026}"))
-                .on_hover_text("A file dmm-gui --replay plays back as the meter")
-                .on_disabled_hover_text(NO_WIRE_FORMAT);
+                .add_enabled(
+                    replay_possible,
+                    egui::Button::new(tr!(l10n, "export-replay")),
+                )
+                .on_hover_text(tr!(l10n, "export-replay.hover"))
+                .on_disabled_hover_text(ExportError::NoWireFormat.text(&l10n));
             if was_open && replay.clicked() {
                 picked = Some(ExportFormat::Replay);
             }
@@ -1172,9 +1157,10 @@ mod tests {
     #[test]
     fn the_export_tooltips_follow_the_buffer() {
         let ctx = crate::app::styled_context();
-        let (label, arrow) = export_tooltips(&ctx, BufferRole::History);
+        let l10n = crate::l10n::english();
+        let (label, arrow) = export_tooltips(&l10n, &ctx, BufferRole::History);
         assert!(label.contains("from the graph") && arrow.contains("from the graph"));
-        let (label, arrow) = export_tooltips(&ctx, BufferRole::Recording);
+        let (label, arrow) = export_tooltips(&l10n, &ctx, BufferRole::Recording);
         assert!(label.contains("the recording") && arrow.contains("the recording"));
     }
 
@@ -1324,20 +1310,125 @@ mod tests {
 
     #[test]
     fn the_prompt_names_samples_and_markers_together() {
+        let l10n = crate::l10n::english();
         assert_eq!(
-            discard_prompt(DiscardFor::Record, 94, 2),
+            discard_prompt(&l10n, DiscardFor::Record, 94, 2),
             (
-                "Discard unexported samples?",
+                "Discard unexported samples?".to_string(),
                 "Starting a new recording will discard 94 unexported samples and unsaved \
                  changes to 2 markers. Markers stay on the graph while it holds their readings."
                     .to_string()
             )
         );
         assert_eq!(
-            discard_prompt(DiscardFor::Discard, 94, 2).1,
+            discard_prompt(&l10n, DiscardFor::Discard, 94, 2).1,
             "Discarding the recording will lose 94 samples that have left the graph, and \
              unsaved changes to 2 markers on them."
         );
+    }
+
+    /// The prompt's text as it was worded before it moved to Fluent: what the
+    /// English messages are checked against.
+    fn discard_prompt_before(
+        action: DiscardFor,
+        samples: usize,
+        markers: usize,
+    ) -> (&'static str, String) {
+        let changes = format!(
+            "unsaved changes to {markers} {}",
+            if markers == 1 { "marker" } else { "markers" }
+        );
+        let samples_noun = noun(samples);
+        let text = match action {
+            DiscardFor::Record => {
+                let lost = match (samples, markers) {
+                    (0, _) => changes,
+                    (n, 0) => format!("{n} unexported {samples_noun}"),
+                    (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
+                };
+                // Only the recording goes: its markers stay while the graph
+                // holds their readings, and Export… saves them once it is
+                // discarded.
+                let stay = if markers > 0 {
+                    " Markers stay on the graph while it holds their readings."
+                } else {
+                    ""
+                };
+                format!("Starting a new recording will discard {lost}.{stay}")
+            }
+            DiscardFor::Import => {
+                let lost = match (samples, markers) {
+                    (0, _) => changes,
+                    (n, 0) => format!("{n} unexported {samples_noun}"),
+                    (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
+                };
+                format!("Importing replaces this session and will discard {lost}.")
+            }
+            DiscardFor::Connect => {
+                let lost = match (samples, markers) {
+                    (0, _) => changes,
+                    (n, 0) => format!("{n} unexported {samples_noun}"),
+                    (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
+                };
+                format!("Connecting ends the imported session and will discard {lost}.")
+            }
+            DiscardFor::Discard => {
+                let lost = match (samples, markers) {
+                    (0, _) => format!("{changes} on readings that have left the graph"),
+                    (n, 0) => format!("{n} {samples_noun} that have left the graph"),
+                    (n, _) => {
+                        format!(
+                            "{n} {samples_noun} that have left the graph, and {changes} on them"
+                        )
+                    }
+                };
+                format!("Discarding the recording will lose {lost}.")
+            }
+        };
+        let heading = if samples == 0 {
+            "Discard unexported markers?"
+        } else {
+            "Discard unexported samples?"
+        };
+        (heading, text)
+    }
+
+    fn noun(n: usize) -> &'static str {
+        if n == 1 { "sample" } else { "samples" }
+    }
+
+    /// Every variant of the prompt reads in English as it did when the code
+    /// glued it together, but for one sample in the Discard prompt, which
+    /// now "has" left the graph, with markers "on it".
+    #[test]
+    fn every_prompt_reads_as_before() {
+        let l10n = crate::l10n::english();
+        for action in [
+            DiscardFor::Record,
+            DiscardFor::Discard,
+            DiscardFor::Import,
+            DiscardFor::Connect,
+        ] {
+            for samples in [0, 1, 2, 94] {
+                for markers in [0, 1, 2, 7] {
+                    if (samples, markers) == (0, 0) {
+                        continue;
+                    }
+                    let (heading, text) = discard_prompt_before(action, samples, markers);
+                    let text = if samples == 1 {
+                        text.replace("1 sample that have", "1 sample that has")
+                            .replace(" on them.", " on it.")
+                    } else {
+                        text
+                    };
+                    assert_eq!(
+                        discard_prompt(&l10n, action, samples, markers),
+                        (heading.to_string(), text),
+                        "{action:?}, {samples} samples, {markers} markers"
+                    );
+                }
+            }
+        }
     }
 
     /// Three minutes of readings a second apart, on the graph and in the

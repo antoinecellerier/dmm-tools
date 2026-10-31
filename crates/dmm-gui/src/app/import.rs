@@ -18,6 +18,8 @@ use std::time::{Duration, Instant, SystemTime};
 use dmm_lib::alarm::Alarm;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::transport::Link;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui;
 use log::{info, warn};
 
@@ -63,10 +65,47 @@ pub(super) struct Loaded {
     left_out: usize,
 }
 
+/// Why a file did not import. `Display` is the English the log takes;
+/// [`ImportError::text`] what the toast shows, in the GUI's language.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum ImportError {
+    /// The file, then why it does not read: the system's, the reader's or
+    /// the parser's own words.
+    Read(PathBuf, String),
+    /// The loader thread panicked reading the file.
+    Crashed(PathBuf),
+}
+
+impl std::fmt::Display for ImportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Read(path, why) => write!(f, "{}: {why}", path.display()),
+            Self::Crashed(path) => write!(f, "{}: the import failed", path.display()),
+        }
+    }
+}
+
+impl ImportError {
+    /// What the toast says, in the GUI's language.
+    fn text(&self, l10n: &Localizer) -> String {
+        match self {
+            Self::Read(path, why) => {
+                let path = path.display().to_string();
+                tr!(l10n, "import-failed", path = path, reason = why)
+            }
+            Self::Crashed(path) => {
+                let path = path.display().to_string();
+                tr!(l10n, "import-failed-crashed", path = path)
+            }
+        }
+        .into_owned()
+    }
+}
+
 /// An import under way.
 pub(super) enum ImportJob {
     /// Parsing on the loader thread.
-    Loading(mpsc::Receiver<Result<Loaded, String>>),
+    Loading(mpsc::Receiver<Result<Loaded, ImportError>>),
     /// Going through the pipeline a chunk per frame.
     Ingesting(Ingest),
 }
@@ -89,9 +128,9 @@ pub(super) struct Ingest {
 ///
 /// The format is the extension's, or for a file without one the content's:
 /// a replay's magic line, a JSON object, or else CSV.
-pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, String> {
+pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, ImportError> {
     use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
-    let fail = |e: String| format!("{}: {e}", path.display());
+    let fail = |e: String| ImportError::Read(path.to_path_buf(), e);
     let kind = ExportKind::of_file(path).map_err(|e| fail(e.to_string()))?;
     // CSV and JSON are read through, keeping no more than the session can
     // hold; a replay is parsed whole, as `--replay` parses it.
@@ -104,8 +143,12 @@ pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, S
         ExportKind::Replay => std::fs::read_to_string(path)
             .map_err(|e| e.to_string())
             .and_then(|text| load_replay(&text, base, limit)),
-        ExportKind::Json => read_json_from(open()?, Some(limit)).map(|i| from_export(i, base)),
-        ExportKind::Csv => read_csv_from(open()?, Some(limit)).map(|i| from_export(i, base)),
+        ExportKind::Json => open()
+            .and_then(|file| read_json_from(file, Some(limit)))
+            .map(|i| from_export(i, base)),
+        ExportKind::Csv => open()
+            .and_then(|file| read_csv_from(file, Some(limit)))
+            .map(|i| from_export(i, base)),
     };
     loaded
         .map(|mut l| {
@@ -154,10 +197,11 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, String
     use dmm_lib::stream::{MeasurementStream, StreamEvent};
     let replay = dmm_lib::replay::Replay::parse(text).map_err(|e| e.to_string())?;
     let recorded = dmm_shared::replay::recorded_at(&replay)?;
-    let clock = dmm_lib::Clock::manual().with_wall_origin(SystemTime::from(recorded));
-    let (start, _) = clock
-        .wall_origin()
-        .ok_or("the replay clock has no origin")?;
+    let clock = dmm_lib::Clock::manual();
+    // A manual clock stands still until the playback sleeps on it: its now
+    // is the instant the wall origin pins.
+    let start = clock.now();
+    let clock = clock.with_wall_origin(SystemTime::from(recorded));
     let mut dmm = replay.open(clock).map_err(|e| e.to_string())?;
     let experimental = !dmm.profile().stability.is_verified();
     let aux_slots = dmm.profile().max_aux_values;
@@ -240,10 +284,10 @@ impl App {
         }
         let (tx, rx) = mpsc::channel();
         let last = self.settings.last_folder.clone();
+        let file_type = tr!(self.l10n, "import-file-type").into_owned();
         std::thread::spawn(move || {
             let picked = std::panic::catch_unwind(|| {
-                let mut dialog =
-                    rfd::FileDialog::new().add_filter("Exported readings", &IMPORT_EXTENSIONS);
+                let mut dialog = rfd::FileDialog::new().add_filter(file_type, &IMPORT_EXTENSIONS);
                 if let Some(dir) = dialog_folder(last.as_deref()) {
                     dialog = dialog.set_directory(dir);
                 }
@@ -313,7 +357,7 @@ impl App {
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             let loaded = std::panic::catch_unwind(|| load(&path, base, limit))
-                .unwrap_or_else(|_| Err(format!("{}: the import failed", path.display())));
+                .unwrap_or(Err(ImportError::Crashed(path)));
             let _ = tx.send(loaded);
         });
         self.import_job = Some(ImportJob::Loading(rx));
@@ -350,14 +394,15 @@ impl App {
         let job = match job {
             ImportJob::Loading(rx) => match rx.try_recv() {
                 Ok(Ok(loaded)) => self.begin_ingest(loaded),
-                Ok(Err(message)) => {
-                    warn!("import failed: {message}");
-                    self.toast = Some(Toast::error(format!("Import failed: {message}")));
+                Ok(Err(why)) => {
+                    warn!("import failed: {why}");
+                    self.toast = Some(Toast::error(why.text(&self.l10n)));
                     None
                 }
                 Err(mpsc::TryRecvError::Empty) => Some(ImportJob::Loading(rx)),
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    self.toast = Some(Toast::error("Import failed".to_string()));
+                    let message = tr!(self.l10n, "import-failed-unexplained");
+                    self.toast = Some(Toast::error(message.into_owned()));
                     None
                 }
             },
@@ -385,10 +430,8 @@ impl App {
             left_out,
         } = loaded;
         if readings.is_empty() {
-            self.toast = Some(Toast::info(format!(
-                "{} holds no readings",
-                file_name(&path)
-            )));
+            let message = tr!(self.l10n, "import-empty", file = file_name(&path));
+            self.toast = Some(Toast::info(message.into_owned()));
             return None;
         }
         self.capture.device_aux_slots = aux_slots;
@@ -452,10 +495,13 @@ impl App {
         self.mark_breaches(breaches);
         if !full && ingest.taken < ingest.total {
             let percent = ingest.taken * 100 / ingest.total;
-            self.toast = Some(Toast::info(format!(
-                "Importing {}… {percent}%",
-                file_name(&ingest.path)
-            )));
+            let message = tr!(
+                self.l10n,
+                "import-progress",
+                file = file_name(&ingest.path),
+                percent = percent
+            );
+            self.toast = Some(Toast::info(message.into_owned()));
             return Some(ImportJob::Ingesting(ingest));
         }
         self.finish_import(ingest);
@@ -486,15 +532,18 @@ impl App {
             ingest.taken,
             ingest.path.display()
         );
-        self.toast = Some(Toast::info(if left_out == 0 {
-            format!("Imported {} from {name}", readings_noun(ingest.taken))
+        let message = if left_out == 0 {
+            tr!(self.l10n, "import-done", count = ingest.taken, file = &name)
         } else {
-            format!(
-                "Imported the first {} from {name}; {} past the Buffer size in Settings were left out",
-                readings_noun(ingest.taken),
-                readings_noun(left_out)
+            tr!(
+                self.l10n,
+                "import-done-partial",
+                count = ingest.taken,
+                left = left_out,
+                file = &name
             )
-        }));
+        };
+        self.toast = Some(Toast::info(message.into_owned()));
         self.imported = Some(ImportedFrom {
             path: ingest.path,
             readings: ingest.taken,
@@ -522,15 +571,6 @@ pub(super) fn view_reach(view: &crate::graph::ViewState) -> Duration {
         .filter(|t| t.is_finite())
         .fold(0.0_f64, f64::max);
     Duration::try_from_secs_f64(reach).unwrap_or(Duration::ZERO)
-}
-
-/// `n readings`, singular for one.
-pub(super) fn readings_noun(n: usize) -> String {
-    if n == 1 {
-        "1 reading".to_string()
-    } else {
-        format!("{n} readings")
-    }
 }
 
 /// The file's name, for a toast: the folder is in the hover.

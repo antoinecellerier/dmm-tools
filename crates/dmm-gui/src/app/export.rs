@@ -8,6 +8,8 @@ use chrono::{DateTime, Local};
 use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::transport::Link;
 use dmm_shared::export::CsvLayout;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui;
 use log::{error, info, warn};
 use std::collections::HashSet;
@@ -29,14 +31,87 @@ const UNKNOWN_DEVICE: &str = "unknown";
 /// `--replay` reads the file's header, not its name.
 const REPLAY_EXTENSION: &str = "replay";
 
-/// Why the mock's samples cannot be written as a replay file. The menu entry
-/// is disabled for the mock, so this only guards the call itself.
-pub(super) const NO_WIRE_FORMAT: &str =
-    "The mock has no wire format to export; connect a real meter";
+/// Why an export saved nothing. `Display` is the English; [`ExportError::text`]
+/// what the toast shows, in the GUI's language.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum ExportError {
+    /// The recording holds no samples yet.
+    NothingRecorded,
+    /// Nothing buffered, and no meter to buffer anything.
+    NotConnected,
+    /// A meter is connected but has sent nothing yet.
+    NoReadings,
+    /// The mock's samples cannot be written as a replay file. The menu
+    /// entry is disabled for the mock, so this only guards the call itself.
+    NoWireFormat,
+    /// An earlier export waits on its dialog or its write. Not about the
+    /// dialog alone: a write has none to point at.
+    InProgress,
+    /// The dialog or the write went wrong.
+    Failed(Failure),
+}
 
-/// Why Export… does nothing while an earlier export waits on its dialog or
-/// its write. Not about the dialog alone: a write has none to point at.
-const EXPORT_IN_PROGRESS: &str = "An export is already in progress \u{2014} finish it first";
+/// Why a started export wrote nothing. `Display` is the reason as the log
+/// takes it, after `export failed: `.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Failure {
+    /// The file system's, the renderer's or a panic's own words.
+    Said(String),
+    /// The save dialog went away without an answer.
+    DialogGone,
+    /// The writer thread went away without an answer.
+    WriterGone,
+    /// The pinned samples were dropped while the dialog was open.
+    SamplesChanged,
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Said(why) => why,
+            Self::DialogGone => "the save dialog closed without an answer",
+            Self::WriterGone => "the writer stopped without an answer",
+            Self::SamplesChanged => "the samples changed while the save dialog was open",
+        })
+    }
+}
+
+impl std::fmt::Display for ExportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NothingRecorded => {
+                f.write_str("Nothing to export \u{2014} the recording has no samples yet")
+            }
+            Self::NotConnected => f.write_str("Nothing to export \u{2014} connect a meter first"),
+            Self::NoReadings => f.write_str("Nothing to export \u{2014} no readings yet"),
+            Self::NoWireFormat => {
+                f.write_str("The mock has no wire format to export; connect a real meter")
+            }
+            Self::InProgress => {
+                f.write_str("An export is already in progress \u{2014} finish it first")
+            }
+            Self::Failed(why) => write!(f, "Export failed: {why}"),
+        }
+    }
+}
+
+impl ExportError {
+    /// What the toast says, in the GUI's language.
+    pub(super) fn text(&self, l10n: &Localizer) -> String {
+        match self {
+            Self::NothingRecorded => tr!(l10n, "export-nothing-recorded"),
+            Self::NotConnected => tr!(l10n, "export-nothing-connect"),
+            Self::NoReadings => tr!(l10n, "export-nothing-yet"),
+            Self::NoWireFormat => tr!(l10n, "export-no-wire-format"),
+            Self::InProgress => tr!(l10n, "export-in-progress"),
+            Self::Failed(Failure::Said(why)) => tr!(l10n, "export-failed", reason = why),
+            Self::Failed(Failure::DialogGone) => tr!(l10n, "export-failed-dialog"),
+            Self::Failed(Failure::WriterGone) => tr!(l10n, "export-failed-writer"),
+            Self::Failed(Failure::SamplesChanged) => tr!(l10n, "export-failed-changed"),
+        }
+        .into_owned()
+    }
+}
 
 /// Which file the export writes. Settled before the dialog opens — by the
 /// Export… label (a CSV) or the menu on its arrow — because the dialog hands
@@ -50,19 +125,29 @@ pub(super) enum ExportFormat {
 }
 
 impl ExportFormat {
-    /// The dialog's one filter: its label and extension.
-    fn filter(self) -> (&'static str, &'static str) {
+    /// The extension of the dialog's one filter, and of the default name.
+    fn extension(self) -> &'static str {
         match self {
-            Self::Csv => ("CSV", "csv"),
-            Self::Json => ("JSON", "json"),
-            Self::Replay => ("Replay", REPLAY_EXTENSION),
+            Self::Csv => "csv",
+            Self::Json => "json",
+            Self::Replay => REPLAY_EXTENSION,
         }
+    }
+
+    /// The label of the dialog's one filter.
+    fn file_type(self, l10n: &Localizer) -> String {
+        match self {
+            Self::Csv => tr!(l10n, "export-file-type-csv"),
+            Self::Json => tr!(l10n, "export-file-type-json"),
+            Self::Replay => tr!(l10n, "export-file-type-replay"),
+        }
+        .into_owned()
     }
 
     /// The name the dialog opens with. Shared with `dmm-cli read -o`, so an
     /// export saved here and one the CLI wrote sort together.
     fn default_name(self, model: &str, mode: Option<&str>, start: DateTime<Local>) -> String {
-        dmm_shared::export::default_name(model, mode, start, self.filter().1)
+        dmm_shared::export::default_name(model, mode, start, self.extension())
     }
 }
 
@@ -93,9 +178,9 @@ pub(super) struct SavedMark {
 
 /// Result of an export, sent from the writer thread to the UI.
 pub(super) struct ExportOutcome {
-    /// Toast text.
-    message: String,
-    is_error: bool,
+    /// For the toast: the samples written and the file's name, or why
+    /// nothing was.
+    written: Result<(usize, String), ExportError>,
     /// On a recording's success, what was saved and the samples written.
     /// Drives the recording's "saved" mark, so a buffer that reached a file
     /// doesn't prompt before being discarded.
@@ -130,13 +215,13 @@ pub(super) struct ExportRequest {
 
 impl ExportRequest {
     /// The file's bytes, from `samples`: the ones pinned at the click.
-    fn render(&self, samples: vec_deque::Iter<'_, Sample>) -> Result<Vec<u8>, String> {
+    fn render(&self, samples: vec_deque::Iter<'_, Sample>) -> Result<Vec<u8>, ExportError> {
         let marked: Vec<&Marker> = self.marked.iter().collect();
         match self.format {
             ExportFormat::Csv => render_csv(samples, &marked, &self.device_model, self.csv_layout)
                 .map_err(|e| {
                     error!("CSV export failed: {e}");
-                    format!("Export failed: {e}")
+                    ExportError::Failed(Failure::Said(e.to_string()))
                 }),
             ExportFormat::Json => render_json(
                 samples,
@@ -147,7 +232,7 @@ impl ExportRequest {
             )
             .map_err(|e| {
                 error!("JSON export failed: {e}");
-                format!("Export failed: {e}")
+                ExportError::Failed(Failure::Said(e.to_string()))
             }),
             ExportFormat::Replay => self
                 .replay
@@ -164,7 +249,7 @@ impl ExportRequest {
                 .map(String::into_bytes)
                 .ok_or_else(|| {
                     warn!("replay export refused: the buffered samples carry no meter frames");
-                    NO_WIRE_FORMAT.to_string()
+                    ExportError::NoWireFormat
                 }),
         }
     }
@@ -223,16 +308,14 @@ fn export_outcome(
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.display().to_string());
             ExportOutcome {
-                message: format!("Exported {sample_count} samples to {file_name}"),
-                is_error: false,
+                written: Ok((sample_count, file_name)),
                 exported: mark.map(|mark| (mark, sample_count)),
             }
         }
         Err(e) => {
             error!("export failed: {e}");
             ExportOutcome {
-                message: format!("Export failed: {e}"),
-                is_error: true,
+                written: Err(ExportError::Failed(Failure::Said(e.to_string()))),
                 exported: None,
             }
         }
@@ -269,7 +352,10 @@ impl App {
     ///
     /// Kept apart from the dialog so what an export writes can be checked
     /// without opening one.
-    pub(super) fn prepare_export(&self, format: ExportFormat) -> Result<ExportRequest, String> {
+    pub(super) fn prepare_export(
+        &self,
+        format: ExportFormat,
+    ) -> Result<ExportRequest, ExportError> {
         // A fresh walk over the samples for each pass that reads them: a
         // borrowed iterator, nothing copied.
         let samples = || self.capture.recording.export_samples();
@@ -278,7 +364,7 @@ impl App {
             // Returning silently made the button and Ctrl+E look broken:
             // no file dialog, no message, nothing in the log. Say why.
             info!("export skipped: sample buffer is empty");
-            return Err(self.nothing_to_export(role).to_string());
+            return Err(self.nothing_to_export(role));
         };
         // The meter these samples came from, not whatever is selected now.
         // Nothing named it and nothing was ever identified — a recording
@@ -299,7 +385,7 @@ impl App {
                     .filter(|_| samples().all(|s| !s.measurement.raw_payload.is_empty()));
                 let Some(id) = id else {
                     warn!("replay export refused: the buffered samples carry no meter frames");
-                    return Err(NO_WIRE_FORMAT.to_string());
+                    return Err(ExportError::NoWireFormat);
                 };
                 // What the samples came over, latched with the rest of the
                 // provenance; the live link only where a recording started
@@ -351,13 +437,13 @@ impl App {
     }
 
     /// Why an empty buffer has nothing to save, as what to do about it.
-    fn nothing_to_export(&self, role: BufferRole) -> &'static str {
+    fn nothing_to_export(&self, role: BufferRole) -> ExportError {
         match role {
-            BufferRole::Recording => "Nothing to export \u{2014} the recording has no samples yet",
+            BufferRole::Recording => ExportError::NothingRecorded,
             BufferRole::History if self.connection.state == ConnectionState::Disconnected => {
-                "Nothing to export \u{2014} connect a meter first"
+                ExportError::NotConnected
             }
-            BufferRole::History => "Nothing to export \u{2014} no readings yet",
+            BufferRole::History => ExportError::NoReadings,
         }
     }
 
@@ -369,9 +455,9 @@ impl App {
     fn begin_export(
         &mut self,
         format: ExportFormat,
-    ) -> Result<(mpsc::Sender<DialogResult>, String), String> {
+    ) -> Result<(mpsc::Sender<DialogResult>, String), ExportError> {
         if self.export.is_some() {
-            return Err(EXPORT_IN_PROGRESS.to_string());
+            return Err(ExportError::InProgress);
         }
         let request = self.prepare_export(format)?;
         let pinned = self.capture.recording.pin_export();
@@ -393,19 +479,20 @@ impl App {
     pub(super) fn export_recording(&mut self, ctx: &egui::Context, format: ExportFormat) {
         let (tx, default_name) = match self.begin_export(format) {
             Ok(begun) => begun,
-            Err(message) => {
-                self.toast = Some(Toast::error(message));
+            Err(why) => {
+                self.toast = Some(Toast::error(why.text(&self.l10n)));
                 return;
             }
         };
         let ctx = ctx.clone();
         let last = self.settings.last_folder.clone();
+        let file_type = format.file_type(&self.l10n);
         std::thread::spawn(move || {
-            let (label, extension) = format.filter();
+            let extension = format.extension();
             let answer = std::panic::catch_unwind(|| {
                 let mut dialog = rfd::FileDialog::new()
                     .set_file_name(default_name)
-                    .add_filter(label, &[extension]);
+                    .add_filter(file_type, &[extension]);
                 if let Some(dir) = super::import::dialog_folder(last.as_deref()) {
                     dialog = dialog.set_directory(dir);
                 }
@@ -446,10 +533,8 @@ impl App {
             Some(PendingExport::Choosing { rx, .. }) => {
                 let answer = match rx.try_recv() {
                     Err(mpsc::TryRecvError::Empty) => return,
-                    Ok(answer) => answer,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        Err("the save dialog closed without an answer".to_string())
-                    }
+                    Ok(answer) => answer.map_err(Failure::Said),
+                    Err(mpsc::TryRecvError::Disconnected) => Err(Failure::DialogGone),
                 };
                 let Some(PendingExport::Choosing { request, .. }) = self.export.take() else {
                     return;
@@ -459,17 +544,18 @@ impl App {
                         self.remember_folder(&path);
                         match self.render_pinned(&request) {
                             Ok(bytes) => self.spawn_write(ctx, path, bytes, *request),
-                            Err(message) => self.toast = Some(Toast::error(message)),
+                            Err(why) => self.toast = Some(Toast::error(why.text(&self.l10n))),
                         }
                     }
                     Ok(None) => {
                         self.capture.recording.unpin_export();
                         info!("export cancelled");
                     }
-                    Err(message) => {
+                    Err(why) => {
                         self.capture.recording.unpin_export();
-                        error!("export failed: {message}");
-                        self.toast = Some(Toast::error(format!("Export failed: {message}")));
+                        error!("export failed: {why}");
+                        let message = ExportError::Failed(why).text(&self.l10n);
+                        self.toast = Some(Toast::error(message));
                     }
                 }
             }
@@ -482,11 +568,10 @@ impl App {
                         // is a no-op, but this arm must not leave the next
                         // Export… refused as one in progress.
                         self.capture.recording.unpin_export();
-                        let message = "the writer stopped without an answer";
-                        error!("export failed: {message}");
+                        let why = Failure::WriterGone;
+                        error!("export failed: {why}");
                         ExportOutcome {
-                            message: format!("Export failed: {message}"),
-                            is_error: true,
+                            written: Err(ExportError::Failed(why)),
                             exported: None,
                         }
                     }
@@ -500,10 +585,12 @@ impl App {
                         .recording
                         .mark_exported(mark.epoch, count, mark.markers);
                 }
-                self.toast = Some(if outcome.is_error {
-                    Toast::error(outcome.message)
-                } else {
-                    Toast::info(outcome.message)
+                self.toast = Some(match outcome.written {
+                    Ok((count, file)) => {
+                        let message = tr!(self.l10n, "export-done", count = count, file = file);
+                        Toast::info(message.into_owned())
+                    }
+                    Err(why) => Toast::error(why.text(&self.l10n)),
                 });
                 self.export = None;
             }
@@ -512,7 +599,7 @@ impl App {
 
     /// Render `request` from the samples pinned at its click, then let them
     /// go, whatever the result.
-    fn render_pinned(&mut self, request: &ExportRequest) -> Result<Vec<u8>, String> {
+    fn render_pinned(&mut self, request: &ExportRequest) -> Result<Vec<u8>, ExportError> {
         let samples = self.capture.recording.pinned_samples();
         let result = if samples.len() == request.sample_count {
             request.render(samples)
@@ -523,7 +610,7 @@ impl App {
                 samples.len(),
                 request.sample_count
             );
-            Err("Export failed: the samples changed while the save dialog was open".to_string())
+            Err(ExportError::Failed(Failure::SamplesChanged))
         };
         self.capture.recording.unpin_export();
         result
@@ -551,8 +638,7 @@ impl App {
                 let message = panic_text(panic.as_ref());
                 error!("export failed: {message}");
                 ExportOutcome {
-                    message: format!("Export failed: {message}"),
-                    is_error: true,
+                    written: Err(ExportError::Failed(Failure::Said(message))),
                     exported: None,
                 }
             });
@@ -739,17 +825,17 @@ mod tests {
             ExportFormat::Csv.default_name("UT61E+", Some("DC V"), start),
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv"
         );
-        assert_eq!(ExportFormat::Csv.filter(), ("CSV", "csv"));
+        assert_eq!(ExportFormat::Csv.extension(), "csv");
         assert_eq!(
             ExportFormat::Json.default_name("UT61E+", Some("DC V"), start),
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.json"
         );
-        assert_eq!(ExportFormat::Json.filter(), ("JSON", "json"));
+        assert_eq!(ExportFormat::Json.extension(), "json");
         assert_eq!(
             ExportFormat::Replay.default_name("UT61E+", Some("DC V"), start),
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.replay"
         );
-        assert_eq!(ExportFormat::Replay.filter(), ("Replay", "replay"));
+        assert_eq!(ExportFormat::Replay.extension(), "replay");
         // A recording with no one mode keeps meter and time, nothing between.
         assert_eq!(
             ExportFormat::Csv.default_name("UT61E+", None, start),
@@ -844,7 +930,7 @@ mod tests {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         let message = |app: &App| match app.prepare_export(ExportFormat::Csv) {
             Ok(_) => panic!("an empty buffer has nothing to write"),
-            Err(message) => message,
+            Err(why) => why.to_string(),
         };
         assert_eq!(
             message(&app),
@@ -1071,7 +1157,7 @@ mod tests {
         app.begin_export(ExportFormat::Csv).expect("two samples");
         assert_eq!(
             app.begin_export(ExportFormat::Json).map(|_| ()),
-            Err(EXPORT_IN_PROGRESS.to_string())
+            Err(ExportError::InProgress)
         );
         assert!(matches!(app.export, Some(PendingExport::Choosing { .. })));
         assert!(app.capture.recording.is_pinned());
@@ -1137,7 +1223,7 @@ mod tests {
         app.capture.recording.push(&frameless, 0);
         assert_eq!(
             app.prepare_export(ExportFormat::Replay).map(|_| ()),
-            Err(NO_WIRE_FORMAT.to_string())
+            Err(ExportError::NoWireFormat)
         );
         assert!(app.begin_export(ExportFormat::Replay).is_err());
         assert!(!app.capture.recording.is_pinned());
@@ -1219,5 +1305,42 @@ mod tests {
         // The one-sub-value sample's is the appended one, so the meter's
         // group stays empty rather than claiming it.
         assert_eq!(rows[2][6..], ["", "", "", "sub0", "0", "V"]);
+    }
+
+    /// The toast's English is the `Display` the tests and the log read.
+    #[test]
+    fn every_error_reads_the_same_in_english() {
+        let l10n = crate::l10n::english();
+        for why in [
+            ExportError::NothingRecorded,
+            ExportError::NotConnected,
+            ExportError::NoReadings,
+            ExportError::NoWireFormat,
+            ExportError::InProgress,
+            ExportError::Failed(Failure::Said("disk full".into())),
+            ExportError::Failed(Failure::DialogGone),
+            ExportError::Failed(Failure::WriterGone),
+            ExportError::Failed(Failure::SamplesChanged),
+        ] {
+            assert_eq!(why.text(&l10n), why.to_string());
+        }
+    }
+
+    /// One sample is counted as one.
+    #[test]
+    fn a_one_sample_export_says_sample() {
+        let mut app = app_holding(0, 0, &[0]);
+        let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
+        let outcome = export_outcome(
+            Path::new("out.csv"),
+            Ok(()),
+            prepared.sample_count,
+            prepared.mark,
+        );
+        deliver_outcome(&mut app, outcome);
+        assert_eq!(
+            app.toast.as_ref().map(|t| t.message.as_str()),
+            Some("Exported 1 sample to out.csv")
+        );
     }
 }
