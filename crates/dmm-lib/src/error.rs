@@ -1,7 +1,9 @@
 use crate::transport::open::KNOWN_TRANSPORTS;
 use thiserror::Error;
 
+mod bluetooth;
 mod reason;
+pub use bluetooth::{BluetoothIssue, CharacteristicRole};
 pub use reason::{Rejected, Sent, Unsupported};
 
 #[derive(Debug, Error)]
@@ -73,7 +75,7 @@ pub enum Error {
     /// permission denied, the device carries no UART. Retrying never helps —
     /// the message carries what the user has to change.
     #[error("Bluetooth: {0}")]
-    Bluetooth(String),
+    Bluetooth(BluetoothIssue),
 
     /// Auto-detection ran its whole probe cascade and nothing on the far end
     /// of the cable answered with a frame we recognise.
@@ -371,7 +373,7 @@ mod tests {
     fn kind_separates_a_lost_link_from_a_misconfigured_stack() {
         assert_eq!(Error::LinkLost.kind(), ErrorKind::Transport);
         assert_eq!(
-            Error::Bluetooth("turned off on this computer".into()).kind(),
+            Error::Bluetooth(BluetoothIssue::PoweredOff).kind(),
             ErrorKind::Configuration
         );
     }

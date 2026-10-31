@@ -1085,7 +1085,11 @@ mod tests {
         let (_cmd_tx, cmd_rx) = mpsc::channel();
         let opens = std::sync::atomic::AtomicUsize::new(0);
         let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
-        let timeout = || dmm_lib::error::Error::Bluetooth("connection timed out".to_string());
+        let timeout = || {
+            dmm_lib::error::Error::Bluetooth(dmm_lib::error::BluetoothIssue::Stack(
+                "connection timed out".to_string(),
+            ))
+        };
         assert_eq!(timeout().kind(), ErrorKind::Configuration);
         let open_fn = move |reopen_at: Option<&str>| {
             if opens.fetch_add(1, Ordering::SeqCst) > 0 {

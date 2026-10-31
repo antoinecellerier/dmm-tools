@@ -354,7 +354,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `clock.rs` | `Clock` |
 | `replay.rs` | `Replay`: the file format, its reader and writer, playback |
 | `mock/` | `MockProtocol`, its scenarios and button state, its registry entry |
-| `error.rs`, `error/` | `Error` and `ErrorKind`; `Unsupported` and `Rejected`, the reasons a refused command gives |
+| `error.rs`, `error/` | `Error` and `ErrorKind`; `Unsupported` and `Rejected`, the reasons a refused command gives; `BluetoothIssue`, why the Bluetooth stack could not do what was asked |
 
 ### dmm-shared
 

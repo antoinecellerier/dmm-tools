@@ -521,9 +521,9 @@ mod tests {
     /// left as the bare error.
     #[test]
     fn a_named_adapter_that_would_not_connect_gets_the_bluetooth_steps() {
-        use dmm_lib::error::Error;
+        use dmm_lib::error::{BluetoothIssue, Error};
         let address = "12:34:56:78:9A:BC";
-        let stack = Error::Bluetooth("Timed out after 10s".to_string());
+        let stack = Error::Bluetooth(BluetoothIssue::Stack("Timed out after 10s".to_string()));
         let expected = dmm_lib::is_bluetooth_selector(address).then_some(address);
         assert_eq!(unreachable_adapter(&stack, Some(address)), expected);
         assert_eq!(unreachable_adapter(&stack, None), None);
@@ -536,8 +536,8 @@ mod tests {
     /// always has.
     #[test]
     fn an_unreachable_bluetooth_only_meter_gets_its_own_steps() {
-        use dmm_lib::error::Error;
-        let stack = Error::Bluetooth("Bluetooth is turned off on this computer".to_string());
+        use dmm_lib::error::{BluetoothIssue, Error};
+        let stack = Error::Bluetooth(BluetoothIssue::PoweredOff);
         let device = |id| Selection::Device(registry::find_device(id).expect("registry entry"));
         let found = unreachable_bluetooth_only(&stack, device("ut60bt")).map(|d| d.id);
         assert_eq!(found, Some("ut60bt"));

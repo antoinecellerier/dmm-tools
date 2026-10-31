@@ -7,7 +7,7 @@
 
 use super::ID;
 use super::packet::{framed, seal};
-use crate::error::Error;
+use crate::error::{BluetoothIssue, Error};
 use crate::protocol::unrecognised::report_unknown;
 use std::time::Duration;
 
@@ -141,26 +141,32 @@ pub(crate) fn judge(reply: &[u8]) -> LoginReply {
 
 /// The error for a login the meter refused with `code` (§8).
 fn refused(code: u16) -> Error {
-    let reason = match code {
-        3 | 4 => {
-            return Error::Bluetooth(
-                concat!(
-                    "the meter refused the connection password 0000 — to reset it, ",
-                    reset_gesture!()
-                )
-                .to_string(),
-            );
-        }
+    match code {
+        3 | 4 => BluetoothIssue::PasswordRefused,
+        code => BluetoothIssue::LoginRefused { code },
+    }
+    .into()
+}
+
+/// What [`BluetoothIssue::PasswordRefused`] says: the way out of the
+/// password this driver sends.
+pub(crate) const PASSWORD_REFUSED: &str = concat!(
+    "the meter refused the connection password 0000 — to reset it, ",
+    reset_gesture!()
+);
+
+/// What a login refusal's error `code` means (§8), for
+/// [`BluetoothIssue::LoginRefused`]; the password's codes, 3 and 4, are
+/// [`BluetoothIssue::PasswordRefused`].
+pub(crate) fn refusal_reason(code: u16) -> &'static str {
+    match code {
         0 => "checksum error",
         1 => "invalid channel ID",
         2 => "out of setting range",
         5 => "invalid arguments",
         6 => "insufficient permissions",
         _ => "unknown error",
-    };
-    Error::Bluetooth(format!(
-        "the meter refused the login: {reason} (code {code})"
-    ))
+    }
 }
 
 #[cfg(test)]

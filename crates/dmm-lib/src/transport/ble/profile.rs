@@ -6,6 +6,7 @@ use super::eevblog121gw::EEVBLOG_121GW;
 use super::fff0::FFF0;
 use super::issc::ISSC_UART;
 use super::owon::OWON;
+use crate::error::CharacteristicRole;
 use btleplug::api::{CharPropFlags, Characteristic, WriteType};
 use std::collections::BTreeSet;
 
@@ -83,8 +84,8 @@ pub(super) struct Chosen {
     pub(super) info: Option<Characteristic>,
 }
 
-/// The profile a peer's discovered characteristics carry, or the role
-/// (`"write"` or `"notify"`) that is missing.
+/// The profile a peer's discovered characteristics carry, or the role that
+/// is missing.
 ///
 /// The first of [`PROFILES`] whose two characteristics are there, under its
 /// service, and offer what the profile needs of them, with the readable
@@ -94,7 +95,7 @@ pub(super) struct Chosen {
 /// with no known profile always heard.
 pub(super) fn choose_profile(
     characteristics: &BTreeSet<Characteristic>,
-) -> std::result::Result<Chosen, &'static str> {
+) -> std::result::Result<Chosen, CharacteristicRole> {
     let find = |service: &str, uuid: &str| {
         characteristics
             .iter()
@@ -140,7 +141,11 @@ pub(super) fn choose_profile(
         .unwrap_or(PROFILES[0]);
     let (_, write) = found(closest);
     let writable = write.is_some_and(|c| fits(c.properties, closest.write_needs));
-    Err(if writable { "notify" } else { "write" })
+    Err(if writable {
+        CharacteristicRole::Notify
+    } else {
+        CharacteristicRole::Write
+    })
 }
 
 /// Whether a characteristic with `properties` offers any of `needs`; empty
@@ -259,7 +264,7 @@ mod tests {
     /// The name of the profile `characteristics` pick, or the missing role.
     fn choose(
         characteristics: impl IntoIterator<Item = Characteristic>,
-    ) -> std::result::Result<&'static str, &'static str> {
+    ) -> std::result::Result<&'static str, CharacteristicRole> {
         choose_profile(&characteristics.into_iter().collect()).map(|c| c.profile.name)
     }
 
@@ -330,33 +335,36 @@ mod tests {
     fn fff4_needs_notify_and_a_write() {
         assert_eq!(
             choose([fff4(CharPropFlags::READ | CharPropFlags::NOTIFY)]),
-            Err("write")
+            Err(CharacteristicRole::Write)
         );
         assert_eq!(
             choose([fff4(
                 CharPropFlags::READ | CharPropFlags::WRITE_WITHOUT_RESPONSE
             )]),
-            Err("notify")
+            Err(CharacteristicRole::Notify)
         );
-        assert_eq!(choose([fff4(CharPropFlags::READ)]), Err("write"));
+        assert_eq!(
+            choose([fff4(CharPropFlags::READ)]),
+            Err(CharacteristicRole::Write)
+        );
     }
 
     /// A peer with neither profile fails as it did with ISSC alone; a known
     /// characteristic under another service does not count.
     #[test]
     fn a_peer_with_neither_profile_is_refused() {
-        assert_eq!(choose([]), Err("write"));
+        assert_eq!(choose([]), Err(CharacteristicRole::Write));
         assert_eq!(
             choose([characteristic(
                 "0000180a-0000-1000-8000-00805f9b34fb",
                 FFF0.notify,
                 CharPropFlags::WRITE | CharPropFlags::NOTIFY,
             )]),
-            Err("write")
+            Err(CharacteristicRole::Write)
         );
         let [notify, write] = issc();
-        assert_eq!(choose([notify]), Err("write"));
-        assert_eq!(choose([write]), Err("notify"));
+        assert_eq!(choose([notify]), Err(CharacteristicRole::Write));
+        assert_eq!(choose([write]), Err(CharacteristicRole::Notify));
     }
 
     /// A peer with the 121GW's service is read over its one characteristic
@@ -411,7 +419,7 @@ mod tests {
     fn a_121gw_characteristic_that_cannot_stream_is_refused() {
         assert_eq!(
             choose([gw(CharPropFlags::READ | CharPropFlags::WRITE)]),
-            Err("notify")
+            Err(CharacteristicRole::Notify)
         );
     }
 
@@ -466,7 +474,10 @@ mod tests {
             BRYMEN.write,
             CharPropFlags::READ | CharPropFlags::WRITE_WITHOUT_RESPONSE,
         );
-        assert_eq!(choose([notify, unacknowledged]), Err("write"));
+        assert_eq!(
+            choose([notify, unacknowledged]),
+            Err(CharacteristicRole::Write)
+        );
     }
 
     /// The readings come by notification (spec §2); a reading
@@ -475,7 +486,7 @@ mod tests {
     fn brymens_reading_characteristic_has_to_notify() {
         let [_, write] = brymen();
         let indicates = characteristic(BRYMEN.service, BRYMEN.notify, CharPropFlags::INDICATE);
-        assert_eq!(choose([indicates, write]), Err("notify"));
+        assert_eq!(choose([indicates, write]), Err(CharacteristicRole::Notify));
     }
 
     /// Half of Brymen's service is no profile, and the error names the half
@@ -483,8 +494,8 @@ mod tests {
     #[test]
     fn half_of_brymens_service_is_refused() {
         let [notify, write] = brymen();
-        assert_eq!(choose([notify]), Err("write"));
-        assert_eq!(choose([write]), Err("notify"));
+        assert_eq!(choose([notify]), Err(CharacteristicRole::Write));
+        assert_eq!(choose([write]), Err(CharacteristicRole::Notify));
     }
 
     /// ISSC and the 121GW still come first beside Brymen's service; the
@@ -551,10 +562,16 @@ mod tests {
     #[test]
     fn owon_needs_its_information_characteristic() {
         let [_, keys, stream] = owon(CharPropFlags::READ);
-        assert_eq!(choose([keys.clone(), stream.clone()]), Err("write"));
+        assert_eq!(
+            choose([keys.clone(), stream.clone()]),
+            Err(CharacteristicRole::Write)
+        );
 
         let [unreadable, ..] = owon(CharPropFlags::WRITE);
-        assert_eq!(choose([unreadable, keys, stream]), Err("write"));
+        assert_eq!(
+            choose([unreadable, keys, stream]),
+            Err(CharacteristicRole::Write)
+        );
     }
 
     /// Key presses go unacknowledged where FFF3 lists that, as a B41T+ acts

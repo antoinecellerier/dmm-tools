@@ -41,7 +41,7 @@ mod search;
 mod winrt;
 
 use crate::DeviceInfo;
-use crate::error::{Error, Result};
+use crate::error::{BluetoothIssue, CharacteristicRole, Error, Result};
 use crate::transport::{BluetoothPeers, LateReadings, Link, Transport};
 use btleplug::api::{
     Central, CentralState, Characteristic, DEFAULT_MTU_SIZE, Manager as _, Peripheral as _,
@@ -250,7 +250,11 @@ fn runtime() -> Result<tokio::runtime::Runtime> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|e| Error::Bluetooth(format!("could not start the Bluetooth runtime: {e}")))
+        .map_err(|e| {
+            Error::from(BluetoothIssue::Runtime {
+                detail: e.to_string(),
+            })
+        })
 }
 
 /// The first Bluetooth adapter on the host, once it is usable.
@@ -262,11 +266,11 @@ async fn central() -> Result<(Manager, Adapter)> {
         .map_err(stack_error)?
         .into_iter()
         .next()
-        .ok_or_else(|| Error::Bluetooth("not available on this computer".to_string()))?;
+        .ok_or(Error::Bluetooth(BluetoothIssue::NoAdapter))?;
     match adapter.adapter_state().await {
         Ok(CentralState::PoweredOn) => {}
         Ok(CentralState::PoweredOff) => {
-            return Err(Error::Bluetooth("turned off on this computer".to_string()));
+            return Err(BluetoothIssue::PoweredOff.into());
         }
         // Not every platform reports a state; an unusable adapter fails at
         // the scan instead, with the platform's own message.
@@ -729,7 +733,7 @@ fn not_found(selector: Option<&str>) -> Error {
 /// A failure of the Bluetooth stack itself: nothing the caller retries will
 /// fix it, so it carries the reason rather than looking like a silent meter.
 fn stack_error(e: btleplug::Error) -> Error {
-    Error::Bluetooth(e.to_string())
+    BluetoothIssue::Stack(e.to_string()).into()
 }
 
 /// A failure of this link. `NotConnected` and a vanished device are the
@@ -737,16 +741,13 @@ fn stack_error(e: btleplug::Error) -> Error {
 fn link_error(e: btleplug::Error) -> Error {
     match e {
         btleplug::Error::NotConnected | btleplug::Error::DeviceNotFound => Error::LinkLost,
-        other => Error::Bluetooth(other.to_string()),
+        other => BluetoothIssue::Stack(other.to_string()).into(),
     }
 }
 
 /// The peer answered but carries no profile we know.
-fn missing_characteristic(role: &str) -> Error {
-    Error::Bluetooth(format!(
-        "the Bluetooth device has no data {role} characteristic we recognise — \
-         it is not a supported adapter or meter, or its services never resolved"
-    ))
+fn missing_characteristic(role: CharacteristicRole) -> Error {
+    BluetoothIssue::NoCharacteristic { role }.into()
 }
 
 /// What `transport_info` adds for a profile that reads a characteristic at

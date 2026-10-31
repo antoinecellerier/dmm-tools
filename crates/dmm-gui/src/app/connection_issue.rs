@@ -644,7 +644,9 @@ mod tests {
     /// address nothing answered, not a silent-meter notice.
     #[test]
     fn an_unreachable_named_adapter_gets_the_bluetooth_steps() {
-        let err = dmm_lib::error::Error::Bluetooth("Timed out after 10s".to_string());
+        let err = dmm_lib::error::Error::Bluetooth(dmm_lib::error::BluetoothIssue::Stack(
+            "Timed out after 10s".to_string(),
+        ));
         let issue = ConnectionIssue::from_error(
             &crate::l10n::english(),
             &err,
@@ -718,7 +720,7 @@ mod tests {
         );
         assert!(n.feedback_link.is_some());
 
-        let stack = Error::Bluetooth("turned off on this computer".to_string());
+        let stack = Error::Bluetooth(dmm_lib::error::BluetoothIssue::PoweredOff);
         let n = notice_for(
             &mut app,
             ConnectionIssue::from_error(
