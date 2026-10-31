@@ -677,7 +677,8 @@ impl App {
                 let limits = self.watched_limits();
                 let recording = &self.capture.recording;
                 let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
-                self.graph.show(ui, &tc, &self.markers, limits, &digits);
+                self.graph
+                    .show(ui, &self.l10n, &tc, &self.markers, limits, &digits);
             });
             self.take_graph_actions(ui.ctx());
 
@@ -725,7 +726,8 @@ impl App {
             let limits = self.watched_limits();
             let recording = &self.capture.recording;
             let digits = |at, label: Option<&str>| reading_digits(recording, at, label);
-            self.graph.show(ui, &tc, &self.markers, limits, &digits);
+            self.graph
+                .show(ui, &self.l10n, &tc, &self.markers, limits, &digits);
             self.take_graph_actions(ui.ctx());
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);

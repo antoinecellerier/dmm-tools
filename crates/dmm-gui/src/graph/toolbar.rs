@@ -1,6 +1,10 @@
 //! The graph's toolbar: the **Plot:** and **Show:** chip groups, the analysis
 //! toggles, and the text fields feeding them.
 
+use std::borrow::Cow;
+
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, Ui};
 
 use super::{AxisRefusal, Graph, MAX_AXES, SeriesOption, TIME_WINDOWS};
@@ -77,16 +81,33 @@ fn group_caption(ui: &mut Ui, text: &str) {
 /// the name if at all, so the distinction has to be in the name.
 /// `series` is the chip's series by name: a sub-value's label, or the name
 /// the meter gives its main reading; `None` for an unnamed main reading.
-pub(super) fn series_chip_label(series: Option<&str>) -> String {
+pub(super) fn series_chip_label<'a>(l10n: &'a Localizer, series: Option<&str>) -> Cow<'a, str> {
     match series {
-        Some(label) => format!("Plot {label}"),
-        None => "Plot main reading".to_string(),
+        Some(label) => tr!(l10n, "graph-plot-series.a11y", series = label),
+        None => tr!(l10n, "graph-plot-main.a11y"),
     }
 }
 
 /// Accessible name for one **Show:** chip. See [`series_chip_label`].
-pub(super) fn overlay_chip_label(label: &str) -> String {
-    format!("Show {label} trace")
+pub(super) fn overlay_chip_label<'a>(l10n: &'a Localizer, label: &str) -> Cow<'a, str> {
+    tr!(l10n, "graph-show-chip.a11y", series = label)
+}
+
+/// A graph key as the hovers that name one write it: `M`, `[`, `End`.
+///
+/// Its symbol where it has one, not `ctx.format_shortcut`: away from macOS
+/// that spells a bare key by name, so `[` would read "OpenBracket".
+fn graph_key(key: egui::Key) -> &'static str {
+    key.symbol_or_name()
+}
+
+/// The two keys that step through the time windows, as their hovers say.
+fn cycle_keys() -> String {
+    format!(
+        "{} / {}",
+        graph_key(egui::Key::OpenBracket),
+        graph_key(egui::Key::CloseBracket)
+    )
 }
 
 /// One toolbar chip: a `selectable_label` showing `on`'s state, with hover
@@ -158,13 +179,20 @@ impl Graph {
     /// of control for a user who didn't already know them. The rows now read
     /// view → what is plotted → what is drawn over it. Each uses
     /// `horizontal_wrapped` so items wrap instead of clipping.
-    pub fn show_toolbar(&mut self, ui: &mut Ui, tc: &ThemeColors) {
+    pub fn show_toolbar(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
+        let key = graph_key;
+        let cycle_keys = cycle_keys();
         // Row 1: time windows + LIVE + Y-axis
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
 
             for &(secs, label) in TIME_WINDOWS {
-                let tooltip = format!("Show the last {label} of samples ([ / ] to cycle)");
+                let tooltip = tr!(
+                    l10n,
+                    "graph-window.hover",
+                    window = label,
+                    keys = &cycle_keys
+                );
                 if ui
                     .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
                     .on_hover_text(tooltip)
@@ -179,7 +207,7 @@ impl Graph {
             // On: the selected fill and text colour come from `selected`,
             // like the presets beside it. Off: dimmed text in a plain frame,
             // so it still reads as a button.
-            let live_text = egui::RichText::new("LIVE").small();
+            let live_text = egui::RichText::new(tr!(l10n, "graph-live")).small();
             let live_text = if self.live {
                 live_text
             } else {
@@ -187,9 +215,7 @@ impl Graph {
             };
             let live_resp = ui
                 .add(egui::Button::new(live_text).selected(self.live))
-                .on_hover_text(
-                    "Auto-follow the newest samples — off while panning (End to jump back)",
-                );
+                .on_hover_text(tr!(l10n, "graph-live.hover", keys = key(egui::Key::End)));
             if live_resp.clicked() {
                 self.live = !self.live;
             }
@@ -197,19 +223,13 @@ impl Graph {
             ui.add_space(6.0);
 
             let (y_label, y_tooltip) = if self.y_axis.fixed {
-                (
-                    "Y:Fixed",
-                    "Using fixed Y-axis bounds — click to auto-scale to visible data",
-                )
+                (tr!(l10n, "graph-y-fixed"), tr!(l10n, "graph-y-fixed.hover"))
             } else {
-                (
-                    "Y:Auto",
-                    "Auto-scaling Y to visible data — click to enter fixed bounds",
-                )
+                (tr!(l10n, "graph-y-auto"), tr!(l10n, "graph-y-auto.hover"))
             };
             // The chip has already flipped the flag, so `self.y_axis.fixed`
             // below reads "fixed mode was just switched on".
-            if toggle_chip(ui, &mut self.y_axis.fixed, y_label, y_tooltip) && self.y_axis.fixed {
+            if toggle_chip(ui, &mut self.y_axis.fixed, &y_label, &y_tooltip) && self.y_axis.fixed {
                 self.pin_y_axes_to_view();
             }
             if self.y_axis.fixed {
@@ -218,8 +238,8 @@ impl Graph {
                     ui,
                     self.y_axis.min.text_mut(),
                     field_width,
-                    "Y axis minimum",
-                    "Lower bound of the fixed Y axis",
+                    &tr!(l10n, "graph-y-min"),
+                    &tr!(l10n, "graph-y-min.hover"),
                 )
                 .changed();
                 ui.label(
@@ -231,8 +251,8 @@ impl Graph {
                     ui,
                     self.y_axis.max.text_mut(),
                     field_width,
-                    "Y axis maximum",
-                    "Upper bound of the fixed Y axis",
+                    &tr!(l10n, "graph-y-max"),
+                    &tr!(l10n, "graph-y-max.hover"),
                 )
                 .changed();
                 if changed_min && self.y_axis.min.parse() {
@@ -247,9 +267,9 @@ impl Graph {
 
             let zoomed = self.is_view_zoomed();
             if ui
-                .add_enabled(zoomed, egui::Button::new("Reset Zoom"))
-                .on_hover_text("Return to live follow and auto Y (double-click graph)")
-                .on_disabled_hover_text("Already at the default live + auto-Y view")
+                .add_enabled(zoomed, egui::Button::new(tr!(l10n, "graph-reset-zoom")))
+                .on_hover_text(tr!(l10n, "graph-reset-zoom.hover"))
+                .on_disabled_hover_text(tr!(l10n, "graph-reset-zoom.hover-disabled"))
                 .clicked()
             {
                 self.reset_view();
@@ -261,8 +281,8 @@ impl Graph {
         if self.has_series_row() {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                self.show_series_selector(ui);
-                self.show_overlay_toggles(ui);
+                self.show_series_selector(ui, l10n);
+                self.show_overlay_toggles(ui, l10n);
             });
         }
 
@@ -273,22 +293,22 @@ impl Graph {
             toggle_chip(
                 ui,
                 &mut self.show_mean,
-                "Mean",
-                "Draw a horizontal line at the mean of visible samples (M)",
+                &tr!(l10n, "graph-mean"),
+                &tr!(l10n, "graph-mean.hover", keys = key(egui::Key::M)),
             );
             toggle_chip(
                 ui,
                 &mut self.show_envelope,
-                "Min/Max",
-                "Draw a shaded band between the rolling min and max (X)",
+                &tr!(l10n, "graph-envelope"),
+                &tr!(l10n, "graph-envelope.hover", keys = key(egui::Key::X)),
             );
             if self.show_envelope {
                 let changed = text_field(
                     ui,
                     self.envelope_window.text_mut(),
                     30.0,
-                    "Min/Max window, seconds",
-                    "Window size (seconds) used to compute the Min/Max envelope",
+                    &tr!(l10n, "graph-envelope-window"),
+                    &tr!(l10n, "graph-envelope-window.hover"),
                 )
                 .changed();
                 if changed {
@@ -302,13 +322,14 @@ impl Graph {
                         .color(ui.visuals().weak_text_color()),
                 );
             }
-            let hover = self.histogram_hover();
-            toggle_chip(ui, &mut self.show_histogram, "Histogram", hover);
+            let hover = self.histogram_hover(l10n, key(egui::Key::H));
+            let label = tr!(l10n, "graph-histogram");
+            toggle_chip(ui, &mut self.show_histogram, &label, &hover);
             if chip(
                 ui,
                 self.show_ref_line,
-                "Ref",
-                "Draw horizontal reference lines at the values in the next field (R)",
+                &tr!(l10n, "graph-ref"),
+                &tr!(l10n, "graph-ref.hover", keys = key(egui::Key::R)),
             ) {
                 self.toggle_ref_lines();
             }
@@ -317,8 +338,8 @@ impl Graph {
                     ui,
                     self.ref_lines.text_mut(),
                     80.0,
-                    "Reference values",
-                    "Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)",
+                    &tr!(l10n, "graph-ref-values"),
+                    &tr!(l10n, "graph-ref-values.hover"),
                 );
                 if std::mem::take(&mut self.focus_ref_field) {
                     resp.request_focus();
@@ -329,20 +350,20 @@ impl Graph {
                 toggle_chip(
                     ui,
                     &mut self.show_crossings,
-                    "Triggers",
-                    "Mark the points where the signal crosses a reference line (T)",
+                    &tr!(l10n, "graph-triggers"),
+                    &tr!(l10n, "graph-triggers.hover", keys = key(egui::Key::T)),
                 );
             }
             if chip(
                 ui,
                 self.cursors.active,
-                "Cursors",
-                "Click the graph to place two cursors (C)",
+                &tr!(l10n, "graph-cursors"),
+                &tr!(l10n, "graph-cursors.hover", keys = key(egui::Key::C)),
             ) {
                 self.cursors.toggle();
             }
             if self.cursors.active {
-                if let Some(figures) = self.cursor_readout() {
+                if let Some(figures) = self.cursor_readout(l10n) {
                     let color = tc.graph_cursor_delta();
                     const GAP: f32 = 6.0;
                     let galleys: Vec<_> = figures
@@ -374,7 +395,7 @@ impl Graph {
                     }
                 } else {
                     ui.label(
-                        egui::RichText::new("click graph to place cursors")
+                        egui::RichText::new(tr!(l10n, "graph-cursors-hint"))
                             .small()
                             .color(ui.visuals().weak_text_color()),
                     );
@@ -387,7 +408,7 @@ impl Graph {
     /// the unit has one, then the mean, σ and count of the readings from A
     /// to B, written as Statistics writes the visible window's. `None` until
     /// both cursors are placed.
-    pub(super) fn cursor_readout(&mut self) -> Option<Vec<String>> {
+    pub(super) fn cursor_readout(&mut self, l10n: &Localizer) -> Option<Vec<String>> {
         let (ta, tb) = (self.cursors.a?, self.cursors.b?);
         let (stats, integral) = self.cursor_figures()?;
         let unit = &self.current_unit;
@@ -409,9 +430,9 @@ impl Graph {
             Some(format!("\u{0394}T={:.2} s", (tb - ta).abs())),
             Some(format!("\u{0394}={dv} {unit}")),
             integral,
-            Some(format!("Mean={}", figure(stats.avg()))),
+            Some(tr!(l10n, "graph-readout-mean", value = figure(stats.avg())).into_owned()),
             Some(format!("\u{3c3}={}", figure(stats.std_dev()))),
-            Some(format!("Count={}", stats.count)),
+            Some(tr!(l10n, "graph-readout-count", count = stats.count).into_owned()),
         ];
         Some(figures.into_iter().flatten().collect())
     }
@@ -423,7 +444,7 @@ impl Graph {
     /// meters see the toolbar exactly as before. `selectable_label` rather
     /// than a combo box because that is the toolbar's idiom throughout — and
     /// with at most five choices the chips stay readable.
-    fn show_series_selector(&mut self, ui: &mut Ui) {
+    fn show_series_selector(&mut self, ui: &mut Ui, l10n: &Localizer) {
         if self.series_options.is_empty() {
             return;
         }
@@ -435,7 +456,7 @@ impl Graph {
 
         let frame = group_frame(ui);
         frame.show(ui, |ui| {
-            group_caption(ui, "Plot:");
+            group_caption(ui, &tr!(l10n, "graph-plot"));
 
             // `Role::RadioButton` rather than the default button role: exactly
             // one chip is selected at a time, and egui maps its own radio
@@ -443,13 +464,13 @@ impl Graph {
             // pairing is proven.
             let main_selected = self.selected_series.is_none();
             let main_hover = match self.main_label {
-                Some(name) => format!("Plot the meter's {name} reading"),
-                None => "Plot the meter's main reading".to_string(),
+                Some(name) => tr!(l10n, "graph-plot-main-named.hover", series = name),
+                None => tr!(l10n, "graph-plot-main.hover"),
             };
             if ui
                 .selectable_label(main_selected, self.main_name())
                 .on_hover_text(main_hover)
-                .a11y_label(&series_chip_label(self.main_label))
+                .a11y_label(&series_chip_label(l10n, self.main_label))
                 .a11y_role(egui::accesskit::Role::RadioButton)
                 .clicked()
             {
@@ -460,8 +481,13 @@ impl Graph {
                 let selected = self.selected_series.as_deref() == Some(label.as_str());
                 if ui
                     .selectable_label(selected, label.as_str())
-                    .on_hover_text(format!("Plot the {label} sub-value ({unit})"))
-                    .a11y_label(&series_chip_label(Some(label)))
+                    .on_hover_text(tr!(
+                        l10n,
+                        "graph-plot-series.hover",
+                        series = label,
+                        unit = unit
+                    ))
+                    .a11y_label(&series_chip_label(l10n, Some(label)))
                     .a11y_role(egui::accesskit::Role::RadioButton)
                     .clicked()
                 {
@@ -497,7 +523,7 @@ impl Graph {
     /// A trace whose unit can't have an axis says why: with every axis taken
     /// its chip is unlit and disabled, while one shed for width stays as the
     /// user left it.
-    fn show_overlay_toggles(&mut self, ui: &mut Ui) {
+    fn show_overlay_toggles(&mut self, ui: &mut Ui, l10n: &Localizer) {
         if self.overlays.is_empty() {
             return;
         }
@@ -508,23 +534,26 @@ impl Graph {
 
         let frame = group_frame(ui);
         frame.show(ui, |ui| {
-            group_caption(ui, "Show:");
+            group_caption(ui, &tr!(l10n, "graph-show"));
 
             for o in &self.overlays {
                 let label = o.label.as_str();
                 let refusal = self.axis_refusal(o);
                 let full = refusal == Some(AxisRefusal::Full);
                 let shown = !full && !self.is_hidden(o);
-                let hover = match refusal {
-                    Some(AxisRefusal::Full) => {
-                        format!("{MAX_AXES} units at most \u{2014} hide one to show {label}")
-                    }
-                    Some(AxisRefusal::Narrow) if shown => {
-                        format!("Widen the window to show the {label} axis, or click to hide it")
-                    }
-                    _ if shown => format!("Hide the {label} trace"),
-                    _ => format!("Draw the {label} trace beside the plotted series"),
+                let state = match refusal {
+                    Some(AxisRefusal::Full) => "full",
+                    Some(AxisRefusal::Narrow) if shown => "narrow",
+                    _ if shown => "shown",
+                    _ => "hidden",
                 };
+                let hover = tr!(
+                    l10n,
+                    "graph-show-chip.hover",
+                    state = state,
+                    series = label,
+                    max = MAX_AXES
+                );
                 // Toggle buttons, unlike the mutually exclusive **Plot:**
                 // chips — but with the same naming problem, so the group goes
                 // in the accessible name here too.
@@ -532,7 +561,7 @@ impl Graph {
                     .add_enabled(!full, egui::Button::selectable(shown, label))
                     .on_hover_text(hover.clone())
                     .on_disabled_hover_text(hover)
-                    .a11y_label(&overlay_chip_label(label))
+                    .a11y_label(&overlay_chip_label(l10n, label))
                     .clicked()
                 {
                     toggled = Some(o.label.clone());
@@ -606,5 +635,33 @@ impl Graph {
     /// click) needs.
     pub(crate) fn hide_overlay(&mut self, label: &str) {
         self.hidden_overlays.insert(label.to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The keys a hover names keep their symbols: `[`, not "OpenBracket".
+    #[test]
+    fn hovers_write_keys_as_symbols() {
+        let l10n = crate::l10n::english();
+        let window = tr!(
+            l10n,
+            "graph-window.hover",
+            window = "10s",
+            keys = &cycle_keys()
+        );
+        assert_eq!(window, "Show the last 10s of samples ([ / ] to cycle)");
+        let live = tr!(l10n, "graph-live.hover", keys = graph_key(egui::Key::End));
+        assert_eq!(
+            live,
+            "Auto-follow the newest samples — off while panning (End to jump back)"
+        );
+        let mean = tr!(l10n, "graph-mean.hover", keys = graph_key(egui::Key::M));
+        assert_eq!(
+            mean,
+            "Draw a horizontal line at the mean of visible samples (M)"
+        );
     }
 }

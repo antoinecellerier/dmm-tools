@@ -41,7 +41,10 @@ pub(crate) use view_state::ViewState;
 mod tests;
 
 use dmm_lib::stats::RunningStats;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, Ui};
+use std::borrow::Cow;
 use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
@@ -106,8 +109,8 @@ const _: () = assert!(MIN_PLOT_BESIDE_STRIP >= MIN_PLOT_WIDTH + RIGHT_AXIS_ROOM)
 struct ReadingsKey(u64, u64, u64);
 
 /// What a histogram is binned from: the visible readings, those between the
-/// cursors, the Y range, the bins it is cut into, and the decimals it
-/// writes.
+/// cursors, the Y range, the bins it is cut into, the decimals it writes,
+/// and the language a screen reader hears it in.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct HistogramKey {
     view: ReadingsKey,
@@ -118,6 +121,8 @@ struct HistogramKey {
     range: (f64, f64),
     bins: usize,
     decimals: (usize, usize),
+    /// The language's id: the spoken text is kept with the bins.
+    language: &'static str,
 }
 
 /// What a graph `width` wide leaves the histogram strip beside a plot of
@@ -1588,6 +1593,7 @@ impl Graph {
     pub fn show(
         &mut self,
         ui: &mut Ui,
+        l10n: &Localizer,
         tc: &ThemeColors,
         markers: &Markers,
         limits: Option<WatchedLimits>,
@@ -1597,7 +1603,7 @@ impl Graph {
         // Before the toolbar, whose Show: chips say which units have no axis.
         let width = ui.available_width();
         self.fit_axes_to(width);
-        self.show_toolbar(ui, tc);
+        self.show_toolbar(ui, l10n, tc);
         let room = ui.available_height() - (MINIMAP_HEIGHT + 30.0);
         // After the toolbar, so a click on the Histogram chip lays the pane
         // out in the frame it lands in.
@@ -1617,11 +1623,11 @@ impl Graph {
                     ui.allocate_ui_with_layout(
                         egui::vec2(ui.available_width() - p.size, main_height),
                         egui::Layout::top_down(egui::Align::Min),
-                        |ui| self.show_main(ui, tc, markers, limits, digits),
+                        |ui| self.show_main(ui, l10n, tc, markers, limits, digits),
                     );
                     let (area, _) = ui
                         .allocate_exact_size(egui::vec2(p.size, main_height), egui::Sense::hover());
-                    self.paint_histogram(ui, area, tc, limits);
+                    self.paint_histogram(ui, l10n, area, tc, limits);
                     area
                 })
                 .inner;
@@ -1631,14 +1637,14 @@ impl Graph {
                 egui::Rect::from_x_y_ranges(area.left()..=area.left() + histogram::DIVIDER, y);
             // Here, after the plot and before the minimap, so Tab reaches it
             // in the order it stands on screen.
-            self.histogram_divider(ui, rect, p);
+            self.histogram_divider(ui, l10n, rect, p);
         } else {
             ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
-                self.show_main(ui, tc, markers, limits, digits);
+                self.show_main(ui, l10n, tc, markers, limits, digits);
             });
         }
         ui.add_space(4.0);
-        self.show_minimap(ui, tc, markers);
+        self.show_minimap(ui, l10n, tc, markers);
         if let Some(p) = place.filter(|p| p.dock == histogram::Dock::Below) {
             let (rect, _) = ui.allocate_exact_size(
                 egui::vec2(ui.available_width(), histogram::DIVIDER),
@@ -1648,14 +1654,20 @@ impl Graph {
                 egui::vec2(ui.available_width(), p.size),
                 egui::Sense::hover(),
             );
-            self.paint_histogram(ui, area, tc, limits);
-            self.histogram_divider(ui, rect, p);
+            self.paint_histogram(ui, l10n, area, tc, limits);
+            self.histogram_divider(ui, l10n, rect, p);
         }
     }
 
     /// The histogram's divider at `rect`, keeping the size it is dragged to.
-    fn histogram_divider(&mut self, ui: &Ui, rect: egui::Rect, place: histogram::Placement) {
-        if let Some(size) = histogram::divider(ui, rect, place) {
+    fn histogram_divider(
+        &mut self,
+        ui: &Ui,
+        l10n: &Localizer,
+        rect: egui::Rect,
+        place: histogram::Placement,
+    ) {
+        if let Some(size) = histogram::divider(ui, l10n, rect, place) {
             match place.dock {
                 histogram::Dock::Side => self.histogram_sizes.0 = size,
                 histogram::Dock::Below => self.histogram_sizes.1 = size,
@@ -1690,12 +1702,13 @@ impl Graph {
 
     /// What the Histogram chip says when hovered: why nothing shows while it
     /// is on and the plotted trace is hidden.
-    pub(super) fn histogram_hover(&self) -> &'static str {
-        if self.show_histogram && self.main_hidden {
-            "Show the plotted trace to see its histogram, or click to turn it off"
+    pub(super) fn histogram_hover<'a>(&self, l10n: &'a Localizer, keys: &str) -> Cow<'a, str> {
+        let state = if self.show_histogram && self.main_hidden {
+            "hidden"
         } else {
-            "Show how the visible readings spread (H)"
-        }
+            "shown"
+        };
+        tr!(l10n, "graph-histogram.hover", state = state, keys = keys)
     }
 
     /// The key of the history readings `range`.
@@ -1811,7 +1824,7 @@ impl Graph {
 
     /// Bin the history readings `view` for the histogram, unless `key` is
     /// what they were last binned from, with those between the cursors.
-    fn bin_histogram(&mut self, key: HistogramKey, view: std::ops::Range<usize>) {
+    fn bin_histogram(&mut self, l10n: &Localizer, key: HistogramKey, view: std::ops::Range<usize>) {
         if self.histogram.as_ref().is_some_and(|b| b.key == key) {
             return;
         }
@@ -1827,7 +1840,7 @@ impl Graph {
             });
         let spoken = hist
             .as_ref()
-            .map(|h| h.spoken(&self.current_unit))
+            .map(|h| h.spoken(l10n, &self.current_unit))
             .unwrap_or_default();
         self.histogram = Some(BinnedHistogram { key, hist, spoken });
     }
@@ -1841,6 +1854,7 @@ impl Graph {
     fn paint_histogram(
         &self,
         ui: &Ui,
+        l10n: &Localizer,
         area: egui::Rect,
         tc: &ThemeColors,
         limits: Option<WatchedLimits>,
@@ -1863,12 +1877,13 @@ impl Graph {
         let unit = self.current_unit.as_str();
         match place.dock {
             histogram::Dock::Side => {
-                histogram::paint_side(ui, area, plot, transform, hist, &lines, unit, &colors);
+                histogram::paint_side(ui, l10n, area, plot, transform, hist, &lines, unit, &colors);
             }
             histogram::Dock::Below => {
                 let bounds = transform.bounds();
                 histogram::paint_below(
                     ui,
+                    l10n,
                     area,
                     plot.x_range(),
                     (bounds.min()[1], bounds.max()[1]),

@@ -1,6 +1,8 @@
 //! The minimap strip below the main graph: the full-history overview and the
 //! drag gestures that move and resize the view window over it.
 
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, Ui};
 
 use super::level::Bucket;
@@ -387,7 +389,13 @@ pub(super) fn pan(
 
 impl Graph {
     /// Render the minimap showing full history with viewport indicator.
-    pub fn show_minimap(&mut self, ui: &mut Ui, tc: &ThemeColors, markers: &Markers) {
+    pub fn show_minimap(
+        &mut self,
+        ui: &mut Ui,
+        l10n: &Localizer,
+        tc: &ThemeColors,
+        markers: &Markers,
+    ) {
         if self.history.len() < 2 {
             ui.allocate_space(egui::vec2(ui.available_width(), MINIMAP_HEIGHT));
             return;
@@ -408,12 +416,8 @@ impl Graph {
             egui::Sense::click_and_drag(),
         );
         let pointer_response = pointer_response
-            .on_hover_text(
-                "Minimap — click or drag to pan, drag the bracket edges to resize the view",
-            )
-            .a11y_label(
-                "Graph minimap — click or drag to navigate timeline (Left/Right to pan), drag bracket edges to resize",
-            );
+            .on_hover_text(tr!(l10n, "graph-minimap.hover"))
+            .a11y_label(&tr!(l10n, "graph-minimap.a11y"));
         // Inset the plot area so brackets at edges have room to render
         let rect = egui::Rect::from_min_size(
             egui::pos2(full_rect.left() + margin, full_rect.top() + margin),

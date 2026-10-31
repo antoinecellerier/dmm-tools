@@ -2429,13 +2429,41 @@ fn the_histogram_shows_while_on_and_its_trace_is_drawn() {
         Some(super::histogram::Dock::Side)
     );
     assert_eq!(
-        g.histogram_hover(),
+        g.histogram_hover(&crate::l10n::english(), "H"),
         "Show how the visible readings spread (H)"
     );
     g.main_hidden = true;
     graph_frame(&mut g, &ctx, vec![]);
     assert_eq!(g.histogram_place, None, "no bars for a trace not drawn");
-    assert!(g.histogram_hover().starts_with("Show the plotted trace"));
+    assert!(
+        g.histogram_hover(&crate::l10n::english(), "H")
+            .starts_with("Show the plotted trace")
+    );
+}
+
+/// What a screen reader hears of the histogram is redone in a new
+/// language, though the readings it is binned from are the same.
+#[test]
+fn the_spoken_histogram_follows_the_language() {
+    let ctx = crate::app::styled_context();
+    let mut g = graph_with_a_minute_of_data();
+    g.show_histogram = true;
+    graph_frame(&mut g, &ctx, vec![]);
+    let english = g.histogram.as_ref().expect("binned").spoken.clone();
+    assert!(english.contains("Histogram of"), "{english}");
+    static OTHER: dmm_shared::l10n::Language = dmm_shared::l10n::Language {
+        id: "x-test",
+        native_name: "Test",
+        reviewed: true,
+    };
+    let options = dmm_shared::l10n::Options {
+        pseudo: true,
+        ..Default::default()
+    };
+    let other = Localizer::new(&OTHER, &crate::l10n::resources(), &options);
+    graph_frame_in(&other, &mut g, &ctx, vec![]);
+    let spoken = &g.histogram.as_ref().expect("binned").spoken;
+    assert_ne!(*spoken, english, "rebuilt in the new language");
 }
 
 /// The cursor readout covers the readings at both cursors and between
@@ -2445,9 +2473,15 @@ fn the_cursor_readout_covers_the_readings_between_the_cursors() {
     let mut g = graph_with_a_minute_of_data();
     g.cursors.active = true;
     g.cursors.a = Some(2.0);
-    assert_eq!(g.cursor_readout(), None, "one cursor placed");
+    assert_eq!(
+        g.cursor_readout(&crate::l10n::english()),
+        None,
+        "one cursor placed"
+    );
     g.cursors.b = Some(1.0);
-    let figures = g.cursor_readout().expect("both cursors placed");
+    let figures = g
+        .cursor_readout(&crate::l10n::english())
+        .expect("both cursors placed");
     assert_eq!(figures[0], "\u{0394}T=1.00 s");
     assert_eq!(
         figures[figures.len() - 3..],
@@ -2619,7 +2653,9 @@ fn tab_reaches_the_strip_divider_before_the_minimap() {
             events,
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show(ui, &tc, &markers, None, NO_DIGITS));
+        let mut out = ctx.run_ui(input, |ui| {
+            g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+        });
         out.textures_delta.clear();
         let focused = out.platform_output.accesskit_update.and_then(|update| {
             let focus = update.focus;
@@ -2659,7 +2695,9 @@ fn dragging_the_divider_resizes_the_histogram() {
             ..Default::default()
         };
         let markers = crate::markers::Markers::default();
-        let mut out = ctx.run_ui(input, |ui| g.show(ui, &tc, &markers, None, NO_DIGITS));
+        let mut out = ctx.run_ui(input, |ui| {
+            g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+        });
         out.textures_delta.clear();
         out.platform_output.accesskit_update.and_then(|update| {
             update
@@ -2889,7 +2927,9 @@ fn the_hover_lists_every_series_at_its_time() {
             color: egui::Color32::BLUE,
         },
     ];
-    let rows = |hovered, t, overload| hover_lines(&series, hovered, t, overload, 1);
+    let rows = |hovered, t, overload| {
+        hover_lines(&crate::l10n::english(), &series, hovered, t, overload, 1)
+    };
     assert_eq!(
         rows("Frequency", 0.5, false),
         vec![
@@ -3084,10 +3124,22 @@ fn a_fifth_overlay_label_is_ignored() {
 /// identically and the user cannot tell what a press will do.
 #[test]
 fn chip_labels_name_their_group() {
-    assert_eq!(series_chip_label(None), "Plot main reading");
-    assert_eq!(series_chip_label(Some("T2")), "Plot T2");
-    assert_eq!(overlay_chip_label("T2"), "Show T2 trace");
-    assert_ne!(series_chip_label(Some("T2")), overlay_chip_label("T2"));
+    assert_eq!(
+        series_chip_label(&crate::l10n::english(), None),
+        "Plot main reading"
+    );
+    assert_eq!(
+        series_chip_label(&crate::l10n::english(), Some("T2")),
+        "Plot T2"
+    );
+    assert_eq!(
+        overlay_chip_label(&crate::l10n::english(), "T2"),
+        "Show T2 trace"
+    );
+    assert_ne!(
+        series_chip_label(&crate::l10n::english(), Some("T2")),
+        overlay_chip_label(&crate::l10n::english(), "T2")
+    );
 }
 
 /// Names in the key, in the order they are painted.
@@ -4232,6 +4284,7 @@ fn gesture_frame(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events
     let mut output = ctx.run_ui(input, |ui| {
         g.show_main(
             ui,
+            &crate::l10n::english(),
             &tc,
             &crate::markers::Markers::default(),
             None,
@@ -4344,6 +4397,11 @@ fn key_press(key: egui::Key) -> Vec<egui::Event> {
 /// One headless frame of the whole graph — toolbar included — with `events`
 /// delivered to it.
 fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
+    graph_frame_in(&crate::l10n::english(), g, ctx, events);
+}
+
+/// [`graph_frame`] in `l10n`'s language.
+fn graph_frame_in(l10n: &Localizer, g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
     let mut output = ctx.run_ui(
         egui::RawInput {
@@ -4354,6 +4412,7 @@ fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
         |ui| {
             g.show(
                 ui,
+                l10n,
                 &tc,
                 &crate::markers::Markers::default(),
                 None,
@@ -4640,7 +4699,9 @@ fn clicking_a_flag_reports_its_marker() {
             events,
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None, NO_DIGITS));
+        let mut out = ctx.run_ui(input, |ui| {
+            g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+        });
         out.textures_delta.clear();
         out.platform_output.accesskit_update.and_then(|update| {
             update
@@ -4702,7 +4763,9 @@ fn menu_frame(
         // The meter's digits for its main reading; none for a sub-value.
         let digits = |_, series: Option<&str>| series.is_none().then(|| shown.clone()).flatten();
         let digits: ReadingDigits = &digits;
-        ctx.run_ui(input, |ui| g.show_main(ui, &tc, markers, *limits, digits))
+        ctx.run_ui(input, |ui| {
+            g.show_main(ui, &crate::l10n::english(), &tc, markers, *limits, digits)
+        })
     });
     out.textures_delta.clear();
     out.platform_output
@@ -5212,7 +5275,9 @@ fn dragging_an_axis_leaves_the_view() {
             events,
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None, NO_DIGITS));
+        let mut out = ctx.run_ui(input, |ui| {
+            g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+        });
         out.textures_delta.clear();
         out.platform_output
     };
@@ -5431,7 +5496,9 @@ fn a_wide_window_draws_about_as_much_as_a_narrow_one() {
                 screen_rect: Some(screen),
                 ..Default::default()
             };
-            let mut out = ctx.run_ui(input, |ui| g.show_main(ui, &tc, &markers, None, NO_DIGITS));
+            let mut out = ctx.run_ui(input, |ui| {
+                g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+            });
             out.textures_delta.clear();
             count = ctx
                 .tessellate(out.shapes, out.pixels_per_point)
@@ -5867,7 +5934,9 @@ fn pattern_frame(g: &mut Graph, ctx: &egui::Context, tc: &ThemeColors) -> Patter
             screen_rect: Some(gesture_screen()),
             ..Default::default()
         };
-        let mut out = ctx.run_ui(input, |ui| g.show_main(ui, tc, &markers, None, NO_DIGITS));
+        let mut out = ctx.run_ui(input, |ui| {
+            g.show_main(ui, &crate::l10n::english(), tc, &markers, None, NO_DIGITS)
+        });
         out.textures_delta.clear();
         shapes = out.shapes;
     }
@@ -5971,7 +6040,7 @@ fn toolbar_fields_leave_its_height_alone() {
             };
             let mut out = ctx.run_ui(input, |ui| {
                 h = ui
-                    .scope(|ui| g.show_toolbar(ui, &tc))
+                    .scope(|ui| g.show_toolbar(ui, &crate::l10n::english(), &tc))
                     .response
                     .rect
                     .height();
@@ -5988,4 +6057,63 @@ fn toolbar_fields_leave_its_height_alone() {
     assert_eq!(height(&mut g), plain, "reference values field");
     g.y_axis.fixed = true;
     assert_eq!(height(&mut g), plain, "fixed Y bounds fields");
+}
+
+/// The plot's name for a screen reader reads as it did before its
+/// sentences moved into Fluent.
+#[test]
+fn the_plots_spoken_label_reads_as_before() {
+    let (mut g, _) = graph_over(30);
+    let ctx = crate::app::styled_context();
+    graph_frame(&mut g, &ctx, vec![]);
+    assert_eq!(
+        g.a11y_label,
+        "Measurement plot. 10 second window. Y axis 1.000 to 1.000 V. 31 samples. live. \
+         last reading 1.0000 V."
+    );
+    g.show_histogram = true;
+    g.live = false;
+    graph_frame(&mut g, &ctx, vec![]);
+    assert_eq!(
+        g.a11y_label,
+        "Measurement plot. 10 second window. Y axis 1.000 to 1.000 V. 31 samples. \
+         Histogram of 11 visible samples, standard deviation 0.0000 V, most at 1.0000 to \
+         1.0000 V (11). paused. last reading 1.0000 V."
+    );
+
+    // Traces drawn beside it, one on an axis of its own, and the readings
+    // between the cursors.
+    let mut g = Graph::new();
+    g.time_window_secs = 10.0;
+    let t0 = Instant::now();
+    for i in 0..=10u32 {
+        let overlays = [
+            ("T2", "\u{00B0}C", Some(30.0)),
+            ("Frequency", "Hz", Some(50.0 + f64::from(i % 2))),
+        ];
+        g.push_sample(PlotSample {
+            value: Some(20.0 + f64::from(i % 3)),
+            timestamp: t0 + Duration::from_secs(u64::from(i)),
+            mode: "Temp",
+            unit: "\u{00B0}C",
+            display_raw: None,
+            series: None,
+            main_label: None,
+            levels: false,
+            overlays: &overlays,
+        });
+    }
+    g.show_histogram = true;
+    g.cursors.active = true;
+    g.cursors.a = Some(2.0);
+    g.cursors.b = Some(5.0);
+    graph_frame(&mut g, &ctx, vec![]);
+    graph_frame(&mut g, &ctx, vec![]);
+    assert_eq!(
+        g.a11y_label,
+        "Measurement plot. 10 second window. Y axis 19.000 to 31.000 \u{00B0}C. 11 samples. \
+         Also showing T2, Frequency in Hz on a right axis. Histogram of 11 visible samples, \
+         standard deviation 0.8312 \u{00B0}C, most at 20 \u{00B0}C (4); 4 samples between the \
+         cursors, standard deviation 0.9574 \u{00B0}C. live. last reading 21.0000 \u{00B0}C."
+    );
 }

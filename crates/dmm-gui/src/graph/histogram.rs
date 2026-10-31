@@ -15,6 +15,8 @@
 //! still compares with it.
 
 use dmm_lib::stats::RunningStats;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, Color32, Rect, Sense, Ui};
 use egui_plot::{PlotPoint, PlotTransform};
 
@@ -100,14 +102,14 @@ pub(super) fn docks_beside(beside: f32) -> bool {
 /// minimap and the band: dragged, or focused and moved with the arrows, it
 /// resizes the pane. The new size when it moved, so a window too small for
 /// the size dragged draws it smaller without forgetting it.
-pub(super) fn divider(ui: &Ui, rect: Rect, placement: Placement) -> Option<f32> {
+pub(super) fn divider(ui: &Ui, l10n: &Localizer, rect: Rect, placement: Placement) -> Option<f32> {
     use crate::a11y::{ResizeAxis, ResponseA11yExt as _};
     // Moving the divider towards the plot grows the pane: left of the strip,
     // up over the band. `arrow_resize` counts Right and Up as positive.
     let (axis, label, toward_plot, key_growth, cursor, line, min) = match placement.dock {
         Dock::Side => (
             ResizeAxis::Horizontal,
-            "Resize the histogram (Left/Right to adjust)",
+            tr!(l10n, "graph-histogram-divider-side.a11y"),
             egui::vec2(-1.0, 0.0),
             -1.0,
             egui::CursorIcon::ResizeHorizontal,
@@ -116,7 +118,7 @@ pub(super) fn divider(ui: &Ui, rect: Rect, placement: Placement) -> Option<f32> 
         ),
         Dock::Below => (
             ResizeAxis::Vertical,
-            "Resize the histogram (Up/Down to adjust)",
+            tr!(l10n, "graph-histogram-divider-below.a11y"),
             egui::vec2(0.0, -1.0),
             1.0,
             egui::CursorIcon::ResizeVertical,
@@ -125,7 +127,7 @@ pub(super) fn divider(ui: &Ui, rect: Rect, placement: Placement) -> Option<f32> 
         ),
     };
     let id = ui.scope_id().with("histogram_resize");
-    let response = ui.interact(rect, id, Sense::drag()).a11y_label(label);
+    let response = ui.interact(rect, id, Sense::drag()).a11y_label(&label);
     let keys = crate::a11y::arrow_resize(ui.ctx(), id, axis, 10.0);
     let growth = response.drag_delta().dot(toward_plot) + keys * key_growth;
     crate::a11y::paint_focus_ring(ui, &response);
@@ -418,33 +420,49 @@ impl Histogram {
 
     /// The readings bin `i` holds, as its hover names them: one value when a
     /// bin is one step wide, else the first and last a reading can take.
-    fn range_label(&self, i: usize, unit: &str) -> String {
+    fn range_label(&self, l10n: &Localizer, i: usize, unit: &str) -> String {
         let d = self.decimals;
         let (low, high) = self.edges(i);
         let (first, last) = (low + self.quantum / 2.0, high - self.quantum / 2.0);
         if self.quantum > 0.0 && (last - first).abs() < self.quantum / 2.0 {
             format!("{first:.d$} {unit}")
-        } else if self.quantum > 0.0 {
-            format!("{first:.d$} to {last:.d$} {unit}")
         } else {
-            format!("{low:.d$} to {high:.d$} {unit}")
+            let (low, high) = if self.quantum > 0.0 {
+                (first, last)
+            } else {
+                (low, high)
+            };
+            tr!(
+                l10n,
+                "graph-histogram-range",
+                low = format!("{low:.d$}"),
+                high = format!("{high:.d$}"),
+                unit = unit
+            )
+            .into_owned()
         }
     }
 
     /// What hovering bin `i` says: its range, then the readings it holds of
     /// the view and of the interval, with their shares.
-    fn hover_text(&self, i: usize, unit: &str) -> String {
-        let held = |c: &Counts| {
-            let n = c.counts[i];
-            format!(
-                "{n} reading{} ({:.1}%)",
-                if n == 1 { "" } else { "s" },
-                c.share(n) * 100.0
-            )
-        };
-        let mut text = format!("{}: {}", self.range_label(i, unit), held(&self.view));
+    fn hover_text(&self, l10n: &Localizer, i: usize, unit: &str) -> String {
+        let percent = |c: &Counts| format!("{:.1}", c.share(c.counts[i]) * 100.0);
+        let mut text = tr!(
+            l10n,
+            "graph-histogram-bin.hover",
+            range = self.range_label(l10n, i, unit),
+            count = self.view.counts[i],
+            percent = percent(&self.view)
+        )
+        .into_owned();
         if let Some(interval) = &self.interval {
-            text.push_str(&format!("\nA\u{2013}B: {}", held(interval)));
+            text.push('\n');
+            text.push_str(&tr!(
+                l10n,
+                "graph-histogram-bin-interval.hover",
+                count = interval.counts[i],
+                percent = percent(interval)
+            ));
         }
         text
     }
@@ -470,12 +488,27 @@ impl Histogram {
         (share(&self.view), self.interval.as_ref().and_then(share))
     }
 
-    /// What a screen reader hears of the pane, appended to the plot's label.
-    pub(super) fn spoken(&self, unit: &str) -> String {
+    /// What a screen reader hears of the pane: one sentence, which the
+    /// plot's label takes among its own.
+    pub(super) fn spoken(&self, l10n: &Localizer, unit: &str) -> String {
         let d = self.sigma_decimals;
-        let mut text = format!(" Histogram of {} visible samples", self.view.stats.count);
-        if let Some(sd) = self.view.stats.std_dev() {
-            text.push_str(&format!(", standard deviation {sd:.d$} {unit}"));
+        let sd = |sd: f64| {
+            tr!(
+                l10n,
+                "graph-histogram-a11y-sd",
+                value = format!("{sd:.d$}"),
+                unit = unit
+            )
+        };
+        let comma = tr!(l10n, "graph-histogram-a11y-separator");
+        let mut text =
+            tr!(l10n, "graph-histogram-a11y", count = self.view.stats.count).into_owned();
+        let clause = |text: &mut String, separator: &str, clause: &str| {
+            text.push_str(separator);
+            text.push_str(clause);
+        };
+        if let Some(v) = self.view.stats.std_dev() {
+            clause(&mut text, &comma, &sd(v));
         }
         let most = self
             .view
@@ -485,28 +518,44 @@ impl Histogram {
             .max_by_key(|&(i, &c)| (c, std::cmp::Reverse(i)))
             .filter(|&(_, &c)| c > 0);
         if let Some((i, &c)) = most {
-            text.push_str(&format!(", most at {} ({c})", self.range_label(i, unit)));
+            let most = tr!(
+                l10n,
+                "graph-histogram-a11y-most",
+                range = self.range_label(l10n, i, unit),
+                count = c
+            );
+            clause(&mut text, &comma, &most);
         }
         if self.view.overloads > 0 {
-            text.push_str(&format!(", {} over range", self.view.overloads));
+            let over = tr!(
+                l10n,
+                "graph-histogram-a11y-over-range",
+                count = self.view.overloads
+            );
+            clause(&mut text, &comma, &over);
         }
         if self.view.above + self.view.below > 0 {
-            text.push_str(&format!(
-                ", {} above and {} below the axis",
-                self.view.above, self.view.below
-            ));
+            let beyond = tr!(
+                l10n,
+                "graph-histogram-a11y-beyond",
+                above = self.view.above,
+                below = self.view.below
+            );
+            clause(&mut text, &comma, &beyond);
         }
         if let Some(interval) = &self.interval {
-            text.push_str(&format!(
-                "; {} samples between the cursors",
-                interval.stats.count
-            ));
-            if let Some(sd) = interval.stats.std_dev() {
-                text.push_str(&format!(", standard deviation {sd:.d$} {unit}"));
+            let between = tr!(
+                l10n,
+                "graph-histogram-a11y-interval",
+                count = interval.stats.count
+            );
+            let semicolon = tr!(l10n, "graph-histogram-a11y-interval-separator");
+            clause(&mut text, &semicolon, &between);
+            if let Some(v) = interval.stats.std_dev() {
+                clause(&mut text, &comma, &sd(v));
             }
         }
-        text.push('.');
-        text
+        tr!(l10n, "graph-histogram-a11y-sentence", clauses = text).into_owned()
     }
 }
 
@@ -548,6 +597,7 @@ fn point(dock: Dock, bars: Rect, at: f32, length: f32) -> egui::Pos2 {
 /// Hover: the bin under the pointer, lit, with its readings and shares.
 fn hover_bin(
     ui: &Ui,
+    l10n: &Localizer,
     rect: Rect,
     hist: &Histogram,
     unit: &str,
@@ -555,7 +605,7 @@ fn hover_bin(
 ) -> Option<usize> {
     let response = ui.interact(rect, ui.scope_id().with("histogram"), Sense::hover());
     let bin = response.hover_pos().and_then(bin_at)?;
-    response.on_hover_text_at_pointer(hist.hover_text(bin, unit));
+    response.on_hover_text_at_pointer(hist.hover_text(l10n, bin, unit));
     Some(bin)
 }
 
@@ -764,6 +814,7 @@ fn paint_beyond(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn paint_side(
     ui: &Ui,
+    l10n: &Localizer,
     area: Rect,
     plot: Rect,
     transform: &PlotTransform,
@@ -775,7 +826,7 @@ pub(super) fn paint_side(
     let strip = Rect::from_x_y_ranges(area.left() + DIVIDER..=area.right(), plot.y_range());
     let x = transform.bounds().min()[0];
     let y_of = |v: f64| transform.position_from_point(&PlotPoint::new(x, v)).y;
-    let hovered = hover_bin(ui, strip, hist, unit, |pos| {
+    let hovered = hover_bin(ui, l10n, strip, hist, unit, |pos| {
         hist.bin_of(transform.value_from_position(pos).y)
     });
     let grid = paint_bins(
@@ -833,6 +884,7 @@ pub(super) fn paint_side(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn paint_below(
     ui: &Ui,
+    l10n: &Localizer,
     area: Rect,
     x_range: egui::Rangef,
     (lo, hi): (f64, f64),
@@ -845,7 +897,7 @@ pub(super) fn paint_below(
     let row = ui.text_style_height(&egui::TextStyle::Small);
     let bars = Rect::from_x_y_ranges(x_range, area.top()..=area.bottom() - row - 2.0);
     let x_of = |v: f64| bars.left() + ((v - lo) / (hi - lo)) as f32 * bars.width();
-    let hovered = hover_bin(ui, bars, hist, unit, |pos| {
+    let hovered = hover_bin(ui, l10n, bars, hist, unit, |pos| {
         let share = f64::from((pos.x - bars.left()) / bars.width());
         hist.bin_of(lo + share * (hi - lo))
     });
@@ -1056,7 +1108,7 @@ mod tests {
         let h = Histogram::new(i(&values), (5.0, 5.004), target_bins(1000.0), (4, 4)).unwrap();
         assert_eq!(h.width, 1e-3);
         assert_eq!(h.view.counts, vec![0, 10, 20, 30, 0]);
-        assert_eq!(h.range_label(2, "V"), "5.002 V");
+        assert_eq!(h.range_label(&crate::l10n::english(), 2, "V"), "5.002 V");
     }
 
     /// Too little room for a bin per step: bins a round number of steps
@@ -1072,7 +1124,10 @@ mod tests {
             "{:?}",
             h.view.counts
         );
-        assert_eq!(h.range_label(0, "V"), "0.000 to 0.009 V");
+        assert_eq!(
+            h.range_label(&crate::l10n::english(), 0, "V"),
+            "0.000 to 0.009 V"
+        );
     }
 
     #[test]
@@ -1119,7 +1174,10 @@ mod tests {
         let mut values = vec![5.002; 19];
         values.push(5.003);
         let h = Histogram::new(i(&values), (5.0, 5.005), target_bins(400.0), (3, 4)).unwrap();
-        assert!(h.spoken("V").contains("standard deviation 0.0002 V"));
+        assert!(
+            h.spoken(&crate::l10n::english(), "V")
+                .contains("standard deviation 0.0002 V")
+        );
     }
 
     #[test]
@@ -1202,11 +1260,11 @@ mod tests {
         assert_eq!(h.peak_share(), 0.5, "2 of the interval's 4 readings");
         assert_eq!(h.beyond(true), (None, Some(0.5)));
         assert_eq!(
-            h.hover_text(2, "V"),
+            h.hover_text(&crate::l10n::english(), 2, "V"),
             "2 V: 20 readings (50.0%)\nA\u{2013}B: 2 readings (50.0%)"
         );
         assert!(
-            h.spoken("V")
+            h.spoken(&crate::l10n::english(), "V")
                 .ends_with("; 4 samples between the cursors, standard deviation 3.6 V.")
         );
     }
@@ -1223,9 +1281,10 @@ mod tests {
         h.count_interval([1.0, 2.0, 2.0].into_iter(), 1);
         assert_eq!(h.overload_shares(), (Some(0.2), Some(0.25)));
         assert!(
-            h.spoken("V").contains(", 10 over range"),
+            h.spoken(&crate::l10n::english(), "V")
+                .contains(", 10 over range"),
             "{}",
-            h.spoken("V")
+            h.spoken(&crate::l10n::english(), "V")
         );
     }
 
@@ -1293,7 +1352,10 @@ mod tests {
     fn an_empty_window_bins_nothing() {
         let h = Histogram::new(i(&[]), (0.0, 1.0), target_bins(100.0), (4, 4)).unwrap();
         assert_eq!(h.view.tallest(), 0);
-        assert_eq!(h.spoken("V"), " Histogram of 0 visible samples.");
+        assert_eq!(
+            h.spoken(&crate::l10n::english(), "V"),
+            "Histogram of 0 visible samples."
+        );
     }
 
     #[test]
@@ -1301,8 +1363,8 @@ mod tests {
         let values = times(&[1.0, 2.0, 2.0], 10);
         let h = Histogram::new(i(&values), (0.0, 3.0), target_bins(300.0), (0, 1)).unwrap();
         assert_eq!(
-            h.spoken("V"),
-            " Histogram of 30 visible samples, standard deviation 0.5 V, most at 2 V (20)."
+            h.spoken(&crate::l10n::english(), "V"),
+            "Histogram of 30 visible samples, standard deviation 0.5 V, most at 2 V (20)."
         );
     }
 }

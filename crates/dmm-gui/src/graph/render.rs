@@ -1,6 +1,8 @@
 //! Painting the main graph: the traces, the analysis overlays, the plot key
 //! and the accessibility summary that describes them.
 
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
     AxisHints, GridInput, GridMark, HoverPosition, Line, Plot, PlotBounds, PlotPoint, PlotPoints,
@@ -639,6 +641,7 @@ pub(super) struct HoverSeries<'a> {
 /// first, each with its index in `series`. The plotted series (first in
 /// `series`) reads "overload" inside its band.
 pub(super) fn hover_lines(
+    l10n: &Localizer,
     series: &[HoverSeries],
     hovered: &str,
     t: f64,
@@ -658,9 +661,19 @@ pub(super) fn hover_lines(
                 ..
             } = &series[i];
             let line = if i == 0 && overload {
-                Some(format!("{name}: overload"))
+                Some(tr!(l10n, "graph-hover-overload-series", series = name).into_owned())
             } else {
-                trace_value_at(segments, t).map(|v| format!("{name}: {v:.decimals$} {unit}"))
+                trace_value_at(segments, t).map(|v| {
+                    let value = format!("{v:.decimals$}");
+                    tr!(
+                        l10n,
+                        "graph-hover-series",
+                        series = name,
+                        value = value,
+                        unit = unit
+                    )
+                    .into_owned()
+                })
             };
             line.map(|l| (i, l))
         })
@@ -1215,6 +1228,7 @@ impl Graph {
     pub fn show_main(
         &mut self,
         ui: &mut Ui,
+        l10n: &Localizer,
         tc: &ThemeColors,
         markers: &Markers,
         limits: Option<super::WatchedLimits>,
@@ -1319,8 +1333,9 @@ impl Graph {
                     super::histogram::Dock::Below => plot.width(),
                 }),
                 decimals: (self.decimals(true), self.decimals(false)),
+                language: l10n.language().id,
             };
-            self.bin_histogram(key, vis_start..vis_end);
+            self.bin_histogram(l10n, key, vis_start..vis_end);
         } else {
             self.histogram = None;
         }
@@ -1439,6 +1454,7 @@ impl Graph {
         let levels = self.levels;
         // Moved into the label_formatter closure, which is rebuilt each frame.
         let tooltip_spans = overload_spans.clone();
+        let overload_word = tr!(l10n, "graph-hover-overload").into_owned();
         // With a right axis, a height on the plot means a different value on
         // each axis, so the readout lists every drawn series at the hovered
         // time instead, in its own unit — the one under the pointer first.
@@ -1516,7 +1532,7 @@ impl Graph {
                     return None;
                 }
                 if overload {
-                    return Some(format!("{time_label}\noverload"));
+                    return Some(format!("{time_label}\n{overload_word}"));
                 }
                 // Only a named item is a trace, so only its y is a point; a
                 // helper's, or the pointer's own, is a height on the axis.
@@ -1735,7 +1751,7 @@ impl Graph {
         self.plot_rect = Some(response.response.rect);
         self.plot_transform = Some(response.transform);
         if let Some((time_label, name, t, overload)) = hover_hit.take() {
-            let lines = hover_lines(&hover_series, &name, t, overload, point_decimals);
+            let lines = hover_lines(l10n, &hover_series, &name, t, overload, point_decimals);
             show_hover_readout(&response.response, &time_label, &hover_series, &lines);
         }
         Self::paint_stacked_ticks(
@@ -1783,6 +1799,7 @@ impl Graph {
         let mut openers = Self::axis_strips(ui, complete_rect, response.response.rect);
         let (flag_click, flags) = Self::paint_marker_flags(
             ui,
+            l10n,
             &response.transform,
             response.response.rect,
             &in_view,
@@ -1798,6 +1815,7 @@ impl Graph {
         taken.extend(flags);
         Self::paint_overlay_labels(
             ui,
+            l10n,
             response.response.rect,
             &response.transform,
             &overlay,
@@ -1805,6 +1823,7 @@ impl Graph {
         );
         self.handle_interaction(ui, &response.response, &response.transform);
         self.show_context_menu(
+            l10n,
             &response.response,
             &openers,
             &response.transform,
@@ -1812,7 +1831,7 @@ impl Graph {
             &overlay.limit_lines,
             digits,
         );
-        self.update_plot_a11y_label(ui, response.response.id, y_min, y_max, in_view.len());
+        self.update_plot_a11y_label(ui, l10n, response.response.id, y_min, y_max, in_view.len());
         // Draw a focus ring on the main plot body when it's keyboard-focused,
         // the plot's one Tab stop: egui_plot's axes take no focus.
         crate::a11y::paint_focus_ring(ui, &response.response);
@@ -1824,6 +1843,7 @@ impl Graph {
     fn update_plot_a11y_label(
         &mut self,
         ui: &Ui,
+        l10n: &Localizer,
         plot_id: egui::Id,
         y_min: f64,
         y_max: f64,
@@ -1853,6 +1873,8 @@ impl Graph {
             quantize_for_hash(y_min).hash(&mut h);
             quantize_for_hash(y_max).hash(&mut h);
             self.history.len().hash(&mut h);
+            // The words are the language's.
+            l10n.language().id.hash(&mut h);
             self.live.hash(&mut h);
             last_value.map(f64::to_bits).hash(&mut h);
             self.current_unit.hash(&mut h);
@@ -1880,11 +1902,23 @@ impl Graph {
                 let named: Vec<String> = shown_labels
                     .iter()
                     .map(|&(label, unit)| match unit {
-                        Some(unit) => format!("{label} in {unit} on a right axis"),
+                        Some(unit) => tr!(
+                            l10n,
+                            "graph-plot-a11y-also-axis",
+                            series = label,
+                            unit = unit
+                        )
+                        .into_owned(),
                         None => label.to_string(),
                     })
                     .collect();
-                format!(" Also showing {}.", named.join(", "))
+                let separator = tr!(l10n, "graph-plot-a11y-also-separator");
+                tr!(
+                    l10n,
+                    "graph-plot-a11y-also",
+                    series = named.join(&*separator)
+                )
+                .into_owned()
             };
             self.a11y_label_sig = sig;
             let unit = if self.current_unit.is_empty() {
@@ -1892,7 +1926,11 @@ impl Graph {
             } else {
                 &self.current_unit
             };
-            let state = if self.live { "live" } else { "paused" };
+            let state = tr!(
+                l10n,
+                "graph-plot-a11y-state",
+                state = if self.live { "live" } else { "paused" }
+            );
             // Prefer the meter's own raw display string for the spoken
             // reading — it already encodes range/scale (e.g. "  1.234"
             // for a 22 V range vs " 12.34" for a 220 V range), so AT
@@ -1903,34 +1941,62 @@ impl Graph {
                 // plotted value — which is stale by definition while the
                 // meter has nothing to measure. The band is otherwise a
                 // purely visual cue.
-                _ if self.breaks.overloaded() => "currently over range".to_string(),
-                (Some(raw), _) => format!("last reading {} {unit}", raw.trim()),
-                (None, Some(v)) => {
-                    format!("last reading {v:.prec$} {unit}", prec = self.decimals(true))
-                }
-                (None, None) => "no data".to_string(),
+                _ if self.breaks.overloaded() => tr!(l10n, "graph-plot-a11y-over-range"),
+                (Some(raw), _) => tr!(
+                    l10n,
+                    "graph-plot-a11y-reading",
+                    value = raw.trim(),
+                    unit = unit
+                ),
+                (None, Some(v)) => tr!(
+                    l10n,
+                    "graph-plot-a11y-reading",
+                    value = format!("{v:.prec$}", prec = self.decimals(true)),
+                    unit = unit
+                ),
+                (None, None) => tr!(l10n, "graph-plot-a11y-no-data"),
             };
             // The plot draws several traces at once for a multi-display
             // meter, and which one the axis belongs to is otherwise purely
             // visual — the key painted in its corner.
-            let of_series = match self.current_series.as_deref().or(self.main_label) {
-                Some(label) => format!(" of {label}"),
-                None => String::new(),
+            let title = match self.current_series.as_deref().or(self.main_label) {
+                Some(label) => tr!(l10n, "graph-plot-a11y-title-series", series = label),
+                None => tr!(l10n, "graph-plot-a11y-title"),
             };
             let markers = match markers_in_view {
                 0 => String::new(),
-                1 => " 1 marker in view.".to_string(),
-                n => format!(" {n} markers in view."),
+                n => tr!(l10n, "graph-plot-a11y-markers", count = n).into_owned(),
             };
-            self.a11y_label = format!(
-                "Measurement plot{of_series}. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples.{also}{markers}{spoken_histogram} {}. {}.",
-                self.time_window_secs,
-                y_min,
-                y_max,
-                self.history.len(),
-                state,
-                reading,
+            // Whole seconds, as the window is written: `{:.0}`'s rounding.
+            let seconds = format!("{:.0}", self.time_window_secs)
+                .parse::<i64>()
+                .unwrap_or(0);
+            let window = tr!(l10n, "graph-plot-a11y-window", seconds = seconds);
+            let y_axis = tr!(
+                l10n,
+                "graph-plot-a11y-y-axis",
+                min = format!("{y_min:.3}"),
+                max = format!("{y_max:.3}"),
+                unit = unit
             );
+            let samples = tr!(l10n, "graph-plot-a11y-samples", count = self.history.len());
+            let sentences = [
+                &*title,
+                &*window,
+                &*y_axis,
+                &*samples,
+                &also,
+                &markers,
+                spoken_histogram,
+                &*state,
+                &*reading,
+            ];
+            let separator = tr!(l10n, "graph-plot-a11y-separator");
+            self.a11y_label = sentences
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(&*separator);
         }
         crate::a11y::set_accessible_label(ui, plot_id, &self.a11y_label);
     }
@@ -1946,6 +2012,7 @@ impl Graph {
     /// Tab stop per marker, and the Recording panel's log already has one.
     fn paint_marker_flags(
         ui: &Ui,
+        l10n: &Localizer,
         transform: &PlotTransform,
         plot_rect: egui::Rect,
         in_view: &[(f64, &crate::markers::Marker)],
@@ -1988,14 +2055,14 @@ impl Graph {
                 flag_font(),
                 text_color,
             );
-            let edit = format!("Write marker {}'s note", flag.number);
+            let edit = tr!(l10n, "graph-marker-flag", number = flag.number);
             let response = ui
                 .interact(
                     flag.rect,
                     ui.scope_id().with(("marker_flag", flag.number)),
                     egui::Sense::CLICK,
                 )
-                .on_hover_text(&edit)
+                .on_hover_text(&*edit)
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
             response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &edit));
             if response.clicked() {
@@ -2047,6 +2114,7 @@ impl Graph {
     /// then form one column around them (see [`level_label_rects`]).
     fn paint_overlay_labels(
         ui: &Ui,
+        l10n: &Localizer,
         plot_rect: egui::Rect,
         transform: &PlotTransform,
         data: &OverlayLabelData,
@@ -2141,7 +2209,8 @@ impl Graph {
         if data.show_mean
             && let Some(avg) = data.mean_value
         {
-            levels.push((avg, format!("Mean: {}", level_text(avg)), data.mean_color));
+            let label = tr!(l10n, "graph-mean-line", value = level_text(avg));
+            levels.push((avg, label.into_owned(), data.mean_color));
         }
         if data.show_ref {
             let mut refs = data.ref_values.clone();

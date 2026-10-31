@@ -3,6 +3,8 @@
 //! its height, put a cursor on it — and the removal of what lies under the
 //! pointer: a marker, a reference line, a limit.
 
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui;
 use egui_plot::{PlotPoint, PlotTransform};
 use std::time::Instant;
@@ -11,9 +13,6 @@ use super::time::format_pointer_time;
 use super::{Cursor, Graph, LimitSide};
 use crate::a11y::ResponseA11yExt;
 use crate::markers::Marker;
-
-/// Why the reading's entries are greyed.
-const NO_READING: &str = "No reading in view";
 
 /// How far the focus ring reaches past an entry: see
 /// [`crate::a11y::paint_focus_ring`].
@@ -174,37 +173,92 @@ fn under_pointer<T>(lines: impl Iterator<Item = (T, f32)>) -> Option<T> {
         .map(|(line, _)| line)
 }
 
-/// The entries putting a cursor on the menu's reading — each a label, the
-/// word joining it to the reading's name, and the cursor it sets: one for
-/// the first cursor, then one placing the missing cursor and one moving
-/// each placed one not already on the reading at `reading_secs`. Named by
-/// what they do, so a second pick of the same
+/// What an entry putting a cursor on the menu's reading does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CursorEntry {
+    /// Puts the first cursor, with none placed.
+    First,
+    /// Puts the cursor missing.
+    Put,
+    /// Moves a placed cursor.
+    Move,
+}
+
+/// The entries putting a cursor on the menu's reading, each with the
+/// cursor it sets: one for the first cursor, then one placing the missing
+/// cursor and one moving each placed one not already on the reading at
+/// `reading_secs`. Named by what they do, so a second pick of the same
 /// entry can't move the cursor just placed where a pair was meant.
 fn cursor_entries(
     cursors: super::MeasureCursors,
     reading_secs: Option<f64>,
-) -> Vec<(String, &'static str, Cursor)> {
+) -> Vec<(CursorEntry, Cursor)> {
     let placed = [Cursor::A, Cursor::B].map(|c| (c, cursors.at(c)));
     if placed.iter().all(|(_, t)| t.is_none()) {
-        return vec![("Put a cursor".to_string(), "on", Cursor::A)];
+        return vec![(CursorEntry::First, Cursor::A)];
     }
     let put = placed
         .iter()
         .filter(|(_, t)| t.is_none())
-        .map(|&(c, _)| (format!("Put cursor {}", c.name()), "on", c));
+        .map(|&(c, _)| (CursorEntry::Put, c));
     let moves = placed
         .iter()
         // Not the cursor already on the reading: it would stay put.
         .filter(|(_, t)| t.is_some() && *t != reading_secs)
-        .map(|&(c, _)| (format!("Move cursor {}", c.name()), "to", c));
+        .map(|&(c, _)| (CursorEntry::Move, c));
     put.chain(moves).collect()
 }
 
-/// A line naming what the entries under it act on: `caption` muted and
-/// `value` in the text colour, both small, so it reads apart from an entry,
-/// greyed or not. Spaced from the first entry by the focus ring's reach,
-/// which would otherwise cover its lower edge.
-fn heading(ui: &mut egui::Ui, caption: &str, value: Option<&str>) {
+/// A cursor entry's label and its name for a screen reader, which names
+/// the reading at `time` (`None`: no reading in view).
+fn cursor_entry_text(
+    l10n: &Localizer,
+    entry: CursorEntry,
+    which: Cursor,
+    time: Option<&str>,
+) -> (String, String) {
+    let reading = if time.is_some() { "some" } else { "none" };
+    let time = time.unwrap_or("");
+    let cursor = which.name();
+    let (short, spoken) = match entry {
+        CursorEntry::First => (
+            tr!(l10n, "graph-menu-put-cursor"),
+            tr!(
+                l10n,
+                "graph-menu-put-cursor.a11y",
+                reading = reading,
+                time = time
+            ),
+        ),
+        CursorEntry::Put => (
+            tr!(l10n, "graph-menu-put-cursor-named", cursor = cursor),
+            tr!(
+                l10n,
+                "graph-menu-put-cursor-named.a11y",
+                cursor = cursor,
+                reading = reading,
+                time = time
+            ),
+        ),
+        CursorEntry::Move => (
+            tr!(l10n, "graph-menu-move-cursor", cursor = cursor),
+            tr!(
+                l10n,
+                "graph-menu-move-cursor.a11y",
+                cursor = cursor,
+                reading = reading,
+                time = time
+            ),
+        ),
+    };
+    (short.into_owned(), spoken.into_owned())
+}
+
+/// A line naming what the entries under it act on: `text` muted, with
+/// `value`, where it holds it, in the text colour, all small, so it reads
+/// apart from an entry, greyed or not. Spaced from the first entry by the
+/// focus ring's reach, which would otherwise cover its lower edge.
+fn heading(ui: &mut egui::Ui, text: &str, value: Option<&str>) {
     let style = ui.style().clone();
     let mut job = egui::text::LayoutJob::default();
     let mut part = |text: egui::RichText| {
@@ -215,12 +269,36 @@ fn heading(ui: &mut egui::Ui, caption: &str, value: Option<&str>) {
             egui::Align::Center,
         );
     };
-    part(egui::RichText::new(caption).color(ui.visuals().weak_text_color()));
-    if let Some(value) = value {
-        part(egui::RichText::new(format!(" {value}")).strong());
+    let weak = ui.visuals().weak_text_color();
+    // The value sits where the language put it in the sentence.
+    match value.and_then(|v| text.rfind(v).map(|at| (at, v.len()))) {
+        Some((at, len)) => {
+            let (before, rest) = text.split_at(at);
+            let (value, after) = rest.split_at(len);
+            for (part_text, strong) in [(before, false), (value, true), (after, false)] {
+                if part_text.is_empty() {
+                    continue;
+                }
+                let rich = egui::RichText::new(part_text);
+                part(if strong {
+                    rich.strong()
+                } else {
+                    rich.color(weak)
+                });
+            }
+        }
+        None => part(egui::RichText::new(text).color(weak)),
     }
     ui.label(job);
     ui.add_space(FOCUS_RING_REACH);
+}
+
+/// The alarm limit `side` as the menu's messages select on it.
+fn side_arg(side: LimitSide) -> &'static str {
+    match side {
+        LimitSide::Low => "low",
+        LimitSide::High => "high",
+    }
 }
 
 /// `v` with `unit` after it, as the menu's entries name a height.
@@ -304,8 +382,10 @@ impl Graph {
     /// be picked takes the focus as the menu opens, the arrows move it, and
     /// Tab or Esc close the menu. The focus then goes nowhere rather than to
     /// the plot, where it would turn the graph's keys off.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn show_context_menu(
         &mut self,
+        l10n: &Localizer,
         plot: &egui::Response,
         openers: &MenuOpeners,
         transform: &PlotTransform,
@@ -380,52 +460,70 @@ impl Graph {
                 // so the entries are verbs alone. A screen reader walks the
                 // entries, not the headings: each is named in full for it.
                 let mut entries: Vec<(egui::Response, Pick)> = Vec::new();
+                let no_reading = tr!(l10n, "graph-menu-no-reading");
                 let mut entry =
                     |ui: &mut egui::Ui, enabled, short: String, spoken: String, pick| {
                         let response = ui
                             .add_enabled(enabled, egui::Button::new(short))
-                            .on_disabled_hover_text(NO_READING)
+                            .on_disabled_hover_text(&*no_reading)
                             .a11y_label(&spoken);
                         entries.push((response, pick));
                     };
+                // An entry whose label is its whole name.
+                let plain = |text: std::borrow::Cow<'_, str>| {
+                    let text = text.into_owned();
+                    (text.clone(), text)
+                };
 
                 if let MenuScope::Flag(number) = menu.scope {
-                    let label = format!("Delete marker {number}");
-                    entry(ui, true, label.clone(), label, Pick::DeleteMarker(number));
+                    let (short, spoken) =
+                        plain(tr!(l10n, "graph-menu-delete-marker", number = number));
+                    entry(ui, true, short, spoken, Pick::DeleteMarker(number));
                 }
                 if menu.scope.offers_reading() {
-                    let the_reading = match reading {
-                        Some(r) => format!("the reading at {}", r.time),
-                        None => "a reading".to_string(),
+                    let time = reading.map(|r| r.time.as_str());
+                    let (has, time_arg) = match time {
+                        Some(t) => ("some", t),
+                        None => ("none", ""),
                     };
                     match reading {
-                        Some(r) => heading(ui, "Reading at", Some(&r.time)),
-                        None => heading(ui, NO_READING, None),
+                        Some(r) => heading(
+                            ui,
+                            &tr!(l10n, "graph-menu-reading-heading", time = &r.time),
+                            Some(&r.time),
+                        ),
+                        None => heading(ui, &no_reading, None),
                     }
                     entry(
                         ui,
                         has_reading,
-                        "Mark".to_string(),
-                        format!("Mark {the_reading}"),
+                        tr!(l10n, "graph-menu-mark").into_owned(),
+                        tr!(l10n, "graph-menu-mark.a11y", reading = has, time = time_arg)
+                            .into_owned(),
                         Pick::Mark,
                     );
-                    let copy = reading.map_or("Copy".to_string(), |r| format!("Copy {}", r.digits));
-                    entry(ui, has_reading, copy.clone(), copy, Pick::Copy);
+                    let (short, spoken) = plain(match reading {
+                        Some(r) => tr!(l10n, "graph-menu-copy-digits", digits = &r.digits),
+                        None => tr!(l10n, "graph-menu-copy"),
+                    });
+                    entry(ui, has_reading, short, spoken, Pick::Copy);
                     if let Some(number) = menu.marker {
-                        let label = format!("Delete marker {number}");
-                        entry(ui, true, label.clone(), label, Pick::DeleteMarker(number));
+                        let (short, spoken) =
+                            plain(tr!(l10n, "graph-menu-delete-marker", number = number));
+                        entry(ui, true, short, spoken, Pick::DeleteMarker(number));
                     }
-                    for (short, preposition, which) in cursor_entries(cursors, reading_secs) {
-                        let spoken = format!("{short} {preposition} {the_reading}");
+                    for (kind, which) in cursor_entries(cursors, reading_secs) {
+                        let (short, spoken) = cursor_entry_text(l10n, kind, which, time);
                         entry(ui, has_reading, short, spoken, Pick::SetCursor(which));
                     }
                     if let Some(which) = menu.cursor {
-                        let label = format!("Remove cursor {}", which.name());
-                        entry(ui, true, label.clone(), label, Pick::RemoveCursor(which));
+                        let (short, spoken) =
+                            plain(tr!(l10n, "graph-menu-remove-cursor", cursor = which.name()));
+                        entry(ui, true, short, spoken, Pick::RemoveCursor(which));
                     }
                     if cursors.placed().next().is_some() {
-                        let label = "Remove cursors".to_string();
-                        entry(ui, true, label.clone(), label, Pick::RemoveCursors);
+                        let (short, spoken) = plain(tr!(l10n, "graph-menu-remove-cursors"));
+                        entry(ui, true, short, spoken, Pick::RemoveCursors);
                     }
                 }
                 if menu.scope == MenuScope::Plot {
@@ -433,31 +531,50 @@ impl Graph {
                 }
                 if menu.scope.offers_value() {
                     let height = with_unit(menu.y, &unit);
-                    heading(ui, "At", Some(&height));
+                    heading(
+                        ui,
+                        &tr!(l10n, "graph-menu-height-heading", height = &height),
+                        Some(&height),
+                    );
                     // Not over a line at that very height, where it would add none.
                     if menu.ref_line != Some(menu.y) {
-                        let spoken = format!("Add reference line at {height}");
                         entry(
                             ui,
                             true,
-                            "Add reference line".to_string(),
-                            spoken,
+                            tr!(l10n, "graph-menu-add-ref").into_owned(),
+                            tr!(l10n, "graph-menu-add-ref.a11y", height = &height).into_owned(),
                             Pick::AddRefLine,
                         );
                     }
                     if let Some(v) = menu.ref_line {
-                        let label = format!("Remove reference line {}", with_unit(v, &unit));
-                        entry(ui, true, label.clone(), label, Pick::RemoveRefLine(v));
+                        let (short, spoken) = plain(tr!(
+                            l10n,
+                            "graph-menu-remove-ref",
+                            height = with_unit(v, &unit)
+                        ));
+                        entry(ui, true, short, spoken, Pick::RemoveRefLine(v));
                     }
                     if menu.limits_apply {
                         for side in [LimitSide::High, LimitSide::Low] {
-                            let short = format!("Set alarm {}", side.name().to_lowercase());
-                            let spoken = format!("{short} at {height}");
-                            entry(ui, true, short, spoken, Pick::SetLimit(side));
+                            let side_arg = side_arg(side);
+                            entry(
+                                ui,
+                                true,
+                                tr!(l10n, "graph-menu-set-alarm", side = side_arg).into_owned(),
+                                tr!(
+                                    l10n,
+                                    "graph-menu-set-alarm.a11y",
+                                    side = side_arg,
+                                    height = &height
+                                )
+                                .into_owned(),
+                                Pick::SetLimit(side),
+                            );
                         }
                         if let Some(side) = menu.limit {
-                            let label = format!("Remove alarm {}", side.name().to_lowercase());
-                            entry(ui, true, label.clone(), label, Pick::ClearLimit(side));
+                            let (short, spoken) =
+                                plain(tr!(l10n, "graph-menu-remove-alarm", side = side_arg(side)));
+                            entry(ui, true, short, spoken, Pick::ClearLimit(side));
                         }
                     }
                 }
