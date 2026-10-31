@@ -13,6 +13,7 @@
 //! always on screen so an active transform can always be turned back off.
 
 use dmm_lib::transform::{FactorError, RAW_LABEL, Transform};
+use dmm_shared::input;
 use eframe::egui::{self, RichText, Ui};
 
 use super::App;
@@ -82,13 +83,8 @@ fn parse_field(
     // way to tell why.
     let value = text
         .parse::<f64>()
-        .map_err(|_| format!("Invalid {name}: \u{201c}{text}\u{201d} is not a number"))?;
-    check(value).map_err(|e| match e {
-        FactorError::NotFinite => format!("Invalid {name}: must be a finite number"),
-        FactorError::ZeroScale => {
-            format!("Invalid {name}: a scale of zero would erase the reading")
-        }
-    })
+        .map_err(|_| format!("Invalid {name}: {}", input::not_a_number(text)))?;
+    check(value).map_err(|e| format!("Invalid {name}: {}", input::factor_error(e)))
 }
 
 impl App {

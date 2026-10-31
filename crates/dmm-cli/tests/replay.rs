@@ -925,7 +925,7 @@ fn alarm_flags_are_checked_before_the_run() {
     for (args, wanted) in [
         (
             &["--alarm-low", "2", "--alarm-high", "1"][..],
-            "--alarm-low must be below --alarm-high",
+            "--alarm-low, --alarm-high: the low limit must be below the high one",
         ),
         (&["--alarm-bell"][..], "--alarm-bell needs"),
     ] {

@@ -5,9 +5,10 @@ use crate::capture::StepListFormat;
 use crate::format::OutputFormat;
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
-use dmm_lib::alarm::{Hysteresis, HysteresisError, LimitError, Limits};
+use dmm_lib::alarm::{Hysteresis, Limits};
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
+use dmm_shared::input;
 use std::path::PathBuf;
 
 /// `--mock-clock-scale`: a multiple of real time, or `max`.
@@ -298,35 +299,25 @@ impl TransformArgs {
 /// Parse a transform flag's number and check it against the rules
 /// [`Transform`] sets for that flag.
 ///
-/// The rules are shared with the GUI's Scale row; the wording is not, so
-/// each [`FactorError`] is turned into a message here. `flag` names the
-/// offending flag so `--scale` and `--offset` cannot word the same rejection
-/// two ways.
-fn parse_factor(
-    flag: &str,
-    s: &str,
-    check: fn(f64) -> Result<f64, FactorError>,
-) -> Result<f64, String> {
-    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
-    check(value).map_err(|e| match e {
-        FactorError::NotFinite => format!("{flag} must be a finite number, got `{s}`"),
-        FactorError::ZeroScale => {
-            "scale must not be zero — it would flatten every reading to the offset".to_string()
-        }
-    })
+/// The rules and their wording are shared with the GUI's Scale row
+/// ([`dmm_shared::input`]); clap's own message already names the flag and
+/// the value.
+fn parse_factor(s: &str, check: fn(f64) -> Result<f64, FactorError>) -> Result<f64, String> {
+    let value: f64 = s.parse().map_err(|_| input::not_a_number(s))?;
+    check(value).map_err(|e| input::factor_error(e).to_string())
 }
 
 /// Reject the two scale factors that destroy the reading rather than
 /// re-express it: zero collapses every sample onto the offset, and NaN/inf
 /// poison the stats and the integral.
 fn parse_scale(s: &str) -> Result<f64, String> {
-    parse_factor("scale", s, Transform::check_scale)
+    parse_factor(s, Transform::check_scale)
 }
 
 /// Any finite shift is a meaningful offset — zero and negatives included — so
 /// only NaN and infinity are rejected, on the same grounds as `--scale`.
 fn parse_offset(s: &str) -> Result<f64, String> {
-    parse_factor("offset", s, Transform::check_offset)
+    parse_factor(s, Transform::check_offset)
 }
 
 /// The `read` flags that set a threshold alarm.
@@ -366,41 +357,25 @@ impl AlarmArgs {
                 .unwrap_or_default()
                 .check(&limits)
                 .map(|band| Some((limits, band)))
-                .map_err(|_| {
-                    "--alarm-hysteresis as a percentage needs limits other than 0; give a value instead"
-                        .to_string()
-                }),
-            Err(e) => Err(limit_message(e, "")),
+                .map_err(|_| format!("--alarm-hysteresis: {}", input::PERCENT_OF_ZERO)),
+            Err(e) => Err(format!(
+                "--alarm-low, --alarm-high: {}",
+                input::limit_error(e)
+            )),
         }
-    }
-}
-
-/// A limit rejection in the CLI's words; `value` is the number as typed,
-/// empty for a rejection of the pair.
-fn limit_message(e: LimitError, value: &str) -> String {
-    match e {
-        LimitError::NotFinite => format!("an alarm limit must be a finite number, got `{value}`"),
-        LimitError::LowNotBelowHigh => "--alarm-low must be below --alarm-high".to_string(),
     }
 }
 
 /// One alarm limit: a finite number.
 fn parse_limit(s: &str) -> Result<f64, String> {
-    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
-    Limits::check(Some(value), None).map_err(|e| limit_message(e, s))?;
+    let value: f64 = s.parse().map_err(|_| input::not_a_number(s))?;
+    Limits::check(Some(value), None).map_err(|e| input::limit_error(e).to_string())?;
     Ok(value)
 }
 
 /// `--alarm-hysteresis`: a value, or a percentage with `%`.
 fn parse_hysteresis(s: &str) -> Result<Hysteresis, String> {
-    Hysteresis::parse(s).map_err(|e| match e {
-        HysteresisError::NotANumber => {
-            format!("`{s}` is not a number, or a percentage such as `1%`")
-        }
-        HysteresisError::NotABand | HysteresisError::PercentOfZero => {
-            format!("--alarm-hysteresis must be zero or more, got `{s}`")
-        }
-    })
+    Hysteresis::parse(s).map_err(|e| input::hysteresis_error(e, s))
 }
 
 /// What `get` and `set` name on the command line, one word per
@@ -775,14 +750,15 @@ mod tests {
         assert!(message.contains("give a value"), "got {message}");
         assert_eq!(
             read_alarm(&["--alarm-low", "5", "--alarm-high", "3"]),
-            Err("--alarm-low must be below --alarm-high".to_string()),
+            Err("--alarm-low, --alarm-high: the low limit must be below the high one".to_string()),
         );
         assert!(read_alarm(&["--alarm-bell"]).is_err());
         assert!(read_alarm(&["--alarm-hysteresis", "1%"]).is_err());
         let msg = flag_error("--alarm-hysteresis", "-1");
         assert!(msg.contains("zero or more"), "got {msg}");
         let msg = flag_error("--alarm-high", "nan");
-        assert!(msg.contains("finite number, got `nan`"), "got {msg}");
+        assert!(msg.contains("'nan' for '--alarm-high"), "got {msg}");
+        assert!(msg.contains("must be a finite number"), "got {msg}");
     }
 
     /// A zero or non-finite factor would destroy the reading rather than
@@ -791,7 +767,10 @@ mod tests {
     fn clap_rejects_a_zero_or_non_finite_scale() {
         for bad in ["0", "-0", "nan", "inf"] {
             let msg = flag_error("--scale", bad);
-            assert!(msg.contains("scale must"), "--scale {bad} said: {msg}");
+            assert!(
+                msg.contains("scale of zero") || msg.contains("finite number"),
+                "--scale {bad} said: {msg}"
+            );
         }
         let msg = flag_error("--scale", "abc");
         assert!(msg.contains("is not a number"), "got {msg}");
@@ -804,7 +783,7 @@ mod tests {
     fn clap_rejects_a_non_finite_offset() {
         for bad in ["nan", "inf"] {
             let msg = flag_error("--offset", bad);
-            assert!(msg.contains("offset must"), "--offset {bad} said: {msg}");
+            assert!(msg.contains("finite number"), "--offset {bad} said: {msg}");
         }
         let msg = flag_error("--offset", "abc");
         assert!(msg.contains("is not a number"), "got {msg}");

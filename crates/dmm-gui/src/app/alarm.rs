@@ -20,8 +20,9 @@ use super::marker_list::log_line;
 use super::toast::Toast;
 use crate::display::ReadingState;
 use crate::graph::{LimitSide, WatchedLimits};
-use dmm_lib::alarm::{Alarm, Breach, Hysteresis, HysteresisError, LimitError, Limits};
+use dmm_lib::alarm::{Alarm, Breach, Hysteresis, LimitError, Limits};
 use dmm_lib::measurement::Measurement;
+use dmm_shared::input;
 use eframe::egui::{self, RichText, Ui};
 
 /// Draft text for the two limits, kept apart from the alarm in force: the
@@ -60,12 +61,13 @@ const ALARM_HOVER: &str = "Set the limits";
 /// The chip's name.
 const ALARM_NAME: &str = "Alarm";
 
-/// Why a pair of drafts was not applied, in the GUI's words.
-fn limit_message(e: LimitError) -> &'static str {
-    match e {
-        LimitError::NotFinite => "Invalid limit: must be a finite number",
-        LimitError::LowNotBelowHigh => "Invalid limits: the low limit must be below the high one",
-    }
+/// Why a pair of drafts was not applied.
+fn limit_message(e: LimitError) -> String {
+    let field = match e {
+        LimitError::NotFinite => "limit",
+        LimitError::LowNotBelowHigh => "limits",
+    };
+    format!("Invalid {field}: {}", input::limit_error(e))
 }
 
 /// A draft as a limit: blank is no limit, anything else must be a number.
@@ -76,7 +78,7 @@ fn parse_draft(text: &str, name: &str) -> Result<Option<f64>, String> {
     }
     text.parse()
         .map(Some)
-        .map_err(|_| format!("Invalid {name} limit: \u{201c}{text}\u{201d} is not a number"))
+        .map_err(|_| format!("Invalid {name} limit: {}", input::not_a_number(text)))
 }
 
 /// The drafts as a pair of limits and their band, or the toast saying which
@@ -84,25 +86,21 @@ fn parse_draft(text: &str, name: &str) -> Result<Option<f64>, String> {
 fn parse_limits(low: &str, high: &str, band: &str) -> Result<(Limits, Hysteresis), String> {
     let low = parse_draft(low, "low")?;
     let high = parse_draft(high, "high")?;
-    let limits = Limits::check(low, high).map_err(|e| limit_message(e).to_string())?;
-    let band = Hysteresis::parse(band).map_err(|e| match e {
-        HysteresisError::NotANumber => format!(
-            "Invalid hysteresis: \u{201c}{}\u{201d} is not a number or a percentage",
-            band.trim()
-        ),
-        HysteresisError::NotABand | HysteresisError::PercentOfZero => {
-            "Invalid hysteresis: must be zero or more".to_string()
-        }
+    let limits = Limits::check(low, high).map_err(limit_message)?;
+    let band = Hysteresis::parse(band).map_err(|e| {
+        format!(
+            "Invalid hysteresis: {}",
+            input::hysteresis_error(e, band.trim())
+        )
     })?;
-    let band = band
-        .check(&limits)
-        .map_err(|_| PERCENT_OF_ZERO.to_string())?;
+    let band = band.check(&limits).map_err(|_| percent_of_zero())?;
     Ok((limits, band))
 }
 
 /// Why a percentage band can't go with the limits.
-const PERCENT_OF_ZERO: &str =
-    "Invalid hysteresis: a percentage of a limit of 0 is 0; type a value instead";
+fn percent_of_zero() -> String {
+    format!("Invalid hysteresis: {}", input::PERCENT_OF_ZERO)
+}
 
 /// Tooltip on the hysteresis field.
 const BAND_HOVER: &str = "How far back the reading must come before a limit alarms again: a value, or a percentage such as 1%. Blank: automatic";
@@ -337,7 +335,7 @@ impl App {
             }
         };
         let Ok(band) = band.check(&limits) else {
-            self.toast = Some(Toast::error(PERCENT_OF_ZERO));
+            self.toast = Some(Toast::error(percent_of_zero()));
             return;
         };
         self.set_limits(limits, band);
