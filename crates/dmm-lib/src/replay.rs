@@ -37,7 +37,7 @@
 
 use crate::Dmm;
 use crate::clock::Clock;
-use crate::error::{Error, Result};
+use crate::error::{Error, Rejected, Result};
 use crate::measurement::Measurement;
 use crate::protocol::registry::{self, SelectableDevice};
 use crate::protocol::{CaptureStep, Choice, DeviceProfile, Protocol, Setting};
@@ -509,7 +509,7 @@ fn cadence(samples: &[(Duration, Vec<u8>)]) -> Duration {
 /// The refusal every command path answers with, in one place so the two
 /// cannot word it differently.
 fn takes_no_commands(what: impl std::fmt::Display) -> Error {
-    Error::CommandRejected(format!("{what}: a replay takes no commands"))
+    Rejected::Replay(what.to_string()).into()
 }
 
 /// A recording driving a family's real parser.

@@ -930,7 +930,10 @@ raw_payload=34"#
         let transport = MockTransport::new(vec![]);
         let err = proto.select(&transport, Setting::Mode, 0x03).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m) if m.contains("more than one dial position")),
+            matches!(
+                &err,
+                Error::UnsupportedCommand(crate::error::Unsupported::SeveralPositions { .. })
+            ),
             "got {err:?}"
         );
         assert!(transport.written.borrow().is_empty());

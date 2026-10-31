@@ -28,7 +28,7 @@ mod frame15;
 mod keys;
 mod model;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Rejected, Result, Unsupported};
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::registry::{self, SelectableDevice};
@@ -97,21 +97,16 @@ fn name_for(code: u8) -> String {
 
 /// Why keys stay off for `confirmed` on an entry opened as `opened`; `None`
 /// when they go out. Every refused key says it.
-fn keys_off(opened: &Model, confirmed: Confirmation) -> Option<String> {
+fn keys_off(opened: &Model, confirmed: Confirmation) -> Option<Rejected> {
     match confirmed {
         Confirmation::Matches | Confirmation::NoInfo => None,
-        Confirmation::Other(model) => Some(format!(
-            "{} ({}), not the {} it was opened as, so remote keys are off; choose Auto-detect \
-             or --device {}",
-            reports_code(model.code),
-            model.display_name(),
-            opened.display_name(),
-            model.id
-        )),
-        Confirmation::Unknown(code) => Some(format!(
-            "{}, which this tool does not know yet, so remote keys are off",
-            reports_code(code)
-        )),
+        Confirmation::Other(model) => Some(Rejected::OtherModel {
+            code: model.code,
+            model: model.display_name(),
+            opened: opened.display_name(),
+            id: model.id,
+        }),
+        Confirmation::Unknown(code) => Some(Rejected::UnknownModel { code }),
     }
 }
 
@@ -126,9 +121,12 @@ fn unconfirmed(key: &keys::Key) -> String {
 }
 
 /// The refusal of `key` while the model code is unread: why, and what to
-/// do instead. Only `exit_rel` waits for the code.
-fn unconfirmed_refusal(key: &keys::Key) -> String {
-    format!("{}: hold REL on the meter to leave REL", unconfirmed(key))
+/// do instead. Only `exit_rel` waits for the code. Its first clause is the
+/// connect warning's, [`unconfirmed`].
+fn unconfirmed_refusal(key: &keys::Key) -> Rejected {
+    Rejected::ModelUnread {
+        command: key.command,
+    }
 }
 
 /// What a read says when the frames are the other kind than the entry's,
@@ -390,13 +388,13 @@ impl Protocol for OwonProtocol {
     /// what the key did (spec §7.1, §10.8).
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let Some(key) = self.model.keys.iter().find(|k| k.command == command) else {
-            return Err(Error::UnsupportedCommand(command.to_string()));
+            return Err(Unsupported::Command(command.to_string()).into());
         };
         if let Some(why) = keys_off(self.model, self.confirmed) {
-            return Err(Error::CommandRejected(why));
+            return Err(why.into());
         }
         if key.needs_confirmed && self.confirmed == Confirmation::NoInfo {
-            return Err(Error::CommandRejected(unconfirmed_refusal(key)));
+            return Err(unconfirmed_refusal(key).into());
         }
         let frame = keys::frame(key);
         debug!("owon: key {command}, frame {frame:02X?}");
@@ -841,11 +839,15 @@ mod tests {
         assert_eq!(proto.confirmed, Confirmation::Other(&model::B41));
         for command in model::B35.commands {
             match proto.send_command(&meter, command) {
-                Err(Error::CommandRejected(why)) => {
-                    assert!(why.contains("OWON B41T+"), "{why}");
-                    assert!(why.contains("OWON B35T+"), "{why}");
-                    assert!(why.contains("--device b41t+"), "{why}");
-                }
+                Err(Error::CommandRejected(why)) => assert_eq!(
+                    why,
+                    Rejected::OtherModel {
+                        code: model::B41.code,
+                        model: "OWON B41T+",
+                        opened: "OWON B35T+",
+                        id: "b41t+",
+                    }
+                ),
                 other => panic!("{command}: {other:?}"),
             }
         }
@@ -863,7 +865,10 @@ mod tests {
         assert!(reports[0].contains("model code"), "{reports:?}");
         let err = proto.send_command(&meter, "hold").unwrap_err();
         assert!(
-            matches!(&err, Error::CommandRejected(why) if why.contains("223")),
+            matches!(
+                err,
+                Error::CommandRejected(Rejected::UnknownModel { code: 223 })
+            ),
             "{err:?}"
         );
         assert!(meter.inner.written.borrow().is_empty());
@@ -1053,10 +1058,12 @@ mod tests {
         let mut proto = proto(&model::VC925PV);
         proto.init(&meter).unwrap();
         match proto.send_command(&meter, "exit_rel") {
-            Err(Error::CommandRejected(why)) => {
-                assert!(why.contains("model code was not read"), "{why}");
-                assert!(why.contains("hold REL"), "{why}");
-            }
+            Err(Error::CommandRejected(why)) => assert_eq!(
+                why,
+                Rejected::ModelUnread {
+                    command: "exit_rel"
+                }
+            ),
             other => panic!("{other:?}"),
         }
         // A tap goes out with no code read.

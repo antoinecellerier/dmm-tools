@@ -18,7 +18,7 @@ pub(crate) mod devices;
 pub(crate) mod vc880;
 pub(crate) mod vc890;
 
-use crate::error::{Error, Result};
+use crate::error::{Result, Unsupported};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::cycle::{
@@ -128,7 +128,7 @@ pub(crate) fn command_byte(command: &str) -> Result<u8> {
         "range_manual" => Ok(CMD_RANGE_MANUAL),
         "light" => Ok(CMD_LIGHT),
         "select" => Ok(CMD_SELECT),
-        _ => Err(Error::UnsupportedCommand(command.to_string())),
+        _ => Err(Unsupported::Command(command.to_string()).into()),
     }
 }
 
@@ -666,10 +666,11 @@ impl<M: Vc8x0Model> CycleMeter for Vc8x0Protocol<M> {
     fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
         let name = self.button_name(button);
         let Some(cmd) = press_command(button) else {
-            return Err(Error::UnsupportedCommand(format!(
-                "the {} has no {name} button",
-                M::NAME
-            )));
+            return Err(Unsupported::NoButton {
+                model: M::NAME,
+                button: name,
+            }
+            .into());
         };
         debug!("{}: pressing {name} ({cmd:#04x})", M::LOG);
         M::write_button(&mut self.rx_buf, transport, cmd)
@@ -1048,6 +1049,7 @@ mod tests {
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
+    use crate::error::Error;
     use crate::protocol::capture_reports;
     use crate::protocol::test_support::snapshot;
     use crate::transport::mock::MockTransport;
@@ -1344,7 +1346,8 @@ pub(crate) mod test_support {
         let mut proto = Vc8x0Protocol::<M>::new();
         let err = proto.press(&transport, button).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m) if m.contains(name)),
+            matches!(&err, Error::UnsupportedCommand(Unsupported::NoButton { model, button })
+                if *model == M::NAME && *button == name),
             "got {err:?}"
         );
         assert!(transport.written.borrow().is_empty());

@@ -9,7 +9,7 @@
 //! bytes; which series a request names is the protocol's business
 //! (`protocol::bm86x`).
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, Unsupported};
 use crate::transport::{Link, Transport};
 use hidapi::HidDevice;
 use log::{debug, trace};
@@ -34,10 +34,11 @@ const REPORT_LEN: usize = 8;
 /// could not carry them.
 fn output_report(data: &[u8]) -> Result<[u8; REQUEST_LEN + 1]> {
     let request: [u8; REQUEST_LEN] = data.try_into().map_err(|_| {
-        Error::UnsupportedCommand(format!(
-            "the {NAME} cable takes {REQUEST_LEN}-byte requests, not {} bytes",
-            data.len()
-        ))
+        Error::from(Unsupported::RequestLength {
+            cable: NAME,
+            len: REQUEST_LEN,
+            got: data.len(),
+        })
     })?;
     let mut report = [0u8; REQUEST_LEN + 1];
     report[1..].copy_from_slice(&request);

@@ -14,7 +14,7 @@
 
 pub(crate) mod devices;
 
-use crate::error::{Error, Result};
+use crate::error::{Result, Unsupported};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
@@ -286,7 +286,7 @@ impl Protocol for Ut171Protocol {
         let frame = match command {
             "connect" => UT171_CMD_CONNECT,
             "pause" => UT171_CMD_PAUSE,
-            _ => return Err(Error::UnsupportedCommand(command.to_string())),
+            _ => return Err(Unsupported::Command(command.to_string()).into()),
         };
         debug!("ut171: sending command {command}: {:02X?}", frame);
         transport.write(frame)?;

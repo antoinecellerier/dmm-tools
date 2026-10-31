@@ -562,6 +562,8 @@ fn print_json(
 mod tests {
     use super::*;
     use crate::test_fixtures::{FakeList, Quirks, fake_meter, fake_meter_with, mode_choice};
+    use dmm_lib::error::Rejected;
+    use dmm_lib::text::TextKind;
 
     /// A meter on the V AC dial: two modes, four ranges, HOLD, and no Peak.
     fn a_full_meter() -> [FakeList; 4] {
@@ -757,7 +759,11 @@ mod tests {
         let (mut dmm, _) = fake_meter_with(
             &a_full_meter(),
             Quirks {
-                refusal: Some("HOLD is locked out"),
+                refusal: Some(Rejected::DidNothing {
+                    button: "HOLD",
+                    state: "off".into(),
+                    kind: TextKind::Toggle,
+                }),
                 ..Default::default()
             },
         );
@@ -765,7 +771,7 @@ mod tests {
             .expect_err("the meter refused")
             .to_string();
         assert!(err.contains("the meter refused on"), "{err}");
-        assert!(err.contains("HOLD is locked out"), "{err}");
+        assert!(err.contains("HOLD did nothing in off"), "{err}");
         assert!(err.contains(CHECK_DIAL_HINT), "{err}");
     }
 
@@ -800,7 +806,9 @@ mod tests {
         let (mut dmm, _) = fake_meter_with(
             &a_full_meter(),
             Quirks {
-                refusal: Some("out of range"),
+                refusal: Some(Rejected::AutoDidNothing {
+                    range: "22V".into(),
+                }),
                 ..Default::default()
             },
         );

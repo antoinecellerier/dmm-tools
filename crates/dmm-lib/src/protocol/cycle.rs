@@ -60,10 +60,11 @@ use log::{debug, warn};
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Rejected, Result, Unsupported};
 use crate::flags::{Flag, StatusFlags};
 use crate::measurement::Measurement;
 use crate::protocol::{AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice, Setting};
+use crate::text::TextKind;
 use crate::transport::Transport;
 
 /// A front-panel button that cycles the meter through a ring of modes.
@@ -324,6 +325,9 @@ pub(crate) trait Observable<M: CycleMeter + ?Sized> {
     /// Display name for one value, for the messages the walk produces.
     fn label(&self, meter: &M, value: u16) -> Cow<'static, str>;
 
+    /// The kind of text [`Observable::label`] is, for an app to look it up.
+    fn kind(&self) -> TextKind;
+
     /// Whether a press that changed nothing under HOLD is sent again once
     /// HOLD is released (see the module docs).
     ///
@@ -343,6 +347,10 @@ impl<M: CycleMeter + ?Sized> Observable<M> for ModeWalk {
 
     fn label(&self, meter: &M, value: u16) -> Cow<'static, str> {
         meter.mode_label(value)
+    }
+
+    fn kind(&self) -> TextKind {
+        TextKind::Mode
     }
 
     fn may_release_hold(&self) -> bool {
@@ -365,10 +373,10 @@ struct RangeWalk {
 impl<M: CycleMeter + ?Sized> Observable<M> for RangeWalk {
     fn value(&self, meter: &M, reading: &Measurement) -> Result<u16> {
         if reading.mode_raw != self.start_mode {
-            return Err(Error::CommandRejected(format!(
-                "the mode changed to {}; stopped pressing {RANGE_BUTTON_NAME}",
-                meter.mode_label(reading.mode_raw),
-            )));
+            return Err(Rejected::ModeChanged {
+                mode: meter.mode_label(reading.mode_raw),
+            }
+            .into());
         }
         Ok(if reading.flags.auto_range {
             AUTO_RANGE_ID
@@ -388,6 +396,10 @@ impl<M: CycleMeter + ?Sized> Observable<M> for RangeWalk {
                 .cloned()
                 .unwrap_or_else(|| Cow::Owned(format!("range {value}"))),
         }
+    }
+
+    fn kind(&self) -> TextKind {
+        TextKind::Range
     }
 
     fn may_release_hold(&self) -> bool {
@@ -522,6 +534,10 @@ impl<M: CycleMeter + ?Sized> Observable<M> for FlagWalk {
     fn label(&self, _meter: &M, value: u16) -> Cow<'static, str> {
         self.0.label(value)
     }
+
+    fn kind(&self) -> TextKind {
+        TextKind::Toggle
+    }
 }
 
 /// A ladder worth offering, or nothing.
@@ -581,14 +597,13 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
 
     let Some(index) = resolve_position(positions, meter.dial_state().position(), current) else {
         let known = positions.iter().any(|p| p.contains(current));
-        return Err(Error::UnsupportedCommand(if known {
-            format!(
-                "{} is reported from more than one dial position — take a reading in another mode first",
-                meter.mode_label(current)
-            )
+        let mode = meter.mode_label(current);
+        return Err(if known {
+            Unsupported::SeveralPositions { mode }
         } else {
-            format!("{} is on no known dial position", meter.mode_label(current))
-        }));
+            Unsupported::NoPosition { mode }
+        }
+        .into());
     };
 
     if id == current {
@@ -596,11 +611,11 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
     }
 
     let Some(legs) = plan(&positions[index], current, id) else {
-        return Err(Error::UnsupportedCommand(format!(
-            "mode {} is not reachable from {} — turn the dial first",
-            meter.mode_label(id),
-            meter.mode_label(current)
-        )));
+        return Err(Unsupported::ModeUnreachable {
+            target: meter.mode_label(id),
+            from: meter.mode_label(current),
+        }
+        .into());
     };
 
     let mut from = current;
@@ -610,9 +625,11 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
             // earlier leg already moved it, say where it came from too, so
             // the user knows the function changed under the failure.
             return Err(match e {
-                Error::CommandRejected(detail) if from != current => Error::CommandRejected(
-                    format!("{detail}; started in {}", meter.mode_label(current)),
-                ),
+                Error::CommandRejected(reason) if from != current => Rejected::StartedIn {
+                    reason: Box::new(reason),
+                    mode: meter.mode_label(current),
+                }
+                .into(),
                 other => other,
             });
         }
@@ -705,24 +722,30 @@ fn walk<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
             return Ok(());
         }
         if now == seen {
-            return Err(Error::CommandRejected(format!(
-                "{name} did nothing in {}",
-                obs.label(meter, seen)
-            )));
+            return Err(Rejected::DidNothing {
+                button: name,
+                state: obs.label(meter, seen),
+                kind: obs.kind(),
+            }
+            .into());
         }
         if now == start {
-            return Err(Error::CommandRejected(format!(
-                "{} never appeared; the meter is back in {}",
-                obs.label(meter, leg.target),
-                obs.label(meter, start)
-            )));
+            return Err(Rejected::NeverAppeared {
+                target: obs.label(meter, leg.target),
+                now: obs.label(meter, start),
+                kind: obs.kind(),
+            }
+            .into());
         }
         seen = now;
     }
-    Err(Error::CommandRejected(format!(
-        "gave up after {budget} presses of {name}; the meter is in {}",
-        obs.label(meter, seen)
-    )))
+    Err(Rejected::GaveUp {
+        presses: budget,
+        button: name,
+        state: obs.label(meter, seen),
+        kind: obs.kind(),
+    }
+    .into())
 }
 
 /// Send `act` — a press, or the command standing in for one — and read the
@@ -842,17 +865,18 @@ fn check_range_id<M: CycleMeter + ?Sized>(
 ) -> Result<Vec<Cow<'static, str>>> {
     let ladder = meter.range_ladder(mode);
     if ladder.is_empty() {
-        return Err(Error::UnsupportedCommand(format!(
-            "{} has no range to choose on this meter",
-            meter.mode_label(mode)
-        )));
+        return Err(Unsupported::NoRanges {
+            mode: meter.mode_label(mode),
+        }
+        .into());
     }
     if id != AUTO_RANGE_ID && usize::from(id) > ladder.len() {
-        return Err(Error::UnsupportedCommand(format!(
-            "range {id} is not one of the {} {} offers",
-            ladder.len(),
-            meter.mode_label(mode)
-        )));
+        return Err(Unsupported::NoSuchRange {
+            id,
+            count: ladder.len(),
+            mode: meter.mode_label(mode),
+        }
+        .into());
     }
     Ok(ladder)
 }
@@ -930,10 +954,10 @@ pub(crate) fn select_range<M: CycleMeter + ?Sized>(
         return if now == AUTO_RANGE_ID {
             Ok(())
         } else {
-            Err(Error::CommandRejected(format!(
-                "AUTO did nothing; the meter is still in {}",
-                walk_obs.label(meter, now)
-            )))
+            Err(Rejected::AutoDidNothing {
+                range: walk_obs.label(meter, now),
+            }
+            .into())
         };
     }
     let leg = Leg {
@@ -956,20 +980,20 @@ fn check_flag_id<M: CycleMeter + ?Sized>(
 ) -> Result<&'static [u16]> {
     let states = meter.flag_states(setting, mode);
     if states.is_empty() {
-        return Err(Error::UnsupportedCommand(format!(
-            "{} cannot be set in {} on this meter",
-            setting.setting(),
-            meter.mode_label(mode)
-        )));
+        return Err(Unsupported::SettingNotInMode {
+            setting: setting.setting(),
+            mode: meter.mode_label(mode),
+        }
+        .into());
     }
     if !states.contains(&id) {
-        let offered: Vec<_> = states.iter().map(|&s| setting.label(s)).collect();
-        return Err(Error::UnsupportedCommand(format!(
-            "{} has no state {id}; {} offers {}",
-            setting.setting(),
-            meter.mode_label(mode),
-            offered.join(", ")
-        )));
+        return Err(Unsupported::NoSuchState {
+            setting: setting.setting(),
+            id,
+            mode: meter.mode_label(mode),
+            offered: states.iter().map(|&s| setting.label(s)).collect(),
+        }
+        .into());
     }
     Ok(states)
 }
@@ -1035,10 +1059,11 @@ pub(crate) fn select_flag<M: CycleMeter + ?Sized>(
         return if now == OFF_STATE {
             Ok(())
         } else {
-            Err(Error::CommandRejected(format!(
-                "EXIT {button} did nothing; the meter is still in {}",
-                walk_obs.label(meter, now)
-            )))
+            Err(Rejected::ExitDidNothing {
+                button,
+                state: walk_obs.label(meter, now),
+            }
+            .into())
         };
     }
     let leg = Leg {
@@ -1085,7 +1110,6 @@ pub(crate) fn all_choice_labels<M: CycleMeter + ?Sized>(
     by: &'static str,
     out: &mut crate::text::Labels,
 ) {
-    use crate::text::TextKind;
     for position in meter.dial_positions() {
         for mode in position.modes() {
             out.add(TextKind::Mode, meter.mode_label(mode), by);
@@ -1229,6 +1253,26 @@ mod tests {
     use super::*;
     use crate::flags::StatusFlags;
     use crate::transport::NullTransport;
+
+    /// The reason a refused walk gives.
+    fn rejected(err: Error) -> Rejected {
+        match err {
+            Error::CommandRejected(reason) => reason,
+            other => panic!("got {other:?}, want CommandRejected"),
+        }
+    }
+
+    /// The reason a command refused unsent gives.
+    fn unsupported(err: Error) -> Unsupported {
+        match err {
+            Error::UnsupportedCommand(reason) => reason,
+            other => panic!("got {other:?}, want UnsupportedCommand"),
+        }
+    }
+
+    fn mode(text: &'static str) -> Cow<'static, str> {
+        Cow::Borrowed(text)
+    }
 
     // Mode ids of a UT61E+-shaped meter.
     const AC_V: u16 = 0x00;
@@ -1903,10 +1947,16 @@ mod tests {
         meter.state.observe(DIAL, AC_V);
         meter.state.observe(DIAL, LPF_V);
         let err = select_mode(&mut meter, &NullTransport, DUTY).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m.contains("back in AC V") && m.ends_with("started in LPF V")),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::StartedIn {
+                reason: Box::new(Rejected::NeverAppeared {
+                    target: mode("Duty %"),
+                    now: mode("AC V"),
+                    kind: TextKind::Mode,
+                }),
+                mode: mode("LPF V"),
+            }
         );
         assert_eq!(meter.mode, AC_V, "the first leg's press stands");
     }
@@ -1938,8 +1988,8 @@ mod tests {
         let mut meter = FakeMeter::seeded(0xAA, vec![]);
         let err = select_mode(&mut meter, &NullTransport, DC_V).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m) if m.contains("no known dial position")),
-            "got {err:?}"
+            matches!(unsupported(err), Unsupported::NoPosition { .. }),
+            "want NoPosition"
         );
         assert!(meter.presses.is_empty());
     }
@@ -1962,10 +2012,13 @@ mod tests {
     fn a_ring_coming_back_around_reports_the_missing_mode() {
         let mut meter = FakeMeter::seeded(OHM, vec![(CycleButton::Select, vec![OHM, CONT])]);
         let err = select_mode(&mut meter, &NullTransport, DIODE).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m.contains("Diode never appeared") && m.contains("back in Ω")),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::NeverAppeared {
+                target: mode("Diode"),
+                now: mode("Ω"),
+                kind: TextKind::Mode,
+            }
         );
         assert_eq!(meter.presses.len(), 2, "walked past the whole ring");
         assert_eq!(meter.mode, OHM, "the meter is back where it started");
@@ -1978,10 +2031,13 @@ mod tests {
         let mut meter = FakeMeter::seeded(AC_V, vec![(CycleButton::Select, vec![AC_V, LPF_V])]);
         meter.settle_reads = 3;
         let err = select_mode(&mut meter, &NullTransport, HZ).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m.contains("Hz/% did nothing in AC V")),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::DidNothing {
+                button: "Hz/%",
+                state: mode("AC V"),
+                kind: TextKind::Mode,
+            }
         );
         assert_eq!(meter.presses, vec![CycleButton::Hz]);
         assert_eq!(meter.reads, 3, "a silent press is retried by reading");
@@ -1999,11 +2055,14 @@ mod tests {
             )],
         );
         let err = select_mode(&mut meter, &NullTransport, CAP).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m.contains("gave up after 5 presses of SELECT")
-                    && m.contains("the meter is in AC+DC V")),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::GaveUp {
+                presses: 5,
+                button: "SELECT",
+                state: mode("AC+DC V"),
+                kind: TextKind::Mode,
+            }
         );
         assert_eq!(meter.presses.len(), 5);
     }
@@ -2115,9 +2174,8 @@ mod tests {
             let mut meter = FakeMeter::on_ladder(1);
             let err = select_range(&mut meter, &NullTransport, id).unwrap_err();
             assert!(
-                matches!(&err, Error::UnsupportedCommand(m)
-                    if m.contains("is not one of the 4")),
-                "got {err:?}"
+                matches!(unsupported(err), Unsupported::NoSuchRange { count: 4, .. }),
+                "want NoSuchRange of 4"
             );
             assert_eq!(meter.reads, 0, "{id} read the meter");
             assert!(meter.presses.is_empty());
@@ -2129,8 +2187,8 @@ mod tests {
         let mut meter = FakeMeter::v_dc();
         let err = select_range(&mut meter, &NullTransport, 1).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m) if m.contains("no range to choose")),
-            "got {err:?}"
+            matches!(unsupported(err), Unsupported::NoRanges { .. }),
+            "want NoRanges"
         );
         assert_eq!(meter.reads, 0);
     }
@@ -2158,10 +2216,9 @@ mod tests {
         let mut meter = FakeMeter::on_ladder(2);
         meter.auto_works = false;
         let err = select_range(&mut meter, &NullTransport, AUTO_RANGE_ID).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m == "AUTO did nothing; the meter is still in 22V"),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::AutoDidNothing { range: mode("22V") }
         );
     }
 
@@ -2186,10 +2243,11 @@ mod tests {
         let mut meter = FakeMeter::on_ladder(1);
         meter.range_flips_mode = Some(ACDC_V);
         let err = select_range(&mut meter, &NullTransport, 4).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m == "the mode changed to AC+DC V; stopped pressing RANGE"),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::ModeChanged {
+                mode: mode("AC+DC V")
+            }
         );
         assert_eq!(meter.presses.len(), 1, "no further press after the change");
         assert_eq!(
@@ -2206,10 +2264,13 @@ mod tests {
         let mut meter = FakeMeter::on_ladder(1);
         meter.real_rungs = 2;
         let err = select_range(&mut meter, &NullTransport, 4).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m == "1000V never appeared; the meter is back in 2.2V"),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::NeverAppeared {
+                target: mode("1000V"),
+                now: mode("2.2V"),
+                kind: TextKind::Range,
+            }
         );
         assert_eq!(meter.presses.len(), 2);
     }
@@ -2221,11 +2282,14 @@ mod tests {
         let mut meter = FakeMeter::on_ladder(2);
         meter.real_rungs = 0;
         let err = select_range(&mut meter, &NullTransport, 1).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m.contains("gave up after 5 presses of RANGE")
-                    && m.contains("the meter is in range 7")),
-            "got {err:?}"
+        assert_eq!(
+            rejected(err),
+            Rejected::GaveUp {
+                presses: 5,
+                button: "RANGE",
+                state: mode("range 7"),
+                kind: TextKind::Range,
+            }
         );
         assert_eq!(meter.presses.len(), 5);
     }
@@ -2303,9 +2367,13 @@ mod tests {
         let mut meter = held_v_ac();
         meter.dead = vec![CycleButton::Hold];
         let err = select_mode(&mut meter, &NullTransport, HZ).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m) if m == "HOLD did nothing in on"),
-            "{err}"
+        assert_eq!(
+            rejected(err),
+            Rejected::DidNothing {
+                button: "HOLD",
+                state: mode("on"),
+                kind: TextKind::Toggle,
+            }
         );
         assert_eq!(meter.presses, vec![CycleButton::Hz, CycleButton::Hold]);
     }
@@ -2317,9 +2385,13 @@ mod tests {
         let mut meter = held_v_ac();
         meter.offers_hold = false;
         let err = select_mode(&mut meter, &NullTransport, HZ).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m) if m == "Hz/% did nothing in AC V"),
-            "{err}"
+        assert_eq!(
+            rejected(err),
+            Rejected::DidNothing {
+                button: "Hz/%",
+                state: mode("AC V"),
+                kind: TextKind::Mode,
+            }
         );
         assert_eq!(meter.presses, vec![CycleButton::Hz]);
     }
@@ -2334,9 +2406,13 @@ mod tests {
         });
         meter.dead = vec![CycleButton::Rel];
         let err = select_flag(&mut meter, &NullTransport, FlagSetting::Rel, 1).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m) if m == "REL did nothing in off"),
-            "{err}"
+        assert_eq!(
+            rejected(err),
+            Rejected::DidNothing {
+                button: "REL",
+                state: mode("off"),
+                kind: TextKind::Toggle,
+            }
         );
         assert_eq!(meter.presses, vec![CycleButton::Rel]);
         assert!(meter.flags.hold);
@@ -2408,9 +2484,13 @@ mod tests {
         let mut meter = FakeMeter::v_dc();
         meter.dead = vec![CycleButton::Hold];
         let err = select_flag(&mut meter, &NullTransport, FlagSetting::Hold, 1).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m) if m == "HOLD did nothing in off"),
-            "{err}"
+        assert_eq!(
+            rejected(err),
+            Rejected::DidNothing {
+                button: "HOLD",
+                state: mode("off"),
+                kind: TextKind::Toggle,
+            }
         );
     }
 
@@ -2457,10 +2537,12 @@ mod tests {
         });
         meter.exit_works = false;
         let err = select_flag(&mut meter, &NullTransport, FlagSetting::MinMax, 0).unwrap_err();
-        assert!(
-            matches!(&err, Error::CommandRejected(m)
-                if m == "EXIT MIN/MAX did nothing; the meter is still in MAX"),
-            "{err}"
+        assert_eq!(
+            rejected(err),
+            Rejected::ExitDidNothing {
+                button: "MIN/MAX",
+                state: mode("MAX"),
+            }
         );
     }
 
@@ -2468,10 +2550,14 @@ mod tests {
     fn a_state_outside_the_ring_costs_no_io() {
         let mut meter = FakeMeter::v_dc();
         let err = select_flag(&mut meter, &NullTransport, FlagSetting::MinMax, 3).unwrap_err();
-        assert!(
-            matches!(&err, Error::UnsupportedCommand(m)
-                if m == "minmax has no state 3; DC V offers off, MAX, MIN"),
-            "{err}"
+        assert_eq!(
+            unsupported(err),
+            Unsupported::NoSuchState {
+                setting: Setting::MinMax,
+                id: 3,
+                mode: mode("DC V"),
+                offered: vec![mode("off"), mode("MAX"), mode("MIN")],
+            }
         );
         assert_eq!(meter.reads, 0);
         assert!(meter.presses.is_empty());
@@ -2481,10 +2567,12 @@ mod tests {
     fn a_setting_the_meter_lacks_is_refused_before_any_io() {
         let mut meter = FakeMeter::v_dc();
         let err = select_flag(&mut meter, &NullTransport, FlagSetting::Peak, 1).unwrap_err();
-        assert!(
-            matches!(&err, Error::UnsupportedCommand(m)
-                if m == "peak cannot be set in DC V on this meter"),
-            "{err}"
+        assert_eq!(
+            unsupported(err),
+            Unsupported::SettingNotInMode {
+                setting: Setting::Peak,
+                mode: mode("DC V"),
+            }
         );
         assert_eq!(meter.reads, 0);
     }

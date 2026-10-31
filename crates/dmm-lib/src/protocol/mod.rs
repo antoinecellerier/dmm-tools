@@ -24,7 +24,7 @@ pub use unrecognised::capture_reports;
 #[cfg(any(test, feature = "test-support"))]
 pub use ut61eplus::make_test_measurement;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, Unsupported};
 use crate::measurement::Measurement;
 use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
@@ -563,7 +563,7 @@ pub(crate) const AUTO_RANGE_LABEL: &str = "Auto";
 /// The refusal a family returns for a setting it cannot drive, kept in one
 /// place so every family words it the same way.
 pub(crate) fn unsupported_setting(setting: Setting) -> Error {
-    Error::UnsupportedCommand(format!("{setting} cannot be set on this meter"))
+    Unsupported::Setting(setting).into()
 }
 
 /// A physical thing a capture step needs the user to have on the bench.
@@ -797,7 +797,7 @@ pub trait Protocol: Send {
     /// The default refuses every command, which is the whole answer for a
     /// family that only streams.
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
-        Err(Error::UnsupportedCommand(command.to_string()))
+        Err(Unsupported::Command(command.to_string()).into())
     }
 
     /// Request device name. Returns None if the protocol doesn't support it.

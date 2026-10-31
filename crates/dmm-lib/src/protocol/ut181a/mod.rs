@@ -34,7 +34,7 @@ pub(crate) mod mode;
 pub(crate) mod parse;
 mod specs;
 
-use crate::error::{Error, Result};
+use crate::error::{Result, Sent, Unsupported};
 use crate::measurement::Measurement;
 use crate::protocol::cycle::FlagSetting;
 use crate::protocol::framing::{self, FrameErrorRecovery};
@@ -168,10 +168,12 @@ impl Protocol for Ut181aProtocol {
         if matches!(command, "auto" | "minmax")
             && let Some(current) = self.last_mode_raw.filter(|&m| mode::is_peak(m))
         {
-            return Err(Error::UnsupportedCommand(format!(
-                "{command} in {} ({current:#06x}): the meter refuses it in Peak",
-                decode_mode_word(current)
-            )));
+            return Err(Unsupported::RefusedInPeak {
+                command: command.to_string(),
+                mode: decode_mode_word(current),
+                word: current,
+            }
+            .into());
         }
         let frame = match command {
             // 0x12 = button-press command, 0x5A = HOLD button code, the two
@@ -184,10 +186,11 @@ impl Protocol for Ut181aProtocol {
             "rel" => {
                 let current = self.require_last_mode(transport)?;
                 if !mode::rel_supported(current) {
-                    return Err(Error::UnsupportedCommand(format!(
-                        "rel in {} ({current:#06x})",
-                        decode_mode_word(current)
-                    )));
+                    return Err(Unsupported::NoRel {
+                        mode: decode_mode_word(current),
+                        word: current,
+                    }
+                    .into());
                 }
                 build_set_mode(current ^ 0x3)
             }
@@ -197,10 +200,11 @@ impl Protocol for Ut181aProtocol {
                 let current = self.require_last_mode(transport)?;
                 let last = self.last_range_raw.unwrap_or(0);
                 let Some(next) = mode::next_manual_range(current, last) else {
-                    return Err(Error::UnsupportedCommand(format!(
-                        "range in {} ({current:#06x}): fixed-range mode",
-                        decode_mode_word(current)
-                    )));
+                    return Err(Unsupported::FixedRange {
+                        mode: decode_mode_word(current),
+                        word: current,
+                    }
+                    .into());
                 };
                 build_command(&[0x02, next])
             }
@@ -211,9 +215,9 @@ impl Protocol for Ut181aProtocol {
             "exit_minmax" => build_command(&[0x04, 0x00]),
             "monitor" => build_command(&[0x05, 0x01]),
             "save" => build_command(&[0x06]),
-            _ => return Err(Error::UnsupportedCommand(command.to_string())),
+            _ => return Err(Unsupported::Command(command.to_string()).into()),
         };
-        self.send_frame(transport, &frame, command)
+        self.send_frame(transport, &frame, &Sent::Command(command.to_string()))
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -275,13 +279,15 @@ impl Protocol for Ut181aProtocol {
             Setting::Mode => {
                 let current = self.require_last_mode(transport)?;
                 if !mode::mode_choices(current).iter().any(|c| c.id == id) {
-                    return Err(Error::UnsupportedCommand(format!(
-                        "mode {id:#06x} is not reachable from {} ({current:#06x}) — turn the dial first",
-                        decode_mode_word(current)
-                    )));
+                    return Err(Unsupported::WordUnreachable {
+                        target: id,
+                        from: decode_mode_word(current),
+                        from_word: current,
+                    }
+                    .into());
                 }
                 let frame = build_set_mode(id);
-                self.send_frame(transport, &frame, &format!("mode {}", decode_mode_word(id)))
+                self.send_frame(transport, &frame, &Sent::Mode(decode_mode_word(id)))
             }
             // The meter takes the range absolutely, so there is nothing to
             // walk: the id is the SET_RANGE byte, and 0 is auto.
@@ -291,25 +297,24 @@ impl Protocol for Ut181aProtocol {
                 // entry is marked current; validation needs the list alone.
                 let ladder = mode::range_choices(current, 0, false);
                 if ladder.is_empty() {
-                    return Err(Error::UnsupportedCommand(format!(
-                        "range in {} ({current:#06x}): fixed-range mode",
-                        decode_mode_word(current)
-                    )));
+                    return Err(Unsupported::FixedRange {
+                        mode: decode_mode_word(current),
+                        word: current,
+                    }
+                    .into());
                 }
                 let Some(choice) = ladder.iter().find(|c| c.id == id) else {
-                    let rungs = ladder.iter().filter(|c| c.id != AUTO_RANGE_ID).count();
-                    let what = if id == AUTO_RANGE_ID {
-                        "auto range".to_string()
+                    let count = ladder.iter().filter(|c| c.id != AUTO_RANGE_ID).count();
+                    let mode = decode_mode_word(current);
+                    return Err(if id == AUTO_RANGE_ID {
+                        Unsupported::AutoRangeNotListed { count, mode }
                     } else {
-                        format!("range {id}")
-                    };
-                    return Err(Error::UnsupportedCommand(format!(
-                        "{what} is not one of the {rungs} ranges {} offers",
-                        decode_mode_word(current)
-                    )));
+                        Unsupported::RangeNotListed { id, count, mode }
+                    }
+                    .into());
                 };
                 // The id came from the ladder, so it fits the command's byte.
-                let what = format!("range {}", choice.label);
+                let what = Sent::Range(choice.label.clone());
                 self.send_frame(transport, &build_command(&[0x02, id as u8]), &what)
             }
             flag => match FlagSetting::of(flag) {
@@ -698,6 +703,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 mod tests {
     use super::parse::tests::{hex, make_payload, make_relative_payload, minmax_payload};
     use super::*;
+    use crate::error::Error;
 
     #[test]
     fn init_sends_start_stream_command() {
@@ -1078,7 +1084,10 @@ mod tests {
 
         let err = proto.select(&mock, Setting::Range, 0).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m) if m.contains("auto range is not one of the 2")),
+            matches!(
+                &err,
+                Error::UnsupportedCommand(Unsupported::AutoRangeNotListed { count: 2, .. })
+            ),
             "got {err:?}"
         );
         let err = proto.select(&mock, Setting::MinMax, 1).unwrap_err();
@@ -1094,7 +1103,10 @@ mod tests {
             let (mut proto, mock) = proto_in(0x9131, 1);
             let err = proto.send_command(&mock, command).unwrap_err();
             assert!(
-                matches!(&err, Error::UnsupportedCommand(m) if m.contains("refuses it in Peak")),
+                matches!(
+                    &err,
+                    Error::UnsupportedCommand(Unsupported::RefusedInPeak { .. })
+                ),
                 "{command}: got {err:?}"
             );
             assert!(mock.written.borrow().is_empty(), "{command}");
@@ -1124,7 +1136,14 @@ mod tests {
         let (mut proto, mock) = proto_in(0x1111, 0);
         let err = proto.select(&mock, Setting::Range, 5).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m) if m.contains("not one of the 4")),
+            matches!(
+                &err,
+                Error::UnsupportedCommand(Unsupported::RangeNotListed {
+                    id: 5,
+                    count: 4,
+                    ..
+                })
+            ),
             "got {err:?}"
         );
         assert!(mock.written.borrow().is_empty());
@@ -1135,7 +1154,10 @@ mod tests {
         let (mut proto, mock) = proto_in(0x4211, 0);
         let err = proto.select(&mock, Setting::Range, 1).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m) if m.contains("fixed-range mode")),
+            matches!(
+                &err,
+                Error::UnsupportedCommand(Unsupported::FixedRange { .. })
+            ),
             "got {err:?}"
         );
         assert!(mock.written.borrow().is_empty());

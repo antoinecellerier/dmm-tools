@@ -26,7 +26,7 @@ mod layout;
 pub(crate) mod sim;
 mod specs;
 
-use crate::error::{Error, Result};
+use crate::error::{Result, Unsupported};
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
@@ -190,7 +190,7 @@ impl Protocol for ZotekProtocol {
     /// first.
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         if !self.profile.supported_commands.contains(&command) {
-            return Err(Error::UnsupportedCommand(command.to_string()));
+            return Err(Unsupported::Command(command.to_string()).into());
         }
         // A key whose code follows the display needs a packet first when
         // none has arrived on this connection, as when `dmm-cli command`
@@ -273,6 +273,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Error;
     use crate::protocol::registry;
     use crate::transport::mock::MockTransport;
     use frame::tests::EXAMPLES;

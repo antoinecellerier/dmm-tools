@@ -7,7 +7,7 @@
 
 use super::frame::xor_key;
 use super::layout::{Coupling, Function, Layout, Showing, Unit};
-use crate::error::{Error, Result};
+use crate::error::{Rejected, Result, Unsupported};
 use crate::measurement::MeasuredValue;
 use crate::protocol::{MeterKey, MeterKeys};
 
@@ -217,9 +217,6 @@ pub(super) fn follows_display(command: &str) -> bool {
     matches!(command, "current" | "temp_unit" | "zero")
 }
 
-/// What the driver says when ZERO is asked for outside capacitance.
-const ZERO_NEEDS_CAPACITANCE: &str = "ZERO works in capacitance only";
-
 /// The code `command` sends from a meter of `type_byte` while it shows
 /// `showing` (spec §8.2). The caller has checked `command` is one of the
 /// layout's [`commands`].
@@ -240,8 +237,8 @@ pub(super) fn code(type_byte: u8, command: &str, showing: Showing) -> Result<u8>
         "zero" if showing.unit == Some(Unit::Farad) => 0xB5,
         // The app sends nothing outside capacitance, so neither does the
         // driver: it refuses, and the user switches to capacitance.
-        "zero" => return Err(Error::CommandRejected(ZERO_NEEDS_CAPACITANCE.into())),
-        _ => return Err(Error::UnsupportedCommand(command.to_string())),
+        "zero" => return Err(Rejected::ZeroNeedsCapacitance.into()),
+        _ => return Err(Unsupported::Command(command.to_string()).into()),
     })
 }
 
@@ -285,6 +282,7 @@ pub(super) fn frame(key: u8) -> [u8; 10] {
 mod tests {
     use super::*;
     use crate::clock::Clock;
+    use crate::error::Error;
     use crate::measurement::Measurement;
     use crate::protocol::zotek::layout::{LAYOUTS, ZT5B, ZT300AB};
     use crate::protocol::zotek::sim::MOCK_ZT5B;
@@ -453,7 +451,7 @@ mod tests {
             ] {
                 let err = code(type_byte, "zero", shown).unwrap_err();
                 assert!(
-                    matches!(&err, Error::CommandRejected(m) if m == ZERO_NEEDS_CAPACITANCE),
+                    matches!(err, Error::CommandRejected(Rejected::ZeroNeedsCapacitance)),
                     "{err:?}"
                 );
             }

@@ -1139,7 +1139,8 @@ mod tests {
             setting: Setting,
             id: u16,
         ) -> dmm_lib::error::Result<()> {
-            use dmm_lib::error::Error;
+            use dmm_lib::error::{Error, Rejected, Unsupported};
+            use dmm_lib::text::TextKind;
             if setting != self.setting {
                 return self.inner.select(t, setting, id);
             }
@@ -1152,19 +1153,28 @@ mod tests {
                 }
                 Failure::Silent => Err(Error::Timeout),
                 Failure::RefusedIntoAnotherMode if id == RESET_ID => {
-                    Err(Error::UnsupportedCommand("no such setting here".into()))
+                    Err(Unsupported::Setting(setting).into())
                 }
                 _ if id == RESET_ID => self.inner.select(t, setting, id),
-                Failure::Refused | Failure::RefusedIntoAnotherMode => {
-                    Err(Error::CommandRejected("no".into()))
+                Failure::Refused | Failure::RefusedIntoAnotherMode => Err(Rejected::DidNothing {
+                    button: "SELECT",
+                    state: "AC V".into(),
+                    kind: TextKind::Mode,
                 }
+                .into()),
                 Failure::TimedOutAfterLanding => {
                     self.inner.select(t, setting, id)?;
                     Err(Error::Timeout)
                 }
                 Failure::RefusedAfterLanding => {
                     self.inner.select(t, setting, id)?;
-                    Err(Error::CommandRejected("gave up".into()))
+                    Err(Rejected::GaveUp {
+                        presses: 5,
+                        button: "RANGE",
+                        state: "2.2V".into(),
+                        kind: TextKind::Range,
+                    }
+                    .into())
                 }
             }
         }
@@ -1193,7 +1203,10 @@ mod tests {
         assert_eq!(bench.ids(), ["step/mode:AC V Hz"]);
         let filed = &bench.report.steps[0];
         assert_eq!(filed.status, StepStatus::Error);
-        assert_eq!(filed.error.as_deref(), Some("command rejected: no"));
+        assert_eq!(
+            filed.error.as_deref(),
+            Some("command rejected: SELECT did nothing in AC V")
+        );
         assert_eq!(filed.samples.last().map(|s| s.mode.as_str()), Some("AC V"));
         assert!(filed.needs_attention);
     }

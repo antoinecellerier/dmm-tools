@@ -31,10 +31,11 @@ pub trait Transport: Send {
     /// chip. The one bridge setting the trait exposes: each HID bridge keeps
     /// its feature reports inside its own transport.
     fn set_baud(&self, baud: u32) -> Result<()> {
-        let link = self.link().map_or("link", |link| link.full_name(false));
-        Err(crate::error::Error::UnsupportedCommand(format!(
-            "the {link} cannot change its rate to {baud} baud"
-        )))
+        Err(crate::error::Unsupported::Baud {
+            link: self.link(),
+            baud,
+        }
+        .into())
     }
 
     /// Query transport-specific version/identification info.
@@ -353,7 +354,7 @@ mod tests {
             }
         }
         let reason = |t: Cable| match t.set_baud(19200) {
-            Err(crate::error::Error::UnsupportedCommand(reason)) => reason,
+            Err(crate::error::Error::UnsupportedCommand(reason)) => reason.to_string(),
             other => panic!("expected UnsupportedCommand, got {other:?}"),
         };
         assert_eq!(

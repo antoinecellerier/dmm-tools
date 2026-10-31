@@ -18,7 +18,7 @@ pub(crate) mod devices;
 mod packet;
 mod tables;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, Unsupported};
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
@@ -189,7 +189,7 @@ impl Protocol for Eevblog121gwProtocol {
     /// what the key did (spec §11.1).
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let Some(&(_, code)) = KEYS.iter().find(|(name, _)| *name == command) else {
-            return Err(Error::UnsupportedCommand(command.to_string()));
+            return Err(Unsupported::Command(command.to_string()).into());
         };
         let frame = key_frame(code);
         debug!("121gw: key {command} ({code:02X}), frame {frame:02X?}");

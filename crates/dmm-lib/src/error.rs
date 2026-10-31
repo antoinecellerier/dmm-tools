@@ -1,6 +1,9 @@
 use crate::transport::open::KNOWN_TRANSPORTS;
 use thiserror::Error;
 
+mod reason;
+pub use reason::{Rejected, Sent, Unsupported};
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("HID error: {0}")]
@@ -22,15 +25,17 @@ pub enum Error {
     #[error("unknown mode: {0:#04x}")]
     UnknownMode(u8),
 
+    /// A command the meter, the link or the dial position cannot carry out,
+    /// refused before anything is sent.
     #[error("unsupported command: {0}")]
-    UnsupportedCommand(String),
+    UnsupportedCommand(Unsupported),
 
     /// The meter received the command and refused it — typically because the
     /// dial isn't where the command needs it — or the driver refused it
     /// unsent for the same reason. Retrying the same command won't help; the
     /// user has to change something.
     #[error("command rejected: {0}")]
-    CommandRejected(String),
+    CommandRejected(Rejected),
 
     #[error("unknown device: {0}")]
     UnknownDevice(String),
@@ -438,7 +443,7 @@ mod tests {
             ErrorKind::Configuration
         );
         assert_eq!(
-            Error::UnsupportedCommand("bar".into()).kind(),
+            Error::from(Unsupported::Command("bar".into())).kind(),
             ErrorKind::Configuration
         );
         // A bad replay file is a file the user has to fix, not a meter that
@@ -450,7 +455,7 @@ mod tests {
         // A refused command must not look like a transport fault: the GUI
         // reconnects on those, and reconnecting can't move the meter's dial.
         assert_eq!(
-            Error::CommandRejected("baz".into()).kind(),
+            Error::from(Rejected::MinMaxLocksRange).kind(),
             ErrorKind::Configuration
         );
     }

@@ -20,7 +20,7 @@ pub use devices::MOCK;
 
 use crate::Dmm;
 use crate::clock::Clock;
-use crate::error::{Error, Result};
+use crate::error::{Error, Rejected, Result, Unsupported};
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::cycle::{self, CycleButton, CycleMeter, FlagSetting};
 use crate::protocol::registry::SelectableDevice;
@@ -450,7 +450,11 @@ impl MockProtocol {
         let scenario = MockMode::from_choice_id(id)
             .and_then(|mode| self.scenarios.iter().position(|s| s.id == mode));
         let Some(idx) = scenario else {
-            return Err(Error::UnsupportedCommand(format!("mode {id:#06x}")));
+            return Err(Unsupported::NoSuchChoice {
+                setting: Setting::Mode,
+                id,
+            }
+            .into());
         };
         self.current_scenario = idx;
         self.scenario_started = self.clock.now();
@@ -627,9 +631,7 @@ impl Protocol for MockProtocol {
 
     fn parse_payload(&self, _payload: &[u8]) -> Result<Measurement> {
         // The mock synthesises readings; there are no wire bytes to decode.
-        Err(Error::UnsupportedCommand(
-            "parse_payload: the mock has no wire format".to_string(),
-        ))
+        Err(Unsupported::NoWireFormat.into())
     }
 
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
@@ -672,7 +674,7 @@ impl Protocol for MockProtocol {
                 self.advance_scenario();
             }
             "light" => { /* no-op */ }
-            _ => return Err(Error::UnsupportedCommand(command.to_string())),
+            _ => return Err(Unsupported::Command(command.to_string()).into()),
         }
         Ok(())
     }
@@ -732,9 +734,7 @@ impl Protocol for MockProtocol {
                         .iter()
                         .any(|c| c.id == id)
                 {
-                    return Err(Error::CommandRejected(
-                        "MIN/MAX locks the range; leave MIN/MAX before changing it".to_string(),
-                    ));
+                    return Err(Rejected::MinMaxLocksRange.into());
                 }
                 cycle::select_range(self, transport, id)
             }

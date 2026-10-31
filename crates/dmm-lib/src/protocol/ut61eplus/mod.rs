@@ -4,7 +4,7 @@ pub mod mode;
 pub(crate) mod specs;
 pub mod tables;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, Unsupported};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
@@ -320,7 +320,7 @@ impl Ut61PlusProtocol {
             "light" => Ok(Command::Light),
             "peak" => Ok(Command::PeakMinMax),
             "exit_peak" => Ok(Command::ExitPeak),
-            _ => Err(Error::UnsupportedCommand(name.to_string())),
+            _ => Err(Unsupported::Command(name.to_string()).into()),
         }
     }
 }
@@ -387,7 +387,7 @@ impl Protocol for Ut61PlusProtocol {
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         // A button this model does not have (family spec §6.5).
         if !self.profile.supported_commands.contains(&command) {
-            return Err(Error::UnsupportedCommand(command.to_string()));
+            return Err(Unsupported::Command(command.to_string()).into());
         }
         let cmd = Self::command_from_name(command)?;
         debug!("sending command: {command}");
@@ -1758,7 +1758,7 @@ mod tests {
         let mut ut60bt = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
         assert!(matches!(
             ut60bt.send_command(&mock, "minmax"),
-            Err(Error::UnsupportedCommand(c)) if c == "minmax"
+            Err(Error::UnsupportedCommand(Unsupported::Command(c))) if c == "minmax"
         ));
         let mut ut202bt = Ut61PlusProtocol::for_model("ut202bt").expect("known model");
         for command in ["auto", "rel", "peak"] {
@@ -2863,8 +2863,10 @@ mod tests {
         proto.request_measurement(&meter).unwrap();
         let err = proto.select(&meter, Setting::Peak, 1).unwrap_err();
         assert!(
-            matches!(&err, Error::UnsupportedCommand(m)
-                if m == "peak cannot be set in DC V on this meter"),
+            matches!(&err, Error::UnsupportedCommand(Unsupported::SettingNotInMode {
+                setting: Setting::Peak,
+                mode,
+            }) if mode == "DC V"),
             "{err}"
         );
         assert!(commands(&meter).is_empty());

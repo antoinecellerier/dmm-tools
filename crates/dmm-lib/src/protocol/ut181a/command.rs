@@ -5,7 +5,7 @@
 use super::Ut181aProtocol;
 use super::mode;
 use super::parse::decode_mode_word;
-use crate::error::{Error, Result};
+use crate::error::{Rejected, Result, Sent, Unsupported};
 use crate::protocol::cycle::{self, FlagSetting};
 use crate::protocol::framing;
 use crate::protocol::unrecognised::report_unknown;
@@ -88,7 +88,7 @@ impl Ut181aProtocol {
         &mut self,
         transport: &dyn Transport,
         frame: &[u8],
-        what: &str,
+        what: &Sent,
     ) -> Result<()> {
         /// How long to wait for the reply before assuming the meter is not
         /// going to send one.
@@ -182,18 +182,24 @@ impl Ut181aProtocol {
     fn check_flag_id(setting: FlagSetting, mode: u16, id: u16) -> Result<()> {
         let states = Self::flag_states(setting, mode);
         if states.is_empty() {
-            return Err(Error::UnsupportedCommand(format!(
-                "{} cannot be set in {} ({mode:#06x}) on this meter",
-                setting.setting(),
-                decode_mode_word(mode)
-            )));
+            return Err(Unsupported::SettingNotInWord {
+                setting: setting.setting(),
+                mode: decode_mode_word(mode),
+                word: mode,
+            }
+            .into());
         }
         if !states.contains(&id) {
-            return Err(Error::UnsupportedCommand(format!(
-                "{} has no state {id}; {} offers off, on",
-                setting.setting(),
-                decode_mode_word(mode)
-            )));
+            return Err(Unsupported::NoSuchState {
+                setting: setting.setting(),
+                id,
+                mode: decode_mode_word(mode),
+                offered: vec![
+                    Cow::Borrowed(cycle::OFF_LABEL),
+                    Cow::Borrowed(cycle::ON_LABEL),
+                ],
+            }
+            .into());
         }
         Ok(())
     }
@@ -260,16 +266,19 @@ impl Ut181aProtocol {
             FlagSetting::MinMax => build_command(&[0x04, id as u8]),
             FlagSetting::Peak => return Err(unsupported_setting(setting.setting())),
         };
-        let what = format!("{} {}", setting.setting(), Self::flag_label(setting, id));
+        let target = Self::flag_label(setting, id);
+        let what = Sent::State(setting.setting(), target.clone());
         self.send_frame(transport, &frame, &what)?;
         let now = self.confirm_flag(transport, setting, seen)?;
         if now == id {
             Ok(())
         } else {
-            Err(Error::CommandRejected(format!(
-                "{what} did nothing; the meter is still in {}",
-                Self::flag_label(setting, now)
-            )))
+            Err(Rejected::SwitchDidNothing {
+                setting: setting.setting(),
+                target,
+                now: Self::flag_label(setting, now),
+            }
+            .into())
         }
     }
 }
@@ -284,15 +293,13 @@ impl Ut181aProtocol {
 /// The refusal names no cause: the meter refuses a range or MIN/MAX in Peak
 /// with the dial where it belongs (spec §4.2). `dmm-cli set` adds its own
 /// hint.
-fn reply_result(payload: &[u8], what: &str) -> Result<()> {
+fn reply_result(payload: &[u8], what: &Sent) -> Result<()> {
     match &payload[1..] {
         [b'O', b'K', ..] => {
             debug!("ut181a: {what} acknowledged");
             Ok(())
         }
-        [b'E', b'R', ..] => Err(Error::CommandRejected(format!(
-            "{what} rejected by the meter"
-        ))),
+        [b'E', b'R', ..] => Err(Rejected::ByMeter(what.clone()).into()),
         other => {
             report_unknown(
                 "ut181a",
@@ -309,6 +316,7 @@ mod tests {
     use super::super::parse::tests::make_payload;
     use super::super::tests::proto_in;
     use super::*;
+    use crate::error::Error;
 
     #[test]
     fn build_command_hold() {

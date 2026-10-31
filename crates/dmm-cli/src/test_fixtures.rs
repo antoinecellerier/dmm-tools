@@ -67,7 +67,7 @@ pub(crate) struct Quirks {
     /// switch — a garbled frame, or a meter gone quiet across it.
     pub(crate) post_switch_errors: Vec<dmm_lib::error::Error>,
     /// What every `select` answers instead of switching.
-    pub(crate) refusal: Option<&'static str>,
+    pub(crate) refusal: Option<dmm_lib::error::Rejected>,
     /// Takes the command and then never reports the new value.
     pub(crate) deaf: bool,
 }
@@ -136,9 +136,7 @@ impl dmm_lib::protocol::Protocol for FakeMeter {
         &self,
         _payload: &[u8],
     ) -> dmm_lib::error::Result<dmm_lib::measurement::Measurement> {
-        Err(dmm_lib::error::Error::UnsupportedCommand(
-            "parse_payload: the fake meter has no wire format".to_string(),
-        ))
+        Err(dmm_lib::error::Unsupported::NoWireFormat.into())
     }
 
     fn send_command(
@@ -146,9 +144,7 @@ impl dmm_lib::protocol::Protocol for FakeMeter {
         _t: &dyn dmm_lib::transport::Transport,
         command: &str,
     ) -> dmm_lib::error::Result<()> {
-        Err(dmm_lib::error::Error::UnsupportedCommand(
-            command.to_string(),
-        ))
+        Err(dmm_lib::error::Unsupported::Command(command.to_string()).into())
     }
 
     fn get_name(
@@ -189,13 +185,11 @@ impl dmm_lib::protocol::Protocol for FakeMeter {
         id: u16,
     ) -> dmm_lib::error::Result<()> {
         self.selected.lock().expect("poisoned").push((setting, id));
-        if let Some(detail) = self.quirks.refusal {
-            return Err(dmm_lib::error::Error::CommandRejected(detail.to_string()));
+        if let Some(reason) = &self.quirks.refusal {
+            return Err(reason.clone().into());
         }
         let Some(len) = self.labels(setting).map(<[&str]>::len) else {
-            return Err(dmm_lib::error::Error::UnsupportedCommand(format!(
-                "{setting} cannot be set on this meter"
-            )));
+            return Err(dmm_lib::error::Unsupported::Setting(setting).into());
         };
         match (0..len).find(|&i| fake_choice_id(setting, i) == id) {
             Some(i) => {
@@ -205,9 +199,7 @@ impl dmm_lib::protocol::Protocol for FakeMeter {
                 self.switched = true;
                 Ok(())
             }
-            None => Err(dmm_lib::error::Error::UnsupportedCommand(format!(
-                "{setting} {id:#06x}"
-            ))),
+            None => Err(dmm_lib::error::Unsupported::NoSuchChoice { setting, id }.into()),
         }
     }
 }
