@@ -409,7 +409,7 @@ impl Graph {
             Some(format!("\u{0394}T={:.2} s", (tb - ta).abs())),
             Some(format!("\u{0394}={dv} {unit}")),
             integral,
-            Some(format!("Avg={}", figure(stats.avg()))),
+            Some(format!("Mean={}", figure(stats.avg()))),
             Some(format!("\u{3c3}={}", figure(stats.std_dev()))),
             Some(format!("Count={}", stats.count)),
         ];

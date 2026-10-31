@@ -289,7 +289,7 @@ A thin strip below the main plot showing the full capture history.
 
 ## Statistics
 
-- **Min**, **Max**, **Avg** and **σ** (sample standard deviation) in monospace
+- **Min**, **Max**, **Mean** and **σ** (sample standard deviation) in monospace
   with fixed-width formatting
 - **Count** — number of samples
 - **Int** — cumulative time-integral (shown only for current and voltage modes).
@@ -301,7 +301,7 @@ A thin strip below the main plot showing the full capture history.
 - Stats persist across reconnects (use Clear for full reset)
 - A second row shows **visible window stats** — the same figures over the
   current graph viewport only
-- Min/Max/Avg/σ/Count/∫ track the meter's main reading whatever the graph is
+- Min/Max/Mean/σ/Count/∫ track the meter's main reading whatever the graph is
   plotting; the visible-window row follows the plotted series and is
   captioned with its unit
 - With a software [scale](#scale) active, all of these follow the scaled

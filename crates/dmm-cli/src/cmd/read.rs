@@ -414,7 +414,7 @@ impl<'a> Run<'a> {
         if let Some(header) = out.header(meter_name) {
             write!(writer, "{header}")?;
         }
-        // Min/Max/Avg and the integral are only meaningful within a single
+        // Min/Max/Mean and the integral are only meaningful within a single
         // mode and unit; `SeriesStats` resets both whenever either moves, so
         // the closing summary only ever covers one comparable series.
         let mut session = dmm_lib::stats::SeriesStats::new(integrate);
@@ -446,7 +446,7 @@ impl<'a> Run<'a> {
         // relabelled clamp reading therefore integrates amps, not the
         // millivolts the meter sent.)
         self.transform.apply(&mut m);
-        // Min/Max/Avg and the integral are only meaningful within a single
+        // Min/Max/Mean and the integral are only meaningful within a single
         // mode and unit, and neither check subsumes the other — see
         // `SeriesStats`, which resets both accumulators and reports the change.
         if let Some(change) = self.session.push(&m) {
@@ -575,7 +575,7 @@ impl<'a> Run<'a> {
                 .map(|sd| format!(" | σ: {}{unit_suffix}", style(format!("{sd:.4}")).cyan()))
                 .unwrap_or_default();
             eprintln!(
-                "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Avg: {}{unit_suffix}{sd}",
+                "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Mean: {}{unit_suffix}{sd}",
                 style("---").dim(),
                 session.stats.count,
                 style(format!("{min:.4}")).cyan(),

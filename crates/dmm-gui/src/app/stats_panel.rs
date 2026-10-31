@@ -105,11 +105,11 @@ fn show_stat_rows(
         }
     };
     let mono = egui::FontId::monospace(font_size);
-    ui.label(styled(format!("Min:{}", group.min), mono.clone()));
-    ui.label(styled(format!("Max:{}", group.max), mono.clone()));
-    ui.label(styled(format!("Avg:{}", group.avg), mono.clone()));
-    // Padded to the other captions' width so the figures line up.
-    ui.label(styled(format!("  \u{3c3}:{}", group.sd), mono.clone()));
+    // Padded to the widest caption so the figures line up.
+    ui.label(styled(format!(" Min:{}", group.min), mono.clone()));
+    ui.label(styled(format!(" Max:{}", group.max), mono.clone()));
+    ui.label(styled(format!("Mean:{}", group.avg), mono.clone()));
+    ui.label(styled(format!("   \u{3c3}:{}", group.sd), mono.clone()));
     ui.label(styled(
         format!("Count: {}", group.count),
         egui::FontId::proportional(font_size),
@@ -184,7 +184,7 @@ impl App {
                     [
                         format!("Min:{}", session.min),
                         format!("Max:{}", session.max),
-                        format!("Avg:{}", session.avg),
+                        format!("Mean:{}", session.avg),
                         format!("\u{3c3}:{}", session.sd),
                         format!("({})", session.count),
                     ],
@@ -202,7 +202,7 @@ impl App {
                         [
                             format!("Visible: Min:{}", vis.min),
                             format!("Max:{}", vis.max),
-                            format!("Avg:{}", vis.avg),
+                            format!("Mean:{}", vis.avg),
                             format!("\u{3c3}:{}", vis.sd),
                             format!("({})", vis.count),
                         ]
@@ -277,7 +277,7 @@ impl App {
             .add(egui::Button::new(
                 RichText::new("Reset").font(egui::FontId::proportional(font_size)),
             ))
-            .on_hover_text("Reset Min / Max / Avg / \u{3c3} / integral and alarm counters")
+            .on_hover_text("Reset Min / Max / Mean / \u{3c3} / integral and alarm counters")
             .clicked()
         {
             self.capture.session.reset();

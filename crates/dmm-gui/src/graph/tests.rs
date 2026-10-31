@@ -2451,7 +2451,7 @@ fn the_cursor_readout_covers_the_readings_between_the_cursors() {
     assert_eq!(figures[0], "\u{0394}T=1.00 s");
     assert_eq!(
         figures[figures.len() - 3..],
-        ["Avg=1.5000 V", "\u{3c3}=0.3317 V", "Count=11"]
+        ["Mean=1.5000 V", "\u{3c3}=0.3317 V", "Count=11"]
     );
 }
 

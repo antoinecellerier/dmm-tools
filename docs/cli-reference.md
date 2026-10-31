@@ -262,7 +262,7 @@ $ dmm-cli read --format csv --count 1
 timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
 2026-09-02T00:00:00+00:00,V AC Hz,239.22,V,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
 
---- 1 samples | Min: 239.2200 V | Max: 239.2200 V | Avg: 239.2200 V
+--- 1 samples | Min: 239.2200 V | Max: 239.2200 V | Mean: 239.2200 V
 ```
 <!-- /snippet -->
 
@@ -284,7 +284,7 @@ AC 0.4406 V [AUTO]
 DC 0.0264 V [AUTO]
 AC 0.3376 V [AUTO]
 
---- 3 samples | Min: 0.0264 V | Max: 1.6112 V | Avg: 0.6140 V | σ: 0.8682 V
+--- 3 samples | Min: 0.0264 V | Max: 1.6112 V | Mean: 0.6140 V | σ: 0.8682 V
 ```
 <!-- /snippet -->
 
