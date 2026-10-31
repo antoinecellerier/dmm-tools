@@ -1,3 +1,5 @@
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
@@ -14,6 +16,8 @@ impl App {
     /// The **Theme** row: Dark, Light and System, then the named themes,
     /// and a caption naming any theme file that was skipped.
     pub(super) fn show_theme_row(&mut self, ui: &mut Ui) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         ui.horizontal_wrapped(|ui| {
             let active = self.settings.active_theme().map(|t| t.name.as_str());
             let from_flag = self.settings.overrides.has_theme();
@@ -25,32 +29,36 @@ impl App {
             };
             let modes = [ThemeMode::Dark, ThemeMode::Light, ThemeMode::System].map(|mode| {
                 let selected = active.is_none() && self.settings.theme == mode;
-                let base = match mode {
-                    ThemeMode::Dark => "Dark",
-                    ThemeMode::Light => "Light",
-                    ThemeMode::System => "System",
+                // Dark and Light keep their own customizations while a
+                // named theme is on; say so on the chip, as a theme's chip
+                // does, picked or not, so a customized Light isn't taken
+                // for plain Light.
+                let state = if selected && from_flag {
+                    "pinned"
+                } else if customized(mode) {
+                    "customized"
+                } else {
+                    "plain"
+                };
+                let (label, tooltip) = match mode {
+                    ThemeMode::Dark => (
+                        tr!(l10n, "colors-theme-dark", state = state),
+                        tr!(l10n, "colors-theme-dark.hover"),
+                    ),
+                    ThemeMode::Light => (
+                        tr!(l10n, "colors-theme-light", state = state),
+                        tr!(l10n, "colors-theme-light.hover"),
+                    ),
+                    ThemeMode::System => (
+                        tr!(l10n, "colors-theme-system", state = state),
+                        tr!(l10n, "colors-theme-system.hover"),
+                    ),
                 };
                 Chip {
                     value: ThemeChoice::Mode(mode),
                     selected,
-                    // Dark and Light keep their own customizations while a
-                    // named theme is on; say so on the chip, as a theme's
-                    // chip does, picked or not, so a customized Light isn't
-                    // taken for plain Light.
-                    label: if selected && from_flag {
-                        format!("{base} (--theme)")
-                    } else if customized(mode) {
-                        format!("{base} (customized)")
-                    } else {
-                        base.to_string()
-                    },
-                    tooltip: match mode {
-                        ThemeMode::System => {
-                            "Follow the desktop's light/dark setting (Dark if it reports none)"
-                                .to_string()
-                        }
-                        _ => format!("Use {base} mode for the whole GUI"),
-                    },
+                    label: label.into_owned(),
+                    tooltip: tooltip.into_owned(),
                 }
             });
             let user = self.settings.user_themes.clone();
@@ -63,31 +71,41 @@ impl App {
                     .for_theme(&theme.name)
                     .is_some_and(|t| *t != PaletteOverrides::default());
                 // Customized whether picked or not, as Dark and Light are.
-                let suffix = match (selected && from_flag, customized) {
-                    (true, _) => " (--theme)",
-                    (false, true) => " (customized)",
-                    (false, false) => "",
+                let name = theme.name.as_str();
+                let label = match (selected && from_flag, customized) {
+                    (true, _) => tr!(l10n, "colors-theme-named-pinned", name = name).into_owned(),
+                    (false, true) => {
+                        tr!(l10n, "colors-theme-named-customized", name = name).into_owned()
+                    }
+                    (false, false) => theme.name.clone(),
+                };
+                let mode = if theme.dark { "dark" } else { "light" };
+                // A user's theme names its file in full, so it can be found
+                // to edit, share or delete.
+                let tooltip = match (&theme.file, &themes_dir) {
+                    (Some(file), Some(dir)) => tr!(
+                        l10n,
+                        "colors-theme-file.hover",
+                        mode = mode,
+                        path = dir.join(file).display().to_string(),
+                    ),
+                    (Some(file), None) => tr!(
+                        l10n,
+                        "colors-theme-file-unplaced.hover",
+                        mode = mode,
+                        file = file,
+                    ),
+                    (None, _) => tr!(l10n, "colors-theme-builtin.hover", mode = mode),
                 };
                 Chip {
                     value: ThemeChoice::Named(theme.name.clone()),
                     selected,
-                    label: format!("{}{suffix}", theme.name),
-                    tooltip: {
-                        let mode = if theme.dark { "Dark" } else { "Light" };
-                        // A user's theme names its file in full, so it can be
-                        // found to edit, share or delete.
-                        match (&theme.file, &themes_dir) {
-                            (Some(file), Some(dir)) => format!(
-                                "{mode} theme, from {}. Delete the file to remove it.",
-                                dir.join(file).display()
-                            ),
-                            (Some(file), None) => format!("{mode} theme, from {file}"),
-                            (None, _) => format!("Built-in {} theme", mode.to_lowercase()),
-                        }
-                    },
+                    label,
+                    tooltip: tooltip.into_owned(),
                 }
             });
-            if let Some(choice) = chip_row(ui, "Theme:", modes.into_iter().chain(named)) {
+            let caption = tr!(l10n, "colors-theme");
+            if let Some(choice) = chip_row(ui, &caption, modes.into_iter().chain(named)) {
                 match choice {
                     ThemeChoice::Mode(mode) => {
                         self.settings.theme = mode;
@@ -113,17 +131,13 @@ impl App {
             if !skipped.is_empty() {
                 let mut list: Vec<String> = themes_dir
                     .iter()
-                    .map(|dir| format!("In {}:", dir.display()))
+                    .map(|dir| {
+                        let folder = dir.display().to_string();
+                        tr!(l10n, "colors-skipped-folder", folder = folder).into_owned()
+                    })
                     .collect();
-                list.extend(
-                    skipped
-                        .iter()
-                        .map(|(file, reason)| format!("{file}: {reason}")),
-                );
-                let caption = match skipped.len() {
-                    1 => "1 theme file skipped".to_string(),
-                    n => format!("{n} theme files skipped"),
-                };
+                list.extend(skipped.iter().map(|(file, reason)| reason.line(l10n, file)));
+                let caption = tr!(l10n, "colors-skipped", count = skipped.len());
                 ui.label(
                     RichText::new(caption)
                         .small()
@@ -140,6 +154,8 @@ impl App {
         // when the preset changes, so they don't count here.
         let has_overrides = self.settings.color_overrides.dark != PaletteOverrides::default()
             || self.settings.color_overrides.light != PaletteOverrides::default();
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
         ui.horizontal_wrapped(|ui| {
             let chips = [
                 ColorPreset::Default,
@@ -149,32 +165,34 @@ impl App {
             .into_iter()
             .map(|preset| {
                 let selected = self.settings.color_preset == preset;
-                let base = match preset {
-                    ColorPreset::Default => "Default",
-                    ColorPreset::HighContrast => "High Contrast",
-                    ColorPreset::ColorblindSafe => "Colorblind",
+                let state = if selected && has_overrides {
+                    "customized"
+                } else {
+                    "plain"
+                };
+                let (label, tooltip) = match preset {
+                    ColorPreset::Default => (
+                        tr!(l10n, "colors-preset-default", state = state),
+                        tr!(l10n, "colors-preset-default.hover"),
+                    ),
+                    ColorPreset::HighContrast => (
+                        tr!(l10n, "colors-preset-high-contrast", state = state),
+                        tr!(l10n, "colors-preset-high-contrast.hover"),
+                    ),
+                    ColorPreset::ColorblindSafe => (
+                        tr!(l10n, "colors-preset-colorblind", state = state),
+                        tr!(l10n, "colors-preset-colorblind.hover"),
+                    ),
                 };
                 Chip {
                     value: preset,
                     selected,
-                    label: if selected && has_overrides {
-                        format!("{base} (customized)")
-                    } else {
-                        base.to_string()
-                    },
-                    tooltip: match preset {
-                        ColorPreset::Default => "Balanced palette tuned for everyday use",
-                        ColorPreset::HighContrast => {
-                            "Maximum-contrast palette for bright lighting or projectors"
-                        }
-                        ColorPreset::ColorblindSafe => {
-                            "Palette that stays distinguishable for protan/deutan vision"
-                        }
-                    }
-                    .to_string(),
+                    label: label.into_owned(),
+                    tooltip: tooltip.into_owned(),
                 }
             });
-            if let Some(preset) = chip_row(ui, "Colors:", chips) {
+            let caption = tr!(l10n, "colors-colors");
+            if let Some(preset) = chip_row(ui, &caption, chips) {
                 self.settings.color_preset = preset;
                 // Clear the presets' overrides when switching presets.
                 self.settings.color_overrides.dark = PaletteOverrides::default();
@@ -184,7 +202,7 @@ impl App {
             }
             if has_overrides {
                 ui.label(
-                    RichText::new("Selecting a preset will clear customizations")
+                    RichText::new(tr!(l10n, "colors-preset-clears"))
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 );
@@ -195,6 +213,8 @@ impl App {
     /// Show the collapsible color customization section.
     pub(super) fn show_color_customization(&mut self, ui: &mut Ui) {
         let dark = ui.visuals().dark_mode;
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
 
         // A named theme's own palette only in its own mode, as
         // `Settings::color_tweaks` has it: on the frame a chip is picked, the
@@ -205,9 +225,12 @@ impl App {
             .filter(|t| t.dark == dark)
             .map(|t| t.name.clone());
         let editing = match &named {
-            Some(name) => format!("(editing {name} colors)"),
-            None if dark => "(editing dark theme colors)".to_string(),
-            None => "(editing light theme colors)".to_string(),
+            Some(name) => tr!(l10n, "colors-editing-named", name = name),
+            None => tr!(
+                l10n,
+                "colors-editing",
+                mode = if dark { "dark" } else { "light" }
+            ),
         };
 
         // The header's id, kept from the frame before: `CollapsingHeader`
@@ -216,7 +239,10 @@ impl App {
         let header_key = ui.scope_id().with("customize_colors_header");
         let header_id: Option<egui::Id> = ui.data(|d| d.get_temp(header_key));
         let clip = ui.clip_rect();
-        let collapsing = egui::CollapsingHeader::new("Customize colors")
+        // Its id from a salt of its own rather than from its text, which
+        // changes with the language.
+        let collapsing = egui::CollapsingHeader::new(tr!(l10n, "colors-customize"))
+            .id_salt("Customize colors")
             .default_open(false)
             .show(ui, |ui| {
                 // Beside the header rather than on a line of its own under
@@ -239,7 +265,7 @@ impl App {
                     caption.set_clip_rect(beside.intersect(clip));
                     let weak = caption.visuals().weak_text_color();
                     caption.add(
-                        egui::Label::new(RichText::new(&editing).small().color(weak)).truncate(),
+                        egui::Label::new(RichText::new(&*editing).small().color(weak)).truncate(),
                     );
                 }
 
@@ -268,33 +294,53 @@ impl App {
                 // what shows without hovering. Each swatch's label, tooltip
                 // and override slot come from the enum, so a colour can't be
                 // listed with another's tooltip or wired to its override.
-                for &(caption, row) in PANEL_ROWS {
+                // The captions' column as wide as the widest of them, so the
+                // swatches line up whatever the language makes of them.
+                let width = [Group::Ui, Group::Graph, Group::Status]
+                    .map(|group| {
+                        egui::WidgetText::from(group.caption(l10n))
+                            .into_galley(
+                                ui,
+                                Some(egui::TextWrapMode::Extend),
+                                f32::INFINITY,
+                                egui::TextStyle::Body,
+                            )
+                            .size()
+                            .x
+                            + ui.spacing().item_spacing.x
+                    })
+                    .into_iter()
+                    .fold(CAPTION_WIDTH, f32::max);
+                for &(group, row) in PANEL_ROWS {
+                    let caption = group.map_or("".into(), |g| g.caption(l10n));
                     match row {
                         PanelRow::Family(anchor) => {
                             // One row per family, the settings panel being
                             // short on height: the anchor, an arrow, the
                             // colours that follow it — dashed while they do.
                             ui.horizontal_wrapped(|ui| {
-                                caption_cell(ui, caption);
-                                changed |= color_edit(ui, anchor, overrides, &current, &base);
+                                caption_cell(ui, &caption, width);
+                                changed |= color_edit(ui, l10n, anchor, overrides, &current, &base);
                                 ui.label(
                                     RichText::new("\u{2192}").color(ui.visuals().weak_text_color()),
                                 )
-                                .on_hover_text(format!(
-                                    "These follow {}, keeping their offset from it, until \
-                                     you pick one on its own",
-                                    anchor.label()
+                                .on_hover_text(tr!(
+                                    l10n,
+                                    "colors-follow-arrow.hover",
+                                    anchor = anchor.label(l10n)
                                 ));
                                 for field in links::followers(anchor) {
-                                    changed |= color_edit(ui, field, overrides, &current, &base);
+                                    changed |=
+                                        color_edit(ui, l10n, field, overrides, &current, &base);
                                 }
                             });
                         }
                         PanelRow::Fields(fields) => {
                             ui.horizontal_wrapped(|ui| {
-                                caption_cell(ui, caption);
+                                caption_cell(ui, &caption, width);
                                 for &field in fields {
-                                    changed |= color_edit(ui, field, overrides, &current, &base);
+                                    changed |=
+                                        color_edit(ui, l10n, field, overrides, &current, &base);
                                 }
                             });
                         }
@@ -307,10 +353,14 @@ impl App {
                 // Only once there is something to reset or save.
                 if self.has_color_changes(dark) {
                     ui.horizontal(|ui| {
-                        let reset = ui.button("Reset colors").on_hover_text(match &named {
-                            Some(name) => format!("Discard your changes to {name}'s colors"),
-                            None => "Discard your changes to the colors of this mode".to_string(),
-                        });
+                        let reset =
+                            ui.button(tr!(l10n, "colors-reset"))
+                                .on_hover_text(match &named {
+                                    Some(name) => {
+                                        tr!(l10n, "colors-reset-named.hover", name = name)
+                                    }
+                                    None => tr!(l10n, "colors-reset.hover"),
+                                });
                         if reset.clicked() {
                             // The button goes with the changes it resets;
                             // focus left on it would fall back to the top of
@@ -373,7 +423,7 @@ impl App {
         crate::a11y::paint_focus_ring(ui, &collapsing.header_response);
         collapsing
             .header_response
-            .on_hover_text("Per-color overrides on top of the selected preset or theme");
+            .on_hover_text(tr!(l10n, "colors-customize.hover"));
     }
 }
 
@@ -386,16 +436,41 @@ enum PanelRow {
     Fields(&'static [PaletteField]),
 }
 
-/// The swatch rows, top to bottom, under their captions. Every palette
-/// field is on exactly one: as an anchor, as one of its followers, or in a
-/// row of its own (`panel_rows_list_every_field_once`).
-const PANEL_ROWS: &[(&str, PanelRow)] = &[
-    ("UI:", PanelRow::Family(PaletteField::Background)),
-    ("", PanelRow::Family(PaletteField::Text)),
-    ("", PanelRow::Fields(&[PaletteField::Accent])),
-    ("Graph:", PanelRow::Family(PaletteField::GraphLine)),
+/// The caption a group of swatch rows starts with.
+#[derive(Clone, Copy)]
+enum Group {
+    Ui,
+    Graph,
+    Status,
+}
+
+impl Group {
+    fn caption(self, l10n: &Localizer) -> std::borrow::Cow<'_, str> {
+        match self {
+            Group::Ui => tr!(l10n, "colors-group-ui"),
+            Group::Graph => tr!(l10n, "colors-group-graph"),
+            Group::Status => tr!(l10n, "colors-group-status"),
+        }
+    }
+}
+
+/// The least width of the swatch rows' captions.
+const CAPTION_WIDTH: f32 = 56.0;
+
+/// The swatch rows, top to bottom, the first of each group under its
+/// caption. Every palette field is on exactly one: as an anchor, as one of
+/// its followers, or in a row of its own
+/// (`panel_rows_list_every_field_once`).
+const PANEL_ROWS: &[(Option<Group>, PanelRow)] = &[
+    (Some(Group::Ui), PanelRow::Family(PaletteField::Background)),
+    (None, PanelRow::Family(PaletteField::Text)),
+    (None, PanelRow::Fields(&[PaletteField::Accent])),
     (
-        "",
+        Some(Group::Graph),
+        PanelRow::Family(PaletteField::GraphLine),
+    ),
+    (
+        None,
         PanelRow::Fields(&[
             PaletteField::GraphGap,
             PaletteField::GraphMean,
@@ -406,7 +481,7 @@ const PANEL_ROWS: &[(&str, PanelRow)] = &[
         ]),
     ),
     (
-        "Status:",
+        Some(Group::Status),
         PanelRow::Fields(&[
             PaletteField::StatusOk,
             PaletteField::StatusWarning,
@@ -417,8 +492,7 @@ const PANEL_ROWS: &[(&str, PanelRow)] = &[
 ];
 
 /// A row's caption, at one width so the swatches line up beneath it.
-fn caption_cell(ui: &mut Ui, caption: &str) {
-    let width = 56.0;
+fn caption_cell(ui: &mut Ui, caption: &str, width: f32) {
     ui.allocate_ui_with_layout(
         egui::vec2(width, ui.spacing().interact_size.y),
         egui::Layout::left_to_right(egui::Align::Center),
@@ -459,12 +533,13 @@ fn relink_refocus_id() -> egui::Id {
 /// warning with the ratio; a linked follower never does, it keeps its floor.
 fn color_edit(
     ui: &mut Ui,
+    l10n: &Localizer,
     field: PaletteField,
     overrides: &mut PaletteOverrides,
     current: &ThemeColors,
     base: &ThemeColors,
 ) -> bool {
-    let label = field.label();
+    let label = field.label(l10n);
     let anchor = links::anchor(field);
     let set = field.override_slot(overrides).is_some();
     let linked = anchor.is_some() && !set;
@@ -484,7 +559,7 @@ fn color_edit(
     // width instead of the window's.
     let gap = 2.0;
     let btn_size = egui::Vec2::splat(ui.spacing().interact_size.y);
-    let text = egui::WidgetText::from(RichText::new(label).small());
+    let text = egui::WidgetText::from(RichText::new(&*label).small());
     let galley = text.clone().into_galley(
         ui,
         Some(egui::TextWrapMode::Extend),
@@ -510,10 +585,15 @@ fn color_edit(
     // can't describe — give it the label text as its accessible name.
     let btn_response = response
         .inner
-        .on_hover_text(field.tooltip())
+        .on_hover_text(field.tooltip(l10n))
         .a11y_label(&match anchor {
-            Some(anchor) if linked => format!("{label}, follows {}", anchor.label()),
-            _ => label.to_string(),
+            Some(anchor) if linked => tr!(
+                l10n,
+                "colors-swatch-linked",
+                color = &*label,
+                anchor = anchor.label(l10n)
+            ),
+            _ => label.clone(),
         });
     if ui
         .ctx()
@@ -551,9 +631,18 @@ fn color_edit(
     if let Some(anchor) = anchor
         && set
         && ui
-            .small_button("\u{21BA} relink")
-            .on_hover_text(format!("Follow {} again", anchor.label()))
-            .a11y_label(&format!("Relink {label} to {}", anchor.label()))
+            .small_button(tr!(l10n, "colors-relink"))
+            .on_hover_text(tr!(
+                l10n,
+                "colors-relink.hover",
+                anchor = anchor.label(l10n)
+            ))
+            .a11y_label(&tr!(
+                l10n,
+                "colors-relink.a11y",
+                color = &*label,
+                anchor = anchor.label(l10n)
+            ))
             .clicked()
     {
         *field.override_slot(overrides) = None;
@@ -572,18 +661,22 @@ fn color_edit(
     if let Some((ratio, ground, floor)) = links::floor_failure(current, field)
         && links::floor_failure(base, field).is_none()
     {
+        let warning = tr!(
+            l10n,
+            "colors-low-contrast",
+            ratio = format!("{ratio:.1}"),
+            ground = ground.label(l10n)
+        );
         ui.label(
-            RichText::new(format!(
-                "{} {ratio:.1}:1 on {}",
-                crate::app::toast::ERROR_GLYPH,
-                ground.label()
-            ))
-            .small()
-            .color(ui.visuals().warn_fg_color),
+            RichText::new(format!("{} {warning}", crate::app::toast::ERROR_GLYPH))
+                .small()
+                .color(ui.visuals().warn_fg_color),
         )
-        .on_hover_text(format!(
-            "Under the {floor}:1 contrast this color needs on {}",
-            ground.label()
+        .on_hover_text(tr!(
+            l10n,
+            "colors-low-contrast.hover",
+            floor = floor.to_string(),
+            ground = ground.label(l10n)
         ));
     }
 
@@ -593,17 +686,17 @@ fn color_edit(
     if let Some((other, d, floor)) = links::too_close(current, field)
         && links::too_close(base, field).is_none()
     {
+        let warning = tr!(l10n, "colors-too-close", other = other.label(l10n));
         ui.label(
-            RichText::new(format!(
-                "{} close to {}",
-                crate::app::toast::ERROR_GLYPH,
-                other.label()
-            ))
-            .small()
-            .color(ui.visuals().warn_fg_color),
+            RichText::new(format!("{} {warning}", crate::app::toast::ERROR_GLYPH))
+                .small()
+                .color(ui.visuals().warn_fg_color),
         )
-        .on_hover_text(format!(
-            "Only {d:.0} apart (\u{0394}E) where graph colors need {floor:.0} to read apart"
+        .on_hover_text(tr!(
+            l10n,
+            "colors-too-close.hover",
+            distance = format!("{d:.0}"),
+            floor = format!("{floor:.0}")
         ));
     }
 
@@ -740,7 +833,7 @@ fn color_edit(
                 hex_text(egui::Color32::from(hsva))
             };
             ui.horizontal(|ui| {
-                let caption = ui.label("Hex");
+                let caption = ui.label(tr!(l10n, "colors-hex"));
                 let field = ui
                     .add(
                         egui::TextEdit::singleline(&mut text)
@@ -749,7 +842,7 @@ fn color_edit(
                             .desired_width(80.0),
                     )
                     .labelled_by(caption.id);
-                let field = field.on_hover_text("Copy this color, or paste one as #RRGGBB");
+                let field = field.on_hover_text(tr!(l10n, "colors-hex.hover"));
                 if field.changed()
                     && let Some(pasted) = parse_hex(&text)
                 {
@@ -859,7 +952,15 @@ mod tests {
             };
             let (overrides, colors) = (&mut self.overrides, &self.colors);
             let mut out = self.ctx.run_ui(raw, |ui| {
-                color_edit(ui, PaletteField::Background, overrides, colors, colors);
+                let l10n = &crate::l10n::english();
+                color_edit(
+                    ui,
+                    l10n,
+                    PaletteField::Background,
+                    overrides,
+                    colors,
+                    colors,
+                );
             });
             out.textures_delta.clear();
         }

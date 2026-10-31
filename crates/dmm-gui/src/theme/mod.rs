@@ -4,6 +4,9 @@ pub(crate) mod links;
 pub(crate) mod named;
 
 use crate::settings::{ColorPreset, HexColor, PaletteOverrides};
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
+use std::borrow::Cow;
 
 /// One user-customisable colour in the palette.
 ///
@@ -78,78 +81,68 @@ impl PaletteField {
     ];
 
     /// Short label shown next to the swatch.
-    pub(crate) fn label(self) -> &'static str {
+    pub(crate) fn label(self, l10n: &Localizer) -> Cow<'_, str> {
         match self {
-            Self::Background => "Background",
-            Self::Frame => "Frame",
-            Self::Text => "Text",
-            Self::Reading => "Reading",
-            Self::WeakText => "Weak text",
-            Self::Heading => "Heading",
-            Self::Button => "Button",
-            Self::Border => "Border",
-            Self::Accent => "Accent",
-            Self::GraphLine => "Data line",
-            Self::GraphGap => "Gap",
-            Self::GraphMean => "Mean",
-            Self::GraphRef => "Ref",
-            Self::GraphCrossing => "Crossing",
-            Self::GraphCursor => "Cursor",
-            Self::GraphEnvelope => "Envelope",
-            Self::GraphOverlay1 => "Overlay 1",
-            Self::GraphOverlay2 => "Overlay 2",
-            Self::GraphOverlay3 => "Overlay 3",
-            Self::PlotBackground => "Plot bg",
-            Self::GraphCrosshair => "Crosshair",
-            Self::GraphMarker => "Marker",
-            Self::StatusOk => "Connected",
-            Self::StatusWarning => "Warning",
-            Self::StatusError => "Error",
-            Self::StatusInactive => "Inactive",
-            Self::MinimapViewport => "Viewport",
+            Self::Background => tr!(l10n, "colors-swatch-background"),
+            Self::Frame => tr!(l10n, "colors-swatch-frame"),
+            Self::Text => tr!(l10n, "colors-swatch-text"),
+            Self::Reading => tr!(l10n, "colors-swatch-reading"),
+            Self::WeakText => tr!(l10n, "colors-swatch-weak-text"),
+            Self::Heading => tr!(l10n, "colors-swatch-heading"),
+            Self::Button => tr!(l10n, "colors-swatch-button"),
+            Self::Border => tr!(l10n, "colors-swatch-border"),
+            Self::Accent => tr!(l10n, "colors-swatch-accent"),
+            Self::GraphLine => tr!(l10n, "colors-swatch-data-line"),
+            Self::GraphGap => tr!(l10n, "colors-swatch-gap"),
+            Self::GraphMean => tr!(l10n, "colors-swatch-mean"),
+            Self::GraphRef => tr!(l10n, "colors-swatch-ref"),
+            Self::GraphCrossing => tr!(l10n, "colors-swatch-crossing"),
+            Self::GraphCursor => tr!(l10n, "colors-swatch-cursor"),
+            Self::GraphEnvelope => tr!(l10n, "colors-swatch-envelope"),
+            Self::GraphOverlay1 => tr!(l10n, "colors-swatch-overlay-1"),
+            Self::GraphOverlay2 => tr!(l10n, "colors-swatch-overlay-2"),
+            Self::GraphOverlay3 => tr!(l10n, "colors-swatch-overlay-3"),
+            Self::PlotBackground => tr!(l10n, "colors-swatch-plot-background"),
+            Self::GraphCrosshair => tr!(l10n, "colors-swatch-crosshair"),
+            Self::GraphMarker => tr!(l10n, "colors-swatch-marker"),
+            Self::StatusOk => tr!(l10n, "colors-swatch-connected"),
+            Self::StatusWarning => tr!(l10n, "colors-swatch-warning"),
+            Self::StatusError => tr!(l10n, "colors-swatch-error"),
+            Self::StatusInactive => tr!(l10n, "colors-swatch-inactive"),
+            Self::MinimapViewport => tr!(l10n, "colors-swatch-viewport"),
         }
     }
 
     /// Hover text for the swatch.
-    pub(crate) fn tooltip(self) -> &'static str {
+    pub(crate) fn tooltip(self, l10n: &Localizer) -> Cow<'_, str> {
         match self {
-            Self::Background => "Panel background color",
-            Self::Frame => "Top bar and reading panel background (the panel background unless set)",
-            Self::Text => "Primary text color",
-            Self::Reading => "The reading and sub-value readings (the text color unless set)",
-            Self::WeakText => "Secondary text: mode line, sub-value labels, hints and captions",
-            Self::Heading => {
-                "Panel headings: Specifications, Statistics, Visible (the weak text color unless set)"
-            }
-            Self::Button => "Button background color",
-            Self::Border => "Separators, panel edges, frames and the plot outline",
-            Self::Accent => {
-                "Mode badges, links, and the fill behind selected toggles, chips and text"
-            }
-            Self::GraphLine => "Data line color on the graph",
-            Self::GraphGap => "Color used to mark gaps in recorded data",
-            Self::GraphMean => "Mean overlay line color",
-            Self::GraphRef => "Reference line color",
-            Self::GraphCrossing => "Trigger-crossing marker color",
-            Self::GraphCursor => "Measurement cursor color",
-            Self::GraphEnvelope => "Min/Max envelope fill color",
-            Self::GraphOverlay1 => {
-                "Line color of the first sub-value drawn beside the plotted series"
-            }
-            Self::GraphOverlay2 => {
-                "Line color of the second sub-value drawn beside the plotted series"
-            }
-            Self::GraphOverlay3 => {
-                "Line color of the third sub-value drawn beside the plotted series"
-            }
-            Self::PlotBackground => "Graph plot area background color",
-            Self::GraphCrosshair => "Hover crosshair color on the graph",
-            Self::GraphMarker => "Marker lines, flags and numbers",
-            Self::StatusOk => "\"Connected\" status color",
-            Self::StatusWarning => "Warning status color",
-            Self::StatusError => "Error status color",
-            Self::StatusInactive => "Inactive / disconnected status color",
-            Self::MinimapViewport => "Minimap viewport rectangle color",
+            Self::Background => tr!(l10n, "colors-swatch-background.hover"),
+            Self::Frame => tr!(l10n, "colors-swatch-frame.hover"),
+            Self::Text => tr!(l10n, "colors-swatch-text.hover"),
+            Self::Reading => tr!(l10n, "colors-swatch-reading.hover"),
+            Self::WeakText => tr!(l10n, "colors-swatch-weak-text.hover"),
+            Self::Heading => tr!(l10n, "colors-swatch-heading.hover"),
+            Self::Button => tr!(l10n, "colors-swatch-button.hover"),
+            Self::Border => tr!(l10n, "colors-swatch-border.hover"),
+            Self::Accent => tr!(l10n, "colors-swatch-accent.hover"),
+            Self::GraphLine => tr!(l10n, "colors-swatch-data-line.hover"),
+            Self::GraphGap => tr!(l10n, "colors-swatch-gap.hover"),
+            Self::GraphMean => tr!(l10n, "colors-swatch-mean.hover"),
+            Self::GraphRef => tr!(l10n, "colors-swatch-ref.hover"),
+            Self::GraphCrossing => tr!(l10n, "colors-swatch-crossing.hover"),
+            Self::GraphCursor => tr!(l10n, "colors-swatch-cursor.hover"),
+            Self::GraphEnvelope => tr!(l10n, "colors-swatch-envelope.hover"),
+            Self::GraphOverlay1 => tr!(l10n, "colors-swatch-overlay-1.hover"),
+            Self::GraphOverlay2 => tr!(l10n, "colors-swatch-overlay-2.hover"),
+            Self::GraphOverlay3 => tr!(l10n, "colors-swatch-overlay-3.hover"),
+            Self::PlotBackground => tr!(l10n, "colors-swatch-plot-background.hover"),
+            Self::GraphCrosshair => tr!(l10n, "colors-swatch-crosshair.hover"),
+            Self::GraphMarker => tr!(l10n, "colors-swatch-marker.hover"),
+            Self::StatusOk => tr!(l10n, "colors-swatch-connected.hover"),
+            Self::StatusWarning => tr!(l10n, "colors-swatch-warning.hover"),
+            Self::StatusError => tr!(l10n, "colors-swatch-error.hover"),
+            Self::StatusInactive => tr!(l10n, "colors-swatch-inactive.hover"),
+            Self::MinimapViewport => tr!(l10n, "colors-swatch-viewport.hover"),
         }
     }
 
@@ -1066,10 +1059,15 @@ mod tests {
 
     #[test]
     fn labels_and_tooltips_are_distinct_per_field() {
+        let l10n = &crate::l10n::english();
         for &a in PaletteField::ALL {
             for &b in PaletteField::ALL {
                 if a != b {
-                    assert_ne!(a.tooltip(), b.tooltip(), "{a:?} and {b:?} share a tooltip");
+                    assert_ne!(
+                        a.tooltip(l10n),
+                        b.tooltip(l10n),
+                        "{a:?} and {b:?} share a tooltip"
+                    );
                 }
             }
         }

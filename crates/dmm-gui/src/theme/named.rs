@@ -17,6 +17,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use serde::{Deserialize, Serialize};
 
 use crate::settings::{ColorPreset, PaletteOverrides};
@@ -63,7 +65,151 @@ pub(crate) struct ThemeCatalog {
     /// The themes it offers, in file-name order.
     pub(crate) themes: Vec<NamedTheme>,
     /// The files it holds that are not offered, by name, with why.
-    pub(crate) skipped: Vec<(String, String)>,
+    pub(crate) skipped: Vec<(String, ThemeIssue)>,
+}
+
+/// Why a theme file can't be offered, or Save as theme won't write one.
+/// `Display` is the English the log takes; [`ThemeIssue::text`] what the
+/// GUI shows, in its language.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ThemeIssue {
+    /// The file system's or the JSON reader's own words.
+    Read(String),
+    NotAFile,
+    /// Over [`MAX_FILE_BYTES`].
+    TooBig,
+    NameEmpty,
+    /// Over [`MAX_NAME_CHARS`].
+    NameTooLong,
+    /// Characters a theme name can't use.
+    NameUnusable,
+    /// Dark, Light or System, which the Theme row's own chips go by.
+    NameReserved(String),
+    NotOpaque(Pair),
+    /// Under [`MIN_READABLE_CONTRAST`], at this ratio.
+    LowContrast(Pair, f64),
+    /// Another file's theme has this name: the name, then that file.
+    NameTaken(String, String),
+    FileNameUnprintable,
+    /// The folder holds more than [`MAX_FILES`]: the entry for the rest,
+    /// this many.
+    TooMany(usize),
+}
+
+/// Which colours of a theme have to read on each other.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum Pair {
+    /// Its text on its background.
+    Text,
+    /// Its button captions on the button.
+    Button,
+}
+
+impl std::fmt::Display for ThemeIssue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let what = |pair: &Pair| match pair {
+            Pair::Text => "text on the background",
+            Pair::Button => "button text on the button",
+        };
+        match self {
+            Self::Read(why) => f.write_str(why),
+            Self::NotAFile => f.write_str("not a file"),
+            Self::TooBig => write!(f, "over {} KiB", MAX_FILE_BYTES / 1024),
+            Self::NameEmpty => f.write_str("the name is empty"),
+            Self::NameTooLong => write!(f, "the name is over {MAX_NAME_CHARS} characters"),
+            Self::NameUnusable => f.write_str("the name has characters a theme name can't use"),
+            Self::NameReserved(name) => write!(f, "{name:?} is taken by the Theme row"),
+            Self::NotOpaque(pair) => write!(f, "{} is not opaque", what(pair)),
+            Self::LowContrast(pair, ratio) => write!(
+                f,
+                "{} is {ratio:.1}:1, under the {MIN_READABLE_CONTRAST}:1 floor",
+                what(pair)
+            ),
+            Self::NameTaken(name, file) => write!(f, "{name:?} is already the name of {file}"),
+            Self::FileNameUnprintable => {
+                f.write_str("the file name has characters that don't print")
+            }
+            Self::TooMany(_) => write!(f, "over the {MAX_FILES}-file limit"),
+        }
+    }
+}
+
+/// A theme name as the log quotes it, without the quotes, which the
+/// messages put around it in their language's own: a quote or backslash
+/// inside comes escaped (`It's \"Dusk\"`), as it always read.
+fn escaped(name: &str) -> String {
+    let quoted = format!("{name:?}");
+    quoted
+        .strip_prefix('"')
+        .and_then(|q| q.strip_suffix('"'))
+        .unwrap_or(&quoted)
+        .to_string()
+}
+
+impl ThemeIssue {
+    /// The reason as the GUI shows it, starting lower case.
+    pub(crate) fn text(&self, l10n: &Localizer) -> String {
+        let what = |pair: &Pair| match pair {
+            Pair::Text => "text",
+            Pair::Button => "button",
+        };
+        match self {
+            Self::Read(why) => return why.clone(),
+            Self::NotAFile => tr!(l10n, "colors-issue-not-a-file"),
+            Self::TooBig => tr!(l10n, "colors-issue-too-big", size = MAX_FILE_BYTES / 1024),
+            Self::NameEmpty => tr!(l10n, "colors-issue-name-empty"),
+            Self::NameTooLong => tr!(l10n, "colors-issue-name-too-long", max = MAX_NAME_CHARS),
+            Self::NameUnusable => tr!(l10n, "colors-issue-name-unusable"),
+            Self::NameReserved(name) => {
+                tr!(l10n, "colors-issue-name-reserved", name = escaped(name))
+            }
+            Self::NotOpaque(pair) => tr!(l10n, "colors-issue-not-opaque", what = what(pair)),
+            Self::LowContrast(pair, ratio) => tr!(
+                l10n,
+                "colors-issue-low-contrast",
+                what = what(pair),
+                ratio = format!("{ratio:.1}"),
+                floor = MIN_READABLE_CONTRAST.to_string(),
+            ),
+            Self::NameTaken(name, file) => tr!(
+                l10n,
+                "colors-issue-name-taken",
+                name = escaped(name),
+                file = file,
+            ),
+            Self::FileNameUnprintable => tr!(l10n, "colors-issue-file-name-unprintable"),
+            Self::TooMany(_) => tr!(l10n, "colors-issue-too-many", max = MAX_FILES),
+        }
+        .into_owned()
+    }
+
+    /// A line of the skipped files' list: `file` and why.
+    pub(crate) fn line(&self, l10n: &Localizer, file: &str) -> String {
+        match self {
+            Self::TooMany(more) => tr!(
+                l10n,
+                "colors-skipped-too-many",
+                count = *more,
+                max = MAX_FILES
+            ),
+            _ => tr!(
+                l10n,
+                "colors-skipped-file",
+                file = file,
+                reason = self.text(l10n)
+            ),
+        }
+        .into_owned()
+    }
+
+    /// The reason with anything unprintable shown as `?`: the file system's
+    /// and the reader's words can quote the file.
+    fn printable(self) -> Self {
+        match self {
+            Self::Read(why) => Self::Read(printable(&why)),
+            other => other,
+        }
+    }
 }
 
 /// The most theme files read from the folder: a bound on what a scan can
@@ -130,14 +276,15 @@ fn is_default_preset(preset: &ColorPreset) -> bool {
 /// left to egui (a preset's border, its accent) as set and so redraw the
 /// chrome that follows them. Checked the way the folder will read it back:
 /// a file the folder would skip is never written.
-pub(crate) fn to_json(name: &str, tc: &ThemeColors) -> Result<String, String> {
+pub(crate) fn to_json(name: &str, tc: &ThemeColors) -> Result<String, ThemeIssue> {
     let file = ThemeFileOut {
         name,
         mode: if tc.is_dark() { "dark" } else { "light" },
         preset: tc.preset(),
         colors: tc.overrides(),
     };
-    let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())? + "\n";
+    let text =
+        serde_json::to_string_pretty(&file).map_err(|e| ThemeIssue::Read(e.to_string()))? + "\n";
     parse(&text)?;
     Ok(text)
 }
@@ -187,8 +334,9 @@ pub(crate) fn name_from_file(file: &str) -> String {
 }
 
 /// Parse and check one theme file.
-fn parse(text: &str) -> Result<NamedTheme, String> {
-    let file: ThemeFile = serde_json::from_str(text).map_err(|e| e.to_string())?;
+fn parse(text: &str) -> Result<NamedTheme, ThemeIssue> {
+    let file: ThemeFile =
+        serde_json::from_str(text).map_err(|e| ThemeIssue::Read(e.to_string()))?;
     let name = file.name.trim().to_string();
     check_name(&name)?;
     let theme = NamedTheme {
@@ -205,12 +353,12 @@ fn parse(text: &str) -> Result<NamedTheme, String> {
 /// A name has to fit a chip and read as what it is: no control characters,
 /// and none of the bidirectional overrides that would make one theme's chip
 /// or log line show another's name.
-pub(crate) fn check_name(name: &str) -> Result<(), String> {
+pub(crate) fn check_name(name: &str) -> Result<(), ThemeIssue> {
     if name.is_empty() {
-        return Err("the name is empty".into());
+        return Err(ThemeIssue::NameEmpty);
     }
     if name.chars().count() > MAX_NAME_CHARS {
-        return Err(format!("the name is over {MAX_NAME_CHARS} characters"));
+        return Err(ThemeIssue::NameTooLong);
     }
     // Nothing invisible — controls, text-direction overrides, zero-width
     // characters — that could make one theme's chip read as another's, or
@@ -220,11 +368,11 @@ pub(crate) fn check_name(name: &str) -> Result<(), String> {
         .chars()
         .any(|c| unprintable(c) || matches!(c, '$' | '`'))
     {
-        return Err("the name has characters a theme name can't use".into());
+        return Err(ThemeIssue::NameUnusable);
     }
     let key = normalize(name);
     if ["dark", "light", "system"].contains(&key.as_str()) {
-        return Err(format!("{name:?} is taken by the Theme row"));
+        return Err(ThemeIssue::NameReserved(name.to_string()));
     }
     Ok(())
 }
@@ -232,21 +380,19 @@ pub(crate) fn check_name(name: &str) -> Result<(), String> {
 /// A theme whose text can't be read on its panel, or whose button captions
 /// can't be read on their fill, would leave the user unable to read the very
 /// chips that switch it off.
-fn check_readable(theme: &NamedTheme) -> Result<(), String> {
+fn check_readable(theme: &NamedTheme) -> Result<(), ThemeIssue> {
     let tc = ThemeColors::new(theme.dark, theme.preset, &theme.colors);
     for (what, fg, ground) in [
-        ("text on the background", tc.text(), tc.background()),
-        ("button text on the button", tc.button_text(), tc.button()),
+        (Pair::Text, tc.text(), tc.background()),
+        (Pair::Button, tc.button_text(), tc.button()),
     ] {
         // `contrast` reads no alpha: a transparent text colour would pass.
         if !fg.is_opaque() || !ground.is_opaque() {
-            return Err(format!("{what} is not opaque"));
+            return Err(ThemeIssue::NotOpaque(what));
         }
         let ratio = contrast(fg, ground);
         if ratio < MIN_READABLE_CONTRAST {
-            return Err(format!(
-                "{what} is {ratio:.1}:1, under the {MIN_READABLE_CONTRAST}:1 floor"
-            ));
+            return Err(ThemeIssue::LowContrast(what, ratio));
         }
     }
     Ok(())
@@ -354,10 +500,9 @@ pub(crate) fn discover(dir: &Path) -> ThemeCatalog {
     paths.sort();
     if paths.len() > MAX_FILES {
         let more = paths.len() - MAX_FILES;
-        catalog.skipped.push((
-            format!("{more} more"),
-            format!("over the {MAX_FILES}-file limit"),
-        ));
+        catalog
+            .skipped
+            .push((format!("{more} more"), ThemeIssue::TooMany(more)));
         paths.truncate(MAX_FILES);
     }
     for path in &paths {
@@ -367,7 +512,7 @@ pub(crate) fn discover(dir: &Path) -> ThemeCatalog {
             .unwrap_or_default();
         // The file name is shown and logged, and kept to save over it.
         if file.chars().any(unprintable) {
-            let reason = "the file name has characters that don't print".to_string();
+            let reason = ThemeIssue::FileNameUnprintable;
             catalog.skipped.push((printable(&file), reason));
             continue;
         }
@@ -378,10 +523,9 @@ pub(crate) fn discover(dir: &Path) -> ThemeCatalog {
                     .iter()
                     .find(|t| same_name(&t.name, &theme.name))
                 {
-                    let reason = format!(
-                        "{:?} is already the name of {}",
-                        theme.name,
-                        taken.file.as_deref().unwrap_or_default()
+                    let reason = ThemeIssue::NameTaken(
+                        theme.name.clone(),
+                        taken.file.clone().unwrap_or_default(),
                     );
                     catalog.skipped.push((file, reason));
                 } else {
@@ -389,7 +533,7 @@ pub(crate) fn discover(dir: &Path) -> ThemeCatalog {
                     catalog.themes.push(theme);
                 }
             }
-            Err(reason) => catalog.skipped.push((file, printable(&reason))),
+            Err(reason) => catalog.skipped.push((file, reason.printable())),
         }
     }
     catalog
@@ -409,19 +553,20 @@ pub(crate) fn log_skipped(catalog: &ThemeCatalog, previous: Option<&ThemeCatalog
 /// Read and parse one theme file. Only a regular file, after following
 /// links, and only its first [`MAX_FILE_BYTES`]: a link to a device or a
 /// pipe is never read, and an oversized file never read whole.
-fn read_theme(path: &Path) -> Result<NamedTheme, String> {
-    let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
+fn read_theme(path: &Path) -> Result<NamedTheme, ThemeIssue> {
+    let read = |e: std::io::Error| ThemeIssue::Read(e.to_string());
+    let meta = std::fs::metadata(path).map_err(read)?;
     if !meta.is_file() {
-        return Err("not a file".into());
+        return Err(ThemeIssue::NotAFile);
     }
     let mut text = String::new();
     File::open(path)
-        .map_err(|e| e.to_string())?
+        .map_err(read)?
         .take(MAX_FILE_BYTES + 1)
         .read_to_string(&mut text)
-        .map_err(|e| e.to_string())?;
+        .map_err(read)?;
     if text.len() as u64 > MAX_FILE_BYTES {
-        return Err(format!("over {} KiB", MAX_FILE_BYTES / 1024));
+        return Err(ThemeIssue::TooBig);
     }
     parse(&text)
 }
@@ -542,7 +687,7 @@ mod tests {
                 "button text on the button",
             ),
         ] {
-            let err = parse(text).unwrap_err();
+            let err = parse(text).unwrap_err().to_string();
             assert!(err.contains(why), "{text}: {err:?} lacks {why:?}");
         }
     }
@@ -570,12 +715,12 @@ mod tests {
         }
     }
 
-    fn reason<'a>(catalog: &'a ThemeCatalog, file: &str) -> &'a str {
+    fn reason(catalog: &ThemeCatalog, file: &str) -> String {
         catalog
             .skipped
             .iter()
             .find(|(f, _)| f == file)
-            .map(|(_, r)| r.as_str())
+            .map(|(_, r)| r.to_string())
             .unwrap_or_else(|| panic!("{file} not skipped: {catalog:?}"))
     }
 
@@ -684,7 +829,7 @@ mod tests {
             ..Default::default()
         };
         let tc = ThemeColors::new(true, ColorPreset::Default, &colors);
-        let err = to_json("Murk", &tc).unwrap_err();
+        let err = to_json("Murk", &tc).unwrap_err().to_string();
         assert!(err.contains("text on the background"), "{err}");
     }
 
@@ -733,5 +878,38 @@ mod tests {
         let why = reason(&catalog, "forged.json");
         assert!(!why.chars().any(unprintable), "{why:?}");
         assert!(why.contains("?[WARN] forged?"), "{why:?}");
+    }
+
+    /// The GUI's English for each reason is the log's.
+    #[test]
+    fn the_reasons_read_in_english_as_the_log_has_them() {
+        let l10n = &crate::l10n::english();
+        let issues = [
+            ThemeIssue::Read("expected value at line 1 column 1".into()),
+            ThemeIssue::NotAFile,
+            ThemeIssue::TooBig,
+            ThemeIssue::NameEmpty,
+            ThemeIssue::NameTooLong,
+            ThemeIssue::NameUnusable,
+            ThemeIssue::NameReserved("Dark".into()),
+            ThemeIssue::NotOpaque(Pair::Text),
+            ThemeIssue::NotOpaque(Pair::Button),
+            ThemeIssue::LowContrast(Pair::Text, 1.14),
+            ThemeIssue::LowContrast(Pair::Button, 2.96),
+            ThemeIssue::NameTaken("It's \"Dusk\"".into(), "b-dusk.json".into()),
+            ThemeIssue::NameTaken("Back\\slash".into(), "c.json".into()),
+            ThemeIssue::FileNameUnprintable,
+            ThemeIssue::TooMany(5),
+        ];
+        for issue in &issues {
+            assert_eq!(issue.text(l10n), issue.to_string());
+            if !matches!(issue, ThemeIssue::TooMany(_)) {
+                assert_eq!(issue.line(l10n, "x.json"), format!("x.json: {issue}"));
+            }
+        }
+        assert_eq!(
+            ThemeIssue::TooMany(5).line(l10n, "5 more"),
+            "5 more: over the 100-file limit"
+        );
     }
 }

@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
+use dmm_shared::tr;
 use eframe::egui::{self, Ui};
 
 use crate::app::App;
@@ -21,17 +22,14 @@ use crate::settings::PaletteOverrides;
 use crate::theme::named::{self, NamedTheme};
 
 /// The answer of a save dialog: the path picked, `None` when cancelled, or
-/// the dialog's panic.
-type DialogAnswer = Result<Option<PathBuf>, String>;
+/// `Err` when the dialog itself fell over.
+type DialogAnswer = Result<Option<PathBuf>, ()>;
 
 /// The save dialog, while it is open.
 #[derive(Default)]
 pub(in crate::app) struct ThemeSave {
     dialog: Option<Receiver<DialogAnswer>>,
 }
-
-/// Why nothing was saved when the dialog itself fell over.
-const DIALOG_FAILED: &str = "the save dialog failed";
 
 impl App {
     /// Whether the colours on screen differ from the preset's or the
@@ -45,11 +43,8 @@ impl App {
     /// The Save as theme button, under the colour swatches.
     pub(super) fn show_theme_save_row(&mut self, ui: &mut Ui) {
         if ui
-            .button("Save as theme\u{2026}")
-            .on_hover_text(
-                "Save these colors as a theme file; one saved in your themes folder joins the \
-                 Theme row",
-            )
+            .button(tr!(self.l10n, "colors-save"))
+            .on_hover_text(tr!(self.l10n, "colors-save.hover"))
             .clicked()
         {
             self.choose_theme_file(ui.ctx());
@@ -74,19 +69,20 @@ impl App {
                 .unwrap_or_else(|| format!("{}.json", named::file_stem(&theme.name))),
             None => "my-theme.json".to_string(),
         };
+        let file_type = tr!(self.l10n, "colors-save-file-type").into_owned();
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let answer = std::panic::catch_unwind(|| {
                 let mut dialog = rfd::FileDialog::new()
                     .set_file_name(file_name)
-                    .add_filter("Theme", &["json"]);
+                    .add_filter(file_type, &["json"]);
                 if let Some(dir) = dir {
                     dialog = dialog.set_directory(dir);
                 }
                 dialog.save_file()
             })
-            .map_err(|_| DIALOG_FAILED.to_string());
+            .map_err(|_| ());
             let _ = tx.send(answer);
             ctx.request_repaint();
         });
@@ -101,7 +97,7 @@ impl App {
         let answer = match rx.try_recv() {
             Ok(answer) => answer,
             Err(mpsc::TryRecvError::Empty) => return,
-            Err(mpsc::TryRecvError::Disconnected) => Err(DIALOG_FAILED.to_string()),
+            Err(mpsc::TryRecvError::Disconnected) => Err(()),
         };
         // The colours on screen when the answer comes: the theme may have
         // changed while the dialog was open.
@@ -113,7 +109,10 @@ impl App {
                 self.save_theme(path, dark, folder.as_deref());
             }
             Ok(None) => {}
-            Err(why) => self.toast = Some(Toast::error(format!("Not saved: {why}"))),
+            Err(()) => {
+                let message = tr!(self.l10n, "colors-save-dialog-failed");
+                self.toast = Some(Toast::error(message));
+            }
         }
     }
 
@@ -130,10 +129,9 @@ impl App {
             path.set_file_name(name);
             // The dialog asked about replacing the name as typed, not this.
             if path.exists() {
-                self.toast = Some(Toast::error(format!(
-                    "Not saved: {} already exists; pick it in the dialog to replace it",
-                    path.display()
-                )));
+                let path = path.display().to_string();
+                let message = tr!(self.l10n, "colors-save-exists", path = path);
+                self.toast = Some(Toast::error(message));
                 return;
             }
         }
@@ -158,32 +156,38 @@ impl App {
                 .iter()
                 .find(|t| named::same_name(&t.name, &name) && t.file.as_deref() != Some(&file))
         {
-            self.toast = Some(Toast::error(format!(
-                "Not saved: {name} is already the name of {} in your themes folder; pick \
-                 another file name",
-                other.file.as_deref().unwrap_or_default()
-            )));
+            let message = tr!(
+                self.l10n,
+                "colors-save-name-taken",
+                name = &name,
+                file = other.file.as_deref().unwrap_or_default(),
+            );
+            self.toast = Some(Toast::error(message));
             return;
         }
         let tc = self.settings.theme_colors(dark);
         let text = match named::to_json(&name, &tc) {
             Ok(text) => text,
             Err(why) => {
-                self.toast = Some(Toast::error(format!("Not saved: {why}")));
+                let reason = why.text(&self.l10n);
+                let message = tr!(self.l10n, "colors-save-invalid", reason = reason);
+                self.toast = Some(Toast::error(message));
                 return;
             }
         };
         if let Err(e) = dmm_shared::write_atomic(&path, text.as_bytes()) {
-            self.toast = Some(Toast::error(format!(
-                "Could not save {}: {e}",
-                path.display()
-            )));
+            let message = tr!(
+                self.l10n,
+                "colors-save-failed",
+                path = path.display().to_string(),
+                error = e.to_string(),
+            );
+            self.toast = Some(Toast::error(message));
             return;
         }
         if !in_folder {
-            self.toast = Some(Toast::info(format!(
-                "Saved {file}. Copy it into your themes folder to use it as a theme"
-            )));
+            let message = tr!(self.l10n, "colors-saved-elsewhere", file = &file);
+            self.toast = Some(Toast::info(message));
             return;
         }
 
@@ -212,7 +216,7 @@ impl App {
         self.settings.overrides.theme = None;
         self.settings.save();
         self.applied.ui_colors = None;
-        self.toast = Some(Toast::info(format!("Saved {name} to your themes folder")));
+        self.toast = Some(Toast::info(tr!(self.l10n, "colors-saved", name = &name)));
     }
 }
 
