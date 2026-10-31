@@ -480,7 +480,7 @@ fn a_bare_output_with_no_readings_says_no_file_was_written() {
         ],
     );
     assert!(ok, "a run with no readings ends cleanly: {stderr}");
-    assert!(stderr.contains("1 readings skipped"), "got {stderr}");
+    assert!(stderr.contains("1 reading skipped"), "got {stderr}");
     assert!(
         stderr.contains("No readings arrived, so no file was written"),
         "got {stderr}"
@@ -845,6 +845,27 @@ fn an_alarm_marks_each_breach() {
     assert!(
         stderr.contains("Alarms: 1 above 1 V, 1 below -0.1 V\n"),
         "got {stderr}"
+    );
+}
+
+/// A breach's note is written in the run's language, as a note the user
+/// typed would be: the pseudo-locale marks every translated text.
+#[test]
+fn an_alarm_note_is_in_the_runs_language() {
+    let dir = dir_for("alarm-language");
+    let path = recording_of(&dir, RECORDING_CROSSING);
+    let out = dmm_cli()
+        .args(["read", "--replay", path.to_str().expect("utf-8 path")])
+        .args(["--count", "3", "--format", "csv", "--alarm-high", "1"])
+        .env("NO_COLOR", "1")
+        .env("DMM_TOOLS_PSEUDO_LOCALE", "1")
+        .output()
+        .expect("run dmm-cli");
+    let csv = String::from_utf8(out.stdout).expect("utf-8 stdout");
+    let breach = csv.lines().nth(3).expect("the breach's row");
+    assert!(
+        breach.contains(",3,[") && breach.contains("1 V") && !breach.contains("Above"),
+        "got {breach}"
     );
 }
 

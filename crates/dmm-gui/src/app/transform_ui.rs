@@ -20,6 +20,7 @@ use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
 use super::controls::remote::{SplitChip, row_field};
 use super::toast::Toast;
+use crate::l10n::english;
 
 /// Draft text for the three fields, kept apart from the applied
 /// [`Transform`]: the row commits on Apply or Enter only, so a half-typed
@@ -83,8 +84,8 @@ fn parse_field(
     // way to tell why.
     let value = text
         .parse::<f64>()
-        .map_err(|_| format!("Invalid {name}: {}", input::not_a_number(text)))?;
-    check(value).map_err(|e| format!("Invalid {name}: {}", input::factor_error(e)))
+        .map_err(|_| format!("Invalid {name}: {}", input::not_a_number(&english(), text)))?;
+    check(value).map_err(|e| format!("Invalid {name}: {}", input::factor_error(&english(), e)))
 }
 
 impl App {

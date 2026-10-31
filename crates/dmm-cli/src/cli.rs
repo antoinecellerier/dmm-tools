@@ -9,6 +9,9 @@ use dmm_lib::alarm::{Hysteresis, Limits};
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
 use dmm_shared::input;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 /// `--mock-clock-scale`: a multiple of real time, or `max`.
@@ -28,7 +31,7 @@ fn parse_clock_scale(s: &str) -> Result<ClockScale, String> {
     }
     s.parse()
         .map(ClockScale::Factor)
-        .map_err(|_| format!("expected a number or 'max', got '{s}'"))
+        .map_err(|_| tr!(crate::l10n::get(), "read-clock-scale-invalid", value = s).into_owned())
 }
 
 fn version_string() -> &'static str {
@@ -303,8 +306,11 @@ impl TransformArgs {
 /// ([`dmm_shared::input`]); clap's own message already names the flag and
 /// the value.
 fn parse_factor(s: &str, check: fn(f64) -> Result<f64, FactorError>) -> Result<f64, String> {
-    let value: f64 = s.parse().map_err(|_| input::not_a_number(s))?;
-    check(value).map_err(|e| input::factor_error(e).to_string())
+    let l = crate::l10n::get();
+    let value: f64 = s
+        .parse()
+        .map_err(|_| input::not_a_number(l, s).into_owned())?;
+    check(value).map_err(|e| input::factor_error(l, e).into_owned())
 }
 
 /// Reject the two scale factors that destroy the reading rather than
@@ -343,13 +349,16 @@ pub(crate) struct AlarmArgs {
 impl AlarmArgs {
     /// The limits these flags set and their band, `None` without any limit,
     /// or why the flags are unusable together.
-    pub(crate) fn limits(&self) -> Result<Option<(Limits, Hysteresis)>, String> {
+    pub(crate) fn limits(&self, l: &Localizer) -> Result<Option<(Limits, Hysteresis)>, String> {
+        let refused = |flags: &str, reason: Cow<'_, str>| {
+            tr!(l, "read-flag-refused", flags = flags, reason = reason).into_owned()
+        };
         match Limits::check(self.alarm_low, self.alarm_high) {
             Ok(limits) if limits.is_empty() && self.alarm_bell => {
-                Err("--alarm-bell needs --alarm-high or --alarm-low".to_string())
+                Err(tr!(l, "read-alarm-bell-needs-limit").into_owned())
             }
             Ok(limits) if limits.is_empty() && self.alarm_hysteresis.is_some() => {
-                Err("--alarm-hysteresis needs --alarm-high or --alarm-low".to_string())
+                Err(tr!(l, "read-alarm-hysteresis-needs-limit").into_owned())
             }
             Ok(limits) if limits.is_empty() => Ok(None),
             Ok(limits) => self
@@ -357,10 +366,10 @@ impl AlarmArgs {
                 .unwrap_or_default()
                 .check(&limits)
                 .map(|band| Some((limits, band)))
-                .map_err(|_| format!("--alarm-hysteresis: {}", input::PERCENT_OF_ZERO)),
-            Err(e) => Err(format!(
-                "--alarm-low, --alarm-high: {}",
-                input::limit_error(e)
+                .map_err(|_| refused("--alarm-hysteresis", input::percent_of_zero(l))),
+            Err(e) => Err(refused(
+                "--alarm-low, --alarm-high",
+                input::limit_error(l, e),
             )),
         }
     }
@@ -368,14 +377,17 @@ impl AlarmArgs {
 
 /// One alarm limit: a finite number.
 fn parse_limit(s: &str) -> Result<f64, String> {
-    let value: f64 = s.parse().map_err(|_| input::not_a_number(s))?;
-    Limits::check(Some(value), None).map_err(|e| input::limit_error(e).to_string())?;
+    let l = crate::l10n::get();
+    let value: f64 = s
+        .parse()
+        .map_err(|_| input::not_a_number(l, s).into_owned())?;
+    Limits::check(Some(value), None).map_err(|e| input::limit_error(l, e).into_owned())?;
     Ok(value)
 }
 
 /// `--alarm-hysteresis`: a value, or a percentage with `%`.
 fn parse_hysteresis(s: &str) -> Result<Hysteresis, String> {
-    Hysteresis::parse(s).map_err(|e| input::hysteresis_error(e, s))
+    Hysteresis::parse(s).map_err(|e| input::hysteresis_error(crate::l10n::get(), e, s).into_owned())
 }
 
 /// What `get` and `set` name on the command line, one word per
@@ -735,7 +747,7 @@ mod tests {
         let mut argv = vec!["dmm-cli", "read"];
         argv.extend_from_slice(args);
         match Cli::try_parse_from(argv).unwrap().command {
-            Cmd::Read { alarm, .. } => alarm.limits(),
+            Cmd::Read { alarm, .. } => alarm.limits(crate::l10n::english()),
             _ => panic!("expected Read"),
         }
     }

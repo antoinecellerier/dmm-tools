@@ -20,6 +20,7 @@ use super::marker_list::log_line;
 use super::toast::Toast;
 use crate::display::ReadingState;
 use crate::graph::{LimitSide, WatchedLimits};
+use crate::l10n::english;
 use dmm_lib::alarm::{Alarm, Breach, Hysteresis, LimitError, Limits};
 use dmm_lib::measurement::Measurement;
 use dmm_shared::input;
@@ -67,7 +68,7 @@ fn limit_message(e: LimitError) -> String {
         LimitError::NotFinite => "limit",
         LimitError::LowNotBelowHigh => "limits",
     };
-    format!("Invalid {field}: {}", input::limit_error(e))
+    format!("Invalid {field}: {}", input::limit_error(&english(), e))
 }
 
 /// A draft as a limit: blank is no limit, anything else must be a number.
@@ -76,9 +77,12 @@ fn parse_draft(text: &str, name: &str) -> Result<Option<f64>, String> {
     if text.is_empty() {
         return Ok(None);
     }
-    text.parse()
-        .map(Some)
-        .map_err(|_| format!("Invalid {name} limit: {}", input::not_a_number(text)))
+    text.parse().map(Some).map_err(|_| {
+        format!(
+            "Invalid {name} limit: {}",
+            input::not_a_number(&english(), text)
+        )
+    })
 }
 
 /// The drafts as a pair of limits and their band, or the toast saying which
@@ -90,7 +94,7 @@ fn parse_limits(low: &str, high: &str, band: &str) -> Result<(Limits, Hysteresis
     let band = Hysteresis::parse(band).map_err(|e| {
         format!(
             "Invalid hysteresis: {}",
-            input::hysteresis_error(e, band.trim())
+            input::hysteresis_error(&english(), e, band.trim())
         )
     })?;
     let band = band.check(&limits).map_err(|_| percent_of_zero())?;
@@ -99,7 +103,7 @@ fn parse_limits(low: &str, high: &str, band: &str) -> Result<(Limits, Hysteresis
 
 /// Why a percentage band can't go with the limits.
 fn percent_of_zero() -> String {
-    format!("Invalid hysteresis: {}", input::PERCENT_OF_ZERO)
+    format!("Invalid hysteresis: {}", input::percent_of_zero(&english()))
 }
 
 /// Tooltip on the hysteresis field.

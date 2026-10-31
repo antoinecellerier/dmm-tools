@@ -17,6 +17,7 @@
 //! - A message missing from a language, or failing to format in it, falls
 //!   back to en-US on its own.
 
+mod alarm;
 #[cfg(any(test, feature = "test-support"))]
 pub mod check;
 mod errors;

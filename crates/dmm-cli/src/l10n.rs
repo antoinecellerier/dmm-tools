@@ -18,11 +18,12 @@ static LOCALIZER: OnceLock<Localizer> = OnceLock::new();
 const CLI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "cli/common.ftl"),
     dmm_shared::ftl!("en-US", "cli/connect.ftl"),
+    dmm_shared::ftl!("en-US", "cli/read.ftl"),
 ];
 
 /// Everything dmm-cli shows: the shared help, the library's text and
 /// errors, and its own messages.
-fn resources() -> Vec<Resource> {
+pub(crate) fn resources() -> Vec<Resource> {
     [
         dmm_shared::help::RESOURCES,
         dmm_shared::l10n::LIB_RESOURCES,
@@ -58,6 +59,9 @@ pub(crate) fn error_text(e: &(dyn std::error::Error + 'static)) -> String {
         return get().error(e);
     }
     if let Some(e) = e.downcast_ref::<crate::open::OpenFailed>() {
+        return e.text(get()).into_owned();
+    }
+    if let Some(e) = e.downcast_ref::<crate::cmd::read::Refused>() {
         return e.text(get()).into_owned();
     }
     e.to_string()

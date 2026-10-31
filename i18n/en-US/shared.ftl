@@ -117,3 +117,25 @@ adapters-heading = Connected devices:
 adapters-unavailable = Run 'dmm-cli list' to see connected devices.
 # $address is the value the user typed, written with colons, e.g. 12:34:56:78:9A:BC.
 colonless-address-hint = If that is a Bluetooth address, write it { $address }.
+
+## Why a number typed for a scale, an offset or an alarm was refused: the
+## reason alone, in lower case and with no full stop. dmm-gui puts it after
+## the field's name in a toast ("Invalid scale: …"); dmm-cli after the
+## option and the value, at the end of a line from its command-line parser,
+## which stays English ("error: invalid value '0' for '--scale <FACTOR>': …").
+
+# $text is what was typed, as it was typed.
+input-not-a-number = “{ $text }” is not a number
+# Infinity or "not a number" (NaN).
+input-not-finite = must be a finite number
+# A scale factor of 0 would turn every reading into the offset.
+input-zero-scale = a scale of zero would erase the reading
+# The alarm's low limit and its high limit.
+input-low-not-below-high = the low limit must be below the high one
+# The alarm's hysteresis band: a number in the limits' unit, or a percentage
+# of the limit. $text is what was typed, as it was typed.
+input-band-not-a-number = “{ $text }” is not a number or a percentage such as 1%
+# A hysteresis band below zero.
+input-band-negative = must be zero or more
+# A percentage band with a limit of 0, of which every percentage is 0.
+input-percent-of-zero = a percentage of a limit of 0 is 0; give a value instead

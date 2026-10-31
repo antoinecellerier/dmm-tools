@@ -2,48 +2,50 @@
 //!
 //! The rules live in `dmm-lib` ([`Transform`](dmm_lib::transform::Transform),
 //! [`Limits`](dmm_lib::alarm::Limits), [`Hysteresis`](dmm_lib::alarm::Hysteresis)); this is only
-//! their wording. Each function gives the reason alone, lower-case and with
-//! no full stop. The framing stays with the binary that knows where the
-//! number came from: the GUI's toast names the field ("Invalid scale: …"),
-//! clap names the flag and the value it was given.
+//! their wording, from `i18n/<locale>/shared.ftl`. Each function gives the
+//! reason alone, lower-case and with no full stop. The framing stays with
+//! the binary that knows where the number came from: the GUI's toast names
+//! the field ("Invalid scale: …"), clap names the flag and the value it was
+//! given.
 
+use crate::l10n::Localizer;
+use crate::tr;
 use dmm_lib::alarm::{HysteresisError, LimitError};
 use dmm_lib::transform::FactorError;
+use std::borrow::Cow;
 
 /// `text` did not parse as a number at all.
-pub fn not_a_number(text: &str) -> String {
-    format!("\u{201c}{text}\u{201d} is not a number")
+pub fn not_a_number<'a>(l: &'a Localizer, text: &str) -> Cow<'a, str> {
+    tr!(l, "input-not-a-number", text = text)
 }
 
 /// Why a scale or offset was refused.
-pub fn factor_error(e: FactorError) -> &'static str {
+pub fn factor_error(l: &Localizer, e: FactorError) -> Cow<'_, str> {
     match e {
-        FactorError::NotFinite => FINITE,
-        FactorError::ZeroScale => "a scale of zero would erase the reading",
+        FactorError::NotFinite => tr!(l, "input-not-finite"),
+        FactorError::ZeroScale => tr!(l, "input-zero-scale"),
     }
 }
 
 /// Why an alarm limit, or the pair of them, was refused.
-pub fn limit_error(e: LimitError) -> &'static str {
+pub fn limit_error(l: &Localizer, e: LimitError) -> Cow<'_, str> {
     match e {
-        LimitError::NotFinite => FINITE,
-        LimitError::LowNotBelowHigh => "the low limit must be below the high one",
+        LimitError::NotFinite => tr!(l, "input-not-finite"),
+        LimitError::LowNotBelowHigh => tr!(l, "input-low-not-below-high"),
     }
 }
 
 /// Why a hysteresis band typed as `text` was refused.
-pub fn hysteresis_error(e: HysteresisError, text: &str) -> String {
+pub fn hysteresis_error<'a>(l: &'a Localizer, e: HysteresisError, text: &str) -> Cow<'a, str> {
     match e {
-        HysteresisError::NotANumber => {
-            format!("\u{201c}{text}\u{201d} is not a number or a percentage such as 1%")
-        }
+        HysteresisError::NotANumber => tr!(l, "input-band-not-a-number", text = text),
         HysteresisError::NotABand | HysteresisError::PercentOfZero => {
-            "must be zero or more".to_string()
+            tr!(l, "input-band-negative")
         }
     }
 }
 
 /// Why a percentage band can't go with limits of zero.
-pub const PERCENT_OF_ZERO: &str = "a percentage of a limit of 0 is 0; give a value instead";
-
-const FINITE: &str = "must be a finite number";
+pub fn percent_of_zero(l: &Localizer) -> Cow<'_, str> {
+    tr!(l, "input-percent-of-zero")
+}

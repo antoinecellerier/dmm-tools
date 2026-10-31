@@ -1,8 +1,12 @@
 use chrono::{DateTime, Local};
 use clap::ValueEnum;
 use dmm_lib::measurement::Measurement;
+use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
 use dmm_shared::export::CsvLayout;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
+use std::borrow::Cow;
 use std::io::Write;
 use std::time::Instant;
 
@@ -183,7 +187,7 @@ impl Output {
                     // reading the GUI's replay export refuses to render.
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        format!("a {} reading carries no meter frame to record", m.mode),
+                        NoFrame(m.mode.to_string()),
                     ));
                 }
                 if first.is_none() {
@@ -325,6 +329,31 @@ fn format_json(
     line.push(b'\n');
     w.write_all(&line)
 }
+
+/// A `--format replay` reading with no meter frame behind it, by its mode:
+/// the run's closing `Error:` line. `Display` writes the English, which is
+/// what the log gets; the terminal gets [`NoFrame::text`] in the run's
+/// language ([`crate::l10n::error_text`]).
+#[derive(Debug)]
+pub(crate) struct NoFrame(String);
+
+impl NoFrame {
+    pub(crate) fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
+        tr!(
+            l,
+            "read-replay-no-frame",
+            mode = l.label(TextKind::Mode, &self.0)
+        )
+    }
+}
+
+impl std::fmt::Display for NoFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text(crate::l10n::english()))
+    }
+}
+
+impl std::error::Error for NoFrame {}
 
 #[cfg(test)]
 mod tests {
@@ -854,8 +883,20 @@ mod tests {
             .write(&mut file, &m, None, None)
             .expect_err("a frameless reading has nothing to record");
         assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
-        assert!(e.to_string().contains("DC V"), "got {e}");
+        assert_eq!(
+            e.to_string(),
+            "a DC V reading carries no meter frame to record"
+        );
         assert!(file.is_empty(), "nothing is written: {file:?}");
+        // The terminal's sentence goes through the messages.
+        let pseudo = dmm_shared::l10n::Options {
+            pseudo: true,
+            ..Default::default()
+        };
+        let pseudo = Localizer::new(&dmm_shared::l10n::EN_US, &crate::l10n::resources(), &pseudo);
+        let no_frame = e.get_ref().and_then(|e| e.downcast_ref::<NoFrame>());
+        let text = no_frame.expect("a NoFrame").text(&pseudo);
+        assert!(text.starts_with('['), "{text}");
     }
 
     fn csv_of(m: &dmm_lib::measurement::Measurement) -> String {

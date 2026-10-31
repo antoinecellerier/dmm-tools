@@ -15,7 +15,7 @@ use cmd::command::cmd_command;
 use cmd::debug::cmd_debug;
 use cmd::info::cmd_info;
 use cmd::list::cmd_list;
-use cmd::read::{REPLAY_NAMES_ITS_DEVICE, cmd_read, refuse_replay_format, resolve_output};
+use cmd::read::{cmd_read, refuse_replay_format, resolve_output};
 use cmd::settings::{cmd_get, cmd_set};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
@@ -167,7 +167,7 @@ fn main() {
             mock_clock_scale,
             mock_clock_preseed,
         } => {
-            let alarm = match alarm.limits() {
+            let alarm = match alarm.limits(l) {
                 Ok(limits) => limits.map(|(limits, hysteresis)| cmd::read::AlarmOptions {
                     limits,
                     hysteresis,
@@ -193,6 +193,7 @@ fn main() {
             // `from_flags` names the offending value, not the flag it came
             // from, so that both binaries can reuse the sentence.
             let clock = match cmd::read::session_clock(
+                l,
                 mock_clock_scale,
                 mock_clock_preseed,
                 replay.is_some(),
@@ -200,8 +201,14 @@ fn main() {
                 Ok(clock) => clock,
                 Err(msg) => {
                     eprintln!(
-                        "{} --mock-clock-scale/--mock-clock-preseed: {msg}",
+                        "{} {}",
                         error_label(),
+                        tr!(
+                            l,
+                            "read-flag-refused",
+                            flags = "--mock-clock-scale/--mock-clock-preseed",
+                            reason = msg
+                        ),
                     );
                     std::process::exit(1);
                 }
@@ -211,17 +218,22 @@ fn main() {
             // flag is refused: the settings file names a meter for every run,
             // and a replay must not need it edited.
             if replay.is_some() && device_named {
-                eprintln!("{} {}", error_label(), REPLAY_NAMES_ITS_DEVICE);
+                eprintln!(
+                    "{} {}",
+                    error_label(),
+                    cmd::read::replay_names_its_device(l)
+                );
                 std::process::exit(1);
             }
             // Settled before anything opens, so a run that cannot write what
             // it was asked for fails with no meter attached.
-            let (format, destination, note) = resolve_output(&format, output);
+            let (format, destination, note) = resolve_output(l, &format, output);
             if let Some(path) = import {
                 if device_named {
                     eprintln!(
-                        "{} --import names its own meter in the file; drop --device",
+                        "{} {}",
                         error_label(),
+                        tr!(l, "read-import-names-its-device"),
                     );
                     std::process::exit(1);
                 }

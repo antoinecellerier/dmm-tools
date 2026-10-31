@@ -4,6 +4,7 @@
 use super::setup_ctrlc;
 use crate::cli::{ClockScale, TransformArgs};
 use crate::format::{self, OutputFormat};
+use crate::l10n::{note_label, warning_label};
 use crate::open::{
     open_mock_device, open_with_help, opened_device, print_no_response_help, requires_hardware,
     selection_id,
@@ -13,9 +14,14 @@ use console::style;
 use dmm_lib::alarm::{Alarm, Hysteresis, Limits};
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{SelectableDevice, Selection};
+use dmm_lib::stats::SeriesChange;
 use dmm_lib::stream::{MeasurementStream, NO_RESPONSE_TIMEOUTS, StreamEvent};
+use dmm_lib::text::TextKind;
 use dmm_lib::transform::Transform;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use log::info;
+use std::borrow::Cow;
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -155,6 +161,7 @@ fn read_output<T: dmm_lib::transport::Transport>(
 /// The flag wins over the extension — the file is what the user asked for by
 /// name — so a `.json` file holding CSV is a note rather than a refusal.
 fn resolve_format(
+    l: &Localizer,
     asked: Option<OutputFormat>,
     path: Option<&str>,
 ) -> (OutputFormat, Option<String>) {
@@ -164,7 +171,15 @@ fn resolve_format(
     match (asked, named, path) {
         (Some(asked), Some(named), Some(path)) if asked != named => (
             asked,
-            Some(format!("--format {} written to {path}", asked.name())),
+            Some(
+                tr!(
+                    l,
+                    "read-format-mismatch",
+                    format = asked.name(),
+                    path = path
+                )
+                .into_owned(),
+            ),
         ),
         (Some(asked), _, _) => (asked, None),
         (None, Some(named), _) => (named, None),
@@ -175,10 +190,11 @@ fn resolve_format(
 /// What `read` writes, where it goes, and the note the pair earns — printed
 /// by the caller, which knows whether the run is going to happen at all.
 pub(crate) fn resolve_output(
+    l: &Localizer,
     asked: &Option<OutputFormat>,
     output: Option<Option<String>>,
 ) -> (OutputFormat, output::Destination, Option<String>) {
-    let (format, note) = resolve_format(*asked, output.as_ref().and_then(|o| o.as_deref()));
+    let (format, note) = resolve_format(l, *asked, output.as_ref().and_then(|o| o.as_deref()));
     let destination = match output {
         None => output::Destination::Stdout,
         // A bare `-o`: the first reading names the file.
@@ -203,27 +219,64 @@ pub(crate) fn refuse_replay_format(
     replaying: bool,
     transform: &TransformArgs,
     integrate: bool,
-) -> Option<String> {
+) -> Option<Refused> {
     if format != OutputFormat::Replay {
         return None;
     }
     if !replaying && !requires_hardware(selection) {
-        return Some(format!(
-            "--format replay needs a real meter; nothing to record from --device {}",
-            selection_id(selection),
-        ));
+        return Some(Refused::ReplayNeedsMeter(selection_id(selection)));
     }
     let flag = transform
         .flag_given()
         .or(integrate.then_some("--integrate"))?;
-    Some(format!(
-        "a replay holds the meter's own frames; pass {flag} when playing it back"
-    ))
+    Some(Refused::ReplayKeepsFrames(flag))
 }
 
+/// Why `read` refused its flags before opening anything, once the run
+/// knows it will: the closing `Error:` line. `Display` writes the English,
+/// which is what the log gets; the terminal gets [`Refused::text`] in the
+/// run's language ([`crate::l10n::error_text`]).
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Refused {
+    /// `--format replay` on a device that synthesises its readings; its id.
+    ReplayNeedsMeter(&'static str),
+    /// `--format replay` with a flag that changes the reading; that flag.
+    ReplayKeepsFrames(&'static str),
+    /// `--format replay` for a CSV or JSON `--import`.
+    ImportHasNoFrames,
+    /// `--interval-ms` for an `--import`.
+    ImportHasNoInterval,
+}
+
+impl Refused {
+    pub(crate) fn text(self, l: &Localizer) -> Cow<'_, str> {
+        match self {
+            Self::ReplayNeedsMeter(device) => {
+                tr!(l, "read-replay-format-needs-meter", device = device)
+            }
+            Self::ReplayKeepsFrames(flag) => tr!(l, "read-replay-format-keeps-frames", flag = flag),
+            Self::ImportHasNoFrames => tr!(l, "read-import-no-frames"),
+            Self::ImportHasNoInterval => tr!(l, "read-import-no-interval"),
+        }
+    }
+}
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text(crate::l10n::english()))
+    }
+}
+
+impl std::error::Error for Refused {}
+
 /// Why `--device` is refused alongside `--replay`.
-pub(crate) const REPLAY_NAMES_ITS_DEVICE: &str =
-    "--replay names its own meter in the file; drop --device (dmm-cli read --replay FILE)";
+pub(crate) fn replay_names_its_device(l: &Localizer) -> Cow<'_, str> {
+    tr!(
+        l,
+        "read-replay-names-its-device",
+        command = "dmm-cli read --replay FILE"
+    )
+}
 
 /// Play a recording back as the session, with no meter on the cable.
 ///
@@ -242,12 +295,17 @@ fn read_replay(
     alarm: Option<AlarmOptions>,
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let l = crate::l10n::get();
     let replay = dmm_shared::replay::load(path)?;
     // The file names its meter, by the row it was recorded under.
     crate::open::note_picked(replay.listing.id(), crate::open::PickedBy::Recording);
     // On screen the pace is the point; into a file it is only a wait.
     if clock.is_real() && !matches!(destination, output::Destination::Stdout) {
-        eprintln!("{}", style(PACED_REPLAY_HINT).dim());
+        let hint = tr!(l, "read-paced-replay", flag = "--mock-clock-scale max");
+        eprintln!(
+            "{}",
+            style(format!("{} {hint}", tr!(l, "common-note-label"))).dim()
+        );
     }
     let recorded =
         dmm_shared::replay::recorded_at(&replay).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -304,6 +362,7 @@ fn read_replay(
 /// The session clock the `--mock-clock-*` flags ask for, or why they can't
 /// be honoured, naming the value rather than the flag.
 pub(crate) fn session_clock(
+    l: &Localizer,
     scale: Option<ClockScale>,
     preseed: Option<f64>,
     replay: bool,
@@ -313,23 +372,16 @@ pub(crate) fn session_clock(
         // waits and the stream's pacing advance it by exactly the recorded
         // gaps, so every reading keeps its timestamp and nothing waits.
         Some(ClockScale::Max) if preseed.is_some() => {
-            Err("'max' takes no preseed: every frame already plays without waiting".to_string())
+            Err(tr!(l, "read-clock-max-no-preseed").into_owned())
         }
         // Only a replay ends: a live mock at `max` would print readings as
         // fast as the CPU goes until Ctrl+C, and grow a file without limit.
-        Some(ClockScale::Max) if !replay => {
-            Err("'max' needs --replay: only a recording ends on its own".to_string())
-        }
+        Some(ClockScale::Max) if !replay => Err(tr!(l, "read-clock-max-needs-replay").into_owned()),
         Some(ClockScale::Max) => Ok(dmm_lib::Clock::manual()),
         Some(ClockScale::Factor(f)) => dmm_lib::Clock::from_flags(Some(f), preseed),
         None => dmm_lib::Clock::from_flags(None, preseed),
     }
 }
-
-/// What a replay played at its recorded pace into a file says once: the run
-/// takes as long as the recording did.
-const PACED_REPLAY_HINT: &str =
-    "Note: playing at the recorded pace; add --mock-clock-scale max to convert without waiting";
 
 /// Refuse a bent session clock on a device that is paced by USB.
 ///
@@ -381,29 +433,24 @@ impl<'a> Run<'a> {
         alarm: Option<AlarmOptions>,
         next_marker: u32,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        let l = crate::l10n::get();
         let mut writer = output::Writer::new(destination, meter_name)?;
+        // Dim, "Note:" included: these say how the run was set up.
+        let note = tr!(l, "common-note-label");
         if !transform.is_identity() {
             // On stderr so a redirected CSV or JSON stream stays
             // machine-readable, but visible: nothing in the output itself says
             // the numbers are not what the meter displayed.
-            eprintln!(
-                "{}",
-                style(format!(
-                    "Note: readings scaled in software ({})",
-                    transform.describe()
-                ))
-                .dim()
-            );
+            let scaled = tr!(l, "read-scaled", transform = transform.describe());
+            eprintln!("{}", style(format!("{note} {scaled}")).dim());
         }
         if let Some(alarm) = &alarm {
-            eprintln!(
-                "{}",
-                style(format!(
-                    "Note: alarm on: {}",
-                    alarm.limits.describe(alarm.hysteresis),
-                ))
-                .dim()
+            let on = tr!(
+                l,
+                "read-alarm-on",
+                limits = l.alarm_limits(&alarm.limits, alarm.hysteresis)
             );
+            eprintln!("{}", style(format!("{note} {on}")).dim());
         }
         if let Some(header) = out.header(meter_name) {
             write!(writer, "{header}")?;
@@ -444,12 +491,11 @@ impl<'a> Run<'a> {
         // mode and unit, and neither check subsumes the other — see
         // `SeriesStats`, which resets both accumulators and reports the change.
         if let Some(change) = self.session.push(&m) {
-            let what = if self.integrate {
-                "statistics and integral"
-            } else {
-                "statistics"
-            };
-            eprintln!("{} {change}, {what} reset", style("Note:").yellow());
+            eprintln!(
+                "{} {}",
+                note_label(),
+                series_reset(crate::l10n::get(), &change, self.integrate)
+            );
         }
         let marker = self.check_alarm(&m, marker);
         let marker = marker.as_ref().map(|(n, note)| (*n, note.as_ref()));
@@ -482,18 +528,21 @@ impl<'a> Run<'a> {
         let Some(alarm) = &mut self.alarm else {
             return marker;
         };
+        let l = crate::l10n::get();
         let breach = alarm.check(m, !self.transform.is_identity());
         // Said on every change of what the readings are in, so an unattended
         // log follows each dial turn, not only the first away.
         if alarm.idle() != self.noted_idle.as_deref() {
             match (alarm.idle(), alarm.quantity()) {
                 (Some(now), Some(watched)) => eprintln!(
-                    "{} alarm idle: readings in {now}, limits in {watched}",
-                    style("Note:").yellow(),
+                    "{} {}",
+                    note_label(),
+                    tr!(l, "read-alarm-idle", now = now, watched = watched),
                 ),
                 (None, Some(watched)) => eprintln!(
-                    "{} alarm watching readings in {watched} again",
-                    style("Note:").yellow(),
+                    "{} {}",
+                    note_label(),
+                    tr!(l, "read-alarm-watching", watched = watched),
                 ),
                 _ => {}
             }
@@ -502,29 +551,35 @@ impl<'a> Run<'a> {
         let Some(breach) = breach else {
             return marker;
         };
-        let note = breach.note();
+        // In the run's language, on the line and in the marker the file
+        // keeps, as a note the user typed would be.
+        let said = l.breach_note(&breach);
         if !breach.crossing {
             // Out before the alarm saw it cross: said, not marked or rung.
-            eprintln!("{} {note}", style("Note:").yellow());
+            eprintln!("{} {said}", note_label());
             return marker;
         }
         eprintln!(
-            "{}{} {note} ({} {})",
+            "{}{} {}",
             if self.bell { "\x07" } else { "" },
-            style("Alarm:").red().bold(),
-            m.value_display_str(),
-            m.unit,
+            style(tr!(l, "read-alarm-label")).red().bold(),
+            tr!(
+                l,
+                "read-alarm-breach",
+                breach = said.as_str(),
+                reading = format!("{} {}", m.value_display_str(), m.unit)
+            ),
         );
         Some(match marker {
             Some((n, own)) => {
                 let mut own = own.into_owned();
-                dmm_shared::export::append_note(&mut own, &note);
+                dmm_shared::export::append_note(&mut own, &said);
                 (n, own.into())
             }
             None => {
                 let n = self.next_marker;
                 self.next_marker += 1;
-                (n, note.into())
+                (n, said.into())
             }
         })
     }
@@ -542,12 +597,14 @@ impl<'a> Run<'a> {
         protocol_errors: usize,
         fatal: Option<dmm_lib::error::Error>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let l = crate::l10n::get();
         info!("shutting down");
         self.writer.flush()?;
         if protocol_errors > 0 {
             eprintln!(
-                "\n{} {protocol_errors} readings skipped (unreadable frames)",
-                style("Note:").yellow(),
+                "\n{} {}",
+                note_label(),
+                tr!(l, "read-skipped-frames", count = protocol_errors),
             );
         }
         let session = &self.session;
@@ -562,36 +619,53 @@ impl<'a> Run<'a> {
                 .filter(|u| !u.is_empty())
                 .map(|u| format!(" {u}"))
                 .unwrap_or_default();
+            // Cyan figures, each with the unit after it.
+            let figure = |v: f64| format!("{}{unit_suffix}", style(format!("{v:.4}")).cyan());
+            let count = session.stats.count;
+            let (min, max, mean) = (figure(min), figure(max), figure(avg));
             // σ needs two samples; a one-reading summary leaves it out.
-            let sd = session
-                .stats
-                .std_dev()
-                .map(|sd| format!(" | σ: {}{unit_suffix}", style(format!("{sd:.4}")).cyan()))
-                .unwrap_or_default();
-            eprintln!(
-                "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Mean: {}{unit_suffix}{sd}",
-                style("---").dim(),
-                session.stats.count,
-                style(format!("{min:.4}")).cyan(),
-                style(format!("{max:.4}")).cyan(),
-                style(format!("{avg:.4}")).cyan(),
-            );
+            let summary = match session.stats.std_dev() {
+                Some(sd) => tr!(
+                    l,
+                    "read-summary-sd",
+                    count = count,
+                    min = min,
+                    max = max,
+                    mean = mean,
+                    sd = figure(sd),
+                ),
+                None => tr!(
+                    l,
+                    "read-summary",
+                    count = count,
+                    min = min,
+                    max = max,
+                    mean = mean
+                ),
+            };
+            eprintln!("\n{} {summary}", style("---").dim());
             if let Some((value, disp_unit)) = session.integral_display() {
-                let dt_str = session
-                    .integrator
-                    .elapsed_secs()
-                    .map(|s| format!(" ({}s)", style(format!("{s:.1}")).cyan()))
-                    .unwrap_or_default();
-                eprintln!(
-                    "    Integral: {} {disp_unit}{dt_str}",
-                    style(format!("{value:.4}")).cyan(),
-                );
+                let value = format!("{} {disp_unit}", style(format!("{value:.4}")).cyan());
+                let integral = match session.integrator.elapsed_secs() {
+                    Some(s) => tr!(
+                        l,
+                        "read-integral-timed",
+                        value = value,
+                        seconds = style(format!("{s:.1}")).cyan().to_string(),
+                    ),
+                    None => tr!(l, "read-integral", value = value),
+                };
+                eprintln!("    {integral}");
                 if session.integrator.skipped_intervals > 0 {
                     eprintln!(
-                        "    {} {} intervals skipped (no reading for more than {} s, 5 sample intervals and at least 2 s \u{2014} the integral is partial)",
-                        style("Note:").yellow(),
-                        session.integrator.skipped_intervals,
-                        session.integrator.max_dt_secs(),
+                        "    {} {}",
+                        note_label(),
+                        tr!(
+                            l,
+                            "read-skipped-intervals",
+                            count = session.integrator.skipped_intervals,
+                            max = session.integrator.max_dt_secs().to_string(),
+                        ),
                     );
                 }
             }
@@ -602,32 +676,36 @@ impl<'a> Run<'a> {
                 .map(|u| format!(" {u}"))
                 .unwrap_or_default();
             let limits = alarm.limits();
-            let counts: Vec<_> = [
-                limits
-                    .high
-                    .map(|v| format!("{} above {v}{unit}", alarm.high_count)),
-                limits
-                    .low
-                    .map(|v| format!("{} below {v}{unit}", alarm.low_count)),
-            ]
-            .into_iter()
-            .flatten()
-            .collect();
-            eprintln!("    Alarms: {}", counts.join(", "));
+            let which = match (limits.high, limits.low) {
+                (Some(_), Some(_)) => "both",
+                (Some(_), None) => "high",
+                _ => "low",
+            };
+            let limit = |v: Option<f64>| v.map(|v| format!("{v}{unit}")).unwrap_or_default();
+            let counts = tr!(
+                l,
+                "read-alarm-counts",
+                limits = which,
+                above = alarm.high_count,
+                high = limit(limits.high),
+                below = alarm.low_count,
+                low = limit(limits.low),
+            );
+            eprintln!("    {counts}");
         }
         // Only a file the run named itself is worth a line, either way: every
         // other destination is in the command the user typed.
         match self.writer.finish()? {
             output::Wrote::Named(path) => {
-                eprintln!("{}", style(format!("Written to {}", path.display())).dim());
+                let path = path.display().to_string();
+                eprintln!("{}", style(tr!(l, "read-written-to", path = path)).dim());
             }
             // The reference promises `-o` prints the path it wrote, so a run
             // with no reading to name a file after has to say that instead of
             // nothing.
-            output::Wrote::Nothing => eprintln!(
-                "{}",
-                style("No readings arrived, so no file was written").dim()
-            ),
+            output::Wrote::Nothing => {
+                eprintln!("{}", style(tr!(l, "read-nothing-written")).dim())
+            }
             output::Wrote::AsAsked => {}
         }
         match fatal {
@@ -635,6 +713,30 @@ impl<'a> Run<'a> {
             None => Ok(()),
         }
     }
+}
+
+/// The note that the statistics start again, for `change` in a run that
+/// integrates the readings or doesn't.
+fn series_reset<'a>(l: &'a Localizer, change: &'a SeriesChange, integrate: bool) -> Cow<'a, str> {
+    let (kind, before, after) = match change {
+        SeriesChange::Mode { prev, new } => (
+            if integrate { "mode-integral" } else { "mode" },
+            l.label(TextKind::Mode, prev),
+            l.label(TextKind::Mode, new),
+        ),
+        SeriesChange::Unit { prev, new } => (
+            if integrate { "unit-integral" } else { "unit" },
+            Cow::Borrowed(prev.as_str()),
+            Cow::Borrowed(new.as_str()),
+        ),
+    };
+    tr!(
+        l,
+        "read-series-reset",
+        change = kind,
+        before = before,
+        after = after
+    )
 }
 
 /// What the `--alarm-*` flags ask of a run.
@@ -743,10 +845,16 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 log::warn!("protocol error: {e}");
                 protocol_errors += 1;
                 if protocol_errors == 1 || protocol_errors.is_multiple_of(100) {
+                    let l = crate::l10n::get();
                     eprintln!(
-                        "{} {} (skipped {protocol_errors} so far)",
-                        style("Warning:").yellow(),
-                        crate::l10n::get().error(&e)
+                        "{} {}",
+                        warning_label(),
+                        tr!(
+                            l,
+                            "read-unreadable-frame",
+                            error = l.error(&e),
+                            count = protocol_errors
+                        ),
                     );
                 }
             }
@@ -761,15 +869,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 
 /// Why `--import` refuses a flag alongside a CSV or JSON file: the readings
 /// are already taken, and the file holds no frames to copy.
-pub(crate) fn refuse_for_import(format: OutputFormat, interval_ms: u64) -> Option<&'static str> {
+pub(crate) fn refuse_for_import(format: OutputFormat, interval_ms: u64) -> Option<Refused> {
     if format == OutputFormat::Replay {
-        return Some(
-            "a CSV or JSON file holds no meter frames to write as a replay; --import a replay file for that",
-        );
+        return Some(Refused::ImportHasNoFrames);
     }
-    (interval_ms != 0).then_some(
-        "--interval-ms keeps readings as a meter sends them; a file's readings are all there is",
-    )
+    (interval_ms != 0).then_some(Refused::ImportHasNoInterval)
 }
 
 /// `read --import`: a CSV or JSON export read back and written out again, in
@@ -856,16 +960,22 @@ mod tests {
     use clap::Parser;
     use dmm_lib::protocol::registry;
 
+    /// The English every test reads.
+    fn l() -> &'static Localizer {
+        crate::l10n::english()
+    }
+
     /// `max` is a clock that waits for nothing: an hour slept is an hour of
     /// session time at once. It hands out no burst, so a preseed is refused.
     #[test]
     fn the_max_scale_waits_for_nothing() {
-        let clock = session_clock(Some(ClockScale::Max), None, true).expect("max alone");
+        let clock = session_clock(l(), Some(ClockScale::Max), None, true).expect("max alone");
         let before = clock.now();
         clock.sleep(Duration::from_secs(3600));
         assert_eq!(clock.now(), before + Duration::from_secs(3600));
         assert!(!clock.is_real(), "refused on hardware like the other flags");
-        let err = session_clock(Some(ClockScale::Max), Some(10.0), true).expect_err("no burst");
+        let err =
+            session_clock(l(), Some(ClockScale::Max), Some(10.0), true).expect_err("no burst");
         assert!(err.contains("preseed"), "{err}");
     }
 
@@ -873,9 +983,9 @@ mod tests {
     /// goes until Ctrl+C: `max` takes a replay, and a factor does not need one.
     #[test]
     fn the_max_scale_needs_a_replay() {
-        let err = session_clock(Some(ClockScale::Max), None, false).expect_err("no replay");
+        let err = session_clock(l(), Some(ClockScale::Max), None, false).expect_err("no replay");
         assert!(err.contains("'max'") && err.contains("--replay"), "{err}");
-        assert!(session_clock(Some(ClockScale::Factor(20.0)), None, false).is_ok());
+        assert!(session_clock(l(), Some(ClockScale::Factor(20.0)), None, false).is_ok());
     }
 
     /// A bent clock on a USB-paced meter would stamp readings with instants
@@ -911,18 +1021,18 @@ mod tests {
             ("readings.dat", OutputFormat::Text),
             ("readings", OutputFormat::Text),
         ] {
-            let (format, note) = resolve_format(None, Some(path));
+            let (format, note) = resolve_format(l(), None, Some(path));
             assert_eq!(format, expected, "{path}");
             assert!(note.is_none(), "{path}");
         }
-        assert_eq!(resolve_format(None, None).0, OutputFormat::Text);
+        assert_eq!(resolve_format(l(), None, None).0, OutputFormat::Text);
     }
 
     /// `--format` wins over the name of the file it writes to — but a `.json`
     /// file holding CSV is worth a word.
     #[test]
     fn an_explicit_format_wins_over_the_extension_and_says_so() {
-        let (format, note) = resolve_format(Some(OutputFormat::Csv), Some("readings.json"));
+        let (format, note) = resolve_format(l(), Some(OutputFormat::Csv), Some("readings.json"));
         assert_eq!(format, OutputFormat::Csv);
         assert_eq!(
             note.as_deref(),
@@ -931,7 +1041,7 @@ mod tests {
         // Matching or unrecognised extensions say nothing.
         for path in ["readings.csv", "readings.dat", "readings"] {
             assert!(
-                resolve_format(Some(OutputFormat::Csv), Some(path))
+                resolve_format(l(), Some(OutputFormat::Csv), Some(path))
                     .1
                     .is_none(),
                 "{path}"
@@ -962,7 +1072,8 @@ mod tests {
                     false,
                     &transform,
                     integrate,
-                ),
+                )
+                .map(|refused| refused.to_string()),
                 _ => panic!("expected Read"),
             }
         };
@@ -990,7 +1101,8 @@ mod tests {
             unit: None,
         };
         let message = refuse_replay_format(OutputFormat::Replay, mock, false, &transform, false)
-            .expect("the mock has no frames");
+            .expect("the mock has no frames")
+            .to_string();
         assert!(
             message.contains("--format replay needs a real meter"),
             "got {message}"

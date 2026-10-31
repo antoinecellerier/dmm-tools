@@ -22,13 +22,14 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 /// The library's text: the generated `lib.ftl` and the hand-written
-/// `lib-names.ftl` and `lib-errors.ftl`, in every language the binaries
+/// `lib-names.ftl`, `lib-errors.ftl` and `lib-alarm.ftl`, in every language the binaries
 /// ship. A binary that draws library text or errors lists these with its
 /// own resources.
 pub const LIB_RESOURCES: &[Resource] = &[
     crate::ftl!("en-US", "lib.ftl"),
     crate::ftl!("en-US", "lib-names.ftl"),
     crate::ftl!("en-US", "lib-errors.ftl"),
+    crate::ftl!("en-US", "lib-alarm.ftl"),
 ];
 
 /// Unit symbols, without prefix. With [`PREFIXES`] they are what stays as

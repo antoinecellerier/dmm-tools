@@ -124,7 +124,7 @@ The reason enum's details:
 - Button names (RANGE, SELECT) inside a reason stay as the meter prints them.
 - Mode labels inside a reason go through the lookup in [Library fixed text](#library-fixed-text).
 
-The library's `Display` stays the English rendering, used by logs and by library users without Fluent. `dmm-shared` renders each error and reason through the hand-written `lib-errors.ftl`. One test renders sample reasons through en-US and checks that the result matches `Display`.
+The library's `Display` stays the English rendering, used by logs and by library users without Fluent. `dmm-shared` renders each error and reason through the hand-written `lib-errors.ftl`, and an alarm's limits and breach notes, which the library also builds with `format!`, through `lib-alarm.ftl`; a breach's marker note is written in the user's language, as a note they typed would be, since they read it and can edit it, and recordings and exports keep it as it is. Tests render samples through en-US and check that the result matches the library's English.
 
 **Structure, not sentences.** The renderer is an exhaustive `match`, so a reason added without a message fails to compile. Matching on error text would fail silently instead.
 
