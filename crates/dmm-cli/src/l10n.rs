@@ -5,15 +5,30 @@
 //! the command tree, clap's derive attributes included. Only `main` sets
 //! it, so the unit tests, which never do, always read English.
 
+use console::{StyledObject, style};
 use dmm_shared::l10n::{Localizer, Options, Resource};
+use dmm_shared::tr;
+use std::borrow::Cow;
 use std::sync::OnceLock;
 
 static LOCALIZER: OnceLock<Localizer> = OnceLock::new();
 
-/// Everything dmm-cli shows: the shared help and the library's text and
-/// errors.
+/// dmm-cli's own messages, one file per part of the command tree under
+/// `i18n/<locale>/cli/`.
+const CLI: &[Resource] = &[
+    dmm_shared::ftl!("en-US", "cli/common.ftl"),
+    dmm_shared::ftl!("en-US", "cli/connect.ftl"),
+];
+
+/// Everything dmm-cli shows: the shared help, the library's text and
+/// errors, and its own messages.
 fn resources() -> Vec<Resource> {
-    [dmm_shared::help::RESOURCES, dmm_shared::l10n::LIB_RESOURCES].concat()
+    [
+        dmm_shared::help::RESOURCES,
+        dmm_shared::l10n::LIB_RESOURCES,
+        CLI,
+    ]
+    .concat()
 }
 
 /// Pick the language from `flag` (`--lang`) and `setting` (the settings
@@ -29,13 +44,39 @@ pub(crate) fn get() -> &'static Localizer {
     LOCALIZER.get_or_init(|| Localizer::en_us(&resources()))
 }
 
-/// `e` as the terminal shows it: a library error in the run's language,
-/// anything else as it reads.
+/// English whatever the run speaks: what an error's `Display` writes, so
+/// the log, which stays English, says the same as an English terminal.
+pub(crate) fn english() -> &'static Localizer {
+    static ENGLISH: OnceLock<Localizer> = OnceLock::new();
+    ENGLISH.get_or_init(|| Localizer::en_us(&resources()))
+}
+
+/// `e` as the terminal shows it: a library error or one of dmm-cli's own
+/// in the run's language, anything else as it reads.
 pub(crate) fn error_text(e: &(dyn std::error::Error + 'static)) -> String {
-    match e.downcast_ref::<dmm_lib::error::Error>() {
-        Some(e) => get().error(e),
-        None => e.to_string(),
+    if let Some(e) = e.downcast_ref::<dmm_lib::error::Error>() {
+        return get().error(e);
     }
+    if let Some(e) = e.downcast_ref::<crate::open::OpenFailed>() {
+        return e.text(get()).into_owned();
+    }
+    e.to_string()
+}
+
+/// `Error:`, red and bold, to open the line saying why a command failed.
+pub(crate) fn error_label() -> StyledObject<Cow<'static, str>> {
+    style(tr!(get(), "common-error-label")).red().bold()
+}
+
+/// `Warning:`, yellow, to open a line about something off that the command
+/// goes on past.
+pub(crate) fn warning_label() -> StyledObject<Cow<'static, str>> {
+    style(tr!(get(), "common-warning-label")).yellow()
+}
+
+/// `Note:`, yellow, to open a line about how the command runs.
+pub(crate) fn note_label() -> StyledObject<Cow<'static, str>> {
+    style(tr!(get(), "common-note-label")).yellow()
 }
 
 #[cfg(test)]
@@ -43,11 +84,12 @@ mod tests {
     use super::*;
 
     /// Every lookup in dmm-cli names an en-US message with the variables
-    /// it is given.
+    /// it is given, and every message in its own files is used.
     #[test]
     fn the_messages_match_their_uses() {
         let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let problems = dmm_shared::l10n::check::check(&src, &resources(), &[]);
+        let owned: Vec<&str> = CLI.iter().map(|r| r.path).collect();
+        let problems = dmm_shared::l10n::check::check(&src, &resources(), &owned);
         assert!(problems.is_empty(), "{problems:#?}");
     }
 }

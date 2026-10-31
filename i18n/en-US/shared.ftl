@@ -96,7 +96,12 @@ setup-bluetooth-scan = Run 'dmm-cli list' to scan for adapters and meters in ran
 
 ## Notices both binaries show.
 
+# A cable or Bluetooth link is open but no meter on it identified itself.
+# A notice title in the GUI; dmm-cli starts a sentence with it, naming the
+# link after it (cli/connect.ftl).
 no-meter-answered = No meter answered
+# The meter picked or found has stopped answering. A notice title in the
+# GUI; dmm-cli starts a sentence with it (cli/connect.ftl).
 no-response = No response from meter
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.

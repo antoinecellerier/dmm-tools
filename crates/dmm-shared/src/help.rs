@@ -18,6 +18,7 @@ use dmm_lib::list_devices;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{Stability, registry};
+use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
 use std::borrow::Cow;
 use std::sync::OnceLock;
@@ -280,6 +281,7 @@ impl<'a> Help<'a> {
             // No adapter to wake, and the meter named: its own steps say how
             // to switch its radio on.
             LinksSearched::BluetoothOnly { activation, .. } => {
+                let activation = self.0.label(TextKind::Activation, activation);
                 let steps = activation
                     .lines()
                     .map(|l| l.to_string())
@@ -604,8 +606,9 @@ pub enum LinksSearched<'a> {
     UsbAndBluetooth,
     /// One Bluetooth adapter, named by address or peripheral id.
     BluetoothAt(&'a str),
-    /// The radio alone, for a meter with Bluetooth built in: its display
-    /// name and the registry's steps that switch its radio on.
+    /// The radio alone, for a meter with Bluetooth built in: its name as
+    /// the help shows it, and the registry's steps that switch its radio
+    /// on, in English: [`Help::sections`] looks them up.
     BluetoothOnly {
         model: &'a str,
         activation: &'static str,

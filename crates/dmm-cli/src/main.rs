@@ -20,6 +20,8 @@ use cmd::settings::{cmd_get, cmd_set};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_shared::help::LinksSearched;
+use dmm_shared::tr;
+use l10n::{error_label, note_label};
 use log::error;
 use open::{
     device_for_listing, open_recording_with_help, opened_device, pinned_mock_mode,
@@ -30,6 +32,7 @@ fn main() {
     // First: the language decides every line printed from here on, `--help`
     // included.
     l10n::init(None, "");
+    let l = l10n::get();
     // Build CLI with registry-generated --device long_help and a dynamic
     // after_long_help that resolves the actual per-platform settings path.
     let mut cmd = Cli::command();
@@ -46,6 +49,7 @@ fn main() {
     if let Cmd::Triage(args) = &cli.command {
         capture::install_triage_logger();
         if let Err(e) = capture::cmd_triage(args, cli.device.as_deref()) {
+            // English, like everything triage prints.
             eprintln!("{} {e}", style("Error:").red().bold());
             std::process::exit(1);
         }
@@ -91,9 +95,9 @@ fn main() {
         Some(s) => s,
         None => {
             eprintln!(
-                "{} unknown device: {}",
-                style("Error:").red().bold(),
-                device_id,
+                "{} {}",
+                error_label(),
+                tr!(l, "connect-unknown-device", device = &device_id),
             );
             std::process::exit(1);
         }
@@ -137,9 +141,13 @@ fn main() {
         // lands here: detecting a meter means opening a cable.
         Cmd::Info | Cmd::Debug { .. } if !requires_hardware(selection) => {
             eprintln!(
-                "{} This command requires real hardware (not supported with --device {}).",
-                style("Error:").red().bold(),
-                selection_id(selection),
+                "{} {}",
+                error_label(),
+                tr!(
+                    l,
+                    "connect-needs-hardware",
+                    device = selection_id(selection)
+                ),
             );
             std::process::exit(1);
         }
@@ -166,7 +174,7 @@ fn main() {
                     bell: alarm.alarm_bell,
                 }),
                 Err(msg) => {
-                    eprintln!("{} {msg}", style("Error:").red().bold());
+                    eprintln!("{} {msg}", error_label());
                     std::process::exit(1);
                 }
             };
@@ -193,7 +201,7 @@ fn main() {
                 Err(msg) => {
                     eprintln!(
                         "{} --mock-clock-scale/--mock-clock-preseed: {msg}",
-                        style("Error:").red().bold(),
+                        error_label(),
                     );
                     std::process::exit(1);
                 }
@@ -203,11 +211,7 @@ fn main() {
             // flag is refused: the settings file names a meter for every run,
             // and a replay must not need it edited.
             if replay.is_some() && device_named {
-                eprintln!(
-                    "{} {}",
-                    style("Error:").red().bold(),
-                    REPLAY_NAMES_ITS_DEVICE,
-                );
+                eprintln!("{} {}", error_label(), REPLAY_NAMES_ITS_DEVICE);
                 std::process::exit(1);
             }
             // Settled before anything opens, so a run that cannot write what
@@ -217,7 +221,7 @@ fn main() {
                 if device_named {
                     eprintln!(
                         "{} --import names its own meter in the file; drop --device",
-                        style("Error:").red().bold(),
+                        error_label(),
                     );
                     std::process::exit(1);
                 }
@@ -225,7 +229,7 @@ fn main() {
                     Some(message) => Err(message.into()),
                     None => {
                         if let Some(note) = note {
-                            eprintln!("{} {note}", style("Note:").yellow());
+                            eprintln!("{} {note}", note_label());
                         }
                         cmd::read::read_import(
                             &path,
@@ -251,7 +255,7 @@ fn main() {
                         // After the refusals: a note about where output goes reads
                         // as a run that started, and this one may not.
                         if let Some(note) = note {
-                            eprintln!("{} {note}", style("Note:").yellow());
+                            eprintln!("{} {note}", note_label());
                         }
                         cmd_read(
                             selection,
@@ -333,23 +337,18 @@ fn main() {
         {
             print_no_response_help(device);
         } else {
-            eprintln!("{} {msg}", style("Error:").red().bold());
+            eprintln!("{} {msg}", error_label());
             if let Some(address) = unreachable_adapter(&*e, cli.adapter.as_deref()) {
                 print_setup_sections(LinksSearched::BluetoothAt(address));
             } else if let Some(device) = unreachable_bluetooth_only(&*e, selection) {
                 print_setup_sections(LinksSearched::BluetoothOnly {
-                    model: open::meter_name(device),
+                    model: &open::prose_name(open::meter_name(device)),
                     activation: device.activation_instructions,
                 });
             } else if bluetooth_switched_off(&*e) {
                 eprintln!(
                     "{}",
-                    style(
-                        crate::l10n::get()
-                            .help()
-                            .cli_bluetooth_off_hint(cli.no_bluetooth)
-                    )
-                    .yellow()
+                    style(l.help().cli_bluetooth_off_hint(cli.no_bluetooth)).yellow()
                 );
             }
         }

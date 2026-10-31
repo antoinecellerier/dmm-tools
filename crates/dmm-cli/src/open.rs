@@ -1,22 +1,38 @@
 //! Opening the meter a command runs against — the one named, or the one
 //! detection finds — and the setup help a failed open prints.
+//!
+//! Everything printed here is in the run's language
+//! (`i18n/<locale>/cli/connect.ftl`), on stderr like every notice, and the
+//! library text in it — model names, activation steps — goes through the
+//! localizer's library lookups. The ids and commands it names stay as typed.
 
 use crate::capture::recording;
+use crate::l10n::{error_label, warning_label};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
+use dmm_lib::text::TextKind;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched};
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
+use std::borrow::Cow;
 use std::sync::OnceLock;
 
 /// Print a "no response" warning with device-specific activation instructions.
 pub(crate) fn print_no_response_help(device: &'static SelectableDevice) {
+    let l = crate::l10n::get();
     eprintln!(
-        "{} {}. Check that it is the {} and that data transmission is enabled.",
-        style("Warning:").yellow(),
-        crate::l10n::get().help().no_response(),
-        meter_name(device),
+        "{} {}",
+        warning_label(),
+        tr!(
+            l,
+            "connect-no-response",
+            title = l.help().no_response(),
+            meter = prose_name(meter_name(device)),
+        ),
     );
     print_picked();
-    eprintln!("{}", style(device.activation_instructions).dim());
+    let steps = l.label(TextKind::Activation, device.activation_instructions);
+    eprintln!("{}", style(steps).dim());
 }
 
 /// Print the setup help for the links that were searched, one section each.
@@ -45,14 +61,13 @@ pub(crate) fn print_setup_sections(links: LinksSearched<'_>) {
 /// Print the whole "nothing found" help: what was looked for, then what to
 /// try on each link it was looked for on.
 fn print_not_found_help(links: LinksSearched<'_>) {
+    let l = crate::l10n::get();
+    let title = l.help().not_found_title(&links);
     eprintln!(
         "{}",
-        style(format!(
-            "{}.",
-            crate::l10n::get().help().not_found_title(&links)
-        ))
-        .yellow()
-        .bold()
+        style(tr!(l, "connect-not-found", title = title))
+            .yellow()
+            .bold()
     );
     print_picked();
     print_setup_sections(links);
@@ -110,23 +125,33 @@ pub(crate) fn picked_line() -> Option<String> {
 
 /// [`picked_line`] for `listing`, picked `by`.
 fn selected_line(listing: registry::Listing, by: PickedBy) -> String {
-    let name = listing.display_name();
-    match by {
-        PickedBy::Flag => format!("Selected: {name} (--device {})", listing.id()),
-        PickedBy::Settings => {
-            format!("Selected: {name} (saved by dmm-gui; pass --device auto to detect the meter)")
-        }
-        PickedBy::Recording => format!("Selected: {name} (named by the recording)"),
-    }
+    let by = match by {
+        PickedBy::Flag => "flag",
+        PickedBy::Settings => "settings",
+        PickedBy::Recording => "recording",
+    };
+    tr!(
+        crate::l10n::get(),
+        "connect-selected",
+        by = by,
+        meter = prose_name(listing.display_name()),
+        device = listing.id(),
+    )
+    .into_owned()
 }
 
 /// Print the name the meter reported for itself through `print`, or that it
 /// reported none — many meters never do, so that is no fault.
 pub(crate) fn print_reported_name(reported: Option<&str>, print: impl Fn(String)) {
-    match reported.filter(|n| !n.is_empty()) {
-        Some(name) => print(format!("Reported name: {}", style(name).bold())),
-        None => print(format!("Reported name: {}", style("(none)").dim())),
-    }
+    let l = crate::l10n::get();
+    let name = match reported.filter(|n| !n.is_empty()) {
+        // The meter's own text, as it sent it.
+        Some(name) => style(name).bold().to_string(),
+        None => style(tr!(l, "connect-reported-name-none"))
+            .dim()
+            .to_string(),
+    };
+    print(tr!(l, "connect-reported-name", name = name).into_owned());
 }
 
 /// Print [`picked_line`], when there is one, under a failed open's headline.
@@ -146,12 +171,38 @@ pub(crate) fn profile_name(profile: &dmm_lib::protocol::DeviceProfile) -> &'stat
     registry::find_device(profile.id).map_or_else(|| profile.display_name(), meter_name)
 }
 
+/// A meter's name as a sentence shows it: [`meter_name`] and the like stay
+/// English for the files they head, and only a simulated meter's name has
+/// words to translate ("Mock UT61E+"); brands and models are as they are.
+pub(crate) fn prose_name(name: &'static str) -> Cow<'static, str> {
+    crate::l10n::get().label(TextKind::Model, name)
+}
+
 /// How the help for a silent cable ends: the way to bypass detection, and
-/// the ask that turns an unrecognised meter into a registry fix.
-const NOT_IDENTIFIED_SELF_HELP: &str = "\nIf the meter is on and transmitting but still not recognised, name it:\n  \
-     dmm-cli --device <id> ...      (dmm-cli --help lists the ids)\n\
-     and please report it with RUST_LOG=dmm_lib=debug output at\n  \
-     https://github.com/antoinecellerier/dmm-tools/issues";
+/// the ask that turns an unrecognised meter into a registry fix. One
+/// paragraph, a line per terminal line, the commands on lines of their own.
+fn not_identified_self_help(l: &Localizer) -> Cow<'_, str> {
+    tr!(
+        l,
+        "connect-not-identified-name-it",
+        command = "dmm-cli --device <id> ...",
+        help = "dmm-cli --help",
+        logging = "RUST_LOG=dmm_lib=debug",
+        url = format!("{}/issues", dmm_shared::help::PROJECT_URL),
+    )
+}
+
+/// The key the messages choose a link's wording by — `usb`, `adapter` (a
+/// Bluetooth adapter on the meter) or `radio` (the meter's own Bluetooth) —
+/// for the link `bridge` is on, told apart as
+/// [`dmm_lib::transport::bridge_link_name`] tells them.
+fn link_key(bridge: &str, built_in_radio: bool) -> &'static str {
+    match bridge == dmm_lib::BLUETOOTH {
+        false => "usb",
+        true if built_in_radio => "radio",
+        true => "adapter",
+    }
+}
 
 /// How both `--adapter` hints spell the value: whatever `dmm-cli list`
 /// printed for that device — a USB cable's serial number or HID path, or a
@@ -193,27 +244,37 @@ pub(crate) fn opened_device(selection: Selection) -> Option<&'static SelectableD
 fn note_detected(detected: dmm_lib::detect::Detected) -> &'static dmm_lib::detect::Detected {
     let detected = AUTO_DETECTED.get_or_init(|| detected);
     let device = detected.device;
+    let l = crate::l10n::get();
+    let meter = prose_name(device.display_name());
     // A name the registry doesn't carry still identifies the family, and the
     // tables in use are then someone else's — say whose, and how to override.
     // Either way the line ends with the exact option that skips the probe next
     // time, so the user never has to look the id up.
-    let note = match &detected.reported_name {
-        Some(name) if !device.answers_to(name) => format!(
-            " (the meter reports {name:?}; using {} tables \u{2014} pass --device {} to keep them, \
-             or another id to override)",
-            device.display_name(),
-            device.id
+    let line = match &detected.reported_name {
+        Some(name) if !device.answers_to(name) => tr!(
+            l,
+            "connect-detected-reports",
+            meter = meter.as_ref(),
+            reported = escaped(name),
+            device = device.id,
         ),
-        _ => format!(
-            " (pass --device {} or pick it in dmm-gui to skip detection next time)",
-            device.id
+        _ => tr!(
+            l,
+            "connect-detected",
+            meter = meter.as_ref(),
+            device = device.id
         ),
     };
-    eprintln!(
-        "{}",
-        style(format!("Detected {}{note}", device.display_name())).dim()
-    );
+    eprintln!("{}", style(line).dim());
     detected
+}
+
+/// `text` escaped as `{:?}` writes it, without the quotes, which the
+/// message supplies: a name with control characters or quotes in it shows
+/// what it holds.
+fn escaped(text: &str) -> String {
+    let quoted = format!("{text:?}");
+    quoted[1..quoted.len() - 1].to_string()
 }
 
 /// Open the meter with helpful error messages for common failures, and say
@@ -322,21 +383,17 @@ fn warn_if_experimental(
     if profile.stability.is_verified() {
         return;
     }
+    let l = crate::l10n::get();
+    let warning = l
+        .help()
+        .stability_warning(&prose_name(profile_name(profile)), profile.stability);
     eprintln!(
         "{}",
-        style(format!(
-            "WARNING: {}",
-            crate::l10n::get()
-                .help()
-                .stability_warning(profile_name(profile), profile.stability)
-        ))
-        .yellow()
-        .bold()
+        style(tr!(l, "connect-unverified-warning", warning = warning))
+            .yellow()
+            .bold()
     );
-    eprintln!(
-        "{}",
-        style("Run 'capture' to generate a report for validation:").yellow()
-    );
+    eprintln!("{}", style(tr!(l, "connect-unverified-capture")).yellow());
     eprintln!(
         "{}",
         style(format!(
@@ -347,7 +404,12 @@ fn warn_if_experimental(
     );
     eprintln!(
         "{}",
-        style(format!("Report feedback: {}", profile.feedback_url())).yellow()
+        style(tr!(
+            l,
+            "connect-report-feedback",
+            url = profile.feedback_url()
+        ))
+        .yellow()
     );
 }
 
@@ -363,20 +425,56 @@ fn print_experimental_note(selection: Selection) {
     if !profile.stability.is_verified() {
         // Its own paragraph: the sections above end in a step, and
         // this is about the meter rather than the link.
+        let l = crate::l10n::get();
+        let warning = l
+            .help()
+            .stability_warning(&prose_name(profile_name(profile)), profile.stability);
         eprintln!();
         eprintln!(
             "{}",
-            style(format!(
-                "{} Report feedback: {}",
-                crate::l10n::get()
-                    .help()
-                    .stability_warning(profile_name(profile), profile.stability),
-                profile.feedback_url()
+            style(tr!(
+                l,
+                "connect-unverified-note",
+                warning = warning,
+                url = profile.feedback_url()
             ))
             .yellow()
         );
     }
 }
+
+/// Why an open failed, once the help printed above it has said what to try:
+/// the closing `Error:` line. `Display` writes the English, which is what
+/// the log gets; the terminal gets [`OpenFailed::text`] in the run's
+/// language ([`crate::l10n::error_text`]).
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum OpenFailed {
+    NotFound,
+    NotIdentified,
+    AdapterNotFound,
+    /// `--device` named a meter on a cable where only a simulated one
+    /// could open; the id it named.
+    NotSimulated(&'static str),
+}
+
+impl OpenFailed {
+    pub(crate) fn text(self, l: &Localizer) -> Cow<'_, str> {
+        match self {
+            Self::NotFound => tr!(l, "connect-error-not-found"),
+            Self::NotIdentified => tr!(l, "connect-error-not-identified"),
+            Self::AdapterNotFound => tr!(l, "connect-error-adapter-not-found"),
+            Self::NotSimulated(id) => tr!(l, "connect-error-not-simulated", device = id),
+        }
+    }
+}
+
+impl std::fmt::Display for OpenFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text(crate::l10n::english()))
+    }
+}
+
+impl std::error::Error for OpenFailed {}
 
 /// Print setup help for the failures a user can act on, and return the error
 /// to report.
@@ -390,7 +488,7 @@ fn open_error_help(
         } => {
             print_not_found_help(LinksSearched::from_usb_failure(bluetooth_searched));
             print_experimental_note(selection);
-            "device not found".into()
+            OpenFailed::NotFound.into()
         }
         // A meter with the radio built in, out of range or asleep: its own
         // steps, not a cable's.
@@ -401,7 +499,7 @@ fn open_error_help(
         } => {
             print_not_found_help(LinksSearched::BluetoothOnly { model, activation });
             print_experimental_note(selection);
-            "device not found".into()
+            OpenFailed::NotFound.into()
         }
         // The cable is there and nothing on it spoke. Every meter it could
         // carry has something the user has to switch on, so list them.
@@ -409,29 +507,28 @@ fn open_error_help(
             bridge,
             built_in_radio,
         } => {
-            eprintln!(
-                "{}",
-                style(format!(
-                    "{} over the {}.",
-                    crate::l10n::get().help().no_meter_answered(),
-                    dmm_lib::transport::bridge_link_name(bridge, built_in_radio)
-                ))
-                .yellow()
-                .bold()
+            let l = crate::l10n::get();
+            let headline = tr!(
+                l,
+                "connect-not-identified",
+                link = link_key(bridge, built_in_radio),
+                title = l.help().no_meter_answered(),
             );
+            eprintln!("{}", style(headline).yellow().bold());
             print_picked();
             for (instructions, names) in
                 dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
             {
                 eprintln!("\n{}", style(names.join(", ")).yellow());
-                for line in instructions.lines() {
+                for line in l.label(TextKind::Activation, instructions).lines() {
                     eprintln!("{}", style(format!("  {line}")).dim());
                 }
             }
-            for line in NOT_IDENTIFIED_SELF_HELP.lines() {
+            eprintln!();
+            for line in not_identified_self_help(l).lines() {
                 eprintln!("{}", style(line).yellow());
             }
-            "device not identified".into()
+            OpenFailed::NotIdentified.into()
         }
         // An address nothing answered: the bus listing would be beside the
         // point, and the only thing that says which addresses are live is a
@@ -440,14 +537,11 @@ fn open_error_help(
             if dmm_lib::is_bluetooth_selector(selector) =>
         {
             print_not_found_help(LinksSearched::BluetoothAt(selector));
-            "adapter not found".into()
+            OpenFailed::AdapterNotFound.into()
         }
         dmm_lib::error::Error::AdapterNotFound(ref detail) => {
-            eprintln!(
-                "{} {}",
-                style("Error:").red().bold(),
-                crate::l10n::get().error(&error)
-            );
+            let l = crate::l10n::get();
+            eprintln!("{} {}", error_label(), l.error(&error));
             // Only a real list is worth setting apart and worth a hint —
             // "nothing is connected" and "couldn't look" are complete on
             // their own.
@@ -456,19 +550,17 @@ fn open_error_help(
             if listed {
                 eprintln!();
             }
-            for line in crate::l10n::get().help().adapter_lines(&adapters) {
+            for line in l.help().adapter_lines(&adapters) {
                 eprintln!("{}", style(line).yellow());
             }
             if listed {
-                eprintln!(
-                    "\n{}",
-                    style(format!("Use {ADAPTER_SELECTOR} to select one.")).dim()
-                );
+                let hint = tr!(l, "connect-adapter-select", selector = ADAPTER_SELECTOR);
+                eprintln!("\n{}", style(hint).dim());
             }
-            if let Some(hint) = crate::l10n::get().help().colonless_address_hint(detail) {
+            if let Some(hint) = l.help().colonless_address_hint(detail) {
                 eprintln!("\n{}", style(hint).yellow());
             }
-            "adapter not found".into()
+            OpenFailed::AdapterNotFound.into()
         }
         e => e.into(),
     }
@@ -493,10 +585,11 @@ pub(crate) fn pinned_mock_mode(
     match saved.parse::<dmm_lib::mock::MockMode>() {
         Ok(_) => Some(saved.to_string()),
         Err(message) => {
+            let error = message.lines().next().unwrap_or_default();
             eprintln!(
-                "{} mock_mode in the settings file: {}",
-                style("Warning:").yellow(),
-                message.lines().next().unwrap_or_default(),
+                "{} {}",
+                warning_label(),
+                tr!(crate::l10n::get(), "connect-saved-mock-mode", error = error),
             );
             None
         }
@@ -525,7 +618,7 @@ pub(crate) fn open_mock_device(
     };
     // Auto is a cable to open and never lands here.
     let Selection::Device(device) = selection else {
-        return Err(format!("--device {} is not simulated", selection_id(selection)).into());
+        return Err(OpenFailed::NotSimulated(selection_id(selection)).into());
     };
     Ok(dmm_lib::mock::open_simulated(device, mode, clock)?)
 }
@@ -551,5 +644,26 @@ mod tests {
             selected_line(et2517a, PickedBy::Recording),
             "Selected: Minipa ET-2517A (named by the recording)"
         );
+    }
+
+    /// The paragraph that closes the help for a silent cable keeps its
+    /// layout: the commands indented under the prose they belong to.
+    #[test]
+    fn the_name_it_paragraph_indents_its_commands() {
+        assert_eq!(
+            not_identified_self_help(crate::l10n::get()),
+            "If the meter is on and transmitting but still not recognised, name it:\n  \
+             dmm-cli --device <id> ...      (dmm-cli --help lists the ids)\n\
+             and please report it with RUST_LOG=dmm_lib=debug output at\n  \
+             https://github.com/antoinecellerier/dmm-tools/issues"
+        );
+    }
+
+    /// A reported name shows what it holds, as `{:?}` would, inside the
+    /// message's own quotes.
+    #[test]
+    fn a_reported_name_is_escaped_without_its_quotes() {
+        assert_eq!(escaped("UT216XD"), "UT216XD");
+        assert_eq!(escaped("a\"b\n\u{1}"), "a\\\"b\\n\\u{1}");
     }
 }
