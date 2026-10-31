@@ -768,19 +768,14 @@ impl App {
         let notice = (self.big_meter_mode != BigMeterMode::Off)
             .then(|| self.connection_notice())
             .flatten();
-        // Rendered by the context rather than spelled out: the binding uses
-        // `Modifiers::COMMAND`, which is Cmd on macOS.
         // The sections and the prose under them as one string: the tooltip is
         // the only place a big-meter session can read them.
         let tooltip = notice.as_ref().map(|n| n.help_text(&self.l10n));
+        // The keys rendered by the context rather than spelled out: the
+        // binding uses `Modifiers::COMMAND`, which is Cmd on macOS.
         let hint = notice.is_some().then(|| {
-            format!(
-                "{} for details",
-                ctx.format_shortcut(&egui::KeyboardShortcut::new(
-                    egui::Modifiers::COMMAND,
-                    egui::Key::B
-                ))
-            )
+            let keys = shortcuts::Shortcut::CycleBigMeter.keys(ctx);
+            dmm_shared::tr!(self.l10n, "reading-big-meter-hint", keys = keys).into_owned()
         });
 
         let main = egui::CentralPanel::default().frame(frame).show(ui, |ui| {
@@ -802,6 +797,7 @@ impl App {
                 transform_is_identity: self.transform.is_identity(),
                 alarm_set: self.alarm.is_some(),
                 notice_kind: notice.as_ref().map(|n| n.kind),
+                language: self.l10n.language().id,
             };
             let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
 
@@ -827,6 +823,7 @@ impl App {
                     };
                     let (scale, measured_ratios, picked) = display::show_reading_large(
                         ui,
+                        &self.l10n,
                         self.last_measurement.as_ref(),
                         display::ReadingFit {
                             base_content_height: content_h,
@@ -1180,7 +1177,7 @@ mod tests {
     /// ends at what is meant to stay as it is: library labels, model names,
     /// numbers with units. Two above the Linux count: macOS draws a
     /// Minimise row in the shortcut help.
-    const UNTRANSLATED_CEILING: usize = 81;
+    const UNTRANSLATED_CEILING: usize = 80;
 
     /// Every distinct text the whole app draws or names to a screen reader
     /// in `scene`, under the pseudo-locale, that has a letter outside the

@@ -64,6 +64,7 @@ impl App {
         let picked = match layout {
             ContentLayout::Wide => display::show_reading(
                 ui,
+                &self.l10n,
                 self.last_measurement.as_ref(),
                 &tc,
                 self.reading_state(),
@@ -71,6 +72,7 @@ impl App {
             ),
             ContentLayout::Narrow => display::show_reading_compact(
                 ui,
+                &self.l10n,
                 self.last_measurement.as_ref(),
                 &tc,
                 self.reading_state(),

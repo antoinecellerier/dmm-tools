@@ -161,6 +161,9 @@ pub(super) struct FitInputs {
     /// in length, so the fitted font has to be re-measured when one replaces
     /// another.
     pub(super) notice_kind: Option<NoticeKind>,
+    /// The language the badges, the placeholder and a notice's hint are
+    /// written in, whose words differ in length.
+    pub(super) language: &'static str,
 }
 
 impl FitInputs {
@@ -252,6 +255,7 @@ mod tests {
             transform_is_identity: true,
             alarm_set: false,
             notice_kind: None,
+            language: "en-US",
         }
     }
 
@@ -574,6 +578,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             notice_kind: Some(NoticeKind::NoResponse),
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            language: "fr",
             ..inputs()
         });
         for (i, m) in mutations.iter().enumerate() {

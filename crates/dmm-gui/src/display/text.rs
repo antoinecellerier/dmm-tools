@@ -6,6 +6,8 @@ use super::ReadingState;
 use dmm_lib::alarm::Zone;
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use std::borrow::Cow;
 
 /// Format the meter's raw 7-char display string for stable rendering.
@@ -56,112 +58,126 @@ pub(super) fn format_value_display(m: &Measurement) -> String {
 /// same value formatting as the visible display so AT users hear exactly
 /// what sighted users see.
 ///
+/// The label is a list of phrases, each one whole message, joined by the
+/// language's separator: the value, the mode, the sub-values, the flags, then
+/// the app's own state.
+///
 /// `no_reading` is what the placeholder says when there is no measurement —
-/// [`super::NO_READING_TITLE`], or the connection issue the big meter puts in the
-/// readout instead, so AT hears the problem and not a bare "No reading". It
-/// is ignored when a measurement is given.
+/// `reading-none`, or the connection issue the big meter puts in the readout
+/// instead, so AT hears the problem and not a bare "No reading". It is
+/// ignored when a measurement is given.
 pub(super) fn live_region_label(
+    l10n: &Localizer,
     measurement: Option<&Measurement>,
     state: ReadingState,
     no_reading: &str,
 ) -> String {
-    match measurement {
-        Some(m) => {
-            let value = match &m.value {
-                MeasuredValue::Overload => "overload".to_string(),
-                MeasuredValue::NcvLevel(l) => format!("NCV level {l}"),
-                MeasuredValue::NoReading(word) => spoken_no_reading(word),
-                MeasuredValue::Normal(_) => format_value_display(m).trim().to_string(),
-                // Nothing to say before the mode: the sub-values carry it.
-                MeasuredValue::Absent => String::new(),
-            };
-            let mut parts = String::with_capacity(96);
-            // Spoken where it is drawn, ahead of the digits — and, as there,
-            // not for a frame without its main reading.
-            if let Some(label) = m.main_label.filter(|_| m.has_main_reading()) {
-                parts.push_str(label.as_str());
-                parts.push(' ');
-            }
-            if !value.is_empty() {
-                parts.push_str(&value);
-                if !m.unit.is_empty() {
-                    parts.push(' ');
-                    parts.push_str(&spoken_unit(&m.unit));
-                }
-            }
-            // "Auto" with no function lit is both the word and the mode;
-            // saying it twice reads as two things.
-            let mode_is_the_word =
-                matches!(m.value, MeasuredValue::NoReading(word) if word == m.mode);
-            if !m.mode.is_empty() && !mode_is_the_word {
-                if !parts.is_empty() {
-                    parts.push_str(", ");
-                }
-                parts.push_str(&m.mode);
-            }
-            // Sub-values sit between the mode and the flags. Whether the
-            // rows are drawn under the reading or beside it depends on the
-            // window, so the spoken order follows neither; it stays put
-            // while the layout moves. Without them a UT181A user in MIN/MAX
-            // hears only the live value and never the extremes the meter is
-            // actually displaying.
-            for aux in m.present_aux() {
-                parts.push_str(", ");
-                parts.push_str(&aux.label);
-                parts.push(' ');
-                parts.push_str(&spoken_aux_value(aux));
-                let unit = spoken_unit(aux.unit_or(&m.unit));
-                if !unit.is_empty() {
-                    parts.push(' ');
-                    parts.push_str(&unit);
-                }
-                // The visible row ends in "@12s"; spelling it out is the only
-                // way an AT user learns *when* a MIN/MAX extreme was caught,
-                // which is half of what those readings mean.
-                if let Some(secs) = aux.elapsed_secs {
-                    parts.push_str(" at ");
-                    parts.push_str(&secs.to_string());
-                    parts.push_str(if secs == 1 { " second" } else { " seconds" });
-                }
-            }
-            // Speak the same status flags that the visible badge row shows.
-            // Without this, a screen reader user toggling HOLD/REL/MIN/MAX/
-            // AUTO via the on-device buttons hears the value change but no
-            // confirmation that the mode actually flipped.
-            append_flags_phrase(&mut parts, &m.flags);
-            // Last, after the flags, so it reads as one more badge — which is
-            // exactly where the SCALE badge sits on screen. Without it a
-            // screen-reader user has no way to tell a software-scaled reading
-            // from one the meter produced.
-            if state.scaled {
-                parts.push_str(", software scaled");
-            }
-            // The alarm's verdict likewise, as the HI LIMIT / LO LIMIT badge.
-            match state.alarm {
-                Some(Zone::Above) => parts.push_str(", above the high limit"),
-                Some(Zone::Below) => parts.push_str(", below the low limit"),
-                Some(Zone::Inside) | None => {}
-            }
-            parts
-        }
-        None => no_reading.to_string(),
+    let Some(m) = measurement else {
+        return no_reading.to_string();
+    };
+    let mut phrases: Vec<Cow<'_, str>> = Vec::with_capacity(8);
+    let value = match &m.value {
+        MeasuredValue::Overload => tr!(l10n, "reading-spoken-overload"),
+        MeasuredValue::NcvLevel(l) => tr!(l10n, "reading-spoken-ncv", level = *l),
+        MeasuredValue::NoReading(word) => spoken_no_reading(l10n, word),
+        MeasuredValue::Normal(_) => Cow::Owned(format_value_display(m).trim().to_string()),
+        // Nothing to say before the mode: the sub-values carry it.
+        MeasuredValue::Absent => Cow::Borrowed(""),
+    };
+    if !value.is_empty() {
+        let value = with_unit(&value, &spoken_unit(l10n, &m.unit));
+        // Spoken where it is drawn, ahead of the digits — and, as there,
+        // not for a frame without its main reading.
+        phrases.push(match m.main_label.filter(|_| m.has_main_reading()) {
+            Some(label) => tr!(
+                l10n,
+                "reading-spoken-labelled",
+                label = label.as_str(),
+                value = value
+            ),
+            None => Cow::Owned(value),
+        });
+    }
+    // "Auto" with no function lit is both the word and the mode; saying it
+    // twice reads as two things.
+    let mode_is_the_word = matches!(m.value, MeasuredValue::NoReading(word) if word == m.mode);
+    if !m.mode.is_empty() && !mode_is_the_word {
+        phrases.push(Cow::Borrowed(&*m.mode));
+    }
+    // Sub-values sit between the mode and the flags. Whether the rows are
+    // drawn under the reading or beside it depends on the window, so the
+    // spoken order follows neither; it stays put while the layout moves.
+    // Without them a UT181A user in MIN/MAX hears only the live value and
+    // never the extremes the meter is actually displaying.
+    for aux in m.present_aux() {
+        let value = with_unit(
+            &spoken_aux_value(l10n, aux),
+            &spoken_unit(l10n, aux.unit_or(&m.unit)),
+        );
+        let label = &*aux.label;
+        phrases.push(match aux.elapsed_secs {
+            // The visible row ends in "@12s"; spelling it out is the only
+            // way an AT user learns *when* a MIN/MAX extreme was caught,
+            // which is half of what those readings mean.
+            Some(secs) => tr!(
+                l10n,
+                "reading-spoken-labelled-at",
+                label = label,
+                value = value,
+                seconds = secs
+            ),
+            None => tr!(
+                l10n,
+                "reading-spoken-labelled",
+                label = label,
+                value = value
+            ),
+        });
+    }
+    // Speak the same status flags that the visible badge row shows. Without
+    // this, a screen reader user toggling HOLD/REL/MIN/MAX/AUTO via the
+    // on-device buttons hears the value change but no confirmation that the
+    // mode actually flipped.
+    phrases.extend(flag_phrases(l10n, &m.flags));
+    // Last, after the flags, so it reads as one more badge — which is
+    // exactly where the SCALE badge sits on screen. Without it a
+    // screen-reader user has no way to tell a software-scaled reading from
+    // one the meter produced.
+    if state.scaled {
+        phrases.push(tr!(l10n, "reading-spoken-scaled"));
+    }
+    // The alarm's verdict likewise, as the HI LIMIT / LO LIMIT badge.
+    match state.alarm {
+        Some(Zone::Above) => phrases.push(tr!(l10n, "reading-spoken-above")),
+        Some(Zone::Below) => phrases.push(tr!(l10n, "reading-spoken-below")),
+        Some(Zone::Inside) | None => {}
+    }
+    phrases.join(&*tr!(l10n, "reading-spoken-separator"))
+}
+
+/// A spoken value and its spoken unit, which may be empty.
+fn with_unit(value: &str, unit: &str) -> String {
+    if unit.is_empty() {
+        value.to_string()
+    } else {
+        format!("{value} {unit}")
     }
 }
 
 /// Spoken form of a sub-value: the parsed value decides, so an overloaded
 /// sub-value is announced as "overload" rather than the letters "O L".
-fn spoken_aux_value(aux: &AuxValue) -> Cow<'_, str> {
+fn spoken_aux_value<'a>(l10n: &'a Localizer, aux: &'a AuxValue) -> Cow<'a, str> {
     match &aux.value {
-        MeasuredValue::Overload => Cow::Borrowed("overload"),
-        MeasuredValue::NoReading(word) => Cow::Owned(spoken_no_reading(word)),
+        MeasuredValue::Overload => tr!(l10n, "reading-spoken-overload"),
+        MeasuredValue::NoReading(word) => spoken_no_reading(l10n, word),
         _ => aux.value_str(),
     }
 }
 
 /// Spoken form of a word the meter shows instead of a reading: said to be no
 /// reading first, since "----" alone reads as four dashes or as nothing.
-fn spoken_no_reading(word: &str) -> String {
-    format!("no reading ({word})")
+fn spoken_no_reading<'a>(l10n: &'a Localizer, word: &str) -> Cow<'a, str> {
+    tr!(l10n, "reading-spoken-no-reading", word = word)
 }
 
 /// Spoken form of a unit string.
@@ -170,16 +186,16 @@ fn spoken_no_reading(word: &str) -> String {
 /// read "°" at all, so a temperature sub-value could otherwise be announced as
 /// a bare "24.1 C". The substitution is confined to the spoken label — the
 /// visible rows keep the symbol.
-fn spoken_unit(unit: &str) -> Cow<'_, str> {
+fn spoken_unit<'a>(l10n: &'a Localizer, unit: &'a str) -> Cow<'a, str> {
     match unit {
-        "\u{00B0}C" => Cow::Borrowed("degrees C"),
-        "\u{00B0}F" => Cow::Borrowed("degrees F"),
+        "\u{00B0}C" => tr!(l10n, "reading-spoken-celsius"),
+        "\u{00B0}F" => tr!(l10n, "reading-spoken-fahrenheit"),
         other => Cow::Borrowed(other),
     }
 }
 
 /// The single order the flags are presented in: `show_flags` paints the
-/// badges in it and `append_flags_phrase` speaks them in it, so the two cannot
+/// badges in it and `flag_phrases` speaks them in it, so the two cannot
 /// drift apart the way three hand-written lists did.
 ///
 /// `Flag::HvWarning` leads — see the hazard-first comment in `show_flags`.
@@ -193,36 +209,37 @@ pub(super) fn badge_order() -> impl Iterator<Item = Flag> {
 ///
 /// `None` where [`Flag::label`] is `None`: the DC/AC distinction rides on the
 /// mode field, so announcing it again would be noise.
-fn spoken(flag: Flag) -> Option<&'static str> {
+fn spoken(l10n: &Localizer, flag: Flag) -> Option<Cow<'_, str>> {
     Some(match flag {
-        Flag::HvWarning => "high voltage warning",
-        Flag::AutoRange => "auto range",
-        Flag::Hold => "hold",
-        Flag::Rel => "relative",
-        Flag::Min => "minimum",
-        Flag::Max => "maximum",
-        Flag::Avg => "average",
-        Flag::PeakMin => "peak minimum",
-        Flag::PeakMax => "peak maximum",
-        Flag::LowBattery => "low battery",
-        Flag::LeadError => "lead error",
-        Flag::Comp => "compare",
-        Flag::Record => "recording",
-        Flag::LoZ => "low impedance",
-        Flag::Void => "void",
+        Flag::HvWarning => tr!(l10n, "reading-spoken-hv-warning"),
+        Flag::AutoRange => tr!(l10n, "reading-spoken-auto-range"),
+        Flag::Hold => tr!(l10n, "reading-spoken-hold"),
+        Flag::Rel => tr!(l10n, "reading-spoken-rel"),
+        Flag::Min => tr!(l10n, "reading-spoken-min"),
+        Flag::Max => tr!(l10n, "reading-spoken-max"),
+        Flag::Avg => tr!(l10n, "reading-spoken-avg"),
+        Flag::PeakMin => tr!(l10n, "reading-spoken-peak-min"),
+        Flag::PeakMax => tr!(l10n, "reading-spoken-peak-max"),
+        Flag::LowBattery => tr!(l10n, "reading-spoken-low-battery"),
+        Flag::LeadError => tr!(l10n, "reading-spoken-lead-error"),
+        Flag::Comp => tr!(l10n, "reading-spoken-comp"),
+        Flag::Record => tr!(l10n, "reading-spoken-record"),
+        Flag::LoZ => tr!(l10n, "reading-spoken-loz"),
+        Flag::Void => tr!(l10n, "reading-spoken-void"),
         Flag::Dc => return None,
     })
 }
 
-/// Append a phrase listing the active status flags, in `badge_order()` — the
-/// same iterator `show_flags` paints from, so what is heard and what is seen
-/// are the same flags in the same order. Each flag is prefixed with ", " so it
-/// reads naturally after the mode field. No-op if all flags are inactive.
-fn append_flags_phrase(out: &mut String, flags: &StatusFlags) {
-    for phrase in badge_order().filter(|f| flags.get(*f)).filter_map(spoken) {
-        out.push_str(", ");
-        out.push_str(phrase);
-    }
+/// The phrases of the active status flags, in `badge_order()` — the same
+/// iterator `show_flags` paints from, so what is heard and what is seen are
+/// the same flags in the same order.
+fn flag_phrases<'a>(
+    l10n: &'a Localizer,
+    flags: &'a StatusFlags,
+) -> impl Iterator<Item = Cow<'a, str>> {
+    badge_order()
+        .filter(|f| flags.get(*f))
+        .filter_map(move |f| spoken(l10n, f))
 }
 
 /// Pack a `StatusFlags` into a u16 bitfield for fingerprint hashing. Bit `i`
@@ -241,12 +258,15 @@ fn flags_bits(flags: &StatusFlags) -> u16 {
 /// produce different output. Lets `set_live_region_cached` skip per-frame
 /// `format!`/`String` allocation when the measurement is unchanged.
 pub(super) fn live_region_fingerprint(
+    l10n: &Localizer,
     measurement: Option<&Measurement>,
     state: ReadingState,
     no_reading: &str,
 ) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
+    // The words are the language's: a switch has to rebuild the label.
+    l10n.language().id.hash(&mut h);
     // Toggling the transform, or the reading crossing a limit, changes the
     // spoken label without necessarily changing the reading, so both have to
     // be in the fingerprint or the cached announcement would never be rebuilt.
@@ -329,8 +349,14 @@ pub(super) fn format_aux_value(aux: &AuxValue) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display::NO_READING_TITLE;
     use crate::display::tests::aux;
+
+    /// The plain placeholder's English.
+    const NO_READING_TITLE: &str = "No reading";
+
+    fn en() -> std::sync::Arc<Localizer> {
+        crate::l10n::english()
+    }
 
     #[test]
     fn format_display_raw_normal() {
@@ -402,7 +428,7 @@ mod tests {
         m.display_raw = Some("    0".to_string());
         assert_eq!(format_value_display(&m).trim(), "OL");
         assert!(
-            live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE)
+            live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE)
                 .starts_with("overload")
         );
     }
@@ -417,27 +443,32 @@ mod tests {
         m.display_raw = Some("   Auto".to_string());
         assert_eq!(format_value_display(&m), "   Auto");
         assert_eq!(
-            live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
             "no reading (Auto)"
         );
         let mut in_a_mode = m.clone();
         in_a_mode.mode = "DC V".into();
         assert_eq!(
-            live_region_label(Some(&in_a_mode), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_label(
+                &en(),
+                Some(&in_a_mode),
+                ReadingState::PLAIN,
+                NO_READING_TITLE
+            ),
             "no reading (Auto), DC V"
         );
 
         let mut over = m.clone();
         over.value = MeasuredValue::Overload;
         assert_ne!(
-            live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
-            live_region_fingerprint(Some(&over), ReadingState::PLAIN, NO_READING_TITLE)
+            live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_fingerprint(&en(), Some(&over), ReadingState::PLAIN, NO_READING_TITLE)
         );
         let mut dashes = m.clone();
         dashes.value = MeasuredValue::NoReading("----");
         assert_ne!(
-            live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
-            live_region_fingerprint(Some(&dashes), ReadingState::PLAIN, NO_READING_TITLE)
+            live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_fingerprint(&en(), Some(&dashes), ReadingState::PLAIN, NO_READING_TITLE)
         );
     }
 
@@ -452,7 +483,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert!(label.contains("V"), "got {label:?}");
         assert!(label.contains("DC V"), "got {label:?}");
         assert!(label.contains("auto range"), "got {label:?}");
@@ -472,7 +503,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         let hv = label.find("high voltage").expect("HV must be announced");
         let auto = label
             .find("auto range")
@@ -486,16 +517,16 @@ mod tests {
     #[test]
     fn the_placeholder_label_carries_the_connection_issue() {
         assert_eq!(
-            live_region_label(None, ReadingState::PLAIN, "No response from meter"),
+            live_region_label(&en(), None, ReadingState::PLAIN, "No response from meter"),
             "No response from meter"
         );
         assert_eq!(
-            live_region_label(None, ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_label(&en(), None, ReadingState::PLAIN, NO_READING_TITLE),
             NO_READING_TITLE
         );
         assert_ne!(
-            live_region_fingerprint(None, ReadingState::PLAIN, "No response from meter"),
-            live_region_fingerprint(None, ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_fingerprint(&en(), None, ReadingState::PLAIN, "No response from meter"),
+            live_region_fingerprint(&en(), None, ReadingState::PLAIN, NO_READING_TITLE),
             "one placeholder replacing another has to be re-announced"
         );
     }
@@ -503,7 +534,7 @@ mod tests {
     #[test]
     fn live_region_label_no_flags_when_inactive() {
         let m = Measurement::test_fixture(MeasuredValue::Normal(0.0), "V", StatusFlags::default());
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         // StatusFlags::default() is all-false, so no flag phrases should
         // appear in the spoken label.
         assert!(!label.contains("hold"), "got {label:?}");
@@ -515,13 +546,13 @@ mod tests {
     fn live_region_fingerprint_changes_on_flag_toggle() {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
-        let fp1 = live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let fp1 = live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         m.flags.hold = true;
-        let fp2 = live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let fp2 = live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_ne!(fp1, fp2, "toggling HOLD must change the fingerprint");
         m.flags.hold = false;
         m.flags.rel = true;
-        let fp3 = live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let fp3 = live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_ne!(fp1, fp3, "toggling REL must change the fingerprint");
         assert_ne!(fp2, fp3, "REL and HOLD must produce distinct fingerprints");
     }
@@ -678,7 +709,7 @@ mod tests {
     fn every_labelled_flag_is_spoken() {
         for flag in Flag::ALL {
             assert_eq!(
-                spoken(flag).is_some(),
+                spoken(&en(), flag).is_some(),
                 flag.label().is_some(),
                 "{flag:?} must be either both labelled and spoken, or neither"
             );
@@ -692,8 +723,8 @@ mod tests {
             peak_min: true,
             ..Default::default()
         };
-        let mut phrase = String::new();
-        append_flags_phrase(&mut phrase, &flags);
+        let en = en();
+        let phrase = flag_phrases(&en, &flags).collect::<Vec<_>>().join(", ");
         assert!(phrase.contains("peak maximum"), "got {phrase:?}");
         assert!(phrase.contains("peak minimum"), "got {phrase:?}");
 
@@ -723,7 +754,7 @@ mod tests {
             aux("Period", "20.00", "ms"),
         ];
 
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert!(label.contains("Frequency 50.01 Hz"), "got {label:?}");
         assert!(label.contains("Period 20.00 ms"), "got {label:?}");
         let mode = label.find("DC V").expect("mode still announced");
@@ -745,7 +776,7 @@ mod tests {
         m.display_raw = Some(" 1.6112".to_string());
         m.main_label = Some(dmm_lib::measurement::MainLabel::Dc);
         m.aux_values = vec![aux("AC", " 0.0123", "")];
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_eq!(label, "DC 1.6112 V, AC+DC V, AC 0.0123 V");
     }
 
@@ -760,13 +791,13 @@ mod tests {
         m.aux_values = vec![aux("AC", " 0.0123", ""), raw];
 
         assert_eq!(format_value_display(&m), "       ");
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_eq!(label, "AC+DC V, AC 0.0123 V");
 
         // As the decoder sends it, named DC on both kinds of frame: with no
         // DC value there is nothing for the name to name.
         m.main_label = Some(dmm_lib::measurement::MainLabel::Dc);
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_eq!(label, "AC+DC V, AC 0.0123 V");
     }
 
@@ -785,7 +816,7 @@ mod tests {
         let plain = aux("Avg", "4.5000", "");
         m.aux_values = vec![max, min, plain];
 
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert!(
             label.contains("Max 5.9010 V at 12 seconds"),
             "got {label:?}"
@@ -808,7 +839,7 @@ mod tests {
         min.value = MeasuredValue::Overload;
         m.aux_values = vec![max, min];
 
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert!(label.contains("Max 5.0123 V"), "got {label:?}");
         assert!(label.contains("Min overload V"), "got {label:?}");
     }
@@ -826,7 +857,7 @@ mod tests {
         );
         m.display_raw = Some("   23.5".to_string());
         m.aux_values = vec![aux("T2", "24.10", "\u{00B0}C")];
-        let label = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert!(label.starts_with("23.5 degrees C"), "got {label:?}");
         assert!(label.contains("T2 24.10 degrees C"), "got {label:?}");
         assert!(
@@ -849,7 +880,7 @@ mod tests {
         );
         assert!(m.aux_values.is_empty());
         assert_eq!(
-            live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
             "5.678 V, DC V, hold"
         );
     }
@@ -860,24 +891,26 @@ mod tests {
     fn live_region_fingerprint_changes_on_sub_value_change() {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
-        let bare = live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let bare = live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
 
         m.aux_values = vec![aux("Max", "5.0123", "")];
-        let with_aux = live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let with_aux =
+            live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_ne!(bare, with_aux, "a sub-value appearing must be noticed");
 
         m.aux_values[0] = aux("Max", "5.0456", "");
-        let moved = live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let moved = live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_ne!(with_aux, moved, "a sub-value changing must be noticed");
 
         m.aux_values[0].elapsed_secs = Some(12);
-        let stamped = live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let stamped =
+            live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert_ne!(moved, stamped, "the @Ns column changing must be noticed");
 
         m.aux_values[0].label = "Min".into();
         assert_ne!(
             stamped,
-            live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
             "a relabelled sub-value must be noticed"
         );
     }
@@ -901,9 +934,9 @@ mod tests {
     fn the_live_region_label_says_when_the_reading_is_software_scaled() {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(12.34), "A", StatusFlags::default());
-        let plain = live_region_label(Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
+        let plain = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert!(!plain.contains("software scaled"), "{plain:?}");
-        let scaled = live_region_label(Some(&m), ReadingState::SCALED, NO_READING_TITLE);
+        let scaled = live_region_label(&en(), Some(&m), ReadingState::SCALED, NO_READING_TITLE);
         assert!(scaled.ends_with(", software scaled"), "{scaled:?}");
         assert!(scaled.starts_with(&plain), "{scaled:?} vs {plain:?}");
     }
@@ -915,8 +948,8 @@ mod tests {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(12.34), "A", StatusFlags::default());
         assert_ne!(
-            live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
-            live_region_fingerprint(Some(&m), ReadingState::SCALED, NO_READING_TITLE)
+            live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_fingerprint(&en(), Some(&m), ReadingState::SCALED, NO_READING_TITLE)
         );
     }
 
@@ -931,12 +964,129 @@ mod tests {
             alarm_set: true,
             alarm: Some(Zone::Above),
         };
-        let label = live_region_label(Some(&m), above, NO_READING_TITLE);
+        let label = live_region_label(&en(), Some(&m), above, NO_READING_TITLE);
         assert!(label.ends_with(", above the high limit"), "{label:?}");
         assert_ne!(
-            live_region_fingerprint(Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
-            live_region_fingerprint(Some(&m), above, NO_READING_TITLE)
+            live_region_fingerprint(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
+            live_region_fingerprint(&en(), Some(&m), above, NO_READING_TITLE)
         );
+    }
+
+    /// The spoken English, whole, for readings of each kind: the phrases,
+    /// their order and the separator all come from `reading.ftl` now, and
+    /// this is what they said when they were written out here.
+    #[test]
+    fn the_spoken_english_is_unchanged() {
+        let en = en();
+        let say = |m: &Measurement, state| live_region_label(&en, Some(m), state, NO_READING_TITLE);
+
+        let held = Measurement::test_fixture(
+            MeasuredValue::Normal(1.234),
+            "V",
+            StatusFlags {
+                hold: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(say(&held, ReadingState::PLAIN), "5.678 V, DC V, hold");
+
+        let over = Measurement::test_fixture(
+            MeasuredValue::Overload,
+            "\u{03A9}",
+            StatusFlags {
+                auto_range: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            say(&over, ReadingState::PLAIN),
+            "overload \u{03A9}, DC V, auto range"
+        );
+
+        let mut extremes = Measurement::test_fixture(
+            MeasuredValue::Normal(23.5),
+            "\u{00B0}C",
+            StatusFlags {
+                max: true,
+                ..Default::default()
+            },
+        );
+        extremes.display_raw = Some("   23.5".to_string());
+        let mut max = aux("Max", "24.10", "");
+        max.elapsed_secs = Some(1);
+        let mut min = aux("Min", "0", "");
+        min.value = MeasuredValue::Overload;
+        min.elapsed_secs = Some(12);
+        extremes.aux_values = vec![max, min, aux("T2", " 22.00", "\u{00B0}F")];
+        let breached = ReadingState {
+            scaled: true,
+            alarm_set: true,
+            alarm: Some(Zone::Above),
+        };
+        assert_eq!(
+            say(&extremes, breached),
+            "23.5 degrees C, DC V, Max 24.10 degrees C at 1 second, \
+             Min overload degrees C at 12 seconds, T2 22.00 degrees F, maximum, \
+             software scaled, above the high limit"
+        );
+
+        let mut ncv = Measurement::test_fixture(
+            MeasuredValue::NcvLevel(3),
+            "",
+            StatusFlags {
+                hv_warning: true,
+                low_battery: true,
+                ..Default::default()
+            },
+        );
+        ncv.mode = "NCV".into();
+        assert_eq!(
+            say(&ncv, ReadingState::PLAIN),
+            "NCV level 3, NCV, high voltage warning, low battery"
+        );
+
+        let below = ReadingState {
+            scaled: false,
+            alarm_set: true,
+            alarm: Some(Zone::Below),
+        };
+        let dashes = Measurement::test_fixture(
+            MeasuredValue::NoReading("----"),
+            "V",
+            StatusFlags::default(),
+        );
+        assert_eq!(
+            say(&dashes, below),
+            "no reading (----) V, DC V, below the low limit"
+        );
+
+        assert_eq!(
+            live_region_label(&en, None, ReadingState::PLAIN, &tr!(en, "reading-none")),
+            "No reading"
+        );
+    }
+
+    /// The cached announcement is rebuilt when the language changes, as its
+    /// words do.
+    #[test]
+    fn the_live_region_fingerprint_tracks_the_language() {
+        static OTHER: dmm_shared::l10n::Language = dmm_shared::l10n::Language {
+            id: "fr",
+            native_name: "Fran\u{00E7}ais",
+            reviewed: false,
+        };
+        let other = Localizer::new(
+            &OTHER,
+            &crate::l10n::resources(),
+            &dmm_shared::l10n::Options::default(),
+        );
+        let m = Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        for measurement in [Some(&m), None] {
+            assert_ne!(
+                live_region_fingerprint(&en(), measurement, ReadingState::PLAIN, NO_READING_TITLE),
+                live_region_fingerprint(&other, measurement, ReadingState::PLAIN, NO_READING_TITLE),
+            );
+        }
     }
 
     #[test]

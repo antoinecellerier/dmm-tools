@@ -18,6 +18,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui/graph.ftl"),
     dmm_shared::ftl!("en-US", "gui/stats-markers.ftl"),
     dmm_shared::ftl!("en-US", "gui/shortcuts.ftl"),
+    dmm_shared::ftl!("en-US", "gui/reading.ftl"),
 ];
 
 /// Everything the GUI shows: the shared help, the library's text and
