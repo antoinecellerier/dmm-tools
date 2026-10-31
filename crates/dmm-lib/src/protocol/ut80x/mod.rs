@@ -511,14 +511,25 @@ impl Ut804Fields {
     /// coupling is still returned (the parser reports it); `None` is a 0
     /// there, or a value past 3.
     fn coupling(&self) -> Option<Coupling> {
-        match self.acdc {
-            1 => Some(Coupling::Ac),
-            2 => Some(Coupling::Dc),
-            3 => Some(Coupling::AcDc),
-            0 if ut804_default_dc(self.mode) => Some(Coupling::Dc),
-            _ => None,
-        }
+        ut804_coupling(self.mode, self.acdc)
     }
+}
+
+/// [`Ut804Fields::coupling`], from the mode and the coupling nibble.
+fn ut804_coupling(mode: u8, acdc: u8) -> Option<Coupling> {
+    match acdc {
+        1 => Some(Coupling::Ac),
+        2 => Some(Coupling::Dc),
+        3 => Some(Coupling::AcDc),
+        0 if ut804_default_dc(mode) => Some(Coupling::Dc),
+        _ => None,
+    }
+}
+
+/// Whether the coupling nibble holds a value §3.5 gives `mode`: 0-3, and
+/// only V, mV, µA, mA and A have one.
+fn ut804_acdc_documented(mode: u8, acdc: u8) -> bool {
+    acdc <= 3 && (acdc == 0 || ut804_default_dc(mode))
 }
 
 /// A UT803 packet's positions (spec §2.1), read here once for everything
@@ -589,6 +600,44 @@ fn mode_info_or_unknown(
     })
 }
 
+/// The mode a UT804-layout reading names in frequency mode with the sign
+/// bit set (spec §7.4 item 7).
+const DUTY_MODE: &str = "Duty %";
+
+/// A UT804-layout reading's mode: `name` from [`ut804_mode_info`], with the
+/// coupling position 8 names on the V/mV/current modes (0 = default DC);
+/// other modes keep their plain name.
+fn ut804_mode_name(name: &'static str, coupling: Option<Coupling>) -> &'static str {
+    let label = match coupling {
+        Some(Coupling::Ac) => match name {
+            "V" => Some("AC V"),
+            "mV" => Some("AC mV"),
+            "µA" => Some("AC µA"),
+            "mA" => Some("AC mA"),
+            "A" => Some("AC A"),
+            _ => None,
+        },
+        Some(Coupling::Dc) => match name {
+            "V" => Some("DC V"),
+            "mV" => Some("DC mV"),
+            "µA" => Some("DC µA"),
+            "mA" => Some("DC mA"),
+            "A" => Some("DC A"),
+            _ => None,
+        },
+        Some(Coupling::AcDc) => match name {
+            "V" => Some("AC+DC V"),
+            "mV" => Some("AC+DC mV"),
+            "µA" => Some("AC+DC µA"),
+            "mA" => Some("AC+DC mA"),
+            "A" => Some("AC+DC A"),
+            _ => None,
+        },
+        None => None,
+    };
+    label.unwrap_or(name)
+}
+
 /// The vendor app's overload text, signed when the sign bit is set.
 fn overload_display(negative: bool) -> Option<String> {
     Some(if negative {
@@ -657,9 +706,7 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
     if f.status & 0x8 != 0 || f.status & 0x3 == 0x3 {
         unrecognised.report("status bits");
     }
-    // Coupling takes values 0-3, and only V, mV, µA, mA and A have one
-    // (§3.5).
-    if f.acdc > 3 || (f.acdc != 0 && !ut804_default_dc(f.mode)) {
+    if !ut804_acdc_documented(f.mode, f.acdc) {
         unrecognised.report("ac/dc nibble");
     }
 
@@ -671,41 +718,12 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
     );
 
     let (mode, negative, dp_pos, unit): (Cow<'static, str>, bool, u8, &'static str) = if f.duty() {
-        (Cow::Borrowed("Duty %"), false, 2, "%")
+        (Cow::Borrowed(DUTY_MODE), false, 2, "%")
     } else if mode_name == "?" {
         (unknown_mode(f.mode), sign_bit, dp_pos, unit)
     } else {
-        // AC/DC labeling comes from position 8 for the V/mV/current
-        // modes (0 = default DC); other modes keep their plain name.
-        let label = match coupling {
-            Some(Coupling::Ac) => match mode_name {
-                "V" => Some("AC V"),
-                "mV" => Some("AC mV"),
-                "µA" => Some("AC µA"),
-                "mA" => Some("AC mA"),
-                "A" => Some("AC A"),
-                _ => None,
-            },
-            Some(Coupling::Dc) => match mode_name {
-                "V" => Some("DC V"),
-                "mV" => Some("DC mV"),
-                "µA" => Some("DC µA"),
-                "mA" => Some("DC mA"),
-                "A" => Some("DC A"),
-                _ => None,
-            },
-            Some(Coupling::AcDc) => match mode_name {
-                "V" => Some("AC+DC V"),
-                "mV" => Some("AC+DC mV"),
-                "µA" => Some("AC+DC µA"),
-                "mA" => Some("AC+DC mA"),
-                "A" => Some("AC+DC A"),
-                _ => None,
-            },
-            None => None,
-        };
         (
-            Cow::Borrowed(label.unwrap_or(mode_name)),
+            Cow::Borrowed(ut804_mode_name(mode_name, coupling)),
             sign_bit,
             dp_pos,
             unit,
@@ -772,6 +790,61 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
     })
 }
 
+/// A UT803 reading's mode: `name` from [`ut803_mode_info`], volts named
+/// DC or AC by position 10's DC bit.
+fn ut803_mode_name(name: &'static str, dc: bool) -> &'static str {
+    match (name, dc) {
+        ("V", true) => "DC V",
+        ("V", false) => "AC V",
+        ("mV", true) => "DC mV",
+        ("mV", false) => "AC mV",
+        _ => name,
+    }
+}
+
+/// Every label the parsers produce, by model: each (mode, range) pair the
+/// model's table knows, with every coupling (UT804 layout) or DC bit and
+/// alt bit (UT803), and the UT804 layout's range labels.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    let models = [
+        Model::Ut803,
+        Model::Ut804,
+        Model::Ut71Ab,
+        Model::Ut71Cde,
+        Model::Vc920,
+    ];
+    // Positions 6 and 7 are nibbles.
+    let nibbles = || 0..=0x0F_u8;
+    for model in models {
+        let by = model.report_id();
+        for (mode, range) in nibbles().flat_map(|m| nibbles().map(move |r| (m, r))) {
+            if !model.ut804_layout() {
+                for alt in [false, true] {
+                    if let Some((name, ..)) = ut803_mode_info(mode, range, alt) {
+                        for dc in [false, true] {
+                            out.add(TextKind::Mode, ut803_mode_name(name, dc), by);
+                        }
+                    }
+                }
+                continue;
+            }
+            let Some((name, _, _, label)) = ut804_mode_info(mode, range) else {
+                continue;
+            };
+            for acdc in nibbles().filter(|&acdc| ut804_acdc_documented(mode, acdc)) {
+                let coupling = ut804_coupling(mode, acdc);
+                out.add(TextKind::Mode, ut804_mode_name(name, coupling), by);
+            }
+            out.add(TextKind::Range, model.range_label(mode, range, label), by);
+        }
+        if model.ut804_layout() {
+            out.add(TextKind::Mode, DUTY_MODE, by);
+        }
+    }
+}
+
 /// Parse a UT803 packet, by the vendor parser's positions
 /// ([`Ut803Fields`]).
 pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
@@ -804,20 +877,15 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
 
     let mode: Cow<'static, str> = if mode_name == "?" {
         unknown_mode(f.mode)
-    } else if mode_name == "V" || mode_name == "mV" {
+    } else {
         // Volts are DC or AC: both bits is AC+DC, open on the UT803 (§5),
         // and neither is undocumented.
-        if !matches!(f.coupling(), Some(Coupling::Dc | Coupling::Ac)) {
+        if matches!(mode_name, "V" | "mV")
+            && !matches!(f.coupling(), Some(Coupling::Dc | Coupling::Ac))
+        {
             unrecognised.report("ac/dc bits");
         }
-        Cow::Borrowed(match (mode_name, dc) {
-            ("V", true) => "DC V",
-            ("V", false) => "AC V",
-            ("mV", true) => "DC mV",
-            _ => "AC mV",
-        })
-    } else {
-        Cow::Borrowed(mode_name)
+        Cow::Borrowed(ut803_mode_name(mode_name, dc))
     };
 
     let (value, display_raw) = if overload {
@@ -3859,5 +3927,36 @@ raw_payload=11"#
         let m = parse_ut804_layout(Model::Ut71Cde, &packet).unwrap();
         assert_eq!(m.display_raw.as_deref(), Some("12.345"));
         assert_eq!(m.mode, "DC V");
+    }
+
+    /// The list holds exactly the labels of the readings each model's parser
+    /// accepts without a report, and the UT804's golden readings.
+    #[test]
+    fn the_listed_labels_are_the_accepted_readings() {
+        use crate::text::TextKind;
+        let all = crate::text::all_texts();
+        crate::text::assert_golden_listed(&all, "ut804");
+        let models = [
+            Model::Ut803,
+            Model::Ut804,
+            Model::Ut71Ab,
+            Model::Ut71Cde,
+            Model::Vc920,
+        ];
+        for model in models {
+            let readings = match model {
+                Model::Ut803 => ut803_accepted_readings(),
+                _ => ut804_layout_accepted_readings(model),
+            };
+            let mut read = std::collections::BTreeSet::new();
+            for (_, m) in readings {
+                read.insert((TextKind::Mode, m.mode.to_string()));
+                if !m.range_label.is_empty() {
+                    read.insert((TextKind::Range, m.range_label.to_string()));
+                }
+            }
+            let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
+            assert_eq!(all.of_device(model.report_id(), &kinds), read, "{model:?}");
+        }
     }
 }

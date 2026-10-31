@@ -53,6 +53,15 @@ const POSITION_TABLE: &[(u8, &str)] = &[
     (0x16, "Duty %"),
 ];
 
+/// Every label the parser produces: the position table's modes. It names
+/// no range.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    for &(_, mode) in POSITION_TABLE {
+        out.add(crate::text::TextKind::Mode, mode, devices::UT8803.id);
+    }
+}
+
 const UT8803_COMMANDS: &[&str] = &[];
 
 /// Display unit (magnitude prefix + base unit) for a (mode, range) pair.
@@ -869,5 +878,16 @@ raw_payload=17"#
         // A stray ASCII letter that isn't O/L is also rejected.
         let payload = make_payload(0x01, 0x00, b"1A.34", 0x00, 0x00, 0x00);
         assert!(parse_measurement(&payload).is_err());
+    }
+
+    #[test]
+    fn every_positions_labels_are_listed() {
+        let all = crate::text::all_texts();
+        let protocol = Ut8803Protocol::new();
+        for (code, _) in POSITION_TABLE {
+            let payload = make_payload(*code, 0x00, b" 1.00", 0x00, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            crate::text::assert_listed(&all, &protocol, &m, devices::UT8803.id);
+        }
     }
 }

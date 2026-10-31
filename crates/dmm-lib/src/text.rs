@@ -75,6 +75,8 @@ impl TextKind {
 
 #[cfg(any(test, feature = "test-support"))]
 pub use list::{Labels, all_texts};
+#[cfg(test)]
+pub(crate) use list::{assert_golden_listed, assert_listed};
 
 #[cfg(any(test, feature = "test-support"))]
 mod list {
@@ -111,6 +113,19 @@ mod list {
         pub fn contains(&self, kind: TextKind, text: &str) -> bool {
             self.0.contains_key(&(kind, Cow::Owned(text.to_string())))
         }
+
+        /// The strings of `kinds` listed as used by device `by`.
+        #[cfg(test)]
+        pub(crate) fn of_device(
+            &self,
+            by: &str,
+            kinds: &[TextKind],
+        ) -> BTreeSet<(TextKind, String)> {
+            self.entries()
+                .filter(|(kind, _, users)| kinds.contains(kind) && users.contains(by))
+                .map(|(kind, text, _)| (kind, text.to_string()))
+                .collect()
+        }
     }
 
     /// Every string the library can show a user, by kind: what the registry
@@ -143,6 +158,7 @@ mod list {
                 }
             }
         }
+        crate::protocol::all_labels(&mut out);
         out
     }
 
@@ -152,6 +168,88 @@ mod list {
         model
             .split(|c: char| !c.is_ascii_alphabetic())
             .any(|w| w.len() >= 3 && w.chars().any(|c| c.is_ascii_lowercase()))
+    }
+
+    /// Panic unless every label of each golden fixture under
+    /// `tests/golden/<device>/`, decoded with that device's parser, is
+    /// listed for it ([`assert_listed`]).
+    #[cfg(test)]
+    pub(crate) fn assert_golden_listed(all: &Labels, device: &'static str) {
+        let entry = registry::find_device(device).expect("a registry id");
+        let protocol = (entry.new_protocol)();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/golden")
+            .join(device);
+        let mut paths: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|e| e == "yaml"))
+            .collect();
+        paths.sort();
+        assert!(!paths.is_empty(), "no fixtures in {}", dir.display());
+        for path in paths {
+            let yaml = std::fs::read_to_string(&path).unwrap();
+            let hex = yaml
+                .lines()
+                .find_map(|l| l.strip_prefix("raw_hex:"))
+                .unwrap_or_else(|| panic!("{}: no raw_hex", path.display()));
+            let hex: String = hex.chars().filter(char::is_ascii_hexdigit).collect();
+            let payload: Vec<u8> = (0..hex.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+                .collect();
+            let m = protocol
+                .parse_payload(&payload)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            assert_listed(all, protocol.as_ref(), &m, device);
+        }
+    }
+
+    /// Panic unless every label of reading `m`, and of the choices
+    /// `protocol` offers from it, is listed under its kind as used by device
+    /// `by`. Choices named by a [`Flag`] label are the apps' to translate by
+    /// variant and are skipped.
+    ///
+    /// [`Flag`]: crate::flags::Flag
+    #[cfg(test)]
+    pub(crate) fn assert_listed(
+        all: &Labels,
+        protocol: &dyn crate::protocol::Protocol,
+        m: &crate::measurement::Measurement,
+        by: &str,
+    ) {
+        use crate::flags::Flag;
+        use crate::protocol::Setting;
+        let check = |kind: TextKind, text: &str| {
+            if text.trim().is_empty() {
+                return;
+            }
+            let users = all.0.get(&(kind, Cow::Owned(text.to_string())));
+            assert!(
+                users.is_some_and(|u| u.contains(by)),
+                "{by}: {kind:?} {text:?} is not listed for it (listed for {users:?})"
+            );
+        };
+        check(TextKind::Mode, &m.mode);
+        check(TextKind::Range, &m.range_label);
+        for aux in &m.aux_values {
+            check(TextKind::Aux, &aux.label);
+        }
+        for setting in Setting::ALL {
+            let kind = match setting {
+                Setting::Mode => TextKind::Mode,
+                Setting::Range => TextKind::Range,
+                _ => TextKind::Toggle,
+            };
+            for choice in protocol.choices(setting, m) {
+                if !Flag::ALL
+                    .iter()
+                    .any(|f| f.label() == Some(choice.label.as_ref()))
+                {
+                    check(kind, &choice.label);
+                }
+            }
+        }
     }
 
     #[cfg(test)]
@@ -187,6 +285,17 @@ mod list {
                 TextKind::Note,
             ] {
                 assert!(kinds.contains(&kind), "nothing of kind {kind:?}");
+            }
+        }
+
+        /// The library's diagnostic fallbacks stay English and unlisted.
+        #[test]
+        fn fallbacks_are_not_listed() {
+            for (kind, text, _) in all_texts().entries() {
+                assert!(
+                    !crate::protocol::is_unknown_mode(text) && !text.starts_with("range "),
+                    "{kind:?} {text:?}"
+                );
             }
         }
     }

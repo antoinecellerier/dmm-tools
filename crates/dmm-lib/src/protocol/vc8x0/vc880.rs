@@ -1064,4 +1064,10 @@ raw_payload=34"#
     fn pressing_peak_is_refused_without_writing() {
         shared::assert_button_refused::<Vc880Model>(CycleButton::Peak, "PEAK");
     }
+
+    #[test]
+    fn every_functions_labels_are_listed() {
+        shared::assert_labels_listed(&Vc880Protocol::new());
+        shared::assert_labels_listed(&Vc880Protocol::for_model("vc650bt"));
+    }
 }

@@ -1072,6 +1072,48 @@ pub(crate) fn choices<M: CycleMeter + ?Sized>(
     }
 }
 
+/// Every label [`choices`] can offer for `meter`, as used by device `by`:
+/// the modes of its dial table, and for each of `modes` (every mode its
+/// readings can report) the range ladder with Auto, and the off/on states.
+///
+/// The MIN/MAX and Peak states are named by their [`Flag`] labels, which
+/// the apps translate by variant, so they are left out.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_choice_labels<M: CycleMeter + ?Sized>(
+    meter: &M,
+    modes: impl IntoIterator<Item = u16>,
+    by: &'static str,
+    out: &mut crate::text::Labels,
+) {
+    use crate::text::TextKind;
+    for position in meter.dial_positions() {
+        for mode in position.modes() {
+            out.add(TextKind::Mode, meter.mode_label(mode), by);
+        }
+    }
+    for mode in modes {
+        let ladder = meter.range_ladder(mode);
+        if !ladder.is_empty() {
+            out.add(TextKind::Range, AUTO_RANGE_LABEL, by);
+        }
+        for rung in ladder {
+            out.add(TextKind::Range, rung, by);
+        }
+        for setting in [
+            FlagSetting::Hold,
+            FlagSetting::Rel,
+            FlagSetting::MinMax,
+            FlagSetting::Peak,
+        ] {
+            for &state in meter.flag_states(setting, mode) {
+                if state == OFF_STATE || setting.toggles() {
+                    out.add(TextKind::Toggle, setting.label(state), by);
+                }
+            }
+        }
+    }
+}
+
 /// The whole of `Protocol::select` for such a family, routed like
 /// [`choices`].
 pub(crate) fn select<M: CycleMeter + ?Sized>(

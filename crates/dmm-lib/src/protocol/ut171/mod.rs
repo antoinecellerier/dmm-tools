@@ -86,41 +86,81 @@ fn lookup_range(mode_byte: u8, range_byte: u8) -> Option<&'static str> {
 ///
 /// Mode byte values from Ghidra analysis of UT171C.exe.
 fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
-    match byte {
-        0x01 => (Cow::Borrowed("LoZ V~"), "V"),
-        0x02 => (Cow::Borrowed("V DC"), "V"),
-        0x03 => (Cow::Borrowed("V AC"), "V"),
-        0x04 => (Cow::Borrowed("V AC+DC"), "V"),
-        0x05 => (Cow::Borrowed("mV DC"), "mV"),
-        0x06 => (Cow::Borrowed("mV AC"), "mV"),
-        0x07 => (Cow::Borrowed("mV AC+DC"), "mV"),
-        0x08 => (Cow::Borrowed("Continuity"), "Ω"),
-        0x09 => (Cow::Borrowed("Capacitance"), "F"),
-        0x0A => (Cow::Borrowed("Ω"), "Ω"),
-        0x0B => (Cow::Borrowed("Diode"), "V"),
-        0x0C => (Cow::Borrowed("°C"), "°C"),
-        0x0D => (Cow::Borrowed("°F"), "°F"),
-        0x0E => (Cow::Borrowed("nS"), "nS"),
-        0x0F => (Cow::Borrowed("Hz"), "Hz"),
-        0x10 => (Cow::Borrowed("Duty %"), "%"),
-        0x11 => (Cow::Borrowed("µA DC"), "µA"),
-        0x12 => (Cow::Borrowed("µA AC"), "µA"),
-        0x13 => (Cow::Borrowed("µA AC+DC"), "µA"),
-        0x14 => (Cow::Borrowed("mA DC"), "mA"),
-        0x15 => (Cow::Borrowed("mA AC"), "mA"),
-        0x16 => (Cow::Borrowed("mA AC+DC"), "mA"),
-        0x17 => (Cow::Borrowed("A DC"), "A"),
-        0x18 => (Cow::Borrowed("A AC"), "A"),
-        0x19 => (Cow::Borrowed("A AC+DC"), "A"),
-        0x1A => (Cow::Borrowed("VFC"), "V"),
-        0x1B => (Cow::Borrowed("% 4-20mA"), "%"),
-        0x1C => (Cow::Borrowed("600A DC"), "A"),
-        0x1D => (Cow::Borrowed("600A AC"), "A"),
-        0x24 => (Cow::Borrowed("NCV"), ""),
-        _ => {
+    match known_mode(byte) {
+        Some((name, unit)) => (Cow::Borrowed(name), unit),
+        None => {
             // §6 lists no other byte. Only the parser calls this.
             report_unknown(FAMILY, "mode byte", format_args!("{byte:#04x}"));
             (unknown_mode(byte), "")
+        }
+    }
+}
+
+/// Mode name and unit of a mode byte §6 lists, `None` for any other.
+fn known_mode(byte: u8) -> Option<(&'static str, &'static str)> {
+    match byte {
+        0x01 => Some(("LoZ V~", "V")),
+        0x02 => Some(("V DC", "V")),
+        0x03 => Some(("V AC", "V")),
+        0x04 => Some(("V AC+DC", "V")),
+        0x05 => Some(("mV DC", "mV")),
+        0x06 => Some(("mV AC", "mV")),
+        0x07 => Some(("mV AC+DC", "mV")),
+        0x08 => Some(("Continuity", "Ω")),
+        0x09 => Some(("Capacitance", "F")),
+        0x0A => Some(("Ω", "Ω")),
+        0x0B => Some(("Diode", "V")),
+        0x0C => Some(("°C", "°C")),
+        0x0D => Some(("°F", "°F")),
+        0x0E => Some(("nS", "nS")),
+        0x0F => Some(("Hz", "Hz")),
+        0x10 => Some(("Duty %", "%")),
+        0x11 => Some(("µA DC", "µA")),
+        0x12 => Some(("µA AC", "µA")),
+        0x13 => Some(("µA AC+DC", "µA")),
+        0x14 => Some(("mA DC", "mA")),
+        0x15 => Some(("mA AC", "mA")),
+        0x16 => Some(("mA AC+DC", "mA")),
+        0x17 => Some(("A DC", "A")),
+        0x18 => Some(("A AC", "A")),
+        0x19 => Some(("A AC+DC", "A")),
+        0x1A => Some(("VFC", "V")),
+        0x1B => Some(("% 4-20mA", "%")),
+        0x1C => Some(("600A DC", "A")),
+        0x1D => Some(("600A AC", "A")),
+        0x24 => Some(("NCV", "")),
+        _ => None,
+    }
+}
+
+/// Whether the aux float is the frequency: on V AC (0x03) and mV AC (0x06).
+fn aux_is_frequency(mode_byte: u8) -> bool {
+    matches!(mode_byte, 0x03 | 0x06)
+}
+
+/// Label and unit of a non-zero aux float in `mode_byte`.
+fn aux_label_unit(mode_byte: u8) -> (&'static str, &'static str) {
+    if aux_is_frequency(mode_byte) {
+        ("Frequency", "kHz")
+    } else {
+        ("Aux", "")
+    }
+}
+
+/// Every label the parser produces: each mode §6 lists, its range labels
+/// and its aux value's label.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    let by = devices::UT171.id;
+    for mode in 0..=u8::MAX {
+        let Some((name, _)) = known_mode(mode) else {
+            continue;
+        };
+        out.add(TextKind::Mode, name, by);
+        out.add(TextKind::Aux, aux_label_unit(mode).0, by);
+        for range in 0..=u8::MAX {
+            out.add(TextKind::Range, lookup_range(mode, range).unwrap_or(""), by);
         }
     }
 }
@@ -516,8 +556,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // aux slot don't emit a spurious "Aux: 0" entry.
     let aux_bytes: [u8; 4] = [payload[11], payload[12], payload[13], payload[14]];
     let aux_float = f32::from_le_bytes(aux_bytes);
-    // 0x03 = V AC, 0x06 = mV AC
-    let aux_is_frequency = matches!(mode_byte, 0x03 | 0x06);
+    let aux_is_frequency = aux_is_frequency(mode_byte);
     // §5.1 describes the aux float only as the frequency on those two modes:
     // a non-zero one elsewhere, or a non-finite one anywhere, is new.
     if !aux_float.is_finite() || (aux_float != 0.0 && !aux_is_frequency) {
@@ -525,11 +564,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     }
     let mut aux_values = Vec::new();
     if aux_float.is_finite() && aux_float != 0.0 {
-        let (aux_label, aux_unit) = if aux_is_frequency {
-            ("Frequency", "kHz")
-        } else {
-            ("Aux", "")
-        };
+        let (aux_label, aux_unit) = aux_label_unit(mode_byte);
         aux_values.push(AuxValue {
             label: Cow::Borrowed(aux_label),
             value: MeasuredValue::Normal(aux_float as f64),
@@ -1375,6 +1410,16 @@ raw_payload=15"#
                     aux.to_le_bytes()
                 )]
             );
+        }
+    }
+
+    #[test]
+    fn the_documented_payloads_labels_are_listed() {
+        let all = crate::text::all_texts();
+        let protocol = Ut171Protocol::new();
+        for payload in documented_payloads() {
+            let m = parse_measurement(&payload).unwrap();
+            crate::text::assert_listed(&all, &protocol, &m, devices::UT171.id);
         }
     }
 }

@@ -349,6 +349,49 @@ fn shown(p: &[u8]) -> Option<AuxValue> {
     })
 }
 
+/// Every label the decoder produces: each mode's name, as the coupling,
+/// filter and temperature-unit bits it reads make it without a report, its
+/// range labels, and every secondary-display label.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    use crate::protocol::unrecognised::silently;
+    use crate::text::TextKind;
+    let by = ID;
+    for (code, mode) in tables::MODES.iter().enumerate() {
+        let mode_raw = code as u8;
+        // A range code outside the table still names the mode.
+        out.add(TextKind::Mode, mode.name, by);
+        for range in mode.ranges {
+            out.add(TextKind::Range, range.label, by);
+            // Byte 6 bits 5-4 (°C, °F); byte 15 bits 4-3 (coupling) and 6
+            // (filter).
+            for b6 in [0x00, 0x10, 0x20, 0x30] {
+                for b15 in (0..4).flat_map(|c| [c << 3, 0x40 | c << 3]) {
+                    let mut p = [0u8; LEN];
+                    p[6] = b6;
+                    p[15] = b15;
+                    let coupling = (p[15] >> 3) & 0x03;
+                    let (name, reported) = silently(|| {
+                        let name = mode_name(&p, mode_raw, mode.name, coupling);
+                        let unit = unit(&p, mode_raw, range);
+                        if mode_raw == 5 { unit } else { name }
+                    });
+                    if !reported {
+                        out.add(TextKind::Mode, name, by);
+                    }
+                }
+            }
+        }
+    }
+    for code in 0..=u8::MAX {
+        for k in [false, true] {
+            if let Secondary::Value(label, _) = classify(code, k) {
+                out.add(TextKind::Aux, label, by);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::packet::tests::{COMMUNITY, EXAMPLES, sealed};
@@ -1107,5 +1150,54 @@ mod tests {
                 actual: 0x35
             })
         ));
+    }
+
+    /// The list holds exactly the labels of every packet the decoder takes
+    /// without a report: each mode, range, temperature-unit, coupling and
+    /// filter combination, and each secondary-display code; and the spec's
+    /// and community packets' labels.
+    #[test]
+    fn the_listed_labels_are_the_quiet_packets() {
+        use crate::text::TextKind;
+        let all = crate::text::all_texts();
+        let protocol = super::super::Eevblog121gwProtocol::new();
+        let mut read = std::collections::BTreeSet::new();
+        let mut take = |p: &[u8]| {
+            let (m, reports) = decoded(p);
+            if reports.is_empty() {
+                crate::text::assert_listed(&all, &protocol, &m, ID);
+                read.insert((TextKind::Mode, m.mode.to_string()));
+                read.extend(
+                    (!m.range_label.is_empty())
+                        .then(|| (TextKind::Range, m.range_label.to_string())),
+                );
+                for aux in &m.aux_values {
+                    read.insert((TextKind::Aux, aux.label.to_string()));
+                }
+            }
+        };
+        for p in EXAMPLES.iter().chain(&COMMUNITY) {
+            take(p);
+        }
+        for mode in 0..32 {
+            for range in 0..16 {
+                for b6 in [0x00, 0x10, 0x20, 0x30] {
+                    for b15 in (0..4).flat_map(|c| [c << 3, 0x40 | c << 3]) {
+                        take(&example1(|p| {
+                            p[5] = mode;
+                            p[6] = b6 | range;
+                            p[15] = b15;
+                        }));
+                    }
+                }
+            }
+        }
+        for code in 0..=u8::MAX {
+            for k in [0x00, 0x20] {
+                take(&with_secondary(1, 0, code, k | 1, 1234));
+            }
+        }
+        let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
+        assert_eq!(all.of_device(ID, &kinds), read);
     }
 }

@@ -728,6 +728,34 @@ impl<M: Vc8x0Model> CycleMeter for Vc8x0Protocol<M> {
     }
 }
 
+/// Every label both families' parsers and choice lists produce: each
+/// function's name and its range labels, and
+/// [`cycle::all_choice_labels`], for each registry entry.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    labels_of(&vc880::Vc880Protocol::new(), out);
+    labels_of(&vc880::Vc880Protocol::for_model(devices::VC650BT.id), out);
+    labels_of(&vc890::Vc890Protocol::new(), out);
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn labels_of<M: Vc8x0Model>(protocol: &Vc8x0Protocol<M>, out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    let by = protocol.profile.id;
+    for &(_, name, _) in M::FUNCTION_TABLE {
+        out.add(TextKind::Mode, name, by);
+    }
+    for function in 0..=u8::MAX {
+        for range_idx in 0..=u8::MAX {
+            if let Some((_, label)) = M::lookup_range(function, range_idx) {
+                out.add(TextKind::Range, label, by);
+            }
+        }
+    }
+    let modes = M::FUNCTION_TABLE.iter().map(|&(code, ..)| u16::from(code));
+    cycle::all_choice_labels(protocol, modes, by, out);
+}
+
 /// Parse one live-data payload into a [`Measurement`].
 ///
 /// The steps are the same on both meters — length guard, function code,
@@ -1623,6 +1651,21 @@ pub(crate) mod test_support {
             }
         })
         .1
+    }
+
+    /// Panic unless every label of `protocol`'s readings in each function
+    /// at each of its ranges, and of the choices they offer, is listed.
+    pub(crate) fn assert_labels_listed<M: Vc8x0Model>(protocol: &Vc8x0Protocol<M>) {
+        let all = crate::text::all_texts();
+        for &(function, ..) in M::FUNCTION_TABLE {
+            let rungs = M::range_table(function).len().max(1) as u8;
+            for range in 0x30..0x30 + rungs {
+                let status = zero_status::<M>();
+                let payload = make_payload::<M>(function, range, b"  1.234", &status);
+                let m = parse_measurement::<M>(&payload).unwrap();
+                crate::text::assert_listed(&all, protocol, &m, protocol.profile.id);
+            }
+        }
     }
 
     /// Leaving MAX/MIN/AVG writes the exit command, not another press.

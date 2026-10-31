@@ -94,6 +94,19 @@ fn lookup_position(code: u8) -> Option<(&'static str, &'static str, &'static str
         .map(|(_, mode, unit, range)| (*mode, *unit, *range))
 }
 
+/// Every label the parser produces: the position table's modes and range
+/// labels.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    for &(code, ..) in POSITION_TABLE {
+        if let Some((mode, _, range)) = lookup_position(code) {
+            out.add(TextKind::Mode, mode, devices::UT8802.id);
+            out.add(TextKind::Range, range, devices::UT8802.id);
+        }
+    }
+}
+
 const UT8802_COMMANDS: &[&str] = &[];
 
 /// Protocol implementation for the UT8802/UT8802N bench multimeter.
@@ -1000,5 +1013,16 @@ raw_payload=7"#
         spaced.extend_from_slice(&frame);
         let recognise = FINGERPRINT.recognise;
         assert_eq!(recognise(&spaced, &Probing::default()), None);
+    }
+
+    #[test]
+    fn every_positions_labels_are_listed() {
+        let all = crate::text::all_texts();
+        let protocol = Ut8802Protocol::new();
+        for &(position, _, _, _) in POSITION_TABLE {
+            let payload = make_payload(position, [1, 2, 3, 4, 5], 1, 0, 0, 0);
+            let m = parse_measurement(&payload).unwrap();
+            crate::text::assert_listed(&all, &protocol, &m, devices::UT8802.id);
+        }
     }
 }

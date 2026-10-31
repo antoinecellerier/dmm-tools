@@ -307,6 +307,20 @@ fn flags(r: &[u8], flag0: u8, flag1: u8) -> StatusFlags {
     flags
 }
 
+/// Every label the decoder produces: the name of each main and sub ID pair
+/// the function table holds. A reading names no range and carries no
+/// sub-value.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    for main in 0..=u8::MAX {
+        for sub in 0..=u8::MAX {
+            if let Ok(function) = tables::function(main, sub) {
+                out.add(crate::text::TextKind::Mode, function.name, super::ID);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::packet::tests::{example_info, example_reading, hex, sealed};
@@ -841,5 +855,26 @@ mod tests {
         let swapped = [example_reading(), example_info()].concat();
         assert!(decode(&swapped).is_err());
         assert!(decode(&hex("FF 02 20 05")).is_err());
+    }
+
+    /// The list holds exactly the modes of the readings the decoder takes
+    /// without a report, over every main and sub ID.
+    #[test]
+    fn the_listed_labels_are_the_quiet_readings() {
+        use crate::text::TextKind;
+        let all = crate::text::all_texts();
+        let protocol = super::super::Bm78xbtProtocol::new();
+        let mut read = std::collections::BTreeSet::new();
+        for main in 0..=u8::MAX {
+            for sub in 0..=u8::MAX {
+                let (m, reports) = decoded(&with(main, sub, 1, |_| {}));
+                if reports.is_empty() {
+                    crate::text::assert_listed(&all, &protocol, &m, super::super::ID);
+                    read.insert((TextKind::Mode, m.mode.to_string()));
+                }
+            }
+        }
+        let kinds = [TextKind::Mode, TextKind::Range, TextKind::Aux];
+        assert_eq!(all.of_device(super::super::ID, &kinds), read);
     }
 }

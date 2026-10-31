@@ -50,6 +50,9 @@ use crate::transport::Transport;
 use log::debug;
 
 /// The registry id, which the report hint names as `--device`.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use decode::all_labels;
+
 pub(crate) const ID: &str = "bm78xbt";
 
 /// Log label for the read loop.

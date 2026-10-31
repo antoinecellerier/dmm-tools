@@ -11,7 +11,7 @@
 
 use super::REPO_ISSUES_URL;
 use log::{debug, warn};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -20,6 +20,8 @@ static WARNED: AtomicBool = AtomicBool::new(false);
 thread_local! {
     /// Reports made on this thread while [`capture_reports`] runs.
     static CAPTURED: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
+    /// Set while [`silently`] runs: reports are counted, not logged.
+    static SILENT: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
 /// Report data the parser for `family` does not recognise.
@@ -28,6 +30,10 @@ thread_local! {
 /// what the meter sent, formatted by the caller with `format_args!` so
 /// nothing is allocated unless a line is written.
 pub(crate) fn report_unknown(family: &'static str, what: &'static str, value: fmt::Arguments) {
+    if let Some(count) = SILENT.get() {
+        SILENT.set(Some(count + 1));
+        return;
+    }
     CAPTURED.with_borrow_mut(|captured| {
         if let Some(reports) = captured {
             reports.push(format!("{family}: unrecognised {what}: {value}"));
@@ -69,6 +75,19 @@ pub fn capture_reports<R>(f: impl FnOnce() -> R) -> (R, Vec<String>) {
     (result, reports)
 }
 
+/// Run `f` with its reports neither logged nor warned about, and say
+/// whether it made any.
+///
+/// For the label lists (`crate::text`), which feed a family's own decoder
+/// inputs it may not know, and keep only what it decodes without a report.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn silently<R>(f: impl FnOnce() -> R) -> (R, bool) {
+    let outer = SILENT.replace(Some(0));
+    let result = f();
+    let reported = SILENT.replace(outer).is_some_and(|count| count > 0);
+    (result, reported)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,6 +115,19 @@ mod tests {
                 "test: unrecognised display text: \"CUT\"",
             ]
         );
+    }
+
+    #[test]
+    fn silently_counts_without_capturing() {
+        let ((), reports) = capture_reports(|| {
+            let ((), reported) = silently(|| {
+                report_unknown("test", "mode byte", format_args!("0x7f"));
+            });
+            assert!(reported);
+            let ((), reported) = silently(|| {});
+            assert!(!reported);
+        });
+        assert!(reports.is_empty());
     }
 
     #[test]

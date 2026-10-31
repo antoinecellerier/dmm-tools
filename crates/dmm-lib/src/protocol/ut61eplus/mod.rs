@@ -1290,18 +1290,58 @@ fn parse_secondary(payload: &[u8], table: &dyn DeviceTable) -> Option<AuxValue> 
         return None;
     };
     let display_raw = String::from_utf8_lossy(&payload[2..9]).to_string();
-    let label = match mode {
-        Mode::Hz => "Frequency",
-        Mode::TempC | Mode::TempF => "Temperature",
-        other => other.as_static_str(),
-    };
     Some(AuxValue {
-        label: Cow::Borrowed(label),
+        label: Cow::Borrowed(secondary_label(mode)),
         value: display_value(mode, &display_raw),
         unit: Cow::Borrowed(range.unit),
         display_raw: Some(display_raw),
         elapsed_secs: None,
     })
+}
+
+/// The sub-value label of a secondary display showing `mode`.
+fn secondary_label(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Hz => "Frequency",
+        Mode::TempC | Mode::TempF => "Temperature",
+        other => other.as_static_str(),
+    }
+}
+
+/// Every label the family's parser and choice lists produce, by model: each
+/// mode, the range labels of the model's table, the sub-value labels its
+/// secondary display and AC+DC V take, and [`cycle::all_choice_labels`].
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    use crate::text::TextKind;
+    let models = [
+        "ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d", "ut60bt", "ut202bt",
+    ];
+    for model in models {
+        let Some(protocol) = Ut61PlusProtocol::for_model(model) else {
+            continue;
+        };
+        let by = protocol.profile.id;
+        let table = protocol.table.as_ref();
+        for &mode in Mode::ALL {
+            out.add(TextKind::Mode, mode.as_static_str(), by);
+            // The parser masks the range byte to its low nibble.
+            for range in 0..=0x0F {
+                let Some(info) = table.range_info(mode, range) else {
+                    continue;
+                };
+                out.add(TextKind::Range, info.label, by);
+                if table.has_secondary_display() {
+                    out.add(TextKind::Aux, secondary_label(mode), by);
+                }
+                if mode == Mode::AcDcV {
+                    out.add(TextKind::Aux, AC_COMPONENT_LABEL, by);
+                }
+            }
+        }
+        let modes = Mode::ALL.iter().map(|&mode| u16::from(mode as u8));
+        cycle::all_choice_labels(&protocol, modes, by, out);
+    }
 }
 
 /// Parse a UT61E+/UT61B+/UT61D+/UT161 measurement payload (pure function).
@@ -3635,5 +3675,39 @@ raw_payload=14"#
 
         let (_, reports) = capture_reports(|| recognised(&NAME_UT61BPLUS));
         assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    #[test]
+    fn the_golden_readings_labels_are_listed() {
+        let all = crate::text::all_texts();
+        for device in ["ut61eplus", "ut161e", "ut61b+"] {
+            crate::text::assert_golden_listed(&all, device);
+        }
+    }
+
+    #[test]
+    fn every_models_dial_and_secondary_labels_are_listed() {
+        use crate::text::TextKind;
+        let all = crate::text::all_texts();
+        // A frame in every mode each model's table names, at its first
+        // range, as a main and as a secondary display.
+        for model in ["ut61e+", "ut61b+", "ut61d+", "ut60bt", "ut202bt"] {
+            let protocol = Ut61PlusProtocol::for_model(model).unwrap();
+            let by = protocol.profile.id;
+            for &mode in Mode::ALL {
+                let Some(range) =
+                    (0..=0x0F).find(|&r| protocol.table.range_info(mode, r).is_some())
+                else {
+                    continue;
+                };
+                let frame = main_frame(mode as u8, 0x30 | range, b"  0.000");
+                let m = parse_measurement(&frame, protocol.table.as_ref()).unwrap();
+                crate::text::assert_listed(&all, &protocol, &m, by);
+                if protocol.table.has_secondary_display() {
+                    let label = secondary_label(mode);
+                    assert!(all.contains(TextKind::Aux, label), "{model} {label}");
+                }
+            }
+        }
     }
 }

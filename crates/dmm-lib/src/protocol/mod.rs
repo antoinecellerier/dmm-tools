@@ -58,6 +58,19 @@ pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
     Cow::Owned(format!("Unknown({code:#06x})"))
 }
 
+/// Every label each family can produce, for [`crate::text::all_texts`].
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn all_labels(out: &mut crate::text::Labels) {
+    ut61eplus::all_labels(out);
+    ut171::all_labels(out);
+    ut8802::all_labels(out);
+    ut8803::all_labels(out);
+    ut80x::all_labels(out);
+    vc8x0::all_labels(out);
+    eevblog121gw::all_labels(out);
+    bm78xbt::all_labels(out);
+}
+
 /// Whether `mode` is the `Unknown(0x..)` fallback a parser writes for a mode
 /// code its family's table doesn't list.
 pub fn is_unknown_mode(mode: &str) -> bool {
