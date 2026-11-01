@@ -79,6 +79,8 @@ To translate a file:
 
 1. Copy it from `i18n/en-US/` to the same path under your locale, such as `i18n/fr/gui/settings.ftl`.
 2. Translate the text after each `=`. Keep the IDs, the `{ $variables }` and the `[selector]` keys as they are; numbers, unit symbols and command lines stay as written. A message you leave out shows in English.
+
+   In VS Code, `code --diff i18n/en-US/gui/settings.ftl i18n/fr/gui/settings.ftl` shows the English beside your file, message for message, with your side editable; the [vscode-fluent](https://marketplace.visualstudio.com/items?itemName=macabeus.vscode-fluent) extension (`macabeus.vscode-fluent`) highlights the syntax and flags errors.
 3. Try it in a release build, without compiling: point `DMM_TOOLS_L10N_DIR` at the folder holding your locale folder, then pick your language in Settings, **Language**, or with dmm-cli's `--lang`.
 
    ```sh
