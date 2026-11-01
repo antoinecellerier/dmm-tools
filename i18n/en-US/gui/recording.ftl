@@ -21,7 +21,7 @@ recording-stop = ■ Stop
 # Shown after Export… once a recording has stopped. Export… is the button
 # beside it, which saves the samples to a file.
 recording-discard = Discard
-    .hover = Discard the recording; Export then saves samples from the graph
+    .hover = Discard the recording; "Export…" then saves samples from the graph
 # After the buttons while recording. $count is how many samples the
 # recording holds; $seconds how long it has run, in whole seconds, e.g. 12.
 # The s after it is the symbol for seconds.
@@ -51,8 +51,8 @@ recording-count =
 # how many samples the graph holds.
 recording-history-hint =
     { $count ->
-        [one] No recording. Export saves { $count } sample from the graph. Record to capture across mode changes.
-       *[other] No recording. Export saves { $count } samples from the graph. Record to capture across mode changes.
+        [one] No recording. "Export…" saves { $count } sample from the graph. Click "Record" to capture across mode changes.
+       *[other] No recording. "Export…" saves { $count } samples from the graph. Click "Record" to capture across mode changes.
     }
 
 ## Messages that show for a few seconds at the top right.
@@ -63,8 +63,8 @@ recording-discarded = Recording discarded
 # that saves them. $count is how many it holds.
 recording-discarded-graph-keeps =
     { $count ->
-        [one] Recording discarded. Export… saves the graph's { $count } sample.
-       *[other] Recording discarded. Export… saves the graph's { $count } samples.
+        [one] Recording discarded. "Export…" saves the graph's { $count } sample.
+       *[other] Recording discarded. "Export…" saves the graph's { $count } samples.
     }
 # After Copy in the graph's right-click menu. $digits is the reading as the
 # meter showed it, e.g. 1.6109, which is now on the clipboard.

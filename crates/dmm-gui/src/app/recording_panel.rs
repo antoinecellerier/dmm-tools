@@ -1145,11 +1145,12 @@ mod tests {
         let l10n = crate::l10n::english();
         assert_eq!(
             history_hint(&l10n, 1),
-            "No recording. Export saves 1 sample from the graph. \
-             Record to capture across mode changes."
+            "No recording. \"Export\u{2026}\" saves 1 sample from the graph. \
+             Click \"Record\" to capture across mode changes."
         );
         assert!(
-            history_hint(&l10n, 1234).starts_with("No recording. Export saves 1234 samples from"),
+            history_hint(&l10n, 1234)
+                .starts_with("No recording. \"Export\u{2026}\" saves 1234 samples from"),
             "{}",
             history_hint(&l10n, 1234)
         );
@@ -1243,7 +1244,7 @@ mod tests {
         assert_eq!(run.app.capture.recording.export_samples().len(), 2);
         assert_eq!(
             run.app.toast.as_ref().map(|t| t.message.as_str()),
-            Some("Recording discarded. Export\u{2026} saves the graph's 2 samples.")
+            Some("Recording discarded. \"Export\u{2026}\" saves the graph's 2 samples.")
         );
     }
 

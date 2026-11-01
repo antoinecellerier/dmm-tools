@@ -148,8 +148,8 @@ connection-named-after-detection =
 # written short, e.g. 1.2K. Export… is a button.
 connection-buffer-shrunk =
     { $count ->
-        [one] Recording stopped — its { $kept } sample is kept, Export… saves it
-       *[other] Recording stopped — its { $kept } samples are kept, Export… saves them
+        [one] Recording stopped — its { $kept } sample is kept, "Export…" saves it
+       *[other] Recording stopped — its { $kept } samples are kept, "Export…" saves them
     }
 # The recording filled the buffer. $count is its size in samples, $kept the
 # same number written short, e.g. 500K.

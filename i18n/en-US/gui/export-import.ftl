@@ -64,8 +64,8 @@ export-no-wire-format = The mock has no wire format to export; connect a real me
 # measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv. Export… is the button.
 import-hint =
     { $count ->
-        [one] Imported { $count } reading from { $file }. Export… saves it with your markers and view.
-       *[other] Imported { $count } readings from { $file }. Export… saves them with your markers and view.
+        [one] Imported { $count } reading from { $file }. "Export…" saves it with your markers and view.
+       *[other] Imported { $count } readings from { $file }. "Export…" saves them with your markers and view.
     }
 
 ## The prompt shown over the window before something would discard samples
