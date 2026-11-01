@@ -111,6 +111,25 @@ fn an_unknown_lang_is_refused_with_the_languages_on_offer() {
     );
 }
 
+/// A translator trying a file with `--help`, as CONTRIBUTING suggests, hears
+/// what in it can't be read, though `--help` exits before the run's logger
+/// would start.
+#[test]
+fn help_names_a_translation_file_it_cannot_read() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("dmm-cli-broken-ftl");
+    std::fs::create_dir_all(dir.join("fr/cli")).unwrap();
+    std::fs::write(dir.join("fr/cli/list.ftl"), "list-none = Aucun { câble\n").unwrap();
+    let out = dmm_cli()
+        .env("DMM_TOOLS_L10N_DIR", &dir)
+        .args(["--lang", "fr", "--help"])
+        .output()
+        .expect("run dmm-cli");
+    assert!(out.status.success());
+    assert!(!out.stdout.is_empty());
+    let err = String::from_utf8(out.stderr).expect("utf-8 stderr");
+    assert!(err.contains("fr/cli/list.ftl"), "{err}");
+}
+
 /// `--lang` beats the settings file's `language`, which beats the
 /// environment. Linux only: elsewhere the settings file isn't under
 /// `XDG_CONFIG_HOME`, and the system's language isn't the environment's.

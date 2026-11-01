@@ -41,7 +41,14 @@ fn main() {
     let cli = cli::command(l)
         .try_get_matches()
         .and_then(|mut m| Cli::from_arg_matches_mut(&mut m))
-        .unwrap_or_else(|e| arg_errors::exit(e));
+        .unwrap_or_else(|e| {
+            // `--help`, `--version` and a refused command line end here,
+            // before the logger below: a translator trying a broken file
+            // with `--help` would otherwise never hear what loading it found.
+            dmm_shared::logging::init();
+            l10n::get().log_load_report();
+            arg_errors::exit(e)
+        });
     debug_assert_eq!(cli.lang, lang, "the pre-scan read --lang as clap does");
     // Before the settings file's meter applies: a report names its own meter,
     // and `--device` as typed overrides it, never the settings file's
