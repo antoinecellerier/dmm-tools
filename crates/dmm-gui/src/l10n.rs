@@ -1,9 +1,10 @@
 //! The resources dmm-gui shows, and the localizers built from them.
 //!
-//! The app keeps its localizer in [`App`](crate::app::App) as a handle; text
-//! drawn outside it (`--help`, errors before the window opens) is English.
+//! The app keeps its localizer in [`App`](crate::app::App) as a handle,
+//! built and swapped in `app/language.rs`; text drawn outside it (`--help`,
+//! errors before the window opens) is English.
 
-use dmm_shared::l10n::{Localizer, Options, Resource};
+use dmm_shared::l10n::{Localizer, Resource};
 use std::sync::{Arc, OnceLock};
 
 /// dmm-gui's own messages, one file per screen area under
@@ -39,17 +40,18 @@ pub(crate) fn resources() -> Vec<Resource> {
 /// it needs, so writing it at launch parses one small file per language.
 #[cfg(target_os = "linux")]
 pub(crate) fn desktop_resources() -> Vec<Resource> {
-    GUI.iter()
-        .filter(|r| r.path == "gui/desktop.ftl")
-        .copied()
-        .collect()
+    gui_file("gui/desktop.ftl")
 }
 
-/// The localizer for `setting` (the settings file's `language`, empty to
-/// follow the system), in this process's environment.
-pub(crate) fn from_env(setting: &str) -> Arc<Localizer> {
-    let language = dmm_shared::l10n::resolve_from_env(None, setting);
-    Arc::new(Localizer::new(language, &resources(), &Options::from_env()))
+/// The settings panel's resources, in every language: all the localizers
+/// that mark each language of the **Language** list in its own words need.
+pub(crate) fn settings_resources() -> Vec<Resource> {
+    gui_file("gui/settings.ftl")
+}
+
+/// One of dmm-gui's files, `path` under `i18n/<locale>/`, in every language.
+fn gui_file(path: &str) -> Vec<Resource> {
+    GUI.iter().filter(|r| r.path == path).copied().collect()
 }
 
 /// English, shared: what tests and an app built without a window speak.

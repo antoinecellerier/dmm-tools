@@ -136,6 +136,40 @@ settings-specs-notes = Notes
 
 ## The window.
 
+# The Language row's caption, shown once the app speaks more than one
+# language. In every language but English, keep the English word in
+# parentheses after yours, e.g. Langue (Language):, so someone who can't
+# read the window can still find the row. .a11y names its dropdown for a
+# screen reader, in your word alone.
+settings-language = Language:
+    .a11y = Language
+    .hover = The language the window speaks
+# The dropdown's first entry: the window speaks the system's language.
+# $language is the language that is, by its name in itself, e.g. Français
+# or 简体中文. The other entries are each language's name in itself, kept
+# as they are.
+settings-language-system = System ({ $language })
+    .hover = Follow the system's language
+# Weak text after your language's name in the dropdown while no native
+# speaker has reviewed it yet. Shown only next to your own language's name,
+# whatever language the window speaks, so its speakers can read it: e.g.
+# Português (Brasil)  tradução automática.
+settings-language-machine-translated = machine-translated
+# A screen reader's name for that entry, also in your language whatever the
+# window speaks. $language is your language's name in itself, e.g.
+# Português (Brasil).
+settings-language-machine-translated-entry = { $language }, machine-translated
+# The weak line under the Language row while such a language is spoken,
+# then a link that opens the translators' guide on GitHub in the web
+# browser; ↗ marks a link.
+settings-language-unreviewed = Machine-translated, not yet reviewed.
+settings-language-review-link = Help review it ↗
+    .hover = Open the translators' guide on GitHub
+# A toast when Chinese is picked and the computer has no font for it. It
+# is always shown in English, which the app's own fonts draw: no need to
+# translate it.
+settings-language-no-chinese-font = No font for Chinese characters was found. Install a Simplified Chinese font, such as Noto Sans CJK SC, then restart dmm-gui.
+
 # The Zoom chips are percentages, e.g. 150%.
 settings-zoom = Zoom:
 # A Zoom chip's hover. $level is its scale in percent, e.g. 150; $step the

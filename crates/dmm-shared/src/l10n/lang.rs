@@ -85,7 +85,9 @@ pub fn find(tag: &str) -> Option<&'static Language> {
     find_in(languages(), tag)
 }
 
-fn find_in<'a>(languages: &'a [Language], tag: &str) -> Option<&'a Language> {
+/// [`find`] among `languages`: what an app offers, which a test may narrow
+/// or widen.
+pub fn find_in<'a>(languages: &'a [Language], tag: &str) -> Option<&'a Language> {
     let tag = tag.split(['.', '@']).next().unwrap_or("").replace('_', "-");
     if tag.is_empty() {
         return None;

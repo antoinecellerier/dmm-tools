@@ -61,6 +61,12 @@ pub struct SharedSettings {
     /// it. Empty means cycle through every scenario.
     #[serde(default)]
     pub mock_mode: String,
+    /// The language the apps speak, as a locale id from
+    /// [`l10n::languages`] (e.g. `"fr"`). Empty means follow the system; an
+    /// id the running build doesn't have is followed the same way
+    /// ([`l10n::resolve`]).
+    #[serde(default)]
+    pub language: String,
 }
 
 /// Bluetooth probing is on unless it was turned off: a settings file written
@@ -75,6 +81,7 @@ impl Default for SharedSettings {
             device_family: String::new(),
             bluetooth: bluetooth_default(),
             mock_mode: String::new(),
+            language: String::new(),
         }
     }
 }
@@ -277,6 +284,16 @@ mod tests {
         assert!(!off.bluetooth);
     }
 
+    /// A file written before the language existed follows the system, and
+    /// a saved choice comes back as written.
+    #[test]
+    fn the_language_follows_the_system_unless_set() {
+        let old: SharedSettings = serde_json::from_str(r#"{"device_family":"ut61eplus"}"#).unwrap();
+        assert_eq!(old.language, "");
+        let set: SharedSettings = serde_json::from_str(r#"{"language":"fr"}"#).unwrap();
+        assert_eq!(set.language, "fr");
+    }
+
     #[test]
     fn deserializes_device_family() {
         let s: SharedSettings = serde_json::from_str(r#"{"device_family":"ut8803"}"#).unwrap();
@@ -355,7 +372,7 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         assert_eq!(
             json,
-            r#"{"device_family":"vc880","bluetooth":true,"mock_mode":""}"#
+            r#"{"device_family":"vc880","bluetooth":true,"mock_mode":"","language":""}"#
         );
     }
 

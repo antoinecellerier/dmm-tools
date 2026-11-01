@@ -51,6 +51,11 @@ impl App {
         ctx.show_viewport_deferred(viewport_id, viewport_builder, move |ui, _class| {
             use egui::{Key, Modifiers};
             let ctx = ui.ctx().clone();
+            // The window is the changelog, which is English whatever the
+            // app speaks: a screen reader should read it as English.
+            ctx.accesskit_node_builder(egui::accesskit_root_id(), |node| {
+                node.set_language(dmm_shared::l10n::EN_US.id);
+            });
             let close_requested = ctx.input(|i| i.viewport().close_requested())
                 || ctx.input_mut(|i| {
                     i.consume_key(Modifiers::NONE, Key::Escape)

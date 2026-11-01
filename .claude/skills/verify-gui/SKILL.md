@@ -65,6 +65,12 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 - The zoom-in chord is `key ctrl+equal`, not `ctrl+plus`: xdotool's `plus` keysym needs Shift, and the app binds `Key::Equals` alongside `Plus`.
 - Ctrl+C, Ctrl+X and Ctrl+V (with or without Shift) become clipboard events in egui-winit before egui sees a key, so no app binding on them can fire — do not test one.
 
+## Languages
+
+- `run` sets `LC_ALL=C`, so the app follows the system into English. To run in another language, set `"language": "<id>"` (e.g. `"fr"`, `"zh-CN"`) in the private `config/dmm-tools/settings.json` under the state directory before `run`, or pick it in the Settings **Language** row, which shows once the build has more than one language. Back that file up first and put it back after.
+- `DMM_TOOLS_PSEUDO_LOCALE=1` in the environment of `run` shows every message accented, padded and bracketed, to find layouts that can't take a longer language and text that skips the translations. `DMM_TOOLS_L10N_DIR=<dir>` loads `<dir>/<locale>/…` over the built-in files; a folder for a locale the build doesn't ship adds that language to the row. Both are environment variables: export them in a script that calls this one, as a prefix on the command falls outside this skill's allowed-tools pattern.
+- Chinese draws only with a CJK system font (`fc-list :lang=zh` lists them).
+
 ## Dependencies
 
 `xvfb`, `xdotool`, `imagemagick` (for `import`); `python3-pil` optional, for pixel measurement. The script names them if any are missing.

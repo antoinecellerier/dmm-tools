@@ -22,6 +22,7 @@ mod controls;
 mod export;
 mod held_reading;
 mod import;
+mod language;
 mod layout;
 mod marker_list;
 mod messages;
@@ -359,6 +360,8 @@ pub struct App {
     /// The language the window speaks. An `Arc` so a deferred viewport
     /// (What's New) can carry it to its own thread.
     pub(crate) l10n: std::sync::Arc<dmm_shared::l10n::Localizer>,
+    /// The languages on offer and what follows the one spoken.
+    speech: language::Speech,
     pub(super) settings_open: bool,
     /// A read of the user's themes folder in flight, started when Settings
     /// opens; `None` once its result is taken in.
@@ -474,8 +477,8 @@ impl App {
         let mut app = Self::from_cli(settings, cli);
         app.on_wayland = on_wayland;
         // Here and not in `from_settings`, so tests speak English whatever
-        // the desktop does.
-        app.l10n = crate::l10n::from_env("");
+        // the desktop does, and install no system fonts.
+        app.start_speaking(&cc.egui_ctx);
         // Here and not in `from_settings`, so a test build can never reach
         // the network or the cache file.
         app.update_check = update_check::UpdateCheck::new(update_notice);
@@ -539,6 +542,7 @@ impl App {
         Self {
             settings,
             l10n: crate::l10n::english(),
+            speech: language::Speech::default(),
             settings_open: false,
             theme_scan: None,
             theme_folder_writes: 0,
@@ -913,6 +917,8 @@ impl eframe::App for App {
             ctx.memory_mut(|m| m.request_focus(target));
             self.shortcut_help.restore_focus = None;
         }
+        self.tell_screen_reader_language(&ctx);
+        self.poll_font_check();
         self.poll_theme_scan();
         self.poll_theme_save();
         self.apply_theme(&ctx);

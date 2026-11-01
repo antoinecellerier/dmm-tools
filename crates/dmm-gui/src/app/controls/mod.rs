@@ -2,6 +2,7 @@
 
 mod colors;
 mod device_list;
+mod language;
 pub(super) mod remote;
 mod settings_panel;
 pub(super) mod theme_save;

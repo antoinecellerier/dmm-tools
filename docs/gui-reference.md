@@ -549,6 +549,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Recording** | on | Toggle recording panel visibility |
 | **Specifications** | on | Toggle [specifications](#specifications) panel visibility |
 | **Resolution**, **Accuracy**, **Input Z**, **Notes** | on | Shown while **Specifications** is on. Each shows or hides its field in the specifications. |
+| **Language** | System | Shown when dmm-gui has more than one language. **System** follows the computer's language ([how it is chosen](setup.md#language)); the other entries name each language in itself. Applies immediately; toasts and notices already on screen, and the readings markers recorded, keep their language. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
 | **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
@@ -710,7 +711,7 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
 - Tab and Shift+Tab cycle through every control in visual order, with a visible focus outline.
 - Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the saturation/value square and the hue gradient also accept arrow keys.
-- The mode and range dropdowns under the reading, and the Settings **Device** list, open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes. In the **Device** list, Left/Right move to the next column.
+- The mode and range dropdowns under the reading, and the Settings **Device** and **Language** lists, open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes. In the **Device** list, Left/Right move to the next column.
 - Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
 - The `?` help overlay and the **What's New** window keep focus inside while open and return it to the control that opened them when closed.
 
@@ -724,6 +725,7 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 - The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
 - The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled"; one past an [alarm limit](#alarm) with ", above the high limit" or ", below the low limit".
 - The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-value traces drawn beside it, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
+- The window tells the screen reader which language its text is in; the **What's New** window, whose notes are in English, says English.
 - The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 
 ### Known limitations

@@ -14,6 +14,8 @@ eframe = { version = "0.37", features = ["glow", "wgpu"] }
 # without them each OS draws its own, colour emoji included.
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 egui_commonmark = "0.26"
+# eframe's own, installed by the app with the UI language's locale.
+egui_system_font_provider = "0.37"
 egui_plot = "0.38"
 raw-window-handle = "0.6"
 chrono.workspace = true

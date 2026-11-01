@@ -151,6 +151,16 @@ over the adapter, against about 10 over the cable.
 first connection asks you to allow Bluetooth for your terminal app (or the
 GUI binary).
 
+### Language
+
+dmm-gui speaks the language picked in its Settings **Language** row. Left on **System**, and for dmm-cli, the apps speak the first of the computer's languages they have, and English if they have none:
+
+- **Linux:** each language in `LANGUAGE`, then those of `LC_ALL`, `LC_MESSAGES` and `LANG`. `LC_ALL=C` (or `POSIX`) means English, whatever `LANGUAGE` says.
+- **Windows:** the display language.
+- **macOS:** the preferred languages, in order.
+
+Chinese needs a Chinese font on the computer; Windows and macOS include one. On Linux, see ["No font for Chinese characters was found"](#no-font-for-chinese-characters-was-found).
+
 ## Troubleshooting
 
 ### "Windows protected your PC"
@@ -230,6 +240,16 @@ one. None are lost; only their timestamps are off.
   the message has none.
 - **Windows 11:** the tool shortens the link itself.
 - **Any system:** a USB cable gives on-time readings.
+
+### "No font for Chinese characters was found"
+
+The computer has no font that draws Chinese. Install one, then restart dmm-gui:
+
+```sh
+sudo apt install fonts-noto-cjk                # Debian, Ubuntu, Raspberry Pi OS
+sudo dnf install google-noto-sans-cjk-fonts    # Fedora
+sudo pacman -S noto-fonts-cjk                  # Arch
+```
 
 ### GUI shows a black screen or won't render
 

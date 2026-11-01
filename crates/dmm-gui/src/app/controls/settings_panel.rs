@@ -535,9 +535,10 @@ impl App {
         });
     }
 
-    /// **Zoom** and how the window sits on the desktop, then the update
-    /// check.
+    /// **Language**, while there is more than one, **Zoom** and how the
+    /// window sits on the desktop, then the update check.
     fn show_window_rows(&mut self, ui: &mut Ui) {
+        self.show_language_rows(ui);
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
         let zoom_row = ui.horizontal_wrapped(|ui| {
@@ -699,6 +700,7 @@ impl App {
 mod tests {
     use super::*;
 
+    use crate::app::language::LanguageChoice;
     use crate::app::update_check::{Tag, UpdateCheck};
     use crate::settings::Settings;
     use eframe::egui::scroll_area::ScrollAreaOutput;
@@ -1370,6 +1372,187 @@ mod tests {
         for (pair, tops) in rows.windows(2).zip(tops.windows(2)) {
             assert!(tops[0] < tops[1], "{} is not above {}", pair[0], pair[1]);
         }
+    }
+
+    /// With English alone there is nothing to pick: no Language row.
+    #[test]
+    fn the_language_row_hides_with_one_language() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        assert!(
+            !frame
+                .nodes
+                .iter()
+                .any(|(_, n)| n.label() == Some("Language")),
+            "the Language row is drawn"
+        );
+    }
+
+    /// The languages a test offers: one reviewed, two machine-translated,
+    /// the second without a translation of its mark.
+    static LANGUAGES: [dmm_shared::l10n::Language; 4] = [
+        dmm_shared::l10n::EN_US,
+        dmm_shared::l10n::Language {
+            id: "fr",
+            native_name: "Français",
+            reviewed: true,
+        },
+        dmm_shared::l10n::Language {
+            id: "pt-BR",
+            native_name: "Português (Brasil)",
+            reviewed: false,
+        },
+        dmm_shared::l10n::Language {
+            id: "de",
+            native_name: "Deutsch",
+            reviewed: false,
+        },
+    ];
+
+    /// A settings run offering [`LANGUAGES`], whose few translations come
+    /// from an override folder, as a translator's would.
+    fn multilingual_run(dir: &std::path::Path) -> SettingsRun {
+        let files = [
+            (
+                "fr",
+                "settings-language = Langue (Language):\n    .a11y = Langue\nsettings-zoom = Zoom :\n",
+            ),
+            (
+                "pt-BR",
+                "settings-language = Idioma (Language):\n    .a11y = Idioma\nsettings-language-unreviewed = Tradução automática, ainda não revisada.\n\
+                 settings-language-machine-translated = tradução automática\n\
+                 settings-language-machine-translated-entry = { $language }, tradução automática\n",
+            ),
+        ];
+        for (locale, text) in files {
+            std::fs::create_dir_all(dir.join(locale).join("gui")).unwrap();
+            std::fs::write(dir.join(locale).join("gui/settings.ftl"), text).unwrap();
+        }
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.app.speech.languages = &LANGUAGES;
+        run.app.speech.options.override_dir = Some(dir.to_path_buf());
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        run
+    }
+
+    /// A setting written loosely, as a hand edit might, shows as the
+    /// language it resolves to; one naming no language on offer as System.
+    #[test]
+    fn a_loose_setting_shows_as_its_language() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.app.speech.languages = &LANGUAGES;
+        for (setting, picked) in [
+            ("fr-FR", Some("fr")),
+            ("fr_FR.UTF-8", Some("fr")),
+            ("pt", Some("pt-BR")),
+            ("xx", None),
+            ("", None),
+        ] {
+            run.app.settings.shared.language = setting.to_string();
+            let shown = match run.app.language_choice() {
+                LanguageChoice::Language(l) => Some(l.id),
+                LanguageChoice::System => None,
+            };
+            assert_eq!(shown, picked, "{setting:?}");
+        }
+    }
+
+    /// A second language brings the row, first of the window group, with
+    /// System naming what the system speaks.
+    #[test]
+    fn a_second_language_shows_the_row_above_zoom() {
+        let dir = std::env::temp_dir().join(format!("dmm-gui-lang-row-{}", std::process::id()));
+        let mut run = multilingual_run(&dir);
+        let frame = run.frame(vec![]);
+        std::fs::remove_dir_all(&dir).unwrap();
+        let (_, node) = frame
+            .nodes
+            .iter()
+            .find(|(_, n)| n.label() == Some("Language"))
+            .expect("the Language box");
+        assert_eq!(node.value(), Some("System (English)"));
+        let row = node_bounds(&frame, "Language:").y0;
+        assert!(
+            node_bounds(&frame, "Graph").y0 < row,
+            "not in the window group"
+        );
+        assert!(row < node_bounds(&frame, "30%").y0, "not above Zoom");
+        assert!(
+            !frame
+                .nodes
+                .iter()
+                .any(|(_, n)| n.value() == Some("Machine-translated, not yet reviewed.")),
+            "the notice shows for English"
+        );
+    }
+
+    /// Picking a language from the keyboard saves it and speaks it from the
+    /// next frame on, the fonts swapped once for it; a machine-translated
+    /// one is marked in the list in its own words, and adds its notice.
+    #[test]
+    fn picking_a_language_switches_the_window() {
+        let dir = std::env::temp_dir().join(format!("dmm-gui-lang-pick-{}", std::process::id()));
+        let mut run = multilingual_run(&dir);
+        let mut reached = false;
+        for _ in 0..120 {
+            let frame = run.frame(tab());
+            if focused_on(&frame, "Language") {
+                reached = true;
+                break;
+            }
+        }
+        assert!(reached, "Tab never reached the Language box");
+        run.frame(press(egui::Key::Space));
+        let frame = run.frame(vec![]);
+        assert!(
+            focused_on(&frame, "System (English)"),
+            "focus is not on the live entry"
+        );
+        // A machine-translated language is marked in its own words, else in
+        // English, whatever the window speaks.
+        for spoken in [
+            "Português (Brasil), tradução automática",
+            "Deutsch, machine-translated",
+        ] {
+            assert!(
+                frame.nodes.iter().any(|(_, n)| n.label() == Some(spoken)),
+                "no entry named {spoken}"
+            );
+        }
+        // System, English, then Français.
+        run.frame(press(egui::Key::ArrowDown));
+        run.frame(press(egui::Key::ArrowDown));
+        run.frame(press(egui::Key::Enter));
+        let mut frame = run.frame(vec![]);
+        for _ in 0..3 {
+            frame = run.frame(vec![]);
+        }
+        assert_eq!(run.app.settings.shared.language, "fr");
+        assert_eq!(run.app.l10n.language().id, "fr");
+        node_bounds(&frame, "Langue (Language):");
+        node_bounds(&frame, "Zoom :");
+        // What the file lacks stays English.
+        node_bounds(&frame, "Always on top");
+        assert_eq!(run.app.speech.font_installs, 1, "fonts swapped per frame");
+
+        run.app
+            .choose_language(&run.ctx.clone(), LanguageChoice::Language(&LANGUAGES[2]));
+        let frame = run.frame(vec![]);
+        std::fs::remove_dir_all(&dir).unwrap();
+        node_bounds(&frame, "Idioma (Language):");
+        node_bounds(&frame, "Tradução automática, ainda não revisada.");
+        assert_eq!(run.app.speech.font_installs, 2);
+
+        // Back to System: English again, the setting empty.
+        run.app
+            .choose_language(&run.ctx.clone(), LanguageChoice::System);
+        let frame = run.frame(vec![]);
+        assert_eq!(run.app.settings.shared.language, "");
+        node_bounds(&frame, "Language:");
+        assert_eq!(run.app.speech.font_installs, 3);
     }
 
     /// Customize colors opens near the foot of the panel, below the fold of a

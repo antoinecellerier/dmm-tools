@@ -1152,6 +1152,7 @@ dependencies = [
  "egui",
  "egui_commonmark",
  "egui_plot",
+ "egui_system_font_provider",
  "log",
  "raw-window-handle",
  "rfd",

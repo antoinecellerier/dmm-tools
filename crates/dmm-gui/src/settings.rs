@@ -811,6 +811,7 @@ mod tests {
                 device_family: "ut8803".to_string(),
                 bluetooth: false,
                 mock_mode: "dcv".to_string(),
+                language: "fr".to_string(),
             },
             theme: ThemeMode::Light,
             named_theme: Some("Desert".to_string()),
@@ -867,6 +868,7 @@ mod tests {
         assert_eq!(deserialized.color_preset, ColorPreset::HighContrast);
         assert_eq!(deserialized.shared.device_family, "ut8803");
         assert!(!deserialized.shared.bluetooth);
+        assert_eq!(deserialized.shared.language, "fr");
         assert!(!deserialized.check_for_updates);
         assert_eq!(
             deserialized.last_folder.as_deref(),

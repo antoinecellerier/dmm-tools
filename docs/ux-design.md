@@ -49,6 +49,27 @@ order a first run needs them: the meter, what is kept, the panels, the window,
 then the look, set once, whose expanding Customize colors grows the panel at
 its foot (`show_settings_rows` in `app/controls/settings_panel.rs`).
 
+**The Language caption keeps the English word.** Outside English it reads
+"Langue (Language):", so someone left in a language they can't read still
+finds the row, first of the window group (`app/controls/language.rs`).
+
+**Languages are listed in themselves.** Their speakers know their names
+whatever the window speaks; **System** names the language it resolves to.
+
+**Machine translation says so.** A weak mark beside the name, in that
+language like the name, so its speakers read it whatever the window speaks;
+and while it is spoken, a weak line under the row linking to the
+translators' guide: the wording may be off, and a native speaker is the
+review it needs.
+
+**One language, no Language row.** There would be nothing to pick.
+
+**A language switch redraws; built text stays.** Every label follows on the
+next frame, while a toast or notice on screen and a marker's recorded reading
+keep their language. The system fonts follow it, so Chinese gets simplified
+shapes on a Japanese desktop, and a missing Chinese font is reported in
+English, which the window can still draw (`app/language.rs`).
+
 **Zoom steps like a browser's.** Ctrl+Plus, Ctrl+Minus and Ctrl+0 walk
 non-linear levels (`ZOOM_LEVELS` in `app/appearance.rs`); 100% is the scale
 of the monitor the window is on, so a window dragged between monitors follows

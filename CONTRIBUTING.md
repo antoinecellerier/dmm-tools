@@ -69,6 +69,27 @@ If you have one of these platforms and a supported meter:
 
 Even "it works" is valuable. If something doesn't work, the output of `RUST_LOG=dmm_lib=trace dmm-cli read` will help us debug.
 
+## Translations
+
+The apps' words are in [Fluent](https://projectfluent.org/fluent/guide/) files under `i18n/<locale>/`, `en-US` being the reference: one file per screen area, each message under an ID, with comments saying where it shows and what each `{ $variable }` holds.
+
+To translate a file:
+
+1. Copy it from `i18n/en-US/` to the same path under your locale, such as `i18n/fr/gui/settings.ftl`.
+2. Translate the text after each `=`. Keep the IDs, the `{ $variables }` and the `[selector]` keys as they are; numbers, unit symbols and command lines stay as written. A message you leave out shows in English.
+3. Try it in a release build, without compiling: point `DMM_TOOLS_L10N_DIR` at the folder holding your locale folder, then pick your language in Settings, **Language**.
+
+   ```sh
+   DMM_TOOLS_L10N_DIR=~/dmm-tools/i18n dmm-gui
+   ```
+
+   A folder for a language the apps don't ship yet makes it selectable.
+4. Open a pull request with the files.
+
+`DMM_TOOLS_PSEUDO_LOCALE=1` shows every message accented and padded, which finds the places where a longer language won't fit; the [development guide](docs/development.md#translations) has the details.
+
+A language ships once all its files are translated. Until a native speaker has read it in the app, it is marked machine-translated in the **Language** list and the app says so under it. To review one, read it in the app, fix what reads wrong in a pull request, and once the whole language has been read, set `reviewed: true` on its entry in `crates/dmm-shared/src/l10n/lang.rs` in the same pull request.
+
 ## Code changes
 
 1. Fork and create a feature branch

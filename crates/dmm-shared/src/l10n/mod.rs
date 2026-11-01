@@ -31,7 +31,7 @@ mod lib_index;
 mod lib_names;
 mod pseudo;
 
-pub use lang::{EN_US, Language, find, languages, resolve};
+pub use lang::{EN_US, Language, find, find_in, languages, resolve};
 pub use lib_index::{LIB_RESOURCES, is_units_only};
 
 use fluent_bundle::concurrent::FluentBundle;

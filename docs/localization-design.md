@@ -143,7 +143,7 @@ Alarm toasts render from `Breach`'s fields, which needs no library change. Alarm
 |---|---|
 | Latin, Cyrillic | Bundled fonts (Ubuntu-Light, with Hack as fallback) |
 | Greek | Partial in Ubuntu-Light; check before offering a Greek translation |
-| Chinese, Japanese, Korean | Only through eframe's system-font fallback, so it depends on the user's installed fonts |
+| Chinese, Japanese, Korean | Only through a system font, which the GUI picks by its language (`app/language.rs`), so it depends on the user's installed fonts |
 | Arabic, Hebrew, Persian | Not possible: egui 0.37 has no bidirectional text or right-to-left layout |
 
 Most of the layout measures its text, but longer strings will still find some trouble spots:

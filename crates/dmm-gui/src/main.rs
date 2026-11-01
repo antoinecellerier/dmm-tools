@@ -551,6 +551,9 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: viewport.clone(),
         renderer,
+        // The app installs its own, picking shapes by its language rather
+        // than the system's (`app/language.rs`).
+        system_font_fallback: false,
         ..Default::default()
     };
 
@@ -566,6 +569,7 @@ fn main() -> eframe::Result<()> {
         let fallback_options = eframe::NativeOptions {
             viewport,
             renderer: eframe::Renderer::Glow,
+            system_font_fallback: false,
             ..Default::default()
         };
         let fallback_overrides = parse_args();
