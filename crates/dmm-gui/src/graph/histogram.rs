@@ -1265,7 +1265,7 @@ mod tests {
         );
         assert!(
             h.spoken(&crate::l10n::english(), "V")
-                .ends_with("; 4 samples between the cursors, standard deviation 3.6 V.")
+                .ends_with("; 4 readings between the cursors, standard deviation 3.6 V.")
         );
     }
 
@@ -1354,7 +1354,7 @@ mod tests {
         assert_eq!(h.view.tallest(), 0);
         assert_eq!(
             h.spoken(&crate::l10n::english(), "V"),
-            "Histogram of 0 visible samples."
+            "Histogram of 0 visible readings."
         );
     }
 
@@ -1364,7 +1364,7 @@ mod tests {
         let h = Histogram::new(i(&values), (0.0, 3.0), target_bins(300.0), (0, 1)).unwrap();
         assert_eq!(
             h.spoken(&crate::l10n::english(), "V"),
-            "Histogram of 30 visible samples, standard deviation 0.5 V, most at 2 V (20)."
+            "Histogram of 30 visible readings, standard deviation 0.5 V, most at 2 V (20)."
         );
     }
 }

@@ -135,7 +135,7 @@ graph-cursors-hint = click graph to place cursors
 # Δ= and σ= beside it are notation and stay as they are in every language.
 graph-readout-mean = Mean={ $value }
 # The same row: how many readings lie from A to B. $count is that number.
-graph-readout-count = Count={ $count }
+graph-readout-count = Readings={ $count }
 
 ## The plot: the readout by the pointer, the labels on its lines, and the
 ## flags of markers along its bottom edge.
@@ -254,11 +254,11 @@ graph-histogram-a11y-sentence = { $clauses }.
 graph-histogram-a11y-separator = {", "}
 # Before graph-histogram-a11y-interval.
 graph-histogram-a11y-interval-separator = {"; "}
-# $count is how many samples are in view.
+# $count is how many readings are in view.
 graph-histogram-a11y =
     { $count ->
-        [one] Histogram of { $count } visible sample
-       *[other] Histogram of { $count } visible samples
+        [one] Histogram of { $count } visible reading
+       *[other] Histogram of { $count } visible readings
     }
 # After graph-histogram-a11y, and after graph-histogram-a11y-interval: how
 # far the readings spread. $value is a number, $unit its unit, e.g. V.
@@ -279,8 +279,8 @@ graph-histogram-a11y-beyond = { $above } above and { $below } below the axis
 # them.
 graph-histogram-a11y-interval =
     { $count ->
-        [one] { $count } sample between the cursors
-       *[other] { $count } samples between the cursors
+        [one] { $count } reading between the cursors
+       *[other] { $count } readings between the cursors
     }
 
 ## The minimap: the strip under the graph showing every sample kept, with

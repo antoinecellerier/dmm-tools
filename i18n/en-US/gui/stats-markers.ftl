@@ -29,7 +29,7 @@ stats-sd = σ:
 # How many readings the figures above cover; $count is that number. On a
 # row of its own in a wide window; a narrow one shows the number alone, in
 # brackets.
-stats-count = Count: { $count }
+stats-count = Readings: { $count }
 # The integral of the readings over time: ∫ is its symbol, $value the
 # figure, $unit its unit (e.g. V·s or mAh), $seconds how long it covers in
 # whole seconds; the s after it is the symbol for seconds.

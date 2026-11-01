@@ -309,7 +309,7 @@ fn a_replay_written_from_a_replay_plays_back_identically() {
     ]);
     assert!(ok, "writing the copy failed: {stderr}");
     // The summary is the run's, whatever it wrote.
-    assert!(stderr.contains("--- 3 samples"), "got {stderr}");
+    assert!(stderr.contains("--- 3 readings"), "got {stderr}");
 
     let (original, _, _) = read_csv(&path, &[]);
     let (played, _, ok) = read_csv(&copy, &[]);
@@ -509,7 +509,7 @@ fn a_replay_ends_with_its_recording() {
     ]);
     assert!(ok, "replay failed: {stderr}");
     assert_eq!(stdout.lines().skip(2).count(), 3, "got {stdout}");
-    assert!(stderr.contains("--- 3 samples"), "got {stderr}");
+    assert!(stderr.contains("--- 3 readings"), "got {stderr}");
 }
 
 /// With no `--format`, the file name says what to write.

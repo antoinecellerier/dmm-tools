@@ -28,7 +28,7 @@ fn read_prints_one_line_per_sample_and_a_summary() {
     for line in &lines {
         assert!(line.ends_with(" V [AUTO]"), "got {line}");
     }
-    assert!(stderr.contains("2 samples | Min:"), "got {stderr}");
+    assert!(stderr.contains("2 readings | Min:"), "got {stderr}");
 }
 
 /// `--mock-mode` reaching the mock is the part the removed arms carried: the

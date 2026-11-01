@@ -2485,7 +2485,7 @@ fn the_cursor_readout_covers_the_readings_between_the_cursors() {
     assert_eq!(figures[0], "\u{0394}T=1.00 s");
     assert_eq!(
         figures[figures.len() - 3..],
-        ["Mean=1.5000 V", "\u{3c3}=0.3317 V", "Count=11"]
+        ["Mean=1.5000 V", "\u{3c3}=0.3317 V", "Readings=11"]
     );
 }
 
@@ -6081,7 +6081,7 @@ fn the_plots_spoken_label_reads_as_before() {
     assert_eq!(
         g.a11y_label,
         "Measurement plot. 10 second window. Y axis 1.000 to 1.000 V. 31 samples. \
-         Histogram of 11 visible samples, standard deviation 0.0000 V, most at 1.0000 to \
+         Histogram of 11 visible readings, standard deviation 0.0000 V, most at 1.0000 to \
          1.0000 V (11). paused. last reading 1.0000 V."
     );
 
@@ -6116,8 +6116,8 @@ fn the_plots_spoken_label_reads_as_before() {
     assert_eq!(
         g.a11y_label,
         "Measurement plot. 10 second window. Y axis 19.000 to 31.000 \u{00B0}C. 11 samples. \
-         Also showing T2, Frequency in Hz on a right axis. Histogram of 11 visible samples, \
-         standard deviation 0.8312 \u{00B0}C, most at 20 \u{00B0}C (4); 4 samples between the \
+         Also showing T2, Frequency in Hz on a right axis. Histogram of 11 visible readings, \
+         standard deviation 0.8312 \u{00B0}C, most at 20 \u{00B0}C (4); 4 readings between the \
          cursors, standard deviation 0.9574 \u{00B0}C. live. last reading 21.0000 \u{00B0}C."
     );
 }

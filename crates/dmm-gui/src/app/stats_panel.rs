@@ -447,7 +447,7 @@ mod tests {
                         None => rich,
                     });
                 }
-                ui.label(RichText::new("Count: 2").font(egui::FontId::proportional(size)));
+                ui.label(RichText::new("Readings: 2").font(egui::FontId::proportional(size)));
             });
             assert!(!before.is_empty());
             assert_eq!(rows, before, "{size} pt");

@@ -105,7 +105,7 @@ fn a_csv_export_converts_to_json() {
     assert_eq!(lines.len(), 4, "metadata and three readings: {json}");
     assert_eq!(lines[2]["marker"], 2);
     assert_eq!(lines[2]["note"], "load on, 2.2 ohm");
-    assert!(err.contains("3 samples"), "the summary: {err}");
+    assert!(err.contains("3 readings"), "the summary: {err}");
 }
 
 /// A CSV holds no frames, so it cannot become a replay; and its readings are

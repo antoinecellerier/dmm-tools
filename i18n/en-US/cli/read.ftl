@@ -110,15 +110,15 @@ read-skipped-frames =
 # are the statistics' names in dmm-gui too.
 read-summary =
     { $count ->
-        [one] { $count } sample | Min: { $min } | Max: { $max } | Mean: { $mean }
-       *[other] { $count } samples | Min: { $min } | Max: { $max } | Mean: { $mean }
+        [one] { $count } reading | Min: { $min } | Max: { $max } | Mean: { $mean }
+       *[other] { $count } readings | Min: { $min } | Max: { $max } | Mean: { $mean }
     }
 # The same, with the readings' standard deviation, σ, in $sd, a number with
 # its unit; $count, $min, $max and $mean as there.
 read-summary-sd =
     { $count ->
-        [one] { $count } sample | Min: { $min } | Max: { $max } | Mean: { $mean } | σ: { $sd }
-       *[other] { $count } samples | Min: { $min } | Max: { $max } | Mean: { $mean } | σ: { $sd }
+        [one] { $count } reading | Min: { $min } | Max: { $max } | Mean: { $mean } | σ: { $sd }
+       *[other] { $count } readings | Min: { $min } | Max: { $max } | Mean: { $mean } | σ: { $sd }
     }
 # Under the summary, with --integrate: the readings summed over time. $value
 # is the integral with its unit, e.g. 0.7720 V·s.
