@@ -1,0 +1,264 @@
+english	portuguese_brazil	part_of_speech/gender	context (where it appears)	source (document + PDF page)	notes
+DC voltage	tensão contínua	s. f.	spec table titles (table-*-dc-voltage), prose, notes	Minipa ET-1649BT PDF p.8 «Corrente Contínua (DC)»; Minipa ET-2517A/2615A PDF p.3 «DC--Corrente Contínua»	Full words in table titles and prose (decided for every language). Minipa's own tables say «Tensão DC» (ET-1649BT PDF p.24): mode labels and notes keep DC as printed. «tensão contínua» is built on Minipa's «corrente contínua»; no Minipa page writes «tensão contínua» itself.
+AC voltage	tensão alternada	s. f.	spec table titles, prose	Minipa ET-1649BT PDF p.8 «Corrente Alternada (AC)»; Minipa ET-2587 PDF p.6 «Corrente Alternada»	As DC voltage: built on Minipa's «corrente alternada».
+AC+DC voltage	tensão alternada + contínua	s. f.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	Minipa ET-1649BT PDF p.8 «Corrente Contínua ou Alternada (DC ou AC)»; Minipa ET-2990 PDF p.4 «Tensão AC/DC/AC+DC»	"Title form. ""AC Voltage + DC Voltage"" → «Tensão alternada + tensão contínua». Notes and mode labels keep AC+DC."
+voltage	tensão	s. f.	aux-voltage, prose	Minipa ET-1649BT PDF p.14 «Medida de Tensão AC/DC»	Never «voltagem» (colloquial; no maker manual uses it).
+current	corrente	s. f.	aux-current, key-current	Minipa ET-1649BT PDF p.15 «Medida de Corrente AC/DC»	Feminine in Portuguese (French courant is masculine): «a corrente».
+DC current	corrente contínua	s. f.	spec table titles	Minipa ET-1649BT PDF p.8 «Corrente Contínua (DC)»	
+AC current	corrente alternada	s. f.	spec table titles	Minipa ET-1649BT PDF p.8 «Corrente Alternada (AC)»	
+4–20 mA loop current	corrente de loop 4-20 mA	s. f.	table-l-4-20-ma-loop-current, notes	Minipa ET-2990 PDF p.22 «Modo Loop», «circuito de loop»	Minipa keeps «loop» untranslated; «malha de corrente» has no approved source.
+resistance	resistência	s. f.	mode, table titles	Minipa ET-1649BT PDF p.16 «Medida de Resistência»	
+Ohms (table title)	Resistência	s. f.	table-ohms, table-autocheck-ohms	Minipa ET-1649BT PDF p.25 «- Resistência» (table title)	Minipa ET-2517A/2615A PDF p.21 heads its table «Ohms»; keep «Ohms» only inside the AutoCheck™ (Ohms) trademark title.
+continuity	continuidade	s. f.	mode-continuity, aux-continuity	Minipa ET-1649BT PDF p.17 «Teste de Continuidade»	
+continuity test	teste de continuidade	s. m.	table-14-continuity-test, table-f-continuity-test	Minipa ET-1649BT PDF p.17; Minipa ET-2990 PDF p.16	
+audible continuity tester	teste de continuidade audível	s. m.	table-audible-continuity-tester	Minipa ET-2517A/2615A PDF p.21 «Teste de Continuidade Audível»	
+diode	diodo	s. m.	mode-diode, range-diode	Minipa ET-1649BT PDF p.18; MS-T «diode» → «diodo» (masc.)	
+diode test	teste de diodo	s. m.	table-15-diode-test, table-diode-tester	Minipa ET-1649BT PDF p.18 «Teste de Diodo»	
+capacitance	capacitância	s. f.	mode-capacitance, tables	Minipa ET-1649BT PDF p.17 «Medida de Capacitância»	Unlike French (capacité), Portuguese uses «capacitância»; «capacidade» is a battery's or a fuse's capacity (ET-1649BT PDF p.15 «capacidade máxima nominal»).
+frequency	frequência	s. f.	mode-frequency, aux-frequency	Minipa ET-1649BT PDF p.18 «Medida de Frequência»; MS-T «frequency» → «frequência» (fem.)	2009 spelling: no trema. Older Minipa manuals write «freqüência» (ET-2517A/2615A PDF p.7): don't copy it.
+duty cycle	duty cycle	s. m.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Minipa ET-1649BT PDF p.19 «Medida de Duty Cycle»; Minipa ET-2587 PDF p.2; Minipa ET-2517A/2615A PDF p.22 «Duty Cycle (D%)»	Ruling needed (SUMMARY). Every Minipa manual keeps the English term. «ciclo de trabalho» is the textbook word but has no approved source.
+Duty % (mode label)	Duty %	s. m.	mode-duty-pct	Minipa ET-2517A/2615A PDF p.8 «Nível Lógico Hz & Duty%»	Keep as the meter prints it; follows the duty cycle ruling.
+pulse width	largura de pulso	s. f.	mode-pulse-width, table-13-pulse-width	Minipa ET-2587 PDF p.26 «Largura de Pulso Minimo»	
+temperature	temperatura	s. f.	mode-temperature, aux-temperature	Minipa ET-1649BT PDF p.19 «Medida de Temperatura»	
+internal temperature	temperatura interna	s. f.	aux-internal-temperature	no approved source found	Plain composition of «temperatura» (Minipa) + «interna».
+K-type thermocouple	termopar tipo K	s. m.	notes (note-k-type-thermocouple-*)	Minipa ET-1649BT PDF p.4 «Termopar tipo K»; Minipa ET-2587 PDF p.3 «Termopar Tipo K»	
+temperature probe	sensor de temperatura	s. m.	notes	Minipa ET-2517A/2615A PDF p.10 «sensor de temperatura Bkp60»; Minipa ET-2587 PDF p.10 «Entrada do sensor de temperatura»	ET-1649BT PDF p.20 also says «sonda termopar tipo K»; «sensor» is the commoner Minipa word.
+hFE	ganho do transistor (hFE)	s. m.	mode-hfe, aux-hfe, table-k-transistor	no approved source found	"No Minipa manual found has an hFE function. ""Transistor Magnification"" → «Ganho do transistor (hFE)»."
+NCV	NCV (detecção de tensão sem contato)	s. f.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	Minipa ET-1649BT PDF p.20 «Detecção de Tensão sem Contato (NCV)»	Acronym first, spelled-out form after it in parentheses (MS-SG PDF p.24).
+EF / non-contact EF detection	EF / detecção de campo elétrico sem contato	s. f.	mode-ef*, table-non-contact-ef-detection	Minipa ET-2517A/2615A PDF p.12 «Detecção de Campo Elétrico - EF», «Detecção-EF Sem Contato»	
+LoZ	LoZ (baixa impedância)	s. f.	mode-loz-*, flag-loz	Minipa ET-2517A/2615A PDF p.7 «O “LoZ” mostrado no LCD lembra o usuário que está no modo de baixa impedância»	
+low-pass filter / LPF	filtro passa-baixa / LPF	s. m.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	Minipa ET-2990 PDF p.2 «Rejeição de Alta Frequência (Filtro Passa Baixa)», PDF p.11 «filtro passa baixa»	Minipa writes it unhyphenated; the hyphen follows the 2009 rule for compounds of verb + adjective. Reviewer to confirm.
+VFD	VFD	—	mode-vfd-*	no approved source found	Keep as printed.
+VFC	VFC	—	mode-vfc	no approved source found	Keep as printed.
+dBm / dBV	dBm / dBV	unidade	mode-v-ac-dbm, notes	Minipa ET-2517A/2615A PDF p.5 «dB (decibel)»	Unit symbols never change.
+dBm reference	referência dBm	s. f.	mode-dbm-reference	Minipa ET-1649BT PDF p.12 «valor de referência»	
+inductance	indutância	s. f.	mode-inductance*	no approved source found	No Minipa manual found measures inductance. Standard spelling (VOLP).
+conductance	condutância	s. f.	table-8-conductance	Minipa ET-2517A/2615A PDF p.9 «Funções Condutância nS, Resistência e Continuidade»	
+power	potência	s. f.	mode-power*	Minipa ET-2587 PDF p.10 «medidas relativas a potência»; MS-T «power» → «potência»	
+apparent power (VA)	potência aparente (VA)	s. f.	notes, VA modes	no approved source found	
+power factor / PF	fator de potência / PF	s. m.	mode-power-factor, aux-pf	no approved source found	Keep PF as printed in labels.
+inrush current	corrente de partida	s. f.	mode-inrush, aux-inrush	no approved source found	Ruling needed (SUMMARY): «corrente de partida» (descriptive) or keep «Inrush» as clamp meters print it.
+True RMS	True RMS	—	notes (note-true-rms-*)	Minipa ET-2517A/2615A PDF p.5 «True RMS é um termo que identifica um multímetro digital que responda precisamente ao valor RMS efetivo»; Minipa ET-1649BT PDF p.23 «True RMS: AC»	Every Minipa manual keeps «True RMS». Where a note explains it, «valor eficaz verdadeiro (True RMS)» has no approved source.
+RMS (sine RMS)	RMS senoidal	adj.	"notes ""sensitivity 40mV (sine RMS)"""	Minipa ET-2517A/2615A PDF p.22 «Sensibilidade (Senoidal RMS)»	"""(sine RMS)"" → «(RMS senoidal)»."
+crest factor	fator de crista	s. m.	notes	Minipa ET-2517A/2615A PDF p.5 «Fator de Crista»; Minipa ET-2587 PDF p.11	
+peak	pico	s. m.	mode-*-peak, qualifier-peak-mode, qualifier-mode-peak, aux-peak-min, main-label-peak-max, CLI Peak	Minipa ET-2517A/2615A PDF p.5 «valor de Crista (pico instantâneo)»; Minipa ET-2587 PDF p.11 «valores de pico»	"Minipa's CREST key is «Captura de Crista» (ET-2517A/2615A PDF p.13), but the value is a «pico». ""Peak { $mode }"" → «Pico { $mode }»."
+peak max / peak min	pico máx. / pico mín.	s. m.	main-label-peak-max, aux-peak-min, spoken «crête maximale / minimale»	Minipa ET-2587 PDF p.9 «registrar o maior valor(P+) e o menor valor(P-)»; abbreviations MS-SG PDF p.22	Spoken: «pico máximo / pico mínimo». Accents stay in abbreviations (MS-SG PDF p.22).
+period	período	s. m.	aux-period	no approved source found	Minipa uses «período» only for spans of time (ET-1649BT PDF p.20), not a signal's period.
+impedance	impedância	s. f.	aux-impedance	Minipa ET-1649BT PDF p.24 «Impedância de entrada»	
+burden voltage	queda de tensão	s. f.	aux-burden-voltage, note-burden-voltage-*	Minipa ET-2517A/2615A PDF p.22 «Queda de Tensão» column of the current tables («1.5mV/mA»)	The same words mean a diode's forward voltage (ET-2517A/2615A PDF p.11 «queda de tensão direta»); context tells them apart.
+clamp	alicate	s. m.	mode-clamp-*, aux-clamp-*	minipa.com.br product category «Alicates» / «Alicates Amperímetros» (web page, see SOURCE.txt)	No Minipa manual among the four covers a clamp. «alicate amperímetro» in full.
+power (mains) line	rede elétrica	s. f.	mode-line-hz, table-line-level-frequency-hz	Minipa ET-1649BT PDF p.21 «fonte de tensão (como a rede elétrica)»; Minipa ET-2517A/2615A PDF p.22 «Freqüência de Nível de Rede (Hz)»	"Table title ""Line Level Frequency (Hz)"" → «Frequência de nível de rede (Hz)»."
+logic level	nível lógico	s. m.	mode-logic-hz, table-logic-level-*	Minipa ET-2517A/2615A PDF p.8 «Nível Lógico Hz & Duty%»	
+Motor / Solar / Tachometer / Compass / Angle / Time / Scope	Motor / Solar / Tacômetro / Bússola / Ângulo / Tempo / Osciloscópio	s. m. (Bússola s. f.)	mode-motor, mode-solar, mode-tachometer, mode-compass, mode-angle, mode-time, mode-scope	Osciloscópio: minipa.com.br category «Osciloscópios»; MS-T «time» → «tempo»; others no approved source found	Brazilian spelling «Tacômetro» (pt-PT «Tacómetro»).
+Live (mode: live-wire detection)	Fase	s. f.	mode-live, aux-live	Minipa ET-2517A/2615A PDF p.12 «distinguir entre conexão viva e o terra», «tensões fase a neutro»	Ruling needed (SUMMARY): «Fase» (what an electrician calls the live conductor) or Minipa's «Fio vivo».
+Recall	Recuperação	s. f.	mode-recall	Minipa ET-2990 PDF p.24 «modo de recuperação»	RECALL on a meter key stays as printed (ET-2517A/2615A PDF p.16 «modo RECALL»).
+Battery (sub-value)	Bateria	s. f.	aux-battery	Minipa ET-1649BT PDF p.28 «Troca de Bateria»; MS-T «battery» → «bateria»	Minipa calls AAA cells «pilhas» (ET-1649BT PDF p.29) and the 9 V block «bateria»; the sub-value is the meter's supply: «Bateria».
+HOLD (flag / key)	HOLD	—	flag-hold, remote panel, CLI settings	Minipa ET-2517A/2615A PDF p.13 «HOLD … Pressione a tecla HOLD»; Minipa ET-2587 PDF p.8	Kept as printed.
+data hold / hold (spoken)	congelamento da leitura	s. m.	reading-spoken-hold, remote-hold hover	Minipa ET-1649BT PDF p.10 «Congelamento de Leitura (Data Hold)»; Minipa ET-2990 PDF p.11 «Auto Hold (congelamento da medida)»	Verb for a hover: «Congelar a leitura atual».
+REL (flag / key)	REL	—	flag-rel, qualifier-mode-rel, CLI	Minipa ET-1649BT PDF p.17 «Pressione a tecla “REL”»	Kept as printed.
+relative	relativo	adj.	main-label-relative, reading-spoken-rel, remote-rel hover	Minipa ET-1649BT PDF p.10 «Modo Relativo»	Agrees with its noun: «valor relativo», «leitura relativa». main-label-relative → «Relativo».
+reference	referência	s. f.	aux-reference, graph Ref	Minipa ET-1649BT PDF p.12 «valor de referência»; MS-T «reference» → «referência» (fem.)	
+absolute	absoluto	adj.	aux-absolute	no approved source found	
+AUTO (flag)	AUTO	—	flag-auto-range, remote AUTO	Minipa ET-1649BT PDF p.12 «exibindo o símbolo “AUTO”»	
+auto range / auto-ranging	faixa automática	s. f.	reading-spoken-auto-range, remote-auto, settings-auto-*, errors	Minipa ET-1649BT PDF p.12 «modo de faixa automática»	Minipa ET-2517A/2615A PDF p.14 also writes «Autorange»; prefer the Portuguese.
+manual range	faixa manual	s. f.	settings-switched [range], remote-range	Minipa ET-1649BT PDF p.12 «modo de faixa manual»	
+range	faixa	s. f.	reading-range, range menu, CLI settings, errors	Minipa ET-1649BT PDF p.24 table heading «Faixa»; PDF p.6 «a função e a faixa apropriados»	MS-T gives «intervalo» (a data range) and «alcance» (radio range); for the meter's range only «faixa». Glossary entry is «faixa», not «faixa de medição»: Minipa uses the bare word throughout.
+RANGE (key)	RANGE	—	remote-range hover, errors	Minipa ET-1649BT PDF p.14 «pressione a tecla “RANGE”»	
+MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	Minipa ET-2587 PDF p.8 «Botão MIN/MAX»	
+minimum / maximum (spoken)	mínimo / máximo	s. m.	reading-spoken-min/max, stats	Minipa ET-2990 PDF p.23 «MAXIMUM (máximo), MINIMUM (mínimo)»	
+AVG (flag) / average	AVG / média	s. f.	flag-avg, reading-spoken-avg, aux-average	Minipa ET-2517A/2615A PDF p.13 «A leitura AVG* (Média)»; Minipa ET-2990 PDF p.23 «AVERAGE (média)»	
+SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	Minipa ET-1649BT PDF p.13 «tecla “SEL”»; PDF p.20 «Pressione brevemente “SELECT”»	
+secondary function	função secundária	s. f.	remote-select hover	no approved source found	Minipa ET-2587 PDF p.9 describes SHIFT as «mudança de função» without naming the result.
+backlight / LIGHT	luz de fundo / LIGHT	s. f.	remote-light hover	Minipa ET-1649BT PDF p.12 «ligar a luz de fundo»; Minipa ET-2587 PDF p.9 «Botão de Luz de Fundo»	
+ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	Minipa ET-1649BT PDF p.17 «zerar o valor residual» (the action)	Key name kept as printed.
+overload / OL	sobrecarga / OL	s. f.	reading-spoken-overload, graph-hover-overload, graph legends	MS-T «overload» → «sobrecarga» (fem.); Minipa ET-1649BT PDF p.15 «proteger o equipamento contra sobrecargas»	"Minipa explains OL as over range («Indicação de Sobrefaixa: … “OL”», ET-1649BT PDF p.23); the app's ""overload"" stays «sobrecarga»."
+over range	acima da faixa	loc.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	Minipa ET-1649BT PDF p.23 «Indicação de Sobrefaixa»; PDF p.14 «indica que a faixa foi excedida»	«sobrefaixa» is Minipa's spec-sheet word; for text read aloud, «acima da faixa» says the same in plain words.
+LOW BAT (flag)	LOW BAT	—	flag-low-battery	Minipa ET-1649BT PDF p.10 «Indicador de Bateria Fraca» (the icon's name)	Flag kept; spoken «bateria fraca».
+HV! (flag)	HV!	—	flag-hv-warning; spoken reading-spoken-hv-warning	Minipa ET-2587 PDF p.11 «Aviso de alta tensão»; Minipa ET-1649BT PDF p.8 «Perigo: Alta Tensão»	Spoken «alta tensão».
+LEAD ERR (flag)	LEAD ERR	—	flag-lead-error; spoken reading-spoken-lead-error	Minipa ET-2587 PDF p.11 «Advertência de Entrada Errada (Beep Guard)»	Spoken «erro de conexão das pontas de prova».
+COMP (flag) / compare	COMP / comparação	s. f.	flag-comp, reading-spoken-comp, aux-comp-*	Minipa ET-2990 PDF p.23 «para comparar o máximo e o mínimo» (verb only)	
+REC (flag) / record (meter memory)	REC / registro	s. m.	flag-record, reading-spoken-record	Minipa ET-2517A/2615A PDF p.13 «Pressione a tecla REC momentaneamente para ativar o modo de registro MAX/MIN/AVG»	«registro» for the meter's own memory; the app's recording is «gravação».
+VOID (flag)	VOID / inválido	adj.	flag-void, reading-spoken-void	no approved source found	Flag kept; spoken «leitura inválida».
+annunciator / status flag	indicador	s. m.	translator comments only	Minipa ET-2517A/2615A PDF p.13 «Os indicadores “R” e “MAX MIN AVG*” do LCD acendem»; MS-T «annunciator» → «indicador»	
+key (on the meter)	tecla	s. f.	remote panel, activation steps, key hovers	Minipa ET-1649BT PDF p.12 «Teclas de Funções»; MS-T «key» → «tecla» (fem.)	Minipa ET-2587 and ET-2990 also say «botão» for the same keys; keep «botão» for the app's on-screen buttons.
+press (briefly) / short press	pressionar brevemente	v.	activation steps, key hovers	Minipa ET-1649BT PDF p.20 «Pressione brevemente “SELECT”»; Minipa ET-2517A/2615A PDF p.7 «Pressione a tecla SELECT momentaneamente»	ET-1649BT PDF p.12 also writes «Pressione levemente» (lightly): avoid, it describes force, not duration.
+hold (a key) / long press	manter pressionada	v.	activation steps	Minipa ET-1649BT PDF p.22 «Mantenha pressionada a tecla “SEL”»; PDF p.12 «Pressione e segure»; MS-T «press and hold» → «pressionar e manter pressionado»	Agrees with «tecla» (f.): «mantenha a tecla SELECT pressionada».
+dial	chave seletora	s. f.	"activation steps, errors ""turn the dial first"""	Minipa ET-1649BT PDF p.11 «Chave Seletora»; PDF p.14 «Gire a chave seletora»	"Also «chave rotativa» (ET-2990 PDF p.10). ""Turn the dial"" → «Gire a chave seletora»."
+dial position	posição da chave seletora	s. f.	errors, remote-select hover	Minipa ET-1649BT PDF p.15 «ajuste a chave seletora para a posição mais alta»	
+function (dial)	função de medida	s. f.	"activation steps ""Turn the dial to any function"""	Minipa ET-2517A/2615A PDF p.6 «travar a faixa ou função de medida»	
+mode	modo	s. m.	reading-mode, mode menu, CLI settings	Minipa ET-1649BT PDF p.12 «modo de medição»; MS-T «mode» → «modo» (masc.)	
+display (the meter's)	display	s. m.	"activation steps ""shows on the display"""	Minipa ET-1649BT PDF p.14 «Leia o valor da tensão medida no display»; PDF p.10 «A. Display»	Ruling needed (SUMMARY): Minipa always says «display»; MS-T gives «visor» for a display device.
+beep	bip	s. m.	activation notes, settings-device-name	Minipa ET-1649BT PDF p.13 «emite 5 bipes … e um bip longo»	Plural «bipes».
+auto power-off	desligamento automático	s. m.	"activation notes ""switches off after 15 minutes idle"""	Minipa ET-1649BT PDF p.13 «Desligamento Automático (Auto Power OFF)»	
+on / off (meter setting)	ativado / desativado	adj.	toggle-on, toggle-off	MS-T «turn on» → «ativar», «turn off» → «desativar»; Minipa ET-1649BT PDF p.13 «Para desativar o Desligamento Automático»	
+specifications	especificações	s. f. pl.	specs-heading, settings-specs	Minipa ET-1649BT PDF p.23 «ESPECIFICAÇÕES»	
+resolution	resolução	s. f.	specs-resolution, settings-specs-resolution	Minipa ET-1649BT PDF p.24 «Faixa Resolução Precisão»; MS-T «resolution» → «resolução»	
+accuracy	precisão	s. f.	specs-accuracy, settings-specs-accuracy, notes	Minipa ET-1649BT PDF p.24 «A precisão é dada como ±(% da leitura + …)»	MS-T gives «exatidão»; every maker manual says «precisão».
+input impedance / Input Z	impedância de entrada / Z de entrada	s. f.	specs-input-impedance, settings-specs-input-z	Minipa ET-1649BT PDF p.24 «Impedância de entrada»	
+overload protection	proteção de sobrecarga	s. f.	spec input rows	Minipa ET-1649BT PDF p.24 «Proteção de Sobrecarga: 1000Vrms (DC/AC)»; Minipa ET-2517A/2615A PDF p.19 «Proteções de Sobrecarga»	
+of reading (±(a% of reading + b))	da leitura	loc.	notes, accuracy bands	Minipa ET-1649BT PDF p.24 «±(% da leitura + número de dígitos menos significativos)»; Minipa ET-2517A/2615A PDF p.20	
+digits / counts (accuracy, residual)	dígitos	s. m. pl.	"notes ""add 10 digits"", ""residual ≤10 digits"", ""Display digits: 6000"""	Minipa ET-1649BT PDF p.24 «número de dígitos menos significativos»; Minipa ET-2517A/2615A PDF p.20 «Leitura residual menor que 5 dígitos com as pontas de prova curto circuitadas», «Precisão especificada + 100 dígitos»	Minipa tables abbreviate «D» / «d» / «díg» («0,5% + 3D», ET-1649BT PDF p.24): keep what the English note has.
+display counts (6000-count display)	6000 contagens	s. f. pl.	note-display-digits-6000, note-true-rms-crest-factor-*	Minipa ET-1649BT PDF p.23 «Display: LCD de 9999 contagens»; Minipa ET-2517A/2615A PDF p.19 «6000 contagens»	Never «60.000 contagens» as ET-2587 PDF p.20 writes it: here a point is the decimal point.
+Not specified / Unspec'd	Não especificado	adj.	"band-not-specified, notes ""not specified above 10A"""	Minipa ET-2517A/2615A PDF p.20 «Função Capacitância não é especificada», table cell «Não Especificado»	Agrees with its noun: «precisão não especificada».
+for reference only	apenas para referência	loc.	band-only-for-reference, note-reading-for-reference-only	no approved source found	No maker manual found has the phrase. «apenas como referência» is the alternative.
+of range (10%–100% of range)	da faixa	loc.	notes	Minipa ET-2517A/2615A PDF p.20 «especificadas de 10 % a 100 % da faixa»; PDF p.20 «Especificado de 30% a 100% da faixa»	
+sensitivity	sensibilidade	s. f.	notes	Minipa ET-1649BT PDF p.21 «A sensibilidade no modo EFLo»; Minipa ET-2517A/2615A PDF p.22 «Sensibilidade (Senoidal RMS)»	MS-T «sensitivity» → «confidencialidade» is a data-label sense: not this one.
+temperature coefficient / tempco	coeficiente de temperatura	s. m.	note-60-00mohm-tempco-*	Minipa ET-2517A/2615A PDF p.19 «Coeficiente de Temperatura»; Minipa ET-2990 PDF p.26	
+humidity	umidade	s. f.	note-humidity-50-pct	Minipa ET-1649BT PDF p.24 «umidade relativa ≤75%»	Brazilian spelling (pt-PT «humidade»). Abbreviation «U.R.» (ET-1649BT PDF p.23).
+typical / typ.	típico / típ.	adj.	notes	Minipa ET-2517A/2615A PDF p.20 «Consumo de Energia (típico)»; PDF p.21 «Corrente de Teste: 0.4mA típico»	Agrees: «tensão típica».
+open circuit	circuito aberto	s. m.	"notes ""Open circuit ≈3V"""	Minipa ET-2517A/2615A PDF p.21 «Tensão de Circuito Aberto: < 1.2VDC»	
+shorted leads	pontas de prova em curto	s. f. pl.	notes	Minipa ET-2517A/2615A PDF p.20 «com as pontas de prova curto circuitadas»; PDF p.11 «diodo em curto»	«pontas de prova em curto-circuito» in full; Minipa's «curto circuitadas» lacks the hyphen.
+test lead	ponta de prova	s. f.	notes, lead error	Minipa ET-1649BT PDF p.4 «Pontas de Prova 1 par»; PDF p.14 «Insira a ponta de prova preta no terminal “COM”»	Plural «pontas de prova».
+fuse	fusível	s. m.	"input-fuse-* (""Fuse 10A 1000V"")"	Minipa ET-1649BT PDF p.29 «Troca de Fusível»; MS-T «fuse» → «fusível» (masc.)	"""Fuse 10A 1000V"" → «Fusível 10A 1000V»."
+nominal	nominal	adj.	input-*-nominal	Minipa ET-2517A/2615A PDF p.19 «Display: 5 por segundo nominal»	
+response time	tempo de resposta	s. m.	note-response-time-100us	Minipa ET-2517A/2615A PDF p.21 «Tempo de Resposta»; MS-T «response time» → «tempo de resposta»	
+meter / multimeter	multímetro	s. m.	"everywhere (""the meter"")"	Minipa ET-1649BT PDF p.1 «MULTÍMETRO DIGITAL»	Minipa also says «instrumento» and «medidor» (ET-2587 PDF p.3). The app says «multímetro»; «medidor» alone means an energy meter to most readers.
+device	dispositivo	s. m.	settings-device, device lists, CLI list	MS-T «device» → «dispositivo» (masc.)	Minipa says «aparelho» / «equipamento»; the app's device lists follow MS.
+simulated / mock	simulado	adj.	brand-simulated, mock models, settings-mock-*	MS-T «simulator» → «simulador»	"""Mock UT61E+"" → «UT61E+ simulado»."
+USB cable	cabo USB	s. m.	link-name-usb-cable, link-usb-cable, notices	Minipa ET-2990 PDF p.5 «Cabo USB 1 peça»; MS-SG PDF p.25 (USB stays USB)	
+Bluetooth adapter	adaptador Bluetooth	s. m.	link-name-bluetooth-adapter, notices	MS-T «Bluetooth adapter» → «adaptador Bluetooth»	
+Bluetooth link (built-in Bluetooth)	conexão Bluetooth	s. f.	link-name-bluetooth-link, top-bar-link-*	Minipa ET-1649BT PDF p.22 «K. Conexão Bluetooth»; PDF p.4 «Módulo Bluetooth integrado»	"Ruling needed (SUMMARY): also the word for ""connection""; the alternative «Bluetooth integrado» (m.) names what the meter has."
+connection	conexão	s. f.	top bar, notices, errors	MS-T «connection» → «conexão» (fem.); Minipa ET-1649BT PDF p.22 «até que a conexão seja feita»	
+connect / Connect	conectar / Conectar	v.	top-bar-connect, shortcuts-connect	MS-T «connect» → «conectar»; Minipa ET-1649BT PDF p.22 «para se conectar ao instrumento»	
+disconnect / Disconnect	desconectar / Desconectar	v.	top-bar-disconnect, top-bar-stop-retrying	MS-T «disconnect» → «desconectar»	
+reconnect / Reconnecting…	reconectar / Reconectando…	v.	top-bar-reconnecting*	no approved source found	Built on MS-T «conectar». A status in progress takes the gerund; MS-SG PDF p.36 forbids the gerund only for a future action.
+pair / paired	emparelhar / emparelhado	v.	list-not-heard	MS-T «pair» → «emparelhar»; «pairing» → «emparelhamento»	
+data transmission	transmissão de dados	s. f.	connection notices, activation (title), shared help	Minipa ET-2587 PDF p.19 «Pressione a tecla STOP para parar a transmissão de dados»	
+detect / Auto-detect	detectar / Detecção automática	v. / s. f.	settings-auto-detect, top-bar-auto-detect, device-auto, toasts	MS-T «detect» → «detectar»; Minipa ET-1649BT PDF p.20 «Quando um campo elétrico for detectado»	Brazilian spelling keeps the c: «detectar», «detecção».
+scan (Bluetooth) / Scanning…	procurar / Procurando…	v.	list-scanning, setup-bluetooth-scan	MS-SG PDF p.8 «search: pesquisar, synonym procurar»	"MS-T «scan» → «digitalizar» is for paper; «varredura» is a sweep. ""scan for adapters"" → «procurar adaptadores»."
+in range (Bluetooth)	ao alcance	loc.	"list, errors ""in Bluetooth range"""	MS-T «range» → «alcance» (masc.)	"""in Bluetooth range"" → «ao alcance do Bluetooth»."
+adapter (any --adapter target)	adaptador	s. m.	connection-adapter-*, CLI	MS-T «adapter» → «adaptador»	
+identify itself (a meter)	identificar-se	v.	connection-not-identified, no-meter-answered	no approved source found	Enclisis after a pause, proclisis after «não»: «O multímetro não se identificou».
+driver	driver	s. m.	setup-usb-windows-warning	MS-T «driver» → «driver» (masc.)	«o driver», plural «drivers».
+Device Manager	Gerenciador de Dispositivos	s. próprio m.	setup-usb-windows-open	MS-T «Device Manager» → «Gerenciador de Dispositivos»	Windows' own name: capitals as Windows shows them.
+System Settings > Privacy & Security (macOS)	Ajustes do Sistema > Privacidade e Segurança > Monitoração de Entrada; … > Bluetooth	—	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple support pt-BR mchl4cedafb6 «Ajustes do Sistema … Privacidade e Segurança … Monitoração de Entrada»; mchl211c911f «Altere o ajuste Privacidade e Segurança no Mac»	macOS's own names, capitals as Apple writes them.
+settings file	arquivo de configurações	s. m.	CLI help, connect-saved-mock-mode	MS-T «settings» → «configurações», «file» → «arquivo»	Never «ficheiro» (pt-PT).
+command-line option / flag	opção de linha de comando	s. f.	comments, notices naming --flags	MS-T «command-line option» → «opção de linha de comando» (fem.)	
+timeout	tempo limite esgotado	s. m.	error-timeout, debug-timeout	MS-T «time-out» → «tempo limite»; «time out» → «atingir tempo limite»	"""Timed out waiting for …"" → «Tempo limite esgotado ao aguardar …»."
+checksum	soma de verificação	s. f.	error-checksum-mismatch	MS-T «checksum» → «soma de verificação» (fem.)	
+frame (protocol)	quadro	s. m.	read-unreadable-frame, error-wrong-meter-*	MS-T «frame» → «quadro» (masc.)	
+support (of a meter by the app)	suporte	s. m.	stability-warning, error-bluetooth-only-not-built	MS-T «support» → «suporte»; MS-SG PDF p.8 «support: suportar; synonyms ser compatível, permitir»	"""{ $model } support is verified"" → «O suporte ao multímetro { $model } está verificado»."
+verified / partly verified / experimental	verificado / parcialmente verificado / experimental	adj.	stability-*, top-bar-badge-*, settings-device-entry	no approved source found	Badges in capitals: VERIFICADO, PARCIALMENTE VERIFICADO (23 characters for 15, the top bar's longest label; fallback «VERIF. PARCIAL»), EXPERIMENTAL.
+reading (a value the meter sent)	leitura	s. f.	reading-none, markers, export/import, graph menu, CLI	Minipa ET-1649BT PDF p.10 «Congelamento de Leitura (Data Hold)»; PDF p.24 «% da leitura»; Minipa ET-2587 PDF p.8 «a última leitura é paralisada no display»	Unlike French, Portuguese «leitura» is the maker word for a reading; «medição» is the act of measuring, «medida» both (MS-T «measurement» → «medida»).
+measured value	valor medido	s. m.	reading-spoken, hovers	Minipa ET-1649BT PDF p.12 «a diferença entre o valor medido e o valor de referência»	
+sample	amostra	s. f.	recording, graph, export, CLI summary	MS-T «sample» → «amostra» (fem.)	
+sample interval	intervalo de amostragem	s. m.	settings-sample-interval, CLI --interval-ms	MS-T «sampling interval» → «intervalo de amostragem»; Minipa ET-2517A/2615A PDF p.16 «Quando o intervalo de amostragem selecionado for 30s»	
+buffer / Buffer size	buffer / Tamanho do buffer	s. m.	settings-buffer-size, recording-status-full	MS-T «buffer» → «buffer» (masc.); «buffer size» → «tamanho do buffer»	
+recording	gravação	s. f.	recording panel, settings-recording, toasts	MS-T «recording» → «gravação» (fem.)	The meter's own memory is «registro» (REC).
+Record (button)	Gravar	v.	"recording-record (""● Record"")"	MS-T «record» → «gravar»	"""● Record"" → «● Gravar»."
+Stop (button)	Parar	v.	"recording-stop (""■ Stop"")"	MS-T «stop» → «Parar»; Minipa ET-2587 PDF p.19 «Pressione a tecla STOP para parar»	"""■ Stop"" → «■ Parar»."
+Discard	Descartar	v.	recording-discard, export-unsaved-*-confirm	MS-T «discard» → «descartar»; «discard changes» → «descartar alterações»	
+export / Export…	exportar / Exportar…	v.	export-button, shortcuts-export, toasts	MS-T «export» → «exportar»	
+import / Import…	importar / Importar…	v.	import-button, toasts, CLI --import	MS-T «import» → «importar»	
+replay (file) / replaying	reprodução / arquivo de reprodução	s. f.	export-replay, top-bar-replaying, --replay help	MS-T «playback» → «reprodução» (fem.)	"""Replaying"" → «Reproduzindo»; «--replay» stays as typed. «leitura» is taken by reading."
+file type	tipo de arquivo	s. m.	export-menu .a11y, import-file-type	MS-T «file type» → «tipo de arquivo»	
+unsaved / unexported	não salvo / não exportado	adj.	export-unsaved-*	MS-SG PDF p.16 «poderão perder o trabalho não salvo»	Agrees: «gravação não salva».
+timestamp	carimbo de data/hora	s. m.	read-error, CSV help	MS-T «timestamp» → «carimbo de data/hora»	The CSV column name `timestamp` stays verbatim.
+marker	marcador	s. m.	markers-*, graph menu	MS-T «marker» → «marcador» (masc.)	
+note (on a marker)	nota	s. f.	markers-note, markers-add	MS-T «note» → «nota»	"""Note:"" before a remark is «Observação:» (see Error: / Warning: …)."
+graph	gráfico	s. m.	settings-graph, toasts, shortcuts	MS-T «chart» → «gráfico»; Minipa ET-1649BT PDF p.4 «gerar gráficos e tabelas»	MS-T «graph» → «grafo» is the mathematical sense: not this one.
+plot (noun)	gráfico	s. m.	"graph-plot-a11y-title ""Measurement plot."""	MS-T «plot» → «gráfico»	"""Measurement plot."" → «Gráfico das leituras.»"
+plot (verb) / Plot:	plotar / Plotar:	v.	graph-plot, graph-plot-*	MS-T «plot» → «plotar»	Chip caption «Plotar:»; alternative «Traçar:» (no source).
+series	série	s. f.	graph comments, graph-show-chip	MS-T «series» → «série de dados» (fem.)	
+trace (a series' line)	curva	s. f.	graph-show-chip, settings-graph-lines	no approved source found	MS-T «trace» → «rastreamento» is a debugging sense: not this one.
+main reading	leitura principal	s. f.	"graph-plot-main (""Main"")"	Minipa ET-2517A/2615A PDF p.15 «display principal»	"""Main"" chip → «Principal»."
+sub-value	valor secundário	s. m.	graph-plot-series hover, colors-swatch-overlay-*	Minipa ET-2517A/2615A PDF p.15 «segundo display» (the meter's second display)	
+axis / Y axis	eixo / eixo Y	s. m.	graph-y-*, graph-plot-a11y-y-axis	MS-T «axis» → «eixo» (masc.); «Y axis» → «eixo y»	Capital Y as the chips print it.
+cursor	cursor	s. m.	graph-cursors, graph menu, shortcuts	MS-T «cursor» → «cursor» (masc.)	
+reference line / Ref	linha de referência / Ref.	s. f.	graph-ref, graph-menu-*-ref	MS-T «line» → «linha», «reference» → «referência»	
+triggers (crossings of a reference line)	gatilhos	s. m. pl.	graph-triggers, shortcuts-graph-triggers, colors-swatch-crossing	MS-T «trigger» → «gatilho» (masc.)	
+histogram	histograma	s. m.	graph-histogram*	MS-T «histogram» → «histograma»	
+minimap	minimapa	s. m.	graph-minimap	MS-T «minimap» → «minimapa» (masc.)	
+zoom / zoom in / zoom out	zoom / ampliar / reduzir	s. m. / v.	settings-zoom, graph, shortcuts-zoom	MS-T «zoom» → «zoom» (masc.); «zoom in» → «ampliar»; «zoom out» → «reduzir»	
+Reset Zoom	Redefinir zoom	v.	graph-reset-zoom, shortcuts-zoom-reset	MS-T «reset» → «redefinir»; «zoom» → «zoom»	Sentence case (see STYLE §3).
+pan	deslocar	v.	graph-live hover, shortcuts-mouse-drag, minimap	MS-T «offset» → «deslocar» (verb); no entry for this sense	MS-T «pan» → «aplicar panorâmica» is the camera sense. «arraste para deslocar a visualização».
+drag	arrastar	v.	gestures	MS-T «drag» → «arrastar»	
+right-click	clicar com o botão direito / clique com o botão direito	v. / s. m.	shortcuts-mouse-menu, Wayland notes	MS-T «right-click» → «clicar com o botão direito do mouse»	Drop «do mouse» where the gesture column is tight.
+double-click	clicar duas vezes / clique duplo	v. / s. m.	shortcuts-mouse-reset, graph-reset-zoom hover	MS-T «double-click» → «clicar duas vezes»	
+scroll wheel	roda de rolagem	s. f.	"gestures ""Ctrl + scroll wheel"""	MS-T «scroll wheel» → «roda de rolagem» (fem.)	
+live / LIVE (chip)	ao vivo / AO VIVO	loc.	graph-live, graph-plot-a11y-state, top-bar status	MS-T «live» → «ao vivo»	
+bounding box	retângulo delimitador	s. m.	shortcuts-mouse-box-zoom	MS-T «bounding box» → «retângulo delimitador» (masc.)	
+time window	janela de tempo	s. f.	graph-window, shortcuts-graph-window	MS-T «window» → «janela»; «time range» → «intervalo de tempo»	
+envelope (min/max band)	envelope	s. m.	graph-envelope*, colors-swatch-envelope	MS-T «envelope» → «envelope»	
+crosshair	retícula	s. f.	colors-swatch-crosshair	no approved source found	
+gap (in recorded data)	lacuna	s. f.	stats-gaps, colors-swatch-gap, read-skipped-intervals	no approved source found	MS-T «gap» has only acronyms.
+viewport (minimap bracket)	área visível	s. f.	colors-swatch-viewport, shortcuts-mouse-minimap	no approved source found	MS-T «viewport» → «visor»: a display device to most readers, so rejected here.
+statistics	estatísticas	s. f. pl.	stats-heading, settings-statistics	MS-T «statistics» → «Estatísticas»	
+mean	média	s. f.	stats-mean, graph-mean, read-summary	MS-T «average» → «média»; Minipa ET-2990 PDF p.23 «Modo Máximo/Mínimo/Média»	Caption «Média:»; the read-out keeps `Mean=` notation as «Média=».
+standard deviation / σ	desvio padrão / σ	s. m.	stats-sd, graph-histogram-a11y-sd, hovers	MS-T «standard deviation» → «desvio padrão» (masc.)	No hyphen (2009 spelling, MS-T).
+readings (count of)	leituras	s. f. pl.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	Minipa ET-2517A/2615A PDF p.13 «20 leituras por segundo»	"""Readings: 12"" → «Leituras: 12»; read-out «Leituras=12»."
+integral	integral	s. f.	stats-integral, read-integral, --integrate help	MS-T «integral» → «integral»	Feminine in the mathematical sense («a integral»); MS-T marks its entry masculine.
+Visible (block of figures)	Visível	adj.	stats-visible	no approved source found	
+Reset (statistics)	Redefinir	v.	stats-reset	MS-T «reset» → «redefinir»	
+alarm	alarme	s. m.	alarm-*, reading badges, CLI	MS-T «alarm» → «alarme» (masc.); Minipa ET-1649BT PDF p.13 «Um alarme sonoro integrado»	
+high limit / low limit	limite superior / limite inferior	s. m.	alarm-high/low, alarm-breach, graph-menu-set-alarm	Minipa ET-2517A/2615A PDF p.3 «o limite especificado do fusível» (limite only)	Badges: LIM. SUP. / LIM. INF.
+threshold	limiar	s. m.	"notes ""Audible threshold"", ""Lo-Z threshold"""	Minipa ET-2517A/2615A PDF p.6 «Limiar Audível»; PDF p.21 «Limiar Lo-Z DCV»	MS-T gives «limite»; the maker word is «limiar».
+hysteresis	histerese	s. f.	alarm-hysteresis, alarm-band hover, --alarm-hysteresis	no approved source found	
+scale / scaling	escala / ajuste de escala	s. f. / s. m.	scale-chip, scale-on toast, reading-badge-scaled, --scale	MS-T «scale» → «escala» (fem.), «ajustar escala»	Badge SCALE → «ESCALA».
+scale factor	fator de escala	s. m.	scale-factor, --scale help	MS-T «scale factor» → «fator de escala»; Minipa ET-2517A/2615A PDF p.5 «fatores de escala»	
+offset	deslocamento	s. m.	scale-offset, --offset help	MS-T «offset» → «Deslocamento»	Ruling needed (SUMMARY): Minipa keeps «offset» in English (ET-2517A/2615A PDF p.5).
+unit / unit label	unidade / rótulo da unidade	s. f. / s. m.	scale-unit, alarm-unit, --unit	MS-T «unit» → «unidade»; «label» → «rótulo»	
+Apply	Aplicar	v.	scale-apply, alarm-apply	MS-T «apply» → «aplicar»	
+Off (button)	Desativar	v.	scale-off, alarm-off	MS-T «turn off» → «desativar»	
+Settings	Configurações	s. f. pl.	"top-bar-settings, every ""in Settings (⚙)"""	MS-T «settings» → «Configurações»	"""in Settings (⚙)"" → «em Configurações (⚙)». «Ajustes» is Apple's word for macOS, only inside macOS paths."
+theme	tema	s. m.	colors-theme*	MS-T «theme» → «tema» (masc.)	
+Dark / Light / System	Escuro / Claro / Sistema	adj. / s. m.	colors-theme-*, settings-language-system	MS-T «dark» → «escuro», «light» → «claro», «system» → «sistema»	Agree with «tema» (m.).
+colours	cores	s. f. pl.	colors-colors, colors-customize	MS-T «accent color» → «cor de destaque»	
+High Contrast	Alto contraste	s. m.	colors-preset-high-contrast	MS-T «high contrast» → «Alto Contraste»	Sentence case (STYLE §3); MS writes it as a Windows feature name.
+Colorblind (preset)	Daltonismo	s. m.	colors-preset-colorblind	no approved source found	Ruling needed (SUMMARY): «Daltonismo» names the need, not the person (MS-SG PDF p.21); alternative «Para daltônicos».
+Default (preset)	Padrão	s. m.	colors-preset-default	MS-T «default» → «padrão»	
+customized / Customize colors	personalizado / Personalizar cores	adj. / v.	colors-*-customized, colors-customize	MS-T «customize» → «personalizar»	
+accent	destaque	s. m.	colors-swatch-accent	MS-T «accent color» → «cor de destaque»	
+background	plano de fundo	s. m.	"colors-swatch-background, ""Plot bg"" → «Fond du tracé»"	MS-T «background» → «plano de fundo»	"""Plot bg"" → «Fundo do gráfico»."
+border	borda	s. f.	colors-swatch-border	MS-T «border» → «borda»	
+frame (colour surface)	quadro	s. m.	colors-swatch-frame	MS-T «frame» → «quadro» (masc.)	
+heading	título	s. m.	colors-swatch-heading	MS-T «heading» → «título» (masc.)	
+weak text	texto secundário	s. m.	colors-swatch-weak-text	MS-T «text» → «texto» (secondary: no source)	
+palette	paleta	s. f.	colors-preset-* hovers	MS-T «palette» → «paleta»	
+keyboard shortcut	atalho de teclado	s. m.	shortcuts-*, top-bar-shortcuts	MS-T «keyboard shortcut» → «atalho de teclado» (masc.)	
+Keyboard & Mouse	Teclado e mouse	—	shortcuts-title	MS-T «keyboard» → «teclado», «mouse» → «mouse»; MS-SG PDF p.22 (spell out & as e)	Brazilian «mouse» (pt-PT «rato»).
+key names in prose (Up/Down, Left/Right, Escape, Space, Shift, PgUp/PgDn, Home/End)	Seta para cima/Seta para baixo, Seta para a esquerda/Seta para a direita, Esc, Barra de espaços, Shift, Page Up/Page Down, Home/End	s. f.	shortcuts-note, divider .a11y texts, gestures	MS-SG PDF p.47–49 key-name table	In prose use MS's names; the shortcut column uses the shorter shortcuts-key-* names (STYLE §8).
+tooltip / hover text	dica de ferramenta	s. f.	translator comments only	MS-T «tooltip» → «dica de ferramenta» (fem.)	Comments only.
+toast	notificação	s. f.	translator comments only	MS-T «toast» → «notificação do sistema»; «notification» → «notificação»	Comments only.
+drop-down	lista suspensa	s. f.	.a11y names, comments	MS-T «drop-down list» → «lista suspensa»	
+checkbox	caixa de seleção	s. f.	"bluetooth-off-* (""Tick …"")"	MS-T «check box» → «caixa de seleção»	"""Tick …"" → «Marque …»."
+panel	painel	s. m.	recording-resize .a11y, settings, big meter	MS-T «panel» → «painel» (masc.)	
+button	botão	s. m.	notices naming buttons	MS-T «button» → «botão»	
+screen reader	leitor de tela	s. m.	comments only	MS-T «screen reader» → «leitor de tela» (masc.)	Brazilian «tela» (pt-PT «ecrã»).
+Help & Feedback	Ajuda e sugestões	—	project-link (top bar, --help last line)	MS-T «help» → «ajuda»; «feedback» → «comentários»; MS-SG PDF p.22 (& as e)	Ruling, as French: «sugestões» says constructive feedback is wanted, and is shorter for the top bar at 700 px. MS-T also keeps «feedback» as a loan word.
+report feedback	enviar comentários	v.	connection-feedback, top-bar-badge-hover, connect-report-feedback	MS-T «feedback» → «Enviar Comentários»	"""Click to report feedback."" → «Clique para enviar comentários.»"
+What's New	Novidades	s. f. pl.	top-bar-version, whats-new-title*	MS-T «what's new» → «Novidades»	
+release notes	notas de versão	s. f. pl.	top-bar-version hover	MS-T «release notes» → «notas de versão»	
+update / new version	atualização / nova versão	s. f.	settings-check-updates, settings-update-*	MS-T «update» → «atualização»; «version» → «versão»	Version numbers keep their periods: «Versão 0.10.0» (MS-SG PDF p.38).
+machine-translated	tradução automática	s. f.	settings-language-machine-translated, -unreviewed	MS-T «machine translation» → «tradução automática» (fem.)	
+language	idioma	s. m.	settings-language	MS-T «language» → «Idioma»	«linguagem» is a programming language. Language names lowercase in running text («o português»).
+Always on top	Sempre visível	—	settings-always-on-top, shortcuts-always-on-top	MS-T «always on top» → «Sempre Visível»	Sentence case (STYLE §3).
+fullscreen	tela inteira	s. f.	shortcuts-fullscreen, big meter hover	MS-T «full screen» → «tela inteira»	
+minimise	minimizar	v.	shortcuts-minimize	MS-T «minimize» → «minimizar»	
+title bar	barra de título	s. f.	Wayland notes	MS-T «title bar» → «barra de título»	
+window decorations	moldura da janela	s. f.	settings-hide-decorations, shortcuts-decorations	no approved source found	"""Hide window decorations"" → «Ocultar a moldura da janela»."
+Quit	Sair	v.	shortcuts-quit	MS-T «exit» → «sair»; MS-SG PDF p.51 «Arquivo Sair»	
+Dismiss	Ignorar	v.	connection-dismiss	MS-T «dismiss» → «ignorar»	Alternative «Fechar» (MS-T «close»).
+Copy / copied	Copiar / copiado	v.	graph-menu-copy, connection-late-copy, toasts	MS-T «copy» → «copiar»; MS-SG PDF p.51 «Editar Copiar»	
+clipboard	área de transferência	s. f.	comments	MS-T «clipboard» → «área de transferência» (fem.)	
+Cancel	Cancelar	v.	export-unsaved-cancel	MS-T «cancel» → «Cancelar»; MS-SG PDF p.49	
+Clear	Limpar	v.	top-bar-clear, shortcuts-clear	MS-T «clear» → «limpar»	
+Pause / Resume	Pausar / Continuar	v.	top-bar-pause, top-bar-resume, shortcuts-pause	MS-T «pause» → «pausar», «resume» → «continuar»; Minipa ET-2517A/2615A PDF p.16 «tecla (Pausar/Continuar/Parar)»	MS-T also has «retomar»; «Continuar» is the shorter and matches Minipa.
+acquisition	aquisição	s. f.	top-bar-pause hover, connection-acquisition-stopped	MS-T «acquisition» → «aquisição»	
+Error: / Warning: / Note: / Tip:	Erro: / Aviso: / Observação: / Dica:	s.	cli/common.ftl, list-select-tip, settings-tip-*	MS-T «error» → «erro», «warning» → «aviso», «tip» → «dica»; MS-SG PDF p.33 «OBSERVAÇÃO: esta compra…»	No space before the colon; lowercase after it (MS-SG PDF p.33).
+measurement (the act)	medição	s. f.	prose, hovers, notes	Minipa ET-1649BT PDF p.12 «modo de medição»; PDF p.16 «afetar a precisão da medição»; MS-T «measurement» → «medida»	Minipa uses «medida» and «medição» interchangeably; prefer «medição» for the act and «leitura» for the value.
+instrument (Minipa's word for the meter)	multímetro	s. m.	translator guidance	Minipa ET-1649BT PDF p.4 «O Modelo ET-1649BT (Daqui em diante referido apena como instrumento)»	Manuals say «o instrumento»; the app names it «o multímetro».
+battery cells (AAA, AA)	pilhas	s. f. pl.	notes, activation steps	Minipa ET-1649BT PDF p.29 «remova as três pilhas do compartimento da bateria»	«bateria» for the supply in general and the 9 V block.
+terminal / input jack	terminal / borne de entrada	s. m.	activation steps, lead error, notes	Minipa ET-1649BT PDF p.9 «Borne de entrada “COM”»; PDF p.14 «no terminal “VΩ”»	Minipa mixes both on one page; prefer «terminal».
+setting (one meter setting: hold, rel, range)	configuração	s. f.	settings-switched, connection-switch-failed, CLI get/set	MS-T «setting» → «configuração»	«a configuração { $setting }».
+computer	computador	s. m.	setup help, notices	MS-T «PC» → «computador»; Minipa ET-2587 PDF p.9 «enviar os dados para o computador»	MS-SG PDF p.7 writes «computador» where English says PC.
+app / application	aplicativo	s. m.	notices, help	MS-T «app» → «aplicativo»; Minipa ET-1649BT PDF p.22 «aplicativo Minipa Link»	Never «app» alone in running text, never «aplicação» (pt-PT).
+press (an app button or key)	pressionar	v.	shortcuts-note, notices	MS-SG PDF p.11 «pressione Enter para enviá-la»	"""press Escape"" → «pressione Esc»."
+click	clicar	v.	hovers, notices	MS-SG PDF p.17 «clique em Cancelar»; MS-T «click» → «clicar»	«clique em …», not «clique …». MS-SG PDF p.22 prefers «Selecione» where any input device works.
+turn on / switch on (the meter, Bluetooth)	ligar	v.	activation steps, setup help	Minipa ET-1649BT PDF p.22 «1. Ligue o instrumento»; MS-T «turn on» → «ligar»	«ligar o Bluetooth», «ligar a transmissão de dados».
+low battery (spoken)	bateria fraca	s. f.	reading-spoken-low-battery	Minipa ET-1649BT PDF p.8 «Bateria Fraca»; PDF p.6 «indicador de bateria fraca»	
+residual reading	leitura residual	s. f.	notes	Minipa ET-2517A/2615A PDF p.20 «Leitura residual menor que 5 dígitos»; Minipa ET-1649BT PDF p.17 «zerar o valor residual»	
+forward voltage	tensão direta	s. f.	notes, diode tables	Minipa ET-1649BT PDF p.26 «Exibe a tensão direta aproximada do diodo»	
+test current	corrente de teste	s. f.	notes	Minipa ET-2517A/2615A PDF p.21 «Corrente de Teste: 0.4mA típico»	
+frequency response	resposta de frequência	s. f.	notes	Minipa ET-1649BT PDF p.24 «Resposta de Frequência: 40~400Hz»	
+sampling rate / update rate	taxa de amostragem / taxa de atualização	s. f.	notes, settings	Minipa ET-1649BT PDF p.23 «Taxa de Amostragem: 3 vezes por segundo»; Minipa ET-2517A/2615A PDF p.19 «Taxa de Atualização»	
