@@ -226,6 +226,16 @@ impl<'a> Triage<'a> {
         if let Some(plan) = &r.plan {
             run.push(format!("plan {plan}"));
         }
+        let translated = r
+            .steps
+            .iter()
+            .filter(|s| s.instruction_shown.is_some())
+            .count();
+        if translated > 0 {
+            run.push(format!(
+                "{translated} step(s) showed the reporter's own translation (instruction_shown)"
+            ));
+        }
         if r.no_response {
             run.push("the meter never answered".to_string());
         }

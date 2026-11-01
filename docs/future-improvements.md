@@ -474,7 +474,7 @@ The apps ship translated ([localization-design.md](localization-design.md)); wha
 - Room at 700 px. With a live meter the Portuguese and Spanish top bars wrap where English and French fit, and the Portuguese statistics row pushes ∫ onto a line of its own.
 - Chinese in the shortcut list. The key column is monospace, so the half-width parentheses around a key leave wide gaps beside the Chinese text.
 - `get` and `set` in Chinese. `get` lists `on` and `off`, the tokens `set` takes, while `set` confirms the change in Chinese (开, 关).
-- The capture tooling, What's New and the user docs, which stay English.
+- Shipped translations of `capture`'s step instructions, which users translate for themselves; `triage`, What's New and the user docs, which stay English.
 
 Use cases: users who don't read English comfortably, meters sold under local brands in non-English markets.
 

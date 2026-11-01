@@ -167,14 +167,16 @@ pub(super) fn run_protocol_capture(
     let missing = ask_missing_needs(&pending, input)?;
     let dropped = steps_without(&pending, &missing);
     for (step, label) in &dropped {
-        upsert_step(
-            report,
-            empty_result(
+        let result = StepResult {
+            // Never shown: the step is dropped before its header prints.
+            instruction_shown: None,
+            ..empty_result(
                 step,
                 StepStatus::Skipped,
                 Some(format!("skipped: no {label}")),
-            ),
-        );
+            )
+        };
+        upsert_step(report, result);
     }
     if !dropped.is_empty() {
         let ids: Vec<&str> = dropped.iter().map(|(s, _)| s.id).collect();

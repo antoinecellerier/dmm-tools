@@ -40,7 +40,7 @@ fn header(l: &Localizer, step: &CaptureStep) -> String {
     } else {
         String::new()
     };
-    format!("{id} {}{gate}", step.instruction)
+    format!("{id} {}{gate}", super::instructions::shown(step))
 }
 
 /// Create a StepResult with no samples or screen capture.

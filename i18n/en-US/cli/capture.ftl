@@ -6,6 +6,8 @@
 ###
 ### Each step's own instruction, the readings (5.5687 V [AUTO]) and the
 ### report file stay as they are, in English: a maintainer reads the report.
+### A user may translate the instructions for themselves: see
+### --export-instructions below.
 ### Step ids (dcv, hold_on, extra_0), setting names (range, hold) and words
 ### in --flag form are typed or read back by those names and stay as they
 ### are. The keys the user presses to answer (s, q, r, n, y) arrive as
@@ -337,6 +339,52 @@ capture-steps-hint = { $flag } runs named steps on their own.
 # $url is the web address of the meter's issue on GitHub.
 capture-attach = Attach the report to { $url }
 
+## --export-instructions: the step instructions written to a file the user
+## translates for themselves, then passes back with --instructions. The
+## file is Fluent source, like this one.
+
+# The comment at the top of the exported file, a line of it per line here.
+# $meter is the meter's name, e.g. Brymen BM829s/BM827s/BM822s/BM821s.
+# Keep "=", "-device" and "#" as they are: they are the file's
+# syntax.
+capture-instructions-header =
+    Capture step instructions for { $meter }, to translate.
+    Replace the text after each "=" with your translation, on the same line.
+    Keep the step id before the "=", the "-device" line and the lines
+    starting with "#" as they are. A step you delete shows in English.
+# A line of the header, when the steps quote words from the meter: its
+# key labels and what its screen shows. $marks lists them, e.g. "AC, HOLD,
+# MIN/MAX, SELECT". A translation, by a person or a machine, must leave them
+# as they are, so say so plainly.
+capture-instructions-keep = Keep these as they are, as the meter prints them on its keys and screen: { $marks }
+# The header's last line. $command is the command that runs the capture
+# with the translated file.
+capture-instructions-run = Then run: { $command }
+# In place of writing a file, for a meter with no steps of its own (a
+# simulated one). $meter is its name, e.g. Mock UT61E+.
+capture-instructions-none = { $meter } has no capture steps of its own: there is nothing to translate.
+# After writing the file. $count is the number of steps; $path the file.
+capture-instructions-written =
+    { $count ->
+        [one] Wrote { $count } step instruction to { $path }.
+       *[other] Wrote { $count } step instructions to { $path }.
+    }
+# $command is the command that runs the capture with the translated file.
+capture-instructions-next = Translate them, then run: { $command }
+# Yellow, before the first step: steps whose English changed after the
+# file was exported, so they show a translation of an older wording.
+# $path is the file; $steps lists the step ids, e.g. "dcv, hold".
+capture-instructions-changed = These steps changed after { $path } was exported, and show your translation of their old text: { $steps }. Export a new file to see the new English.
+# One problem in the file, on a line of its own under
+# capture-error-instructions-unreadable. $line is a line number.
+capture-instructions-problem-syntax = line { $line }: not a step id, "=" and its text
+# Another problem. $id is a step id, e.g. dcv.
+capture-instructions-problem-not-text = { $id }: the text holds curly brackets; remove them
+# Another problem. $id is a step id, e.g. dcv.
+capture-instructions-problem-twice = { $id }: the step is there twice
+# Another problem: the file couldn't be read at all.
+capture-instructions-problem-unparsable = the file can't be read; check the curly brackets and quotes in it
+
 ## The line that closes a failed run, after "Error:" (common.ftl).
 
 capture-error-not-responding = meter not responding
@@ -346,3 +394,16 @@ capture-error-input-gone = keyboard input stopped working; finish the capture an
 capture-error-unknown-steps =
     unknown capture step(s): { $steps }
     Run { $command } to see the steps this device supports.
+# The --instructions file can't be read. $path is the file; $problems the
+# problems, one per line (capture-instructions-problem-*).
+capture-error-instructions-unreadable =
+    { $path } can't be read as capture instructions:
+    { $problems }
+# The --instructions file was exported for another meter. $path is the
+# file; $named the meter id in it, e.g. ut61eplus; $device this run's, e.g.
+# bm82x; $command the command that exports a file for this meter.
+capture-error-instructions-device = { $path } holds the instructions for { $named }, not { $device }. Export them for this meter with { $command }.
+# The --instructions file names steps this run doesn't have, most likely a
+# step id that was translated. $path is the file; $ids the ids not found,
+# e.g. "vcc, retencao"; $known the ids the run has, e.g. "dcv, acv, hold".
+capture-error-instructions-ids = { $path } names steps this run doesn't have: { $ids }. Keep each step id as it was exported; the steps are: { $known }.

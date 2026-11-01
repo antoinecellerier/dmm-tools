@@ -340,6 +340,19 @@ pub(crate) struct CaptureArgs {
     /// How --list-steps prints the list (md is the issue checklist)
     #[arg(long, value_enum, default_value = "text", requires = "list_steps")]
     pub(crate) format: StepListFormat,
+    // Last of capture's own, so they sit beside the global --lang.
+    /// Write the step instructions to FILE, to translate for --instructions,
+    /// and exit
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with_all = ["instructions", "steps", "unverified", "list_steps"]
+    )]
+    pub(crate) export_instructions: Option<String>,
+    /// Show the step instructions from FILE, translated from what
+    /// --export-instructions wrote
+    #[arg(long, value_name = "FILE")]
+    pub(crate) instructions: Option<String>,
 }
 
 /// The `read` flags that build a software [`Transform`].

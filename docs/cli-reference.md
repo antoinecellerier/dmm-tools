@@ -672,6 +672,8 @@ dmm-cli capture [OPTIONS]
 | `--settle <MS>` | `0` | Wait this long before every sample, for readings that settle slowly. Costs that much per step, so pair it with `--steps`. |
 | `--list-steps` | | List the selected device's step IDs and exit. `✓` marks a step confirmed on hardware, `gate` a step that checks the decoder. |
 | `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use. |
+| `--export-instructions <FILE>` | | Write the step instructions (the device's, or the `--plan` file's) to FILE to translate, and exit. An existing FILE is kept: the new one gets a number. Conflicts with `--instructions`, `--steps`, `--unverified` and `--list-steps`. |
+| `--instructions <FILE>` | | Show the step instructions from FILE, translated from what `--export-instructions` wrote; a step it leaves out shows in English. |
 
 The steps come from the selected device's protocol; `--list-steps` shows what
 will run for it (pass `--device` for another).
@@ -713,6 +715,12 @@ restart the meter, unplugging its USB cable if it has one, then detects it as
 The run ends with how many unverified steps the report covers and the issue
 to attach it to.
 
+The run speaks the language `--lang` picks, but the step instructions are in
+English. To read them in your language, export them with
+`--export-instructions`, replace the text after each `=` with your
+translation, by hand or with a translation tool, and run with
+`--instructions`. The report keeps the English beside the text you read.
+
 **Examples:**
 
 ```bash
@@ -742,6 +750,10 @@ dmm-cli capture --steps ohm --settle 3000
 
 # Run a maintainer's step list from an issue
 dmm-cli --device vc890 capture --plan edge.yaml
+
+# Read the step instructions in your own translation
+dmm-cli --device bm82x capture --export-instructions bm82x-pt.ftl
+dmm-cli --device bm82x capture --instructions bm82x-pt.ftl
 ```
 
 ### dmm-cli completions

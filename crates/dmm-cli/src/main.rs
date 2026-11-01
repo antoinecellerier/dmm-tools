@@ -321,7 +321,13 @@ fn main() {
         ),
         Cmd::Debug { count, interval_ms } => cmd_debug(selection, opts, count, interval_ms),
         Cmd::Capture(args) => {
-            if args.list_steps {
+            if let Some(path) = &args.export_instructions {
+                // Like --list-steps: the run's steps, without opening the
+                // meter when it is named.
+                device_for_listing(selection, opts).and_then(|device| {
+                    capture::export_instructions(device, args.plan.as_deref(), path)
+                })
+            } else if args.list_steps {
                 // Device-scoped: the steps come from the selected device's
                 // protocol, so what's listed is what `--steps` will match.
                 // With nothing selected, that means asking the cable first.

@@ -4,6 +4,7 @@
 mod detection;
 mod drive;
 mod input;
+mod instructions;
 mod listing;
 mod plan;
 pub(crate) mod recording;
@@ -15,6 +16,7 @@ mod watch;
 
 pub(crate) use detection::Reopen;
 pub(crate) use input::{ErrorLog, Input, InputGone};
+pub(crate) use instructions::{OtherDevice, UnknownIds, Unreadable, export as export_instructions};
 pub(crate) use listing::{StepListFormat, UnknownSteps, list_steps};
 pub(crate) use report::{
     CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report, upsert_step,
@@ -60,6 +62,7 @@ pub(crate) fn cmd_capture(
         steps: filter,
         unverified: unverified_only,
         plan: plan_path,
+        instructions: instructions_path,
         sniff,
         no_drive,
         settle,
@@ -71,6 +74,9 @@ pub(crate) fn cmd_capture(
     // Before the meter is touched: a plan the tool can't read is the
     // reporter's typo, and they should hear about it straight away.
     let plan_steps = plan_path.as_deref().map(plan::load).transpose()?;
+    if let Some(path) = instructions_path.as_deref() {
+        instructions::install(path, device, plan_steps.as_deref())?;
+    }
 
     let l = crate::l10n::get();
     let (device_name, supported) = match verify_meter(&mut dmm, device) {
@@ -427,6 +433,8 @@ mod tests {
             steps: None,
             unverified: false,
             plan: None,
+            instructions: None,
+            export_instructions: None,
             sniff: false,
             no_drive: false,
             settle: 0,

@@ -167,6 +167,11 @@ pub(crate) enum ConfirmedBy {
 pub(crate) struct StepResult {
     pub id: String,
     pub instruction: String,
+    /// The instruction the operator read instead, from their own
+    /// translation (`capture --instructions`), so a maintainer can see what
+    /// they were asked to do.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub instruction_shown: Option<String>,
     pub status: StepStatus,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub samples: Vec<SampleData>,
@@ -210,6 +215,7 @@ impl StepResult {
         StepResult {
             id: id.to_string(),
             instruction: instruction.to_string(),
+            instruction_shown: super::instructions::translated(id, instruction).map(str::to_string),
             status,
             samples: vec![],
             confirmed: None,

@@ -34,6 +34,12 @@ pub(super) fn load(path: &Path) -> Result<CaptureReport, String> {
                     "{shown}: a capture plan, not a report; pass it as --plan beside the report"
                 ));
             }
+            // What --instructions reads: the reporter's translated steps.
+            _ if text.lines().any(|l| l.starts_with("-device")) => {
+                return Err(format!(
+                    "{shown}: capture instructions for --instructions, not a report"
+                ));
+            }
             _ => return Err(not_a_report()),
         },
     };

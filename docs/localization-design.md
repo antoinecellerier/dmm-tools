@@ -1,6 +1,6 @@
 # Localization Design
 
-dmm-gui and dmm-cli speak the user's language using [Fluent](https://projectfluent.org/): English, French, Brazilian Portuguese, Simplified Chinese and Spanish. The first request came in [issue #35](https://github.com/antoinecellerier/dmm-tools/issues/35). A reporter whose Brymen meters are sold in Brazil under the Minipa brand ran `capture` through their own wrapper, which rewrote its prompts into Brazilian Portuguese. Because the wrapper piped stdio, the review step and `detect` were skipped. The reporter named the capture flow as the place translation helps most, and offered to contribute and review a pt-BR translation. The capture tooling stays in English (see [Ruled out](#ruled-out)), so this serves that audience but not the case that prompted the request.
+dmm-gui and dmm-cli speak the user's language using [Fluent](https://projectfluent.org/): English, French, Brazilian Portuguese, Simplified Chinese and Spanish. The first request came in [issue #35](https://github.com/antoinecellerier/dmm-tools/issues/35). A reporter whose Brymen meters are sold in Brazil under the Minipa brand ran `capture` through their own wrapper, which rewrote its prompts into Brazilian Portuguese. Because the wrapper piped stdio, the review step and `detect` were skipped. The reporter named the capture flow as the place translation helps most, and offered to contribute and review a pt-BR translation. `capture` now speaks the user's language, and its step instructions can be read in the user's own translation (see [Ruled out](#ruled-out)), so a run needs no wrapper.
 
 One principle runs through every section. **Canonical English stays the data.** The library's strings stay what they are and keep serving as keys, file contents and saved settings. Translation happens in the apps, at the moment text reaches the screen or the terminal.
 
@@ -21,7 +21,7 @@ Stays English:
 - every data format: CSV, JSON, replay, capture YAML, export file names
 - `read`'s stdout line, `get --format json`, and every token typed on a command line, such as `set` arguments
 - logs, including the library warnings shown by default
-- in `capture`: the step instructions, the readings it echoes and the report; `--list-steps` and `triage`
+- in `capture`: the step instructions, unless the user translates them for themselves; the readings it echoes and the report; `--list-steps` and `triage`
 - What's New (`CHANGELOG.md`), doc screenshots, `dmm-gui --help`, the shell completion scripts
 - unit symbols, decimal points, timestamps
 - theme names, which are also setting values, `--theme` arguments and file names
@@ -207,9 +207,7 @@ What makes doc translation harder than message translation:
 
 **On-the-fly machine translation.** Firefox translates pages locally with Bergamot, which runs Marian models, and in Rust `candle` can run Marian models too. Here it would mean a heavy dependency tree and a model download of tens of MB per language. Short UI labels with no context ("Hold", "Range", "REL") are where neural translation does worst. And every string this design translates is fixed or structured, so it can all be drafted offline, with better quality and at no runtime cost.
 
-**Translating the capture tooling.** That means about 800 step instructions, the `Expect` reasons and `triage`. It is the largest translation job of all. The step texts also change whenever a family's verification moves on. Capture serves only people running a guided capture for an issue, and maintainers can't check a translated instruction against the meter. Step IDs aren't the obstacle: they are unique per device, so device-scoped message IDs would work.
-
-#35's need can be met far more cheaply, and without a wrapper. `capture` would export a device's step instructions to a file keyed by step ID. The user translates that file by hand or by machine and passes it back in. The run is unchanged except for the printed text: gate steps, expectations, review and `detect` all behave as before, and the report keeps the English. The file belongs to the user, so maintainers keep no catalogue in sync. It doesn't depend on the rest of this design.
+**Shipping translated capture step instructions.** There are about 800, the largest translation job of all, and they change whenever a family's verification moves on. Only people running a guided capture for an issue read them, and maintainers can't check a translated instruction against the meter. Instead the user exports a meter's instructions, translates them by hand or by machine, and passes the file back in ([capture design](capture-design.md#i-instructions-in-the-users-words)). The file is theirs, so maintainers keep no catalogue in sync. `capture`'s own prompts, which every run shares, are translated like the rest of dmm-cli.
 
 **Right-to-left scripts**, until egui supports them (see [Scripts, fonts and layout](#scripts-fonts-and-layout)).
 

@@ -168,6 +168,9 @@ fn ours<'e>(e: &'e (dyn std::error::Error + 'static)) -> Option<&'e dyn Localize
         .or_else(|| of::<crate::capture::NotResponding>(e))
         .or_else(|| of::<crate::capture::InputGone>(e))
         .or_else(|| of::<crate::capture::UnknownSteps>(e))
+        .or_else(|| of::<crate::capture::Unreadable>(e))
+        .or_else(|| of::<crate::capture::OtherDevice>(e))
+        .or_else(|| of::<crate::capture::UnknownIds>(e))
 }
 
 /// `e` as the terminal shows it: a library error or one of dmm-cli's own

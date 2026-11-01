@@ -252,7 +252,7 @@ fn beside(path: &Path, n: u32) -> PathBuf {
 
 /// Name the file in an io failure: "permission denied" on its own says
 /// nothing about which file the run could not write.
-fn at_path(path: &Path, e: io::Error) -> io::Error {
+pub(crate) fn at_path(path: &Path, e: io::Error) -> io::Error {
     io::Error::new(e.kind(), format!("{}: {e}", path.display()))
 }
 

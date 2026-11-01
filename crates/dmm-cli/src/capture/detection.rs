@@ -391,10 +391,14 @@ fn read_back(opened: Opened, step: &CaptureStep, input: &Input, timeout: Duratio
                 .as_ref()
                 .map(SampleData::from_measurement);
             let l = crate::l10n::get();
-            // The step's instruction stays as the step words it.
+            // The step's instruction, in the user's words when they gave some.
             eprintln!(
                 "{}",
-                tr!(l, "capture-detect-now", instruction = step.instruction)
+                tr!(
+                    l,
+                    "capture-detect-now",
+                    instruction = super::instructions::shown(step)
+                )
             );
             eprintln!(
                 "{}",

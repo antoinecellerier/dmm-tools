@@ -48,6 +48,8 @@ A full `dmm-cli capture` stays the thorough option: it re-checks the confirmed s
 
 If a maintainer posts a short plan file in your issue, run it with `dmm-cli capture --plan edge.yaml` and attach the report it writes.
 
+The steps' instructions are in English. To read them in your language, run `dmm-cli capture --export-instructions steps.ftl`, translate the text after each `=` (by hand or with a translation tool), then run `dmm-cli capture --instructions steps.ftl`.
+
 Captures save after each step, so you can interrupt and resume later.
 
 ### What to do with the capture

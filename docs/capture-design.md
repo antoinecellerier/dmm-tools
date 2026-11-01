@@ -247,12 +247,36 @@ steps, since the device's unverified coverage says nothing about steps that are 
 list. The default output file is named after the plan, so a plan run never resumes into the
 full report.
 
+## I. Instructions in the user's words
+
+A user who doesn't read English well can read the step instructions in their own
+translation ([#35](https://github.com/antoinecellerier/dmm-tools/issues/35)): the rest of the
+run already speaks their language, and the instructions are the user's to translate, not ours
+([localization design](localization-design.md#ruled-out)). `--export-instructions FILE` writes the
+run's steps, the device's or a plan's, as a Fluent file: a `-device` term naming the registry
+entry, then one message per step id, each under a `# en:` fingerprint of its English and the
+English itself, for the user to check a translation against. Its
+header lists the words the steps quote from the meter, its key labels and what its screen shows
+(HOLD, AC+DC), so a translator, or a machine given nothing but the file, leaves them as the
+meter prints them. Fluent
+keeps the file in the format the apps' own translations use, and is read back with the same
+parser and escaping. `--instructions FILE` shows the file's text in the step header and in the
+detection check's read-back; a step the file leaves out shows in English.
+
+A file exported for another meter, or naming ids neither the device nor the plan has, stops the
+run before its first step: a machine translator turning `hold` into `retenção` is caught there.
+A device's file also serves a plan run on it. A
+step whose English changed since the export is named before the first step and shows the old
+translation. The report keeps the English `instruction` and adds `instruction_shown` with the
+text the operator read. The file format is `dmm_shared::l10n::instructions`; the run's side is
+`capture/instructions.rs`.
+
 ## Report format
 
 The schema is `CaptureReport` and `StepResult` in `report.rs`, with each field documented there.
 The report level holds the run's context: the device, `init_frames`, `tier`, `core_semantics`,
 `drive`, `plan` and `detection`. Each step holds its `samples`, `frames`, `diagnostics`, the operator's
-confirmation and `needs_attention`; sub-steps, mode switches included, are steps of their own. A
+confirmation, `needs_attention` and any `instruction_shown`; sub-steps, mode switches included, are steps of their own. A
 rejected transfer is visible as a frame with no matching sample and a line under
 `diagnostics`. Every field added since the first report format is optional on read, so older
 reports still resume.

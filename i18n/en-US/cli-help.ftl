@@ -159,3 +159,9 @@ capture--list-steps =
 # dmm-cli capture --format
 capture--format =
     .help = How --list-steps prints the list (md is the issue checklist)
+# dmm-cli capture --export-instructions
+capture--export-instructions =
+    .help = Write the step instructions to FILE, to translate for --instructions, and exit
+# dmm-cli capture --instructions
+capture--instructions =
+    .help = Show the step instructions from FILE, translated from what --export-instructions wrote
