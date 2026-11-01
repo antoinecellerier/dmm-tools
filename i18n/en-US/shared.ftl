@@ -139,3 +139,32 @@ input-band-not-a-number = “{ $text }” is not a number or a percentage such a
 input-band-negative = must be zero or more
 # A percentage band with a limit of 0, of which every percentage is 0.
 input-percent-of-zero = a percentage of a limit of 0 is 0; give a value instead
+
+## Why an exported file or a recording did not read: in dmm-gui's toast
+## after "Import failed:" and the file, in dmm-cli after "Error:" and the
+## file. Lower case, with no full stop. The backquotes (`) set off text
+## from the file, or a name it must have, which stays as it is: keep them.
+## A parser's own words ($detail) arrive in English.
+
+# Where the file stopped: $line is a line number, $reason one of the
+# reasons below.
+read-error-at-line = line { $line }: { $reason }
+read-error-empty = the file is empty
+# A CSV export without its first row naming the columns.
+read-error-no-header-row = no header row ({ $detail })
+# $column is the name of a column every CSV export has, e.g. timestamp.
+read-error-no-column = no `{ $column }` column
+# A JSON export whose first line is not the one starting {"_metadata":.
+read-error-no-metadata = no `_metadata` line ({ $detail })
+# $text is what the file has where a reading's value should be.
+read-error-not-a-value = `{ $text }` is not a value
+# $text is a cell starting NCV: whose level is no number. NCV is
+# non-contact voltage detection, as the meter prints it.
+read-error-not-an-ncv-level = `{ $text }` is not an NCV level
+# $text is the part of a flags cell that names no status flag.
+read-error-not-a-flag = `{ $text }` is not a flag
+# $text is what the file has where a marker's number should be.
+read-error-not-a-marker-number = `{ $text }` is not a marker number
+# $text is a timestamp from the file, or a recording's "# recorded:" line;
+# RFC 3339 is the standard date format the files use.
+read-error-not-a-date = `{ $text }` is not an RFC 3339 date: { $detail }

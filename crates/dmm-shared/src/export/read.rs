@@ -8,6 +8,7 @@
 //! word. CSV also has no `progress`, `experimental` or DC flag, and writes a
 //! sub-value's unit even where the meter left it to the main reading's.
 
+use super::{ReadError, ReadReason};
 use chrono::DateTime;
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
@@ -211,9 +212,8 @@ impl ImportedReading {
 }
 
 /// Why a file would not read, with the line it stopped at.
-fn at(line: usize, message: impl std::fmt::Display) -> String {
-    // Messages quote the file, and are printed.
-    format!("line {line}: {}", escape_controls(&message.to_string()))
+fn at(line: usize, reason: ReadReason) -> ReadError {
+    ReadError::at(line, reason)
 }
 
 /// A meter's name from a file, on one line whatever the file put in it.
@@ -226,7 +226,7 @@ fn device_name(name: &str) -> Option<String> {
 }
 
 /// A timestamp cell or key: RFC 3339, as both binaries write it.
-fn wall_time(line: usize, text: &str) -> Result<SystemTime, String> {
+fn wall_time(line: usize, text: &str) -> Result<SystemTime, ReadError> {
     DateTime::parse_from_rfc3339(text)
         .map(SystemTime::from)
         .map_err(|e| at(line, crate::replay::not_a_date(text, e)))
@@ -236,7 +236,10 @@ fn wall_time(line: usize, text: &str) -> Result<SystemTime, String> {
 /// digits, `OL`, `NCV:n`, or empty. Empty is a word the meter showed or no
 /// value at all, which the caller tells apart. The digits are also returned
 /// as the display text, which re-export writes back unchanged.
-fn value_text(line: usize, text: &str) -> Result<(Option<MeasuredValue>, Option<String>), String> {
+fn value_text(
+    line: usize,
+    text: &str,
+) -> Result<(Option<MeasuredValue>, Option<String>), ReadError> {
     let text = text.trim();
     if text.is_empty() {
         return Ok((None, None));
@@ -247,12 +250,12 @@ fn value_text(line: usize, text: &str) -> Result<(Option<MeasuredValue>, Option<
     if let Some(level) = text.strip_prefix("NCV:") {
         let level = level
             .parse()
-            .map_err(|_| at(line, format!("`{text}` is not an NCV level")))?;
+            .map_err(|_| at(line, ReadReason::NotAnNcvLevel(text.to_string())))?;
         return Ok((Some(MeasuredValue::NcvLevel(level)), None));
     }
     let number: f64 = text
         .parse()
-        .map_err(|_| at(line, format!("`{text}` is not a value")))?;
+        .map_err(|_| at(line, ReadReason::NotAValue(text.to_string())))?;
     Ok((Some(MeasuredValue::Normal(number)), Some(text.to_string())))
 }
 
@@ -271,7 +274,7 @@ fn no_value(has_aux: bool) -> MeasuredValue {
 /// [`Flag::ALL`] order — which is also the order to read them in, so a
 /// two-word label ("LOW BAT") and one that ends another ("MIN", "P-MIN")
 /// cannot be misread.
-fn flags_cell(line: usize, cell: &str) -> Result<StatusFlags, String> {
+fn flags_cell(line: usize, cell: &str) -> Result<StatusFlags, ReadError> {
     let mut flags = StatusFlags::default();
     let mut rest = cell.trim();
     for flag in Flag::ALL {
@@ -286,7 +289,7 @@ fn flags_cell(line: usize, cell: &str) -> Result<StatusFlags, String> {
     if rest.is_empty() {
         Ok(flags)
     } else {
-        Err(at(line, format!("`{rest}` is not a flag")))
+        Err(at(line, ReadReason::NotAFlag(rest.to_string())))
     }
 }
 
@@ -295,20 +298,23 @@ fn flags_cell(line: usize, cell: &str) -> Result<StatusFlags, String> {
 /// Columns are found by name, so a file with integral or marker columns, or
 /// any number of sub-value groups, reads the same way. The integral is left
 /// out: it is worked out again from the readings by whatever reads them.
-pub fn read_csv(text: &str) -> Result<Imported, String> {
+pub fn read_csv(text: &str) -> Result<Imported, ReadError> {
     read_csv_from(text.as_bytes(), None)
 }
 
 /// [`read_csv`], from a stream, keeping at most `limit` readings and
 /// counting the rest in [`Imported::left_out`]: a file far larger than the
 /// session can hold is read through without being held.
-pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Imported, String> {
+pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Imported, ReadError> {
     let mut device = None;
     let mut first_row_line = 0;
     let mut header = String::new();
     loop {
         let mut line = String::new();
-        if input.read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+        let read = input
+            .read_line(&mut line)
+            .map_err(|e| ReadError::whole(ReadReason::Io(e.to_string())))?;
+        if read == 0 {
             break;
         }
         first_row_line += 1;
@@ -330,11 +336,12 @@ pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Im
         .from_reader(std::io::Cursor::new(header.into_bytes()).chain(input));
     let header = reader
         .headers()
-        .map_err(|e| at(first_row_line, format!("no header row ({e})")))?
+        .map_err(|e| at(first_row_line, ReadReason::NoHeaderRow(e.to_string())))?
         .clone();
     let column = |name: &str| header.iter().position(|h| h == name);
-    let required =
-        |name: &str| column(name).ok_or_else(|| at(first_row_line, format!("no `{name}` column")));
+    let required = |name: &'static str| {
+        column(name).ok_or_else(|| at(first_row_line, ReadReason::NoColumn(name)))
+    };
     let (timestamp, mode, value, unit, range, flags) = (
         required("timestamp")?,
         required("mode")?,
@@ -371,7 +378,7 @@ pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Im
     };
     for (i, row) in reader.records().enumerate() {
         let line = first_row_line + 1 + i;
-        let row = row.map_err(|e| at(line, e))?;
+        let row = row.map_err(|e| at(line, ReadReason::Parse(e.to_string())))?;
         if limit.is_some_and(|limit| imported.readings.len() >= limit) {
             imported.left_out += 1;
             continue;
@@ -410,9 +417,9 @@ pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Im
         {
             imported.markers.push(ImportedMarker {
                 reading: imported.readings.len() - 1,
-                number: cell(number)
-                    .parse()
-                    .map_err(|_| at(line, format!("`{}` is not a marker number", cell(number))))?,
+                number: cell(number).parse().map_err(|_| {
+                    at(line, ReadReason::NotAMarkerNumber(cell(number).to_string()))
+                })?,
                 note: cell(note).to_string(),
             });
         }
@@ -470,24 +477,27 @@ struct JsonAuxIn {
 }
 
 /// Read a JSON export: the `_metadata` line, then one reading per line.
-pub fn read_json(text: &str) -> Result<Imported, String> {
+pub fn read_json(text: &str) -> Result<Imported, ReadError> {
     read_json_from(text.as_bytes(), None)
 }
 
 /// [`read_json`], from a stream, keeping at most `limit` readings and
 /// counting the rest in [`Imported::left_out`].
-pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Imported, String> {
+pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Imported, ReadError> {
     let mut lines = input
         .lines()
         .enumerate()
-        .map(|(i, l)| l.map(|l| (i, l)).map_err(|e| e.to_string()))
+        .map(|(i, l)| {
+            l.map(|l| (i, l))
+                .map_err(|e| ReadError::whole(ReadReason::Io(e.to_string())))
+        })
         .filter(|l| l.as_ref().map_or(true, |(_, l)| !l.trim().is_empty()));
     let (_, first) = lines
         .next()
-        .ok_or_else(|| "the file is empty".to_string())??;
+        .ok_or_else(|| ReadError::whole(ReadReason::Empty))??;
     let first = first.trim_start_matches('\u{feff}');
     let metadata: JsonMetadataLine =
-        serde_json::from_str(first).map_err(|e| at(1, format!("no `_metadata` line ({e})")))?;
+        serde_json::from_str(first).map_err(|e| at(1, ReadReason::NoMetadata(e.to_string())))?;
     let mut imported = Imported {
         device: metadata.metadata.device.as_deref().and_then(device_name),
         view: metadata.metadata.view.map(|v| v.get().to_string()),
@@ -503,7 +513,8 @@ pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Impor
             imported.left_out += 1;
             continue;
         }
-        let r: JsonReadingIn = serde_json::from_str(&text).map_err(|e| at(line, e))?;
+        let r: JsonReadingIn =
+            serde_json::from_str(&text).map_err(|e| at(line, ReadReason::Parse(e.to_string())))?;
         let mut aux = Vec::with_capacity(r.aux.len());
         for a in r.aux {
             let (value, display_raw) = value_text(line, a.value.as_deref().unwrap_or(""))?;
@@ -519,16 +530,16 @@ pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Impor
             serde_json::Value::Number(n) => n
                 .as_f64()
                 .map(MeasuredValue::Normal)
-                .ok_or_else(|| at(line, format!("`{n}` is not a value")))?,
+                .ok_or_else(|| at(line, ReadReason::NotAValue(n.to_string())))?,
             serde_json::Value::String(s) if s == "OL" => MeasuredValue::Overload,
             serde_json::Value::Object(o) => o
                 .get("ncv_level")
                 .and_then(|l| l.as_u64())
                 .and_then(|l| u8::try_from(l).ok())
                 .map(MeasuredValue::NcvLevel)
-                .ok_or_else(|| at(line, format!("`{}` is not a value", r.value)))?,
+                .ok_or_else(|| at(line, ReadReason::NotAValue(r.value.to_string())))?,
             serde_json::Value::Null => no_value(!aux.is_empty()),
-            other => return Err(at(line, format!("`{other}` is not a value"))),
+            other => return Err(at(line, ReadReason::NotAValue(other.to_string()))),
         };
         let mut flags = StatusFlags::default();
         for flag in Flag::ALL {
@@ -786,7 +797,7 @@ mod tests {
         assert_eq!(device_comment("UT\n61E+"), "# device: UT 61E+");
         let (readings, marks) = shapes();
         let text = csv_of(&readings, &marks).replace("1.6109", "\u{1b}[2J");
-        let message = read_csv(&text).expect_err("not a value");
+        let message = read_csv(&text).expect_err("not a value").to_string();
         assert!(
             !message.contains('\u{1b}') && message.contains("\\u{1b}"),
             "{message}"
@@ -811,22 +822,22 @@ mod tests {
     fn a_malformed_row_names_its_line() {
         let (readings, marks) = shapes();
         let text = csv_of(&readings, &marks).replace("1.6109", "1.6.109");
-        let message = read_csv(&text).expect_err("a bad value");
-        assert!(
-            message.starts_with("line 3:") && message.contains("1.6.109"),
-            "{message}"
+        let error = read_csv(&text).expect_err("a bad value");
+        assert_eq!(
+            error,
+            ReadError::at(3, ReadReason::NotAValue("1.6.109".to_string()))
         );
 
         let text = json_of(&readings, &marks).replace("\"mode\"", "\"mood\"");
-        let message = read_json(&text).expect_err("a missing key");
-        assert!(message.starts_with("line 2:"), "{message}");
+        let error = read_json(&text).expect_err("a missing key");
+        assert!(matches!(error.reason, ReadReason::Parse(_)), "{error}");
+        assert_eq!(error.line, Some(2));
 
         let text = csv_of(&readings, &marks).replace("HOLD", "HOLDS");
-        assert!(
-            read_csv(&text)
-                .expect_err("an unknown flag")
-                .contains("HOLDS")
-        );
+        assert!(matches!(
+            read_csv(&text).expect_err("an unknown flag").reason,
+            ReadReason::NotAFlag(rest) if rest.contains("HOLDS")
+        ));
     }
 
     /// A file whose times step backwards — the clock was set back mid-run —

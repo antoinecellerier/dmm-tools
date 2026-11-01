@@ -79,15 +79,17 @@ pub(super) enum ImportError {
 /// it in the GUI's language: the log takes its English.
 #[derive(Debug)]
 pub(super) enum Unreadable {
-    /// The system's, the reader's or the parser's own words.
+    /// The system's own words.
     Text(String),
+    /// Why the export or the recording's header does not read.
+    Reader(dmm_shared::export::ReadError),
     /// The library's error.
     Library(dmm_lib::error::Error),
 }
 
-impl From<String> for Unreadable {
-    fn from(text: String) -> Self {
-        Self::Text(text)
+impl From<dmm_shared::export::ReadError> for Unreadable {
+    fn from(e: dmm_shared::export::ReadError) -> Self {
+        Self::Reader(e)
     }
 }
 
@@ -101,6 +103,7 @@ impl std::fmt::Display for Unreadable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Text(text) => f.write_str(text),
+            Self::Reader(e) => e.fmt(f),
             Self::Library(e) => e.fmt(f),
         }
     }
@@ -111,6 +114,7 @@ impl Unreadable {
     fn text(&self, l10n: &Localizer) -> String {
         match self {
             Self::Text(text) => text.clone(),
+            Self::Reader(e) => l10n.read_error(e),
             Self::Library(e) => l10n.error(e),
         }
     }
@@ -177,20 +181,22 @@ pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, I
     let open = || {
         std::fs::File::open(path)
             .map(std::io::BufReader::new)
-            .map_err(|e| e.to_string())
+            .map_err(|e| Unreadable::Text(e.to_string()))
     };
     let loaded = match kind {
         ExportKind::Replay => std::fs::read_to_string(path)
             .map_err(|e| Unreadable::Text(e.to_string()))
             .and_then(|text| load_replay(&text, base, limit)),
-        ExportKind::Json => open()
-            .and_then(|file| read_json_from(file, Some(limit)))
-            .map(|i| from_export(i, base))
-            .map_err(Unreadable::Text),
-        ExportKind::Csv => open()
-            .and_then(|file| read_csv_from(file, Some(limit)))
-            .map(|i| from_export(i, base))
-            .map_err(Unreadable::Text),
+        ExportKind::Json => open().and_then(|file| {
+            read_json_from(file, Some(limit))
+                .map(|i| from_export(i, base))
+                .map_err(Unreadable::from)
+        }),
+        ExportKind::Csv => open().and_then(|file| {
+            read_csv_from(file, Some(limit))
+                .map(|i| from_export(i, base))
+                .map_err(Unreadable::from)
+        }),
     };
     loaded
         .map(|mut l| {

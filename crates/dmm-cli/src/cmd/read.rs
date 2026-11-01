@@ -299,8 +299,8 @@ fn read_replay(
             style(format!("{} {hint}", tr!(l, "common-note-label"))).dim()
         );
     }
-    let recorded =
-        dmm_shared::replay::recorded_at(&replay).map_err(|e| format!("{}: {e}", path.display()))?;
+    let recorded = dmm_shared::replay::recorded_at(&replay)
+        .map_err(|e| format!("{}: {}", path.display(), l.read_error(&e)))?;
     let mut dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
     // A copy is dated from its first frame, whose wall time the pinned
     // origin maps to when it was measured, so a copy that starts partway
@@ -890,7 +890,7 @@ pub(crate) fn read_import(
         // A replay never reaches here: it plays as `--replay` does.
         ExportKind::Csv | ExportKind::Replay => read_csv_from(input, None),
     }
-    .map_err(fail)?;
+    .map_err(|e| fail(crate::l10n::get().read_error(&e)))?;
     let device = imported
         .device
         .clone()

@@ -8,6 +8,7 @@
 //! included. The fixture's other fields are what the golden test expects the
 //! frame to parse to; playback parses the frame itself.
 
+use crate::export::{ReadError, ReadReason};
 use chrono::{DateTime, FixedOffset, SecondsFormat};
 use dmm_lib::error::{Error, Result};
 use dmm_lib::protocol::registry;
@@ -19,15 +20,20 @@ use std::time::Duration;
 ///
 /// `dmm-lib` keeps the line as written, having no date library of its own;
 /// turning it into a session origin is the apps' job.
-pub fn recorded_at(replay: &Replay) -> std::result::Result<DateTime<FixedOffset>, String> {
-    DateTime::parse_from_rfc3339(&replay.recorded)
-        .map_err(|e| not_a_date(&format!("# recorded: {}", replay.recorded), e))
+pub fn recorded_at(replay: &Replay) -> std::result::Result<DateTime<FixedOffset>, ReadError> {
+    DateTime::parse_from_rfc3339(&replay.recorded).map_err(|e| {
+        let text = format!("# recorded: {}", replay.recorded);
+        ReadError::whole(not_a_date(&text, e))
+    })
 }
 
 /// Why `text`, meant as an RFC 3339 date, was refused — a replay's header or
 /// an export's timestamp cell.
-pub(crate) fn not_a_date(text: &str, e: chrono::ParseError) -> String {
-    format!("`{text}` is not an RFC 3339 date: {e}")
+pub(crate) fn not_a_date(text: &str, e: chrono::ParseError) -> ReadReason {
+    ReadReason::NotADate {
+        text: text.to_string(),
+        detail: e.to_string(),
+    }
 }
 
 /// Open `path` as a recording: a golden fixture when it is a `.yaml` file,
@@ -109,7 +115,7 @@ mod tests {
         let mut text = replay::header("ut61eplus", "yesterday", None, None);
         text.push_str(&replay::sample_line(Duration::ZERO, &[0x02, 0x03]));
         let replay = Replay::parse(&text).unwrap();
-        let err = recorded_at(&replay).unwrap_err();
+        let err = recorded_at(&replay).unwrap_err().to_string();
         assert!(
             err.starts_with("`# recorded: yesterday` is not an RFC 3339 date: "),
             "got {err}"
