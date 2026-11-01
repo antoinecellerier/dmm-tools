@@ -1180,9 +1180,12 @@ mod tests {
     /// The most strings the main scenes may draw without going through the
     /// localizer. Comes down as each panel's text moves into `i18n/`, and
     /// ends at what is meant to stay as it is: brand and model names, key
-    /// symbols, theme names, the version. Two above the Linux count: macOS
-    /// draws a Minimise row in the shortcut help.
-    const UNTRANSLATED_CEILING: usize = 40;
+    /// names, theme names, the version, numbers formatted in Rust (`500K`),
+    /// the commands and links a notice quotes, a spec text's English on the
+    /// hover of its translation, and egui's own colour picker (Hue, R, G, B,
+    /// U8). Two above the Linux count: macOS draws a Minimise row in the
+    /// shortcut help.
+    const UNTRANSLATED_CEILING: usize = 57;
 
     /// Every distinct text the whole app draws or names to a screen reader
     /// in `scene`, under the pseudo-locale, that has a word outside the
@@ -1192,8 +1195,27 @@ mod tests {
     /// range, its "V", a "0.5 s" tick — and the library's labels made of
     /// nothing else come back from the localizer as they are, unbracketed
     /// ([`dmm_shared::l10n::is_units_only`]); text whose words outside the
-    /// brackets are all unit symbols is not counted.
+    /// brackets are all unit symbols is not counted ([`units_only`]).
+    ///
+    /// Blind spot: English passed into a message as a variable sits inside
+    /// its brackets, so a caller that hands a message an English word, or
+    /// a whole English sentence, is not counted. Only reading the call
+    /// sites finds those.
     fn untranslated_texts(scene: impl Fn(&mut App)) -> std::collections::BTreeSet<String> {
+        untranslated_after_clicks(scene, &[], &[])
+    }
+
+    /// Where a scene clicks once its first frames have settled, and with
+    /// which button, found in the frame before: `None` fails the test.
+    type Click = dyn Fn(&App, &egui::FullOutput) -> Option<(egui::Pos2, egui::PointerButton)>;
+
+    /// [`untranslated_texts`] once `clicks` have been made, in order, on a
+    /// frame that shows each message of `shows`: what the clicks opened.
+    fn untranslated_after_clicks(
+        scene: impl Fn(&mut App),
+        clicks: &[&Click],
+        shows: &[&str],
+    ) -> std::collections::BTreeSet<String> {
         let mut settings = Settings {
             auto_connect: false,
             ..Settings::default()
@@ -1210,7 +1232,14 @@ mod tests {
             &options,
         ));
         scene(&mut app);
-        let mut texts = drawn_texts(&last_frame(&mut app));
+        let mut texts = drawn_texts(&frame_after_clicks(&mut app, clicks));
+        for id in shows {
+            let shown = app.l10n.message(id, &[]);
+            assert!(
+                texts.iter().any(|t| t.contains(&*shown)),
+                "no {shown:?} drawn: {texts:#?}"
+            );
+        }
         texts.retain(|t| {
             let mut depth = 0usize;
             let outside: String = t
@@ -1227,32 +1256,128 @@ mod tests {
                     _ => depth == 0,
                 })
                 .collect();
-            outside.chars().any(|c| c.is_ascii_alphabetic())
-                && !dmm_shared::l10n::is_units_only(&outside)
+            outside.chars().any(|c| c.is_ascii_alphabetic()) && !units_only(&outside)
         });
         texts
+    }
+
+    /// Whether `text` is nothing but numbers and units, as
+    /// [`dmm_shared::l10n::is_units_only`] reads it, except for a lone
+    /// letter: an SI prefix or a one-letter unit (M, k, F, S) alone is more
+    /// likely a key's name than a unit, so it counts only right after a
+    /// number or the `---` of a missing one ("5 V", "2 M", "--- V"), or as
+    /// the whole text when it is a unit (a reading's "V").
+    fn units_only(text: &str) -> bool {
+        const PREFIXES: [&str; 8] = ["p", "n", "\u{b5}", "u", "m", "k", "M", "G"];
+        let mut words = Vec::new();
+        let (mut before, mut start) = (None, None);
+        for (i, c) in text.char_indices().chain([(text.len(), ' ')]) {
+            if c.is_alphabetic() || c == '\u{b0}' {
+                start.get_or_insert((i, before));
+                continue;
+            }
+            if let Some((from, before)) = start.take() {
+                words.push((&text[from..i], before));
+            }
+            if !c.is_whitespace() {
+                before = Some(c);
+            }
+        }
+        let lone = |word: &str, before: Option<char>| {
+            word.chars().count() == 1
+                && !before.is_some_and(|c| c.is_ascii_digit() || c == '-')
+                && !(text.trim() == word && !PREFIXES.contains(&word))
+        };
+        dmm_shared::l10n::is_units_only(text) && !words.iter().any(|&(w, b)| lone(w, b))
+    }
+
+    #[test]
+    fn a_lone_letter_is_a_unit_only_after_a_number() {
+        for units in [
+            "22V", "5 V", "0.5 s", "2 M", "100kHz", "\u{b0}C", "V", "--- V",
+        ] {
+            assert!(units_only(units), "{units}");
+        }
+        for words in ["M", "k", "F11", "Ctrl+F", "S / V"] {
+            assert!(!units_only(words), "{words}");
+        }
     }
 
     /// The fourth frame of `app` in a 1600×1000 window, AccessKit on: by
     /// then the layout has settled.
     fn last_frame(app: &mut App) -> egui::FullOutput {
+        frame_after_clicks(app, &[])
+    }
+
+    /// [`last_frame`], then each of `clicks` — a press and a release on
+    /// frames of their own — and the frames that settle after each.
+    fn frame_after_clicks(app: &mut App, clicks: &[&Click]) -> egui::FullOutput {
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let mut frame = eframe::Frame::_new_kittest();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
-        let mut out = None;
-        for _ in 0..4 {
+        let mut run = |app: &mut App, events: Vec<egui::Event>| {
             let mut o = ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(screen),
+                    events,
                     ..Default::default()
                 },
                 |ui| eframe::App::ui(app, ui, &mut frame),
             );
             o.textures_delta.clear();
-            out = Some(o);
+            o
+        };
+        let mut out = run(app, vec![]);
+        for _ in 0..3 {
+            out = run(app, vec![]);
         }
-        out.expect("four frames ran")
+        for (i, click) in clicks.iter().enumerate() {
+            let (pos, button) = click(app, &out).unwrap_or_else(|| panic!("click {i}: no target"));
+            let press = |pressed| egui::Event::PointerButton {
+                pos,
+                button,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            run(app, vec![egui::Event::PointerMoved(pos)]);
+            run(app, vec![egui::Event::PointerMoved(pos), press(true)]);
+            out = run(app, vec![egui::Event::PointerMoved(pos), press(false)]);
+            for _ in 0..4 {
+                out = run(app, vec![]);
+            }
+        }
+        out
+    }
+
+    /// The centre of the first AccessKit node whose label `label` accepts.
+    fn node_centre(out: &egui::FullOutput, label: impl Fn(&str) -> bool) -> Option<egui::Pos2> {
+        a11y_nodes(out)
+            .iter()
+            .find(|(_, n)| n.label().is_some_and(&label))
+            .and_then(|(_, n)| n.bounds())
+            .map(|b| egui::pos2((b.x0 + b.x1) as f32 / 2.0, (b.y0 + b.y1) as f32 / 2.0))
+    }
+
+    /// Connected to the mock UT61E+, with a few seconds of its readings
+    /// through the pipeline — the graph, the statistics, the
+    /// Specifications panel — and a marker on the last.
+    fn with_readings(app: &mut App) {
+        app.connection.state = ConnectionState::Connected;
+        app.connection.meter = Some(ConnectedMeter::test_fixture(Some("mock")));
+        let mut dmm =
+            dmm_lib::mock::open_mock_mode(dmm_lib::mock::MockMode::DcV).expect("the mock opens");
+        let start = app.clock.now();
+        for i in 0..50 {
+            let mut m = dmm.request_measurement().expect("the mock reads");
+            m.timestamp = start + std::time::Duration::from_millis(100 * i);
+            let (m, _) = app
+                .capture
+                .ingest(m, &app.transform, &mut app.graph, &app.connection);
+            app.last_measurement = Some(m);
+        }
+        app.add_marker(false);
+        assert!(!app.markers.is_empty(), "the last reading took a marker");
     }
 
     /// Every distinct text a frame draws or names to a screen reader.
@@ -1297,6 +1422,53 @@ mod tests {
         found.extend(untranslated_texts(|app| {
             app.last_measurement = Some(labelled_reading());
         }));
+        found.extend(untranslated_after_clicks(
+            |app| {
+                app.connection.last_error = Some(ConnectionIssue::DeviceNotFound {
+                    bluetooth_searched: false,
+                });
+            },
+            &[],
+            &["not-found-usb"],
+        ));
+        found.extend(untranslated_after_clicks(
+            App::buffer_full_toast,
+            &[],
+            &["connection-dismiss.a11y"],
+        ));
+        found.extend(untranslated_after_clicks(
+            with_readings,
+            &[],
+            &["stats-heading", "specs-heading"],
+        ));
+        // The plot's right-click menu, over the readings.
+        let plot: &Click = &|app, out| {
+            let title = dmm_shared::tr!(app.l10n, "graph-plot-a11y-title");
+            let at = node_centre(out, |l| l.starts_with(&*title))?;
+            Some((at, egui::PointerButton::Secondary))
+        };
+        found.extend(untranslated_after_clicks(
+            with_readings,
+            &[plot],
+            &["graph-menu-mark"],
+        ));
+        // A colour's editor, open from the Settings panel's Customize
+        // colours section.
+        let customize: &Click = &|app, out| {
+            let header = dmm_shared::tr!(app.l10n, "colors-customize");
+            let at = node_centre(out, |l| l == header)?;
+            Some((at, egui::PointerButton::Primary))
+        };
+        let swatch: &Click = &|app, out| {
+            let label = crate::theme::PaletteField::Background.label(&app.l10n);
+            let at = node_centre(out, |l| l == label)?;
+            Some((at, egui::PointerButton::Primary))
+        };
+        found.extend(untranslated_after_clicks(
+            |app| app.settings_open = true,
+            &[customize, swatch],
+            &["colors-hex"],
+        ));
         assert!(
             found.len() <= UNTRANSLATED_CEILING,
             "{} untranslated strings, the ceiling is {UNTRANSLATED_CEILING}: {found:#?}",
