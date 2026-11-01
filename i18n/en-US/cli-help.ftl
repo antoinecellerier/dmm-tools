@@ -11,7 +11,7 @@
 ### paragraph to the terminal's width: keep a paragraph on one line. Option
 ### names (--device), values (auto, mock) and command lines ('dmm-cli list')
 ### stay as they are. clap's own words around these texts (Usage:, Options:,
-### [default: …], [possible values: …]) stay English.
+### [default: …], [possible values: …]) are in cli/help.ftl.
 
 # dmm-cli
 dmm-cli =

@@ -516,7 +516,7 @@ pub(crate) enum SettingsFormat {
 /// run time. What `main` parses with and prints `--help` from.
 pub(crate) fn command(l: &Localizer) -> clap::Command {
     let cmd = clap_help::translate(<Cli as clap::CommandFactory>::command(), l, &values_parser);
-    with_run_time_help(cmd, l)
+    crate::help_layout::localize(with_run_time_help(cmd, l), l)
 }
 
 /// The parser of an argument whose possible values' help is translated: the
@@ -1217,7 +1217,7 @@ read--interval-ms.help what its --interval-ms option does. clap wraps each
 paragraph to the terminal's width: keep a paragraph on one line. Option
 names (--device), values (auto, mock) and command lines ('dmm-cli list')
 stay as they are. clap's own words around these texts (Usage:, Options:,
-[default: …], [possible values: …]) stay English.";
+[default: …], [possible values: …]) are in cli/help.ftl.";
 
     /// `cli-help.ftl` holds the doc comments as they are now.
     #[test]

@@ -4,6 +4,7 @@ mod choice;
 mod cli;
 mod cmd;
 mod format;
+mod help_layout;
 mod l10n;
 mod open;
 mod output;
@@ -131,7 +132,11 @@ fn main() {
                     );
                 }
                 None => {
-                    let _ = cli::command(l)
+                    // Built, so the usage line names the whole command as
+                    // the translated layout's does, in English too.
+                    let mut cmd = help_layout::invoked_as(cli::command(l));
+                    cmd.build();
+                    let _ = cmd
                         .find_subcommand_mut("completions")
                         .unwrap()
                         .print_long_help();

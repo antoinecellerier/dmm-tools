@@ -12,12 +12,12 @@
 //! named after itself (`dmm-cli`) and a nested command joins the names
 //! below the root with `-`.
 //!
-//! What the walk leaves alone stays English: clap's scaffolding ("Usage:",
-//! "Options:", `[default: …]`, `[possible values: …]`), the
-//! built-in `help` and `version`, which clap adds after the walk, and hidden
-//! commands and arguments. Help a binary builds at run time is translated
-//! where it is built, and clap's errors where the binary prints them
-//! (dmm-cli's `arg_errors`). The en-US file is generated from the tree by
+//! What the walk leaves alone: hidden commands and arguments, which stay
+//! English; clap's own words ("Usage:", "Options:", `[default: …]`, the
+//! built-in `help` and `version`, which clap adds after the walk), which
+//! the binary words once clap has built the tree (dmm-cli's `help_layout`);
+//! help the binary builds at run time, translated where it is built; and
+//! clap's errors, worded where the binary prints them (`arg_errors`). The en-US file is generated from the tree by
 //! [`render`].
 
 use super::Localizer;

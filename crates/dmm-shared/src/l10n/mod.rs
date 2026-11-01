@@ -276,7 +276,7 @@ impl Localizer {
 
     /// Whether this localizer shows the English as written: en-US without
     /// the pseudo-locale.
-    fn plain_english(&self) -> bool {
+    pub fn plain_english(&self) -> bool {
         self.language.id == EN_US.id && !self.pseudo
     }
 }

@@ -6,9 +6,9 @@
 //! English the result is byte for byte clap's own, which a test holds it
 //! to, but for the hidden subcommands clap would list among the expected
 //! ones.
-//! What clap builds as text of its own stays English: the usage line, and
-//! the rare `tip:` hints that are whole sentences (`to pass '--x' as a
-//! value, use '-- --x'`). Kinds that are not errors (help, version) and the
+//! What clap builds as text of its own stays English: the usage line's
+//! syntax after its worded heading, and the rare `tip:` hints that are
+//! whole sentences (`to pass '--x' as a value, use '-- --x'`). Kinds that are not errors (help, version) and the
 //! ones this doesn't word go to clap as they are.
 
 use std::fmt::Write as _;
@@ -92,7 +92,12 @@ fn render<F: ErrorFormatter>(error: &clap::error::Error<F>, l: &Localizer) -> St
         }
     }
     if let Some(ContextValue::StyledStr(usage)) = error.get(ContextKind::Usage) {
-        let _ = write!(out, "\n\n{}", usage.ansi());
+        // clap's heading, worded as --help words it (`help_layout`).
+        let usage = usage
+            .ansi()
+            .to_string()
+            .replacen("Usage:", &tr!(l, "help-usage"), 1);
+        let _ = write!(out, "\n\n{usage}");
     }
     let help = paint.literal("--help");
     let _ = write!(out, "\n\n{}\n", tr!(l, "args-more-info", help = help));

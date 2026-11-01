@@ -35,7 +35,12 @@ fn completions_stay_english_under_the_pseudo_locale() {
 #[test]
 fn help_speaks_the_pseudo_locale() {
     let help = stdout(&["read", "--help"], true);
-    assert!(help.contains("Usage: dmm-cli read"), "{help}");
+    // clap's own words go through the messages too: none is left English.
+    assert!(help.contains("dmm-cli read [OPTIONS]"), "{help}");
+    assert!(
+        !help.contains("Usage:") && !help.contains("Options:"),
+        "{help}"
+    );
     assert!(!help.contains("Continuously read measurements"), "{help}");
     assert!(help.starts_with('['), "{help}");
 }
