@@ -36,7 +36,8 @@ fn completions_stay_english_under_the_pseudo_locale() {
 fn help_speaks_the_pseudo_locale() {
     let help = stdout(&["read", "--help"], true);
     // clap's own words go through the messages too: none is left English.
-    assert!(help.contains("dmm-cli read [OPTIONS]"), "{help}");
+    // The binary as it was run: `dmm-cli.exe` on Windows.
+    assert!(help.contains(" read [OPTIONS]"), "{help}");
     assert!(
         !help.contains("Usage:") && !help.contains("Options:"),
         "{help}"

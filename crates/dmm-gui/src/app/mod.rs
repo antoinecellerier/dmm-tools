@@ -1157,9 +1157,15 @@ impl eframe::App for App {
 /// A context with the app's own styles, for headless tests: laid out on
 /// egui's defaults instead, a test measures spacing and text sizes the
 /// window never shows.
+///
+/// It writes shortcuts as Linux does, whatever the host: on a Mac, egui
+/// asks the fonts whether they draw `⌘`, and outside a pass there are no
+/// fonts yet. A test about macOS sets the OS itself and runs in a pass, as
+/// `mac_rows_use_cmd` does.
 #[cfg(test)]
 pub(crate) fn styled_context() -> egui::Context {
     let ctx = egui::Context::default();
+    ctx.set_os(egui::os::OperatingSystem::Nix);
     appearance::install_styles(&ctx);
     ctx
 }
