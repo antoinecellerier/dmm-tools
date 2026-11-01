@@ -42,6 +42,10 @@ pub const LIB_RESOURCES: &[Resource] = &[
     crate::ftl!("zh-CN", "lib-names.ftl"),
     crate::ftl!("zh-CN", "lib-errors.ftl"),
     crate::ftl!("zh-CN", "lib-alarm.ftl"),
+    crate::ftl!("es", "lib.ftl"),
+    crate::ftl!("es", "lib-names.ftl"),
+    crate::ftl!("es", "lib-errors.ftl"),
+    crate::ftl!("es", "lib-alarm.ftl"),
 ];
 
 /// The en-US half of [`LIB_RESOURCES`]: what a test that makes up its own

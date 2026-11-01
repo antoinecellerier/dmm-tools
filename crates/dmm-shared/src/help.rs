@@ -67,6 +67,7 @@ pub const RESOURCES: &[Resource] = &[
     crate::ftl!("fr", "shared.ftl"),
     crate::ftl!("pt-BR", "shared.ftl"),
     crate::ftl!("zh-CN", "shared.ftl"),
+    crate::ftl!("es", "shared.ftl"),
 ];
 
 /// The help in English, for what stays English whatever the language: shell
