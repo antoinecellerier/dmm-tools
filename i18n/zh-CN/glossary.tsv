@@ -1,0 +1,259 @@
+english	chinese	part_of_speech/measure_word	context (where it appears)	source (URL or file + page)	notes
+DC voltage	直流电压	n.	spec table titles (table-*-dc-voltage), prose, notes	UT61E+ CN PDF p.8R (p.14) “2. 直流电压测量”; UT71 CN PDF p.5 “直流电压测量”	Mode labels keep the meter's DC V / V DC (STYLE §6). Never «DCV 电压» in prose.
+AC voltage	交流电压	n.	spec table titles, prose	UT61E+ CN PDF p.8L (p.13) “1. 交流电压测量”; UT8805A CN PDF p.6 “交流电压量程”	
+AC+DC voltage	交流+直流电压	n.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	UT181A CN PDF p.8 (p.4) “交流合并直流(AC+DC)”; UT171 CN PDF p.6L (p.7) “(交流+直流)测量”; UT195 CN PDF p.3L (p.1) “AC+DC（交流合并直流）”	"Provisional ruling: full words in titles and prose, like DC/AC voltage. UT61E+ CN PDF p.16L (p.29) heads the table «AC+DC电压测量»: that is the label form, kept in mode labels and notes. «交直流» is NOT AC+DC: UNI-T uses it for «AC or DC» (UT61E+ PDF p.7L «交直流电压测量»). ""AC Voltage + DC Voltage"" → «交流电压+直流电压»."
+voltage	电压	n.	aux-voltage, prose	UT61E+ CN PDF p.8L (p.13); UT71 CN PDF p.6	
+current	电流	n.	aux-current, key-current	UT61E+ CN PDF p.18R (p.34) “交流电流测量”; MS-T current => 电流	
+DC current	直流电流	n.	spec table titles	UT71 CN PDF p.5 “3.直流电流测量”; UT8805A CN PDF p.6	
+AC current	交流电流	n.	spec table titles	UT61E+ CN PDF p.18R (p.34) “10. 交流电流测量”	
+4–20 mA loop current	4-20 mA 环路电流	n.	table-l-4-20-ma-loop-current, notes	partial: UT171 CN PDF p.6L (p.7) “专供(4-20mA)电流变送器测量”; UT71 CN PDF p.4 “(4～20mA)%测量”	«环路电流» itself has no approved source; UNI-T names the use (current transmitter), not the loop. Keep the hyphen as the English writes the range.
+resistance	电阻	n.	mode, table titles	UT61E+ CN PDF p.16R (p.30) “4.电阻测量”; MS-T resistance => 电阻	
+Ohms (table title)	电阻	n.	table-ohms, table-autocheck-ohms	UT61E+ CN PDF p.16R (p.30) “电阻测量”; UT61E+ CN PDF p.6R (p.10) “电阻单位：欧姆”	Keep «Ohms» inside the AutoCheck™ (Ohms) trademark title, as fr does.
+continuity	通断	n.	mode-continuity, aux-continuity	UT61E+ CN PDF p.6R (p.10) “电路通断测量提示符”; UT181A CN PDF p.20 (p.16) “通断测试”	Bench manuals say «连通性» (UT8805A CN PDF p.6): use «通断», the handheld word.
+continuity test	通断测试	n.	table-14-continuity-test, table-f-continuity-test	UT181A CN PDF p.20 (p.16) “9.通断测试”; UT71 CN PDF p.5 “电路通断测量”	
+audible continuity tester	蜂鸣通断测试	n.	table-audible-continuity-tester	partial: UT71 CN PDF p.41 “电路良好导通…蜂鸣器连续发声”; UT8805A CN PDF p.29 “蜂鸣器发出连续的蜂鸣声”	No manual names the tester as such.
+diode	二极管	n.	mode-diode, range-diode	UT61E+ CN PDF p.6R (p.10) “二极管测量提示符”	UT8806 writes «二极体» (Taiwan usage): avoid.
+diode test	二极管测试	n.	table-15-diode-test, table-diode-tester	UT181A CN PDF p.20 (p.16) “二极管测试开路电压约为3V”; UT8805A CN PDF p.6 “连通性和二极管测试”	Diode Tester → «二极管测试».
+capacitance	电容	n.	mode-capacitance, tables	UT61E+ CN PDF p.7L (p.11) “电容测量”; UT181A CN PDF p.19 (p.15) “8.电容”	«电容» is both capacitance and capacitor; context decides, as in the manuals.
+frequency	频率	n.	mode-frequency, aux-frequency	UT61E+ CN PDF p.7L (p.11) “频率占空比测量”; MS-T frequency => 频率	
+duty cycle	占空比	n.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	UT61E+ CN PDF p.7L (p.11) “频率占空比测量”; UT71 CN PDF p.4 “频率/占空比测量”; UT181A CN PDF p.21 (p.17)	Every manual agrees; no French-style choice needed.
+Duty % (mode label)	占空比 %	n.	mode-duty-pct	UT61E+ CN PDF p.6R (p.10) “Hz, % 频率单位：赫兹、占空比”; UT195 CN PDF p.6R (p.8) “% 占空比测量单位”	Shorter than the English on screen; no fallback needed.
+pulse width	脉冲宽度	n.	mode-pulse-width, table-13-pulse-width	UT181A CN PDF p.21 (p.17) “11.频率/占空比测量/脉冲宽度”	
+temperature	温度	n.	mode-temperature, aux-temperature	UT61E+ CN PDF p.17R (p.32) “8.温度测量”	Temp °C → «温度 °C». Keep °C as two characters; never ℃ (U+2103), which the manuals print (STYLE §6).
+internal temperature	内部温度	n.	aux-internal-temperature	no approved source found	Plain Chinese.
+K-type thermocouple	K 型热电偶	n.	notes (note-k-type-thermocouple-*)	UT61E+ CN PDF p.17R (p.32) “点式K型(镍铬～镍硅)热电偶”; UT71 CN PDF p.23	
+temperature probe	温度探头	n.	notes	UT71 CN PDF p.23 “将温度探头探测被测温度表面”; UT181A CN PDF p.21 (p.17)	point-contact probe → «点式探头» (UT61E+ PDF p.17R «点式K型»); rod-type probe → «杆式探头» (no source).
+hFE	三极管放大倍数 (hFE)	n.	mode-hfe, aux-hfe, table-k-transistor	UT61E+ CN PDF p.6R (p.10) “β 三极管放大倍数(UT61E+)”; PDF p.7L (p.11) “hFE 三极管放大测量”	"Sourced, unlike fr. ""Transistor Magnification"" → «三极管放大倍数 (hFE)»; mode labels keep hFE."
+NCV	NCV (非接触电压感应)	n.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	UT61E+ CN PDF p.13R (p.24) “13. NCV非接触电压感应测量”; UT171 CN PDF p.6L (p.7) “非接触交流电压感测”	"Keep «NCV» in labels; spell out only in prose. Spoken ""NCV level n"" → «NCV 等级 { $level }» (UT61E+ PDF p.13R «感应等级»). Half-width parentheses, a space before them after Latin text (STYLE §4)."
+EF / non-contact EF detection	EF / 非接触电场检测	n.	mode-ef*, table-non-contact-ef-detection	partial: UT61E+ CN PDF p.13R (p.24) “LCD显示“EF”” (no Chinese name given)	Keep EF, EF-H, EF-L as printed. «电场检测» has no approved source.
+LoZ	LoZ (低阻抗)	n.	mode-loz-*, flag-loz	UT61E+ CN PDF p.6R (p.10) “LoZ 交流低阻抗提示符”; UT171 CN PDF p.6L (p.7) “交流低阻抗电压测量”; UT195 CN PDF p.8L (p.11) “在线交流电压低阻抗测量”	"Spoken (reading-spoken-loz): «低阻抗». ""Lo-Z threshold"" → «Lo-Z 阈值»."
+low-pass filter / LPF	低通滤波 / LPF	n.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	UT61E+ CN PDF p.7L (p.11) “低通滤波测量”; UT181A CN PDF p.22 (p.18) “13. 低通滤波测量”; UT195 CN PDF p.6R (p.8) “LPF 低通滤波器测量”	Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»). The filter itself: «低通滤波器».
+VFD	VFD	n.	mode-vfd-*	UT195 CN PDF p.3L (p.1) “低通滤波器确保对变速驱动器(VSD)精确测量”	Keep as printed. In prose the drive is «变频器» (UT181A CN PDF p.22 (p.18) “由逆变器和变频电动机产生”, partial).
+VFC	VFC	n.	mode-vfc	UT171 CN PDF p.5R (p.6) “VFC 变频电压测量提示符”	Keep as printed; in prose «变频电压测量».
+dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	UT181A CN PDF p.22 (p.18) “14.dBV” “15.dBm”	Unit symbols: never change.
+dBm reference	dBm 参考阻抗	n.	mode-dbm-reference	UT181A CN PDF p.22 (p.18) “dBm 测量必须使用一个参考阻抗(电阻)”; UT8806 CN PDF p.75 “参考电阻”	mode-dbm-reference. Sourced, unlike fr.
+inductance	电感	n.	mode-inductance*	no approved source found	No UNI-T manual read has an inductance function. Q and R sub-labels unchanged.
+conductance	电导	n.	table-8-conductance	UT171 CN PDF p.6L (p.7) “nS 电导测量”; PDF p.5R (p.6) “电导单位：纳西门子”; UT181A CN PDF p.8 (p.4) “电导系数测量”	
+power	功率	n.	mode-power*	UT71 CN PDF p.6 “有功功率、功率因数、视在功率”	AC power W → «交流功率 W» in prose, «AC 功率 W» as a label. Active power: «有功功率» (UT71 CN PDF p.13 “W 有功功率提示符”).
+apparent power (VA)	视在功率 (VA)	n.	notes, VA modes	UT71 CN PDF p.13 “VA 视在功率提示符”	Ruling kept from fr: the unit symbol stays when the English gives it.
+power factor / PF	功率因数 / PF	n.	mode-power-factor, aux-pf	UT71 CN PDF p.13 “COSф 功率因数提示符”	Keep «PF» where the meter prints it.
+inrush current	浪涌电流	n.	mode-inrush, aux-inrush	no approved source found (no UNI-T CN manual read has the function; MS-T has no entry)	Alternatives: «启动电流», «冲击电流»; or keep «Inrush» as the meter prints it. Reviewer to choose.
+True RMS	真有效值 (True RMS)	n.	notes (note-true-rms-*)	UT61E+ CN PDF p.6R (p.10) “TRMS 真有效值符”; UT71 CN PDF p.6 “自动量程真有效值数字万用表”; UT8806 CN PDF p.83 “真有效值 AC 测量”	Notes may keep «True RMS» alone, as UT195 CN PDF p.3L (p.1) does («真有效值True RMS»).
+RMS (sine RMS)	正弦波有效值	n.	"notes ""sensitivity 40mV (sine RMS)"""	UT61E+ CN PDF p.16L (p.29) “显示正弦波真有效值”; UT8805A CN PDF p.60 “正弦波准确度”	"""sensitivity 40mV (sine RMS)"" → «灵敏度 40mV (正弦波有效值)»."
+crest factor	波峰因数	n.	notes	UT8805A CN PDF p.60 “波形 波峰因数 C.F.”; UT8806 CN PDF p.83	UT61E+ CN PDF p.16L (p.29) writes «波峰因素» (a misprint variant): avoid. UT8805A p.60 also has «峰值因数».
+peak	峰值	n.	mode-*-peak, qualifier-peak-mode, qualifier-mode-peak, aux-peak-min, main-label-peak-max, CLI Peak	UT71 CN PDF p.11 “Peak HOLD 峰值保持键”; UT181A CN PDF p.23 (p.19) “18.峰值检测”; UT195 CN PDF p.6R (p.8) “PEAK峰值测量提示符”	Keep PEAK as a key/flag name. Qualifier: «{ $mode } 峰值».
+peak max / peak min	峰值最大值 / 峰值最小值	n.	main-label-peak-max, aux-peak-min, spoken «crête maximale / minimale»	UT61E+ CN PDF p.6R (p.10) “P-MAX/P-MIN 峰值最大最小值测量”	Flags P-MAX / P-MIN stay as printed. Label «峰值最大»/«峰值最小» where room is short.
+period	周期	n.	aux-period	UT8806 CN PDF p.18 “测量信号频率或信号周期”; UT181A CN PDF p.8 (p.4) “频率、周期和占空比”	
+impedance	阻抗	n.	aux-impedance	UT61E+ CN PDF p.15L (p.27) “输入阻抗”; UT71 CN PDF p.14	
+burden voltage	负载电压	n.	aux-burden-voltage, note-burden-voltage-*	no approved source found	No CN manual read gives a term. Alternative: «电流档压降». Reviewer to choose; no optional parts in parentheses (fr ruling 9).
+clamp	钳形	adj./n.	mode-clamp-*, aux-clamp-*	partial: UT171 CN PDF p.6L (p.7) “600A交流/直流电流卡钳输入测量”	Clamp AC A → «钳形 AC A». The accessory itself: «电流钳» (UT171 says «卡钳»).
+power (mains) line	市电	n.	mode-line-hz, table-line-level-frequency-hz	UT8805N CN PDF p.8 “支持全球市电电压”; UT61E+ CN PDF p.13R (p.24) “被测电源线”	Line Hz → «市电 Hz».
+logic level	逻辑电平	n.	mode-logic-hz, table-logic-level-*	no approved source found	Logic Hz → «逻辑 Hz».
+Motor / Solar / Tachometer / Compass / Angle / Time / Scope	电机 / 太阳能 / 转速表 / 指南针 / 角度 / 时间 / 示波器	n.	mode-motor, mode-solar, mode-tachometer, mode-compass, mode-angle, mode-time, mode-scope	Motor only: UT195 CN PDF p.3L (p.1) “识别马达电机相位”, PDF p.8L (p.11) “MOTOR 三相电机旋转相序”; MS-T time => 时间; others no approved source found	Check each against the meter when it is reviewed.
+Live (mode: live-wire detection)	火线	n.	mode-live, aux-live	no approved source found	Chinese electricians call the live wire «火线». Not the graph's LIVE chip (that is «实时»).
+Recall	数据回读	n.	mode-recall	UT71 CN PDF p.11 “RECALL 回读数据键”, p.13 “RCL 数据回读提示符”; UT171 CN PDF p.5R (p.6) “RCL 数据回读提示符”	mode-recall. MS-T recall => 召回率 (statistics sense): avoid.
+Battery (sub-value)	电池	n.	aux-battery	UT61E+ CN PDF p.6R (p.10) “电池电量不足提示符”; MS-T battery => 电池	
+HOLD (flag / key)	HOLD	—	flag-hold, remote panel, CLI settings	UT71 CN PDF p.11 “HOLD 数据保持键”; UT61E+ CN PDF p.7R (p.12)	Keep on the display text. Prose: «数据保持».
+data hold / hold (spoken)	数据保持	n.	reading-spoken-hold, remote-hold hover	UT61E+ CN PDF p.6R (p.10) “数据保持提示符”; UT71 CN PDF p.6	"Hover ""Freeze the current reading"" → «保持当前读数» (UT181A CN PDF p.8 (p.4) “保持显示屏中的当前读数”)."
+REL (flag / key)	REL	—	flag-rel, qualifier-mode-rel, CLI	UT71 CN PDF p.11 “REL 相对测试键”	Keep.
+relative	相对值 / 相对测量	n.	main-label-relative, reading-spoken-rel, remote-rel hover	UT61E+ CN PDF p.6R (p.10) “相对值测量提示符”; UT181A CN PDF p.23 (p.19) “17.相对值”	"Main label ""Relative"" → «相对值»; spoken REL → «相对测量»."
+reference	参考值	n.	aux-reference, graph Ref	UT181A CN PDF p.23 (p.19) “可设置比较参考值”; MS-T reference => 参考	aux-reference → «参考值». The graph's Ref is «参考线» (row reference line).
+absolute	绝对值	n.	aux-absolute	partial: UT8805A CN PDF p.44 “表征功率值绝对值”	aux-absolute.
+AUTO (flag)	AUTO	—	flag-auto-range, remote AUTO	UT61E+ CN PDF p.6R (p.10) “AUTO 自动量程提示符”	Keep.
+auto range / auto-ranging	自动量程	n.	reading-spoken-auto-range, remote-auto, settings-auto-*, errors	UT61E+ CN PDF p.7R (p.12) “长按退出手动进入自动量程切换”; UT71 CN PDF p.13	Meter now auto-ranging (6V) → «万用表已切换到自动量程 (6V)».
+manual range	手动量程	n.	settings-switched [range], remote-range	UT61E+ CN PDF p.7R (p.12) “短按进入手动量程切换”; UT8805A CN PDF p.17	
+range	量程	n.	reading-range, range menu, CLI settings, errors	UT61E+ CN PDF p.15R (p.28) table header “量程”; UT8805A CN PDF p.17 “量程的选择有自动和手动两种方式”	Every manual agrees. MS-T range => 范围 is the generic sense: use «范围» only for ranges that are not the meter's (time, Bluetooth reach).
+RANGE (key)	RANGE	—	remote-range hover, errors	UT71 CN PDF p.11 “RANGE 量程切换键”; UT61E+ CN PDF p.7R (p.12)	Keep.
+MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	UT181A CN PDF p.8 (p.4) “开始 MIN MAX (最小值最大值) 记录”	Keep.
+minimum / maximum (spoken)	最小值 / 最大值	n.	reading-spoken-min/max, stats	UT181A CN PDF p.22 (p.18) “16.最大值最小值”; UT8805A CN PDF p.42	MS-SG p.7 «上限/下限» is for limits, not for statistics.
+AVG (flag) / average	AVG / 平均值	n.	flag-avg, reading-spoken-avg, aux-average	UT171 CN PDF p.5R (p.6) “MIN/AVG/MAX 最小值/平均值/最大值测量提示符”	Keep AVG on the display; spoken «平均值».
+SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	UT61E+ CN PDF p.8L (p.13) “短按 SELECT 键”	Keep; «SELECT 键», no quotes (STYLE §7).
+secondary function	第二功能	n.	remote-select hover	UT8806 CN PDF p.18 “测量信号频率或信号周期(第二功能)”	Also «复合功能» (UT181A CN PDF p.8 (p.4) “短按选择档位的复合功能”) and «附加功能» (UT71 CN PDF p.11).
+backlight / LIGHT	背光 / LIGHT	n.	remote-light hover	UT71 CN PDF p.11 “LIGHT 背光开关键”; UT61E+ CN PDF p.7R (p.12) “开启/关闭背光功能”	Keep the key name LIGHT.
+ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	partial: UT8806 CN PDF p.37 “自动归零”	Keep the key name. The action: «清零» (no source).
+overload / OL	超量程 / OL	n.	reading-spoken-overload, graph-hover-overload, graph legends	UT71 CN PDF p.13 “OL 超量程提示符”; UT61E+ CN PDF p.14R (p.26) “过量程提示：显示OL”	For the reading the meter shows as OL, use «超量程», as every manual does. Keep «过载» for overload protection (row). Keep «OL» where the English writes OL.
+over range	超量程	n.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	UT71 CN PDF p.13; UT8805A CN PDF p.18 “所有的档位允许超量程20%”	currently over range. → «当前超量程。»
+LOW BAT (flag)	LOW BAT	—	flag-low-battery	UT61E+ CN PDF p.14L (p.25) “电池欠压符号”; PDF p.6R (p.10) “电池电量不足提示符”	Keep (fr ruling). Spoken: «电池电量不足».
+HV! (flag)	HV!	—	flag-hv-warning; spoken reading-spoken-hv-warning	UT171 CN PDF p.5R (p.6) “高压警示符”; UT61E+ CN PDF p.6R (p.10) “交直流电压高于30V警示符”	Spoken: «高压警示».
+LEAD ERR (flag)	LEAD ERR	—	flag-lead-error; spoken reading-spoken-lead-error	UT71 CN PDF p.6 “插错报警”; UT181A CN PDF p.8 (p.4) “如果表笔误插错，显示屏会显示“Lead Error!””	Spoken: «表笔插错».
+COMP (flag) / compare	COMP / 比较	n.	flag-comp, reading-spoken-comp, aux-comp-*	UT181A CN PDF p.23 (p.19) “19.比较模式COMP”	COMP High/Low → «COMP 偏高 / COMP 偏低» (no source for the pair).
+REC (flag) / record (meter memory)	REC / 记录	n.	flag-record, reading-spoken-record	UT181A CN PDF p.23 (p.19) “20. 记录测量数据”; PDF p.24 (p.20) “显示器上显示”REC”字符”	
+VOID (flag)	VOID / 无效	adj.	flag-void, reading-spoken-void	MS-T invalid => 无效	Spoken: «无效».
+annunciator / status flag	提示符	n.	translator comments only	UT61E+ CN PDF p.6R (p.10) every row “…提示符”; UT71 CN PDF p.13	Translator comments only.
+key (on the meter)	按键 / …键	n.	remote panel, activation steps, key hovers	UT61E+ CN PDF p.7R (p.12) “按键说明”; PDF p.8L (p.13) “SELECT 键”	«按钮» is for the app's own buttons (MS-T button => 按钮).
+press (briefly) / short press	短按	v.	activation steps, key hovers	UT61E+ CN PDF p.7R (p.12) “短按：按下按键，保持时长<2s”	"Plain ""press"" → «按» (UT181A CN PDF p.22 (p.18) “按 MAX MIN”)."
+hold (a key) / long press	长按 / 按住	v.	activation steps	UT61E+ CN PDF p.7R (p.12) “长按：按下按键，保持时长>2s”, “关机状态按住SELECT”; UT8806 CN PDF p.66 “按住 键”	«长按» when the key is released after a while; «按住» while doing something else (turning the dial, switching on).
+dial	旋钮	n.	"activation steps, errors ""turn the dial first"""	UT61E+ CN PDF p.7L (p.11) “旋钮开关及按键功能”, PDF p.8L (p.13) “将旋钮转至”	Also «旋钮开关» (UT181A CN PDF p.8), «功能量程开关» (UT71 CN PDF p.8), «功能选择开关» (UT195 CN PDF p.7R (p.10)).
+dial position	档位	n.	errors, remote-select hover	UT181A CN PDF p.8 (p.4) “选择档位的复合功能”; UT61E+ CN PDF p.8R (p.14) “直流电电压档位”	UT61E+ CN PDF p.7L (p.11) heads the column «功能位置».
+function (dial)	功能档	n.	"activation steps ""Turn the dial to any function"""	UT181A CN PDF p.8 (p.4) “旋钮开关功能档”; UT61E+ CN PDF p.8L (p.13) “档”	"""Turn the dial to any function"" → «将旋钮转到任意功能档»."
+mode	模式	n.	reading-mode, mode menu, CLI settings	UT181A CN PDF p.22 (p.18) “低通滤波测量模式”; MS-T mode => 模式	«{ $mode } 模式» or «模式: { $mode }»; no agreement to worry about.
+display (the meter's)	显示屏	n.	"activation steps ""shows on the display"""	UT61E+ CN PDF p.8R (p.14) “读取显示屏上测出的电压”; UT181A CN PDF p.7 (p.3) “LCD显示屏”	
+beep	蜂鸣声	n.; 量词 声	activation notes, settings-device-name	UT61E+ CN PDF p.14L (p.25) “蜂鸣器会连续发出5声警示”; UT71 CN PDF p.41 “蜂鸣器连续发声”	"Measure word 声: ""two beeps"" → «两声蜂鸣». The part: «蜂鸣器»."
+auto power-off	自动关机	n.	"activation notes ""switches off after 15 minutes idle"""	UT61E+ CN PDF p.6R (p.10) “自动关机提示符”, PDF p.14L (p.25)	Keep APO as printed.
+on / off (meter setting)	开 / 关	adj.	toggle-on, toggle-off	UT8806 CN PDF p.60 “定标 关”, p.72 “开/关”	toggle-on, toggle-off. As a verb: «开启/关闭» (UT61E+ CN PDF p.7R (p.12)).
+specifications	技术指标	n.	specs-heading, settings-specs	UT61E+ CN PDF p.15L (p.27) “十、技术指标”; UT195 CN PDF p.2R (TOC) “十、技术指标”	«规格» has no manual hit in the documents read.
+resolution	分辨力	n.	specs-resolution, settings-specs-resolution	UT61E+ CN PDF p.15R (p.28) table header “分辨力”	"Bench manuals and MS-T say «分辨率» (UT8805A CN PDF p.6 “读数分辨率”; MS-T resolution => 分辨率), which also means screen resolution: use «分辨力», the spec-table word. ""Res:"" → «分辨力:»."
+accuracy	准确度	n.	specs-accuracy, settings-specs-accuracy, notes	UT61E+ CN PDF p.15R (p.28) table header “准确度”; PDF p.15L (p.27) “准确度：±(a%读数+b字数)”; MS-T accuracy => 准确度	"UT61E+ notes also say «精度» (PDF p.16R (p.30) “精度范围”): avoid. ""Acc:"" → «准确度:»."
+input impedance / Input Z	输入阻抗	n.	specs-input-impedance, settings-specs-input-z	UT61E+ CN PDF p.15L (p.27) “输入阻抗：mV量程约1GΩ”	"""Input Z"" chip → «输入阻抗»."
+overload protection	过载保护	n.	spec input rows	UT61E+ CN PDF p.15L (p.27) “过载保护：1000V”; UT71 CN PDF p.33	
+of reading (±(a% of reading + b))	读数	n.	notes, accuracy bands	UT61E+ CN PDF p.15L (p.27) “±(a%读数+b字数)”; UT71 CN PDF p.33 “±（a%读数+字数）”	«±(a%读数+b)»: «读数» follows the percentage, no «的».
+digits / counts (accuracy, residual)	字	n.; 量词 个	"notes ""add 10 digits"", ""residual ≤10 digits"", ""Display digits: 6000"""	UT61E+ CN PDF p.15L (p.27) “短路允许有≤5个字剩余读数”; PDF p.17R (p.32) “需加10个字”; UT71 CN PDF p.35 “80个字剩余读数”	"""add 10 digits"" → «加 10 个字»; ""residual ≤10 digits"" → «剩余读数 ≤10 个字»."
+display counts (6000-count display)	6000 计数	n.	note-display-digits-6000, note-true-rms-crest-factor-*	UT71 CN PDF p.6 “20000计数4 1/2数位”; UT195 CN PDF p.3L (p.1) “6000计数”	UT61E+ CN PDF p.16L (p.29) keeps «counts» in Latin. Never «6千».
+Not specified / Unspec'd	未指定	adj.	"band-not-specified, notes ""not specified above 10A"""	UT71 CN PDF p.22 “>40MHz时 : 未指定”	
+for reference only	仅供参考	loc.	band-only-for-reference, note-reading-for-reference-only	UT61E+ CN PDF p.16L (p.29) “占空比测量仅供参考”; PDF p.13R (p.24) “只供参考”	Sourced and idiomatic (fr had to choose).
+of range (10%–100% of range)	量程的	loc.	notes	UT61E+ CN PDF p.16L (p.29) “当前量程的10%-100%”; UT71 CN PDF p.9 “+量程的5%”	«量程的 10%–100%».
+sensitivity	灵敏度	n.	notes	no approved source found (MS-T sensitivity => 敏感度 is the data-privacy sense)	
+temperature coefficient / tempco	温度系数	n.	note-60-00mohm-tempco-*	UT61E+ CN PDF p.15L (p.27) “附加温度系数误差0.1x(指定准确度)/°C”	
+humidity	湿度 / 相对湿度	n.	note-humidity-50-pct	UT61E+ CN PDF p.15L (p.27) “相对湿度：≤75%”; UT71 CN PDF p.9	
+typical / typ.	典型值 / 典型	adj.	notes	UT8806 CN PDF p.90 “典型分辨率为 0.08℃”	Never drop it (STYLE §12).
+open circuit	开路	n.	"notes ""Open circuit ≈3V"""	UT61E+ CN PDF p.16R (p.30) “开路电压约：1V”; UT71 CN PDF p.19 “二极管测试开路电压约为2.8V”	Open circuit ≈3V → «开路电压 ≈3V».
+shorted leads	表笔短路	n.	notes	UT61E+ CN PDF p.16R (p.30) “被测值 = 测量显示值 - 表笔短路值”; UT71 CN PDF p.16	
+test lead	表笔	n.	notes, lead error	UT61E+ CN PDF p.8L (p.13) “将红表笔插入”; UT181A CN PDF p.8 (p.4)	Bench manuals say «测试引线» (UT8805A CN PDF p.20): handheld word preferred.
+fuse	保险丝	n.	"input-fuse-* (""Fuse 10A 1000V"")"	UT61E+ CN PDF p.14R (p.26) “快熔式保险丝”; MS-T fuse => 保险丝	
+nominal	标称	adj.	input-*-nominal	no approved source found	
+response time	响应时间	n.	note-response-time-100us	UT181A CN PDF p.23 (p.19) “响应时间1ms”; MS-T response time => 响应时间	
+meter / multimeter	万用表	n.; 量词 台	"everywhere (""the meter"")"	UT61E+ CN title “数字万用表”; UT8805A CN PDF p.6	The manuals also say «仪表» (UT61E+ CN PDF p.8L (p.13) “仪表开机”): use «万用表» throughout. MS-T meter => 计量 (billing sense): never. «万用表 { $model }», no agreement to handle.
+device	设备	n.	settings-device, device lists, CLI list	MS-T device => 设备	Bench manuals say «仪器» for the instrument; in device lists use «设备».
+simulated / mock	仿真	adj./n.	brand-simulated, mock models, settings-mock-*	MS-T emulator => 仿真器, emulation => 仿真; simulation => 模拟	"Provisional ruling: «模拟» (MS-T simulation) also means analog in meters (UT61E+ CN PDF p.14R (p.26) “模拟条”), so «模拟 UT61E+» reads as an analog meter. ""Mock UT61E+"" → «UT61E+ 仿真»; ""Simulated"" heading → «仿真»."
+USB cable	USB 连接线	n.	link-name-usb-cable, link-usb-cable, notices	UT71 CN PDF p.7 “USB接口连接线”; UT171 CN PDF p.5L (p.5) “USB连接线”	UT61E+ CN PDF p.14L (p.25) calls its own cable «USB通信模组»: the app talks about the cable.
+Bluetooth adapter	蓝牙适配器	n.	link-name-bluetooth-adapter, notices	MS-T Bluetooth => 蓝牙, adapter => 适配器	MS-T Bluetooth adapter => 蓝牙无线收发器 (dated): avoid.
+Bluetooth link (built-in Bluetooth)	蓝牙链路	n.	link-name-bluetooth-link, top-bar-link-*	no approved source found (MS-T link => 链接/连接)	Keeps the app's link/connection distinction; «连接» is taken by connection.
+connection	连接	n.	top bar, notices, errors	MS-T connection => 连接	
+connect / Connect	连接	v.	top-bar-connect, shortcuts-connect	MS-T connect => 连接	Status «已连接».
+disconnect / Disconnect	断开连接	v.	top-bar-disconnect, top-bar-stop-retrying	MS-T disconnect => 断开连接	Status «已断开连接» (MS-T disconnected). Button «断开» if the top bar is tight.
+reconnect / Reconnecting…	重新连接 / 正在重新连接…	v.	top-bar-reconnecting*	MS-SG p.39 §4.1.15 “Uploading… → 正在上载…”	Reconnecting (attempt 3)... → «正在重新连接 (第 3 次尝试)…».
+pair / paired	配对 / 已配对	v.	list-not-heard	MS-T pair => 配对	
+data transmission	数据传输	n.	connection notices, activation (title), shared help	UT61E+ CN PDF p.14L (p.25) “14. USB数据传输操作”; UT71 CN PDF p.6	UT61E+ CN PDF p.7R (p.12) also says «数据通信功能».
+detect / Auto-detect	检测 / 自动检测	v.	settings-auto-detect, top-bar-auto-detect, device-auto, toasts	MS-T detect => 检测	"""Detected X"" → «已检测到 X»; ""Detecting the meter…"" → «正在检测万用表…»."
+scan (Bluetooth) / Scanning…	扫描 / 正在扫描…	v.	list-scanning, setup-bluetooth-scan	MS-T scan => 扫描	Unlike fr, «扫描» has no paper-only sense in Chinese.
+in range (Bluetooth)	在蓝牙范围内	loc.	"list, errors ""in Bluetooth range"""	no approved source found (MS-T range => 范围)	Never «量程» here.
+adapter (any --adapter target)	适配器	n.	connection-adapter-*, CLI	MS-T adapter => 适配器	
+identify itself (a meter)	识别	v.	connection-not-identified, no-meter-answered	no approved source found	No meter answered → «没有万用表响应».
+driver	驱动程序	n.	setup-usb-windows-warning	MS-T driver => 驱动程序	
+Device Manager	设备管理器	n.	setup-usb-windows-open	MS-T Device Manager => 设备管理器	UNVERIFIED Windows names: 'USB Input Device' → «USB 输入设备», and the HID group «人体学输入设备», which Microsoft's zh-cn touchscreen support page and MS-T write «人机接口设备». Check on a Chinese Windows. «其他设备»: Microsoft support zh-cn Bluetooth page.
+System Settings > Privacy & Security (macOS)	系统设置 > 隐私与安全 > 输入监控；… > 蓝牙	n.	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple support zh-cn mchl211c911f «点按边栏中的“隐私与安全”»	macOS's own names.
+settings file	设置文件	n.	CLI help, connect-saved-mock-mode	MS-T settings => 设置	
+command-line option / flag	命令行选项	n.	comments, notices naming --flags	MS-T command-line option => 命令行选项	The --flag itself is verbatim.
+timeout	超时	n.	error-timeout, debug-timeout	MS-T time-out => 超时	
+checksum	校验和	n.	error-checksum-mismatch	MS-T checksum => 校验和	
+frame (protocol)	帧	n.	read-unreadable-frame, error-wrong-meter-*	MS-T frame => 帧	Not «框架» (the window frame).
+support (of a meter by the app)	支持	n./v.	stability-warning, error-bluetooth-only-not-built	MS-T support => 支持	«对万用表 { $model } 的支持已验证».
+verified / partly verified / experimental	已验证 / 部分验证 / 实验性	adj.	stability-*, top-bar-badge-*, settings-device-entry	partial: MS-T experimental build => 实验性生成	Badges as they are: «已验证», «部分验证», «实验性» (no capitals in Chinese).
+reading (a value the meter sent)	读数	n.; 量词 个	reading-none, markers, export/import, graph menu, CLI	UT61E+ CN PDF p.6R (p.10) “负的读数”; UT181A CN PDF p.8 (p.4) “当前读数”; UT8805A CN PDF p.42 “所有读数”	Measure word 个 (UT8805A CN PDF p.50 “最新测量的8个读数”). «测量值» where the number itself is meant.
+measured value	测量值	n.	reading-spoken, hovers	UT181A CN PDF p.23 (p.19) “测量值-基值”; UT61E+ CN PDF p.16R (p.30) “测量显示值”	
+sample	样本	n.; 量词 个	recording, graph, export, CLI summary	MS-T sample => 样本; UT8805A CN PDF p.42 “样本数”	UT181A CN PDF p.24 (p.20) says «记录点» for logged samples.
+sample interval	采样间隔	n.	settings-sample-interval, CLI --interval-ms	MS-T sampling interval => 采样间隔; UT8805A CN PDF p.37 “以一定的时间间隔采集”	Every reading chip → «每个读数».
+buffer / Buffer size	缓冲区 / 缓冲区大小	n.	settings-buffer-size, recording-status-full	MS-T buffer => 缓冲区	buffer full → «缓冲区已满».
+recording	记录	n.	recording panel, settings-recording, toasts	UT181A CN PDF p.23 (p.19) “20. 记录测量数据”, PDF p.24 (p.20) “连续记录”	MS-T recording => 录制 is audio/video: avoid.
+Record (button)	记录	v.	"recording-record (""● Record"")"	UT181A CN PDF p.24 (p.20) “开始连续记录”; MS-T record => 记录	"""● Record"" → «● 记录»."
+Stop (button)	停止	v.	"recording-stop (""■ Stop"")"	MS-T stop => 停止; UT181A CN PDF p.24 (p.20) “STOP…停止记录”	
+Discard	放弃	v.	recording-discard, export-unsaved-*-confirm	MS-T discard => 放弃	"""Discard and record"" → «放弃并记录»; ""Recording discarded"" → «已放弃记录»."
+export / Export…	导出 / 导出…	v.	export-button, shortcuts-export, toasts	MS-T export => 导出	
+import / Import…	导入 / 导入…	v.	import-button, toasts, CLI --import	MS-T import => 导入	Import failed → «导入失败».
+replay (file) / replaying	回放 / 回放文件	n./v.	export-replay, top-bar-replaying, --replay help	no approved source found for «回放»; MS-SG p.48 example “Replay → 重播(&P)”; MS-T playback => 播放	"Provisional ruling: «回放», the usual word for replaying logged data; MS-SG's «重播» is the broadcast sense. ""Replaying { $path }"" → «正在回放 { $path }»."
+file type	文件类型	n.	export-menu .a11y, import-file-type	MS-T file type => 文件类型	
+unsaved / unexported	未保存 / 未导出	adj.	export-unsaved-*	MS-SG p.10 “尚未保存的工作”	
+timestamp	时间戳	n.	read-error, CSV help	MS-T time stamp => 时间戳	The CSV column name `timestamp` stays English.
+marker	标记	n.; 量词 个	markers-*, graph menu	MS-T marker => 标记	
+note (on a marker)	备注	n.	markers-note, markers-add	MS-T note => 备注	
+graph	图表	n.	settings-graph, toasts, shortcuts	MS-T chart => 图表; graph => 图	UT8806 CN PDF p.38 names its own views «趋势图», «直方图».
+plot (noun)	绘图	n.	"graph-plot-a11y-title ""Measurement plot."""	MS-T plot => 绘图	"""Measurement plot."" → «测量绘图。»; reviewer may prefer «测量曲线图»."
+plot (verb) / Plot:	绘制 / 绘制:	v.	graph-plot, graph-plot-*	partial: MS-T plot => 绘图	
+series	数据系列	n.	graph comments, graph-show-chip	MS-T data series => 数据系列	
+trace (a series' line)	曲线	n.	graph-show-chip, settings-graph-lines	partial: MS-T trendline => 趋势线; UT181A CN PDF p.25 (p.21) “趋势线”	MS-T trace => 跟踪 is the debugging sense: avoid.
+main reading	主读数	n.	"graph-plot-main (""Main"")"	partial: UT171 CN PDF p.5R (p.6) “主显测量值”; UT195 CN PDF p.6R (p.8) “主显测量值”	"Chip ""Main"" → «主读数»."
+sub-value	副读数	n.	graph-plot-series hover, colors-swatch-overlay-*	partial: UT195 CN PDF p.6R (p.8) “副小显测量值”; UT181A CN PDF p.7 (p.3) “辅助显示屏”	Pairs with «主读数».
+axis / Y axis	轴 / Y 轴	n.	graph-y-*, graph-plot-a11y-y-axis	MS-T axis => 轴, x-axis => x 轴; UT181A CN PDF p.25 (p.21) “X 轴时间标签”	Y:Fixed / Y:Auto → «Y:固定» / «Y:自动» (notation, no space).
+cursor	光标	n.	graph-cursors, graph menu, shortcuts	MS-T cursor => 光标; UT181A CN PDF p.25 (p.21) “光标对应的测量值”	Cursors A and B keep their letters.
+reference line / Ref	参考线 / 参考	n.	graph-ref, graph-menu-*-ref	partial: MS-T reference => 参考	
+triggers (crossings of a reference line)	触发	n.	graph-triggers, shortcuts-graph-triggers, colors-swatch-crossing	MS-T trigger => 触发; UT8805A CN PDF p.37 “该万用表可选的触发方式”	"""crossing"" → «穿越» (no source)."
+histogram	直方图	n.	graph-histogram*	MS-T histogram => 直方图; UT8805A CN PDF p.20 ““数字”、“条形图”、“趋势图”和“直方图””	
+minimap	缩略图	n.	graph-minimap	MS-T minimap => 缩略图	
+zoom / zoom in / zoom out	缩放 / 放大 / 缩小	n./v.	settings-zoom, graph, shortcuts-zoom	MS-T zoom => 缩放, zoom in => 放大, zoom out => 缩小	«缩放» is taken by zoom: scaling is «换算» (row scale / scaling).
+Reset Zoom	重置缩放	v.	graph-reset-zoom, shortcuts-zoom-reset	MS-T reset => 重置	
+pan	平移	v.	graph-live hover, shortcuts-mouse-drag, minimap	MS-T pan => 平移	Unlike fr, MS's word fits.
+drag	拖动	v.	gestures	MS-T drag => 拖动	"Gesture label ""Drag"" → «拖动»."
+right-click	右键单击	v.	shortcuts-mouse-menu, Wayland notes	MS-T right-click => 右键单击	
+double-click	双击	v.	shortcuts-mouse-reset, graph-reset-zoom hover	MS-T double-click => 双击	
+scroll wheel	滚轮	n.	"gestures ""Ctrl + scroll wheel"""	MS-T scroll wheel => 鼠标滚轮 | 滚轮	
+live / LIVE (chip)	实时	adj.	graph-live, graph-plot-a11y-state, top-bar status	MS-T live => 实时; live view => 实时视图	Chip «实时»; a11y state «实时。»
+bounding box	边界框	n.	shortcuts-mouse-box-zoom	MS-T bounding box => 边界框	
+time window	时间窗口	n.	graph-window, shortcuts-graph-window	MS-T window => 窗口	
+envelope (min/max band)	包络线	n.	graph-envelope*, colors-swatch-envelope	MS-T envelope => 包络线	
+crosshair	十字线	n.	colors-swatch-crosshair	no approved source found	
+gap (in recorded data)	间断	n.	stats-gaps, colors-swatch-gap, read-skipped-intervals	no approved source found	
+viewport (minimap bracket)	视区	n.	colors-swatch-viewport, shortcuts-mouse-minimap	MS-T viewport => 视区	
+statistics	统计	n.	stats-heading, settings-statistics	UT8805A CN PDF p.42 “统计运算”; MS-T statistics => 统计信息	Heading «统计».
+mean	平均值	n.	stats-mean, graph-mean, read-summary	UT8805A CN PDF p.42 “统计…平均值”; UT171 CN PDF p.5R (p.6)	Caption «平均值:»; readout «平均值={ $value }».
+standard deviation / σ	标准差 / σ	n.	stats-sd, graph-histogram-a11y-sd, hovers	UT8805A CN PDF p.42 “Std dev 统计测量期间所有读数的标准差”	MS-T says «标准偏差» (also UT8805A CN PDF p.6). Recommended «标准差», the shorter one.
+readings (count of)	读数	n.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	UT8805A CN PDF p.42 “统计测量期间所有读数”; UT8805A CN PDF p.50 “8个读数”	The statistics say how many readings: «读数: 12», read-out «读数=12». UT8805A CN PDF p.42 calls the count «样本数» (alternative).
+integral	积分	n.	stats-integral, read-integral, --integrate help	MS-T integral => 积分	
+Visible (block of figures)	可见部分	n.	stats-visible	no approved source found	Caption «可见部分:».
+Reset (statistics)	重置	v.	stats-reset	MS-T reset => 重置	
+alarm	报警	n.	alarm-*, reading badges, CLI	UT8805A CN PDF p.44 “蜂鸣器将发出声音报警”; UT71 CN PDF p.6 “插错报警”	MS-T alarm => 闹钟 | 告警: «闹钟» is an alarm clock, never.
+high limit / low limit	上限 / 下限	n.	alarm-high/low, alarm-breach, graph-menu-set-alarm	UT8805A CN PDF p.43 “上限 指定限定范围的上限值”; UT71 CN PDF p.13 “HIGH 数据设置上限值提示符”; MS-SG p.7	Fields Low/High → «下限»/«上限». Badges HI LIMIT/LO LIMIT → «超上限»/«超下限» (UT71 CN PDF p.30 “超上限值”).
+threshold	阈值	n.	"notes ""Audible threshold"", ""Lo-Z threshold"""	MS-T threshold => 阈值; UT8805A CN PDF p.29 “设置短路电阻（阈值）”	
+hysteresis	回差	n.	alarm-hysteresis, alarm-band hover, --alarm-hysteresis	no approved source found (no MS-T entry)	Alternative «迟滞». Reviewer to choose.
+scale / scaling	换算	n./v.	scale-chip, scale-on toast, reading-badge-scaled, --scale	no approved source found (MS-T scaling => 缩放 rejected)	Provisional ruling: MS-T «缩放» is already zoom. Chip «换算»; badge «换算»; spoken «软件换算». UT8806 CN PDF p.72 «定标» is its dB/dBm math, not this.
+scale factor	比例因子	n.	scale-factor, --scale help	MS-T scale factor => 比例因子	
+offset	偏移	n.	scale-offset, --offset help	MS-T offset => 偏移; UT8805A CN PDF p.31 “偏移值”	
+unit / unit label	单位 / 单位标签	n.	scale-unit, alarm-unit, --unit	MS-T unit => 单位, label => 标签	
+Apply	应用	v.	scale-apply, alarm-apply	MS-T apply => 应用	
+Off (button)	关闭	v.	scale-off, alarm-off	MS-T close (dismiss => 关闭)	"Toast ""Alarm off"" → «报警已关闭»."
+Settings	设置	n.	"top-bar-settings, every ""in Settings (⚙)"""	MS-T settings => 设置	«在“设置”(⚙) 中».
+theme	主题	n.	colors-theme*	MS-T theme => 主题	
+Dark / Light / System	深色 / 浅色 / 系统	adj.	colors-theme-*, settings-language-system	MS-T dark mode => 深色模式, light mode => 浅色模式, system => 系统	"""Dark (customized)"" → «深色 (自定义)»."
+colours	颜色	n.	colors-colors, colors-customize	MS-T theme color => 主题颜色	
+High Contrast	高对比度	n.	colors-preset-high-contrast	MS-T high contrast => 高对比度	
+Colorblind (preset)	色盲友好	adj.	colors-preset-colorblind	no approved source found	Provisional. Alternative «色觉友好»; MS-SG p.15 asks to focus on people, not conditions.
+Default (preset)	默认	n.	colors-preset-default	MS-T default => 默认	
+customized / Customize colors	自定义 / 自定义颜色	adj./v.	colors-*-customized, colors-customize	MS-T customize => 自定义	
+accent	主题色	n.	colors-swatch-accent	MS-T accent color => 主题色	
+background	背景	n.	"colors-swatch-background, ""Plot bg"" → «Fond du tracé»"	MS-T background => 背景	"""Plot bg"" → «绘图背景»."
+border	边框	n.	colors-swatch-border	MS-T border => 边框	
+frame (colour surface)	框架	n.	colors-swatch-frame	MS-T window frame => 窗口框架	
+heading	标题	n.	colors-swatch-heading	MS-T heading => 标题	
+weak text	次要文本	n.	colors-swatch-weak-text	"no approved source found (the hover says ""Secondary text"")"	
+palette	调色板	n.	colors-preset-* hovers	MS-T palette => 调色板	
+keyboard shortcut	快捷键	n.	shortcuts-*, top-bar-shortcuts	MS-T shortcut key => 快捷键; MS-SG p.46–48 §5.5.3	MS-T keyboard shortcut => 键盘快捷方式 is longer; the list is all key combinations.
+Keyboard & Mouse	键盘和鼠标	n.	shortcuts-title	MS-T keyboard => 键盘, mouse => 鼠标; MS-SG p.15 (spell out &)	
+key names in prose (Up/Down, Left/Right, Escape, Space, Shift, PgUp/PgDn, Home/End)	向上键/向下键、向左键/向右键、Esc、空格键、Shift、Page Up/Page Down、Home/End	n.	shortcuts-note, divider .a11y texts, gestures	MS-SG p.50–51 §5.5.4 Key names	shortcuts-key-*: Ctrl, Shift, Alt, 空格键, Esc, 向左键, 向右键, Home, End, 加号, 减号 (MS-T plus sign => 加号, minus sign => 减号). MS-SG p.51: never add «键» after Ctrl/Shift/Alt.
+tooltip / hover text	工具提示	n.	translator comments only	MS-T tooltip => 工具提示	Translator comments only.
+toast	通知	n.	translator comments only	MS-T notification => 通知; toast => toast 通知	Translator comments only.
+drop-down	下拉列表	n.	.a11y names, comments	MS-T drop-down list => 下拉列表	
+checkbox	复选框	n.	"bluetooth-off-* (""Tick …"")"	MS-T check box => 复选框	Tick → «勾选».
+panel	面板	n.	recording-resize .a11y, settings, big meter	MS-T panel => 面板	
+button	按钮	n.	notices naming buttons	MS-T button => 按钮	
+screen reader	屏幕阅读器	n.	comments only	MS-T screen reader => 屏幕阅读器	
+Help & Feedback	帮助和反馈	n.	project-link (top bar, --help last line)	MS-T help => 帮助, feedback => 反馈; MS-SG p.15	
+report feedback	提供反馈	v.	connection-feedback, top-bar-badge-hover, connect-report-feedback	MS-T feedback => 反馈	Click to report feedback. → «单击以提供反馈。»
+What's New	新增功能	n.	top-bar-version, whats-new-title*	MS-T what's new => 新增功能	What's New in v{ $version } → «v{ $version } 新增功能».
+release notes	发行说明	n.	top-bar-version hover	MS-T release notes => 发行说明	
+update / new version	更新 / 新版本	n.	settings-check-updates, settings-update-*	MS-T update => 更新, version => 版本	Newer dev build ↗ → «更新的开发版本 ↗» (MS-T build => 版本).
+machine-translated	机器翻译	adj.	settings-language-machine-translated, -unreviewed	MS-T machine translation => 自动翻译	Provisional: «机器翻译», the everyday word; MS-T says «自动翻译».
+language	语言	n.	settings-language	MS-T language => 语言; UT8805A CN PDF p.36 “语言 设置菜单的语言种类”	Caption «语言 (Language):» per the en-US comment. The list entry stays «简体中文».
+Always on top	窗口置顶	n.	settings-always-on-top, shortcuts-always-on-top	MS-T always on top => 前端显示	Provisional: «窗口置顶» is what Chinese desktops say; MS-T «前端显示» is the alternative.
+fullscreen	全屏	n.	shortcuts-fullscreen, big meter hover	MS-T full screen => 全屏	
+minimise	最小化	v.	shortcuts-minimize	MS-T minimize => 最小化	
+title bar	标题栏	n.	Wayland notes	MS-T title bar => 标题栏	
+window decorations	标题栏和边框	n.	settings-hide-decorations, shortcuts-decorations	MS-T title bar => 标题栏, border => 边框	Hide window decorations → «隐藏标题栏和边框».
+Quit	退出	v.	shortcuts-quit	MS-T quit => 退出	
+Dismiss	关闭	v.	connection-dismiss	MS-T dismiss => 关闭	
+Copy / copied	复制 / 已复制	v.	graph-menu-copy, connection-late-copy, toasts	MS-T copy => 复制	Command copied → «命令已复制».
+clipboard	剪贴板	n.	comments	MS-T clipboard => 剪贴板	
+Cancel	取消	v.	export-unsaved-cancel	MS-T cancel => 取消	
+Clear	清除	v.	top-bar-clear, shortcuts-clear	MS-T clear => 清除	
+Pause / Resume	暂停 / 继续	v.	top-bar-pause, top-bar-resume, shortcuts-pause	MS-T pause => 暂停, resume => 继续	"""▶ Resume"" → «▶ 继续», ""⏸ Pause"" → «⏸ 暂停»."
+acquisition	采集	n.	top-bar-pause hover, connection-acquisition-stopped	MS-T data acquisition => 数据采集	
+Error: / Warning: / Note: / Tip:	错误: / 警告: / 注意: / 提示:	n.	cli/common.ftl, list-select-tip, settings-tip-*	MS-T error => 错误, warning => 警告, tip => 提示; MS-SG p.29 “错误: %1”; UT61E+ CN PDF p.8L (p.13) “注意：”	Half-width colon and a space (STYLE §4).
+you (addressing the user)	你 (多数情况省略)	pron.	every sentence that speaks to the user	MS-SG p.27 §4.1.12 “use 你 instead of 您”	Provisional ruling 1. Omit the pronoun wherever the sentence reads without it.
+measure word for samples, readings, markers, files, digits	个	量词	plurals with $count, $samples, $markers	MS-SG p.45 §5.5.2 “%d 位用户在线” (add measure words); UT8805A CN PDF p.50 “8个读数”; UT61E+ CN PDF p.15L (p.27) “5个字”	«{ $samples } 个样本», «{ $markers } 个标记».
+measure word for records / log entries	条	量词	stored records, log lines, notes	MS-SG p.6 “3 条记录”; UT181A CN PDF p.23 (p.19) “记录数量最多达到20000条”	
+measure word for times / attempts	次	量词	"attempt counts, ""2–3 times a second"""	UT61E+ CN PDF p.14R (p.26) “显示更新约每秒2～3次”	Reconnecting (attempt 3) → «第 3 次尝试».
+measure word for beeps	声	量词	activation notes	UT61E+ CN PDF p.14L (p.25) “连续发出5声警示”	
+seconds / minutes / hours / days (in prose)	秒 / 分钟 / 小时 / 天	n.	"""17 minutes"", ""2 seconds"" in notes and hovers"	UT181A CN PDF p.24 (p.20) “持续时间可设置天数，小时和分钟”; UT61E+ CN PDF p.14L (p.25) “约15分钟”	Where the English writes a symbol (s, ms, h) keep the symbol (STYLE §6).
+input terminal / jack	插孔 / 输入端子	n.	lead-error and activation text naming the jacks	UT61E+ CN PDF p.8L (p.13) “将红表笔插入…插孔”; UT181A CN PDF p.8 (p.4) “(3)输入端子”	«COM 插孔».
+analog bar graph (meter display)	模拟条	n.	not in en-US today; listed for the «模拟» clash	UT61E+ CN PDF p.14R (p.26) “模拟条：31段”	Why «仿真», not «模拟», for the simulated meter.
+Simplified Chinese (language name)	简体中文	n.	Language list, settings-language-system	crates/dmm-shared/src/l10n/lang.rs native_name	Fixed entry; do not translate the other languages' names in the list.
+turn (the dial) to	将旋钮转至 / 转到	v.	activation steps	UT61E+ CN PDF p.8L (p.13) “将旋钮转至”; UT181A CN PDF p.21 (p.17) “将仪表的旋钮开关转到”	
+switch on / switch off (the meter)	开机 / 关机	v.	activation steps and notes	UT71 CN PDF p.26 “按下此键开机”; UT61E+ CN PDF p.7L (p.11) “OFF 关机”	"""hold SELECT while turning it on"" → «按住 SELECT 键的同时开机»."
