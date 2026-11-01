@@ -563,7 +563,7 @@ mod tests {
                      band-40hz-100hz-lpf = 40 Hz~100 Hz (filtre)\n\
                      band-only-for-reference = Pour référence\n",
         };
-        let resources = [crate::l10n::resources(), vec![lib]].concat();
+        let resources = [crate::l10n::english_resources(), vec![lib]].concat();
         Localizer::new(&FRENCH, &resources, &Options::default())
     }
 

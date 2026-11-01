@@ -62,7 +62,10 @@ const CATALOG_URL: &str =
 
 /// The messages of [`Help`]: `i18n/<locale>/shared.ftl`, in every language
 /// the binaries ship.
-pub const RESOURCES: &[Resource] = &[crate::ftl!("en-US", "shared.ftl")];
+pub const RESOURCES: &[Resource] = &[
+    crate::ftl!("en-US", "shared.ftl"),
+    crate::ftl!("fr", "shared.ftl"),
+];
 
 /// The help in English, for what stays English whatever the language: shell
 /// completions, and the docs' generated tables.

@@ -908,7 +908,7 @@ mod tests {
             reviewed: true,
         };
         let resources = [
-            LIB_RESOURCES,
+            &crate::l10n::lib_index::english_lib()[..],
             &[
                 crate::l10n::Resource {
                     locale: "fr",

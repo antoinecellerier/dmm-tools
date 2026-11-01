@@ -30,7 +30,22 @@ pub const LIB_RESOURCES: &[Resource] = &[
     crate::ftl!("en-US", "lib-names.ftl"),
     crate::ftl!("en-US", "lib-errors.ftl"),
     crate::ftl!("en-US", "lib-alarm.ftl"),
+    crate::ftl!("fr", "lib.ftl"),
+    crate::ftl!("fr", "lib-names.ftl"),
+    crate::ftl!("fr", "lib-errors.ftl"),
+    crate::ftl!("fr", "lib-alarm.ftl"),
 ];
+
+/// The en-US half of [`LIB_RESOURCES`]: what a test that makes up its own
+/// translation starts from, so the shipped ones don't stand in for it.
+#[cfg(test)]
+pub(crate) fn english_lib() -> Vec<Resource> {
+    LIB_RESOURCES
+        .iter()
+        .filter(|r| r.locale == super::EN_US.id)
+        .copied()
+        .collect()
+}
 
 /// Unit symbols, without prefix. With [`PREFIXES`] they are what stays as
 /// it is in every language: a label whose letters are nothing but these
@@ -596,7 +611,7 @@ mod tests {
 
     fn french() -> Localizer {
         let resources = [
-            LIB_RESOURCES,
+            &english_lib()[..],
             &[Resource {
                 locale: "fr",
                 path: "lib.ftl",
@@ -651,7 +666,7 @@ mod tests {
     /// A language without its own `lib.ftl`: every lookup goes through the
     /// messages, en-US's.
     fn untranslated() -> Localizer {
-        Localizer::new(&FRENCH, LIB_RESOURCES, &Options::default())
+        Localizer::new(&FRENCH, &english_lib(), &Options::default())
     }
 
     /// Every label the library lists comes back from the en-US messages as
@@ -675,7 +690,7 @@ mod tests {
     #[test]
     fn qualifiers_translate_once_and_may_move() {
         let resources = [
-            LIB_RESOURCES,
+            &english_lib()[..],
             &[Resource {
                 locale: "fr",
                 path: "lib.ftl",
@@ -722,7 +737,7 @@ mod tests {
              {lpf} = 40 Hz~1000 Hz (LPF)\n"
         );
         let resources = [
-            LIB_RESOURCES,
+            &english_lib()[..],
             &[Resource {
                 locale: "fr",
                 path: "lib.ftl",

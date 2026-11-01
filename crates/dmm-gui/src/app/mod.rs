@@ -1532,7 +1532,7 @@ mod tests {
             path: "lib-names.ftl",
             source: "flag-hold = MAINTIEN\nmain-label-dc = CC\n",
         };
-        let resources = [crate::l10n::resources(), vec![lib, names]].concat();
+        let resources = [crate::l10n::english_resources(), vec![lib, names]].concat();
         std::sync::Arc::new(Localizer::new(&FRENCH, &resources, &Options::default()))
     }
 

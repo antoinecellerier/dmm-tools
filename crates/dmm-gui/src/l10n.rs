@@ -36,6 +36,16 @@ pub(crate) fn resources() -> Vec<Resource> {
     .concat()
 }
 
+/// [`resources`] in en-US only: what a test that makes up its own
+/// translation starts from, so the shipped ones don't stand in for it.
+#[cfg(test)]
+pub(crate) fn english_resources() -> Vec<Resource> {
+    resources()
+        .into_iter()
+        .filter(|r| r.locale == dmm_shared::l10n::EN_US.id)
+        .collect()
+}
+
 /// The desktop entry's resources, in every language: all a localizer for
 /// it needs, so writing it at launch parses one small file per language.
 #[cfg(target_os = "linux")]
