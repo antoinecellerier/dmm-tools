@@ -30,12 +30,16 @@ use open::{
 
 fn main() {
     // First: the language decides every line printed from here on, `--help`
-    // included.
-    l10n::init(None, "");
+    // included, so `--lang` and the settings file are read before the
+    // command line is parsed.
+    let settings = dmm_shared::SharedSettings::load_if_exists();
+    let lang = cli::lang_from_argv(std::env::args_os().skip(1));
+    l10n::init(lang, settings.as_ref().map_or("", |s| s.language.as_str()));
     let l = l10n::get();
     let cli = Cli::from_arg_matches_mut(&mut cli::command(l).get_matches())
         .unwrap_or_else(|e: clap::Error| e.exit());
-    // Before the settings file and the meter: a report names its own meter,
+    debug_assert_eq!(cli.lang, lang, "the pre-scan read --lang as clap does");
+    // Before the settings file's meter applies: a report names its own meter,
     // and `--device` as typed overrides it, never the settings file's
     // choice, which a newer build may have written. Its logger keeps what
     // the library logs beside the frame that caused it, so it is installed
@@ -56,8 +60,6 @@ fn main() {
     // Whether the meter was named on the command line, as opposed to coming
     // from the settings file or from detection. Only `read --replay` asks.
     let device_named = cli.device.is_some();
-
-    let settings = dmm_shared::SharedSettings::load_if_exists();
 
     // Nothing named a meter, so none is assumed: detection is the fallback,
     // and `--device` or the settings file pins a model when the user wants

@@ -5,8 +5,9 @@
 //! the command tree, clap's derive attributes included. Only `main` sets
 //! it, so the unit tests, which never do, always read English.
 
+use crate::cli::Lang;
 use console::{StyledObject, style};
-use dmm_shared::l10n::{Localizer, Options, Resource};
+use dmm_shared::l10n::{Language, Localizer, Options, Resource};
 use dmm_shared::tr;
 use std::borrow::Cow;
 use std::sync::OnceLock;
@@ -46,10 +47,27 @@ pub(crate) fn resources() -> Vec<Resource> {
 
 /// Pick the language from `flag` (`--lang`) and `setting` (the settings
 /// file's), else the environment, and speak it for the rest of the run.
-/// Must run before anything is printed or `--help` is built.
-pub(crate) fn init(flag: Option<&str>, setting: &str) {
-    let language = dmm_shared::l10n::resolve_from_env(flag, setting);
-    let _ = LOCALIZER.set(Localizer::new(language, &resources(), &Options::from_env()));
+/// Must run once, before anything is printed or `--help` is built.
+pub(crate) fn init(flag: Option<Lang>, setting: &str) {
+    let fresh = LOCALIZER
+        .set(Localizer::new(
+            choose(flag, setting),
+            &resources(),
+            &Options::from_env(),
+        ))
+        .is_ok();
+    debug_assert!(fresh, "the language was chosen, or read, before init");
+}
+
+/// The language a run speaks: `--lang`'s, else the settings file's, else
+/// the environment's ([`dmm_shared::l10n::resolve`]). `--lang system`
+/// skips the settings file.
+fn choose(flag: Option<Lang>, setting: &str) -> &'static Language {
+    match flag {
+        Some(Lang::Language(language)) => language,
+        Some(Lang::System) => dmm_shared::l10n::resolve_from_env(None, ""),
+        None => dmm_shared::l10n::resolve_from_env(None, setting),
+    }
 }
 
 /// The run's localizer: English until [`init`] has run.

@@ -153,7 +153,7 @@ GUI binary).
 
 ### Language
 
-dmm-gui speaks the language picked in its Settings **Language** row. Left on **System**, and for dmm-cli, the apps speak the first of the computer's languages they have, and English if they have none:
+dmm-gui speaks the language picked in its Settings **Language** row, and dmm-cli the one its `--lang` option names, else the row's. On **System** (or `--lang system`), the apps speak the first of the computer's languages they have, and English if they have none:
 
 - **Linux:** each language in `LANGUAGE`, then those of `LC_ALL`, `LC_MESSAGES` and `LANG`. `LC_ALL=C` (or `POSIX`) means English, whatever `LANGUAGE` says.
 - **Windows:** the display language.

@@ -125,8 +125,9 @@ fn traditional(tag: &str) -> bool {
 /// 3. the C locale: if the first non-empty of `LC_ALL`, `LC_MESSAGES` and
 ///    `LANG` is `C` or `POSIX` (`C.UTF-8` included), English, whatever
 ///    `LANGUAGE` says — scripts and cron jobs set `LC_ALL=C` and expect
-///    English, and Debian and Ubuntu desktops set `LANGUAGE` anyway. Where
-///    those variables are the system's language (Unix but macOS), all
+///    English (one that must get English whatever the setting says passes
+///    `--lang en-US`), and Debian and Ubuntu desktops set `LANGUAGE`
+///    anyway. Where those variables are the system's language (Unix but macOS), all
 ///    three unset is the C locale too, as gettext reads it;
 /// 4. `system`, the system's preferred languages in order
 ///    (`sys_locale::get_locales()`), skipping `C` and `POSIX`;

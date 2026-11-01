@@ -25,6 +25,9 @@ dmm-cli--adapter =
 # dmm-cli --no-bluetooth
 dmm-cli--no-bluetooth =
     .help = Turn off Bluetooth scanning for this run: nothing scans for adapters or meters and 'list' shows cables only. Overrides the saved 'bluetooth' setting. An address given to --adapter is still opened
+# dmm-cli --lang
+dmm-cli--lang =
+    .help = Language of messages and help, or `system` for the system's. If omitted, falls back to `language` in the settings file (written by dmm-gui's Language row), then to the system's
 # dmm-cli list
 list =
     .about = List connected USB cables, and Bluetooth adapters and meters in range

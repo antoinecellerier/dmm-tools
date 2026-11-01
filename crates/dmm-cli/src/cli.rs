@@ -10,7 +10,7 @@ use dmm_lib::alarm::{Hysteresis, Limits};
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
 use dmm_shared::input;
-use dmm_shared::l10n::{Localizer, clap_help};
+use dmm_shared::l10n::{self, Language, Localizer, clap_help};
 use dmm_shared::tr;
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -39,6 +39,95 @@ fn version_string() -> &'static str {
     dmm_shared::help::version_string(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
 }
 
+/// `--lang`: a language the build has, or the system's whatever the
+/// settings file says.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Lang {
+    System,
+    Language(&'static Language),
+}
+
+/// What `--lang` names: `system`, or a tag [`l10n::find`] matches, so
+/// `fr`, `fr_FR` and `pt-br` are taken as the settings file's `language`
+/// and the system's locale are. `None` for anything else.
+pub(crate) fn parse_lang(s: &str) -> Option<Lang> {
+    if s.eq_ignore_ascii_case("system") {
+        return Some(Lang::System);
+    }
+    l10n::find(s).map(Lang::Language)
+}
+
+/// The values `--lang` lists: each language's id, then `system`.
+fn lang_values() -> impl Iterator<Item = &'static str> {
+    l10n::languages().iter().map(|l| l.id).chain(["system"])
+}
+
+/// [`parse_lang`] as clap takes it: an unknown value gets clap's own
+/// "invalid value" error, with the values it takes.
+#[derive(Clone)]
+struct LangParser;
+
+impl TypedValueParser for LangParser {
+    type Value = Lang;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Lang, clap::Error> {
+        let given = value.to_string_lossy();
+        parse_lang(&given).ok_or_else(|| {
+            use clap::error::{ContextKind, ContextValue, ErrorKind};
+            let mut e = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
+            let arg = arg.map_or_else(|| "--lang".to_string(), ToString::to_string);
+            e.insert(ContextKind::InvalidArg, ContextValue::String(arg));
+            e.insert(
+                ContextKind::InvalidValue,
+                ContextValue::String(given.into_owned()),
+            );
+            e.insert(
+                ContextKind::ValidValue,
+                ContextValue::Strings(lang_values().map(String::from).collect()),
+            );
+            e
+        })
+    }
+
+    fn possible_values(&self) -> Option<Box<dyn Iterator<Item = PossibleValue> + '_>> {
+        Some(Box::new(lang_values().map(PossibleValue::new)))
+    }
+}
+
+/// The `--lang` of a command line, read before the command tree is built,
+/// since its help is built in that language: `--lang X` or `--lang=X`, the
+/// last before any `--`, as clap keeps a command's over the top level's. A
+/// value [`parse_lang`] refuses is `None`, so the run goes on in the
+/// language it would speak without, and clap reports the value.
+pub(crate) fn lang_from_argv<I, S>(args: I) -> Option<Lang>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    let mut args = args.into_iter();
+    let mut found = None;
+    while let Some(arg) = args.next() {
+        let arg = arg.as_ref().to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+        if arg == "--lang" {
+            found = Some(
+                args.next()
+                    .and_then(|v| parse_lang(&v.as_ref().to_string_lossy())),
+            );
+        } else if let Some(value) = arg.strip_prefix("--lang=") {
+            found = Some(parse_lang(value));
+        }
+    }
+    found.flatten()
+}
+
 #[derive(Parser)]
 #[command(
     name = "dmm-cli",
@@ -64,6 +153,19 @@ pub(crate) struct Cli {
     /// An address given to --adapter is still opened.
     #[arg(long)]
     pub(crate) no_bluetooth: bool,
+
+    /// Language of messages and help, or `system` for the system's. If
+    /// omitted, falls back to `language` in the settings file (written by
+    /// dmm-gui's Language row), then to the system's.
+    // Global, as it is read wherever it stands; listed last.
+    #[arg(
+        long,
+        global = true,
+        display_order = 100,
+        value_name = "LANG",
+        value_parser = LangParser
+    )]
+    pub(crate) lang: Option<Lang>,
 
     #[command(subcommand)]
     pub(crate) command: Cmd,
@@ -991,6 +1093,71 @@ mod tests {
             }
             _ => panic!("expected Debug"),
         }
+    }
+
+    fn english() -> Lang {
+        Lang::Language(l10n::find("en-US").unwrap())
+    }
+
+    #[test]
+    fn lang_takes_a_language_or_system() {
+        for tag in ["en-US", "en", "EN_gb", "en_US.UTF-8"] {
+            assert_eq!(parse_lang(tag), Some(english()), "{tag}");
+        }
+        assert_eq!(parse_lang("system"), Some(Lang::System));
+        assert_eq!(parse_lang("System"), Some(Lang::System));
+        for tag in ["", "xx", "C", "POSIX"] {
+            assert_eq!(parse_lang(tag), None, "{tag}");
+        }
+    }
+
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        command(crate::l10n::english())
+            .try_get_matches_from(std::iter::once("dmm-cli").chain(args.iter().copied()))
+            .and_then(|mut m| Cli::from_arg_matches_mut(&mut m))
+    }
+
+    /// The pre-scan finds `--lang` where clap does: before or after the
+    /// command, with or without `=`, never past `--`.
+    #[test]
+    fn the_lang_pre_scan_reads_what_clap_reads() {
+        for (args, wanted) in [
+            (&["--lang", "en", "list"][..], Some(english())),
+            (&["--lang=en-us", "list"], Some(english())),
+            (
+                &["read", "--lang", "system", "--count", "1"],
+                Some(Lang::System),
+            ),
+            (
+                &["--device", "mock", "read", "--lang=system"],
+                Some(Lang::System),
+            ),
+            (
+                &["--lang", "system", "read", "--lang", "en"],
+                Some(english()),
+            ),
+            (&["list"], None),
+        ] {
+            assert_eq!(lang_from_argv(args), wanted, "{args:?}");
+            assert_eq!(parse(args).unwrap().lang, wanted, "{args:?}");
+        }
+        assert_eq!(lang_from_argv(["command", "--", "--lang", "en"]), None);
+        assert_eq!(lang_from_argv(["--lang"]), None);
+    }
+
+    /// A value the pre-scan passes over is clap's to refuse, with the
+    /// values `--lang` takes.
+    #[test]
+    fn an_unknown_lang_gets_claps_error() {
+        assert_eq!(lang_from_argv(["--lang", "xx", "list"]), None);
+        let e = parse(&["--lang", "xx", "list"]).err().unwrap();
+        assert_eq!(e.kind(), clap::error::ErrorKind::InvalidValue);
+        let text = e.to_string();
+        assert!(
+            text.contains("invalid value 'xx' for '--lang <LANG>'"),
+            "{text}"
+        );
+        assert!(text.contains("[possible values: en-US, system]"), "{text}");
     }
 
     #[test]

@@ -264,8 +264,10 @@ while working on them:
   without `RUST_LOG`. A folder for a locale the apps don't ship makes that
   language selectable.
 
-`LC_ALL=C` always means English, whatever else the environment says; the
-test helpers and the screenshot scripts rely on it.
+`LC_ALL=C` means English, whatever `LANGUAGE` says, when neither `--lang`
+nor the settings file names a language; the test helpers rely on it, with
+a settings folder of their own. A script that must read English whatever
+the settings say passes `--lang en-US`, as the screenshot script does.
 
 `i18n/en-US/lib.ftl` is generated from the library's text: its labels, meter
 keys, activation steps and spec tables. After changing any of them, run

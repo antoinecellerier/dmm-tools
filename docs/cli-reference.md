@@ -32,6 +32,7 @@ Set `NO_COLOR=1` to disable colored output.
 | `--device <DEVICE>` | `auto` | Meter model to connect to, or `auto` to work out which meter is connected. See [Devices](#devices) below. |
 | `--adapter <SERIAL_PATH_OR_ADDRESS>` | | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, from `list` output. |
 | `--no-bluetooth` | | Turn off Bluetooth scanning for this run. Overrides the `bluetooth` setting in the settings file; an address given to `--adapter` is still opened. |
+| `--lang <LANG>` | | Language of messages and help: an id from the list `--help` shows (`en` or `en_GB` picks `en-US`), or `system` for the system's. Overrides the `language` setting in the settings file; see [Language](setup.md#language). A script that matches output text passes `--lang en-US`. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
 
@@ -779,7 +780,7 @@ dmm-cli completions powershell >> $PROFILE
 |---|---|
 | `RUST_LOG` | Log filter. Unset, warnings from the meter library and errors from everything else are shown. Use `dmm_lib=trace` for wire-level debugging. |
 | `NO_COLOR` | Set to `1` to disable colored terminal output. |
-| `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG` | Language of messages and help on Linux, read in that order as gettext does: Debian and Ubuntu desktops set `LANGUAGE`, which wins over `LANG`. On macOS and Windows, the system's language applies. `C` or `POSIX` in the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set means English, whatever `LANGUAGE` says. |
+| `LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG` | Language of messages and help on Linux when neither `--lang` nor the settings file names one, read in that order as gettext does: Debian and Ubuntu desktops set `LANGUAGE`, which wins over `LANG`. On macOS and Windows, the system's language applies. `C` or `POSIX` in the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set means English, whatever `LANGUAGE` says. |
 
 ## Appendix
 

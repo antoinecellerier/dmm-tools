@@ -306,8 +306,9 @@ launch_without_meter() {
 no_meter_or_skip() {
 	local listing
 	# Once per run: the answer cannot change between scenes, and a list can
-	# spend seconds on a Bluetooth scan.
-	[ -n "$METER_LISTING" ] || METER_LISTING="$(cd "$ROOT" && cargo run -q -p dmm-cli -- list 2>&1 || true)"
+	# spend seconds on a Bluetooth scan. The matches below are English, and a
+	# language setting outranks LC_ALL=C, hence --lang.
+	[ -n "$METER_LISTING" ] || METER_LISTING="$(cd "$ROOT" && cargo run -q -p dmm-cli -- --lang en-US list 2>&1 || true)"
 	listing="$METER_LISTING"
 	if printf '%s\n' "$listing" | grep -qx 'No devices heard in range.'; then
 		echo "$1: a paired Bluetooth adapter is listed — make sure it is switched off"
