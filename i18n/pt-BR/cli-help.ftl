@@ -159,3 +159,9 @@ capture--list-steps =
 # dmm-cli capture --format
 capture--format =
     .help = Como --list-steps exibe a lista (md é a lista de verificação da issue)
+# dmm-cli capture --export-instructions
+capture--export-instructions =
+    .help = Gravar as instruções das etapas em FILE, para traduzir e usar com --instructions, e sair
+# dmm-cli capture --instructions
+capture--instructions =
+    .help = Exibir as instruções das etapas a partir de FILE, traduzidas do que --export-instructions gravou

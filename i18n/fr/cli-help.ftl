@@ -159,3 +159,9 @@ capture--list-steps =
 # dmm-cli capture --format
 capture--format =
     .help = Façon dont --list-steps affiche la liste (md est la liste de contrôle du ticket)
+# dmm-cli capture --export-instructions
+capture--export-instructions =
+    .help = Écrire les instructions des étapes dans FILE, à traduire pour --instructions, puis quitter
+# dmm-cli capture --instructions
+capture--instructions =
+    .help = Afficher les instructions des étapes lues dans FILE, traduites à partir de ce qu’a écrit --export-instructions
