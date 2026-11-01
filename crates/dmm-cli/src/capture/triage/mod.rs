@@ -500,13 +500,18 @@ impl<'a> Triage<'a> {
                     (last.mode != mode).then(|| format!("mode is {:?}, want {mode:?}", last.mode))
                 }
                 // The id holds the choice's label: "Auto", or the rung's.
-                Some(Some(("range", "Auto"))) => {
-                    Expect::new().range(RangeExpect::Auto).check(last).err()
-                }
+                Some(Some(("range", "Auto"))) => Expect::new()
+                    .range(RangeExpect::Auto)
+                    .check(last)
+                    .err()
+                    .map(|e| e.to_string()),
                 Some(Some(("range", range))) => (last.range_label != range)
                     .then(|| format!("range is {:?}, want {range:?}", last.range_label)),
                 Some(_) => None,
-                None => definition.expect.and_then(|e| e.check(last).err()),
+                None => definition
+                    .expect
+                    .and_then(|e| e.check(last).err())
+                    .map(|e| e.to_string()),
             };
             if let Some(reason) = verdict {
                 out.push(format!(

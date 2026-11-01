@@ -372,7 +372,7 @@ steps:
 
         let running = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
         assert_eq!(
-            expect.check(&running),
+            expect.check(&running).map_err(|e| e.to_string()),
             Err("hold is off, want on".to_string())
         );
     }

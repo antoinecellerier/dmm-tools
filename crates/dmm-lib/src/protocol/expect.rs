@@ -9,6 +9,7 @@
 use crate::flags::Flag;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::AUTO_RANGE_LABEL;
+use std::borrow::Cow;
 
 /// Whether the meter should be autoranging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,23 +141,20 @@ impl Expect {
         self
     }
 
-    /// Check a reading, returning a one-line reason for the first mismatch.
-    pub fn check(&self, m: &Measurement) -> Result<(), String> {
+    /// Check a reading, returning the first way it falls short.
+    pub fn check(&self, m: &Measurement) -> Result<(), Mismatch> {
         if let Some(want) = self.mode
             && m.mode != want
         {
-            return Err(format!("mode is {:?}, want {:?}", m.mode, want));
+            return Err(Mismatch::Mode {
+                got: m.mode.clone(),
+                want,
+            });
         }
 
         for &(flag, want) in self.flags {
-            let got = m.flags.get(flag);
-            if got != want {
-                return Err(format!(
-                    "{} is {}, want {}",
-                    flag.name(),
-                    on_off(got),
-                    on_off(want)
-                ));
+            if m.flags.get(flag) != want {
+                return Err(Mismatch::Flag { flag, want });
             }
         }
 
@@ -171,22 +169,23 @@ impl Expect {
             };
             if !ok {
                 let got = match (label.is_empty(), auto) {
-                    (true, _) => "(none)".to_string(),
-                    (false, true) if label != AUTO_RANGE_LABEL => format!("{label} (auto)"),
-                    _ => label.to_string(),
+                    (true, _) => RangeShown::Unlabelled,
+                    (false, true) if label != AUTO_RANGE_LABEL => {
+                        RangeShown::AutoRung(m.range_label.clone())
+                    }
+                    _ => RangeShown::Label(m.range_label.clone()),
                 };
-                let want = match want {
-                    RangeExpect::Auto => "auto",
-                    RangeExpect::Manual => "manual",
-                };
-                return Err(format!("range is {got}, want {want}"));
+                return Err(Mismatch::Range { got, want });
             }
         }
 
         if let Some(want) = self.value
             && !want.matches(&m.value)
         {
-            return Err(format!("value is {}, want {}", shown(m), want.describe()));
+            return Err(Mismatch::Value {
+                got: shown(m),
+                want,
+            });
         }
 
         if let Some(min) = self.at_least {
@@ -195,10 +194,7 @@ impl Expect {
                 _ => false,
             };
             if !big_enough {
-                return Err(format!(
-                    "value is {}, want at least {min} either way",
-                    shown(m)
-                ));
+                return Err(Mismatch::AtLeast { got: shown(m), min });
             }
         }
 
@@ -206,15 +202,99 @@ impl Expect {
     }
 }
 
-/// The value as a failed check names it: the export form, which reads back
-/// as the number the parser produced, or the word a meter shows instead of a
-/// reading, whose export form is empty — as is a frame's without a main
-/// reading.
-fn shown(m: &Measurement) -> std::borrow::Cow<'_, str> {
+/// How a reading fell short of an [`Expect`]: the first field that did not
+/// hold, with what the reading had instead. `Display` words it in English,
+/// as a one-line reason; an app that speaks another language words it from
+/// the fields.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Mismatch {
+    /// The mode label is `got`, not `want`.
+    Mode {
+        got: Cow<'static, str>,
+        want: &'static str,
+    },
+    /// `flag` is not `want`: the reading has it the other way.
+    Flag { flag: Flag, want: bool },
+    /// The range, `got`, is not `want`.
+    Range { got: RangeShown, want: RangeExpect },
+    /// The value, `got`, is not in `want`'s class.
+    Value { got: Shown, want: ValueExpect },
+    /// The value, `got`, is not a number of at least `min` either way.
+    AtLeast { got: Shown, min: f64 },
+}
+
+/// The range as a failed check names it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RangeShown {
+    /// The reading has no range label.
+    Unlabelled,
+    /// The rung autoranging picked, as a family that labels it while
+    /// autoranging says (the UT61+, with its AUTO flag).
+    AutoRung(Cow<'static, str>),
+    /// The range label as it reads: a manual rung, or the autorange label.
+    Label(Cow<'static, str>),
+}
+
+/// The value as a failed check names it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Shown {
+    /// The export form, which reads back as the number the parser produced,
+    /// or the word a meter shows instead of a reading, whose export form is
+    /// empty.
+    Text(String),
+    /// The frame has no main reading.
+    NoMainReading,
+}
+
+impl std::fmt::Display for Shown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Shown::Text(text) => f.write_str(text),
+            Shown::NoMainReading => f.write_str("no main reading"),
+        }
+    }
+}
+
+impl std::fmt::Display for Mismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mismatch::Mode { got, want } => write!(f, "mode is {got:?}, want {want:?}"),
+            Mismatch::Flag { flag, want } => write!(
+                f,
+                "{} is {}, want {}",
+                flag.name(),
+                on_off(!want),
+                on_off(*want)
+            ),
+            Mismatch::Range { got, want } => {
+                let want = match want {
+                    RangeExpect::Auto => "auto",
+                    RangeExpect::Manual => "manual",
+                };
+                match got {
+                    RangeShown::Unlabelled => write!(f, "range is (none), want {want}"),
+                    RangeShown::AutoRung(label) => {
+                        write!(f, "range is {label} (auto), want {want}")
+                    }
+                    RangeShown::Label(label) => write!(f, "range is {label}, want {want}"),
+                }
+            }
+            Mismatch::Value { got, want } => {
+                write!(f, "value is {got}, want {}", want.describe())
+            }
+            Mismatch::AtLeast { got, min } => {
+                write!(f, "value is {got}, want at least {min} either way")
+            }
+        }
+    }
+}
+
+/// The value as a failed check names it ([`Shown`]).
+fn shown(m: &Measurement) -> Shown {
     match m.value {
-        MeasuredValue::NoReading(word) => std::borrow::Cow::Borrowed(word),
-        MeasuredValue::Absent => std::borrow::Cow::Borrowed("no main reading"),
-        _ => m.value_export_str(),
+        MeasuredValue::NoReading(word) => Shown::Text(word.to_string()),
+        MeasuredValue::Absent => Shown::NoMainReading,
+        _ => Shown::Text(m.value_export_str().into_owned()),
     }
 }
 
@@ -235,6 +315,11 @@ mod tests {
         make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0))
     }
 
+    /// A check's outcome with the mismatch as `Display` words it.
+    fn reason(checked: Result<(), Mismatch>) -> Result<(), String> {
+        checked.map_err(|e| e.to_string())
+    }
+
     #[test]
     fn empty_expect_accepts_anything() {
         assert_eq!(Expect::new().check(&dcv()), Ok(()));
@@ -244,7 +329,7 @@ mod tests {
     fn mode_mismatch_names_both_labels() {
         assert_eq!(Expect::mode("DC V").check(&dcv()), Ok(()));
         assert_eq!(
-            Expect::mode("AC V").check(&dcv()),
+            reason(Expect::mode("AC V").check(&dcv())),
             Err(r#"mode is "DC V", want "AC V""#.to_string())
         );
     }
@@ -256,14 +341,14 @@ mod tests {
 
         assert_eq!(Expect::new().flags(HOLD_OFF).check(&dcv()), Ok(()));
         assert_eq!(
-            Expect::new().flags(HOLD_ON).check(&dcv()),
+            reason(Expect::new().flags(HOLD_ON).check(&dcv())),
             Err("hold is off, want on".to_string())
         );
 
         let held = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (F_HOLD, 0, 0));
         assert_eq!(Expect::new().flags(HOLD_ON).check(&held), Ok(()));
         assert_eq!(
-            Expect::new().flags(HOLD_OFF).check(&held),
+            reason(Expect::new().flags(HOLD_OFF).check(&held)),
             Err("hold is on, want off".to_string())
         );
     }
@@ -277,7 +362,7 @@ mod tests {
         };
         assert_eq!(Expect::new().range(RangeExpect::Auto).check(&auto), Ok(()));
         assert_eq!(
-            Expect::new().range(RangeExpect::Manual).check(&auto),
+            reason(Expect::new().range(RangeExpect::Manual).check(&auto)),
             Err("range is Auto, want manual".to_string())
         );
 
@@ -290,7 +375,7 @@ mod tests {
             Ok(())
         );
         assert_eq!(
-            Expect::new().range(RangeExpect::Manual).check(&rung_auto),
+            reason(Expect::new().range(RangeExpect::Manual).check(&rung_auto)),
             Err("range is 22V (auto), want manual".to_string())
         );
 
@@ -301,7 +386,7 @@ mod tests {
             Ok(())
         );
         assert_eq!(
-            Expect::new().range(RangeExpect::Auto).check(&manual),
+            reason(Expect::new().range(RangeExpect::Auto).check(&manual)),
             Err("range is 22V, want auto".to_string())
         );
 
@@ -310,7 +395,7 @@ mod tests {
             ..dcv()
         };
         assert_eq!(
-            Expect::new().range(RangeExpect::Manual).check(&unlabelled),
+            reason(Expect::new().range(RangeExpect::Manual).check(&unlabelled)),
             Err("range is (none), want manual".to_string())
         );
     }
@@ -336,17 +421,17 @@ mod tests {
         );
 
         assert_eq!(
-            Expect::new().value(ValueExpect::Overload).check(&finite),
+            reason(Expect::new().value(ValueExpect::Overload).check(&finite)),
             Err("value is 12.345, want OL".to_string())
         );
         assert_eq!(
-            Expect::new().value(ValueExpect::Negative).check(&finite),
+            reason(Expect::new().value(ValueExpect::Negative).check(&finite)),
             Err("value is 12.345, want a negative reading".to_string())
         );
         let zero = make_test_measurement(0x02, 0x01, b" 0.0000", (0, 0), (0, 0, 0));
         assert_eq!(Expect::new().value(ValueExpect::Zero).check(&zero), Ok(()));
         assert_eq!(
-            Expect::new().value(ValueExpect::Zero).check(&finite),
+            reason(Expect::new().value(ValueExpect::Zero).check(&finite)),
             Err("value is 12.345, want a reading of zero".to_string())
         );
         assert!(
@@ -356,14 +441,14 @@ mod tests {
                 .is_err()
         );
         assert_eq!(
-            Expect::new().value(ValueExpect::Finite).check(&overload),
+            reason(Expect::new().value(ValueExpect::Finite).check(&overload)),
             Err("value is OL, want a numeric reading".to_string())
         );
 
         let mut idle = finite.clone();
         idle.value = MeasuredValue::NoReading("Auto");
         assert_eq!(
-            Expect::new().value(ValueExpect::Finite).check(&idle),
+            reason(Expect::new().value(ValueExpect::Finite).check(&idle)),
             Err("value is Auto, want a numeric reading".to_string())
         );
         assert_eq!(
@@ -371,7 +456,7 @@ mod tests {
             Ok(())
         );
         assert_eq!(
-            Expect::new().value(ValueExpect::NoReading).check(&finite),
+            reason(Expect::new().value(ValueExpect::NoReading).check(&finite)),
             Err(format!(
                 "value is {}, want a word instead of a reading",
                 finite.value
@@ -385,7 +470,7 @@ mod tests {
         let ncv = make_test_measurement(0x14, 0x00, b"      2", (0, 0), (0, 0, 0));
         assert!(matches!(ncv.value, MeasuredValue::NcvLevel(2)));
         assert_eq!(
-            Expect::new().value(ValueExpect::Finite).check(&ncv),
+            reason(Expect::new().value(ValueExpect::Finite).check(&ncv)),
             Err("value is NCV:2, want a numeric reading".to_string())
         );
         assert_eq!(
@@ -398,7 +483,7 @@ mod tests {
         let idle = make_test_measurement(0x14, 0x00, b"   EF  ", (0, 0), (0, 0, 0));
         assert!(matches!(idle.value, MeasuredValue::NcvLevel(0)));
         assert_eq!(
-            Expect::new().value(ValueExpect::NcvDetected).check(&idle),
+            reason(Expect::new().value(ValueExpect::NcvDetected).check(&idle)),
             Err("value is NCV:0, want an NCV level of 1 or more".to_string())
         );
         let one_bar = make_test_measurement(0x14, 0x00, b"     - ", (0, 0), (0, 0, 0));
@@ -420,12 +505,63 @@ mod tests {
         let want = Expect::new().value(ValueExpect::Negative).at_least(1.0);
         assert_eq!(want.check(&battery), Ok(()));
         assert_eq!(
-            want.check(&noise),
+            reason(want.check(&noise)),
             Err("value is -0.0013, want at least 1 either way".to_string())
         );
         assert_eq!(
-            Expect::new().at_least(1.0).check(&overload),
+            reason(Expect::new().at_least(1.0).check(&overload)),
             Err("value is OL, want at least 1 either way".to_string())
+        );
+    }
+
+    /// Each mismatch carries what the reading had, for an app to word it
+    /// in its own language.
+    #[test]
+    fn mismatches_carry_what_the_reading_had() {
+        const HOLD_ON: &[(Flag, bool)] = &[(Flag::Hold, true)];
+        assert_eq!(
+            Expect::mode("AC V").check(&dcv()),
+            Err(Mismatch::Mode {
+                got: "DC V".into(),
+                want: "AC V"
+            })
+        );
+        assert_eq!(
+            Expect::new().flags(HOLD_ON).check(&dcv()),
+            Err(Mismatch::Flag {
+                flag: Flag::Hold,
+                want: true
+            })
+        );
+        assert_eq!(
+            Expect::new().range(RangeExpect::Manual).check(&dcv()),
+            Err(Mismatch::Range {
+                got: RangeShown::AutoRung("22V".into()),
+                want: RangeExpect::Manual
+            })
+        );
+        assert_eq!(
+            Expect::new().value(ValueExpect::Negative).check(&dcv()),
+            Err(Mismatch::Value {
+                got: Shown::Text("12.345".to_string()),
+                want: ValueExpect::Negative
+            })
+        );
+        let absent = Measurement {
+            value: MeasuredValue::Absent,
+            ..dcv()
+        };
+        let checked = Expect::new().at_least(1.0).check(&absent);
+        assert_eq!(
+            checked,
+            Err(Mismatch::AtLeast {
+                got: Shown::NoMainReading,
+                min: 1.0
+            })
+        );
+        assert_eq!(
+            reason(checked),
+            Err("value is no main reading, want at least 1 either way".to_string())
         );
     }
 
@@ -433,9 +569,11 @@ mod tests {
     fn mode_is_checked_before_value() {
         let overload = make_test_measurement(0x06, 0x01, b"     OL", (0, 0), (0, 0, 0));
         assert_eq!(
-            Expect::mode("DC V")
-                .value(ValueExpect::Finite)
-                .check(&overload),
+            reason(
+                Expect::mode("DC V")
+                    .value(ValueExpect::Finite)
+                    .check(&overload)
+            ),
             Err(r#"mode is "Ω", want "DC V""#.to_string())
         );
     }

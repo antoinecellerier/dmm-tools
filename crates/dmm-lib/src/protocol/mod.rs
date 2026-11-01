@@ -17,7 +17,7 @@ pub(crate) mod ut8803;
 pub(crate) mod vc8x0;
 pub(crate) mod zotek;
 
-pub use expect::{Expect, RangeExpect, ValueExpect};
+pub use expect::{Expect, Mismatch, RangeExpect, RangeShown, Shown, ValueExpect};
 #[doc(hidden)]
 pub use unrecognised::capture_reports;
 /// A parsed UT61E+ reading, for the CLI's and GUI's tests.

@@ -11,7 +11,7 @@
 
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
-use dmm_lib::protocol::{Expect, ValueExpect};
+use dmm_lib::protocol::{Expect, Mismatch, ValueExpect};
 use std::borrow::Cow;
 use std::mem::Discriminant;
 
@@ -20,12 +20,12 @@ use std::mem::Discriminant;
 pub(crate) const STABLE_FRAMES: usize = 3;
 
 /// What the watcher makes of the frames it has been given so far.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum Verdict {
     /// Nothing to report; keep reading.
     Waiting,
     /// The meter settled into a state that is not the one the step asked for.
-    Mismatch(String),
+    Mismatch(Mismatch),
     /// The step's state is on screen and holding — capture now.
     Ready,
 }
@@ -602,7 +602,10 @@ mod tests {
         let Verdict::Mismatch(reason) = w.feed(&acv(b"  1.234")) else {
             panic!("a settled wrong mode must be reported");
         };
-        assert!(reason.contains("AC V"), "got {reason}");
+        assert!(
+            matches!(&reason, Mismatch::Mode { got, .. } if got == "AC V"),
+            "got {reason}"
+        );
         for _ in 0..5 {
             assert_eq!(w.feed(&acv(b"  1.234")), Verdict::Waiting);
         }
@@ -660,7 +663,10 @@ mod tests {
         let Verdict::Mismatch(reason) = w.feed(&acv(b" 0.0000")) else {
             panic!("a settled wrong mode must be reported");
         };
-        assert!(reason.contains("AC V"), "got {reason}");
+        assert!(
+            matches!(&reason, Mismatch::Mode { got, .. } if got == "AC V"),
+            "got {reason}"
+        );
     }
 
     /// The state the step asked for, held for three frames, is the whole
