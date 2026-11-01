@@ -204,17 +204,19 @@ Code: `crates/dmm-shared/src/lib.rs`, `export/`.
 
 ### Translation
 
-Each binary holds a `Localizer`, a handle rather than a global, built from the Fluent files compiled
-into it. Text is translated where it is shown: exports, settings and logs stay English, and so do
-the library's strings, which the apps look up by kind and English text in a `lib.ftl` generated
+Each binary builds a `Localizer` from the Fluent files compiled into it: the GUI holds it in its app
+state and replaces it on a language switch, and the CLI sets one for the whole run. Text is
+translated where it is shown: exports, settings and logs stay English, and so do the library's
+strings, which the apps look up by kind and English text in a `lib.ftl` generated
 from the library as they draw them (see [localization-design.md](localization-design.md)). Library
 errors are worded by variant from `lib-errors.ftl`; the GUI words one when it arrives, so a notice
 or toast already on screen keeps its language after a switch. clap has no translation hook, so the
 CLI walks its command tree at start-up and swaps each command's and option's help for its message in
 `cli-help.ftl`, generated from the doc comments. clap's own words around that help (headings,
 defaults, its built-in flags) and its command-line errors are worded by the CLI too, from
-`cli/help.ftl` and `cli/args.ftl`; only the shell completion scripts stay English. A message a language lacks falls back to English alone, and `LC_ALL=C` means English
-unless `--lang` or the saved Language setting names another.
+`cli/help.ftl` and `cli/args.ftl`; only the shell completion scripts stay English. A message a
+language lacks falls back to English alone, and `LC_ALL=C` means English unless `--lang` or the
+saved Language setting names another.
 
 Code: `crates/dmm-shared/src/l10n/`, `i18n/`.
 
