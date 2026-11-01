@@ -47,6 +47,16 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("pt-BR", "cli/settings.ftl"),
     dmm_shared::ftl!("pt-BR", "cli/help.ftl"),
     dmm_shared::ftl!("pt-BR", "cli/args.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/common.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/connect.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/read.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/list.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/info.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/debug.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/command.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/settings.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/help.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli/args.ftl"),
 ];
 
 /// What each command and option does, as `--help` says it: generated from
@@ -56,6 +66,7 @@ const CLI_HELP: &[Resource] = &[
     dmm_shared::ftl!("en-US", "cli-help.ftl"),
     dmm_shared::ftl!("fr", "cli-help.ftl"),
     dmm_shared::ftl!("pt-BR", "cli-help.ftl"),
+    dmm_shared::ftl!("zh-CN", "cli-help.ftl"),
 ];
 
 /// Everything dmm-cli shows: the shared help, the library's text and
