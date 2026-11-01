@@ -104,22 +104,27 @@ read-skipped-frames =
         [one] { $count } reading skipped (unreadable frame)
        *[other] { $count } readings skipped (unreadable frames)
     }
-# After a dim "---": the statistics of the last series of readings, since
-# the mode or the unit last changed. $count is how many readings; $min, $max
-# and $mean are numbers with their unit, e.g. 4.0010 V. Min, Max and Mean
-# are the statistics' names in dmm-gui too.
-read-summary =
+## After a dim "---": the statistics of the last series of readings, since
+## the mode or the unit last changed, one cell per message, joined by " | ":
+##
+##     --- 3 readings | Min: 0.0264 V | Max: 1.6112 V | Mean: 0.6140 V | σ: 0.8682 V
+##
+## Min, Max and Mean are the statistics' names in dmm-gui too.
+
+# $count is how many readings.
+read-summary-count =
     { $count ->
-        [one] { $count } reading | Min: { $min } | Max: { $max } | Mean: { $mean }
-       *[other] { $count } readings | Min: { $min } | Max: { $max } | Mean: { $mean }
+        [one] { $count } reading
+       *[other] { $count } readings
     }
-# The same, with the readings' standard deviation, σ, in $sd, a number with
-# its unit; $count, $min, $max and $mean as there.
-read-summary-sd =
-    { $count ->
-        [one] { $count } reading | Min: { $min } | Max: { $max } | Mean: { $mean } | σ: { $sd }
-       *[other] { $count } readings | Min: { $min } | Max: { $max } | Mean: { $mean } | σ: { $sd }
-    }
+# $min is a number with its unit, e.g. 4.0010 V; the same for the next three.
+read-summary-min = Min: { $min }
+# $max: the largest reading.
+read-summary-max = Max: { $max }
+# $mean: the readings' mean.
+read-summary-mean = Mean: { $mean }
+# $sd: the readings' standard deviation, σ. Left out after a single reading.
+read-summary-sd = σ: { $sd }
 # Under the summary, with --integrate: the readings summed over time. $value
 # is the integral with its unit, e.g. 0.7720 V·s.
 read-integral = Integral: { $value }

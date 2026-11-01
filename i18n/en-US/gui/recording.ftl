@@ -22,29 +22,17 @@ recording-stop = ■ Stop
 # beside it, which saves the samples to a file.
 recording-discard = Discard
     .hover = Discard the recording; "Export…" then saves samples from the graph
-# After the buttons while recording. $count is how many samples the
-# recording holds; $seconds how long it has run, in whole seconds, e.g. 12.
-# The s after it is the symbol for seconds.
-recording-status =
-    { $count ->
-        [one] { $count } sample | { $seconds }s
-       *[other] { $count } samples | { $seconds }s
-    }
-# The same, in a warning colour, once the recording holds as many samples
-# as the Buffer size setting allows and takes no more; $count and $seconds
-# as there.
-recording-status-full =
-    { $count ->
-        [one] { $count } sample | { $seconds }s (buffer full)
-       *[other] { $count } samples | { $seconds }s (buffer full)
-    }
-# After the buttons once a recording has stopped. $count is how many
-# samples it holds.
+# After the buttons: $count is how many samples the recording holds. While
+# it runs, followed by " | " and how long it has run, e.g. 152 samples | 12s.
 recording-count =
     { $count ->
         [one] { $count } sample
        *[other] { $count } samples
     }
+# After the recording's count and time, the whole line in a warning colour,
+# once the recording holds as many samples as the Buffer size setting
+# allows and takes no more.
+recording-buffer-full = (buffer full)
 # A small line under the buttons while nothing is recorded: Export… then
 # saves the samples the graph holds, which a mode change restarts, where a
 # recording keeps them. Export and Record are the buttons' names. $count is

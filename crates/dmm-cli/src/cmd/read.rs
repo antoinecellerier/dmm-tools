@@ -615,26 +615,19 @@ impl<'a> Run<'a> {
             let figure = |v: f64| format!("{}{unit_suffix}", style(format!("{v:.4}")).cyan());
             let count = session.stats.count;
             let (min, max, mean) = (figure(min), figure(max), figure(avg));
-            // σ needs two samples; a one-reading summary leaves it out.
-            let summary = match session.stats.std_dev() {
-                Some(sd) => tr!(
-                    l,
-                    "read-summary-sd",
-                    count = count,
-                    min = min,
-                    max = max,
-                    mean = mean,
-                    sd = figure(sd),
-                ),
-                None => tr!(
-                    l,
-                    "read-summary",
-                    count = count,
-                    min = min,
-                    max = max,
-                    mean = mean
-                ),
-            };
+            // One message per cell, so a new figure leaves the others'
+            // translations alone. σ needs two samples; a one-reading
+            // summary leaves it out.
+            let mut cells = vec![
+                tr!(l, "read-summary-count", count = count),
+                tr!(l, "read-summary-min", min = min),
+                tr!(l, "read-summary-max", max = max),
+                tr!(l, "read-summary-mean", mean = mean),
+            ];
+            if let Some(sd) = session.stats.std_dev() {
+                cells.push(tr!(l, "read-summary-sd", sd = figure(sd)));
+            }
+            let summary = cells.join(" | ");
             eprintln!("\n{} {summary}", style("---").dim());
             if let Some((value, disp_unit)) = session.integral_display() {
                 let value = format!("{} {disp_unit}", style(format!("{value:.4}")).cyan());

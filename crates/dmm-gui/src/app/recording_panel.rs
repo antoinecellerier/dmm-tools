@@ -398,25 +398,21 @@ impl App {
                     "{:.0}",
                     self.capture.recording.duration_secs(self.clock.now())
                 );
+                // Each cell its own message; the seconds are a number and
+                // its symbol.
+                let status = format!(
+                    "{} | {seconds}s",
+                    tr!(l10n, "recording-count", count = count)
+                );
                 if self.capture.recording.is_full() {
                     let warn = self
                         .settings
                         .theme_colors(ui.visuals().dark_mode)
                         .recording_full_warning();
-                    let status = tr!(
-                        l10n,
-                        "recording-status-full",
-                        count = count,
-                        seconds = seconds
-                    );
+                    let status = format!("{status} {}", tr!(l10n, "recording-buffer-full"));
                     ui.label(RichText::new(status).color(warn));
                 } else {
-                    ui.label(tr!(
-                        l10n,
-                        "recording-status",
-                        count = count,
-                        seconds = seconds
-                    ));
+                    ui.label(status);
                 }
             } else if recorded && count > 0 {
                 ui.label(tr!(l10n, "recording-count", count = count));
