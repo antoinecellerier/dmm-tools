@@ -1,0 +1,248 @@
+english	french	part_of_speech/gender	context (where it appears)	source (URL or file + page)	notes
+DC voltage	tension continue	n. f.	spec table titles (table-*-dc-voltage), prose, notes	Voltcraft VC831 FR (Conrad 2576864) PDF p.91 «Mesure de la tension continue»; VC920 FR PDF p.65	Mode labels keep the meter's DC V / V DC (see STYLE §Units). UNI-T UT197 FR p.31 heads it «Tension DC»: rejected in titles, Voltcraft wording preferred.
+AC voltage	tension alternative	n. f.	spec table titles, prose	Voltcraft VC831 FR PDF p.91 «Mesure de la tension alternative»; VC920 FR PDF p.65	
+AC+DC voltage	tension alternative + continue	n. f.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	Voltcraft VC891 FR (Conrad 2576866) PDF p.99 «Mesure CA + CC de la tension « V AC+DC »»; VC925 FR (Conrad 3072348) PDF p.111 «tension CA/CC»	"Ruling: full words in titles and prose, like DC/AC voltage; mode labels and notes keep AC+DC as the meter prints it. ""AC Voltage + DC Voltage"" → «Tension alternative + tension continue»."
+voltage	tension	n. f.	aux-voltage, prose	Voltcraft VC831 FR PDF p.91	Never «voltage» (anglicism).
+current	courant	n. m.	aux-current, key-current	Voltcraft VC831 FR PDF p.91 «Mesure du courant»	«intensité» appears in VC880 symbol lists only.
+DC current	courant continu	n. m.	spec table titles	Voltcraft VC831 FR PDF p.94 «Mesure de courant continu et alternatif»	
+AC current	courant alternatif	n. m.	spec table titles	Voltcraft VC831 FR PDF p.94	
+4–20 mA loop current	courant de boucle 4-20 mA	n. m.	table-l-4-20-ma-loop-current, notes	Voltcraft VC915 FR (Conrad 3072347) PDF p.107 «Mesure du courant de boucle 4 - 20 mA»; VC891 FR PDF p.114	
+resistance	résistance	n. f.	mode, table titles	Voltcraft VC891 FR PDF p.99 «Mesure de la résistance»	
+Ohms (table title)	Résistance	n. f.	table-ohms, table-autocheck-ohms	Voltcraft VC920 FR PDF p.71 «Ohm (unité de résistance électrique)»	Keep «Ohms» only inside the AutoCheck™ (Ohms) trademark title.
+continuity	continuité	n. f.	mode-continuity, aux-continuity	Voltcraft VC831 FR PDF p.91 «Test de continuité»	
+continuity test	test de continuité	n. m.	table-14-continuity-test, table-f-continuity-test	Voltcraft VC831 FR PDF p.91; alt. «contrôle de continuité» VC880 FR (Conrad 124609) PDF p.66, «essai de continuité» VC920 FR PDF p.64	Pick «test» everywhere.
+audible continuity tester	testeur de continuité acoustique	n. m.	table-audible-continuity-tester	Voltcraft VC925 FR PDF p.124 «Symbole du testeur de continuité acoustique»; VC920 FR PDF p.71 «contrôleur acoustique de continuité»	
+diode	diode	n. f.	mode-diode, range-diode	Voltcraft VC831 FR PDF p.91	
+diode test	test de diode	n. m.	table-15-diode-test, table-diode-tester	Voltcraft VC925 FR PDF p.111 «Test de diode»; VC831 FR PDF p.91 «Test de diodes»	Diode Tester → «Testeur de diode».
+capacitance	capacité	n. f.	mode-capacitance, tables	Voltcraft VC831 FR PDF p.91 «Mesure de la capacité»; VC920 FR PDF p.72	UNI-T UT197 FR PDF p.33 writes «capacitance» (anglicism): rejected.
+frequency	fréquence	n. f.	mode-frequency, aux-frequency	Voltcraft VC831 FR PDF p.91	
+duty cycle	rapport cyclique	n. m.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Voltcraft VC925 FR PDF p.111 and p.134 «Mesures de la fréquence / du rapport cyclique (%)»	Decided. Manuals disagree: «cycle de service» (VC915 PDF p.156, VC920 PDF p.80), «cycle d'utilisation» (VC831 PDF p.91), «rapport d'impulsion» (VC891 PDF p.147), «facteur de marche» (VC650 PDF p.84), «Duty Cycle» kept (VC880 PDF p.77), «cycle d'occupation» (UT197 PDF p.12). IEV (search index only) has «facteur de marche» 851-12-03 (welding) and «facteur d'utilisation» 444-02-15 (relays), neither about pulses. Recommended: «rapport cyclique».
+Duty % (mode label)	Rapport cyclique %	n. m.	mode-duty-pct	as duty cycle	Long (18 vs 6 chars) for a mode line. Fallback if it wraps: keep «Duty %», as VC880 FR keeps «Duty Cycle».
+pulse width	largeur d'impulsion	n. f.	mode-pulse-width, table-13-pulse-width	UNI-T UT197 FR PDF p.13 «la largeur d'impulsion de 250uS»	
+temperature	température	n. f.	mode-temperature, aux-temperature	Voltcraft VC891 FR PDF p.100 «Mesure de la température»	Temp °C label → «Temp °C» (same abbreviation).
+internal temperature	température interne	n. f.	aux-internal-temperature	no approved source found	Plain French; listed so it stays consistent.
+K-type thermocouple	thermocouple de type K	n. m.	notes (note-k-type-thermocouple-*)	Voltcraft VC920 FR PDF p.66 «Sonde thermique de type K»; VC891 FR PDF p.107 «Sonde de température filaire, type K»	The FR manuals checked never print «thermocouple»; the word itself is unverified against an approved source.
+temperature probe	sonde de température	n. f.	notes	Voltcraft VC891 FR PDF p.107; VC880 FR PDF p.80 «sonde de température à contact»	"point-contact probe → «sonde à contact» (VC880 p.80); ""rod-type probe"" → «sonde à tige» (no source)."
+hFE	gain en courant (hFE)	—	mode-hfe, aux-hfe, table-k-transistor	maintainer's ruling (no approved source)	"Ruling: ""Transistor Magnification"" → «Gain en courant du transistor (hFE)»; mode labels keep hFE. ""gain en courant"" the maintainer's."
+NCV	NCV (détection de tension sans contact)	n. f.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	UNI-T UT197 FR PDF p.28 «NCV (Détection de tension AC sans contact)»	Keep «NCV» in labels; spell out only in prose. Spoken: «niveau NCV { $level }».
+EF / non-contact EF detection	EF / détection de champ électrique sans contact	n. f.	mode-ef*, table-non-contact-ef-detection	UNI-T UT197 FR PDF p.28 «proche d'un champ électrique sous tension» (partial)	Keep EF, EF-H, EF-L as printed.
+LoZ	LoZ (basse impédance)	n. f.	mode-loz-*, flag-loz	Voltcraft VC831 FR PDF p.94 «Une fonction basse impédance (LoZ)»; VC915 FR PDF p.119 «LoZ Symbole de basse impédance»	"VC925 PDF p.125 has «Faible impédance d'entrée». Spoken (reading-spoken-loz): «basse impédance». ""Lo-Z threshold"" → «seuil Lo-Z»."
+low-pass filter / LPF	filtre passe-bas / LPF	n. m.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	Voltcraft VC915 FR PDF p.106 «tension alternative avec filtre passe-bas « LPF »»; VC891 FR PDF p.106 «Filtre passe-bas actif»	Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»).
+VFD	VFD	—	mode-vfd-*	UNI-T UT197 FR PDF p.4 «La fonction de filtre passe-bas (VFD)»	Keep as printed.
+VFC	VFC	—	mode-vfc	no French source	Keep as printed.
+dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	Voltcraft VC925 FR PDF p.155 «0,86 dBm»	Unit symbols: never change.
+dBm reference	référence dBm	n. f.	mode-dbm-reference	no approved source for the phrase; «référence» from Voltcraft VC891 FR PDF p.113	
+inductance	inductance	n. f.	mode-inductance*	no approved source found	Q and R sub-labels unchanged.
+conductance	conductance	n. f.	table-8-conductance	no approved source found	
+power	puissance	n. f.	mode-power*	Voltcraft VC920 FR PDF p.72 «W Watt (Unité de mesure de la puissance)»	AC power W → «Puissance AC W».
+apparent power (VA)	puissance apparente (VA)	n. f.	notes, VA modes	Voltcraft VC920 FR PDF p.72 «VA Voltampère (Unité de mesure de la puissance apparente)»	Ruling: keep the unit symbol whenever the English gives it. No en-US text uses the term today.
+power factor / PF	facteur de puissance / PF	n. m.	mode-power-factor, aux-pf	Voltcraft VC920 FR PDF p.72 «cos φ Cosinus phi (Facteur de puissance)»	Keep «PF» where the meter prints it.
+inrush current	courant d'appel	n. m.	mode-inrush, aux-inrush	no approved source found (no FR manual hit; IEV search returned no entry)	Decided: «Courant d'appel» or keep «Inrush» as the meter prints it.
+True RMS	valeur efficace vraie (True RMS)	n. f.	notes (note-true-rms-*)	Voltcraft VC920 FR PDF p.65 «True RMS = valeur efficace vraie»; VC925 FR PDF p.124; IEV 103-02-03 «valeur efficace, f» (search index)	Notes may keep «True RMS» as the manuals do.
+RMS (sine RMS)	valeur efficace sinusoïdale	adj.	"notes ""sensitivity 40mV (sine RMS)"""	Voltcraft VC891 FR PDF p.143 «signaux non sinusoïdaux»; IEV 103-02-03	Ruling: in a note already in parentheses: «sensibilité 40mV (valeur efficace sinusoïdale)».
+crest factor	facteur de crête	n. m.	notes	Voltcraft VC880 FR PDF p.94 «facteur de crête (Crest Factor)»; VC925 FR PDF p.158	
+peak	crête	n. f.	mode-*-peak, qualifier-peak-mode, qualifier-mode-peak, aux-peak-min, main-label-peak-max, CLI Peak	Voltcraft VC891 FR PDF p.114 «PEAK Affichage de la valeur de crête»; VC920 FR PDF p.72	Keep PEAK as a key/flag name. UT197 FR p.9 says «pic»: rejected for consistency.
+peak max / peak min	crête max. / crête min.	n. f.	main-label-peak-max, aux-peak-min, spoken «crête maximale / minimale»	Voltcraft VC920 FR PDF p.72 (crête); UNI-T UT197 FR PDF p.9 «pic maximum, pic minimum»	Flags P-MAX / P-MIN stay as printed.
+period	période	n. f.	aux-period	no approved source found	
+impedance	impédance	n. f.	aux-impedance	UNI-T UT197 FR PDF p.30 «Impédance d'entrée»	
+burden voltage	chute de tension	n. f.	aux-burden-voltage, note-burden-voltage-*	no approved source found	No manual term found. Ruling: no optional parts in parentheses.
+clamp	pince	n. f.	mode-clamp-*, aux-clamp-*	UNI-T UT197 FR PDF p.38 «la pince multimètre»	Clamp AC A → «Pince AC A».
+power (mains) line	secteur	n. m.	mode-line-hz, table-line-level-frequency-hz	Voltcraft VC925 FR PDF p.114 «distribution secteur»	Line Hz → «Hz secteur».
+logic level	niveau logique	n. m.	mode-logic-hz, table-logic-level-*	no approved source found	Logic Hz → «Hz logique».
+Motor / Solar / Tachometer / Compass / Angle / Time / Scope	Moteur / Solaire / Tachymètre / Boussole / Angle / Temps / Oscilloscope	n. m. (Boussole f.)	mode-motor, mode-solar, mode-tachometer, mode-compass, mode-angle, mode-time, mode-scope	no approved source found (VC925 is a PV meter: «Icône PV» PDF p.123)	Plain French; check each against the meter when it is reviewed.
+Live (mode: live-wire detection)	Phase	n. f.	mode-live, aux-live	no approved source found	Decided: French electricians say «phase» for the live wire; no manual seen. Not the graph's LIVE chip.
+Recall	Lecture mémoire	n. f.	mode-recall	"Voltcraft VC920 FR PDF p.72 «RCL ""Recall"" Lecture de la mémoire des valeurs de mesure»"	
+Battery (sub-value)	Pile	n. f.	aux-battery	Voltcraft VC880 FR PDF p.66 «Piles et batteries»	«Batterie» only for rechargeable packs (VC925 Li-ion).
+HOLD (flag / key)	HOLD	—	flag-hold, remote panel, CLI settings	Voltcraft VC831 FR PDF p.92 «12.4 Fonction HOLD»; VC891 FR PDF p.106 «Indicateur HOLD actif»	Keep on the display text. Prose: «maintien de l'affichage».
+data hold / hold (spoken)	maintien de l'affichage	n. m.	reading-spoken-hold, remote-hold hover	Voltcraft VC920 FR PDF p.72 «Data Hold (maintien des données)»; VC925 FR PDF p.123 «Maintien de l'affichage»; VC891 FR PDF p.114 «figer sur l'écran la valeur de mesure»	"Hover ""Freeze the current reading"" → «Figer la mesure affichée». Ruling: full form."
+REL (flag / key)	REL	—	flag-rel, qualifier-mode-rel, CLI	Voltcraft VC831 FR PDF p.92 «12.3 Fonction REL»	Keep.
+relative	relatif / relative	adj.	main-label-relative, reading-spoken-rel, remote-rel hover	Voltcraft VC891 FR PDF p.113 «REL Bouton de mesure de valeur relative (= mesure de la valeur de référence)»	Main label: «Relatif» (a label standing alone, masc.); spoken flag REL: «relatif».
+reference	référence	n. f.	aux-reference, graph Ref	Voltcraft VC891 FR PDF p.113 «valeur de référence»	
+absolute	absolu	adj.	aux-absolute	no approved source found	
+AUTO (flag)	AUTO	—	flag-auto-range, remote AUTO	"Voltcraft VC920 FR PDF p.71 «AUTO désigne la ""Sélection automatique de la plage de mesure""»"	Keep.
+auto range / auto-ranging	plage automatique	n. f.	reading-spoken-auto-range, remote-auto, settings-auto-*, errors	UNI-T UT197 FR PDF p.10 «Invite de plage automatique»; Voltcraft VC880 FR PDF p.73 «sélection automatique de la plage de mesure»	Meter now auto-ranging (6V) → «Multimètre en plage automatique (6V)».
+manual range	plage manuelle	n. f.	settings-switched [range], remote-range	UNI-T UT197 FR PDF p.10 «Invite de la plage manuelle»; VC880 FR PDF p.73 «MANUAL désigne la « sélection manuelle de la plage de mesure »»	
+range	plage de mesure	n. f.	reading-range, range menu, CLI settings, errors	Voltcraft VC831 FR PDF p.94 «la sélection de la plage s'effectue automatiquement»; MS Terminology range => plage	Decided. Also seen: «gamme» (UT197 PDF p.31), «échelle de mesure» (UT197 PDF p.30), «portée» (VC925 PDF p.157), «étendue de mesure» (IEV 311-03-12, search index). The bench word «calibre» has no approved source. Recommended: «plage». Ruling: full form; «plage» alone where the sentence already says what is measured.
+RANGE (key)	RANGE	—	remote-range hover, errors	Voltcraft VC831 FR PDF p.92 «12.1 RANGE»	Only VC925 PDF p.111 translates the key («Fonction PLAGE»). Keep.
+MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	Voltcraft VC831 FR PDF p.92 «Fonction MAX/MIN»; VC920 FR PDF p.72 «MIN Affichage de la plus petite valeur de mesure enregistrée»	Keep.
+minimum / maximum (spoken)	minimum / maximum	n. m.	reading-spoken-min/max, stats	Voltcraft VC650BT FR (Conrad 124411) PDF p.83 «alternance entre l'affichage du maximum / du minimum»	
+AVG (flag) / average	AVG / moyenne	n. f.	flag-avg, reading-spoken-avg, aux-average	Voltcraft VC880 FR PDF p.66 «Fonction MAX/MIN, AVG»; Voltsoft FR PDF p.85 «valeur moyenne»	Keep AVG on the display; spoken «moyenne».
+SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	Voltcraft VC831 FR PDF p.103 «La touche SELECT permet de passer à une sous-fonction»	Keep.
+secondary function	sous-fonction	n. f.	remote-select hover	Voltcraft VC831 FR PDF p.103; VC925 FR PDF p.124 «SELECT Passe au sous-mode»	
+backlight / LIGHT	rétroéclairage / LIGHT	n. m.	remote-light hover	Voltcraft VC915 FR PDF p.141 «11.10 Rétroéclairage»; UNI-T UT197 FR PDF p.13	VC880 FR PDF p.86 has «Éclairage de l'écran». Keep the key name LIGHT.
+ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	Voltcraft VC925 FR PDF p.141 «la mesure est remise à zéro» (action)	Keep the key name.
+overload / OL	surcharge / OL	n. f.	reading-spoken-overload, graph-hover-overload, graph legends	Voltcraft VC891 FR PDF p.114 «OL Overload = Surcharge ; la plage de mesure a été dépassée»	VC880/VC920 FR (PDF p.73 / p.71) say «dépassement». Keep «OL» where the English writes OL.
+over range	hors plage / dépassement de plage	loc.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	Voltcraft VC880 FR PDF p.74 «vous avez dépassé la plage de mesure»	currently over range. → «actuellement hors plage.»
+LOW BAT (flag)	LOW BAT	—	flag-low-battery	Voltcraft VC920 FR PDF p.71 «Symbole de remplacement des piles»	Decided: keep since it stands for the battery icon. Spoken: «pile faible» (UT197 PDF p.10 «sous-tension des piles»).
+HV! (flag)	HV!	—	flag-hv-warning; spoken reading-spoken-hv-warning	Voltcraft VC891 FR PDF p.106 «flash pour tension dangereuse»; UNI-T UT197 FR PDF p.10 «Invite de tension dangereuse»	Spoken: «avertissement de tension dangereuse».
+LEAD ERR (flag)	LEAD ERR	—	flag-lead-error; spoken reading-spoken-lead-error	UNI-T UT197 FR PDF p.29 «mauvais branchement des cordons de mesure»; Voltcraft VC891 FR PDF p.99 «mauvais choix de borne»	Spoken: «erreur de branchement des cordons».
+COMP (flag) / compare	COMP / comparaison	n. f.	flag-comp, reading-spoken-comp, aux-comp-*	Voltcraft VC880 FR PDF p.73 «COMP Mode de comparaison»; VC891 FR PDF p.114	COMP High/Low → «COMP haut / COMP bas».
+REC (flag) / record (meter memory)	REC / enregistrement	n. m.	flag-record, reading-spoken-record	Voltcraft VC891 FR PDF p.114 «RECORD Enregistrement automatique ... « REC »»	
+VOID (flag)	VOID / non valide	adj.	flag-void, reading-spoken-void	MS FR Style Guide p.12 «propriétés non valides» (wording)	Spoken: «non valide».
+annunciator / status flag	indicateur	n. m.	translator comments only	Voltcraft VC831 FR PDF p.97 «(3) Indicateur HOLD actif»	
+key (on the meter)	touche	n. f.	remote panel, activation steps, key hovers	Voltcraft VC891 FR PDF p.113 «SELECT Touche de sélection des sous-fonctions»; VC831 FR PDF p.109 «la touche LoZ»	«bouton» is also used (VC650 PDF p.83): keep «bouton» for the app's own buttons.
+press (briefly) / short press	appuyer brièvement sur	v.	activation steps, key hovers	UNI-T UT197 FR PDF p.12 «Appuyez brièvement»	"Ruling: full form; plain ""press"" → «appuyer sur»."
+hold (a key) / long press	maintenir enfoncé / appuyer longuement	v.	activation steps	Voltcraft VC880 FR PDF p.82 «maintenez la touche « RANGE » enfoncée pendant 2 s»; UNI-T UT197 FR PDF p.13 «Appuyez longuement»	Note gender: «la touche … enfoncée», «le bouton … enfoncé».
+dial	commutateur rotatif	n. m.	"activation steps, errors ""turn the dial first"""	Voltcraft VC891 FR PDF p.102 «sélectionnées via le commutateur rotatif»; VC920 FR PDF p.70; UNI-T UT197 FR PDF p.3	Also «sélecteur de fonction» (VC915 PDF p.140), «bouton rotatif» (VC880 PDF p.68). Short form in tight text: «sélecteur».
+dial position	position du commutateur	n. f.	errors, remote-select hover	UNI-T UT197 FR PDF p.12 «Position ACV»	
+function (dial)	fonction de mesure	n. f.	"activation steps ""Turn the dial to any function"""	Voltcraft VC891 FR PDF p.102 «Les fonctions de mesure sont sélectionnées via le commutateur rotatif»	Ruling: full form; «fonction» alone for the dial position.
+mode	mode	n. m.	reading-mode, mode menu, CLI settings	Voltcraft VC925 FR PDF p.140 «Mode LoZ»; UNI-T UT197 FR PDF p.13 «mode de mesure REL»	Put «mode» before a placeable: «en mode { $mode }».
+display (the meter's)	écran	n. m.	"activation steps ""shows on the display"""	Voltcraft VC891 FR PDF p.115 «Si l'écran affiche « OL »»	
+beep	bip sonore	n. m.	activation notes, settings-device-name	Voltcraft VC891 FR PDF p.128 «Un bip est émis»; VC880 FR PDF p.79 «un bip sonore retentit»	Ruling: full form.
+auto power-off	arrêt automatique	n. m.	"activation notes ""switches off after 15 minutes idle"""	Voltcraft VC831 FR PDF p.92 «Fonction d'arrêt automatique»; VC920 FR PDF p.84	Keep APO as printed (VC831 PDF p.97).
+on / off (meter setting)	activé / désactivé	adj.	toggle-on, toggle-off	Voltcraft VC925 FR PDF p.112 «Bluetooth ACTIVER/DÉSACTIVER»	VC915 PDF p.113 has «(Marche/Arrêt)» for the display freeze. Lowercase like the English.
+specifications	spécifications	n. f. pl.	specs-heading, settings-specs	UNI-T UT197 FR PDF p.29 «Spécifications Techniques»	Voltcraft uses «Caractéristiques techniques» (VC880 PDF p.93). Recommended «Spécifications», one word for the heading.
+resolution	résolution	n. f.	specs-resolution, settings-specs-resolution	Voltcraft VC880 FR PDF p.93 (table header «Plage Précision Résolution»); UNI-T UT197 FR PDF p.30	"Short ""Res:"" → «Rés. :»."
+accuracy	précision	n. f.	specs-accuracy, settings-specs-accuracy, notes	Voltcraft VC880 FR PDF p.93 «Indication de la précision en ±»; VC925 FR PDF p.156; UNI-T UT197 FR PDF p.30	"Decided: IEV 311-06-08 (search index) gives «exactitude» and keeps «précision» for precision. Every maker manual says «précision»: recommended. Short ""Acc:"" → «Préc. :»."
+input impedance / Input Z	impédance d'entrée	n. f.	specs-input-impedance, settings-specs-input-z	UNI-T UT197 FR PDF p.30 «Impédance d'entrée : ≥10MΩ»; Voltcraft VC925 FR PDF p.125	Ruling: the specs row and its setting say «Impédance d'entrée» in full; «Z d'entrée» read oddly.
+overload protection	protection contre les surcharges	n. f.	spec input rows	Voltcraft VC925 FR PDF p.161 «Protection contre les surcharges : 1 000 V»; UNI-T UT197 FR PDF p.31 «Protection contre la surcharge»	
+of reading (±(a% of reading + b))	de la mesure	loc.	notes, accuracy bands	Voltcraft VC925 FR PDF p.156 «± (% de la mesure + erreur d'affichage en nombre de points)»	Also «% de lecture» (VC880 PDF p.93), «a% du relevé» (UT197 PDF p.30). Follows the reading decision.
+digits / counts (accuracy, residual)	points	n. m. pl.	"notes ""add 10 digits"", ""residual ≤10 digits"", ""Display digits: 6000"""	Voltcraft VC925 FR PDF p.157 «Le multimètre peut afficher ≤10 points si une entrée de mesure est court-circuitée»; VC831 FR PDF p.127 «erreur d'affichage en points»	Decided. VC880/VC891 FR keep «counts» (PDF p.93 / p.112); UT197 says «chiffres» (PDF p.30) — but «chiffre» also means a display digit (4 ¾ digits). Recommended: «points».
+display counts (6000-count display)	6000 points	n. m. pl.	note-display-digits-6000, note-true-rms-crest-factor-*	Voltcraft VC880 FR PDF p.93 «40 000 counts max. (caractères)»; VC925 FR PDF p.157	Do not write «40 000»: the spec check rejects regrouped thousands.
+Not specified / Unspec'd	Non spécifié	adj.	"band-not-specified, notes ""not specified above 10A"""	Voltcraft VC880 FR PDF p.94; VC920 FR PDF p.89; UNI-T UT197 FR PDF p.30	Agree when attached to a feminine noun («précision non spécifiée»).
+for reference only	à titre de référence uniquement	loc.	band-only-for-reference, note-reading-for-reference-only	UNI-T UT197 FR PDF p.34 «à titre de référence uniquement»	Decided: the only maker wording is a calque; «à titre indicatif» is the idiomatic phrase but has no approved source.
+of range (10%–100% of range)	de la plage	loc.	notes	Voltcraft VC925 FR PDF p.157 «5 à 100 % de la gamme de mesure»; UNI-T UT197 FR PDF p.33 «de la plage»	Use «plage» per the range decision.
+sensitivity	sensibilité	n. f.	notes	Voltcraft VC920 FR PDF p.91 «Sensibilité de mesurage»	
+temperature coefficient / tempco	coefficient de température	n. m.	note-60-00mohm-tempco-*	Voltcraft VC880 FR PDF p.93 «Coefficient de température : +0,1 x (précision spécifiée)/1 °C»	
+humidity	humidité	n. f.	note-humidity-50-pct	Voltcraft VC880 FR PDF p.93 «humidité rel. de l'air»; UNI-T UT197 FR PDF p.33	
+typical / typ.	typique / typ.	adj.	notes	Voltcraft VC925 FR PDF p.161 «3Vtyp.»	Never drop it (STYLE §Spec text).
+open circuit	circuit ouvert	n. m.	"notes ""Open circuit ≈3V"""	UNI-T UT197 FR PDF p.19 «La tension en circuit ouvert est d'environ 2V»	Open circuit ≈3V → «Circuit ouvert ≈3V» / «Tension à vide ≈3V» (no source).
+shorted leads	cordons court-circuités	n. m. pl.	notes	UNI-T UT197 FR PDF p.20 «la résistance du cordon de mesure court-circuité»	
+test lead	cordon de mesure	n. m.	notes, lead error	Voltcraft VC915 FR PDF p.113 «2 cordons de mesure de sécurité»; UNI-T UT197 FR PDF p.29	VC880 says «câbles de mesure», VC831 «pointes de mesure» (= probe tips).
+fuse	fusible	n. m.	"input-fuse-* (""Fuse 10A 1000V"")"	UNI-T UT197 FR PDF p.34 «Fusibles F 0.6A H 1000V»; Voltcraft VC880 FR PDF p.68	
+nominal	nominal	adj.	input-*-nominal	no approved source found	
+response time	temps de réponse	n. m.	note-response-time-100us	no approved source found	
+meter / multimeter	multimètre	n. m.	"everywhere (""the meter"")"	Voltcraft VC880 FR PDF p.66 onward; UNI-T UT197 FR PDF p.1 «Multimètre numérique industriel»	UT197 FR also says «compteur» (calque of meter): rejected. Put the noun before a model name: «le multimètre { $model }».
+device	appareil	n. m.	settings-device, device lists, CLI list	MS Terminology device => appareil; IEV 311-03-01 «appareil de mesure» (search index); Voltcraft VC891 FR PDF p.132	«périphérique» only for the computer's devices (Device Manager).
+simulated / mock	simulé	adj.	brand-simulated, mock models, settings-mock-*	MS Terminology simulator => simulateur	"Mock UT61E+ → «UT61E+ simulé». ""Simulated"" heading → «Simulés»."
+USB cable	câble USB	n. m.	link-name-usb-cable, link-usb-cable, notices	Voltcraft VC650BT FR PDF p.78 «Câble USB»	
+Bluetooth adapter	adaptateur Bluetooth	n. m.	link-name-bluetooth-adapter, notices	MS Terminology Bluetooth adapter => adaptateur Bluetooth; Voltcraft VC925 FR PDF p.144 «si l'adaptateur sort de la zone de couverture»	
+Bluetooth link (built-in Bluetooth)	liaison Bluetooth	n. f.	link-name-bluetooth-link, top-bar-link-*	Voltcraft VC891 FR PDF p.132 «La liaison des données est établie»; MS Terminology link (noun) => liaison	Keeps the app's link/connection distinction.
+connection	connexion	n. f.	top bar, notices, errors	Voltcraft VC925 FR PDF p.144 «La connexion Bluetooth peut être interrompue»; MS Terminology connection => connexion	
+connect / Connect	connecter / Connecter	v.	top-bar-connect, shortcuts-connect	MS Terminology Connect => Connecter; Voltcraft VC915 FR PDF p.140 «le compteur est connecté à l'application»	Button = infinitive.
+disconnect / Disconnect	déconnecter / Déconnecter	v.	top-bar-disconnect, top-bar-stop-retrying	MS Terminology disconnect => déconnecter	Status «Déconnecté».
+reconnect / Reconnecting…	reconnecter / Reconnexion…	v. / n. f.	top-bar-reconnecting*	Voltcraft VC925 FR PDF p.112 «14.2 Reconnecter le Bluetooth»	Reconnecting (attempt 3)... → «Reconnexion (tentative 3)…» (MS Terminology retry => nouvelle tentative).
+pair / paired	jumeler / jumelé	v.	list-not-heard	MS Terminology pair => jumeler, coupler; pairing => jumelage	No manual hit.
+data transmission	transmission des données	n. f.	connection notices, activation (title), shared help	Voltcraft VC880 FR PDF p.68 «Transmission des données par interface optique»; VC650BT FR PDF p.77	UT197 FR PDF p.39 says «communication des données».
+detect / Auto-detect	détecter / Détection automatique	v. / n. f.	settings-auto-detect, top-bar-auto-detect, device-auto, toasts	Voltsoft FR PDF p.15 «détecter si un périphérique est connecté»	"Detected X → «X détecté». ""Detecting the meter…"" → «Détection du multimètre…»."
+scan (Bluetooth) / Scanning…	rechercher / Recherche…	v. / n. f.	list-scanning, setup-bluetooth-scan	UNI-T UT197 FR PDF p.39 «on recherche automatiquement les compteurs compatibles Bluetooth à proximité»; MS Terminology Search => Rechercher	MS «scan => numériser» is for paper: avoid.
+in range (Bluetooth)	à portée	loc.	"list, errors ""in Bluetooth range"""	UNI-T UT197 FR PDF p.39 «à proximité»; Voltcraft VC925 FR PDF p.144 «zone de couverture»	«à portée Bluetooth».
+adapter (any --adapter target)	adaptateur	n. m.	connection-adapter-*, CLI	MS Terminology Bluetooth adapter => adaptateur Bluetooth	
+identify itself (a meter)	s'identifier	v.	connection-not-identified, no-meter-answered	no approved source found	No meter answered → «Aucun multimètre n'a répondu».
+driver	pilote	n. m.	setup-usb-windows-warning	MS Terminology driver => pilote	
+Device Manager	Gestionnaire de périphériques	n. pr. m.	setup-usb-windows-open	MS Terminology Device Manager => Gestionnaire de périphériques	The quoted Windows names must be Windows' own French names. «Périphériques d’interface utilisateur» and «Autres périphériques»: Microsoft support fr-fr (touchscreen and Bluetooth pages). 'USB Input Device' is in neither MS Terminology nor public fr-fr docs: unverified, check on a French Windows.
+System Settings > Privacy & Security (macOS)	Réglages Système > Confidentialité et sécurité > Surveillance de l’entrée ; … > Bluetooth	—	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple support fr-fr mchl4cedafb6, mchl211c911f	Apple writes the typographic apostrophe in «Surveillance de l’entrée». Older macOS: Préférences Système > Sécurité et confidentialité.
+settings file	fichier de paramètres	n. m.	CLI help, connect-saved-mock-mode	MS Terminology settings => paramètres	
+command-line option / flag	option de ligne de commande	n. f.	comments, notices naming --flags	MS Terminology command-line option => option de ligne de commande	The --flag itself is verbatim.
+timeout	délai d'attente dépassé	n. m.	error-timeout, debug-timeout	MS Terminology time-out => délai d'attente / délai d'expiration	
+checksum	somme de contrôle	n. f.	error-checksum-mismatch	MS Terminology checksum => somme de contrôle	
+frame (protocol)	trame	n. f.	read-unreadable-frame, error-wrong-meter-*	MS Terminology frame => trame	Not «cadre» (that is the window frame).
+support (of a meter by the app)	prise en charge	n. f.	stability-warning, error-bluetooth-only-not-built	no approved source (MS Terminology support => support means customer support)	Feminine: «la prise en charge du { $model } est vérifiée».
+verified / partly verified / experimental	vérifié / partiellement vérifié / expérimental	adj.	stability-*, top-bar-badge-*, settings-device-entry	no approved source (plain French)	Agree with the noun they qualify: device-list tag (le multimètre) masc.; «la prise en charge … vérifiée» fem. Badges: «VÉRIFIÉ», «PARTIELLEMENT VÉRIFIÉ», «EXPÉRIMENTAL».
+reading (a value the meter sent)	mesure	n. f.	reading-none, markers, export/import, graph menu, CLI	Voltcraft VC925 FR PDF p.156 «% de la mesure»; VC891 FR PDF p.114 «la valeur de mesure affichée»	Decided. Alternatives: «relevé» (VC915 PDF p.140 «transférer les relevés», UT197 PDF p.30), «lecture» (VC925 PDF p.126 «précision des lectures»; ambiguous with playback). Recommended «mesure»; «valeur mesurée» where the number itself is meant.
+measured value	valeur mesurée	n. f.	reading-spoken, hovers	Voltcraft VC891 FR PDF p.114 «Enregistrement automatique des valeurs mesurées»	
+sample	échantillon	n. m.	recording, graph, export, CLI summary	MS Terminology sample => échantillon; Voltsoft FR PDF p.27 «Points d'échantillonnage»	
+sample interval	intervalle d'échantillonnage	n. m.	settings-sample-interval, CLI --interval-ms	MS Terminology interval => intervalle; Voltsoft FR PDF p.27 «Fréquence d'échantillonnage»	Every reading chip → «Chaque mesure».
+buffer / Buffer size	mémoire tampon / Taille du tampon	n. f. / n. f.	settings-buffer-size, recording-status-full	MS Terminology buffer => tampon, mémoire tampon	buffer full → «tampon plein».
+recording	enregistrement	n. m.	recording panel, settings-recording, toasts	MS Terminology recording => enregistrement; Voltcraft VC891 FR PDF p.114	
+Record (button)	Enregistrer	v.	"recording-record (""● Record"")"	MS Terminology record => enregistrer	MS also maps Save => Enregistrer; the app has no Save button, so no clash.
+Stop (button)	Arrêter	v.	"recording-stop (""■ Stop"")"	Voltcraft VC891 FR PDF p.114 «RECORD STOP Met fin à l'enregistrement»	
+Discard	Abandonner	v.	recording-discard, export-unsaved-*-confirm	MS Terminology discard => abandonner	"Discard and record → «Abandonner et enregistrer»; ""Recording discarded"" → «Enregistrement abandonné»."
+export / Export…	exporter / Exporter…	v.	export-button, shortcuts-export, toasts	MS Terminology export => exporter; Voltsoft FR PDF p.16 «exporter les paramètres et les données»	
+import / Import…	importer / Importer…	v.	import-button, toasts, CLI --import	MS Terminology import => importer	Import failed → «Échec de l'importation» (MS FR Style Guide p.41).
+replay (file) / replaying	relecture / fichier de relecture	n. f.	export-replay, top-bar-replaying, --replay help	MS Terminology playback => lecture	"Decided: «lecture» clashes with the «lecture» some manuals use for a reading; «relecture» avoids it. ""Replaying { $path }"" → «Relecture de { $path }»."
+file type	type de fichier	n. m.	export-menu .a11y, import-file-type	MS Terminology file type => type de fichier	
+unsaved / unexported	non enregistré / non exporté	adj.	export-unsaved-*	MS FR Style Guide p.12 «le travail non enregistré»	
+timestamp	horodatage	n. m.	read-error, CSV help	MS Terminology time stamp => horodatage	The CSV column name `timestamp` stays English.
+marker	marqueur	n. m.	markers-*, graph menu	MS Terminology marker => marqueur	
+note (on a marker)	note	n. f.	markers-note, markers-add	MS Terminology note => note	
+graph	graphique	n. m.	settings-graph, toasts, shortcuts	MS Terminology chart => graphique; Voltsoft FR PDF p.18 «Onglet Graphique»	
+plot (noun)	tracé	n. m.	"graph-plot-a11y-title ""Measurement plot."""	MS Terminology plot => tracé	
+plot (verb) / Plot:	tracer / Tracer :	v.	graph-plot, graph-plot-*	MS Terminology plot => tracer; Voltsoft FR PDF p.22 «tracer le graphique des mesures»	
+series	série	n. f.	graph comments, graph-show-chip	MS Terminology data series => série de données	
+trace (a series' line)	courbe	n. f.	graph-show-chip, settings-graph-lines	MS Terminology trendline => courbe de tendance (closest entry)	Decided: MS «trace» entries are the debugging sense. Recommended «courbe».
+main reading	mesure principale	n. f.	"graph-plot-main (""Main"")"	no approved source	"Chip ""Main"" → «Principale»."
+sub-value	valeur secondaire	n. f.	graph-plot-series hover, colors-swatch-overlay-*	no approved source	
+axis / Y axis	axe / axe Y	n. m.	graph-y-*, graph-plot-a11y-y-axis	MS Terminology axis => axe; Voltsoft FR PDF p.23 «l'axe Y»	Y:Fixed / Y:Auto → «Y : fixe / Y : auto» (see STYLE on the colon).
+cursor	curseur	n. m.	graph-cursors, graph menu, shortcuts	MS Terminology cursor => curseur	Cursors A and B keep their letters.
+reference line / Ref	ligne de référence / Réf.	n. f.	graph-ref, graph-menu-*-ref	MS FR Style Guide p.19 abbreviation «réf.»; Voltcraft VC891 FR PDF p.113 «valeur de référence»	
+triggers (crossings of a reference line)	déclencheurs	n. m. pl.	graph-triggers, shortcuts-graph-triggers, colors-swatch-crossing	MS Terminology trigger => déclencheur	"Hover explains ""crossing"" → «franchissement» (no source)."
+histogram	histogramme	n. m.	graph-histogram*	MS Terminology histogram => histogramme	
+minimap	minimap	n. f.	graph-minimap	MS Terminology minimap => minimap	«mini-carte» has no approved source. Gender unrecorded in MS; use «la minimap».
+zoom / zoom in / zoom out	zoom / zoom avant / zoom arrière	n. m.	settings-zoom, graph, shortcuts-zoom	MS Terminology zoom in => zoom avant, zoom out => zoom arrière; Voltsoft FR PDF p.26	
+Reset Zoom	Réinitialiser le zoom	v.	graph-reset-zoom, shortcuts-zoom-reset	MS Terminology reset => réinitialiser; Voltsoft FR PDF p.26 «Réinitialise le zoom»	
+pan	faire défiler	v.	graph-live hover, shortcuts-mouse-drag, minimap	MS Terminology scroll => faire défiler	MS «pan => panoramique» is the camera sense: avoid.
+drag	faire glisser	v.	gestures	MS Terminology drag => faire glisser	"Gesture label ""Drag"" → «Glisser»."
+right-click	clic droit / faire un clic droit	n. m. / v.	shortcuts-mouse-menu, Wayland notes	MS Terminology right-click => faire un clic droit sur	
+double-click	double-clic / double-cliquer	n. m. / v.	shortcuts-mouse-reset, graph-reset-zoom hover	MS Terminology double-click => double-cliquer	
+scroll wheel	molette	n. f.	"gestures ""Ctrl + scroll wheel"""	MS Terminology scroll wheel => molette de défilement	
+live / LIVE (chip)	direct / DIRECT	n. m.	graph-live, graph-plot-a11y-state, top-bar status	MS Terminology live => en direct; Live view => Affichage en direct	Chip «DIRECT»; a11y state «en direct.»
+bounding box	rectangle englobant	n. m.	shortcuts-mouse-box-zoom	MS Terminology bounding box => rectangle englobant	
+time window	fenêtre de temps	n. f.	graph-window, shortcuts-graph-window	MS Terminology window => fenêtre	
+envelope (min/max band)	enveloppe	n. f.	graph-envelope*, colors-swatch-envelope	MS Terminology envelope => enveloppe	
+crosshair	réticule	n. m.	colors-swatch-crosshair	no approved source (no MS Terminology entry)	
+gap (in recorded data)	interruption	n. f.	stats-gaps, colors-swatch-gap, read-skipped-intervals	no approved source	
+viewport (minimap bracket)	fenêtre d'affichage	n. f.	colors-swatch-viewport, shortcuts-mouse-minimap	MS Terminology viewport => fenêtre d'affichage	
+statistics	statistiques	n. f. pl.	stats-heading, settings-statistics	MS Terminology Statistics => Statistiques	
+mean	moyenne	n. f.	stats-mean, graph-mean, read-summary	MS Terminology AVERAGE => MOYENNE; Voltsoft FR PDF p.85 «valeur moyenne»	Depends on the pending English Mean-vs-Avg checkpoint: either way French is «Moyenne» (caption «Moy. :» if the column is too wide).
+standard deviation / σ	écart-type / σ	n. m.	stats-sd, graph-histogram-a11y-sd, hovers	IEV 103-08-13 «écart-type, m» (search index); MS Terminology standard deviation => écart type (no hyphen)	Decided: sources differ on the hyphen. Recommended «écart-type» (IEV).
+readings (count of)	mesures	n. f. pl.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	Voltcraft VC925 FR PDF p.156 «mesure» (see reading)	Ruling: the statistics say how many readings, not "Count": «Mesures : 12», read-out «Mesures=12».
+integral	intégrale	n. f.	stats-integral, read-integral, --integrate help	MS Terminology integral => intégrale	
+Visible (block of figures)	Visible	adj.	stats-visible	no approved source	Same word.
+Reset (statistics)	Réinitialiser	v.	stats-reset	MS Terminology reset => réinitialiser	
+alarm	alarme	n. f.	alarm-*, reading badges, CLI	MS Terminology alarm => alarme; Voltsoft FR PDF p.20 «niveau d'alarme»	
+high limit / low limit	limite haute / limite basse	n. f.	alarm-high/low, alarm-breach, graph-menu-set-alarm	Voltcraft VC920 FR PDF p.72 «LOW Affichage de la valeur limite inférieure prédéfinie / HIGH … valeur limite supérieure»	"Fields ""Low""/""High"" → «Basse»/«Haute» (agree with limite). Badges HI LIMIT/LO LIMIT → «LIM. HAUTE»/«LIM. BASSE» (decided)."
+threshold	seuil	n. m.	"notes ""Audible threshold"", ""Lo-Z threshold"""	MS Terminology threshold => seuil; Voltcraft VC891 FR PDF p.102 «le seuil de résistance»	
+hysteresis	hystérésis	n. f.	alarm-hysteresis, alarm-band hover, --alarm-hysteresis	no approved source found (no FR manual, no MS Terminology entry; IEV not reachable)	Spelling and gender per standard dictionaries; mark as unverified.
+scale / scaling	mise à l'échelle / échelle	n. f.	scale-chip, scale-on toast, reading-badge-scaled, --scale	MS Terminology scaling => mise à l'échelle; scale => échelle	Chip «Échelle»; badge «ÉCHELLE»; spoken «mise à l'échelle logicielle».
+scale factor	facteur d'échelle	n. m.	scale-factor, --scale help	MS Terminology scale factor => facteur d'échelle	
+offset	décalage	n. m.	scale-offset, --offset help	MS Terminology Offset => Décalage	
+unit / unit label	unité / étiquette d'unité	n. f.	scale-unit, alarm-unit, --unit	MS Terminology unit => unité; label => étiquette	
+Apply	Appliquer	v.	scale-apply, alarm-apply	MS Terminology apply => appliquer	
+Off (button)	Désactiver	v.	scale-off, alarm-off	MS Terminology clear => désactiver (closest); Voltcraft VC925 FR PDF p.112 «DÉSACTIVER»	"Toasts ""Alarm off"" → «Alarme désactivée»."
+Settings	Paramètres	n. m. pl.	"top-bar-settings, every ""in Settings (⚙)"""	MS Terminology Settings => Paramètres	Voltsoft FR PDF p.13 «Fichier->Paramètres».
+theme	thème	n. m.	colors-theme*	MS Terminology theme => thème	
+Dark / Light / System	Sombre / Clair / Système	adj. / n. m.	colors-theme-*, settings-language-system	MS Terminology dark mode => mode sombre; Light Mode => mode clair; System => Système	Masc. agreement with «thème»: «Sombre (personnalisé)».
+colours	couleurs	n. f. pl.	colors-colors, colors-customize	MS Terminology theme color => couleur de thème	
+High Contrast	Contraste élevé	n. m.	colors-preset-high-contrast	MS Terminology High Contrast => contraste élevé	
+Colorblind (preset)	Daltonien	adj.	colors-preset-colorblind	maintainer's ruling (no approved source)	Ruling: «Daltonien» over «Daltonisme».
+Default (preset)	Par défaut	loc.	colors-preset-default	MS Terminology default => par défaut	
+customized / Customize colors	personnalisé / Personnaliser les couleurs	adj. / v.	colors-*-customized, colors-customize	MS Terminology customize => personnaliser	
+accent	accentuation	n. f.	colors-swatch-accent	MS Terminology accent color => couleur d'accentuation	
+background	arrière-plan	n. m.	"colors-swatch-background, ""Plot bg"" → «Fond du tracé»"	MS Terminology background => arrière-plan	
+border	bordure	n. f.	colors-swatch-border	MS Terminology border => bordure	
+frame (colour surface)	cadre	n. m.	colors-swatch-frame	MS Terminology window frame => cadre de la fenêtre	
+heading	titre	n. m.	colors-swatch-heading	MS Terminology heading => titre	
+weak text	texte secondaire	n. m.	colors-swatch-weak-text	"no approved source (the hover says ""Secondary text"")"	
+palette	palette	n. f.	colors-preset-* hovers	MS Terminology palette => palette	
+keyboard shortcut	raccourci clavier	n. m.	shortcuts-*, top-bar-shortcuts	MS Terminology keyboard shortcut => raccourci clavier	
+Keyboard & Mouse	Clavier et souris	—	shortcuts-title	MS Terminology keyboard => clavier; mouse => souris; MS FR Style Guide p.18 (spell out «et», not &)	
+key names in prose (Up/Down, Left/Right, Escape, Space, Shift, PgUp/PgDn, Home/End)	Haut/Bas, Gauche/Droite, Échap, Espace, Maj, Pg préc/Pg suiv, Origine/Fin	n. f.	shortcuts-note, divider .a11y texts, gestures	MS FR Style Guide pp.45–46 (Key names)	Ruling: the shortcut list and $keys placeholders write these names too (shortcuts-key-*), so prose and keys agree; Ctrl and Alt stay.
+tooltip / hover text	info-bulle	n. f.	translator comments only	MS Terminology tooltip => info-bulle	
+toast	notification	n. f.	translator comments only	MS Terminology toast => toast, notification toast, bannière	Use «notification» if the word ever reaches the screen.
+drop-down	liste déroulante	n. f.	.a11y names, comments	MS Terminology drop-down list => liste déroulante	
+checkbox	case à cocher	n. f.	"bluetooth-off-* (""Tick …"")"	MS Terminology check box => case à cocher	Tick → «Cochez».
+panel	panneau	n. m.	recording-resize .a11y, settings, big meter	MS Terminology panel => panneau	
+button	bouton	n. m.	notices naming buttons	MS Terminology button => bouton	
+screen reader	lecteur d'écran	n. m.	comments only	MS Terminology screen reader => lecteur d'écran	
+Help & Feedback	Aide et suggestions	—	project-link (top bar, --help last line)	MS Terminology help => aide; feedback => commentaires	Ruling: «suggestions» says constructive feedback is wanted; «commentaires» also made the top bar wrap at 700 px.
+report feedback	envoyer des commentaires	v.	connection-feedback, top-bar-badge-hover, connect-report-feedback	MS Terminology Feedback => Envoyer vos commentaires	Click to report feedback. → «Cliquez pour envoyer vos commentaires.»
+What's New	Nouveautés	n. f. pl.	top-bar-version, whats-new-title*	MS Terminology What's New => Nouveautés	What's New in v{ $version } → «Nouveautés de la v{ $version }».
+release notes	notes de publication	n. f. pl.	top-bar-version hover	MS Terminology release notes => notes de publication	
+update / new version	mise à jour / nouvelle version	n. f.	settings-check-updates, settings-update-*	MS Terminology update => mise à jour	Newer dev build ↗ → «Version de développement plus récente ↗» (MS «build» is kept English: avoid).
+machine-translated	traduction automatique	n. f.	settings-language-machine-translated, -unreviewed	MS Terminology machine translation => traduction automatique	Weak text: «traduction automatique».
+language	langue	n. f.	settings-language	MS Terminology Language => Langue	Caption «Langue (Language) :» per the en-US comment.
+Always on top	Toujours visible	—	settings-always-on-top, shortcuts-always-on-top	MS Terminology Always on Top => Toujours visible	
+fullscreen	plein écran	n. m.	shortcuts-fullscreen, big meter hover	MS Terminology full screen => plein écran	
+minimise	réduire	v.	shortcuts-minimize	MS Terminology minimize => réduire	
+title bar	barre de titre	n. f.	Wayland notes	MS Terminology title bar => barre de titre	
+window decorations	cadre de la fenêtre	n. m.	settings-hide-decorations, shortcuts-decorations	MS Terminology window frame => cadre de la fenêtre (closest)	Hide window decorations → «Masquer le cadre de la fenêtre».
+Quit	Quitter	v.	shortcuts-quit	MS Terminology quit => quitter	
+Dismiss	Masquer	v.	connection-dismiss	MS Terminology dismiss => masquer, ignorer	
+Copy / copied	Copier / copié	v.	graph-menu-copy, connection-late-copy, toasts	MS Terminology copy => copier	Command copied → «Commande copiée».
+clipboard	Presse-papiers	n. m.	comments	MS Terminology clipboard => Presse-papiers	
+Cancel	Annuler	v.	export-unsaved-cancel	MS Terminology Cancel => Annuler	
+Clear	Effacer	v.	top-bar-clear, shortcuts-clear	MS Terminology clear => effacer	
+Pause / Resume	Pause / Reprendre	n. f. / v.	top-bar-pause, top-bar-resume, shortcuts-pause	MS Terminology Pause => Pause; resume => reprendre	"▶ Resume → «▶ Reprendre», ""⏸ Pause"" → «⏸ Pause»."
+acquisition	acquisition	n. f.	top-bar-pause hover, connection-acquisition-stopped	MS Terminology data acquisition => acquisition de données	
+Error: / Warning: / Note: / Tip:	Erreur : / Avertissement : / Remarque : / Conseil :	n.	cli/common.ftl, list-select-tip, settings-tip-*	MS Terminology error, warning, tip => conseil; Voltcraft VC915 FR PDF p.127 «Remarque :»	
