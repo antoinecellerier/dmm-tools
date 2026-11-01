@@ -26,6 +26,7 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "cli/command.ftl"),
     dmm_shared::ftl!("en-US", "cli/settings.ftl"),
     dmm_shared::ftl!("en-US", "cli/help.ftl"),
+    dmm_shared::ftl!("en-US", "cli/args.ftl"),
 ];
 
 /// What each command and option does, as `--help` says it: generated from

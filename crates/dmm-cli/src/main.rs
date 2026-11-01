@@ -1,3 +1,4 @@
+mod arg_errors;
 mod capture;
 mod choice;
 mod cli;
@@ -36,8 +37,10 @@ fn main() {
     let lang = cli::lang_from_argv(std::env::args_os().skip(1));
     l10n::init(lang, settings.as_ref().map_or("", |s| s.language.as_str()));
     let l = l10n::get();
-    let cli = Cli::from_arg_matches_mut(&mut cli::command(l).get_matches())
-        .unwrap_or_else(|e: clap::Error| e.exit());
+    let cli = cli::command(l)
+        .try_get_matches()
+        .and_then(|mut m| Cli::from_arg_matches_mut(&mut m))
+        .unwrap_or_else(|e| arg_errors::exit(e));
     debug_assert_eq!(cli.lang, lang, "the pre-scan read --lang as clap does");
     // Before the settings file's meter applies: a report names its own meter,
     // and `--device` as typed overrides it, never the settings file's

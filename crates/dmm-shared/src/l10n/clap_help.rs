@@ -13,10 +13,11 @@
 //! below the root with `-`.
 //!
 //! What the walk leaves alone stays English: clap's scaffolding ("Usage:",
-//! "Options:", `[default: …]`, `[possible values: …]`) and errors, the
+//! "Options:", `[default: …]`, `[possible values: …]`), the
 //! built-in `help` and `version`, which clap adds after the walk, and hidden
 //! commands and arguments. Help a binary builds at run time is translated
-//! where it is built. The en-US file is generated from the tree by
+//! where it is built, and clap's errors where the binary prints them
+//! (dmm-cli's `arg_errors`). The en-US file is generated from the tree by
 //! [`render`].
 
 use super::Localizer;

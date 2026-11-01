@@ -211,7 +211,8 @@ from the library as they draw them (see [localization-design.md](localization-de
 errors are worded by variant from `lib-errors.ftl`; the GUI words one when it arrives, so a notice
 or toast already on screen keeps its language after a switch. clap has no translation hook, so the
 CLI walks its command tree at start-up and swaps each command's and option's help for its message in
-`cli-help.ftl`, generated from the doc comments; clap's own words and the shell completion scripts
+`cli-help.ftl`, generated from the doc comments; its command-line errors are worded from
+`cli/args.ftl` by a formatter of its own, and clap's help layout and the shell completion scripts
 stay English. A message a language lacks falls back to English alone, and `LC_ALL=C` always means
 English.
 
@@ -380,6 +381,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 |---|---|
 | `main.rs` | Resolves the device, dispatches the subcommand, prints the help for a failed run |
 | `cli.rs` | The clap types, value parsers and runtime help text |
+| `arg_errors.rs` | clap's command-line errors, worded in the user's language |
 | `cmd/` | One module per subcommand, and the Ctrl+C flag |
 | `open.rs` | Opening the meter a command runs against, and the setup help |
 | `choice.rs` | Reading the choice `set` was given |
