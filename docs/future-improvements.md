@@ -470,6 +470,10 @@ The apps ship translated ([localization-design.md](localization-design.md)); wha
 
 - Partial languages for testers. A language reaches users only once it clears the bar in CONTRIBUTING, and a translator tries one through `DMM_TOOLS_L10N_DIR`. Should translations start arriving in pieces rather than machine-drafted and then reviewed, dev builds could offer unlisted languages, marked as in progress.
 - Units and durations in the user's language. Sizes (`≈194 MB`), counts (`500K`) and the graph's time axis (`1m 5s`) are formatted in English inside translated sentences.
+- Why a typed number was refused. dmm-cli's command-line errors are translated, but the reason after them is Rust's own English (`invalid digit found in string`).
+- Room at 700 px. With a live meter the Portuguese and Spanish top bars wrap where English and French fit, and the Portuguese statistics row pushes ∫ onto a line of its own.
+- Chinese in the shortcut list. The key column is monospace, so the half-width parentheses around a key leave wide gaps beside the Chinese text.
+- `get` and `set` in Chinese. `get` lists `on` and `off`, the tokens `set` takes, while `set` confirms the change in Chinese (开, 关).
 - The capture tooling, What's New and the user docs, which stay English.
 
 Use cases: users who don't read English comfortably, meters sold under local brands in non-English markets.

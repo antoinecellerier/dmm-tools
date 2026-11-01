@@ -184,6 +184,22 @@ real screen reader has walked the other half.
 - The same checks under NVDA or JAWS (UI Automation) and VoiceOver
   (NSAccessibility), AccessKit's other two backends.
 
+## Translations
+
+Checked on Linux only; the other platforms take their fonts, console and
+screen reader from the system.
+
+- Windows: in `dmm-gui --device mock`, Settings, **Language**, pick 简体中文,
+  then Français and Português. Chinese must draw without boxes or the
+  missing-font notice; this decides whether the CJK font lookup needs a fix.
+- Windows: Narrator (Win+Ctrl+Enter) reads French and Chinese with a voice
+  of that language, from the language AccessKit sets on the window.
+- Windows: `dmm-cli --lang zh-CN --help` in Windows Terminal and in the old
+  console (cmd.exe), whose default font may lack Chinese.
+- Windows: with no `language` setting, an en-US Windows starts both apps in
+  English.
+- macOS: the same four checks, with VoiceOver for Narrator.
+
 ## Known defects
 
 Bugs a reader can reproduce: symptom, cause, and the fix where known.
@@ -260,6 +276,10 @@ Bugs a reader can reproduce: symptom, cause, and the fix where known.
   the next save writes them over the file — likely after a downgrade, meeting
   a theme or colour preset only a newer build knows. Fix, untried: deserialize
   field by field from a `serde_json::Value`, defaulting only those that fail.
+- **A narrow window shows ∫ twice in the statistics.** At quarter width the
+  Visible row's ∫ wraps onto a line of its own, just above the session's ∫
+  line. Fix, untried: keep that ∫ with its row, or draw the session's ∫
+  first. Any live mock at a quarter of a 1600 px screen.
 - **The mock offers Peak outside the AC modes.** Its Hz, Ω, capacitance,
   temperature and NCV scenarios take Peak, where the UT61E+ offers it only in
   `AC_PEAK_MODES` (`protocol/ut61eplus/tables/mod.rs`). Cause:
