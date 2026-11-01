@@ -1,0 +1,272 @@
+english	spanish	part_of_speech/gender	context (where it appears)	source (document + PDF page)	notes
+DC voltage	tensión continua	s. f.	spec table titles (table-*-dc-voltage), prose, notes	Fluke 117 PDF p.6 «Tensión continua de 0,1 a 600 mV»; UNI-T UT197 PDF p.7 «DC (Corriente continua)»	Mode labels keep the meter's DC V / V DC (STYLE §6). Fluke and Amprobe write «tensión de CC» (F87V PDF p.7, AM500 PDF p.62): CC rejected, see AC/DC ruling.
+AC voltage	tensión alterna	s. f.	spec table titles, prose	Fluke 3000 FC PDF p.39 «Mide tensión alterna hasta 1000 V»; UNI-T UT197 PDF p.7 «AC (Corriente alterna)»	Fluke usually says «tensión de CA» (F117 PDF p.6): CA rejected.
+AC+DC voltage	tensión alterna + continua	s. f.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	Fluke 287/289 PDF p.37 «un valor CA+CC (rms) combinado» (the combination); wording built from the two rows above	"Full words in titles and prose, like DC/AC voltage; mode labels and notes keep AC+DC as printed. ""AC Voltage + DC Voltage"" → «Tensión alterna + tensión continua»."
+voltage	tensión	s. f.	aux-voltage, prose	Fluke 80 Series V PDF p.3 «Medición de tensiones de CA y CC»; Fluke 117 PDF p.6; Amprobe AM-500 PDF p.50 «medición de tensión»	Provisional (SUMMARY Q5). «voltaje» is in Fluke 287/289 (PDF p.4) and UNI-T UT197 (PDF p.4) and common in Latin America; keep one word: «tensión».
+current	corriente	s. f.	aux-current, key-current	Amprobe AM-500 PDF p.51 «Corriente continua»; Fluke 117 PDF p.7	
+DC current	corriente continua	s. f.	spec table titles	Amprobe AM-500 PDF p.51 «2 Corriente continua»; Fluke 117 PDF p.7 «Corriente continua o corriente alterna»	
+AC current	corriente alterna	s. f.	spec table titles	Amprobe AM-500 PDF p.51 «3 Corriente alterna»; Truper MUT-39 PDF p.4 «c.a. (corriente alterna)»	
+4–20 mA loop current	corriente de lazo de 4-20 mA	s. f.	table-l-4-20-ma-loop-current, notes	no approved source found for «lazo» (UNI-T UT197 PDF p.12 prints only «%4-20mA»)	«lazo de corriente» is the usual instrumentation term; «bucle» is the alternative. Unverified.
+resistance	resistencia	s. f.	mode, table titles	Fluke 80 Series V PDF p.3 «Medición de resistencia»; Truper MUT-202 PDF p.3	
+Ohms (table title)	Resistencia	s. f.	table-ohms, table-autocheck-ohms	Fluke 80 Series V PDF p.3 «Medición de resistencia»	Keep «Ohms» only inside the AutoCheck™ (Ohms) trademark title.
+continuity	continuidad	s. f.	mode-continuity, aux-continuity	Fluke 117 PDF p.3 «Pruebas de continuidad»; Amprobe AM-500 PDF p.51	
+continuity test	prueba de continuidad	s. f.	table-14-continuity-test, table-f-continuity-test	Fluke 3000 FC PDF p.4 «Prueba de continuidad»; Fluke 117 PDF p.3; alt. «comprobación de continuidad» Fluke 80 Series V PDF p.3, Amprobe AM-500 PDF p.51	Pick «prueba» everywhere.
+audible continuity tester	comprobador de continuidad audible	s. m.	table-audible-continuity-tester	Truper MUT-39 PDF p.2 «continuidad audible»; «comprobador»: no approved source	
+diode	diodo	s. m.	mode-diode, range-diode	Fluke 117 PDF p.6; UNI-T UT197 PDF p.10 «medición de diodos»	
+diode test	prueba de diodos	s. f.	table-15-diode-test, table-diode-tester	Fluke 117 PDF p.6 «Prueba de diodos»; Fluke 287/289 PDF p.6	Diode Tester → «Comprobador de diodos» (AM-500 PDF p.51 «Comprobación de diodos»).
+capacitance	capacitancia	s. f.	mode-capacitance, tables	Fluke 80 Series V PDF p.3 «Medición de capacitancia»; Fluke 117 PDF p.3; Truper MUT-39 PDF p.10; UNI-T UT197 PDF p.5	Every maker manual says «capacitancia». «capacidad» (UT195 PDF p.1 «capacidad eléctrica») is also a fuse's breaking capacity (UT197 PDF p.8): avoid.
+frequency	frecuencia	s. f.	mode-frequency, aux-frequency	Fluke 80 Series V PDF p.4 «Medición de frecuencia»; Truper MUT-202 PDF p.3	
+duty cycle	ciclo de trabajo	s. m.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Fluke 80 Series V PDF p.4 «Medición del ciclo de trabajo»; Truper MUT-202 PDF p.5 «ciclo de trabajo (duty cycle)»; UNI-T UT197 PDF p.11	Every maker agrees.
+Duty % (mode label)	Ciclo de trabajo %	s. m.	mode-duty-pct	as duty cycle	Long (19 vs 6 characters) for the mode line. Fallback if it wraps: keep «Duty %», as Truper prints «(duty cycle)» beside the Spanish.
+pulse width	ancho de pulso	s. m.	mode-pulse-width, table-13-pulse-width	UNI-T UT197 PDF p.13 «el ancho de pulso de 250uS»; alt. «ancho de impulso» Fluke 287/289 PDF p.58	
+temperature	temperatura	s. f.	mode-temperature, aux-temperature	Fluke 80 Series V PDF p.3 «Medición de temperatura»	Temp °C label → «Temp °C» (same abbreviation).
+internal temperature	temperatura interna	s. f.	aux-internal-temperature	no approved source found	Plain Spanish; listed so it stays consistent.
+K-type thermocouple	termopar tipo K	s. m.	notes (note-k-type-thermocouple-*)	Fluke 80 Series V PDF p.16 «Conecte un termopar tipo K»; UNI-T UT197 PDF p.37 «termopar tipo K»	
+temperature probe	sonda de temperatura	s. f.	notes	UNI-T UT197 PDF p.5 «Sonda de temperatura»; Fluke 287/289 PDF p.39	"point-contact probe → «sonda de contacto puntual»; ""rod-type probe"" → «sonda de varilla» (no source)."
+hFE	ganancia de corriente (hFE)	s. f.	mode-hfe, aux-hfe, table-k-transistor	no approved source found (Truper MUT-39 PDF p.2 prints «hFE» only)	"Mode labels keep hFE. ""Transistor Magnification"" → «Ganancia de corriente del transistor (hFE)»."
+NCV	NCV (detección de tensión sin contacto)	s. f.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	UNI-T UT197 PDF p.38 «NCV (Detección de voltaje de AC sin contacto)»; Fluke 117 PDF p.6 «Detección sin contacto de tensión de CA»	Keep «NCV» in labels; spell out only in prose. Spoken: «nivel NCV { $level }».
+EF / non-contact EF detection	EF / detección de campo eléctrico sin contacto	s. f.	mode-ef*, table-non-contact-ef-detection	UNI-T UT197 PDF p.28 «cerca de un campo eléctrico activo»; PDF p.38 «se muestra "EF"»	Keep EF, EF-H, EF-L as printed.
+LoZ	LoZ (baja impedancia)	s. f.	mode-loz-*, flag-loz	Fluke 287/289 PDF p.4 «Utilización de LoZ para mediciones de voltaje»; UNI-T UT197 PDF p.10 «La baja impedancia identifica automáticamente…»	"Spoken (reading-spoken-loz): «baja impedancia». ""Lo-Z threshold"" → «umbral Lo-Z»."
+low-pass filter / LPF	filtro de paso bajo / LPF	s. m.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	Fluke 80 Series V PDF p.3 «Filtro de paso bajo»; Fluke 287/289 PDF p.4; UNI-T UT197 PDF p.6 «filtro de paso bajo»	Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»).
+VFD	VFD	—	mode-vfd-*	UNI-T UT197 PDF p.13 lists «VFD» among the modes	Keep as printed.
+VFC	VFC	—	mode-vfc	no approved source found	Keep as printed.
+dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	Fluke 287/289 PDF p.35	Unit symbols: never change.
+dBm reference	referencia de dBm	s. f.	mode-dbm-reference	Fluke 287/289 PDF p.35 «Establecimiento de una referencia de dBm personalizada»	
+inductance	inductancia	s. f.	mode-inductance*	no approved source found	Q and R sub-labels unchanged.
+conductance	conductancia	s. f.	table-8-conductance	Fluke 80 Series V PDF p.3 «Uso de la conductancia en pruebas de valores altos de resistencia»; Fluke 287/289 PDF p.10	
+power	potencia	s. f.	mode-power*	MS-T «power» → «potencia»; no meter manual hit	AC power W → «Potencia AC W».
+apparent power (VA)	potencia aparente (VA)	s. f.	notes, VA modes	no approved source found	Keep the unit symbol whenever the English gives it. No en-US text uses the term today.
+power factor / PF	factor de potencia / PF	s. m.	mode-power-factor, aux-pf	no approved source found	Keep «PF» where the meter prints it.
+inrush current	corriente de arranque	s. f.	mode-inrush, aux-inrush	Fluke 80 Series V PDF p.32 «corrientes de arranque»; Fluke 287/289 PDF p.27	Mode label «Arranque»; or keep «Inrush» as the meter prints it.
+True RMS	verdadero valor eficaz (True RMS)	s. m.	notes (note-true-rms-*)	Fluke 80 Series V PDF p.13 «lecturas del verdadero valor eficaz»; Fluke 3000 FC PDF p.5 «multímetro digital de verdadero valor eficaz»; Truper MUT-202 PDF p.7 «Muestra el valor True RMS»	Notes may keep «True RMS» as Truper does. UT197 PDF p.4 and MUT-39 PDF p.7 say «RMS real»: calque, avoid.
+RMS (sine RMS)	valor eficaz de onda sinusoidal	s. m.	"notes ""sensitivity 40mV (sine RMS)"""	Fluke 3000 FC PDF p.17 «ondas sinusoidales puras»; Fluke 80 Series V PDF p.13 «verdadero valor eficaz»	In a note already in parentheses: «sensibilidad 40mV (valor eficaz de onda sinusoidal)».
+crest factor	factor de cresta	s. m.	notes	Fluke 117 PDF p.21 «el factor de cresta es de ≤3 a 4000»; Fluke 3000 FC PDF p.42; UNI-T UT197 PDF p.35	
+peak	pico	s. m.	mode-*-peak, qualifier-peak-mode, qualifier-mode-peak, aux-peak-min, main-label-peak-max, CLI Peak	Fluke 287/289 PDF p.22 «registro de picos»; Fluke 80 Series V PDF p.9 «Pico (250 μs)»; UNI-T UT197 PDF p.5 «captura de picos»	Keep PEAK as a key/flag name. Fluke keeps «cresta» for crest factor only.
+peak max / peak min	pico máximo / pico mínimo	s. m.	main-label-peak-max, aux-peak-min, spoken	Fluke 287/289 PDF p.22 (picos); Fluke 287/289 PDF p.27 «Captura de valores mínimo y máximo»	Labels «Pico máx.» / «Pico mín.». Flags P-MAX / P-MIN stay as printed.
+period	período	s. m.	aux-period	Fluke 287/289 PDF p.21 «temperatura, período y ciclo de trabajo»	Both «período» and «periodo» are correct; Truper writes «periodo» (MUT-39 PDF p.7). Pick «período».
+impedance	impedancia	s. f.	aux-impedance	Amprobe AM-500 PDF p.62 «Impedancia de entrada»	
+burden voltage	tensión de carga	s. f.	aux-burden-voltage, note-burden-voltage-*	Fluke 3000 FC PDF p.44 «Tensión de carga de entrada (típica)»; Fluke 80 Series V PDF p.26; Fluke 287/289 PDF p.93 «Voltaje típico de la carga»	
+clamp	pinza	s. f.	mode-clamp-*, aux-clamp-*	UNI-T UT197 PDF p.5 «Pinza de AC/DC UT-CS07»; Fluke 117 PDF p.13 «pinzas amperimétricas»	Clamp AC A → «Pinza AC A». Truper (Mexico) says «multímetro de gancho» (MUT-202 PDF p.1): «pinza» is understood everywhere.
+power (mains) line	red eléctrica	s. f.	mode-line-hz, table-line-level-frequency-hz	Fluke 3000 FC PDF p.8 «la instalación de baja tensión de la red eléctrica del edificio»	Line Hz → «Hz de red».
+logic level	nivel lógico	s. m.	mode-logic-hz, table-logic-level-*	no approved source found	Logic Hz → «Hz lógico».
+Motor / Solar / Tachometer / Compass / Angle / Time / Scope	Motor / Solar / Tacómetro / Brújula / Ángulo / Tiempo / Osciloscopio	s. m. (Brújula f.)	mode-motor, mode-solar, mode-tachometer, mode-compass, mode-angle, mode-time, mode-scope	no approved source found	Plain Spanish; check each against the meter when it is reviewed.
+Live (mode: live-wire detection)	Fase	s. f.	mode-live, aux-live	no approved source found	Spanish electricians call the live wire «fase» in Spain and most of Latin America («vivo» is also heard). Not the graph's LIVE chip.
+Recall	Recuperar	v.	mode-recall	no approved source found (MS-T has no «recall» entry)	Mode label, infinitive like a key's action; alternative «Memoria».
+Battery (sub-value)	Batería	s. f.	aux-battery	Fluke 287/289 PDF p.4 «Indicador del nivel de carga en la batería»; Truper MUT-202 PDF p.4 «Batería baja»	Truper and UT197 also say «pila» for the cells; «batería» for the meter's supply, as Fluke.
+HOLD (flag / key)	HOLD	—	flag-hold, remote panel, CLI settings	Fluke 117 PDF p.3 «Retención de valores en pantalla (HOLD)»; Amprobe AM-500 PDF p.50 «Botón DATA HOLD»	Keep on the display text. Prose: «retención de lectura».
+data hold / hold (spoken)	retención de lectura	s. f.	reading-spoken-hold, remote-hold hover	Fluke 3000 FC PDF p.11 «Retención de pantalla»; Truper MUT-39 PDF p.2 «retención de datos»; Fluke 117 PDF p.7 «pantalla congela la lectura actual»	"Hover ""Freeze the current reading"" → «Congelar la lectura actual» (Fluke 287/289 PDF p.15 «Congela la lectura actual en la pantalla»). Spoken: «retención»."
+REL (flag / key)	REL	—	flag-rel, qualifier-mode-rel, CLI	UNI-T UT197 PDF p.31 «la función de modo relativo (REL)»	Keep.
+relative	relativo	adj.	main-label-relative, reading-spoken-rel, remote-rel hover	Fluke 80 Series V PDF p.4 «Modo relativo»; Fluke 287/289 PDF p.4 «Mediciones relativas»	Main label: «Relativo» (a label standing alone, m.); spoken flag REL: «relativo».
+reference	referencia	s. f.	aux-reference, graph Ref	Fluke 287/289 PDF p.17 «relativo a un valor de referencia»; Fluke 80 Series V PDF p.10 «Almacena la lectura actual como referencia»	
+absolute	absoluto	adj.	aux-absolute	no approved source found	
+AUTO (flag)	AUTO	—	flag-auto-range, remote AUTO	Truper MUT-39 PDF p.4 «AUTO Rango automático»	Keep.
+auto range / auto-ranging	rango automático	s. m.	reading-spoken-auto-range, remote-auto, settings-auto-*, errors	Amprobe AM-500 PDF p.50 «Multímetro de rango automático»; UNI-T UT197 PDF p.10 «Aviso de rango automático»; Fluke 80 Series V PDF p.12	Meter now auto-ranging (6V) → «Multímetro en rango automático (6V)».
+manual range	rango manual	s. m.	settings-switched [range], remote-range	Fluke 3000 FC PDF p.12 «Rango manual y automático»; Truper MUT-202 PDF p.3 «Rango automático o manual»	
+range	rango de medición	s. m.	reading-range, range menu, CLI settings, errors	Truper MUT-39 PDF p.7 table header «Rango Resolución Precisión»; Fluke 117 PDF p.16 «el valor de la escala total del rango seleccionado»; UNI-T UT197 PDF p.4	Every maker manual says «rango»; «escala» means full scale there (Fluke 117 PDF p.16). Full form; «rango» alone where the sentence already says what is measured.
+RANGE (key)	RANGE	—	remote-range hover, errors	UNI-T UT197 PDF p.13 «presione brevemente el botón RANGE»; Fluke 80 Series V PDF p.15 «presione el botón RANGE»	Keep.
+MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	Fluke 80 Series V PDF p.4 «Modo de registro MIN MAX»; Fluke 3000 FC PDF p.10	Keep. Fluke 117/289 also print «MÍN MÁX» in prose: keep the meter's spelling.
+minimum / maximum (spoken)	mínimo / máximo	s. m.	reading-spoken-min/max, stats	Fluke 287/289 PDF p.27 «Captura de valores mínimo y máximo»; Fluke 3000 FC PDF p.10	
+AVG (flag) / average	AVG / promedio	s. m.	flag-avg, reading-spoken-avg, aux-average	Fluke 80 Series V PDF p.8 «MAX, MIN, AVG (promedio)»; Fluke 3000 FC PDF p.10 «MIN MAX AVG (promedio)»	Keep AVG on the display; spoken «promedio». The statistics' Mean is «media» (see mean).
+SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	UNI-T UT197 PDF p.12 «Mantenga presionado SELECT»; Amprobe AM-500 PDF p.50 «Botón SELECT»	Keep.
+secondary function	función secundaria	s. f.	remote-select hover	no approved source found; Fluke 3000 FC PDF p.11 «ajustar el Producto en una función de medición distinta» (the yellow button's role)	
+backlight / LIGHT	luz de fondo / LIGHT	s. f.	remote-light hover	Fluke 287/289 PDF p.4 «Control de la luz de fondo»; Fluke 3000 FC PDF p.11; Truper MUT-202 PDF p.5 «Función de luz de fondo»	Fluke 117 PDF p.3 and UT197 PDF p.5 say «retroiluminación». Keep the key name LIGHT.
+ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	no approved source found	Keep the key name.
+overload / OL	sobrecarga / OL	s. f.	reading-spoken-overload, graph-hover-overload, graph legends	Fluke 117 PDF p.5 «una sobrecarga de tensión (OL)»	Keep «OL» where the English writes OL.
+over range	fuera de rango	loc.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	Amprobe AM-500 PDF p.56 «la medición está fuera de rango»; Fluke 287/289 PDF p.38 «excede el rango actual»	currently over range. → «actualmente fuera de rango.»
+LOW BAT (flag)	LOW BAT	—	flag-low-battery	Truper MUT-202 PDF p.4 «Batería baja»; Amprobe AM-500 PDF p.51 «Indicador de batería con poca carga»	Keep, since it stands for the battery icon. Spoken: «batería baja».
+HV! (flag)	HV!	—	flag-hv-warning; spoken reading-spoken-hv-warning	Fluke 3000 FC PDF p.9 «El icono de advertencia de tensión peligrosa»	Spoken: «advertencia de tensión peligrosa».
+LEAD ERR (flag)	LEAD ERR	—	flag-lead-error; spoken reading-spoken-lead-error	Fluke 287/289 PDF p.70 «Conductores incorrectamente»; Fluke 3000 FC PDF p.9 «Aviso de conductores de prueba»	Spoken: «error de conexión de los cables de prueba».
+COMP (flag) / compare	COMP / comparación	s. f.	flag-comp, reading-spoken-comp, aux-comp-*	no approved source found	COMP High/Low → «COMP alto / COMP bajo».
+REC (flag) / record (meter memory)	REC / grabación	s. f.	flag-record, reading-spoken-record	Fluke 287/289 PDF p.22 «los modos de grabación»; MS-T «recording» → «grabación»	
+VOID (flag)	VOID / no válido	adj.	flag-void, reading-spoken-void	MS-SG-ES PDF p.49 / MS-SG-MX PDF p.47 «Dispositivo especificado no válido»; MS-T «invalid» → «no válido»	Spoken: «lectura no válida».
+annunciator / status flag	indicador	s. m.	translator comments only	Fluke 80 Series V PDF p.11 «Indicadores para el modo de grabación»; Amprobe AM-500 PDF p.51 «Indicador de batería con poca carga»	
+key (on the meter)	botón	s. m.	remote panel, activation steps, key hovers	Amprobe AM-500 PDF p.50 «Botón SELECT»; Fluke 3000 FC PDF p.11 «Botón amarillo»; UNI-T UT197 PDF p.13 «el botón RANGE»; Truper MUT-202 PDF p.5 «Botón HOLD»	Provisional (SUMMARY Q8). «tecla» (UT197 PDF p.13, MUT-39 PDF p.8) is kept for the computer's keys; «el botón … del multímetro» tells it from the app's buttons.
+press (briefly) / short press	presionar brevemente	v.	activation steps, key hovers	UNI-T UT197 PDF p.12 «presione brevemente para seleccionar»; Truper MUT-39 PDF p.14 «Presione brevemente el botón “HOLD”»	"Plain ""press"" → «presionar» (SUMMARY Q4)."
+hold (a key) / long press	mantener presionado	v.	activation steps	Fluke 80 Series V PDF p.8 «mantenga presionado el botón durante 1 segundo»; UNI-T UT197 PDF p.12 «Mantenga presionado SELECT»	Alt. «mantener pulsado» (Fluke 117 PDF p.10, Fluke 3000 FC PDF p.12). Agreement: «el botón … presionado».
+dial	selector giratorio	s. m.	"activation steps, errors ""turn the dial first"""	Fluke 80 Series V PDF p.7 «Posiciones del selector giratorio»; Fluke 117 PDF p.5; Amprobe AM-500 PDF p.50 «Selector giratorio»	Also «interruptor giratorio» (UT197 PDF p.3, MUT-39 PDF p.2) and «perilla» (MUT-202 PDF p.5, Mexico). Short form in tight text: «selector».
+dial position	posición del selector	s. f.	errors, remote-select hover	Fluke 80 Series V PDF p.7 «Posiciones del selector giratorio»	
+function (dial)	función de medición	s. f.	"activation steps ""Turn the dial to any function"""	Fluke 3000 FC PDF p.11 «ajustar el Producto en una función de medición distinta»; Fluke 287/289 PDF p.20 «Seleccione una función de medición primaria»	Full form; «función» alone for the dial position.
+mode	modo	s. m.	reading-mode, mode menu, CLI settings	Fluke 80 Series V PDF p.4 «Modo relativo»; Fluke 3000 FC PDF p.10	Put «modo» before a placeable: «en modo { $mode }».
+display (the meter's)	pantalla	s. f.	"activation steps ""shows on the display"""	Fluke 117 PDF p.3; UNI-T UT197 PDF p.3 «Pantalla LCD»; Truper MUT-39 PDF p.4	
+beep	pitido	s. m.	activation notes, settings-device-name	Fluke 3000 FC PDF p.10 «el Producto emite un pitido»	Fluke 117 PDF p.5 and AM-500 PDF p.53 say «señal acústica»; «pitido» is shorter. «emitir un pitido».
+auto power-off	apagado automático	s. m.	"activation notes ""switches off after 15 minutes idle"""	Fluke 80 Series V PDF p.3; Amprobe AM-500 PDF p.52; Truper MUT-202 PDF p.4 «APO Apagado automático»	Keep APO as printed.
+on / off (meter setting)	activado / desactivado	adj.	toggle-on, toggle-off	Fluke 3000 FC PDF p.11 «cuando está activado el modo de retención»; Fluke 117 PDF p.10	Lowercase like the English.
+specifications	especificaciones	s. f. pl.	specs-heading, settings-specs	Fluke 117 PDF p.3 «Especificaciones»; Amprobe AM-500 PDF p.52	
+resolution	resolución	s. f.	specs-resolution, settings-specs-resolution	Truper MUT-39 PDF p.7 table header «Rango Resolución Precisión»; Fluke 3000 FC PDF p.12	"Short ""Res:"" → «Res.:»."
+accuracy	exactitud	s. f.	specs-accuracy, settings-specs-accuracy, notes	Amprobe AM-500 PDF p.61 «Exactitud: ± (% de la lectura + dígitos)»; Fluke 80 Series V PDF p.43; Fluke 117 PDF p.19	"Provisional (SUMMARY Q6). Truper (MUT-39 PDF p.7) and UNI-T (UT197 PDF p.29) say «precisión»; Fluke 3000 FC mixes both (PDF p.10, p.40). Short ""Acc:"" → «Exact.:»."
+input impedance / Input Z	impedancia de entrada	s. f.	specs-input-impedance, settings-specs-input-z	Amprobe AM-500 PDF p.62 «Impedancia de entrada: alrededor de 10 MΩ»; UNI-T UT197 PDF p.15	The specs row and its setting say «Impedancia de entrada» in full, as French ruled; «Z de entrada» if the row is too long.
+overload protection	protección contra sobrecargas	s. f.	spec input rows	Amprobe AM-500 PDF p.62 «Protección contra sobrecargas: 600 V CC o CA rms»; UNI-T UT197 PDF p.8	Truper writes «Protección de sobrecarga» (MUT-39 PDF p.7).
+of reading (±(a% of reading + b))	de la lectura	loc.	notes, accuracy bands	Amprobe AM-500 PDF p.61 «± (% de la lectura + dígitos)»; Fluke 80 Series V PDF p.43 «± ([% de la lectura]) + [cantidad de dígitos menos significativos])»	Follows the reading decision.
+digits / counts (accuracy, residual)	dígitos	s. m. pl.	"notes ""add 10 digits"", ""residual ≤10 digits"""	Amprobe AM-500 PDF p.61 «% de la lectura + dígitos»; Fluke 80 Series V PDF p.43	Provisional (SUMMARY Q9). Fluke 3000 FC says «cuentas» here too (PDF p.10 «± 12 cuentas»).
+display counts (6000-count display)	6000 cuentas	s. f. pl.	note-display-digits-6000, note-true-rms-crest-factor-*	Fluke 3000 FC PDF p.42 «≤3 a 4000 cuentas»; alt. «recuentos» Fluke 117 PDF p.5, «conteos» UNI-T UT197 PDF p.35	Never «6.000» or «6 000»: the spec check rejects regrouped thousands.
+Not specified / Unspec'd	No especificado	adj.	"band-not-specified, notes ""not specified above 10A"""	Fluke 287/289 PDF p.84 «> 10 A no especificado»; UNI-T UT197 PDF p.30 «No especificado»; Fluke 117 PDF p.21 «sin especificar»	Agree when attached to a feminine noun («exactitud no especificada»).
+for reference only	solo como referencia	loc.	band-only-for-reference, note-reading-for-reference-only	UNI-T UT197 PDF p.35 «solo como referencia»; Truper MUT-39 PDF p.8 «(solo como referencia…)»	Write «solo» without accent (current orthography; Truper and UT197 agree).
+of range (10%–100% of range)	del rango	loc.	notes	Fluke 117 PDF p.16 «la escala total del rango seleccionado»; Truper MUT-39 PDF p.7 «entre 2% y 100% de la escala completa»	Use «rango» per the range decision.
+sensitivity	sensibilidad	s. f.	notes	Fluke 287/289 PDF p.6 «Sensibilidad del contador de frecuencia»; UNI-T UT197 PDF p.29	
+temperature coefficient / tempco	coeficiente de temperatura	s. m.	note-60-00mohm-tempco-*	Fluke 117 PDF p.19 «Coeficiente de temperatura… 0,1 x (exactitud especificada)/°C»; UNI-T UT197 PDF p.29	
+humidity	humedad	s. f.	note-humidity-50-pct	Amprobe AM-500 PDF p.61 «Humedad relativa»	
+typical / typ.	típico / típ.	adj.	notes	Fluke 3000 FC PDF p.42 «típico»; Fluke 80 Series V PDF p.48 «(típica)»	Never drop it (STYLE §12).
+open circuit	circuito abierto	s. m.	"notes ""Open circuit ≈3V"""	Fluke 117 PDF p.22 «Tensión de prueba en circuito abierto»; UNI-T UT197 PDF p.19 «El voltaje de circuito abierto es de aproximadamente 2V»	Open circuit ≈3V → «Circuito abierto ≈3V».
+shorted leads	cables de prueba en cortocircuito	s. m. pl.	notes	UNI-T UT197 PDF p.20 «la resistencia del cable de prueba en cortocircuito»	
+test lead	cable de prueba	s. m.	notes, lead error	Fluke 117 PDF p.3 «Aviso de cables de prueba»; UNI-T UT197 PDF p.5 «Cables de prueba retráctiles»	Fluke 287/289 and AM-500 say «conductores de prueba» (F289 PDF p.6), Truper «puntas de prueba» (MUT-39 PDF p.2 = probe tips).
+fuse	fusible	s. m.	"input-fuse-* (""Fuse 10A 1000V"")"	UNI-T UT197 PDF p.8 «Fusible 600mA/1000V»; Truper MUT-39 PDF p.4	
+nominal	nominal	adj.	input-*-nominal	Fluke 80 Series V PDF p.2 «valores nominales especificados»; UNI-T UT197 PDF p.7 «voltaje nominal»	
+response time	tiempo de respuesta	s. m.	note-response-time-100us	Fluke 80 Series V PDF p.32 «Tiempo de respuesta es el lapso…»; Fluke 117 PDF p.22	
+meter / multimeter	multímetro	s. m.	"everywhere (""the meter"")"	Fluke 3000 FC PDF p.5 «multímetro digital»; Truper MUT-39 PDF p.2; UNI-T UT197 PDF p.1 «Multímetro Digital Industrial»	Fluke 117 PDF p.5 and UT197 PDF p.2 also say «medidor»; use «multímetro». Put the noun before a model name: «el multímetro { $model }».
+device	dispositivo	s. m.	settings-device, device lists, CLI list	MS-T «device» → «dispositivo»; UNI-T UT197 PDF p.39 «administración de dispositivos»	
+simulated / mock	simulado	adj.	brand-simulated, mock models, settings-mock-*	MS-T «simulator» → «simulador»	"Mock UT61E+ → «UT61E+ simulado». ""Simulated"" heading → «Simulados»."
+USB cable	cable USB	s. m.	link-name-usb-cable, link-usb-cable, notices	no approved source for the phrase (MS-T «USB port» → «puerto USB»)	
+Bluetooth adapter	adaptador Bluetooth	s. m.	link-name-bluetooth-adapter, notices	MS-T «Bluetooth adapter» → «adaptador Bluetooth»; MS-Support es-es/es-mx «Desinstalar el adaptador Bluetooth»	
+Bluetooth link (built-in Bluetooth)	enlace Bluetooth	s. m.	link-name-bluetooth-link, top-bar-link-*	MS-T «link» → «enlace»; Fluke 287/289 PDF p.61 «el enlace de comunicación»	Keeps the app's link/connection distinction.
+connection	conexión	s. f.	top bar, notices, errors	MS-T «connection» → «conexión»; UNI-T UT197 PDF p.39 «realice la conexión»	
+connect / Connect	conectar / Conectar	v.	top-bar-connect, shortcuts-connect	MS-T «connect» → «conectar»	Button = infinitive.
+disconnect / Disconnect	desconectar / Desconectar	v.	top-bar-disconnect, top-bar-stop-retrying	MS-T «disconnect» → «desconectar»	Status «Desconectado».
+reconnect / Reconnecting…	reconectar / Reconectando…	v.	top-bar-reconnecting*	MS-SG-ES PDF p.51 / MS-SG-MX PDF p.49 «Error durante la reconexión de %2 a %3»	Reconnecting (attempt 3)... → «Reconectando (intento 3)…» (MS-T «retry» → «reintentar»).
+pair / paired	emparejar / emparejado	v.	list-not-heard	MS-T «pair» → «emparejar»; Fluke 3000 FC PDF p.9 «Puede configurarlo para emparejarlo con»	
+data transmission	transmisión de datos	s. f.	connection notices, activation (title), shared help	no approved source for the phrase; UNI-T UT197 PDF p.39 «se puede lograr la comunicación de datos»	«transmisión de datos» says the meter sends; «comunicación» is the alternative.
+detect / Auto-detect	detectar / Detección automática	v. / s. f.	settings-auto-detect, top-bar-auto-detect, device-auto, toasts	MS-T «detect» → «detectar»	"Detected X → «Se detectó X» / «X detectado». ""Detecting the meter…"" → «Detectando el multímetro…»."
+scan (Bluetooth) / Scanning…	buscar / Buscando…	v.	list-scanning, setup-bluetooth-scan	UNI-T UT197 PDF p.39 «busca automáticamente los medidores cercanos habilitados para Bluetooth»; MS-T «search» → «buscar»	MS-T «scan» → «digitalizar» is for paper: avoid.
+in range (Bluetooth)	al alcance	loc.	"list, errors ""in Bluetooth range"""	UNI-T UT197 PDF p.39 «medidores cercanos»; «alcance»: no approved source	«al alcance del Bluetooth» / «cercanos».
+adapter (any --adapter target)	adaptador	s. m.	connection-adapter-*, CLI	MS-T «adapter» → «adaptador»	
+identify itself (a meter)	identificarse	v.	connection-not-identified, no-meter-answered	no approved source found	No meter answered → «Ningún multímetro respondió».
+driver	controlador	s. m.	setup-usb-windows-warning	MS-T «driver» → «controlador»; MS-Support es-es/es-mx (Bluetooth page) «actualizaciones de los controladores»	
+Device Manager	Administrador de dispositivos	n. pr. m.	setup-usb-windows-open	MS-T «Device Manager» → «Administrador de dispositivos»; MS-Support es-es and es-mx, same name	"Same in Spain and Mexico. Categories: «Dispositivos de interfaz humana» (MS-Support touchscreen page, es-es/es-mx; MS-T HID), «Otros dispositivos» (MS-Support Bluetooth page, es-es/es-mx). 'USB Input Device' → 'Dispositivo de entrada USB': unverified, no approved source."
+System Settings > Privacy & Security (macOS)	Ajustes del Sistema / Configuración del Sistema > Privacidad y seguridad > Monitorización de entrada ; … > Bluetooth	—	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple-ES mchl4cedafb6, mchl211c911f «Ajustes del Sistema», «Privacidad y seguridad», «Monitorización de entrada»; Apple-MX same pages «Configuración del Sistema»	Provisional (SUMMARY Q12): Spain's macOS says «Ajustes del Sistema», Latin America's «Configuración del Sistema»; the rest of the path is the same. Name both.
+settings file	archivo de configuración	s. m.	CLI help, connect-saved-mock-mode	MS-SG-ES PDF p.23 / MS-SG-MX PDF p.21 «Asigna un nombre al archivo de configuración»	Never «fichero» (neither Microsoft guide uses it).
+command-line option / flag	opción de la línea de comandos	s. f.	comments, notices naming --flags	MS-T «command-line option» → «opción de la línea de comandos»	The --flag itself is verbatim.
+timeout	tiempo de espera agotado	s. m.	error-timeout, debug-timeout	MS-T «time-out» → «tiempo de espera»	
+checksum	suma de comprobación	s. f.	error-checksum-mismatch	MS-T «checksum» → «suma de comprobación»	
+frame (protocol)	trama	s. f.	read-unreadable-frame, error-wrong-meter-*	MS-T «frame» → «trama»	Not «marco» (the window frame).
+support (of a meter by the app)	compatibilidad	s. f.	stability-warning, error-bluetooth-only-not-built	no approved source (MS-T «support» → «soporte» means customer support; «admitir» for the verb)	«La compatibilidad con el multímetro { $model } está verificada»; verb «admitir» («esta compilación no admite Bluetooth»).
+verified / partly verified / experimental	verificado / parcialmente verificado / experimental	adj.	stability-*, top-bar-badge-*, settings-device-entry	no approved source (plain Spanish); MS-SG-ES PDF p.45 / MS-SG-MX PDF p.44 keep «verificar» for checking true or false	Agree with the noun: device-list tag (el multímetro) m.; «la compatibilidad … verificada» f. Badges «VERIFICADO», «PARCIALMENTE VERIFICADO», «EXPERIMENTAL».
+reading (a value the meter sent)	lectura	s. f.	reading-none, markers, export/import, graph menu, CLI	Fluke 117 PDF p.7 «congela la lectura actual»; Amprobe AM-500 PDF p.61 «% de la lectura»; Truper MUT-39 PDF p.3 «lecturas falsas»	Every maker agrees. «medición» for the act and for what a function measures.
+measured value	valor medido	s. m.	reading-spoken, hovers	Fluke 117 PDF p.16 «indica el valor medido»; Amprobe AM-500 PDF p.62	
+sample	muestra	s. f.	recording, graph, export, CLI summary	MS-T «sample» → «muestra»	
+sample interval	intervalo de muestreo	s. m.	settings-sample-interval, CLI --interval-ms	MS-T «interval» → «intervalo»; Fluke 287/289 PDF p.62 «los datos de intervalos y eventos»	Every reading chip → «Cada lectura».
+buffer / Buffer size	búfer / Tamaño del búfer	s. m.	settings-buffer-size, recording-status-full	MS-SG-ES PDF p.44 / MS-SG-MX PDF p.43 «buffer → búfer»; MS-T «buffer» → «búfer»	buffer full → «búfer lleno». Plural «búferes».
+recording	grabación	s. f.	recording panel, settings-recording, toasts	MS-T «recording» → «grabación»; Fluke 287/289 PDF p.22	
+Record (button)	Grabar	v.	"recording-record (""● Record"")"	MS-T «record» → «grabar»	
+Stop (button)	Detener	v.	"recording-stop (""■ Stop"")"	MS-T «stop» → «detener»	
+Discard	Descartar	v.	recording-discard, export-unsaved-*-confirm	MS-T «discard» → «descartar»; Fluke 287/289 PDF p.28 «descartará todos los datos MÍN MÁX»	"Discard and record → «Descartar y grabar»; ""Recording discarded"" → «Grabación descartada»."
+export / Export…	exportar / Exportar…	v.	export-button, shortcuts-export, toasts	MS-T «export» → «exportar»	
+import / Import…	importar / Importar…	v.	import-button, toasts, CLI --import	MS-T «import» → «importar»	Import failed → «Error al importar» (MS-SG-ES PDF p.50 / MS-SG-MX PDF p.48: "Failed to …" → «Error + preposition»).
+replay (file) / replaying	reproducción / archivo de reproducción	s. f.	export-replay, top-bar-replaying, --replay help	MS-T «playback» → «reproducción»	"No clash with «lectura». ""Replaying { $path }"" → «Reproduciendo { $path }»; Replay… → «Reproducción…»."
+file type	tipo de archivo	s. m.	export-menu .a11y, import-file-type	MS-T «file type» → «tipo de archivo»	
+unsaved / unexported	no guardado / sin exportar	adj.	export-unsaved-*	MS-SG-ES PDF p.13 / MS-SG-MX PDF p.10 «el trabajo no guardado»	
+timestamp	marca de tiempo	s. f.	read-error, CSV help	MS-T «timestamp» → «marca de tiempo»	The CSV column name `timestamp` stays English. Fluke 287/289 PDF p.29 says «sello de hora».
+marker	marcador	s. m.	markers-*, graph menu	MS-T «marker» → «marcador»	
+note (on a marker)	nota	s. f.	markers-note, markers-add	MS-T «note» → «nota»	
+graph	gráfico	s. m.	settings-graph, toasts, shortcuts	MS-T «chart» → «gráfico»; Fluke 287/289 PDF p.17 «Gráfico de barras»	«gráfica» (f.) is common in Mexico; keep one: «gráfico».
+plot (noun)	gráfico de mediciones	s. m.	"graph-plot-a11y-title ""Measurement plot."""	MS-T «plot» → «trazado»	«Gráfico de mediciones.» reads better aloud than «Trazado de mediciones.».
+plot (verb) / Plot:	trazar / Trazar:	v.	graph-plot, graph-plot-*	MS-T «plot» → «trazado» (noun)	"Hover ""Plot the meter's main reading"" → «Trazar la lectura principal del multímetro»."
+series	serie	s. f.	graph comments, graph-show-chip	MS-T «data series» → «serie de datos»	
+trace (a series' line)	curva	s. f.	graph-show-chip, settings-graph-lines	no approved source (MS-T «trendline» → «línea de tendencia», closest)	
+main reading	lectura principal	s. f.	"graph-plot-main (""Main"")"	no approved source	"Chip ""Main"" → «Principal»."
+sub-value	valor secundario	s. m.	graph-plot-series hover, colors-swatch-overlay-*	Fluke 287/289 PDF p.19 «La pantalla secundaria»	
+axis / Y axis	eje / eje Y	s. m.	graph-y-*, graph-plot-a11y-y-axis	MS-T «axis» → «eje»	Y:Fixed / Y:Auto → «Y:fijo» / «Y:auto».
+cursor	cursor	s. m.	graph-cursors, graph menu, shortcuts	MS-T «cursor» → «cursor»	Cursors A and B keep their letters.
+reference line / Ref	línea de referencia / Ref.	s. f.	graph-ref, graph-menu-*-ref	MS-SG-ES PDF p.20 / MS-SG-MX PDF p.18 abbreviation «ref.»; Fluke 287/289 PDF p.17 «valor de referencia»	
+triggers (crossings of a reference line)	disparos	s. m. pl.	graph-triggers, shortcuts-graph-triggers, colors-swatch-crossing	no approved source (MS-T «trigger» → «desencadenador», the workflow sense)	"Hover explains ""crossing"" → «cruce» (no source)."
+histogram	histograma	s. m.	graph-histogram*	MS-T «histogram» → «histograma»	
+minimap	minimapa	s. m.	graph-minimap	MS-T «minimap» → «minimapa»	
+zoom / zoom in / zoom out	zoom / acercar / alejar	s. m. / v.	settings-zoom, graph, shortcuts-zoom	MS-T «zoom in» → «acercar», «zoom out» → «alejar»; Fluke 287/289 PDF p.64 «Zoom de los datos de tendencias»	
+Reset Zoom	Restablecer zoom	v.	graph-reset-zoom, shortcuts-zoom-reset	MS-T «reset» → «restablecer»	
+pan	desplazar	v.	graph-live hover, shortcuts-mouse-drag, minimap	MS-T «scroll» → «desplazar»	MS-T «pan» → «movimiento panorámico» is the camera sense: avoid.
+drag	arrastrar	v.	gestures	MS-T «drag» → «arrastrar»	"Gesture label ""Drag"" → «Arrastrar»."
+right-click	clic con el botón derecho / hacer clic con el botón derecho	s. m. / v.	shortcuts-mouse-menu, Wayland notes	MS-T «right-click» → «hacer clic con el botón derecho»	Gesture label «Clic derecho».
+double-click	doble clic / hacer doble clic	s. m. / v.	shortcuts-mouse-reset, graph-reset-zoom hover	MS-T «double-click» → «hacer doble clic»	
+scroll wheel	rueda del mouse	s. f.	"gestures ""Ctrl + scroll wheel"""	MS-T «scroll wheel» → «rueda del mouse»	Follows the mouse ruling (SUMMARY Q3); Spain: «rueda del ratón».
+live / LIVE (chip)	en vivo / EN VIVO	loc.	graph-live, graph-plot-a11y-state, top-bar status	Fluke 287/289 PDF p.19 «la medición de la señal de entrada (en vivo)»; MS-T «live» → «en directo»	Provisional (SUMMARY Q10). Chip «EN VIVO»; a11y state «en vivo.».
+bounding box	rectángulo delimitador	s. m.	shortcuts-mouse-box-zoom	MS-T «bounding box» → «rectángulo delimitador»	
+time window	ventana de tiempo	s. f.	graph-window, shortcuts-graph-window	MS-T «window» → «ventana»	
+envelope (min/max band)	envolvente	s. f.	graph-envelope*, colors-swatch-envelope	no approved source (MS-T «envelope» → «sobre» is postal)	
+crosshair	cruz del cursor	s. f.	colors-swatch-crosshair	no approved source (no MS-T entry)	Swatch label «Cruz».
+gap (in recorded data)	interrupción	s. f.	stats-gaps, colors-swatch-gap, read-skipped-intervals	no approved source	
+viewport (minimap bracket)	área visible	s. f.	colors-swatch-viewport, shortcuts-mouse-minimap	no approved source (MS-T «viewport» → «ventanilla», a 3-D modelling sense)	
+statistics	estadísticas	s. f. pl.	stats-heading, settings-statistics	MS-T «Statistics» → «Estadísticas»	
+mean	media	s. f.	stats-mean, graph-mean, read-summary	no approved source for «media» (MS-T «AVERAGE» → «PROMEDIO»; Fluke 80 Series V PDF p.8 «AVG (promedio)»)	Statistics' mean: «media» (caption «Media:»); the meter's AVG: «promedio».
+standard deviation / σ	desviación estándar / σ	s. f.	stats-sd, graph-histogram-a11y-sd, hovers	MS-T «standard deviation» → «desviación estándar»	Spain also says «desviación típica»; «estándar» is understood everywhere.
+readings (count of)	lecturas	s. f. pl.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	Fluke 80 Series V PDF p.8 «las lecturas MAX, MIN, AVG»	The statistics say how many readings: «Lecturas: 12», read-out «Lecturas=12».
+integral	integral	s. f.	stats-integral, read-integral, --integrate help	MS-T «integral» → «integral»	
+Visible (block of figures)	Visible	adj.	stats-visible	no approved source	Same word.
+Reset (statistics)	Restablecer	v.	stats-reset	MS-T «reset» → «restablecer»	
+alarm	alarma	s. f.	alarm-*, reading badges, CLI	MS-T «alarm» → «alarma»; Fluke 117 PDF p.10 «Desactiva la alarma audible»	
+high limit / low limit	límite superior / límite inferior	s. m.	alarm-high/low, alarm-breach, graph-menu-set-alarm	no approved source found	"Fields ""Low""/""High"" → «Inferior»/«Superior». Badges HI LIMIT/LO LIMIT → «LÍM. SUP.»/«LÍM. INF.»."
+threshold	umbral	s. m.	"notes ""Audible threshold"", ""Lo-Z threshold"""	MS-T «threshold» → «umbral»; Fluke 287/289 PDF p.26 «Umbral de evento»	
+hysteresis	histéresis	s. f.	alarm-hysteresis, alarm-band hover, --alarm-hysteresis	no approved source found (no maker manual, no MS-T entry; IEV not reachable)	Spelling and gender per standard dictionaries; mark as unverified.
+scale / scaling	escala / escalado	s. f. / s. m.	scale-chip, scale-on toast, reading-badge-scaled, --scale	MS-T «scaling» → «escalado»; «scale» → «escala»	Chip «Escala»; badge «ESCALA»; spoken «escalado por software».
+scale factor	factor de escala	s. m.	scale-factor, --scale help	MS-T «scale factor» → «factor de escala»	
+offset	desplazamiento	s. m.	scale-offset, --offset help	MS-T «offset» → «desplazar» (verb)	Fluke 287/289 PDF p.40 «Offset (Compensación)» uses «compensación» for a temperature correction; here the value is added, not a correction.
+unit / unit label	unidad / etiqueta de unidad	s. f.	scale-unit, alarm-unit, --unit	MS-T «unit» → «unidad»; «label» → «etiqueta»	
+Apply	Aplicar	v.	scale-apply, alarm-apply	MS-T «apply» → «aplicar»	
+Off (button)	Desactivar	v.	scale-off, alarm-off	MS-T «disable» → «desactivar»	"Toasts ""Alarm off"" → «Alarma desactivada»."
+Settings	Configuración	s. f.	"top-bar-settings, every ""in Settings (⚙)"""	MS-T «Settings» → «Configuración»; MS-SG-ES PDF p.13 / MS-SG-MX PDF p.10 «desactiva el contraste alto en Configuración»	Same in both Microsoft guides (Apple Spain's «Ajustes» is macOS only).
+theme	tema	s. m.	colors-theme*	MS-T «theme» → «tema»	
+Dark / Light / System	Oscuro / Claro / Sistema	adj. / s. m.	colors-theme-*, settings-language-system	MS-T «dark mode» → «modo oscuro»; «Light Mode» → «modo claro»	M. agreement with «tema»: «Oscuro (personalizado)».
+colours	colores	s. m. pl.	colors-colors, colors-customize	no approved source (plain Spanish)	
+High Contrast	Contraste alto	s. m.	colors-preset-high-contrast	MS-T «high contrast» → «contraste alto»; MS-SG-ES PDF p.13 «desactiva el contraste alto»	
+Colorblind (preset)	Daltonismo	s. m.	colors-preset-colorblind	no approved source found	Provisional; alternative «Para daltónicos». MS-SG-ES PDF p.18 / MS-SG-MX PDF p.16: focus on people, not disabilities.
+Default (preset)	Predeterminado	adj.	colors-preset-default	MS-SG-ES PDF p.45 / MS-SG-MX PDF p.43 «por defecto → predeterminado»; MS-T «default» → «predeterminado»	Never «por defecto».
+customized / Customize colors	personalizado / Personalizar colores	adj. / v.	colors-*-customized, colors-customize	MS-T «customize» → «personalizar»	
+accent	énfasis	s. m.	colors-swatch-accent	MS-T «accent color» → «color de énfasis»	
+background	fondo	s. m.	"colors-swatch-background, ""Plot bg"" → «Fondo del gráfico»"	MS-T «background» → «fondo»	
+border	borde	s. m.	colors-swatch-border	MS-T «border» → «borde»	
+frame (colour surface)	marco	s. m.	colors-swatch-frame	MS-T «window frame» → «marco de ventana»	
+heading	título	s. m.	colors-swatch-heading	MS-T «heading» → «título»	
+weak text	texto secundario	s. m.	colors-swatch-weak-text	"no approved source (the hover says ""Secondary text"")"	
+palette	paleta	s. f.	colors-preset-* hovers	MS-T «palette» → «paleta»	
+keyboard shortcut	método abreviado de teclado	s. m.	shortcuts-*, top-bar-shortcuts	MS-T «keyboard shortcut» → «método abreviado de teclado»; MS-SG-ES PDF p.44 / MS-SG-MX PDF p.43 «atajo → acceso directo, método abreviado»	Never «atajo». «combinación de teclas» (MS-T) where shorter reads better.
+Keyboard & Mouse	Teclado y mouse	—	shortcuts-title	MS-T «keyboard» → «teclado», «mouse» → «mouse» / «ratón»; MS-SG-MX PDF p.44 «ratón → mouse»	Provisional (SUMMARY Q3): Spain says «ratón» (MS-SG-ES PDF p.45). Spell out «y», not &.
+key names in prose (Up/Down, Left/Right, Escape, Space, Shift, PgUp/PgDn, Home/End)	Flecha arriba/Flecha abajo, Izquierda/Derecha, Esc, Espacio, Mayús, Re Pág/Av Pág, Inicio/Fin	s. f.	shortcuts-note, divider .a11y texts, gestures	MS-SG-ES PDF p.55–56 / MS-SG-MX PDF p.51–52 (Keys); «Mayús» in shortcuts MS-SG-ES PDF p.26 «Ctrl+Mayús+A»	Provisional (SUMMARY Q11). The key column (shortcuts-key-*) writes Ctrl, Mayús, Alt, Espacio, Esc, Izquierda, Derecha, Inicio, Fin, Más, Menos; MS's full «Barra espaciadora» and «Flecha izquierda» in prose where room allows.
+tooltip / hover text	información sobre herramientas	s. f.	translator comments only	MS-T «tooltip» → «información sobre herramientas»	Comments only; never on screen.
+toast	notificación	s. f.	translator comments only	MS-T «toast» → «notificación del sistema», «mensaje emergente»	Use «notificación» if the word ever reaches the screen.
+drop-down	lista desplegable	s. f.	.a11y names, comments	MS-T «drop-down list» → «lista desplegable»	
+checkbox	casilla	s. f.	"bluetooth-off-* (""Tick …"")"	MS-T «check box» → «casilla», «casilla de verificación»	Tick → «Activa la casilla …» / «Marca …».
+panel	panel	s. m.	recording-resize .a11y, settings, big meter	MS-T «panel» → «panel»	
+button	botón	s. m.	notices naming buttons	MS-T «button» → «botón»	
+screen reader	lector de pantalla	s. m.	comments only	MS-T «screen reader» → «lector de pantalla»	
+Help & Feedback	Ayuda y comentarios	—	project-link (top bar, --help last line)	MS-T «help» → «ayuda»; «feedback» → «comentarios»	19 characters for 15: check the top bar at 700 px.
+report feedback	enviar comentarios	v.	connection-feedback, top-bar-badge-hover, connect-report-feedback	MS-T «Feedback» → «Enviar comentarios»	Click to report feedback. → «Haz clic para enviar comentarios.»
+What's New	Novedades	s. f. pl.	top-bar-version, whats-new-title*	MS-T «What's New» → «Novedades»	What's New in v{ $version } → «Novedades de la v{ $version }».
+release notes	notas de la versión	s. f. pl.	top-bar-version hover	MS-T «release notes» → «notas de la versión»	
+update / new version	actualización / nueva versión	s. f.	settings-check-updates, settings-update-*	MS-T «update» → «actualización»	Newer dev build ↗ → «Compilación de desarrollo más reciente ↗» (MS-T «build» → «compilación»).
+machine-translated	traducido automáticamente	adj.	settings-language-machine-translated, -unreviewed	MS-T «machine translation» → «traducción automática»	Weak text: «traducción automática».
+language	idioma	s. m.	settings-language	MS-T «Language» → «Idioma»	Caption «Idioma (Language):» per the en-US comment. «lenguaje» is a programming language.
+Always on top	Siempre visible	—	settings-always-on-top, shortcuts-always-on-top	MS-T «Always on Top» → «Siempre visible»	
+fullscreen	pantalla completa	s. f.	shortcuts-fullscreen, big meter hover	MS-T «full screen» → «pantalla completa»	
+minimise	minimizar	v.	shortcuts-minimize	MS-T «minimize» → «minimizar»	
+title bar	barra de título	s. f.	Wayland notes	MS-T «title bar» → «barra de título»	
+window decorations	marco de la ventana	s. m.	settings-hide-decorations, shortcuts-decorations	MS-T «window frame» → «marco de ventana» (closest)	Hide window decorations → «Ocultar el marco de la ventana».
+Quit	Salir	v.	shortcuts-quit	MS-T «quit» → «salir»	
+Dismiss	Cerrar	v.	connection-dismiss	MS-T «dismiss» → «ignorar», «descartar»; MS-SG-ES PDF p.46 / MS-SG-MX PDF p.45 warn that «ignorar» is a false friend	«Descartar» is taken by Discard. a11y «Cerrar la notificación».
+Copy / copied	Copiar / copiado	v.	graph-menu-copy, connection-late-copy, toasts	MS-T «copy» → «copiar»	Command copied → «Comando copiado».
+clipboard	Portapapeles	s. m.	comments	MS-T «clipboard» → «Portapapeles»	
+Cancel	Cancelar	v.	export-unsaved-cancel	MS-T «Cancel» → «Cancelar»	
+Clear	Borrar	v.	top-bar-clear, shortcuts-clear	MS-T «clear» → «borrar»	
+Pause / Resume	Pausar / Reanudar	v.	top-bar-pause, top-bar-resume, shortcuts-pause	MS-T «pause» → «pausar»; «resume» → «reanudar»	"▶ Resume → «▶ Reanudar», ""⏸ Pause"" → «⏸ Pausar»."
+acquisition	adquisición	s. f.	top-bar-pause hover, connection-acquisition-stopped	Fluke 287/289 PDF p.26 «continuará la adquisición de datos»	MS-T «data acquisition» → «obtención de datos»: the meter maker's word wins.
+Error: / Warning: / Note: / Tip:	Error: / Advertencia: / Nota: / Sugerencia:	s.	cli/common.ftl, list-select-tip, settings-tip-*	MS-T «error» → «error», «warning» → «advertencia», «tip» → «sugerencia»; Fluke 3000 FC PDF p.10 «Nota»	
+you (addressing the user)	tú	pron.	every instruction	MS-SG-ES PDF p.34 / MS-SG-MX PDF p.32 «the informal second person singular pronoun “tú” is recommended»	Provisional (SUMMARY Q1). Every maker manual uses «usted» («Presione», «Mantenga presionado»).
+computer	equipo	s. m.	setup-bluetooth-check, error-bluetooth-no-adapter, -powered-off	MS-T «computer» → «equipo», «PC»; MS-SG-ES PDF p.45 «computadora» not used in Spain; MS-SG-MX PDF p.43 «ordenador» not used in Latin America	Provisional (SUMMARY Q2). «en este equipo» is the one word both regions read; «PC» changes gender (el PC in Spain, la PC in Latin America: MS-SG-ES PDF p.21, MS-SG-MX PDF p.19).
+mouse	mouse	s. m.	shortcuts-title, top-bar-shortcuts hover, gestures	MS-T «mouse» → «mouse» / «ratón»; MS-SG-MX PDF p.44 «ratón, ratones → mouse, los mouse»; MS-SG-ES PDF p.45 the reverse	Provisional (SUMMARY Q3). Plural «los mouse».
+file	archivo	s. m.	export, import, CLI	MS-T «file» → «archivo»; both MS guides («Asigna un nombre al archivo de configuración», MS-SG-ES PDF p.23)	Never «fichero».
+app / application	aplicación	s. f.	activation steps (phone app), desktop entry	MS-SG-ES PDF p.8 / MS-SG-MX PDF p.8: no Spanish short form for "app", use the full word; MS-T «app» → «aplicación»	«Desconecta el multímetro de cualquier aplicación del teléfono».
+press (an app button or key)	presionar	v.	shortcuts-note, activation steps, hovers	MS-SG-ES PDF p.49 / MS-SG-MX PDF p.47 «Presiona Aceptar»; Fluke 80 Series V PDF p.15 «presione el botón RANGE»; UNI-T UT197 PDF p.12; Truper MUT-39 PDF p.8	Provisional (SUMMARY Q4). Alt. «pulsar» (Fluke 117/289/3000, Spain).
+click	hacer clic en	v.	notices, hovers	MS-T «click» → «hacer clic»; MS-SG-ES PDF p.15 / MS-SG-MX PDF p.12 «haz clic en Cancelar»	
+check (verify)	comprobar	v.	notices («Check that…»)	MS-SG-ES PDF p.45 / MS-SG-MX PDF p.44 «The term “comprobar” will be used as the translation for “to check”»	«verificar» only for checking a fact true or false (the support level).
+turn on / switch on (the meter)	encender	v.	activation steps	Fluke 287/289 PDF p.4 «Encendido y apagado manual del multímetro»; Truper MUT-202 PDF p.13 «encenderlo»	Bluetooth or data transmission: «activar» (MS-T «turn on» → «activar»; Fluke 3000 FC PDF p.11 «activar y desactivar la luz de fondo»).
+measurement (the act)	medición	s. f.	graph a11y, prose	Fluke 3000 FC PDF p.4 «Medición de frecuencia»; Amprobe AM-500 PDF p.50	MS-T «measurement» → «medida»: the meter makers' word wins.
+terminal / input jack	terminal de entrada	s. m. / s. f.	notes, lead error	Amprobe AM-500 PDF p.50 «Terminal de entrada para medición de tensión»; UNI-T UT197 PDF p.5 «terminal de entrada»	Gender differs: «el terminal» (UT197 PDF p.40), «la terminal» (Truper MUT-39 PDF p.13). Avoid the article or use the plural «los terminales» (Fluke 80 Series V PDF p.35).
+setting (one meter setting: hold, rel, range)	ajuste	s. m.	connection-switch-failed, settings-*	Fluke 117 PDF p.15 «Los ajustes de sensibilidad»	«configuración» is the whole Settings panel.
+battery cells (AAA, AA)	pilas	s. f. pl.	notes	UNI-T UT197 PDF p.40 «No mezcle pilas viejas y nuevas»; Truper MUT-39 PDF p.2	
+residual reading	lectura residual	s. f.	notes «residual ≤10 digits»	no approved source found	
+forward voltage	tensión directa	s. f.	notes «forward drop up to ≈3V»	Truper MUT-39 PDF p.10 «tensión directa»; Fluke 117 PDF p.16 «Polarización directa»	
+test current	corriente de prueba	s. f.	notes «Test current 0.4mA typical»	Truper MUT-39 PDF p.11 «Corriente de prueba»; Fluke 287/289 PDF p.40	
+frequency response	respuesta de frecuencia	s. f.	notes «Frequency response 40Hz–1kHz»	Amprobe AM-500 PDF p.62 «Respuesta de frecuencia: 45 Hz ~ 400 Hz»	
+seconds / minutes / hours (in prose)	segundos / minutos / horas	s. m. / s. f.	activation notes, hovers	Fluke 3000 FC PDF p.11 «después de 2 minutos»; Fluke 3000 FC PDF p.10 «durante 1 segundo»	Unit symbols (s, ms, h) never take an «s»; words do.
+add (a marker, note, reference line)	agregar	v.	markers-add, markers-note, graph-menu-add-ref, shortcuts-add-marker, colors-save.hover	no approved source found	Consistency choice of the draft; «añadir» is the usual word in Spain. Never mix the two.
+big meter (mode)	modo de lectura grande	s. m.	shortcuts-big-meter, stats-markers toasts	no approved source found	
+normal layout (as opposed to the big meter)	vista normal	s. f.	alarm-scale-setup-in-normal-layout, recording-big-meter-off.hover	no approved source found	Not «distribución», which is the histogram's distribution of readings.
+trigger ticks (crossing marks on the graph)	marcas de disparo	s. f. pl.	shortcuts-graph-triggers, colors-swatch-crossing.hover	no approved source found	Not «marcadores», which are the user's numbered markers.
+request (bytes sent to a meter or cable)	petición	s. f.	debug --count, error-unsupported-request-length	no approved source found	STYLE §2: «pedir», not «solicitar».
+wire format	formato de transmisión	s. m.	export-no-wire-format, error-unsupported-no-wire-format	no approved source found	The byte encoding a meter sends.
