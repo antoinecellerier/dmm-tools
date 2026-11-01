@@ -462,11 +462,15 @@ the Default preset).
 
 Use cases: matching a bench's colour conventions, high-contrast setups, colour-vision needs beyond the two stock themes.
 
-### Localization
+### Localization follow-ups
 
-**Complexity:** High
+**Complexity:** Low-medium each
 
-Translate the GUI, the shared help text, the library's labels and user-facing errors, and optionally the CLI's prose and the user docs, using Fluent. Data formats, logs and the capture tooling stay English. The design, its scope and its costs are in [localization-design.md](localization-design.md). The first ask came in [issue #35](https://github.com/antoinecellerier/dmm-tools/issues/35), where a reporter wrapped `capture` to translate its prompts into Brazilian Portuguese.
+The apps ship translated ([localization-design.md](localization-design.md)); what is left:
+
+- Partial languages for testers. A language reaches users only once it clears the bar in CONTRIBUTING, and a translator tries one through `DMM_TOOLS_L10N_DIR`. Should translations start arriving in pieces rather than machine-drafted and then reviewed, dev builds could offer unlisted languages, marked as in progress.
+- Units and durations in the user's language. Sizes (`≈194 MB`), counts (`500K`) and the graph's time axis (`1m 5s`) are formatted in English inside translated sentences.
+- The capture tooling, What's New and the user docs, which stay English.
 
 Use cases: users who don't read English comfortably, meters sold under local brands in non-English markets.
 
