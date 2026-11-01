@@ -1453,14 +1453,16 @@ impl Protocol for Ut80xProtocol {
             ),
             // The HOLD wire encoding is what this step is for, so it asserts
             // nothing about the flag. The UT804 sends nothing while HOLD is
-            // on (#16), which the step reports as "No response from meter."
-            // only after its sampling reads time out, so its instruction says
-            // that is a valid result, that it can take up to a minute, and
-            // how to leave HOLD for the rest of the run: EXIT turns the data
-            // output off as well, and SEND turns it back on. That line is the
-            // result the reporter confirmed on the UT804; the handhelds, whose
-            // HOLD nobody has run, get the same. There the step waits for
-            // Enter, as REL's clean-up before it leaves a state of its own.
+            // on (#16), which the step reports as no response only after its
+            // sampling reads time out, so its instruction says that is a
+            // valid result, that it can take up to a minute, and how to leave
+            // HOLD for the rest of the run: EXIT turns the data output off as
+            // well, and SEND turns it back on. It names the outcome rather
+            // than quoting the line, which capture prints in the run's
+            // language. That outcome is the result the reporter confirmed on
+            // the UT804; the handhelds, whose HOLD nobody has run, get the
+            // same. There the step waits for Enter, as REL's clean-up before
+            // it leaves a state of its own.
             on(
                 ALL,
                 match model {
@@ -1471,14 +1473,14 @@ impl Protocol for Ut80xProtocol {
                     Ut804 => CaptureStep::basic(
                         "hold",
                         "Press HOLD on the meter, then Enter. If the meter stops sending, \
-                         \"No response from meter.\" shows within a minute: that is a valid \
+                         the tool reports no response within a minute: that is a valid \
                          result. Press EXIT, then SEND, on the meter afterwards.",
                     )
                     .wait_for_enter(),
                     Ut71Ab | Ut71Cde | Vc920 => CaptureStep::basic(
                         "hold",
                         "Press HOLD on the meter, then Enter. If the meter stops sending, \
-                         \"No response from meter.\" shows within a minute: that is a valid \
+                         the tool reports no response within a minute: that is a valid \
                          result. Press EXIT, then turn SEND on again, afterwards.",
                     )
                     .wait_for_enter(),

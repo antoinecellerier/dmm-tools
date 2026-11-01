@@ -146,8 +146,7 @@ pub(crate) fn frames_for_step(events: &[WireEvent], step_id: &str) -> (Vec<Frame
     )
 }
 
-/// What a step that read nothing prints. The UT804's HOLD instruction quotes
-/// it, since a meter silent in HOLD ends there.
+/// What a step that read nothing prints.
 pub(super) const NO_RESPONSE: &str = "No response from meter.";
 
 /// How long a step watches the meter before offering the keyboard: long
@@ -786,17 +785,18 @@ mod tests {
         .unwrap()
     }
 
-    /// A UT804 sends nothing while HOLD is on (#16), and its step says the
-    /// line that follows is an answer: the quote has to be what the step
-    /// prints. EXIT, which leaves HOLD, turns the meter's output off too, so
-    /// every step that has the operator press it asks for SEND after it.
+    /// A UT804 sends nothing while HOLD is on (#16), and its step says that
+    /// outcome is an answer. EXIT, which leaves HOLD, turns the meter's output
+    /// off too, so every step that has the operator press it asks for SEND
+    /// after it.
     #[test]
-    fn the_ut804_hold_step_quotes_the_no_response_line() {
+    fn the_ut804_hold_step_says_no_response_is_an_answer() {
         let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
         let steps = (device.new_protocol)().capture_steps();
         let hold = steps.iter().find(|s| s.id == "hold").unwrap();
         assert!(
-            hold.instruction.contains(&format!("\"{NO_RESPONSE}\"")),
+            hold.instruction
+                .contains("the tool reports no response within a minute: that is a valid result"),
             "{:?}",
             hold.instruction
         );
@@ -811,18 +811,36 @@ mod tests {
     }
 
     /// Whether HOLD silences a UT71 or VC9x0 is open, so their HOLD step
-    /// words the answer as the UT804's does, and quotes the same line.
+    /// words the answer as the UT804's does.
     #[test]
-    fn the_handheld_hold_steps_quote_the_no_response_line() {
+    fn the_handheld_hold_steps_say_no_response_is_an_answer() {
         for id in ["ut71ab", "ut71cde", "vc920"] {
             let device = dmm_lib::protocol::registry::find_device(id).unwrap();
             let steps = (device.new_protocol)().capture_steps();
             let hold = steps.iter().find(|s| s.id == "hold").unwrap();
             assert!(
-                hold.instruction.contains(&format!("\"{NO_RESPONSE}\"")),
+                hold.instruction.contains("the tool reports no response"),
                 "{id}: {:?}",
                 hold.instruction
             );
+        }
+    }
+
+    /// The no-response line is printed in the run's language, so a step
+    /// that expects it names the outcome instead of quoting the line, which
+    /// would not read the same.
+    #[test]
+    fn no_step_quotes_the_no_response_line() {
+        for device in dmm_lib::protocol::registry::DEVICES {
+            for step in (device.new_protocol)().capture_steps() {
+                assert!(
+                    !step.instruction.contains(NO_RESPONSE),
+                    "{}/{}: {:?}",
+                    device.id,
+                    step.id,
+                    step.instruction
+                );
+            }
         }
     }
 

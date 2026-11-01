@@ -476,8 +476,8 @@ pub(super) fn bm86x() -> Vec<CaptureStep> {
         CaptureStep::basic(
             "iner",
             "Red lead still in A: set the dial to V⎓, leads open (the meter beeps and shows \
-             InEr), then Enter. If the meter stops answering, \"No response from meter.\" \
-             shows within a minute: that is a valid result.",
+             InEr), then Enter. If the meter stops answering, the tool reports no response \
+             within a minute: that is a valid result.",
         )
         .wait_for_enter()
         .expect(
@@ -618,8 +618,8 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
             CaptureStep::basic(
                 "ef",
                 "V⎓ position: hold HOLD (EF) for one second or more, away from any wire (E.F. \
-                 shows), then Enter. If the meter stops answering, \"No response from meter.\" \
-                 shows within a minute: that is a valid result (BM827s and BM829s only; skip if \
+                 shows), then Enter. If the meter stops answering, the tool reports no response \
+                 within a minute: that is a valid result (BM827s and BM829s only; skip if \
                  your meter lacks it).",
             )
             .wait_for_enter()
@@ -628,7 +628,7 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
                 "ncv",
                 "EF: hold the top of the meter near a live wire, probe tips away from it, \
                  without touching it (dashes show), then Enter. If the meter stops answering, \
-                 \"No response from meter.\" shows within a minute: that is a valid result. Hold \
+                 the tool reports no response within a minute: that is a valid result. Hold \
                  HOLD for one second or more afterwards to leave EF (BM827s and BM829s only; \
                  skip if your meter lacks it).",
             )
@@ -996,8 +996,8 @@ fn bm820s(series: Series) -> Vec<CaptureStep> {
         CaptureStep::basic(
             "iner",
             "Red lead still in A: set the dial to V⎓, leads open (the meter beeps and shows \
-             InEr), then Enter. If the meter stops answering, \"No response from meter.\" \
-             shows within a minute: that is a valid result.",
+             InEr), then Enter. If the meter stops answering, the tool reports no response \
+             within a minute: that is a valid result.",
         )
         .wait_for_enter()
         .expect(
