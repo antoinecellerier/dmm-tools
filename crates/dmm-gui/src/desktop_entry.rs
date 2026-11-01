@@ -118,9 +118,15 @@ mod tests {
             .map(|l| format!("{l}\n"))
             .collect();
         assert_eq!(english, before);
+        // A language that hasn't translated the comment yet has no line.
+        let translated = |locale: &str| {
+            crate::l10n::resources().iter().any(|r| {
+                r.locale == locale && r.source.lines().any(|s| s.starts_with("desktop-comment ="))
+            })
+        };
         for l in dmm_shared::l10n::languages().iter().skip(1) {
             let key = format!("Comment[{}]=", l.id.replace('-', "_"));
-            assert!(entry.contains(&key), "no {key} line");
+            assert!(entry.contains(&key) || !translated(l.id), "no {key} line");
         }
     }
 

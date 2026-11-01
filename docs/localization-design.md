@@ -171,7 +171,7 @@ The resources get three checks:
 - **Weblate** can come later, once translators who aren't developers turn up. It has supported Fluent since 4.8 and opens pull requests for review. It has no plural editor for Fluent, so translators edit select expressions as text.
 - **Machine-drafted translations** are made offline with an LLM or OPUS-MT. They draw on a glossary of meter terms and the wording rules the English follows. A comment at the top of a drafted file marks it unreviewed until a native speaker has read it.
 - **A message ID is renamed** when the meaning of the English changes, so stale translations fall back to English rather than saying the wrong thing. A correction that keeps the meaning keeps its ID and its translations.
-- **A missing message** falls back to English one message at a time. The dropdown can wait until a language reaches a completeness threshold.
+- **A missing message** falls back to English one message at a time. A language ships complete, but for its specification text; text added after that shows in English until the translations are filled before the next release, so a change to the English never waits on them.
 
 The cost continues after launch:
 

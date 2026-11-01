@@ -1,7 +1,8 @@
 //! The test that stands in for compile-time message checks: every
 //! [`tr!`](crate::tr) in a crate's source names an en-US message, passes
 //! exactly the variables that message uses, and every message and attribute
-//! a crate owns is used and has its variables explained to translators.
+//! a crate owns is used and has its variables explained to translators, and
+//! every translation of its files on disk is compiled in.
 //!
 //! Each crate runs [`check`] over its own `src/` from a test. The scan reads
 //! source text, so code behind `cfg` for another platform counts too. It
@@ -318,9 +319,43 @@ impl Messages {
 /// error or a duplicate id; and in the `owned` resource paths, a message or
 /// attribute that nothing uses or references, or a variable (selectors
 /// included) that its message's comment, group comment or file comment
-/// doesn't name as `$variable`. Empty when all is well.
+/// doesn't name as `$variable`; and a translation on disk that `resources`
+/// leaves out ([`unlisted`]). Empty when all is well.
 pub fn check(src: &Path, resources: &[Resource], owned: &[&str]) -> Vec<String> {
-    check_uses(&scan(src), resources, owned)
+    let mut problems = check_uses(&scan(src), resources, owned);
+    problems.extend(unlisted(resources));
+    problems
+}
+
+/// Translations the binary would never show: for each en-US file in
+/// `resources`, a copy under another `i18n/<locale>/` with no `ftl!` line of
+/// its own. A file a language lacks is no problem, as it shows in English;
+/// one it has must be compiled in.
+fn unlisted(resources: &[Resource]) -> Vec<String> {
+    let i18n = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../i18n");
+    let listed: BTreeSet<(&str, &str)> = resources.iter().map(|r| (r.locale, r.path)).collect();
+    let mut locales: Vec<String> = std::fs::read_dir(&i18n)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    locales.sort();
+    let mut problems = Vec::new();
+    for r in resources.iter().filter(|r| r.locale == super::EN_US.id) {
+        for locale in &locales {
+            if !listed.contains(&(locale.as_str(), r.path))
+                && i18n.join(locale).join(r.path).is_file()
+            {
+                problems.push(format!(
+                    "i18n/{locale}/{}: not compiled in; add its `ftl!` line beside the en-US one",
+                    r.path
+                ));
+            }
+        }
+    }
+    problems
 }
 
 fn check_uses(uses: &[Use], resources: &[Resource], owned: &[&str]) -> Vec<String> {
@@ -485,6 +520,27 @@ fn walk_inline(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_translation_left_out_of_the_build_is_named() {
+        let en = Resource {
+            locale: "en-US",
+            path: "shared.ftl",
+            source: "",
+        };
+        let fr = Resource { locale: "fr", ..en };
+        let problems = unlisted(&[en, fr]);
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.starts_with("i18n/zh-CN/shared.ftl: not compiled in")),
+            "{problems:#?}"
+        );
+        assert!(
+            !problems.iter().any(|p| p.contains("/fr/")),
+            "{problems:#?}"
+        );
+    }
 
     #[test]
     fn calls_are_found_across_lines_and_past_nested_commas() {

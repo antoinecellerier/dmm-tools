@@ -6,9 +6,12 @@
 //! only those; and what must stay as it is — `code` spans,
 //! `--options`, a spec note's numbers — stays, with none the English lacks.
 //!
-//! A language on its way may leave messages out, which show in English. One
-//! that ships (`lang::SHIPPED`) has every file and every message but the
-//! specification text ([`optional`]): the bar a language clears to ship.
+//! Any language may leave messages out, which show in English. Before a
+//! language ships (`lang::SHIPPED`), and before each release for those that
+//! do, [`shipped_languages_are_complete`] wants every file and every message
+//! but the specification text ([`optional`]): text added in between shows
+//! in English until then, so a change to the English never waits on its
+//! translations.
 
 use super::lib_index::{GUARDED, kind_of_id, same_numbers};
 use dmm_lib::text::TextKind;
@@ -300,18 +303,35 @@ fn optional(path: &str, key: &str) -> bool {
             .is_some_and(|k| k == TextKind::Table || GUARDED.contains(&k))
 }
 
-/// Every problem `locale`'s files have against en-US.
+/// What `locale` lacks of en-US but the [`optional`] messages: files, then
+/// messages.
+fn gaps(locale: &str) -> Vec<String> {
+    let english = ftl_files(&i18n_dir().join(super::EN_US.id));
+    let translated = ftl_files(&i18n_dir().join(locale));
+    let mut gaps = Vec::new();
+    for (path, english_source) in &english {
+        let Some(source) = translated.get(path) else {
+            gaps.push(format!("{locale}/{path}: missing"));
+            continue;
+        };
+        let (en, tr) = (shapes(english_source).0, shapes(source).0);
+        for key in en
+            .keys()
+            .filter(|k| !optional(path, k) && !tr.contains_key(*k))
+        {
+            gaps.push(format!("{locale}/{path}: `{key}` is missing"));
+        }
+    }
+    gaps
+}
+
+/// Every problem `locale`'s files have against en-US. A message left out
+/// is not one: see [`gaps`].
 fn problems(locale: &str) -> Vec<String> {
     let english = ftl_files(&i18n_dir().join(super::EN_US.id));
     let translated = ftl_files(&i18n_dir().join(locale));
     let forms = plural_forms(locale);
     let mut problems = Vec::new();
-    let shipped = super::lang::SHIPPED.iter().any(|l| l.id == locale);
-    for path in english.keys() {
-        if shipped && !translated.contains_key(path) {
-            problems.push(format!("{locale}/{path}: missing, and {locale} ships"));
-        }
-    }
     for (path, source) in &translated {
         let at = |what: String| format!("{locale}/{path}: {what}");
         let Some(english_source) = english.get(path) else {
@@ -321,12 +341,6 @@ fn problems(locale: &str) -> Vec<String> {
         let (en, _) = shapes(english_source);
         let (tr, parse) = shapes(source);
         problems.extend(parse.into_iter().map(at));
-        // A language on its way may leave messages out, which show in
-        // English; one that ships has them all, but the optional ones.
-        let required = |k: &&String| shipped && !optional(path, k);
-        for key in en.keys().filter(required).filter(|k| !tr.contains_key(*k)) {
-            problems.push(at(format!("`{key}` is missing, and {locale} ships")));
-        }
         // A term (`-name`, its attributes) may be the language's own: a
         // grammatical gender, say.
         for key in tr
@@ -399,6 +413,20 @@ fn translations_match_their_english() {
         all.extend(problems(&locale));
     }
     assert!(all.is_empty(), "{}", all.join("\n"));
+}
+
+/// Every shipped language has all its messages but the specification
+/// text: run before a release, and in the commit that ships a language
+/// (`cargo test -p dmm-shared shipped_languages_are_complete -- --ignored`).
+#[test]
+#[ignore = "before a release: text added since shows in English until then"]
+fn shipped_languages_are_complete() {
+    let gaps: Vec<_> = super::lang::SHIPPED
+        .iter()
+        .filter(|l| l.id != super::EN_US.id)
+        .flat_map(|l| gaps(l.id))
+        .collect();
+    assert!(gaps.is_empty(), "{}", gaps.join("\n"));
 }
 
 #[test]

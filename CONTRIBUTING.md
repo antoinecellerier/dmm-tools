@@ -89,7 +89,7 @@ To translate a file:
 
 `DMM_TOOLS_PSEUDO_LOCALE=1` shows every message accented and padded, which finds the places where a longer language won't fit; the [development guide](docs/development.md#translations) has the details.
 
-A language ships once all its files are translated, but for the specification text in `lib.ftl` (the `table-`, `note-`, `input-` and `band-` messages): that shows in English until someone translates it. Until a native speaker has read it in the app, it is marked machine-translated in the **Language** list and the app says so under it. To review one, read it in the app, fix what reads wrong in a pull request, and once the whole language has been read, set `reviewed: true` on its entry in `crates/dmm-shared/src/l10n/lang.rs` in the same pull request.
+A language ships once all its files are translated, but for the specification text in `lib.ftl` (the `table-`, `note-`, `input-` and `band-` messages): that shows in English until someone translates it. Text a code change adds or rewords needs only its English: it shows in English until the translations are filled in before the next release. Until a native speaker has read it in the app, it is marked machine-translated in the **Language** list and the app says so under it. To review one, read it in the app, fix what reads wrong in a pull request, and once the whole language has been read, set `reviewed: true` on its entry in `crates/dmm-shared/src/l10n/lang.rs` in the same pull request.
 
 ## Code changes
 

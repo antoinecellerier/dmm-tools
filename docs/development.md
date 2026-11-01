@@ -266,11 +266,15 @@ while working on them:
 
 `cargo test -p dmm-shared translations` checks every language against
 en-US: messages and variables, plural forms, and the `code`, `--options`
-and spec-note numbers that stay as written; a shipped language must have
-every message but the specification text (`lib.ftl`'s table titles, notes,
-inputs and bands), which shows in English until translated. `cargo test -p dmm-shared long_labels -- --ignored
---nocapture` lists short labels that grew past one and a half times their
-English, for a look in the window.
+and spec-note numbers that stay as written, with none added. A message a
+language lacks shows in English, so new or reworded English never waits on
+its translations. They are filled before each release, and before a
+language ships: `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored`
+lists what each shipped language lacks, the specification text (`lib.ftl`'s
+table titles, notes, inputs and bands) aside, which may stay English.
+`cargo test -p dmm-shared long_labels -- --ignored --nocapture` lists short
+labels that grew past one and a half times their English, for a look in
+the window.
 
 `LC_ALL=C` means English, whatever `LANGUAGE` says, when neither `--lang`
 nor the settings file names a language; the test helpers rely on it, with
@@ -349,16 +353,17 @@ both. Before changing a family's protocol code, read its
 2. Rename the heading to the version. If the release has a theme, add a short tagline stating what it changes in scope or intent: `## v0.2.0 — Multi-Device Protocol Support`. Open the section with a one- or two-sentence summary of the intent and the main areas touched. Close it with the `**Full Changelog**` compare link, as the existing entries do
 3. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.3.0"`
 4. Update `Cargo.lock`: `cargo update --workspace`
-5. Regenerate the GUI pictures with `scripts/doc-screenshots.sh all`, review the deltas and the pictures, and commit the ones whose changelog entry changed what they show, and those whose top bar now reads the release version. Three scenes need no meter attached: the script checks with `dmm-cli list` and names any it skipped. If it skips any, unplug the cable and run those scenes again
-6. Run `scripts/package-docs.py <dir>` (needs `pandoc`): a dead relative link in a shipped doc fails the tagged build
-7. Commit: `git commit -am "Release v0.3.0"`
-8. Push the release commit and wait for CI to go green: `git push`
-9. Tag and push the tag, which publishes the release: `git tag v0.3.0 && git push origin v0.3.0`
-10. The `release.yml` workflow takes over from the tag:
+5. Fill the translations: `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists the messages each shipped language lacks. Translate them following the language's `i18n/<locale>/glossary.tsv` and `STYLE.md`, check them with `cargo test -p dmm-shared translations`, and commit
+6. Regenerate the GUI pictures with `scripts/doc-screenshots.sh all`, review the deltas and the pictures, and commit the ones whose changelog entry changed what they show, and those whose top bar now reads the release version. Three scenes need no meter attached: the script checks with `dmm-cli list` and names any it skipped. If it skips any, unplug the cable and run those scenes again
+7. Run `scripts/package-docs.py <dir>` (needs `pandoc`): a dead relative link in a shipped doc fails the tagged build
+8. Commit: `git commit -am "Release v0.3.0"`
+9. Push the release commit and wait for CI to go green: `git push`
+10. Tag and push the tag, which publishes the release: `git tag v0.3.0 && git push origin v0.3.0`
+11. The `release.yml` workflow takes over from the tag:
     - It builds binaries for all supported platforms: Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel.
     - It creates a GitHub Release titled `v0.3.0 — <tagline>`, or just `v0.3.0` without one, with the changelog entry as the body. A `[@user](https://github.com/user)` credit becomes an `@user` mention there, and only there.
     - It fails before building anything if the tag does not match the workspace `version` in `Cargo.toml`, and fails if `CHANGELOG.md` has no `## v0.3.0` heading.
-11. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, put an empty `## Unreleased` back above the released heading (the nightly notes append that section), commit, and push
+12. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, put an empty `## Unreleased` back above the released heading (the nightly notes append that section), commit, and push
 
 ### GitHub Actions workflows
 
