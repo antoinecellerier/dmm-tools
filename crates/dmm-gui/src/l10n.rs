@@ -36,6 +36,19 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("fr", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("fr", "gui/specs-remote.ftl"),
     dmm_shared::ftl!("fr", "gui/desktop.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/top-bar.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/connection.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/settings.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/colors.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/recording.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/export-import.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/graph.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/stats-markers.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/shortcuts.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/reading.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/alarm-scale.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/specs-remote.ftl"),
+    dmm_shared::ftl!("pt-BR", "gui/desktop.ftl"),
 ];
 
 /// Everything the GUI shows: the shared help, the library's text and
