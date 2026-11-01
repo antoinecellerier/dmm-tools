@@ -108,7 +108,7 @@ impl App {
 
             match &self.connection.state {
                 ConnectionState::Disconnected => {
-                    let keys = Shortcut::ConnectToggle.keys(ctx);
+                    let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
                     if ui
                         .button(tr!(l10n, "top-bar-connect"))
                         .on_hover_text(tr!(l10n, "top-bar-connect.hover", keys = &keys))
@@ -118,7 +118,7 @@ impl App {
                     }
                 }
                 ConnectionState::Connected => {
-                    let keys = Shortcut::ConnectToggle.keys(ctx);
+                    let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
                     if ui
                         .button(tr!(l10n, "top-bar-disconnect"))
                         .on_hover_text(tr!(l10n, "top-bar-disconnect.hover", keys = &keys))
@@ -126,7 +126,7 @@ impl App {
                     {
                         self.disconnect();
                     }
-                    let keys = Shortcut::TogglePause.keys(ctx);
+                    let keys = Shortcut::TogglePause.keys(ctx, l10n);
                     let (pause_label, pause_tooltip) = if self.connection.paused {
                         (
                             tr!(l10n, "top-bar-resume"),
@@ -145,7 +145,7 @@ impl App {
                     {
                         self.set_paused(!self.connection.paused);
                     }
-                    let keys = Shortcut::ClearSession.keys(ctx);
+                    let keys = Shortcut::ClearSession.keys(ctx, l10n);
                     if ui
                         .button(tr!(l10n, "top-bar-clear"))
                         .on_hover_text(tr!(l10n, "top-bar-clear.hover", keys = &keys))
@@ -165,7 +165,7 @@ impl App {
                     // The reconnect loop retries every 2 s indefinitely, so
                     // this is the user's only way out short of killing the
                     // app — the status tooltip above tells them to click it.
-                    let keys = Shortcut::ConnectToggle.keys(ctx);
+                    let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
                     if ui
                         .button(tr!(l10n, "top-bar-stop-retrying"))
                         .on_hover_text(tr!(l10n, "top-bar-stop-retrying.hover", keys = &keys))
@@ -452,7 +452,7 @@ impl App {
         }
         ui.hyperlink_to(l10n.help().project_link(), dmm_shared::help::PROJECT_URL)
             .on_hover_text(tr!(l10n, "top-bar-project-link.hover"));
-        let (keys, other) = Shortcut::help_keys(ui.ctx());
+        let (keys, other) = Shortcut::help_keys(ui.ctx(), l10n);
         let shortcuts_btn = ui
             .button("?")
             .on_hover_text(tr!(

@@ -5,7 +5,7 @@
 
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, Key, RichText};
 
 use super::shortcuts;
 use super::{App, HelpScroll};
@@ -116,25 +116,35 @@ fn help_section<K: Into<String>, A: Into<String>>(
 }
 
 fn graph_keys(ui: &mut egui::Ui, l10n: &Localizer) {
-    // Key names stay as they are, like the General table's, which egui
-    // writes.
+    // Named keys in the window's language, as the General table writes them.
+    let name = |key| shortcuts::key_name(l10n, key).unwrap_or_default();
     let rows = [
-        ("[ / ]", tr!(l10n, "shortcuts-graph-window")),
-        ("Left / Right", tr!(l10n, "shortcuts-graph-scroll")),
-        ("Home", tr!(l10n, "shortcuts-graph-start")),
-        ("End", tr!(l10n, "shortcuts-graph-live")),
-        ("M", tr!(l10n, "shortcuts-graph-mean")),
-        ("X", tr!(l10n, "shortcuts-graph-band")),
-        ("H", tr!(l10n, "shortcuts-graph-histogram")),
-        ("R", tr!(l10n, "shortcuts-graph-reference")),
-        ("T", tr!(l10n, "shortcuts-graph-triggers")),
-        ("C", tr!(l10n, "shortcuts-graph-cursors")),
+        ("[ / ]".into(), tr!(l10n, "shortcuts-graph-window")),
+        (
+            format!("{} / {}", name(Key::ArrowLeft), name(Key::ArrowRight)),
+            tr!(l10n, "shortcuts-graph-scroll"),
+        ),
+        (
+            name(Key::Home).into_owned(),
+            tr!(l10n, "shortcuts-graph-start"),
+        ),
+        (
+            name(Key::End).into_owned(),
+            tr!(l10n, "shortcuts-graph-live"),
+        ),
+        ("M".into(), tr!(l10n, "shortcuts-graph-mean")),
+        ("X".into(), tr!(l10n, "shortcuts-graph-band")),
+        ("H".into(), tr!(l10n, "shortcuts-graph-histogram")),
+        ("R".into(), tr!(l10n, "shortcuts-graph-reference")),
+        ("T".into(), tr!(l10n, "shortcuts-graph-triggers")),
+        ("C".into(), tr!(l10n, "shortcuts-graph-cursors")),
     ];
     help_section(
         ui,
         "shortcuts_graph",
         &tr!(l10n, "shortcuts-graph-keys"),
-        rows.into_iter().map(|(key, action)| (key, action, false)),
+        rows.into_iter()
+            .map(|(key, action): (String, _)| (key, action, false)),
     );
 }
 

@@ -126,10 +126,29 @@ shortcuts-mouse-menu = Mark, copy, cursors, reference lines, alarm
 shortcuts-mouse-minimap = Jump to time / resize viewport
     .gesture = Minimap drag
 
+## Key names, as the key column above and every hover that names a
+## shortcut write them, e.g. Ctrl+O, Esc / Ctrl+W. Use the names printed on
+## keyboards in your language. On a Mac the modifiers show as ⌘ ⇧ ⌥ symbols
+## where the font has them, and these names aren't used.
+
+shortcuts-key-ctrl = Ctrl
+shortcuts-key-shift = Shift
+shortcuts-key-alt = Alt
+shortcuts-key-space = Space
+shortcuts-key-escape = Esc
+# The left and right arrow keys.
+shortcuts-key-left = Left
+shortcuts-key-right = Right
+shortcuts-key-home = Home
+shortcuts-key-end = End
+# The + and - keys, named together for zooming in and out: Ctrl+Plus/Minus.
+shortcuts-key-plus = Plus
+shortcuts-key-minus = Minus
+
 ## The note under the tables, in small grey text.
 
-# Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: keep them
-# as they are, the way the key column spells them.
+# Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: write them
+# the way the key names above do.
 shortcuts-note = Graph and Space shortcuts are disabled while any widget has keyboard focus — press Escape to release it. Up/Down, PgUp/PgDn and Home/End scroll this help.
 
 ## Ctrl+T on Wayland, where a window can't put itself above the others.

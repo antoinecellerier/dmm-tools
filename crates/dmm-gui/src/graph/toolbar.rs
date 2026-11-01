@@ -96,18 +96,19 @@ pub(super) fn overlay_chip_label<'a>(l10n: &'a Localizer, label: &str) -> Cow<'a
 
 /// A graph key as the hovers that name one write it: `M`, `[`, `End`.
 ///
-/// Its symbol where it has one, not `ctx.format_shortcut`: away from macOS
+/// A named key in the window's language ([`crate::app::key_name`]), else
+/// its symbol where it has one, not `ctx.format_shortcut`: away from macOS
 /// that spells a bare key by name, so `[` would read "OpenBracket".
-fn graph_key(key: egui::Key) -> &'static str {
-    key.symbol_or_name()
+fn graph_key(l10n: &Localizer, key: egui::Key) -> std::borrow::Cow<'_, str> {
+    crate::app::key_name(l10n, key).unwrap_or(std::borrow::Cow::Borrowed(key.symbol_or_name()))
 }
 
 /// The two keys that step through the time windows, as their hovers say.
 fn cycle_keys() -> String {
     format!(
         "{} / {}",
-        graph_key(egui::Key::OpenBracket),
-        graph_key(egui::Key::CloseBracket)
+        egui::Key::OpenBracket.symbol_or_name(),
+        egui::Key::CloseBracket.symbol_or_name()
     )
 }
 
@@ -181,7 +182,7 @@ impl Graph {
     /// view → what is plotted → what is drawn over it. Each uses
     /// `horizontal_wrapped` so items wrap instead of clipping.
     pub fn show_toolbar(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
-        let key = graph_key;
+        let key = |k| graph_key(l10n, k);
         let cycle_keys = cycle_keys();
         // Row 1: time windows + LIVE + Y-axis
         ui.horizontal_wrapped(|ui| {
@@ -323,7 +324,7 @@ impl Graph {
                         .color(ui.visuals().weak_text_color()),
                 );
             }
-            let hover = self.histogram_hover(l10n, key(egui::Key::H));
+            let hover = self.histogram_hover(l10n, &key(egui::Key::H));
             let label = tr!(l10n, "graph-histogram");
             toggle_chip(ui, &mut self.show_histogram, &label, &hover);
             if chip(
@@ -658,12 +659,20 @@ mod tests {
             keys = &cycle_keys()
         );
         assert_eq!(window, "Show the last 10s of samples ([ / ] to cycle)");
-        let live = tr!(l10n, "graph-live.hover", keys = graph_key(egui::Key::End));
+        let live = tr!(
+            l10n,
+            "graph-live.hover",
+            keys = graph_key(&l10n, egui::Key::End)
+        );
         assert_eq!(
             live,
             "Auto-follow the newest samples — off while panning (End to jump back)"
         );
-        let mean = tr!(l10n, "graph-mean.hover", keys = graph_key(egui::Key::M));
+        let mean = tr!(
+            l10n,
+            "graph-mean.hover",
+            keys = graph_key(&l10n, egui::Key::M)
+        );
         assert_eq!(
             mean,
             "Draw a horizontal line at the mean of visible samples (M)"

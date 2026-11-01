@@ -167,7 +167,7 @@ impl App {
 
     pub(super) fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
         let icon = Self::big_meter_toggle_icon(self.big_meter_mode);
-        let keys = Shortcut::CycleBigMeter.keys(ui.ctx());
+        let keys = Shortcut::CycleBigMeter.keys(ui.ctx(), &self.l10n);
         let tooltip = match self.big_meter_mode {
             BigMeterMode::Off => tr!(self.l10n, "recording-big-meter-on.hover", keys = &keys),
             BigMeterMode::Full | BigMeterMode::Minimal => {

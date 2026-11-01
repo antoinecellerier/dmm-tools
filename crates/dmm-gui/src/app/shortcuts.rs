@@ -280,13 +280,11 @@ impl Shortcut {
     /// The keys that trigger this shortcut, as this machine renders them —
     /// for the help grid and for every tooltip that names a shortcut.
     ///
-    /// Rendered by `ctx`, not spelled out: the bindings use
+    /// Rendered by [`shortcut_text`], not spelled out: the bindings use
     /// `Modifiers::COMMAND`, which is Cmd on macOS, so a literal "Ctrl+O"
     /// would name a key macOS users don't have.
-    pub(super) fn keys(self, ctx: &egui::Context) -> String {
-        let keys = |modifiers: Modifiers, key: Key| {
-            ctx.format_shortcut(&egui::KeyboardShortcut::new(modifiers, key))
-        };
+    pub(super) fn keys(self, ctx: &egui::Context, l10n: &Localizer) -> String {
+        let keys = |modifiers: Modifiers, key: Key| shortcut_text(ctx, l10n, modifiers, key);
         match self {
             Self::ConnectToggle => keys(Modifiers::COMMAND, Key::O),
             Self::TogglePause => keys(Modifiers::NONE, Key::Space),
@@ -304,11 +302,20 @@ impl Shortcut {
             Self::ToggleFullscreen => keys(Modifiers::NONE, Key::F11),
             Self::Minimize => keys(Modifiers::MAC_CMD, Key::M),
             // One pair, named together.
-            Self::ZoomIn | Self::ZoomOut => format!("{}Plus/Minus", command_prefix(ctx)),
+            Self::ZoomIn | Self::ZoomOut => format!(
+                "{}{}/{}",
+                command_prefix(ctx, l10n),
+                tr!(l10n, "shortcuts-key-plus"),
+                tr!(l10n, "shortcuts-key-minus")
+            ),
             Self::ZoomReset => keys(Modifiers::COMMAND, Key::Num0),
             // Escape is egui's own (`Modal::should_close`), so it has no
             // binding to render — only the Ctrl+W half comes from the table.
-            Self::Close => format!("Esc / {}", keys(Modifiers::COMMAND, Key::W)),
+            Self::Close => format!(
+                "{} / {}",
+                tr!(l10n, "shortcuts-key-escape"),
+                keys(Modifiers::COMMAND, Key::W)
+            ),
             Self::Quit => format!(
                 "{} / {}",
                 keys(Modifiers::COMMAND, Key::Q),
@@ -319,9 +326,9 @@ impl Shortcut {
     }
 
     /// The help's two keys, `?` and F1, for the hover that names them both.
-    pub(super) fn help_keys(ctx: &egui::Context) -> (String, String) {
-        let f1 = ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::NONE, Key::F1));
-        (Self::ToggleHelp.keys(ctx), f1)
+    pub(super) fn help_keys(ctx: &egui::Context, l10n: &Localizer) -> (String, String) {
+        let f1 = shortcut_text(ctx, l10n, Modifiers::NONE, Key::F1);
+        (Self::ToggleHelp.keys(ctx, l10n), f1)
     }
 
     /// Row in the help grid: `(keys, action, inert)`; `None` for a binding
@@ -367,22 +374,84 @@ impl Shortcut {
             // toolbar's `?` button spells the key out in its tooltip.
             Self::ToggleHelp => return None,
         };
-        let key = self.keys(ctx);
+        let key = self.keys(ctx, l10n);
         let inert = on_wayland && self == Self::ToggleAlwaysOnTop;
         Some((key, action, inert))
     }
 }
 
+/// `modifiers`+`key` as this machine writes a shortcut, in the window's
+/// language: egui's own rendering (`Context::format_shortcut`), with the
+/// modifier and key names it spells out in English looked up instead —
+/// Ctrl, Shift, Alt, and the named keys of [`key_name`]. Where egui draws
+/// symbols (`⌘`, `⇧` on a macOS whose font has them), the symbols stay.
+pub(crate) fn shortcut_text(
+    ctx: &egui::Context,
+    l10n: &Localizer,
+    modifiers: Modifiers,
+    key: Key,
+) -> String {
+    let is_mac = ctx.os().is_mac();
+    // egui draws symbols only on a macOS whose font has them: ask it how it
+    // writes one shortcut, rather than guessing the font.
+    let probe = egui::KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0);
+    let symbols =
+        ctx.format_shortcut(&probe) == probe.format(&egui::ModifierNames::SYMBOLS, is_mac);
+    let (ctrl, shift, alt) = (
+        tr!(l10n, "shortcuts-key-ctrl"),
+        tr!(l10n, "shortcuts-key-shift"),
+        tr!(l10n, "shortcuts-key-alt"),
+    );
+    let names = if symbols {
+        egui::ModifierNames::SYMBOLS
+    } else {
+        egui::ModifierNames {
+            ctrl: &ctrl,
+            shift: &shift,
+            alt: &alt,
+            ..egui::ModifierNames::NAMES
+        }
+    };
+    let mut text = names.format(&modifiers, is_mac);
+    if !text.is_empty() {
+        text.push_str(names.concat);
+    }
+    let symbol = (key.symbol_or_name() != key.name()).then(|| key.symbol_or_name());
+    match (symbol.filter(|_| symbols), key_name(l10n, key)) {
+        (Some(symbol), _) => text.push_str(symbol),
+        (None, Some(name)) => text.push_str(&name),
+        (None, None) => text.push_str(key.name()),
+    }
+    text
+}
+
+/// A named key as this language writes it — Space, Esc, the arrows, Home,
+/// End, Plus, Minus, and `?` as itself rather than egui's "Questionmark" —
+/// or `None` for one written as egui names it (a letter, a digit, F1).
+pub(crate) fn key_name(l10n: &Localizer, key: Key) -> Option<Cow<'_, str>> {
+    Some(match key {
+        Key::Questionmark => Cow::Borrowed("?"),
+        Key::Space => tr!(l10n, "shortcuts-key-space"),
+        Key::Escape => tr!(l10n, "shortcuts-key-escape"),
+        Key::ArrowLeft => tr!(l10n, "shortcuts-key-left"),
+        Key::ArrowRight => tr!(l10n, "shortcuts-key-right"),
+        Key::Home => tr!(l10n, "shortcuts-key-home"),
+        Key::End => tr!(l10n, "shortcuts-key-end"),
+        Key::Plus => tr!(l10n, "shortcuts-key-plus"),
+        Key::Minus => tr!(l10n, "shortcuts-key-minus"),
+        _ => return None,
+    })
+}
+
 /// The command modifier as this machine renders it, followed by whatever
-/// egui puts between it and the key: `+` where the modifier is spelled out
+/// goes between it and the key: `+` where the modifier is spelled out
 /// (`Ctrl+`, or `Cmd+` on a macOS whose body font has no `⌘`), nothing where
 /// it is drawn as a symbol (`⌘`). A row that folds two keys into one label
 /// has to join them the way the single-key rows above it do.
-fn command_prefix(ctx: &egui::Context) -> String {
+fn command_prefix(ctx: &egui::Context, l10n: &Localizer) -> String {
     // `Key::Num0` renders as "0" both ways, so trimming it off a formatted
     // Ctrl+0 leaves exactly the modifier and the separator.
-    let mut formatted =
-        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0));
+    let mut formatted = shortcut_text(ctx, l10n, Modifiers::COMMAND, Key::Num0);
     let prefix_len = formatted.trim_end_matches(Key::Num0.name()).len();
     formatted.truncate(prefix_len);
     formatted
@@ -732,6 +801,19 @@ mod tests {
             })
             .collect();
         assert_eq!(help_rows(&ctx, &l10n, true).collect::<Vec<_>>(), expected);
+    }
+
+    /// The help's hover names its keys as the keyboard prints them.
+    #[test]
+    fn the_help_keys_are_printed_as_on_the_keyboard() {
+        let ctx = crate::app::styled_context();
+        let l10n = crate::l10n::english();
+        let mut keys = (String::new(), String::new());
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            keys = Shortcut::help_keys(ui.ctx(), &l10n);
+        });
+        output.textures_delta.clear();
+        assert_eq!(keys, ("?".to_string(), "F1".to_string()));
     }
 
     /// The bindings are `Modifiers::COMMAND`, so on macOS they are Cmd —

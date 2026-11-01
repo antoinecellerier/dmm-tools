@@ -522,8 +522,9 @@ mod tests {
         let ctx = crate::app::styled_context();
         let chip = app.scale_chip(&ctx);
         assert!(
-            chip.unready_hover
-                .contains(&crate::app::shortcuts::Shortcut::CycleBigMeter.keys(&ctx)),
+            chip.unready_hover.contains(
+                &crate::app::shortcuts::Shortcut::CycleBigMeter.keys(&ctx, &crate::l10n::english())
+            ),
             "{}",
             chip.unready_hover
         );

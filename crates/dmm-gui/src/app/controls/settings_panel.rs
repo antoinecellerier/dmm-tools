@@ -542,8 +542,8 @@ impl App {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
         let zoom_row = ui.horizontal_wrapped(|ui| {
-            let step = Shortcut::ZoomIn.keys(ui.ctx());
-            let reset = Shortcut::ZoomReset.keys(ui.ctx());
+            let step = Shortcut::ZoomIn.keys(ui.ctx(), l10n);
+            let reset = Shortcut::ZoomReset.keys(ui.ctx(), l10n);
             let chips = Self::ZOOM_LEVELS.iter().map(|&level| Chip {
                 value: level,
                 selected: self.settings.zoom_pct == level,
@@ -584,7 +584,7 @@ impl App {
                 &tr!(
                     l10n,
                     "settings-hide-decorations.hover",
-                    keys = Shortcut::ToggleDecorations.keys(ui.ctx())
+                    keys = Shortcut::ToggleDecorations.keys(ui.ctx(), l10n)
                 ),
             ) {
                 self.apply_decorations(ui.ctx());
@@ -602,7 +602,7 @@ impl App {
             .on_hover_text(tr!(
                 l10n,
                 "settings-always-on-top.hover",
-                keys = Shortcut::ToggleAlwaysOnTop.keys(ui.ctx())
+                keys = Shortcut::ToggleAlwaysOnTop.keys(ui.ctx(), l10n)
             ))
             .on_disabled_hover_text(tr!(l10n, "settings-always-on-top.wayland"));
             if response.changed() {

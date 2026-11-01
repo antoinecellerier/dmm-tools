@@ -26,7 +26,7 @@ const EXPORT_MENU_ARROW: &str = "\u{23F7}";
 /// The Export… segments' hover text, label first, then arrow: what they save
 /// for the buffer's role.
 fn export_tooltips(l10n: &Localizer, ctx: &egui::Context, role: BufferRole) -> (String, String) {
-    let keys = Shortcut::ExportRecording.keys(ctx);
+    let keys = Shortcut::ExportRecording.keys(ctx, l10n);
     let buffer = match role {
         BufferRole::Recording => "recording",
         BufferRole::History => "graph",
@@ -350,7 +350,7 @@ impl App {
     fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
-        let keys = Shortcut::ToggleRecording.keys(ui.ctx());
+        let keys = Shortcut::ToggleRecording.keys(ui.ctx(), l10n);
         let (btn_label, btn_tooltip) = if self.capture.recording.active {
             (
                 tr!(l10n, "recording-stop"),
@@ -369,7 +369,7 @@ impl App {
             // First, apart from the recording's own controls: an import
             // replaces the session, where the rest act on the recording and
             // Export… sits next to the count it saves.
-            let keys = Shortcut::ImportFile.keys(ui.ctx());
+            let keys = Shortcut::ImportFile.keys(ui.ctx(), l10n);
             if ui
                 .button(tr!(l10n, "import-button"))
                 .on_hover_text(tr!(l10n, "import-button.hover", keys = &keys))

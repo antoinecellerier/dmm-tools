@@ -31,6 +31,7 @@ mod plot_input;
 mod recording_panel;
 mod shortcut_help;
 mod shortcuts;
+pub(crate) use shortcuts::key_name;
 mod stats_panel;
 mod toast;
 mod top_bar;
@@ -656,7 +657,7 @@ impl App {
         if !self.settings.show_graph && !self.settings.show_recording {
             dmm_shared::tr!(self.l10n, "alarm-scale-setup-in-settings").into_owned()
         } else {
-            let keys = shortcuts::Shortcut::CycleBigMeter.keys(ctx);
+            let keys = shortcuts::Shortcut::CycleBigMeter.keys(ctx, &self.l10n);
             dmm_shared::tr!(self.l10n, "alarm-scale-setup-in-normal-layout", keys = keys)
                 .into_owned()
         }
@@ -777,7 +778,7 @@ impl App {
         // The keys rendered by the context rather than spelled out: the
         // binding uses `Modifiers::COMMAND`, which is Cmd on macOS.
         let hint = notice.is_some().then(|| {
-            let keys = shortcuts::Shortcut::CycleBigMeter.keys(ctx);
+            let keys = shortcuts::Shortcut::CycleBigMeter.keys(ctx, &self.l10n);
             dmm_shared::tr!(self.l10n, "reading-big-meter-hint", keys = keys).into_owned()
         });
 
@@ -1185,7 +1186,7 @@ mod tests {
     /// hover of its translation, and egui's own colour picker (Hue, R, G, B,
     /// U8). Two above the Linux count: macOS draws a Minimise row in the
     /// shortcut help.
-    const UNTRANSLATED_CEILING: usize = 57;
+    const UNTRANSLATED_CEILING: usize = 49;
 
     /// Every distinct text the whole app draws or names to a screen reader
     /// in `scene`, under the pseudo-locale, that has a word outside the
