@@ -73,7 +73,7 @@ An `l10n` module in `dmm-shared` holds the loader, the language choice and the s
 
 **No bidi isolation marks.** By default Fluent wraps each placeable in U+2068/U+2069. egui hides them when drawing, but they would still end up in stderr, copied text, screen-reader names and test assertions. `set_use_isolating(false)` turns them off. The right-to-left scripts that need them are out of scope anyway (see [Scripts, fonts and layout](#scripts-fonts-and-layout)).
 
-**Pre-formatted numbers.** A raw `f64` passed to Fluent loses the app's precision: `5.0` prints as "5". Readings and statistics go into messages as already-formatted strings.
+**Pre-formatted numbers.** A raw `f64` passed to Fluent loses the app's precision: `5.0` prints as "5". Readings and statistics go into messages as already-formatted strings. Formatted in Rust, they keep the English decimal point in every language for now (`1.5 h`, `1.2K`, a reading's decimals): locale number formatting is out of scope.
 
 ## Choosing the language
 
