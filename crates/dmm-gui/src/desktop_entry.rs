@@ -152,7 +152,11 @@ mod tests {
                 reviewed: false,
             },
         ];
-        let mut resources = crate::l10n::desktop_resources();
+        // The made-up translations stand alone: the shipped ones are left out.
+        let mut resources: Vec<Resource> = crate::l10n::desktop_resources()
+            .into_iter()
+            .filter(|r| r.locale == dmm_shared::l10n::EN_US.id)
+            .collect();
         resources.push(Resource {
             locale: "pt-BR",
             path: "gui/desktop.ftl",

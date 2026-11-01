@@ -1395,12 +1395,12 @@ mod tests {
     static LANGUAGES: [dmm_shared::l10n::Language; 4] = [
         dmm_shared::l10n::EN_US,
         dmm_shared::l10n::Language {
-            id: "fr",
+            id: "fr-CA",
             native_name: "Français",
             reviewed: true,
         },
         dmm_shared::l10n::Language {
-            id: "pt-BR",
+            id: "pt-PT",
             native_name: "Português (Brasil)",
             reviewed: false,
         },
@@ -1412,15 +1412,16 @@ mod tests {
     ];
 
     /// A settings run offering [`LANGUAGES`], whose few translations come
-    /// from an override folder, as a translator's would.
+    /// from an override folder, as a translator's would. Their locales are
+    /// ones the app doesn't ship, so no built-in file answers for them.
     fn multilingual_run(dir: &std::path::Path) -> SettingsRun {
         let files = [
             (
-                "fr",
+                "fr-CA",
                 "settings-language = Langue (Language):\n    .a11y = Langue\nsettings-zoom = Zoom :\n",
             ),
             (
-                "pt-BR",
+                "pt-PT",
                 "settings-language = Idioma (Language):\n    .a11y = Idioma\nsettings-language-unreviewed = Tradução automática, ainda não revisada.\n\
                  settings-language-machine-translated = tradução automática\n\
                  settings-language-machine-translated-entry = { $language }, tradução automática\n",
@@ -1445,9 +1446,9 @@ mod tests {
         let mut run = SettingsRun::new(1200.0, 900.0);
         run.app.speech.languages = &LANGUAGES;
         for (setting, picked) in [
-            ("fr-FR", Some("fr")),
-            ("fr_FR.UTF-8", Some("fr")),
-            ("pt", Some("pt-BR")),
+            ("fr-FR", Some("fr-CA")),
+            ("fr_FR.UTF-8", Some("fr-CA")),
+            ("pt", Some("pt-PT")),
             ("xx", None),
             ("", None),
         ] {
@@ -1530,8 +1531,8 @@ mod tests {
         for _ in 0..3 {
             frame = run.frame(vec![]);
         }
-        assert_eq!(run.app.settings.shared.language, "fr");
-        assert_eq!(run.app.l10n.language().id, "fr");
+        assert_eq!(run.app.settings.shared.language, "fr-CA");
+        assert_eq!(run.app.l10n.language().id, "fr-CA");
         node_bounds(&frame, "Langue (Language):");
         node_bounds(&frame, "Zoom :");
         // What the file lacks stays English.
