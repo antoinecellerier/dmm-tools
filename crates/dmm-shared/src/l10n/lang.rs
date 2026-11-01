@@ -25,7 +25,7 @@ pub const EN_US: Language = Language {
 
 /// The languages the binaries ship. A language is added here in the commit
 /// that completes its resources, so a half-translated one is never chosen.
-const SHIPPED: &[Language] = &[EN_US];
+pub(super) const SHIPPED: &[Language] = &[EN_US];
 
 /// The shipped languages, plus any [`L10N_DIR_VAR`] holds a folder for.
 ///

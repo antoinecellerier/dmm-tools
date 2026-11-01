@@ -264,6 +264,14 @@ while working on them:
   without `RUST_LOG`. A folder for a locale the apps don't ship makes that
   language selectable.
 
+`cargo test -p dmm-shared translations` checks every language against
+en-US: messages and variables, plural forms, and the `code`, `--options`
+and spec-note numbers that stay as written; a shipped language must have
+every message but the specification text (`lib.ftl`'s table titles, notes,
+inputs and bands), which shows in English until translated. `cargo test -p dmm-shared long_labels -- --ignored
+--nocapture` lists short labels that grew past one and a half times their
+English, for a look in the window.
+
 `LC_ALL=C` means English, whatever `LANGUAGE` says, when neither `--lang`
 nor the settings file names a language; the test helpers rely on it, with
 a settings folder of their own. A script that must read English whatever

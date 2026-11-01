@@ -107,7 +107,7 @@ pub fn is_units_only(text: &str) -> bool {
 
 /// The kinds of spec text a translation may only show with the English's
 /// numbers ([`Localizer::spec_text`]).
-const GUARDED: [TextKind; 3] = [TextKind::Band, TextKind::Input, TextKind::Note];
+pub(super) const GUARDED: [TextKind; 3] = [TextKind::Band, TextKind::Input, TextKind::Note];
 
 /// The numbers of `text`, each with its sign and the unit or `%` right
 /// after it, spacing dropped: "About 10 MΩ" gives `["10MΩ"]`, the same as
@@ -197,7 +197,7 @@ fn spec_numbers(text: &str) -> Vec<String> {
 
 /// Whether `translated` carries the numbers of `english` ([`spec_numbers`]),
 /// in any order.
-fn same_numbers(english: &str, translated: &str) -> bool {
+pub(super) fn same_numbers(english: &str, translated: &str) -> bool {
     let sorted = |text| {
         let mut numbers = spec_numbers(text);
         numbers.sort();
