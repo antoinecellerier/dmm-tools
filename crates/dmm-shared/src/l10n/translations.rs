@@ -9,9 +9,9 @@
 //! Any language may leave messages out, which show in English. Before a
 //! language ships (`lang::SHIPPED`), and before each release for those that
 //! do, [`shipped_languages_are_complete`] wants every file and every message
-//! but the specification text ([`optional`]): text added in between shows
-//! in English until then, so a change to the English never waits on its
-//! translations.
+//! but the specification text and `capture`'s text ([`optional`]): text
+//! added in between shows in English until then, so a change to the English
+//! never waits on its translations.
 
 use super::lib_index::{GUARDED, kind_of_id, same_numbers};
 use dmm_lib::text::TextKind;
@@ -294,30 +294,39 @@ fn spec_number_problems(english: &str, translated: &str, locale: &str) -> Vec<St
 
 /// Whether message `key` of file `path` may be left out of a shipped
 /// language: the specification text of `lib.ftl` (table titles, notes,
-/// input ratings, accuracy bands), polish that shows in English one
-/// message at a time until translated. Everything that drives the meter or
-/// the apps — modes, ranges, keys, activation steps, errors — is required.
+/// input ratings, accuracy bands) and every message of `cli/capture.ftl`
+/// (the guided run behind a device report, whose report stays English),
+/// polish that shows in English one message at a time until translated.
+/// Everything that drives the meter or the apps — modes, ranges, keys,
+/// activation steps, errors — is required.
 fn optional(path: &str, key: &str) -> bool {
-    path == "lib.ftl"
-        && kind_of_id(key.split('.').next().unwrap_or(key))
-            .is_some_and(|k| k == TextKind::Table || GUARDED.contains(&k))
+    path == CAPTURE
+        || path == "lib.ftl"
+            && kind_of_id(key.split('.').next().unwrap_or(key))
+                .is_some_and(|k| k == TextKind::Table || GUARDED.contains(&k))
 }
 
-/// What `locale` lacks of en-US but the [`optional`] messages: files, then
-/// messages.
-fn gaps(locale: &str) -> Vec<String> {
+/// `capture`'s own text, every message of it [`optional`].
+const CAPTURE: &str = "cli/capture.ftl";
+
+/// What `locale` lacks of en-US, files then messages: all of it with
+/// `optional_too`, else all but the [`optional`] messages.
+fn gaps(locale: &str, optional_too: bool) -> Vec<String> {
     let english = ftl_files(&i18n_dir().join(super::EN_US.id));
     let translated = ftl_files(&i18n_dir().join(locale));
     let mut gaps = Vec::new();
     for (path, english_source) in &english {
         let Some(source) = translated.get(path) else {
-            gaps.push(format!("{locale}/{path}: missing"));
+            // A file of optional messages only may be missing as a whole.
+            if optional_too || path != CAPTURE {
+                gaps.push(format!("{locale}/{path}: missing"));
+            }
             continue;
         };
         let (en, tr) = (shapes(english_source).0, shapes(source).0);
         for key in en
             .keys()
-            .filter(|k| !optional(path, k) && !tr.contains_key(*k))
+            .filter(|k| (optional_too || !optional(path, k)) && !tr.contains_key(*k))
         {
             gaps.push(format!("{locale}/{path}: `{key}` is missing"));
         }
@@ -415,17 +424,33 @@ fn translations_match_their_english() {
     assert!(all.is_empty(), "{}", all.join("\n"));
 }
 
-/// Every shipped language has all its messages but the specification
-/// text: run before a release, and in the commit that ships a language
+/// What the shipped languages lack, [`gaps`] each.
+fn shipped_gaps(optional_too: bool) -> Vec<String> {
+    super::lang::SHIPPED
+        .iter()
+        .filter(|l| l.id != super::EN_US.id)
+        .flat_map(|l| gaps(l.id, optional_too))
+        .collect()
+}
+
+/// Every shipped language has all its messages but the [`optional`] ones:
+/// run before a release, and in the commit that ships a language
 /// (`cargo test -p dmm-shared shipped_languages_are_complete -- --ignored`).
 #[test]
 #[ignore = "before a release: text added since shows in English until then"]
 fn shipped_languages_are_complete() {
-    let gaps: Vec<_> = super::lang::SHIPPED
-        .iter()
-        .filter(|l| l.id != super::EN_US.id)
-        .flat_map(|l| gaps(l.id))
-        .collect();
+    let gaps = shipped_gaps(false);
+    assert!(gaps.is_empty(), "{}", gaps.join("\n"));
+}
+
+/// Every shipped language has the [`optional`] messages too: what the
+/// translate skill's fill-gaps workflow drafts with `optional: true`
+/// (`cargo test -p dmm-shared shipped_languages_have_the_optional_text --
+/// --ignored`).
+#[test]
+#[ignore = "polish: optional text shows in English until translated"]
+fn shipped_languages_have_the_optional_text() {
+    let gaps = shipped_gaps(true);
     assert!(gaps.is_empty(), "{}", gaps.join("\n"));
 }
 
@@ -479,6 +504,9 @@ d = Extra
     assert!(optional("lib.ftl", "table-resistance"));
     assert!(!optional("lib.ftl", "activation-ut8802"));
     assert!(!optional("lib.ftl", "mode-capacitance"));
+    assert!(optional("cli/capture.ftl", "capture-no-response"));
+    assert!(optional("cli/capture.ftl", "capture-mismatch-mode"));
+    assert!(!optional("cli/read.ftl", "read-alarm-on"));
     assert!(!optional("gui/settings.ftl", "note-x"));
     assert_eq!(plural_forms("pt-BR"), forms);
     // A variable the English only selects on isn't one it shows; a

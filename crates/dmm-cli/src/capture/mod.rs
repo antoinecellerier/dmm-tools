@@ -14,11 +14,12 @@ mod triage;
 mod watch;
 
 pub(crate) use detection::Reopen;
-pub(crate) use input::{ErrorLog, Input};
-pub(crate) use listing::{StepListFormat, list_steps};
+pub(crate) use input::{ErrorLog, Input, InputGone};
+pub(crate) use listing::{StepListFormat, UnknownSteps, list_steps};
 pub(crate) use report::{
     CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report, upsert_step,
 };
+pub(crate) use session::NotResponding;
 pub(crate) use step::{
     CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, frames_for_step, read_past_blank,
     samples_after_switch,
@@ -28,6 +29,8 @@ pub(crate) use triage::{cmd_triage, install_triage_logger};
 use crate::cli::CaptureArgs;
 use console::style;
 use detection::run_detection_check;
+use dmm_lib::text::TextKind;
+use dmm_shared::tr;
 use listing::{step_included, validate_step_filter};
 use recording::SharedRecorder;
 use report::{
@@ -69,21 +72,38 @@ pub(crate) fn cmd_capture(
     // reporter's typo, and they should hear about it straight away.
     let plan_steps = plan_path.as_deref().map(plan::load).transpose()?;
 
+    let l = crate::l10n::get();
     let (device_name, supported) = match verify_meter(&mut dmm, device) {
         Ok(verified) => verified,
         Err(e) => {
             match save_no_response(&mut dmm, &recorder, device, output_override.as_deref()) {
                 Ok((path, rx_bytes)) => {
                     eprintln!(
-                        "Bytes received: {rx_bytes}, saved to {}",
-                        style(&path).bold()
+                        "{}",
+                        tr!(
+                            l,
+                            "capture-no-response-saved",
+                            bytes = rx_bytes,
+                            path = style(&path).bold().to_string(),
+                        )
                     );
                     eprintln!(
-                        "If the meter is on and still not answering, attach that file to {}",
-                        dmm.profile().feedback_url()
+                        "{}",
+                        tr!(
+                            l,
+                            "capture-no-response-attach",
+                            url = dmm.profile().feedback_url(),
+                        )
                     );
                 }
-                Err(save) => eprintln!("Could not save the bytes received: {save}"),
+                Err(save) => eprintln!(
+                    "{}",
+                    tr!(
+                        l,
+                        "capture-no-response-not-saved",
+                        error = crate::l10n::error_text(l, &*save),
+                    )
+                ),
             }
             return Err(e);
         }
@@ -96,7 +116,7 @@ pub(crate) fn cmd_capture(
             None => return Ok(()),
         };
 
-    eprintln!("Output file: {output_path}\n");
+    eprintln!("{}\n", tr!(l, "capture-output-file", path = &output_path));
 
     populate_report_metadata(&mut report, &mut dmm, device_name, supported);
     report.device_id = Some(device.id.to_string());
@@ -189,10 +209,7 @@ pub(crate) fn cmd_capture(
     if confirmed {
         eprintln!(
             "{}",
-            style(format!(
-                "Auto-detection is already confirmed over {bridge}, so its check is skipped."
-            ))
-            .dim()
+            style(tr!(l, "capture-detect-confirmed", bridge = bridge)).dim()
         );
     }
     let check = if wanted {
@@ -208,36 +225,70 @@ pub(crate) fn cmd_capture(
         Ok(None) => {}
         // The report is saved: a keyboard gone at the last prompt must not
         // hide where to send it.
-        Err(e) => eprintln!("{} auto-detection check: {e}", style("Warning:").yellow()),
+        Err(e) => eprintln!(
+            "{} {}",
+            crate::l10n::warning_label(),
+            tr!(
+                l,
+                "capture-detect-failed",
+                error = crate::l10n::error_text(l, &*e),
+            )
+        ),
     }
 
     eprintln!();
-    eprintln!("{}", style("=== Capture complete! ===").bold().green());
-    eprintln!("Report saved to: {}", style(&output_path).bold());
+    eprintln!(
+        "{}",
+        style(format!("=== {} ===", tr!(l, "capture-complete")))
+            .bold()
+            .green()
+    );
+    eprintln!(
+        "{}",
+        tr!(
+            l,
+            "capture-report-saved",
+            path = style(&output_path).bold().to_string(),
+        )
+    );
     let (covered, total) = if let Some(plan) = &plan_path {
         // The plan's steps are not in the device's unverified list, so its
         // coverage line would read zero for a run that captured everything.
         let ids: std::collections::HashSet<&str> = cli_steps.iter().map(|s| s.id).collect();
         let covered = captured_count(&report, &ids);
-        eprintln!("Plan {plan}: {covered} of {} steps captured", ids.len());
+        eprintln!(
+            "{}",
+            tr!(
+                l,
+                "capture-plan-covered",
+                plan = plan,
+                covered = covered,
+                total = ids.len(),
+            )
+        );
         (covered, ids.len())
     } else {
         let covered = captured_count(&report, &unverified_ids);
         if unverified_only && covered == 0 {
-            eprintln!("No unverified step was captured, so there is nothing new to report.");
+            eprintln!("{}", tr!(l, "capture-nothing-new"));
         } else {
             eprintln!(
-                "Covered {covered} of {} unverified steps for {}.",
-                unverified_ids.len(),
-                crate::open::meter_name(device)
+                "{}",
+                tr!(
+                    l,
+                    "capture-covered",
+                    covered = covered,
+                    total = unverified_ids.len(),
+                    meter = l.label(TextKind::Model, crate::open::meter_name(device)),
+                )
             );
         }
         (covered, unverified_ids.len())
     };
-    if let Some(hint) = resume_hint(covered, total, plan_path.is_some()) {
+    if let Some(hint) = resume_hint(l, covered, total, plan_path.is_some()) {
         eprintln!("{hint}");
     }
-    eprintln!("Attach the report to {feedback_url}");
+    eprintln!("{}", tr!(l, "capture-attach", url = feedback_url));
     Ok(())
 }
 
@@ -264,15 +315,20 @@ fn detection_already_confirmed(
     unverified_only && step_filter.is_none() && device.detection_verified.contains(&bridge)
 }
 
-fn resume_hint(covered: usize, total: usize, plan: bool) -> Option<String> {
+fn resume_hint(
+    l: &dmm_shared::l10n::Localizer,
+    covered: usize,
+    total: usize,
+    plan: bool,
+) -> Option<String> {
     if covered >= total {
         return None;
     }
-    let mut hint =
-        "Not finished \u{2014} run the same command again and answer r to resume.".to_string();
+    let mut hint = tr!(l, "capture-not-finished", resume = "r").into_owned();
     // `--steps` conflicts with `--plan`, so it is not on offer for a plan run.
     if !plan {
-        hint.push_str("\n--steps <ids> runs named steps on their own.");
+        hint.push('\n');
+        hint.push_str(&tr!(l, "capture-steps-hint", flag = "--steps <ids>"));
     }
     Some(hint)
 }
@@ -434,17 +490,18 @@ mod tests {
 
     #[test]
     fn an_unfinished_run_says_how_to_resume() {
-        let hint = resume_hint(1, 27, false).expect("26 steps left");
+        let l = crate::l10n::english();
+        let hint = resume_hint(l, 1, 27, false).expect("26 steps left");
         assert!(hint.contains("run the same command again"), "{hint}");
         assert!(hint.contains("--steps"), "{hint}");
 
         // `--steps` conflicts with `--plan`, so a plan run is not sent to it.
-        let hint = resume_hint(1, 2, true).expect("1 step left");
+        let hint = resume_hint(l, 1, 2, true).expect("1 step left");
         assert!(hint.contains("run the same command again"), "{hint}");
         assert!(!hint.contains("--steps"), "{hint}");
 
-        assert_eq!(resume_hint(27, 27, false), None);
-        assert_eq!(resume_hint(0, 0, false), None);
+        assert_eq!(resume_hint(l, 27, 27, false), None);
+        assert_eq!(resume_hint(l, 0, 0, false), None);
     }
 
     #[test]

@@ -10,7 +10,10 @@ use super::report::{
 use super::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
 use console::{Key, style};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
-use dmm_lib::protocol::ValueExpect;
+use dmm_lib::protocol::{Mismatch, RangeExpect, RangeShown, Shown, ValueExpect};
+use dmm_lib::text::TextKind;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use std::time::{Duration, Instant};
 
 /// Cap on wire events recorded per step, so one chatty step can't grow the
@@ -30,10 +33,10 @@ pub(crate) use dmm_lib::protocol::CaptureStep;
 
 /// The line announcing the step. Gate steps say so: skipping one leaves the
 /// rest of the run uninterpretable.
-fn header(step: &CaptureStep) -> String {
+fn header(l: &Localizer, step: &CaptureStep) -> String {
     let id = style(format!("[{}]", step.id)).cyan().bold();
     let gate = if step.gate {
-        format!(" {}", style("(gate)").dim())
+        format!(" {}", style(tr!(l, "capture-gate-mark")).dim())
     } else {
         String::new()
     };
@@ -146,9 +149,6 @@ pub(crate) fn frames_for_step(events: &[WireEvent], step_id: &str) -> (Vec<Frame
     )
 }
 
-/// What a step that read nothing prints.
-pub(super) const NO_RESPONSE: &str = "No response from meter.";
-
 /// How long a step watches the meter before offering the keyboard: long
 /// enough to fetch a thermocouple, short enough not to look stuck.
 const STEP_TIMEOUT: Duration = Duration::from_secs(45);
@@ -224,6 +224,7 @@ fn watch_for_state(
     hint: bool,
     errors: &mut ErrorLog,
 ) -> Result<Watched, Box<dyn std::error::Error>> {
+    let l = crate::l10n::get();
     let start = Instant::now();
     let mut hinted = false;
     let mut last = None;
@@ -240,7 +241,7 @@ fn watch_for_state(
                 Verdict::Ready => return Ok(Watched::Ready(Some(m))),
                 Verdict::Mismatch(reason) => {
                     last = Some(m);
-                    eprintln!("  {}", style(format!("meter shows: {reason}")).dim());
+                    eprintln!("  {}", style(mismatch_line(l, &reason)).dim());
                 }
                 Verdict::Waiting => last = Some(m),
             },
@@ -264,28 +265,100 @@ fn watch_for_state(
                 hinted = true;
                 eprintln!(
                     "  {}",
-                    style("Press Enter when the meter is ready (s=skip, q=finish)").dim()
+                    style(tr!(l, "capture-press-enter", skip = "s", quit = "q")).dim()
                 );
             }
         }
     }
 }
 
-/// The wording for a command the meter ignored, in the terms `cycle.rs` uses
-/// for the same failure.
-fn did_nothing(command: &str, last: Option<&Measurement>) -> String {
-    match last {
-        Some(m) => format!(
-            "{command} did nothing; the meter still shows {}",
-            SampleData::from_measurement(m).summary()
-        ),
-        None => format!("{command} did nothing; the meter sent no reading"),
+/// A mismatch line, in `l`'s language: what [`Mismatch`]'s `Display` says,
+/// after "meter shows:".
+fn mismatch_line(l: &Localizer, mismatch: &Mismatch) -> String {
+    fn shown(got: &Shown) -> (&'static str, &str) {
+        match got {
+            Shown::Text(text) => ("value", text),
+            Shown::NoMainReading => ("absent", ""),
+        }
     }
+    match mismatch {
+        Mismatch::Mode { got, want } => tr!(
+            l,
+            "capture-mismatch-mode",
+            got = format!("{:?}", l.label(TextKind::Mode, got)),
+            want = format!("{:?}", l.label(TextKind::Mode, want)),
+        ),
+        Mismatch::Flag { flag, want } => tr!(
+            l,
+            "capture-mismatch-flag",
+            flag = l
+                .flag(*flag)
+                .unwrap_or(std::borrow::Cow::Borrowed(flag.name())),
+            want = if *want { "on" } else { "off" },
+        ),
+        Mismatch::Range { got, want } => {
+            let (kind, range) = match got {
+                RangeShown::Unlabelled => ("none", ""),
+                RangeShown::AutoRung(label) => ("auto", label.as_ref()),
+                RangeShown::Label(label) => ("plain", label.as_ref()),
+            };
+            tr!(
+                l,
+                "capture-mismatch-range",
+                range = l.label(TextKind::Range, range),
+                shown = kind,
+                want = match want {
+                    RangeExpect::Auto => "auto",
+                    RangeExpect::Manual => "manual",
+                },
+            )
+        }
+        Mismatch::Value { got, want } => {
+            let (kind, value) = shown(got);
+            tr!(
+                l,
+                "capture-mismatch-value",
+                shown = kind,
+                value = value,
+                want = match want {
+                    ValueExpect::Overload => "overload",
+                    ValueExpect::Negative => "negative",
+                    ValueExpect::Finite => "finite",
+                    ValueExpect::NcvDetected => "ncv",
+                    ValueExpect::NoReading => "word",
+                    ValueExpect::Zero => "zero",
+                },
+            )
+        }
+        Mismatch::AtLeast { got, min } => {
+            let (kind, value) = shown(got);
+            tr!(
+                l,
+                "capture-mismatch-at-least",
+                shown = kind,
+                value = value,
+                min = min.to_string(),
+            )
+        }
+    }
+    .into_owned()
 }
 
-/// The question asked about a reading the operator can see on the meter, used
-/// by the end-of-run review as well so there is one phrase for it.
-pub(super) const WHAT_SHOWN: &str = "What did the meter show?";
+/// The wording for a command the meter ignored, in the terms `cycle.rs` uses
+/// for the same failure: in `l`'s language on the terminal, in English in
+/// the report.
+fn did_nothing(l: &Localizer, command: &str, last: Option<&Measurement>) -> String {
+    match last {
+        Some(m) => tr!(
+            l,
+            "capture-did-nothing-shows",
+            command = command,
+            reading = SampleData::from_measurement(m).summary(),
+        ),
+        None => tr!(l, "capture-did-nothing-silent", command = command),
+    }
+    .into_owned()
+}
 
 /// What the operator answered at a confirmation prompt.
 #[derive(Debug, PartialEq, Eq)]
@@ -336,36 +409,45 @@ pub(super) fn ask_confirmation(
     input: &Input,
     retake: bool,
 ) -> Result<Confirmed, Box<dyn std::error::Error>> {
-    let (keys, again) = if retake {
-        (
-            "(Enter = yes, n = no, r = retake)",
-            "Answer n, r, or press Enter.",
-        )
-    } else {
-        ("(Enter = yes, n = no)", "Answer n, or press Enter.")
-    };
+    let l = crate::l10n::get();
+    let retake_arg = if retake { "yes" } else { "no" };
     loop {
-        let answer = input.line(&format!(
-            "  {} ",
-            style(format!("Did the meter show this? {keys}")).dim()
-        ))?;
+        let question = tr!(
+            l,
+            "capture-confirm",
+            retake = retake_arg,
+            no = "n",
+            redo = "r",
+        );
+        let answer = input.line(&format!("  {} ", style(question).dim()))?;
         match Confirmation::of(&answer, retake) {
             Some(Confirmation::Yes) => return Ok(Confirmed::Reading(None)),
             Some(Confirmation::No) => {
-                let shown = input.line(&format!("  {} ", style(WHAT_SHOWN).dim()))?;
+                let shown =
+                    input.line(&format!("  {} ", style(tr!(l, "capture-what-shown")).dim()))?;
                 // Echoed because this is the answer that marks a gate step as
                 // failed; a plain Enter above records nothing and says nothing.
                 // Saying nothing here is still a mismatch, so it is echoed as
                 // one rather than as a meter showing an empty screen.
                 let recorded = match shown.as_str() {
-                    "" => "recorded: the reading did not match".to_string(),
-                    text => format!("recorded: the meter showed {text:?}"),
+                    "" => tr!(l, "capture-recorded-mismatch"),
+                    text => tr!(l, "capture-recorded-shown", shown = format!("{text:?}")),
                 };
                 eprintln!("  {}", style(recorded).dim());
                 return Ok(Confirmed::Reading(Some(shown)));
             }
             Some(Confirmation::Retake) => return Ok(Confirmed::Retake),
-            None => eprintln!("  {}", style(again).yellow()),
+            None => eprintln!(
+                "  {}",
+                style(tr!(
+                    l,
+                    "capture-confirm-again",
+                    retake = retake_arg,
+                    no = "n",
+                    redo = "r",
+                ))
+                .yellow()
+            ),
         }
     }
 }
@@ -426,16 +508,24 @@ pub(crate) fn run_capture_step(
     trust: &Trust,
     driver: &mut super::drive::Driver,
 ) -> Result<StepOutcome, Box<dyn std::error::Error>> {
+    let l = crate::l10n::get();
     // Check if already captured (resume)
     if already_captured(report, step.id) {
-        eprintln!("  {} already captured, skipping", style(step.id).dim());
+        eprintln!(
+            "  {}",
+            tr!(
+                l,
+                "capture-already-captured",
+                step = style(step.id).dim().to_string(),
+            )
+        );
         return Ok(StepOutcome::nothing(false));
     }
 
     if interactive {
         eprintln!();
     }
-    eprintln!("{}", header(step));
+    eprintln!("{}", header(l, step));
 
     recording::lock(recorder).set_step(Some(step.id));
     let mut errors = ErrorLog::default();
@@ -469,7 +559,10 @@ pub(crate) fn run_capture_step(
             let before = capture_samples(dmm, STABLE_FRAMES, &mut errors);
 
             if let Err(e) = dmm.send_command(cmd) {
-                eprintln!("  {}", style(format!("Command failed: {e}")).red());
+                eprintln!(
+                    "  {}",
+                    style(tr!(l, "capture-command-failed", error = l.error(&e))).red()
+                );
                 let result = empty_result(step, StepStatus::Error, Some(e.to_string()));
                 finish_failed_step(recorder, report, step.id, result);
                 return Ok(StepOutcome::nothing(false));
@@ -491,8 +584,8 @@ pub(crate) fn run_capture_step(
                 Watched::TimedOut(last) => {
                     // No samples: filing pre-command frames as the step's result
                     // is what made a dead command look like a captured state.
-                    let error = did_nothing(cmd, last.as_ref());
-                    eprintln!("  {}", style(&error).yellow());
+                    let error = did_nothing(crate::l10n::english(), cmd, last.as_ref());
+                    eprintln!("  {}", style(did_nothing(l, cmd, last.as_ref())).yellow());
                     let mut result = empty_result(step, StepStatus::Error, Some(error));
                     result.diagnostics = errors.into_diagnostics();
                     finish_failed_step(recorder, report, step.id, result);
@@ -533,7 +626,7 @@ pub(crate) fn run_capture_step(
             // No terminal to poll: ask, the way this step always did.
             let ch = input.key(&format!(
                 "  {} ",
-                style("any key=capture, s=skip, q=finish:").dim()
+                style(tr!(l, "capture-any-key", skip = "s", quit = "q")).dim()
             ))?;
             if ch == 'q' || ch == 'Q' {
                 return Ok(skipped(report, step, true));
@@ -568,8 +661,11 @@ pub(crate) fn run_capture_step(
         {
             eprintln!(
                 "  {}",
-                style(format!(
-                    "the meter left {mode} for {other} while sampling \u{2014} retaking\u{2026}"
+                style(tr!(
+                    l,
+                    "capture-left-mode",
+                    mode = l.label(TextKind::Mode, mode),
+                    other = l.label(TextKind::Mode, other),
                 ))
                 .yellow()
             );
@@ -594,7 +690,14 @@ pub(crate) fn run_capture_step(
 
         let confirmation = if let Some(last) = sample_data.last() {
             if interactive {
-                eprintln!("  We read: {}", style(last.summary()).green());
+                eprintln!(
+                    "  {}",
+                    tr!(
+                        l,
+                        "capture-we-read",
+                        reading = style(last.summary()).green().to_string(),
+                    )
+                );
             }
             // A trusted run doesn't stop here: the reading is listed with the
             // others in the one review at the end.
@@ -607,7 +710,7 @@ pub(crate) fn run_capture_step(
             if interactive && input.is_tty() && trust.confirm_inline(step) {
                 match ask_confirmation(input, true)? {
                     Confirmed::Retake => {
-                        eprintln!("  {}", style("retaking\u{2026}").dim());
+                        eprintln!("  {}", style(tr!(l, "capture-retaking")).dim());
                         continue;
                     }
                     Confirmed::Reading(shown) => Some(shown),
@@ -616,7 +719,7 @@ pub(crate) fn run_capture_step(
                 None
             }
         } else {
-            eprintln!("  {}", style(NO_RESPONSE).yellow());
+            eprintln!("  {}", style(tr!(l, "capture-no-response")).yellow());
             None
         };
 
@@ -634,10 +737,14 @@ pub(crate) fn run_capture_step(
         StepStatus::Timeout
     } else if sample_data.len() < step.samples {
         eprintln!(
-            "  {} only got {}/{} samples",
-            style("warning:").yellow(),
-            sample_data.len(),
-            step.samples
+            "  {} {}",
+            style(tr!(l, "capture-few-samples-label")).yellow(),
+            tr!(
+                l,
+                "capture-few-samples",
+                got = sample_data.len(),
+                wanted = step.samples,
+            )
         );
         StepStatus::Captured
     } else {
@@ -834,7 +941,9 @@ mod tests {
         for device in dmm_lib::protocol::registry::DEVICES {
             for step in (device.new_protocol)().capture_steps() {
                 assert!(
-                    !step.instruction.contains(NO_RESPONSE),
+                    !step
+                        .instruction
+                        .contains(&*tr!(crate::l10n::english(), "capture-no-response")),
                     "{}/{}: {:?}",
                     device.id,
                     step.id,
@@ -885,12 +994,47 @@ mod tests {
     fn a_dead_command_names_what_the_meter_still_shows() {
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
         assert_eq!(
-            did_nothing("hold", Some(&m)),
+            did_nothing(crate::l10n::english(), "hold", Some(&m)),
             "hold did nothing; the meter still shows 5.678 V [AUTO]"
         );
         assert_eq!(
-            did_nothing("hold", None),
+            did_nothing(crate::l10n::english(), "hold", None),
             "hold did nothing; the meter sent no reading"
+        );
+    }
+
+    /// The mismatch line reads as the library words the mismatch in
+    /// English, but for a flag, which goes by the label the meter's screen
+    /// shows.
+    #[test]
+    fn a_mismatch_line_words_each_kind_of_mismatch() {
+        use dmm_lib::flags::Flag;
+        use dmm_lib::protocol::Expect;
+        let l = crate::l10n::english();
+        let dcv = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
+        let absent = Measurement {
+            value: MeasuredValue::Absent,
+            ..dcv.clone()
+        };
+        let hold: &[(Flag, bool)] = &[(Flag::Hold, true)];
+        for (expect, m) in [
+            (Expect::mode("AC V"), &dcv),
+            (Expect::new().range(RangeExpect::Manual), &dcv),
+            (Expect::new().value(ValueExpect::Negative), &dcv),
+            (Expect::new().value(ValueExpect::NoReading), &absent),
+            (Expect::new().at_least(20.0), &dcv),
+            (Expect::new().at_least(1.5), &absent),
+        ] {
+            let mismatch = expect.check(m).unwrap_err();
+            assert_eq!(
+                mismatch_line(l, &mismatch),
+                format!("meter shows: {mismatch}")
+            );
+        }
+        let mismatch = Expect::new().flags(hold).check(&dcv).unwrap_err();
+        assert_eq!(
+            mismatch_line(l, &mismatch),
+            "meter shows: HOLD is off, want on"
         );
     }
 

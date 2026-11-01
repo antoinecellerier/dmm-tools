@@ -14,23 +14,25 @@ Translated:
 - library errors, device names, activation steps, alarm limits and breach notes
 - spec-data notes, guarded (see [Library fixed text](#library-fixed-text))
 - the CLI's stderr prose and `--help`, clap's headings and command-line errors included
+- `capture`'s own prompts, notices and closing lines, which a shipped language may leave English
 
 Stays English:
 
 - every data format: CSV, JSON, replay, capture YAML, export file names
 - `read`'s stdout line, `get --format json`, and every token typed on a command line, such as `set` arguments
 - logs, including the library warnings shown by default
-- the capture tooling: step instructions, `Expect` reasons, `triage`
+- in `capture`: the step instructions, the readings it echoes and the report; `--list-steps` and `triage`
 - What's New (`CHANGELOG.md`), doc screenshots, `dmm-gui --help`, the shell completion scripts
 - unit symbols, decimal points, timestamps
 - theme names, which are also setting values, `--theme` arguments and file names
 
-About 1,350 messages in all, plus about 240 attributes for tooltips, accessibility names and long help:
+About 1,450 messages in all, plus about 240 attributes for tooltips, accessibility names and long help:
 
 | Source | Messages |
 |---|---|
 | GUI (`gui/`) | ~480 |
 | CLI prose and clap's words (`cli/`) | ~140 |
+| `capture`'s own text (`cli/capture.ftl`) | ~110 |
 | CLI `--help` (`cli-help.ftl`) | ~50 |
 | `dmm_shared::help` (`shared.ftl`) | ~60 |
 | Library labels and keys (`lib.ftl`) | ~220 |
@@ -167,7 +169,7 @@ The checks on the resources, listed in [development.md](development.md#translati
 - **Weblate** can come later, once translators who aren't developers turn up. It has supported Fluent since 4.8 and opens pull requests for review. It has no plural editor for Fluent, so translators edit select expressions as text.
 - **Machine-drafted languages ship marked.** A language is drafted offline from its glossary and style sheet (`i18n/<lang>/`), themselves built from meter manuals in that language and Microsoft's terminology and style guides. Until a native speaker has reviewed it, its `SHIPPED` entry says `reviewed: false`: the Language row marks it machine-translated, in its own words, and a line under the row asks its speakers to review it.
 - **A message ID is renamed** when the meaning of the English changes, so stale translations fall back to English rather than saying the wrong thing. A correction that keeps the meaning keeps its ID and its translations.
-- **A missing message** falls back to English one message at a time. A language ships complete, but for its specification text; text added after that shows in English until the translations are filled before the next release, so a change to the English never waits on them.
+- **A missing message** falls back to English one message at a time. A language ships complete, but for its specification text and `capture`'s text; text added after that shows in English until the translations are filled before the next release, so a change to the English never waits on them.
 
 The cost continues after launch:
 

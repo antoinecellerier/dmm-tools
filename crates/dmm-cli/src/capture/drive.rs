@@ -15,6 +15,8 @@ use super::{
 use console::style;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::Setting;
+use dmm_lib::text::TextKind;
+use dmm_shared::tr;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -156,8 +158,7 @@ impl Driver {
         if self.failures == DRIVE_FAILURE_BUDGET {
             eprintln!(
                 "  {}",
-                style("remote control unreliable on this meter \u{2014} no more automatic sweeps")
-                    .yellow()
+                style(tr!(crate::l10n::get(), "capture-drive-unreliable")).yellow()
             );
         }
     }
@@ -252,6 +253,7 @@ pub(crate) fn sweep_step(
     if !driver.active() {
         return Ok(());
     }
+    let l = crate::l10n::get();
     let mut current = last.clone();
     let mut filed = 0usize;
 
@@ -261,16 +263,21 @@ pub(crate) fn sweep_step(
         // the sweeps for the rest of the run. A display still blank after the
         // wait has no reading to take a reference from either.
         if setting == Setting::Rel {
-            let why = match current.value {
-                MeasuredValue::Overload => Some("reading is OL"),
-                MeasuredValue::NoReading(_) => Some("no reading"),
+            let skipped = match current.value {
+                MeasuredValue::Overload => Some(tr!(
+                    l,
+                    "capture-drive-rel-skipped-ol",
+                    setting = setting.name(),
+                )),
+                MeasuredValue::NoReading(_) => Some(tr!(
+                    l,
+                    "capture-drive-rel-skipped-blank",
+                    setting = setting.name(),
+                )),
                 _ => None,
             };
-            if let Some(why) = why {
-                eprintln!(
-                    "    {}",
-                    style(format!("\u{21b3} rel skipped: {why}")).dim()
-                );
+            if let Some(skipped) = skipped {
+                eprintln!("    {}", style(format!("\u{21b3} {skipped}")).dim());
                 continue;
             }
         }
@@ -295,7 +302,14 @@ pub(crate) fn sweep_step(
                 .iter()
                 .any(|s| s.id == id && s.status == StepStatus::Captured)
             {
-                eprintln!("    {} already captured, skipping", style(&id).dim());
+                eprintln!(
+                    "    {}",
+                    tr!(
+                        l,
+                        "capture-already-captured",
+                        step = style(&id).dim().to_string(),
+                    )
+                );
                 continue;
             }
             filed += 1;
@@ -415,9 +429,15 @@ pub(crate) fn switch_mode(
         return Ok(false);
     };
 
+    let l = crate::l10n::get();
+    let mode = l.label(TextKind::Mode, want);
     eprintln!(
         "  {}",
-        style(format!("\u{21b3} switching to {want} (sent by the tool)")).dim()
+        style(format!(
+            "\u{21b3} {}",
+            tr!(l, "capture-drive-switching", mode = &*mode)
+        ))
+        .dim()
     );
     let id = sub_step_id(step.id, Setting::Mode, want);
     recording::lock(recorder).set_step(Some(&id));
@@ -470,7 +490,13 @@ pub(crate) fn switch_mode(
             eprintln!(
                 "  {}",
                 style(format!(
-                    "\u{21b3} could not switch to {want}: {e} \u{2014} do it by hand"
+                    "\u{21b3} {}",
+                    tr!(
+                        l,
+                        "capture-drive-switch-failed",
+                        mode = &*mode,
+                        error = l.error(&e),
+                    )
                 ))
                 .dim()
             );
@@ -539,11 +565,12 @@ fn drive_choice(
         Err(_) => StepStatus::Error,
     };
     let error = selected.as_ref().err().map(ToString::to_string);
-    match (&error, samples.last()) {
-        (Some(text), _) => eprintln!(
+    let l = crate::l10n::get();
+    match (selected.as_ref().err(), samples.last()) {
+        (Some(e), _) => eprintln!(
             "    {} {}",
             style(format!("\u{21b3} {}", short_id(id))).dim(),
-            style(text).yellow()
+            style(l.error(e)).yellow()
         ),
         (None, Some(s)) => eprintln!(
             "    {}",
@@ -551,7 +578,12 @@ fn drive_choice(
         ),
         (None, None) => eprintln!(
             "    {}",
-            style(format!("\u{21b3} {}  no reading", short_id(id))).dim()
+            style(format!(
+                "\u{21b3} {}  {}",
+                short_id(id),
+                tr!(l, "capture-drive-no-reading")
+            ))
+            .dim()
         ),
     }
 
@@ -627,8 +659,10 @@ fn restore(
     }
     eprintln!(
         "  {}",
-        style(format!(
-            "{setting} could not be reset \u{2014} press the meter's button"
+        style(tr!(
+            crate::l10n::get(),
+            "capture-drive-reset-failed",
+            setting = setting.name(),
         ))
         .yellow()
     );

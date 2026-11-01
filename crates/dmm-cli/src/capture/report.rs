@@ -7,6 +7,7 @@ use super::watch::Baseline;
 use console::style;
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::Measurement;
+use dmm_shared::tr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default)]
@@ -557,16 +558,16 @@ impl Trust {
             report.core_semantics = Some(CoreSemantics::Confirmed);
             eprintln!(
                 "{}",
-                style("Core semantics confirmed \u{2014} remaining steps are reviewed at the end.")
-                    .green()
+                style(tr!(crate::l10n::get(), "capture-core-confirmed")).green()
             );
         } else {
             report.core_semantics = Some(CoreSemantics::Failed);
             eprintln!(
                 "{}",
-                style(format!(
-                    "Core semantics not confirmed ({}) \u{2014} every step will ask for confirmation.",
-                    failures.join(", ")
+                style(tr!(
+                    crate::l10n::get(),
+                    "capture-core-not-confirmed",
+                    steps = failures.join(", "),
                 ))
                 .yellow()
             );
@@ -735,6 +736,7 @@ pub(super) fn load_or_create_report(
     input: &Input,
 ) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
     let output_path = capture_path(output_override, device_id, plan_path);
+    let l = crate::l10n::get();
 
     let report = match std::fs::read_to_string(&output_path) {
         Ok(contents) => match from_yaml::<CaptureReport>(&contents) {
@@ -753,34 +755,55 @@ pub(super) fn load_or_create_report(
                     .filter(|s| s.status == StepStatus::Skipped)
                     .count();
                 eprintln!(
-                    "Found existing capture: {output_path} ({captured} captured, {skipped} skipped)"
+                    "{}",
+                    tr!(
+                        l,
+                        "capture-found-existing",
+                        path = &output_path,
+                        captured = captured,
+                        skipped = skipped,
+                    )
                 );
-                let ch = input.key("r=resume, n=start fresh, q=abort: ")?;
+                let ch = input.key(&format!(
+                    "{} ",
+                    tr!(
+                        l,
+                        "capture-resume-prompt",
+                        resume = "r",
+                        fresh = "n",
+                        abort = "q",
+                    )
+                ))?;
                 if ch == 'q' || ch == 'Q' {
-                    eprintln!("Aborted.");
+                    eprintln!("{}", tr!(l, "capture-aborted"));
                     return Ok(None);
                 }
                 if ch == 'n' || ch == 'N' {
-                    let confirm = input
-                        .key("This will overwrite the existing capture. Are you sure? y/n: ")?;
+                    let confirm = input.key(&format!(
+                        "{} ",
+                        tr!(l, "capture-overwrite-confirm", yes = "y", no = "n")
+                    ))?;
                     if confirm != 'y' && confirm != 'Y' {
-                        eprintln!("Aborted.");
+                        eprintln!("{}", tr!(l, "capture-aborted"));
                         return Ok(None);
                     }
                     CaptureReport::default()
                 } else if ch == 'r' || ch == 'R' {
-                    eprintln!("Resuming — already-captured steps will be skipped.\n");
+                    eprintln!("{}\n", tr!(l, "capture-resuming"));
                     r
                 } else {
-                    eprintln!("Aborted.");
+                    eprintln!("{}", tr!(l, "capture-aborted"));
                     return Ok(None);
                 }
             }
             Err(_) => {
-                eprintln!("Found {output_path} but couldn't parse it.");
-                let ch = input.key("Overwrite? y=start fresh, any other key=abort: ")?;
+                eprintln!("{}", tr!(l, "capture-unreadable", path = &output_path));
+                let ch = input.key(&format!(
+                    "{} ",
+                    tr!(l, "capture-overwrite-unreadable", yes = "y")
+                ))?;
                 if ch != 'y' && ch != 'Y' {
-                    eprintln!("Aborted.");
+                    eprintln!("{}", tr!(l, "capture-aborted"));
                     return Ok(None);
                 }
                 CaptureReport::default()

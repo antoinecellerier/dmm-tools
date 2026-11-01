@@ -155,12 +155,26 @@ pub(super) fn validate_step_filter(
         return Ok(());
     }
     unknown.sort_unstable();
-    Err(format!(
-        "unknown capture step(s): {}\nRun `dmm-cli capture --list-steps` to see the steps this device supports.",
-        unknown.join(", ")
-    )
-    .into())
+    Err(UnknownSteps(unknown.join(", ")).into())
 }
+
+/// `--steps` named steps the device doesn't have, listed: the run's closing
+/// `Error:` line ([`crate::l10n::Localized`]).
+#[derive(Debug)]
+pub(crate) struct UnknownSteps(String);
+
+impl crate::l10n::Localized for UnknownSteps {
+    fn text<'a>(&'a self, l: &'a dmm_shared::l10n::Localizer) -> std::borrow::Cow<'a, str> {
+        dmm_shared::tr!(
+            l,
+            "capture-error-unknown-steps",
+            steps = &self.0,
+            command = "`dmm-cli capture --list-steps`",
+        )
+    }
+}
+
+crate::l10n::localized_error!(UnknownSteps);
 
 /// Returns true if the given step ID is included by the filter (or if there is no filter).
 pub(super) fn step_included(

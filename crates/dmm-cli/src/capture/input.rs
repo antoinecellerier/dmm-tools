@@ -2,13 +2,29 @@
 //! collects while it is sampling.
 
 use console::Key;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
+use std::borrow::Cow;
 use std::io::Write;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
-/// The one message for a keyboard reader that has gone away, so a dead thread
+/// A keyboard reader that has gone away: the run's closing `Error:` line
+/// ([`crate::l10n::Localized`]).
+#[derive(Debug)]
+pub(crate) struct InputGone;
+
+impl crate::l10n::Localized for InputGone {
+    fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
+        tr!(l, "capture-error-input-gone")
+    }
+}
+
+crate::l10n::localized_error!(InputGone);
+
+/// The one error for a keyboard reader that has gone away, so a dead thread
 /// ends the run with a reason instead of hanging on a channel nobody feeds.
 fn input_gone() -> Box<dyn std::error::Error> {
-    "keyboard input stopped working; finish the capture and rerun".into()
+    InputGone.into()
 }
 
 /// The capture run's keyboard.
@@ -169,13 +185,14 @@ pub(crate) struct ErrorLog {
 
 impl ErrorLog {
     /// Echo the rejection the first time it appears — a step that waits for a
-    /// state can see hundreds of them.
+    /// state can see hundreds of them. The report keeps it in English.
     pub(super) fn record(&mut self, e: &dmm_lib::error::Error) {
         let text = e.to_string();
         match self.entries.iter_mut().find(|(t, _)| *t == text) {
             Some((_, count)) => *count += 1,
             None => {
-                eprintln!("  error: {text}");
+                let l = crate::l10n::get();
+                eprintln!("  {}", tr!(l, "capture-frame-error", error = l.error(e)));
                 self.entries.push((text, 1));
             }
         }

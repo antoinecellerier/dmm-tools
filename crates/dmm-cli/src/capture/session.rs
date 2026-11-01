@@ -9,25 +9,43 @@ use super::report::{
     baseline_from_report, needs_attention, save_report, upsert_step,
 };
 use super::step::{
-    CaptureStep, Confirmed, NO_RESPONSE, PrevState, WHAT_SHOWN, ask_confirmation, capture_samples,
-    empty_result, frames_for_step, run_capture_step,
+    CaptureStep, Confirmed, PrevState, ask_confirmation, capture_samples, empty_result,
+    frames_for_step, run_capture_step,
 };
 use console::style;
 use dmm_lib::protocol::{Need, Stability};
+use dmm_lib::text::TextKind;
+use dmm_lib::transport::Link;
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
+use std::borrow::Cow;
+
+/// The meter never answered the check: the run's closing `Error:` line
+/// ([`crate::l10n::Localized`]).
+#[derive(Debug)]
+pub(crate) struct NotResponding;
+
+impl crate::l10n::Localized for NotResponding {
+    fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
+        tr!(l, "capture-error-not-responding")
+    }
+}
+
+crate::l10n::localized_error!(NotResponding);
 
 /// What the status banner says about the model the run was started for: the
 /// headline, and the line under it for a family hardware has not fully
 /// confirmed.
-fn status_banner(stability: Stability) -> (&'static str, Option<&'static str>) {
+fn status_banner(l: &Localizer, stability: Stability) -> (Cow<'_, str>, Option<Cow<'_, str>>) {
     match stability {
-        Stability::Verified => ("supported model", None),
+        Stability::Verified => (tr!(l, "capture-status-verified"), None),
         Stability::PartlyVerified => (
-            "partly verified \u{2014} connection and main modes confirmed",
-            Some("The modes still unconfirmed are what this run is for."),
+            tr!(l, "capture-status-partly-verified"),
+            Some(tr!(l, "capture-status-partly-verified-detail")),
         ),
         Stability::Experimental => (
-            "experimental \u{2014} the protocol is reverse-engineered, not confirmed",
-            Some("Please complete as many steps as possible and share the report."),
+            tr!(l, "capture-status-experimental"),
+            Some(tr!(l, "capture-status-experimental-detail")),
         ),
     }
 }
@@ -44,7 +62,8 @@ pub(super) fn verify_meter(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
 ) -> Result<(String, bool), Box<dyn std::error::Error>> {
-    eprintln!("{}", style("Checking meter communication...").dim());
+    let l = crate::l10n::get();
+    eprintln!("{}", style(tr!(l, "capture-checking")).dim());
     let reported = match dmm.get_name() {
         Ok(Some(name)) => Some(name),
         Ok(None) | Err(_) => {
@@ -55,45 +74,48 @@ pub(super) fn verify_meter(
                     eprintln!();
                     // Name the link the session is on: "adapter" now reads as
                     // the Bluetooth one, and over a cable it never was one.
-                    let link = dmm
-                        .transport()
-                        .link()
-                        .map_or("link", |link| link.full_name(device.bluetooth_only()));
+                    let link = match dmm.transport().link() {
+                        Some(Link::UsbCable) => "usb",
+                        Some(Link::Bluetooth) if device.bluetooth_only() => "radio",
+                        Some(Link::Bluetooth) => "adapter",
+                        None => "other",
+                    };
                     eprintln!(
                         "{}",
-                        style(format!(
-                            "The {link} is connected but the meter isn't responding."
-                        ))
-                        .yellow()
-                        .bold()
+                        style(tr!(l, "capture-not-responding", link = link))
+                            .yellow()
+                            .bold()
                     );
-                    eprintln!("To enable data transmission:");
-                    for line in device.activation_instructions.lines() {
+                    eprintln!("{}", tr!(l, "capture-enable-transmission"));
+                    let steps = l.label(TextKind::Activation, device.activation_instructions);
+                    for line in steps.lines() {
                         eprintln!("  {line}");
                     }
                     eprintln!();
-                    eprintln!("Then run this command again.");
-                    return Err("meter not responding".into());
+                    eprintln!("{}", tr!(l, "capture-run-again"));
+                    return Err(NotResponding.into());
                 }
             }
         }
     };
 
     // The meter the run was started for, then the meter's own name: a
-    // detected meter was named by the open already. In English, as the
-    // rest of capture.
-    let english = crate::l10n::english();
-    if let Some(line) = crate::open::picked_line(english) {
+    // detected meter was named by the open already.
+    if let Some(line) = crate::open::picked_line(l) {
         eprintln!("{line}");
     }
-    crate::open::print_reported_name(english, reported.as_deref(), |line| eprintln!("{line}"));
+    crate::open::print_reported_name(l, reported.as_deref(), |line| eprintln!("{line}"));
     let stability = dmm.profile().stability;
-    let (headline, detail) = status_banner(stability);
-    if stability.is_verified() {
-        eprintln!("Status: {}", style(headline).green());
+    let (headline, detail) = status_banner(l, stability);
+    let headline = if stability.is_verified() {
+        style(headline).green()
     } else {
-        eprintln!("Status: {}", style(headline).yellow().bold());
-    }
+        style(headline).yellow().bold()
+    };
+    eprintln!(
+        "{}",
+        tr!(l, "capture-status", status = headline.to_string())
+    );
     if let Some(detail) = detail {
         eprintln!("        {detail}");
     }
@@ -160,13 +182,14 @@ pub(super) fn run_protocol_capture(
         save_report(report, output_path)?;
     }
 
+    let l = crate::l10n::get();
     eprintln!(
         "{}",
-        style("\u{2501}\u{2501}\u{2501} Measurement Modes \u{2501}\u{2501}\u{2501}").bold()
+        style(heading(&tr!(l, "capture-modes-heading"))).bold()
     );
     eprintln!(
         "{}",
-        style("each step captures itself once the meter settles \u{2014} Enter=capture now, s=skip one, q=skip to end and save").dim()
+        style(tr!(l, "capture-modes-keys", skip = "s", quit = "q")).dim()
     );
 
     // A resumed run inherits the gate its earlier half already passed.
@@ -229,10 +252,33 @@ fn step_selected(
     step_included(step_filter, step.id) && !(unverified_only && step.verified)
 }
 
+/// A pass's heading, between heavy lines.
+pub(super) fn heading(title: &str) -> String {
+    format!("\u{2501}\u{2501}\u{2501} {title} \u{2501}\u{2501}\u{2501}")
+}
+
+/// What the checklist calls `need`: the run's language for [`Need::label`],
+/// which the report keeps. A `match`, so a new [`Need`] has to be worded
+/// here.
+fn need_text(l: &Localizer, need: Need) -> Cow<'_, str> {
+    match need {
+        Need::ShortedLeads => tr!(l, "capture-need-shorted-leads"),
+        Need::DcSource => tr!(l, "capture-need-dc-source"),
+        Need::Thermocouple => tr!(l, "capture-need-thermocouple"),
+        Need::LiveWire => tr!(l, "capture-need-live-wire"),
+        Need::PowerAdapter => tr!(l, "capture-need-power-adapter"),
+        Need::Transistor => tr!(l, "capture-need-transistor"),
+        Need::Scr => tr!(l, "capture-need-scr"),
+        Need::LoopSource => tr!(l, "capture-need-loop-source"),
+        Need::PowerModule => tr!(l, "capture-need-power-module"),
+        Need::PvAdapter => tr!(l, "capture-need-pv-adapter"),
+    }
+}
+
 /// The equipment the given steps ask for, numbered in `Need::ALL` order, and
 /// the needs behind those numbers. `None` when the run needs nothing beyond
 /// the meter and its leads.
-fn render_needs(steps: &[CaptureStep]) -> Option<(String, Vec<Need>)> {
+fn render_needs(l: &Localizer, steps: &[CaptureStep]) -> Option<(String, Vec<Need>)> {
     let mut needs = Vec::new();
     let mut lines = String::new();
     for need in Need::ALL {
@@ -245,14 +291,20 @@ fn render_needs(steps: &[CaptureStep]) -> Option<(String, Vec<Need>)> {
             continue;
         }
         needs.push(need);
-        lines.push_str(&format!(
-            "  [{}] {}  (steps: {})\n",
-            needs.len(),
-            need.label(),
-            ids.join(", ")
-        ));
+        let item = tr!(
+            l,
+            "capture-needs-item",
+            item = need_text(l, need),
+            steps = ids.join(", "),
+        );
+        lines.push_str(&format!("  [{}] {item}\n", needs.len()));
     }
-    (!needs.is_empty()).then(|| (format!("You will need:\n{lines}"), needs))
+    (!needs.is_empty()).then(|| {
+        (
+            format!("{}\n{lines}", tr!(l, "capture-needs-heading")),
+            needs,
+        )
+    })
 }
 
 /// The steps waiting on something the operator hasn't got, each with the item
@@ -279,7 +331,8 @@ fn ask_missing_needs(
     steps: &[CaptureStep],
     input: &Input,
 ) -> Result<Vec<Need>, Box<dyn std::error::Error>> {
-    let Some((table, needs)) = render_needs(steps) else {
+    let l = crate::l10n::get();
+    let Some((table, needs)) = render_needs(l, steps) else {
         return Ok(Vec::new());
     };
     eprintln!();
@@ -288,9 +341,8 @@ fn ask_missing_needs(
         return Ok(Vec::new());
     }
     let missing = loop {
-        let answer =
-            input.line("Numbers of anything you don't have (Enter = have everything): ")?;
-        match parse_review_indices(&answer, needs.len()) {
+        let answer = input.line(&format!("{} ", tr!(l, "capture-needs-prompt")))?;
+        match parse_review_indices(l, &answer, needs.len()) {
             Ok(indices) => break indices,
             Err(e) => eprintln!("  {}", style(e).yellow()),
         }
@@ -316,14 +368,22 @@ fn render_review_table(rows: &[(String, String)]) -> String {
 ///
 /// One-based on the way in, since that is what the table shows; an empty line
 /// means every reading matched.
-fn parse_review_indices(input: &str, len: usize) -> Result<Vec<usize>, String> {
+fn parse_review_indices(l: &Localizer, input: &str, len: usize) -> Result<Vec<usize>, String> {
     let mut out = Vec::new();
     for token in input.split([',', ' ', '\t']).filter(|t| !t.is_empty()) {
         let n = token
             .parse::<usize>()
             .ok()
             .filter(|n| (1..=len).contains(n))
-            .ok_or_else(|| format!("{token:?} is not a number between 1 and {len}"))?;
+            .ok_or_else(|| {
+                tr!(
+                    l,
+                    "capture-not-a-number",
+                    token = format!("{token:?}"),
+                    max = len,
+                )
+                .into_owned()
+            })?;
         if !out.contains(&(n - 1)) {
             out.push(n - 1);
         }
@@ -364,17 +424,16 @@ pub(super) fn run_batch_review(
         return Ok(());
     }
 
+    let l = crate::l10n::get();
     eprintln!(
         "\n{}",
-        style("\u{2501}\u{2501}\u{2501} Review the readings \u{2501}\u{2501}\u{2501}").bold()
+        style(heading(&tr!(l, "capture-review-heading"))).bold()
     );
     eprint!("{}", render_review_table(&rows));
 
     let wrong = loop {
-        let answer = input.line(
-            "Numbers of the readings that did NOT match the meter's screen (Enter = all correct): ",
-        )?;
-        match parse_review_indices(&answer, rows.len()) {
+        let answer = input.line(&format!("{} ", tr!(l, "capture-review-prompt")))?;
+        match parse_review_indices(l, &answer, rows.len()) {
             Ok(indices) => break indices,
             Err(e) => eprintln!("  {}", style(e).yellow()),
         }
@@ -383,7 +442,7 @@ pub(super) fn run_batch_review(
     let mut answers: Vec<(String, Option<String>)> = Vec::with_capacity(rows.len());
     for (i, (id, _)) in rows.iter().enumerate() {
         let lcd = if wrong.contains(&i) {
-            Some(input.line(&format!("[{id}] {WHAT_SHOWN} "))?)
+            Some(input.line(&format!("[{id}] {} ", tr!(l, "capture-what-shown")))?)
         } else {
             None
         };
@@ -419,12 +478,12 @@ pub(super) fn run_freeform_captures(
         return Ok(());
     }
 
+    let l = crate::l10n::get();
     eprintln!(
         "\n{}",
-        style("\u{2501}\u{2501}\u{2501} Part 4: Additional Captures (optional) \u{2501}\u{2501}\u{2501}")
-            .bold()
+        style(heading(&tr!(l, "capture-freeform-heading"))).bold()
     );
-    eprintln!("Set the meter to any mode/state not covered above.\n");
+    eprintln!("{}\n", tr!(l, "capture-freeform-intro"));
 
     // A resumed report keeps its freeform steps: number on from them.
     let mut extra = report
@@ -435,7 +494,8 @@ pub(super) fn run_freeform_captures(
         .map_or(0, |n| n + 1);
     loop {
         let desc = input.line(&format!(
-            "[extra_{extra}] Describe what you set the meter to (or 'q' to finish): "
+            "[extra_{extra}] {} ",
+            tr!(l, "capture-freeform-prompt", quit = "q")
         ))?;
         if ends_freeform(&desc) {
             break;
@@ -461,7 +521,14 @@ pub(super) fn run_freeform_captures(
         }
 
         let confirmation = if let Some(last) = sample_data.last() {
-            eprintln!("  We read: {}", style(last.summary()).green());
+            eprintln!(
+                "  {}",
+                tr!(
+                    l,
+                    "capture-we-read",
+                    reading = style(last.summary()).green().to_string(),
+                )
+            );
             match ask_confirmation(input, false)? {
                 Confirmed::Reading(shown) => Some(shown),
                 // No retake is offered above, so this cannot come back; a step
@@ -470,7 +537,7 @@ pub(super) fn run_freeform_captures(
                 Confirmed::Retake => None,
             }
         } else {
-            eprintln!("  {NO_RESPONSE}");
+            eprintln!("  {}", tr!(l, "capture-no-response"));
             None
         };
 
@@ -523,31 +590,46 @@ mod tests {
     /// partly verified meter's owner they had an unknown model.
     #[test]
     fn the_banner_says_how_far_the_family_is_confirmed() {
-        assert_eq!(
-            status_banner(Stability::Verified),
-            ("supported model", None)
-        );
+        let l = crate::l10n::english();
+        let (headline, detail) = status_banner(l, Stability::Verified);
+        assert_eq!(headline, "supported model");
+        assert_eq!(detail, None);
 
-        let (headline, detail) = status_banner(Stability::PartlyVerified);
+        let (headline, detail) = status_banner(l, Stability::PartlyVerified);
         assert!(headline.starts_with("partly verified"), "{headline}");
         assert!(detail.unwrap().contains("still unconfirmed"));
 
-        let (headline, detail) = status_banner(Stability::Experimental);
+        let (headline, detail) = status_banner(l, Stability::Experimental);
         assert!(headline.starts_with("experimental"), "{headline}");
         assert!(detail.unwrap().contains("as many steps as possible"));
     }
 
     #[test]
     fn review_indices_are_one_based_and_bounded() {
-        assert_eq!(parse_review_indices("", 3), Ok(vec![]));
-        assert_eq!(parse_review_indices("  ", 3), Ok(vec![]));
-        assert_eq!(parse_review_indices("1,3", 3), Ok(vec![0, 2]));
-        assert_eq!(parse_review_indices("3 1", 3), Ok(vec![0, 2]));
-        assert_eq!(parse_review_indices("2, 2", 3), Ok(vec![1]));
+        assert_eq!(
+            parse_review_indices(crate::l10n::english(), "", 3),
+            Ok(vec![])
+        );
+        assert_eq!(
+            parse_review_indices(crate::l10n::english(), "  ", 3),
+            Ok(vec![])
+        );
+        assert_eq!(
+            parse_review_indices(crate::l10n::english(), "1,3", 3),
+            Ok(vec![0, 2])
+        );
+        assert_eq!(
+            parse_review_indices(crate::l10n::english(), "3 1", 3),
+            Ok(vec![0, 2])
+        );
+        assert_eq!(
+            parse_review_indices(crate::l10n::english(), "2, 2", 3),
+            Ok(vec![1])
+        );
 
         for bad in ["0", "4", "-1", "two", "1,x"] {
             assert!(
-                parse_review_indices(bad, 3).is_err(),
+                parse_review_indices(crate::l10n::english(), bad, 3).is_err(),
                 "{bad:?} must be rejected"
             );
         }
@@ -614,7 +696,7 @@ mod tests {
             needy_step("acv", &[]),
             needy_step("ohm_short", &[Need::ShortedLeads]),
         ];
-        let (table, needs) = render_needs(&steps).unwrap();
+        let (table, needs) = render_needs(crate::l10n::english(), &steps).unwrap();
         assert_eq!(needs, vec![Need::ShortedLeads, Need::Thermocouple]);
         assert_eq!(
             table,
@@ -629,7 +711,7 @@ mod tests {
     #[test]
     fn no_needs_shows_no_checklist() {
         let steps = [needy_step("acv", &[]), needy_step("hold", &[])];
-        assert!(render_needs(&steps).is_none());
+        assert!(render_needs(crate::l10n::english(), &steps).is_none());
     }
 
     /// Saying "no thermocouple" drops the temperature steps and nothing else.

@@ -25,6 +25,7 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "cli/debug.ftl"),
     dmm_shared::ftl!("en-US", "cli/command.ftl"),
     dmm_shared::ftl!("en-US", "cli/settings.ftl"),
+    dmm_shared::ftl!("en-US", "cli/capture.ftl"),
     dmm_shared::ftl!("en-US", "cli/help.ftl"),
     dmm_shared::ftl!("en-US", "cli/args.ftl"),
     dmm_shared::ftl!("fr", "cli/common.ftl"),
@@ -164,6 +165,9 @@ fn ours<'e>(e: &'e (dyn std::error::Error + 'static)) -> Option<&'e dyn Localize
         .or_else(|| of::<crate::cmd::read::Refused>(e))
         .or_else(|| of::<crate::cmd::settings::SetFailed>(e))
         .or_else(|| of::<crate::format::NoFrame>(e))
+        .or_else(|| of::<crate::capture::NotResponding>(e))
+        .or_else(|| of::<crate::capture::InputGone>(e))
+        .or_else(|| of::<crate::capture::UnknownSteps>(e))
 }
 
 /// `e` as the terminal shows it: a library error or one of dmm-cli's own
@@ -185,12 +189,7 @@ pub(crate) fn error_text(l: &Localizer, e: &(dyn std::error::Error + 'static)) -
 
 /// `Error:`, red and bold, to open the line saying why a command failed.
 pub(crate) fn error_label() -> StyledObject<Cow<'static, str>> {
-    error_label_in(get())
-}
-
-/// [`error_label`] in `l`'s language: capture's stays English.
-pub(crate) fn error_label_in(l: &'static Localizer) -> StyledObject<Cow<'static, str>> {
-    style(tr!(l, "common-error-label")).red().bold()
+    style(tr!(get(), "common-error-label")).red().bold()
 }
 
 /// `Warning:`, yellow, to open a line about something off that the command

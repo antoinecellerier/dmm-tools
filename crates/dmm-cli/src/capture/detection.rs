@@ -15,7 +15,10 @@ use dmm_lib::detect::Detected;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::protocol::{CaptureStep, Expect, ValueExpect};
+use dmm_lib::text::TextKind;
 use dmm_lib::transport::{Link, Transport};
+use dmm_shared::l10n::Localizer;
+use dmm_shared::tr;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -209,10 +212,10 @@ pub(super) fn run_detection_check(
         return Ok(Some(DetectionCheck::new(DetectionOutcome::Skipped)));
     }
 
+    let l = crate::l10n::get();
     eprintln!(
         "\n{}",
-        style("\u{2501}\u{2501}\u{2501} Last check: auto-detection \u{2501}\u{2501}\u{2501}")
-            .bold()
+        style(super::session::heading(&tr!(l, "capture-detect-heading"))).bold()
     );
     // Two prompts: on a dial meter off is a dial position, so "off and on
     // again at DC V" is not one thing to do.
@@ -221,25 +224,29 @@ pub(super) fn run_detection_check(
     // restarted meter's. A Bluetooth link is scanned for and joined afresh
     // anyway, and a meter with the radio built in restarts it.
     if on_cable {
-        eprintln!("Turn the meter off and unplug its USB cable.");
+        eprintln!("{}", tr!(l, "capture-detect-off-cable"));
     } else {
-        eprintln!("Turn the meter off.");
+        eprintln!("{}", tr!(l, "capture-detect-off"));
     }
-    if !confirmed(input, "Press Enter once it is off, or s to skip: ")? {
+    let off = tr!(l, "capture-detect-off-prompt", skip = "s");
+    if !confirmed(input, &format!("{off} "))? {
         return Ok(Some(DetectionCheck::new(DetectionOutcome::Skipped)));
     }
     // Some meters keep transmission on across a restart (the UT61E+), some
     // switch it off (the UT181A), so the steps are only for the second kind.
+    let dc_v = l.label(TextKind::Mode, "DC V");
     if on_cable {
-        eprintln!("Plug the cable back in and turn the meter on at DC V.");
+        eprintln!("{}", tr!(l, "capture-detect-on-cable", mode = &*dc_v));
     } else {
-        eprintln!("Turn it back on at DC V.");
+        eprintln!("{}", tr!(l, "capture-detect-on", mode = &*dc_v));
     }
-    eprintln!("If the meter switched data transmission off, turn it back on:");
-    for line in device.activation_instructions.lines() {
+    eprintln!("{}", tr!(l, "capture-detect-transmission"));
+    let steps = l.label(TextKind::Activation, device.activation_instructions);
+    for line in steps.lines() {
         eprintln!("{}", style(format!("  {line}")).dim());
     }
-    if !confirmed(input, "Press Enter when it is ready, or s to skip: ")? {
+    let ready = tr!(l, "capture-detect-ready-prompt", skip = "s");
+    if !confirmed(input, &format!("{ready} "))? {
         return Ok(Some(DetectionCheck::new(DetectionOutcome::Skipped)));
     }
 
@@ -249,7 +256,7 @@ pub(super) fn run_detection_check(
     if let (Some(opened), Some(step)) = (opened, read_back_step(device)) {
         check.read_back = Some(read_back(opened, &step, input, READ_BACK_TIMEOUT));
     }
-    let (line, advice) = closing_line(&check, device);
+    let (line, advice) = closing_line(l, &check, device);
     if advice {
         eprintln!("{}", style(line).yellow());
     } else {
@@ -289,7 +296,10 @@ fn detect_on(
     capture_bridge: &'static str,
     capture_name: Option<&str>,
 ) -> (DetectionCheck, Option<Opened>) {
-    eprintln!("{}", style("Checking auto-detection\u{2026}").dim());
+    eprintln!(
+        "{}",
+        style(tr!(crate::l10n::get(), "capture-detect-checking")).dim()
+    );
     let mut check = DetectionCheck::new(DetectionOutcome::OpenFailed);
     check.capture_bridge = Some(capture_bridge.to_string());
     let (transport, bridge) = match reopen(capture_bridge) {
@@ -380,14 +390,15 @@ fn read_back(opened: Opened, step: &CaptureStep, input: &Input, timeout: Duratio
                 .ok()
                 .as_ref()
                 .map(SampleData::from_measurement);
-            eprintln!("Now: {}", step.instruction);
+            let l = crate::l10n::get();
+            // The step's instruction stays as the step words it.
             eprintln!(
                 "{}",
-                style(
-                    "The reading is taken once the meter settles \u{2014} Enter takes it now, \
-                     s skips."
-                )
-                .dim()
+                tr!(l, "capture-detect-now", instruction = step.instruction)
+            );
+            eprintln!(
+                "{}",
+                style(tr!(l, "capture-detect-read-keys", skip = "s")).dim()
             );
             // `read_back_step` only picks a step with an expectation.
             let expect = step.expect.unwrap_or_default();
@@ -462,56 +473,86 @@ fn wait_for<T: Transport>(
 /// with the wrong tables or not at all, so the reporter is told what to keep
 /// doing. Some of those are known and can't be fixed (a UT803 never
 /// identifies, a UT71 reads as a UT804); the advice is right for them too.
-fn closing_line(check: &DetectionCheck, device: &'static SelectableDevice) -> (String, bool) {
+fn closing_line(
+    l: &Localizer,
+    check: &DetectionCheck,
+    device: &'static SelectableDevice,
+) -> (String, bool) {
     // Nothing was probed, so there is nothing to say about the meter.
     if check.outcome == DetectionOutcome::OpenFailed {
-        let why = check.error.as_deref().unwrap_or("no reason given");
+        // The error as the report keeps it.
+        let why = match check.error.as_deref() {
+            Some(why) => why.into(),
+            None => tr!(l, "capture-detect-no-reason"),
+        };
         return (
-            format!("Auto-detection was not checked: the link did not reopen ({why})."),
+            tr!(l, "capture-detect-not-reopened", reason = why).into_owned(),
             true,
         );
     }
-    let keep = format!(
-        " \u{2014} keep using --device {}, or pick {} in dmm-gui.",
-        crate::open::meter_listing(device).id(),
-        crate::open::meter_name(device)
-    );
+    let id = crate::open::meter_listing(device).id();
+    let meter = l.label(TextKind::Model, crate::open::meter_name(device));
     let picked = check.device_id.as_deref().and_then(registry::find_device);
-    match picked {
+    let (line, advice) = match picked {
         Some(picked) if picked.id == device.id => {
-            let name = picked.display_name();
+            let found = l.label(TextKind::Model, picked.display_name());
             let Some(read_back) = &check.read_back else {
-                return (format!("Auto-detection found {name}."), false);
+                return (
+                    tr!(l, "capture-detect-found", found = found).into_owned(),
+                    false,
+                );
             };
             let read = read_back.reading.as_ref().map(SampleData::summary);
             match (read_back.outcome, read) {
                 (ReadBackOutcome::Matched, Some(read)) => (
-                    format!("Auto-detection found {name} and read {read}."),
+                    tr!(
+                        l,
+                        "capture-detect-found-read",
+                        found = found,
+                        reading = read
+                    ),
                     false,
                 ),
                 (ReadBackOutcome::Unexpected, Some(read)) => (
-                    format!("Auto-detection found {name}, but then read {read}{keep}"),
+                    tr!(
+                        l,
+                        "capture-detect-found-read-other",
+                        found = found,
+                        reading = read,
+                        device = id,
+                        meter = meter,
+                    ),
                     true,
                 ),
                 (ReadBackOutcome::NoReading | ReadBackOutcome::Matched, _) => (
-                    format!("Auto-detection found {name}, but then read nothing{keep}"),
+                    tr!(
+                        l,
+                        "capture-detect-found-read-nothing",
+                        found = found,
+                        device = id,
+                        meter = meter,
+                    ),
                     true,
                 ),
-                _ => (format!("Auto-detection found {name}."), false),
+                _ => (tr!(l, "capture-detect-found", found = found), false),
             }
         }
         Some(picked) => (
-            format!(
-                "Auto-detection picked {} for this meter{keep}",
-                picked.display_name()
+            tr!(
+                l,
+                "capture-detect-picked-other",
+                found = l.label(TextKind::Model, picked.display_name()),
+                device = id,
+                meter = meter,
             ),
             true,
         ),
         None => (
-            format!("Auto-detection did not find this meter{keep}"),
+            tr!(l, "capture-detect-not-found", device = id, meter = meter),
             true,
         ),
-    }
+    };
+    (line.into_owned(), advice)
 }
 
 #[cfg(test)]
@@ -783,7 +824,7 @@ mod tests {
         assert_eq!(check.outcome, DetectionOutcome::OpenFailed);
         assert_eq!(check.device_id, None);
         assert!(check.frames.is_empty(), "nothing was probed");
-        let (line, _) = closing_line(&check, ut61eplus());
+        let (line, _) = closing_line(crate::l10n::english(), &check, ut61eplus());
         assert!(line.starts_with("Auto-detection was not checked"), "{line}");
     }
 
@@ -837,13 +878,13 @@ mod tests {
     fn the_closing_line_advises_only_when_auto_would_not_open_this_meter() {
         let mut check = DetectionCheck::new(DetectionOutcome::Found);
         check.device_id = Some("ut61eplus".to_string());
-        let (line, advice) = closing_line(&check, ut61eplus());
+        let (line, advice) = closing_line(crate::l10n::english(), &check, ut61eplus());
         assert_eq!(line, "Auto-detection found UNI-T UT61E+.");
         assert!(!advice);
 
         let ut71 = registry::find_device("ut71cde").unwrap();
         check.device_id = Some("ut804".to_string());
-        let (line, advice) = closing_line(&check, ut71);
+        let (line, advice) = closing_line(crate::l10n::english(), &check, ut71);
         assert!(advice);
         assert!(
             line.starts_with("Auto-detection picked UNI-T UT804 for this meter"),
@@ -851,8 +892,11 @@ mod tests {
         );
         assert!(line.contains("--device ut71cde"), "{line}");
 
-        let (line, advice) =
-            closing_line(&DetectionCheck::new(DetectionOutcome::NotIdentified), ut71);
+        let (line, advice) = closing_line(
+            crate::l10n::english(),
+            &DetectionCheck::new(DetectionOutcome::NotIdentified),
+            ut71,
+        );
         assert!(advice);
         assert!(
             line.starts_with("Auto-detection did not find this meter"),
@@ -940,7 +984,7 @@ mod tests {
             frames: vec![],
             frames_dropped: 0,
         });
-        let (line, advice) = closing_line(&check, ut61eplus());
+        let (line, advice) = closing_line(crate::l10n::english(), &check, ut61eplus());
         assert_eq!(
             line,
             format!("Auto-detection found UNI-T UT61E+ and read {summary}.")
@@ -948,7 +992,7 @@ mod tests {
         assert!(!advice);
 
         check.read_back.as_mut().unwrap().outcome = ReadBackOutcome::Unexpected;
-        let (line, advice) = closing_line(&check, ut61eplus());
+        let (line, advice) = closing_line(crate::l10n::english(), &check, ut61eplus());
         assert!(line.contains("but then read"), "{line}");
         assert!(line.contains("--device ut61eplus"), "{line}");
         assert!(advice);
@@ -956,7 +1000,7 @@ mod tests {
         let read_back = check.read_back.as_mut().unwrap();
         read_back.outcome = ReadBackOutcome::NoReading;
         read_back.reading = None;
-        let (line, advice) = closing_line(&check, ut61eplus());
+        let (line, advice) = closing_line(crate::l10n::english(), &check, ut61eplus());
         assert!(line.contains("read nothing"), "{line}");
         assert!(advice);
     }

@@ -87,12 +87,12 @@ Once a native speaker has read the language in the app, set `reviewed: true` on 
 
 New or reworded English ships without its translations: it shows in English until they are filled in, at the latest by the release step in `docs/development.md`.
 
-1. `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists each language's missing messages.
+1. `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists each language's missing messages, the optional ones (the specification text, `cli/capture.ftl`) aside; `shipped_languages_have_the_optional_text` lists those too.
 2. For a handful, translate them inline, following each language's `i18n/<lang>/STYLE.md` and `glossary.tsv`. A missing file is copied from en-US, translated, and given an `ftl!` line per language next to the en-US one; until it has that line, `cargo test` names it. For more, run:
 
-   `Workflow({scriptPath: ".claude/skills/translate/scripts/fill-gaps.js", args: {repo: "<absolute repo path>", langs: [{lang: "fr", name: "French"}, …], writeModel?}})`
+   `Workflow({scriptPath: ".claude/skills/translate/scripts/fill-gaps.js", args: {repo: "<absolute repo path>", langs: [{lang: "fr", name: "French"}, …], writeModel?, optional?}})`
 
-   Per language, it runs a drafter, a reviewer of the added messages, and a fixer.
+   Per language, it runs a drafter, a reviewer of the added messages, and a fixer. `optional: true` drafts the optional messages too.
 3. Show the user the new messages in any language they read before committing.
 4. Commit each language's additions with the component prefixes of the files touched.
 

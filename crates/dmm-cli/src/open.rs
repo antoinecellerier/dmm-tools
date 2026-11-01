@@ -117,8 +117,7 @@ pub(crate) fn meter_listing(device: &'static SelectableDevice) -> registry::List
 /// The line that says which meter the run was told to open, and where it was
 /// told: a meter saved by dmm-gui opens with no `--device` in sight, and a
 /// wrong one would otherwise only show as a cable or meter that never
-/// answers. `None` under Auto-detect. In `l`'s language: capture, which
-/// stays English, passes [`crate::l10n::english`].
+/// answers. `None` under Auto-detect. In `l`'s language.
 pub(crate) fn picked_line(l: &Localizer) -> Option<String> {
     let &(listing, by) = PICKED.get()?;
     Some(selected_line(l, listing, by))

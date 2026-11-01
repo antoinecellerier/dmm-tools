@@ -8,9 +8,11 @@ export const meta = {
   ],
 }
 
-// args: {repo, langs: [{lang, name}], writeModel?} — see the translate skill.
+// args: {repo, langs: [{lang, name}], writeModel?, optional?} — see the translate skill.
 const REPO = args.repo
 const WRITE = args.writeModel ? { model: args.writeModel } : {}
+// With optional, the optional text too (spec notes, capture's own text).
+const GAPS = args.optional ? 'shipped_languages_have_the_optional_text' : 'shipped_languages_are_complete'
 
 const common = (lang, name) => `
 You are bringing the ${name} (locale id \`${lang}\`) translation of the dmm-tools apps (dmm-gui desktop app, dmm-cli CLI for digital multimeters) up to date with its English, in ${REPO}. Work only in ${REPO}/i18n/${lang}/, plus the one Rust edit a new file needs (below); never edit other Rust code, en-US files, docs, other languages or anything else, and never commit, stash or push. Scratch files go under ${REPO}/references/l10n/${lang}/work/ (gitignored).
@@ -37,7 +39,7 @@ const results = await pipeline(
   ({ lang, name }) => agent(`${common(lang, name)}
 
 List what ${lang} lacks:
-  cd ${REPO} && cargo test -q -p dmm-shared shipped_languages_are_complete -- --ignored 2>&1 | grep '^${lang}/'
+  cd ${REPO} && cargo test -q -p dmm-shared ${GAPS} -- --ignored 2>&1 | grep '^${lang}/'
 For each missing message, add its translation to the same file under i18n/${lang}/, at the place the en-US file has it (same order, same comments copied from en-US). A missing file: copy it from en-US and translate it, then add its \`dmm_shared::ftl!("${lang}", "<path>")\` line after the other ${lang} lines of the list that holds the en-US one; \`cargo test -q --workspace messages_match_their_uses\` names the list until you do. Translate the text only: keep IDs, attributes, { $variables }, selectors and their keys, \`code\`, --options, command lines, numbers and units as they are. Then run
   cd ${REPO} && cargo test -q -p dmm-shared translations 2>&1 | grep -E '^${lang}/|test result'
 and the completeness command above until neither lists ${lang}. Return the IDs you added, with any you were unsure about (your choice and the alternative).`,
