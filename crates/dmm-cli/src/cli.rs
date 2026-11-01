@@ -1157,7 +1157,10 @@ mod tests {
             text.contains("invalid value 'xx' for '--lang <LANG>'"),
             "{text}"
         );
-        assert!(text.contains("[possible values: en-US, system]"), "{text}");
+        assert!(
+            text.contains("[possible values: en-US, fr, system]"),
+            "{text}"
+        );
     }
 
     #[test]

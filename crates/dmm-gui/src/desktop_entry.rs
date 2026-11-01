@@ -97,6 +97,8 @@ mod tests {
         keys
     }
 
+    /// The entry as it was before translation, plus one `Comment[xx]` line
+    /// per shipped language.
     #[test]
     fn the_english_entry_is_the_one_written_before_translation() {
         let before = format!(
@@ -109,7 +111,17 @@ mod tests {
              Categories=Utility;Electronics;\n\
              StartupWMClass=dmm-tools\n"
         );
-        assert_eq!(contents(EXE), before);
+        let entry = contents(EXE);
+        let english: String = entry
+            .lines()
+            .filter(|l| !l.starts_with("Comment["))
+            .map(|l| format!("{l}\n"))
+            .collect();
+        assert_eq!(english, before);
+        for l in dmm_shared::l10n::languages().iter().skip(1) {
+            let key = format!("Comment[{}]=", l.id.replace('-', "_"));
+            assert!(entry.contains(&key), "no {key} line");
+        }
     }
 
     #[test]

@@ -9,6 +9,7 @@
 
 ### GUI
 
+- **French translation available** — pick it in Settings, **Language**, or let it follow the system's language.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
@@ -16,6 +17,7 @@
 
 ### CLI
 
+- **French translation available** — chosen by `--lang`, dmm-gui's Language setting or the system's language.
 - **`--help` lists each brand's own model names in name order, such as `ut217a` under UNI-T**
 - **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
 - **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.

@@ -549,7 +549,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Recording** | on | Toggle recording panel visibility |
 | **Specifications** | on | Toggle [specifications](#specifications) panel visibility |
 | **Resolution**, **Accuracy**, **Input Z**, **Notes** | on | Shown while **Specifications** is on. Each shows or hides its field in the specifications. |
-| **Language** | System | Shown when dmm-gui has more than one language. **System** follows the computer's language ([how it is chosen](setup.md#language)); the other entries name each language in itself. Applies immediately; toasts and notices already on screen, and the readings markers recorded, keep their language. |
+| **Language** | System | **System** follows the computer's language ([how it is chosen](setup.md#language)); the other entries name each language in itself. Applies immediately; toasts and notices already on screen, and the readings markers recorded, keep their language. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
 | **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |

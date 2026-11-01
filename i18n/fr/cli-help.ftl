@@ -1,0 +1,161 @@
+### dmm-cli's --help: what each command and option does.
+###
+### Generated from the doc comments in crates/dmm-cli/src/cli.rs by
+### `UPDATE_L10N=1 cargo test -p dmm-cli cli_help_ftl`: edit those, not this
+### file. The run names each ID whose English changed. When the meaning changed
+### too, delete that message from every language's cli-help.ftl, so it shows in
+### English until it is translated again.
+###
+### IDs follow the command tree: read.about is what the read command does,
+### read--interval-ms.help what its --interval-ms option does. clap wraps each
+### paragraph to the terminal's width: keep a paragraph on one line. Option
+### names (--device), values (auto, mock) and command lines ('dmm-cli list')
+### stay as they are. clap's own words around these texts (Usage:, Options:,
+### [default: …], [possible values: …]) are in cli/help.ftl.
+
+# dmm-cli
+dmm-cli =
+    .about = Outil en ligne de commande pour multimètres numériques USB et Bluetooth
+# dmm-cli --device
+dmm-cli--device =
+    .help = Appareil auquel se connecter [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Sans cette option, `device_family` dans ~/.config/dmm-tools/settings.json (écrit par dmm-gui) s’applique, puis `auto`, qui détecte le multimètre via le câble USB
+# dmm-cli --adapter
+dmm-cli--adapter =
+    .help = Choisir un adaptateur précis quand plusieurs sont accessibles. Indiquez le numéro de série ou le chemin HID d’un câble USB, ou l’adresse d’un adaptateur ou d’un multimètre Bluetooth, tels que 'dmm-cli list' les affiche
+# dmm-cli --no-bluetooth
+dmm-cli--no-bluetooth =
+    .help = Désactiver la recherche Bluetooth pour cette exécution : aucun adaptateur ni multimètre n’est recherché et 'list' n’affiche que les câbles. Remplace le paramètre 'bluetooth' enregistré. Une adresse donnée à --adapter est quand même ouverte
+# dmm-cli --lang
+dmm-cli--lang =
+    .help = Langue des messages et de l’aide, ou `system` pour celle du système. Sans cette option, `language` dans le fichier de paramètres (écrit par la ligne Langue de dmm-gui) s’applique, puis la langue du système
+# dmm-cli list
+list =
+    .about = Lister les câbles USB connectés, ainsi que les adaptateurs et multimètres Bluetooth à portée
+# dmm-cli info
+info =
+    .about = Se connecter et afficher les informations de l’appareil
+# dmm-cli read
+read =
+    .about = Lire les mesures en continu
+# dmm-cli read --interval-ms
+read--interval-ms =
+    .help = Garder au plus une mesure par intervalle, en millisecondes (0 = chaque mesure que produit le multimètre)
+# dmm-cli read --format
+# .value-… says what that value does, in --help's list of values.
+read--format =
+    .help = Format de sortie [par défaut : text, ou celui que nomme l’extension du fichier -o]
+    .value-replay = Les propres trames du multimètre, que --replay peut relire
+# dmm-cli read --output
+read--output =
+    .help = Fichier de sortie (stdout si non précisé). Sans nom, le fichier est nommé d’après le multimètre, son mode et le début de l’exécution
+# dmm-cli read --count
+read--count =
+    .help = Nombre de mesures (0 = illimité : jusqu’à Ctrl+C, ou jusqu’à la fin d’un fichier --replay)
+# dmm-cli read --integrate
+read--integrate =
+    .help = Afficher l’intégrale cumulée dans le temps (charge pour les modes courant, V·s pour la tension)
+# dmm-cli read --scale
+read--scale =
+    .help = Multiplier la mesure, prise en unités de base (V, A, Ω, …), par FACTOR. Une pince de 10 mV/A s’utilise avec --scale 100, une sonde 100:1 avec --scale 100
+# dmm-cli read --offset
+read--offset =
+    .help = Ajouter VALUE après la mise à l’échelle (32 avec --scale 1.8 convertit les °C en °F)
+# dmm-cli read --unit
+read--unit =
+    .help = Étiqueter la mesure mise à l’échelle avec cette unité au lieu de l’unité de base du multimètre
+# dmm-cli read --alarm-high
+read--alarm-high =
+    .help = Avertir quand la mesure dépasse VALUE, en unités de base (V, A, Ω, …), ou dans l’unité --unit d’une mesure mise à l’échelle
+# dmm-cli read --alarm-low
+read--alarm-low =
+    .help = Avertir quand la mesure passe sous VALUE, comme --alarm-high
+# dmm-cli read --alarm-hysteresis
+read--alarm-hysteresis =
+    .help = De combien une mesure doit revenir à l’intérieur avant que la même limite déclenche de nouveau l’alarme : une valeur dans l’unité des limites, ou un pourcentage de la limite (`1%`) [par défaut : quelques points du dernier chiffre du multimètre]
+# dmm-cli read --alarm-bell
+read--alarm-bell =
+    .help = Faire sonner le terminal à chaque alarme
+# dmm-cli read --mock-mode
+read--mock-mode =
+    .help = Fixer l’appareil simulé sur un mode précis (seulement avec --device mock). Sinon, le mode simulé du fichier de paramètres s’applique, à défaut l’appareil simulé parcourt tous les modes
+# dmm-cli read --replay
+read--replay =
+    .help = Relire un fichier écrit par --format replay au lieu d’ouvrir un multimètre, jusqu’à la fin du fichier
+# dmm-cli read --import
+read--import =
+    .help = Lire un fichier CSV, JSON ou de relecture exporté au lieu d’ouvrir un multimètre, sans attendre : pour le convertir ou afficher son résumé
+# dmm-cli command
+command =
+    .about = Envoyer au multimètre une commande d’appui sur une touche. Lancez sans argument pour lister les commandes disponibles pour l’appareil sélectionné
+# dmm-cli command <ACTION>
+command--action =
+    .help = Nom de la commande (lancez sans argument pour voir les commandes disponibles)
+# dmm-cli get
+get =
+    .about = Lister les choix que proposent les réglages du multimètre depuis sa position actuelle. Lancez sans argument pour tous les réglages qui offrent un choix
+# dmm-cli get <SETTING>
+get--setting =
+    .help = Réglage à lister (omettez-le pour tous)
+# dmm-cli get --format
+get--format =
+    .help = Format de sortie
+# dmm-cli get --mock-mode
+get--mock-mode =
+    .help = Fixer l’appareil simulé sur un mode précis (seulement avec --device mock). Sinon, le mode simulé du fichier de paramètres s’applique, à défaut l’appareil simulé parcourt tous les modes
+# dmm-cli set
+set =
+    .about = Changer un réglage du multimètre sans toucher au multimètre. Lancez sans choix pour lister ce que ce réglage permet d’atteindre depuis la position actuelle
+# dmm-cli set <SETTING>
+set--setting =
+    .help = Réglage à changer
+# dmm-cli set <CHOICE>
+set--choice =
+    .help = Libellé d’une valeur, ou un fragment unique d’un libellé, tiré de la liste (lancez la commande sans choix pour les voir)
+# dmm-cli set --mock-mode
+set--mock-mode =
+    .help = Fixer l’appareil simulé sur un mode précis (seulement avec --device mock). Sinon, le mode simulé du fichier de paramètres s’applique, à défaut l’appareil simulé parcourt tous les modes
+# dmm-cli debug
+debug =
+    .about = Mode de vidage hexadécimal brut pour le débogage du protocole
+# dmm-cli debug --count
+debug--count =
+    .help = Nombre de requêtes à envoyer (0 = illimité)
+# dmm-cli debug --interval-ms
+debug--interval-ms =
+    .help = Garder au plus une mesure par intervalle, en millisecondes (0 = chaque mesure)
+# dmm-cli completions
+completions =
+    .about = Générer l’autocomplétion du shell
+# dmm-cli completions <SHELL>
+completions--shell =
+    .help = Shell pour lequel générer l’autocomplétion
+# dmm-cli capture
+capture =
+    .about = Capture guidée du protocole pour les rapports de bogue et la vérification
+# dmm-cli capture --output
+capture--output =
+    .help = Fichier de sortie (par défaut : capture-<device>.yaml). Remplace le nommage automatique
+# dmm-cli capture --steps
+capture--steps =
+    .help = N’exécuter que certaines étapes (identifiants séparés par des virgules, par exemple "dcmv,temp,duty")
+# dmm-cli capture --unverified
+capture--unverified =
+    .help = N’exécuter que les étapes pas encore confirmées sur un vrai multimètre, plus la passe libre
+# dmm-cli capture --plan
+capture--plan =
+    .help = Exécuter les étapes du fichier de plan d’un mainteneur au lieu de la liste propre à l’appareil
+# dmm-cli capture --sniff
+capture--sniff =
+    .help = Ne se fier à rien de ce que dit l’analyseur : détecter les étapes aux changements des octets bruts et confirmer chacune
+# dmm-cli capture --no-drive
+capture--no-drive =
+    .help = Ne pas laisser l’outil régler lui-même les plages et les indicateurs après chaque étape de mode
+# dmm-cli capture --settle
+capture--settle =
+    .help = Attendre MS avant d’échantillonner chaque étape, pour les mesures qui se stabilisent lentement
+# dmm-cli capture --list-steps
+capture--list-steps =
+    .help = Lister tous les identifiants d’étape disponibles et quitter
+# dmm-cli capture --format
+capture--format =
+    .help = Façon dont --list-steps affiche la liste (md est la liste de contrôle du ticket)

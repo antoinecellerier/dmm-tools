@@ -27,12 +27,25 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "cli/settings.ftl"),
     dmm_shared::ftl!("en-US", "cli/help.ftl"),
     dmm_shared::ftl!("en-US", "cli/args.ftl"),
+    dmm_shared::ftl!("fr", "cli/common.ftl"),
+    dmm_shared::ftl!("fr", "cli/connect.ftl"),
+    dmm_shared::ftl!("fr", "cli/read.ftl"),
+    dmm_shared::ftl!("fr", "cli/list.ftl"),
+    dmm_shared::ftl!("fr", "cli/info.ftl"),
+    dmm_shared::ftl!("fr", "cli/debug.ftl"),
+    dmm_shared::ftl!("fr", "cli/command.ftl"),
+    dmm_shared::ftl!("fr", "cli/settings.ftl"),
+    dmm_shared::ftl!("fr", "cli/help.ftl"),
+    dmm_shared::ftl!("fr", "cli/args.ftl"),
 ];
 
 /// What each command and option does, as `--help` says it: generated from
 /// the doc comments in `cli.rs` by the `cli_help_ftl` test, so the ID scan
 /// leaves it out of its unused check, as it does `lib.ftl`.
-const CLI_HELP: &[Resource] = &[dmm_shared::ftl!("en-US", "cli-help.ftl")];
+const CLI_HELP: &[Resource] = &[
+    dmm_shared::ftl!("en-US", "cli-help.ftl"),
+    dmm_shared::ftl!("fr", "cli-help.ftl"),
+];
 
 /// Everything dmm-cli shows: the shared help, the library's text and
 /// errors, its own messages and its `--help`.
