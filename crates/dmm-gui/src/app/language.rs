@@ -195,6 +195,8 @@ impl App {
     /// One is installed for every language, English too, so a name in
     /// another script — a theme's, a file's — still draws. Glyphs it finds
     /// arrive a few frames after a switch, once the enumeration is done.
+    /// On Windows 11, Chinese draws from a system font this way, with no
+    /// boxes and no missing-font notice.
     fn install_fonts(&mut self, ctx: &egui::Context) {
         let language = self.l10n.language();
         if self.speech.fonts_for == Some(language.id) {
@@ -247,8 +249,9 @@ impl App {
     /// each one.
     ///
     /// Narrator does not pick its voice from it: on Windows 11 it reads in
-    /// the voice chosen in its own settings, and reads French text right once
-    /// that voice is French.
+    /// the voice chosen in its own settings, and reads French or Chinese text
+    /// right once that voice is in the language. Its own words — "button",
+    /// "checked" — follow the Windows display language.
     pub(super) fn tell_screen_reader_language(&self, ctx: &egui::Context) {
         let id = self.l10n.language().id;
         ctx.accesskit_node_builder(egui::accesskit_root_id(), |node| node.set_language(id));

@@ -55,7 +55,8 @@ pub const PSEUDO_VAR: &str = "DMM_TOOLS_PSEUDO_LOCALE";
 pub const L10N_DIR_VAR: &str = "DMM_TOOLS_L10N_DIR";
 
 /// [`resolve`] against this process: its locale variables and the system's
-/// preferred languages.
+/// preferred languages. With no setting, an en-US Windows 11 gives both apps
+/// English.
 pub fn resolve_from_env(flag: Option<&str>, setting: &str) -> &'static Language {
     let system: Vec<String> = sys_locale::get_locales().collect();
     resolve(flag, setting, |k| std::env::var(k).ok(), &system)

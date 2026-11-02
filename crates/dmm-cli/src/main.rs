@@ -33,7 +33,8 @@ use open::{
 fn main() {
     // First: the language decides every line printed from here on, `--help`
     // included, so `--lang` and the settings file are read before the
-    // command line is parsed.
+    // command line is parsed. Chinese prints right on Windows 11, in Windows
+    // Terminal and in the old console (cmd.exe) alike.
     let settings = dmm_shared::SharedSettings::load_if_exists();
     let lang = cli::lang_from_argv(std::env::args_os().skip(1));
     l10n::init(lang, settings.as_ref().map_or("", |s| s.language.as_str()));

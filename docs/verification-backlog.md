@@ -187,23 +187,17 @@ screen reader has walked the rest.
 
 ## Translations
 
-Checked on Linux only; the other platforms take their fonts, console and
-screen reader from the system.
+Checked on Linux and Windows; macOS takes its fonts, console and screen
+reader from the system.
 
-- Windows: in `dmm-gui --device mock`, Settings, **Language**, pick 简体中文,
+- macOS: in `dmm-gui --device mock`, Settings, **Language**, pick 简体中文,
   then Français and Português. Chinese must draw without boxes or the
   missing-font notice; this decides whether the CJK font lookup needs a fix.
-- Windows: Narrator (Win+Ctrl+Enter) with a Chinese voice selected reads the
+- macOS: VoiceOver with a voice in the language reads the French and the
   Chinese window right.
-- Windows with French as the display language: Narrator says its role and
-  state words (button, checked) in French beside the app's French text;
-  decides whether the GUI reference's Screen reader section names their source.
-- Windows: `dmm-cli --lang zh-CN --help` in Windows Terminal and in the old
-  console (cmd.exe), whose default font may lack Chinese.
-- Windows: with no `language` setting, an en-US Windows starts both apps in
+- macOS: `dmm-cli --lang zh-CN --help` in Terminal.
+- macOS: with no `language` setting, an English macOS starts both apps in
   English.
-- macOS: the same checks, with VoiceOver and its voice for each language in
-  place of Narrator's.
 
 ## Known defects
 
