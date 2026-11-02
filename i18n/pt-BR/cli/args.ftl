@@ -114,4 +114,4 @@ args-similar =
             }
     }
 # The last line. $help is --help.
-args-more-info = Para mais informações, tente '{ $help }'.
+args-more-info = Para mais informações, use '{ $help }'.

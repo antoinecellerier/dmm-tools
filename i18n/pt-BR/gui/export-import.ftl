@@ -64,8 +64,8 @@ export-no-wire-format = O multímetro simulado não tem dados brutos para export
 # measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv. Export… is the button.
 import-hint =
     { $count ->
-        [one] { $count } leitura importada de { $file }. “Exportar…” salva a leitura com os marcadores e a visualização.
-       *[other] { $count } leituras importadas de { $file }. “Exportar…” salva as leituras com os marcadores e a visualização.
+        [one] { $count } leitura importada de { $file }. Use “Exportar…” para salvá-la com os marcadores e a visualização.
+       *[other] { $count } leituras importadas de { $file }. Use “Exportar…” para salvá-las com os marcadores e a visualização.
     }
 
 ## The prompt shown over the window before something would discard samples
@@ -94,20 +94,20 @@ export-unsaved-record =
             }
         [markers]
             { $markers ->
-                [one] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto ele tiver as leituras deles.
-               *[other] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto ele tiver as leituras deles.
+                [one] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
+               *[other] Iniciar uma nova gravação descartará as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto ele tiver as leituras deles.
-                       *[other] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto ele tiver as leituras deles.
+                        [one] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
+                       *[other] Iniciar uma nova gravação descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
                     }
                *[other]
                     { $markers ->
-                        [one] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto ele tiver as leituras deles.
-                       *[other] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto ele tiver as leituras deles.
+                        [one] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
+                       *[other] Iniciar uma nova gravação descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores. Os marcadores permanecem no gráfico enquanto as leituras deles continuarem nele.
                     }
             }
     }
@@ -151,25 +151,25 @@ export-unsaved-import =
     { $lost ->
         [samples]
             { $samples ->
-                [one] Importar substitui esta sessão e descartará { $samples } amostra não exportada.
-               *[other] Importar substitui esta sessão e descartará { $samples } amostras não exportadas.
+                [one] Importar substitui esta sessão e descarta { $samples } amostra não exportada.
+               *[other] Importar substitui esta sessão e descarta { $samples } amostras não exportadas.
             }
         [markers]
             { $markers ->
-                [one] Importar substitui esta sessão e descartará as alterações não salvas de { $markers } marcador.
-               *[other] Importar substitui esta sessão e descartará as alterações não salvas de { $markers } marcadores.
+                [one] Importar substitui esta sessão e descarta as alterações não salvas de { $markers } marcador.
+               *[other] Importar substitui esta sessão e descarta as alterações não salvas de { $markers } marcadores.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Importar substitui esta sessão e descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador.
-                       *[other] Importar substitui esta sessão e descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores.
+                        [one] Importar substitui esta sessão e descarta { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador.
+                       *[other] Importar substitui esta sessão e descarta { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores.
                     }
                *[other]
                     { $markers ->
-                        [one] Importar substitui esta sessão e descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador.
-                       *[other] Importar substitui esta sessão e descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores.
+                        [one] Importar substitui esta sessão e descarta { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador.
+                       *[other] Importar substitui esta sessão e descarta { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores.
                     }
             }
     }
@@ -181,25 +181,25 @@ export-unsaved-connect =
     { $lost ->
         [samples]
             { $samples ->
-                [one] Conectar encerra a sessão importada e descartará { $samples } amostra não exportada.
-               *[other] Conectar encerra a sessão importada e descartará { $samples } amostras não exportadas.
+                [one] Conectar encerra a sessão importada e descarta { $samples } amostra não exportada.
+               *[other] Conectar encerra a sessão importada e descarta { $samples } amostras não exportadas.
             }
         [markers]
             { $markers ->
-                [one] Conectar encerra a sessão importada e descartará as alterações não salvas de { $markers } marcador.
-               *[other] Conectar encerra a sessão importada e descartará as alterações não salvas de { $markers } marcadores.
+                [one] Conectar encerra a sessão importada e descarta as alterações não salvas de { $markers } marcador.
+               *[other] Conectar encerra a sessão importada e descarta as alterações não salvas de { $markers } marcadores.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Conectar encerra a sessão importada e descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador.
-                       *[other] Conectar encerra a sessão importada e descartará { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores.
+                        [one] Conectar encerra a sessão importada e descarta { $samples } amostra não exportada e as alterações não salvas de { $markers } marcador.
+                       *[other] Conectar encerra a sessão importada e descarta { $samples } amostra não exportada e as alterações não salvas de { $markers } marcadores.
                     }
                *[other]
                     { $markers ->
-                        [one] Conectar encerra a sessão importada e descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador.
-                       *[other] Conectar encerra a sessão importada e descartará { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores.
+                        [one] Conectar encerra a sessão importada e descarta { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcador.
+                       *[other] Conectar encerra a sessão importada e descarta { $samples } amostras não exportadas e as alterações não salvas de { $markers } marcadores.
                     }
             }
     }
@@ -240,13 +240,13 @@ import-done-partial =
     { $count ->
         [one]
             { $left ->
-                [one] Importada a primeira leitura de { $file }; { $left } leitura além do Tamanho do buffer em Configurações ficou de fora
-               *[other] Importada a primeira leitura de { $file }; { $left } leituras além do Tamanho do buffer em Configurações ficaram de fora
+                [one] Importada a primeira leitura de { $file }; { $left } leitura ficou de fora por exceder o Tamanho do buffer definido em Configurações
+               *[other] Importada a primeira leitura de { $file }; { $left } leituras ficaram de fora por exceder o Tamanho do buffer definido em Configurações
             }
        *[other]
             { $left ->
-                [one] Importadas as primeiras { $count } leituras de { $file }; { $left } leitura além do Tamanho do buffer em Configurações ficou de fora
-               *[other] Importadas as primeiras { $count } leituras de { $file }; { $left } leituras além do Tamanho do buffer em Configurações ficaram de fora
+                [one] Importadas as primeiras { $count } leituras de { $file }; { $left } leitura ficou de fora por exceder o Tamanho do buffer definido em Configurações
+               *[other] Importadas as primeiras { $count } leituras de { $file }; { $left } leituras ficaram de fora por exceder o Tamanho do buffer definido em Configurações
             }
     }
 # The file was read but has no readings in it. $file is its name.

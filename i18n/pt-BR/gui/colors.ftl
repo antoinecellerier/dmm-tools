@@ -157,14 +157,14 @@ colors-preset-colorblind =
         [customized] Daltonismo (personalizado)
        *[plain] Daltonismo
     }
-    .hover = Paleta que continua distinguível com deficiência protan ou deutan
+    .hover = Paleta que continua distinguível para quem tem deficiência protan ou deutan
 # After the chips while there are changes a click would lose.
 colors-preset-clears = Escolher uma predefinição apaga as personalizações
 
 ## The Customize colors section, folded under its header until opened.
 
 colors-customize = Personalizar cores
-    .hover = Ajustar cada cor sobre a predefinição ou o tema selecionado
+    .hover = Ajustar cada cor a partir da predefinição ou do tema selecionado
 # Beside the header: whose colours the swatches change. $mode is dark or
 # light.
 colors-editing =
@@ -182,14 +182,14 @@ colors-group-status = Status:
 # The arrow after a colour that others follow, before those it leads.
 # $anchor is the leading colour's name, as its swatch below has it.
 colors-follow-arrow =
-    .hover = Estas cores seguem a cor { $anchor }, mantendo a diferença em relação a ela, até você escolher uma separadamente
+    .hover = Estas cores seguem a cor { $anchor }, mantendo a diferença em relação a ela, até que você escolha uma delas separadamente
 
 ## The swatches, each named beside it, in the rows the section shows them.
 
 colors-swatch-background = Plano de fundo
     .hover = Cor do plano de fundo dos painéis
 colors-swatch-frame = Quadro
-    .hover = Plano de fundo da barra superior e do painel de leitura (o dos painéis, se não definido)
+    .hover = Plano de fundo da barra superior e do painel de leitura (se não definido, o mesmo dos painéis)
 colors-swatch-button = Botão
     .hover = Cor do plano de fundo dos botões
 # Lines between and around the panels.
@@ -273,13 +273,13 @@ colors-relink = ↺ revincular
 # their contrast, e.g. 2.1; $ground the other colour's name; $floor the
 # least contrast it needs, e.g. 4.5.
 colors-low-contrast = { $ratio }:1 sobre { $ground }
-    .hover = Abaixo do contraste de { $floor }:1 de que esta cor precisa sobre { $ground }
+    .hover = Abaixo do contraste mínimo de { $floor }:1 necessário para esta cor sobre { $ground }
 # A warning after a graph colour the user made hard to tell from another.
 # $other is the other colour's name; $distance how far apart they are and
 # $floor how far apart they need to be, as whole numbers. ΔE is the
 # measure of colour difference.
 colors-too-close = próxima de { $other }
-    .hover = Só { $distance } de distância (ΔE), quando as cores do gráfico precisam de { $floor } para se distinguir
+    .hover = Distância de apenas { $distance } (ΔE); as cores do gráfico precisam de { $floor } para se distinguir
 
 ## The editor a swatch opens: a colour picker, then the colour as text.
 
@@ -295,7 +295,7 @@ colors-reset = Redefinir cores
 colors-reset-named =
     .hover = Descartar as alterações nas cores do tema { $name }
 colors-save = Salvar como tema…
-    .hover = Salvar estas cores como arquivo de tema; um tema salvo na sua pasta de temas entra na linha Tema
+    .hover = Salvar estas cores como arquivo de tema; um tema salvo na sua pasta de temas aparece na linha Tema
 # The file type in the save dialog's list of types.
 colors-save-file-type = Tema
 

@@ -96,7 +96,7 @@ alarm-low = Inferior
 # Caption before the high limit's field.
 alarm-high = Superior
 # Placeholder in an empty Low or High field: that side has no limit.
-alarm-no-limit = sem
+alarm-no-limit = nenhum
 # The field after ±, the hysteresis band: how far back inside a limit the
 # reading must come before that limit can alarm again. Its placeholder says
 # that blank picks the band automatically.

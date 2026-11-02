@@ -49,7 +49,7 @@ connect-reported-name-none = (nenhum)
 connect-detected = Multímetro { $meter } detectado (use --device { $device } ou selecione-o no dmm-gui para pular a detecção na próxima vez)
 # The meter gave a name of its own that isn't the model's: $reported is
 # that name, e.g. UT216XD. "Tables" are how the readings are decoded.
-connect-detected-reports = Multímetro { $meter } detectado (o multímetro informa “{ $reported }”; decodificação com as tabelas do multímetro { $meter }: use --device { $device } para mantê-las, ou outro identificador para substituí-las)
+connect-detected-reports = Multímetro { $meter } detectado (o multímetro se identifica como “{ $reported }”; as leituras são decodificadas com as tabelas do multímetro { $meter }: use --device { $device } para mantê-las ou outro identificador para substituí-las)
 
 ## Once a meter whose support isn't fully verified is open: a warning, then
 ## the command that makes a report, on a line of its own, then where to send
@@ -58,7 +58,7 @@ connect-detected-reports = Multímetro { $meter } detectado (o multímetro infor
 # $warning is the sentence saying how far the meter's support is verified.
 connect-unverified-warning = AVISO: { $warning }
 # Followed by the command line to run.
-connect-unverified-capture = Execute 'capture' para gerar um relatório para validação:
+connect-unverified-capture = Execute 'capture' para gerar um relatório de validação:
 # $url is the web address of the meter's issue on GitHub.
 connect-report-feedback = Envie comentários: { $url }
 

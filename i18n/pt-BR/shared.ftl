@@ -71,7 +71,7 @@ not-found-bluetooth-only = Nenhum multímetro { $model } encontrado via Bluetoot
 # $link is link-usb-cable or link-bluetooth.
 # $check is setup-usb-check or setup-bluetooth-check.
 setup-label = { $link }: { $check }
-setup-usb-check = verifique se ele está conectado e se o multímetro está ligado.
+setup-usb-check = verifique se está conectado e se o multímetro está ligado.
 setup-bluetooth-check = ligue o Bluetooth neste computador e a transmissão de dados no multímetro.
 # Linux. Two command lines follow.
 setup-usb-linux-rule = Verifique se a regra udev está instalada:
@@ -139,7 +139,7 @@ input-band-not-a-number = “{ $text }” não é um número nem uma porcentagem
 # A hysteresis band below zero.
 input-band-negative = deve ser maior ou igual a zero
 # A percentage band with a limit of 0, of which every percentage is 0.
-input-percent-of-zero = uma porcentagem de um limite de 0 é sempre 0; informe um valor
+input-percent-of-zero = qualquer porcentagem de um limite igual a 0 é 0; informe um valor
 
 ## Why an exported file or a recording did not read: in dmm-gui's toast
 ## after "Import failed:" and the file, in dmm-cli after "Error:" and the

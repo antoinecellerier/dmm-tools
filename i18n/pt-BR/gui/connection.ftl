@@ -20,7 +20,7 @@ connection-no-frames = Nenhum quadro neste trecho da gravação
 # at the end, with nothing after it.
 connection-waiting = Aguardando o multímetro{ $dots }
 # Under the waiting title, when a meter is picked in Settings.
-connection-waiting-check-selection = Verifique se o dispositivo certo está selecionado em Configurações (⚙), ou escolha Detecção automática ali
+connection-waiting-check-selection = Verifique se o dispositivo certo está selecionado em Configurações (⚙) ou escolha Detecção automática
 # Under the waiting title, when Settings is on Auto-detect.
 connection-waiting-switch-on = Ligue a transmissão de dados do multímetro, ou escolha o modelo em Configurações (⚙)
 
@@ -86,7 +86,7 @@ connection-no-response =
             não responde (modelo selecionado: { $model }).
     }
 
-    Se este for o dispositivo errado, altere-o em Configurações (⚙), ou escolha Detecção automática ali.
+    Se este for o dispositivo errado, altere-o em Configurações (⚙) ou escolha Detecção automática.
     Caso contrário, ligue a transmissão de dados:
     { $steps }
 # The same, on Auto-detect: no meter is picked to name.
@@ -139,8 +139,8 @@ connection-other-model = O multímetro informa “{ $reported }”, não o model
 # Settings now names that model.
 connection-named-after-detection =
     { $saved ->
-        [yes] O multímetro informa “{ $reported }”, modelo salvo como seu dispositivo: reconecte para lê-lo como { $named }.
-       *[no] O multímetro informa “{ $reported }”: reconecte para lê-lo como { $named }.
+        [yes] O multímetro informa “{ $reported }”, modelo salvo como seu dispositivo: reconecte para tratá-lo como { $named }.
+       *[no] O multímetro informa “{ $reported }”: reconecte para tratá-lo como { $named }.
     }
 
 # The recording stopped because Buffer size, in Settings, was lowered below
@@ -148,9 +148,9 @@ connection-named-after-detection =
 # written short, e.g. 1.2K. Export… is a button.
 connection-buffer-shrunk =
     { $count ->
-        [0] Gravação interrompida: { $kept } amostras mantidas; “Exportar…” as salva
-        [one] Gravação interrompida: { $kept } amostra mantida; “Exportar…” a salva
-       *[other] Gravação interrompida: { $kept } amostras mantidas; “Exportar…” as salva
+        [0] Gravação interrompida: { $kept } amostras mantidas; salve-as com “Exportar…”
+        [one] Gravação interrompida: { $kept } amostra mantida; salve-a com “Exportar…”
+       *[other] Gravação interrompida: { $kept } amostras mantidas; salve-as com “Exportar…”
     }
 # The recording filled the buffer. $count is its size in samples, $kept the
 # same number written short, e.g. 500K.

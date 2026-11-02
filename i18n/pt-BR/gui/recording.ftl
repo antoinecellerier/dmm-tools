@@ -40,9 +40,9 @@ recording-buffer-full = (buffer cheio)
 # how many samples the graph holds.
 recording-history-hint =
     { $count ->
-        [0] Nenhuma gravação. “Exportar…” salva { $count } amostras do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
-        [one] Nenhuma gravação. “Exportar…” salva { $count } amostra do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
-       *[other] Nenhuma gravação. “Exportar…” salva { $count } amostras do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
+        [0] Nenhuma gravação. Use “Exportar…” para salvar { $count } amostras do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
+        [one] Nenhuma gravação. Use “Exportar…” para salvar { $count } amostra do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
+       *[other] Nenhuma gravação. Use “Exportar…” para salvar { $count } amostras do gráfico. Clique em “Gravar” para continuar gravando quando o modo mudar.
     }
 
 ## Messages that show for a few seconds at the top right.
@@ -53,8 +53,8 @@ recording-discarded = Gravação descartada
 # that saves them. $count is how many it holds.
 recording-discarded-graph-keeps =
     { $count ->
-        [one] Gravação descartada. “Exportar…” salva { $count } amostra do gráfico.
-       *[other] Gravação descartada. “Exportar…” salva as { $count } amostras do gráfico.
+        [one] Gravação descartada. Use “Exportar…” para salvar { $count } amostra do gráfico.
+       *[other] Gravação descartada. Use “Exportar…” para salvar as { $count } amostras do gráfico.
     }
 # After Copy in the graph's right-click menu. $digits is the reading as the
 # meter showed it, e.g. 1.6109, which is now on the clipboard.

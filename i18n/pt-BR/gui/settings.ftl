@@ -92,13 +92,13 @@ settings-buffer-size-chip =
         { $pace ->
             [every-reading]
                 { $count ->
-                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Uma gravação parada mantida junto pode ocupar outro tanto
-                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Uma gravação parada mantida junto pode ocupar outro tanto
+                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
+                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } a 10 leituras por segundo. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
                 }
            *[interval]
                 { $count ->
-                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } no intervalo de amostragem atual. Uma gravação parada mantida junto pode ocupar outro tanto
-                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } no intervalo de amostragem atual. Uma gravação parada mantida junto pode ocupar outro tanto
+                    [one] Manter até { $samples } amostra no gráfico e para exportação: { $memory }, cerca de { $span } no intervalo de amostragem atual. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
+                   *[other] Manter até { $samples } amostras no gráfico e para exportação: { $memory }, cerca de { $span } no intervalo de amostragem atual. Se houver também uma gravação parada, ela pode ocupar o mesmo tanto
                 }
         }
 # After the Buffer size chips: what the picked size costs. $memory is the
@@ -130,9 +130,9 @@ settings-specs-accuracy = Precisão
     .hover = Mostrar a precisão nas especificações
 # Input Z is the input impedance.
 settings-specs-input-z = Z de entrada
-    .hover = Mostrar a impedância de entrada no painel Especificações completo
+    .hover = Mostrar a impedância de entrada no painel Especificações, quando expandido
 settings-specs-notes = Notas
-    .hover = Mostrar as notas do manual no painel Especificações completo
+    .hover = Mostrar as notas do manual no painel Especificações, quando expandido
 
 ## The window.
 
@@ -212,7 +212,7 @@ settings-update-dev-short = Atualizar ↗
 # Every reading taking that row's first chip's label, then Never.
 settings-announce = Anúncios do leitor de tela:
 settings-announce-every-reading =
-    .hover = Anunciar cada nova leitura. Um leitor de tela pode se interromper quando as leituras chegam mais rápido do que ele as lê.
+    .hover = Anunciar cada nova leitura. O leitor de tela pode cortar a própria fala quando as leituras chegam mais rápido do que ele consegue lê-las.
 # The duration chips' hover. $n is a whole number of seconds.
 settings-announce-chip =
     .hover =
@@ -224,8 +224,8 @@ settings-announce-never = Nunca
     .hover = Não anunciar as leituras quando elas mudam. Uma perda de conexão continua sendo anunciada.
 # A checkbox at the end of the same row, or under it when the row wraps.
 # Focus is keyboard focus, or where the screen reader's cursor is.
-settings-announce-focused = Somente quando a leitura tem o foco
-    .hover = Anunciar a leitura somente quando o leitor de tela está nela, no ritmo escolhido. A tecla Tab leva até ela.
+settings-announce-focused = Somente enquanto a leitura tiver o foco
+    .hover = Anunciar a leitura somente enquanto o leitor de tela estiver nela, no ritmo escolhido. A tecla Tab leva até ela.
 
 ## How the graph's lines look, the last row.
 

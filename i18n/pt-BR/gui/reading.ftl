@@ -16,7 +16,7 @@
 # The mode readout as a dropdown of the modes the meter can switch to at
 # its dial position.
 reading-mode =
-    .hover = Mudar o multímetro para outro modo da posição atual da chave seletora
+    .hover = Mudar o multímetro para outro modo disponível na posição atual da chave seletora
     .a11y = Modo
 # The range readout as a dropdown of the meter's ranges in this mode.
 reading-range =
@@ -49,7 +49,7 @@ reading-none = Sem leitura
 # The big meter's second line under the connection problem that takes the
 # reading's place: hovering it shows the steps, and $keys (the shortcut that
 # turns the big meter off, e.g. Ctrl+B or ⌘B) brings the whole window back.
-reading-big-meter-hint = { $keys } para detalhes
+reading-big-meter-hint = { $keys } para ver detalhes
 
 ## What a screen reader says for the reading: never drawn, read aloud each
 ## time the reading changes. It is one list of phrases, in this order: the
@@ -68,7 +68,7 @@ reading-spoken-labelled = { $label } { $value }
 reading-spoken-labelled-at =
     { $seconds ->
         [0] { $label } { $value } aos { $seconds } segundos
-        [one] { $label } { $value } a { $seconds } segundo
+        [one] { $label } { $value } com { $seconds } segundo
        *[other] { $label } { $value } aos { $seconds } segundos
     }
 # Said in place of the digits when the input is past the range (OL).

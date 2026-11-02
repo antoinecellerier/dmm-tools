@@ -105,15 +105,15 @@ error-bluetooth-only-usb-adapter = o multímetro { $model } só se conecta via B
 # $setting is a setting's name.
 error-unsupported-setting = a configuração { $setting } não pode ser alterada neste multímetro
 # $mode is a mode.
-error-unsupported-several-positions = o modo { $mode } é informado em mais de uma posição da chave seletora: faça primeiro uma leitura em outro modo
+error-unsupported-several-positions = o modo { $mode } aparece em mais de uma posição da chave seletora: faça primeiro uma leitura em outro modo
 # $mode is a mode.
 error-unsupported-no-position = o modo { $mode } não corresponde a nenhuma posição conhecida da chave seletora
 # $target and $from are modes.
-error-unsupported-mode-unreachable = o modo { $target } não pode ser alcançado a partir do modo { $from }: gire primeiro a chave seletora
+error-unsupported-mode-unreachable = não é possível passar do modo { $from } para o modo { $target }: gire primeiro a chave seletora
 # $target and $from_word are mode codes, $from is the mode $from_word is.
-error-unsupported-word-unreachable = o modo { $target } não pode ser alcançado a partir do modo { $from } ({ $from_word }): gire primeiro a chave seletora
+error-unsupported-word-unreachable = não é possível passar do modo { $from } ({ $from_word }) para o modo { $target }: gire primeiro a chave seletora
 # $mode is a mode.
-error-unsupported-no-ranges = o modo { $mode } não tem faixa para escolher neste multímetro
+error-unsupported-no-ranges = o modo { $mode } não tem faixas selecionáveis neste multímetro
 # $id is a range's number, $count how many ranges $mode, a mode, has.
 error-unsupported-no-such-range = a faixa { $id } não está entre as { $count } que o modo { $mode } oferece
 # $id is a range's number, $count how many ranges $mode, a mode, has.
@@ -141,9 +141,9 @@ error-unsupported-request-length = o cabo { $cable } aceita solicitações de { 
 # link that does not say what it is); $baud a serial speed, e.g. 19200.
 error-unsupported-baud =
     { $link ->
-        [usb] o cabo USB não pode mudar sua velocidade para { $baud } baud
-        [adapter] o adaptador Bluetooth não pode mudar sua velocidade para { $baud } baud
-       *[none] a conexão não pode mudar sua velocidade para { $baud } baud
+        [usb] o cabo USB não pode mudar a velocidade para { $baud } baud
+        [adapter] o adaptador Bluetooth não pode mudar a velocidade para { $baud } baud
+       *[none] a conexão não pode mudar a velocidade para { $baud } baud
     }
 # A developer's error: the simulated meter has no bytes to decode.
 error-unsupported-no-wire-format = parse_payload: o multímetro simulado não tem formato de dados brutos
@@ -182,7 +182,7 @@ error-rejected-zero-needs-capacitance = ZERO só funciona no modo de capacitânc
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.
-error-rejected-other-model = o multímetro informa o código de modelo OWON { $code } ({ $model }), e não o multímetro { $opened } escolhido ao abrir a conexão, por isso as teclas remotas estão desativadas; escolha Detecção automática ou --device { $id }
+error-rejected-other-model = o multímetro informa o código de modelo OWON { $code } ({ $model }) e não é o multímetro { $opened } escolhido ao abrir a conexão, por isso as teclas remotas estão desativadas; escolha Detecção automática ou --device { $id }
 # $code is a number.
 error-rejected-unknown-model = o multímetro informa o código de modelo OWON { $code }, que o aplicativo ainda não conhece, por isso as teclas remotas estão desativadas
 # $command is a command word.
@@ -208,7 +208,7 @@ error-sent-range = a faixa { $range }
 # Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
 # 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
 # for $model.
-error-wrong-meter-other-frame = o multímetro informa o código de modelo OWON { $code } ({ $model }), que envia o quadro OWON de { $frame } bytes, e não o multímetro { $opened } escolhido ao abrir a conexão; escolha Detecção automática ou --device { $id }
+error-wrong-meter-other-frame = o multímetro informa o código de modelo OWON { $code } ({ $model }), que envia o quadro OWON de { $frame } bytes, e não é o multímetro { $opened } escolhido ao abrir a conexão; escolha Detecção automática ou --device { $id }
 # An OWON meter sends the other kind of data frame and names no model.
 # $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
 # meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
@@ -277,6 +277,6 @@ late-readings-title = Algumas leituras Bluetooth chegam atrasadas
 # none.
 late-readings-advice =
     { $fix ->
-        [command] Neste adaptador, uma leitura às vezes chega agrupada com a seguinte. Nenhuma se perde. Para carimbos de data/hora precisos até o multímetro se desconectar, execute:
+        [command] Neste adaptador, uma leitura às vezes chega agrupada com a seguinte. Nenhuma se perde. Para obter carimbos de data/hora precisos até o multímetro se desconectar, execute:
        *[none] Neste adaptador, uma leitura às vezes chega agrupada com a seguinte. Nenhuma se perde.
     }

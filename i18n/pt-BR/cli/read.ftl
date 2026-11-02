@@ -25,9 +25,9 @@ read-clock-max-no-preseed = 'max' não aceita pré-carga: todos os quadros já s
 read-clock-max-needs-replay = 'max' requer --replay: só uma gravação termina sozinha
 # A recording names the meter it was made with. $command is the command line
 # that plays one (dmm-cli read --replay FILE).
-read-replay-names-its-device = o arquivo de --replay indica o próprio multímetro; remova --device ({ $command })
+read-replay-names-its-device = o arquivo de --replay já indica o multímetro; remova --device ({ $command })
 # An exported CSV or JSON file names the meter it was read from.
-read-import-names-its-device = o arquivo de --import indica o próprio multímetro; remova --device
+read-import-names-its-device = o arquivo de --import já indica o multímetro; remova --device
 # --format replay writes the frames a meter sent. $device is the simulated
 # meter's id, e.g. mock.
 read-replay-format-needs-meter = --format replay requer um multímetro real; não há nada para gravar de --device { $device }
@@ -48,7 +48,7 @@ read-clock-scale-invalid = esperado um número ou 'max', recebido '{ $value }'
 
 # --format named one format and the -o file's name another; the format wins.
 # $format is the format given, e.g. csv; $path is the file.
-read-format-mismatch = --format { $format } salvo em { $path }
+read-format-mismatch = { $path } salvo no formato de --format { $format }
 # A recording played into a file takes as long as the recording did. $flag
 # is the option that skips the wait (--mock-clock-scale max).
 read-paced-replay = reprodução no ritmo da gravação; adicione { $flag } para converter sem esperar

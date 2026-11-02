@@ -190,7 +190,7 @@ graph-plot-a11y-also = Mostrando também { $series }.
 graph-plot-a11y-also-separator = {", "}
 # One trace in graph-plot-a11y-also, drawn against an axis of its own on the
 # right: $series is its name, $unit its unit, e.g. Hz.
-graph-plot-a11y-also-axis = { $series } em { $unit } em um eixo à direita
+graph-plot-a11y-also-axis = { $series } em { $unit }, com eixo próprio à direita
 # Only with markers on the readings in view: $count is how many.
 graph-plot-a11y-markers =
     { $count ->
@@ -271,7 +271,7 @@ graph-histogram-a11y =
 graph-histogram-a11y-sd = desvio padrão { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
-graph-histogram-a11y-most = mais frequente de { $range } ({ $count })
+graph-histogram-a11y-most = maior concentração em { $range } ({ $count })
 # How many readings in view were over range (OL). $count is that number.
 graph-histogram-a11y-over-range =
     { $count ->
@@ -367,7 +367,7 @@ graph-menu-add-ref = Adicionar linha de referência
     .a11y = Adicionar linha de referência em { $height }
 # Removes the reference line under the pointer, at $height, a number with
 # its unit.
-graph-menu-remove-ref = Remover a linha de referência { $height }
+graph-menu-remove-ref = Remover a linha de referência em { $height }
 # Sets one of the alarm's two limits at the height clicked: $side is high
 # for the upper limit, low for the lower. The alarm, set up beside the
 # reading, warns when a reading goes past a limit. $height as above.

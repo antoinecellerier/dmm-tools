@@ -142,7 +142,7 @@ capture-no-response = Sem resposta do multímetro.
 # Yellow, before capture-few-samples on the same line.
 capture-few-samples-label = aviso:
 # The step got fewer readings than it asks for. $got and $wanted count them.
-capture-few-samples = amostras obtidas: apenas { $got }/{ $wanted }
+capture-few-samples = apenas { $got }/{ $wanted } amostras obtidas
 
 ## Dim, while a step waits: the meter settled, but not in what the step
 ## expects. Each says what the reading has and what the step wants.
@@ -198,7 +198,7 @@ capture-mismatch-at-least =
     o multímetro mostra: { $shown ->
         [absent] nenhuma leitura principal
        *[value] valor { $value }
-    }, a etapa espera pelo menos { $min }, positivo ou negativo
+    }, a etapa espera pelo menos { $min } em valor absoluto
 
 ## Asking whether the reading matches the meter's screen. Each prompt waits
 ## for a line, after a space.
@@ -239,7 +239,7 @@ capture-core-not-confirmed = Semântica básica não confirmada ({ $steps }): ca
 ## starts with an arrow.
 
 # $mode is the function, e.g. Continuity.
-capture-drive-switching = mudando para o modo { $mode } (enviado pelo aplicativo)
+capture-drive-switching = mudando para o modo { $mode } (comando enviado pelo aplicativo)
 # $mode is the function, e.g. Continuity; $error why the meter refused.
 capture-drive-switch-failed = não foi possível mudar para o modo { $mode }: { $error } — faça isso manualmente
 # $setting is the setting's name, rel (relative mode): the meter refuses it
@@ -336,7 +336,7 @@ capture-plan-covered =
 capture-nothing-new = Nenhuma etapa não verificada foi capturada, então não há nada novo a relatar.
 # $covered and $total count the meter's steps that hardware hasn't confirmed
 # yet; $meter is its name, e.g. UNI-T UT61E+.
-capture-covered = Etapas não verificadas cobertas para o multímetro { $meter }: { $covered } de { $total }.
+capture-covered = Foram capturadas { $covered } de { $total } etapas não verificadas do multímetro { $meter }.
 # $resume is the key that resumes, r (capture-resume-prompt).
 capture-not-finished = Captura não concluída: execute o mesmo comando novamente e responda { $resume } para retomar.
 # $flag is the option as typed, --steps <ids>.
@@ -361,7 +361,7 @@ capture-instructions-header =
 # key labels and what its screen shows. $marks lists them, e.g. "AC, HOLD,
 # MIN/MAX, SELECT". A translation, by a person or a machine, must leave them
 # as they are, so say so plainly.
-capture-instructions-keep = Mantenha estes termos como estão, como o multímetro os mostra nas teclas e na tela: { $marks }
+capture-instructions-keep = Mantenha estes termos exatamente como o multímetro os mostra nas teclas e na tela: { $marks }
 # The header's last line. $command is the command that runs the capture
 # with the translated file.
 capture-instructions-run = Depois execute: { $command }

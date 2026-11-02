@@ -13,7 +13,7 @@
 # Before the list of devices.
 help-device-intro = Dispositivo a conectar.
 # Before the list of the simulated meter's modes.
-help-mock-mode-intro = Fixar o dispositivo simulado em um modo de medição específico em vez de percorrer os modos automaticamente. Só tem efeito com --device mock. Sem esta opção, o mock_mode do arquivo de configurações (o modo simulado do dmm-gui) o fixa.
+help-mock-mode-intro = Fixar o dispositivo simulado em um modo de medição específico em vez de percorrer os modos automaticamente. Só tem efeito com --device mock. Sem esta opção, vale o mock_mode do arquivo de configurações (o modo simulado do dmm-gui).
 
 ## The words around every command's help: its headings, what follows an
 ## option, and the help of the built-in -h, -V and help. They are the same
@@ -66,7 +66,7 @@ help-environment = AMBIENTE:
 # Beside RUST_LOG; each line of the message is a line of the help. $filter
 # is the filter that shows everything the library sends and receives.
 help-env-rust-log =
-    Filtro de log. Se não definido, mostra os avisos de dmm_lib e todos os erros.
+    Filtro de log. Sem ele, são exibidos os avisos de dmm_lib e todos os erros.
     Use `{ $filter }` para depurar a comunicação byte a byte.
 # Beside NO_COLOR.
 help-env-no-color = Defina como 1 para desativar as cores no terminal.
@@ -74,7 +74,7 @@ help-env-no-color = Defina como 1 para desativar as cores no terminal.
 # variable names stay as they are. On macOS and Windows the system's
 # language applies instead.
 help-env-language =
-    Idioma das mensagens e da ajuda no Linux, na ordem em que o gettext lê:
+    Idioma das mensagens e da ajuda no Linux, lido pelo gettext nesta ordem:
     LANGUAGE, depois LC_ALL, LC_MESSAGES, LANG. Os ambientes de desktop do
     Debian e do Ubuntu definem LANGUAGE, que tem prioridade sobre LANG.
 # Beside LC_ALL; each line of the message is a line of the help. C and
