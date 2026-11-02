@@ -561,6 +561,15 @@ fn make_aux(
     }
 }
 
+/// One format's reading: the main value with its display digits and unit,
+/// and the values the meter shows beside it.
+struct Parsed {
+    value: MeasuredValue,
+    display_raw: Option<String>,
+    unit: Cow<'static, str>,
+    aux_values: Vec<AuxValue>,
+}
+
 pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // Minimum header: type(1) + misc(1) + misc2(1) + mode(2) + range(1) = 6
     check_len("ut181a", payload, 6)?;
@@ -621,191 +630,20 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             format_args!("misc {misc:#04x} misc2 {misc2:#04x}"),
         );
     }
-    let data = &payload[6..]; // format-dependent value section
 
-    let (value, display_raw, unit, aux_values) = match format_type {
-        // Normal format (0x00)
-        0x00 => {
-            if data.len() < 13 {
-                return Err(Error::invalid_response(
-                    format!("ut181a normal format too short: {} bytes", payload.len()),
-                    payload,
-                ));
-            }
-            let (val, disp, unit) = parse_full_value(data)?;
-            let mut aux = Vec::new();
-            let mut offset = 13;
-            let (aux1_label, aux2_label) = aux_labels(mode_word);
-
-            // Aux1 (optional, misc bit 1)
-            if misc & 0x02 != 0 && data.len() >= offset + 13 {
-                let (av, ad, au) = parse_full_value(&data[offset..])?;
-                report_positional_aux(aux1_label, mode_word);
-                aux.push(make_aux(aux1_label, av, au, ad, None));
-                offset += 13;
-            }
-            // Aux2 (optional, misc bit 2)
-            if misc & 0x04 != 0 && data.len() >= offset + 13 {
-                let (av, ad, au) = parse_full_value(&data[offset..])?;
-                report_positional_aux(aux2_label, mode_word);
-                aux.push(make_aux(aux2_label, av, au, ad, None));
-                offset += 13;
-            }
-            // Bargraph (optional, misc bit 3): the meter's fast sample, not the
-            // reading on its display (research spec §5.3), so it is skipped.
-            if misc & 0x08 != 0 && data.len() >= offset + 12 {
-                offset += 12; // float32(4) + unit(8)
-            }
-
-            // COMP extension (when misc2 bit 4 set)
-            if comp_active && data.len() >= offset + 7 {
-                let comp_mode = data[offset];
-                let comp_result = data[offset + 1];
-                let comp_prec = data[offset + 2];
-                let high_float = f32::from_le_bytes([
-                    data[offset + 3],
-                    data[offset + 4],
-                    data[offset + 5],
-                    data[offset + 6],
-                ]);
-                // Low limit present for INNER/OUTER modes
-                let low_float = ((comp_mode == 0 || comp_mode == 1) && data.len() >= offset + 11)
-                    .then(|| {
-                        f32::from_le_bytes([
-                            data[offset + 7],
-                            data[offset + 8],
-                            data[offset + 9],
-                            data[offset + 10],
-                        ])
-                    });
-                // §5.4: modes 0-3, results 0-1, digits in the low nibble and
-                // two float32 limits.
-                if comp_mode > 3
-                    || comp_result > 1
-                    || comp_prec > 0x0F
-                    || !high_float.is_finite()
-                    || low_float.is_some_and(|f| !f.is_finite())
-                {
-                    let end = offset + if low_float.is_some() { 11 } else { 7 };
-                    report_unknown(
-                        "ut181a",
-                        "comp field",
-                        format_args!("{:02X?}", &data[offset..end]),
-                    );
-                }
-                // COMP digits live in the LOW nibble, unshifted — unlike
-                // the other precision fields (spec §5.4).
-                let dp = (comp_prec & 0x0F) as usize;
-                let comp_mode_str = match comp_mode {
-                    0 => "INNER",
-                    1 => "OUTER",
-                    2 => "BELOW",
-                    3 => "ABOVE",
-                    _ => "?",
-                };
-                let result_str = if comp_result == 0 { "PASS" } else { "FAIL" };
-                let high_v = high_float as f64;
-                aux.push(make_aux(
-                    COMP_HIGH,
-                    MeasuredValue::Normal(high_v),
-                    unit.clone(),
-                    Some(format!("{high_v:.dp$}")),
-                    None,
-                ));
-
-                if let Some(low_float) = low_float {
-                    let low_v = low_float as f64;
-                    aux.push(make_aux(
-                        COMP_LOW,
-                        MeasuredValue::Normal(low_v),
-                        unit.clone(),
-                        Some(format!("{low_v:.dp$}")),
-                        None,
-                    ));
-                }
-
-                debug!("ut181a: COMP {comp_mode_str} {result_str} high={high_float}");
-            }
-
-            (val, disp, unit, aux)
-        }
-
-        // Relative format (0x10 >> 4 = 1)
-        0x01 => {
-            // 3 full values: relative (delta), reference, absolute
-            if data.len() < 39 {
-                return Err(Error::invalid_response(
-                    format!(
-                        "ut181a relative format too short: {} bytes, need >= 45",
-                        payload.len()
-                    ),
-                    payload,
-                ));
-            }
-            let (rel_val, rel_disp, rel_unit) = parse_full_value(data)?;
-            let (ref_val, ref_disp, ref_unit) = parse_full_value(&data[13..])?;
-            let (abs_val, abs_disp, abs_unit) = parse_full_value(&data[26..])?;
-
-            let aux = vec![
-                make_aux(REFERENCE, ref_val, ref_unit, ref_disp, None),
-                make_aux(ABSOLUTE, abs_val, abs_unit, abs_disp, None),
-            ];
-            // Main value = delta (matches meter display)
-            (rel_val, rel_disp, rel_unit, aux)
-        }
-
-        // Min/Max format (0x20 >> 4 = 2)
-        0x02 => {
-            // current(5) + max(5)+ts(4) + avg(5)+ts(4) + min(5)+ts(4) + unit(8) = 40
-            if data.len() < 40 {
-                return Err(Error::invalid_response(
-                    format!(
-                        "ut181a minmax format too short: {} bytes, need >= 46",
-                        payload.len()
-                    ),
-                    payload,
-                ));
-            }
-            let (cur_val, cur_disp) = parse_short_value(data)?;
-
-            let (max_val, max_disp) = parse_short_value(&data[5..])?;
-            let max_ts = u32::from_le_bytes([data[10], data[11], data[12], data[13]]);
-
-            let (avg_val, avg_disp) = parse_short_value(&data[14..])?;
-            let avg_ts = u32::from_le_bytes([data[19], data[20], data[21], data[22]]);
-
-            let (min_val, min_disp) = parse_short_value(&data[23..])?;
-            let min_ts = u32::from_le_bytes([data[28], data[29], data[30], data[31]]);
-
-            let unit = parse_unit_string(&data[32..40]);
-
-            let aux = vec![
-                make_aux(MAX, max_val, unit.clone(), max_disp, Some(max_ts)),
-                make_aux(AVERAGE, avg_val, unit.clone(), avg_disp, Some(avg_ts)),
-                make_aux(MIN, min_val, unit.clone(), min_disp, Some(min_ts)),
-            ];
-            (cur_val, cur_disp, unit, aux)
-        }
-
-        // Peak format (0x40 >> 4 = 4)
-        0x04 => {
-            // 2 full values: peak max, peak min
-            if data.len() < 26 {
-                return Err(Error::invalid_response(
-                    format!(
-                        "ut181a peak format too short: {} bytes, need >= 32",
-                        payload.len()
-                    ),
-                    payload,
-                ));
-            }
-            let (pmax_val, pmax_disp, pmax_unit) = parse_full_value(data)?;
-            let (pmin_val, pmin_disp, pmin_unit) = parse_full_value(&data[13..])?;
-
-            let aux = vec![make_aux(PEAK_MIN, pmin_val, pmin_unit, pmin_disp, None)];
-            (pmax_val, pmax_disp, pmax_unit, aux)
-        }
-
+    let Parsed {
+        value,
+        display_raw,
+        unit,
+        aux_values,
+    } = match format_type {
+        // COMP extension can also apply to relative/peak, but only documented
+        // for normal format. Parse it there only; for other formats, just set
+        // the flag.
+        0x00 => parse_normal(payload, misc, mode_word, comp_active)?,
+        0x01 => parse_relative(payload)?, // misc 0x10 >> 4
+        0x02 => parse_minmax(payload)?,   // misc 0x20 >> 4
+        0x04 => parse_peak(payload)?,     // misc 0x40 >> 4
         // Unknown format — try to parse as normal
         _ => {
             // §5.1 lists formats 0x00, 0x10, 0x20 and 0x40 only.
@@ -814,19 +652,23 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                 "format type",
                 format_args!("{:#04x}, read as normal", misc & 0x70),
             );
+            let data = &payload[6..];
             if data.len() < 13 {
                 return Err(Error::invalid_response(
                     format!("ut181a unknown format too short: {} bytes", payload.len()),
                     payload,
                 ));
             }
-            let (val, disp, unit) = parse_full_value(data)?;
-            (val, disp, unit, vec![])
+            let (value, display_raw, unit) = parse_full_value(data)?;
+            Parsed {
+                value,
+                display_raw,
+                unit,
+                aux_values: vec![],
+            }
         }
     };
 
-    // COMP extension can also apply to relative/peak, but only documented for
-    // normal format. Parse it there only; for other formats, just set the flag.
     let flags = StatusFlags {
         hold,
         auto_range,
@@ -854,6 +696,205 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         aux_values,
         main_label: main_label(format_type, mode_word),
         ..Measurement::from_payload(payload)
+    })
+}
+
+/// The normal format (0x00): the reading, then the optional aux values,
+/// bargraph and COMP extension that misc's bits and misc2's COMP bit say
+/// follow it.
+fn parse_normal(payload: &[u8], misc: u8, mode_word: u16, comp_active: bool) -> Result<Parsed> {
+    let data = &payload[6..];
+    if data.len() < 13 {
+        return Err(Error::invalid_response(
+            format!("ut181a normal format too short: {} bytes", payload.len()),
+            payload,
+        ));
+    }
+    let (value, display_raw, unit) = parse_full_value(data)?;
+    let mut aux = Vec::new();
+    let mut offset = 13;
+    let (aux1_label, aux2_label) = aux_labels(mode_word);
+
+    // Aux1 (optional, misc bit 1)
+    if misc & 0x02 != 0 && data.len() >= offset + 13 {
+        let (av, ad, au) = parse_full_value(&data[offset..])?;
+        report_positional_aux(aux1_label, mode_word);
+        aux.push(make_aux(aux1_label, av, au, ad, None));
+        offset += 13;
+    }
+    // Aux2 (optional, misc bit 2)
+    if misc & 0x04 != 0 && data.len() >= offset + 13 {
+        let (av, ad, au) = parse_full_value(&data[offset..])?;
+        report_positional_aux(aux2_label, mode_word);
+        aux.push(make_aux(aux2_label, av, au, ad, None));
+        offset += 13;
+    }
+    // Bargraph (optional, misc bit 3): the meter's fast sample, not the
+    // reading on its display (research spec §5.3), so it is skipped.
+    if misc & 0x08 != 0 && data.len() >= offset + 12 {
+        offset += 12; // float32(4) + unit(8)
+    }
+    // COMP extension (when misc2 bit 4 set)
+    if comp_active && data.len() >= offset + 7 {
+        aux.extend(parse_comp(&data[offset..], unit.clone()));
+    }
+
+    Ok(Parsed {
+        value,
+        display_raw,
+        unit,
+        aux_values: aux,
+    })
+}
+
+/// The COMP extension (research spec §5.4) at the start of `comp`, at least
+/// 7 bytes: its high limit, and its low limit for the INNER and OUTER modes,
+/// in the reading's `unit`.
+fn parse_comp(comp: &[u8], unit: Cow<'static, str>) -> Vec<AuxValue> {
+    let comp_mode = comp[0];
+    let comp_result = comp[1];
+    let comp_prec = comp[2];
+    let high_float = f32::from_le_bytes([comp[3], comp[4], comp[5], comp[6]]);
+    // Low limit present for INNER/OUTER modes
+    let low_float = ((comp_mode == 0 || comp_mode == 1) && comp.len() >= 11)
+        .then(|| f32::from_le_bytes([comp[7], comp[8], comp[9], comp[10]]));
+    // §5.4: modes 0-3, results 0-1, digits in the low nibble and
+    // two float32 limits.
+    if comp_mode > 3
+        || comp_result > 1
+        || comp_prec > 0x0F
+        || !high_float.is_finite()
+        || low_float.is_some_and(|f| !f.is_finite())
+    {
+        let end = if low_float.is_some() { 11 } else { 7 };
+        report_unknown(
+            "ut181a",
+            "comp field",
+            format_args!("{:02X?}", &comp[..end]),
+        );
+    }
+    // COMP digits live in the LOW nibble, unshifted — unlike
+    // the other precision fields (spec §5.4).
+    let dp = (comp_prec & 0x0F) as usize;
+    let comp_mode_str = match comp_mode {
+        0 => "INNER",
+        1 => "OUTER",
+        2 => "BELOW",
+        3 => "ABOVE",
+        _ => "?",
+    };
+    let result_str = if comp_result == 0 { "PASS" } else { "FAIL" };
+    let high_v = high_float as f64;
+    let mut aux = vec![make_aux(
+        COMP_HIGH,
+        MeasuredValue::Normal(high_v),
+        unit.clone(),
+        Some(format!("{high_v:.dp$}")),
+        None,
+    )];
+    if let Some(low_float) = low_float {
+        let low_v = low_float as f64;
+        aux.push(make_aux(
+            COMP_LOW,
+            MeasuredValue::Normal(low_v),
+            unit,
+            Some(format!("{low_v:.dp$}")),
+            None,
+        ));
+    }
+    debug!("ut181a: COMP {comp_mode_str} {result_str} high={high_float}");
+    aux
+}
+
+/// The relative format (misc 0x10, format type 1): three full values —
+/// the relative reading (the delta), the reference and the absolute.
+fn parse_relative(payload: &[u8]) -> Result<Parsed> {
+    let data = &payload[6..];
+    if data.len() < 39 {
+        return Err(Error::invalid_response(
+            format!(
+                "ut181a relative format too short: {} bytes, need >= 45",
+                payload.len()
+            ),
+            payload,
+        ));
+    }
+    let (value, display_raw, unit) = parse_full_value(data)?;
+    let (ref_val, ref_disp, ref_unit) = parse_full_value(&data[13..])?;
+    let (abs_val, abs_disp, abs_unit) = parse_full_value(&data[26..])?;
+    // Main value = delta (matches meter display)
+    Ok(Parsed {
+        value,
+        display_raw,
+        unit,
+        aux_values: vec![
+            make_aux(REFERENCE, ref_val, ref_unit, ref_disp, None),
+            make_aux(ABSOLUTE, abs_val, abs_unit, abs_disp, None),
+        ],
+    })
+}
+
+/// The Min/Max format (misc 0x20, format type 2): the current value, then
+/// the maximum, average and minimum, each with its timestamp, sharing one
+/// unit string.
+fn parse_minmax(payload: &[u8]) -> Result<Parsed> {
+    let data = &payload[6..];
+    // current(5) + max(5)+ts(4) + avg(5)+ts(4) + min(5)+ts(4) + unit(8) = 40
+    if data.len() < 40 {
+        return Err(Error::invalid_response(
+            format!(
+                "ut181a minmax format too short: {} bytes, need >= 46",
+                payload.len()
+            ),
+            payload,
+        ));
+    }
+    let (value, display_raw) = parse_short_value(data)?;
+
+    let (max_val, max_disp) = parse_short_value(&data[5..])?;
+    let max_ts = u32::from_le_bytes([data[10], data[11], data[12], data[13]]);
+
+    let (avg_val, avg_disp) = parse_short_value(&data[14..])?;
+    let avg_ts = u32::from_le_bytes([data[19], data[20], data[21], data[22]]);
+
+    let (min_val, min_disp) = parse_short_value(&data[23..])?;
+    let min_ts = u32::from_le_bytes([data[28], data[29], data[30], data[31]]);
+
+    let unit = parse_unit_string(&data[32..40]);
+    let aux_values = vec![
+        make_aux(MAX, max_val, unit.clone(), max_disp, Some(max_ts)),
+        make_aux(AVERAGE, avg_val, unit.clone(), avg_disp, Some(avg_ts)),
+        make_aux(MIN, min_val, unit.clone(), min_disp, Some(min_ts)),
+    ];
+
+    Ok(Parsed {
+        value,
+        display_raw,
+        unit,
+        aux_values,
+    })
+}
+
+/// The Peak format (misc 0x40, format type 4): two full values, the peak
+/// maximum and the peak minimum.
+fn parse_peak(payload: &[u8]) -> Result<Parsed> {
+    let data = &payload[6..];
+    if data.len() < 26 {
+        return Err(Error::invalid_response(
+            format!(
+                "ut181a peak format too short: {} bytes, need >= 32",
+                payload.len()
+            ),
+            payload,
+        ));
+    }
+    let (value, display_raw, unit) = parse_full_value(data)?;
+    let (pmin_val, pmin_disp, pmin_unit) = parse_full_value(&data[13..])?;
+    Ok(Parsed {
+        value,
+        display_raw,
+        unit,
+        aux_values: vec![make_aux(PEAK_MIN, pmin_val, pmin_unit, pmin_disp, None)],
     })
 }
 
