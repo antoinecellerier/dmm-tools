@@ -167,6 +167,7 @@ settings-language-review-link = 帮助审校 ↗
 # is always shown in English, which the app's own fonts draw: no need to
 # translate it.
 settings-language-no-chinese-font = No font for Chinese characters was found. Install a Simplified Chinese font, such as Noto Sans CJK SC, then restart dmm-gui.
+settings-language-no-japanese-font = No font for Japanese characters was found. Install a Japanese font, such as Noto Sans CJK JP, then restart dmm-gui.
 
 # The Zoom chips are percentages, e.g. 150%.
 settings-zoom = 缩放:

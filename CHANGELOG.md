@@ -9,7 +9,7 @@
 
 ### GUI
 
-- **French, Brazilian Portuguese, Simplified Chinese and Spanish translations available** — pick one in Settings, **Language**, or let it follow the system's language; Portuguese, Chinese and Spanish are machine-translated until reviewed.
+- **French, Brazilian Portuguese, Simplified Chinese, Spanish and Japanese translations available** — pick one in Settings, **Language**, or let it follow the system's language; Portuguese, Chinese, Spanish and Japanese are machine-translated until reviewed.
 - **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
 - **Screen readers say units by name, such as millivolts for mV** — they spelled the symbols out letter by letter.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
@@ -19,7 +19,7 @@
 
 ### CLI
 
-- **French, Brazilian Portuguese, Simplified Chinese and Spanish translations available** — chosen by `--lang`, dmm-gui's Language setting or the system's language.
+- **French, Brazilian Portuguese, Simplified Chinese, Spanish and Japanese translations available** — chosen by `--lang`, dmm-gui's Language setting or the system's language.
 - **`capture` shows its step instructions in your own translation** — export them with `--export-instructions`, translate the file, and pass it back with `--instructions`.
 - **`--help` lists each brand's own model names in name order, such as `ut217a` under UNI-T**
 - **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.

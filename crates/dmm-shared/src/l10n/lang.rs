@@ -47,6 +47,11 @@ pub(super) const SHIPPED: &[Language] = &[
         native_name: "Español",
         reviewed: false,
     },
+    Language {
+        id: "ja",
+        native_name: "日本語",
+        reviewed: false,
+    },
 ];
 
 /// The shipped languages, plus any [`L10N_DIR_VAR`] holds a folder for.

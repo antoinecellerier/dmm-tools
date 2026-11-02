@@ -119,7 +119,7 @@ MS-SG p.32: Japanese symbols and punctuation are full-width, symbols used worldw
 
 ### How egui breaks Japanese lines
 
-epaint 0.37 (`text/unicode.rs:49–71`) treats U+3040–U+30FF and the CJK ideograph blocks as breakable before any character, and never starts a row with a character from its list, which includes «、» «。» «」» «』» «ー», the small kana («ッ», «ャ», «ァ»…), «・», «…», and the half-width `)` `:` `?` `!` `%`. So Japanese punctuation and the long-vowel mark never strand at a line start. Opening «「» and «[» are not held to the next character: avoid long bracketed names at the end of a wrapped notice line.
+epaint 0.37 (`text/unicode.rs:49–71`) treats U+3040–U+30FF and the CJK ideograph blocks as breakable before any character, and keeps the characters of its list off a row's start: «、» «。» «」» «』» «ー», the small kana («ッ», «ャ», «ァ»…), «・», «…», and the half-width `)` `:` `?` `!` `%`. Punctuation stays off a line start, but a bug in epaint 0.37 (`text_layout.rs`, the `pre_cjk` break) lets «ー» and the small kana start one after kana or kanji («マルチメ» / «ーター»); nothing in the text can prevent it. Opening «「» and «[» are not held to the next character: avoid long bracketed names at the end of a wrapped notice line.
 
 ## 5. Numbers
 
@@ -193,7 +193,7 @@ Japanese has no gender, number or article to agree, and its word order puts the 
 - **Multi-line messages:** keep the indentation and the line breaks; one activation step per line. Japanese lines come out shorter; re-wrap a notice only if a line would be very short.
 - **`.a11y` text** is read aloud: units in words where the comments ask («摂氏度»), «と» for «&», arrow keys as «左右方向キー», no symbols a screen reader may misread (MS-SG p.15 names & + ~).
 - **Trailing and leading spaces** are dropped by Fluent; write `{" "}` where one matters.
-- **Never translated:** the `#` comments, and `settings-language-no-chinese-font`, which is always shown in English.
+- **Never translated:** the `#` comments, and `settings-language-no-japanese-font` and `settings-language-no-chinese-font`, which are always shown in English.
 
 ## 12. Spec text (lib.ftl: bands, inputs, notes)
 
@@ -208,11 +208,9 @@ Optional for shipping (`translations::optional()`), as for every language.
 
 The GUI draws Japanese with a system font chosen for the `ja` locale (`crates/dmm-gui/src/app/language.rs`, `font_locale`, which passes the language id through), so Han characters take Japanese shapes. Latin text and the meter's symbols still come from the bundled fonts (Ubuntu-Light, Hack), so ᛒ, △, ⇌, Ω, µ, σ, ∫, ≈, …, ⏸/▶ need nothing new.
 
-Characters this sheet asks for beyond Latin: hiragana and katakana (U+3040–U+30FF), kanji of the 常用漢字表, «、» «。» «「» «」» (U+3001, U+3002, U+300C, U+300D), «ー» (U+30FC). Noto Sans CJK JP covers them all. This was **not checked on this machine**, which has only Droid Sans Fallback (`fc-list :lang=ja`), whose Han characters have Chinese shapes. Check under verify-gui with Noto Sans CJK JP installed before shipping.
+Characters this sheet asks for beyond Latin: hiragana and katakana (U+3040–U+30FF), kanji of the 常用漢字表, «、» «。» «「» «」» (U+3001, U+3002, U+300C, U+300D), «ー» (U+30FC). Noto Sans CJK JP covers them all. The review screenshots were taken with Noto Sans CJK JP installed.
 
-**Gaps for the developers, not the translators:**
-- `script_probe` (`language.rs`) probes a font for zh-CN only. For ja it returns `None`, so a user without a Japanese font gets boxes and no notice. Adding `"ja" => Some("\u{3042}")` (あ) or a kanji would cover it.
-- The notice itself, `settings-language-no-chinese-font`, names Chinese and a Chinese font; Japanese needs its own wording, or a message that takes the language.
+When no system font draws Japanese, the GUI shows `settings-language-no-japanese-font`, in English (`script_probe` looks for «あ»).
 
 ## 14. Words to avoid
 

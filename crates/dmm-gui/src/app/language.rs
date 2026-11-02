@@ -135,6 +135,7 @@ fn font_locale(language: &Language) -> Option<&'static str> {
 fn script_probe(language: &Language) -> Option<&'static str> {
     match language.id {
         "zh-CN" => Some("\u{4E2D}"),
+        "ja" => Some("\u{3042}"),
         _ => None,
     }
 }
@@ -233,7 +234,11 @@ impl App {
                     self.l10n.language().native_name
                 );
                 let english = crate::l10n::english();
-                let message = tr!(english, "settings-language-no-chinese-font").into_owned();
+                let message = match self.l10n.language().id {
+                    "ja" => tr!(english, "settings-language-no-japanese-font"),
+                    _ => tr!(english, "settings-language-no-chinese-font"),
+                }
+                .into_owned();
                 self.toast = Some(Toast::error(message));
             }
             None => log::warn!("UI: the font check stopped without an answer"),
@@ -289,7 +294,7 @@ mod tests {
     use crate::settings::Settings;
 
     /// Every language but English gets its own shapes, Chinese in the
-    /// simplified script.
+    /// simplified script, and Chinese and Japanese check for a font.
     #[test]
     fn the_fonts_follow_the_language() {
         let fr = Language {
@@ -307,6 +312,13 @@ mod tests {
         assert_eq!(font_locale(&zh), Some("zh-Hans"));
         assert_eq!(script_probe(&fr), None);
         assert!(script_probe(&zh).is_some());
+        let ja = Language {
+            id: "ja",
+            native_name: "日本語",
+            reviewed: false,
+        };
+        assert_eq!(font_locale(&ja), Some("ja"));
+        assert!(script_probe(&ja).is_some());
     }
 
     /// The root of the accessibility tree carries the window's language,

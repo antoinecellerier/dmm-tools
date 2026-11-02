@@ -67,8 +67,8 @@ review it needs.
 **A language switch redraws; built text stays.** Every label follows on the
 next frame, while a toast or notice on screen and a marker's recorded reading
 keep their language. The system fonts follow it, so Chinese gets simplified
-shapes on a Japanese desktop, and a missing Chinese font is reported in
-English, which the window can still draw (`app/language.rs`).
+shapes on a Japanese desktop, and a missing Chinese or Japanese font is
+reported in English, which the window can still draw (`app/language.rs`).
 
 **Zoom steps like a browser's.** Ctrl+Plus, Ctrl+Minus and Ctrl+0 walk
 non-linear levels (`ZOOM_LEVELS` in `app/appearance.rs`); 100% is the scale
