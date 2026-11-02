@@ -478,9 +478,9 @@ impl App {
     }
 
     /// The menu under the Export… arrow. Keyboard handling follows the
-    /// readout lists in `display/mod.rs`: focus lands on the first entry as the
-    /// menu opens, the arrows move it, Enter picks, and Tab or Esc leave
-    /// with the focus back on the arrow.
+    /// readout lists in `display/readout.rs` (`listbox.rs`): focus lands on
+    /// the first entry as the menu opens, the arrows move it, Enter picks,
+    /// and Tab or Esc leave with the focus back on the arrow.
     fn show_export_menu(&mut self, ui: &mut Ui, arrow: &egui::Response) {
         let ctx = ui.ctx().clone();
         let popup_id = arrow.id.with("export_menu");
@@ -551,7 +551,7 @@ impl App {
                 .into_iter()
                 .filter(|entry| entry.enabled())
                 .collect();
-            crate::display::navigate_choice_entries(ui.ctx(), &entries);
+            crate::listbox::navigate_choice_entries(ui.ctx(), &entries);
         });
 
         if let Some(format) = picked {

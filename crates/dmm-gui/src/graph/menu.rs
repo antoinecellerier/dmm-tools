@@ -601,7 +601,7 @@ impl Graph {
                 }
                 // A disabled entry cannot take the focus, so it is not a stop
                 // for the arrows either: Down would strand the focus on it.
-                crate::display::navigate_choice_entries(ui.ctx(), &enabled);
+                crate::listbox::navigate_choice_entries(ui.ctx(), &enabled);
             });
         if let Some(pick) = picked {
             // Enter and Space click without a pointer click, which is the

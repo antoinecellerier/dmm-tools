@@ -54,14 +54,14 @@ impl App {
 /// Keyboard as in every choice list ([`listbox_dropdown`]). Returns the
 /// entry picked this frame, the live one included.
 ///
-/// [`listbox_dropdown`]: crate::display::listbox_dropdown
+/// [`listbox_dropdown`]: crate::listbox::listbox_dropdown
 fn language_dropdown(
     ui: &mut Ui,
     l10n: &Localizer,
     speech: &Speech,
     choice: LanguageChoice,
 ) -> Option<LanguageChoice> {
-    use crate::display::{listbox_dropdown, navigate_choice_entries};
+    use crate::listbox::{listbox_dropdown, navigate_choice_entries};
     use egui::ComboBox;
 
     let system = tr!(
@@ -128,7 +128,7 @@ fn entry_text(
     let font = || FontSelection::Style(TextStyle::Button);
     let mut text = egui::text::LayoutJob::default();
     let style = ui.style();
-    RichText::new(crate::display::choice_entry_text(name, live)).append_to(
+    RichText::new(crate::listbox::choice_entry_text(name, live)).append_to(
         &mut text,
         style,
         font(),

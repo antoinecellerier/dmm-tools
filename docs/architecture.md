@@ -424,6 +424,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/appearance.rs` | Fonts, theme, zoom, window commands; reading the themes folder |
 | `graph/` | The graph's points, the main plot (`egui_plot`) with a right Y axis per sub-value unit, the painted minimap and histogram |
 | `display/` | The reading in its three sizes |
+| `listbox.rs` | The keyboard-driven choice list the readout selectors, the language and Device lists and the menus share |
 | `recording.rs` | The sample store and its CSV, JSON and replay rendering |
 | `markers.rs` | The markers on readings |
 | `settings.rs` | Persisted settings and colour presets |

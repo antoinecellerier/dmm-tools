@@ -191,7 +191,7 @@ impl DeviceListLayout {
             .flat_map(|(brand, rows)| {
                 let entries = rows.iter().map(|(d, _)| {
                     let name = l10n.label(TextKind::Model, d.model_name());
-                    measure(&crate::display::choice_entry_text(&name, true)) + with.padding
+                    measure(&crate::listbox::choice_entry_text(&name, true)) + with.padding
                 });
                 std::iter::once(measure(&l10n.brand(*brand))).chain(entries)
             })
@@ -215,7 +215,7 @@ pub(super) fn device_dropdown(
     selected_id: &str,
     label: &str,
 ) -> Option<&'static str> {
-    use crate::display::{choice_entry_text, listbox_dropdown, navigate_choice_entries};
+    use crate::listbox::{choice_entry_text, listbox_dropdown, navigate_choice_entries};
     use egui::{Align, ComboBox, Layout, TextWrapMode, vec2};
 
     let ctx = ui.ctx().clone();

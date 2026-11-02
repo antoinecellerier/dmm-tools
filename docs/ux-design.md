@@ -82,7 +82,7 @@ so closing the app keeps the configured layout.
 
 **The reading's layout is whichever gives the biggest value.** Value over mode
 line, value │ mode with the sub-values under it, or value │ sub-values │ mode:
-there is no width breakpoint (`pick_layout` in `display/mod.rs`). Beside the
+there is no width breakpoint (`pick_layout` in `display/fit.rs`). Beside the
 value, the sub-values come before the mode. They are readings and the mode is a
 control.
 

@@ -6,6 +6,7 @@ mod desktop_entry;
 mod display;
 mod graph;
 mod l10n;
+mod listbox;
 mod markers;
 mod recording;
 mod settings;
