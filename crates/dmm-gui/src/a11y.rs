@@ -191,6 +191,10 @@ impl Default for AnnouncePolicy {
 /// shown: on Windows the switch alone announces the node again, and other
 /// platforms ignore it.
 ///
+/// Checked with Narrator on Windows 11: each paced reading is read whole,
+/// sub-values included, with no role word; focus mode reads it once per
+/// interval with the cursor on it and is silent elsewhere.
+///
 /// [`Self::decide`] is pure and idempotent — egui reruns a frame it discards,
 /// with the same time — so the live setting is stored, not derived from what
 /// the frame did.

@@ -166,8 +166,9 @@ each step settles is in the family's file.
 
 ## GUI accessibility
 
-The keyboard half is in the [GUI reference](gui-reference.md#keyboard); no
-real screen reader has walked the other half.
+The keyboard half is in the [GUI reference](gui-reference.md#keyboard).
+Narrator has walked the reading (its pace, focus mode and sub-values); no
+screen reader has walked the rest.
 
 - Orca (AT-SPI): each interactive widget announces a sensible name on Tab,
   and HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK and LIVE say "pressed" / "not
@@ -181,7 +182,7 @@ real screen reader has walked the other half.
 - Orca with a software scale: the live region ends with ", software scaled"
   and drops it when scaling is off, **Scale** announces on/off, and its fields
   read "Scale factor", "Offset" and "Unit label" from their hints.
-- The same checks under NVDA or JAWS (UI Automation) and VoiceOver
+- The same checks under Narrator, NVDA or JAWS (UI Automation) and VoiceOver
   (NSAccessibility), AccessKit's other two backends.
 
 ## Translations
@@ -192,13 +193,17 @@ screen reader from the system.
 - Windows: in `dmm-gui --device mock`, Settings, **Language**, pick 简体中文,
   then Français and Português. Chinese must draw without boxes or the
   missing-font notice; this decides whether the CJK font lookup needs a fix.
-- Windows: Narrator (Win+Ctrl+Enter) reads French and Chinese with a voice
-  of that language, from the language AccessKit sets on the window.
+- Windows: Narrator (Win+Ctrl+Enter) with a Chinese voice selected reads the
+  Chinese window right.
+- Windows with French as the display language: Narrator says its role and
+  state words (button, checked) in French beside the app's French text;
+  decides whether the GUI reference's Screen reader section names their source.
 - Windows: `dmm-cli --lang zh-CN --help` in Windows Terminal and in the old
   console (cmd.exe), whose default font may lack Chinese.
 - Windows: with no `language` setting, an en-US Windows starts both apps in
   English.
-- macOS: the same four checks, with VoiceOver for Narrator.
+- macOS: the same checks, with VoiceOver and its voice for each language in
+  place of Narrator's.
 
 ## Known defects
 

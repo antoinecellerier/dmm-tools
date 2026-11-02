@@ -245,6 +245,10 @@ impl App {
     /// Tell a screen reader which language the window's text is in, on the
     /// root of the accessibility tree. Every pass: egui builds the tree anew
     /// each one.
+    ///
+    /// Narrator does not pick its voice from it: on Windows 11 it reads in
+    /// the voice chosen in its own settings, and reads French text right once
+    /// that voice is French.
     pub(super) fn tell_screen_reader_language(&self, ctx: &egui::Context) {
         let id = self.l10n.language().id;
         ctx.accesskit_node_builder(egui::accesskit_root_id(), |node| node.set_language(id));

@@ -719,7 +719,7 @@ When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#e
 
 ### Screen reader
 
-Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md#gui-accessibility). Reports of what does and doesn't come through as expected are welcome.
+Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. Reports of what does and doesn't come through as expected are welcome.
 
 - Every button, toggle, text field, and custom widget has a spoken name; icon-only buttons, color swatches, the graph minimap and the resize bars announce what they do instead of their glyph or color.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button, **Scale** and **Alarm** announce whether they are currently on or off — you don't have to rely on the color change. The **▸** beside **Scale** and **Alarm** announces as "Scale settings" or "Alarm settings", expanded or collapsed.
@@ -727,7 +727,7 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 - The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
 - The main reading, its sub-values included, is one item for a screen reader, spoken as it changes, at most once per **Announce readings** interval ([Settings](#settings)); a change of mode is spoken at once, except under **Never**, and a lost connection always is. Under **Never**, the reading a screen reader reads on demand is at most 5 s old. With Narrator's cursor left on the reading, each change is read twice, unless **Only while the reading has focus** is on. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled"; one past an [alarm limit](#alarm) with ", above the high limit" or ", below the low limit".
 - The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-value traces drawn beside it, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
-- The window tells the screen reader which language its text is in; the **What's New** window, whose notes are in English, says English.
+- The window tells the screen reader which language its text is in; the **What's New** window, whose notes are in English, says English. Narrator speaks in the voice chosen in its own settings whatever the window says: pick a voice for the app's language to hear its text in it.
 - The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 
 ### Known limitations
