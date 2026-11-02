@@ -167,7 +167,7 @@ fn unit(p: &[u8], mode_raw: u8, range: &Range) -> &'static str {
 /// The annunciators a reading carries (spec §9). APO, BT, dBm, the
 /// V2 °C/℉ bits 15.7 and 16.7, TEST, byte 17 bits 1-0 and ↙ are in V2 but
 /// shown by no flag, so they stay silent. ↙ is the danger icon only by
-/// firmware 1.02's disassembly (spec §15.4), and no vendor source names it,
+/// spec §15.4's reading of firmware 1.02, and no vendor document names it,
 /// so it raises no hazard warning that might be wrong.
 fn flags(p: &[u8], coupling: u8) -> StatusFlags {
     let mut flags = StatusFlags {

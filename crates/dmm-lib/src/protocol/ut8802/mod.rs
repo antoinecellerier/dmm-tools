@@ -8,8 +8,6 @@
 //! Key difference from UT8803: single-byte 0xAC header, BCD-encoded display,
 //! combined position codes (function + range), no checksum.
 //!
-//! Based on reverse engineering of uci.dll (Ghidra decompilation) and
-//! UT8803E Programming Manual V1.1.
 //! See docs/research/uci-bench-family/reverse-engineered-protocol.md
 
 pub(crate) mod devices;
@@ -31,18 +29,17 @@ use std::borrow::Cow;
 /// UT8802 position code table: (code, mode_name, unit, range_label).
 ///
 /// Combined function + range position codes from the programming manual
-/// (page 10) and Ghidra decompilation (FUN_1001c7b0, line 23234).
+/// (page 10) and the vendor's position table (spec §3.3).
 /// Both sources agree on all 35 entries.
 ///
 /// `unit` carries the SI prefix for the position, because the meter's five
 /// display digits are **range-relative**: with a decimal point at 0-4 the
 /// smallest magnitude it can express is 0.0001, so 10 nF or 1.5 MHz simply
 /// cannot be sent in farads or hertz. The prefix per position comes from
-/// `FUN_1001cd30` in uci.dll (line 23603), which returns the UnitMag index
-/// (0=n, 1=µ, 2=m, 3=none, 4=k, 5=M) that the vendor renders via
-/// `FUN_1001cec0`; the base units it combines with are `FUN_1001cf30`
-/// (line 23729) and match the `unit` column here. The sibling UT8803 parser
-/// resolves its units the same way (`display_unit`, FUN_1001cdc0/FUN_1001cff0).
+/// the vendor's prefix lookup, which returns the UnitMag index
+/// (0=n, 1=µ, 2=m, 3=none, 4=k, 5=M) the vendor renders as a prefix; the
+/// base units it combines with match the `unit` column here. The sibling
+/// UT8803 parser resolves its units the same way (`display_unit`).
 /// See docs/research/uci-bench-family/reverse-engineered-protocol.md §3.3.
 ///
 /// `range_label` is left empty where the manual publishes no numeric span —
@@ -149,10 +146,9 @@ impl Protocol for Ut8802Protocol {
     }
 
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
-        // No trigger byte: the vendor's CP2110 init path (uci.dll
-        // FUN_1001d460) never writes to the UART; the 0x5A trigger we
-        // previously sent belongs to the QinHeng/CH9325 init path
-        // (FUN_1001d360) for other meters. See the UT8803 init for the
+        // No trigger byte: the vendor's CP2110 init path never writes to
+        // the UART; the 0x5A trigger we previously sent belongs to the
+        // QinHeng/CH9325 init path for other meters. See the UT8803 init for the
         // same correction.
         debug!("ut8802: init (no trigger byte; meter streams unprompted)");
         Ok(())
@@ -227,7 +223,7 @@ impl Protocol for Ut8802Protocol {
 /// Whether a position code measures a DC quantity.
 ///
 /// The vendor derives the status-word AC/DC field from the position code
-/// alone via a lookup (`FUN_1001ca30`, uci_dll_decompiled.txt:23411-23445:
+/// alone via a lookup (spec §3.4:
 /// returns 2=DC for the codes below, 1=AC for 0x09-0x0C/0x10/0x13/0x14/0x18,
 /// 0 otherwise). Frame byte 5 bits 4-5 — previously misread as AC/DC
 /// coupling — are diode/SCR probe-direction indicators.
@@ -257,16 +253,16 @@ fn bcd_to_char(nibble: u8) -> char {
 
 /// Parse a UT8802 measurement payload (7 bytes = frame bytes 1..8).
 ///
-/// Layout (from Ghidra FUN_1001e0a0 + programming manual; payload index =
+/// Layout (spec §3.1; payload index =
 /// frame byte − 1):
 /// - byte 0: position code (0x01-0x2D, combined function + range)
 /// - bytes 1-3: 5 display nibbles, most significant digit in byte 3's low
 ///   nibble: d1=b3 lo, d2=b2 hi, d3=b2 lo, d4=b1 hi, d5(LSD)=b1 lo
-///   (vendor stack slots at uci_dll_decompiled.txt:24714-24719; byte 3's
+///   (spec §3.2; byte 3's
 ///   high nibble is never read, and is reported if set)
 /// - byte 4: decimal point position (low nibble, 0-4) + diode/SCR probe
 ///   direction (bits 4-5, consumed only for positions 0x23/0x2A,
-///   uci_dll_decompiled.txt:24727, 24777-24800 — NOT AC/DC coupling);
+///   spec §3.4 — NOT AC/DC coupling);
 ///   bits 6-7 are never read, and are reported if set
 /// - byte 5: status/bargraph byte [UNVERIFIED purpose]
 /// - byte 6: sign (bit 7) + status flags (bits 0-6)
@@ -316,7 +312,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     // Decode the 5 display nibbles, MSD first. The vendor parser fills its
     // display buffer as [b3 lo, b2 hi, b2 lo, b1 hi, b1 lo] (payload
-    // indexing; uci_dll_decompiled.txt:24714-24719) and runs atof directly
+    // indexing; spec §3.2) and runs atof directly
     // on the resulting string, so byte 3's low nibble is the most
     // significant digit.
     let nibbles = [
@@ -329,7 +325,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     // The vendor's only overload mechanism is byte 6 bit 6: it skips the
     // atof and substitutes a sentinel plus the literal display "  0L "
-    // (uci_dll_decompiled.txt:24806-24821). The digit-nibble 0x0C ('L')
+    // (spec §3.2). The digit-nibble 0x0C ('L')
     // check below is kept as a defensive secondary — the vendor never
     // validates digit nibbles.
     //
@@ -374,7 +370,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     }
 
     // The digits never carry a sign: the vendor hands its string builder the
-    // digit string and byte 6 bit 7 separately (uci_dll_decompiled.txt:24813).
+    // digit string and byte 6 bit 7 separately (spec §3.2).
     // Every display and export path prefers `display_raw` for a normal
     // value, so the sign has to be in the string, not only on the float.
     if sign_byte & 0x80 != 0 && !overload {
@@ -401,10 +397,10 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         }
     };
 
-    // Flag bit positions from the UT8802 parser in uci.dll (`FUN_1001e0a0`,
-    // status-word construction at line 24768-24773). Tracing each source
-    // bit through the shift chain back to `param_2[7]` and matching the
-    // status-word bits to the debug format string at line 24865 gives:
+    // Flag bit positions from the vendor's UT8802 parser (status-word
+    // construction, spec §3.7). Tracing each source bit through the shift
+    // chain back to frame byte 7 (`payload[6]`) and matching the status-word
+    // bits to the debug format string (spec §3.5) gives:
     //
     //   bit 0: MIN  (→ status-word D29)
     //   bit 1: MAX  (→ D28)
@@ -569,7 +565,7 @@ raw_payload=7"#
 
     /// The five display digits are range-relative: 10 nF is sent as "10.00"
     /// on the nF position, and reporting that in farads would be off by 10^9.
-    /// Prefixes come from `FUN_1001cd30` (uci.dll).
+    /// Prefixes come from the vendor's prefix lookup (spec §3.3).
     #[test]
     fn capacitance_units_carry_the_range_decade() {
         for (position, expected) in [(0x27, "nF"), (0x28, "µF"), (0x29, "mF")] {
@@ -592,8 +588,8 @@ raw_payload=7"#
         }
     }
 
-    /// The 200 mV position reports millivolts, not volts — `FUN_1001cd30`
-    /// returns the `m` prefix for position 0x01.
+    /// The 200 mV position reports millivolts, not volts — the vendor's
+    /// prefix lookup returns `m` for position 0x01.
     #[test]
     fn millivolt_range_reports_millivolts() {
         let payload = make_payload(0x01, [0, 1, 2, 3, 4], 2, 0x00, 0x00, 0x00);
@@ -687,14 +683,14 @@ raw_payload=7"#
     fn digit_order_matches_vendor_wire_layout() {
         // Raw bytes, not via make_payload: digits 1,2,3,4,5 (MSD→LSD) are
         // d1=byte3 lo, d2=byte2 hi, d3=byte2 lo, d4=byte1 hi, d5=byte1 lo
-        // (uci_dll_decompiled.txt:24714-24719). dp_pos=1 → "1234.5".
+        // (spec §3.2). dp_pos=1 → "1234.5".
         let payload = [0x05, 0x45, 0x23, 0x01, 0x01, 0x00, 0x00];
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1234.5).abs() < 1e-6));
     }
 
     /// Vendor overload = byte 6 bit 6, with ordinary digits on the wire
-    /// (uci_dll_decompiled.txt:24806-24821).
+    /// (spec §3.2).
     ///
     /// The bit has to be folded in before the display string is formatted.
     /// Inserting the decimal point first left the measurement carrying
@@ -724,7 +720,7 @@ raw_payload=7"#
 
     #[test]
     fn dc_flag_from_position_code() {
-        // AC position (0x09 = AC V per FUN_1001ca30) must not set dc even
+        // AC position (0x09 = AC V, spec §3.4) must not set dc even
         // though byte 4 bits 4-5 (diode/SCR direction) read as "2".
         let payload = make_payload(0x09, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
@@ -785,7 +781,7 @@ raw_payload=7"#
     /// test was written to that reading — but it only ever passed because
     /// each case's position code happened to agree with the coupling bits it
     /// asserted on. `position_is_dc` documents the corrected reading: the
-    /// vendor derives AC/DC from the position code alone (`FUN_1001ca30`),
+    /// vendor derives AC/DC from the position code alone (spec §3.4),
     /// and these bits are diode/SCR probe-direction indicators.
     ///
     /// So sweep all four bit values against a fixed position and assert the

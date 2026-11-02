@@ -6,7 +6,7 @@ use crate::protocol::ut61eplus::mode::Mode;
 ///
 /// 9,999-count model. Which modes it has, how many rungs each and their
 /// range-byte order and units come from UNI-T's iDMM2.0 app, which ships the
-/// table as the asset `funOl1_UT60BT.json`. The labels are the UT60BT
+/// table as a data file. The labels are the UT60BT
 /// manual's printed ranges (§X, P2) where it prints the rung, the asset's
 /// otherwise. No UT60BT has been connected; see
 /// `docs/research/ut61-family/reverse-engineered-protocol.md` §9.

@@ -13,8 +13,6 @@
 //! The driver itself is [`super::Vc8x0Protocol`], shared with the
 //! VC-880; this module is the [`Vc8x0Model`] it runs on.
 //!
-//! Based on ILSpy decompilation of Voltsoft DMSShare.dll (VC890Obj,
-//! VC890Reading classes).
 //! See docs/research/vc890/reverse-engineered-protocol.md
 
 use super::{
@@ -33,22 +31,20 @@ use std::thread;
 use std::time::Duration;
 
 /// Ack frame sent as both a pre-clear (before each command) and a
-/// post-confirm (after each received frame). Decoded from
-/// `DMSShare_decompiled.cs:3861` (`AckMessage`) plus the `WriteCommand`
-/// builder at line 3805: command = `0xFF`, data = `[0x00]`, header
-/// `0xAB 0xCD`, length byte `0x04` (= 2 + cmd + 1 data), checksum
-/// `0xAB + 0xCD + 0x04 + 0xFF + 0x00 = 0x027B` (BE).
+/// post-confirm (after each received frame): command = `0xFF`, data =
+/// `[0x00]`, header `0xAB 0xCD`, length byte `0x04` (= 2 + cmd + 1 data),
+/// checksum `0xAB + 0xCD + 0x04 + 0xFF + 0x00 = 0x027B` (BE). Spec,
+/// Communication Model, "Ack protocol".
 ///
 /// `pub(crate)` because detection sends the same burst before its poll.
 pub(crate) const ACK_FRAME: [u8; 7] = framing::build_abcd_be16(0xFF, &[0x00]);
 
-/// Gap between the three ack writes, matching `Thread.Sleep(100)` in
-/// the vendor code.
+/// Gap between the three ack writes, as the vendor software leaves it.
 const ACK_GAP: Duration = Duration::from_millis(100);
 
-/// Send the vendor's 3× ack sequence (`AckMessage(clear: true)`):
-/// three ack frames separated by 100ms sleeps. The vendor also calls
-/// `FlushBuffer()` at the end, but the `Transport` trait has no flush
+/// Send the vendor's 3× ack sequence: three ack frames separated by
+/// 100ms sleeps. The vendor software also flushes its receive buffer at
+/// the end, but the `Transport` trait has no flush
 /// and we have not observed a functional need for one.
 ///
 /// Sent before every command and after every live frame, as the vendor
@@ -106,7 +102,7 @@ const ECHOED_COMMANDS: [u8; 9] = [
 /// VC-890 function code table: (code, mode_name, base_unit).
 ///
 /// Note: function codes are DIFFERENT from VC-880 — remapped!
-/// From VC890Reading.SetDeviceMode_And_Unit_And_Range() in DMSShare.dll.
+/// From the vendor software's function table (spec, Function Codes).
 const FUNCTION_TABLE: &[(u8, &str, &str)] = &[
     (0x00, "AC V", "V"),
     (0x01, "ACV LPF", "V"),
@@ -284,7 +280,7 @@ const SETTLE: Settle = Settle {
 
 /// What the shared Voltcraft driver needs to speak VC-890.
 ///
-/// Live data payload (from VC890Reading.SetReadingValue + SetStatus):
+/// Live data payload (spec, Live Data Frame):
 ///
 /// ```text
 /// payload[0]     = type byte (0x01)
@@ -306,7 +302,7 @@ const SETTLE: Settle = Settle {
 /// payload[58]    = status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
 /// payload[59]    = battery level (low nibble)
 /// payload[60]    = misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
-///   3=V err — DMSShare_decompiled.cs:23649-23665)
+///   3=V err; spec, Live Data Frame byte 63)
 /// ```
 pub(crate) struct Vc890Model;
 
@@ -350,7 +346,7 @@ impl Vc8x0Model for Vc890Model {
 
     fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static str)> {
         // ACV LPF: vendor never reads the range byte and fixes the range at
-        // 1000V (DMSShare_decompiled.cs:23466-23469, `case 1`), unlike the other
+        // 1000V (spec, Range Tables), unlike the other
         // voltage functions. What the meter sends in the range byte for LPF is
         // unknown — accept any index. `range_table` reports no ladder for it, so
         // no range choice is offered there either.
@@ -361,15 +357,14 @@ impl Vc8x0Model for Vc890Model {
     }
 
     fn extra_flags(flags: &mut StatusFlags, status: &[u8]) {
-        // Spec byte 59: Loz(2), Void(3). Vendor (DMSShare_decompiled.cs:23638-23639)
-        // reads both into dedicated `Loz_flag` / `Void_flag` bools.
+        // Spec byte 59: Loz(2), Void(3). The vendor software reads both as
+        // flags of their own (spec, Live Data Frame).
         flags.loz = status[3] & 0x04 != 0;
         flags.void = status[3] & 0x08 != 0;
-        // Battery level is the low nibble of status[6]. The vendor DLL
-        // (`DMSShare_decompiled.cs:23648`, `battery_flag = msg[62] & 0xF`)
-        // stores the raw 0-15 value and does not threshold it here — the
-        // VoltSoft GUI (a separate binary not yet reversed) decides what
-        // counts as "low". Without that threshold the previous guess of
+        // Battery level is the low nibble of status[6]. The vendor library
+        // stores the raw 0-15 value and does not threshold it (spec, Live
+        // Data Frame) — the VoltSoft application, not examined, decides
+        // what counts as "low". Without that threshold the previous guess of
         // `>= 3 == low` was as likely to cry wolf as to help, so we report
         // low_battery only for a fully-empty nibble. The raw level stays
         // available in raw_payload for consumers that want the gauge.
@@ -409,13 +404,11 @@ impl Vc8x0Model for Vc890Model {
 
     /// The vendor wraps every exchange in an ack burst — see the spec's
     /// "Ack protocol" section and `send_ack_sequence` above. `get_name` needs
-    /// it too: the vendor's `GetDeviceID()` calls `WriteCommand(0)`
-    /// (DMSShare_decompiled.cs:3895), and that overload is
-    /// `WriteCommand(command, ack: true)` (:3800), whose body opens with
-    /// `AckMessage(clear: true)` (:3775).
+    /// it too: the vendor sends the burst before GetDeviceID as before any
+    /// other command (spec, "Ack protocol").
     ///
     /// The vendor also retries the whole GetDeviceID exchange up to 10 times
-    /// with a FlushBuffer between attempts; we make one. See "Exchanges" in
+    /// with a buffer flush between attempts; we make one. See "Exchanges" in
     /// docs/research/vc890/verification.md.
     fn ack(transport: &dyn Transport) -> Result<()> {
         send_ack_sequence(transport)
@@ -434,8 +427,7 @@ impl Vc8x0Model for Vc890Model {
     }
 
     /// Write the frame the way every VC-890 exchange starts: the vendor's
-    /// pre-clear ack burst (`WriteCommand(cmd, ack: true)` →
-    /// `AckMessage(clear: true)`), then the frame itself.
+    /// pre-clear ack burst, then the frame itself.
     ///
     /// Nothing to read back here: the vendor expects the meter to echo the
     /// command in a frame of its own, and the live-frame accept filter (type
@@ -514,7 +506,7 @@ mod tests {
     #[test]
     fn parse_acv_lpf_fixed_range() {
         // Vendor fixes LPF at 1000V and never reads the range byte
-        // (DMSShare_decompiled.cs:23466-23469) — any index must work.
+        // (spec, Range Tables) — any index must work.
         for range_byte in [0x30, 0x33, 0x00, 0xFF] {
             let payload = make_payload(0x01, range_byte, b" 230.45", zero_status());
             let m = parse_measurement(&payload).unwrap();
@@ -748,8 +740,7 @@ mod tests {
     }
 
     /// The vendor sends the ack burst before GetDeviceID like every other
-    /// exchange (`WriteCommand(0)` → `WriteCommand(cmd, ack: true)` →
-    /// `AckMessage(clear: true)`, DMSShare_decompiled.cs:3895/3800/3775).
+    /// exchange (spec, "Ack protocol").
     /// The shared DeviceID helper writes bare, so the model's `ack` is what
     /// puts the burst in front of it.
     #[test]

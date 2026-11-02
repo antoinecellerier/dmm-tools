@@ -72,6 +72,8 @@ The sequence is invoked in two places per measurement cycle:
    (line 3773) calls `AckMessage(clear: true)` before writing the
    command frame. `GetReading()` / `SendCommand()` take this default
    path, so every outgoing command is preceded by the 3× ack burst.
+   `GetDeviceID()` (line 3895) takes it too: it calls the one-argument
+   `WriteCommand(0)` (line 3800), which forwards with `ack: true`.
 2. **Post-confirm** — `ReceiveOneMessage(byte messageType, bool ack =
    true)` (line 3977) calls `AckMessage(ack)` right after a valid
    response frame is reassembled (line 4009). Default `ack = true` →

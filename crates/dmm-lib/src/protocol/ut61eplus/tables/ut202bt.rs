@@ -15,8 +15,8 @@ const PEAK_MODES: &[Mode] = &[Mode::AcV, Mode::AcA, Mode::ClampAcA];
 ///
 /// 9,999-count model with no dial: colour-coded buttons pick the function.
 /// Which modes it has, how many rungs each and their range-byte order and
-/// units come from UNI-T's iDMM2.0 app, which ships the table as the asset
-/// `funOl1_UT202BT.json`. The labels are the UT202T/UT202BT manual's printed
+/// units come from UNI-T's iDMM2.0 app, which ships the table as a data
+/// file. The labels are the UT202T/UT202BT manual's printed
 /// ranges (spec tables, P14/26 to P17/31) where it prints the rung, the
 /// asset's otherwise. No UT202BT has been connected; see
 /// `docs/research/ut61-family/reverse-engineered-protocol.md` §9.

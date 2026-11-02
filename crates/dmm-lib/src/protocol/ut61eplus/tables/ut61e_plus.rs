@@ -30,7 +30,7 @@ impl Ut61ePlusTable {
     pub fn new() -> Self {
         Self {
             // Four ranges, verified on a real UT61E+ (2026-03-21): the
-            // meter never sends a fifth. The vendor decompile listed a
+            // meter never sends a fifth. The vendor software listed a
             // 220mV entry here, but 220 mV is the separate DC mV mode
             // (0x03) on its own dial position, not a range of mode 0x02.
             dc_v: [

@@ -160,7 +160,7 @@ pub(super) static CMS_COMMANDS: [&str; 7] = commands(&CMS);
 pub(super) static OW65: [Key; 5] = [SELECT, RANGE, HOLD_TAP, REL, MINMAX];
 pub(super) static OW65_COMMANDS: [&str; 5] = commands(&OW65);
 
-/// The OW67B: the app's `_c871AndOw67Keys` (spec §10.8), taps only.
+/// The OW67B: the app's key list for it (spec §10.8), taps only.
 pub(super) static OW67: [Key; 8] = [
     SELECT,
     RANGE,
@@ -189,7 +189,7 @@ pub(super) static VC871: [Key; 10] = [
 ];
 pub(super) static VC871_COMMANDS: [&str; 10] = commands(&VC871);
 
-/// The OW69B: the app's `_c891AndOw69Keys` (spec §10.8), taps only.
+/// The OW69B: the app's key list for it (spec §10.8), taps only.
 pub(super) static OW69: [Key; 9] = [
     SELECT,
     RANGE,

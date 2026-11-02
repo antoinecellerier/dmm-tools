@@ -10,7 +10,6 @@
 //!   [flags0 x2] [flags1 x2] [flags2 x2] [flags3] [chk_hi] [chk_lo]
 //! ```
 //!
-//! Based on reverse engineering of uci.dll (Ghidra decompilation).
 //! See docs/research/ut8803/reverse-engineered-protocol.md
 
 pub(crate) mod devices;
@@ -72,9 +71,9 @@ const UT8803_COMMANDS: &[&str] = &[];
 ///
 /// The display value is range-relative — e.g. 5.999 on Ω range 1 means
 /// 5.999 kΩ — so the unit must carry the magnitude prefix. Base units per
-/// mode from `FUN_1001cff0` (uci_dll_decompiled.txt:23789-23829: 2=Ω also
+/// mode from the vendor's base-unit lookup (spec §2.3: 2=Ω also
 /// for IndR/CapR ESR sub-modes, default 0xF=no unit for IndQ/CapD);
-/// prefixes per (mode, range) from `FUN_1001cdc0` (lines 23644-23700:
+/// prefixes per (mode, range) from its prefix lookup (spec §2.3:
 /// 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M).
 fn display_unit(mode_byte: u8, range_idx: u8) -> &'static str {
     match mode_byte {
@@ -140,8 +139,8 @@ const FLAG_BYTE_MASKS: [u8; 5] = [0x0F, 0x07, 0x0F, 0x07, 0x03];
 /// prefix must not make every session report.
 const POSSIBLE_ASCII_PREFIX: u8 = 0x30;
 
-/// Whether a mode measures a DC quantity, per `FUN_1001ca90`
-/// (uci_dll_decompiled.txt:23449-23466: AC = modes 0x00/0x02-0x04,
+/// Whether a mode measures a DC quantity, per the vendor's AC/DC lookup
+/// (spec §2.3: AC = modes 0x00/0x02-0x04,
 /// DC = 0x01/0x05-0x07).
 fn mode_is_dc(mode_byte: u8) -> bool {
     matches!(mode_byte, 0x01 | 0x05..=0x07)
@@ -187,12 +186,11 @@ impl Protocol for Ut8803Protocol {
     }
 
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
-        // No trigger byte: the vendor's CP2110 init path (uci.dll
-        // FUN_1001d460, uci_dll_decompiled.txt:24031-24085) configures the
-        // UART and reads — it never writes. The 0x5A trigger we previously
-        // sent here belongs to the QinHeng/CH9325 init path for other
-        // meters (FUN_1001d360, lines 24003-24005). Whether the UT8803
-        // tolerates a stray 0x5A is untested on hardware.
+        // No trigger byte: the vendor's CP2110 init path (spec §1.3)
+        // configures the UART and reads — it never writes. The 0x5A trigger
+        // we previously sent here belongs to the QinHeng/CH9325 init path for
+        // other meters (spec §1.3). Whether the UT8803 tolerates a stray 0x5A
+        // is untested on hardware.
         debug!("ut8803: init (no trigger byte; meter streams unprompted)");
         Ok(())
     }
@@ -288,7 +286,7 @@ impl Protocol for Ut8803Protocol {
 
 /// Parse a UT8803 measurement payload (17 bytes = frame bytes 2..19).
 ///
-/// Layout (from Ghidra decompilation of uci.dll):
+/// Layout (spec §2.3):
 /// - byte 0:    (frame byte 2, part of mode word, not directly consumed)
 /// - byte 1:    type byte (0x02 = measurement, already verified by framing)
 /// - byte 2:    mode byte (raw, 0x00-0x16)
@@ -327,13 +325,13 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         unknown_mode(mode_byte)
     };
 
-    // Parse display value: 5 raw ASCII bytes appended by the vendor parser
-    // (`FUN_1001fce0` per spec §2.3) and then converted to a float via
-    // `FUN_1017f410`. Validate that every byte is in the character set a
-    // numeric-or-"OL" display can produce; a byte outside that set means
-    // the frame is malformed and should be surfaced as a parse error rather
-    // than silently smuggled past `String::from_utf8_lossy` as U+FFFD,
-    // which would mask real corruption during HW verification.
+    // Parse display value: 5 raw ASCII bytes the vendor parser appends to a
+    // string and converts to a float (spec §2.3). Validate that every byte
+    // is in the character set a numeric-or-"OL" display can produce; a byte
+    // outside that set means the frame is malformed and should be surfaced
+    // as a parse error rather than silently smuggled past
+    // `String::from_utf8_lossy` as U+FFFD, which would mask real corruption
+    // during HW verification.
     for (i, &b) in display_bytes.iter().enumerate() {
         let allowed = b == 0x00
             || b == b' '
@@ -365,19 +363,16 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         .collect();
     let display_trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
 
-    // Flag bit positions traced from the UT8803 parser in uci.dll
-    // (`FUN_1001e5f0`). The parser builds a 32-bit status word by OR-ing
-    // shifted extracts of a handful of intermediate locals, and the final
-    // debug format string at line 25091 pins each status-word bit to its
-    // name (`isauto = uVar9 >> 6 & 1`, `ismax = ... >> 0x1c & 1`, ...).
-    // Tracing each intermediate local back to its source byte yields:
+    // Flag bit positions from the vendor's UT8803 parser (spec §2.3), which
+    // builds a 32-bit status word and names each bit in its debug output
+    // (`isauto` = bit 6, `ismax` = bit 28, ...). Each bit's source byte:
     //
     //   HOLD (D31) ← frame byte 14 bit 0 = payload[12] & 0x01
     //   OL   (D7)  ← frame byte 14 bit 2 = payload[12] & 0x04
     //   Sign (D19) ← frame byte 14 bit 3 = payload[12] & 0x08
     //   REL  (D30) ← frame byte 15 bit 0 = payload[13] & 0x01
     //   AUTO (D6)  ← frame byte 15 bit 1 = payload[13] & 0x02, **inverted**
-    //                (vendor `bVar17 = local_16 == '\0';`)
+    //                (the vendor sets AUTO when the bit is clear)
     //   MIN  (D29) ← frame byte 16 bit 0 = payload[14] & 0x01
     //   MAX  (D28) ← frame byte 16 bit 1 = payload[14] & 0x02
     //
@@ -428,7 +423,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let value = if overload {
         MeasuredValue::Overload
     } else if let Ok(v) = display_trimmed.parse::<f64>() {
-        // Vendor (`FUN_1001e5f0` after line 25040) checks status-word bit
+        // The vendor parser (spec §2.3) checks status-word bit
         // 19 and negates the parsed float when set.
         MeasuredValue::Normal(if negative { -v } else { v })
     } else if display_trimmed.contains("OL") {
@@ -575,7 +570,7 @@ raw_payload=17"#
     fn parse_ohm() {
         // Range 1 is the kΩ range: the display value is range-relative,
         // so the unit must carry the vendor's magnitude prefix
-        // (FUN_1001cdc0, uci_dll_decompiled.txt:23644-23700).
+        // (spec §2.3).
         let payload = make_payload(0x08, 0x01, b"123.4", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "Ω");
@@ -585,7 +580,7 @@ raw_payload=17"#
     #[test]
     fn display_unit_magnitude_prefixes() {
         // Spot-check the (mode, range) → prefixed-unit table against
-        // FUN_1001cdc0 / FUN_1001cff0.
+        // the vendor's prefix and base-unit lookups (spec §2.3).
         assert_eq!(display_unit(0x01, 0), "mV"); // V range 0 = mV
         assert_eq!(display_unit(0x08, 0), "Ω");
         assert_eq!(display_unit(0x08, 4), "MΩ");

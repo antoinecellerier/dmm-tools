@@ -344,6 +344,17 @@ DiodeLR (byte 18 bit 0), `local_25` = DiodeRL (byte 18 bit 1),
 `local_20` = TestMode (byte 17 bit 2), `local_26` = Error (byte 15
 bit 2) (lines 25018-25021). [VENDOR]
 
+**Vendor lookups**: three small functions turn the mode and range bytes
+into the status word's AC/DC field and the reading's unit. [VENDOR]
+- `FUN_1001ca90` (uci_dll_decompiled.txt:23449-23466), AC/DC: modes 0x00
+  and 0x02-0x04 return 1 (AC), 0x01 and 0x05-0x07 return 2 (DC), every
+  other mode 0.
+- `FUN_1001cff0` (lines 23789-23829), the base unit per mode: 2 (Ω) also
+  for the IndR/CapR ESR sub-modes, the default 0xF (no unit) for
+  IndQ/CapD.
+- `FUN_1001cdc0` (lines 23644-23700), the magnitude prefix per (mode,
+  range): 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M.
+
 #### Inductance Test Frequency
 
 The parser checks for inductance modes (0x0B through 0x10) and

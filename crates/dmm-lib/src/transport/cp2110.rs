@@ -116,7 +116,7 @@ impl Cp2110 {
             )));
         }
         // TX/RX FIFO counts read as 16-bit little-endian (AN434 §3.2 default byte
-        // order). UNI-T's SLABHIDtoUART.dll reads them big-endian (UT171 spec §8);
+        // order). UNI-T's software reads them big-endian (UT171 spec §8);
         // idle reads give 0, which fits either, so which is right is an open check
         // (docs/verification-backlog.md, "USB bridges").
         let tx_fifo = u16::from_le_bytes([buf[1], buf[2]]);

@@ -40,7 +40,7 @@ pub(crate) const fn build_command(cmd: u8) -> [u8; 6] {
     framing::build_abcd_be16(cmd, &[])
 }
 
-/// The button the vendor DLL calls `Select` (spec §5, "SELECT button (cycle
+/// The button the command table calls `Select` (spec §5, "SELECT button (cycle
 /// sub-function)"). Both meters' front panel labels it SHIFT/SETUP, and it is
 /// what steps a dial position through its sub-functions.
 pub(crate) const CMD_SELECT: u8 = 0x4C;
@@ -320,8 +320,8 @@ pub(crate) fn common_flags(status: &[u8]) -> (StatusFlags, bool) {
         // Status byte 2: bit0=Hold, bit1=Manual
         hold: status[2] & 0x01 != 0,
         // Status byte 1: bit0=Rel, bit1=Avg, bit2=Min, bit3=Max
-        // (vc880 spec byte 31, tables at lines 117 and 272; vc890 spec byte 57,
-        // line 95 — both families share this byte layout.)
+        // (vc880 spec §4 byte 31 and §4.3; vc890 spec, Live Data Frame byte
+        // 57 — both families share this byte layout.)
         rel: status[1] & 0x01 != 0,
         avg: status[1] & 0x02 != 0,
         min: status[1] & 0x04 != 0,

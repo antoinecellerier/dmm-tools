@@ -13,7 +13,6 @@
 //! The driver itself is [`super::Vc8x0Protocol`], shared with the
 //! VC-890; this module is the [`Vc8x0Model`] it runs on.
 //!
-//! Based on ILSpy decompilation of Voltsoft DMSShare.dll.
 //! See docs/research/vc880/reverse-engineered-protocol.md
 
 use super::{COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol, build_command, re, read_live};
@@ -35,8 +34,8 @@ const LIVE_DATA_PAYLOAD_LEN: usize = 34;
 
 /// Function code table: (code, mode_name, unit).
 ///
-/// From `SetDeviceMode_And_Unit_And_Range()` switch statement in
-/// DMSShare.dll (line 16335). The unit here is the base unit; the
+/// From the vendor software's function table (spec §4.1). The unit here
+/// is the base unit; the
 /// actual unit depends on the range byte (e.g., function 0x06 can be
 /// Ω, kΩ, or MΩ depending on range).
 const FUNCTION_TABLE: &[(u8, &str, &str)] = &[
@@ -64,8 +63,8 @@ const FUNCTION_TABLE: &[(u8, &str, &str)] = &[
 /// The range table of a function code, empty for a single-range or unknown
 /// function.
 ///
-/// Range tables from DMSShare.dll `SetDeviceMode_And_Unit_And_Range()`
-/// and cross-referenced against VC880 user manual pages 62-65. The meter
+/// Range tables from the vendor software (spec §4.2), cross-referenced
+/// against VC880 user manual pages 62-65. The meter
 /// reports the index into this table as `range_raw - 0x30`, so it is also
 /// the manual range ladder [`crate::protocol::Setting::Range`] offers.
 fn range_table(function: u8) -> &'static [RangeEntry] {

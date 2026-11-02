@@ -9,7 +9,6 @@
 //!
 //! Values are IEEE 754 float32 (LE). 26 measurement modes.
 //!
-//! Based on Ghidra decompilation of UT171C.exe and USB captures.
 //! See docs/research/ut171/reverse-engineered-protocol.md
 
 pub(crate) mod devices;
@@ -33,7 +32,7 @@ const FAMILY: &str = "ut171";
 
 /// Look up the human-readable range label for a (mode, range) pair.
 ///
-/// Spec §5.4 lists vendor-extracted range tables from UT171C.exe strings.
+/// Spec §5.4 lists the vendor software's range tables.
 /// Range byte is raw and 1-based (`0` = auto-range, no specific label).
 /// Only the modes whose range tables are explicitly documented in the spec
 /// are returned here; others get `None` and fall through to an empty label,
@@ -84,7 +83,7 @@ fn lookup_range(mode_byte: u8, range_byte: u8) -> Option<&'static str> {
 /// Returns `(Cow::Borrowed(name), unit)` for known modes,
 /// or `(Cow::Owned("Unknown(0xNN)"), "")` for unknown bytes.
 ///
-/// Mode byte values from Ghidra analysis of UT171C.exe.
+/// Mode byte values: spec §6.
 fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
     match known_mode(byte) {
         Some((name, unit)) => (Cow::Borrowed(name), unit),
@@ -984,7 +983,7 @@ raw_payload=15"#
 
     #[test]
     fn all_known_modes_parse() {
-        // All known mode bytes from Ghidra analysis of UT171C.exe
+        // Every mode byte in spec §6
         let known_modes: &[u8] = &[
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
             0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C,

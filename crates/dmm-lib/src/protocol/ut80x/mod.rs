@@ -13,9 +13,8 @@
 //! code E is their power position
 //! (docs/research/ut71/reverse-engineered-protocol.md §1-§4).
 //!
-//! **UT803 and UT804 use different payload layouts** (2026-06 review,
-//! re-derived from UT803.exe V1.01 / UT804.exe V2.00 with string constants
-//! resolved from the recovered binaries and the vendor LCD fonts rendered).
+//! **UT803 and UT804 use different payload layouts** (2026-06 review of
+//! the vendor software, spec §7).
 //! Positions are the vendor parsers' 1-based indices into the low nibbles.
 //!
 //! UT804 (position k = byte k):
@@ -119,8 +118,8 @@ impl Model {
 /// position from the left (point after digit `pos+1`; a position past the
 /// last digit means an integer display), and range label.
 ///
-/// From the UT804.exe parse function `FUN_00558a7c` unit-string appends
-/// and range switches (spec §7.4 item 7), with unit glyphs resolved from
+/// From the vendor parser's unit strings and range switches (spec §7.4
+/// item 7), with unit glyphs resolved from
 /// the vendor LCD fonts (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω).
 /// The labels are the full ranges of the UT804 manual's Table 2-3 (spec
 /// §3.7), which match the decimal points, with two corrections. That table
