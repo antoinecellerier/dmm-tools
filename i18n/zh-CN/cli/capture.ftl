@@ -47,7 +47,7 @@ capture-no-response-not-saved = 无法保存收到的字节: { $error }
 capture-status = 状态: { $status }
 capture-status-verified = 受支持的型号
 capture-status-partly-verified = 部分验证，连接和主要模式已确认
-capture-status-partly-verified-detail = 其余模式尚未确认，本次运行正是为此。
+capture-status-partly-verified-detail = 其余模式尚未确认，本次运行就是为了确认它们。
 # The protocol was worked out from the meter's traffic, not from its maker.
 capture-status-experimental = 实验性，协议通过逆向工程得出，尚未确认
 capture-status-experimental-detail = 请尽量多完成一些步骤，并分享报告。
@@ -62,7 +62,7 @@ capture-resume-prompt = { $resume }=继续，{ $fresh }=重新开始，{ $abort 
 capture-aborted = 已中止。
 # $yes and $no are the keys that answer: y and n.
 capture-overwrite-confirm = 这将覆盖已有的捕获。确定吗? { $yes }/{ $no }:
-capture-resuming = 正在继续: 已捕获的步骤将被跳过。
+capture-resuming = 正在继续: 将跳过已捕获的步骤。
 # The file is there but isn't a report this tool can read. $path is the
 # file.
 capture-unreadable = 找到 { $path }，但无法解析。
@@ -90,7 +90,7 @@ capture-need-shorted-leads = 短接的表笔
 capture-need-dc-source = 电池或其他直流电源
 capture-need-thermocouple = K 型热电偶
 # For the non-contact voltage detector, which senses a live wire nearby.
-capture-need-live-wire = 附近带电的市电火线
+capture-need-live-wire = 附近有一根带电的市电火线
 # The meter's power-measurement adapter, plugged into a live outlet with a
 # load plugged into it.
 capture-need-power-adapter = 功率测量适配器、通电的插座和负载
@@ -187,7 +187,7 @@ capture-mismatch-value =
     }，需要{ $want ->
         [overload] 超量程 (OL)
         [negative] 负读数
-        [ncv] 至少为 1 的 NCV 等级
+        [ncv] NCV 等级不低于 1
         [word] 显示文字而非读数
         [zero] 读数为零
        *[finite] 数值读数
@@ -214,8 +214,8 @@ capture-confirm =
 # capture-confirm.
 capture-confirm-again =
     { $retake ->
-        [yes] 请回答 { $no }、{ $redo }，或按 Enter。
-       *[no] 请回答 { $no }，或按 Enter。
+        [yes] 请输入 { $no } 或 { $redo }，或直接按 Enter。
+       *[no] 请输入 { $no }，或直接按 Enter。
     }
 # The reading didn't match: the user types what the meter showed.
 capture-what-shown = 万用表显示的是什么?
@@ -239,7 +239,7 @@ capture-core-not-confirmed = 核心语义未确认 ({ $steps })，每个步骤�
 ## starts with an arrow.
 
 # $mode is the function, e.g. Continuity.
-capture-drive-switching = 正在切换到“{ $mode }”(由工具发送)
+capture-drive-switching = 正在切换到“{ $mode }”(由工具遥控)
 # $mode is the function, e.g. Continuity; $error why the meter refused.
 capture-drive-switch-failed = 无法切换到“{ $mode }”: { $error }，请手动切换
 # $setting is the setting's name, rel (relative mode): the meter refuses it
@@ -280,7 +280,7 @@ capture-freeform-prompt = 描述万用表当前的设置 (或输入 '{ $quit }' 
 capture-detect-confirmed = 已确认可通过 { $bridge } 自动检测，因此跳过此项检查。
 # Bold, between heavy lines.
 capture-detect-heading = 最后一项检查: 自动检测
-capture-detect-off-cable = 将万用表关机，并拔下它的 USB 连接线。
+capture-detect-off-cable = 关闭万用表，并拔下 USB 连接线。
 capture-detect-off = 将万用表关机。
 # Waits for one key. $skip is the key that skips: s.
 capture-detect-off-prompt = 关机后按 Enter，或按 { $skip } 跳过:
@@ -333,7 +333,7 @@ capture-nothing-new = 没有捕获到任何未验证的步骤，因此没有新�
 # yet; $meter is its name, e.g. UNI-T UT61E+.
 capture-covered = 已覆盖 { $meter } 的 { $total } 个未验证步骤中的 { $covered } 个。
 # $resume is the key that resumes, r (capture-resume-prompt).
-capture-not-finished = 未完成: 再次运行同一命令，并回答 { $resume } 以继续。
+capture-not-finished = 未完成: 再次运行同一命令，并按 { $resume } 继续。
 # $flag is the option as typed, --steps <ids>.
 capture-steps-hint = { $flag } 可单独运行指定的步骤。
 # $url is the web address of the meter's issue on GitHub.
@@ -370,7 +370,7 @@ capture-instructions-next = 翻译完成后运行: { $command }
 # Yellow, before the first step: steps whose English changed after the
 # file was exported, so they show a translation of an older wording.
 # $path is the file; $steps lists the step ids, e.g. "dcv, hold".
-capture-instructions-changed = 以下步骤在导出 { $path } 之后有改动，显示的是你对其旧文本的翻译: { $steps }。导出新文件即可查看新的英文原文。
+capture-instructions-changed = 以下步骤在导出 { $path } 之后有改动，显示的仍是你按旧文本翻译的内容: { $steps }。导出新文件即可查看新的英文原文。
 # One problem in the file, on a line of its own under
 # capture-error-instructions-unreadable. $line is a line number.
 capture-instructions-problem-syntax = 第 { $line } 行: 应为步骤 ID、"=" 和其后的文字

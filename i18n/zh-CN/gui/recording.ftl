@@ -38,7 +38,7 @@ recording-buffer-full = (缓冲区已满)
 # how many samples the graph holds.
 recording-history-hint =
     { $count ->
-       *[other] 没有记录。“导出…”将保存图表中的 { $count } 个样本。单击“记录”可跨模式切换持续采集。
+       *[other] 没有记录。“导出…”将保存图表中的 { $count } 个样本。单击“记录”可在切换模式时持续采集。
     }
 
 ## Messages that show for a few seconds at the top right.

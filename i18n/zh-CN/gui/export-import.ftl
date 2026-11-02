@@ -84,8 +84,8 @@ export-unsaved-heading-markers = 放弃未导出的标记?
 export-unsaved-record =
     { $lost ->
         [samples] 开始新记录将放弃 { $samples } 个未导出的样本。
-        [markers] 开始新记录将放弃 { $markers } 个标记的未保存更改。图表仍保留其读数时，标记会留在图表上。
-       *[both] 开始新记录将放弃 { $samples } 个未导出的样本，以及 { $markers } 个标记的未保存更改。图表仍保留其读数时，标记会留在图表上。
+        [markers] 开始新记录将放弃 { $markers } 个标记的未保存更改。只要图表中还有标记所在的读数，标记就会保留在图表上。
+       *[both] 开始新记录将放弃 { $samples } 个未导出的样本，以及 { $markers } 个标记的未保存更改。只要图表中还有标记所在的读数，标记就会保留在图表上。
     }
 # The prompt's button that goes ahead: discards, then starts recording.
 export-unsaved-record-confirm = 放弃并记录
@@ -176,9 +176,9 @@ export-in-progress = 已有导出正在进行: 请先等它完成
 # system or the file writer, often in English.
 export-failed = 导出失败: { $reason }
 # The save dialog went away without saying which file to write.
-export-failed-dialog = 导出失败: 保存对话框关闭时没有给出结果
+export-failed-dialog = 导出失败: 保存对话框未返回结果就已关闭
 # The part of the app writing the file stopped without saying how it went.
-export-failed-writer = 导出失败: 写入程序停止时没有给出结果
+export-failed-writer = 导出失败: 写入程序未返回结果就已停止
 # The samples to export were dropped while the save dialog was open, so
 # the file would not hold what was asked for.
 export-failed-changed = 导出失败: 保存对话框打开期间样本已更改

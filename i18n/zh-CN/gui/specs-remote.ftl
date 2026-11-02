@@ -104,7 +104,7 @@ remote-select =
     .hover = 在当前档位的第二功能间循环切换
 # LIGHT: the display's backlight.
 remote-light =
-    .hover = 开关万用表背光
+    .hover = 开启/关闭万用表背光
 
 ## The What's New window, opened from the version at the top bar's right
 ## end: the window's title, which the system draws in its title bar. The

@@ -98,7 +98,7 @@ graph-envelope = 最小/最大
 # The small field after Min/Max, about 30 pixels wide: how many seconds the
 # band's window spans. The text shows greyed inside the field while it is
 # empty; "s" after the field is the symbol for seconds.
-graph-envelope-window = 最小/最大窗口，秒
+graph-envelope-window = 最小/最大窗口 (秒)
     .hover = 计算最小/最大包络所用的窗口大小 (秒)
 # A chip that shows a histogram, bars of how many readings fell at each
 # value, beside or under the graph. $state is hidden while the plotted
@@ -155,7 +155,7 @@ graph-mean-line = 平均值: { $value }
 # A marker's flag (a numbered tag under its line) when hovered, and its name
 # for a screen reader; a click opens the note. $number is the marker's
 # number.
-graph-marker-flag = 编写标记 { $number } 的备注
+graph-marker-flag = 填写标记 { $number } 的备注
 
 ## What a screen reader hears of the plot: the sentences below, one after
 ## the other, in this order. Each ends with its own full stop.
@@ -170,13 +170,13 @@ graph-plot-a11y-title-series = { $series } 的测量绘图。
 graph-plot-a11y-window = 时间窗口 { $seconds } 秒。
 # The range of the left axis: $min is a number, $max a number with the
 # plotted unit (reading-spoken-amount), e.g. 5.000 volts, or a bare number.
-graph-plot-a11y-y-axis = Y 轴 { $min } 到 { $max }。
+graph-plot-a11y-y-axis = Y 轴范围 { $min } 到 { $max }。
 # $count is how many samples the graph holds.
 graph-plot-a11y-samples = { $count } 个样本。
 # Only when other traces are drawn beside the plotted series: $series lists
 # them, separated by graph-plot-a11y-also-separator; each is a name, or
 # graph-plot-a11y-also-axis.
-graph-plot-a11y-also = 另显示 { $series }。
+graph-plot-a11y-also = 同时显示 { $series }。
 # Between two traces in graph-plot-a11y-also.
 graph-plot-a11y-also-separator = {"、"}
 # One trace in graph-plot-a11y-also, drawn against an axis of its own on the
@@ -193,7 +193,7 @@ graph-plot-a11y-state =
     }
 # The last sentence: $value is the meter's last reading as it showed it,
 # with its unit (reading-spoken-amount), e.g. 1.6112 volts.
-graph-plot-a11y-reading = 最后读数 { $value }。
+graph-plot-a11y-reading = 最新读数 { $value }。
 # The last sentence while the meter reads over range (shows OL).
 graph-plot-a11y-over-range = 当前超量程。
 # The last sentence before any reading.
@@ -243,9 +243,9 @@ graph-histogram-a11y = { $count } 个可见读数的直方图
 graph-histogram-a11y-sd = 标准差 { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
-graph-histogram-a11y-most = 最多的读数在 { $range } ({ $count })
+graph-histogram-a11y-most = 读数最多的区间为 { $range } ({ $count })
 # How many readings in view were over range (OL). $count is that number.
-graph-histogram-a11y-over-range = { $count } 个超量程
+graph-histogram-a11y-over-range = { $count } 个读数超量程
 # How many readings in view lie above and below the Y axis' ends, out of
 # the histogram's reach. $above and $below are those numbers.
 graph-histogram-a11y-beyond = 轴上方 { $above } 个，轴下方 { $below } 个

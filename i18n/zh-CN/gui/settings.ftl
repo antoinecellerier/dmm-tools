@@ -43,7 +43,7 @@ settings-mock-auto =
         [yes] 自动 (循环) (--mock-mode)
        *[no] 自动 (循环)
     }
-    .hover = 循环所有合成模式，以测试 GUI
+    .hover = 依次循环切换所有合成模式，以测试 GUI
 # The chip for the mode --mock-mode picked for this session. $mode is its
 # name, e.g. dcv.
 settings-mock-mode-pinned = { $mode } (--mock-mode)
@@ -75,9 +75,9 @@ settings-interval-every-reading = 每个读数
 settings-interval-chip =
     .hover =
         { $unit ->
-            [second] 每秒最多保留 1 个读数: 最接近每个时间点的那个
-            [seconds] 每 { $n } s 最多保留 1 个读数: 最接近每个时间点的那个
-           *[ms] 每 { $n } ms 最多保留 1 个读数: 最接近每个时间点的那个
+            [second] 每秒最多保留 1 个读数，即最接近各时间点的读数
+            [seconds] 每 { $n } s 最多保留 1 个读数，即最接近各时间点的读数
+           *[ms] 每 { $n } ms 最多保留 1 个读数，即最接近各时间点的读数
         }
 
 settings-buffer-size = 缓冲区大小:
@@ -92,11 +92,11 @@ settings-buffer-size-chip =
         { $pace ->
             [every-reading]
                 { $count ->
-                   *[other] 图表和导出最多保留 { $samples } 个样本: 占用 { $memory }，按每秒 10 个读数约可容纳 { $span }。同时保留的已停止记录最多可再占用同样多的空间
+                   *[other] 图表中最多保留 { $samples } 个样本供显示和导出: 占用 { $memory }，按每秒 10 个读数约可容纳 { $span }。同时保留的已停止记录最多可再占用同样多的空间
                 }
            *[interval]
                 { $count ->
-                   *[other] 图表和导出最多保留 { $samples } 个样本: 占用 { $memory }，按当前采样间隔约可容纳 { $span }。同时保留的已停止记录最多可再占用同样多的空间
+                   *[other] 图表中最多保留 { $samples } 个样本供显示和导出: 占用 { $memory }，按当前采样间隔约可容纳 { $span }。同时保留的已停止记录最多可再占用同样多的空间
                 }
         }
 # After the Buffer size chips: what the picked size costs. $memory is the
@@ -141,7 +141,7 @@ settings-specs-notes = 备注
 # screen reader, in your word alone.
 settings-language = 语言 (Language):
     .a11y = 语言
-    .hover = 窗口使用的语言
+    .hover = 界面使用的语言
 # The dropdown's first entry: the window speaks the system's language.
 # $language is the language that is, by its name in itself, e.g. Français
 # or 简体中文. The other entries are each language's name in itself, kept
@@ -210,7 +210,7 @@ settings-update-dev-short = 更新 ↗
 # Every reading taking that row's first chip's label, then Never.
 settings-announce = 屏幕阅读器播报:
 settings-announce-every-reading =
-    .hover = 播报每个新读数。读数来得比屏幕阅读器读得快时，屏幕阅读器可能会打断自己。
+    .hover = 播报每个新读数。如果读数更新快于屏幕阅读器的朗读速度，播报可能会被中途打断。
 # The duration chips' hover. $n is a whole number of seconds.
 settings-announce-chip =
     .hover = 最多每 { $n } 秒播报一次读数。模式改变时立即播报。
@@ -219,14 +219,14 @@ settings-announce-never = 从不
 # A checkbox at the end of the same row, or under it when the row wraps.
 # Focus is keyboard focus, or where the screen reader's cursor is.
 settings-announce-focused = 仅在读数获得焦点时
-    .hover = 仅在屏幕阅读器位于读数上时，按选定的频率播报读数。按 Tab 键可以到达读数。
+    .hover = 仅在读数获得焦点时，按选定的频率播报读数。按 Tab 键可将焦点移到读数上。
 
 ## How the graph's lines look, the last row.
 
 settings-graph-lines = 图表线条:
 # Sub-value lines are the extra traces a meter that shows several values
 # at once draws beside the main one.
-settings-graph-lines-patterned = 带样式
+settings-graph-lines-patterned = 虚线
     .hover = 副读数曲线用虚线和点线绘制，无需靠颜色区分
 settings-graph-lines-solid = 实线
     .hover = 连续的线条，靠颜色和图例区分

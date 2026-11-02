@@ -505,44 +505,44 @@ model-mock-zt-5b = ZT-5B 仿真
 
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 activation-bm52x =
-    1. 将 BU-86X 连接线接到万用表背面的光学 PC-Comm 端口，并插好
-    2. 在电压功能档打开万用表
+    1. 将 BU-86X 连接线接到万用表背面的光学 PC-Comm 端口，再将另一端插入电脑
+    2. 将旋钮转到电压功能档开机
     注意: BM869s 或 BM867s 万用表空闲约 17 分钟后自动关机，其他型号为 30 分钟；按住 SELECT 键的同时开机可禁用自动关机。
 # Used by: UT8802, UT8803
 activation-ut8802 =
-    1. 将 USB 连接线连接到万用表
+    1. 将 USB 连接线插入万用表
     2. 打开万用表
 # Used by: UT171A/B/C
 activation-ut171 =
-    1. 将 USB 连接线连接到万用表
+    1. 将 USB 连接线插入万用表
     2. 打开万用表
     3. 进入 SETUP -> Communication -> ON
 # Used by: UT181A
 activation-ut181a =
-    1. 将 USB 连接线连接到万用表
+    1. 将 USB 连接线插入万用表
     2. 打开万用表
     3. 进入 SETUP -> Communication -> ON
     注意: 该设置在断电重启后复位。
 # Used by: UT71A/B, UT71C/D/E, VC920/VC940/VC960
 activation-ut71ab =
-    1. 将 USB 连接线连接到万用表
+    1. 将 USB 连接线插入万用表
     2. 打开万用表
-    3. 长按 MAX MIN 键 1 s；UT71A 则按 SEND 键；显示屏上显示 SEND
+    3. 长按 MAX MIN 键 1 s (UT71A 则按 SEND 键)，显示屏上显示 SEND
     注意: 按 EXIT 键关闭 SEND。
 # Used by: UT803
 activation-ut803 =
-    1. 将 USB 连接线连接到万用表
+    1. 将 USB 连接线插入万用表
     2. 打开万用表
     3. 按 RS232 键，显示屏上显示 RS232
 # Used by: UT804
 activation-ut804 =
-    1. 将 USB 连接线连接到万用表
+    1. 将 USB 连接线插入万用表
     2. 打开万用表
     3. 按 SEND 键，显示屏上显示 SEND
-    注意: HOLD 键暂停数据，EXIT 键关闭 SEND。
+    注意: 按 HOLD 键可暂停数据发送，按 EXIT 键可关闭 SEND。
 # Used by: VC-880, VC-890, VC650BT
 activation-vc650bt =
-    1. 将 USB 连接线连接到万用表
+    1. 将 USB 连接线插入万用表
     2. 打开万用表
     3. 按万用表上的 PC 键
 # Used by: BM788BT/BM787BT
@@ -573,7 +573,7 @@ activation-vc871 =
     1. 断开万用表与手机应用的连接
     2. 打开万用表
     3. 按住 BLE 键约 2 秒，直到万用表发出蜂鸣声并在左上角显示蓝牙符号
-    注意: 每次开机后蓝牙都处于关闭状态；此时请再次按住 BLE 键。
+    注意: 每次开机后蓝牙都处于关闭状态，需再次按住 BLE 键打开。
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
     1. 断开万用表与手机应用的连接
@@ -639,7 +639,7 @@ activation-ut60bt =
 activation-zt5566se =
     1. 打开万用表
     2. 按 POWER 键打开蓝牙，蓝牙符号闪烁
-    注意: 手册只说明了扬声器的蓝牙功能；通过蓝牙读取的读数未经验证。
+    注意: 手册只说明了扬声器的蓝牙功能；通过蓝牙获取的读数未经验证。
 # Used by: ZT-5BQ
 activation-zt5bq =
     1. 打开万用表
@@ -836,10 +836,10 @@ band-under-rel-mode = REL 模式下
 input-1000v-dc-ac-rms = 1000V DC/AC rms
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: 4 tables
-input-10mohm-50pf-nominal = 10MΩ，50pF 标称
+input-10mohm-50pf-nominal = 标称 10MΩ，50pF
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC Voltage; DC AC & AC+DC AC Voltage; DC Voltage
-input-10mohm-80pf-nominal = 10MΩ，80pF 标称
+input-10mohm-80pf-nominal = 标称 10MΩ，80pF
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: 6 tables
 input-1100v-dc-ac-rms = 1100V DC/AC rms
@@ -899,10 +899,10 @@ input-fuse-500ma-125v = 保险丝 500mA 125V
 input-fuse-600ma-1000v = 保险丝 600mA 1000V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
-input-initially-approx-3-0kohm-150pf-nominal = 初始约 3.0kΩ，150pF 标称
+input-initially-approx-3-0kohm-150pf-nominal = 初始约 3.0kΩ，标称 150pF
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (DCV)
-input-initially-approx-3-0kohm-165pf-nominal = 初始约 3.0kΩ，165pF 标称
+input-initially-approx-3-0kohm-165pf-nominal = 初始约 3.0kΩ，标称 165pF
 
 ## Specification notes, under a table in the Specifications panel, from
 ## the meter's manual. Keep the exact sense, comparisons and qualifiers such as
@@ -981,7 +981,7 @@ note-9-999v-3khz-20khz-specified-for = 9.999V，3kHz ~ 20kHz: 仅在 3kHz ~ 15kH
 note-4ma-shows-lo-20ma-shows-hi = <4mA 显示 LO，>20mA 显示 HI
 # Used by: 7 meters
 # In: AC Current; DC Current
-note-5a-max-10s-rest-15-min = >5A: 最长 10s，之后休息 ≥15 min
+note-5a-max-10s-rest-15-min = >5A: 最长 10s，之后间隔 ≥15 min
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Line Level Frequency (~Hz)
 note-ac-10-00a-15-00-3 = AC 10.00A: 15.00 ~ 3.000kHz，灵敏度 6A (正弦波有效值)
@@ -1050,7 +1050,7 @@ note-accuracy-valid-40hz-500hz-1-pct = 准确度有效范围: 40Hz–500Hz，量
 note-accuracy-valid-40hz-500hz-1-pct-2 = 准确度有效范围: 40Hz–500Hz，量程的 1%–100% (60mV: 2%–100%)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
-note-accuracy-with-film-capacitor-or-better = 准确度以薄膜电容或更好的电容为准
+note-accuracy-with-film-capacitor-or-better = 准确度适用于薄膜电容或性能更优的电容
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-audible-threshold-between-20ohm-and-300ohm = 蜂鸣阈值: 20Ω 到 300Ω 之间
@@ -1062,7 +1062,7 @@ note-bm821s-specified-from-10-pct-to = BM821s: 指定范围为量程的 10%–10
 note-bar-segments-beep-tones-proportional-to = 条形段数和蜂鸣音调与场强成正比
 # Used by: Mock ZT-5B, ZT-5B
 # In: Continuity
-note-beeps-50ohm = 蜂鸣 <50Ω
+note-beeps-50ohm = <50Ω 时蜂鸣
 # Used by: UT803
 # In: F. Continuity Test
 note-beeps-continuously-10ohm-silent-30ohm = ≤10Ω 时连续蜂鸣；>30Ω 时无声
@@ -1071,7 +1071,7 @@ note-beeps-continuously-10ohm-silent-30ohm = ≤10Ω 时连续蜂鸣；>30Ω 时
 note-beeps-continuously-10ohm-silent-50ohm = ≤10Ω 时连续蜂鸣；>50Ω 时无声
 # Used by: UT181A
 # In: (15) Diode Test
-note-brief-beep-on-a-normal-junction = 正常结短促蜂鸣，短路时连续蜂鸣
+note-brief-beep-on-a-normal-junction = 结正常时短促蜂鸣，短路时连续蜂鸣
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AC & AC+DC Current; DC Current
 note-burden-voltage-0-02v-a = 负载电压 0.02V/A
@@ -1188,7 +1188,7 @@ note-k-type-thermocouple-two-channels-via = K 型热电偶；通过温度接口�
 note-lo-z-threshold-plus-1-5vdc = Lo-Z 阈值: > +1.5VDC 或 < -1.0VDC (标称)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
-note-lo-z-threshold-3vac-50-60hz = Lo-Z 阈值: > 3VAC (50/60Hz) (标称)
+note-lo-z-threshold-3vac-50-60hz = Lo-Z 阈值: 标称 > 3VAC (50/60Hz)
 # Used by: UT803
 # In: K. Transistor
 note-max-1000beta = 最大 1000β

@@ -67,9 +67,9 @@ error-bluetooth = 蓝牙: { $reason }
 # radio (the meter's own Bluetooth).
 error-device-not-identified =
     { $link ->
-        [adapter] 通过蓝牙适配器没有万用表响应
-        [radio] 通过蓝牙链路没有万用表响应
-       *[usb] 通过 USB 连接线没有万用表响应
+        [adapter] 蓝牙适配器上没有万用表响应
+        [radio] 蓝牙链路上没有万用表响应
+       *[usb] USB 连接线上没有万用表响应
     }
 # No cable was found. $bluetooth is searched when Bluetooth was searched
 # too, else not-searched.
@@ -95,7 +95,7 @@ error-bluetooth-only-switched-off = 万用表 { $model } 只能通过蓝牙连�
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-not-built = 万用表 { $model } 只能通过蓝牙连接，而此版本不支持蓝牙
 # $model is the meter, e.g. UNI-T UT60BT.
-error-bluetooth-only-usb-adapter = 万用表 { $model } 只能通过蓝牙连接，而 --adapter 指定的是 USB 设备: 请传入该万用表的蓝牙地址，或去掉 --adapter
+error-bluetooth-only-usb-adapter = 万用表 { $model } 只能通过蓝牙连接，而 --adapter 指定的是 USB 设备: 请用 --adapter 指定该万用表的蓝牙地址，或去掉 --adapter
 
 ## Refused before it was sent: the meter, the link or the dial position
 ## cannot do it. After "unsupported command:". $setting is a setting's
@@ -105,7 +105,7 @@ error-bluetooth-only-usb-adapter = 万用表 { $model } 只能通过蓝牙连接
 # $setting is a setting's name.
 error-unsupported-setting = 此万用表无法设置 { $setting }
 # $mode is a mode.
-error-unsupported-several-positions = { $mode } 会在多个档位上报告，请先在其他模式下取一次读数
+error-unsupported-several-positions = 万用表在多个档位上都会报告 { $mode }，请先在其他模式下取一次读数
 # $mode is a mode.
 error-unsupported-no-position = { $mode } 不在任何已知档位上
 # $target and $from are modes.
@@ -121,14 +121,14 @@ error-unsupported-range-not-listed = 量程 { $id } 不在 { $mode } 提供的 {
 # $count is how many ranges $mode, a mode, has.
 error-unsupported-auto-range-not-listed = 自动量程不在 { $mode } 提供的 { $count } 个量程之中
 # $mode is a mode, $word its code.
-error-unsupported-fixed-range = { $mode } ({ $word }) 中的量程: 固定量程模式
+error-unsupported-fixed-range = { $mode } ({ $word }) 为固定量程模式，无法选择量程
 # $setting is a setting's name, $mode a mode.
-error-unsupported-setting-not-in-mode = 此万用表在 { $mode } 下无法设置 { $setting }
+error-unsupported-setting-not-in-mode = 此万用表在 { $mode } 模式下无法设置 { $setting }
 # $setting is a setting's name, $mode a mode, $word its code.
-error-unsupported-setting-not-in-word = 此万用表在 { $mode } ({ $word }) 下无法设置 { $setting }
+error-unsupported-setting-not-in-word = 此万用表在 { $mode } ({ $word }) 模式下无法设置 { $setting }
 # $setting is a setting's name, $id a state's number, $mode a mode and
 # $offered the states it offers, separated by commas (on, off, MAX…).
-error-unsupported-no-such-state = { $setting } 没有状态 { $id }；{ $mode } 提供 { $offered }
+error-unsupported-no-such-state = { $setting } 没有状态 { $id }；{ $mode } 下可选的状态为 { $offered }
 # $command is a command word, $mode a Peak mode, $word its code.
 error-unsupported-refused-in-peak = { $mode } ({ $word }) 下的 { $command }: 万用表在峰值模式下拒绝该命令
 # "rel" is the command word. $mode is a mode, $word its code.
@@ -154,7 +154,7 @@ error-unsupported-no-wire-format = parse_payload: 仿真设备没有传输格式
 ## states.
 
 # $button is a button's name, $state what the meter stayed in.
-error-rejected-did-nothing = 在 { $state } 下，{ $button } 没有任何作用
+error-rejected-did-nothing = 在 { $state } 下按 { $button } 键没有任何作用
 # $target is what was asked for, $now what the meter is in.
 error-rejected-never-appeared = 一直没有出现 { $target }；万用表已回到 { $now }
 # $presses is how many times $button was pressed; $state is what the meter
@@ -166,7 +166,7 @@ error-rejected-mode-changed = 模式已变为 { $mode }；已停止按 RANGE 键
 # in before.
 error-rejected-started-in = { $reason }；起始模式为 { $mode }
 # $range is a range.
-error-rejected-auto-did-nothing = AUTO 没有任何作用；万用表仍处于 { $range }
+error-rejected-auto-did-nothing = 按 AUTO 键没有任何作用；万用表仍处于 { $range }
 # $button is a button's name, $state a setting's state.
 error-rejected-exit-did-nothing = EXIT { $button } 没有任何作用；万用表仍处于 { $state }
 # $setting is a setting's name, $target and $now its states.
@@ -180,12 +180,12 @@ error-rejected-zero-needs-capacitance = ZERO 只能在电容模式下使用
 # choice.
 error-rejected-other-model = 万用表报告的 OWON 型号代码为 { $code } ({ $model })，不是打开时选择的 { $opened }，因此遥控按键已关闭；请选择“自动检测”或 --device { $id }
 # $code is a number.
-error-rejected-unknown-model = 万用表报告的 OWON 型号代码为 { $code }，本工具尚不认识，因此遥控按键已关闭
+error-rejected-unknown-model = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法识别，因此遥控按键已关闭
 # $command is a command word.
 error-rejected-model-unread = 未能读取万用表的型号代码，因此 { $command } 已关闭: 要退出 REL，请在万用表上长按 REL 键
 error-rejected-min-max-locks-range = MIN/MAX 会锁定量程；请先退出 MIN/MAX 再更改量程
 # $command is a command word or a setting's name.
-error-rejected-replay = { $command }: 回放不接受命令
+error-rejected-replay = { $command }: 回放时不接受命令
 
 # What a refused command switched to, as error-rejected-by-meter names it.
 # $mode is a mode.

@@ -32,7 +32,7 @@ connection-click-connect = 解决问题后，单击“连接”。
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.
-connection-restart-with-address = 将 --adapter 设为它打印出的地址，然后重新启动。
+connection-restart-with-address = 将 --adapter 设为它输出的地址，然后重新启动。
 
 # A meter that connects over Bluetooth only, and Bluetooth was not looked at.
 connection-bluetooth-not-searched = 未查找蓝牙设备
@@ -63,7 +63,7 @@ connection-not-identified =
 
     打开万用表的数据传输，或在“设置”(⚙) 中选择型号:
 # After that list.
-connection-not-identified-report = 已在传输数据但仍无法识别? 在“设置”(⚙) 中选择它的型号，并请报告此问题。
+connection-not-identified-report = 已在传输数据但仍无法识别? 请在“设置”(⚙) 中选择它的型号，并报告此问题。
 
 # The meter stopped answering. $link is usb (a USB cable), adapter (a
 # Bluetooth adapter plugged into the meter), radio (the meter's own
@@ -139,8 +139,8 @@ connection-other-model = 万用表报告的名称为“{ $reported }”，与所
 # Settings now names that model.
 connection-named-after-detection =
     { $saved ->
-        [yes] 万用表报告的名称为“{ $reported }”，已保存为你的设备: 请重新连接，以按 { $named } 读取。
-       *[no] 万用表报告的名称为“{ $reported }”: 请重新连接，以按 { $named } 读取。
+        [yes] 万用表报告的名称为“{ $reported }”，已保存为你的设备: 请重新连接，将其作为 { $named } 读取。
+       *[no] 万用表报告的名称为“{ $reported }”: 请重新连接，将其作为 { $named } 读取。
     }
 
 # The recording stopped because Buffer size, in Settings, was lowered below
@@ -148,7 +148,7 @@ connection-named-after-detection =
 # written short, e.g. 1.2K. Export… is a button.
 connection-buffer-shrunk =
     { $count ->
-       *[other] 记录已停止，其中 { $kept } 个样本已保留，单击“导出…”可保存
+       *[other] 记录已停止，已保留 { $kept } 个样本，单击“导出…”可保存
     }
 # The recording filled the buffer. $count is its size in samples, $kept the
 # same number written short, e.g. 500K.

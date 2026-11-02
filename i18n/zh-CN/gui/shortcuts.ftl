@@ -16,7 +16,7 @@ shortcuts-title = 键盘和鼠标
 # The × button at the right end of the title row, which closes the dialog:
 # its name for a screen reader.
 shortcuts-close =
-    .a11y = 关闭键盘快捷键
+    .a11y = 关闭快捷键帮助
 
 ## The General table: the app's own shortcuts, shown in the left column of
 ## the dialog when it is wide.
@@ -38,7 +38,7 @@ shortcuts-import = 导入文件…
 # N: puts a numbered marker on the reading the meter shows now.
 shortcuts-add-marker = 在屏幕上的读数处添加标记
 # Ctrl+N: the same, then puts the caret in the marker's note.
-shortcuts-add-marker-note = 添加标记并写备注
+shortcuts-add-marker-note = 添加标记并填写备注
 # Ctrl+B: steps the big meter (the reading drawn large) through off, full
 # window and a minimal strip.
 shortcuts-big-meter = 循环切换大字显示 (关/全窗口/极简)
@@ -149,7 +149,7 @@ shortcuts-key-minus = 减号
 
 # Space, Escape, Up/Down, PgUp/PgDn and Home/End are key names: write them
 # the way the key names above do.
-shortcuts-note = 任何控件拥有键盘焦点时，图表快捷键和空格键快捷键会停用，按 Esc 可释放焦点。向上键/向下键、Page Up/Page Down 和 Home/End 可滚动此帮助。
+shortcuts-note = 当任一控件获得键盘焦点时，图表快捷键和空格键快捷键会停用，按 Esc 可释放焦点。向上键/向下键、Page Up/Page Down 和 Home/End 可滚动此帮助。
 
 ## Ctrl+T on Wayland, where a window can't put itself above the others.
 

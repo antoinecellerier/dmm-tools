@@ -49,7 +49,7 @@ reading-none = 无读数
 # The big meter's second line under the connection problem that takes the
 # reading's place: hovering it shows the steps, and $keys (the shortcut that
 # turns the big meter off, e.g. Ctrl+B or ⌘B) brings the whole window back.
-reading-big-meter-hint = { $keys } 查看详情
+reading-big-meter-hint = 按 { $keys } 查看详情
 
 ## What a screen reader says for the reading: never drawn, read aloud each
 ## time the reading changes. It is one list of phrases, in this order: the

@@ -118,7 +118,7 @@ colors-issue-not-opaque =
 # their contrast, e.g. 1.8, and $floor the least allowed, e.g. 3.
 colors-issue-low-contrast =
     { $what ->
-        [button] 按钮上的按钮文字对比度为 { $ratio }:1，低于 { $floor }:1 的下限
+        [button] 按钮文字的对比度为 { $ratio }:1，低于 { $floor }:1 的下限
        *[text] 背景上的文字对比度为 { $ratio }:1，低于 { $floor }:1 的下限
     }
 # Another file in the folder gives its theme the same name. $name is the
@@ -180,7 +180,7 @@ colors-group-status = 状态:
 # The arrow after a colour that others follow, before those it leads.
 # $anchor is the leading colour's name, as its swatch below has it.
 colors-follow-arrow =
-    .hover = 这些颜色跟随“{ $anchor }”并保持与它的偏差，直到你单独选择其中一个
+    .hover = 这些颜色跟随“{ $anchor }”变化并保持相对偏移，直到你单独设置其中一个
 
 ## The swatches, each named beside it, in the rows the section shows them.
 
@@ -305,7 +305,7 @@ colors-saved = 已将 { $name } 保存到主题文件夹
 # Saved outside the themes folder. $file is the file name.
 colors-saved-elsewhere = 已保存 { $file }。将它复制到主题文件夹即可作为主题使用
 # The save dialog closed without an answer.
-colors-save-dialog-failed = 未保存: 保存对话框失败
+colors-save-dialog-failed = 未保存: 保存对话框出错
 # A name typed without .json gets it added, and the file of that name
 # already exists. $path is that file, in full.
 colors-save-exists = 未保存: { $path } 已存在；在对话框中选择该文件即可替换

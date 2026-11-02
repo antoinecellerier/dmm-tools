@@ -104,7 +104,7 @@ markers-note-hidden =
 markers-log-cut = 导出后可查看 { $time } 之前的样本。
 # When Ctrl+N cannot show the note it opened because the panel is too short
 # for a single row; $number is the marker's number.
-markers-log-too-short = 加高“记录”面板后才能写标记 { $number } 的备注。
+markers-log-too-short = 加高“记录”面板后才能填写标记 { $number } 的备注。
 # After a marker's reading, in small text, when the graph no longer holds
 # that reading.
 markers-off-graph = 不在图表上

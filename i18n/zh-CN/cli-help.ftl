@@ -24,7 +24,7 @@ dmm-cli--adapter =
     .help = 有多个可用适配器时，选择指定的一个。使用 USB 连接线的序列号或 HID 路径，或蓝牙适配器或万用表的地址，写法同 'dmm-cli list' 的输出
 # dmm-cli --no-bluetooth
 dmm-cli--no-bluetooth =
-    .help = 本次运行关闭蓝牙扫描: 不扫描适配器和万用表，'list' 只显示连接线。覆盖已保存的 'bluetooth' 设置。传给 --adapter 的地址仍会被打开
+    .help = 本次运行关闭蓝牙扫描: 不扫描适配器和万用表，'list' 只显示连接线。覆盖已保存的 'bluetooth' 设置。仍会打开传给 --adapter 的地址
 # dmm-cli --lang
 dmm-cli--lang =
     .help = 消息和帮助的语言，或用 `system` 采用系统语言。省略时，依次采用设置文件中的 `language` (由 dmm-gui 的“语言”一行写入)，再采用系统语言
@@ -44,7 +44,7 @@ read--interval-ms =
 # .value-… says what that value does, in --help's list of values.
 read--format =
     .help = 输出格式 [默认值: text，或由 -o 的扩展名决定]
-    .value-replay = 万用表自己的帧，供 --replay 回放
+    .value-replay = 万用表发出的原始帧，供 --replay 回放
 # dmm-cli read --output
 read--output =
     .help = 输出文件 (未指定时输出到 stdout)。不给文件名时，文件按万用表、模式和运行的开始时间命名
@@ -71,10 +71,10 @@ read--alarm-low =
     .help = 读数降到 VALUE 以下时报警，写法同 --alarm-high
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
-    .help = 读数要回到限值内多远，同一限值才会再次报警: 以限值的单位给出的数值，或限值的百分比 (`1%`) [默认值: 万用表末位的几个字]
+    .help = 读数须回到限值以内多少，同一限值才会再次报警: 以限值的单位给出的数值，或限值的百分比 (`1%`) [默认值: 万用表末位的几个字]
 # dmm-cli read --alarm-bell
 read--alarm-bell =
-    .help = 每次报警时响终端铃声
+    .help = 每次报警时让终端响铃
 # dmm-cli read --mock-mode
 read--mock-mode =
     .help = 将仿真设备固定在指定模式 (仅适用于 --device mock)。未指定时，采用设置文件中的仿真模式，否则仿真设备会循环所有模式
@@ -92,7 +92,7 @@ command--action =
     .help = 命令名 (不带参数运行可查看可用命令)
 # dmm-cli get
 get =
-    .about = 列出万用表的设置在当前状态下可切换到的值。不带参数运行则列出所有提供选择的设置
+    .about = 列出万用表的设置在当前状态下可切换到的值。不带参数运行则列出所有可切换的设置
 # dmm-cli get <SETTING>
 get--setting =
     .help = 要列出的设置 (省略则列出全部)
@@ -104,13 +104,13 @@ get--mock-mode =
     .help = 将仿真设备固定在指定模式 (仅适用于 --device mock)。未指定时，采用设置文件中的仿真模式，否则仿真设备会循环所有模式
 # dmm-cli set
 set =
-    .about = 无需操作万用表，直接切换它的某项设置。不指定 CHOICE 运行可列出该设置在当前状态下能切换到的值
+    .about = 直接切换万用表的某项设置，无需在万用表上操作。不指定 CHOICE 运行可列出该设置在当前状态下能切换到的值
 # dmm-cli set <SETTING>
 set--setting =
     .help = 要切换的设置
 # dmm-cli set <CHOICE>
 set--choice =
-    .help = 列表中的值标签，或其唯一的片段 (不带它运行可查看列表)
+    .help = 列表中的值标签，或能唯一匹配的部分文字 (省略此参数运行可查看列表)
 # dmm-cli set --mock-mode
 set--mock-mode =
     .help = 将仿真设备固定在指定模式 (仅适用于 --device mock)。未指定时，采用设置文件中的仿真模式，否则仿真设备会循环所有模式
@@ -128,7 +128,7 @@ completions =
     .about = 生成 shell 补全脚本
 # dmm-cli completions <SHELL>
 completions--shell =
-    .help = 要为哪种 shell 生成补全
+    .help = 要生成补全的 shell
 # dmm-cli capture
 capture =
     .about = 用于错误报告和验证的引导式协议捕获
@@ -158,7 +158,7 @@ capture--list-steps =
     .help = 列出所有可用的步骤 ID 并退出
 # dmm-cli capture --format
 capture--format =
-    .help = --list-steps 如何打印列表 (md 为议题检查清单)
+    .help = --list-steps 打印列表的格式 (md 为议题检查清单)
 # dmm-cli capture --export-instructions
 capture--export-instructions =
     .help = 将步骤说明写入 FILE，翻译后供 --instructions 使用，然后退出

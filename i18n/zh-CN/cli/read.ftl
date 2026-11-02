@@ -21,7 +21,7 @@ read-alarm-hysteresis-needs-limit = --alarm-hysteresis 需要 --alarm-high 或 -
 # speed a simulated run up: 'max' plays a recording as fast as it decodes, a
 # preseed starts a run with readings already behind it. After
 # read-flag-refused's options.
-read-clock-max-no-preseed = 'max' 不接受预置读数: 每一帧本来就不等待直接回放
+read-clock-max-no-preseed = 'max' 不接受预置读数: 每一帧本来就会立即回放
 read-clock-max-needs-replay = 'max' 需要 --replay: 只有回放文件才会自行结束
 # A recording names the meter it was made with. $command is the command line
 # that plays one (dmm-cli read --replay FILE).
@@ -42,7 +42,7 @@ read-import-no-interval = --interval-ms 按万用表发送的节奏保留读数�
 ## '--mock-clock-scale <MOCK_CLOCK_SCALE>': …".
 
 # $value is what was typed.
-read-clock-scale-invalid = 需要数字或 'max'，但得到 '{ $value }'
+read-clock-scale-invalid = 应为数字或 'max'，实际为 '{ $value }'
 
 ## Notes as the run starts, each after "Note:" (common.ftl).
 
@@ -78,7 +78,7 @@ read-series-reset =
 # $watched the limits' unit, e.g. Ω and V.
 read-alarm-idle = 报警待机: 读数的单位是 { $now }，限值的单位是 { $watched }
 # After "Note:". The readings are back in the limits' unit, $watched, e.g. V.
-read-alarm-watching = 报警恢复监视: 读数的单位又是 { $watched } 了
+read-alarm-watching = 报警恢复监视: 读数单位已恢复为 { $watched }
 # Red and bold, opening the line that says a reading crossed a limit; the
 # terminal may ring. Keep the colon, or your language's equivalent: the
 # sentence follows after a space.
@@ -149,4 +149,4 @@ read-alarm-counts =
 # $path is the file.
 read-written-to = 已写入 { $path }
 # -o without a file name, and no reading came to name the file after.
-read-nothing-written = 没有读数到达，因此未写入文件
+read-nothing-written = 没有收到读数，因此未写入文件

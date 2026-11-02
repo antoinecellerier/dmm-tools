@@ -76,7 +76,7 @@ settings-switched =
         [minmax] 万用表已进入 { $choice }
         [minmax-off] 万用表已退出 MIN/MAX
         [peak] 万用表已进入 { $choice }
-        [peak-off] 万用表已退出峰值
+        [peak-off] 万用表已退出峰值模式
     }
 # The meter was on it already, so nothing was sent.
 settings-already =

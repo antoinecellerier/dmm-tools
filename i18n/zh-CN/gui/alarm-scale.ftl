@@ -58,7 +58,7 @@ scale-apply = 应用
     .hover = 从现在起对每个读数应用这些值
 # Turns scaling off; the fields keep their values for the next Apply.
 scale-off = 关闭
-    .hover = 停止换算，重新显示万用表自己的读数
+    .hover = 停止换算，重新显示万用表本身的读数
 
 ## The Scale row's toasts.
 
@@ -101,7 +101,7 @@ alarm-no-limit = 无
 # reading must come before that limit can alarm again. Its placeholder says
 # that blank picks the band automatically.
 alarm-band = 自动
-    .hover = 读数回到限值内多远，该限值才能再次报警: 填一个值，或百分比 (如 1%)。留空: 自动
+    .hover = 读数需回到限值内多少，该限值才会再次报警: 填写数值或百分比 (如 1%)，留空则自动设置
 # After the limits, the unit they are in, e.g. V; this is its hover.
 alarm-unit =
     .hover = 限值使用的单位

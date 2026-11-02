@@ -76,7 +76,7 @@ help-env-no-color = 设为 1 可禁用彩色终端输出。
 help-env-language =
     Linux 上消息和帮助的语言，读取方式同 gettext:
     依次为 LANGUAGE、LC_ALL、LC_MESSAGES、LANG。Debian 和 Ubuntu
-    桌面会设置 LANGUAGE，它优先于 LANG。
+    桌面会设置 LANGUAGE，其优先级高于 LANG。
 # Beside LC_ALL; each line of the message is a line of the help. C and
 # POSIX are the locale names that mean English, on every system.
 help-env-lc-all =
@@ -86,4 +86,4 @@ help-env-lc-all =
 ## After the options of dmm-cli completions --help. The command line for
 ## each shell follows.
 
-help-completions-install = 为你的 shell 安装补全:
+help-completions-install = 为 shell 安装补全:

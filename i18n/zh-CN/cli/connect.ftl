@@ -37,7 +37,7 @@ connect-selected =
     }
 # The name the meter gave for itself. $name is that name as the meter sent
 # it, or connect-reported-name-none.
-connect-reported-name = 万用表报告的名称: { $name }
+connect-reported-name = 万用表上报的名称: { $name }
 # In place of the name when the meter gave none, which many never do.
 connect-reported-name-none = (无)
 
@@ -49,7 +49,7 @@ connect-reported-name-none = (无)
 connect-detected = 已检测到 { $meter } (传入 --device { $device } 或在 dmm-gui 中选择，下次即可跳过检测)
 # The meter gave a name of its own that isn't the model's: $reported is
 # that name, e.g. UT216XD. "Tables" are how the readings are decoded.
-connect-detected-reports = 已检测到 { $meter } (万用表报告的名称为 "{ $reported }"，现使用 { $meter } 的解码表；传入 --device { $device } 可保持不变，传入其他 id 可改用别的型号)
+connect-detected-reports = 已检测到 { $meter } (万用表上报的名称为 "{ $reported }"，现使用 { $meter } 的解码表；传入 --device { $device } 可保持不变，传入其他 id 可改用别的型号)
 
 ## Once a meter whose support isn't fully verified is open: a warning, then
 ## the command that makes a report, on a line of its own, then where to send
@@ -82,9 +82,9 @@ connect-unverified-note = { $warning } 提供反馈: { $url }
 # radio (the meter's own Bluetooth).
 connect-not-identified =
     { $link ->
-        [adapter] { $title }(通过蓝牙适配器)。
-        [radio] { $title }(通过蓝牙链路)。
-       *[usb] { $title }(通过 USB 连接线)。
+        [adapter] 蓝牙适配器上{ $title }。
+        [radio] 蓝牙链路上{ $title }。
+       *[usb] USB 连接线上{ $title }。
     }
 # The closing paragraph; keep its line breaks, and the {"  "} that indents
 # the two command lines under the prose. $command is the command line that names the meter
@@ -94,7 +94,7 @@ connect-not-identified =
 connect-not-identified-name-it =
     如果万用表已开机并在发送数据，但仍未被识别，请指定型号:
     {"  "}{ $command }      ({ $help } 列出所有 id)
-    并请连同 { $logging } 的输出一起报告到
+    并附上 { $logging } 的输出，反馈到
     {"  "}{ $url }
 
 ## --adapter, a command-line option, named a USB device that isn't there.
@@ -108,7 +108,7 @@ connect-adapter-select = 使用 { $selector } 选择其中一个。
 
 # $title is "No response from meter" (shared.ftl). $meter is the meter
 # picked, e.g. UNI-T UT61E+.
-connect-no-response = { $title }。请检查它是否是 { $meter }，以及是否已开启数据传输。
+connect-no-response = { $title }。请确认它是 { $meter }，并已开启数据传输。
 
 ## The line that closes a failed open, after "Error:" (common.ftl). The
 ## lines above it have already said what to try.

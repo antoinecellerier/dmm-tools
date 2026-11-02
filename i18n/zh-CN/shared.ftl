@@ -39,7 +39,7 @@ stability-warning =
     { $stability ->
         [verified] 对万用表 { $model } 的支持已验证 (已在真实硬件上验证)。
         [partly-verified] 对万用表 { $model } 的支持已部分验证 (部分模式和命令尚未在真实硬件上确认)。
-       *[experimental] 对万用表 { $model } 的支持为实验性 (尚未在真实硬件上验证)。
+       *[experimental] 对万用表 { $model } 的支持尚处于实验阶段 (未在真实硬件上验证)。
     }
 
 ## The --mock-mode flag's long help, after the binary's own first line.
@@ -71,7 +71,7 @@ not-found-bluetooth-only = 通过蓝牙找不到万用表 { $model }
 # $link is link-usb-cable or link-bluetooth.
 # $check is setup-usb-check or setup-bluetooth-check.
 setup-label = { $link }: { $check }
-setup-usb-check = 检查连接线是否已插好，且万用表已开机。
+setup-usb-check = 检查连接线是否已插好、万用表是否已开机。
 setup-bluetooth-check = 打开此计算机的蓝牙，并在万用表上打开数据传输。
 # Linux. Two command lines follow.
 setup-usb-linux-rule = 确认已安装 udev 规则:
@@ -88,7 +88,7 @@ setup-usb-windows-input = - '人体学输入设备'下的 'USB 输入设备': �
 setup-usb-windows-warning = - '其他设备'下出现黄色警告图标: 请从以下地址安装驱动程序
 setup-usb-windows-nothing = - 没有任何显示: 换一个 USB 端口试试。
 # macOS. Name the settings as macOS shows them in your language.
-setup-usb-macos-auto = 连接线应会被自动识别 (无需驱动程序)。
+setup-usb-macos-auto = 系统应能自动识别连接线 (无需驱动程序)。
 setup-usb-macos-privacy = 如果找不到设备，请检查“系统设置 > 隐私与安全 > 输入监控”。
 setup-bluetooth-adapter = 如果两者都已打开，请关闭再打开适配器。
 setup-bluetooth-macos-privacy = 在“系统设置 > 隐私与安全 > 蓝牙”中允许蓝牙。
@@ -140,7 +140,7 @@ input-band-not-a-number = “{ $text }”不是数字，也不是 1% 这样的�
 # A hysteresis band below zero.
 input-band-negative = 必须大于或等于零
 # A percentage band with a limit of 0, of which every percentage is 0.
-input-percent-of-zero = 0 的百分之几仍是 0，请改为给出一个数值
+input-percent-of-zero = 0 的任何百分比都是 0，请改为输入一个数值
 
 ## Why an exported file or a recording did not read: in dmm-gui's toast
 ## after "Import failed:" and the file, in dmm-cli after "Error:" and the

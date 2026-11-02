@@ -44,7 +44,7 @@ args-missing-subcommand = '{ $command }' 需要一个子命令，但没有提供
 # separated by commas.
 args-subcommands = [子命令: { $values }]
 # A value after an option that takes no more.
-args-unexpected-value = 为 '{ $arg }' 找到了多余的值 '{ $value }'，它不再接受更多的值
+args-unexpected-value = '{ $arg }' 收到了多余的值 '{ $value }'，不再接受更多的值
 # Too few values after an option. $needed and $given are numbers; $count is
 # $given, for choosing the verb's form ([0] and [one]: one value or none).
 args-too-few-values =
@@ -80,8 +80,8 @@ args-conflict-with-list =
 # subcommand; $name is what the user typed.
 args-conflict-with-others =
     { $what ->
-        [subcommand] 子命令 '{ $name }' 不能与指定的其他一个或多个参数一起使用
-       *[argument] 参数 '{ $name }' 不能与指定的其他一个或多个参数一起使用
+        [subcommand] 子命令 '{ $name }' 不能与指定的某些其他参数一起使用
+       *[argument] 参数 '{ $name }' 不能与指定的某些其他参数一起使用
     }
 
 ## Hints after the error.
@@ -107,4 +107,4 @@ args-similar =
             }
     }
 # The last line. $help is --help.
-args-more-info = 如需更多信息，请尝试 '{ $help }'。
+args-more-info = 如需更多信息，请运行 '{ $help }'。
