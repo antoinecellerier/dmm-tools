@@ -17,7 +17,8 @@
 //! [`help`], the help and version text both print; and [`logging`], the log
 //! levels both start with. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
-//! platform path on macOS and Windows (computed via `directories`).
+//! platform path on macOS and Windows (computed via `directories`, or from
+//! `%APPDATA%` when set).
 //!
 //! What does not: device, protocol and transport code stays in `dmm-lib`, and
 //! anything one binary alone needs stays in that binary — GUI-only settings
@@ -113,11 +114,30 @@ pub fn resolve_device_family(
 
 /// Return the canonical path to the shared settings file.
 ///
+/// On Windows, under `%APPDATA%` when it is set, as most Windows programs
+/// read it: the known-folder API behind [`directories`] gives the same folder
+/// but no variable moves it, so the integration tests could not keep a
+/// developer's own settings out the way `XDG_CONFIG_HOME` does elsewhere.
+///
 /// `None` if the platform's config dir is unavailable (rare — weird embedded
 /// or sandboxed environments).
 pub fn config_path() -> Option<PathBuf> {
+    if cfg!(windows)
+        && let Some(appdata) = std::env::var_os("APPDATA").filter(|v| !v.is_empty())
+    {
+        return Some(appdata_config_path(Path::new(&appdata)));
+    }
     directories::ProjectDirs::from("", "", "dmm-tools")
         .map(|dirs| dirs.config_dir().join("settings.json"))
+}
+
+/// The settings file under `appdata`, laid out as [`directories`] lays out
+/// the roaming application data folder.
+fn appdata_config_path(appdata: &Path) -> PathBuf {
+    appdata
+        .join("dmm-tools")
+        .join("config")
+        .join("settings.json")
 }
 
 /// Write `bytes` to `path` so that a crash, kill or full disk mid-write leaves
@@ -194,6 +214,19 @@ impl SharedSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `%APPDATA%` leads to the file `directories` finds, so setting it
+    /// changes nothing for anyone whose variable is the system's.
+    #[cfg(windows)]
+    #[test]
+    fn appdata_leads_where_directories_does() {
+        let roaming = directories::BaseDirs::new().expect("base dirs");
+        let project = directories::ProjectDirs::from("", "", "dmm-tools").expect("project dirs");
+        assert_eq!(
+            appdata_config_path(roaming.config_dir()),
+            project.config_dir().join("settings.json")
+        );
+    }
 
     /// A private scratch directory for one test, removed on drop so a failing
     /// assertion doesn't leave files behind. Named per-process and per-test so

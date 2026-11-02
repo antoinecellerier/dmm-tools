@@ -7,8 +7,8 @@ use std::process::Command;
 
 /// The `dmm-cli` binary, run with its settings lookup pointed at an empty
 /// directory, so a developer's own `settings.json` (a pinned meter, say)
-/// cannot change what the tests see. `XDG_CONFIG_HOME` covers Linux and
-/// `HOME` macOS; Windows reads the known-folder API, which no variable moves.
+/// cannot change what the tests see. `XDG_CONFIG_HOME` covers Linux, `HOME`
+/// macOS and `APPDATA` Windows.
 ///
 /// In English, whatever the developer's desktop speaks: the C locale means
 /// English on every platform, and the other locale variables are cleared so
@@ -19,6 +19,7 @@ pub fn dmm_cli() -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_dmm-cli"));
     cmd.env("XDG_CONFIG_HOME", &config)
         .env("HOME", &config)
+        .env("APPDATA", &config)
         .env("LC_ALL", "C")
         .env_remove("LC_MESSAGES")
         .env_remove("LANG")
