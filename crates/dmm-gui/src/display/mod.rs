@@ -357,7 +357,9 @@ fn show_aux_rows(
     let mut rects: Vec<AuxRowRects> = Vec::with_capacity(m.aux_values.len());
     // A grid rather than a stack of horizontal rows so labels, digits and
     // timestamps line up in columns however long the individual strings are.
-    ui.scope_builder(UiBuilder::new().scope_id(id), |ui| {
+    // Hidden from screen readers, as the reading's own labels are: the spoken
+    // reading says the sub-values.
+    let scope = ui.scope_builder(UiBuilder::new().scope_id(id), |ui| {
         Grid::new("aux_rows")
             .num_columns(3)
             .spacing([aux_column_gap(size), AUX_ROW_GAP])
@@ -374,6 +376,7 @@ fn show_aux_rows(
                 }
             });
     });
+    crate::a11y::hide_from_screen_readers(ui, scope.response.id);
     rects
 }
 
@@ -1026,7 +1029,7 @@ pub(crate) enum NoReadingText<'a> {
 }
 
 impl<'a> NoReadingText<'a> {
-    /// What a screen reader hears in place of a reading.
+    /// The title a screen reader hears in place of a reading.
     fn title<'b>(&self, l10n: &'b Localizer) -> Cow<'b, str>
     where
         'a: 'b,
@@ -1153,24 +1156,44 @@ fn no_reading_bars(ui: &mut Ui, value_size: f32) {
 /// The placeholder and its caption sit in a spoken row like a reading's, so
 /// a screen reader hears the whole notice — the connection issue, not just
 /// the placeholder's dashes — from the same node it hears readings from.
+/// The row itself is hidden from screen readers, so a notice's hint is said
+/// after its title, and its help steps, a tooltip on screen, become the
+/// node's description, which a screen reader reads on demand.
 fn no_reading_placeholder(
     ui: &mut Ui,
     l10n: &Localizer,
     state: ReadingState,
-    title: &str,
+    text: &NoReadingText<'_>,
     add_contents: impl FnOnce(&mut Ui),
 ) {
     // Trailing dots are animation, not speech: the waiting notice cycles
     // through one to four of them, and a fingerprint that hashed them would
     // have a screen reader repeat the same sentence every timeout.
-    let spoken = title.trim_end_matches(['.', ' ']);
+    let title = text.title(l10n);
+    let title = title.trim_end_matches(['.', ' ']);
+    let (hint, help) = match text {
+        NoReadingText::Notice { hint, tooltip, .. } => (*hint, *tooltip),
+        NoReadingText::Plain => ("", ""),
+    };
+    let spoken: Cow<'_, str> = if hint.is_empty() {
+        Cow::Borrowed(title)
+    } else {
+        let separator = tr!(l10n, "reading-spoken-separator");
+        Cow::Owned(format!("{title}{separator}{hint}"))
+    };
     ui.spoken_reading(
         state.announce,
-        live_region_fingerprint(l10n, None, state, spoken),
+        live_region_fingerprint(l10n, None, state, &spoken),
         live_region_context(None),
-        || live_region_label(l10n, None, state, spoken),
+        || live_region_label(l10n, None, state, &spoken),
         add_contents,
     );
+    if !help.is_empty() {
+        ui.ctx()
+            .accesskit_node_builder(crate::a11y::reading_region_id(), |node| {
+                node.set_description(help);
+            });
+    }
 }
 
 /// Render the primary reading display at the given font size (two-line layout).
@@ -1233,7 +1256,7 @@ fn show_reading_sized(
             .inner
         }
         None => {
-            no_reading_placeholder(ui, l10n, state, &no_reading.title(l10n), |ui| {
+            no_reading_placeholder(ui, l10n, state, &no_reading, |ui| {
                 if no_reading.is_notice() {
                     // A notice stacks under the bars, the shape this layout
                     // already gives a reading and its mode line: an issue
@@ -1343,7 +1366,7 @@ fn show_reading_inline(
             (picked, line)
         }
         None => {
-            no_reading_placeholder(ui, l10n, state, &no_reading.title(l10n), |ui| {
+            no_reading_placeholder(ui, l10n, state, &no_reading, |ui| {
                 if no_reading.is_notice() {
                     no_reading_bars(ui, value_size);
                     no_reading.show_text(ui, l10n, mode_size);
@@ -1824,16 +1847,18 @@ pub fn show_reading_compact(
 
             // One summary line rather than the grid: the compact layout is
             // the narrow-window one, where a label/value/unit grid would
-            // squeeze the reading itself.
+            // squeeze the reading itself. Hidden from screen readers like the
+            // grid: the spoken reading says the sub-values.
             let summary = aux_summary_job(ui, l10n, m, tc);
             if !summary.is_empty() {
-                ui.label(summary);
+                let label = ui.label(summary);
+                crate::a11y::hide_from_screen_readers(ui, label.id);
             }
             picked
         }
         None => {
             let none = tr!(l10n, "reading-none");
-            no_reading_placeholder(ui, l10n, state, &none, |ui| {
+            no_reading_placeholder(ui, l10n, state, &NoReadingText::Plain, |ui| {
                 ui.label(
                     RichText::new(format!("{} {none}", crate::NO_DATA))
                         .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
@@ -2909,23 +2934,68 @@ mod tests {
         assert!(said(5.1, 5.678).contains("5.678"), "shown once it ran out");
     }
 
+    /// Whether `id` or a node above it is hidden from screen readers.
+    fn hidden(nodes: &[(NodeId, Node)], id: NodeId) -> bool {
+        let mut at = Some(id);
+        while let Some(id) = at {
+            let Some((_, node)) = nodes.iter().find(|(nid, _)| *nid == id) else {
+                return false;
+            };
+            if node.is_hidden() {
+                return true;
+            }
+            at = nodes
+                .iter()
+                .find(|(_, n)| n.children().contains(&id))
+                .map(|(pid, _)| *pid);
+        }
+        false
+    }
+
     /// Every layout, with a selector or without, and the placeholder speaks
-    /// from the one leaf: nothing inside the row it lies over is live.
+    /// from the one leaf: nothing inside the row it lies over is live, and
+    /// the labels that draw the reading and its sub-values are hidden from
+    /// screen readers, the selector not.
     #[test]
     fn every_layout_speaks_the_reading_from_one_leaf() {
-        let m = ranged_reading();
+        let mut m = ranged_reading();
+        m.aux_values.push(aux("Frequency", "60.000", "Hz"));
         let choices = two_choices();
         for layout in LAYOUTS {
             for (offer, picks) in [("with a selector", modes(&choices)), ("plain", modes(&[]))] {
                 let ctx = crate::app::styled_context();
                 let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, picks));
                 let what = format!("{layout}, {offer}");
-                let (_, node) = spoken_reading(&f.nodes, &what);
+                let (leaf, node) = spoken_reading(&f.nodes, &what);
                 let said = node.value().unwrap_or_default();
                 assert!(
-                    said.contains("5.678") && said.contains("DC V"),
+                    said.contains("5.678") && said.contains("DC V") && said.contains("60.000"),
                     "{what}: {said:?}"
                 );
+                assert!(
+                    !hidden(&f.nodes, leaf),
+                    "{what}: the spoken reading is hidden"
+                );
+                for copy in ["5.678", "60.000"] {
+                    let labels: Vec<NodeId> = f
+                        .nodes
+                        .iter()
+                        .filter(|(id, n)| {
+                            *id != leaf && n.value().is_some_and(|v| v.contains(copy))
+                        })
+                        .map(|(id, _)| *id)
+                        .collect();
+                    assert!(!labels.is_empty(), "{what}: no label draws {copy}");
+                    for id in labels {
+                        assert!(
+                            hidden(&f.nodes, id),
+                            "{what}: the {copy} label is not hidden"
+                        );
+                    }
+                }
+                if let Some((combo, _)) = node_with_role(&f.nodes, Role::ComboBox) {
+                    assert!(!hidden(&f.nodes, *combo), "{what}: the selector is hidden");
+                }
             }
         }
         let ctx = crate::app::styled_context();
@@ -2944,6 +3014,39 @@ mod tests {
         });
         let (_, node) = spoken_reading(&f.nodes, "placeholder");
         assert_eq!(node.value(), Some("No reading"), "placeholder");
+    }
+
+    /// The big meter's connection notice is hidden from screen readers with
+    /// the rest of the row, so the spoken reading says its hint after its
+    /// title, dots dropped, and carries its help steps as the description.
+    #[test]
+    fn the_notice_speaks_its_hint_and_describes_its_help() {
+        let ctx = crate::app::styled_context();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let notice = NoReadingText::Notice {
+            title: "Waiting for meter...",
+            hint: "Press F11 for details",
+            tooltip: "Check the meter is on.",
+            color: Color32::YELLOW,
+        };
+        let f = run_frame(&ctx, vec![], |ui| {
+            show_reading_sized(
+                ui,
+                &en(),
+                None,
+                BASE_READING_FONT_SIZE,
+                &tc,
+                ReadingState::PLAIN,
+                modes(&[]),
+                notice,
+            )
+        });
+        let (_, node) = spoken_reading(&f.nodes, "notice");
+        assert_eq!(
+            node.value(),
+            Some("Waiting for meter, Press F11 for details")
+        );
+        assert_eq!(node.description(), Some("Check the meter is on."));
     }
 
     /// Open the popup, see both entries with the live one marked, pick the

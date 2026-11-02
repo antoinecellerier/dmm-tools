@@ -122,6 +122,15 @@ pub(crate) fn reading_region_id() -> egui::Id {
 /// reading — became a live region of its own, and Narrator cut itself off at
 /// each one. A `Role::Label` takes its name from its value on Windows.
 ///
+/// Keep `id` and everything under it from screen readers: the labels that
+/// draw the reading, which the spoken reading says whole. Narrator reads the
+/// item its cursor is on again at each change of its text, so a cursor on a
+/// label new with every reading heard nothing but restarts.
+pub(crate) fn hide_from_screen_readers(ui: &Ui, id: egui::Id) {
+    ui.ctx()
+        .accesskit_node_builder(id, |node| node.set_hidden());
+}
+
 /// How the reading is paced for a screen reader ([`Announcer`]): the
 /// **Announce readings** setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -399,6 +408,7 @@ impl UiA11yExt for Ui {
         add_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<R> {
         let row = self.horizontal(add_contents);
+        hide_from_screen_readers(self, row.response.id);
         speak_reading(
             self,
             row.response.rect,
