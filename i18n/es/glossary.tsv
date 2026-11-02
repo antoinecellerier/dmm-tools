@@ -270,3 +270,17 @@ normal layout (as opposed to the big meter)	vista normal	s. f.	alarm-scale-setup
 trigger ticks (crossing marks on the graph)	marcas de disparo	s. f. pl.	shortcuts-graph-triggers, colors-swatch-crossing.hover	no approved source found	Not «marcadores», which are the user's numbered markers.
 request (bytes sent to a meter or cable)	petición	s. f.	debug --count, error-unsupported-request-length	no approved source found	STYLE §2: «pedir», not «solicitar».
 wire format	formato de transmisión	s. m.	export-no-wire-format, error-unsupported-no-wire-format	no approved source found	The byte encoding a meter sends.
+volt	voltio	s. m.	reading-unit-volt (spoken)	no approved source at hand	Plural «voltios».
+ampere	amperio	s. m.	reading-unit-ampere (spoken)	no approved source at hand	Plural «amperios».
+ohm	ohmio	s. m.	reading-unit-ohm (spoken)	no approved source at hand	kΩ, MΩ spoken «kiloohmio», «megaohmio»: no contraction (ruling 20).
+hertz	hercio	s. m.	reading-unit-hertz (spoken)	no approved source at hand	Plural «hercios».
+farad	faradio	s. m.	reading-unit-farad (spoken)	no approved source at hand	Plural «faradios».
+siemens	siemens	s. m.	reading-unit-siemens (spoken)	no approved source at hand	Invariable.
+watt	vatio	s. m.	reading-unit-watt (spoken)	no approved source at hand	Plural «vatios».
+volt-ampere	voltamperio	s. m.	reading-unit-volt-ampere (spoken)	no approved source at hand	One word; plural «voltamperios».
+henry	henrio	s. m.	reading-unit-henry (spoken)	no approved source at hand	Plural «henrios».
+second	segundo	s. m.	reading-unit-second (spoken)	no approved source at hand	Plural «segundos».
+percent	por ciento	loc.	reading-unit-percent (spoken)	no approved source at hand	
+SI prefixes	pico, nano, micro, mili, kilo, mega, giga	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined whole to the unit's name: «miliamperio», «megahercio», «kiloohmio».
+Announce readings	Anunciar lecturas	v.	settings-announce, settings-announce-* hovers	no approved source at hand	Every reading → «Cada lectura» (the Sample interval chip); Never → «Nunca».
+focus (keyboard)	foco	s. m.	settings-announce-focused	no approved source at hand	«tiene el foco».

@@ -27,6 +27,7 @@ One Spanish serves every Spanish system locale: the app matches by language subt
 17. **Simple tenses:** the pretérito perfecto simple for what just happened («Se detectó…», «No se pudo…»), as MS-SG-ES PDF p.11 («si ya permitiste», not «si ya has permitido») and PDF p.39–40 ask; the -ra subjunctive («si el multímetro no respondiera»), which every region uses (MS-SG-MX PDF p.37).
 18. **Terms with no approved source** (the rows marked so in `glossary.tsv`, listed in `SUMMARY.md`): take the glossary's value as drafted until a reviewer rules.
 19. **OS names.** Windows, the same in Spain and Mexico: «Administrador de dispositivos», «Dispositivos de interfaz humana», «Otros dispositivos» (MS-T; MS-Support es-es and es-mx). macOS differs by region: «Ajustes del Sistema» (Spain) and «Configuración del Sistema» (Latin America), then «Privacidad y seguridad > Monitorización de entrada» and «… > Bluetooth» in both (Apple-ES, Apple-MX). Name both: «Ajustes del Sistema / Configuración del Sistema > Privacidad y seguridad > Monitorización de entrada». 'USB Input Device' stays **unverified** ('Dispositivo de entrada USB'): its message carries a `# UNVERIFIED Windows name` comment until someone checks a Spanish Windows.
+20. **Spoken unit names** (`reading-unit-*`, read aloud only): the Academies' forms, «voltio», «amperio», «ohmio», «hercio», «faradio», «siemens», «vatio», «voltamperio», «henrio», «segundo», «por ciento»; prefixes «pico», «nano», «micro», «mili», «kilo», «mega», «giga», joined whole with no contraction («kiloohmio», «megaohmio»). The plural comes from the number as displayed: singular for exactly 1 («1.000 voltio»), plural otherwise («1.5 voltios», «0.000 voltios»). Alternative: the international names Mexico's standards use («volt», «ampere», «ohm», «watt»).
 
 ## 1. Sources
 
@@ -137,7 +138,7 @@ Where the Spain and Mexico guides, or the manuals, pick different words, use a w
 
 ## 6. Units and AC/DC
 
-- **Unit symbols never change** *(decided)*: V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. They are symbols, not abbreviations: no period, no plural «s» (MS-SG-ES PDF p.20–21).
+- **Unit symbols never change** *(decided)*, except in the spoken reading's unit names (§0 ruling 20): V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. They are symbols, not abbreviations: no period, no plural «s» (MS-SG-ES PDF p.20–21).
 - **Space between a number and its unit:** follow the English as written in notation and spec text (`10MΩ`, `≈3V`); in prose you write, put U+00A0 («2 s», «10 MΩ»).
 - **The meter's AC/DC labels stay as the meter prints them** *(decided)*: `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`.
 - **In prose and table titles, spell the words out** *(decided)*: «tensión continua» (Fluke 117 PDF p.6), «tensión alterna» (Fluke 3000 FC PDF p.39), «corriente continua / alterna» (Amprobe AM-500 PDF p.51), «tensión alterna + continua» for AC+DC.
