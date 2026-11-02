@@ -262,7 +262,7 @@ mod tests {
         }
     }
 
-    /// The shape community clients saw on a meter (spec §15.4): 18-byte
+    /// The shape spec §15.4 records from meters: 18-byte
     /// values, no `F2`.
     #[test]
     fn eighteen_byte_values_without_f2_give_readings() {
@@ -444,7 +444,10 @@ mod tests {
                 assert!(found(&after_false_start));
             }
         }
-        assert!(found(&COMMUNITY[1][1..]), "121gwcli's 18-byte value");
+        assert!(
+            found(&COMMUNITY[1][1..]),
+            "the second community packet's 18-byte value"
+        );
     }
 
     #[test]

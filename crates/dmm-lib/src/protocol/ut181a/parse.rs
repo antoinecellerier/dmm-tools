@@ -53,9 +53,7 @@ fn compose_mode_name(mode: u16) -> Cow<'static, str> {
     let n1 = (mode >> 4) & 0xF;
     let n0 = mode & 0xF;
 
-    // Two mode words break the "N0=2 means REL" rule (sigrok
-    // MODE_CONT_OPEN / MODE_DIODE_ALARM; antage Beeper_Open /
-    // Diode_Alarm agree):
+    // Two mode words break the "N0=2 means REL" rule (spec §6):
     match mode {
         0x5212 => return Cow::Borrowed("Continuity (open)"),
         0x6112 => return Cow::Borrowed("Diode Alarm"),
@@ -63,7 +61,7 @@ fn compose_mode_name(mode: u16) -> Cow<'static, str> {
     }
 
     // Temperature families use N1 as the display arrangement, not the
-    // generic variant nibble (sigrok: T1(T2), T2(T1), T1-T2, T2-T1).
+    // generic variant nibble (T1(T2), T2(T1), T1-T2, T2-T1; spec §6).
     if n3 == 0x4 && (n2 == 0x2 || n2 == 0x3) {
         let family = if n2 == 0x2 { "°C" } else { "°F" };
         let arrangement = match n1 {
@@ -696,9 +694,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                     );
                 }
                 // COMP digits live in the LOW nibble, unshifted — unlike
-                // the other precision fields (sigrok protocol.c:112
-                // "1 byte digits, not shifted as in other precision
-                // fields"; decode at protocol.c:2123).
+                // the other precision fields (spec §5.4).
                 let dp = (comp_prec & 0x0F) as usize;
                 let comp_mode_str = match comp_mode {
                     0 => "INNER",
@@ -994,13 +990,13 @@ raw_payload=19"#
         assert_eq!(decode_mode_word(0x1141), "V AC LPF");
         assert_eq!(decode_mode_word(0x3121), "V DC AC+DC");
         assert_eq!(decode_mode_word(0x1112), "V AC REL");
-        // DC currents with n1=2 are AC+DC (sigrok MODE_*_DC_ACDC), not Hz;
+        // DC currents with n1=2 are AC+DC (spec §6), not Hz;
         // Hz applies only to the AC sub-function.
         assert_eq!(decode_mode_word(0x8121), "µA DC AC+DC");
         assert_eq!(decode_mode_word(0x9121), "mA DC AC+DC");
         assert_eq!(decode_mode_word(0xA121), "A DC AC+DC");
         assert_eq!(decode_mode_word(0x8221), "µA AC Hz");
-        // 0x4121 = mV DC Peak (sigrok/antage)
+        // 0x4121 = mV DC Peak (spec §6)
         assert_eq!(decode_mode_word(0x4121), "mV DC Peak");
         // Non-REL exceptions to the n0=2 rule
         assert_eq!(decode_mode_word(0x5212), "Continuity (open)");

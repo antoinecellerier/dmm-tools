@@ -10,8 +10,6 @@
 //! Values are IEEE 754 float32 (LE) with device-sent unit strings.
 //! 79 mode words (uint16 LE) with structured nibble encoding.
 //!
-//! Based on 3 independent community implementations:
-//! antage/ut181a (Rust), loblab/ut181a (C++), sigrok uni-t-ut181a (C).
 //! See docs/research/ut181/reverse-engineered-protocol.md
 //!
 //! ## Not Implemented
@@ -209,8 +207,8 @@ impl Protocol for Ut181aProtocol {
                 build_command(&[0x02, next])
             }
             "auto" => build_command(&[0x02, 0x00]),
-            // SET_MIN_MAX takes a single byte, not the uint32 the community
-            // specs list — the vendor app sends two-byte frames (§6.1).
+            // SET_MIN_MAX takes a single argument byte, as the vendor app
+            // sends it (spec §4.2).
             "minmax" => build_command(&[0x04, 0x01]),
             "exit_minmax" => build_command(&[0x04, 0x00]),
             "monitor" => build_command(&[0x05, 0x01]),
@@ -912,7 +910,7 @@ mod tests {
         assert!(mock.written.borrow().is_empty());
     }
 
-    /// SET_MIN_MAX takes one byte, not the uint32 the community specs list.
+    /// SET_MIN_MAX takes one argument byte (spec §4.2).
     #[test]
     fn minmax_sends_a_single_argument_byte() {
         let (mut proto, mock) = proto_in(0x3111, 0);

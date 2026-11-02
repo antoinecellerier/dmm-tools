@@ -5,8 +5,8 @@
 //! read once before the subscribe. What its bytes say is the protocol's.
 //!
 //! No challenge is written (§3.4): OWON's PC software never sends one and
-//! parses readings (§3.3), and every community client streams without it,
-//! up to a B41T+ on firmware 0.1.2 (§14.4).
+//! parses readings (§3.3), and meters up to a B41T+ on firmware 0.1.2
+//! stream without one (§14.4).
 
 use super::profile::{BringUp, GattProfile};
 use btleplug::api::CharPropFlags;

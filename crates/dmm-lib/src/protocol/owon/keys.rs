@@ -72,8 +72,8 @@ const LIGHT: Key = key("light", 0x03, LONG);
 /// The OW16 and OW18: Select, Range, Hold/Light and one △/Hz/Duty key,
 /// code 5 (spec §7.3). That key is REL in the DC functions and Hz/Duty in
 /// AC V, AC A and Hz% (OW18-UM p.22/17), so it is offered under both
-/// names. One community client sends code 4 for Hz/Duty on an OW18B; both
-/// of OWON's programs send 5 (spec §14.3 D6), and 4 is not sent.
+/// names. Both of OWON's programs send 5 for Hz/Duty on an OW18B (spec
+/// §14.3 D6), so code 4 is not sent.
 pub(super) static OW: [Key; 7] = [
     SELECT,
     RANGE,

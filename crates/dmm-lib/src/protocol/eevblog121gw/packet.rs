@@ -181,9 +181,9 @@ pub(super) mod tests {
         ],
     ];
 
-    /// Community-captured, spec §15.5, not ours: the packet quoted in
-    /// sigrok (Duty 0.0 %, internal 27.9 °C) and 121gwcli's (Ω OFL at
-    /// 50 MΩ, internal 25.8 °C), `F2` prepended to the latter. Both set
+    /// Community-captured, spec §15.5, not ours: the two packets it quotes
+    /// (Duty 0.0 %, internal 27.9 °C; Ω OFL at 50 MΩ, internal 25.8 °C),
+    /// `F2` prepended to the second. Both set
     /// byte 14 bit 5 (spec §15.3 D4).
     pub(crate) const COMMUNITY: [[u8; LEN]; 2] = [
         [

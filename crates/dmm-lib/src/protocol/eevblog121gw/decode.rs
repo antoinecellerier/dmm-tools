@@ -530,7 +530,7 @@ mod tests {
         assert!(ohms.flags.auto_range);
     }
 
-    /// Constructed from 121gwcli's decoded fields (spec §15.5): 1.638 mV AC
+    /// Constructed from the decoded fields spec §15.5 quotes: 1.638 mV AC
     /// beside 62.97 Hz.
     #[test]
     fn ac_millivolts_with_the_frequency() {

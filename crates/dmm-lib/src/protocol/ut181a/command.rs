@@ -320,7 +320,8 @@ mod tests {
 
     #[test]
     fn build_command_hold() {
-        // Button-press (0x12) with HOLD button code (0x5A), per antage.
+        // Button-press (0x12) with HOLD button code (0x5A), as the vendor app
+        // sends it (spec §4.2).
         let frame = build_command(&[0x12, 0x5A]);
         // len = 2 + 2 = 4; checksum = 04 + 00 + 12 + 5A = 0x70
         assert_eq!(frame, vec![0xAB, 0xCD, 0x04, 0x00, 0x12, 0x5A, 0x70, 0x00]);
