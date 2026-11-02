@@ -157,7 +157,7 @@ fn lines(wire: &Wire) -> Vec<String> {
             |i: usize, what: &str| format!("{} {what} {}", at(i), hex(&wire.records[i].bytes));
         let event = match entry {
             Entry::Key(i) => {
-                let reply = super::reply_delay(wire, i)
+                let reply = super::stats::reply_delay(wire, i)
                     .map_or(String::new(), |d| format!(" (bytes back after {d} ms)"));
                 Run::flush(&mut run, &mut out);
                 out.push(format!("{}{reply}", line(i, "TX key")));
