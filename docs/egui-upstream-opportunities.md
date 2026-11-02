@@ -690,7 +690,7 @@ semantics make it impossible to distinguish.
 "was this the click that just opened me" via a separate
 `was_open_key` in `ctx.data`. Lots of hand-rolled boilerplate.
 
-**Workaround.** See `color_edit` in
+**Workaround.** See `color_edit` and `keep_focus_with_popup` in
 `crates/dmm-gui/src/app/controls/colors.rs`.
 
 **Suggested fix.** Add a `Popup::modal(true) -> Self` builder that:
@@ -731,7 +731,7 @@ cached `Hsva` ourselves. The 50px threshold was chosen because the
 actual slider widths in our theme happen to be exactly 100px — the
 heuristic is acknowledged-brittle and would break under non-default
 DPI or theme tweaks. See `crates/dmm-gui/src/app/controls/colors.rs`
-`color_edit`.
+`picker_popup_body`.
 
 **This is the single biggest upstream gap in the entire pass.**
 

@@ -545,7 +545,7 @@ fn color_edit(
     let linked = anchor.is_some() && !set;
     // The colour on screen: this field's override, or where the preset, the
     // theme or its anchor put it.
-    let mut color = current.effective_color(field);
+    let color = current.effective_color(field);
 
     // Render the swatch as a plain Button with an explicit fill, so we control
     // the open lifecycle. egui's `color_edit_button_srgba` also uses
@@ -604,28 +604,7 @@ fn color_edit(
             .data_mut(|d| d.remove::<egui::Id>(relink_refocus_id()));
         btn_response.request_focus();
     }
-    // An outline on every swatch, so one the colour of the panel it sits
-    // on still shows; dashed while it follows its anchor.
-    let rect = btn_response.rect;
-    let stroke = egui::Stroke::new(1.0, ui.visuals().weak_text_color());
-    if linked {
-        let r = rect.expand(1.0);
-        let corners = [
-            r.left_top(),
-            r.right_top(),
-            r.right_bottom(),
-            r.left_bottom(),
-            r.left_top(),
-        ];
-        ui.painter()
-            .extend(egui::Shape::dashed_line(&corners, stroke, 3.0, 2.0));
-    } else {
-        ui.painter()
-            .rect_stroke(rect, 2.0, stroke, egui::StrokeKind::Outside);
-    }
-    // The fill covers the usual button border, so paint an explicit focus
-    // ring when the swatch is keyboard-focused.
-    crate::a11y::paint_focus_ring(ui, &btn_response);
+    paint_swatch_outline(ui, &btn_response, linked);
 
     let mut relinked = false;
     if let Some(anchor) = anchor
@@ -655,50 +634,7 @@ fn color_edit(
             .data_mut(|d| d.insert_temp(relink_refocus_id(), btn_response.id));
         ui.ctx().request_repaint();
     }
-    // Only where the user's changes brought it under: the presets' own
-    // decorative borders sit under the graphical floor on purpose. A linked
-    // colour warns too, when no lightness could keep it readable.
-    if let Some((ratio, ground, floor)) = links::floor_failure(current, field)
-        && links::floor_failure(base, field).is_none()
-    {
-        let warning = tr!(
-            l10n,
-            "colors-low-contrast",
-            ratio = format!("{ratio:.1}"),
-            ground = ground.label(l10n)
-        );
-        ui.label(
-            RichText::new(format!("{} {warning}", crate::app::toast::ERROR_GLYPH))
-                .small()
-                .color(ui.visuals().warn_fg_color),
-        )
-        .on_hover_text(tr!(
-            l10n,
-            "colors-low-contrast.hover",
-            floor = floor.to_string(),
-            ground = ground.label(l10n)
-        ));
-    }
-
-    // Graph colours drawn together have to read apart; a turn of the line
-    // can bring an overlay onto a colour that stayed put. Said only where
-    // the user's changes did it, as the contrast warning is.
-    if let Some((other, d, floor)) = links::too_close(current, field)
-        && links::too_close(base, field).is_none()
-    {
-        let warning = tr!(l10n, "colors-too-close", other = other.label(l10n));
-        ui.label(
-            RichText::new(format!("{} {warning}", crate::app::toast::ERROR_GLYPH))
-                .small()
-                .color(ui.visuals().warn_fg_color),
-        )
-        .on_hover_text(tr!(
-            l10n,
-            "colors-too-close.hover",
-            distance = format!("{d:.0}"),
-            floor = format!("{floor:.0}")
-        ));
-    }
+    show_change_warnings(ui, l10n, field, current, base);
 
     let popup_id = btn_response.id.with("color_popup");
     // "This click is the one that opens the popup" — true only on the click
@@ -717,176 +653,268 @@ fn color_edit(
         egui::Popup::close_id(ui.ctx(), popup_id);
     }
 
-    // Track open state across frames to detect close transitions (click
-    // outside, Esc, or swatch re-click) so focus can be restored to the
-    // swatch regardless of how the popup closed.
-    let was_open_key = btn_response.id.with("color_popup_was_open");
-    let was_open: bool = ui.ctx().data(|d| d.get_temp(was_open_key)).unwrap_or(false);
-
-    let mut color_changed = false;
-    let hsva_cache_key = btn_response.id.with("hsva_cache");
-    egui::Popup::menu(&btn_response)
+    let picked = egui::Popup::menu(&btn_response)
         .id(popup_id)
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-        .show(|ui| {
-            // Trap Tab focus to the popup's layer. Without this, Tab cycles
-            // through main-settings widgets (which are registered earlier in
-            // the frame) rather than through the picker's drag values and
-            // sliders.
-            ui.ctx().memory_mut(|m| m.set_modal_layer(ui.layer_id()));
+        .show(|ui| picker_popup_body(ui, l10n, btn_response.id, newly_opened, color))
+        .and_then(|shown| shown.inner);
 
-            // Invisible focusable anchor. When the popup first opens, focus
-            // is still on the swatch — in a layer *below* the modal layer and
-            // therefore no longer focusable — so Tab wouldn't advance to
-            // anything. Requesting focus on this anchor puts the user inside
-            // the popup's focus cycle immediately.
-            // Zero-sized and placed with `interact` rather than added, so it
-            // takes no row of its own: an empty label here left a blank line
-            // at the top of the picker.
-            let focus_anchor = ui.interact(
-                egui::Rect::from_min_size(ui.cursor().min, egui::Vec2::ZERO),
-                btn_response.id.with("popup_focus_anchor"),
-                egui::Sense::focusable_noninteractive(),
-            );
-            if newly_opened {
-                focus_anchor.request_focus();
-            }
+    keep_focus_with_popup(ui, popup_id, btn_response.id);
 
-            // HSVA is the source of truth while the popup is open.
-            // Converting srgba → Hsva each frame is slightly lossy (sRGB
-            // gamma), so we cache the Hsva in ctx temp data and only seed
-            // from the current color on first open.
-            let mut hsva: egui::ecolor::Hsva = if newly_opened {
-                egui::ecolor::Hsva::from(color)
-            } else {
-                ui.ctx()
-                    .data(|d| d.get_temp::<egui::ecolor::Hsva>(hsva_cache_key))
-                    .unwrap_or_else(|| egui::ecolor::Hsva::from(color))
-            };
+    if let Some(color) = picked {
+        *field.override_slot(overrides) = Some(HexColor(color));
+        return true;
+    }
 
-            // Arrow-key HSV adjustment. egui's `color_slider_1d` and
-            // `color_slider_2d` only handle `interact_pointer_pos` (mouse
-            // drag), so Tab-focused sliders do nothing on arrow press.
-            // Detect which slider currently has focus via the rect shape
-            // of the focused widget (2D slider is square, hue slider is
-            // wide-and-short) and apply the arrow deltas directly to
-            // `hsva` before the picker renders. The size thresholds are
-            // chosen to include 100-wide sliders (observed in this app's
-            // theme) while excluding small toggle/drag widgets (~20 px).
-            let hex_id = btn_response.id.with("hex_field");
-            if let Some(fid) = ui.ctx().memory(|m| m.focused())
-                && fid != btn_response.id
-                // The hex field is as wide and short as the hue slider,
-                // and its arrows move the caret.
-                && fid != hex_id
-                && let Some(focused_resp) = ui.ctx().read_response(fid)
-            {
-                let rect = focused_resp.rect;
-                let is_2d_slider =
-                    rect.width() >= 50.0 && (rect.width() - rect.height()).abs() < 2.0;
-                let is_hue_slider = rect.width() >= 50.0 && rect.width() > rect.height() * 3.0;
+    relinked
+}
 
-                let left = ui
-                    .ctx()
-                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft));
-                let right = ui
-                    .ctx()
-                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight));
-                let up = ui
-                    .ctx()
-                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp));
-                let down = ui
-                    .ctx()
-                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown));
+/// The outline every swatch has, so one the colour of the panel it sits on
+/// still shows — dashed while it follows its anchor — and its focus ring.
+fn paint_swatch_outline(ui: &Ui, response: &egui::Response, linked: bool) {
+    let rect = response.rect;
+    let stroke = egui::Stroke::new(1.0, ui.visuals().weak_text_color());
+    if linked {
+        let r = rect.expand(1.0);
+        let corners = [
+            r.left_top(),
+            r.right_top(),
+            r.right_bottom(),
+            r.left_bottom(),
+            r.left_top(),
+        ];
+        ui.painter()
+            .extend(egui::Shape::dashed_line(&corners, stroke, 3.0, 2.0));
+    } else {
+        ui.painter()
+            .rect_stroke(rect, 2.0, stroke, egui::StrokeKind::Outside);
+    }
+    // The fill covers the usual button border, so paint an explicit focus ring
+    // when the swatch is keyboard-focused.
+    crate::a11y::paint_focus_ring(ui, response);
+}
 
-                let step = 0.02;
-                let dx = if right { step } else { 0.0 } - if left { step } else { 0.0 };
-                let dy = if up { step } else { 0.0 } - if down { step } else { 0.0 };
+/// The warnings under a swatch whose colour the user's changes brought under
+/// its contrast floor or too close to another graph colour.
+fn show_change_warnings(
+    ui: &mut Ui,
+    l10n: &Localizer,
+    field: PaletteField,
+    current: &ThemeColors,
+    base: &ThemeColors,
+) {
+    // Only where the user's changes brought it under: the presets' own
+    // decorative borders sit under the graphical floor on purpose. A linked
+    // colour warns too, when no lightness could keep it readable.
+    if let Some((ratio, ground, floor)) = links::floor_failure(current, field)
+        && links::floor_failure(base, field).is_none()
+    {
+        let warning = tr!(
+            l10n,
+            "colors-low-contrast",
+            ratio = format!("{ratio:.1}"),
+            ground = ground.label(l10n)
+        );
+        let hover = tr!(
+            l10n,
+            "colors-low-contrast.hover",
+            floor = floor.to_string(),
+            ground = ground.label(l10n)
+        );
+        warning_label(ui, &warning, &hover);
+    }
 
-                if is_2d_slider && (dx != 0.0 || dy != 0.0) {
-                    hsva.s = (hsva.s + dx).clamp(0.0, 1.0);
-                    hsva.v = (hsva.v + dy).clamp(0.0, 1.0);
-                    color_changed = true;
-                } else if is_hue_slider && dx != 0.0 {
-                    hsva.h = (hsva.h + dx).rem_euclid(1.0);
-                    color_changed = true;
-                }
-            }
+    // Graph colours drawn together have to read apart; a turn of the line can
+    // bring an overlay onto a colour that stayed put. Said only where the
+    // user's changes did it, as the contrast warning is.
+    if let Some((other, d, floor)) = links::too_close(current, field)
+        && links::too_close(base, field).is_none()
+    {
+        let warning = tr!(l10n, "colors-too-close", other = other.label(l10n));
+        let hover = tr!(
+            l10n,
+            "colors-too-close.hover",
+            distance = format!("{d:.0}"),
+            floor = format!("{floor:.0}")
+        );
+        warning_label(ui, &warning, &hover);
+    }
+}
 
-            color_changed |= egui::color_picker::color_picker_hsva_2d(
-                ui,
-                &mut hsva,
-                egui::color_picker::Alpha::Opaque,
-            );
+/// One of a swatch's warnings: the error glyph and `text`, small, in the
+/// warning colour, with `hover` to explain it.
+fn warning_label(ui: &mut Ui, text: &str, hover: &str) {
+    ui.label(
+        RichText::new(format!("{} {text}", crate::app::toast::ERROR_GLYPH))
+            .small()
+            .color(ui.visuals().warn_fg_color),
+    )
+    .on_hover_text(hover);
+}
 
-            // The colour as text, to copy from one swatch and paste into
-            // another rather than retyping three channels. It shows the
-            // colour while not being edited; while it is, a valid entry
-            // applies at once.
-            let text_key = hex_id.with("text");
-            let editing = ui.ctx().memory(|m| m.has_focus(hex_id));
-            let mut text = if editing {
-                ui.ctx()
-                    .data(|d| d.get_temp::<String>(text_key))
-                    .unwrap_or_else(|| hex_text(egui::Color32::from(hsva)))
-            } else {
-                hex_text(egui::Color32::from(hsva))
-            };
-            ui.horizontal(|ui| {
-                let caption = ui.label(tr!(l10n, "colors-hex"));
-                let field = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut text)
-                            .id(hex_id)
-                            .font(egui::TextStyle::Monospace)
-                            .desired_width(80.0),
-                    )
-                    .labelled_by(caption.id);
-                let field = field.on_hover_text(tr!(l10n, "colors-hex.hover"));
-                if field.changed()
-                    && let Some(pasted) = parse_hex(&text)
-                {
-                    hsva = egui::ecolor::Hsva::from(pasted);
-                    color_changed = true;
-                }
-            });
-            ui.ctx().data_mut(|d| d.insert_temp(text_key, text));
+/// The body of the swatch `btn_id`'s picker popup, showing `color`; called
+/// inside `Popup::show`. Traps Tab in the popup, focuses its anchor and
+/// seeds the HSV from `color` when `newly_opened`, steps the sliders on
+/// arrow keys, and shows the hex field. The new colour, if it changed this
+/// frame.
+fn picker_popup_body(
+    ui: &mut Ui,
+    l10n: &Localizer,
+    btn_id: egui::Id,
+    newly_opened: bool,
+    color: egui::Color32,
+) -> Option<egui::Color32> {
+    let mut color_changed = false;
+    let hsva_cache_key = btn_id.with("hsva_cache");
+    // Trap Tab focus to the popup's layer. Without this, Tab cycles through
+    // main-settings widgets (which are registered earlier in the frame) rather
+    // than through the picker's drag values and sliders.
+    ui.ctx().memory_mut(|m| m.set_modal_layer(ui.layer_id()));
 
-            // Write back to Color32 and persist Hsva for next frame.
-            color = egui::Color32::from(hsva);
-            ui.ctx().data_mut(|d| d.insert_temp(hsva_cache_key, hsva));
+    // Invisible focusable anchor. When the popup first opens, focus is still on
+    // the swatch — in a layer *below* the modal layer and therefore no longer
+    // focusable — so Tab wouldn't advance to anything. Requesting focus on this
+    // anchor puts the user inside the popup's focus cycle immediately.
+    // Zero-sized and placed with `interact` rather than added, so it takes no
+    // row of its own: an empty label here left a blank line at the top of the
+    // picker.
+    let focus_anchor = ui.interact(
+        egui::Rect::from_min_size(ui.cursor().min, egui::Vec2::ZERO),
+        btn_id.with("popup_focus_anchor"),
+        egui::Sense::focusable_noninteractive(),
+    );
+    if newly_opened {
+        focus_anchor.request_focus();
+    }
 
-            // The focus lock filter set below only takes effect on the
-            // *next* frame because of its `had_focus_last_frame` gate. Cover
-            // the first frame by resetting `focus_direction` if any arrow is
-            // held — here, before the popup's own menu arrow navigation runs
-            // after this closure, which a reset after `show` came too late
-            // to stop.
-            let any_arrow_down = ui.ctx().input(|i| {
-                i.key_down(egui::Key::ArrowLeft)
-                    || i.key_down(egui::Key::ArrowRight)
-                    || i.key_down(egui::Key::ArrowUp)
-                    || i.key_down(egui::Key::ArrowDown)
-            });
-            let focused = ui.ctx().memory(|m| m.focused());
-            if any_arrow_down && focused.is_some_and(|id| id != btn_response.id) {
-                ui.ctx()
-                    .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
-            }
-        });
+    // HSVA is the source of truth while the popup is open. Converting srgba →
+    // Hsva each frame is slightly lossy (sRGB gamma), so we cache the Hsva in
+    // ctx temp data and only seed from the current color on first open.
+    let mut hsva: egui::ecolor::Hsva = if newly_opened {
+        egui::ecolor::Hsva::from(color)
+    } else {
+        ui.ctx()
+            .data(|d| d.get_temp::<egui::ecolor::Hsva>(hsva_cache_key))
+            .unwrap_or_else(|| egui::ecolor::Hsva::from(color))
+    };
+
+    // Arrow-key HSV adjustment. egui's `color_slider_1d` and `color_slider_2d`
+    // only handle `interact_pointer_pos` (mouse drag), so Tab-focused sliders
+    // do nothing on arrow press. Detect which slider currently has focus via
+    // the rect shape of the focused widget (2D slider is square, hue slider is
+    // wide-and-short) and apply the arrow deltas directly to `hsva` before the
+    // picker renders. The size thresholds are chosen to include 100-wide
+    // sliders (observed in this app's theme) while excluding small toggle/drag
+    // widgets (~20 px).
+    let hex_id = btn_id.with("hex_field");
+    if let Some(fid) = ui.ctx().memory(|m| m.focused())
+        && fid != btn_id
+        // The hex field is as wide and short as the hue slider, and its arrows
+        // move the caret.
+        && fid != hex_id
+        && let Some(focused_resp) = ui.ctx().read_response(fid)
+    {
+        let rect = focused_resp.rect;
+        let is_2d_slider = rect.width() >= 50.0 && (rect.width() - rect.height()).abs() < 2.0;
+        let is_hue_slider = rect.width() >= 50.0 && rect.width() > rect.height() * 3.0;
+
+        let [left, right, up, down] = crate::a11y::consume_arrows(ui.ctx());
+
+        let step = 0.02;
+        let dx = if right { step } else { 0.0 } - if left { step } else { 0.0 };
+        let dy = if up { step } else { 0.0 } - if down { step } else { 0.0 };
+
+        if is_2d_slider && (dx != 0.0 || dy != 0.0) {
+            hsva.s = (hsva.s + dx).clamp(0.0, 1.0);
+            hsva.v = (hsva.v + dy).clamp(0.0, 1.0);
+            color_changed = true;
+        } else if is_hue_slider && dx != 0.0 {
+            hsva.h = (hsva.h + dx).rem_euclid(1.0);
+            color_changed = true;
+        }
+    }
+
+    color_changed |=
+        egui::color_picker::color_picker_hsva_2d(ui, &mut hsva, egui::color_picker::Alpha::Opaque);
+
+    // The colour as text, to copy from one swatch and paste into another rather
+    // than retyping three channels. It shows the colour while not being edited;
+    // while it is, a valid entry applies at once.
+    let text_key = hex_id.with("text");
+    let editing = ui.ctx().memory(|m| m.has_focus(hex_id));
+    let mut text = if editing {
+        ui.ctx()
+            .data(|d| d.get_temp::<String>(text_key))
+            .unwrap_or_else(|| hex_text(egui::Color32::from(hsva)))
+    } else {
+        hex_text(egui::Color32::from(hsva))
+    };
+    ui.horizontal(|ui| {
+        let caption = ui.label(tr!(l10n, "colors-hex"));
+        let field = ui
+            .add(
+                egui::TextEdit::singleline(&mut text)
+                    .id(hex_id)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_width(80.0),
+            )
+            .labelled_by(caption.id);
+        let field = field.on_hover_text(tr!(l10n, "colors-hex.hover"));
+        if field.changed()
+            && let Some(pasted) = parse_hex(&text)
+        {
+            hsva = egui::ecolor::Hsva::from(pasted);
+            color_changed = true;
+        }
+    });
+    ui.ctx().data_mut(|d| d.insert_temp(text_key, text));
+
+    // Persist Hsva for next frame.
+    ui.ctx().data_mut(|d| d.insert_temp(hsva_cache_key, hsva));
+
+    // The focus lock filter `keep_focus_with_popup` sets after `show` only
+    // takes effect on the *next* frame because of its `had_focus_last_frame`
+    // gate. Cover the first frame by resetting `focus_direction` if any arrow
+    // is held — here, before the popup's own menu arrow navigation runs after
+    // this body, which a reset after `show` came too late to stop.
+    let any_arrow_down = ui.ctx().input(|i| {
+        i.key_down(egui::Key::ArrowLeft)
+            || i.key_down(egui::Key::ArrowRight)
+            || i.key_down(egui::Key::ArrowUp)
+            || i.key_down(egui::Key::ArrowDown)
+    });
+    let focused = ui.ctx().memory(|m| m.focused());
+    if any_arrow_down && focused.is_some_and(|id| id != btn_id) {
+        ui.ctx()
+            .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+    }
+
+    color_changed.then(|| egui::Color32::from(hsva))
+}
+
+/// Keep the keyboard focus with the swatch `btn_id`'s popup `popup_id`:
+/// trapped on the widget it is on while the popup is open, and back on the
+/// swatch once it closes. Called after `Popup::show`, which opens and closes
+/// it.
+fn keep_focus_with_popup(ui: &Ui, popup_id: egui::Id, btn_id: egui::Id) {
+    // Track open state across frames to detect close transitions (click
+    // outside, Esc, or swatch re-click) so focus can be restored to the swatch
+    // regardless of how the popup closed.
+    let was_open_key = btn_id.with("color_popup_was_open");
+    let was_open: bool = ui.ctx().data(|d| d.get_temp(was_open_key)).unwrap_or(false);
 
     let is_open_now = egui::Popup::is_id_open(ui.ctx(), popup_id);
     if is_open_now {
-        // Trap arrow keys on whichever widget inside the popup currently
-        // has focus. egui's color_slider_1d/2d (hue + saturation-value) are
+        // Trap arrow keys on whichever widget inside the popup currently has
+        // focus. egui's color_slider_1d/2d (hue + saturation-value) are
         // focusable but don't respond to arrow keys; without trapping, the
-        // first arrow press Tab-jumps focus off the slider spatially.
-        // Trapping keeps focus inside the popup so the user can still Tab
-        // between sliders and the RGBA drag values (which ARE keyboard-
-        // adjustable via Enter-to-edit + Up/Down). See the "Known
-        // limitations" note in docs/gui-reference.md on the color picker.
+        // first arrow press Tab-jumps focus off the slider spatially. Trapping
+        // keeps focus inside the popup so the user can still Tab between
+        // sliders and the RGBA drag values (which ARE keyboard-adjustable via
+        // Enter-to-edit + Up/Down). See the "Known limitations" note in
+        // docs/gui-reference.md on the color picker.
         if let Some(focused_id) = ui.ctx().memory(|m| m.focused())
-            && focused_id != btn_response.id
+            && focused_id != btn_id
         {
             ui.ctx().memory_mut(|m| {
                 m.set_focus_lock_filter(
@@ -903,17 +931,10 @@ fn color_edit(
     if was_open && !is_open_now {
         // Popup just closed — put focus back on the swatch so keyboard users
         // don't get teleported to the top of the Tab order.
-        ui.ctx().memory_mut(|m| m.request_focus(btn_response.id));
+        ui.ctx().memory_mut(|m| m.request_focus(btn_id));
     }
     ui.ctx()
         .data_mut(|d| d.insert_temp(was_open_key, is_open_now));
-
-    if color_changed {
-        *field.override_slot(overrides) = Some(HexColor(color));
-        return true;
-    }
-
-    relinked
 }
 
 #[cfg(test)]
