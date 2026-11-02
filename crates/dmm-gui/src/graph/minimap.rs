@@ -387,6 +387,69 @@ pub(super) fn pan(
     }
 }
 
+/// The arm of a viewport bracket: how far its top and bottom strokes reach
+/// into the view.
+const BRACKET_ARM: f32 = 4.0;
+
+/// One of the viewport's brackets, `[` at `x` with `arm` positive and `]`
+/// with it negative: a stroke down `rect` and one along each edge.
+fn paint_bracket(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    x: f32,
+    arm: f32,
+    stroke: egui::Stroke,
+) {
+    painter.line_segment(
+        [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+        stroke,
+    );
+    painter.line_segment(
+        [egui::pos2(x, rect.top()), egui::pos2(x + arm, rect.top())],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            egui::pos2(x, rect.bottom()),
+            egui::pos2(x + arm, rect.bottom()),
+        ],
+        stroke,
+    );
+}
+
+/// The time labels under the strip, each with a tick, at round steps from
+/// `data_min` to `data_max`.
+fn paint_time_axis(
+    painter: &egui::Painter,
+    scale: &MinimapScale,
+    rect: egui::Rect,
+    (data_min, data_max): (f64, f64),
+    label_color: egui::Color32,
+) {
+    let nice_interval = nice_time_interval(scale.span());
+    let mut t = (data_min / nice_interval).ceil() * nice_interval;
+    while t <= data_max {
+        let x = scale.x_of(t);
+        let label = format_time_label(t);
+        painter.text(
+            egui::pos2(x, rect.bottom() + 2.0),
+            egui::Align2::CENTER_TOP,
+            label,
+            egui::FontId::proportional(11.0),
+            label_color,
+        );
+        // Small tick mark
+        painter.line_segment(
+            [
+                egui::pos2(x, rect.bottom() - 2.0),
+                egui::pos2(x, rect.bottom()),
+            ],
+            egui::Stroke::new(1.0_f32, label_color),
+        );
+        t += nice_interval;
+    }
+}
+
 impl Graph {
     /// Render the minimap showing full history with viewport indicator.
     pub fn show_minimap(
@@ -403,9 +466,6 @@ impl Graph {
 
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
-
-        let line_color = tc.minimap_line();
-        let overload_fill = tc.graph_overload_fill();
 
         // Allocate rect for minimap + label space below, with margin for bracket strokes
         let label_height = 14.0;
@@ -444,79 +504,9 @@ impl Graph {
         // Background
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
 
-        // Same spans the main plot bands, including one still open.
-        let overload_spans: Vec<(f64, f64)> = self
-            .minimap_level
-            .iter()
-            .flat_map(|level| level.gaps())
-            .filter(|(_, _, kind)| *kind == GapKind::Overload)
-            .map(|(a, b, _)| (a, b))
-            .chain(self.pending_overload_span())
-            .collect();
-
-        // Overload bands, matching the main plot so the two read the same way.
         // Behind the trace, like the background.
-        for &(start, end) in &overload_spans {
-            let (x0, x1) = scale.band_x(start, end);
-            painter.rect_filled(
-                egui::Rect::from_min_max(egui::pos2(x0, rect.top()), egui::pos2(x1, rect.bottom())),
-                0.0,
-                overload_fill,
-            );
-        }
-
-        // Draw data lines.
-        //
-        // The Y range covers the whole history, so it is the same for every
-        // bucket and the level already carries the extremes it needs — the
-        // strip pays no scan for it at all. Recomputing it inside the
-        // projection once turned the minimap into an O(n²) hot spot that
-        // dominated frame time.
-        //
-        // Deliberately the *auto* range, not the main plot's: a pinned Y range
-        // (a Shift-drag box zoom, or a user-entered fixed range) is chosen to
-        // frame a detail of the main view, and scaling full history by it puts
-        // most points far outside this 60px strip. They clip to a flat line
-        // along the edges and overdraw the time axis below — the overview the
-        // minimap exists to give disappears exactly when zooming in makes it
-        // most useful.
-        let y_map = self
-            .minimap_level
-            .as_ref()
-            .and_then(|level| level.value_range())
-            .map(|(lo, hi)| pad_range(lo, hi))
-            .map(|(lo, hi)| {
-                let range = (hi - lo).max(1e-10);
-                (lo, range)
-            });
-        let y_of = |v: f64| -> f32 {
-            let y_frac = match y_map {
-                Some((y_lo, range)) => ((v - y_lo) / range) as f32,
-                None => 0.5,
-            };
-            rect.bottom() - y_frac * rect.height()
-        };
-        // Each run of buckets between two interruptions is drawn as a single
-        // polyline. Drawn point by point instead, once the history passed a
-        // sample per pixel the semi-transparent segments blended twice at
-        // their joints and thinned to nothing between them — the trace read as
-        // beads and dashes. One path feathers once, joins properly, and the
-        // per-bucket extremes keep the spikes.
-        if let Some(level) = self.minimap_level.as_mut() {
-            for run in level.runs() {
-                let mut points = level_polyline(run, y_of);
-                if points.len() < 2 {
-                    continue;
-                }
-                for p in &mut points {
-                    p.x = scale.x_of(p.x as f64 * bucket);
-                }
-                painter.add(egui::Shape::line(
-                    points,
-                    egui::Stroke::new(1.5_f32, line_color),
-                ));
-            }
-        }
+        self.paint_overload_bands(&painter, &scale, rect, tc.graph_overload_fill());
+        self.paint_trace(&painter, &scale, rect, bucket, tc.minimap_line());
 
         // A marker is a small upward point on the bottom edge — its flag's
         // point on the main plot. One per pixel at most: a burst of markers
@@ -545,78 +535,17 @@ impl Graph {
         let vp_right = scale.x_of(view_max);
         let vp_color = tc.minimap_viewport();
         let vp_stroke = egui::Stroke::new(2.5_f32, vp_color);
-        let bracket_w = 4.0_f32; // horizontal arm of the bracket
 
-        // Left bracket [
-        painter.line_segment(
-            [
-                egui::pos2(vp_left, rect.top()),
-                egui::pos2(vp_left, rect.bottom()),
-            ],
-            vp_stroke,
-        );
-        painter.line_segment(
-            [
-                egui::pos2(vp_left, rect.top()),
-                egui::pos2(vp_left + bracket_w, rect.top()),
-            ],
-            vp_stroke,
-        );
-        painter.line_segment(
-            [
-                egui::pos2(vp_left, rect.bottom()),
-                egui::pos2(vp_left + bracket_w, rect.bottom()),
-            ],
-            vp_stroke,
-        );
+        paint_bracket(&painter, rect, vp_left, BRACKET_ARM, vp_stroke);
+        paint_bracket(&painter, rect, vp_right, -BRACKET_ARM, vp_stroke);
 
-        // Right bracket ]
-        painter.line_segment(
-            [
-                egui::pos2(vp_right, rect.top()),
-                egui::pos2(vp_right, rect.bottom()),
-            ],
-            vp_stroke,
+        paint_time_axis(
+            &painter,
+            &scale,
+            rect,
+            (data_min, data_max),
+            ui.visuals().weak_text_color(),
         );
-        painter.line_segment(
-            [
-                egui::pos2(vp_right, rect.top()),
-                egui::pos2(vp_right - bracket_w, rect.top()),
-            ],
-            vp_stroke,
-        );
-        painter.line_segment(
-            [
-                egui::pos2(vp_right, rect.bottom()),
-                egui::pos2(vp_right - bracket_w, rect.bottom()),
-            ],
-            vp_stroke,
-        );
-
-        // Draw X-axis time labels
-        let label_color = ui.visuals().weak_text_color();
-        let nice_interval = nice_time_interval(scale.span());
-        let mut t = (data_min / nice_interval).ceil() * nice_interval;
-        while t <= data_max {
-            let x = scale.x_of(t);
-            let label = format_time_label(t);
-            painter.text(
-                egui::pos2(x, rect.bottom() + 2.0),
-                egui::Align2::CENTER_TOP,
-                label,
-                egui::FontId::proportional(11.0),
-                label_color,
-            );
-            // Small tick mark
-            painter.line_segment(
-                [
-                    egui::pos2(x, rect.bottom() - 2.0),
-                    egui::pos2(x, rect.bottom()),
-                ],
-                egui::Stroke::new(1.0_f32, label_color),
-            );
-            t += nice_interval;
-        }
 
         // Handle click/drag navigation with bracket resize handles.
         //
@@ -678,33 +607,116 @@ impl Graph {
             self.minimap_drag = MinimapDrag::None;
         }
 
-        // Keyboard pan when the minimap holds focus. Has to run *after*
-        // `allocate_exact_size` above (which runs `interested_in_focus`
-        // on the pointer response) so that on a Tab press focus has
-        // already advanced away and `pointer_response.has_focus()`
-        // returns false. Otherwise the `move_focus(FocusDirection::None)`
-        // below would also wipe egui's `Focus::begin_pass` snapshot of
-        // Tab into `focus_direction = Next` (egui stores arrow keys and
-        // Tab in the same field), trapping focus on the minimap.
+        // After `allocate_exact_size`: see `handle_minimap_keys`.
+        self.handle_minimap_keys(ui, &pointer_response);
+
+        // Paint focus ring last so it sits on top of the minimap content
+        // (background, brackets, time labels) rather than being overdrawn.
+        crate::a11y::paint_focus_ring(ui, &pointer_response);
+    }
+
+    /// The overload bands, matching the main plot's so the two read the same
+    /// way: the level's spans and the one still open.
+    fn paint_overload_bands(
+        &self,
+        painter: &egui::Painter,
+        scale: &MinimapScale,
+        rect: egui::Rect,
+        fill: egui::Color32,
+    ) {
+        let overload_spans: Vec<(f64, f64)> = self
+            .minimap_level
+            .iter()
+            .flat_map(|level| level.gaps())
+            .filter(|(_, _, kind)| *kind == GapKind::Overload)
+            .map(|(a, b, _)| (a, b))
+            .chain(self.pending_overload_span())
+            .collect();
+        for &(start, end) in &overload_spans {
+            let (x0, x1) = scale.band_x(start, end);
+            painter.rect_filled(
+                egui::Rect::from_min_max(egui::pos2(x0, rect.top()), egui::pos2(x1, rect.bottom())),
+                0.0,
+                fill,
+            );
+        }
+    }
+
+    /// The trace: the level's buckets of `bucket` seconds, a polyline per run
+    /// between interruptions.
+    fn paint_trace(
+        &mut self,
+        painter: &egui::Painter,
+        scale: &MinimapScale,
+        rect: egui::Rect,
+        bucket: f64,
+        color: egui::Color32,
+    ) {
+        // The Y range covers the whole history, so it is the same for every
+        // bucket and the level already carries the extremes it needs — the
+        // strip pays no scan for it at all. Recomputing it inside the
+        // projection once turned the minimap into an O(n²) hot spot that
+        // dominated frame time.
+        //
+        // Deliberately the *auto* range, not the main plot's: a pinned Y range
+        // (a Shift-drag box zoom, or a user-entered fixed range) is chosen to
+        // frame a detail of the main view, and scaling full history by it puts
+        // most points far outside this 60px strip. They clip to a flat line
+        // along the edges and overdraw the time axis below — the overview the
+        // minimap exists to give disappears exactly when zooming in makes it
+        // most useful.
+        let y_map = self
+            .minimap_level
+            .as_ref()
+            .and_then(|level| level.value_range())
+            .map(|(lo, hi)| pad_range(lo, hi))
+            .map(|(lo, hi)| {
+                let range = (hi - lo).max(1e-10);
+                (lo, range)
+            });
+        let y_of = |v: f64| -> f32 {
+            let y_frac = match y_map {
+                Some((y_lo, range)) => ((v - y_lo) / range) as f32,
+                None => 0.5,
+            };
+            rect.bottom() - y_frac * rect.height()
+        };
+        // Each run of buckets between two interruptions is drawn as a single
+        // polyline. Drawn point by point instead, once the history passed a
+        // sample per pixel the semi-transparent segments blended twice at their
+        // joints and thinned to nothing between them — the trace read as beads
+        // and dashes. One path feathers once, joins properly, and the
+        // per-bucket extremes keep the spikes.
+        if let Some(level) = self.minimap_level.as_mut() {
+            for run in level.runs() {
+                let mut points = level_polyline(run, y_of);
+                if points.len() < 2 {
+                    continue;
+                }
+                for p in &mut points {
+                    p.x = scale.x_of(p.x as f64 * bucket);
+                }
+                painter.add(egui::Shape::line(points, egui::Stroke::new(1.5_f32, color)));
+            }
+        }
+    }
+
+    /// Keyboard pan when the minimap holds focus.
+    ///
+    /// Has to run *after* the strip's `allocate_exact_size` (which runs
+    /// `interested_in_focus` on `pointer_response`) so that on a Tab press
+    /// focus has already advanced away and `pointer_response.has_focus()`
+    /// returns false. Otherwise the `move_focus(FocusDirection::None)` below
+    /// would also wipe egui's `Focus::begin_pass` snapshot of Tab into
+    /// `focus_direction = Next` (egui stores arrow keys and Tab in the same
+    /// field), trapping focus on the minimap.
+    fn handle_minimap_keys(&mut self, ui: &Ui, pointer_response: &egui::Response) {
         if pointer_response.has_focus() {
-            use egui::{Key, Modifiers};
-            let left = ui
-                .ctx()
-                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft));
-            let right = ui
-                .ctx()
-                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight));
-            // Up/Down get consumed too even though they don't pan —
-            // without that, `end_pass` would walk
-            // `find_widget_in_direction` on the begin_pass snapshot and
-            // Tab-jump focus to the spatially nearest widget on every
-            // Up/Down press.
-            let up = ui
-                .ctx()
-                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowUp));
-            let down = ui
-                .ctx()
-                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowDown));
+            // Up/Down get consumed too even though they don't pan — without
+            // that, `end_pass` would walk `find_widget_in_direction` on the
+            // begin_pass snapshot and Tab-jump focus to the spatially nearest
+            // widget on every Up/Down press.
+            let [left, right, up, down] = crate::a11y::consume_arrows(ui.ctx());
             if left {
                 self.scroll_view(-0.25);
             }
@@ -716,10 +728,6 @@ impl Graph {
                     .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
             }
         }
-
-        // Paint focus ring last so it sits on top of the minimap content
-        // (background, brackets, time labels) rather than being overdrawn.
-        crate::a11y::paint_focus_ring(ui, &pointer_response);
     }
 }
 

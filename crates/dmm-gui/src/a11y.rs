@@ -101,6 +101,23 @@ pub(crate) fn arrow_resize(
     delta
 }
 
+/// Consume the arrow keys pressed this frame without Ctrl or Cmd (an extra
+/// Shift or Alt is ignored, as `consume_key` ignores it), so nothing else
+/// acts on them. Whether Left, Right, Up and Down were pressed, in that
+/// order.
+pub(crate) fn consume_arrows(ctx: &egui::Context) -> [bool; 4] {
+    use egui::{Key, Modifiers};
+    ctx.input_mut(|i| {
+        [
+            Key::ArrowLeft,
+            Key::ArrowRight,
+            Key::ArrowUp,
+            Key::ArrowDown,
+        ]
+        .map(|key| i.consume_key(Modifiers::NONE, key))
+    })
+}
+
 /// The node a screen reader hears the reading from.
 ///
 /// One fixed id for every layout and for the placeholder, not one derived
