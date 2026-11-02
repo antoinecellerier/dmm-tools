@@ -182,100 +182,10 @@ impl Graph {
     /// view → what is plotted → what is drawn over it. Each uses
     /// `horizontal_wrapped` so items wrap instead of clipping.
     pub fn show_toolbar(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
-        let key = |k| graph_key(l10n, k);
-        let cycle_keys = cycle_keys();
-        // Row 1: time windows + LIVE + Y-axis
+        // Row 1
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-
-            for &(secs, label) in TIME_WINDOWS {
-                let tooltip = tr!(
-                    l10n,
-                    "graph-window.hover",
-                    window = label,
-                    keys = &cycle_keys
-                );
-                if ui
-                    .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
-                    .on_hover_text(tooltip)
-                    .clicked()
-                {
-                    self.time_window_secs = secs;
-                }
-            }
-
-            ui.add_space(6.0);
-
-            // On: the selected fill and text colour come from `selected`,
-            // like the presets beside it. Off: dimmed text in a plain frame,
-            // so it still reads as a button.
-            let live_text = egui::RichText::new(tr!(l10n, "graph-live")).small();
-            let live_text = if self.live {
-                live_text
-            } else {
-                live_text.color(ui.visuals().weak_text_color())
-            };
-            let live_resp = ui
-                .add(egui::Button::new(live_text).selected(self.live))
-                .on_hover_text(tr!(l10n, "graph-live.hover", keys = key(egui::Key::End)));
-            if live_resp.clicked() {
-                self.live = !self.live;
-            }
-
-            ui.add_space(6.0);
-
-            let (y_label, y_tooltip) = if self.y_axis.fixed {
-                (tr!(l10n, "graph-y-fixed"), tr!(l10n, "graph-y-fixed.hover"))
-            } else {
-                (tr!(l10n, "graph-y-auto"), tr!(l10n, "graph-y-auto.hover"))
-            };
-            // The chip has already flipped the flag, so `self.y_axis.fixed`
-            // below reads "fixed mode was just switched on".
-            if toggle_chip(ui, &mut self.y_axis.fixed, &y_label, &y_tooltip) && self.y_axis.fixed {
-                self.pin_y_axes_to_view();
-            }
-            if self.y_axis.fixed {
-                let field_width = 50.0;
-                let changed_min = text_field(
-                    ui,
-                    self.y_axis.min.text_mut(),
-                    field_width,
-                    &tr!(l10n, "graph-y-min"),
-                    &tr!(l10n, "graph-y-min.hover"),
-                )
-                .changed();
-                ui.label(
-                    egui::RichText::new("..")
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
-                );
-                let changed_max = text_field(
-                    ui,
-                    self.y_axis.max.text_mut(),
-                    field_width,
-                    &tr!(l10n, "graph-y-max"),
-                    &tr!(l10n, "graph-y-max.hover"),
-                )
-                .changed();
-                if changed_min && self.y_axis.min.parse() {
-                    self.y_axis.user_set = true;
-                }
-                if changed_max && self.y_axis.max.parse() {
-                    self.y_axis.user_set = true;
-                }
-            }
-
-            ui.add_space(6.0);
-
-            let zoomed = self.is_view_zoomed();
-            if ui
-                .add_enabled(zoomed, egui::Button::new(tr!(l10n, "graph-reset-zoom")))
-                .on_hover_text(tr!(l10n, "graph-reset-zoom.hover"))
-                .on_disabled_hover_text(tr!(l10n, "graph-reset-zoom.hover-disabled"))
-                .clicked()
-            {
-                self.reset_view();
-            }
+            self.show_view_row(ui, l10n);
         });
 
         // Row 2: what is plotted, and what is drawn beside it. Skipped
@@ -288,122 +198,230 @@ impl Graph {
             });
         }
 
-        // Row 3: analysis overlays
+        // Row 3
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-
-            toggle_chip(
-                ui,
-                &mut self.show_mean,
-                &tr!(l10n, "graph-mean"),
-                &tr!(l10n, "graph-mean.hover", keys = key(egui::Key::M)),
-            );
-            toggle_chip(
-                ui,
-                &mut self.show_envelope,
-                &tr!(l10n, "graph-envelope"),
-                &tr!(l10n, "graph-envelope.hover", keys = key(egui::Key::X)),
-            );
-            if self.show_envelope {
-                let changed = text_field(
-                    ui,
-                    self.envelope_window.text_mut(),
-                    30.0,
-                    &tr!(l10n, "graph-envelope-window"),
-                    &tr!(l10n, "graph-envelope-window.hover"),
-                )
-                .changed();
-                if changed {
-                    // A zero or negative window would bucket every sample
-                    // together, so it is left as a draft.
-                    self.envelope_window.parse_if(|v| v > 0.0);
-                }
-                ui.label(
-                    egui::RichText::new("s")
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
-                );
-            }
-            let hover = self.histogram_hover(l10n, &key(egui::Key::H));
-            let label = tr!(l10n, "graph-histogram");
-            toggle_chip(ui, &mut self.show_histogram, &label, &hover);
-            if chip(
-                ui,
-                self.show_ref_line,
-                &tr!(l10n, "graph-ref"),
-                &tr!(l10n, "graph-ref.hover", keys = key(egui::Key::R)),
-            ) {
-                self.toggle_ref_lines();
-            }
-            if self.show_ref_line {
-                let resp = text_field(
-                    ui,
-                    self.ref_lines.text_mut(),
-                    80.0,
-                    &tr!(l10n, "graph-ref-values"),
-                    &tr!(l10n, "graph-ref-values.hover"),
-                );
-                if std::mem::take(&mut self.focus_ref_field) {
-                    resp.request_focus();
-                }
-                if resp.changed() {
-                    self.ref_lines.parse();
-                }
-                toggle_chip(
-                    ui,
-                    &mut self.show_crossings,
-                    &tr!(l10n, "graph-triggers"),
-                    &tr!(l10n, "graph-triggers.hover", keys = key(egui::Key::T)),
-                );
-            }
-            if chip(
-                ui,
-                self.cursors.active,
-                &tr!(l10n, "graph-cursors"),
-                &tr!(l10n, "graph-cursors.hover", keys = key(egui::Key::C)),
-            ) {
-                self.cursors.toggle();
-            }
-            if self.cursors.active {
-                if let Some(figures) = self.cursor_readout(l10n) {
-                    let color = tc.graph_cursor_delta();
-                    const GAP: f32 = 6.0;
-                    let galleys: Vec<_> = figures
-                        .into_iter()
-                        .map(|text| {
-                            egui::WidgetText::from(egui::RichText::new(text).color(color).strong())
-                                .into_galley(
-                                    ui,
-                                    Some(egui::TextWrapMode::Extend),
-                                    f32::INFINITY,
-                                    egui::TextStyle::Body,
-                                )
-                        })
-                        .collect();
-                    // The readout stays together: on the chips' row while it
-                    // fits there, else on a row of its own, and only a window
-                    // too narrow for that splits it, between two figures.
-                    let between = GAP + 2.0 * ui.spacing().item_spacing.x;
-                    let width = galleys.iter().map(|g| g.size().x).sum::<f32>()
-                        + between * galleys.len().saturating_sub(1) as f32;
-                    if width > ui.available_size_before_wrap().x {
-                        ui.end_row();
-                    }
-                    for (k, galley) in galleys.into_iter().enumerate() {
-                        if k > 0 {
-                            ui.add_space(GAP);
-                        }
-                        ui.add(egui::Label::new(galley));
-                    }
-                } else {
-                    ui.label(
-                        egui::RichText::new(tr!(l10n, "graph-cursors-hint"))
-                            .small()
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                }
-            }
+            self.show_analysis_row(ui, l10n, tc);
         });
+    }
+
+    /// The toolbar's first row: the time windows, LIVE, the Y axis's Auto or
+    /// Fixed with its range, and Reset Zoom.
+    fn show_view_row(&mut self, ui: &mut Ui, l10n: &Localizer) {
+        let key = |k| graph_key(l10n, k);
+        let cycle_keys = cycle_keys();
+        for &(secs, label) in TIME_WINDOWS {
+            let tooltip = tr!(
+                l10n,
+                "graph-window.hover",
+                window = label,
+                keys = &cycle_keys
+            );
+            if ui
+                .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
+                .on_hover_text(tooltip)
+                .clicked()
+            {
+                self.time_window_secs = secs;
+            }
+        }
+
+        ui.add_space(6.0);
+
+        // On: the selected fill and text colour come from `selected`, like the
+        // presets beside it. Off: dimmed text in a plain frame, so it still
+        // reads as a button.
+        let live_text = egui::RichText::new(tr!(l10n, "graph-live")).small();
+        let live_text = if self.live {
+            live_text
+        } else {
+            live_text.color(ui.visuals().weak_text_color())
+        };
+        let live_resp = ui
+            .add(egui::Button::new(live_text).selected(self.live))
+            .on_hover_text(tr!(l10n, "graph-live.hover", keys = key(egui::Key::End)));
+        if live_resp.clicked() {
+            self.live = !self.live;
+        }
+
+        ui.add_space(6.0);
+
+        let (y_label, y_tooltip) = if self.y_axis.fixed {
+            (tr!(l10n, "graph-y-fixed"), tr!(l10n, "graph-y-fixed.hover"))
+        } else {
+            (tr!(l10n, "graph-y-auto"), tr!(l10n, "graph-y-auto.hover"))
+        };
+        // The chip has already flipped the flag, so `self.y_axis.fixed` below
+        // reads "fixed mode was just switched on".
+        if toggle_chip(ui, &mut self.y_axis.fixed, &y_label, &y_tooltip) && self.y_axis.fixed {
+            self.pin_y_axes_to_view();
+        }
+        if self.y_axis.fixed {
+            let field_width = 50.0;
+            let changed_min = text_field(
+                ui,
+                self.y_axis.min.text_mut(),
+                field_width,
+                &tr!(l10n, "graph-y-min"),
+                &tr!(l10n, "graph-y-min.hover"),
+            )
+            .changed();
+            ui.label(
+                egui::RichText::new("..")
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+            let changed_max = text_field(
+                ui,
+                self.y_axis.max.text_mut(),
+                field_width,
+                &tr!(l10n, "graph-y-max"),
+                &tr!(l10n, "graph-y-max.hover"),
+            )
+            .changed();
+            if changed_min && self.y_axis.min.parse() {
+                self.y_axis.user_set = true;
+            }
+            if changed_max && self.y_axis.max.parse() {
+                self.y_axis.user_set = true;
+            }
+        }
+
+        ui.add_space(6.0);
+
+        let zoomed = self.is_view_zoomed();
+        if ui
+            .add_enabled(zoomed, egui::Button::new(tr!(l10n, "graph-reset-zoom")))
+            .on_hover_text(tr!(l10n, "graph-reset-zoom.hover"))
+            .on_disabled_hover_text(tr!(l10n, "graph-reset-zoom.hover-disabled"))
+            .clicked()
+        {
+            self.reset_view();
+        }
+    }
+
+    /// The toolbar's analysis row: Mean, Min/Max with its window,
+    /// Histogram, Ref with its values and Triggers, and Cursors with their
+    /// readout.
+    fn show_analysis_row(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
+        let key = |k| graph_key(l10n, k);
+        toggle_chip(
+            ui,
+            &mut self.show_mean,
+            &tr!(l10n, "graph-mean"),
+            &tr!(l10n, "graph-mean.hover", keys = key(egui::Key::M)),
+        );
+        toggle_chip(
+            ui,
+            &mut self.show_envelope,
+            &tr!(l10n, "graph-envelope"),
+            &tr!(l10n, "graph-envelope.hover", keys = key(egui::Key::X)),
+        );
+        if self.show_envelope {
+            let changed = text_field(
+                ui,
+                self.envelope_window.text_mut(),
+                30.0,
+                &tr!(l10n, "graph-envelope-window"),
+                &tr!(l10n, "graph-envelope-window.hover"),
+            )
+            .changed();
+            if changed {
+                // A zero or negative window would bucket every sample together,
+                // so it is left as a draft.
+                self.envelope_window.parse_if(|v| v > 0.0);
+            }
+            ui.label(
+                egui::RichText::new("s")
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+        }
+        let hover = self.histogram_hover(l10n, &key(egui::Key::H));
+        let label = tr!(l10n, "graph-histogram");
+        toggle_chip(ui, &mut self.show_histogram, &label, &hover);
+        if chip(
+            ui,
+            self.show_ref_line,
+            &tr!(l10n, "graph-ref"),
+            &tr!(l10n, "graph-ref.hover", keys = key(egui::Key::R)),
+        ) {
+            self.toggle_ref_lines();
+        }
+        if self.show_ref_line {
+            let resp = text_field(
+                ui,
+                self.ref_lines.text_mut(),
+                80.0,
+                &tr!(l10n, "graph-ref-values"),
+                &tr!(l10n, "graph-ref-values.hover"),
+            );
+            if std::mem::take(&mut self.focus_ref_field) {
+                resp.request_focus();
+            }
+            if resp.changed() {
+                self.ref_lines.parse();
+            }
+            toggle_chip(
+                ui,
+                &mut self.show_crossings,
+                &tr!(l10n, "graph-triggers"),
+                &tr!(l10n, "graph-triggers.hover", keys = key(egui::Key::T)),
+            );
+        }
+        if chip(
+            ui,
+            self.cursors.active,
+            &tr!(l10n, "graph-cursors"),
+            &tr!(l10n, "graph-cursors.hover", keys = key(egui::Key::C)),
+        ) {
+            self.cursors.toggle();
+        }
+        if self.cursors.active {
+            self.show_cursor_readout(ui, l10n, tc);
+        }
+    }
+
+    /// The cursors' readout beside their chip, or how to place them until
+    /// both are.
+    fn show_cursor_readout(&mut self, ui: &mut Ui, l10n: &Localizer, tc: &ThemeColors) {
+        if let Some(figures) = self.cursor_readout(l10n) {
+            let color = tc.graph_cursor_delta();
+            const GAP: f32 = 6.0;
+            let galleys: Vec<_> = figures
+                .into_iter()
+                .map(|text| {
+                    egui::WidgetText::from(egui::RichText::new(text).color(color).strong())
+                        .into_galley(
+                            ui,
+                            Some(egui::TextWrapMode::Extend),
+                            f32::INFINITY,
+                            egui::TextStyle::Body,
+                        )
+                })
+                .collect();
+            // The readout stays together: on the chips' row while it fits
+            // there, else on a row of its own, and only a window too narrow for
+            // that splits it, between two figures.
+            let between = GAP + 2.0 * ui.spacing().item_spacing.x;
+            let width = galleys.iter().map(|g| g.size().x).sum::<f32>()
+                + between * galleys.len().saturating_sub(1) as f32;
+            if width > ui.available_size_before_wrap().x {
+                ui.end_row();
+            }
+            for (k, galley) in galleys.into_iter().enumerate() {
+                if k > 0 {
+                    ui.add_space(GAP);
+                }
+                ui.add(egui::Label::new(galley));
+            }
+        } else {
+            ui.label(
+                egui::RichText::new(tr!(l10n, "graph-cursors-hint"))
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+        }
     }
 
     /// The cursor readout: ΔT and Δ between the cursors, the integral where
