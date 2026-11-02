@@ -27,7 +27,8 @@ Archive everything worth keeping under `references/l10n/<lang>/` (gitignored): s
 Clean-room rule. Use only these:
 - multimeter manuals in the language, from meter makers;
 - Microsoft's localization style guide and Terminology for the language;
-- Apple's and Microsoft's public support pages, for OS setting names.
+- Apple's and Microsoft's public support pages, for OS setting names;
+- GitHub Docs in the language (docs.github.com/<lang>/), for GitHub's own terms such as issue and release.
 
 Never read other apps' translations, vendor app string files, community translations or machine-translation output. Save each download under `references/l10n/<lang>/`, and list its URL and title in `SOURCE.txt` there. For any other source, ask the user first.
 
@@ -37,7 +38,7 @@ Never read other apps' translations, vendor app string files, community translat
 Language: <lang>
 - [ ] 1. Glossary, style sheet and SUMMARY.md drafted from approved sources
 - [ ] 2. Rulings settled with the user; glossary committed
-- [ ] 3. Workflow run with the user's go-ahead; result archived
+- [ ] 3. Workflow run with the user's go-ahead; result archived; native review run
 - [ ] 4. Three translation commits; the last one ships the language
 - [ ] 5. Checks, screenshots and per-commit check pass
 - [ ] 6. README translation, its picture and the language row
@@ -62,7 +63,7 @@ Language: <lang>
    - **While it runs,** make no Rust edits and no commits in the checkout. Its agents build there, and the commit hook would test half-written files.
    - **Real meters:** the GUI reviewer picks only simulated meters, unless `dmm-cli list` shows nothing attached.
 
-   Afterwards, save the result to `references/l10n/<lang>/workflow/`. Read the reviewers' notes:
+   Then run the [native review](#native-review) over the language, and save both results to `references/l10n/<lang>/workflow/`. Read the reviewers' notes:
    - Fold the glossary gaps and style fixes the drafters, reviewers and fixer report into the glossary commit.
    - Anything that needs code rather than translation becomes a fix of its own, or an entry under "Localization follow-ups" in `docs/future-improvements.md`. First check it against "Stays English" in `docs/localization-design.md`: reviewers also flag text that is English by design, such as logs and `set` tokens.
 4. **Commits.** Three, in this order. Each adds `ftl!` entries in the same order the other languages use. Each commit's hook run must see only that commit's files under `i18n/<lang>/`: a translation with no `ftl!` line fails `messages_match_their_uses`. So keep the full result under `references/l10n/<lang>/workflow/`, and copy each group back into `i18n/<lang>/` just before its commit.
@@ -78,7 +79,20 @@ Language: <lang>
    - `dmm-cli --lang <lang> --help`, and `--device mock read --count 3`.
    - A verify-gui shot of the Language row, showing the native name, and of the top bar at 700 px wide. Compare each shot with en-US at the same width and state: paused, the top bar wraps at 700 px in English too.
    - A history rewrite is followed by clippy and tests on every rewritten commit (`git rebase -x` in a worktree).
-6. **README.** Recommended, in a `docs:` commit of its own: draft `README.<lang>.md` from the English README and the glossary, following `.claude/rules/readme.md`; add the language to the row in `README.md` and in every copy; add its marker notes and a `gui-wide-layout.<lang>` row to `scripts/doc-screenshots.sh` and run that scene; fill the copy's `read` sample with `UPDATE_DOCS=1 cargo test -p dmm-cli docs_snippets`. Render it with `gh api /markdown` and check its in-page links. Show the user the copy if they read the language.
+6. **README.** Recommended, in a `docs:` commit of its own: draft `README.<lang>.md` from the English README and the glossary, following `.claude/rules/readme.md`; add the language to the row in `README.md` and in every copy; add its marker notes and a `gui-wide-layout.<lang>` row to `scripts/doc-screenshots.sh` and run that scene; fill the copy's `read` sample with `UPDATE_DOCS=1 cargo test -p dmm-cli docs_snippets`. Run the [native review](#native-review) with `target: "readme"`, then check its in-page links with `cargo test -p dmm-cli --test readme_languages`. Show the user the copy if they read the language.
+
+## Native review
+
+A draft passes a single review before it ships; this pass finds what that one misses. It runs after a new language's workflow, on a README copy, and on any shipped language the user asks to polish:
+
+`Workflow({scriptPath: ".claude/skills/translate/scripts/native-review.js", args: {repo: "<absolute repo path>", langs: [{lang: "es", name: "Spanish"}, …], target?: "app" | "readme", accuracy?: false, readLangs?: ["fr"], writeModel?}})`
+
+- **Three readers per file group.** A Sonnet and an Opus reviewer check accuracy independently: meaning, glossary terms, leftover English, structure. They catch different things. An Opus reviewer reads for native feel only: calques, word order, prepositions and particles, noun chains, a translated-sounding register. `accuracy: false` runs only the native reader, for a language whose accuracy was just reviewed.
+- **Platform terms come from the platform.** A word GitHub, Windows or macOS shows in its own interface takes that platform's word in the language, from its own docs ([Sources](#sources)).
+- **One fixer per language** applies the findings within the house rules, settles disagreements by the style sheet and the English, and reruns the checks.
+- **The user rules on what they read.** For a language in `readLangs`, the findings come back unapplied: show them to the user as a table of current text, proposed text and your take, and apply what they approve. A ruling on a term goes into the language's glossary and its STYLE.md §0 in the same change.
+
+Ask the user's go-ahead first: for the apps it runs twelve reviewers per language (four with `accuracy: false`), plus a fixer.
 
 ## Reviewed
 
@@ -91,7 +105,7 @@ Language: <lang>
 New or reworded English ships without its translations: it shows in English until they are filled in, at the latest by the release step in `docs/development.md`.
 
 1. `cargo test -p dmm-shared shipped_languages_are_complete -- --ignored` lists each language's missing messages, the optional ones (the specification text, `cli/capture.ftl`) aside; `shipped_languages_have_the_optional_text` lists those too.
-2. For a handful, translate them inline, following each language's `i18n/<lang>/STYLE.md` and `glossary.tsv`. A missing file is copied from en-US, translated, and given an `ftl!` line per language next to the en-US one; until it has that line, `cargo test` names it. For more, run:
+2. For a handful, translate them inline, following each language's `i18n/<lang>/STYLE.md` and `glossary.tsv`, and read each back for native feel as the [native review](#native-review) does. A missing file is copied from en-US, translated, and given an `ftl!` line per language next to the en-US one; until it has that line, `cargo test` names it. For more, run:
 
    `Workflow({scriptPath: ".claude/skills/translate/scripts/fill-gaps.js", args: {repo: "<absolute repo path>", langs: [{lang: "fr", name: "French"}, …], writeModel?, optional?}})`
 
@@ -110,5 +124,6 @@ New or reworded English ships without its translations: it shows in English unti
 Run these through the Workflow tool; don't read them into context:
 - `scripts/translate-language.js`: one new language, from draft to fix.
 - `scripts/fill-gaps.js`: the missing messages of the shipped languages.
+- `scripts/native-review.js`: accuracy and native-feel review of shipped languages or README copies, then a fixer per language.
 
 `scripts/glossary-brief.md` is the glossary agent's brief, with placeholders to fill in.
