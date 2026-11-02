@@ -611,7 +611,7 @@ impl Graph {
         if let Some(place) = self.histogram_place {
             let plot = self.plot_rect.unwrap_or(ui.available_rect_before_wrap());
             let cursors = self.cursor_range();
-            let key = super::HistogramKey {
+            let key = super::figures::HistogramKey {
                 view: self.readings_key(vis_start..vis_end),
                 interval: cursors.clone().map(|r| self.readings_key(r)),
                 overloads: (
