@@ -184,4 +184,61 @@ mod tests {
         }
         assert_eq!(time_steps(7.0 * 86400.0 / 553.0)[2], 2.0 * 86400.0);
     }
+
+    #[test]
+    fn time_axis_label_integer_seconds() {
+        // Existing behaviour preserved when step ≥ 1s.
+        assert_eq!(format_time_axis_label(9.0, 1.0), "9 s");
+        assert_eq!(format_time_axis_label(45.0, 5.0), "45 s");
+    }
+
+    #[test]
+    fn time_axis_label_subsecond_step_adds_decimals() {
+        // step=0.1 → 1 decimal; step=0.01 → 2 decimals.
+        assert_eq!(format_time_axis_label(9.1, 0.1), "9.1 s");
+        assert_eq!(format_time_axis_label(9.25, 0.01), "9.25 s");
+        assert_eq!(format_time_axis_label(9.123, 0.001), "9.123 s");
+    }
+
+    #[test]
+    fn time_axis_label_integer_value_with_subsecond_step_pads_decimals() {
+        // A grid mark at an integer second still gets padded when the step
+        // is sub-second, so all visible labels line up at the same precision.
+        assert_eq!(format_time_axis_label(9.0, 0.1), "9.0 s");
+        assert_eq!(format_time_axis_label(10.0, 0.01), "10.00 s");
+    }
+
+    #[test]
+    fn time_axis_label_minutes_with_subsecond_step() {
+        // Zooming into a span past 1 minute while sub-second still shows
+        // the decimal seconds portion.
+        assert_eq!(format_time_axis_label(90.5, 0.1), "1m 30.5s");
+    }
+
+    #[test]
+    fn time_axis_label_whole_minute_with_integer_step() {
+        // Step ≥ 1s, exact minute → shorthand "N m".
+        assert_eq!(format_time_axis_label(120.0, 1.0), "2 m");
+    }
+
+    #[test]
+    fn time_axis_label_hour_integer_step() {
+        assert_eq!(format_time_axis_label(3720.0, 60.0), "1h 2m");
+    }
+
+    /// A 1 m window past the first hour has 10 s grid marks: without the seconds
+    /// every mark in it read "23h 59m".
+    #[test]
+    fn time_axis_label_hour_keeps_whole_seconds() {
+        assert_eq!(format_time_axis_label(86350.0, 10.0), "23h 59m 10s");
+        assert_eq!(format_time_axis_label(86400.0, 10.0), "24h 0m");
+    }
+
+    #[test]
+    fn time_axis_label_hour_subsecond_step() {
+        // Unlikely in practice but the formatter should not drop the
+        // seconds field when hours are involved and step is sub-second.
+        let out = format_time_axis_label(3725.5, 0.1);
+        assert_eq!(out, "1h 2m 5.5s");
+    }
 }
