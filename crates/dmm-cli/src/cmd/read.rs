@@ -940,7 +940,7 @@ fn unreachable_replay_header() -> format::ReplayHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::{Cli, Cmd};
+    use crate::cli::{Cli, Cmd, ReadArgs};
     use crate::test_fixtures::selection;
     use clap::Parser;
     use dmm_lib::protocol::registry;
@@ -1047,11 +1047,11 @@ mod tests {
             )
             .expect("the flags parse");
             match cli.command {
-                Cmd::Read {
+                Cmd::Read(ReadArgs {
                     transform,
                     integrate,
                     ..
-                } => refuse_replay_format(
+                }) => refuse_replay_format(
                     OutputFormat::Replay,
                     Selection::Auto,
                     false,

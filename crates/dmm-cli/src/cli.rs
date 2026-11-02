@@ -178,54 +178,7 @@ pub(crate) enum Cmd {
     /// Connect and print device info
     Info,
     /// Continuously read measurements
-    Read {
-        /// Keep at most one reading per interval, in milliseconds (0 = every reading the meter produces)
-        #[arg(long, default_value = "0")]
-        interval_ms: u64,
-        /// Output format [default: text, or what -o's extension names]
-        #[arg(long)]
-        format: Option<OutputFormat>,
-        /// Output file (stdout if not specified). Given without a name, the
-        /// file is named after the meter, its mode and the run's start.
-        #[arg(short, long, value_name = "FILE", num_args(0..=1))]
-        output: Option<Option<String>>,
-        /// Number of readings (0 = unlimited: Ctrl+C stops it, or the end of a --replay file)
-        #[arg(long, default_value = "0")]
-        count: usize,
-        /// Show cumulative time-integral (charge for current modes, V·s for voltage)
-        #[arg(long)]
-        integrate: bool,
-        #[command(flatten)]
-        transform: TransformArgs,
-        #[command(flatten)]
-        alarm: AlarmArgs,
-        /// Pin mock device to a specific mode (only with --device mock).
-        /// Without this, the settings file's mock mode applies, else the
-        /// mock cycles through all modes.
-        #[arg(long)]
-        mock_mode: Option<String>,
-        /// Play back a file written by --format replay instead of opening a meter; ends with the file
-        #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
-        replay: Option<PathBuf>,
-        /// Read an exported CSV, JSON or replay file instead of opening a
-        /// meter, without waiting: to convert it or print its summary
-        #[arg(
-            long,
-            value_name = "FILE",
-            conflicts_with_all = ["mock_mode", "replay", "mock_clock_scale", "mock_clock_preseed"]
-        )]
-        import: Option<PathBuf>,
-        /// Run session time at this multiple of real time (mock only), or
-        /// `max`: with --replay, every frame at its recorded time, as fast as
-        /// it decodes. Hidden: a contributor tool for fast runs, not a
-        /// user-facing knob.
-        #[arg(long, hide = true, value_parser = parse_clock_scale)]
-        mock_clock_scale: Option<ClockScale>,
-        /// Start the run with this many seconds of readings already behind it,
-        /// produced as fast as the mock answers (mock only). Hidden, as above.
-        #[arg(long, hide = true)]
-        mock_clock_preseed: Option<f64>,
-    },
+    Read(ReadArgs),
     /// Send a button press command to the meter.
     /// Run with no arguments to list available commands for the selected device.
     Command {
@@ -282,6 +235,57 @@ pub(crate) enum Cmd {
     /// Hidden: a maintainer tool for the reports reporters attach.
     #[command(hide = true)]
     Triage(TriageArgs),
+}
+
+/// The `read` flags, handed to [`crate::run_read`] whole.
+#[derive(clap::Args)]
+pub(crate) struct ReadArgs {
+    /// Keep at most one reading per interval, in milliseconds (0 = every reading the meter produces)
+    #[arg(long, default_value = "0")]
+    pub(crate) interval_ms: u64,
+    /// Output format [default: text, or what -o's extension names]
+    #[arg(long)]
+    pub(crate) format: Option<OutputFormat>,
+    /// Output file (stdout if not specified). Given without a name, the
+    /// file is named after the meter, its mode and the run's start.
+    #[arg(short, long, value_name = "FILE", num_args(0..=1))]
+    pub(crate) output: Option<Option<String>>,
+    /// Number of readings (0 = unlimited: Ctrl+C stops it, or the end of a --replay file)
+    #[arg(long, default_value = "0")]
+    pub(crate) count: usize,
+    /// Show cumulative time-integral (charge for current modes, V·s for voltage)
+    #[arg(long)]
+    pub(crate) integrate: bool,
+    #[command(flatten)]
+    pub(crate) transform: TransformArgs,
+    #[command(flatten)]
+    pub(crate) alarm: AlarmArgs,
+    /// Pin mock device to a specific mode (only with --device mock).
+    /// Without this, the settings file's mock mode applies, else the
+    /// mock cycles through all modes.
+    #[arg(long)]
+    pub(crate) mock_mode: Option<String>,
+    /// Play back a file written by --format replay instead of opening a meter; ends with the file
+    #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
+    pub(crate) replay: Option<PathBuf>,
+    /// Read an exported CSV, JSON or replay file instead of opening a
+    /// meter, without waiting: to convert it or print its summary
+    #[arg(
+        long,
+        value_name = "FILE",
+        conflicts_with_all = ["mock_mode", "replay", "mock_clock_scale", "mock_clock_preseed"]
+    )]
+    pub(crate) import: Option<PathBuf>,
+    /// Run session time at this multiple of real time (mock only), or
+    /// `max`: with --replay, every frame at its recorded time, as fast as
+    /// it decodes. Hidden: a contributor tool for fast runs, not a
+    /// user-facing knob.
+    #[arg(long, hide = true, value_parser = parse_clock_scale)]
+    pub(crate) mock_clock_scale: Option<ClockScale>,
+    /// Start the run with this many seconds of readings already behind it,
+    /// produced as fast as the mock answers (mock only). Hidden, as above.
+    #[arg(long, hide = true)]
+    pub(crate) mock_clock_preseed: Option<f64>,
 }
 
 /// The `triage` flags, handed to [`crate::capture::cmd_triage`] whole. The
@@ -359,7 +363,7 @@ pub(crate) struct CaptureArgs {
 
 /// The `read` flags that build a software [`Transform`].
 ///
-/// Flattened into `Cmd::Read` so the three flags stay one unit here and in
+/// Flattened into `ReadArgs` so the three flags stay one unit here and in
 /// `--help`, and so `read` keeps its identity behaviour when none are given.
 #[derive(clap::Args, Clone)]
 pub(crate) struct TransformArgs {
@@ -689,7 +693,7 @@ mod tests {
     fn clap_parse_read_defaults() {
         let cli = Cli::try_parse_from(["dmm-cli", "read"]).unwrap();
         match cli.command {
-            Cmd::Read {
+            Cmd::Read(ReadArgs {
                 interval_ms,
                 format,
                 output,
@@ -702,7 +706,7 @@ mod tests {
                 import,
                 mock_clock_scale,
                 mock_clock_preseed,
-            } => {
+            }) => {
                 assert_eq!(interval_ms, 0);
                 // Neither given, so the run prints text on stdout.
                 assert!(format.is_none());
@@ -730,7 +734,7 @@ mod tests {
         let playback = Cli::try_parse_from(["dmm-cli", "read", "--replay", "bench.replay"])
             .expect("--replay parses");
         match playback.command {
-            Cmd::Read { replay, .. } => {
+            Cmd::Read(ReadArgs { replay, .. }) => {
                 assert_eq!(replay.as_deref(), Some(Path::new("bench.replay")));
             }
             _ => panic!("expected Read"),
@@ -745,7 +749,7 @@ mod tests {
             let cli = Cli::try_parse_from(["dmm-cli", "read"].iter().chain(args).copied())
                 .expect("-o parses");
             match cli.command {
-                Cmd::Read { output, count, .. } => (output, count),
+                Cmd::Read(ReadArgs { output, count, .. }) => (output, count),
                 _ => panic!("expected Read"),
             }
         };
@@ -787,11 +791,11 @@ mod tests {
         ])
         .unwrap();
         match cli.command {
-            Cmd::Read {
+            Cmd::Read(ReadArgs {
                 mock_clock_scale,
                 mock_clock_preseed,
                 ..
-            } => {
+            }) => {
                 assert_eq!(mock_clock_scale, Some(ClockScale::Factor(20.0)));
                 assert_eq!(mock_clock_preseed, Some(90.0));
             }
@@ -806,9 +810,9 @@ mod tests {
             Cli::try_parse_from(["dmm-cli", "read", "--mock-clock-scale", value])
                 .ok()
                 .and_then(|cli| match cli.command {
-                    Cmd::Read {
+                    Cmd::Read(ReadArgs {
                         mock_clock_scale, ..
-                    } => mock_clock_scale,
+                    }) => mock_clock_scale,
                     _ => None,
                 })
         };
@@ -833,7 +837,7 @@ mod tests {
         ])
         .unwrap();
         match cli.command {
-            Cmd::Read {
+            Cmd::Read(ReadArgs {
                 interval_ms,
                 format,
                 output,
@@ -846,7 +850,7 @@ mod tests {
                 mock_clock_scale: _,
                 mock_clock_preseed: _,
                 import: _,
-            } => {
+            }) => {
                 assert_eq!(interval_ms, 100);
                 assert_eq!(format, Some(OutputFormat::Csv));
                 assert_eq!(output, Some(Some("test.csv".to_string())));
@@ -876,7 +880,7 @@ mod tests {
         let mut argv = vec!["dmm-cli", "read"];
         argv.extend_from_slice(args);
         match Cli::try_parse_from(argv).unwrap().command {
-            Cmd::Read { transform, .. } => transform.to_transform(),
+            Cmd::Read(ReadArgs { transform, .. }) => transform.to_transform(),
             _ => panic!("expected Read"),
         }
     }
@@ -890,9 +894,9 @@ mod tests {
         ])
         .unwrap();
         match cli.command {
-            Cmd::Read {
+            Cmd::Read(ReadArgs {
                 transform, format, ..
-            } => {
+            }) => {
                 assert_eq!(
                     transform.to_transform(),
                     Transform::linear(100.0, 0.0, Some("A".to_string()))
@@ -937,7 +941,7 @@ mod tests {
         let mut argv = vec!["dmm-cli", "read"];
         argv.extend_from_slice(args);
         match Cli::try_parse_from(argv).unwrap().command {
-            Cmd::Read { alarm, .. } => alarm.limits(crate::l10n::english()),
+            Cmd::Read(ReadArgs { alarm, .. }) => alarm.limits(crate::l10n::english()),
             _ => panic!("expected Read"),
         }
     }
@@ -1332,7 +1336,9 @@ stay as they are. clap's own words around these texts (Usage:, Options:,
                 .and_then(|mut m| Cli::from_arg_matches_mut(&mut m))
         };
         match parse("replay").map(|cli| cli.command) {
-            Ok(Cmd::Read { format, .. }) => assert_eq!(format, Some(OutputFormat::Replay)),
+            Ok(Cmd::Read(ReadArgs { format, .. })) => {
+                assert_eq!(format, Some(OutputFormat::Replay))
+            }
             _ => panic!("expected Read"),
         }
         let refused = parse("yaml").err().unwrap().to_string();

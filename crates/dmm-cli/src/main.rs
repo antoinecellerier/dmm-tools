@@ -12,7 +12,8 @@ mod output;
 mod test_fixtures;
 
 use clap::FromArgMatches;
-use cli::{Cli, Cmd};
+use clap_complete::Shell;
+use cli::{CaptureArgs, Cli, Cmd, ReadArgs};
 use cmd::command::cmd_command;
 use cmd::debug::cmd_debug;
 use cmd::info::cmd_info;
@@ -22,6 +23,7 @@ use cmd::settings::{cmd_get, cmd_set};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_shared::help::LinksSearched;
+use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use l10n::{error_label, note_label};
 use log::error;
@@ -70,7 +72,8 @@ fn main() {
     l10n::get().log_load_report();
 
     // Whether the meter was named on the command line, as opposed to coming
-    // from the settings file or from detection. Only `read --replay` asks.
+    // from the settings file or from detection. Only `read --replay` and
+    // `--import` ask.
     let device_named = cli.device.is_some();
 
     // Nothing named a meter, so none is assumed: detection is the fallback,
@@ -82,16 +85,7 @@ fn main() {
         registry::AUTO_DEVICE_ID,
     );
     // A replay or an import names its own meter; a saved pick is not it.
-    if !matches!(
-        &cli.command,
-        Cmd::Read {
-            replay: Some(_),
-            ..
-        } | Cmd::Read {
-            import: Some(_),
-            ..
-        }
-    ) {
+    if !matches!(&cli.command, Cmd::Read(a) if a.replay.is_some() || a.import.is_some()) {
         let by = if device_named {
             open::PickedBy::Flag
         } else {
@@ -99,16 +93,8 @@ fn main() {
         };
         open::note_picked(&device_id, by);
     }
-    let selection = match registry::resolve_selection(&device_id) {
-        Some(s) => s,
-        None => {
-            eprintln!(
-                "{} {}",
-                error_label(),
-                tr!(l, "connect-unknown-device", device = &device_id),
-            );
-            std::process::exit(1);
-        }
+    let Some(selection) = registry::resolve_selection(&device_id) else {
+        fail(tr!(l, "connect-unknown-device", device = &device_id));
     };
 
     let bluetooth = bluetooth_probing(cli.no_bluetooth, settings.as_ref());
@@ -123,26 +109,7 @@ fn main() {
         // Run and returned from before the settings file was read.
         Cmd::Triage(_) => Ok(()),
         Cmd::Completions { shell } => {
-            match shell {
-                Some(shell) => {
-                    clap_complete::generate(
-                        shell,
-                        &mut cli::completion_command(),
-                        "dmm-cli",
-                        &mut std::io::stdout(),
-                    );
-                }
-                None => {
-                    // Built, so the usage line names the whole command as
-                    // the translated layout's does, in English too.
-                    let mut cmd = help_layout::invoked_as(cli::command(l));
-                    cmd.build();
-                    let _ = cmd
-                        .find_subcommand_mut("completions")
-                        .unwrap()
-                        .print_long_help();
-                }
-            }
+            print_completions(l, shell);
             Ok(())
         }
 
@@ -151,159 +118,14 @@ fn main() {
         // `read`, `command`, `get` and `set` pick the mock transport
         // themselves and take the same arm as every other device. Auto never
         // lands here: detecting a meter means opening a cable.
-        Cmd::Info | Cmd::Debug { .. } if !requires_hardware(selection) => {
-            eprintln!(
-                "{} {}",
-                error_label(),
-                tr!(
-                    l,
-                    "connect-needs-hardware",
-                    device = selection_id(selection)
-                ),
-            );
-            std::process::exit(1);
-        }
+        Cmd::Info | Cmd::Debug { .. } if !requires_hardware(selection) => fail(tr!(
+            l,
+            "connect-needs-hardware",
+            device = selection_id(selection)
+        )),
 
         Cmd::Info => cmd_info(selection, opts),
-        Cmd::Read {
-            interval_ms,
-            format,
-            output,
-            count,
-            integrate,
-            transform,
-            alarm,
-            mock_mode,
-            replay,
-            import,
-            mock_clock_scale,
-            mock_clock_preseed,
-        } => {
-            let alarm = match alarm.limits(l) {
-                Ok(limits) => limits.map(|(limits, hysteresis)| cmd::read::AlarmOptions {
-                    limits,
-                    hysteresis,
-                    bell: alarm.alarm_bell,
-                }),
-                Err(msg) => {
-                    eprintln!("{} {msg}", error_label());
-                    std::process::exit(1);
-                }
-            };
-            // An import names its own meter, as a replay does; a replay file
-            // imported is a replay played without waiting.
-            // Detected as the GUI detects it: an extensionless replay file is
-            // still a replay.
-            let import_replay = import.as_ref().is_some_and(|p| {
-                dmm_shared::export::ExportKind::of_file(p)
-                    .is_ok_and(|kind| kind == dmm_shared::export::ExportKind::Replay)
-            });
-            let (replay, import, mock_clock_scale) = match import {
-                Some(path) if import_replay => (Some(path), None, Some(cli::ClockScale::Max)),
-                other => (replay, other, mock_clock_scale),
-            };
-            // `from_flags` names the offending value, not the flag it came
-            // from, so that both binaries can reuse the sentence.
-            let clock = match cmd::read::session_clock(
-                l,
-                mock_clock_scale,
-                mock_clock_preseed,
-                replay.is_some(),
-            ) {
-                Ok(clock) => clock,
-                Err(msg) => {
-                    eprintln!(
-                        "{} {}",
-                        error_label(),
-                        tr!(
-                            l,
-                            "read-flag-refused",
-                            flags = "--mock-clock-scale/--mock-clock-preseed",
-                            reason = msg
-                        ),
-                    );
-                    std::process::exit(1);
-                }
-            };
-            // A replay file names its own meter, so a `--device` alongside it
-            // would either be ignored or contradict the file. Only a typed
-            // flag is refused: the settings file names a meter for every run,
-            // and a replay must not need it edited.
-            if replay.is_some() && device_named {
-                eprintln!(
-                    "{} {}",
-                    error_label(),
-                    cmd::read::replay_names_its_device(l)
-                );
-                std::process::exit(1);
-            }
-            // Settled before anything opens, so a run that cannot write what
-            // it was asked for fails with no meter attached.
-            let (format, destination, note) = resolve_output(l, &format, output);
-            if let Some(path) = import {
-                if device_named {
-                    eprintln!(
-                        "{} {}",
-                        error_label(),
-                        tr!(l, "read-import-names-its-device"),
-                    );
-                    std::process::exit(1);
-                }
-                match cmd::read::refuse_for_import(format, interval_ms) {
-                    Some(message) => Err(message.into()),
-                    None => {
-                        if let Some(note) = note {
-                            eprintln!("{} {note}", note_label());
-                        }
-                        cmd::read::read_import(
-                            &path,
-                            format,
-                            destination,
-                            count,
-                            integrate,
-                            &transform.to_transform(),
-                            alarm,
-                        )
-                    }
-                }
-            } else {
-                match refuse_replay_format(
-                    format,
-                    selection,
-                    replay.is_some(),
-                    &transform,
-                    integrate,
-                ) {
-                    Some(message) => Err(message.into()),
-                    None => {
-                        // After the refusals: a note about where output goes reads
-                        // as a run that started, and this one may not.
-                        if let Some(note) = note {
-                            eprintln!("{} {note}", note_label());
-                        }
-                        cmd_read(
-                            selection,
-                            opts,
-                            interval_ms,
-                            format,
-                            destination,
-                            count,
-                            integrate,
-                            &transform.to_transform(),
-                            alarm,
-                            // A replay opens no mock: its saved mode is not read.
-                            if replay.is_some() {
-                                mock_mode
-                            } else {
-                                pinned_mock_mode(selection, mock_mode, settings.as_ref())
-                            },
-                            replay,
-                            clock,
-                        )
-                    }
-                }
-            }
-        }
+        Cmd::Read(args) => run_read(l, args, selection, opts, device_named, settings.as_ref()),
         Cmd::Command { action } => cmd_command(selection, opts, action),
         Cmd::Get {
             setting,
@@ -328,62 +150,226 @@ fn main() {
             pinned_mock_mode(selection, mock_mode, settings.as_ref()),
         ),
         Cmd::Debug { count, interval_ms } => cmd_debug(selection, opts, count, interval_ms),
-        Cmd::Capture(args) => {
-            if let Some(path) = &args.export_instructions {
-                // Like --list-steps: the run's steps, without opening the
-                // meter when it is named.
-                device_for_listing(selection, opts).and_then(|device| {
-                    capture::export_instructions(device, args.plan.as_deref(), path)
-                })
-            } else if args.list_steps {
-                // Device-scoped: the steps come from the selected device's
-                // protocol, so what's listed is what `--steps` will match.
-                // With nothing selected, that means asking the cable first.
-                device_for_listing(selection, opts).map(|device| {
-                    capture::list_steps(device, args.format);
-                })
-            } else {
-                open_recording_with_help(selection, opts).and_then(
-                    |(dmm, recorder, device, detected)| {
-                        // The capture's own bridge first: `auto` alone could
-                        // open another cable, or USB before a meter's radio.
-                        let reopen: capture::Reopen<'_> =
-                            Box::new(move |bridge| dmm_lib::open_transport(&[bridge], opts));
-                        capture::cmd_capture(args, dmm, recorder, device, detected, reopen)
-                    },
-                )
-            }
-        }
+        Cmd::Capture(args) => run_capture(args, selection, opts),
     };
 
     if let Err(e) = result {
-        error!("{e}");
-        let msg = l10n::error_text(l, &*e);
-        // The activation instructions belong to one meter, so they are only
-        // printed once one is settled on: the one named, or the one detection
-        // found before the meter went quiet.
-        if meter_went_quiet(&*e)
-            && let Some(device) = opened_device(selection)
-        {
-            print_no_response_help(device);
-        } else {
-            eprintln!("{} {msg}", error_label());
-            if let Some(address) = unreachable_adapter(&*e, cli.adapter.as_deref()) {
-                print_setup_sections(LinksSearched::BluetoothAt(address));
-            } else if let Some(device) = unreachable_bluetooth_only(&*e, selection) {
-                print_setup_sections(LinksSearched::BluetoothOnly {
-                    model: &open::prose_name(open::meter_name(device)),
-                    activation: device.activation_instructions,
-                });
-            } else if bluetooth_switched_off(&*e) {
-                eprintln!(
-                    "{}",
-                    style(l.help().cli_bluetooth_off_hint(cli.no_bluetooth)).yellow()
-                );
+        report_failure(l, &*e, selection, cli.adapter.as_deref(), cli.no_bluetooth);
+    }
+}
+
+/// Print `message` after the error label and end the run.
+fn fail(message: impl std::fmt::Display) -> ! {
+    eprintln!("{} {message}", error_label());
+    std::process::exit(1);
+}
+
+/// `completions`: the script for `shell`, or with none named, the
+/// command's own help.
+fn print_completions(l: &Localizer, shell: Option<Shell>) {
+    match shell {
+        Some(shell) => {
+            clap_complete::generate(
+                shell,
+                &mut cli::completion_command(),
+                "dmm-cli",
+                &mut std::io::stdout(),
+            );
+        }
+        None => {
+            // Built, so the usage line names the whole command as the
+            // translated layout's does, in English too.
+            let mut cmd = help_layout::invoked_as(cli::command(l));
+            cmd.build();
+            if let Some(completions) = cmd.find_subcommand_mut("completions") {
+                let _ = completions.print_long_help();
             }
         }
-        std::process::exit(1);
     }
+}
+
+/// `read`: its flags settled and checked against each other before
+/// anything opens, then the import read or the meter or replay run.
+fn run_read(
+    l: &Localizer,
+    args: ReadArgs,
+    selection: Selection,
+    opts: dmm_lib::OpenOptions<'_>,
+    device_named: bool,
+    settings: Option<&dmm_shared::SharedSettings>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ReadArgs {
+        interval_ms,
+        format,
+        output,
+        count,
+        integrate,
+        transform,
+        alarm,
+        mock_mode,
+        replay,
+        import,
+        mock_clock_scale,
+        mock_clock_preseed,
+    } = args;
+    let alarm = match alarm.limits(l) {
+        Ok(limits) => limits.map(|(limits, hysteresis)| cmd::read::AlarmOptions {
+            limits,
+            hysteresis,
+            bell: alarm.alarm_bell,
+        }),
+        Err(msg) => fail(msg),
+    };
+    // An import names its own meter, as a replay does; a replay file imported
+    // is a replay played without waiting.
+    // Detected as the GUI detects it: an extensionless replay file is still a
+    // replay.
+    let import_replay = import.as_ref().is_some_and(|p| {
+        dmm_shared::export::ExportKind::of_file(p)
+            .is_ok_and(|kind| kind == dmm_shared::export::ExportKind::Replay)
+    });
+    let (replay, import, mock_clock_scale) = match import {
+        Some(path) if import_replay => (Some(path), None, Some(cli::ClockScale::Max)),
+        other => (replay, other, mock_clock_scale),
+    };
+    // `from_flags` names the offending value, not the flag it came from, so
+    // that both binaries can reuse the sentence.
+    let clock =
+        match cmd::read::session_clock(l, mock_clock_scale, mock_clock_preseed, replay.is_some()) {
+            Ok(clock) => clock,
+            Err(msg) => fail(tr!(
+                l,
+                "read-flag-refused",
+                flags = "--mock-clock-scale/--mock-clock-preseed",
+                reason = msg
+            )),
+        };
+    // A replay file names its own meter, so a `--device` alongside it would
+    // either be ignored or contradict the file. Only a typed flag is refused:
+    // the settings file names a meter for every run, and a replay must not need
+    // it edited.
+    if replay.is_some() && device_named {
+        fail(cmd::read::replay_names_its_device(l));
+    }
+    // Settled before anything opens, so a run that cannot write what it was
+    // asked for fails with no meter attached.
+    let (format, destination, note) = resolve_output(l, &format, output);
+    if let Some(path) = import {
+        if device_named {
+            fail(tr!(l, "read-import-names-its-device"));
+        }
+        if let Some(message) = cmd::read::refuse_for_import(format, interval_ms) {
+            return Err(message.into());
+        }
+        if let Some(note) = note {
+            eprintln!("{} {note}", note_label());
+        }
+        return cmd::read::read_import(
+            &path,
+            format,
+            destination,
+            count,
+            integrate,
+            &transform.to_transform(),
+            alarm,
+        );
+    }
+    if let Some(message) =
+        refuse_replay_format(format, selection, replay.is_some(), &transform, integrate)
+    {
+        return Err(message.into());
+    }
+    // After the refusals: a note about where output goes reads as a run that
+    // started, and this one may not.
+    if let Some(note) = note {
+        eprintln!("{} {note}", note_label());
+    }
+    cmd_read(
+        selection,
+        opts,
+        interval_ms,
+        format,
+        destination,
+        count,
+        integrate,
+        &transform.to_transform(),
+        alarm,
+        // A replay opens no mock: its saved mode is not read.
+        if replay.is_some() {
+            mock_mode
+        } else {
+            pinned_mock_mode(selection, mock_mode, settings)
+        },
+        replay,
+        clock,
+    )
+}
+
+/// `capture`: its instructions exported or its steps listed, without
+/// opening a named meter, or the guided run itself.
+fn run_capture(
+    args: CaptureArgs,
+    selection: Selection,
+    opts: dmm_lib::OpenOptions<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(path) = &args.export_instructions {
+        // Like --list-steps: the run's steps, without opening the meter when it
+        // is named.
+        device_for_listing(selection, opts)
+            .and_then(|device| capture::export_instructions(device, args.plan.as_deref(), path))
+    } else if args.list_steps {
+        // Device-scoped: the steps come from the selected device's protocol, so
+        // what's listed is what `--steps` will match. With nothing selected,
+        // that means asking the cable first.
+        device_for_listing(selection, opts).map(|device| {
+            capture::list_steps(device, args.format);
+        })
+    } else {
+        open_recording_with_help(selection, opts).and_then(|(dmm, recorder, device, detected)| {
+            // The capture's own bridge first: `auto` alone could open another
+            // cable, or USB before a meter's radio.
+            let reopen: capture::Reopen<'_> =
+                Box::new(move |bridge| dmm_lib::open_transport(&[bridge], opts));
+            capture::cmd_capture(args, dmm, recorder, device, detected, reopen)
+        })
+    }
+}
+
+/// Report a failed command and end the run: the error, then whatever
+/// help answers it.
+fn report_failure(
+    l: &Localizer,
+    e: &(dyn std::error::Error + 'static),
+    selection: Selection,
+    adapter: Option<&str>,
+    no_bluetooth: bool,
+) -> ! {
+    error!("{e}");
+    let msg = l10n::error_text(l, e);
+    // The activation instructions belong to one meter, so they are only
+    // printed once one is settled on: the one named, or the one detection
+    // found before the meter went quiet.
+    if meter_went_quiet(e)
+        && let Some(device) = opened_device(selection)
+    {
+        print_no_response_help(device);
+    } else {
+        eprintln!("{} {msg}", error_label());
+        if let Some(address) = unreachable_adapter(e, adapter) {
+            print_setup_sections(LinksSearched::BluetoothAt(address));
+        } else if let Some(device) = unreachable_bluetooth_only(e, selection) {
+            print_setup_sections(LinksSearched::BluetoothOnly {
+                model: &open::prose_name(open::meter_name(device)),
+                activation: device.activation_instructions,
+            });
+        } else if bluetooth_switched_off(e) {
+            eprintln!(
+                "{}",
+                style(l.help().cli_bluetooth_off_hint(no_bluetooth)).yellow()
+            );
+        }
+    }
+    std::process::exit(1);
 }
 
 /// Whether `error` is the meter going quiet, which its activation steps
