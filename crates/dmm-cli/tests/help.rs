@@ -107,7 +107,7 @@ fn an_unknown_lang_is_refused_with_the_languages_on_offer() {
         "{err}"
     );
     assert!(
-        err.contains("[possible values: en-US, fr, pt-BR, zh-CN, es, ja, de, it, system]"),
+        err.contains("[possible values: en-US, es, fr, pt-BR, ja, zh-CN, de, it, system]"),
         "{err}"
     );
 }

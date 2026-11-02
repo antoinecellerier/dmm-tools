@@ -25,8 +25,19 @@ pub const EN_US: Language = Language {
 
 /// The languages the binaries ship. A language is added here in the commit
 /// that completes its resources, so a half-translated one is never chosen.
+///
+/// Every language list shows them in this order: English first, as the
+/// reference, then the rest by their own names, which is what a reader
+/// scans a list for. Plain `str` order puts Latin-script names first and
+/// the others after them; a name opening on an accented letter would need
+/// a key of its own.
 pub(super) const SHIPPED: &[Language] = &[
     EN_US,
+    Language {
+        id: "es",
+        native_name: "Español",
+        reviewed: false,
+    },
     Language {
         id: "fr",
         native_name: "Français",
@@ -38,18 +49,13 @@ pub(super) const SHIPPED: &[Language] = &[
         reviewed: false,
     },
     Language {
-        id: "zh-CN",
-        native_name: "简体中文",
-        reviewed: false,
-    },
-    Language {
-        id: "es",
-        native_name: "Español",
-        reviewed: false,
-    },
-    Language {
         id: "ja",
         native_name: "日本語",
+        reviewed: false,
+    },
+    Language {
+        id: "zh-CN",
+        native_name: "简体中文",
         reviewed: false,
     },
 ];
@@ -240,6 +246,15 @@ mod tests {
 
     fn id(tag: &str) -> Option<&'static str> {
         find_in(LANGS, tag).map(|l| l.id)
+    }
+
+    #[test]
+    fn shipped_languages_are_in_list_order() {
+        assert_eq!(SHIPPED[0], EN_US);
+        let names: Vec<&str> = SHIPPED[1..].iter().map(|l| l.native_name).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted, "English first, then by native name");
     }
 
     #[test]

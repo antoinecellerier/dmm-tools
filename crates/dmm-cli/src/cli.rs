@@ -1171,7 +1171,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            text.contains("[possible values: en-US, fr, pt-BR, zh-CN, es, ja, system]"),
+            text.contains("[possible values: en-US, es, fr, pt-BR, ja, zh-CN, system]"),
             "{text}"
         );
     }

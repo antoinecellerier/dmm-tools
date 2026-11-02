@@ -22,7 +22,7 @@ Both the desktop app and the command-line tool:
 - Keep statistics: min, max, average, standard deviation and the integral over time
 - Raise an alarm when a reading crosses a limit
 - Scale, offset and relabel readings in software
-- Show their text in English, French, Brazilian Portuguese, Simplified Chinese, Spanish or Japanese, following the system's language
+- Show their text in English, Brazilian Portuguese, French, Japanese, Simplified Chinese or Spanish, following the system's language
 
 ### Desktop app (`dmm-gui`)
 
