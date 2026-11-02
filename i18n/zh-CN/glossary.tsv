@@ -271,3 +271,4 @@ percent	百分比	n.	reading-unit-percent (spoken)	no approved source at hand	On
 SI prefixes	皮, 纳, 微, 毫, 千, 兆, 吉	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined to the unit's name: «毫伏», «千欧», «兆赫兹».
 Screen reader updates	屏幕阅读器播报	n.	settings-announce	no approved source at hand	The settings-announce-* hovers keep the verb «播报». Every reading → «每个读数» (the Sample interval chip); Never → «从不».
 focus (keyboard)	焦点	n.	settings-announce-focused	MS-T focus => 焦点	«获得焦点».
+issue (GitHub)	议题	n.	lib-errors error-wrong-meter-*, cli-help list-steps format, connection feedback hover, README	GitHub Docs zh «创建议题» (docs.github.com/zh/issues), user ruling 2026-11-02	GitHub's own term; 问题 reads as "problem".

@@ -216,7 +216,7 @@ error-wrong-meter-other-frame-kind =
     }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
-error-wrong-meter-not-yet = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法读取；请附上此消息提交 issue
+error-wrong-meter-not-yet = 万用表报告的 OWON 型号代码为 { $code }，本工具尚无法读取；请附上此消息提交议题
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = 万用表报告的 OWON 型号代码为 { $code }: 它发送的 OWON 6 字节数据帧把符号放在功能字中，本工具尚无法读取
@@ -230,7 +230,7 @@ error-wrong-meter-no-six-byte-frames = 万用表没有发送 OWON 的 6 字节�
 error-wrong-meter-no-fifteen-byte-frames = 万用表没有发送 OWON 的 15 字节数据帧；请选择“自动检测”
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
-error-wrong-meter-untold-frame-kind = 无法从万用表的型号代码或数据帧判断它发送的是 OWON 的 6 字节还是 15 字节数据帧；请附上此消息提交 issue
+error-wrong-meter-untold-frame-kind = 无法从万用表的型号代码或数据帧判断它发送的是 OWON 的 6 字节还是 15 字节数据帧；请附上此消息提交议题
 
 ## Bluetooth: what the Bluetooth stack could not do. After "Bluetooth:".
 

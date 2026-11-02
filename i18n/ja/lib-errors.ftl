@@ -216,7 +216,7 @@ error-wrong-meter-other-frame-kind =
     }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
-error-wrong-meter-not-yet = マルチメーターが報告した OWON のモデル コード { $code } は、このツールではまだ読み取れません: このメッセージを添えて issue を作成してください
+error-wrong-meter-not-yet = マルチメーターが報告した OWON のモデル コード { $code } は、このツールではまだ読み取れません: このメッセージを添えて Issue を作成してください
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = マルチメーターが報告した OWON のモデル コード { $code } は、ファンクション ワードに符号を含む OWON の 6 バイト フレームを送信しますが、このツールではまだ読み取れません
@@ -230,7 +230,7 @@ error-wrong-meter-no-six-byte-frames = マルチメーターが OWON の 6 バ�
 error-wrong-meter-no-fifteen-byte-frames = マルチメーターが OWON の 15 バイト フレームを送信しません: [自動検出] を選択してください
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
-error-wrong-meter-untold-frame-kind = マルチメーターのモデル コードからもフレームからも、OWON の 6 バイト フレームと 15 バイト フレームのどちらを送信するのか判別できません: このメッセージを添えて issue を作成してください
+error-wrong-meter-untold-frame-kind = マルチメーターのモデル コードからもフレームからも、OWON の 6 バイト フレームと 15 バイト フレームのどちらを送信するのか判別できません: このメッセージを添えて Issue を作成してください
 
 ## Bluetooth: what the Bluetooth stack could not do. After "Bluetooth:".
 

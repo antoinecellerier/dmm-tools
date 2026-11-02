@@ -103,7 +103,7 @@ connection-acquisition-stopped = 采集意外停止，请重新连接以继续
 # The last line of a notice for a meter whose support isn't fully verified;
 # a link. $warning is the sentence saying how far it is verified.
 connection-feedback = { $warning }提供反馈。
-    .hover = 打开 GitHub 问题跟踪页面以提供反馈
+    .hover = 打开 GitHub 议题页面以提供反馈
 
 ## The notice under the reading when the Bluetooth link delivers readings
 ## two at a time, which can end with a command that fixes it.

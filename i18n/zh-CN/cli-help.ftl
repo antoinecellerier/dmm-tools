@@ -158,7 +158,7 @@ capture--list-steps =
     .help = 列出所有可用的步骤 ID 并退出
 # dmm-cli capture --format
 capture--format =
-    .help = --list-steps 如何打印列表 (md 为 issue 检查清单)
+    .help = --list-steps 如何打印列表 (md 为议题检查清单)
 # dmm-cli capture --export-instructions
 capture--export-instructions =
     .help = 将步骤说明写入 FILE，翻译后供 --instructions 使用，然后退出

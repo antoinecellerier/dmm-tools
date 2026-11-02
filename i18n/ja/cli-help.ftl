@@ -158,7 +158,7 @@ capture--list-steps =
     .help = 使用できるすべてのステップ ID を一覧表示して終了する
 # dmm-cli capture --format
 capture--format =
-    .help = --list-steps の一覧の出力形式 (md は issue のチェックリスト)
+    .help = --list-steps の一覧の出力形式 (md は Issue のチェックリスト)
 # dmm-cli capture --export-instructions
 capture--export-instructions =
     .help = ステップの説明を FILE に書き出して終了する (翻訳して --instructions で使うため)
