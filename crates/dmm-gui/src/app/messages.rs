@@ -12,8 +12,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::SystemTime;
 
+use super::alarm::PendingBreach;
 use super::connection::{
-    self, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext, spawn_acquisition,
+    self, ConnectedMeter, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext,
+    spawn_acquisition,
 };
 use super::connection_issue::{ConnectionIssue, NoticeKind};
 use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
@@ -480,130 +482,13 @@ impl App {
         let mut breaches = Vec::new();
         for msg in messages {
             match msg {
-                DmmMessage::Connected(meter) => {
-                    self.connection.state = ConnectionState::Connected;
-                    self.held.clear();
-                    // A new link: it says again if its readings come in pairs.
-                    self.connection.late_readings = None;
-                    self.capture.device_aux_slots = meter.max_aux_values;
-                    // A reconnect mid-recording is the same meter, so the
-                    // in-flight capture picks the slot count back up — it was
-                    // 0 before the first Connected of the session.
-                    if self.capture.recording.active {
-                        self.capture.recording_layout.aux_slots = meter.max_aux_values;
-                        // The meter Record was pressed ahead of: the first one
-                        // to answer during this recording is the one its
-                        // samples come from, and the only one the export can
-                        // still name once the cable is out.
-                        self.capture
-                            .recording_layout
-                            .experimental
-                            .get_or_insert(!meter.stability.is_verified());
-                    }
-                    // A reconnect may find the dial elsewhere; the thread
-                    // re-lists the choices with its first reading.
-                    self.connection.choices.clear();
-                    let device_id = meter.device.map(|d| d.id);
-                    let reported = meter.name.clone().unwrap_or_default();
-                    let (named, picked) = (meter.named_other, meter.device);
-                    // A reconnect is the same meter, told about already.
-                    let id = |d: Option<&registry::SelectableDevice>| d.map(|d| d.id);
-                    let told = named.is_some()
-                        && self
-                            .connection
-                            .meter
-                            .as_ref()
-                            .is_some_and(|m| id(m.named_other) == id(named));
-                    self.connection.meter = Some(meter);
-                    let family = &self.settings.shared.device_family;
-                    let detected = detected_under_auto(family, device_id).is_some();
-                    match (named, picked) {
-                        // Detection fell back without hearing the name: the
-                        // meter that then named itself is the one to save.
-                        (Some(named), _) if detected => {
-                            let saved = detected_device_to_save(
-                                family,
-                                self.settings.overrides.has_device(),
-                                Some(named.id),
-                            )
-                            .is_some();
-                            self.remember_detected_device(Some(named.id), &reported);
-                            if !told {
-                                self.toast = Some(Toast::error(named_after_detection_toast(
-                                    &self.l10n,
-                                    &reported,
-                                    named.display_name(),
-                                    saved,
-                                )));
-                            }
-                        }
-                        (Some(named), Some(picked)) => {
-                            if !told {
-                                // Under the name it was picked by, and the
-                                // named model under the same brand.
-                                let pick = self.picked_listing();
-                                let named = registry::named_under_pick(pick, named);
-                                let picked =
-                                    registry::connected_listing(pick, picked).display_name();
-                                self.toast = Some(Toast::error(other_model_toast(
-                                    &self.l10n,
-                                    &reported,
-                                    picked,
-                                    named.display_name(),
-                                )));
-                            }
-                        }
-                        // Under Auto-detect the meter that just named itself
-                        // becomes the saved device, so the next session opens
-                        // it pinned instead of probing the cable again.
-                        _ => self.remember_detected_device(device_id, &reported),
-                    }
-                    self.connection.last_error = None;
-                    self.connection.reconnect_attempt = 0;
-                    self.connection.reconnect_last_error = None;
-                    if let Some(meter) = &self.connection.meter {
-                        info!(
-                            "UI: connected to {} (meter reports {:?})",
-                            meter
-                                .listing
-                                .map_or("an unnamed meter", |l| l.display_name()),
-                            meter.name
-                        );
-                    }
-                }
+                DmmMessage::Connected(meter) => self.on_connected(meter),
                 DmmMessage::Ended => {
                     self.connection.ended = true;
                 }
                 DmmMessage::WaitingForMeter(count) => {
-                    self.connection.waiting_timeouts = count;
-                    // A timeout never raises Disconnected — the bridge is
-                    // still enumerated, the meter just isn't answering (auto
-                    // power-off, or unplugged at the meter end). Without this
-                    // an outage during an overload would be drawn as one long
-                    // band, claiming over-range for a stretch nothing was
-                    // heard in. Same threshold the "no response" notice uses.
-                    // No reading for a read timeout: nothing to integrate
-                    // across, whatever the interval.
-                    self.capture.session.integrator.push_gap();
-                    if count >= dmm_lib::stream::NO_RESPONSE_TIMEOUTS {
-                        self.mark_data_loss();
-                    }
-                    // Crossing the threshold is a failure, recorded once. A
-                    // gap in a recording plays back as timeouts and reaches
-                    // it too. It is not a quiet meter: there is no device
-                    // selection to check, no USB mode to switch on, and the
-                    // file carries on by itself once the gap is over.
-                    if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.replay.is_none() {
-                        // The log stays English.
-                        error!(
-                            "UI: error: {}",
-                            connection::no_response(&crate::l10n::english())
-                        );
-                        self.connection.last_error =
-                            Some(ConnectionIssue::Other(connection::no_response(&self.l10n)));
-                        if self.connection.state == ConnectionState::Disconnected {
-                            clear_channel = true;
-                        }
+                    if self.on_waiting_for_meter(count) {
+                        clear_channel = true;
                     }
                 }
                 DmmMessage::Reconnecting {
@@ -613,32 +498,7 @@ impl App {
                     self.connection.reconnect_attempt = attempt;
                     self.connection.reconnect_last_error = last_error.map(|e| self.l10n.error(&e));
                 }
-                DmmMessage::Measurement(m) => {
-                    self.connection.last_error = None;
-                    self.connection.waiting_timeouts = 0;
-                    if self.connection.paused {
-                        continue;
-                    }
-
-                    let (m, filled) =
-                        self.capture
-                            .ingest(m, &self.transform, &mut self.graph, &self.connection);
-                    if filled {
-                        self.buffer_full_toast();
-                    }
-
-                    // Specs are attached to each measurement by `Dmm::request_measurement`;
-                    // last_measurement.spec / .mode_spec is what render code reads.
-                    // Filled in from the frames before it when the meter sends
-                    // a reading's parts in frames of their own.
-                    self.place_replay_marker(&m);
-                    // After the file's marker: a breach on the same reading
-                    // adds its note to that marker rather than pushing it on.
-                    breaches.extend(self.check_alarm(&m, self.alarm_scaled()));
-                    self.apply_replay_view(&m);
-                    let shown = self.held.fill_in(self.last_measurement.as_ref(), m);
-                    self.last_measurement = Some(shown);
-                }
+                DmmMessage::Measurement(m) => breaches.extend(self.on_measurement(m)),
                 DmmMessage::Disconnected(err) => {
                     info!("UI: disconnected: {err} ({:?})", err.kind());
                     self.connection.state = ConnectionState::Reconnecting;
@@ -703,6 +563,163 @@ impl App {
             // Disconnect properly: send stop signal so the background thread exits
             self.disconnect();
         }
+    }
+
+    /// A link is up: record the meter, save or toast about the model it
+    /// names, and clear the error and reconnect state.
+    fn on_connected(&mut self, meter: ConnectedMeter) {
+        self.connection.state = ConnectionState::Connected;
+        self.held.clear();
+        // A new link: it says again if its readings come in pairs.
+        self.connection.late_readings = None;
+        self.capture.device_aux_slots = meter.max_aux_values;
+        // A reconnect mid-recording is the same meter, so the in-flight capture
+        // picks the slot count back up — it was 0 before the first Connected of
+        // the session.
+        if self.capture.recording.active {
+            self.capture.recording_layout.aux_slots = meter.max_aux_values;
+            // The meter Record was pressed ahead of: the first one to answer
+            // during this recording is the one its samples come from, and the
+            // only one the export can still name once the cable is out.
+            self.capture
+                .recording_layout
+                .experimental
+                .get_or_insert(!meter.stability.is_verified());
+        }
+        // A reconnect may find the dial elsewhere; the thread re-lists the
+        // choices with its first reading.
+        self.connection.choices.clear();
+        let device_id = meter.device.map(|d| d.id);
+        let reported = meter.name.clone().unwrap_or_default();
+        let (named, picked) = (meter.named_other, meter.device);
+        // A reconnect is the same meter, told about already.
+        let id = |d: Option<&registry::SelectableDevice>| d.map(|d| d.id);
+        let told = named.is_some()
+            && self
+                .connection
+                .meter
+                .as_ref()
+                .is_some_and(|m| id(m.named_other) == id(named));
+        self.connection.meter = Some(meter);
+        let family = &self.settings.shared.device_family;
+        let detected = detected_under_auto(family, device_id).is_some();
+        match (named, picked) {
+            // Detection fell back without hearing the name: the meter that then
+            // named itself is the one to save.
+            (Some(named), _) if detected => {
+                let saved = detected_device_to_save(
+                    family,
+                    self.settings.overrides.has_device(),
+                    Some(named.id),
+                )
+                .is_some();
+                self.remember_detected_device(Some(named.id), &reported);
+                if !told {
+                    self.toast = Some(Toast::error(named_after_detection_toast(
+                        &self.l10n,
+                        &reported,
+                        named.display_name(),
+                        saved,
+                    )));
+                }
+            }
+            (Some(named), Some(picked)) => {
+                if !told {
+                    // Under the name it was picked by, and the named model
+                    // under the same brand.
+                    let pick = self.picked_listing();
+                    let named = registry::named_under_pick(pick, named);
+                    let picked = registry::connected_listing(pick, picked).display_name();
+                    self.toast = Some(Toast::error(other_model_toast(
+                        &self.l10n,
+                        &reported,
+                        picked,
+                        named.display_name(),
+                    )));
+                }
+            }
+            // Under Auto-detect the meter that just named itself becomes the
+            // saved device, so the next session opens it pinned instead of
+            // probing the cable again.
+            _ => self.remember_detected_device(device_id, &reported),
+        }
+        self.connection.last_error = None;
+        self.connection.reconnect_attempt = 0;
+        self.connection.reconnect_last_error = None;
+        if let Some(meter) = &self.connection.meter {
+            info!(
+                "UI: connected to {} (meter reports {:?})",
+                meter
+                    .listing
+                    .map_or("an unnamed meter", |l| l.display_name()),
+                meter.name
+            );
+        }
+    }
+
+    /// The meter missed `count` reads in a row. Whether to drop the channel:
+    /// the no-response error was raised while already Disconnected, as the
+    /// Error and ErrorText arms drop it.
+    fn on_waiting_for_meter(&mut self, count: u32) -> bool {
+        self.connection.waiting_timeouts = count;
+        // No reading for a read timeout: nothing to integrate across, whatever
+        // the interval.
+        self.capture.session.integrator.push_gap();
+        // A timeout never raises Disconnected — the bridge is still enumerated,
+        // the meter just isn't answering (auto power-off, or unplugged at the
+        // meter end). Without this an outage during an overload would be drawn
+        // as one long band, claiming over-range for a stretch nothing was heard
+        // in. Same threshold the "no response" notice uses.
+        if count >= dmm_lib::stream::NO_RESPONSE_TIMEOUTS {
+            self.mark_data_loss();
+        }
+        // Crossing the threshold is a failure, recorded once. A gap in a
+        // recording plays back as timeouts and reaches it too. It is not a
+        // quiet meter: there is no device selection to check, no USB mode to
+        // switch on, and the file carries on by itself once the gap is over.
+        if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.replay.is_none() {
+            // The log stays English.
+            error!(
+                "UI: error: {}",
+                connection::no_response(&crate::l10n::english())
+            );
+            self.connection.last_error =
+                Some(ConnectionIssue::Other(connection::no_response(&self.l10n)));
+            self.connection.state == ConnectionState::Disconnected
+        } else {
+            false
+        }
+    }
+
+    /// A reading from the meter, unless paused: into the capture, the graph
+    /// and the display. The alarm breach it raises, if any, to be marked
+    /// once the drain is done.
+    fn on_measurement(&mut self, m: dmm_lib::measurement::Measurement) -> Option<PendingBreach> {
+        self.connection.last_error = None;
+        self.connection.waiting_timeouts = 0;
+        if self.connection.paused {
+            return None;
+        }
+
+        let (m, filled) =
+            self.capture
+                .ingest(m, &self.transform, &mut self.graph, &self.connection);
+        if filled {
+            self.buffer_full_toast();
+        }
+
+        self.place_replay_marker(&m);
+        // After the file's marker: a breach on the same reading adds its note
+        // to that marker rather than pushing it on.
+        let breach = self.check_alarm(&m, self.alarm_scaled());
+        self.apply_replay_view(&m);
+        // Specs are attached to each measurement by `Dmm::request_measurement`;
+        // last_measurement.spec / .mode_spec is what render code reads.
+        // Filled in from the frames before it when the meter sends a reading's
+        // parts in frames of their own.
+        let shown = self.held.fill_in(self.last_measurement.as_ref(), m);
+        self.last_measurement = Some(shown);
+        breach
     }
 
     /// Draw the notice for readings arriving two at a time under the
