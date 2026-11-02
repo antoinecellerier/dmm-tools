@@ -262,3 +262,17 @@ forward voltage	tensão direta	s. f.	notes, diode tables	Minipa ET-1649BT PDF p.
 test current	corrente de teste	s. f.	notes	Minipa ET-2517A/2615A PDF p.21 «Corrente de Teste: 0.4mA típico»	
 frequency response	resposta de frequência	s. f.	notes	Minipa ET-1649BT PDF p.24 «Resposta de Frequência: 40~400Hz»	
 sampling rate / update rate	taxa de amostragem / taxa de atualização	s. f.	notes, settings	Minipa ET-1649BT PDF p.23 «Taxa de Amostragem: 3 vezes por segundo»; Minipa ET-2517A/2615A PDF p.19 «Taxa de Atualização»	
+volt	volt	s. m.	reading-unit-volt (spoken)	no approved source at hand	Plural «volts».
+ampere	ampère	s. m.	reading-unit-ampere (spoken)	no approved source at hand	Plural «ampères».
+ohm	ohm	s. m.	reading-unit-ohm (spoken)	no approved source at hand	kΩ, MΩ spoken «quiloohm», «megaohm»: no contraction (ruling 16).
+hertz	hertz	s. m.	reading-unit-hertz (spoken)	no approved source at hand	Invariable.
+farad	farad	s. m.	reading-unit-farad (spoken)	no approved source at hand	Plural «farads».
+siemens	siemens	s. m.	reading-unit-siemens (spoken)	no approved source at hand	Invariable.
+watt	watt	s. m.	reading-unit-watt (spoken)	no approved source at hand	Plural «watts».
+volt-ampere	volt-ampère	s. m.	reading-unit-volt-ampere (spoken)	no approved source at hand	Plural «volt-ampères».
+henry	henry	s. m.	reading-unit-henry (spoken)	no approved source at hand	Plural «henrys».
+second	segundo	s. m.	reading-unit-second (spoken)	no approved source at hand	Plural «segundos».
+percent	por cento	loc.	reading-unit-percent (spoken)	no approved source at hand	
+SI prefixes	pico, nano, micro, mili, quilo, mega, giga	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined whole to the unit's name: «miliampère», «megahertz», «quiloohm».
+Announce readings	Anunciar leituras	v.	settings-announce, settings-announce-* hovers	no approved source at hand	Every reading → «Todas as leituras» (the Sample interval chip); Never → «Nunca».
+focus (keyboard)	foco	s. m.	settings-announce-focused	no approved source at hand	«tem o foco».

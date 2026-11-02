@@ -204,6 +204,28 @@ settings-update-dev = Nova versão dev ↗
 # Its shorter form, when the top bar is short of room.
 settings-update-dev-short = Atualizar ↗
 
+## How a screen reader hears the reading change.
+
+# A screen reader speaks the reading each time it changes; this row sets how
+# often at most. Its chips are durations like the Sample interval row's,
+# Every reading taking that row's first chip's label, then Never.
+settings-announce = Anunciar leituras:
+settings-announce-every-reading =
+    .hover = Anunciar cada nova leitura. Um leitor de tela pode se interromper quando as leituras chegam mais rápido do que ele as lê.
+# The duration chips' hover. $n is a whole number of seconds.
+settings-announce-chip =
+    .hover =
+        { $n ->
+            [one] Anunciar a leitura no máximo uma vez por segundo. Uma mudança de modo é anunciada imediatamente.
+           *[other] Anunciar a leitura no máximo uma vez a cada { $n } segundos. Uma mudança de modo é anunciada imediatamente.
+        }
+settings-announce-never = Nunca
+    .hover = Não anunciar as leituras quando elas mudam. Uma perda de conexão continua sendo anunciada.
+# A checkbox under the Announce readings row. Focus is keyboard focus, or
+# where the screen reader's cursor is.
+settings-announce-focused = Somente quando a leitura tem o foco
+    .hover = Anunciar a leitura somente quando o leitor de tela está nela, no ritmo escolhido acima. A tecla Tab leva até ela.
+
 ## How the graph's lines look, the last row.
 
 settings-graph-lines = Linhas do gráfico:

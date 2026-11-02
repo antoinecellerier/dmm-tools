@@ -21,6 +21,7 @@ How the Brazilian Portuguese translation is written. It goes with `glossary.tsv`
 13. **Key names** (`shortcuts-key-*`): Ctrl, Shift, Alt, Espaço, Esc, Esquerda, Direita, Home, End, Mais, Menos. In prose, MS's full names: «Seta para cima», «Seta para a esquerda», «Barra de espaços», «Page Up» (MS-SG PDF p.47–49).
 14. **Terms ruled without an approved source** (24 rows, listed in `SUMMARY.md`): take the glossary's value as drafted until a reviewer rules.
 15. **OS names.** Windows: «Gerenciador de Dispositivos» (MS-T), «Dispositivos de Interface Humana» and «Outros dispositivos» (Microsoft's pt-BR support pages). macOS: «Ajustes do Sistema > Privacidade e Segurança > Monitoração de Entrada» and «… > Bluetooth» (Apple's pt-BR support pages). 'USB Input Device' stays **unverified** («Dispositivo de Entrada USB»): its message carries a `# UNVERIFIED Windows name` comment until someone checks a Brazilian Windows.
+16. **Spoken unit names** (`reading-unit-*`, read aloud only): «volt», «ampère», «ohm», «hertz», «farad», «siemens», «watt», «volt-ampère», «henry» (plural «henrys»), «segundo», «por cento»; prefixes «pico», «nano», «micro», «mili», «quilo», «mega», «giga», joined whole with no contraction («quiloohm», «megaohm»). The plural comes from the number as displayed, by CLDR's rule: singular below 2 («1.5 volt», «0.000 volt»), plural from 2 («2.0 volts»). No `[0]` variant: a Fluent number key never matches a decimal such as 0.000.
 
 ## 1. Sources
 
@@ -96,7 +97,7 @@ The four Minipa manuals are uneven too: the older ones write «freqüência» (p
 
 ## 6. Units and AC/DC
 
-- **Unit symbols never change** *(decided)*: V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. No plural «s» on a symbol (MS-SG PDF p.23).
+- **Unit symbols never change** *(decided)*, except in the spoken reading's unit names (§0 ruling 16): V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. No plural «s» on a symbol (MS-SG PDF p.23).
 - **Space between a number and its unit:** follow the English as written in notation and spec text (`10MΩ`, `≈3V`); in prose you write, put U+00A0 («2 s», «10 MΩ») (MS-SG PDF p.30).
 - **The meter's AC/DC labels stay as the meter prints them** *(decided)*: `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`.
 - **In prose and table titles, spell the words out** *(decided)*: «tensão contínua», «tensão alternada», «corrente contínua / alternada» (Minipa ET-1649BT PDF p.8), «tensão alternada + contínua» for AC+DC.
@@ -145,7 +146,7 @@ Fluent can't tell you the gender or number of what a placeable holds, and Portug
 - **Nothing agrees with the user** (§0 item 12; MS-SG PDF p.19–20): use a noun phrase or an impersonal form.
 - **Crase:** «à» where «a» + feminine article meet: «à faixa», «à rede elétrica»; none before a masculine noun or a verb.
 
-**Plurals.** CLDR 37's rule for Portuguese, which fluent-bundle applies to pt-BR, puts integers 0 and 1 in `one` and everything else in `other` (`intl_pluralrules` 7.0.2, `rules.rs`). The app passes integers only (`Arg::Int`). Write `[one]` and `*[other]` as the check requires; where the count can be 0, add a `[0]` variant with the plural text, since Brazilian Portuguese says «0 amostras», «nenhuma amostra»:
+**Plurals.** CLDR 37's rule for Portuguese, which fluent-bundle applies to pt-BR, puts integers 0 and 1 in `one` and everything else in `other` (`intl_pluralrules` 7.0.2, `rules.rs`). The app passes integers (`Arg::Int`), except to the spoken unit names (§0 ruling 16). Write `[one]` and `*[other]` as the check requires; where the count can be 0, add a `[0]` variant with the plural text, since Brazilian Portuguese says «0 amostras», «nenhuma amostra»:
 
 ```
 { $count ->
