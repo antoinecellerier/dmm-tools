@@ -272,7 +272,7 @@ mod tests {
         /// window's minimum width.
         fn bar_left_width(&self) -> f32 {
             self.ctx
-                .data(|d| d.get_temp(Id::unique("top_bar_left_w")))
+                .data(|d| d.get_temp(crate::app::top_bar::left_width_id()))
                 .expect("the bar caches its left width every frame")
         }
 

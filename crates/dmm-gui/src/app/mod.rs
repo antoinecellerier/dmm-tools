@@ -903,6 +903,79 @@ impl App {
         });
         main.response.a11y_role(egui::accesskit::Role::Main);
     }
+
+    /// The first frame's one-off work: the window's always-on-top and
+    /// maximized state, the import `--import` named or the auto-connect, and
+    /// What's New after an upgrade.
+    fn on_first_frame(&mut self, ctx: &egui::Context) {
+        if self.settings.always_on_top && !self.on_wayland {
+            self.apply_always_on_top(ctx);
+        }
+        // `main` builds the window without its title bar and maximized.
+        // Maximize again all the same: eframe creates the window hidden,
+        // and X11 window managers ignore a maximize request made before
+        // the window is shown.
+        if self.settings.window_maximized {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+        }
+        if let Some(path) = self.pending_import.take() {
+            // The file is the session: no meter is opened beside it.
+            self.import_file(path);
+        } else if self.settings.auto_connect {
+            self.connect(ctx);
+        }
+        // Show "What's New" on first launch after a release upgrade.
+        // Dev builds (-dev suffix) never auto-open to avoid annoyance.
+        let current_version = env!("CARGO_PKG_VERSION");
+        if !current_version.contains("-dev")
+            && self.settings.last_seen_version.as_deref() != Some(current_version)
+            && crate::changelog::has_version_section(current_version)
+        {
+            self.open_whats_new();
+        }
+    }
+
+    /// Keep the window's minimum size, and its size, fitting what this frame
+    /// shows: `minimal` big meter, the meter alone, or the panels.
+    fn update_min_window_size(&mut self, ctx: &egui::Context, minimal: bool, meter_only: bool) {
+        // Reading dimensions come from cached ratios × minimum big meter
+        // font size; top bar widths come from previous-frame measurements.
+        let bar_left_w: f32 = ctx.data(|d| d.get_temp(top_bar::left_width_id()).unwrap_or(300.0));
+        let bar_right_w: f32 = ctx.data(|d| d.get_temp(top_bar::right_width_id()).unwrap_or(120.0));
+        let bar_min_w = bar_left_w.max(bar_right_w) + 16.0;
+
+        let window_content = if minimal {
+            WindowContent::ReadingOnly
+        } else if meter_only {
+            WindowContent::Meter
+        } else {
+            WindowContent::Panels
+        };
+        let min_size = self.meter_fit.min_window_size(window_content, bar_min_w);
+        // Only when it changes. Its inputs — cached top-bar widths, meter
+        // ratios, big-meter mode — are stable across the vast majority of
+        // frames, and a viewport command sent every repaint is the same class
+        // of mistake .claude/rules/gui.md calls out for set_visuals() and
+        // set_zoom_factor().
+        if let Some(min) = meter_fit::min_size_request(
+            min_size,
+            ctx.pixels_per_point(),
+            &mut self.applied.min_size,
+        ) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min));
+        }
+        // If the window is smaller than the new minimum (e.g. after exiting
+        // minimal mode), grow it to fit. Once per change: a tiling window
+        // manager may refuse, and every viewport command asks for another
+        // frame, so an unguarded request redraws at the refresh rate.
+        if let Some(grown) = meter_fit::grow_request(
+            ctx.content_rect().size(),
+            min_size,
+            &mut self.applied.grow_request,
+        ) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(grown));
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -955,34 +1028,9 @@ impl eframe::App for App {
             self.toast = None;
         }
 
-        // Auto-connect on first frame if enabled
         if self.first_frame {
             self.first_frame = false;
-            if self.settings.always_on_top && !self.on_wayland {
-                self.apply_always_on_top(&ctx);
-            }
-            // `main` builds the window without its title bar and maximized.
-            // Maximize again all the same: eframe creates the window hidden,
-            // and X11 window managers ignore a maximize request made before
-            // the window is shown.
-            if self.settings.window_maximized {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
-            }
-            if let Some(path) = self.pending_import.take() {
-                // The file is the session: no meter is opened beside it.
-                self.import_file(path);
-            } else if self.settings.auto_connect {
-                self.connect(&ctx);
-            }
-            // Show "What's New" on first launch after a release upgrade.
-            // Dev builds (-dev suffix) never auto-open to avoid annoyance.
-            let current_version = env!("CARGO_PKG_VERSION");
-            if !current_version.contains("-dev")
-                && self.settings.last_seen_version.as_deref() != Some(current_version)
-                && crate::changelog::has_version_section(current_version)
-            {
-                self.open_whats_new();
-            }
+            self.on_first_frame(&ctx);
         }
 
         let minimal = self.big_meter_mode == BigMeterMode::Minimal;
@@ -1008,50 +1056,7 @@ impl eframe::App for App {
 
         let meter_only = self.meter_only();
 
-        // Dynamic minimum window size derived from actual rendered content.
-        // Reading dimensions come from cached ratios × minimum big meter
-        // font size; top bar widths come from previous-frame measurements.
-        let bar_left_w: f32 = ctx.data(|d| {
-            d.get_temp(egui::Id::unique("top_bar_left_w"))
-                .unwrap_or(300.0)
-        });
-        let bar_right_w: f32 = ctx.data(|d| {
-            d.get_temp(egui::Id::unique("top_bar_right_w"))
-                .unwrap_or(120.0)
-        });
-        let bar_min_w = bar_left_w.max(bar_right_w) + 16.0;
-
-        let window_content = if minimal {
-            WindowContent::ReadingOnly
-        } else if meter_only {
-            WindowContent::Meter
-        } else {
-            WindowContent::Panels
-        };
-        let min_size = self.meter_fit.min_window_size(window_content, bar_min_w);
-        // Only when it changes. Its inputs — cached top-bar widths, meter
-        // ratios, big-meter mode — are stable across the vast majority of
-        // frames, and a viewport command sent every repaint is the same class
-        // of mistake .claude/rules/gui.md calls out for set_visuals() and
-        // set_zoom_factor().
-        if let Some(min) = meter_fit::min_size_request(
-            min_size,
-            ctx.pixels_per_point(),
-            &mut self.applied.min_size,
-        ) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min));
-        }
-        // If the window is smaller than the new minimum (e.g. after exiting
-        // minimal mode), grow it to fit. Once per change: a tiling window
-        // manager may refuse, and every viewport command asks for another
-        // frame, so an unguarded request redraws at the refresh rate.
-        if let Some(grown) = meter_fit::grow_request(
-            ctx.content_rect().size(),
-            min_size,
-            &mut self.applied.grow_request,
-        ) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(grown));
-        }
+        self.update_min_window_size(&ctx, minimal, meter_only);
 
         if meter_only {
             self.show_meter_only(ui, &ctx, minimal);

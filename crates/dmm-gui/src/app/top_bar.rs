@@ -49,8 +49,8 @@ impl App {
 
         // Cache left/right group widths from the previous frame to decide
         // whether both fit on one row.
-        let left_id = egui::Id::unique("top_bar_left_w");
-        let right_id = egui::Id::unique("top_bar_right_w");
+        let left_id = left_width_id();
+        let right_id = right_width_id();
         let link_id = egui::Id::unique("top_bar_link_w");
         let cached_left: f32 = ui.data(|d| d.get_temp(left_id)).unwrap_or(300.0);
         let cached_right: f32 = ui.data(|d| d.get_temp(right_id)).unwrap_or(200.0);
@@ -106,75 +106,7 @@ impl App {
             ui.label(RichText::new(device_label).strong());
             ui.separator();
 
-            match &self.connection.state {
-                ConnectionState::Disconnected => {
-                    let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
-                    if ui
-                        .button(tr!(l10n, "top-bar-connect"))
-                        .on_hover_text(tr!(l10n, "top-bar-connect.hover", keys = &keys))
-                        .clicked()
-                    {
-                        self.request_connect(ctx);
-                    }
-                }
-                ConnectionState::Connected => {
-                    let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
-                    if ui
-                        .button(tr!(l10n, "top-bar-disconnect"))
-                        .on_hover_text(tr!(l10n, "top-bar-disconnect.hover", keys = &keys))
-                        .clicked()
-                    {
-                        self.disconnect();
-                    }
-                    let keys = Shortcut::TogglePause.keys(ctx, l10n);
-                    let (pause_label, pause_tooltip) = if self.connection.paused {
-                        (
-                            tr!(l10n, "top-bar-resume"),
-                            tr!(l10n, "top-bar-resume.hover", keys = &keys),
-                        )
-                    } else {
-                        (
-                            tr!(l10n, "top-bar-pause"),
-                            tr!(l10n, "top-bar-pause.hover", keys = &keys),
-                        )
-                    };
-                    if ui
-                        .button(pause_label)
-                        .on_hover_text(pause_tooltip)
-                        .clicked()
-                    {
-                        self.set_paused(!self.connection.paused);
-                    }
-                    let keys = Shortcut::ClearSession.keys(ctx, l10n);
-                    if ui
-                        .button(tr!(l10n, "top-bar-clear"))
-                        .on_hover_text(tr!(l10n, "top-bar-clear.hover", keys = &keys))
-                        .clicked()
-                    {
-                        self.clear_session();
-                    }
-                }
-                ConnectionState::Reconnecting => {
-                    let label = self.reconnecting_label();
-                    let hover = match &self.connection.reconnect_last_error {
-                        Some(err) => tr!(l10n, "top-bar-reconnecting-hover-error", error = err),
-                        None => tr!(l10n, "top-bar-reconnecting-hover"),
-                    };
-                    ui.add_enabled(false, egui::Button::new(label))
-                        .on_disabled_hover_text(hover);
-                    // The reconnect loop retries every 2 s indefinitely, so
-                    // this is the user's only way out short of killing the
-                    // app — the status tooltip above tells them to click it.
-                    let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
-                    if ui
-                        .button(tr!(l10n, "top-bar-stop-retrying"))
-                        .on_hover_text(tr!(l10n, "top-bar-stop-retrying.hover", keys = &keys))
-                        .clicked()
-                    {
-                        self.disconnect();
-                    }
-                }
-            }
+            self.show_connection_buttons(ui, ctx, l10n);
 
             // Whether the suffix ends up on the bar this frame, which is what
             // the row's width has to be corrected by below.
@@ -229,42 +161,7 @@ impl App {
             // explicit salt, the auto-derived scope id flips on every
             // state transition and AT loses the Status landmark.
             ui.landmark("status_landmark", egui::accesskit::Role::Status, |ui| {
-                // What the bar had no room to say, plus — a replayed session
-                // being a meter session in every visible way, which is the
-                // point — the file it is coming from, said where a human can
-                // find it and a screenshot cannot.
-                let mut hover: Vec<String> = Vec::new();
-                if self.connection.state == ConnectionState::Connected {
-                    // The connected entry, live or recorded: a meter with the
-                    // radio built in is on no adapter.
-                    let built_in_radio = self
-                        .connection
-                        .detected()
-                        .is_some_and(|d| d.bluetooth_only());
-                    hover.push(link_tooltip(
-                        l10n,
-                        self.connection.link(),
-                        built_in_radio,
-                        self.replay.is_some(),
-                    ));
-                }
-                if let Some(source) = &self.replay {
-                    let path = source.path.display().to_string();
-                    hover.push(tr!(l10n, "top-bar-replaying", path = path).into_owned());
-                }
-                if let Some(from) = &self.imported {
-                    let path = from.path.display().to_string();
-                    hover.push(
-                        tr!(
-                            l10n,
-                            "top-bar-imported-from",
-                            readings = from.readings,
-                            path = path
-                        )
-                        .into_owned(),
-                    );
-                }
-                let hover = hover.join("\n");
+                let hover = self.status_hover(l10n);
 
                 // Status dot — decorative, so not focusable, but it hovers
                 // with the text beside it rather than being a dead spot in
@@ -288,35 +185,7 @@ impl App {
                     status.on_hover_text(&hover);
                 }
 
-                // The stability badge names a protocol, so it comes from
-                // the connected one where there is one — under Auto-detect
-                // that is the only thing that names a meter at all — and from
-                // the selected entry's profile otherwise.
-                let badge = if self.imported.is_some() {
-                    // No protocol is decoding anything.
-                    None
-                } else if self.connection.state == ConnectionState::Connected {
-                    self.connection
-                        .meter
-                        .as_ref()
-                        .filter(|m| !m.stability.is_verified())
-                        .and_then(|m| {
-                            let name = m.listing?.display_name();
-                            let name = l10n.label(TextKind::Model, name).into_owned();
-                            Some((name, m.stability, m.feedback_url.clone()))
-                        })
-                } else {
-                    self.selected_profile()
-                        .filter(|p| !p.stability.is_verified())
-                        .map(|p| {
-                            let name = self
-                                .picked_listing()
-                                .map_or(p.display_name(), |l| l.display_name());
-                            let name = l10n.label(TextKind::Model, name).into_owned();
-                            (name, p.stability, p.feedback_url())
-                        })
-                };
-                if let Some((model_name, stability, url)) = badge {
+                if let Some((model_name, stability, url)) = self.stability_badge(l10n) {
                     ui.hyperlink_to(
                         RichText::new(badge_text(l10n, stability))
                             .small()
@@ -364,6 +233,151 @@ impl App {
             ui.horizontal(|ui| {
                 self.show_top_bar_right(ui, right_id);
             });
+        }
+    }
+
+    /// The connection's buttons for its state: Connect; Disconnect, Pause
+    /// and Clear; or the greyed reconnect count and Stop retrying.
+    fn show_connection_buttons(&mut self, ui: &mut Ui, ctx: &egui::Context, l10n: &Localizer) {
+        match &self.connection.state {
+            ConnectionState::Disconnected => {
+                let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
+                if ui
+                    .button(tr!(l10n, "top-bar-connect"))
+                    .on_hover_text(tr!(l10n, "top-bar-connect.hover", keys = &keys))
+                    .clicked()
+                {
+                    self.request_connect(ctx);
+                }
+            }
+            ConnectionState::Connected => {
+                let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
+                if ui
+                    .button(tr!(l10n, "top-bar-disconnect"))
+                    .on_hover_text(tr!(l10n, "top-bar-disconnect.hover", keys = &keys))
+                    .clicked()
+                {
+                    self.disconnect();
+                }
+                let keys = Shortcut::TogglePause.keys(ctx, l10n);
+                let (pause_label, pause_tooltip) = if self.connection.paused {
+                    (
+                        tr!(l10n, "top-bar-resume"),
+                        tr!(l10n, "top-bar-resume.hover", keys = &keys),
+                    )
+                } else {
+                    (
+                        tr!(l10n, "top-bar-pause"),
+                        tr!(l10n, "top-bar-pause.hover", keys = &keys),
+                    )
+                };
+                if ui
+                    .button(pause_label)
+                    .on_hover_text(pause_tooltip)
+                    .clicked()
+                {
+                    self.set_paused(!self.connection.paused);
+                }
+                let keys = Shortcut::ClearSession.keys(ctx, l10n);
+                if ui
+                    .button(tr!(l10n, "top-bar-clear"))
+                    .on_hover_text(tr!(l10n, "top-bar-clear.hover", keys = &keys))
+                    .clicked()
+                {
+                    self.clear_session();
+                }
+            }
+            ConnectionState::Reconnecting => {
+                let label = self.reconnecting_label();
+                let hover = match &self.connection.reconnect_last_error {
+                    Some(err) => tr!(l10n, "top-bar-reconnecting-hover-error", error = err),
+                    None => tr!(l10n, "top-bar-reconnecting-hover"),
+                };
+                ui.add_enabled(false, egui::Button::new(label))
+                    .on_disabled_hover_text(hover);
+                // The reconnect loop retries every 2 s indefinitely, so this is
+                // the user's only way out short of killing the app — the status
+                // tooltip above tells them to click it.
+                let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
+                if ui
+                    .button(tr!(l10n, "top-bar-stop-retrying"))
+                    .on_hover_text(tr!(l10n, "top-bar-stop-retrying.hover", keys = &keys))
+                    .clicked()
+                {
+                    self.disconnect();
+                }
+            }
+        }
+    }
+
+    /// The status's hover: what the bar had no room to say, plus — a
+    /// replayed session being a meter session in every visible way, which
+    /// is the point — the file it is coming from, said where a human can
+    /// find it and a screenshot cannot.
+    fn status_hover(&self, l10n: &Localizer) -> String {
+        let mut hover: Vec<String> = Vec::new();
+        if self.connection.state == ConnectionState::Connected {
+            // The connected entry, live or recorded: a meter with the radio
+            // built in is on no adapter.
+            let built_in_radio = self
+                .connection
+                .detected()
+                .is_some_and(|d| d.bluetooth_only());
+            hover.push(link_tooltip(
+                l10n,
+                self.connection.link(),
+                built_in_radio,
+                self.replay.is_some(),
+            ));
+        }
+        if let Some(source) = &self.replay {
+            let path = source.path.display().to_string();
+            hover.push(tr!(l10n, "top-bar-replaying", path = path).into_owned());
+        }
+        if let Some(from) = &self.imported {
+            let path = from.path.display().to_string();
+            hover.push(
+                tr!(
+                    l10n,
+                    "top-bar-imported-from",
+                    readings = from.readings,
+                    path = path
+                )
+                .into_owned(),
+            );
+        }
+        hover.join("\n")
+    }
+
+    /// The stability badge's model name, stability and feedback link, for a
+    /// protocol not yet verified. It names a protocol, so it comes from the
+    /// connected one where there is one — under Auto-detect that is the only
+    /// thing that names a meter at all — and from the selected entry's
+    /// profile otherwise.
+    fn stability_badge(&self, l10n: &Localizer) -> Option<(String, Stability, String)> {
+        if self.imported.is_some() {
+            // No protocol is decoding anything.
+            None
+        } else if self.connection.state == ConnectionState::Connected {
+            self.connection
+                .meter
+                .as_ref()
+                .filter(|m| !m.stability.is_verified())
+                .and_then(|m| {
+                    let name = m.listing?.display_name();
+                    let name = l10n.label(TextKind::Model, name).into_owned();
+                    Some((name, m.stability, m.feedback_url.clone()))
+                })
+        } else {
+            self.selected_profile()
+                .filter(|p| !p.stability.is_verified())
+                .map(|p| {
+                    let name = self
+                        .picked_listing()
+                        .map_or(p.display_name(), |l| l.display_name());
+                    let name = l10n.label(TextKind::Model, name).into_owned();
+                    (name, p.stability, p.feedback_url())
+                })
         }
     }
 
@@ -549,6 +563,18 @@ fn link_suffix_width(ui: &Ui, l10n: &Localizer, link: Option<Link>) -> f32 {
         text_width(ui, &connected_status(l10n, name, Some(link), false))
             - text_width(ui, &connected_status(l10n, name, None, false))
     })
+}
+
+/// Where the top bar caches the width its left group took last frame: the
+/// one-row decision and the window's minimum width read it.
+pub(super) fn left_width_id() -> egui::Id {
+    egui::Id::unique("top_bar_left_w")
+}
+
+/// Where the top bar caches the width its right group took last frame: the
+/// one-row decision and the window's minimum width read it.
+pub(super) fn right_width_id() -> egui::Id {
+    egui::Id::unique("top_bar_right_w")
 }
 
 /// Whether the status row has room for the link as well.
