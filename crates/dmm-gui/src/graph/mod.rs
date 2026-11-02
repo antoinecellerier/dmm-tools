@@ -126,7 +126,8 @@ const GAP_MINIMUM_SECS: f64 = 1.0;
 ///
 /// The distinction is user-visible: an overload is the meter reporting a
 /// condition, while a data gap is the absence of any report at all. They are
-/// drawn differently — see `show_main`.
+/// drawn differently — see `MainFrame::draw_behind_trace` and
+/// `MainFrame::draw_over_trace` in `render.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GapKind {
     /// No samples arrived: disconnect, pause, or a sample interval longer
@@ -536,7 +537,7 @@ pub struct Graph {
     /// again only when the readings they cover change.
     cursor_figures: Option<RangeFigures>,
     visible_figures: Option<RangeFigures>,
-    /// This frame's bins, cut by `show_main` over its Y range.
+    /// This frame's bins, cut by `update_histogram` over its Y range.
     histogram: Option<BinnedHistogram>,
     /// The minimap's whole-session trace, bucketed at whatever width its
     /// strip last asked for. `None` until the strip first draws, and again

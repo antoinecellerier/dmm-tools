@@ -8,8 +8,8 @@ use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
-    AxisHints, GridInput, GridMark, Line, Plot, PlotBounds, PlotPoint, PlotPoints, PlotTransform,
-    Points, Span, VLine,
+    AxisHints, GridInput, GridMark, Line, Plot, PlotBounds, PlotPoint, PlotPoints, PlotResponse,
+    PlotTransform, PlotUi, Points, Span, VLine,
 };
 use std::cell::RefCell;
 use std::time::Instant;
@@ -209,6 +209,337 @@ pub(super) fn stepped(points: &[[f64; 2]]) -> Vec<[f64; 2]> {
         out.push(*p);
     }
     out
+}
+
+/// The min/max envelope's two edges: its minima, then its maxima.
+type Envelope = (Vec<[f64; 2]>, Vec<[f64; 2]>);
+
+/// What the main plot draws this frame, worked out before it is shown: the
+/// plot's closure draws from it, and what is painted after the plot — the
+/// hover, the flags, the menu — reads it. The labelled horizontal lines are
+/// [`OverlayLabelData`]'s; everything else drawn is here.
+struct MainFrame<'m> {
+    /// The time range in view, and the Y range drawn.
+    view: (f64, f64),
+    y: (f64, f64),
+    /// The plotted series' segments over the view, and the gaps between them.
+    segments: Vec<Vec<[f64; 2]>>,
+    gaps: Vec<(f64, f64, GapKind)>,
+    /// Overload spans, including one still in progress. Used both to draw
+    /// the bands and to answer the crosshair tooltip, which is the only
+    /// non-visual cue available — `Span` is never a hover target.
+    overload_spans: Vec<(f64, f64)>,
+    /// The min/max envelope's two edges, when it is shown.
+    envelope: Option<Envelope>,
+    /// The sub-value traces drawn, each with the map of its axis when it is
+    /// on one of its own.
+    overlay_traces: Vec<OverlayTrace>,
+    trace_maps: Vec<Option<AxisMap>>,
+    /// Where the data crosses the reference lines.
+    crossings: Vec<[f64; 2]>,
+    /// The markers in view, at their times.
+    in_view: Vec<(f64, &'m crate::markers::Marker)>,
+    /// The span of session time each drawn line keeps a few points of.
+    bucket: f64,
+    /// The plotted series is levels, drawn as steps.
+    levels: bool,
+    /// The user chose solid sub-value lines.
+    solid_lines: bool,
+}
+
+impl MainFrame<'_> {
+    /// One line's points worth drawing (`thin_for_drawing`).
+    fn thin(&self, points: &[[f64; 2]]) -> Vec<[f64; 2]> {
+        thin_for_drawing(points, self.bucket)
+    }
+
+    /// Draw the frame into the plot, back to front, with `overlay`'s lines
+    /// over the data. The plotted series' segments as drawn.
+    fn draw<'p>(
+        &self,
+        plot_ui: &mut PlotUi<'p>,
+        patterns: &Patterns<'p>,
+        tc: &ThemeColors,
+        overlay: &OverlayLabelData,
+    ) -> Vec<Vec<[f64; 2]>> {
+        // Set exact bounds: our X view range + computed Y range
+        plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+            [self.view.0, self.y.0],
+            [self.view.1, self.y.1],
+        ));
+        self.draw_behind_trace(plot_ui, patterns, tc);
+        let drawn = self.draw_trace(plot_ui, tc);
+        self.draw_over_trace(plot_ui, tc, overlay);
+        drawn
+    }
+
+    /// What sits behind the plotted series: the overload bands, the
+    /// envelope and the sub-value traces.
+    fn draw_behind_trace<'p>(
+        &self,
+        plot_ui: &mut PlotUi<'p>,
+        patterns: &Patterns<'p>,
+        tc: &ThemeColors,
+    ) {
+        // Overload bands, before everything else so they sit behind the
+        // data. An overload is the meter reporting a condition, not an
+        // absence of one, so it reads as a filled region rather than the
+        // dashed edges used for a dropout — a distinction that survives
+        // without colour.
+        //
+        // Drawn at true duration with no minimum width: a brief excursion
+        // collapses to a line rather than overstating how long the meter
+        // was over range. `Span` clamps itself to the visible range, so a
+        // band wider than the window still fills the plot — the case where
+        // two edge markers would both be off-screen and show nothing.
+        for &(start, end) in &self.overload_spans {
+            plot_ui.span(
+                // Empty name: `Span` renders its name as a label inside
+                // the band, which would collide at narrow widths.
+                Span::new("", start..=end)
+                    .fill(tc.graph_overload_fill())
+                    .border_color(tc.graph_overload())
+                    .border_style(egui_plot::LineStyle::Solid),
+            );
+        }
+
+        // Min/max envelope
+        if let Some((env_min, env_max)) = &self.envelope {
+            // Never from where it begins: that is the oldest point held,
+            // which moves once the buffer's bound starts dropping them.
+            for (edge, key) in [
+                (env_max, PatternKey::EnvelopeMax),
+                (env_min, PatternKey::EnvelopeMin),
+            ] {
+                patterns.line(
+                    plot_ui,
+                    Line::new("", PlotPoints::new(self.thin(edge))),
+                    tc.graph_envelope(),
+                    egui_plot::LineStyle::dashed_dense(),
+                    key,
+                    false,
+                );
+            }
+        }
+
+        // Sub-values first: the plotted series goes on top of them. One in
+        // another unit is drawn at its axis's heights.
+        for ((k, label, segments), map) in self.overlay_traces.iter().zip(&self.trace_maps) {
+            let (color, style) = Graph::overlay_color_and_style(tc, *k, self.solid_lines);
+            for (i, seg) in segments.iter().enumerate() {
+                let mut points = self.thin(seg);
+                if let Some(map) = map {
+                    for p in &mut points {
+                        p[1] = map.height_of(p[1]);
+                    }
+                }
+                // A later segment begins after a break, at a fixed time.
+                // The first begins at the oldest point held, which moves
+                // once the buffer's bound starts dropping them.
+                patterns.line(
+                    plot_ui,
+                    Line::new("", PlotPoints::new(points)),
+                    color,
+                    style,
+                    PatternKey::Overlay(label.clone()),
+                    i > 0,
+                );
+            }
+        }
+    }
+
+    /// The plotted series, thinned, as steps for levels. Its segments as
+    /// drawn.
+    fn draw_trace(&self, plot_ui: &mut PlotUi<'_>, tc: &ThemeColors) -> Vec<Vec<[f64; 2]>> {
+        let drawn: Vec<Vec<[f64; 2]>> = self
+            .segments
+            .iter()
+            .map(|s| {
+                if self.levels {
+                    stepped(&self.thin(s))
+                } else {
+                    self.thin(s)
+                }
+            })
+            .collect();
+        for seg in drawn.iter().filter(|s| !s.is_empty()) {
+            plot_ui.add(SegmentedLine::new(
+                Line::new("", PlotPoints::new(seg.clone())),
+                tc.graph_line(),
+            ));
+        }
+        drawn
+    }
+
+    /// What sits over the plotted series: the dropout edges, the markers'
+    /// lines, and `overlay`'s mean, reference and limit lines, crossings and
+    /// cursors.
+    fn draw_over_trace(
+        &self,
+        plot_ui: &mut PlotUi<'_>,
+        tc: &ThemeColors,
+        overlay: &OverlayLabelData,
+    ) {
+        // No data: two dashed edges, no fill.
+        for &(gap_start, gap_end, kind) in &self.gaps {
+            if kind != GapKind::NoData {
+                continue;
+            }
+            plot_ui.vline(
+                VLine::new("", gap_start)
+                    .color(tc.graph_gap())
+                    .style(egui_plot::LineStyle::dashed_dense()),
+            );
+            plot_ui.vline(
+                VLine::new("", gap_end)
+                    .color(tc.graph_gap())
+                    .style(egui_plot::LineStyle::dashed_dense()),
+            );
+        }
+
+        // Markers: dotted, apart from the dashed data-loss edges and the
+        // solid cursors; each flag below carries its number.
+        for &(x, _) in &self.in_view {
+            plot_ui.vline(
+                VLine::new("", x)
+                    .color(tc.graph_marker())
+                    .width(1.5)
+                    .style(egui_plot::LineStyle::dotted_dense()),
+            );
+        }
+
+        // Mean line overlay
+        if overlay.show_mean
+            && let Some(avg) = overlay.mean_value
+        {
+            plot_ui.add(TimedHLine::new(
+                avg,
+                tc.graph_mean(),
+                egui_plot::LineStyle::dashed_loose(),
+            ));
+        }
+
+        // Reference line overlays
+        if overlay.show_ref {
+            for &v in &overlay.ref_values {
+                plot_ui.add(TimedHLine::new(
+                    v,
+                    tc.graph_ref(),
+                    egui_plot::LineStyle::dashed_dense(),
+                ));
+            }
+        }
+
+        // Alarm limits, loosely dotted: the trace is solid and the mean
+        // and reference lines dashed, so the limits read apart from all
+        // of them without the colour — the error colour can be the
+        // trace's own hue, as in the default themes. Wider than the
+        // others, so the sparse dots still read as a line.
+        for &(v, _) in &overlay.limit_lines {
+            plot_ui.add(
+                TimedHLine::new(v, tc.status_error(), egui_plot::LineStyle::dotted_loose())
+                    .width(2.0),
+            );
+        }
+
+        // Trigger crossing markers (where data crosses reference lines)
+        if !self.crossings.is_empty() {
+            plot_ui.points(
+                Points::new("", PlotPoints::new(self.crossings.clone()))
+                    .color(tc.graph_crossing())
+                    .radius(4.0_f32)
+                    .shape(egui_plot::MarkerShape::Diamond),
+            );
+        }
+
+        // Measurement cursors (vertical + horizontal Y-value lines)
+        let cursors = overlay.cursors;
+        if cursors.active {
+            if let Some(t) = cursors.a {
+                plot_ui.vline(VLine::new("", t).color(tc.graph_cursor()));
+            }
+            if let Some(v) = overlay.cursor_va {
+                plot_ui.add(TimedHLine::new(
+                    v,
+                    tc.graph_cursor_dim(),
+                    egui_plot::LineStyle::dashed_dense(),
+                ));
+            }
+            if let Some(t) = cursors.b {
+                plot_ui.vline(VLine::new("", t).color(tc.graph_cursor()));
+            }
+            if let Some(v) = overlay.cursor_vb {
+                plot_ui.add(TimedHLine::new(
+                    v,
+                    tc.graph_cursor_dim(),
+                    egui_plot::LineStyle::dashed_dense(),
+                ));
+            }
+        }
+    }
+}
+
+/// Where the pointer reads on the main plot: see [`Graph::hover_at`].
+struct Hover<'f> {
+    /// On screen: the reading it snapped to, or the pointer.
+    at: egui::Pos2,
+    /// The height and the time it reads at.
+    y: f64,
+    t: f64,
+    /// Inside an overload.
+    overload: bool,
+    series: Vec<super::hover::HoverSeries<'f>>,
+}
+
+/// The main plot, configured: `height` tall, panned by a plain drag along
+/// X when `allow_x_drag`, with its axes, and a Y grid of whole numbers for
+/// `levels` or of `grid_step`s when right axes share one.
+fn main_plot(
+    height: f32,
+    allow_x_drag: bool,
+    x_axis: AxisHints<'static>,
+    y_axes: Vec<AxisHints<'static>>,
+    levels: bool,
+    grid_step: Option<f64>,
+) -> Plot<'static> {
+    let mut plot = Plot::new("main_plot")
+        .height(height)
+        .allow_drag(Vec2b::new(allow_x_drag, false))
+        // handle_interaction owns the Ctrl+wheel zoom: it reads the same
+        // `zoom_delta` egui_plot would, so leaving egui_plot's own zoom on
+        // applies the tick twice — once to `time_window_secs`, once to the
+        // transform the frame is drawn with. It gates nothing else; the
+        // Shift+drag bbox is ours. egui_plot's own boxed zoom, on a
+        // right-drag, would draw a box the view pinned below undoes;
+        // the right button opens the plot's menu instead.
+        .allow_zoom(Vec2b::FALSE)
+        .allow_boxed_zoom(false)
+        // Its drag-an-axis zoom would show a resize cursor over the axes
+        // and jitter the view the per-frame `reset` pins back.
+        .allow_axis_zoom_drag(false)
+        .allow_scroll(Vec2b::new(false, false))
+        .allow_double_click_reset(false)
+        .reset()
+        .custom_x_axes(vec![x_axis])
+        .custom_y_axes(y_axes)
+        .y_axis_min_width(60.0)
+        // The hover is ours, painted after `plot.show`: egui_plot's
+        // snaps to the nearest drawn point and reads the height there, so
+        // one number was a reading or a height with nothing to say which.
+        .show_x(false)
+        .show_y(false);
+    // egui_plot's own range, set here as `time_marks` reckons with it.
+    plot = plot
+        .grid_spacing(egui::Rangef::new(MIN_GRID_SPACING, 300.0))
+        .x_grid_spacer(time_marks);
+    if levels {
+        plot = plot.y_grid_spacer(whole_number_marks);
+    } else if let Some(step) = grid_step {
+        plot = plot.y_grid_spacer(egui_plot::uniform_grid_spacer(move |_| {
+            [step, step * 10.0, step * 100.0]
+        }));
+    }
+    plot
 }
 
 impl Graph {
@@ -525,7 +856,6 @@ impl Graph {
         digits: super::ReadingDigits,
     ) {
         let (view_min, view_max) = self.view_bounds();
-        let marker_color = tc.graph_marker();
         let in_view = self.markers_between(markers, view_min, view_max);
 
         // Build segments and gaps for the visible slice only, plus one
@@ -546,7 +876,6 @@ impl Graph {
             (view_max - view_min)
                 / f64::from(2.0 * ui.available_width() * ui.ctx().pixels_per_point()),
         );
-        let thin = |points: &[[f64; 2]]| thin_for_drawing(points, bucket);
         // The dashed and dotted lines are built from further left, so the
         // pattern they carry from anchor to anchor stays on the line as the
         // view moves (`pattern.rs`).
@@ -572,64 +901,11 @@ impl Graph {
             .chain(self.pending_overload_span())
             .collect();
 
-        // Theme-aware colors from shared palette
-        let line_color = tc.graph_line();
-        let solid_lines = self.solid_lines;
-        let gap_color = tc.graph_gap();
-        let overload_edge = tc.graph_overload();
-        let overload_fill = tc.graph_overload_fill();
-        let mean_color = tc.graph_mean();
-        let ref_color = tc.graph_ref();
-        let cross_color = tc.graph_crossing();
-        let cursor_color = tc.graph_cursor();
-        let cursor_color_dim = tc.graph_cursor_dim();
-        let env_color = tc.graph_envelope();
-        let limit_color = tc.status_error();
-
-        // The plotted series' name as the screen shows it, which the hover's
-        // row names it by. The lines themselves are unnamed: nothing reads
-        // their names now that the hover is ours.
-        let plotted_name = self.plotted_series_name();
-        let main_name = self.series_text(l10n, &plotted_name).into_owned();
-
-        let shift_held = ui.input(|i| i.modifiers.shift);
-        let bbox_active = self.box_zoom.is_some();
-        // Plain drag-to-pan is allowed even in live mode — starting a drag
-        // drops out of live (see handle_interaction). Bbox and shift-drag
-        // always suppress the built-in pan.
-        let allow_plot_x_drag = !shift_held && !bbox_active;
-
         // Compute Y bounds from visible data
         let (y_min, y_max) = self
             .y_range_for_view(view_min, view_max, true)
             .unwrap_or((-1.0, 1.0));
-
-        // Binned over the Y range drawn, so the strip's bars sit at the
-        // heights of the values they count, into bins sized for the plot's
-        // extent they span, last frame's until it has one. Counted by bins,
-        // a plot settling by a pixel doesn't bin it again.
-        if let Some(place) = self.histogram_place {
-            let plot = self.plot_rect.unwrap_or(ui.available_rect_before_wrap());
-            let cursors = self.cursor_range();
-            let key = super::figures::HistogramKey {
-                view: self.readings_key(vis_start..vis_end),
-                interval: cursors.clone().map(|r| self.readings_key(r)),
-                overloads: (
-                    self.overloads_in(vis_start..vis_end),
-                    cursors.map(|r| self.overloads_in(r)),
-                ),
-                range: (y_min, y_max),
-                bins: super::histogram::target_bins(match place.dock {
-                    super::histogram::Dock::Side => plot.height(),
-                    super::histogram::Dock::Below => plot.width(),
-                }),
-                decimals: (self.decimals(true), self.decimals(false)),
-                language: l10n.language().id,
-            };
-            self.bin_histogram(l10n, key, vis_start..vis_end);
-        } else {
-            self.histogram = None;
-        }
+        self.update_histogram(ui, l10n, vis_start..vis_end, (y_min, y_max));
 
         let right = self.right_axes(ui, (view_min, view_max), (y_min, y_max));
         self.axis_maps.clone_from(&right.maps);
@@ -649,7 +925,7 @@ impl Graph {
             .collect();
         let key_entries = self.key_entries(l10n, &overlay_traces, !visible_segments.is_empty());
 
-        let mut y_axes = vec![self.left_axis(ui, grid_step, line_color)];
+        let mut y_axes = vec![self.left_axis(ui, grid_step, tc.graph_line())];
         // The right axes share one column, their labels painted once the plot
         // is drawn (`paint_stacked_ticks`); egui_plot only keeps its width.
         let (right_labels, column_width) = self.right_axis_labels(ui, tc, &right, &overlay_traces);
@@ -661,10 +937,234 @@ impl Graph {
                     .formatter(|_, _| String::new()),
             );
         }
+        let x_axis = self.time_axis(ui, &in_view, (view_min, view_max));
 
-        // The marker flags hang in the time axis's row, so the time labels
-        // they would cover are left out. The formatter runs before this
-        // frame's plot exists, so the flags are placed on last frame's.
+        let ref_values = self.ref_lines.values().to_vec();
+        let crossings = if self.show_ref_line && self.show_crossings && !ref_values.is_empty() {
+            self.find_crossings(&ref_values, view_min, view_max)
+        } else {
+            Vec::new()
+        };
+        let cursors = self.cursors;
+        // The lines the plot draws over the data and the labels painted on
+        // them after, from one place so their values cannot disagree.
+        let overlay = OverlayLabelData {
+            show_mean: self.show_mean,
+            mean_value: self.visible_stats().and_then(|s| s.avg()),
+            show_ref: self.show_ref_line,
+            ref_values,
+            limit_lines: self.limit_lines(limits),
+            cursors,
+            cursor_va: cursors
+                .a
+                .and_then(|t| self.nearest_point(t).map(|(_, v)| v)),
+            cursor_vb: cursors
+                .b
+                .and_then(|t| self.nearest_point(t).map(|(_, v)| v)),
+            marker_times: in_view.iter().map(|&(t, _)| t).collect(),
+            overlay_unit: self.current_unit.clone(),
+            point_decimals: self.decimals(true),
+            other_decimals: self.decimals(false),
+            view_max,
+            mean_color: tc.graph_mean(),
+            ref_color: tc.graph_ref(),
+            limit_color: tc.status_error(),
+            cursor_color: tc.graph_cursor(),
+            halo_color: tc.plot_background(),
+        };
+        let frame = MainFrame {
+            view: (view_min, view_max),
+            y: (y_min, y_max),
+            envelope: self
+                .show_envelope
+                .then(|| self.build_envelope(draw_min, view_max, self.envelope_window.value()))
+                .filter(|(min, _)| !min.is_empty()),
+            segments: visible_segments,
+            gaps: visible_gaps,
+            overload_spans,
+            overlay_traces,
+            trace_maps,
+            crossings,
+            in_view,
+            bucket,
+            levels: self.levels,
+            solid_lines: self.solid_lines,
+        };
+
+        // The plot's whole area, axes included, as egui_plot is about to
+        // allocate it: the axes' strips around the plot body take the menu's
+        // right-click too.
+        let plot_height = ui.available_height().max(60.0);
+        let complete_rect = egui::Rect::from_min_size(
+            ui.cursor().min,
+            egui::vec2(ui.available_size_before_wrap().x, plot_height),
+        );
+        // Plain drag-to-pan is allowed even in live mode — starting a drag
+        // drops out of live (see handle_interaction). Bbox and shift-drag
+        // always suppress the built-in pan.
+        let allow_x_drag = !ui.input(|i| i.modifiers.shift) && self.box_zoom.is_none();
+        let plot = main_plot(
+            plot_height,
+            allow_x_drag,
+            x_axis,
+            y_axes,
+            self.levels,
+            grid_step,
+        );
+        let PlotResponse {
+            inner,
+            response,
+            transform,
+            ..
+        } = plot.show(ui, |plot_ui| frame.draw(plot_ui, &patterns, tc, &overlay));
+
+        self.dash_phases = phases.into_inner();
+        self.plot_rect = Some(response.rect);
+        self.plot_transform = Some(transform);
+        let body = response.rect;
+        let hover = self.hover_at(ui, l10n, tc, &frame, &response, &transform);
+        // The crosshair under the labels, where egui_plot's sat: on the
+        // reading it snapped to, or on the pointer.
+        if let Some(hover) = hover.as_ref() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            let painter = ui.painter().with_clip_rect(body);
+            let stroke = egui::Stroke::new(1.0, tc.graph_crosshair());
+            painter.vline(hover.at.x, body.y_range(), stroke);
+            painter.hline(body.x_range(), hover.at.y, stroke);
+        }
+        Self::paint_stacked_ticks(ui, body, &transform, &right.ticks, &right_labels);
+
+        // The key and the flags first: the labels lay themselves out around
+        // them.
+        let mut taken: Vec<egui::Rect> =
+            Self::paint_plot_key(ui, body, &key_entries, tc, self.solid_lines)
+                .into_iter()
+                .collect();
+        // Before the flags, which sit in the time axis's row and must stay
+        // on top of it for their clicks.
+        let mut openers = Self::axis_strips(ui, complete_rect, body);
+        let (flag_click, flags) = Self::paint_marker_flags(
+            ui,
+            l10n,
+            &transform,
+            body,
+            &frame.in_view,
+            tc.graph_marker(),
+            tc.plot_background(),
+        );
+        self.clicked_marker = flag_click
+            .filter(|&(_, button)| button == egui::PointerButton::Primary)
+            .map(|(number, _)| number);
+        openers.flag = flag_click
+            .filter(|&(_, button)| button == egui::PointerButton::Secondary)
+            .map(|(number, _)| number);
+        taken.extend(flags);
+        Self::paint_overlay_labels(ui, l10n, body, &transform, &overlay, &inner, taken);
+        // The dots, the height's tags and the readout over everything else.
+        if let Some(Hover {
+            at,
+            y,
+            t,
+            overload,
+            series,
+        }) = hover
+        {
+            let rows = hover_lines(l10n, &series, t, overload, overlay.point_decimals);
+            paint_hover_dots(ui, body, &transform, &series, &rows, tc.plot_background());
+            let per_point = transform.dvalue_dpos()[1].abs();
+            let max_decimals = if self.levels {
+                overlay.other_decimals
+            } else {
+                usize::MAX
+            };
+            if let Some((left, right_tags)) =
+                height_tags(y, per_point, &self.current_unit, &right.maps, max_decimals)
+            {
+                let left_color = if grid_step.is_some() {
+                    tick_color(ui, tc.graph_line())
+                } else {
+                    ui.visuals().text_color()
+                };
+                let right_rows: Vec<_> = right_tags
+                    .into_iter()
+                    .map(|(i, text)| (text, right_labels[i].1))
+                    .collect();
+                paint_height_tags(
+                    ui,
+                    (complete_rect, body),
+                    at.y,
+                    &[(left, left_color)],
+                    &right_rows,
+                    tc.graph_crosshair(),
+                );
+            }
+            // The time alone where no series has a reading. Not over the box
+            // being drawn.
+            if self.box_zoom.is_none() {
+                show_hover_readout(&response, at, &format_pointer_time(t), &series, &rows);
+            }
+        }
+        self.handle_interaction(ui, &response, &transform);
+        self.show_context_menu(
+            l10n,
+            &response,
+            &openers,
+            &transform,
+            &frame.in_view,
+            &overlay.limit_lines,
+            digits,
+        );
+        self.update_plot_a11y_label(ui, l10n, response.id, y_min, y_max, frame.in_view.len());
+        // Draw a focus ring on the main plot body when it's keyboard-focused,
+        // the plot's one Tab stop: egui_plot's axes take no focus.
+        crate::a11y::paint_focus_ring(ui, &response);
+    }
+
+    /// Bin the histogram strip's bars, when it is shown, over the Y range
+    /// drawn (`y`), so they sit at the heights of the values they count,
+    /// into bins sized for the plot's extent they span, last frame's until
+    /// it has one. Counted by bins, a plot settling by a pixel doesn't bin
+    /// it again.
+    fn update_histogram(
+        &mut self,
+        ui: &Ui,
+        l10n: &Localizer,
+        visible: std::ops::Range<usize>,
+        y: (f64, f64),
+    ) {
+        let Some(place) = self.histogram_place else {
+            self.histogram = None;
+            return;
+        };
+        let plot = self.plot_rect.unwrap_or(ui.available_rect_before_wrap());
+        let cursors = self.cursor_range();
+        let key = super::figures::HistogramKey {
+            view: self.readings_key(visible.clone()),
+            interval: cursors.clone().map(|r| self.readings_key(r)),
+            overloads: (
+                self.overloads_in(visible.clone()),
+                cursors.map(|r| self.overloads_in(r)),
+            ),
+            range: y,
+            bins: super::histogram::target_bins(match place.dock {
+                super::histogram::Dock::Side => plot.height(),
+                super::histogram::Dock::Below => plot.width(),
+            }),
+            decimals: (self.decimals(true), self.decimals(false)),
+            language: l10n.language().id,
+        };
+        self.bin_histogram(l10n, key, visible);
+    }
+
+    /// The time axis for `view`. The marker flags hang in its row, so the
+    /// time labels they would cover are left out. The formatter runs before
+    /// this frame's plot exists, so the flags are placed on last frame's.
+    fn time_axis(
+        &self,
+        ui: &Ui,
+        in_view: &[(f64, &crate::markers::Marker)],
+        (view_min, view_max): (f64, f64),
+    ) -> AxisHints<'static> {
         let flag_spans: Vec<egui::Rangef> = match self.plot_rect {
             Some(plot) if !in_view.is_empty() && view_max > view_min => {
                 let at: Vec<(f32, u32, &str)> = in_view
@@ -694,7 +1194,7 @@ impl Graph {
         };
         let tick_font = egui::TextStyle::Body.resolve(ui.style());
         let ctx = ui.ctx().clone();
-        let x_axis = AxisHints::new_x().formatter(move |mark, _range| {
+        AxisHints::new_x().formatter(move |mark, _range| {
             let text = format_time_axis_label(mark.value, mark.step_size);
             if flag_spans.is_empty() {
                 return text;
@@ -711,443 +1211,69 @@ impl Graph {
             } else {
                 text
             }
-        });
+        })
+    }
 
-        let show_envelope = self.show_envelope;
-        let (env_min, env_max) = if show_envelope {
-            self.build_envelope(draw_min, view_max, self.envelope_window.value())
-        } else {
-            (Vec::new(), Vec::new())
-        };
-        let show_mean = self.show_mean;
-        let show_ref = self.show_ref_line;
-        let ref_values = self.ref_lines.values().to_vec();
-        let limit_lines = self.limit_lines(limits);
-        let show_crossings = self.show_crossings;
-        let crossings = if show_ref && show_crossings && !ref_values.is_empty() {
-            self.find_crossings(&ref_values, view_min, view_max)
-        } else {
-            Vec::new()
-        };
-        let cursors = self.cursors;
-        let cursor_va = cursors
-            .a
-            .and_then(|t| self.nearest_point(t).map(|(_, v)| v));
-        let cursor_vb = cursors
-            .b
-            .and_then(|t| self.nearest_point(t).map(|(_, v)| v));
-        let mean_value = self.visible_stats().and_then(|s| s.avg());
-
-        let (point_decimals, other_decimals) = (self.decimals(true), self.decimals(false));
-        let levels = self.levels;
-        // The readout under the pointer would cover the menu's entry, which
-        // opens where the pointer is.
+    /// The hover: where the pointer on the plot `response` reads, snapped to
+    /// the reading near it — its place on screen, its height, the time it
+    /// reads at and whether that is inside an overload. None off the plot
+    /// body, and while the plot's menu is open: the readout under the
+    /// pointer would cover the menu's entry, which opens where it is.
+    fn hover_at<'f>(
+        &self,
+        ui: &Ui,
+        l10n: &Localizer,
+        tc: &ThemeColors,
+        frame: &'f MainFrame<'_>,
+        response: &egui::Response,
+        transform: &PlotTransform,
+    ) -> Option<Hover<'f>> {
         let menu_open = egui::Popup::is_id_open(ui.ctx(), plot_menu_id());
-        // The plot's whole area, axes included, as egui_plot is about to
-        // allocate it: the axes' strips around the plot body take the menu's
-        // right-click too.
-        let plot_height = ui.available_height().max(60.0);
-        let complete_rect = egui::Rect::from_min_size(
-            ui.cursor().min,
-            egui::vec2(ui.available_size_before_wrap().x, plot_height),
-        );
-        let mut plot = Plot::new("main_plot")
-            .height(plot_height)
-            .allow_drag(Vec2b::new(allow_plot_x_drag, false))
-            // handle_interaction owns the Ctrl+wheel zoom: it reads the same
-            // `zoom_delta` egui_plot would, so leaving egui_plot's own zoom on
-            // applies the tick twice — once to `time_window_secs`, once to the
-            // transform the frame is drawn with. It gates nothing else; the
-            // Shift+drag bbox is ours. egui_plot's own boxed zoom, on a
-            // right-drag, would draw a box the view pinned below undoes;
-            // the right button opens the plot's menu instead.
-            .allow_zoom(Vec2b::FALSE)
-            .allow_boxed_zoom(false)
-            // Its drag-an-axis zoom would show a resize cursor over the axes
-            // and jitter the view the per-frame `reset` pins back.
-            .allow_axis_zoom_drag(false)
-            .allow_scroll(Vec2b::new(false, false))
-            .allow_double_click_reset(false)
-            .reset()
-            .custom_x_axes(vec![x_axis])
-            .custom_y_axes(y_axes)
-            .y_axis_min_width(60.0)
-            // The hover is ours, painted after `plot.show` below: egui_plot's
-            // snaps to the nearest drawn point and reads the height there, so
-            // one number was a reading or a height with nothing to say which.
-            .show_x(false)
-            .show_y(false);
-        // egui_plot's own range, set here as `time_marks` reckons with it.
-        plot = plot
-            .grid_spacing(egui::Rangef::new(MIN_GRID_SPACING, 300.0))
-            .x_grid_spacer(time_marks);
-        if levels {
-            plot = plot.y_grid_spacer(whole_number_marks);
-        } else if let Some(step) = grid_step {
-            plot = plot.y_grid_spacer(egui_plot::uniform_grid_spacer(move |_| {
-                [step, step * 10.0, step * 100.0]
-            }));
-        }
-        let response = plot.show(ui, |plot_ui| {
-            // Set exact bounds: our X view range + computed Y range
-            plot_ui.set_plot_bounds(PlotBounds::from_min_max(
-                [view_min, y_min],
-                [view_max, y_max],
-            ));
-
-            // Overload bands, before everything else so they sit behind the
-            // data. An overload is the meter reporting a condition, not an
-            // absence of one, so it reads as a filled region rather than the
-            // dashed edges used for a dropout — a distinction that survives
-            // without colour.
-            //
-            // Drawn at true duration with no minimum width: a brief excursion
-            // collapses to a line rather than overstating how long the meter
-            // was over range. `Span` clamps itself to the visible range, so a
-            // band wider than the window still fills the plot — the case where
-            // two edge markers would both be off-screen and show nothing.
-            for &(start, end) in &overload_spans {
-                plot_ui.span(
-                    // Empty name: `Span` renders its name as a label inside
-                    // the band, which would collide at narrow widths.
-                    Span::new("", start..=end)
-                        .fill(overload_fill)
-                        .border_color(overload_edge)
-                        .border_style(egui_plot::LineStyle::Solid),
-                );
-            }
-
-            // Min/max envelope (drawn first so it's behind the data line)
-            if show_envelope && !env_min.is_empty() {
-                // Never from where it begins: that is the oldest point held,
-                // which moves once the buffer's bound starts dropping them.
-                for (edge, key) in [
-                    (&env_max, PatternKey::EnvelopeMax),
-                    (&env_min, PatternKey::EnvelopeMin),
-                ] {
-                    patterns.line(
-                        plot_ui,
-                        Line::new("", PlotPoints::new(thin(edge))),
-                        env_color,
-                        egui_plot::LineStyle::dashed_dense(),
-                        key,
-                        false,
-                    );
-                }
-            }
-
-            // Sub-values first: the plotted series goes on top of them. One in
-            // another unit is drawn at its axis's heights.
-            for ((k, label, segments), map) in overlay_traces.iter().zip(&trace_maps) {
-                let (color, style) = Self::overlay_color_and_style(tc, *k, solid_lines);
-                for (i, seg) in segments.iter().enumerate() {
-                    let mut points = thin(seg);
-                    if let Some(map) = map {
-                        for p in &mut points {
-                            p[1] = map.height_of(p[1]);
-                        }
-                    }
-                    // A later segment begins after a break, at a fixed time.
-                    // The first begins at the oldest point held, which moves
-                    // once the buffer's bound starts dropping them.
-                    patterns.line(
-                        plot_ui,
-                        Line::new("", PlotPoints::new(points)),
-                        color,
-                        style,
-                        PatternKey::Overlay(label.clone()),
-                        i > 0,
-                    );
-                }
-            }
-
-            let drawn_trace: Vec<Vec<[f64; 2]>> = visible_segments
-                .iter()
-                .map(|s| if levels { stepped(&thin(s)) } else { thin(s) })
-                .collect();
-            for seg in drawn_trace.iter().filter(|s| !s.is_empty()) {
-                plot_ui.add(SegmentedLine::new(
-                    Line::new("", PlotPoints::new(seg.clone())),
-                    line_color,
-                ));
-            }
-
-            // No data: two dashed edges, no fill.
-            for &(gap_start, gap_end, kind) in &visible_gaps {
-                if kind != GapKind::NoData {
-                    continue;
-                }
-                plot_ui.vline(
-                    VLine::new("", gap_start)
-                        .color(gap_color)
-                        .style(egui_plot::LineStyle::dashed_dense()),
-                );
-                plot_ui.vline(
-                    VLine::new("", gap_end)
-                        .color(gap_color)
-                        .style(egui_plot::LineStyle::dashed_dense()),
-                );
-            }
-
-            // Markers: dotted, apart from the dashed data-loss edges and the
-            // solid cursors; each flag below carries its number.
-            for &(x, _) in &in_view {
-                plot_ui.vline(
-                    VLine::new("", x)
-                        .color(marker_color)
-                        .width(1.5)
-                        .style(egui_plot::LineStyle::dotted_dense()),
-                );
-            }
-
-            // Mean line overlay
-            if show_mean && let Some(avg) = mean_value {
-                plot_ui.add(TimedHLine::new(
-                    avg,
-                    mean_color,
-                    egui_plot::LineStyle::dashed_loose(),
-                ));
-            }
-
-            // Reference line overlays
-            if show_ref {
-                for &v in &ref_values {
-                    plot_ui.add(TimedHLine::new(
-                        v,
-                        ref_color,
-                        egui_plot::LineStyle::dashed_dense(),
-                    ));
-                }
-            }
-
-            // Alarm limits, loosely dotted: the trace is solid and the mean
-            // and reference lines dashed, so the limits read apart from all
-            // of them without the colour — the error colour can be the
-            // trace's own hue, as in the default themes. Wider than the
-            // others, so the sparse dots still read as a line.
-            for &(v, _) in &limit_lines {
-                plot_ui.add(
-                    TimedHLine::new(v, limit_color, egui_plot::LineStyle::dotted_loose())
-                        .width(2.0),
-                );
-            }
-
-            // Trigger crossing markers (where data crosses reference lines)
-            if !crossings.is_empty() {
-                plot_ui.points(
-                    Points::new("", PlotPoints::new(crossings.clone()))
-                        .color(cross_color)
-                        .radius(4.0_f32)
-                        .shape(egui_plot::MarkerShape::Diamond),
-                );
-            }
-
-            // Measurement cursors (vertical + horizontal Y-value lines)
-            if cursors.active {
-                if let Some(t) = cursors.a {
-                    plot_ui.vline(VLine::new("", t).color(cursor_color));
-                }
-                if let Some(v) = cursor_va {
-                    plot_ui.add(TimedHLine::new(
-                        v,
-                        cursor_color_dim,
-                        egui_plot::LineStyle::dashed_dense(),
-                    ));
-                }
-                if let Some(t) = cursors.b {
-                    plot_ui.vline(VLine::new("", t).color(cursor_color));
-                }
-                if let Some(v) = cursor_vb {
-                    plot_ui.add(TimedHLine::new(
-                        v,
-                        cursor_color_dim,
-                        egui_plot::LineStyle::dashed_dense(),
-                    ));
-                }
-            }
-
-            drawn_trace
-        });
-
-        self.dash_phases = phases.into_inner();
-        self.plot_rect = Some(response.response.rect);
-        self.plot_transform = Some(response.transform);
-        // The hover: the pointer on screen, its height, the time it reads at
-        // and whether that is inside an overload. The readout under the
-        // pointer would cover the menu's entry, which opens where it is.
-        let body = response.response.rect;
-        let hover = response
-            .response
+        let body = response.rect;
+        let pos = response
             .hover_pos()
-            .filter(|pos| !menu_open && body.contains(*pos))
-            .map(|pos| {
-                let transform = &response.transform;
-                let series = self.hover_series(
-                    l10n,
-                    tc,
-                    &main_name,
-                    &visible_segments,
-                    &overlay_traces,
-                    &trace_maps,
-                );
-                let p = transform.value_from_position(pos);
-                let radius = ui.style().interaction.interact_radius;
-                let reach = |dx: f32| transform.value_from_position(pos + egui::vec2(dx, 0.0)).x;
-                let [t, y] = reading_near(
-                    &series,
-                    (reach(-radius), reach(radius)),
-                    (view_min, view_max),
-                    pos,
-                    radius,
-                    |t, h| transform.position_from_point(&PlotPoint::new(t, h)),
-                )
-                .unwrap_or([p.x, p.y]);
-                // Strictly inside: a band's edges are readings that keep
-                // their values.
-                let overload = overload_spans.iter().any(|&(a, b)| a < t && t < b);
-                // A height off at infinity, as a Y range of "inf" gives, has
-                // no place on screen: the crosshair stays on the pointer.
-                let at = Some(transform.position_from_point(&PlotPoint::new(t, y)))
-                    .filter(|at| at.is_finite())
-                    .unwrap_or(pos);
-                (at, y, t, overload, series)
-            });
-        // The crosshair under the labels, where egui_plot's sat: on the
-        // reading it snapped to, or on the pointer.
-        if let Some(&(at, ..)) = hover.as_ref() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
-            let painter = ui.painter().with_clip_rect(body);
-            let stroke = egui::Stroke::new(1.0, tc.graph_crosshair());
-            painter.vline(at.x, body.y_range(), stroke);
-            painter.hline(body.x_range(), at.y, stroke);
-        }
-        Self::paint_stacked_ticks(
-            ui,
-            response.response.rect,
-            &response.transform,
-            &right.ticks,
-            &right_labels,
-        );
-
-        let overlay = OverlayLabelData {
-            show_mean,
-            mean_value,
-            show_ref,
-            ref_values,
-            limit_lines,
-            cursors,
-            cursor_va,
-            cursor_vb,
-            trace: response.inner,
-            marker_times: in_view.iter().map(|&(t, _)| t).collect(),
-            overlay_unit: self.current_unit.clone(),
-            point_decimals,
-            other_decimals,
-            view_max,
-            mean_color,
-            ref_color,
-            limit_color,
-            cursor_color,
-            halo_color: tc.plot_background(),
-        };
-        // The key and the flags first: the labels lay themselves out around
-        // them.
-        let mut taken: Vec<egui::Rect> = Self::paint_plot_key(
-            ui,
-            response.response.rect,
-            &key_entries,
+            .filter(|pos| !menu_open && body.contains(*pos))?;
+        // The plotted series' name as the screen shows it, which the hover's
+        // row names it by. The lines themselves are unnamed: nothing reads
+        // their names now that the hover is ours.
+        let main_name = self
+            .series_text(l10n, &self.plotted_series_name())
+            .into_owned();
+        let series = self.hover_series(
+            l10n,
             tc,
-            self.solid_lines,
+            &main_name,
+            &frame.segments,
+            &frame.overlay_traces,
+            &frame.trace_maps,
+        );
+        let p = transform.value_from_position(pos);
+        let radius = ui.style().interaction.interact_radius;
+        let reach = |dx: f32| transform.value_from_position(pos + egui::vec2(dx, 0.0)).x;
+        let [t, y] = reading_near(
+            &series,
+            (reach(-radius), reach(radius)),
+            frame.view,
+            pos,
+            radius,
+            |t, h| transform.position_from_point(&PlotPoint::new(t, h)),
         )
-        .into_iter()
-        .collect();
-        // Before the flags, which sit in the time axis's row and must stay
-        // on top of it for their clicks.
-        let mut openers = Self::axis_strips(ui, complete_rect, response.response.rect);
-        let (flag_click, flags) = Self::paint_marker_flags(
-            ui,
-            l10n,
-            &response.transform,
-            response.response.rect,
-            &in_view,
-            marker_color,
-            tc.plot_background(),
-        );
-        self.clicked_marker = flag_click
-            .filter(|&(_, button)| button == egui::PointerButton::Primary)
-            .map(|(number, _)| number);
-        openers.flag = flag_click
-            .filter(|&(_, button)| button == egui::PointerButton::Secondary)
-            .map(|(number, _)| number);
-        taken.extend(flags);
-        Self::paint_overlay_labels(
-            ui,
-            l10n,
-            response.response.rect,
-            &response.transform,
-            &overlay,
-            taken,
-        );
-        // The dots, the height's tags and the readout over everything else.
-        if let Some((at, y, t, overload, series)) = hover {
-            let rows = hover_lines(l10n, &series, t, overload, point_decimals);
-            paint_hover_dots(
-                ui,
-                body,
-                &response.transform,
-                &series,
-                &rows,
-                tc.plot_background(),
-            );
-            let per_point = response.transform.dvalue_dpos()[1].abs();
-            let max_decimals = if levels { other_decimals } else { usize::MAX };
-            if let Some((left, right_tags)) =
-                height_tags(y, per_point, &self.current_unit, &right.maps, max_decimals)
-            {
-                let left_color = if grid_step.is_some() {
-                    tick_color(ui, line_color)
-                } else {
-                    ui.visuals().text_color()
-                };
-                let right_rows: Vec<_> = right_tags
-                    .into_iter()
-                    .map(|(i, text)| (text, right_labels[i].1))
-                    .collect();
-                paint_height_tags(
-                    ui,
-                    (complete_rect, body),
-                    at.y,
-                    &[(left, left_color)],
-                    &right_rows,
-                    tc.graph_crosshair(),
-                );
-            }
-            // The time alone where no series has a reading. Not over the box
-            // being drawn.
-            if self.box_zoom.is_none() {
-                show_hover_readout(
-                    &response.response,
-                    at,
-                    &format_pointer_time(t),
-                    &series,
-                    &rows,
-                );
-            }
-        }
-        self.handle_interaction(ui, &response.response, &response.transform);
-        self.show_context_menu(
-            l10n,
-            &response.response,
-            &openers,
-            &response.transform,
-            &in_view,
-            &overlay.limit_lines,
-            digits,
-        );
-        self.update_plot_a11y_label(ui, l10n, response.response.id, y_min, y_max, in_view.len());
-        // Draw a focus ring on the main plot body when it's keyboard-focused,
-        // the plot's one Tab stop: egui_plot's axes take no focus.
-        crate::a11y::paint_focus_ring(ui, &response.response);
+        .unwrap_or([p.x, p.y]);
+        // Strictly inside: a band's edges are readings that keep their
+        // values.
+        let overload = frame.overload_spans.iter().any(|&(a, b)| a < t && t < b);
+        // A height off at infinity, as a Y range of "inf" gives, has no place
+        // on screen: the crosshair stays on the pointer.
+        let at = Some(transform.position_from_point(&PlotPoint::new(t, y)))
+            .filter(|at| at.is_finite())
+            .unwrap_or(pos);
+        Some(Hover {
+            at,
+            y,
+            t,
+            overload,
+            series,
+        })
     }
 
     /// Set an AccessKit label on the plot that summarizes current state so

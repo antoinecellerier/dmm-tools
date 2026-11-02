@@ -177,8 +177,9 @@ impl Graph {
     }
 
     /// The plot's horizontal lines, carried across the histogram in the
-    /// order and styles `show_main` draws them: the mean, the reference
-    /// lines, the alarm limits, then the readings at the cursors.
+    /// order and styles `MainFrame::draw_over_trace` draws them: the mean,
+    /// the reference lines, the alarm limits, then the readings at the
+    /// cursors.
     fn histogram_lines(
         &self,
         hist: &histogram::Histogram,

@@ -424,8 +424,10 @@ pub(super) fn segment_hits_rect(a: egui::Pos2, b: egui::Pos2, rect: egui::Rect) 
     true
 }
 
-/// Pre-computed data needed by `paint_overlay_labels` to draw text labels
-/// for mean, reference, and cursor overlays after the plot has been rendered.
+/// The plot's labelled horizontal lines — the mean, the reference lines, the
+/// alarm limits and the cursors — worked out before the plot: the plot draws
+/// the lines from it (`MainFrame::draw_over_trace`) and `paint_overlay_labels`
+/// labels them once it is drawn, so a line and its label share their values.
 pub(super) struct OverlayLabelData {
     pub(super) show_mean: bool,
     pub(super) mean_value: Option<f64>,
@@ -436,9 +438,6 @@ pub(super) struct OverlayLabelData {
     pub(super) cursors: MeasureCursors,
     pub(super) cursor_va: Option<f64>,
     pub(super) cursor_vb: Option<f64>,
-    /// The plotted series' visible segments as drawn, which cursor readouts
-    /// keep off.
-    pub(super) trace: Vec<Vec<[f64; 2]>>,
     /// The times of the markers in view, whose lines the mean and reference
     /// labels step aside from.
     pub(super) marker_times: Vec<f64>,
@@ -549,6 +548,7 @@ impl Graph {
         plot_rect: egui::Rect,
         transform: &PlotTransform,
         data: &OverlayLabelData,
+        trace: &[Vec<[f64; 2]>],
         mut taken: Vec<egui::Rect>,
     ) {
         let painter = ui.painter();
@@ -581,7 +581,7 @@ impl Graph {
         let hits_trace = |rect: egui::Rect| {
             let t_lo = transform.value_from_position(rect.left_top()).x;
             let t_hi = transform.value_from_position(rect.right_top()).x;
-            data.trace.iter().any(|segment| {
+            trace.iter().any(|segment| {
                 segment.windows(2).any(|w| {
                     w[1][0] >= t_lo
                         && w[0][0] <= t_hi
