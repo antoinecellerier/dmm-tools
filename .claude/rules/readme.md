@@ -1,6 +1,7 @@
 ---
 paths:
   - "README.md"
+  - "README.*.md"
 ---
 
 # README rules
@@ -19,8 +20,10 @@ point, not a fourth reference. The general rules are in
   per brand, and ends with "and more" linking to the device table, which
   lists every model. A new device gets a table row, not an intro mention,
   unless it outsells the models already named for its brand.
-- The badges sit under the title, so the tagline and the model list read as
-  one block.
+- The badges sit under the title, then the language row, so the tagline and
+  the model list read as one block: English, then each language with a
+  copy, by its own name in `SHIPPED` order, joined by ` · `, the page's own
+  bold and unlinked. `readme_languages.rs` checks it.
 - The reader is a hobbyist or a repair technician with a meter on the cable or
   in Bluetooth range. A line says what a feature does in general terms, not
   through one use of it, in the references' feature names. No per-meter
@@ -64,3 +67,21 @@ point, not a fourth reference. The general rules are in
   brand.
 - The screenshot is refreshed at a release whose changelog changes what the
   picture shows.
+
+## Translated copies
+
+`README.<lang>.md` follows the rules above in its language, the first
+paragraph in the terms of `i18n/<lang>/glossary.tsv`. It is refreshed at the
+release step, never with the English change (`docs/localization-design.md`,
+User documentation). Besides the English structure and links, a copy keeps:
+
+- the hash line first, and the language row with itself bold;
+- a line under the row naming the English README as the reference, which
+  also says the page is machine-translated while the language's `reviewed`
+  is false;
+- the generated `read` sample, which `docs_snippets.rs` runs in its language;
+- the device table's rows and emoji, status words from the language's
+  `stability-*` messages;
+- its own picture, `assets/gui-wide-layout.<lang>.webp`, and translated alt
+  text, badges' included;
+- in-page links to the anchors of its own headings.

@@ -454,6 +454,49 @@ fn shipped_languages_have_the_optional_text() {
     assert!(gaps.is_empty(), "{}", gaps.join("\n"));
 }
 
+/// Every shipped language has a translation of the README, `README.<lang>.md`,
+/// made from the README as it is now: its first line holds the
+/// `git hash-object` of the English it was translated from, and `git
+/// cat-file blob <hash>` gives that English back to diff against. A copy is
+/// refreshed at release, not with each English change (`docs/development.md`,
+/// release step 5): `cargo test -p dmm-shared readme_translations_are_current
+/// -- --ignored`. The always-run checks on the copies are in dmm-cli's
+/// `readme_languages.rs`.
+#[test]
+#[ignore = "before a release: a README translation lags the English until then"]
+fn readme_translations_are_current() {
+    let root = i18n_dir().join("..");
+    let out = std::process::Command::new("git")
+        .args(["hash-object", "README.md"])
+        .current_dir(&root)
+        .output()
+        .expect("run git hash-object");
+    assert!(out.status.success(), "git hash-object README.md failed");
+    let english = String::from_utf8(out.stdout).expect("utf-8 hash");
+    let wanted = format!("<!-- translated from README.md {} -->", english.trim());
+    let mut stale = Vec::new();
+    for l in super::lang::SHIPPED
+        .iter()
+        .filter(|l| l.id != super::EN_US.id)
+    {
+        let name = format!("README.{}.md", l.id);
+        match std::fs::read_to_string(root.join(&name)) {
+            Err(_) => stale.push(format!("{name}: missing")),
+            Ok(text) if text.lines().next() != Some(wanted.as_str()) => stale.push(format!(
+                "{name}: translated from another README.md ({})",
+                text.lines().next().unwrap_or_default()
+            )),
+            Ok(_) => {}
+        }
+    }
+    assert!(
+        stale.is_empty(),
+        "README.md is now {}\n{}",
+        english.trim(),
+        stale.join("\n")
+    );
+}
+
 #[test]
 fn every_shipped_language_has_a_folder() {
     for l in super::lang::SHIPPED {

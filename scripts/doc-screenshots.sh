@@ -138,6 +138,21 @@ MINIMAL_NARROW_W=420; MINIMAL_NARROW_H=170
 # reading above 0 mA, the dip after the plateau as the radio goes off, and the
 # fall to the draw of the e-Paper display refreshing.
 HERO_VIEW='# view: {"window":30.0,"start":1.62,"mean":true,"cursors":{"a":2.376,"b":29.995}}'
+# The hero's three marker notes, '|' between them, as a user of each README
+# language would type them. A language without its line takes the English.
+declare -A HERO_NOTES=(
+	[en-US]='boot|wifi off|e-Paper display refreshing'
+	[es]='arranque|wifi apagado|refresco de la pantalla e-Paper'
+	[fr]='démarrage|wifi coupé|rafraîchissement de l’écran e-Paper'
+	[pt-BR]='inicialização|wi-fi desligado|atualização da tela e-Paper'
+	[ja]='起動|Wi-Fi オフ|電子ペーパー画面の更新'
+	[zh-CN]='启动|关闭 Wi-Fi|电子纸屏幕刷新'
+)
+# The face each CJK README language's hero is drawn in, fonts-noto-cjk's.
+declare -A HERO_CJK_FACE=(
+	[ja]='Noto Sans CJK JP'
+	[zh-CN]='Noto Sans CJK SC'
+)
 # The hero's session and window in a window too narrow for two columns, the
 # mean without the cursors.
 NARROW_VIEW='# view: {"window":30.0,"start":1.06,"mean":true}'
@@ -452,12 +467,90 @@ differing_pixels() {
 # and in the log.
 scene_wide() {
 	write_settings
-	launch_file "$(staged dcma-boot-refresh "$HERO_VIEW" \
-		'# marker: 2475 1 boot' \
-		'# marker: 8018 2 wifi off' \
-		'# marker: 9998 3 e-Paper display refreshing')" 160.5
+	launch_hero en-US
 	park
 	capture gui-wide-layout "" "$VERSION_ROW_WIDE"
+}
+
+# launch_hero <language> — the hero's session, its marker notes in <language>.
+launch_hero() {
+	local notes=()
+	IFS='|' read -r -a notes <<<"${HERO_NOTES[$1]:-${HERO_NOTES[en-US]}}"
+	((${#notes[@]} == 3)) || die "HERO_NOTES[$1] needs three notes"
+	launch_file "$(staged dcma-boot-refresh "$HERO_VIEW" \
+		"# marker: 2475 1 ${notes[0]}" \
+		"# marker: 8018 2 ${notes[1]}" \
+		"# marker: 9998 3 ${notes[2]}")" 160.5
+}
+
+# The hero once per README translation, in its language, for README.<lang>.md:
+# every row of SCENES naming this function, the language after the picture's
+# last dot. Its state comes from the recording and its one click lands on an
+# empty spot, so a language's longer words move nothing the scene relies on.
+# The version label is the exception: a translated Help & Feedback link moves
+# it along the bar, so the band that tells a -dev run's label apart covers the
+# bar's right half.
+scene_wide_translated() {
+	local entry picture lang VERSION_RIGHT=0 VERSION_BAND_W=1000
+	for entry in "${SCENES[@]}"; do
+		[ "${entry#* }" = scene_wide_translated ] || continue
+		picture="${entry%% *}"
+		lang="${picture##*.}"
+		write_settings "{\"language\": \"$lang\"}"
+		with_cjk_face "$lang" launch_hero "$lang"
+		park
+		capture "$picture" "" "$VERSION_ROW_WIDE"
+	done
+}
+
+# with_cjk_face <language> <command>... — run <command> with the app seeing
+# only <language>'s own CJK face among the CJK fonts, for a language in
+# HERO_CJK_FACE; as is otherwise.
+#
+# The app draws Chinese and Japanese from a system font, and which one depends
+# on what else is installed: a Korean font can take Japanese, and Debian draws
+# Chinese in Noto Sans CJK's Japanese face (docs/future-improvements.md,
+# "Localization follow-ups"). So the picture shows the face the language is
+# meant to have, a fontconfig file of the run's own includes the system's and
+# rejects every other family that covers Chinese, Japanese or Korean. Noto's
+# CJK file holds a face per region, and each is matched by its family name.
+with_cjk_face() {
+	local lang="$1" face conf
+	shift
+	face="${HERO_CJK_FACE[$lang]:-}"
+	if [ -z "$face" ]; then
+		"$@"
+		return
+	fi
+	conf="$TMP/fonts-$lang.conf"
+	python3 - "$conf" "$face" <<-'PY' ||
+		import subprocess, sys
+		from xml.sax.saxutils import escape
+		conf, face = sys.argv[1:3]
+		reject, found = set(), False
+		for lang in ("zh-cn", "ja", "ko"):
+		    listing = subprocess.run(["fc-list", f":lang={lang}", "family"],
+		                             capture_output=True, text=True, check=True).stdout
+		    for line in listing.splitlines():
+		        # One face per line, its names comma-separated, fc-list's
+		        # backslash escapes undone.
+		        names = [n.replace("\\", "") for n in line.split(",") if n]
+		        if face in names:
+		            found = True
+		        elif names:
+		            reject.add(names[0])
+		if not found:
+		    sys.exit(1)
+		with open(conf, "w") as f:
+		    f.write('<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">\n'
+		            '<fontconfig>\n  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n'
+		            '  <selectfont><rejectfont>\n')
+		    for family in sorted(reject):
+		        f.write(f'    <pattern><patelt name="family"><string>{escape(family)}</string></patelt></pattern>\n')
+		    f.write('  </rejectfont></selectfont>\n</fontconfig>\n')
+	PY
+		die "$lang: no $face installed — ask the user to run: sudo apt install fonts-noto-cjk"
+	FONTCONFIG_FILE="$conf" "$@"
 }
 
 # The hero's session and window in a window too narrow for two columns. The

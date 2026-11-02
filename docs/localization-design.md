@@ -22,7 +22,8 @@ Stays English:
 - `read`'s stdout line, `get --format json`, and every token typed on a command line, such as `set` arguments
 - logs, including the library warnings shown by default
 - in `capture`: the step instructions, unless the user translates them for themselves; the readings it echoes and the report; `--list-steps` and `triage`
-- What's New (`CHANGELOG.md`), doc screenshots, `dmm-gui --help`, the shell completion scripts
+- What's New (`CHANGELOG.md`), `dmm-gui --help`, the shell completion scripts
+- the user docs and their screenshots, but for the README and its picture (see [User documentation](#user-documentation))
 - unit symbols, decimal points, timestamps — except in what a screen reader says (see [Writing messages](#writing-messages))
 - theme names, which are also setting values, `--theme` arguments and file names
 
@@ -160,7 +161,7 @@ Most of the layout measures its text. The places longer strings strain are:
 
 ## Tests and pipelines
 
-Many tests check English text or find a widget by its label. Each builds a localizer pinned to en-US, so a developer with a French desktop gets the same results. `scripts/doc-screenshots.sh` and verify-gui set `LC_ALL=C`, which the C-locale rule turns into English. Doc screenshots stay English-only because their click positions assume English widths.
+Many tests check English text or find a widget by its label. Each builds a localizer pinned to en-US, so a developer with a French desktop gets the same results. `scripts/doc-screenshots.sh` and verify-gui set `LC_ALL=C`, which the C-locale rule turns into English. Doc screenshots stay English, as their scenes click at positions that assume English widths, but for the README's hero, taken once per README language: its scene loads its state from the recording and clicks only an empty spot. Its Chinese and Japanese shots run under a fontconfig file that hides every CJK face but the language's own, so the picture shows the font each language is meant to draw in, whatever else is installed. A stock Debian desktop draws Chinese in the Japanese face for now ([Localization follow-ups](future-improvements.md#localization-follow-ups)).
 
 The checks on the resources, listed in [development.md](development.md#translations), fail the build on a broken translation (a wrong variable or plural, a lost `--option`, `code` span or spec number), on a `tr!` call naming no en-US message, and on a library label missing from `lib.ftl`. They never fail on a missing translation.
 
@@ -180,12 +181,24 @@ The cost continues after launch:
 
 ## User documentation
 
-The user docs stay English for now. When they are translated, this is the plan. `scripts/package-docs.py` renders them to HTML with pandoc for the release archives: about 28,000 words in seven files. The order of translation is:
+The README is translated; the other user docs stay English for now. `scripts/package-docs.py` renders the user docs to HTML with pandoc for the release archives: about 28,000 words in seven files.
+
+**The README comes first.** It is the page a visitor and a search engine meet before anything is installed, about 1,300 words, and it is where a reader learns that the apps speak their language. A copy is `README.<lang>.md` beside the English, `<lang>` being the `i18n/` locale id: the usual convention, found in the root listing, and the English relative links work unchanged. A row under the badges names English and each language that has a copy, by its own name in the order of `SHIPPED`, and every copy carries the same row. A language may ship before its copy exists; the release check asks for one.
+
+**A copy is refreshed at release.** Its first line records the `git hash-object` of the English it was translated from, so `git cat-file blob` gives that English back for a diff against the current one. The English changes on its own; before each release, with the messages, every copy whose hash is stale is brought up to date. A copy as of the last release describes the binary people download. Copies are not in the archives, whose English README links to them on GitHub.
+
+What a copy keeps besides the prose:
+
+- **Its program output.** `docs_snippets.rs` regenerates the `dmm-cli read` sample with the copy's `--lang`, so it shows that language's summary line. The device table is copied with the release refresh, its status words those of the language's `stability-*` messages.
+- **Its picture.** The hero screenshot is the one taken in every README language (see [Tests and pipelines](#tests-and-pipelines)). The badges stay as they are: their services don't translate them.
+- **Its own anchors.** Nothing outside a copy links into it, so its in-page links follow the anchors GitHub makes from its translated headings.
+- **A note that the English is the reference,** a line under the row, since even a reviewed copy lags the English until the release. While the language's `reviewed` is false, it also says the page is machine-translated.
+
+The other docs, when translated, come in this order:
 
 | Doc | When |
 |---|---|
 | `docs/setup.md` | First: install, drivers and permissions are where a non-English user gets stuck |
-| `README.md` | Next, linking the translated pages |
 | `docs/gui-reference.md` | Then, quoting the UI names from that language's `gui/` files |
 | `docs/supported-devices.md` | Optional: mostly model names and tables |
 | `docs/cli-reference.md` | With the GUI reference |
@@ -193,14 +206,12 @@ The user docs stay English for now. When they are translated, this is the plan. 
 
 The changelog changes every release and feeds What's New and the release notes. Contributions to the project are made in English.
 
-**Parallel Markdown files.** A translation is a full copy at `docs/i18n/<lang>/<doc>.md`. `package-docs.py` renders it alongside the English. Links go to the translated page where one exists and to the English page otherwise. Tools that split docs into PO entries paragraph by paragraph, such as po4a and mdpo, track changes more finely. They add a toolchain to the release job, so they become worth it only once Weblate is in use.
+**Parallel Markdown files.** A translated doc is a full copy at `docs/i18n/<lang>/<doc>.md`, with the README's hash line. `package-docs.py` renders it alongside the English, and puts a banner linking the current English on a page whose hash is stale; the hash works in a shallow CI clone and survives a rebase. Links go to the translated page where one exists and to the English page otherwise. Tools that split docs into PO entries paragraph by paragraph, such as po4a and mdpo, track changes more finely. They add a toolchain to the release job, so they become worth it only once Weblate is in use.
 
-**Translations say how current they are.** A comment on a translated file's first line records the hash of the English file it was translated from (`git hash-object`). When the English file's hash differs, `package-docs.py` puts a banner on the rendered page linking the current English. This works in a shallow CI clone and survives a rebase. A translation never has to change in the same commit as the English.
-
-What makes doc translation harder than message translation:
+What makes these harder than the README:
 
 - **UI names have to match.** The docs quote labels in bold, such as **Alarm**. A translated page uses the words from that language's `gui/` files, and a check can flag a bold name that isn't in them.
-- **Generated blocks stay English.** The copies keep the blocks that `docs_snippets.rs` and `docs_tables.rs` regenerate verbatim. Either the regeneration test covers the copies, or it leaves them out.
+- **Generated blocks.** The regeneration tests in `docs_snippets.rs` and `docs_tables.rs` cover the copies, as they do the README's.
 - **Screenshots stay English** (see [Tests and pipelines](#tests-and-pipelines)).
 - **Anchors.** The apps link to `setup.md`, `supported-devices.md` and anchors in `cli-reference.md` on GitHub. Translated headings produce different anchors, and neither GitHub nor pandoc's GFM reader accepts `{#id}`. So a translated page keeps each English anchor as a raw `<a id="…"></a>` before its heading.
 

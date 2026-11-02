@@ -18,6 +18,7 @@ The ground rules are in the docs; read the parts you need rather than restating 
 - `docs/localization-design.md`: what is translated and what stays English.
 - `docs/development.md`, "Translations": the checks, `DMM_TOOLS_L10N_DIR` and `DMM_TOOLS_PSEUDO_LOCALE`.
 - `CONTRIBUTING.md`, "Translations": what a language needs to ship, and the `reviewed` flag.
+- `.claude/rules/readme.md`, "Translated copies": what a `README.<lang>.md` keeps.
 
 Archive everything worth keeping under `references/l10n/<lang>/` (gitignored): sources, glossary drafts, workflow results, review screenshots. The scratchpad does not survive a reboot.
 
@@ -39,6 +40,7 @@ Language: <lang>
 - [ ] 3. Workflow run with the user's go-ahead; result archived
 - [ ] 4. Three translation commits; the last one ships the language
 - [ ] 5. Checks, screenshots and per-commit check pass
+- [ ] 6. README translation, its picture and the language row
 ```
 
 1. **Glossary.** First choose the locale id: the bare language (`fr`, `es`) when one text can serve all its regions, a region (`pt-BR`, `zh-CN`) when the regions write differently. Then spawn one agent with `scripts/glossary-brief.md`, filling in `<LANG>`, `<NAME>`, `<REPO>`, and `<MANUAL_HINTS>` (the meter brands that print manuals in that language). It writes to `references/l10n/<lang>/glossary-draft/`:
@@ -67,7 +69,7 @@ Language: <lang>
    1. `shared: translate the help and the library's text into <lang>`: `shared.ftl` and the four `lib*.ftl` files, listed in `help.rs` `RESOURCES` and `lib_index.rs` `LIB_RESOURCES`.
    2. `gui: translate the GUI and its desktop entry into <lang>`: `gui/*.ftl`, listed in `crates/dmm-gui/src/l10n.rs`.
    3. `shared, cli, gui: translate dmm-cli into <lang> and offer <lang>`: `cli/*.ftl` and `cli-help.ftl`, listed in `crates/dmm-cli/src/l10n.rs` (CLI and CLI_HELP). This commit also:
-      - adds the language to `SHIPPED` in `crates/dmm-shared/src/l10n/lang.rs`, with its native name and `reviewed: false`;
+      - adds the language to `SHIPPED` in `crates/dmm-shared/src/l10n/lang.rs`, with its native name and `reviewed: false`, in the place its doc comment's order gives it;
       - updates the possible-values tests in `crates/dmm-cli/src/cli.rs` and `crates/dmm-cli/tests/help.rs`;
       - rewrites the CHANGELOG's GUI and CLI translation entries, the README's features line and the first line of `docs/localization-design.md` to name the new language. The GUI entry says which languages are machine-translated.
 5. **Checks.**
@@ -76,10 +78,11 @@ Language: <lang>
    - `dmm-cli --lang <lang> --help`, and `--device mock read --count 3`.
    - A verify-gui shot of the Language row, showing the native name, and of the top bar at 700 px wide. Compare each shot with en-US at the same width and state: paused, the top bar wraps at 700 px in English too.
    - A history rewrite is followed by clippy and tests on every rewritten commit (`git rebase -x` in a worktree).
+6. **README.** Recommended, in a `docs:` commit of its own: draft `README.<lang>.md` from the English README and the glossary, following `.claude/rules/readme.md`; add the language to the row in `README.md` and in every copy; add its marker notes and a `gui-wide-layout.<lang>` row to `scripts/doc-screenshots.sh` and run that scene; fill the copy's `read` sample with `UPDATE_DOCS=1 cargo test -p dmm-cli docs_snippets`. Render it with `gh api /markdown` and check its in-page links. Show the user the copy if they read the language.
 
 ## Reviewed
 
-`scripts/l10n-side-by-side.py <lang> <lang>.html` sets a language beside its English on one page, for a reviewer, or for the user when shown new messages, to read through. Once a native speaker has read the language in the app, set `reviewed: true` on its `SHIPPED` entry. For a language the user reads, the user's review counts. In the same change, update the CHANGELOG:
+`scripts/l10n-side-by-side.py <lang> <lang>.html` sets a language beside its English on one page, for a reviewer, or for the user when shown new messages, to read through. Once a native speaker has read the language in the app, set `reviewed: true` on its `SHIPPED` entry, and cut the note under its `README.<lang>.md` row down to the line naming the English README as the reference. For a language the user reads, the user's review counts. In the same change, update the CHANGELOG:
 - if the entry that says the language is machine-translated is still under `## Unreleased`, drop the language from its "machine-translated" clause;
 - if it has been released, add an entry saying the translation has been reviewed.
 
@@ -95,6 +98,7 @@ New or reworded English ships without its translations: it shows in English unti
    Per language, it runs a drafter, a reviewer of the added messages, and a fixer. `optional: true` drafts the optional messages too.
 3. Show the user the new messages in any language they read before committing.
 4. Commit each language's additions with the component prefixes of the files touched.
+5. At the release step, bring the README's translations up to date too: `docs/development.md`, release step 5.
 
 ## Rewording English later
 

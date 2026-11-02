@@ -6,6 +6,7 @@ paths:
   - "docs/setup.md"
   - "CONTRIBUTING.md"
   - "README.md"
+  - "README.*.md"
 ---
 
 # User-facing doc rules
@@ -17,7 +18,8 @@ stop — a short section is never the defect.
 
 These files ship in the release archives, as Markdown and HTML, through `DOCS`
 in `scripts/package-docs.py`. A new user doc goes both in `paths:` above and
-in that list.
+in that list. The README's translations, `README.<lang>.md`, are the
+exception: they are read on GitHub only.
 
 ## Not in a reference
 

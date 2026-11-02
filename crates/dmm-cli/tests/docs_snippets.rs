@@ -15,6 +15,9 @@
 //! sleep. The doc shows the command as a user with a meter on the cable would
 //! type it — none of these flags appears in the block.
 //!
+//! The README's translations, `README.<lang>.md`, run the same commands in
+//! their own language, so a reader sees the output their `dmm-cli` prints.
+//!
 //! `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites a stale block; a plain run
 //! fails with a diff. The run pins `TZ=UTC`, which chrono's `Local` ignores on
 //! Windows, so the test is Linux and macOS only.
@@ -25,8 +28,31 @@ mod common;
 use common::{dmm_cli, repo_root, unified_diff};
 use std::path::{Path, PathBuf};
 
-/// The docs whose snippets are generated. Every marker pair in each is checked.
+/// The docs whose snippets are generated, besides the README's translations.
+/// Every marker pair in each is checked.
 const DOCS: [&str; 2] = ["README.md", "docs/cli-reference.md"];
+
+/// [`DOCS`], then every `README.<lang>.md` at the root.
+fn docs() -> Vec<String> {
+    let mut translations: Vec<String> = std::fs::read_dir(repo_root())
+        .expect("read the repository root")
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|name| language_of(name).is_some())
+        .collect();
+    translations.sort();
+    DOCS.iter()
+        .map(|d| d.to_string())
+        .chain(translations)
+        .collect()
+}
+
+/// The language a doc is written in, when it is a README translation.
+fn language_of(relative: &str) -> Option<&str> {
+    relative
+        .strip_prefix("README.")?
+        .strip_suffix(".md")
+        .filter(|lang| !lang.is_empty())
+}
 
 const START: &str = "<!-- snippet ";
 /// Ends the opening marker, which sits on its own line after the commands.
@@ -114,13 +140,16 @@ fn parse_via(spec: &str, where_: &str) -> Via {
 /// Run one documented command and return what a user would see: stdout, then
 /// the stderr the same terminal would interleave (the `--- N samples` summary
 /// lives there), with trailing whitespace and blank lines trimmed.
-fn output_of(command: &str, via: &Via, where_: &str) -> String {
+fn output_of(command: &str, via: &Via, lang: Option<&str>, where_: &str) -> String {
     let mut args = split_command(command);
     assert!(
         args.first().is_some_and(|a| a == "dmm-cli"),
         "{where_}: a snippet command starts with `dmm-cli`, got `{command}`"
     );
     args.remove(0);
+    if let Some(lang) = lang {
+        args.splice(0..0, ["--lang".to_string(), lang.to_string()]);
+    }
     match via {
         Via::Mock(mode) => {
             let mode = mode.clone().filter(|_| takes_mock_mode(&args));
@@ -175,14 +204,14 @@ fn output_of(command: &str, via: &Via, where_: &str) -> String {
 
 /// The fenced block a marker's commands render to: `$ <command>` then its
 /// output, one blank line between commands.
-fn render(commands: &[String], via: &Via, where_: &str) -> String {
+fn render(commands: &[String], via: &Via, lang: Option<&str>, where_: &str) -> String {
     let mut block = String::from("```\n");
     for (i, command) in commands.iter().enumerate() {
         if i > 0 {
             block.push('\n');
         }
         block.push_str(&format!("$ {command}\n"));
-        block.push_str(&output_of(command, via, where_));
+        block.push_str(&output_of(command, via, lang, where_));
     }
     block.push_str("```");
     block
@@ -226,7 +255,10 @@ fn check_doc(relative: &str) -> Vec<String> {
         let block = block_start..block_start + block_len;
         cursor = block.end + END.len();
 
-        let wanted = format!("\n{}\n", render(&commands, &via, &where_));
+        let wanted = format!(
+            "\n{}\n",
+            render(&commands, &via, language_of(relative), &where_)
+        );
         if text[block.clone()] == wanted {
             continue;
         }
@@ -251,7 +283,7 @@ fn check_doc(relative: &str) -> Vec<String> {
 
 #[test]
 fn doc_snippets_match_what_the_binary_prints() {
-    let diffs: Vec<String> = DOCS.iter().flat_map(|doc| check_doc(doc)).collect();
+    let diffs: Vec<String> = docs().iter().flat_map(|doc| check_doc(doc)).collect();
     assert!(
         diffs.is_empty(),
         "documented output is out of date:\n\n{}\nrun `UPDATE_DOCS=1 cargo test -p dmm-cli` to regenerate",
