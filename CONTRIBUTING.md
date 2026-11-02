@@ -75,9 +75,44 @@ Even "it works" is valuable. If something doesn't work, the output of `RUST_LOG=
 
 The apps' words are in [Fluent](https://projectfluent.org/fluent/guide/) files under `i18n/<locale>/`, `en-US` being the reference: one file per screen area, each message under an ID, with comments saying where it shows and what each `{ $variable }` holds.
 
-To translate a file:
+Most languages start machine-translated, and stay marked so in the **Language** list until a native speaker has read them: a review is the most useful help.
 
-1. Copy it from `i18n/en-US/` to the same path under your locale, such as `i18n/fr/gui/settings.ftl`.
+### Reviewing a translation
+
+1. From a clone of this repository, write the language beside its English as one page, then open it in a browser. Each message sits under its English and its notes, the glossary comes last, and buttons show only what is missing or identical to the English.
+
+   ```sh
+   python3 scripts/l10n-side-by-side.py pt-BR pt-BR.html
+   ```
+
+   On Windows: `python scripts\l10n-side-by-side.py pt-BR pt-BR.html`.
+2. Read it in the apps too, on a simulated meter, where length and context show. dmm-gui follows the system's language; otherwise pick yours in Settings, **Language**.
+
+   ```sh
+   dmm-gui --device mock
+   dmm-cli --lang pt-BR --help
+   dmm-cli --lang pt-BR --device mock read --count 5
+   ```
+3. Look for:
+   - a text that says something other than its English, above all about a measurement or what to do with the meter;
+   - meter vocabulary that strays from the glossary or from what meter manuals in your language say;
+   - what must stay as written that didn't: the meter's own key and display labels (HOLD, REL, AC/DC as the meter prints them), unit symbols, numbers with their decimal point (1.5, never 1,5), `--options`, command lines, `{ $variables }`;
+   - "same as English" on a sentence rather than a label;
+   - text cut off or wrapping badly in a small window;
+   - a tone or form of address foreign to software in your language. `i18n/<locale>/STYLE.md` records the choices made, and `SUMMARY.md`, where there is one, those most worth a second opinion.
+4. Fix what reads wrong, [by hand](#manually-translating), and open a pull request, or list it in an issue. Once the whole language has been read, set `reviewed: true` on its entry in `crates/dmm-shared/src/l10n/lang.rs` in the same pull request.
+
+### Translating
+
+A language ships once all its files are translated, but for the specification text in `lib.ftl` (the `table-`, `note-`, `input-` and `band-` messages) and `capture`'s text in `cli/capture.ftl`: these show in English until someone translates them. Text a code change adds or rewords needs only its English: it shows in English until the translations are filled in before the next release.
+
+#### Using a coding agent
+
+To start a whole new language, open [Claude Code](https://claude.com/claude-code) in a clone of this repository and ask `/translate` for it. The skill (`.claude/skills/translate/`) runs the process the existing languages went through: a glossary and style sheet from approved sources, drafting, review on screenshots and CLI output, and the checks.
+
+#### Manually translating
+
+1. Copy a file from `i18n/en-US/` to the same path under your locale, such as `i18n/fr/gui/settings.ftl`.
 2. Translate the text after each `=`. Keep the IDs, the `{ $variables }` and the `[selector]` keys as they are; numbers, unit symbols and command lines stay as written. A message you leave out shows in English.
 
    In VS Code, `code --diff i18n/en-US/gui/settings.ftl i18n/fr/gui/settings.ftl` shows the English beside your file, message for message, with your side editable; the [vscode-fluent](https://marketplace.visualstudio.com/items?itemName=macabeus.vscode-fluent) extension (`macabeus.vscode-fluent`) highlights the syntax and flags errors.
@@ -92,8 +127,6 @@ To translate a file:
 4. Open a pull request with the files.
 
 `DMM_TOOLS_PSEUDO_LOCALE=1` shows every message accented and padded, which finds the places where a longer language won't fit; the [development guide](docs/development.md#translations) has the details.
-
-A language ships once all its files are translated, but for the specification text in `lib.ftl` (the `table-`, `note-`, `input-` and `band-` messages) and `capture`'s text in `cli/capture.ftl`: these show in English until someone translates them. Text a code change adds or rewords needs only its English: it shows in English until the translations are filled in before the next release. Until a native speaker has read it in the app, it is marked machine-translated in the **Language** list and the app says so under it. To review one, read it in the app, fix what reads wrong in a pull request, and once the whole language has been read, set `reviewed: true` on its entry in `crates/dmm-shared/src/l10n/lang.rs` in the same pull request. To read a whole language through beside its English, `python3 scripts/l10n-side-by-side.py pt-BR pt-BR.html` writes it as one page.
 
 ## Code changes
 
