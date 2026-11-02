@@ -18,6 +18,7 @@ The short list. Where a section below gives the background, this list is what ap
 10. A unit symbol the English gives next to a term stays («puissance apparente (VA)»).
 11. Terms ruled without an approved source: «gain en courant (hFE)» ("Transistor Magnification" → «Gain en courant du transistor (hFE)»), «Daltonien» (Colorblind preset). The other unsourced terms take the glossary's value as drafted.
 12. macOS names (Apple's French support pages): «Réglages Système > Confidentialité et sécurité > Surveillance de l’entrée», and «… > Bluetooth». Windows: «Gestionnaire de périphériques» (MS Terminology), «Périphériques d’interface utilisateur» and «Autres périphériques» (Microsoft's French support pages). The French name of 'USB Input Device' is unverified: its message carries a `# UNVERIFIED Windows name` comment until someone checks a French Windows.
+13. Spoken unit names (`reading-unit-*`, read aloud only): «volt», «ampère», «ohm», «hertz», «farad», «siemens», «watt», «voltampère», «henry» (pluriel «henrys»), «seconde», «pour cent»; prefixes «pico», «nano», «micro», «milli», «kilo», «méga», «giga», joined whole with no contraction («kiloohm», «mégaohm»). Ruled by the user; ohm, watt and voltampère follow VC920 PDF p.71–72.
 
 ## 1. Sources
 
@@ -113,7 +114,7 @@ That leaves French prose next to English-formatted numbers: «Conserver jusqu'à
 
 ## 6. Units and AC/DC
 
-- **Unit symbols never change:** V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. `lib.ftl` doesn't even list labels made only of units (`200mV`, `kΩ`).
+- **Unit symbols never change,** except in the spoken reading's unit names (§0 ruling 13): V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. `lib.ftl` doesn't even list labels made only of units (`200mV`, `kΩ`).
 - **Space between a number and its unit:** follow the English as written. Spec text keeps the manual's own spacing (`10MΩ`, `≈3V`), which the spec check ignores. In prose that you write, use U+00A0 («2 s», «10 MΩ») (MS-SG p.33).
 - **The meter's AC/DC labels stay as the meter prints them:** `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`. `lib.ftl` allows this ("you may keep abbreviations such as DC V, LPF or REL"), and they match the LCD and the meter's own legends.
 - **In prose and table titles, spell the words out:** «tension continue», «tension alternative», «courant continu / alternatif» (VC831 PDF p.91, VC920 PDF p.65), and «tension alternative + continue» for AC+DC.

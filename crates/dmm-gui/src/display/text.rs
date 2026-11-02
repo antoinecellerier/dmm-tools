@@ -1077,6 +1077,34 @@ mod tests {
         assert_eq!(spoken_amount(&en, "1.000", ""), "1.000");
     }
 
+    /// French takes its plural by its own rules — singular below 2, as in
+    /// "1.5 milliampère" — and joins every prefix whole: kiloohm, mégaohm.
+    #[test]
+    fn units_are_spoken_by_name_in_french() {
+        let fr = Localizer::new(
+            dmm_shared::l10n::find("fr").expect("French ships"),
+            &crate::l10n::resources(),
+            &dmm_shared::l10n::Options::default(),
+        );
+        for (unit, value, said) in [
+            ("mA", "1.5", "milliampère"),
+            ("mA", "2.0", "milliampères"),
+            ("V", "-0.52", "volt"),
+            ("k\u{03A9}", "2.200", "kiloohms"),
+            ("M\u{03A9}", "1", "mégaohm"),
+            ("MHz", "1.000", "mégahertz"),
+            ("mVA", "3", "millivoltampères"),
+            ("ms", "16.657", "millisecondes"),
+            ("%", "50.0", "pour cent"),
+        ] {
+            assert_eq!(spoken_unit(&fr, unit, value), said, "{value} {unit}");
+        }
+        assert_eq!(
+            spoken_mode(&fr, "AC V Hz", "AC V Hz".into()),
+            "AC volts hertz"
+        );
+    }
+
     #[test]
     fn live_region_label_spells_out_degrees() {
         let mut m = Measurement::test_fixture(

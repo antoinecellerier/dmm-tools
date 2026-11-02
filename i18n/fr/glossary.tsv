@@ -246,3 +246,16 @@ Clear	Effacer	v.	top-bar-clear, shortcuts-clear	MS Terminology clear => effacer
 Pause / Resume	Pause / Reprendre	n. f. / v.	top-bar-pause, top-bar-resume, shortcuts-pause	MS Terminology Pause => Pause; resume => reprendre	"▶ Resume → «▶ Reprendre», ""⏸ Pause"" → «⏸ Pause»."
 acquisition	acquisition	n. f.	top-bar-pause hover, connection-acquisition-stopped	MS Terminology data acquisition => acquisition de données	
 Error: / Warning: / Note: / Tip:	Erreur : / Avertissement : / Remarque : / Conseil :	n.	cli/common.ftl, list-select-tip, settings-tip-*	MS Terminology error, warning, tip => conseil; Voltcraft VC915 FR PDF p.127 «Remarque :»	
+volt	volt	n. m.	reading-unit-volt (spoken)	ruled by the user; no approved source at hand	Plural «volts».
+ampere	ampère	n. m.	reading-unit-ampere (spoken)	ruled by the user; no approved source at hand	Plural «ampères».
+ohm	ohm	n. m.	reading-unit-ohm (spoken)	Voltcraft VC920 FR PDF p.71 «Ohm (unité de résistance électrique)»	kΩ, MΩ spoken «kiloohm», «mégaohm»: no contraction (ruling).
+hertz	hertz	n. m.	reading-unit-hertz (spoken)	ruled by the user; no approved source at hand	Invariable.
+farad	farad	n. m.	reading-unit-farad (spoken)	ruled by the user; no approved source at hand	Plural «farads».
+siemens	siemens	n. m.	reading-unit-siemens (spoken)	ruled by the user; no approved source at hand	Invariable.
+watt	watt	n. m.	reading-unit-watt (spoken)	Voltcraft VC920 FR PDF p.72 «W Watt (Unité de mesure de la puissance)»	Plural «watts».
+volt-ampere	voltampère	n. m.	reading-unit-volt-ampere (spoken)	Voltcraft VC920 FR PDF p.72 «VA Voltampère (Unité de mesure de la puissance apparente)»	One word; plural «voltampères».
+henry	henry	n. m.	reading-unit-henry (spoken)	ruled by the user; no approved source at hand	Plural «henrys».
+second	seconde	n. f.	reading-unit-second (spoken)	ruled by the user; no approved source at hand	Plural «secondes».
+percent	pour cent	loc.	reading-unit-percent (spoken)	ruled by the user; no approved source at hand	
+SI prefixes	pico, nano, micro, milli, kilo, méga, giga	prefix	reading-unit-prefix-* (spoken)	ruled by the user; no approved source at hand	Joined whole to the unit's name: «milliampère», «mégahertz», «kiloohm».
+Announce readings	Annoncer les mesures	v.	settings-announce, settings-announce-* hovers	ruled by the user; no approved source at hand	Every reading → «Chaque mesure» (the Sample interval chip); Never → «Jamais».
