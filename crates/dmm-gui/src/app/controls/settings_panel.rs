@@ -280,7 +280,8 @@ impl App {
     }
 
     /// **Announce readings**: how often a screen reader hears the reading
-    /// change (`a11y::AnnouncePolicy`).
+    /// change, and whether only with its cursor on it
+    /// (`a11y::AnnouncePolicy`).
     fn show_announce_rows(&mut self, ui: &mut Ui) {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
@@ -304,6 +305,16 @@ impl App {
             let caption = tr!(l10n, "settings-announce");
             if let Some(secs) = chip_row(ui, &caption, chips) {
                 self.settings.announce_interval_secs = secs;
+                self.settings.save();
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            if setting_checkbox(
+                ui,
+                &mut self.settings.announce_only_focused,
+                &tr!(l10n, "settings-announce-focused"),
+                &tr!(l10n, "settings-announce-focused.hover"),
+            ) {
                 self.settings.save();
             }
         });
@@ -1409,8 +1420,8 @@ mod tests {
         }
     }
 
-    /// **Announce readings** picks the pace, Never included, and the reading
-    /// takes it.
+    /// **Announce readings** picks the pace, Never included, and its checkbox
+    /// focus only; the reading takes both.
     #[test]
     fn an_announce_chip_sets_the_pace() {
         let mut run = SettingsRun::new(1200.0, 900.0);
@@ -1427,10 +1438,18 @@ mod tests {
             assert_eq!(run.app.settings.announce_interval_secs, want, "{chip}");
             assert_eq!(
                 run.app.reading_state().announce,
-                crate::a11y::AnnouncePolicy::every_secs(want),
+                crate::a11y::AnnouncePolicy::new(want, false),
                 "{chip}"
             );
         }
+        let frame = run.frame(vec![]);
+        let b = node_bounds(&frame, "Only while the reading has focus");
+        run.click(Pos2::new(
+            ((b.x0 + b.x1) / 2.0) as f32,
+            ((b.y0 + b.y1) / 2.0) as f32,
+        ));
+        assert!(run.app.settings.announce_only_focused);
+        assert!(run.app.reading_state().announce.focus_only);
     }
 
     /// With English alone there is nothing to pick: no Language row.

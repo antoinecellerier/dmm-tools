@@ -145,7 +145,10 @@ impl App {
             scaled: !self.transform.is_identity(),
             alarm_set: self.alarm.is_some(),
             alarm: self.alarm.as_ref().and_then(|a| a.reading_zone()),
-            announce: AnnouncePolicy::every_secs(self.settings.announce_interval_secs),
+            announce: AnnouncePolicy::new(
+                self.settings.announce_interval_secs,
+                self.settings.announce_only_focused,
+            ),
         }
     }
 

@@ -199,6 +199,10 @@ it changes, and Narrator cuts itself off to do so, so a new value waits out
 the **Announce readings** interval; a new mode or the connection state is
 news the user acts on and is spoken at once (`Announcer` in `a11y.rs`).
 
+**Focus mode turns the live region off.** A screen reader reads the item its
+cursor is on again whenever its text changes, so the paced text alone speaks
+the reading there; a live region on top would have each change read twice.
+
 **11 pt floor.** egui's small text style ships at 9 pt, so it is raised to
 11 pt once at startup rather than avoided per call site (`SMALL_TEXT_SIZE` in
 `app/appearance.rs`).

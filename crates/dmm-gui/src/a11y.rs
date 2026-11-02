@@ -132,24 +132,36 @@ pub(crate) fn hide_from_screen_readers(ui: &Ui, id: egui::Id) {
 }
 
 /// How the reading is paced for a screen reader ([`Announcer`]): the
-/// **Announce readings** setting.
+/// **Announce readings** settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AnnouncePolicy {
     /// The least time between two announcements of a value: zero for every
     /// reading, `None` for none.
     pub(crate) every: Option<Duration>,
+    /// **Only while the reading has focus**: the reading is a Tab stop and
+    /// never a live region. A screen reader reads the item its cursor is on
+    /// again at each change of its text, so with the cursor on the reading it
+    /// hears it once per interval, and elsewhere nothing — where a live region
+    /// on top would have it read each change twice.
+    pub(crate) focus_only: bool,
 }
 
 impl AnnouncePolicy {
-    pub(crate) const DEFAULT: Self = Self::every_secs(Some(5));
+    pub(crate) const DEFAULT: Self = Self::new(Some(5), false);
 
-    pub(crate) const fn every_secs(secs: Option<u32>) -> Self {
+    pub(crate) const fn new(every_secs: Option<u32>, focus_only: bool) -> Self {
         Self {
-            every: match secs {
+            every: match every_secs {
                 Some(s) => Some(Duration::from_secs(s as u64)),
                 None => None,
             },
+            focus_only,
         }
+    }
+
+    /// Whether values are announced wherever the screen reader's cursor is.
+    fn live(self) -> bool {
+        self.every.is_some() && !self.focus_only
     }
 }
 
@@ -215,38 +227,30 @@ impl Announcer {
         now: f64,
         fingerprint: u64,
         context: Option<u64>,
-        every: Option<Duration>,
+        policy: AnnouncePolicy,
     ) -> Decision {
         let changed = self.shown.as_ref().is_none_or(|(fp, _)| *fp != fingerprint);
-        let keep = Decision {
-            take: false,
-            live: self.live,
+        // The placeholder is always wanted live; a value only as the policy
+        // says.
+        let wanted = context.is_none() || policy.live();
+        let show = Decision {
+            take: true,
+            live: wanted,
             due_in: None,
         };
-        if context.is_none() {
-            return Decision {
-                take: changed,
-                live: changed || self.live,
-                due_in: None,
-            };
-        }
-        let wanted = every.is_some();
         let keep = Decision {
+            take: false,
             live: self.live && wanted,
-            ..keep
+            due_in: None,
         };
         if !changed {
             return keep;
         }
         // A clock that went backwards counts as the interval passed.
         let elapsed = now - self.shown_at;
-        let pace = every.unwrap_or(QUIET_PACE).as_secs_f64();
-        if self.shown_context != context || elapsed < 0.0 || elapsed >= pace {
-            Decision {
-                take: true,
-                live: wanted,
-                due_in: None,
-            }
+        let pace = policy.every.unwrap_or(QUIET_PACE).as_secs_f64();
+        if context.is_none() || self.shown_context != context || elapsed < 0.0 || elapsed >= pace {
+            show
         } else {
             Decision {
                 due_in: Some(pace - elapsed),
@@ -286,18 +290,27 @@ fn speak_reading(
     make_label: impl FnOnce() -> String,
 ) {
     let id = reading_region_id();
-    ui.interact(rect, id, egui::Sense::hover());
+    let sense = if announce.focus_only {
+        egui::Sense::focusable_noninteractive()
+    } else {
+        egui::Sense::hover()
+    };
+    let response = ui.interact(rect, id, sense);
+    paint_focus_ring(ui, &response);
     let key = id.with("announcer");
     let now = ui.input(|i| i.time);
     let mut announcer: Announcer = ui.ctx().data(|d| d.get_temp(key)).unwrap_or_default();
-    let decision = announcer.decide(now, fingerprint, context, announce.every);
+    let decision = announcer.decide(now, fingerprint, context, announce);
     announcer.apply(decision, now, fingerprint, context, make_label);
     if let Some(secs) = decision.due_in {
         ui.ctx()
             .request_repaint_after(Duration::from_secs_f64(secs));
     }
     let label = announcer.shown.as_ref().map(|(_, l)| Arc::clone(l));
-    let live = announcer.live;
+    // With the reading focused in focus mode, its cursor already reads each
+    // change, the placeholder's included: a live region on top would read it
+    // twice.
+    let live = announcer.live && !(announce.focus_only && response.has_focus());
     ui.ctx().data_mut(|d| d.insert_temp(key, announcer));
     ui.ctx().accesskit_node_builder(id, |node| {
         node.set_role(egui::accesskit::Role::Label);
@@ -501,7 +514,26 @@ mod tests {
         context: Option<u64>,
         every: Option<Duration>,
     ) -> Decision {
-        let d = a.decide(now, fp, context, every);
+        frame_with(
+            a,
+            now,
+            fp,
+            context,
+            AnnouncePolicy {
+                every,
+                focus_only: false,
+            },
+        )
+    }
+
+    fn frame_with(
+        a: &mut Announcer,
+        now: f64,
+        fp: u64,
+        context: Option<u64>,
+        policy: AnnouncePolicy,
+    ) -> Decision {
+        let d = a.decide(now, fp, context, policy);
         a.apply(d, now, fp, context, || fp.to_string());
         d
     }
@@ -585,6 +617,28 @@ mod tests {
             assert!(d.take, "{every:?}: one notice replacing another: {d:?}");
             let d = frame(&mut a, 11.0, 4, DC_V, every);
             assert!(d.take, "{every:?}: {d:?}");
+        }
+    }
+
+    /// Focus only: never live, the text paced at the interval for the
+    /// screen reader's cursor to read — or at the quiet pace under Never —
+    /// and the connection state still announced.
+    #[test]
+    fn focus_only_paces_the_text_and_is_never_live() {
+        for (secs, pace) in [(Some(30), 30.0), (None, 5.0)] {
+            let policy = AnnouncePolicy::new(secs, true);
+            let mut a = Announcer::default();
+            let d = frame_with(&mut a, 10.0, 1, DC_V, policy);
+            assert!(d.take && !d.live, "{secs:?}: {d:?}");
+            let d = frame_with(&mut a, 11.0, 2, DC_V, policy);
+            assert!(
+                !d.take && !d.live && d.due_in == Some(pace - 1.0),
+                "{secs:?}: {d:?}"
+            );
+            let d = frame_with(&mut a, 10.0 + pace, 2, DC_V, policy);
+            assert!(d.take && !d.live, "{secs:?}: {d:?}");
+            let d = frame_with(&mut a, 11.0 + pace, 3, None, policy);
+            assert!(d.take && d.live, "{secs:?}: the placeholder: {d:?}");
         }
     }
 

@@ -436,6 +436,10 @@ pub struct Settings {
     /// reading, in seconds: 0 for every reading, `None` (`null`) for none.
     #[serde(default = "default_announce_interval_secs")]
     pub announce_interval_secs: Option<u32>,
+    /// Announce the reading only while a screen reader's cursor is on it,
+    /// which makes it a Tab stop (`a11y::AnnouncePolicy::focus_only`).
+    #[serde(default)]
+    pub announce_only_focused: bool,
     /// The folder Import… or Export… last picked a file in; both dialogs open
     /// there. `None` until one does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -501,6 +505,7 @@ impl Default for Settings {
             last_seen_version: None,
             check_for_updates: default_check_for_updates(),
             announce_interval_secs: default_announce_interval_secs(),
+            announce_only_focused: false,
             last_folder: None,
             window_size: None,
             window_maximized: false,
@@ -846,6 +851,7 @@ mod tests {
             last_seen_version: Some("0.3.0".to_string()),
             check_for_updates: false,
             announce_interval_secs: None,
+            announce_only_focused: true,
             last_folder: Some(PathBuf::from("/data/bench")),
             window_size: Some([1300.0, 900.0]),
             window_maximized: true,
@@ -881,6 +887,7 @@ mod tests {
         assert_eq!(deserialized.shared.language, "fr");
         assert!(!deserialized.check_for_updates);
         assert_eq!(deserialized.announce_interval_secs, None, "Never survives");
+        assert!(deserialized.announce_only_focused);
         assert_eq!(
             deserialized.last_folder.as_deref(),
             Some(std::path::Path::new("/data/bench"))
@@ -911,6 +918,7 @@ mod tests {
         // One written before readings were paced announces every 5 s, not
         // never (a missing field is not a `null`).
         assert_eq!(s.announce_interval_secs, Some(5));
+        assert!(!s.announce_only_focused);
         // A config file written before the buffer became configurable must
         // land on the default bound, not on zero.
         assert_eq!(s.max_samples, DEFAULT_MAX_SAMPLES);

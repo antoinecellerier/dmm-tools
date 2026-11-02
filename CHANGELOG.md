@@ -10,7 +10,7 @@
 ### GUI
 
 - **French, Brazilian Portuguese, Simplified Chinese and Spanish translations available** — pick one in Settings, **Language**, or let it follow the system's language; Portuguese, Chinese and Spanish are machine-translated until reviewed.
-- **Choose how often a screen reader announces the reading** — every 5s by default, in Settings, **Announce readings**.
+- **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.

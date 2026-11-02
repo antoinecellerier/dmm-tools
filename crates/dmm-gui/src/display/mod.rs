@@ -3248,6 +3248,65 @@ mod tests {
         assert_eq!(f.focus, node_id_labelled(&f.nodes, "Range"), "second Tab");
     }
 
+    /// With **Only while the reading has focus**, Tab reaches the reading
+    /// before the selectors, keeps it through a new value and through the
+    /// placeholder; the focused reading is never live, the placeholder neither.
+    #[test]
+    fn focus_only_makes_the_reading_a_tab_stop() {
+        let ctx = crate::app::styled_context();
+        let modes_offered = two_choices();
+        let frame = |m: Option<&Measurement>, events: Vec<egui::Event>| {
+            let tc = crate::settings::Settings::default().theme_colors(true);
+            let state = ReadingState {
+                announce: AnnouncePolicy::new(Some(5), true),
+                ..ReadingState::PLAIN
+            };
+            run_frame(&ctx, events, |ui| {
+                show_reading_sized(
+                    ui,
+                    &en(),
+                    m,
+                    BASE_READING_FONT_SIZE,
+                    &tc,
+                    state,
+                    modes(&modes_offered),
+                    NoReadingText::Plain,
+                )
+            })
+        };
+        let reading = |v: &str| {
+            let mut m = ranged_reading();
+            m.display_raw = Some(v.to_string());
+            m
+        };
+        let (a, b) = (reading("1.234"), reading("5.678"));
+        let tab = || key(egui::Key::Tab, egui::Modifiers::NONE);
+        let reading_id = Some(crate::a11y::reading_region_id().accesskit_id());
+
+        frame(Some(&a), vec![]);
+        let f = frame(Some(&a), tab());
+        assert_eq!(f.focus, reading_id, "first Tab");
+        assert!(
+            f.nodes
+                .iter()
+                .all(|(_, n)| n.live().is_none_or(|l| l == egui::accesskit::Live::Off)),
+            "a live node with focus only"
+        );
+        let f = frame(Some(&b), vec![]);
+        assert_eq!(f.focus, reading_id, "a new value keeps the focus");
+        let f = frame(None, vec![]);
+        assert_eq!(f.focus, reading_id, "the placeholder keeps the focus");
+        assert!(
+            f.nodes
+                .iter()
+                .all(|(_, n)| n.live().is_none_or(|l| l == egui::accesskit::Live::Off)),
+            "the focused placeholder is live, so read twice"
+        );
+        frame(Some(&a), vec![]);
+        let f = frame(Some(&a), tab());
+        assert_eq!(f.focus, node_id_labelled(&f.nodes, "Mode"), "second Tab");
+    }
+
     /// Opening the range list and picking a rung reports it against
     /// `Setting::Range`, so the caller knows which setting to switch.
     #[test]

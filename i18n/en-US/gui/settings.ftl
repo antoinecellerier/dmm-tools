@@ -221,6 +221,10 @@ settings-announce-chip =
         }
 settings-announce-never = Never
     .hover = Don't speak readings as they change. A lost connection is still spoken.
+# A checkbox under the Announce readings row. Focus is keyboard focus, or
+# where the screen reader's cursor is.
+settings-announce-focused = Only while the reading has focus
+    .hover = Speak the reading only while the screen reader is on it, at the pace above; Tab reaches it.
 
 ## How the graph's lines look, the last row.
 
