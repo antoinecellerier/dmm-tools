@@ -24,10 +24,10 @@ dmm-cli--adapter =
     .help = 複数のアダプターに接続できるとき、特定のアダプターを選択する。'dmm-cli list' が表示する USB ケーブルのシリアル番号か HID パス、または Bluetooth アダプターかマルチメーターのアドレスを指定する
 # dmm-cli --no-bluetooth
 dmm-cli--no-bluetooth =
-    .help = この実行では Bluetooth スキャンをオフにする: アダプターやマルチメーターを一切スキャンせず、'list' はケーブルのみを表示する。保存された 'bluetooth' 設定より優先される。--adapter に指定したアドレスはそのまま開かれる
+    .help = 今回の実行に限り Bluetooth スキャンをオフにする: アダプターやマルチメーターを一切スキャンせず、'list' はケーブルのみを表示する。保存された 'bluetooth' 設定より優先される。--adapter に指定したアドレスはそのまま開かれる
 # dmm-cli --lang
 dmm-cli--lang =
-    .help = メッセージとヘルプの言語。システムの言語にするには `system`。省略すると設定ファイルの `language` (dmm-gui の [言語] 行で書き込まれる)、次にシステムの言語を使用する
+    .help = メッセージとヘルプの言語。システムの言語を使うには `system` を指定する。省略すると設定ファイルの `language` (dmm-gui の [言語] 行で書き込まれる)、次にシステムの言語を使用する
 # dmm-cli list
 list =
     .about = 接続されている USB ケーブルと、通信範囲内の Bluetooth アダプターおよびマルチメーターを一覧表示する
@@ -39,12 +39,12 @@ read =
     .about = 測定値を連続して読み取る
 # dmm-cli read --interval-ms
 read--interval-ms =
-    .help = 1 間隔あたり最大 1 件の測定値を保持する。間隔はミリ秒単位 (0 = マルチメーターが送るすべての測定値)
+    .help = 指定した間隔 (ミリ秒) ごとに最大 1 件の測定値を保持する (0 = マルチメーターが送るすべての測定値)
 # dmm-cli read --format
 # .value-… says what that value does, in --help's list of values.
 read--format =
     .help = 出力形式 [既定値: text、または -o の拡張子が示す形式]
-    .value-replay = マルチメーター自体のフレーム。--replay で再生する
+    .value-replay = マルチメーターが送ったフレームそのもの (--replay で再生できる)
 # dmm-cli read --output
 read--output =
     .help = 出力ファイル (指定しない場合は標準出力)。名前なしで指定すると、マルチメーター、モード、実行開始時刻からファイル名を付ける
@@ -71,7 +71,7 @@ read--alarm-low =
     .help = 測定値が VALUE を下回ったときに警告する (--alarm-high と同様)
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
-    .help = 同じ制限値で再びアラームが鳴るまでに、測定値がどれだけ内側に戻る必要があるか: 制限値の単位の値、または制限値に対する割合 (`1%`) [既定値: マルチメーターの最終桁で数カウント]
+    .help = 同じ制限値で再びアラームが鳴るまでに、測定値が内側へ戻る必要のある幅: 制限値の単位の値、または制限値に対する割合 (`1%`) [既定値: マルチメーターの最終桁の数カウント]
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = アラームのたびに端末のベルを鳴らす
@@ -104,13 +104,13 @@ get--mock-mode =
     .help = シミュレーション デバイスを特定のモードに固定する (--device mock のときのみ)。指定しない場合は設定ファイルのシミュレーション モードが適用され、それもなければすべてのモードを順に切り替える
 # dmm-cli set
 set =
-    .about = マルチメーターの設定の 1 つを、マルチメーターに触れずに切り替える。値を指定せずに実行すると、その設定で現在の状態から選べる値を一覧表示する
+    .about = マルチメーターに触れずに設定を 1 つ切り替える。値を指定せずに実行すると、その設定で現在の状態から選べる値を一覧表示する
 # dmm-cli set <SETTING>
 set--setting =
     .help = 切り替える設定
 # dmm-cli set <CHOICE>
 set--choice =
-    .help = 一覧に表示される値のラベル、またはその一意な一部 (指定せずに実行すると一覧を表示する)
+    .help = 一覧に表示される値のラベル、またはそれを一意に特定できる一部 (指定せずに実行すると一覧を表示する)
 # dmm-cli set --mock-mode
 set--mock-mode =
     .help = シミュレーション デバイスを特定のモードに固定する (--device mock のときのみ)。指定しない場合は設定ファイルのシミュレーション モードが適用され、それもなければすべてのモードを順に切り替える
@@ -122,7 +122,7 @@ debug--count =
     .help = 送信する要求の数 (0 = 無制限)
 # dmm-cli debug --interval-ms
 debug--interval-ms =
-    .help = 1 間隔あたり最大 1 件の測定値を保持する。間隔はミリ秒単位 (0 = すべての測定値)
+    .help = 指定した間隔 (ミリ秒) ごとに最大 1 件の測定値を保持する (0 = すべての測定値)
 # dmm-cli completions
 completions =
     .about = シェル補完を生成する
@@ -134,7 +134,7 @@ capture =
     .about = バグ報告と検証のためのガイド付きプロトコル キャプチャ
 # dmm-cli capture --output
 capture--output =
-    .help = 出力ファイル (既定値: capture-<device>.yaml)。自動の名前付けより優先される
+    .help = 出力ファイル (既定値: capture-<device>.yaml)。自動で付くファイル名より優先される
 # dmm-cli capture --steps
 capture--steps =
     .help = 特定のステップのみ実行する (カンマ区切りの ID。例: 「dcmv,temp,duty」)
@@ -143,7 +143,7 @@ capture--unverified =
     .help = 実機でまだ確認されていないステップと、最後の自由操作のステップのみ実行する
 # dmm-cli capture --plan
 capture--plan =
-    .help = デバイス自体のリストの代わりに、メンテナーのプラン ファイルにあるステップを実行する
+    .help = デバイス既定のステップ一覧の代わりに、メンテナーのプラン ファイルにあるステップを実行する
 # dmm-cli capture --sniff
 capture--sniff =
     .help = パーサーの結果を一切信用しない: 生のバイトの変化でステップを検出し、1 つずつ確認する

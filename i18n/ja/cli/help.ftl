@@ -13,7 +13,7 @@
 # Before the list of devices.
 help-device-intro = 接続するデバイス。
 # Before the list of the simulated meter's modes.
-help-mock-mode-intro = シミュレーション デバイスを、モードを自動で切り替える代わりに特定の測定モードに固定する。--device mock を指定したときのみ有効。指定しない場合は、設定ファイルの mock_mode (dmm-gui のシミュレーション モード) で固定される。
+help-mock-mode-intro = シミュレーション デバイスの測定モードを、自動で切り替えずに特定のモードに固定する。--device mock を指定したときのみ有効。指定しない場合は、設定ファイルの mock_mode (dmm-gui のシミュレーション モード) で固定される。
 
 ## The words around every command's help: its headings, what follows an
 ## option, and the help of the built-in -h, -V and help. They are the same

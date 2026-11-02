@@ -105,15 +105,15 @@ colors-issue-name-reserved = 「{ $name }」は [テーマ] の行で使われ�
 # button captions on the button.
 colors-issue-not-opaque =
     { $what ->
-        [button] ボタン上のボタン テキストが不透明ではありません
+        [button] ボタンのテキストが不透明ではありません
        *[text] 背景上のテキストが不透明ではありません
     }
 # The colours can't be read on each other. $what is as above; $ratio is
 # their contrast, e.g. 1.8, and $floor the least allowed, e.g. 3.
 colors-issue-low-contrast =
     { $what ->
-        [button] ボタン上のボタン テキストのコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
-       *[text] 背景上のテキストのコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
+        [button] ボタンのテキストとボタン背景のコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
+       *[text] テキストと背景のコントラストが { $ratio }:1 で、下限の { $floor }:1 未満です
     }
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
@@ -134,7 +134,7 @@ colors-preset-default =
         [customized] 既定 (カスタマイズ済み)
        *[plain] 既定
     }
-    .hover = 日常の使用向けに調整したバランスのよいパレット
+    .hover = 普段使い向けに調整したバランスのよいパレット
 # $state as for Default.
 colors-preset-high-contrast =
     { $state ->
@@ -156,7 +156,7 @@ colors-preset-clears = プリセットを選択すると、カスタマイズし
 ## The Customize colors section, folded under its header until opened.
 
 colors-customize = 色のカスタマイズ
-    .hover = 選択したプリセットまたはテーマに、色ごとの変更を重ねる
+    .hover = 選択したプリセットまたはテーマの色を 1 色ずつ変更する
 # Beside the header: whose colours the swatches change. $mode is dark or
 # light.
 colors-editing =
@@ -264,8 +264,8 @@ colors-relink = ↺ 再リンク
 # A warning after a colour the user made hard to see on another. $ratio is
 # their contrast, e.g. 2.1; $ground the other colour's name; $floor the
 # least contrast it needs, e.g. 4.5.
-colors-low-contrast = { $ground } 上で { $ratio }:1
-    .hover = この色に { $ground } 上で必要なコントラスト { $floor }:1 を下回っています
+colors-low-contrast = { $ground } に対して { $ratio }:1
+    .hover = { $ground } に対するコントラストが、この色に必要な { $floor }:1 を下回っています
 # A warning after a graph colour the user made hard to tell from another.
 # $other is the other colour's name; $distance how far apart they are and
 # $floor how far apart they need to be, as whole numbers. ΔE is the

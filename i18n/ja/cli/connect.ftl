@@ -49,7 +49,7 @@ connect-reported-name-none = (なし)
 connect-detected = { $meter } を検出しました (次回から検出を省くには、--device { $device } を指定するか dmm-gui で選択してください)
 # The meter gave a name of its own that isn't the model's: $reported is
 # that name, e.g. UT216XD. "Tables" are how the readings are decoded.
-connect-detected-reports = { $meter } を検出しました (マルチメーターは「{ $reported }」と報告しています。{ $meter } のテーブルを使用します。このテーブルを使い続けるには --device { $device } を、別のテーブルにするにはほかの ID を指定してください)
+connect-detected-reports = { $meter } を検出しました (マルチメーターは「{ $reported }」と報告しています。{ $meter } のテーブルを使用します。このテーブルを使い続けるには --device { $device } を、別のテーブルを使うにはほかの ID を指定してください)
 
 ## Once a meter whose support isn't fully verified is open: a warning, then
 ## the command that makes a report, on a line of its own, then where to send
@@ -101,14 +101,14 @@ connect-not-identified-name-it =
 ## Under the list of what is plugged in.
 
 # $selector is the option as typed, --adapter <serial-path-or-address>.
-connect-adapter-select = 1 つを選択するには { $selector } を使用してください。
+connect-adapter-select = { $selector } で 1 つ選択してください。
 
 ## The meter stopped answering. After "Warning:" (common.ftl); the meter's
 ## own steps for switching data transmission on follow.
 
 # $title is "No response from meter" (shared.ftl). $meter is the meter
 # picked, e.g. UNI-T UT61E+.
-connect-no-response = { $title }。マルチメーターが { $meter } であること、およびデータ転送が有効になっていることをご確認ください。
+connect-no-response = { $title }。マルチメーターが { $meter } であることと、データ転送が有効になっていることをご確認ください。
 
 ## The line that closes a failed open, after "Error:" (common.ftl). The
 ## lines above it have already said what to try.

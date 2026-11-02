@@ -21,21 +21,21 @@ read-alarm-hysteresis-needs-limit = --alarm-hysteresis には --alarm-high ま�
 # speed a simulated run up: 'max' plays a recording as fast as it decodes, a
 # preseed starts a run with readings already behind it. After
 # read-flag-refused's options.
-read-clock-max-no-preseed = 'max' ではプリシードを指定できません: すべてのフレームがすでに待ち時間なしで再生されます
+read-clock-max-no-preseed = 'max' ではプリシードを指定できません: もともとすべてのフレームが待ち時間なしで再生されます
 read-clock-max-needs-replay = 'max' には --replay が必要です: 自然に終了するのはリプレイだけです
 # A recording names the meter it was made with. $command is the command line
 # that plays one (dmm-cli read --replay FILE).
-read-replay-names-its-device = --replay ではファイル自体に記録したマルチメーターが記載されています。--device を外してください ({ $command })。
+read-replay-names-its-device = --replay のファイルには記録元のマルチメーターが記載されています。--device を外してください ({ $command })。
 # An exported CSV or JSON file names the meter it was read from.
-read-import-names-its-device = --import ではファイル自体に読み取ったマルチメーターが記載されています。--device を外してください。
+read-import-names-its-device = --import のファイルには読み取り元のマルチメーターが記載されています。--device を外してください。
 # --format replay writes the frames a meter sent. $device is the simulated
 # meter's id, e.g. mock.
 read-replay-format-needs-meter = --format replay には実際のマルチメーターが必要です。--device { $device } からは記録できるものがありません。
 # $flag is the option given that would change the readings, e.g. --scale or
 # --integrate.
-read-replay-format-keeps-frames = リプレイにはマルチメーター自体のフレームが保存されます。{ $flag } は再生時に指定してください。
+read-replay-format-keeps-frames = リプレイにはマルチメーターが送ったフレームがそのまま保存されます。{ $flag } は再生時に指定してください。
 read-import-no-frames = CSV や JSON ファイルには、リプレイとして書き出せるマルチメーターのフレームがありません。リプレイが必要な場合は、リプレイ ファイルを --import してください。
-read-import-no-interval = --interval-ms はマルチメーターから届く測定値を間引くためのものです。ファイルの測定値は、記録されているものがすべてです。
+read-import-no-interval = --interval-ms はマルチメーターから届く測定値を間引くためのものです。ファイルには、記録された測定値しかありません。
 
 ## Why --mock-clock-scale's value was refused, at the end of a line from the
 ## command-line parser, which stays English: "error: invalid value 'abc' for
@@ -126,7 +126,7 @@ read-integral-timed = 積分: { $value } ({ $seconds }s)
 # After "Note:", under the integral: gaps in the readings the integral leaves
 # out. $count is how many; $max the longest interval it bridges, in seconds
 # (s). The rule's other figures, 5 intervals and 2 s, are fixed.
-read-skipped-intervals = { $count } 件の区間をスキップしました (測定値のない時間が { $max } s を超えた区間: サンプリング間隔の 5 倍、かつ 2 s 以上。積分値は一部の区間のみの値です)
+read-skipped-intervals = { $count } 件の区間をスキップしました (測定値のない時間が { $max } s を超えた区間: サンプリング間隔の 5 倍、かつ 2 s 以上。積分値には欠落した区間があります)
 # Under the summary: how many times the readings crossed each limit.
 # $limits is both, high or low: the limits the alarm had. $above and $below
 # are the counts; $high and $low the limits with their unit, e.g. 5 V.

@@ -14,7 +14,7 @@
 
 # A button; ● is part of it.
 recording-record = ● 記録
-    .hover = ライブ サンプルの記録バッファーへの書き込みを開始する ({ $keys })
+    .hover = 受信したサンプルを記録バッファーに書き込み始める ({ $keys })
 # The Record button while recording; ■ is part of it.
 recording-stop = ■ 停止
     .hover = 記録を停止する ({ $keys })

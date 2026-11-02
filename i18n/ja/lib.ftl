@@ -527,7 +527,7 @@ activation-ut181a =
 activation-ut71ab =
     1. USB ケーブルをマルチメーターに接続します。
     2. マルチメーターの電源を入れます。
-    3. MAX MIN を 1 s 押し続けるか、UT71A では SEND を押します。ディスプレイに SEND が表示されます。
+    3. MAX MIN を 1 s 押し続けます (UT71A では SEND を押します)。ディスプレイに SEND が表示されます。
     注意: EXIT を押すと SEND がオフになります。
 # Used by: UT803
 activation-ut803 =
@@ -556,12 +556,12 @@ activation-bm78xbt =
 activation-ow69b =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. マルチメーターの電源を入れます。
-    3. Bluetooth アイコンが表示されるまで、< キー (上に BLE と印字) を押し続けます。
+    3. Bluetooth アイコンが表示されるまで、上に BLE と印字された < キーを押し続けます。
 # Used by: OW67B
 activation-ow67b =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. マルチメーターの電源を入れます。
-    3. Bluetooth アイコンが表示されるまで、< キー (上に BLE と印字) を押し続けます。
+    3. Bluetooth アイコンが表示されるまで、上に BLE と印字された < キーを押し続けます。
     注意: 5 分間操作しないと Bluetooth がオフになります。もう一度 < を押し続けるとオンに戻ります。
 # Used by: VC915, VC925 PV
 activation-vc915 =
@@ -573,7 +573,7 @@ activation-vc871 =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. マルチメーターの電源を入れます。
     3. マルチメーターのビープ音が鳴り、左上に Bluetooth マークが表示されるまで、BLE ボタンを約 2 秒間押し続けます。
-    注意: マルチメーターの電源を入れるたびに Bluetooth はオフになります。そのときはもう一度 BLE を押し続けます。
+    注意: マルチメーターの電源を入れるたびに Bluetooth はオフになるので、そのつど BLE を押し続けます。
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
@@ -584,26 +584,26 @@ activation-ow18b =
 activation-ow65b =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. マルチメーターの電源を入れます。
-    3. Bluetooth アイコンが表示されるまで、SETUP キー (上に BLE と印字) を押し続けます。
+    3. Bluetooth アイコンが表示されるまで、上に BLE と印字された SETUP キーを押し続けます。
     注意: もう一度 SETUP を押し続けると Bluetooth がオフになります。
 # Used by: CMS061, CMS101
 activation-cms061 =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. マルチメーターの電源を入れます。
-    3. Bluetooth アイコンが表示されるまで、Tab⇌ キー (上に BLE と印字) を押し続けます。
+    3. Bluetooth アイコンが表示されるまで、上に BLE と印字された Tab⇌ キーを押し続けます。
     注意: Bluetooth がオンの間は、マルチメーターの電源は自動で切れません。
 # Used by: CM2100B
 activation-cm2100b =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. マルチメーターの電源を入れます。
     3. ディスプレイの左上に ᛒ アイコンが表示されるまで、ZERO/ᛒ キーを約 2 秒間押し続けます。
-    注意: 5 分間操作しないか、もう一度 ZERO/ᛒ を押し続けると、Bluetooth がオフになります。マルチメーターは約 15 分間操作しないと電源が切れます。次に電源を切るまでこれを無効にするには、SELECT を押しながら電源を入れます。
+    注意: 5 分間操作しないか、もう一度 ZERO/ᛒ を押し続けると、Bluetooth がオフになります。マルチメーターは約 15 分間操作しないと電源が切れます。次に電源を切るまでこの機能を無効にするには、SELECT を押しながら電源を入れます。
 # Used by: B33
 activation-b33 =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
     2. マルチメーターの電源を入れます。
     3. ᛒ アイコンが表示されるまで、△/ᛒ キーを押し続けます。
-    注意: 10 分間操作しないとき (ビープ音が 2 回鳴った後) と、オフライン記録が終了したときに、Bluetooth がオフになります。もう一度 △/ᛒ を押し続けるとオンに戻ります。
+    注意: 10 分間操作しないと (ビープ音が 2 回鳴った後)、またはオフライン記録が終了すると、Bluetooth がオフになります。もう一度 △/ᛒ を押し続けるとオンに戻ります。
 # Used by: B35T+, B41T+
 activation-b35t-plus =
     1. スマートフォン アプリとマルチメーターの接続をすべて切断します。
@@ -651,7 +651,7 @@ activation-ut202bt =
     2. Bluetooth ボタンを短く押します。Bluetooth マークが点滅します。
     注意: 接続がないまま 5 分経つと、Bluetooth は自動でオフになります。
 # Used by: Mock UT61E+, Mock ZT-5B
-activation-mock = 設定は不要です。これはシミュレーションのデバイスです。
+activation-mock = シミュレーション用のデバイスのため、設定は不要です。
 
 ## Specification table names, in the Specifications panel, as the
 ## meter's manual titles them. Keep the manual's numbering: (1), A.
@@ -899,10 +899,10 @@ input-fuse-500ma-125v = ヒューズ 500mA 125V
 input-fuse-600ma-1000v = ヒューズ 600mA 1000V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
-input-initially-approx-3-0kohm-150pf-nominal = 初期は約 3.0kΩ, 150pF (定格)
+input-initially-approx-3-0kohm-150pf-nominal = 初期状態で約 3.0kΩ, 150pF (定格)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (DCV)
-input-initially-approx-3-0kohm-165pf-nominal = 初期は約 3.0kΩ, 165pF (定格)
+input-initially-approx-3-0kohm-165pf-nominal = 初期状態で約 3.0kΩ, 165pF (定格)
 
 ## Specification notes, under a table in the Specifications panel, from
 ## the meter's manual. Keep the exact sense, comparisons and qualifiers such as
@@ -1050,7 +1050,7 @@ note-accuracy-valid-40hz-500hz-1-pct = 確度は 40Hz–500Hz、レンジの 1%�
 note-accuracy-valid-40hz-500hz-1-pct-2 = 確度は 40Hz–500Hz、レンジの 1%–100% で有効 (60mV: 2%–100%)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
-note-accuracy-with-film-capacitor-or-better = 確度はフィルムコンデンサーまたはそれ以上のもので規定
+note-accuracy-with-film-capacitor-or-better = 確度はフィルムコンデンサー以上の品質のコンデンサーで規定
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-audible-threshold-between-20ohm-and-300ohm = ブザーのしきい値: 20Ω から 300Ω の間
@@ -1269,10 +1269,10 @@ note-reading-for-reference-only = 測定値は参考値
 note-record-specified-accuracy-adds-10-digits = 記録: > 100 ms の変化では規定の確度に 10 カウントを加算
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-a-ma-picks = 赤のテストリードを A mA に接続: 電流を選択
+note-red-lead-in-a-ma-picks = 赤のテストリードを A mA 端子に接続すると電流を選択
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-vohm-picks-v = 赤のテストリードを VΩ に接続: 0.8V 超で V、それ以外は Ω を選択
+note-red-lead-in-vohm-picks-v = 赤のテストリードを VΩ 端子に接続すると、0.8V 超で V、それ以外は Ω を選択
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-response-time-100us = 応答時間 < 100µs

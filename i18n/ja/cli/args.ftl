@@ -67,8 +67,8 @@ args-conflict-with =
 # subcommand; $name is what the user typed.
 args-conflict-with-list =
     { $what ->
-        [subcommand] サブコマンド '{ $name }' は次と同時に使用できません:
-       *[argument] 引数 '{ $name }' は次と同時に使用できません:
+        [subcommand] サブコマンド '{ $name }' は次のものと同時に使用できません:
+       *[argument] 引数 '{ $name }' は次のものと同時に使用できません:
     }
 # The same, when the others aren't named. $what is argument or
 # subcommand; $name is what the user typed.

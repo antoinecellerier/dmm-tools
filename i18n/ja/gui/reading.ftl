@@ -16,7 +16,7 @@
 # The mode readout as a dropdown of the modes the meter can switch to at
 # its dial position.
 reading-mode =
-    .hover = マルチメーターを、ファンクションスイッチの現在の位置にある別のモードに切り替える
+    .hover = ファンクションスイッチの現在の位置で選べる別のモードにマルチメーターを切り替える
     .a11y = モード
 # The range readout as a dropdown of the meter's ranges in this mode.
 reading-range =

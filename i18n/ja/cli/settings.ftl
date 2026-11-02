@@ -49,13 +49,13 @@ settings-tip-right-column = ヒント: 右の列の値で切り替えられま�
 # hold, rel, minmax or peak, or all for every setting.
 settings-nothing-to-switch =
     { $setting ->
-        [mode] { $meter } では、{ $mode } のとき切り替えられるモードはありません。ファンクションスイッチを使用してください。
-        [range] { $meter } では、{ $mode } のとき切り替えられるレンジはありません。ファンクションスイッチを使用してください。
+        [mode] { $meter } では、{ $mode } のとき切り替えられるモードはありません。ファンクションスイッチで切り替えてください。
+        [range] { $meter } では、{ $mode } のとき切り替えられるレンジはありません。ファンクションスイッチで切り替えてください。
         [hold] { $meter } では、{ $mode } のとき HOLD を切り替えられません。
         [rel] { $meter } では、{ $mode } のとき REL を切り替えられません。
         [minmax] { $meter } では、{ $mode } のとき MIN/MAX を切り替えられません。
         [peak] { $meter } では、{ $mode } のときピークを切り替えられません。
-       *[all] { $meter } では、{ $mode } のとき切り替えられる設定はありません。ファンクションスイッチを使用してください。
+       *[all] { $meter } では、{ $mode } のとき切り替えられる設定はありません。ファンクションスイッチで切り替えてください。
     }
 
 ## In green on the standard output, once 'set' sees the meter on the choice.

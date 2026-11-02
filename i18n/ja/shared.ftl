@@ -62,9 +62,9 @@ link-bluetooth = Bluetooth
 
 # No full stop: the CLI adds one, the GUI's notice titles carry none.
 not-found-usb = USB ケーブルが見つかりません
-not-found-usb-or-bluetooth = USB または Bluetooth でマルチメーターが見つかりません
+not-found-usb-or-bluetooth = USB でも Bluetooth でもマルチメーターが見つかりません
 # $address is a Bluetooth address or peripheral id.
-not-found-bluetooth-at = { $address } に Bluetooth デバイスが見つかりません
+not-found-bluetooth-at = { $address } の Bluetooth デバイスが見つかりません
 # $model is the meter's name, e.g. "UNI-T UT60BT".
 not-found-bluetooth-only = Bluetooth でマルチメーター { $model } が見つかりません
 # A section's label line.
@@ -84,13 +84,13 @@ setup-usb-windows-cp2110 = - [ヒューマン インターフェイス デバイ
 # UNVERIFIED Windows name
 setup-usb-windows-input = - [ヒューマン インターフェイス デバイス] の下の 'USB 入力デバイス': 操作は必要ありません。
 # The driver's download address follows.
-setup-usb-windows-warning = - [ほかのデバイス] の下に黄色の警告アイコンがある: 次の場所からドライバーをインストールしてください:
-setup-usb-windows-nothing = - 何も表示されない: 別の USB ポートをお試しください。
+setup-usb-windows-warning = - [ほかのデバイス] の下に黄色の警告アイコンが表示されている場合は、次の場所からドライバーをインストールしてください:
+setup-usb-windows-nothing = - 何も表示されない場合は、別の USB ポートをお試しください。
 # macOS. Name the settings as macOS shows them in your language.
 setup-usb-macos-auto = ケーブルは自動的に認識されます (ドライバーは不要です)。
 setup-usb-macos-privacy = デバイスが見つからない場合は、[システム設定] > [プライバシーとセキュリティ] > [入力監視] をご確認ください。
 setup-bluetooth-adapter = 両方ともオンになっている場合は、アダプターをオフにしてからもう一度オンにしてください。
-setup-bluetooth-macos-privacy = Bluetooth の使用を [システム設定] > [プライバシーとセキュリティ] > [Bluetooth] で許可してください。
+setup-bluetooth-macos-privacy = [システム設定] > [プライバシーとセキュリティ] > [Bluetooth] で Bluetooth の使用を許可してください。
 # The device catalog's address follows.
 setup-bluetooth-catalog = 対応しているアダプターとマルチメーターの一覧は、デバイス カタログをご覧ください:
 setup-bluetooth-scan = 'dmm-cli list' を実行すると、通信範囲内のアダプターとマルチメーターをスキャンできます。
@@ -130,7 +130,7 @@ input-not-a-number = 「{ $text }」は数値ではありません
 # Infinity or "not a number" (NaN).
 input-not-finite = 有限の数値である必要があります
 # A scale factor of 0 would turn every reading into the offset.
-input-zero-scale = 倍率を 0 にすると測定値が消えてしまいます
+input-zero-scale = 倍率を 0 にすると測定値が消えます
 # The alarm's low limit and its high limit.
 input-low-not-below-high = 下限は上限より小さくする必要があります
 # The alarm's hysteresis band: a number in the limits' unit, or a percentage

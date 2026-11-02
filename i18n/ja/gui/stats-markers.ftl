@@ -43,7 +43,7 @@ stats-integral-untimed = ∫:{ $value } { $unit }
 # for seconds. ⚠ is part of it. The hover explains it: 5 and 2 are fixed
 # numbers.
 stats-gaps = ⚠ >{ $limit }s の欠落 { $count } 件をスキップ
-    .hover = 測定値のない区間が { $limit } s を超えると、その区間は積分されません (サンプリング間隔の 5 倍、かつ 2 s 以上)。積分値は一部の区間のみの値です。
+    .hover = 測定値のない区間が { $limit } s を超えると、その区間は積分されません (サンプリング間隔の 5 倍、かつ 2 s 以上)。そのため、積分値には一部の区間が含まれていません。
 # While the Alarm row under the reading has limits set: how many times the
 # reading went past each. $limits is both while there is a high and a low
 # limit, high or low while there is only that one; $high and $low are the

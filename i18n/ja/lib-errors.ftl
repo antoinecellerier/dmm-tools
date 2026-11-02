@@ -105,9 +105,9 @@ error-bluetooth-only-usb-adapter = マルチメーター { $model } は Bluetoot
 # $setting is a setting's name.
 error-unsupported-setting = このマルチメーターでは { $setting } を設定できません
 # $mode is a mode.
-error-unsupported-several-positions = { $mode } は複数のファンクションスイッチの位置から報告されます: 先に別のモードで測定値を読み取ってください
+error-unsupported-several-positions = { $mode } はファンクションスイッチの複数の位置で報告されます: 先に別のモードで測定値を読み取ってください
 # $mode is a mode.
-error-unsupported-no-position = { $mode } に対応する既知のファンクションスイッチの位置はありません
+error-unsupported-no-position = { $mode } に対応するファンクションスイッチの位置は不明です
 # $target and $from are modes.
 error-unsupported-mode-unreachable = { $from } からモード { $target } に切り替えることはできません: 先にファンクションスイッチを回してください
 # $target and $from_word are mode codes, $from is the mode $from_word is.
@@ -178,7 +178,7 @@ error-rejected-zero-needs-capacitance = ZERO は静電容量の測定でのみ�
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.
-error-rejected-other-model = マルチメーターが報告した OWON のモデル コード { $code } ({ $model }) は、接続時に指定した { $opened } ではないため、リモート キーは無効です: [自動検出] または --device { $id } を選択してください
+error-rejected-other-model = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) で、接続時に指定した { $opened } と異なるため、リモート キーは無効です: [自動検出] または --device { $id } を選択してください
 # $code is a number.
 error-rejected-unknown-model = マルチメーターが報告した OWON のモデル コード { $code } はこのツールではまだ認識できないため、リモート キーは無効です
 # $command is a command word.
@@ -204,7 +204,7 @@ error-sent-range = レンジ { $range }
 # Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
 # 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
 # for $model.
-error-wrong-meter-other-frame = マルチメーターが報告した OWON のモデル コード { $code } ({ $model }) は OWON の { $frame } バイト フレームを送信するモデルで、接続時に指定した { $opened } ではありません: [自動検出] または --device { $id } を選択してください
+error-wrong-meter-other-frame = マルチメーターが報告した OWON のモデル コードは { $code } ({ $model }) で、接続時に指定した { $opened } ではなく、OWON の { $frame } バイト フレームを送信するモデルです: [自動検出] または --device { $id } を選択してください
 # An OWON meter sends the other kind of data frame and names no model.
 # $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
 # meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
@@ -216,10 +216,10 @@ error-wrong-meter-other-frame-kind =
     }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
-error-wrong-meter-not-yet = マルチメーターが報告した OWON のモデル コード { $code } は、このツールではまだ読み取れません: このメッセージを添えて Issue を作成してください
+error-wrong-meter-not-yet = マルチメーターが報告した OWON のモデル コードは { $code } で、この機種はこのツールではまだ読み取れません: このメッセージを添えて Issue を作成してください
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
-error-wrong-meter-sign-in-function-word = マルチメーターが報告した OWON のモデル コード { $code } は、ファンクション ワードに符号を含む OWON の 6 バイト フレームを送信しますが、このツールではまだ読み取れません
+error-wrong-meter-sign-in-function-word = マルチメーターが報告した OWON のモデル コードは { $code } で、この機種はファンクション ワードに符号を含む OWON の 6 バイト フレームを送信しますが、このツールではまだ読み取れません
 # A Brymen meter of another series answered. $found and $opened are series,
 # e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
 error-wrong-meter-other-series = ケーブルに接続されているマルチメーターは { $found } で、{ $opened } ではありません: [自動検出] または --device { $id } を選択してください
@@ -242,8 +242,8 @@ error-bluetooth-powered-off = このコンピューターでオフになって�
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] Bluetooth デバイスに認識できるデータ書き込み用のキャラクタリスティックがありません: 対応しているアダプターやマルチメーターではないか、サービスが解決されませんでした
-       *[notify] Bluetooth デバイスに認識できるデータ通知用のキャラクタリスティックがありません: 対応しているアダプターやマルチメーターではないか、サービスが解決されませんでした
+        [write] Bluetooth デバイスに認識できるデータ書き込み用のキャラクタリスティックがありません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
+       *[notify] Bluetooth デバイスに認識できるデータ通知用のキャラクタリスティックがありません: 対応しているアダプターやマルチメーターではないか、サービスの検出が完了しませんでした
     }
 # A Brymen meter refused the password this tool sends.
 error-bluetooth-password-refused = マルチメーターが接続パスワード 0000 を拒否しました: リセットするには、{ error-bluetooth-reset-gesture }
@@ -272,6 +272,6 @@ late-readings-title = 一部の Bluetooth 測定値が遅れて届きます
 # none.
 late-readings-advice =
     { $fix ->
-        [command] このアダプターでは、測定値が次の測定値とまとめて届くことがあります。測定値が失われることはありません。マルチメーターが切断されるまで正確なタイムスタンプを得るには、次のコマンドを実行してください:
+        [command] このアダプターでは、測定値が次の測定値とまとめて届くことがあります。測定値が失われることはありません。マルチメーターが切断されるまでの間、正確なタイムスタンプを得るには、次のコマンドを実行してください:
        *[none] このアダプターでは、測定値が次の測定値とまとめて届くことがあります。測定値が失われることはありません。
     }

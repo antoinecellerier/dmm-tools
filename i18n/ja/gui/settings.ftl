@@ -90,8 +90,8 @@ settings-buffer-size = バッファー サイズ:
 settings-buffer-size-chip =
     .hover =
         { $pace ->
-            [every-reading] グラフとエクスポート用にサンプルを最大 { $samples } 件保持します ({ $memory }、毎秒 10 件の測定値で約 { $span })。停止した記録を併せて保持すると、さらに同じだけ使用する場合があります。
-           *[interval] グラフとエクスポート用にサンプルを最大 { $samples } 件保持します ({ $memory }、現在のサンプリング間隔で約 { $span })。停止した記録を併せて保持すると、さらに同じだけ使用する場合があります。
+            [every-reading] グラフとエクスポート用にサンプルを最大 { $samples } 件保持します ({ $memory }、毎秒 10 件の測定値で約 { $span })。停止した記録も保持している場合は、メモリをさらに同じ量だけ使用することがあります。
+           *[interval] グラフとエクスポート用にサンプルを最大 { $samples } 件保持します ({ $memory }、現在のサンプリング間隔で約 { $span })。停止した記録も保持している場合は、メモリをさらに同じ量だけ使用することがあります。
         }
 # After the Buffer size chips: what the picked size costs. $memory is the
 # memory it takes, e.g. ≈194 MB; $span how long it lasts, e.g. 14 h.
@@ -122,9 +122,9 @@ settings-specs-accuracy = 確度
     .hover = 仕様に確度を表示する
 # Input Z is the input impedance.
 settings-specs-input-z = 入力インピーダンス
-    .hover = 仕様パネルの全体表示に入力インピーダンスを表示する
+    .hover = 仕様パネルを全体表示したときに入力インピーダンスを表示する
 settings-specs-notes = 注記
-    .hover = 仕様パネルの全体表示に取扱説明書の注記を表示する
+    .hover = 仕様パネルを全体表示したときに取扱説明書の注記を表示する
 
 ## The window.
 
@@ -213,7 +213,7 @@ settings-announce-never = 読み上げない
 # A checkbox at the end of the same row, or under it when the row wraps.
 # Focus is keyboard focus, or where the screen reader's cursor is.
 settings-announce-focused = 測定値にフォーカスがあるときだけ読み上げる
-    .hover = スクリーン リーダーが測定値の上にあるときだけ、選択したペースで読み上げます。Tab キーで移動できます。
+    .hover = スクリーン リーダーのカーソルが測定値にあるときだけ、選択したペースで読み上げます。測定値には Tab キーで移動できます。
 
 ## How the graph's lines look, the last row.
 
@@ -223,4 +223,4 @@ settings-graph-lines = グラフの線:
 settings-graph-lines-patterned = パターン
     .hover = サブ表示値の線を破線と点線にして、色に頼らずに区別する
 settings-graph-lines-solid = 実線
-    .hover = 連続した線にして、色と凡例で区別する
+    .hover = サブ表示値の線を実線にして、色と凡例で区別する

@@ -94,7 +94,7 @@ graph-mean = 平均値
 # A chip that draws a shaded band between the lowest and highest readings
 # over a sliding window of time.
 graph-envelope = 最小/最大
-    .hover = 移動する時間幅での最小値と最大値の間に網掛けの帯を描画する ({ $keys })
+    .hover = 時間幅をずらしながら求めた最小値と最大値の間を網掛けで描画する ({ $keys })
 # The small field after Min/Max, about 30 pixels wide: how many seconds the
 # band's window spans. The text shows greyed inside the field while it is
 # empty; "s" after the field is the symbol for seconds.
@@ -107,13 +107,13 @@ graph-envelope-window = 最小/最大の時間幅 (秒)
 graph-histogram = ヒストグラム
     .hover =
         { $state ->
-            [hidden] ヒストグラムを見るにはプロット中のトレースを表示するか、クリックしてオフにしてください。
+            [hidden] ヒストグラムを表示するには、プロット中のトレースを表示してください。または、クリックしてオフにしてください。
            *[shown] 表示中の測定値の分布を表示する ({ $keys })
         }
 # A chip that draws reference lines: horizontal lines at the values typed
 # in the field after it. Short for reference.
 graph-ref = 基準
-    .hover = 次のフィールドの値に水平の基準線を描画する ({ $keys })
+    .hover = 右のフィールドに入力した値の位置に水平の基準線を描画する ({ $keys })
 # The field after Ref, about 80 pixels wide. The text shows greyed inside
 # the field while it is empty; the numbers in the hover are an example of
 # what to type, kept as they are.

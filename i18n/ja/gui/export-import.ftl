@@ -96,8 +96,8 @@ export-unsaved-record-confirm = 破棄して記録
 export-unsaved-discard =
     { $lost ->
         [samples] 記録を破棄すると、グラフに残っていないサンプル { $samples } 件が失われます。
-        [markers] 記録を破棄すると、グラフに残っていない測定値にあるマーカー { $markers } 個の保存されていない変更が失われます。
-       *[both] 記録を破棄すると、グラフに残っていないサンプル { $samples } 件と、そこにあるマーカー { $markers } 個の保存されていない変更が失われます。
+        [markers] 記録を破棄すると、グラフに残っていない測定値に付いたマーカー { $markers } 個について、保存されていない変更が失われます。
+       *[both] 記録を破棄すると、グラフに残っていないサンプル { $samples } 件と、それらに付いたマーカー { $markers } 個の保存されていない変更が失われます。
     }
 # The prompt's button that goes ahead: drops the recording.
 export-unsaved-discard-confirm = 記録の破棄
@@ -176,9 +176,9 @@ export-in-progress = エクスポートはすでに実行中です。先にそ�
 # system or the file writer, often in English.
 export-failed = エクスポートできませんでした: { $reason }
 # The save dialog went away without saying which file to write.
-export-failed-dialog = エクスポートできませんでした: 保存ダイアログが応答なしで閉じられました。
+export-failed-dialog = エクスポートできませんでした: 保存先が選択されないまま保存ダイアログが閉じました。
 # The part of the app writing the file stopped without saying how it went.
-export-failed-writer = エクスポートできませんでした: 書き込み処理が応答なしで停止しました。
+export-failed-writer = エクスポートできませんでした: 書き込み処理が結果を返さずに停止しました。
 # The samples to export were dropped while the save dialog was open, so
 # the file would not hold what was asked for.
 export-failed-changed = エクスポートできませんでした: 保存ダイアログが開いている間にサンプルが変更されました。

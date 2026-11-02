@@ -101,7 +101,7 @@ remote-press-key = マルチメーターの { $key } キーを押す
 # SELECT: steps through the functions that share the dial position, e.g.
 # AC and DC.
 remote-select =
-    .hover = ファンクションスイッチの現在の位置にあるサブ機能を順に切り替える
+    .hover = ファンクションスイッチの現在の位置で使えるサブ機能を順に切り替える
 # LIGHT: the display's backlight.
 remote-light =
     .hover = マルチメーターのバックライトをオン/オフする

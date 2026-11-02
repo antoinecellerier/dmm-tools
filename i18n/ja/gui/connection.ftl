@@ -20,7 +20,7 @@ connection-no-frames = 記録のこの区間にはフレームがありません
 # at the end, with nothing after it.
 connection-waiting = マルチメーターを待機中{ $dots }
 # Under the waiting title, when a meter is picked in Settings.
-connection-waiting-check-selection = [設定] (⚙) で正しいデバイスが選択されていることをご確認ください。または、そこで [自動検出] を選択してください。
+connection-waiting-check-selection = [設定] (⚙) で正しいデバイスが選択されているかを確認するか、[自動検出] を選択してください。
 # Under the waiting title, when Settings is on Auto-detect.
 connection-waiting-switch-on = マルチメーターのデータ転送をオンにするか、[設定] (⚙) で機種を選択してください。
 
@@ -86,7 +86,7 @@ connection-no-response =
             応答しません ({ $model } を選択中)。
     }
 
-    デバイスが違う場合は、[設定] (⚙) で変更するか、そこで [自動検出] を選択してください。
+    デバイスが違う場合は、[設定] (⚙) で変更するか、[自動検出] を選択してください。
     それ以外の場合は、データ転送をオンにしてください:
     { $steps }
 # The same, on Auto-detect: no meter is picked to name.
@@ -133,7 +133,7 @@ connection-detected-reports =
 # The meter named another model than the one picked in Settings. $reported
 # is the name it gave, e.g. UT161E; $picked the model picked, $named the
 # model that name belongs to, e.g. UNI-T UT161E.
-connection-other-model = マルチメーターは「{ $reported }」と報告しており、選択した { $picked } ではありません。[設定] で { $named } または [自動検出] を選択してください。
+connection-other-model = マルチメーターは選択した { $picked } ではなく「{ $reported }」と報告しています。[設定] で { $named } または [自動検出] を選択してください。
 # Detection settled on a meter, then the meter named another. $reported is
 # the name it gave, $named the model it belongs to. $saved is yes when
 # Settings now names that model.

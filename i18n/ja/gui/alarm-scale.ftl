@@ -58,7 +58,7 @@ scale-apply = 適用
     .hover = これ以降のすべての測定値にこの値を適用する
 # Turns scaling off; the fields keep their values for the next Apply.
 scale-off = オフ
-    .hover = スケーリングを停止し、マルチメーター本来の測定値の表示に戻す
+    .hover = スケーリングを停止し、マルチメーターの元の測定値を表示する
 
 ## The Scale row's toasts.
 
