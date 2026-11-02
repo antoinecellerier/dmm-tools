@@ -181,25 +181,25 @@ export-unsaved-connect =
     { $lost ->
         [samples]
             { $samples ->
-                [one] La conexión cierra la sesión importada y descartará { $samples } muestra sin exportar.
-               *[other] La conexión cierra la sesión importada y descartará { $samples } muestras sin exportar.
+                [one] Conectar cierra la sesión importada y descartará { $samples } muestra sin exportar.
+               *[other] Conectar cierra la sesión importada y descartará { $samples } muestras sin exportar.
             }
         [markers]
             { $markers ->
-                [one] La conexión cierra la sesión importada y descartará los cambios no guardados de { $markers } marcador.
-               *[other] La conexión cierra la sesión importada y descartará los cambios no guardados de { $markers } marcadores.
+                [one] Conectar cierra la sesión importada y descartará los cambios no guardados de { $markers } marcador.
+               *[other] Conectar cierra la sesión importada y descartará los cambios no guardados de { $markers } marcadores.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] La conexión cierra la sesión importada y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador.
-                       *[other] La conexión cierra la sesión importada y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores.
+                        [one] Conectar cierra la sesión importada y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Conectar cierra la sesión importada y descartará { $samples } muestra sin exportar y los cambios no guardados de { $markers } marcadores.
                     }
                *[other]
                     { $markers ->
-                        [one] La conexión cierra la sesión importada y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador.
-                       *[other] La conexión cierra la sesión importada y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores.
+                        [one] Conectar cierra la sesión importada y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcador.
+                       *[other] Conectar cierra la sesión importada y descartará { $samples } muestras sin exportar y los cambios no guardados de { $markers } marcadores.
                     }
             }
     }
@@ -240,13 +240,13 @@ import-done-partial =
     { $count ->
         [one]
             { $left ->
-                [one] Se importó { $count } lectura (la primera) de { $file }; se omitió { $left } lectura más allá del Tamaño del búfer de Configuración
-               *[other] Se importó { $count } lectura (la primera) de { $file }; se omitieron { $left } lecturas más allá del Tamaño del búfer de Configuración
+                [one] Se importó { $count } lectura (la primera) de { $file }; se omitió { $left } lectura que superaba el Tamaño del búfer fijado en Configuración
+               *[other] Se importó { $count } lectura (la primera) de { $file }; se omitieron { $left } lecturas que superaban el Tamaño del búfer fijado en Configuración
             }
        *[other]
             { $left ->
-                [one] Se importaron las primeras { $count } lecturas de { $file }; se omitió { $left } lectura más allá del Tamaño del búfer de Configuración
-               *[other] Se importaron las primeras { $count } lecturas de { $file }; se omitieron { $left } lecturas más allá del Tamaño del búfer de Configuración
+                [one] Se importaron las primeras { $count } lecturas de { $file }; se omitió { $left } lectura que superaba el Tamaño del búfer fijado en Configuración
+               *[other] Se importaron las primeras { $count } lecturas de { $file }; se omitieron { $left } lecturas que superaban el Tamaño del búfer fijado en Configuración
             }
     }
 # The file was read but has no readings in it. $file is its name.
@@ -262,8 +262,8 @@ import-failed-unexplained = Error al importar
 # its name, e.g. measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv.
 export-done =
     { $count ->
-        [one] Se exportó { $count } muestra en { $file }
-       *[other] Se exportaron { $count } muestras en { $file }
+        [one] Se exportó { $count } muestra a { $file }
+       *[other] Se exportaron { $count } muestras a { $file }
     }
 # After Export… with nothing to save: the recording is running or stopped
 # but empty.
@@ -280,7 +280,7 @@ export-in-progress = Ya hay una exportación en curso. Termínala primero.
 # system or the file writer, often in English.
 export-failed = Error al exportar: { $reason }
 # The save dialog went away without saying which file to write.
-export-failed-dialog = Error al exportar: el cuadro de diálogo Guardar se cerró sin respuesta
+export-failed-dialog = Error al exportar: el cuadro de diálogo Guardar se cerró sin indicar ningún archivo
 # The part of the app writing the file stopped without saying how it went.
 export-failed-writer = Error al exportar: el proceso de escritura se detuvo sin respuesta
 # The samples to export were dropped while the save dialog was open, so

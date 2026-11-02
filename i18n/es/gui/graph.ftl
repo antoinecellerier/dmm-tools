@@ -23,7 +23,7 @@ graph-window =
 # A chip, lit while the graph follows the newest samples; dragging the graph
 # turns it off. Keep it short; it is set in small capitals.
 graph-live = EN VIVO
-    .hover = Seguir las muestras más recientes: se desactiva al desplazar ({ $keys } para volver)
+    .hover = Seguir las muestras más recientes: se desactiva al desplazar la vista ({ $keys } para volver)
 # The chip for the Y (vertical) axis while its bounds are typed in: Y is the
 # axis, Fixed the mode. Clicking it switches to Y:Auto.
 graph-y-fixed = Y:fijo
@@ -98,7 +98,7 @@ graph-envelope = Mín./Máx.
 # The small field after Min/Max, about 30 pixels wide: how many seconds the
 # band's window spans. The text shows greyed inside the field while it is
 # empty; "s" after the field is the symbol for seconds.
-graph-envelope-window = Ventana Mín./Máx., segundos
+graph-envelope-window = Ventana Mín./Máx. en segundos
     .hover = Tamaño de la ventana (segundos) para calcular la envolvente Mín./Máx.
 # A chip that shows a histogram, bars of how many readings fell at each
 # value, beside or under the graph. $state is hidden while the plotted
@@ -107,7 +107,7 @@ graph-envelope-window = Ventana Mín./Máx., segundos
 graph-histogram = Histograma
     .hover =
         { $state ->
-            [hidden] Muestra la curva trazada para ver su histograma, o haz clic para desactivarlo
+            [hidden] Activa la curva trazada para ver su histograma o haz clic para desactivarlo
            *[shown] Mostrar la distribución de las lecturas visibles ({ $keys })
         }
 # A chip that draws reference lines: horizontal lines at the values typed
@@ -267,7 +267,7 @@ graph-histogram-a11y =
 graph-histogram-a11y-sd = desviación estándar { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
-graph-histogram-a11y-most = la mayoría en el intervalo { $range } ({ $count })
+graph-histogram-a11y-most = la mayoría en el intervalo de { $range } ({ $count })
 # How many readings in view were over range (OL). $count is that number.
 graph-histogram-a11y-over-range =
     { $count ->

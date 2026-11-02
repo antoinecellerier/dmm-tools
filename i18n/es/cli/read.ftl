@@ -34,7 +34,7 @@ read-replay-format-needs-meter = --format replay necesita un multímetro real: n
 # $flag is the option given that would change the readings, e.g. --scale or
 # --integrate.
 read-replay-format-keeps-frames = un archivo de reproducción guarda las tramas del propio multímetro: indica { $flag } al reproducirlo
-read-import-no-frames = un archivo CSV o JSON no contiene tramas del multímetro que escribir como reproducción: para eso, usa --import con un archivo de reproducción
+read-import-no-frames = un archivo CSV o JSON no contiene tramas del multímetro con las que crear un archivo de reproducción: para eso, usa --import con un archivo de reproducción
 read-import-no-interval = --interval-ms selecciona las lecturas a medida que un multímetro las envía: un archivo ya trae todas sus lecturas
 
 ## Why --mock-clock-scale's value was refused, at the end of a line from the

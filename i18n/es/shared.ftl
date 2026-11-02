@@ -76,7 +76,7 @@ setup-bluetooth-check = activa el Bluetooth en este equipo y la transmisión de 
 # Linux. Two command lines follow.
 setup-usb-linux-rule = Asegúrate de que la regla udev esté instalada:
 # Linux. The setup guide's address follows.
-setup-usb-linux-replug = Después, vuelve a conectar el cable. En un equipo sin pantalla, incluye un grupo en la regla:
+setup-usb-linux-replug = Después, vuelve a conectar el cable. En un equipo sin pantalla, añade un grupo a la regla:
 # Windows. The quoted names are what Device Manager shows; use the names
 # Windows shows in your language.
 setup-usb-windows-open = Abre el Administrador de dispositivos con el cable conectado:
@@ -130,7 +130,7 @@ input-not-a-number = “{ $text }” no es un número
 # Infinity or "not a number" (NaN).
 input-not-finite = debe ser un número finito
 # A scale factor of 0 would turn every reading into the offset.
-input-zero-scale = un factor de escala de cero borraría la lectura
+input-zero-scale = un factor de escala igual a cero borraría la lectura
 # The alarm's low limit and its high limit.
 input-low-not-below-high = el límite inferior debe ser menor que el superior
 # The alarm's hysteresis band: a number in the limits' unit, or a percentage
@@ -152,11 +152,11 @@ input-percent-of-zero = un porcentaje de un límite de 0 siempre es 0; indica un
 read-error-at-line = línea { $line }: { $reason }
 read-error-empty = el archivo está vacío
 # A CSV export without its first row naming the columns.
-read-error-no-header-row = sin fila de encabezado ({ $detail })
+read-error-no-header-row = falta la fila de encabezado ({ $detail })
 # $column is the name of a column every CSV export has, e.g. timestamp.
-read-error-no-column = sin columna `{ $column }`
+read-error-no-column = falta la columna `{ $column }`
 # A JSON export whose first line is not the one starting {"_metadata":.
-read-error-no-metadata = sin línea `_metadata` ({ $detail })
+read-error-no-metadata = falta la línea `_metadata` ({ $detail })
 # $text is what the file has where a reading's value should be.
 read-error-not-a-value = `{ $text }` no es un valor
 # $text is a cell starting NCV: whose level is no number. NCV is

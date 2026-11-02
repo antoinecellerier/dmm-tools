@@ -21,7 +21,7 @@ dmm-cli--device =
     .help = Dispositivo al que conectarse [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]. Si se omite, se usa `device_family` de ~/.config/dmm-tools/settings.json (escrito por dmm-gui) y, si no, `auto`, que detecta el multímetro por el cable USB
 # dmm-cli --adapter
 dmm-cli--adapter =
-    .help = Seleccionar un adaptador concreto cuando hay más de uno accesible. Indica el número de serie o la ruta HID de un cable USB, o la dirección de un adaptador o multímetro Bluetooth, tal como los muestra 'dmm-cli list'
+    .help = Seleccionar un adaptador concreto cuando hay más de uno disponible. Indica el número de serie o la ruta HID de un cable USB, o la dirección de un adaptador o multímetro Bluetooth, tal como los muestra 'dmm-cli list'
 # dmm-cli --no-bluetooth
 dmm-cli--no-bluetooth =
     .help = Desactivar la búsqueda Bluetooth en esta ejecución: no se buscan adaptadores ni multímetros y 'list' solo muestra cables. Anula el ajuste 'bluetooth' guardado. Una dirección indicada en --adapter se abre igualmente
@@ -47,7 +47,7 @@ read--format =
     .value-replay = Las tramas del propio multímetro, para que --replay las reproduzca
 # dmm-cli read --output
 read--output =
-    .help = Archivo de salida (stdout si no se especifica). Sin nombre, el archivo recibe el nombre del multímetro, su modo y el inicio de la ejecución
+    .help = Archivo de salida (stdout si no se especifica). Si se indica sin nombre, el nombre del archivo se forma con el multímetro, su modo y la hora de inicio de la ejecución
 # dmm-cli read --count
 read--count =
     .help = Número de lecturas (0 = ilimitado: hasta Ctrl+C o el final de un archivo de --replay)
@@ -56,7 +56,7 @@ read--integrate =
     .help = Mostrar la integral acumulada en el tiempo (carga para los modos de corriente, V·s para la tensión)
 # dmm-cli read --scale
 read--scale =
-    .help = Multiplicar la lectura, tomada en unidades base (V, A, Ω, …), por FACTOR. Una pinza de 10 mV/A es --scale 100; una sonda 100:1 es --scale 100
+    .help = Multiplicar la lectura, tomada en unidades base (V, A, Ω, …), por FACTOR. Para una pinza de 10 mV/A, usa --scale 100; para una sonda 100:1, --scale 100
 # dmm-cli read --offset
 read--offset =
     .help = Sumar VALUE después de escalar (32 con --scale 1.8 convierte °C en °F)
@@ -71,7 +71,7 @@ read--alarm-low =
     .help = Avisar cuando la lectura baje de VALUE, igual que --alarm-high
 # dmm-cli read --alarm-hysteresis
 read--alarm-hysteresis =
-    .help = Cuánto debe volver hacia dentro una lectura antes de que el mismo límite vuelva a activar la alarma: un valor en la unidad de los límites, o un porcentaje del límite (`1%`) [predeterminado: unas pocas cuentas del último dígito del multímetro]
+    .help = Cuánto debe retroceder una lectura hacia dentro del límite antes de que ese mismo límite vuelva a activar la alarma: un valor en la unidad de los límites, o un porcentaje del límite (`1%`) [predeterminado: unas pocas cuentas del último dígito del multímetro]
 # dmm-cli read --alarm-bell
 read--alarm-bell =
     .help = Hacer sonar la campana de la consola en cada alarma
@@ -80,10 +80,10 @@ read--mock-mode =
     .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos
 # dmm-cli read --replay
 read--replay =
-    .help = Reproducir un archivo escrito por --format replay en lugar de abrir un multímetro; termina con el archivo
+    .help = Reproducir un archivo escrito por --format replay en lugar de abrir un multímetro; termina al llegar al final del archivo
 # dmm-cli read --import
 read--import =
-    .help = Leer un archivo CSV, JSON o de reproducción exportado en lugar de abrir un multímetro, sin esperar: para convertirlo o mostrar su resumen
+    .help = Leer un archivo exportado (CSV, JSON o de reproducción) en lugar de abrir un multímetro, sin esperar, para convertirlo o mostrar su resumen
 # dmm-cli command
 command =
     .about = Enviar al multímetro un comando que presiona un botón. Ejecútalo sin argumentos para ver los comandos disponibles del dispositivo seleccionado
@@ -92,7 +92,7 @@ command--action =
     .help = Nombre del comando (ejecútalo sin argumentos para ver los comandos disponibles)
 # dmm-cli get
 get =
-    .about = Mostrar a qué se pueden cambiar los ajustes del multímetro desde donde está ahora. Ejecútalo sin argumento para ver todos los ajustes que ofrecen opciones
+    .about = Mostrar a qué valores se pueden cambiar los ajustes del multímetro desde su estado actual. Ejecútalo sin argumento para ver todos los ajustes que ofrecen opciones
 # dmm-cli get <SETTING>
 get--setting =
     .help = Ajuste que mostrar (omítelo para verlos todos)
@@ -104,13 +104,13 @@ get--mock-mode =
     .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos
 # dmm-cli set
 set =
-    .about = Cambiar un ajuste del multímetro sin tocar el multímetro. Ejecútalo sin valor para ver a qué valores llega ese ajuste desde aquí
+    .about = Cambiar un ajuste del multímetro sin tocarlo. Ejecútalo sin valor para ver a qué valores se puede cambiar ese ajuste desde el estado actual
 # dmm-cli set <SETTING>
 set--setting =
     .help = Ajuste que cambiar
 # dmm-cli set <CHOICE>
 set--choice =
-    .help = Etiqueta del valor, o un fragmento único de ella, tal como aparece en la lista (ejecútalo sin él para verlas)
+    .help = Etiqueta del valor, o un fragmento que la identifique sin ambigüedad, tal como aparece en la lista (ejecútalo sin valor para ver la lista)
 # dmm-cli set --mock-mode
 set--mock-mode =
     .help = Fijar el dispositivo simulado en un modo concreto (solo con --device mock). Sin esta opción, se aplica el modo simulado del archivo de configuración y, si no, el simulador recorre todos los modos
@@ -140,10 +140,10 @@ capture--steps =
     .help = Ejecutar solo pasos concretos (identificadores separados por comas, p. ej. "dcmv,temp,duty")
 # dmm-cli capture --unverified
 capture--unverified =
-    .help = Ejecutar solo los pasos aún no confirmados con hardware real, más la pasada libre
+    .help = Ejecutar solo los pasos aún no confirmados con hardware real, además de las capturas adicionales libres
 # dmm-cli capture --plan
 capture--plan =
-    .help = Ejecutar los pasos del archivo de plan de un mantenedor en lugar de la lista propia del dispositivo
+    .help = Ejecutar los pasos de un archivo de plan escrito por un mantenedor en lugar de la lista propia del dispositivo
 # dmm-cli capture --sniff
 capture--sniff =
     .help = No confiar en nada de lo que dice el analizador: detectar los pasos por cambios en los bytes sin procesar y confirmar cada uno

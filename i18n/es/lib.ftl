@@ -506,7 +506,7 @@ model-mock-zt-5b = ZT-5B simulado
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 activation-bm52x =
     1. Fija el cable BU-86X en el puerto óptico PC-Comm de la parte trasera del multímetro y conéctalo al equipo
-    2. Enciende el multímetro en una función de tensión
+    2. Enciende el multímetro con el selector en una función de tensión
     Nota: el multímetro se apaga después de unos 17 minutos de inactividad en un BM869s o BM867s, y de 30 minutos en los demás. Mantén presionado SELECT mientras lo enciendes para desactivar el apagado automático.
 # Used by: UT8802, UT8803
 activation-ut8802 =
@@ -539,7 +539,7 @@ activation-ut804 =
     1. Conecta el cable USB al multímetro
     2. Enciende el multímetro
     3. Presiona SEND; la pantalla muestra SEND
-    Nota: HOLD pausa los datos y EXIT desactiva SEND.
+    Nota: HOLD pausa el envío de datos y EXIT desactiva SEND.
 # Used by: VC-880, VC-890, VC650BT
 activation-vc650bt =
     1. Conecta el cable USB al multímetro
@@ -551,46 +551,46 @@ activation-bm78xbt =
     2. Gira el selector a cualquier función excepto Auto V/LoZ
     3. Mantén presionado Δ durante un segundo o más, hasta que aparezca ((D)) en la pantalla
     Nota: el multímetro se apaga después de 15 a 30 minutos de inactividad. Mantén presionado SELECT mientras lo enciendes para desactivar el apagado automático (aparece dSAPO).
-    Si no se encuentra el multímetro o se cambió su contraseña de conexión, mantén presionado el botón Hz mientras giras el selector de OFF a capacitancia en menos de 0.6 s: el multímetro muestra “Org”, y la contraseña de conexión y el nombre Bluetooth vuelven a los valores de fábrica.
+    Si no se encuentra el multímetro o se cambió su contraseña de conexión, mantén presionado el botón Hz mientras giras el selector de OFF a capacitancia en menos de 0.6 s: el multímetro muestra “Org”, y la contraseña de conexión y el nombre de Bluetooth vuelven a los valores de fábrica.
 # Used by: OW69B
 activation-ow69b =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
-    3. Mantén presionado el botón < (con BLE impreso encima) hasta que aparezca el icono Bluetooth
+    3. Mantén presionado el botón < (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
 # Used by: OW67B
 activation-ow67b =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
-    3. Mantén presionado el botón < (con BLE impreso encima) hasta que aparezca el icono Bluetooth
+    3. Mantén presionado el botón < (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
     Nota: el Bluetooth se desactiva después de 5 minutos de inactividad. Vuelve a mantener presionado < para reactivarlo.
 # Used by: VC915, VC925 PV
 activation-vc915 =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
-    3. Mantén presionado el botón BLE unos 2 segundos, hasta que el multímetro emita un pitido y aparezca el símbolo Bluetooth
+    3. Mantén presionado el botón BLE unos 2 segundos, hasta que el multímetro emita un pitido y aparezca el símbolo de Bluetooth
 # Used by: VC871, VC891
 activation-vc871 =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
-    3. Mantén presionado el botón BLE unos 2 segundos, hasta que el multímetro emita un pitido y aparezca el símbolo Bluetooth arriba a la izquierda
-    Nota: el Bluetooth queda desactivado cada vez que se enciende el multímetro. Vuelve entonces a mantener presionado BLE.
+    3. Mantén presionado el botón BLE unos 2 segundos, hasta que el multímetro emita un pitido y aparezca el símbolo de Bluetooth arriba a la izquierda
+    Nota: el Bluetooth queda desactivado cada vez que se enciende el multímetro. Después de encenderlo, vuelve a mantener presionado BLE.
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
     3. Mantén presionado el botón Hz/Duty△/ᛒ hasta que aparezca el icono ᛒ
-    Nota: el Bluetooth se desactiva después de 10 minutos de inactividad, tras dos pitidos. Vuelve a mantener presionado Hz/Duty△/ᛒ para reactivarlo.
+    Nota: el Bluetooth se desactiva con dos pitidos después de 10 minutos de inactividad. Vuelve a mantener presionado Hz/Duty△/ᛒ para reactivarlo.
 # Used by: OW65B
 activation-ow65b =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
-    3. Mantén presionado el botón SETUP (con BLE impreso encima) hasta que aparezca el icono Bluetooth
+    3. Mantén presionado el botón SETUP (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
     Nota: si vuelves a mantener presionado SETUP, el Bluetooth se desactiva.
 # Used by: CMS061, CMS101
 activation-cms061 =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
-    3. Mantén presionado el botón Tab⇌ (con BLE impreso encima) hasta que aparezca el icono Bluetooth
+    3. Mantén presionado el botón Tab⇌ (con BLE impreso encima) hasta que aparezca el icono de Bluetooth
     Nota: el multímetro no se apaga automáticamente mientras el Bluetooth esté activado.
 # Used by: CM2100B
 activation-cm2100b =
@@ -603,17 +603,17 @@ activation-b33 =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
     3. Mantén presionado el botón △/ᛒ hasta que aparezca el icono ᛒ
-    Nota: el Bluetooth se desactiva después de 10 minutos de inactividad, tras dos pitidos, y al terminar una grabación sin conexión. Vuelve a mantener presionado △/ᛒ para reactivarlo.
+    Nota: el Bluetooth se desactiva con dos pitidos después de 10 minutos de inactividad, y también al terminar una grabación sin conexión. Vuelve a mantener presionado △/ᛒ para reactivarlo.
 # Used by: B35T+, B41T+
 activation-b35t-plus =
     1. Desconecta el multímetro de cualquier aplicación del teléfono
     2. Enciende el multímetro
     3. Mantén presionado el botón △/ᛒ hasta que aparezca el icono ᛒ
-    Nota: el Bluetooth se desactiva después de 10 minutos de inactividad, tras dos pitidos. Vuelve a mantener presionado △/ᛒ para reactivarlo.
+    Nota: el Bluetooth se desactiva con dos pitidos después de 10 minutos de inactividad. Vuelve a mantener presionado △/ᛒ para reactivarlo.
 # Used by: ZT-5B
 activation-zt5b =
     1. Mantén presionado el botón rojo durante 2 segundos para encender el multímetro
-    2. Presiona brevemente el botón rojo; aparece el símbolo Bluetooth
+    2. Presiona brevemente el botón rojo; aparece el símbolo de Bluetooth
     Nota: el multímetro se apaga después de 15 minutos de inactividad. Presiona NCV antes de encenderlo para desactivar el apagado automático.
 # Used by: UT161B, UT161D, UT161E, UT61B+, UT61D+, UT61E+
 activation-ut161b =
@@ -629,26 +629,26 @@ activation-121gw =
 # Used by: ZT-300AB
 activation-zt300ab =
     1. Enciende el multímetro
-    2. Mantén presionado el botón Hz% durante 2 segundos; aparece el símbolo Bluetooth
+    2. Mantén presionado el botón Hz% durante 2 segundos; aparece el símbolo de Bluetooth
     Nota: el multímetro se apaga después de 15 minutos de inactividad. Mantén presionado SEL mientras lo enciendes para desactivar el apagado automático.
 # Used by: UT60BT
 activation-ut60bt =
     1. Enciende el multímetro
-    2. Mantén presionado SEL hasta que aparezca el símbolo Bluetooth
+    2. Mantén presionado SEL hasta que aparezca el símbolo de Bluetooth
 # Used by: ZT-5566SE
 activation-zt5566se =
     1. Enciende el multímetro
-    2. Presiona POWER para activar el Bluetooth; el símbolo Bluetooth parpadea
+    2. Presiona POWER para activar el Bluetooth; el símbolo de Bluetooth parpadea
     Nota: el manual documenta el Bluetooth solo para el altavoz del multímetro. Las lecturas transmitidas por Bluetooth no están verificadas.
 # Used by: ZT-5BQ
 activation-zt5bq =
     1. Enciende el multímetro
-    2. Presiona Power y Hz a la vez; aparece el símbolo Bluetooth
+    2. Presiona Power y Hz a la vez; aparece el símbolo de Bluetooth
     Nota: el multímetro se apaga después de 15 minutos de inactividad. Mantén presionado Hz/NCV mientras lo enciendes para desactivar el apagado automático.
 # Used by: UT202BT
 activation-ut202bt =
     1. Enciende el multímetro
-    2. Presiona brevemente el botón Bluetooth; el símbolo Bluetooth parpadea
+    2. Presiona brevemente el botón de Bluetooth; el símbolo de Bluetooth parpadea
     Nota: el Bluetooth se desactiva automáticamente después de 5 minutos sin conexión.
 # Used by: Mock UT61E+, Mock ZT-5B
 activation-mock = No requiere configuración: es un dispositivo simulado.
@@ -715,7 +715,7 @@ table-autocheck-ohms = AutoCheck™ (Ohms)
 # Used by: UT803
 table-b-ac-voltage = B. Tensión alterna
 # Used by: UT804
-table-b-ac-voltage-ac-plus-dc = B. Tensión alterna (medición de alterna + continua disponible)
+table-b-ac-voltage-ac-plus-dc = B. Tensión alterna (con medición de alterna + continua)
 # Used by: UT803, UT804
 table-c-dc-current = C. Corriente continua
 # Used by: 11 meters
@@ -729,7 +729,7 @@ table-crest-mode-instantaneous-peak-hold = Modo cresta (retención de pico insta
 # Used by: UT803
 table-d-ac-current = D. Corriente alterna
 # Used by: UT804
-table-d-ac-current-ac-plus-dc = D. Corriente alterna (medición de alterna + continua disponible)
+table-d-ac-current-ac-plus-dc = D. Corriente alterna (con medición de alterna + continua)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-dc-ac-ac-plus-dc-ac = Tensión continua, alterna y alterna + continua
 # Used by: 9 meters
@@ -773,9 +773,9 @@ table-k-transistor = K. Transistor
 # Used by: UT804
 table-l-4-20-ma-loop-current = L. Corriente de lazo de 4~20 mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-line-level-frequency-hz = Frecuencia a nivel de red (~Hz)
+table-line-level-frequency-hz = Frecuencia de nivel de red (~Hz)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-logic-level-frequency-hz-duty-cycle = Frecuencia a nivel lógico (⎍Hz) y ciclo de trabajo (D%)
+table-logic-level-frequency-hz-duty-cycle = Frecuencia de nivel lógico (⎍Hz) y ciclo de trabajo (D%)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-non-contact-ef-detection = Detección de campo eléctrico (EF) sin contacto
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -936,7 +936,7 @@ note-400ohm-accuracy-plus-test-lead-open = 400Ω: exactitud + valor de los cable
 note-40nf-accuracy-plus-open-circuit-test = 40nF: exactitud + capacitancia de los cables de prueba en circuito abierto
 # Used by: UT804
 # In: L. 4~20 mA loop current
-note-4ma-shows-0-pct-20ma-shows = 4mA muestra 0%, 20mA muestra 100%
+note-4ma-shows-0-pct-20ma-shows = Con 4mA muestra 0%; con 20mA, 100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
 note-6-000mf-manual-range-not-specified = 6.000mF, rango manual: no especificado por debajo de 0.54mF
@@ -978,7 +978,7 @@ note-9-999v-1khz-20khz-specified-for = 9.999V, 1kHz ~ 20kHz: especificado solo p
 note-9-999v-3khz-20khz-specified-for = 9.999V, 3kHz ~ 20kHz: especificado solo para 3kHz ~ 15kHz
 # Used by: UT804
 # In: L. 4~20 mA loop current
-note-4ma-shows-lo-20ma-shows-hi = <4mA muestra LO, >20mA muestra HI
+note-4ma-shows-lo-20ma-shows-hi = Con <4mA muestra LO; con >20mA, HI
 # Used by: 7 meters
 # In: AC Current; DC Current
 note-5a-max-10s-rest-15-min = >5A: máx. 10s, reposo ≥15 min
@@ -1029,7 +1029,7 @@ note-above-230degc-use-the-rod-contact = Por encima de 230°C: usar la sonda de 
 note-above-230degc-use-the-rod-type = Por encima de 230°C: usar la sonda de varilla
 # Used by: UT181A
 # In: (10) Temperature
-note-accessory-point-contact-probe-below-230degc = Sonda de contacto puntual accesoria: solo por debajo de 230°C
+note-accessory-point-contact-probe-below-230degc = Sonda accesoria de contacto puntual: solo por debajo de 230°C
 # Used by: 7 meters
 # In: 4 tables
 note-accuracy-valid-1-pct-100-pct = Exactitud válida en el 1%–100% del rango
@@ -1050,7 +1050,7 @@ note-accuracy-valid-40hz-500hz-1-pct = Exactitud válida en 40Hz–500Hz, 1%–1
 note-accuracy-valid-40hz-500hz-1-pct-2 = Exactitud válida en 40Hz–500Hz, 1%–100% del rango (60mV: 2%–100%)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
-note-accuracy-with-film-capacitor-or-better = Exactitud con condensador de película o mejor
+note-accuracy-with-film-capacitor-or-better = Exactitud con un condensador de película o de mejor calidad
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-audible-threshold-between-20ohm-and-300ohm = Umbral audible: entre 20Ω y 300Ω
@@ -1059,7 +1059,7 @@ note-audible-threshold-between-20ohm-and-300ohm = Umbral audible: entre 20Ω y 3
 note-bm821s-specified-from-10-pct-to = BM821s: especificado del 10% al 100% del rango
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
-note-bar-segments-beep-tones-proportional-to = Segmentos de barra y tonos de pitido proporcionales a la intensidad del campo
+note-bar-segments-beep-tones-proportional-to = Segmentos de la barra y pitidos proporcionales a la intensidad del campo
 # Used by: Mock ZT-5B, ZT-5B
 # In: Continuity
 note-beeps-50ohm = Pitido <50Ω
@@ -1095,7 +1095,7 @@ note-crest-factor-2-1-at-full = Factor de cresta < 2:1 a fondo de escala, < 4:1 
 note-crest-factor-up-to-3-0 = Factor de cresta hasta 3.0 (1000V: 1.5)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Crest mode (Instantaneous Peak Hold)
-note-crest-specified-accuracy-adds-250-digits = Cresta: la exactitud especificada suma 250 dígitos para cambios > 1.0 ms
+note-crest-specified-accuracy-adds-250-digits = Cresta: sumar 250 dígitos a la exactitud especificada para cambios > 1.0 ms
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-detects-50-60hz-antenna-at-the = Detecta 50/60Hz; antena en el extremo superior del multímetro
@@ -1107,7 +1107,7 @@ note-diode-one-beep-0-12v-2v = Diodo: un pitido 0.12V–2V (normal), pitido larg
 note-diode-open-circuit-3v = Diodo: circuito abierto ≈3V
 # Used by: UT181A
 # In: (9) Capacitance
-note-display-digits-6000 = Cuentas de la pantalla: 6000
+note-display-digits-6000 = Pantalla de 6000 cuentas
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Logic Level Frequency (⎍Hz) & Duty Cycle (D%)
 note-duty-cycle-specified-for-5hz-10khz = Ciclo de trabajo especificado para 5Hz ~ 10kHz
@@ -1266,10 +1266,10 @@ note-ranges-2-2uf-add-10-digits = Rangos ≤2.2µF: sumar 10 dígitos cuando la 
 note-reading-for-reference-only = Lectura solo como referencia
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Record mode
-note-record-specified-accuracy-adds-10-digits = Grabación: la exactitud especificada suma 10 dígitos para cambios > 100 ms
+note-record-specified-accuracy-adds-10-digits = Grabación: sumar 10 dígitos a la exactitud especificada para cambios > 100 ms
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-a-ma-picks = Cable rojo en A mA: selecciona corriente
+note-red-lead-in-a-ma-picks = Cable rojo en A mA: selecciona la corriente
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
 note-red-lead-in-vohm-picks-v = Cable rojo en VΩ: selecciona V por encima de 0.8V; si no, Ω
@@ -1278,10 +1278,10 @@ note-red-lead-in-vohm-picks-v = Cable rojo en VΩ: selecciona V por encima de 0.
 note-response-time-100us = Tiempo de respuesta < 100µs
 # Used by: UT161B, UT161D, UT61B+, UT61D+
 # In: Capacitance
-note-result-reading-open-lead-capacitance-1uf = Resultado = lectura − capacitancia de los cables abiertos; ≤1µF: usar REL
+note-result-reading-open-lead-capacitance-1uf = Resultado = lectura − capacitancia de los cables en circuito abierto; ≤1µF: usar REL
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Capacitance
-note-result-reading-open-lead-capacitance-22nf = Resultado = lectura − capacitancia de los cables abiertos; ≤22nF: usar REL
+note-result-reading-open-lead-capacitance-22nf = Resultado = lectura − capacitancia de los cables en circuito abierto; ≤22nF: usar REL
 # Used by: 7 meters
 # In: Resistance
 note-result-reading-shorted-lead-resistance = Resultado = lectura − resistencia de los cables en cortocircuito
@@ -1311,13 +1311,13 @@ note-shorted-leads-residual-3-digits = Cables de prueba en cortocircuito: lectur
 note-shorted-leads-residual-5-digits = Cables de prueba en cortocircuito: lectura residual ≤5 dígitos
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Diode Tester
-note-test-current-0-4ma-typical = Corriente de prueba 0.4mA típica
+note-test-current-0-4ma-typical = Corriente de prueba típica: 0.4mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (ACV)
-note-then-typically-18kohm-100v-125kohm-300v = Después, típicamente 18kΩ@100V, 125kΩ@300V, 320kΩ@600V, 460kΩ@1000V
+note-then-typically-18kohm-100v-125kohm-300v = Después, valores típicos: 18kΩ@100V, 125kΩ@300V, 320kΩ@600V, 460kΩ@1000V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (DCV)
-note-then-typically-18kohm-100v-125kohm-300v-2 = Después, típicamente 18kΩ@100V, 125kΩ@300V, 320kΩ@600V, 500kΩ@1000V
+note-then-typically-18kohm-100v-125kohm-300v-2 = Después, valores típicos: 18kΩ@100V, 125kΩ@300V, 320kΩ@600V, 500kΩ@1000V
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Non-Contact EF-Detection
 note-tolerance-10v-36v-23v-83v-59v = Tolerancia: 10V~36V, 23V~83V, 59V~165V, 124V~330V, > 250V

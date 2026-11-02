@@ -29,13 +29,13 @@ settings-heading =
 # In one setting's listing, on the Auto row.
 settings-auto-now = (ahora { $range })
 # In the listing of every setting.
-settings-auto-in = (rango automático en { $range })
+settings-auto-in = (rango automático, ahora { $range })
 
 ## Dim, under a listing: a switch to try. $command is the command line that
 ## makes it, e.g. dmm-cli set mode hz.
 
 # Under the listing of every setting.
-settings-tip-by-name = Sugerencia: cambia uno por su nombre, p. ej. { $command }
+settings-tip-by-name = Sugerencia: para cambiar un ajuste, indica su nombre, p. ej. { $command }
 # Under one setting's listing, whose right column holds what to type for
 # each choice.
 settings-tip-right-column = Sugerencia: escribe el valor de la columna derecha para cambiar a esa opción, p. ej. { $command }

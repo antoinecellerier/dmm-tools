@@ -31,10 +31,10 @@ top-bar-clear = Borrar
 top-bar-reconnecting = Reconectando…
 # $attempt counts the retries, from 1.
 top-bar-reconnecting-attempt = Reconectando (intento { $attempt })…
-top-bar-reconnecting-hover = Reintentando la conexión automáticamente: haz clic en Desconectar para detenerla
+top-bar-reconnecting-hover = Reintentando la conexión automáticamente: haz clic en Desconectar para dejar de intentarlo
 # $error is the last attempt's error, in the language of the system that raised it.
 top-bar-reconnecting-hover-error =
-    Reintentando la conexión automáticamente: haz clic en Desconectar para detenerla.
+    Reintentando la conexión automáticamente: haz clic en Desconectar para dejar de intentarlo.
     Último error: { $error }
 top-bar-stop-retrying = Desconectar
     .hover = Dejar de reintentar y cerrar la conexión ({ $keys })

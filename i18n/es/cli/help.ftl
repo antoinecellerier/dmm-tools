@@ -45,7 +45,7 @@ help-command-subcommand = Mostrar la ayuda de los subcomandos indicados
 
 ## After the options of dmm-cli -h.
 
-help-see-long-help = Ejecuta con --help para ver la lista completa de dispositivos compatibles y la ruta del archivo de configuración compartido.
+help-see-long-help = Usa --help para ver la lista completa de dispositivos compatibles y la ruta del archivo de configuración compartido.
 # $setting is NO_COLOR=1.
 help-no-color = Establece { $setting } para desactivar la salida en color.
 
@@ -66,7 +66,7 @@ help-environment = ENTORNO:
 # Beside RUST_LOG; each line of the message is a line of the help. $filter
 # is the filter that shows everything the library sends and receives.
 help-env-rust-log =
-    Filtro del registro. Sin definir, se muestran las advertencias de dmm_lib y todos los errores.
+    Filtro del registro. Si no se define, se muestran las advertencias de dmm_lib y todos los errores.
     Usa `{ $filter }` para depurar a nivel de trama.
 # Beside NO_COLOR.
 help-env-no-color = Establecer en 1 para desactivar la salida en color.

@@ -16,11 +16,11 @@
 # The mode readout as a dropdown of the modes the meter can switch to at
 # its dial position.
 reading-mode =
-    .hover = Cambiar el multímetro a otro modo de la posición actual del selector
+    .hover = Pasar el multímetro a otro modo de la posición actual del selector
     .a11y = Modo
 # The range readout as a dropdown of the meter's ranges in this mode.
 reading-range =
-    .hover = Cambiar el multímetro a otro rango del modo actual
+    .hover = Pasar el multímetro a otro rango del modo actual
     .a11y = Rango
 # The mode readout on a meter that lists its function keys instead of its
 # modes: the value is the caption over the open list, which says its entries

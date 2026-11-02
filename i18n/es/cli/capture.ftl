@@ -90,14 +90,14 @@ capture-need-shorted-leads = cables de prueba en cortocircuito
 capture-need-dc-source = pila u otra fuente de tensión continua
 capture-need-thermocouple = termopar tipo K
 # For the non-contact voltage detector, which senses a live wire nearby.
-capture-need-live-wire = cable de la red eléctrica con tensión cercano
+capture-need-live-wire = cable con tensión de la red eléctrica, a mano
 # The meter's power-measurement adapter, plugged into a live outlet with a
 # load plugged into it.
-capture-need-power-adapter = adaptador de medición de potencia, toma de corriente con tensión y carga
+capture-need-power-adapter = adaptador de medición de potencia, toma de corriente con tensión y una carga
 capture-need-transistor = transistor
 capture-need-scr = SCR (tiristor)
 capture-need-loop-source = lazo de 4-20 mA y su fuente de alimentación de 15-48 V
-capture-need-power-module = módulo de medición de potencia de corriente continua o USB, fuente de alimentación y carga
+capture-need-power-module = módulo de medición de potencia para corriente continua o USB, fuente de alimentación y carga
 # LX-925 is the adapter's name.
 capture-need-pv-adapter = adaptador de irradiancia LX-925
 
@@ -239,7 +239,7 @@ capture-core-not-confirmed = Semántica básica no confirmada ({ $steps }): cada
 ## starts with an arrow.
 
 # $mode is the function, e.g. Continuity.
-capture-drive-switching = cambiando al modo { $mode } (enviado por la herramienta)
+capture-drive-switching = cambiando al modo { $mode } (comando enviado por la herramienta)
 # $mode is the function, e.g. Continuity; $error why the meter refused.
 capture-drive-switch-failed = no se pudo cambiar al modo { $mode }: { $error }. Hazlo a mano
 # $setting is the setting's name, rel (relative mode): the meter refuses it
@@ -331,7 +331,7 @@ capture-plan-covered = Plan { $plan }: { $covered } de { $total } pasos capturad
 capture-nothing-new = No se capturó ningún paso sin verificar, así que no hay nada nuevo que informar.
 # $covered and $total count the meter's steps that hardware hasn't confirmed
 # yet; $meter is its name, e.g. UNI-T UT61E+.
-capture-covered = Pasos sin verificar del multímetro { $meter } cubiertos: { $covered } de { $total }.
+capture-covered = Se cubrieron { $covered } de los { $total } pasos sin verificar del multímetro { $meter }.
 # $resume is the key that resumes, r (capture-resume-prompt).
 capture-not-finished = Sin terminar: ejecuta el mismo comando otra vez y responde { $resume } para reanudar.
 # $flag is the option as typed, --steps <ids>.
@@ -356,7 +356,7 @@ capture-instructions-header =
 # key labels and what its screen shows. $marks lists them, e.g. "AC, HOLD,
 # MIN/MAX, SELECT". A translation, by a person or a machine, must leave them
 # as they are, so say so plainly.
-capture-instructions-keep = Deja estos términos como están, tal como el multímetro los muestra en sus teclas y su pantalla: { $marks }
+capture-instructions-keep = Deja estos términos tal como el multímetro los muestra en sus teclas y en su pantalla: { $marks }
 # The header's last line. $command is the command that runs the capture
 # with the translated file.
 capture-instructions-run = Después ejecuta: { $command }

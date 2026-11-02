@@ -32,7 +32,7 @@ connection-click-connect = Haz clic en “Conectar” después de resolver el pr
 # The closing line after the Bluetooth steps when nothing answered at the
 # address given with --adapter, a command-line option kept as it is. "It"
 # is the scan command the steps above name.
-connection-restart-with-address = Reinicia con --adapter igual a la dirección que muestra ese comando.
+connection-restart-with-address = Reinicia con --adapter seguido de la dirección que muestra ese comando.
 
 # A meter that connects over Bluetooth only, and Bluetooth was not looked at.
 connection-bluetooth-not-searched = No se buscó por Bluetooth

@@ -58,16 +58,16 @@ colors-theme-builtin =
 colors-theme-file =
     .hover =
         { $mode ->
-            [light] Tema claro, de { $path }. Elimina el archivo para quitarlo.
-           *[dark] Tema oscuro, de { $path }. Elimina el archivo para quitarlo.
+            [light] Tema claro, cargado desde { $path }. Elimina el archivo para quitarlo.
+           *[dark] Tema oscuro, cargado desde { $path }. Elimina el archivo para quitarlo.
         }
 # The same when the themes folder can't be found, with $mode as there.
 # $file is the theme's file name.
 colors-theme-file-unplaced =
     .hover =
         { $mode ->
-            [light] Tema claro, de { $file }
-           *[dark] Tema oscuro, de { $file }
+            [light] Tema claro, cargado desde { $file }
+           *[dark] Tema oscuro, cargado desde { $file }
         }
 
 ## After the Theme row's chips: the theme files in the themes folder that
@@ -157,14 +157,14 @@ colors-preset-colorblind =
         [customized] Daltonismo (personalizado)
        *[plain] Daltonismo
     }
-    .hover = Paleta que se distingue bien con daltonismo protán o deután
+    .hover = Paleta cuyos colores se distinguen bien con daltonismo protán o deután
 # After the chips while there are changes a click would lose.
 colors-preset-clears = Elegir una paleta predefinida borra las personalizaciones
 
 ## The Customize colors section, folded under its header until opened.
 
 colors-customize = Personalizar colores
-    .hover = Cambiar cada color sobre la paleta o el tema seleccionado
+    .hover = Cambiar colores uno a uno a partir de la paleta o el tema seleccionado
 # Beside the header: whose colours the swatches change. $mode is dark or
 # light.
 colors-editing =
@@ -241,7 +241,7 @@ colors-swatch-ref = Ref.
     .hover = Color de la línea de referencia
 # Where the readings cross a set level.
 colors-swatch-crossing = Cruce
-    .hover = Color de las marcas de los cruces de los disparos
+    .hover = Color de las marcas de disparo en los cruces
 colors-swatch-cursor = Cursor
     .hover = Color de los cursores de medición
 # The numbered markers the user drops on the graph.

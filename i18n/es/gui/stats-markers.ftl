@@ -47,7 +47,7 @@ stats-gaps =
         [one] ⚠ { $count } interrupción >{ $limit }s omitida
        *[other] ⚠ { $count } interrupciones >{ $limit }s omitidas
     }
-    .hover = Los tramos de más de { $limit } s sin lecturas no se integran: 5 intervalos de muestreo y al menos 2 s. La integral es parcial.
+    .hover = Los tramos sin lecturas de más de { $limit } s (5 intervalos de muestreo, como mínimo 2 s) no se integran. La integral es parcial.
 # While the Alarm row under the reading has limits set: how many times the
 # reading went past each. $limits is both while there is a high and a low
 # limit, high or low while there is only that one; $high and $low are the

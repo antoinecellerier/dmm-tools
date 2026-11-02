@@ -34,7 +34,7 @@ alarm-settings =
 # meter alone with nothing typed in its fields yet. With the graph and the
 # recording both hidden in Settings, there is no room for the row of
 # fields.
-alarm-scale-setup-in-settings = Muestra primero el gráfico o la grabación en Configuración
+alarm-scale-setup-in-settings = Activa primero el gráfico o la grabación en Configuración
 # The same in the big meter, which has no room for the row. $keys is the
 # shortcut that leaves the big meter, e.g. Ctrl+B or ⌘B.
 alarm-scale-setup-in-normal-layout = Configúrala primero en la vista normal ({ $keys })

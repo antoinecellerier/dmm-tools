@@ -26,7 +26,7 @@ error-wrong-meter = respuesta no válida: { $reason }
 # A frame from the meter failed its check. $expected and $actual are
 # hexadecimal numbers, e.g. 0x01a3.
 error-checksum-mismatch = suma de comprobación incorrecta: se esperaba { $expected }, se recibió { $actual }
-error-timeout = tiempo de espera agotado al esperar la respuesta
+error-timeout = tiempo de espera agotado sin respuesta
 # The meter reports a mode this tool does not know. $code is a hexadecimal
 # number, e.g. 0x1f.
 error-unknown-mode = modo desconocido: { $code }
@@ -161,8 +161,8 @@ error-rejected-never-appeared = { $target } no llegó a aparecer; el multímetro
 # is in.
 error-rejected-gave-up =
     { $presses ->
-        [one] se dejó de intentar tras presionar { $presses } vez el botón { $button }; el multímetro está en { $state }
-       *[other] se dejó de intentar tras presionar { $presses } veces el botón { $button }; el multímetro está en { $state }
+        [one] se abandonó el intento tras presionar { $presses } vez el botón { $button }; el multímetro está en { $state }
+       *[other] se abandonó el intento tras presionar { $presses } veces el botón { $button }; el multímetro está en { $state }
     }
 # $mode is a mode.
 error-rejected-mode-changed = el multímetro cambió al modo { $mode }; se dejó de presionar RANGE
@@ -178,7 +178,7 @@ error-rejected-switch-did-nothing = { $setting } { $target } no tuvo efecto; el 
 # $sent is what was sent: a command word, or one of the error-sent messages
 # below, or a setting's name and a state.
 error-rejected-by-meter = el multímetro rechazó { $sent }
-error-rejected-zero-needs-capacitance = ZERO solo funciona en capacitancia
+error-rejected-zero-needs-capacitance = ZERO solo funciona en modo capacitancia
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.
@@ -226,7 +226,7 @@ error-wrong-meter-not-yet = el multímetro indica el código de modelo OWON { $c
 error-wrong-meter-sign-in-function-word = el multímetro indica el código de modelo OWON { $code }: envía la trama OWON de 6 bytes con el signo en la palabra de función, que esta herramienta aún no lee
 # A Brymen meter of another series answered. $found and $opened are series,
 # e.g. Brymen BM82x and Brymen BM86x; $id is the --device value for $found.
-error-wrong-meter-other-series = el multímetro conectado al cable es un multímetro { $found }, no un multímetro { $opened }; elige Detección automática o --device { $id }
+error-wrong-meter-other-series = el multímetro conectado al cable es de la serie { $found }, no de la serie { $opened }; elige Detección automática o --device { $id }
 # An OWON meter chosen by its model sends bytes, but never its 6-byte data
 # frame. B35 and B35T are OWON models.
 error-wrong-meter-no-six-byte-frames = el multímetro no envía tramas OWON de 6 bytes; puede ser un B35 o un B35T antiguo, cuyas tramas de 14 bytes esta herramienta aún no lee
@@ -246,8 +246,8 @@ error-bluetooth-powered-off = desactivado en este equipo
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] el dispositivo Bluetooth no tiene ninguna característica conocida de escritura de datos: no es un adaptador ni un multímetro compatible, o sus servicios nunca se resolvieron
-       *[notify] el dispositivo Bluetooth no tiene ninguna característica conocida de notificación de datos: no es un adaptador ni un multímetro compatible, o sus servicios nunca se resolvieron
+        [write] el dispositivo Bluetooth no tiene ninguna característica de escritura de datos conocida: no es un adaptador ni un multímetro compatible, o sus servicios nunca se resolvieron
+       *[notify] el dispositivo Bluetooth no tiene ninguna característica de notificación de datos conocida: no es un adaptador ni un multímetro compatible, o sus servicios nunca se resolvieron
     }
 # A Brymen meter refused the password this tool sends.
 error-bluetooth-password-refused = el multímetro rechazó la contraseña de conexión 0000: para restablecerla, { error-bluetooth-reset-gesture }
