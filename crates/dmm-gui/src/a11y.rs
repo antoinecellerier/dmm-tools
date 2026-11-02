@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use eframe::egui::{self, InnerResponse, Response, Ui};
 
@@ -121,35 +122,190 @@ pub(crate) fn reading_region_id() -> egui::Id {
 /// reading — became a live region of its own, and Narrator cut itself off at
 /// each one. A `Role::Label` takes its name from its value on Windows.
 ///
-/// `make_label` is only called when `fingerprint` has changed since the last
-/// frame. The label is cached in `ctx.data` as an `Arc<str>`, so the
-/// unchanged path costs a refcount, and re-applied every frame: egui rebuilds
+/// How the reading is paced for a screen reader ([`Announcer`]): the
+/// **Announce readings** setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct AnnouncePolicy {
+    /// The least time between two announcements of a value: zero for every
+    /// reading, `None` for none.
+    pub(crate) every: Option<Duration>,
+}
+
+impl AnnouncePolicy {
+    pub(crate) const DEFAULT: Self = Self::every_secs(Some(5));
+
+    pub(crate) const fn every_secs(secs: Option<u32>) -> Self {
+        Self {
+            every: match secs {
+                Some(s) => Some(Duration::from_secs(s as u64)),
+                None => None,
+            },
+        }
+    }
+}
+
+impl Default for AnnouncePolicy {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+/// What the spoken reading shows a screen reader, and when it changes it.
+///
+/// A screen reader announces a live node each time its text changes, and
+/// Narrator cuts off what it was saying to do so; a meter reads several times
+/// a second. So a new value is shown at most once per [`AnnouncePolicy`]
+/// interval: at once when the interval has passed since the last, otherwise
+/// held, and shown when the interval runs out — the caller repaints then, so
+/// the last value lands even after readings stop. A new mode (the dial
+/// turned) and the placeholder (the connection state) are shown at once.
+/// Flags, overload and the alarm's zone are not: they can flicker reading to
+/// reading, and arrive within an interval anyway.
+///
+/// While values are not to be announced (`every` is `None`) the node keeps
+/// its live setting off and its text paced at [`QUIET_PACE`], for a screen
+/// reader that reads it on demand: Narrator drops what it was about to say
+/// when the text of the item it is on changes, so a text new with every
+/// reading was never read at all. Live goes back on only with a new value
+/// shown: on Windows the switch alone announces the node again, and other
+/// platforms ignore it.
+///
+/// [`Self::decide`] is pure and idempotent — egui reruns a frame it discards,
+/// with the same time — so the live setting is stored, not derived from what
+/// the frame did.
+#[derive(Debug, Clone, Default)]
+struct Announcer {
+    /// The fingerprint and text of the label the node shows.
+    shown: Option<(u64, Arc<str>)>,
+    /// The mode of the shown label; `None` for the placeholder.
+    shown_context: Option<u64>,
+    /// When the shown label was shown, in egui's input time.
+    shown_at: f64,
+    live: bool,
+}
+
+/// How often the text changes while values are not announced: the default
+/// interval, long enough for a screen reader to read the whole sentence.
+const QUIET_PACE: Duration = Duration::from_secs(5);
+
+/// What [`Announcer::decide`] makes of a frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Decision {
+    /// Show the frame's label.
+    take: bool,
+    live: bool,
+    /// Seconds until a held value is due.
+    due_in: Option<f64>,
+}
+
+impl Announcer {
+    /// What to do with a frame whose label has `fingerprint`, at `now`.
+    /// `context` is the mode's hash, or `None` for the placeholder.
+    fn decide(
+        &self,
+        now: f64,
+        fingerprint: u64,
+        context: Option<u64>,
+        every: Option<Duration>,
+    ) -> Decision {
+        let changed = self.shown.as_ref().is_none_or(|(fp, _)| *fp != fingerprint);
+        let keep = Decision {
+            take: false,
+            live: self.live,
+            due_in: None,
+        };
+        if context.is_none() {
+            return Decision {
+                take: changed,
+                live: changed || self.live,
+                due_in: None,
+            };
+        }
+        let wanted = every.is_some();
+        let keep = Decision {
+            live: self.live && wanted,
+            ..keep
+        };
+        if !changed {
+            return keep;
+        }
+        // A clock that went backwards counts as the interval passed.
+        let elapsed = now - self.shown_at;
+        let pace = every.unwrap_or(QUIET_PACE).as_secs_f64();
+        if self.shown_context != context || elapsed < 0.0 || elapsed >= pace {
+            Decision {
+                take: true,
+                live: wanted,
+                due_in: None,
+            }
+        } else {
+            Decision {
+                due_in: Some(pace - elapsed),
+                ..keep
+            }
+        }
+    }
+
+    fn apply(
+        &mut self,
+        d: Decision,
+        now: f64,
+        fingerprint: u64,
+        context: Option<u64>,
+        make_label: impl FnOnce() -> String,
+    ) {
+        if d.take {
+            self.shown = Some((fingerprint, make_label().into()));
+            self.shown_context = context;
+            self.shown_at = now;
+        }
+        self.live = d.live;
+    }
+}
+
+/// `make_label` is only called when the label is shown. The [`Announcer`]
+/// keeps it in `ctx.data` as an `Arc<str>`, so a frame that shows nothing
+/// new costs a refcount, and the node is rebuilt every frame: egui rebuilds
 /// the AccessKit tree from scratch each one. A panel shown again is a new node
 /// to the screen reader, which announces it once.
-fn speak_reading(ui: &Ui, rect: egui::Rect, fingerprint: u64, make_label: impl FnOnce() -> String) {
+fn speak_reading(
+    ui: &Ui,
+    rect: egui::Rect,
+    announce: AnnouncePolicy,
+    fingerprint: u64,
+    context: Option<u64>,
+    make_label: impl FnOnce() -> String,
+) {
     let id = reading_region_id();
     ui.interact(rect, id, egui::Sense::hover());
-    let cache = id.with("label");
-    let cached: Option<(u64, Arc<str>)> = ui.ctx().data(|d| d.get_temp(cache));
-    let label = match cached {
-        Some((fp, label)) if fp == fingerprint => label,
-        _ => {
-            let label: Arc<str> = make_label().into();
-            ui.ctx()
-                .data_mut(|d| d.insert_temp(cache, (fingerprint, Arc::clone(&label))));
-            label
-        }
-    };
+    let key = id.with("announcer");
+    let now = ui.input(|i| i.time);
+    let mut announcer: Announcer = ui.ctx().data(|d| d.get_temp(key)).unwrap_or_default();
+    let decision = announcer.decide(now, fingerprint, context, announce.every);
+    announcer.apply(decision, now, fingerprint, context, make_label);
+    if let Some(secs) = decision.due_in {
+        ui.ctx()
+            .request_repaint_after(Duration::from_secs_f64(secs));
+    }
+    let label = announcer.shown.as_ref().map(|(_, l)| Arc::clone(l));
+    let live = announcer.live;
+    ui.ctx().data_mut(|d| d.insert_temp(key, announcer));
     ui.ctx().accesskit_node_builder(id, |node| {
         node.set_role(egui::accesskit::Role::Label);
-        node.set_value(&*label);
+        if let Some(label) = label {
+            node.set_value(&*label);
+        }
         node.set_bounds(egui::accesskit::Rect {
             x0: rect.min.x.into(),
             y0: rect.min.y.into(),
             x1: rect.max.x.into(),
             y1: rect.max.y.into(),
         });
-        node.set_live(egui::accesskit::Live::Polite);
+        node.set_live(if live {
+            egui::accesskit::Live::Polite
+        } else {
+            egui::accesskit::Live::Off
+        });
     });
 }
 
@@ -208,12 +364,15 @@ pub(crate) trait UiA11yExt {
     ) -> InnerResponse<R>;
 
     /// Draw `add_contents` in a `ui.horizontal` row and lay the spoken
-    /// reading over it (see [`speak_reading`]). `fingerprint` should hash
-    /// everything the spoken label says; `make_label` is only invoked when
-    /// the fingerprint changes.
+    /// reading over it (see [`speak_reading`]), paced by `announce`.
+    /// `fingerprint` should hash everything the spoken label says, `context`
+    /// the mode (`None` for the placeholder); `make_label` is only invoked
+    /// when the label is shown.
     fn spoken_reading<R>(
         &mut self,
+        announce: AnnouncePolicy,
         fingerprint: u64,
+        context: Option<u64>,
         make_label: impl FnOnce() -> String,
         add_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<R>;
@@ -233,12 +392,21 @@ impl UiA11yExt for Ui {
 
     fn spoken_reading<R>(
         &mut self,
+        announce: AnnouncePolicy,
         fingerprint: u64,
+        context: Option<u64>,
         make_label: impl FnOnce() -> String,
         add_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<R> {
         let row = self.horizontal(add_contents);
-        speak_reading(self, row.response.rect, fingerprint, make_label);
+        speak_reading(
+            self,
+            row.response.rect,
+            announce,
+            fingerprint,
+            context,
+            make_label,
+        );
         row
     }
 }
@@ -309,6 +477,135 @@ mod tests {
                 );
             }
         }
+    }
+
+    const FIVE: Option<Duration> = Some(Duration::from_secs(5));
+    const DC_V: Option<u64> = Some(1);
+
+    /// Run one frame through `a`: what it decides, applied as the app does.
+    /// The label is the fingerprint's number.
+    fn frame(
+        a: &mut Announcer,
+        now: f64,
+        fp: u64,
+        context: Option<u64>,
+        every: Option<Duration>,
+    ) -> Decision {
+        let d = a.decide(now, fp, context, every);
+        a.apply(d, now, fp, context, || fp.to_string());
+        d
+    }
+
+    fn shown(a: &Announcer) -> Option<&str> {
+        a.shown.as_ref().map(|(_, l)| &**l)
+    }
+
+    /// The first reading is shown and announced; changes inside the interval
+    /// are held, with a repaint asked for when it runs out, and the latest
+    /// lands then even though readings stopped.
+    #[test]
+    fn values_are_paced_and_the_last_one_lands() {
+        let mut a = Announcer::default();
+        let d = frame(&mut a, 10.0, 1, DC_V, FIVE);
+        assert!(d.take && d.live, "{d:?}");
+        let d = frame(&mut a, 11.0, 2, DC_V, FIVE);
+        assert!(!d.take && d.live, "held, still live: {d:?}");
+        assert_eq!(d.due_in, Some(4.0));
+        let d = frame(&mut a, 12.5, 3, DC_V, FIVE);
+        assert_eq!(d.due_in, Some(2.5));
+        assert_eq!(shown(&a), Some("1"));
+        // The repaint: no new reading, the held one is due.
+        let d = frame(&mut a, 15.0, 3, DC_V, FIVE);
+        assert!(d.take && d.live, "{d:?}");
+        assert_eq!(shown(&a), Some("3"));
+        // Nothing new: nothing to do.
+        let d = frame(&mut a, 30.0, 3, DC_V, FIVE);
+        assert!(!d.take && d.due_in.is_none(), "{d:?}");
+    }
+
+    #[test]
+    fn every_reading_shows_each_change() {
+        let mut a = Announcer::default();
+        for (i, fp) in [1, 2, 3].into_iter().enumerate() {
+            let d = frame(
+                &mut a,
+                10.0 + i as f64 * 0.1,
+                fp,
+                DC_V,
+                Some(Duration::ZERO),
+            );
+            assert!(d.take && d.live, "{fp}: {d:?}");
+        }
+    }
+
+    /// Never keeps live off and the text paced, for reading on demand: a
+    /// screen reader drops what it was about to say when the text changes
+    /// under it. Switching back turns live on only with a new value, and
+    /// switching to Never turns it off at once.
+    #[test]
+    fn never_keeps_the_text_paced_and_silent() {
+        let mut a = Announcer::default();
+        let d = frame(&mut a, 10.0, 1, DC_V, None);
+        assert!(d.take && !d.live, "{d:?}");
+        let d = frame(&mut a, 11.0, 2, DC_V, None);
+        assert!(!d.take && !d.live, "{d:?}");
+        assert_eq!(d.due_in, Some(4.0));
+        let d = frame(&mut a, 15.0, 2, DC_V, None);
+        assert!(d.take && !d.live, "{d:?}");
+        let d = frame(&mut a, 16.0, 2, DC_V, FIVE);
+        assert!(!d.take && !d.live, "no new value, live stays off: {d:?}");
+        let d = frame(&mut a, 17.0, 3, DC_V, FIVE);
+        assert!(!d.take && !d.live && d.due_in == Some(3.0), "{d:?}");
+        let d = frame(&mut a, 20.0, 3, DC_V, FIVE);
+        assert!(d.take && d.live, "{d:?}");
+        let d = frame(&mut a, 21.0, 3, DC_V, None);
+        assert!(!d.take && !d.live, "{d:?}");
+    }
+
+    /// The placeholder — the connection state — is shown at once whatever
+    /// the pace, Never included, and so is the first value after it.
+    #[test]
+    fn the_placeholder_is_shown_at_once() {
+        for every in [FIVE, None] {
+            let mut a = Announcer::default();
+            frame(&mut a, 10.0, 1, DC_V, every);
+            let d = frame(&mut a, 10.5, 2, None, every);
+            assert!(d.take && d.live, "{every:?}: {d:?}");
+            let d = frame(&mut a, 10.7, 3, None, every);
+            assert!(d.take, "{every:?}: one notice replacing another: {d:?}");
+            let d = frame(&mut a, 11.0, 4, DC_V, every);
+            assert!(d.take, "{every:?}: {d:?}");
+        }
+    }
+
+    #[test]
+    fn a_new_mode_is_shown_at_once() {
+        let mut a = Announcer::default();
+        frame(&mut a, 10.0, 1, DC_V, FIVE);
+        let d = frame(&mut a, 11.0, 2, Some(2), FIVE);
+        assert!(d.take && d.live, "{d:?}");
+    }
+
+    /// egui reruns a discarded frame with the same time: the second run must
+    /// agree with the first, live setting included.
+    #[test]
+    fn a_rerun_frame_decides_the_same() {
+        for every in [FIVE, Some(Duration::ZERO), None] {
+            let mut a = Announcer::default();
+            frame(&mut a, 10.0, 1, DC_V, every);
+            frame(&mut a, 12.0, 2, DC_V, every);
+            let first = (shown(&a).map(str::to_owned), a.live);
+            frame(&mut a, 12.0, 2, DC_V, every);
+            assert_eq!((shown(&a).map(str::to_owned), a.live), first, "{every:?}");
+        }
+    }
+
+    #[test]
+    fn a_clock_that_went_back_counts_as_the_interval_passed() {
+        let mut a = Announcer::default();
+        frame(&mut a, 10.0, 1, DC_V, FIVE);
+        let d = frame(&mut a, 3.0, 2, DC_V, FIVE);
+        assert!(d.take, "{d:?}");
     }
 
     fn arrow(key: egui::Key) -> egui::Event {

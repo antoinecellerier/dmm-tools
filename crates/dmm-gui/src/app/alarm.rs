@@ -18,6 +18,7 @@ use super::appearance::SMALL_TEXT_SIZE;
 use super::controls::remote::{SplitChip, row_field};
 use super::marker_list::log_line;
 use super::toast::Toast;
+use crate::a11y::AnnouncePolicy;
 use crate::display::ReadingState;
 use crate::graph::{LimitSide, WatchedLimits};
 use dmm_lib::alarm::{Alarm, Breach, Hysteresis, LimitError, Limits};
@@ -144,6 +145,7 @@ impl App {
             scaled: !self.transform.is_identity(),
             alarm_set: self.alarm.is_some(),
             alarm: self.alarm.as_ref().and_then(|a| a.reading_zone()),
+            announce: AnnouncePolicy::every_secs(self.settings.announce_interval_secs),
         }
     }
 

@@ -172,8 +172,8 @@ real screen reader has walked the other half.
 - Orca (AT-SPI): each interactive widget announces a sensible name on Tab,
   and HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK and LIVE say "pressed" / "not
   pressed" when toggled.
-- Orca: the plot's summary is read when focused, the reading's live region
-  speaks politely rather than continuously, and Orca+Ctrl+Shift+L lists
+- Orca: the plot's summary is read when focused, the reading is spoken at
+  most once per **Announce readings** interval, and Orca+Ctrl+Shift+L lists
   Toolbar, Main and Status.
 - Orca with sub-values (a UT181A or the mock): "Plot \<name\>" radios and "Show
   \<name\> trace" toggles with their state; the live region speaks sub-values and

@@ -255,6 +255,17 @@ fn flags_bits(flags: &StatusFlags) -> u16 {
     })
 }
 
+/// What a new reading must change to be announced at once rather than at
+/// the spoken reading's pace (`a11y::Announcer`): its mode, the dial turned.
+/// `None` for the placeholder, which is always announced at once.
+pub(super) fn live_region_context(measurement: Option<&Measurement>) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+    let m = measurement?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    m.mode.hash(&mut h);
+    Some(h.finish())
+}
+
 /// Build a u64 fingerprint that changes whenever `live_region_label` would
 /// produce different output. Lets the spoken reading (`a11y::speak_reading`)
 /// skip per-frame `format!`/`String` allocation when the measurement is
@@ -272,7 +283,8 @@ pub(super) fn live_region_fingerprint(
     // Toggling the transform, or the reading crossing a limit, changes the
     // spoken label without necessarily changing the reading, so both have to
     // be in the fingerprint or the cached announcement would never be rebuilt.
-    state.hash(&mut h);
+    // How often it is announced changes nothing it says.
+    (state.scaled, state.alarm_set, state.alarm).hash(&mut h);
     match measurement {
         None => {
             0u8.hash(&mut h);
@@ -965,6 +977,7 @@ mod tests {
             scaled: false,
             alarm_set: true,
             alarm: Some(Zone::Above),
+            ..ReadingState::PLAIN
         };
         let label = live_region_label(&en(), Some(&m), above, NO_READING_TITLE);
         assert!(label.ends_with(", above the high limit"), "{label:?}");
@@ -1024,6 +1037,7 @@ mod tests {
             scaled: true,
             alarm_set: true,
             alarm: Some(Zone::Above),
+            ..ReadingState::PLAIN
         };
         assert_eq!(
             say(&extremes, breached),
@@ -1051,6 +1065,7 @@ mod tests {
             scaled: false,
             alarm_set: true,
             alarm: Some(Zone::Below),
+            ..ReadingState::PLAIN
         };
         let dashes = Measurement::test_fixture(
             MeasuredValue::NoReading("----"),

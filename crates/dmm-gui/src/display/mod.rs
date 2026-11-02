@@ -12,13 +12,14 @@ use eframe::egui::{
     TextWrapMode, Ui, UiBuilder, Vec2, WidgetText, vec2,
 };
 
-use crate::a11y::{ResponseA11yExt, UiA11yExt};
+use crate::a11y::{AnnouncePolicy, ResponseA11yExt, UiA11yExt};
 use crate::theme::ThemeColors;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use std::borrow::Cow;
 use text::{
-    badge_order, format_aux_value, format_value_display, live_region_fingerprint, live_region_label,
+    badge_order, format_aux_value, format_value_display, live_region_context,
+    live_region_fingerprint, live_region_label,
 };
 
 /// Base font size for the primary reading in the wide (side panel) layout.
@@ -49,6 +50,8 @@ pub(crate) struct ReadingState {
     /// Where the reading lies against the limits; `None` while no alarm is
     /// judging it.
     pub(crate) alarm: Option<Zone>,
+    /// How often a screen reader hears the reading.
+    pub(crate) announce: AnnouncePolicy,
 }
 
 impl ReadingState {
@@ -57,12 +60,12 @@ impl ReadingState {
         scaled: false,
         alarm_set: false,
         alarm: None,
+        announce: AnnouncePolicy::DEFAULT,
     };
     #[cfg(test)]
     pub(crate) const SCALED: Self = Self {
         scaled: true,
-        alarm_set: false,
-        alarm: None,
+        ..Self::PLAIN
     };
 
     /// Whether the reading is past one of the alarm's limits.
@@ -942,7 +945,9 @@ fn show_reading_line_with_selector(
 ) -> Option<ReadoutPick> {
     ui.horizontal(|ui| {
         ui.spoken_reading(
+            state.announce,
             live_region_fingerprint(l10n, Some(m), state, ""),
+            live_region_context(Some(m)),
             || live_region_label(l10n, Some(m), state, ""),
             |ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -975,7 +980,9 @@ fn show_reading_line_plain(
     tc: &ThemeColors,
 ) {
     ui.spoken_reading(
+        state.announce,
         live_region_fingerprint(l10n, Some(m), state, ""),
+        live_region_context(Some(m)),
         || live_region_label(l10n, Some(m), state, ""),
         |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
@@ -1158,7 +1165,9 @@ fn no_reading_placeholder(
     // have a screen reader repeat the same sentence every timeout.
     let spoken = title.trim_end_matches(['.', ' ']);
     ui.spoken_reading(
+        state.announce,
         live_region_fingerprint(l10n, None, state, spoken),
+        live_region_context(None),
         || live_region_label(l10n, None, state, spoken),
         add_contents,
     );
@@ -1186,7 +1195,9 @@ fn show_reading_sized(
             let (value_text, value_color) = value_display(m, tc, state);
 
             ui.spoken_reading(
+                state.announce,
                 live_region_fingerprint(l10n, Some(m), state, ""),
+                live_region_context(Some(m)),
                 || live_region_label(l10n, Some(m), state, ""),
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
@@ -1394,7 +1405,9 @@ fn show_reading_beside(
                     Layout::left_to_right(Align::Min),
                     |ui| {
                         ui.spoken_reading(
+                            state.announce,
                             live_region_fingerprint(l10n, Some(m), state, ""),
+                            live_region_context(Some(m)),
                             || live_region_label(l10n, Some(m), state, ""),
                             |ui| {
                                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -2042,6 +2055,7 @@ mod tests {
                 scaled: false,
                 alarm_set,
                 alarm,
+                ..ReadingState::PLAIN
             };
             let mut width = 0.0;
             let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
@@ -2643,6 +2657,16 @@ mod tests {
     fn run_frame(
         ctx: &egui::Context,
         events: Vec<egui::Event>,
+        draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
+    ) -> Frame {
+        run_frame_at(ctx, None, events, draw)
+    }
+
+    /// [`run_frame`] at input time `time`, for what is paced in real time.
+    fn run_frame_at(
+        ctx: &egui::Context,
+        time: Option<f64>,
+        events: Vec<egui::Event>,
         mut draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
     ) -> Frame {
         ctx.enable_accesskit();
@@ -2650,6 +2674,7 @@ mod tests {
         let mut out = ctx.run_ui(
             egui::RawInput {
                 events,
+                time,
                 ..Default::default()
             },
             |ui| picked = draw(ui),
@@ -2854,6 +2879,34 @@ mod tests {
             "{what}: the spoken reading has no bounds"
         );
         (*id, node)
+    }
+
+    /// A reading that changes within the interval reaches the screen reader
+    /// when the interval runs out, not before.
+    #[test]
+    fn a_new_value_waits_for_the_interval() {
+        let ctx = crate::app::styled_context();
+        let reading = |v: f64| {
+            let mut m =
+                Measurement::test_fixture(MeasuredValue::Normal(v), "V", StatusFlags::default());
+            m.display_raw = Some(v.to_string());
+            m
+        };
+        let said = |time: f64, v: f64| {
+            let m = reading(v);
+            let f = run_frame_at(&ctx, Some(time), vec![], |ui| {
+                draw_reading(ui, "two-line", &m, modes(&[]))
+            });
+            let (_, node) = spoken_reading(&f.nodes, &format!("t={time}"));
+            node.value().unwrap_or_default().to_owned()
+        };
+        let first = said(0.0, 1.234);
+        assert!(first.contains("1.234"), "{first:?}");
+        assert!(
+            said(1.0, 5.678).contains("1.234"),
+            "held inside the interval"
+        );
+        assert!(said(5.1, 5.678).contains("5.678"), "shown once it ran out");
     }
 
     /// Every layout, with a selector or without, and the placeholder speaks

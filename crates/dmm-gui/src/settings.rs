@@ -55,6 +55,10 @@ fn default_check_for_updates() -> bool {
     true
 }
 
+fn default_announce_interval_secs() -> Option<u32> {
+    Some(5)
+}
+
 /// Bytes one point costs in the graph's history: a `DataPoint` plus the
 /// `VecDeque` slack it sits in.
 const GRAPH_BYTES_PER_POINT: usize = 48;
@@ -428,6 +432,10 @@ pub struct Settings {
     /// builds ask; see `app::update_check`.
     #[serde(default = "default_check_for_updates")]
     pub check_for_updates: bool,
+    /// The least time between two screen-reader announcements of the
+    /// reading, in seconds: 0 for every reading, `None` (`null`) for none.
+    #[serde(default = "default_announce_interval_secs")]
+    pub announce_interval_secs: Option<u32>,
     /// The folder Import… or Export… last picked a file in; both dialogs open
     /// there. `None` until one does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -492,6 +500,7 @@ impl Default for Settings {
             graph_lines: GraphLines::Patterned,
             last_seen_version: None,
             check_for_updates: default_check_for_updates(),
+            announce_interval_secs: default_announce_interval_secs(),
             last_folder: None,
             window_size: None,
             window_maximized: false,
@@ -836,6 +845,7 @@ mod tests {
             graph_lines: GraphLines::Solid,
             last_seen_version: Some("0.3.0".to_string()),
             check_for_updates: false,
+            announce_interval_secs: None,
             last_folder: Some(PathBuf::from("/data/bench")),
             window_size: Some([1300.0, 900.0]),
             window_maximized: true,
@@ -870,6 +880,7 @@ mod tests {
         assert!(!deserialized.shared.bluetooth);
         assert_eq!(deserialized.shared.language, "fr");
         assert!(!deserialized.check_for_updates);
+        assert_eq!(deserialized.announce_interval_secs, None, "Never survives");
         assert_eq!(
             deserialized.last_folder.as_deref(),
             Some(std::path::Path::new("/data/bench"))
@@ -897,6 +908,9 @@ mod tests {
         assert_eq!(s.spec_fields, SpecFields::default());
         assert_eq!(s.zoom_pct, 100);
         assert_eq!(s.sample_interval_ms, 0);
+        // One written before readings were paced announces every 5 s, not
+        // never (a missing field is not a `null`).
+        assert_eq!(s.announce_interval_secs, Some(5));
         // A config file written before the buffer became configurable must
         // land on the default bound, not on zero.
         assert_eq!(s.max_samples, DEFAULT_MAX_SAMPLES);

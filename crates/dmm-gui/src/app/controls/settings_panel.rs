@@ -258,10 +258,11 @@ impl App {
     }
 
     /// The settings rows, top to bottom, in groups a rule apart: the meter,
-    /// what is kept of its readings, which panels show, the window, and how
-    /// it all looks. Appearance comes last, being set once and holding the
-    /// one section that opens, **Customize colors**, which then grows the
-    /// panel near its foot rather than pushing every other row down. Drawn
+    /// what is kept of its readings, which panels show, the window, how a
+    /// screen reader hears the reading, and how it all looks. Appearance
+    /// comes last, being set once and holding the one section that opens,
+    /// **Customize colors**, which then grows the panel near its foot rather
+    /// than pushing every other row down. Drawn
     /// inside the scroll area that [`Self::show_settings_panel`] caps; the
     /// colour rows live in `colors.rs`.
     fn show_settings_rows(&mut self, ui: &mut Ui) {
@@ -273,7 +274,39 @@ impl App {
         ui.separator();
         self.show_window_rows(ui);
         ui.separator();
+        self.show_announce_rows(ui);
+        ui.separator();
         self.show_appearance_rows(ui);
+    }
+
+    /// **Announce readings**: how often a screen reader hears the reading
+    /// change (`a11y::AnnouncePolicy`).
+    fn show_announce_rows(&mut self, ui: &mut Ui) {
+        let l10n = self.l10n.clone();
+        let l10n = l10n.as_ref();
+        ui.horizontal_wrapped(|ui| {
+            let chips = [Some(0u32), Some(2), Some(5), Some(10), Some(30), None]
+                .into_iter()
+                .map(|secs| Chip {
+                    value: secs,
+                    selected: self.settings.announce_interval_secs == secs,
+                    label: match secs {
+                        Some(s) => interval_label(l10n, s * 1000),
+                        None => tr!(l10n, "settings-announce-never").into_owned(),
+                    },
+                    tooltip: match secs {
+                        Some(0) => tr!(l10n, "settings-announce-every-reading.hover"),
+                        Some(n) => tr!(l10n, "settings-announce-chip.hover", n = n),
+                        None => tr!(l10n, "settings-announce-never.hover"),
+                    }
+                    .into_owned(),
+                });
+            let caption = tr!(l10n, "settings-announce");
+            if let Some(secs) = chip_row(ui, &caption, chips) {
+                self.settings.announce_interval_secs = secs;
+                self.settings.save();
+            }
+        });
     }
 
     /// **Device**, **Mock mode** while the mock is picked, and how a
@@ -1347,7 +1380,8 @@ mod tests {
     }
 
     /// The groups in the panel's order: the meter, what is kept, the
-    /// panels, the window, then how it looks.
+    /// panels, the window, how a screen reader hears the reading, then how
+    /// it looks.
     #[test]
     fn the_settings_groups_run_meter_first_appearance_last() {
         let mut run = SettingsRun::new(1200.0, 900.0);
@@ -1363,6 +1397,7 @@ mod tests {
             "30%",
             "Always on top",
             "Check for new versions",
+            "Never",
             "Dark",
             "Default",
             "Customize colors",
@@ -1371,6 +1406,30 @@ mod tests {
         let tops = rows.map(|label| node_bounds(&frame, label).y0);
         for (pair, tops) in rows.windows(2).zip(tops.windows(2)) {
             assert!(tops[0] < tops[1], "{} is not above {}", pair[0], pair[1]);
+        }
+    }
+
+    /// **Announce readings** picks the pace, Never included, and the reading
+    /// takes it.
+    #[test]
+    fn an_announce_chip_sets_the_pace() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        assert_eq!(run.app.settings.announce_interval_secs, Some(5));
+        for (chip, want) in [("Never", None), ("30s", Some(30))] {
+            let frame = run.frame(vec![]);
+            let b = node_bounds(&frame, chip);
+            run.click(Pos2::new(
+                ((b.x0 + b.x1) / 2.0) as f32,
+                ((b.y0 + b.y1) / 2.0) as f32,
+            ));
+            assert_eq!(run.app.settings.announce_interval_secs, want, "{chip}");
+            assert_eq!(
+                run.app.reading_state().announce,
+                crate::a11y::AnnouncePolicy::every_secs(want),
+                "{chip}"
+            );
         }
     }
 

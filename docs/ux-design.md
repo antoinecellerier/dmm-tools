@@ -194,6 +194,11 @@ patterns for those who don't need them, on data lines only: the mean,
 reference, envelope, cursor, marker and data-loss lines keep theirs, which
 are what tell them from data and from each other.
 
+**Readings are paced.** A screen reader speaks the live reading each time
+it changes, and Narrator cuts itself off to do so, so a new value waits out
+the **Announce readings** interval; a new mode or the connection state is
+news the user acts on and is spoken at once (`Announcer` in `a11y.rs`).
+
 **11 pt floor.** egui's small text style ships at 9 pt, so it is raised to
 11 pt once at startup rather than avoided per call site (`SMALL_TEXT_SIZE` in
 `app/appearance.rs`).

@@ -204,6 +204,24 @@ settings-update-dev = Newer dev build ↗
 # Its shorter form, when the top bar is short of room.
 settings-update-dev-short = Update ↗
 
+## How a screen reader hears the reading change.
+
+# A screen reader speaks the reading each time it changes; this row sets how
+# often at most. Its chips are durations like the Sample interval row's,
+# Every reading taking that row's first chip's label, then Never.
+settings-announce = Announce readings:
+settings-announce-every-reading =
+    .hover = Speak every new reading. A screen reader may cut itself off when readings come faster than it speaks.
+# The duration chips' hover. $n is a whole number of seconds.
+settings-announce-chip =
+    .hover =
+        { $n ->
+            [one] Speak the reading at most once a second. A change of mode is spoken at once.
+           *[other] Speak the reading at most once every { $n } seconds. A change of mode is spoken at once.
+        }
+settings-announce-never = Never
+    .hover = Don't speak readings as they change. A lost connection is still spoken.
+
 ## How the graph's lines look, the last row.
 
 settings-graph-lines = Graph lines:
