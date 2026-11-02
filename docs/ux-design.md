@@ -196,7 +196,7 @@ are what tell them from data and from each other.
 
 **Readings are paced.** A screen reader speaks the live reading each time
 it changes, and Narrator cuts itself off to do so, so a new value waits out
-the **Announce readings** interval; a new mode or the connection state is
+the **Screen reader updates** interval; a new mode or the connection state is
 news the user acts on and is spoken at once (`Announcer` in `a11y.rs`).
 
 **Focus mode turns the live region off.** A screen reader reads the item its

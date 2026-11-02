@@ -258,4 +258,4 @@ henry	henry	n. m.	reading-unit-henry (spoken)	ruled by the user; no approved sou
 second	seconde	n. f.	reading-unit-second (spoken)	ruled by the user; no approved source at hand	Plural «secondes».
 percent	pour cent	loc.	reading-unit-percent (spoken)	ruled by the user; no approved source at hand	
 SI prefixes	pico, nano, micro, milli, kilo, méga, giga	prefix	reading-unit-prefix-* (spoken)	ruled by the user; no approved source at hand	Joined whole to the unit's name: «milliampère», «mégahertz», «kiloohm».
-Announce readings	Annoncer les mesures	v.	settings-announce, settings-announce-* hovers	ruled by the user; no approved source at hand	Every reading → «Chaque mesure» (the Sample interval chip); Never → «Jamais».
+Screen reader updates	Annonces du lecteur d’écran	n. f. pl.	settings-announce	ruled by the user; no approved source at hand	The settings-announce-* hovers keep the verb «annoncer». Every reading → «Chaque mesure» (the Sample interval chip); Never → «Jamais».

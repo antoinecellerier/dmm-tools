@@ -209,7 +209,7 @@ settings-update-dev-short = Update ↗
 # A screen reader speaks the reading each time it changes; this row sets how
 # often at most. Its chips are durations like the Sample interval row's,
 # Every reading taking that row's first chip's label, then Never.
-settings-announce = Announce readings:
+settings-announce = Screen reader updates:
 settings-announce-every-reading =
     .hover = Speak every new reading. A screen reader may cut itself off when readings come faster than it speaks.
 # The duration chips' hover. $n is a whole number of seconds.
@@ -221,10 +221,10 @@ settings-announce-chip =
         }
 settings-announce-never = Never
     .hover = Don't speak readings as they change. A lost connection is still spoken.
-# A checkbox under the Announce readings row. Focus is keyboard focus, or
-# where the screen reader's cursor is.
+# A checkbox at the end of the same row, or under it when the row wraps.
+# Focus is keyboard focus, or where the screen reader's cursor is.
 settings-announce-focused = Only while the reading has focus
-    .hover = Speak the reading only while the screen reader is on it, at the pace above; Tab reaches it.
+    .hover = Speak the reading only while the screen reader is on it, at the chosen pace; Tab reaches it.
 
 ## How the graph's lines look, the last row.
 

@@ -279,9 +279,9 @@ impl App {
         self.show_appearance_rows(ui);
     }
 
-    /// **Announce readings**: how often a screen reader hears the reading
-    /// change, and whether only with its cursor on it
-    /// (`a11y::AnnouncePolicy`).
+    /// **Screen reader updates**: how often a screen reader hears the
+    /// reading change, and, at the row's end, whether only with its cursor
+    /// on it (`a11y::AnnouncePolicy`).
     fn show_announce_rows(&mut self, ui: &mut Ui) {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
@@ -307,8 +307,6 @@ impl App {
                 self.settings.announce_interval_secs = secs;
                 self.settings.save();
             }
-        });
-        ui.horizontal_wrapped(|ui| {
             if setting_checkbox(
                 ui,
                 &mut self.settings.announce_only_focused,
@@ -1420,7 +1418,7 @@ mod tests {
         }
     }
 
-    /// **Announce readings** picks the pace, Never included, and its checkbox
+    /// **Screen reader updates** picks the pace, Never included, and its checkbox
     /// focus only; the reading takes both.
     #[test]
     fn an_announce_chip_sets_the_pace() {

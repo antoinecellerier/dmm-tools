@@ -209,7 +209,7 @@ settings-update-dev-short = Mise à jour ↗
 # A screen reader speaks the reading each time it changes; this row sets how
 # often at most. Its chips are durations like the Sample interval row's,
 # Every reading taking that row's first chip's label, then Never.
-settings-announce = Annoncer les mesures :
+settings-announce = Annonces du lecteur d’écran :
 settings-announce-every-reading =
     .hover = Annoncer chaque nouvelle mesure. Un lecteur d’écran peut s’interrompre quand les mesures arrivent plus vite qu’il ne les lit.
 # The duration chips' hover. $n is a whole number of seconds.
@@ -221,10 +221,10 @@ settings-announce-chip =
         }
 settings-announce-never = Jamais
     .hover = Ne pas annoncer les mesures quand elles changent. Une perte de connexion est toujours annoncée.
-# A checkbox under the Announce readings row. Focus is keyboard focus, or
-# where the screen reader's cursor is.
+# A checkbox at the end of the same row, or under it when the row wraps.
+# Focus is keyboard focus, or where the screen reader's cursor is.
 settings-announce-focused = Seulement quand la mesure a le focus
-    .hover = Annoncer la mesure seulement quand le lecteur d’écran est dessus, au rythme choisi ci-dessus. La touche Tab y mène.
+    .hover = Annoncer la mesure seulement quand le lecteur d’écran est dessus, au rythme choisi. La touche Tab y mène.
 
 ## How the graph's lines look, the last row.
 

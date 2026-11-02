@@ -174,7 +174,7 @@ screen reader has walked the rest.
   and HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK and LIVE say "pressed" / "not
   pressed" when toggled.
 - Orca: the plot's summary is read when focused, the reading is spoken at
-  most once per **Announce readings** interval, and Orca+Ctrl+Shift+L lists
+  most once per **Screen reader updates** interval, and Orca+Ctrl+Shift+L lists
   Toolbar, Main and Status.
 - Orca with sub-values (a UT181A or the mock): "Plot \<name\>" radios and "Show
   \<name\> trace" toggles with their state; the live region speaks sub-values and

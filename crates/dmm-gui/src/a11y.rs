@@ -132,7 +132,7 @@ pub(crate) fn hide_from_screen_readers(ui: &Ui, id: egui::Id) {
 }
 
 /// How the reading is paced for a screen reader ([`Announcer`]): the
-/// **Announce readings** settings.
+/// **Screen reader updates** settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct AnnouncePolicy {
     /// The least time between two announcements of a value: zero for every

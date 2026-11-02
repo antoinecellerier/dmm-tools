@@ -269,5 +269,5 @@ henry	亨	n.	reading-unit-henry (spoken)	no approved source at hand	Short name; 
 second	秒	n.	reading-unit-second (spoken)	no approved source at hand	«毫秒».
 percent	百分比	n.	reading-unit-percent (spoken)	no approved source at hand	Only where no number goes before it; a number of percent is «百分之 50.0» (ruling 16).
 SI prefixes	皮, 纳, 微, 毫, 千, 兆, 吉	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined to the unit's name: «毫伏», «千欧», «兆赫兹».
-Announce readings	播报读数	v.	settings-announce, settings-announce-* hovers	no approved source at hand	Every reading → «每个读数» (the Sample interval chip); Never → «从不».
+Screen reader updates	屏幕阅读器播报	n.	settings-announce	no approved source at hand	The settings-announce-* hovers keep the verb «播报». Every reading → «每个读数» (the Sample interval chip); Never → «从不».
 focus (keyboard)	焦点	n.	settings-announce-focused	MS-T focus => 焦点	«获得焦点».

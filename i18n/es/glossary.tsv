@@ -282,5 +282,5 @@ henry	henrio	s. m.	reading-unit-henry (spoken)	no approved source at hand	Plural
 second	segundo	s. m.	reading-unit-second (spoken)	no approved source at hand	Plural «segundos».
 percent	por ciento	loc.	reading-unit-percent (spoken)	no approved source at hand	
 SI prefixes	pico, nano, micro, mili, kilo, mega, giga	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined whole to the unit's name: «miliamperio», «megahercio», «kiloohmio».
-Announce readings	Anunciar lecturas	v.	settings-announce, settings-announce-* hovers	no approved source at hand	Every reading → «Cada lectura» (the Sample interval chip); Never → «Nunca».
+Screen reader updates	Anuncios del lector de pantalla	s. m. pl.	settings-announce	no approved source at hand	The settings-announce-* hovers keep the verb «anunciar». Every reading → «Cada lectura» (the Sample interval chip); Never → «Nunca».
 focus (keyboard)	foco	s. m.	settings-announce-focused	no approved source at hand	«tiene el foco».
