@@ -259,3 +259,4 @@ second	seconde	n. f.	reading-unit-second (spoken)	ruled by the user; no approved
 percent	pour cent	loc.	reading-unit-percent (spoken)	ruled by the user; no approved source at hand	
 SI prefixes	pico, nano, micro, milli, kilo, méga, giga	prefix	reading-unit-prefix-* (spoken)	ruled by the user; no approved source at hand	Joined whole to the unit's name: «milliampère», «mégahertz», «kiloohm».
 Screen reader updates	Annonces du lecteur d’écran	n. f. pl.	settings-announce	ruled by the user; no approved source at hand	The settings-announce-* hovers keep the verb «annoncer». Every reading → «Chaque mesure» (the Sample interval chip); Never → «Jamais».
+bug	bug	n. m.	cli-help capture .about, README	user ruling 2026-11-02	Everyday French says «bug» far more than «bogue»: «signaler un bug», «rapport de bug».

@@ -131,7 +131,7 @@ completions--shell =
     .help = Shell pour lequel générer l’autocomplétion
 # dmm-cli capture
 capture =
-    .about = Capture guidée du protocole pour les rapports de bogue et la vérification
+    .about = Capture guidée du protocole pour les rapports de bug et la vérification
 # dmm-cli capture --output
 capture--output =
     .help = Fichier de sortie (par défaut : capture-<device>.yaml). Remplace le nommage automatique

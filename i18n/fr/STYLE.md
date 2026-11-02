@@ -19,6 +19,7 @@ The short list. Where a section below gives the background, this list is what ap
 11. Terms ruled without an approved source: «gain en courant (hFE)» ("Transistor Magnification" → «Gain en courant du transistor (hFE)»), «Daltonien» (Colorblind preset). The other unsourced terms take the glossary's value as drafted.
 12. macOS names (Apple's French support pages): «Réglages Système > Confidentialité et sécurité > Surveillance de l’entrée», and «… > Bluetooth». Windows: «Gestionnaire de périphériques» (MS Terminology), «Périphériques d’interface utilisateur» and «Autres périphériques» (Microsoft's French support pages). The French name of 'USB Input Device' is unverified: its message carries a `# UNVERIFIED Windows name` comment until someone checks a French Windows.
 13. Spoken unit names (`reading-unit-*`, read aloud only): «volt», «ampère», «ohm», «hertz», «farad», «siemens», «watt», «voltampère», «henry» (pluriel «henrys»), «seconde», «pour cent»; prefixes «pico», «nano», «micro», «milli», «kilo», «méga», «giga», joined whole with no contraction («kiloohm», «mégaohm»). Ruled by the user; ohm, watt and voltampère follow VC920 PDF p.71–72.
+14. «bug», never «bogue»: everyday French says «bug» («signaler un bug», «rapport de bug»). Ruled by the user.
 
 ## 1. Sources
 
