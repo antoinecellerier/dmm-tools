@@ -473,6 +473,7 @@ The apps ship translated ([localization-design.md](localization-design.md)); wha
 - Why a typed number was refused. dmm-cli's command-line errors are translated, but the reason after them is Rust's own English (`invalid digit found in string`).
 - Room at 700 px. With a live meter the Portuguese and Spanish top bars wrap where English and French fit, and the Portuguese statistics row pushes ∫ onto a line of its own.
 - Chinese in the shortcut list. The key column is monospace, so the half-width parentheses around a key leave wide gaps beside the Chinese text.
+- Back to egui's own system fonts. `app/system_fonts.rs` stands in for `egui_system_font_provider`, which in 0.37 asks the generic sans-serif list before the language's font (with fonts-nanum installed, Japanese drew from a Korean font, gaps after the kana). On an egui update, switch back in a trial build and look at Japanese under verify-gui with fonts-nanum installed. Also open upstream: Chinese draws with the Japanese face of Noto Sans CJK on Debian (fontique takes `zh-CN` for its default Han locale, fontconfig maps no `zh-SG`), and «ー» or a small kana can start a wrapped line.
 - `get` and `set` in Chinese. `get` lists `on` and `off`, the tokens `set` takes, while `set` confirms the change in Chinese (开, 关).
 - Shipped translations of `capture`'s step instructions, which users translate for themselves; `triage`, What's New and the user docs, which stay English.
 
