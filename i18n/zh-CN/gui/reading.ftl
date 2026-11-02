@@ -78,6 +78,50 @@ reading-spoken-no-reading = 无读数 ({ $word })
 reading-spoken-celsius = 摄氏度
 reading-spoken-fahrenheit = 华氏度
 
+## Unit names, said after a number in place of the unit's symbol, which a
+## screen reader spells out letter by letter (mV as "m V"). The screen keeps
+## the symbols; only the spoken reading says these.
+##
+## $value is the number the name follows, as the screen shows it, e.g.
+## 1.000 or -0.52, to choose the plural by; after "overload", or in a mode's
+## name (DC volts), it is no number and the last form is taken. $prefix is
+## the SI prefix's word below, empty for none, and leads the name. Only
+## reading-unit-ohm is also given $scale, which prefix it is (none, pico,
+## nano, micro, milli, kilo, mega or giga), for a pair the language writes
+## its own way, as English contracts kilohm and megohm. reading-unit-percent
+## is given none of these.
+
+# The SI prefixes, as they lead a unit's name (milli in millivolt).
+reading-unit-prefix-pico = 皮
+reading-unit-prefix-nano = 纳
+reading-unit-prefix-micro = 微
+reading-unit-prefix-milli = 毫
+reading-unit-prefix-kilo = 千
+reading-unit-prefix-mega = 兆
+reading-unit-prefix-giga = 吉
+reading-unit-volt = { $prefix }伏
+reading-unit-ampere = { $prefix }安
+reading-unit-ohm = { $prefix }欧
+reading-unit-hertz = { $prefix }赫兹
+reading-unit-farad = { $prefix }法
+reading-unit-siemens = { $prefix }西门子
+reading-unit-watt = { $prefix }瓦
+reading-unit-volt-ampere = { $prefix }伏安
+reading-unit-henry = { $prefix }亨
+reading-unit-second = { $prefix }秒
+# The % sign; it takes no prefix.
+reading-unit-percent = 百分比
+# A number and its unit's name: $value is the number as the screen shows
+# it, e.g. 1.6112, or a word such as "overload"; $unit is one of the names
+# above, e.g. millivolts. $kind is percent for a number followed by
+# reading-unit-percent, for a language that says percent before the
+# number, and other otherwise.
+reading-spoken-amount =
+    { $kind ->
+        [percent] 百分之 { $value }
+       *[other] { $value } { $unit }
+    }
+
 ## The meter's badges spoken, one phrase each.
 
 # HV!: the probes are on a dangerous voltage.

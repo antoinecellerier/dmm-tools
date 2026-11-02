@@ -202,6 +202,24 @@ settings-update-dev = 更新的开发版本 ↗
 # Its shorter form, when the top bar is short of room.
 settings-update-dev-short = 更新 ↗
 
+## How a screen reader hears the reading change.
+
+# A screen reader speaks the reading each time it changes; this row sets how
+# often at most. Its chips are durations like the Sample interval row's,
+# Every reading taking that row's first chip's label, then Never.
+settings-announce = 播报读数:
+settings-announce-every-reading =
+    .hover = 播报每个新读数。读数来得比屏幕阅读器读得快时，屏幕阅读器可能会打断自己。
+# The duration chips' hover. $n is a whole number of seconds.
+settings-announce-chip =
+    .hover = 最多每 { $n } 秒播报一次读数。模式改变时立即播报。
+settings-announce-never = 从不
+    .hover = 读数变化时不播报。连接断开时仍会播报。
+# A checkbox under the Announce readings row. Focus is keyboard focus, or
+# where the screen reader's cursor is.
+settings-announce-focused = 仅在读数获得焦点时
+    .hover = 仅在屏幕阅读器位于读数上时，按上面选定的频率播报读数。按 Tab 键可以到达读数。
+
 ## How the graph's lines look, the last row.
 
 settings-graph-lines = 图表线条:

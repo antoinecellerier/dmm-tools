@@ -1105,6 +1105,20 @@ mod tests {
         );
     }
 
+    /// Chinese says percent before the number, 百分之五十, and every other
+    /// unit after it.
+    #[test]
+    fn chinese_says_percent_first() {
+        let zh = Localizer::new(
+            dmm_shared::l10n::find("zh-CN").expect("Chinese ships"),
+            &crate::l10n::resources(),
+            &dmm_shared::l10n::Options::default(),
+        );
+        assert_eq!(spoken_amount(&zh, "50.0", "%"), "百分之 50.0");
+        assert_eq!(spoken_amount(&zh, "1.5", "mA"), "1.5 毫安");
+        assert_eq!(spoken_amount(&zh, "超量程", "%"), "超量程 百分比");
+    }
+
     #[test]
     fn live_region_label_spells_out_degrees() {
         let mut m = Measurement::test_fixture(

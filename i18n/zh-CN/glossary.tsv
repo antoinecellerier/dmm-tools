@@ -257,3 +257,17 @@ analog bar graph (meter display)	模拟条	n.	not in en-US today; listed for the
 Simplified Chinese (language name)	简体中文	n.	Language list, settings-language-system	crates/dmm-shared/src/l10n/lang.rs native_name	Fixed entry; do not translate the other languages' names in the list.
 turn (the dial) to	将旋钮转至 / 转到	v.	activation steps	UT61E+ CN PDF p.8L (p.13) “将旋钮转至”; UT181A CN PDF p.21 (p.17) “将仪表的旋钮开关转到”	
 switch on / switch off (the meter)	开机 / 关机	v.	activation steps and notes	UT71 CN PDF p.26 “按下此键开机”; UT61E+ CN PDF p.7L (p.11) “OFF 关机”	"""hold SELECT while turning it on"" → «按住 SELECT 键的同时开机»."
+volt	伏	n.	reading-unit-volt (spoken)	no approved source at hand	Short name; «伏特» in full.
+ampere	安	n.	reading-unit-ampere (spoken)	no approved source at hand	Short name; «安培» in full.
+ohm	欧	n.	reading-unit-ohm (spoken)	no approved source at hand	Short name; «欧姆» in full. kΩ, MΩ spoken «千欧», «兆欧».
+hertz	赫兹	n.	reading-unit-hertz (spoken)	no approved source at hand	«兆赫兹», «千赫兹».
+farad	法	n.	reading-unit-farad (spoken)	no approved source at hand	Short name; «法拉» in full. «微法», «纳法».
+siemens	西门子	n.	reading-unit-siemens (spoken)	no approved source at hand	
+watt	瓦	n.	reading-unit-watt (spoken)	no approved source at hand	Short name; «瓦特» in full.
+volt-ampere	伏安	n.	reading-unit-volt-ampere (spoken)	no approved source at hand	
+henry	亨	n.	reading-unit-henry (spoken)	no approved source at hand	Short name; «亨利» in full.
+second	秒	n.	reading-unit-second (spoken)	no approved source at hand	«毫秒».
+percent	百分比	n.	reading-unit-percent (spoken)	no approved source at hand	Only where no number goes before it; a number of percent is «百分之 50.0» (ruling 16).
+SI prefixes	皮, 纳, 微, 毫, 千, 兆, 吉	prefix	reading-unit-prefix-* (spoken)	no approved source at hand	Joined to the unit's name: «毫伏», «千欧», «兆赫兹».
+Announce readings	播报读数	v.	settings-announce, settings-announce-* hovers	no approved source at hand	Every reading → «每个读数» (the Sample interval chip); Never → «从不».
+focus (keyboard)	焦点	n.	settings-announce-focused	MS-T focus => 焦点	«获得焦点».

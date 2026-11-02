@@ -23,6 +23,7 @@ The short list. Where a section below gives the background, this list is what ap
 13. *Provisional.* Key terms: reading «读数»; range «量程»; accuracy «准确度»; resolution «分辨力»; digits/counts «字»; specifications «技术指标»; graph «图表»; trace «曲线»; recording «记录»; replay «回放»; simulated «仿真»; scale/scaling «换算»; alarm «报警»; OL «超量程».
 14. *Provisional.* Terms without an approved source take the glossary's value as drafted, marked there "no approved source found"; the reviewer decides inrush current, burden voltage, hysteresis, Colorblind, Live (live wire) and the Bluetooth link first.
 15. Windows and macOS names. «设备管理器» is MS-T's, «其他设备» Microsoft's zh-cn Bluetooth support page's, and macOS «系统设置 > 隐私与安全 > 输入监控» and «… > 蓝牙» Apple's zh-cn support pages'. Two are **unverified**: 'USB Input Device' «USB 输入设备», and the HID group «人体学输入设备», the name Chinese Windows' Device Manager is believed to show; Microsoft's zh-cn touchscreen support page and MS-T write «人机接口设备». Their messages carry a `# UNVERIFIED Windows name` comment until someone checks a Chinese Windows.
+16. *Provisional.* Spoken unit names (`reading-unit-*`, read aloud only) take the short names: «伏», «安», «欧», «赫兹», «法», «西门子», «瓦», «伏安», «亨», «秒», and «百分比» for %; prefixes «皮», «纳», «微», «毫», «千», «兆», «吉», joined to the name («毫伏», «千欧», «兆赫兹»). No plural select. A number of percent is said first, «百分之 50.0» (`reading-spoken-amount`); «百分比» is left to where no number goes before it, as in a mode's name or after «超量程».
 
 ## 1. Sources
 
@@ -122,7 +123,7 @@ epaint 0.37 (`text_layout.rs:1394–1431`, `unicode.rs:49–71`) may break befor
 
 ## 6. Units and AC/DC
 
-- **Unit symbols never change:** V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. Keep `°C`/`°F` as the app writes them (degree sign + letter); the manuals' single-character «℃» and «℉» would fail the spec check and look different from the reading.
+- **Unit symbols never change,** except in the spoken reading's unit names (§0 ruling 16): V, mV, A, mA, µA, Ω, kΩ, MΩ, Hz, F, °C, °F, W, VA, Wh, Ah, dBm, dBV, s, ms, h, V·s, mAh. Keep `°C`/`°F` as the app writes them (degree sign + letter); the manuals' single-character «℃» and «℉» would fail the spec check and look different from the reading.
 - **Space between a number and its unit:** follow the English as written; spec text keeps the manual's own spacing (`10MΩ`), which the spec check ignores.
 - **Time words in prose:** where the English writes words ("17 minutes", "2 seconds"), write «17 分钟», «2 秒»; where it writes a symbol, keep the symbol.
 - **The meter's AC/DC labels stay as the meter prints them:** `DC V`, `V AC`, `AC mA`, `AC+DC`, `ACV`, `DCV`, `LoZ V~`. The UNI-T manuals do the same in their tables («LoZ ACV 600.0V», UT61E+ PDF p.15R).
