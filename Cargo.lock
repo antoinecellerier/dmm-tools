@@ -1152,13 +1152,16 @@ dependencies = [
  "egui",
  "egui_commonmark",
  "egui_plot",
- "egui_system_font_provider",
+ "fontique",
  "log",
  "raw-window-handle",
  "rfd",
  "rustls",
  "serde",
  "serde_json",
+ "skrifa",
+ "sys-locale",
+ "unicode-script",
  "ureq",
 ]
 

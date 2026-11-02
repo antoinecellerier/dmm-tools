@@ -146,7 +146,7 @@ The library's `Display` stays the English rendering, used by logs and by library
 |---|---|
 | Latin, Cyrillic | Bundled fonts (Ubuntu-Light, with Hack as fallback) |
 | Greek | Partial in Ubuntu-Light; check before offering a Greek translation |
-| Chinese, Japanese, Korean | Only through a system font, which the GUI picks by its language (`app/language.rs`), so it depends on the user's installed fonts |
+| Chinese, Japanese, Korean | Only through a system font, the language's own before the generic sans-serif list (`app/system_fonts.rs`), so it depends on the user's installed fonts |
 | Arabic, Hebrew, Persian | Not possible: egui 0.37 has no bidirectional text or right-to-left layout |
 
 Most of the layout measures its text. The places longer strings strain are:

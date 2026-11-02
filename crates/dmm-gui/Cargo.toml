@@ -14,8 +14,14 @@ eframe = { version = "0.37", features = ["glow", "wgpu"] }
 # without them each OS draws its own, colour emoji included.
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 egui_commonmark = "0.26"
-# eframe's own, installed by the app with the UI language's locale.
-egui_system_font_provider = "0.37"
+# The system font lookup in app/system_fonts.rs, adapted from
+# egui_system_font_provider 0.37 (already in the tree through eframe).
+# On an egui update, check whether upstream now asks the language's own
+# font first (docs/future-improvements.md, "Localization follow-ups").
+fontique = "0.11"
+skrifa = "0.44"
+sys-locale = "0.3"
+unicode-script = "0.5"
 egui_plot = "0.38"
 raw-window-handle = "0.6"
 chrono.workspace = true

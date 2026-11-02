@@ -14,10 +14,10 @@ use dmm_shared::l10n::{EN_US, Language, Localizer, Options};
 use dmm_shared::tr;
 use eframe::egui;
 use egui::epaint::text::{FallbackRequest, FontFamily, FontProvider};
-use egui_system_font_provider::SystemFontProvider;
 use std::sync::{Arc, OnceLock, mpsc};
 
 use super::App;
+use super::system_fonts::SystemFonts;
 use super::toast::Toast;
 
 /// Where the notice under the **Language** row sends a reader who can help
@@ -203,11 +203,7 @@ impl App {
             return;
         }
         let locale = font_locale(language);
-        let provider = SystemFontProvider::new();
-        let provider = Arc::new(match locale {
-            Some(locale) => provider.with_locale(Some(locale)),
-            None => provider,
-        });
+        let provider = Arc::new(SystemFonts::new(locale));
         ctx.set_font_providers(vec![provider.clone()]);
         self.speech.fonts_for = Some(language.id);
         self.speech.font_installs += 1;
@@ -264,7 +260,7 @@ impl App {
 /// failed.
 fn check_font(
     ctx: egui::Context,
-    provider: Arc<SystemFontProvider>,
+    provider: Arc<SystemFonts>,
     probe: &'static str,
 ) -> mpsc::Receiver<Option<bool>> {
     let (tx, rx) = mpsc::channel();
