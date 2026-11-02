@@ -1,7 +1,10 @@
+use super::hover::{
+    HoverSeries, height_decimals, height_tags, hover_lines, reading_at, reading_near,
+};
+use super::key::KeyStyle;
+use super::labels::{cursor_label_rect, layout_marker_flags, level_label_rects, segment_hits_rect};
 use super::render::{
-    HoverSeries, KeyStyle, cursor_label_rect, height_decimals, height_tags, hover_lines,
-    layout_marker_flags, level_label_rects, quantize_for_hash, reading_at, reading_near,
-    segment_hits_rect, stacks_that_fit, stepped, thin_for_drawing, whole_number_marks,
+    quantize_for_hash, stacks_that_fit, stepped, thin_for_drawing, whole_number_marks,
 };
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};

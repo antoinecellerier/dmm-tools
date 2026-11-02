@@ -163,7 +163,7 @@ or apart from it would overflow.
 
 **The plot key is a key.** It toggles nothing: egui_plot's legend loses its
 show/hide state while the view is pinned every frame (`paint_plot_key` in
-`graph/render.rs`), so the **Show:** chips are the control.
+`graph/key.rs`), so the **Show:** chips are the control.
 
 **Session choices are never saved, hidden traces are.** A scale or plotted
 series restored silently at the next launch would corrupt readings or plot a
