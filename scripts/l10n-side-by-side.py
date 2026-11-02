@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write one HTML page that sets a language's translation beside its English.
 
-    scripts/l10n-side-by-side.py pt-BR > pt-BR.html
+    python3 scripts/l10n-side-by-side.py pt-BR pt-BR.html
 
 Every file under i18n/en-US/, the GUI's first, under its group headings: each
 message and each attribute on a row of its own, with the English's comment
@@ -456,13 +456,19 @@ for (const button of buttons) if (button.dataset.f === initial) button.click();
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):
+    if len(sys.argv) not in (2, 3) or sys.argv[1] in ("-h", "--help"):
         sys.exit(__doc__.strip())
     lang = sys.argv[1]
     if lang == ENGLISH or not (I18N / lang).is_dir():
         known = sorted(p.name for p in I18N.iterdir() if p.is_dir() and p.name != ENGLISH)
         sys.exit(f"no translation called {lang!r} under i18n/; there are: {', '.join(known)}")
-    sys.stdout.write(page(lang))
+    # Written as UTF-8 by the script, not through a shell's `>`: Windows
+    # would encode redirected output in its code page, which lacks ✔ or «.
+    if len(sys.argv) == 3:
+        Path(sys.argv[2]).write_text(page(lang), encoding="utf-8")
+    else:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.write(page(lang))
 
 
 if __name__ == "__main__":
