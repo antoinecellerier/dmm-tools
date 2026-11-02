@@ -79,7 +79,7 @@ Language: <lang>
 
 ## Reviewed
 
-Once a native speaker has read the language in the app, set `reviewed: true` on its `SHIPPED` entry. For a language the user reads, the user's review counts. In the same change, update the CHANGELOG:
+`scripts/l10n-side-by-side.py <lang> > <lang>.html` sets a language beside its English on one page, for a reviewer, or for the user when shown new messages, to read through. Once a native speaker has read the language in the app, set `reviewed: true` on its `SHIPPED` entry. For a language the user reads, the user's review counts. In the same change, update the CHANGELOG:
 - if the entry that says the language is machine-translated is still under `## Unreleased`, drop the language from its "machine-translated" clause;
 - if it has been released, add an entry saying the translation has been reviewed.
 
