@@ -178,6 +178,11 @@ THEMES_VIEW='# view: {"window":30.0,"mean":true,"references":[1.0],"references_s
 # picture written -> the function that stages it.
 SCENES=(
 	"gui-wide-layout scene_wide"
+	"gui-wide-layout.es scene_wide_translated"
+	"gui-wide-layout.fr scene_wide_translated"
+	"gui-wide-layout.pt-BR scene_wide_translated"
+	"gui-wide-layout.ja scene_wide_translated"
+	"gui-wide-layout.zh-CN scene_wide_translated"
 	"gui-narrow-layout scene_narrow"
 	"gui-reading-controls scene_reading_controls"
 	"gui-graph-overlays scene_overlays"

@@ -4,6 +4,8 @@
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
+**English** · [Español](README.es.md) · [Français](README.fr.md) · [Português (Brasil)](README.pt-BR.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+
 Open-source desktop app and command-line tool to read, log, graph and remote-control digital multimeters (DMMs) and clamp meters from UNI-T, ZOTEK (ZOYI, ANENG, BSIDE), OWON, Brymen (Minipa), EEVblog and Voltcraft, over USB and Bluetooth, on Linux, Windows, macOS and Raspberry Pi.
 
 Works with the UNI-T UT61E+, UT181A, UT161, UT71, UT60BT and UT804, ANENG AN9002 (ZOTEK ZT-300AB), Brymen BM869s, EEVblog 121GW, OWON OW18E and B41T+, Voltcraft VC-890 and [more](#supported-devices).
