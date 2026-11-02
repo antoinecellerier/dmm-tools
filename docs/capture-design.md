@@ -130,7 +130,7 @@ the operator said what the screen held.
 again, so a step captured before the leads were in place is redone rather than corrected. The
 deferred review (F) has no retake, because by then the dial has moved on.
 
-Once every gate step has a result, `Trust::update` in `report.rs` rules on it once and says so.
+Once every gate step has a result, `Trust::update` in `report/trust.rs` rules on it once and says so.
 All confirmed: the report records `core_semantics: confirmed` and the run moves to tier 2.
 Anything else: `core_semantics: failed`, the step ids under `gate_failures`, and the run stays
 at tier 1.
@@ -216,7 +216,7 @@ after it, so no answer to one is a valid answer to the other. A run with nobody 
 stderr is not a terminal — skips the review and leaves those steps unconfirmed rather than
 recording agreement nobody gave.
 
-The answers are structured fields on `StepResult` in `report.rs`, which replaced a free-text
+The answers are structured fields on `StepResult` in `report/mod.rs`, which replaced a free-text
 `screen` string. Reports carrying that string still load, so a resume across versions works.
 
 ## G. Preparation up front
@@ -273,7 +273,7 @@ text the operator read. The file format is `dmm_shared::l10n::instructions`; the
 
 ## Report format
 
-The schema is `CaptureReport` and `StepResult` in `report.rs`, with each field documented there.
+The schema is `CaptureReport` and `StepResult` in `report/mod.rs`, with each field documented there.
 The report level holds the run's context: the device, `init_frames`, `tier`, `core_semantics`,
 `drive`, `plan` and `detection`. Each step holds its `samples`, `frames`, `diagnostics`, the operator's
 confirmation, `needs_attention` and any `instruction_shown`; sub-steps, mode switches included, are steps of their own. A

@@ -1,14 +1,20 @@
 //! The capture report: its schema and serde, the trust tier the gate rules
 //! on, and the report file the run reads back and writes out.
 
-use super::input::Input;
-use super::step::CaptureStep;
 use super::watch::Baseline;
-use console::style;
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::Measurement;
-use dmm_shared::tr;
 use serde::{Deserialize, Serialize};
+
+mod file;
+mod trust;
+
+pub(crate) use file::{from_yaml, save_report};
+pub(super) use file::{
+    hex_bytes, hex_string, load_or_create_report, no_response_path, populate_report_metadata,
+    tool_version,
+};
+pub(crate) use trust::Trust;
 
 #[derive(Serialize, Deserialize, Default)]
 pub(crate) struct CaptureReport {
@@ -488,101 +494,6 @@ impl SampleData {
     }
 }
 
-/// The gate steps that did not confirm the parser, or `None` while any of
-/// them is still to run. An empty list is a gate that passed.
-fn gate_failures(report: &CaptureReport, gate_ids: &[&str]) -> Option<Vec<String>> {
-    let mut failed = Vec::new();
-    for id in gate_ids {
-        let step = report.steps.iter().find(|s| s.id == *id)?;
-        if step.status != StepStatus::Captured || step.confirmed != Some(true) {
-            failed.push((*id).to_string());
-        }
-    }
-    Some(failed)
-}
-
-/// How much the run trusts the parser, and what the gate has decided about it.
-pub(crate) struct Trust {
-    pub(super) tier: Tier,
-    /// Every gate step the device declares, not just the selected ones: the
-    /// gate is only decided once the whole block has reported.
-    gate_ids: Vec<&'static str>,
-    /// The gate has been ruled on, so a failed one says so once.
-    decided: bool,
-}
-
-impl Trust {
-    /// A family whose readings hardware has confirmed is trusted from the
-    /// start; `--sniff` distrusts even a family that has been.
-    pub(crate) fn new(sniff: bool, verified: bool, steps: &[CaptureStep]) -> Self {
-        Trust {
-            tier: match (sniff, verified) {
-                (true, _) => Tier::Sniff,
-                (false, true) => Tier::Trusted,
-                (false, false) => Tier::Gate,
-            },
-            gate_ids: steps.iter().filter(|s| s.gate).map(|s| s.id).collect(),
-            decided: false,
-        }
-    }
-
-    /// What the step's detector may assume. Sniff assumes nothing: the step
-    /// advances on the payload bytes changing, whatever the parse made of it.
-    pub(super) fn expect(&self, step: &CaptureStep) -> Option<dmm_lib::protocol::Expect> {
-        self.reads_parse().then_some(step.expect).flatten()
-    }
-
-    /// Whether a step may judge the meter by the parse at all: not in Sniff.
-    pub(super) fn reads_parse(&self) -> bool {
-        self.tier != Tier::Sniff
-    }
-
-    /// Whether the run may drive the meter's settings itself: only once the
-    /// gate has shown that mode, range and flags read back correctly.
-    pub(super) fn drives(&self) -> bool {
-        self.tier == Tier::Trusted
-    }
-
-    /// Whether the step is confirmed at the step itself. Gate steps always
-    /// are — the rest of the run's confirmations rest on them.
-    pub(super) fn confirm_inline(&self, step: &CaptureStep) -> bool {
-        step.gate || self.tier != Tier::Trusted
-    }
-
-    /// Rule on the gate once every one of its steps has reported, and promote
-    /// the run if the parser got the core semantics right.
-    pub(super) fn update(&mut self, report: &mut CaptureReport) {
-        if self.decided || self.tier != Tier::Gate || self.gate_ids.is_empty() {
-            return;
-        }
-        let Some(failures) = gate_failures(report, &self.gate_ids) else {
-            return;
-        };
-        self.decided = true;
-        if failures.is_empty() {
-            self.tier = Tier::Trusted;
-            report.core_semantics = Some(CoreSemantics::Confirmed);
-            eprintln!(
-                "{}",
-                style(tr!(crate::l10n::get(), "capture-core-confirmed")).green()
-            );
-        } else {
-            report.core_semantics = Some(CoreSemantics::Failed);
-            eprintln!(
-                "{}",
-                style(tr!(
-                    crate::l10n::get(),
-                    "capture-core-not-confirmed",
-                    steps = failures.join(", "),
-                ))
-                .yellow()
-            );
-        }
-        report.gate_failures = failures;
-        report.tier = Some(self.tier);
-    }
-}
-
 /// Whether the report already holds samples for the step, which is what a
 /// resumed run leaves alone.
 pub(super) fn already_captured(report: &CaptureReport, id: &str) -> bool {
@@ -601,71 +512,6 @@ pub(super) fn baseline_from_report(report: &CaptureReport, step_id: &str) -> Opt
         .filter_map(|s| hex_bytes(&s.raw_hex))
         .collect();
     Baseline::from_payloads(payloads.iter().map(Vec::as_slice))
-}
-
-/// Bytes as a report writes them: "02 30 20".
-pub(super) fn hex_string(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|b| format!("{b:02X}"))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// "02 30 20" back to the payload it was written from.
-pub(super) fn hex_bytes(hex: &str) -> Option<Vec<u8>> {
-    hex.split_whitespace()
-        .map(|b| u8::from_str_radix(b, 16).ok())
-        .collect()
-}
-
-pub(crate) fn save_report(
-    report: &CaptureReport,
-    path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let yaml = to_yaml(report)?;
-    // Atomic write (.tmp + fsync + rename), so a crash mid-write doesn't
-    // corrupt the existing report.
-    dmm_shared::write_atomic(std::path::Path::new(path), yaml.as_bytes())?;
-    Ok(())
-}
-
-/// `value` as the YAML a report or plan file holds.
-///
-/// Every string stays on one line: frame hex runs to thousands of
-/// characters and is grepped, so no folding into `>` blocks. Strings a
-/// YAML 1.1 reader would type otherwise (`'on'`, a date) are quoted, so
-/// older builds and other tools read them back as strings.
-pub(crate) fn to_yaml<T: Serialize>(value: &T) -> Result<String, serde_saphyr::SerializeError> {
-    serde_saphyr::to_string_with_options(
-        value,
-        serde_saphyr::ser_options! { prefer_block_scalars: false },
-    )
-}
-
-/// A report or plan file's YAML as `T`.
-///
-/// Errors stay one line without the source snippet: they follow a file
-/// name, and a quoted report line can carry a meter's Bluetooth address.
-///
-/// No cap on how much the file holds: a long run's report passes the
-/// parser's default node count, and limits that grow with the file's
-/// length guard nothing once it is in memory. The depth and alias limits,
-/// which bound the work a small hostile file can cause, stay.
-pub(crate) fn from_yaml<T: serde::de::DeserializeOwned>(
-    yaml: &str,
-) -> Result<T, serde_saphyr::Error> {
-    serde_saphyr::from_str_with_options(
-        yaml,
-        serde_saphyr::options! {
-            with_snippet: false,
-            budget: serde_saphyr::budget! {
-                max_events: usize::MAX,
-                max_nodes: usize::MAX,
-                max_total_scalar_bytes: usize::MAX,
-            },
-        },
-    )
 }
 
 /// Insert or replace a step result in the report.
@@ -691,174 +537,6 @@ pub(crate) fn needs_attention(
             .any(|s| dmm_lib::protocol::is_unknown_mode(&s.mode))
 }
 
-/// A name reduced to what a file name can safely carry.
-fn slug(name: &str) -> String {
-    name.chars()
-        .map(|c| {
-            if c.is_alphanumeric() {
-                c.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect()
-}
-
-/// The plan file's name without its directory or extension.
-fn plan_stem(path: &str) -> String {
-    std::path::Path::new(path)
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "plan".to_string())
-}
-
-/// Where the run's report goes: named after the registry id the run was
-/// started for, as the no-response report already is. The meter's own name
-/// would be "unknown" for every family that answers no name query, so a
-/// UT804, a UT171 and a UT181A all wrote `capture-unknown.yaml`.
-pub(super) fn capture_path(
-    output_override: Option<String>,
-    device_id: &str,
-    plan_path: Option<&str>,
-) -> String {
-    output_override.unwrap_or_else(|| match plan_path {
-        // A plan run covers a handful of steps nobody else asked for, so it
-        // gets its own file rather than resuming into the full report.
-        Some(plan) => format!(
-            "capture-{}-{}.yaml",
-            slug(device_id),
-            slug(&plan_stem(plan))
-        ),
-        None => format!("capture-{}.yaml", slug(device_id)),
-    })
-}
-
-/// Determine the output path and load an existing report (with resume/overwrite prompt)
-/// or create a fresh one. Returns `None` if the user chose to abort.
-pub(super) fn load_or_create_report(
-    output_override: Option<String>,
-    device_id: &str,
-    plan_path: Option<&str>,
-    input: &Input,
-) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
-    let output_path = capture_path(output_override, device_id, plan_path);
-    let l = crate::l10n::get();
-
-    let report = match std::fs::read_to_string(&output_path) {
-        Ok(contents) => match from_yaml::<CaptureReport>(&contents) {
-            Ok(mut r) => {
-                for step in &mut r.steps {
-                    step.normalize_legacy();
-                }
-                let captured = r
-                    .steps
-                    .iter()
-                    .filter(|s| s.status == StepStatus::Captured)
-                    .count();
-                let skipped = r
-                    .steps
-                    .iter()
-                    .filter(|s| s.status == StepStatus::Skipped)
-                    .count();
-                eprintln!(
-                    "{}",
-                    tr!(
-                        l,
-                        "capture-found-existing",
-                        path = &output_path,
-                        captured = captured,
-                        skipped = skipped,
-                    )
-                );
-                let ch = input.key(&format!(
-                    "{} ",
-                    tr!(
-                        l,
-                        "capture-resume-prompt",
-                        resume = "r",
-                        fresh = "n",
-                        abort = "q",
-                    )
-                ))?;
-                if ch == 'q' || ch == 'Q' {
-                    eprintln!("{}", tr!(l, "capture-aborted"));
-                    return Ok(None);
-                }
-                if ch == 'n' || ch == 'N' {
-                    let confirm = input.key(&format!(
-                        "{} ",
-                        tr!(l, "capture-overwrite-confirm", yes = "y", no = "n")
-                    ))?;
-                    if confirm != 'y' && confirm != 'Y' {
-                        eprintln!("{}", tr!(l, "capture-aborted"));
-                        return Ok(None);
-                    }
-                    CaptureReport::default()
-                } else if ch == 'r' || ch == 'R' {
-                    eprintln!("{}\n", tr!(l, "capture-resuming"));
-                    r
-                } else {
-                    eprintln!("{}", tr!(l, "capture-aborted"));
-                    return Ok(None);
-                }
-            }
-            Err(_) => {
-                eprintln!("{}", tr!(l, "capture-unreadable", path = &output_path));
-                let ch = input.key(&format!(
-                    "{} ",
-                    tr!(l, "capture-overwrite-unreadable", yes = "y")
-                ))?;
-                if ch != 'y' && ch != 'Y' {
-                    eprintln!("{}", tr!(l, "capture-aborted"));
-                    return Ok(None);
-                }
-                CaptureReport::default()
-            }
-        },
-        Err(_) => CaptureReport::default(),
-    };
-
-    Ok(Some((report, output_path)))
-}
-
-/// Where the report of a meter that never answered goes: beside the path the
-/// run would have written, so `-o` still picks the directory, under its own
-/// name so a report in progress is never replaced by an empty one.
-pub(super) fn no_response_path(
-    output_override: Option<&str>,
-    device_id: &str,
-) -> std::path::PathBuf {
-    let path = std::path::PathBuf::from(
-        output_override
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("capture-{}.yaml", slug(device_id))),
-    );
-    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    path.with_file_name(format!("{stem}-no-response.yaml"))
-}
-
-/// The version a report section was written by, with the commit.
-pub(super) fn tool_version() -> String {
-    format!("{} ({})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
-}
-
-/// Populate report metadata (date, version, device info).
-pub(super) fn populate_report_metadata(
-    report: &mut CaptureReport,
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-    device_name: String,
-    supported: bool,
-) {
-    report.date = chrono::Local::now().to_rfc3339();
-    report.tool_version = tool_version();
-    report.device_name = device_name;
-    report.transport_name = Some(dmm.transport().transport_name().to_string());
-    if let Ok(info) = dmm.transport().transport_info() {
-        report.transport_info = Some(info);
-    }
-    report.supported = supported;
-}
-
 /// How many of `ids` the report now holds samples for — the number the
 /// epilogue reports as what this run is worth to the issue.
 pub(super) fn captured_count(
@@ -874,8 +552,8 @@ pub(super) fn captured_count(
 
 #[cfg(test)]
 mod tests {
+    use super::file::to_yaml;
     use super::*;
-    use crate::capture::step::cli_step;
     use crate::capture::watch::{STABLE_FRAMES, StateWatcher, Verdict};
     use dmm_lib::measurement::MeasuredValue;
     use dmm_lib::protocol::make_test_measurement;
@@ -1456,164 +1134,6 @@ mod tests {
         }
     }
 
-    /// A report holding one result per gate step, as the run would have left
-    /// it.
-    fn gate_report(results: &[(&str, StepStatus, Option<bool>)]) -> CaptureReport {
-        let mut report = CaptureReport::default();
-        for (id, status, confirmed) in results {
-            upsert_step(
-                &mut report,
-                StepResult {
-                    confirmed: *confirmed,
-                    ..StepResult::new(id, "do the thing", status.clone())
-                },
-            );
-        }
-        report
-    }
-
-    fn gate_steps() -> Vec<CaptureStep> {
-        vec![
-            cli_step("dcv", false, true),
-            cli_step("ohm", false, true),
-            cli_step("temp", false, false),
-        ]
-    }
-
-    /// The gate is what says the parser reads digits, OL and sign correctly,
-    /// so every one of its steps has to have been captured and confirmed.
-    #[test]
-    fn a_gate_passes_only_when_every_step_confirmed() {
-        let ids = ["dcv", "ohm"];
-        let passed = gate_report(&[
-            ("dcv", StepStatus::Captured, Some(true)),
-            ("ohm", StepStatus::Captured, Some(true)),
-        ]);
-        assert_eq!(gate_failures(&passed, &ids), Some(vec![]));
-
-        let corrected = gate_report(&[
-            ("dcv", StepStatus::Captured, Some(true)),
-            ("ohm", StepStatus::Captured, Some(false)),
-        ]);
-        assert_eq!(
-            gate_failures(&corrected, &ids),
-            Some(vec!["ohm".to_string()])
-        );
-
-        let skipped = gate_report(&[
-            ("dcv", StepStatus::Captured, Some(true)),
-            ("ohm", StepStatus::Skipped, None),
-        ]);
-        assert_eq!(gate_failures(&skipped, &ids), Some(vec!["ohm".to_string()]));
-
-        // Nothing to rule on until the whole block has reported.
-        let half = gate_report(&[("dcv", StepStatus::Captured, Some(true))]);
-        assert_eq!(gate_failures(&half, &ids), None);
-    }
-
-    /// A confirmed gate is what buys the rest of the run its deferred review.
-    #[test]
-    fn a_passed_gate_promotes_the_run() {
-        let mut trust = Trust::new(false, false, &gate_steps());
-        assert_eq!(trust.tier, Tier::Gate);
-        assert!(trust.confirm_inline(&cli_step("temp", false, false)));
-
-        let mut report = gate_report(&[
-            ("dcv", StepStatus::Captured, Some(true)),
-            ("ohm", StepStatus::Captured, Some(true)),
-        ]);
-        trust.update(&mut report);
-
-        assert_eq!(trust.tier, Tier::Trusted);
-        assert_eq!(report.tier, Some(Tier::Trusted));
-        assert_eq!(report.core_semantics, Some(CoreSemantics::Confirmed));
-        assert!(report.gate_failures.is_empty());
-        assert!(!trust.confirm_inline(&cli_step("temp", false, false)));
-        // Gate steps are confirmed at the step whatever the tier.
-        assert!(trust.confirm_inline(&cli_step("dcv", false, true)));
-    }
-
-    /// A gate step the meter disagreed with leaves every later reading worth
-    /// asking about.
-    #[test]
-    fn a_failed_gate_keeps_confirming_every_step() {
-        let mut trust = Trust::new(false, false, &gate_steps());
-        let mut report = gate_report(&[
-            ("dcv", StepStatus::Captured, Some(true)),
-            ("ohm", StepStatus::Captured, Some(false)),
-        ]);
-        trust.update(&mut report);
-
-        assert_eq!(trust.tier, Tier::Gate);
-        assert_eq!(report.core_semantics, Some(CoreSemantics::Failed));
-        assert_eq!(report.gate_failures, vec!["ohm".to_string()]);
-        assert!(trust.confirm_inline(&cli_step("temp", false, false)));
-    }
-
-    /// `--sniff` is for a parser nobody trusts, so a passed gate must not
-    /// hand it the benefit of the doubt.
-    #[test]
-    fn sniff_never_promotes_and_never_reads_the_expectation() {
-        let mut trust = Trust::new(true, true, &gate_steps());
-        assert_eq!(trust.tier, Tier::Sniff);
-
-        let mut report = gate_report(&[
-            ("dcv", StepStatus::Captured, Some(true)),
-            ("ohm", StepStatus::Captured, Some(true)),
-        ]);
-        trust.update(&mut report);
-
-        assert_eq!(trust.tier, Tier::Sniff);
-        assert_eq!(report.core_semantics, None);
-        assert!(trust.confirm_inline(&cli_step("temp", false, false)));
-
-        let mut step = cli_step("dcv", false, true);
-        step.expect = Some(dmm_lib::protocol::Expect::mode("DC V"));
-        assert!(trust.expect(&step).is_none(), "sniff detects on raw bytes");
-    }
-
-    /// Hardware has already confirmed a Verified family's readings, so its
-    /// run starts where a passed gate would leave it.
-    #[test]
-    fn a_verified_family_starts_trusted() {
-        let trust = Trust::new(false, true, &gate_steps());
-        assert_eq!(trust.tier, Tier::Trusted);
-        assert!(!trust.confirm_inline(&cli_step("temp", false, false)));
-
-        let mut step = cli_step("dcv", false, true);
-        step.expect = Some(dmm_lib::protocol::Expect::mode("DC V"));
-        assert!(trust.expect(&step).is_some());
-    }
-
-    /// Resuming an interrupted capture reloads the report, so one written
-    /// before the trust tiers existed must still parse.
-    #[test]
-    fn reports_without_the_trust_fields_still_load() {
-        let yaml = "date: '2026-01-01'\ntool_version: test\ndevice_name: UT61E+\n\
-                    supported: true\nsteps:\n- id: dcv\n  instruction: test\n  \
-                    status: captured\n";
-        let report: CaptureReport = from_yaml(yaml).unwrap();
-        assert_eq!(report.tier, None);
-        assert_eq!(report.core_semantics, None);
-        assert!(report.gate_failures.is_empty());
-    }
-
-    #[test]
-    fn the_tier_and_gate_outcome_serialize_in_lowercase() {
-        let report = CaptureReport {
-            tier: Some(Tier::Trusted),
-            core_semantics: Some(CoreSemantics::Failed),
-            gate_failures: vec!["ohm".to_string()],
-            ..CaptureReport::default()
-        };
-        let yaml = to_yaml(&report).unwrap();
-        assert!(yaml.contains("tier: trusted"), "{yaml}");
-        assert!(yaml.contains("core_semantics: failed"), "{yaml}");
-        let parsed: CaptureReport = from_yaml(&yaml).unwrap();
-        assert_eq!(parsed.tier, Some(Tier::Trusted));
-        assert_eq!(parsed.gate_failures, vec!["ohm".to_string()]);
-    }
-
     #[test]
     fn upsert_step_insert() {
         let mut report = CaptureReport::default();
@@ -1661,22 +1181,6 @@ mod tests {
         upsert_step(&mut report, StepResult::new("hz", "h", StepStatus::Skipped));
         let unverified: std::collections::HashSet<&str> = ["temp", "hz"].into_iter().collect();
         assert_eq!(captured_count(&report, &unverified), 1);
-    }
-
-    /// The families that answer no name query — UT803/UT804, UT171, UT181A —
-    /// all reported themselves as "unknown", so every one of their runs wrote
-    /// `capture-unknown.yaml` and resumed into the last meter's report.
-    #[test]
-    fn the_report_is_named_after_the_device_the_run_was_started_for() {
-        assert_eq!(capture_path(None, "ut804", None), "capture-ut804.yaml");
-        assert_eq!(
-            capture_path(None, "ut804", Some("plans/hz-walk.yaml")),
-            "capture-ut804-hz-walk.yaml"
-        );
-        assert_eq!(
-            capture_path(Some("runs/bench.yaml".to_string()), "ut804", None),
-            "runs/bench.yaml"
-        );
     }
 
     #[test]
@@ -1801,34 +1305,5 @@ mod tests {
 
         let yaml = to_yaml(&StepStatus::Error).unwrap();
         assert!(yaml.contains("error"));
-    }
-
-    #[test]
-    fn save_and_load_report_file() {
-        let report = CaptureReport {
-            date: "2026-01-01".to_string(),
-            tool_version: "test".to_string(),
-            device_name: "UT61E+".to_string(),
-            transport_name: None,
-            transport_info: None,
-            supported: true,
-            steps: vec![],
-            ..CaptureReport::default()
-        };
-
-        let dir = std::env::temp_dir();
-        let path = dir
-            .join("dmm-cli-test-capture.yaml")
-            .to_string_lossy()
-            .to_string();
-
-        save_report(&report, &path).unwrap();
-
-        let contents = std::fs::read_to_string(&path).unwrap();
-        let parsed: CaptureReport = from_yaml(&contents).unwrap();
-        assert_eq!(parsed.device_name, "UT61E+");
-
-        // Cleanup
-        let _ = std::fs::remove_file(&path);
     }
 }
