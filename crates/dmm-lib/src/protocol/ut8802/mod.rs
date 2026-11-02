@@ -272,8 +272,9 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let position = payload[0];
     let dp_pos = payload[4] & 0x0F;
     // The framing extractor already rejects dp_pos > 4, but the index math
-    // below (`chars.len() - dp_pos - 1`) would panic on larger values, so
-    // guard here too in case this is ever called on unvalidated payloads.
+    // in `display_text` (`chars.len() - dp_pos - 1`) would panic on larger
+    // values, so guard here too in case this is ever called on unvalidated
+    // payloads.
     if dp_pos > 4 {
         return Err(Error::invalid_response(
             format!("ut8802 invalid decimal point position {dp_pos}"),
@@ -310,6 +311,81 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             (unknown_mode(position), "", "")
         };
 
+    let (display_str, overload) = display_text(payload, dp_pos, sign_byte);
+
+    // Parse numeric value
+    let value = if overload {
+        MeasuredValue::Overload
+    } else {
+        let trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
+        match trimmed.parse::<f64>() {
+            Ok(v) => MeasuredValue::Normal(v),
+            Err(_) => {
+                report_unknown(
+                    "ut8802",
+                    "display text",
+                    format_args!("{trimmed:?}, shown as OL"),
+                );
+                MeasuredValue::Overload
+            }
+        }
+    };
+
+    // Flag bit positions from the vendor's UT8802 parser (status-word
+    // construction, spec §3.7). Tracing each source bit through the shift
+    // chain back to frame byte 7 (`payload[6]`) and matching the status-word
+    // bits to the debug format string (spec §3.5) gives:
+    //
+    //   bit 0: MIN  (→ status-word D29)
+    //   bit 1: MAX  (→ D28)
+    //   bit 2: AUTO **inverted** (→ D6 via `~bit2`) [VENDOR]
+    //   bit 3: REL  (→ D30)
+    //   bit 4: HOLD (→ D31)
+    //   bit 5: Over (→ D18; not surfaced by StatusFlags)
+    //   bit 6: OL   (→ D7)
+    //   bit 7: sign (→ D19, folded into the display string by
+    //         `display_text`)
+    //
+    // See docs/research/uci-bench-family/reverse-engineered-protocol.md §3.5.
+    let auto_range = sign_byte & 0x04 == 0;
+    let hold = sign_byte & 0x10 != 0;
+    let rel = sign_byte & 0x08 != 0;
+    let max_flag = sign_byte & 0x02 != 0;
+    let min_flag = sign_byte & 0x01 != 0;
+
+    let flags = StatusFlags {
+        hold,
+        rel,
+        min: min_flag,
+        max: max_flag,
+        auto_range,
+        low_battery: false,
+        hv_warning: false,
+        dc: position_is_dc(position),
+        peak_max: false,
+        peak_min: false,
+        ..Default::default()
+    };
+
+    Ok(Measurement {
+        mode,
+        mode_raw: position as u16,
+        range_raw: position, // UT8802 combines mode+range in position code
+        value,
+        unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(range_label),
+        display_raw: Some(display_str),
+        flags,
+        ..Measurement::from_payload(payload)
+    })
+}
+
+/// The display string from the five digit nibbles — leading zeros blanked,
+/// then the decimal point and the sign, both left off on overload — and
+/// whether the reading is over range (`sign_byte` bit 6, or an 'L' digit).
+/// `dp_pos` must be 0-4.
+fn display_text(payload: &[u8], dp_pos: u8, sign_byte: u8) -> (String, bool) {
+    debug_assert!(dp_pos <= 4, "parse_measurement rejects dp_pos {dp_pos}");
     // Decode the 5 display nibbles, MSD first. The vendor parser fills its
     // display buffer as [b3 lo, b2 hi, b2 lo, b1 hi, b1 lo] (payload
     // indexing; spec §3.2) and runs atof directly
@@ -377,72 +453,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         chars.insert(0, '-');
     }
 
-    let display_str: String = chars.iter().collect();
-
-    // Parse numeric value
-    let value = if overload {
-        MeasuredValue::Overload
-    } else {
-        let trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
-        match trimmed.parse::<f64>() {
-            Ok(v) => MeasuredValue::Normal(v),
-            Err(_) => {
-                report_unknown(
-                    "ut8802",
-                    "display text",
-                    format_args!("{trimmed:?}, shown as OL"),
-                );
-                MeasuredValue::Overload
-            }
-        }
-    };
-
-    // Flag bit positions from the vendor's UT8802 parser (status-word
-    // construction, spec §3.7). Tracing each source bit through the shift
-    // chain back to frame byte 7 (`payload[6]`) and matching the status-word
-    // bits to the debug format string (spec §3.5) gives:
-    //
-    //   bit 0: MIN  (→ status-word D29)
-    //   bit 1: MAX  (→ D28)
-    //   bit 2: AUTO **inverted** (→ D6 via `~bit2`) [VENDOR]
-    //   bit 3: REL  (→ D30)
-    //   bit 4: HOLD (→ D31)
-    //   bit 5: Over (→ D18; not surfaced by StatusFlags)
-    //   bit 6: OL   (→ D7)
-    //   bit 7: sign (→ D19, folded into the display string above)
-    //
-    // See docs/research/uci-bench-family/reverse-engineered-protocol.md §3.5.
-    let auto_range = sign_byte & 0x04 == 0;
-    let hold = sign_byte & 0x10 != 0;
-    let rel = sign_byte & 0x08 != 0;
-    let max_flag = sign_byte & 0x02 != 0;
-    let min_flag = sign_byte & 0x01 != 0;
-
-    let flags = StatusFlags {
-        hold,
-        rel,
-        min: min_flag,
-        max: max_flag,
-        auto_range,
-        low_battery: false,
-        hv_warning: false,
-        dc: position_is_dc(position),
-        peak_max: false,
-        peak_min: false,
-        ..Default::default()
-    };
-
-    Ok(Measurement {
-        mode,
-        mode_raw: position as u16,
-        range_raw: position, // UT8802 combines mode+range in position code
-        value,
-        unit: Cow::Borrowed(unit),
-        range_label: Cow::Borrowed(range_label),
-        display_raw: Some(display_str),
-        flags,
-        ..Measurement::from_payload(payload)
-    })
+    (chars.iter().collect(), overload)
 }
 
 /// Detection for the UT8802.
