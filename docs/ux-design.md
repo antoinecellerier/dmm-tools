@@ -234,7 +234,7 @@ fill and the text-edit background. A user's own pick is theirs to keep above it.
 
 **Dark text is lifted.** Dark primary text is gray(180), not egui's gray(140):
 beside 140 no dimmer tone clears 4.5:1, and 180 keeps two distinct tiers
-(ratios beside `PRESET_DEFAULT` in `theme/mod.rs`).
+(ratios beside `PRESET_DEFAULT` in `theme/presets.rs`).
 
 **The stock presets stay egui's own.** Text and Accent reach egui's own
 painting only once customized, and only High Contrast pins Border (3:1), so the

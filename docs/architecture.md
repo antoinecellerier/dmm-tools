@@ -429,6 +429,6 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `markers.rs` | The markers on readings |
 | `settings.rs` | Persisted settings and colour presets |
 | `specs.rs` | Specification rendering |
-| `theme/` | The palette: preset colour tables, named themes and the themes folder (`named.rs`), linked colours (`links.rs`) |
+| `theme/` | The palette: preset colour tables (`presets.rs`), named themes and the themes folder (`named.rs`), linked colours (`links.rs`) |
 | `a11y.rs` | AccessKit helpers |
 | `changelog.rs` | The embedded changelog |
