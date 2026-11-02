@@ -49,7 +49,7 @@ connect-reported-name-none = (无)
 connect-detected = 已检测到 { $meter } (传入 --device { $device } 或在 dmm-gui 中选择，下次即可跳过检测)
 # The meter gave a name of its own that isn't the model's: $reported is
 # that name, e.g. UT216XD. "Tables" are how the readings are decoded.
-connect-detected-reports = 已检测到 { $meter } (万用表上报的名称为 "{ $reported }"，现使用 { $meter } 的解码表；传入 --device { $device } 可保持不变，传入其他 id 可改用别的型号)
+connect-detected-reports = 已检测到 { $meter } (万用表上报的名称为“{ $reported }”，现使用 { $meter } 的解码表；传入 --device { $device } 可保持不变，传入其他 id 可改用别的型号)
 
 ## Once a meter whose support isn't fully verified is open: a warning, then
 ## the command that makes a report, on a line of its own, then where to send

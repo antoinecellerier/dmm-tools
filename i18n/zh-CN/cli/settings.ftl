@@ -84,8 +84,8 @@ settings-already =
        *[mode] 万用表已处于 { $choice }
         [range-auto] 万用表已处于自动量程 ({ $range })
         [range] 万用表已处于 { $choice } (手动量程)
-        [hold] 万用表 HOLD 已是 { $choice }
-        [rel] 万用表 REL 已是 { $choice }
+        [hold] 万用表 HOLD 已是{ $choice }
+        [rel] 万用表 REL 已是{ $choice }
         [minmax] 万用表已处于 { $choice }
         [minmax-off] 万用表已不在 MIN/MAX 状态
         [peak] 万用表已处于 { $choice }
