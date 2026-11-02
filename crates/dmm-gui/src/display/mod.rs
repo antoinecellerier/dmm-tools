@@ -457,7 +457,7 @@ pub struct ReadoutChoices<'a> {
 
 impl ReadoutChoices<'_> {
     /// Whether either readout has something to pick. The single-line layouts
-    /// draw plain labels inside the live region when neither does, and the
+    /// draw plain labels inside the spoken row when neither does, and the
     /// selector row when one does.
     fn any_offered(&self) -> bool {
         self.mode_offered() || mode_switch_offered(self.range)
@@ -925,10 +925,10 @@ pub(crate) fn navigate_choice_entries(ctx: &Context, entries: &[Response]) {
 
 /// Single-line reading with the mode and range selectors beside it.
 ///
-/// The value and unit form the live region; the selectors, controls, sit
-/// after it in the same row rather than inside it — a screen reader would
-/// otherwise have the dropdowns re-announced with every reading update.
-/// `draw_value` paints the value and unit labels.
+/// The value and unit form the spoken row; the selectors, controls, sit
+/// after it in the same row rather than inside it, so the spoken reading's
+/// bounds stop at the value and a screen reader exploring by pointer finds
+/// the dropdowns as themselves. `draw_value` paints the value and unit labels.
 #[allow(clippy::too_many_arguments)]
 fn show_reading_line_with_selector(
     ui: &mut Ui,
@@ -941,7 +941,7 @@ fn show_reading_line_with_selector(
     tc: &ThemeColors,
 ) -> Option<ReadoutPick> {
     ui.horizontal(|ui| {
-        ui.live_region_horizontal(
+        ui.spoken_reading(
             live_region_fingerprint(l10n, Some(m), state, ""),
             || live_region_label(l10n, Some(m), state, ""),
             |ui| {
@@ -961,7 +961,7 @@ fn show_reading_line_with_selector(
 }
 
 /// Single-line reading with no selector on it: value, unit, mode and flags,
-/// all inside the live region.
+/// all inside the spoken row.
 ///
 /// `mode_size` of 0 is the small text style, the convention `show_flags` uses
 /// for the same choice.
@@ -974,7 +974,7 @@ fn show_reading_line_plain(
     mode_size: f32,
     tc: &ThemeColors,
 ) {
-    ui.live_region_horizontal(
+    ui.spoken_reading(
         live_region_fingerprint(l10n, Some(m), state, ""),
         || live_region_label(l10n, Some(m), state, ""),
         |ui| {
@@ -1143,10 +1143,9 @@ fn no_reading_bars(ui: &mut Ui, value_size: f32) {
 
 /// What each layout shows in place of a reading.
 ///
-/// Wrap the placeholder + caption in a horizontal scope so the live-region
-/// label is attached to the scope id rather than to the inner `ui.label()`
-/// Response. egui maps Role::Label overrides to set_value, not set_label, so
-/// attaching directly to the label would silently drop the live-region label.
+/// The placeholder and its caption sit in a spoken row like a reading's, so
+/// a screen reader hears the whole notice — the connection issue, not just
+/// the placeholder's dashes — from the same node it hears readings from.
 fn no_reading_placeholder(
     ui: &mut Ui,
     l10n: &Localizer,
@@ -1158,7 +1157,7 @@ fn no_reading_placeholder(
     // through one to four of them, and a fingerprint that hashed them would
     // have a screen reader repeat the same sentence every timeout.
     let spoken = title.trim_end_matches(['.', ' ']);
-    ui.live_region_horizontal(
+    ui.spoken_reading(
         live_region_fingerprint(l10n, None, state, spoken),
         || live_region_label(l10n, None, state, spoken),
         add_contents,
@@ -1186,7 +1185,7 @@ fn show_reading_sized(
         Some(m) => {
             let (value_text, value_color) = value_display(m, tc, state);
 
-            ui.live_region_horizontal(
+            ui.spoken_reading(
                 live_region_fingerprint(l10n, Some(m), state, ""),
                 || live_region_label(l10n, Some(m), state, ""),
                 |ui| {
@@ -1388,13 +1387,13 @@ fn show_reading_beside(
             let value = ui
                 .allocate_ui_with_layout(
                     vec2(ui.available_width(), value_h),
-                    // Top, not centre: the live region is a nested horizontal,
+                    // Top, not centre: the spoken row is a nested horizontal,
                     // which starts `interact_size.y` tall where the layout puts
                     // it and grows downwards — centred, it would hang half the
                     // value's height low. From the top it fills the slot exactly.
                     Layout::left_to_right(Align::Min),
                     |ui| {
-                        ui.live_region_horizontal(
+                        ui.spoken_reading(
                             live_region_fingerprint(l10n, Some(m), state, ""),
                             || live_region_label(l10n, Some(m), state, ""),
                             |ui| {
@@ -2230,12 +2229,12 @@ mod tests {
     }
 
     /// Bounds of the plain label whose text contains `needle`. Labels carry
-    /// their text as the node's value; the live region's row carries the
-    /// whole sentence as its label, so it never matches here.
+    /// their text as the node's value, and so does the spoken reading, whose
+    /// whole sentence would match: it is the one live node, skipped here.
     fn label_bounds(nodes: &[(NodeId, Node)], needle: &str) -> egui::Rect {
         let (_, node) = nodes
             .iter()
-            .find(|(_, n)| n.value().is_some_and(|t| t.contains(needle)))
+            .find(|(_, n)| n.live().is_none() && n.value().is_some_and(|t| t.contains(needle)))
             .unwrap_or_else(|| panic!("no label reads {needle:?}"));
         let b = node.bounds().expect("drawn widgets have bounds");
         egui::Rect::from_min_max(
@@ -2802,9 +2801,7 @@ mod tests {
     }
 
     /// With choices the readout is a combo box a screen reader calls "Mode"
-    /// whose value is the live mode — and, in the single-line layouts, it
-    /// sits beside the live region rather than inside it, so it is not
-    /// re-announced with every reading.
+    /// whose value is the live mode, outside the spoken reading.
     #[test]
     fn the_mode_readout_becomes_a_named_combo_with_choices() {
         let m =
@@ -2821,23 +2818,79 @@ mod tests {
                 .unwrap_or_else(|| panic!("{layout}: no combo box"));
             assert_eq!(combo.label(), Some("Mode"), "{layout}");
             assert_eq!(combo.value(), Some("DC V"), "{layout}");
-
-            let live_regions: Vec<NodeId> = nodes
-                .iter()
-                .filter(|(_, n)| n.live() == Some(egui::accesskit::Live::Polite))
-                .map(|(id, _)| *id)
-                .collect();
+            let (reading, _) = spoken_reading(nodes, layout);
             assert!(
-                !live_regions.is_empty(),
-                "{layout}: the reading lost its live region"
+                !descendants(nodes, reading).contains(combo_id),
+                "{layout}: the selector is inside the spoken reading"
             );
-            for region in live_regions {
+        }
+    }
+
+    /// The one live node in the frame, the spoken reading, checked for what
+    /// lets a screen reader hear it at all: a leaf (children would inherit
+    /// its live setting and each announce on its own), a role AccessKit does
+    /// not filter out (it drops `GenericContainer`), bounds, and the whole
+    /// sentence as its value.
+    fn spoken_reading<'a>(nodes: &'a [(NodeId, Node)], what: &str) -> (NodeId, &'a Node) {
+        let live: Vec<&(NodeId, Node)> = nodes
+            .iter()
+            .filter(|(_, n)| n.live().is_some_and(|l| l != egui::accesskit::Live::Off))
+            .collect();
+        let [(id, node)] = live[..] else {
+            panic!("{what}: want exactly one live node, got {}", live.len());
+        };
+        assert_eq!(
+            *id,
+            crate::a11y::reading_region_id().accesskit_id(),
+            "{what}: the live node is not the spoken reading"
+        );
+        assert_eq!(node.role(), Role::Label, "{what}");
+        assert!(
+            node.children().is_empty(),
+            "{what}: the spoken reading has children"
+        );
+        assert!(
+            node.bounds().is_some(),
+            "{what}: the spoken reading has no bounds"
+        );
+        (*id, node)
+    }
+
+    /// Every layout, with a selector or without, and the placeholder speaks
+    /// from the one leaf: nothing inside the row it lies over is live.
+    #[test]
+    fn every_layout_speaks_the_reading_from_one_leaf() {
+        let m = ranged_reading();
+        let choices = two_choices();
+        for layout in LAYOUTS {
+            for (offer, picks) in [("with a selector", modes(&choices)), ("plain", modes(&[]))] {
+                let ctx = crate::app::styled_context();
+                let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, picks));
+                let what = format!("{layout}, {offer}");
+                let (_, node) = spoken_reading(&f.nodes, &what);
+                let said = node.value().unwrap_or_default();
                 assert!(
-                    !descendants(nodes, region).contains(combo_id),
-                    "{layout}: the selector is inside the live region"
+                    said.contains("5.678") && said.contains("DC V"),
+                    "{what}: {said:?}"
                 );
             }
         }
+        let ctx = crate::app::styled_context();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let f = run_frame(&ctx, vec![], |ui| {
+            show_reading_sized(
+                ui,
+                &en(),
+                None,
+                BASE_READING_FONT_SIZE,
+                &tc,
+                ReadingState::PLAIN,
+                modes(&[]),
+                NoReadingText::Plain,
+            )
+        });
+        let (_, node) = spoken_reading(&f.nodes, "placeholder");
+        assert_eq!(node.value(), Some("No reading"), "placeholder");
     }
 
     /// Open the popup, see both entries with the live one marked, pick the

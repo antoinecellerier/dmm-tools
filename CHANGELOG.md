@@ -28,6 +28,7 @@
 
 - **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
+- **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
 - **dmm-gui rescales when dragged to a monitor with another display scale** — it kept the scale of the monitor it opened on.
 
 ## v0.9.0 — Graph Analysis and Alarms

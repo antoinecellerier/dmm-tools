@@ -256,8 +256,9 @@ fn flags_bits(flags: &StatusFlags) -> u16 {
 }
 
 /// Build a u64 fingerprint that changes whenever `live_region_label` would
-/// produce different output. Lets `set_live_region_cached` skip per-frame
-/// `format!`/`String` allocation when the measurement is unchanged.
+/// produce different output. Lets the spoken reading (`a11y::speak_reading`)
+/// skip per-frame `format!`/`String` allocation when the measurement is
+/// unchanged.
 pub(super) fn live_region_fingerprint(
     l10n: &Localizer,
     measurement: Option<&Measurement>,

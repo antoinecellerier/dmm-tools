@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use eframe::egui::{self, InnerResponse, Response, Ui};
 
 /// Override the AccessKit label for a widget whose visible text is not
@@ -98,39 +100,56 @@ pub(crate) fn arrow_resize(
     delta
 }
 
-/// Mark `id` as a polite ARIA-style live region. Screen readers announce
-/// updates to polite live regions at the next pause rather than interrupting
-/// the user. Intended for streaming readouts (e.g. the primary measurement
-/// value).
+/// The node a screen reader hears the reading from.
+///
+/// One fixed id for every layout and for the placeholder, not one derived
+/// from egui's id counter, so the node keeps its identity when the layout
+/// switches or the reading gives way to "No reading".
+pub(crate) fn reading_region_id() -> egui::Id {
+    egui::Id::unique("dmm_reading")
+}
+
+/// Lay the spoken reading over `rect`, the row that draws it: a polite live
+/// region whose text is the whole reading, value, mode, flags and the app's
+/// own state.
+///
+/// It is a leaf of its own, beside the row, not the row itself, for two
+/// reasons. AccessKit drops `GenericContainer` nodes, which is what a
+/// `ui.horizontal` is, so a label set on the row never reaches a screen
+/// reader. And a node with no live setting of its own takes its parent's, so
+/// on the row every label inside it — the value above all, new with every
+/// reading — became a live region of its own, and Narrator cut itself off at
+/// each one. A `Role::Label` takes its name from its value on Windows.
 ///
 /// `make_label` is only called when `fingerprint` has changed since the last
-/// frame, so the caller doesn't pay for `format!`/`String` allocation on
-/// frames where the underlying value is the same. The resulting label is
-/// cached in `ctx.data` and re-applied every frame — egui rebuilds the
-/// AccessKit tree from scratch each frame, so the label has to be set on
-/// every pass even when it hasn't changed.
-pub(crate) fn set_live_region_cached(
-    ui: &Ui,
-    id: egui::Id,
-    fingerprint: u64,
-    make_label: impl FnOnce() -> String,
-) {
-    let fp_key = id.with("a11y_live_fingerprint");
-    let label_key = id.with("a11y_live_label");
-    let prev_fp: Option<u64> = ui.ctx().data(|d| d.get_temp(fp_key));
-    if prev_fp != Some(fingerprint) {
-        let new_label = make_label();
-        ui.ctx().data_mut(|d| {
-            d.insert_temp(fp_key, fingerprint);
-            d.insert_temp(label_key, new_label);
-        });
-    }
-    let label: Option<String> = ui.ctx().data(|d| d.get_temp(label_key));
-    ui.ctx().accesskit_node_builder(id, |builder| {
-        if let Some(label) = label {
-            builder.set_label(label);
+/// frame. The label is cached in `ctx.data` as an `Arc<str>`, so the
+/// unchanged path costs a refcount, and re-applied every frame: egui rebuilds
+/// the AccessKit tree from scratch each one. A panel shown again is a new node
+/// to the screen reader, which announces it once.
+fn speak_reading(ui: &Ui, rect: egui::Rect, fingerprint: u64, make_label: impl FnOnce() -> String) {
+    let id = reading_region_id();
+    ui.interact(rect, id, egui::Sense::hover());
+    let cache = id.with("label");
+    let cached: Option<(u64, Arc<str>)> = ui.ctx().data(|d| d.get_temp(cache));
+    let label = match cached {
+        Some((fp, label)) if fp == fingerprint => label,
+        _ => {
+            let label: Arc<str> = make_label().into();
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(cache, (fingerprint, Arc::clone(&label))));
+            label
         }
-        builder.set_live(egui::accesskit::Live::Polite);
+    };
+    ui.ctx().accesskit_node_builder(id, |node| {
+        node.set_role(egui::accesskit::Role::Label);
+        node.set_value(&*label);
+        node.set_bounds(egui::accesskit::Rect {
+            x0: rect.min.x.into(),
+            y0: rect.min.y.into(),
+            x1: rect.max.x.into(),
+            y1: rect.max.y.into(),
+        });
+        node.set_live(egui::accesskit::Live::Polite);
     });
 }
 
@@ -188,10 +207,11 @@ pub(crate) trait UiA11yExt {
         add_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<R>;
 
-    /// Wrap `add_contents` in `ui.horizontal` and tag the row as a polite
-    /// ARIA-style live region. `fingerprint` should hash the visible value
-    /// state; `make_label` is only invoked when the fingerprint changes.
-    fn live_region_horizontal<R>(
+    /// Draw `add_contents` in a `ui.horizontal` row and lay the spoken
+    /// reading over it (see [`speak_reading`]). `fingerprint` should hash
+    /// everything the spoken label says; `make_label` is only invoked when
+    /// the fingerprint changes.
+    fn spoken_reading<R>(
         &mut self,
         fingerprint: u64,
         make_label: impl FnOnce() -> String,
@@ -211,14 +231,14 @@ impl UiA11yExt for Ui {
         scope
     }
 
-    fn live_region_horizontal<R>(
+    fn spoken_reading<R>(
         &mut self,
         fingerprint: u64,
         make_label: impl FnOnce() -> String,
         add_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<R> {
         let row = self.horizontal(add_contents);
-        set_live_region_cached(self, row.response.id, fingerprint, make_label);
+        speak_reading(self, row.response.rect, fingerprint, make_label);
         row
     }
 }

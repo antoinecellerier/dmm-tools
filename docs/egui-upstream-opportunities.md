@@ -27,8 +27,8 @@ encapsulated as two extension traits in `crates/dmm-gui/src/a11y.rs`:
   workaround for gap #2 in `Button` lives here; gap #3's
   `a11y_toggled` was retired once egui shipped `Button::selected`.
 - `UiA11yExt` — `Ui::landmark(id_salt, role, add_contents)` and
-  `Ui::live_region_horizontal(fp, make_label, add_contents)`. Both
-  bake in the stable-id-salt workaround for gap #5 and the cached
+  `Ui::spoken_reading(fp, make_label, add_contents)`. The first bakes in
+  the stable-id-salt workaround for gap #5, the second the cached
   fingerprint logic for gap #6.
 
 The chainable / extension-method signatures are deliberately shaped
@@ -314,8 +314,8 @@ There is no "sticky" override — every consumer that wants a stable
 label or live-region marker on a non-standard widget has to re-apply
 it on every frame, even when nothing has changed.
 
-**Symptom.** Our `set_live_region_cached` helper has to cache the
-formatted label string in `ctx.data` and re-issue `set_label` +
+**Symptom.** Our spoken reading (`speak_reading` in `a11y.rs`) has to
+cache the formatted label string in `ctx.data` and re-issue `set_value` +
 `set_live(Live::Polite)` every frame. Same for the plot summary.
 
 **Suggested fix.** Either:
@@ -507,13 +507,12 @@ There is no `with_temp(&self, id, |&T| -> R) -> Option<R>` borrow API,
 so any cached `String`, `Vec`, etc. is cloned out of `IdTypeMap` on
 every read.
 
-**Symptom.** Our `set_live_region_cached` claims (in its doc-comment)
-to be allocation-free on the no-change path, but actually clones the
-cached `String` out of `ctx.data` every frame just to pass it to
-`builder.set_label`.
+**Symptom.** A label cached in `ctx.data` as a `String` is cloned out
+every frame just to pass it to the AccessKit node builder.
 
 **Workaround.** Cache as `Arc<str>` so the clone is a refcount bump
-instead of a heap allocation.
+instead of a heap allocation, as the spoken reading (`speak_reading` in
+`a11y.rs`) does.
 
 **Suggested fix.** Add:
 
