@@ -82,35 +82,7 @@ pub(crate) fn cmd_capture(
     let (device_name, supported) = match verify_meter(&mut dmm, device) {
         Ok(verified) => verified,
         Err(e) => {
-            match save_no_response(&mut dmm, &recorder, device, output_override.as_deref()) {
-                Ok((path, rx_bytes)) => {
-                    eprintln!(
-                        "{}",
-                        tr!(
-                            l,
-                            "capture-no-response-saved",
-                            bytes = rx_bytes,
-                            path = style(&path).bold().to_string(),
-                        )
-                    );
-                    eprintln!(
-                        "{}",
-                        tr!(
-                            l,
-                            "capture-no-response-attach",
-                            url = dmm.profile().feedback_url(),
-                        )
-                    );
-                }
-                Err(save) => eprintln!(
-                    "{}",
-                    tr!(
-                        l,
-                        "capture-no-response-not-saved",
-                        error = crate::l10n::error_text(l, &*save),
-                    )
-                ),
-            }
+            save_no_response(l, &mut dmm, &recorder, device, output_override.as_deref());
             return Err(e);
         }
     };
@@ -339,10 +311,50 @@ fn resume_hint(
     Some(hint)
 }
 
+/// Save the no-response file ([`write_no_response_report`]) and say where
+/// it went and where to send it, or why it could not be saved.
+fn save_no_response(
+    l: &dmm_shared::l10n::Localizer,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: &SharedRecorder,
+    device: &'static dmm_lib::protocol::registry::SelectableDevice,
+    output_override: Option<&str>,
+) {
+    match write_no_response_report(dmm, recorder, device, output_override) {
+        Ok((path, rx_bytes)) => {
+            eprintln!(
+                "{}",
+                tr!(
+                    l,
+                    "capture-no-response-saved",
+                    bytes = rx_bytes,
+                    path = style(&path).bold().to_string(),
+                )
+            );
+            eprintln!(
+                "{}",
+                tr!(
+                    l,
+                    "capture-no-response-attach",
+                    url = dmm.profile().feedback_url(),
+                )
+            );
+        }
+        Err(save) => eprintln!(
+            "{}",
+            tr!(
+                l,
+                "capture-no-response-not-saved",
+                error = crate::l10n::error_text(l, &*save),
+            )
+        ),
+    }
+}
+
 /// Keep what the cable delivered when the meter never answered: on a meter
 /// being brought up, bytes that did not decode are all the evidence there is.
 /// Returns the file written and how many bytes it holds.
-fn save_no_response(
+fn write_no_response_report(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: &SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,

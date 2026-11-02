@@ -8,6 +8,7 @@
 //! already at, which `switch_mode` does before the step is watched.
 
 use super::recording::{self, SharedRecorder};
+use super::report::already_captured;
 use super::{
     CaptureReport, CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, frames_for_step,
     needs_attention, read_past_blank, samples_after_switch, save_report, upsert_step,
@@ -297,11 +298,7 @@ pub(crate) fn sweep_step(
                 break;
             }
             let id = sub_step_id(step.id, setting, &choice.label);
-            if report
-                .steps
-                .iter()
-                .any(|s| s.id == id && s.status == StepStatus::Captured)
-            {
+            if already_captured(report, &id) {
                 eprintln!(
                     "    {}",
                     tr!(
