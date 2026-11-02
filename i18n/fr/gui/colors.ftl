@@ -120,8 +120,8 @@ colors-issue-not-opaque =
 # their contrast, e.g. 1.8, and $floor the least allowed, e.g. 3.
 colors-issue-low-contrast =
     { $what ->
-        [button] le texte du bouton sur le bouton est à { $ratio }:1, sous le minimum de { $floor }:1
-       *[text] le texte sur l’arrière-plan est à { $ratio }:1, sous le minimum de { $floor }:1
+        [button] le contraste du texte sur le bouton est de { $ratio }:1, inférieur au minimum de { $floor }:1
+       *[text] le contraste du texte sur l’arrière-plan est de { $ratio }:1, inférieur au minimum de { $floor }:1
     }
 # Another file in the folder gives its theme the same name. $name is the
 # name as the file has it, to put in your language's quotes; $file the
@@ -164,7 +164,7 @@ colors-preset-clears = Choisir un préréglage efface vos personnalisations
 ## The Customize colors section, folded under its header until opened.
 
 colors-customize = Personnaliser les couleurs
-    .hover = Modifier chaque couleur par-dessus le préréglage ou le thème choisi
+    .hover = Remplacer une à une les couleurs du préréglage ou du thème choisi
 # Beside the header: whose colours the swatches change. $mode is dark or
 # light.
 colors-editing =
@@ -273,7 +273,7 @@ colors-relink = ↺ relier
 # their contrast, e.g. 2.1; $ground the other colour's name; $floor the
 # least contrast it needs, e.g. 4.5.
 colors-low-contrast = { $ratio }:1 sur { $ground }
-    .hover = Sous le contraste de { $floor }:1 dont cette couleur a besoin sur { $ground }
+    .hover = Contraste inférieur au minimum de { $floor }:1 requis pour cette couleur sur { $ground }
 # A warning after a graph colour the user made hard to tell from another.
 # $other is the other colour's name; $distance how far apart they are and
 # $floor how far apart they need to be, as whole numbers. ΔE is the

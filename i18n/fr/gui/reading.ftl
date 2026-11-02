@@ -16,7 +16,7 @@
 # The mode readout as a dropdown of the modes the meter can switch to at
 # its dial position.
 reading-mode =
-    .hover = Passer le multimètre dans un autre mode de la position actuelle du commutateur
+    .hover = Passer le multimètre dans un autre mode disponible sur la position actuelle du commutateur
     .a11y = Mode
 # The range readout as a dropdown of the meter's ranges in this mode.
 reading-range =

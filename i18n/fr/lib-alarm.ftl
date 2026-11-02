@@ -20,7 +20,7 @@ alarm-limits =
 # With a hysteresis band given: how far back a reading must come before the
 # same limit alarms again. $limits is the text of alarm-limits; $band is a
 # number, or a percentage of the limit such as 1%.
-alarm-hysteresis = { $limits }, hystérésis { $band }
+alarm-hysteresis = { $limits }, hystérésis de { $band }
 
 ## A reading past a limit: dmm-gui's toast, and dmm-cli's line after
 ## "Alarm:" or "Note:" (cli/read.ftl). $side is high (the high limit) or

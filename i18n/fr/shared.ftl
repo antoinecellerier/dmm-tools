@@ -22,7 +22,7 @@ device-auto = Détecter le multimètre connecté
 device-auto-default = { device-auto } (par défaut)
 device-aliases =
     Accepte aussi des alias : ut61e+, ut61b, ut171a, ut181, etc.
-    Mettez entre guillemets les noms à caractères spéciaux : --device 'ut61e+'
+    Mettez entre guillemets les noms qui contiennent des caractères spéciaux : --device 'ut61e+'
 # Beside the simulated meters, in device lists.
 device-no-hardware = aucun matériel nécessaire
 
@@ -48,7 +48,7 @@ stability-warning =
 mock-mode-list = Modes : { $modes }
 # $example is a command line.
 mock-mode-example = Exemple : { $example }
-mock-clock-mock-only = --mock-clock-scale et --mock-clock-preseed ne s’appliquent qu’au multimètre simulé et à une relecture. Relancez avec --device mock ou --replay, ou sans les options d’horloge.
+mock-clock-mock-only = --mock-clock-scale et --mock-clock-preseed ne s’appliquent qu’au multimètre simulé et aux relectures. Relancez avec --device mock ou --replay, ou sans les options d’horloge.
 
 ## A link's short name, where the meter is already named: the GUI's
 ## status line, the setup help's section labels.
@@ -117,7 +117,7 @@ adapters-none = Aucun appareil connecté pour le moment.
 adapters-heading = Appareils connectés :
 adapters-unavailable = Lancez 'dmm-cli list' pour voir les appareils connectés.
 # $address is the value the user typed, written with colons, e.g. 12:34:56:78:9A:BC.
-colonless-address-hint = S’il s’agit d’une adresse Bluetooth, écrivez-la { $address }.
+colonless-address-hint = S’il s’agit d’une adresse Bluetooth, écrivez-la sous la forme { $address }.
 
 ## Why a number typed for a scale, an offset or an alarm was refused: the
 ## reason alone, in lower case and with no full stop. dmm-gui puts it after

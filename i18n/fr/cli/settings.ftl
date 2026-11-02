@@ -105,19 +105,19 @@ settings-unknown = choix inconnu pour { $setting } : { $input }
 # when the input is past its end.
 settings-refused =
     { $setting ->
-        [range] le multimètre a refusé { $choice } ({ $reason }) : vérifiez la position du commutateur et que l’entrée reste dans la plage
+        [range] le multimètre a refusé { $choice } ({ $reason }) : vérifiez la position du commutateur et assurez-vous que l’entrée reste dans la plage
        *[other] le multimètre a refusé { $choice } ({ $reason }) : vérifiez la position du commutateur
     }
 # The meter took the command, but its readings never showed the choice.
 settings-not-switched =
     { $setting ->
-        [range] Le multimètre n’a pas changé : vérifiez la position du commutateur et que l’entrée reste dans la plage
+        [range] Le multimètre n’a pas changé : vérifiez la position du commutateur et assurez-vous que l’entrée reste dans la plage
        *[other] Le multimètre n’a pas changé : vérifiez la position du commutateur
     }
 # As settings-not-switched, naming $live, the choice the meter is still on,
 # e.g. off.
 settings-not-switched-still =
     { $setting ->
-        [range] Le multimètre n’a pas changé (toujours { $live }) : vérifiez la position du commutateur et que l’entrée reste dans la plage
+        [range] Le multimètre n’a pas changé (toujours { $live }) : vérifiez la position du commutateur et assurez-vous que l’entrée reste dans la plage
        *[other] Le multimètre n’a pas changé (toujours { $live }) : vérifiez la position du commutateur
     }

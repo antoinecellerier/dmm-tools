@@ -91,11 +91,11 @@ error-no-transport-found-looked-for =
 error-bluetooth-only-not-in-range = aucun multimètre { $model } trouvé à portée Bluetooth
 # A meter with Bluetooth built in, and Bluetooth was not searched. $model
 # is the meter, e.g. UNI-T UT60BT. Each app adds how to switch it on.
-error-bluetooth-only-switched-off = le multimètre { $model } se connecte uniquement en Bluetooth, et le Bluetooth est désactivé
+error-bluetooth-only-switched-off = le multimètre { $model } ne se connecte qu’en Bluetooth, mais le Bluetooth est désactivé
 # $model is the meter, e.g. UNI-T UT60BT.
-error-bluetooth-only-not-built = le multimètre { $model } se connecte uniquement en Bluetooth, et cette version n’intègre pas la prise en charge du Bluetooth
+error-bluetooth-only-not-built = le multimètre { $model } ne se connecte qu’en Bluetooth, mais cette version n’intègre pas la prise en charge du Bluetooth
 # $model is the meter, e.g. UNI-T UT60BT.
-error-bluetooth-only-usb-adapter = le multimètre { $model } se connecte uniquement en Bluetooth, et --adapter désigne un appareil USB : indiquez l’adresse Bluetooth du multimètre, ou retirez --adapter
+error-bluetooth-only-usb-adapter = le multimètre { $model } ne se connecte qu’en Bluetooth, mais --adapter désigne un appareil USB : indiquez l’adresse Bluetooth du multimètre, ou retirez --adapter
 
 ## Refused before it was sent: the meter, the link or the dial position
 ## cannot do it. After "unsupported command:". $setting is a setting's
@@ -105,7 +105,7 @@ error-bluetooth-only-usb-adapter = le multimètre { $model } se connecte uniquem
 # $setting is a setting's name.
 error-unsupported-setting = le réglage { $setting } ne peut pas être modifié sur ce multimètre
 # $mode is a mode.
-error-unsupported-several-positions = le mode { $mode } est signalé depuis plusieurs positions du commutateur : faites d’abord une mesure dans un autre mode
+error-unsupported-several-positions = le mode { $mode } correspond à plusieurs positions du commutateur : faites d’abord une mesure dans un autre mode
 # $mode is a mode.
 error-unsupported-no-position = le mode { $mode } ne correspond à aucune position connue du commutateur
 # $target and $from are modes.
@@ -113,7 +113,7 @@ error-unsupported-mode-unreachable = le mode { $target } n’est pas accessible 
 # $target and $from_word are mode codes, $from is the mode $from_word is.
 error-unsupported-word-unreachable = le mode { $target } n’est pas accessible depuis le mode { $from } ({ $from_word }) : tournez d’abord le commutateur
 # $mode is a mode.
-error-unsupported-no-ranges = le mode { $mode } n’a aucune plage à choisir sur ce multimètre
+error-unsupported-no-ranges = le mode { $mode } ne propose aucun choix de plage sur ce multimètre
 # $id is a range's number, $count how many ranges $mode, a mode, has.
 error-unsupported-no-such-range = la plage { $id } ne fait pas partie des { $count } plages que propose le mode { $mode }
 # $id is a range's number, $count how many ranges $mode, a mode, has.
@@ -136,7 +136,7 @@ error-unsupported-no-rel = rel en mode { $mode } ({ $word })
 # $model is the meter's part number, e.g. VC-880; $button a button's name.
 error-unsupported-no-button = le multimètre { $model } n’a pas de touche { $button }
 # $cable is a cable's name, e.g. BU-86X; $len and $got are byte counts.
-error-unsupported-request-length = le câble { $cable } accepte des requêtes de { $len } octets, pas de { $got } octets
+error-unsupported-request-length = le câble { $cable } accepte des requêtes de { $len } octets, et non de { $got } octets
 # $link is usb (the USB cable), adapter (the Bluetooth adapter) or none (a
 # link that does not say what it is); $baud a serial speed, e.g. 19200.
 error-unsupported-baud =
@@ -182,7 +182,7 @@ error-rejected-zero-needs-capacitance = ZERO ne fonctionne qu’en mode capacit�
 # $code is a number, $model and $opened are meters (e.g. OWON B41T+), $id a
 # meter's ID as --device takes it. "Auto-detect" is the GUI's Device
 # choice.
-error-rejected-other-model = le multimètre indique le code de modèle OWON { $code } ({ $model }) et n’est donc pas le multimètre { $opened } choisi à l’ouverture, si bien que les touches à distance sont désactivées : choisissez Détection automatique ou --device { $id }
+error-rejected-other-model = le multimètre indique le code de modèle OWON { $code } ({ $model }) : ce n’est pas le multimètre { $opened } choisi à l’ouverture, et les touches à distance sont donc désactivées : choisissez Détection automatique ou --device { $id }
 # $code is a number.
 error-rejected-unknown-model = le multimètre indique le code de modèle OWON { $code }, que cet outil ne connaît pas encore, donc les touches à distance sont désactivées
 # $command is a command word.
@@ -208,7 +208,7 @@ error-sent-range = la plage { $range }
 # Voltcraft VC871; $frame the length of that model's frame in bytes, 6 or
 # 15; $opened the meter chosen, e.g. OWON B35T+; $id the --device value
 # for $model.
-error-wrong-meter-other-frame = le multimètre indique le code de modèle OWON { $code } ({ $model }), qui envoie la trame OWON de { $frame } octets, et n’est donc pas le multimètre { $opened } choisi à l’ouverture : choisissez Détection automatique ou --device { $id }
+error-wrong-meter-other-frame = le multimètre indique le code de modèle OWON { $code } ({ $model }), un modèle qui envoie des trames OWON de { $frame } octets : ce n’est donc pas le multimètre { $opened } choisi à l’ouverture : choisissez Détection automatique ou --device { $id }
 # An OWON meter sends the other kind of data frame and names no model.
 # $sent and $expected are frame lengths in bytes, 6 or 15; $opened is the
 # meter chosen, e.g. Voltcraft VC871. $remedy is auto-detect, or own-model
@@ -220,7 +220,7 @@ error-wrong-meter-other-frame-kind =
     }
 # An OWON model this tool does not read yet. $code is OWON's model number,
 # e.g. 83. "This message" is the whole error, for the issue.
-error-wrong-meter-not-yet = le multimètre indique le code de modèle OWON { $code }, que cet outil ne lit pas encore : ouvrez un ticket (issue) avec ce message
+error-wrong-meter-not-yet = le multimètre indique le code de modèle OWON { $code }, que cet outil ne lit pas encore : ouvrez un ticket (issue) en y copiant ce message
 # An OWON model whose readings carry their sign where this tool does not
 # read it yet. $code is OWON's model number, e.g. 55.
 error-wrong-meter-sign-in-function-word = le multimètre indique le code de modèle OWON { $code } : il envoie la trame OWON de 6 octets avec le signe dans le mot de fonction, que cet outil ne lit pas encore
@@ -234,7 +234,7 @@ error-wrong-meter-no-six-byte-frames = le multimètre n’envoie aucune trame OW
 error-wrong-meter-no-fifteen-byte-frames = le multimètre n’envoie aucune trame OWON de 15 octets : choisissez Détection automatique
 # An OWON meter that names no model sends frames of neither length. "This
 # message" is the whole error, for the issue.
-error-wrong-meter-untold-frame-kind = ni le code de modèle du multimètre ni ses trames n’indiquent s’il envoie des trames OWON de 6 ou de 15 octets : ouvrez un ticket (issue) avec ce message
+error-wrong-meter-untold-frame-kind = ni le code de modèle du multimètre ni ses trames n’indiquent s’il envoie des trames OWON de 6 ou de 15 octets : ouvrez un ticket (issue) en y copiant ce message
 
 ## Bluetooth: what the Bluetooth stack could not do. After "Bluetooth:".
 
@@ -246,8 +246,8 @@ error-bluetooth-powered-off = désactivé sur cet ordinateur
 # (the one the meter's data arrives on).
 error-bluetooth-no-characteristic =
     { $role ->
-        [write] l’appareil Bluetooth n’a aucune caractéristique d’écriture de données reconnue : ce n’est pas un adaptateur ou un multimètre pris en charge, ou ses services n’ont jamais été résolus
-       *[notify] l’appareil Bluetooth n’a aucune caractéristique de notification de données reconnue : ce n’est pas un adaptateur ou un multimètre pris en charge, ou ses services n’ont jamais été résolus
+        [write] l’appareil Bluetooth n’a aucune caractéristique d’écriture de données reconnue : soit ce n’est ni un adaptateur ni un multimètre pris en charge, soit ses services n’ont jamais été résolus
+       *[notify] l’appareil Bluetooth n’a aucune caractéristique de notification de données reconnue : soit ce n’est ni un adaptateur ni un multimètre pris en charge, soit ses services n’ont jamais été résolus
     }
 # A Brymen meter refused the password this tool sends.
 error-bluetooth-password-refused = le multimètre a refusé le mot de passe de connexion 0000 : pour le réinitialiser, { error-bluetooth-reset-gesture }

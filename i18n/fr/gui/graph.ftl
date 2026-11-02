@@ -23,7 +23,7 @@ graph-window =
 # A chip, lit while the graph follows the newest samples; dragging the graph
 # turns it off. Keep it short; it is set in small capitals.
 graph-live = DIRECT
-    .hover = Suivre les échantillons les plus récents, désactivé pendant le défilement ({ $keys } pour y revenir)
+    .hover = Suivre les échantillons les plus récents (se désactive pendant le défilement, { $keys } pour y revenir)
 # The chip for the Y (vertical) axis while its bounds are typed in: Y is the
 # axis, Fixed the mode. Clicking it switches to Y:Auto.
 graph-y-fixed = Y:fixe
@@ -43,7 +43,7 @@ graph-y-max = Max. de l’axe Y
 # out: "live" is the LIVE chip, "auto-Y" the Y:Auto chip.
 graph-reset-zoom = Réinitialiser le zoom
     .hover = Revenir au suivi en direct et à l’axe Y automatique (double-clic sur le graphique)
-    .hover-disabled = Déjà à la vue par défaut : direct et Y automatique
+    .hover-disabled = La vue par défaut est déjà affichée : direct et Y automatique
 
 ## The second row, only for meters that send more than one value: Plot:,
 ## the series the graph plots, then Show:, the traces drawn beside it, each
@@ -99,7 +99,7 @@ graph-envelope = Min/Max
 # band's window spans. The text shows greyed inside the field while it is
 # empty; "s" after the field is the symbol for seconds.
 graph-envelope-window = Fenêtre Min/Max, secondes
-    .hover = Taille de la fenêtre (secondes) servant à calculer l’enveloppe Min/Max
+    .hover = Taille de la fenêtre (en secondes) servant au calcul de l’enveloppe Min/Max
 # A chip that shows a histogram, bars of how many readings fell at each
 # value, beside or under the graph. $state is hidden while the plotted
 # trace itself is switched off, so the histogram has nothing to show;
@@ -184,7 +184,7 @@ graph-plot-a11y-samples =
 # Only when other traces are drawn beside the plotted series: $series lists
 # them, separated by graph-plot-a11y-also-separator; each is a name, or
 # graph-plot-a11y-also-axis.
-graph-plot-a11y-also = Affiche aussi { $series }.
+graph-plot-a11y-also = Le tracé affiche aussi { $series }.
 # Between two traces in graph-plot-a11y-also.
 graph-plot-a11y-also-separator = {", "}
 # One trace in graph-plot-a11y-also, drawn against an axis of its own on the
@@ -267,7 +267,7 @@ graph-histogram-a11y =
 graph-histogram-a11y-sd = écart-type { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
-graph-histogram-a11y-most = le plus souvent de { $range } ({ $count })
+graph-histogram-a11y-most = valeurs les plus fréquentes de { $range } ({ $count })
 # How many readings in view were over range (OL). $count is that number.
 graph-histogram-a11y-over-range =
     { $count ->

@@ -37,7 +37,7 @@ alarm-settings =
 alarm-scale-setup-in-settings = Affichez d’abord le graphique ou l’enregistrement dans Paramètres
 # The same in the big meter, which has no room for the row. $keys is the
 # shortcut that leaves the big meter, e.g. Ctrl+B or ⌘B.
-alarm-scale-setup-in-normal-layout = Réglez d’abord dans la disposition normale ({ $keys })
+alarm-scale-setup-in-normal-layout = Effectuez d’abord le réglage dans la disposition normale ({ $keys })
 
 ## The Scale row, under the chips while Scale's caret is open:
 ## "× [Scale factor] + [Offset] → [Unit label] [Apply] [Off]". The ×, +
@@ -101,7 +101,7 @@ alarm-no-limit = aucune
 # reading must come before that limit can alarm again. Its placeholder says
 # that blank picks the band automatically.
 alarm-band = auto
-    .hover = De combien la mesure doit revenir avant qu’une limite redéclenche l’alarme : une valeur ou un pourcentage, par exemple 1 %. Vide : automatique
+    .hover = Écart de retour exigé avant qu’une limite puisse redéclencher l’alarme : une valeur ou un pourcentage, par exemple 1 %. Vide : automatique
 # After the limits, the unit they are in, e.g. V; this is its hover.
 alarm-unit =
     .hover = L’unité des limites

@@ -18,23 +18,23 @@
 
 # The first button of the row.
 import-button = Importer…
-    .hover = Ouvrir un fichier CSV, JSON ou de relecture exporté ({ $keys })
+    .hover = Ouvrir un fichier exporté au format CSV, JSON ou relecture ({ $keys })
 # The left part of the Export… split button: saves a CSV file at once.
 # $buffer is recording when a recording holds the samples, graph when
 # nothing is recorded and Export… saves the samples the graph holds.
 export-button = Exporter…
     .hover =
         { $buffer ->
-            [recording] Exporter l’enregistrement en fichier CSV ({ $keys })
-           *[graph] Exporter les échantillons du graphique en fichier CSV ({ $keys })
+            [recording] Exporter l’enregistrement dans un fichier CSV ({ $keys })
+           *[graph] Exporter les échantillons du graphique dans un fichier CSV ({ $keys })
         }
 # The arrow at the right of the Export… split button, which drops the menu
 # of file types. It has no text. $buffer is as for Export….
 export-menu =
     .hover =
         { $buffer ->
-            [recording] Exporter l’enregistrement en fichier CSV, JSON ou de relecture
-           *[graph] Exporter les échantillons du graphique en fichier CSV, JSON ou de relecture
+            [recording] Exporter l’enregistrement dans un fichier CSV, JSON ou de relecture
+           *[graph] Exporter les échantillons du graphique dans un fichier CSV, JSON ou de relecture
         }
     .a11y = Type de fichier d’export
 
@@ -64,8 +64,8 @@ export-no-wire-format = Le multimètre simulé n’a pas de trames brutes à exp
 # measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv. Export… is the button.
 import-hint =
     { $count ->
-        [one] { $count } mesure importée depuis { $file }. « Exporter… » l’enregistre avec vos marqueurs et votre vue.
-       *[other] { $count } mesures importées depuis { $file }. « Exporter… » les enregistre avec vos marqueurs et votre vue.
+        [one] { $count } mesure importée depuis { $file }. Utilisez « Exporter… » pour l’enregistrer avec vos marqueurs et votre vue.
+       *[other] { $count } mesures importées depuis { $file }. Utilisez « Exporter… » pour les enregistrer avec vos marqueurs et votre vue.
     }
 
 ## The prompt shown over the window before something would discard samples
@@ -89,25 +89,25 @@ export-unsaved-record =
     { $lost ->
         [samples]
             { $samples ->
-                [one] Démarrer un nouvel enregistrement abandonnera { $samples } échantillon non exporté.
-               *[other] Démarrer un nouvel enregistrement abandonnera { $samples } échantillons non exportés.
+                [one] Démarrer un nouvel enregistrement fera perdre { $samples } échantillon non exporté.
+               *[other] Démarrer un nouvel enregistrement fera perdre { $samples } échantillons non exportés.
             }
         [markers]
             { $markers ->
-                [one] Démarrer un nouvel enregistrement abandonnera les modifications non enregistrées de { $markers } marqueur. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
-               *[other] Démarrer un nouvel enregistrement abandonnera les modifications non enregistrées de { $markers } marqueurs. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
+                [one] Démarrer un nouvel enregistrement fera perdre les modifications non enregistrées de { $markers } marqueur. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
+               *[other] Démarrer un nouvel enregistrement fera perdre les modifications non enregistrées de { $markers } marqueurs. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] Démarrer un nouvel enregistrement abandonnera { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueur. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
-                       *[other] Démarrer un nouvel enregistrement abandonnera { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueurs. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
+                        [one] Démarrer un nouvel enregistrement fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueur. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
+                       *[other] Démarrer un nouvel enregistrement fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueurs. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
                     }
                *[other]
                     { $markers ->
-                        [one] Démarrer un nouvel enregistrement abandonnera { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueur. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
-                       *[other] Démarrer un nouvel enregistrement abandonnera { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueurs. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
+                        [one] Démarrer un nouvel enregistrement fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueur. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
+                       *[other] Démarrer un nouvel enregistrement fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueurs. Les marqueurs restent sur le graphique tant qu’il contient leurs mesures.
                     }
             }
     }
@@ -151,25 +151,25 @@ export-unsaved-import =
     { $lost ->
         [samples]
             { $samples ->
-                [one] L’importation remplace cette session et abandonnera { $samples } échantillon non exporté.
-               *[other] L’importation remplace cette session et abandonnera { $samples } échantillons non exportés.
+                [one] L’importation remplacera cette session et fera perdre { $samples } échantillon non exporté.
+               *[other] L’importation remplacera cette session et fera perdre { $samples } échantillons non exportés.
             }
         [markers]
             { $markers ->
-                [one] L’importation remplace cette session et abandonnera les modifications non enregistrées de { $markers } marqueur.
-               *[other] L’importation remplace cette session et abandonnera les modifications non enregistrées de { $markers } marqueurs.
+                [one] L’importation remplacera cette session et fera perdre les modifications non enregistrées de { $markers } marqueur.
+               *[other] L’importation remplacera cette session et fera perdre les modifications non enregistrées de { $markers } marqueurs.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] L’importation remplace cette session et abandonnera { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueur.
-                       *[other] L’importation remplace cette session et abandonnera { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueurs.
+                        [one] L’importation remplacera cette session et fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueur.
+                       *[other] L’importation remplacera cette session et fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueurs.
                     }
                *[other]
                     { $markers ->
-                        [one] L’importation remplace cette session et abandonnera { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueur.
-                       *[other] L’importation remplace cette session et abandonnera { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueurs.
+                        [one] L’importation remplacera cette session et fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueur.
+                       *[other] L’importation remplacera cette session et fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueurs.
                     }
             }
     }
@@ -181,25 +181,25 @@ export-unsaved-connect =
     { $lost ->
         [samples]
             { $samples ->
-                [one] La connexion met fin à la session importée et abandonnera { $samples } échantillon non exporté.
-               *[other] La connexion met fin à la session importée et abandonnera { $samples } échantillons non exportés.
+                [one] La connexion mettra fin à la session importée et fera perdre { $samples } échantillon non exporté.
+               *[other] La connexion mettra fin à la session importée et fera perdre { $samples } échantillons non exportés.
             }
         [markers]
             { $markers ->
-                [one] La connexion met fin à la session importée et abandonnera les modifications non enregistrées de { $markers } marqueur.
-               *[other] La connexion met fin à la session importée et abandonnera les modifications non enregistrées de { $markers } marqueurs.
+                [one] La connexion mettra fin à la session importée et fera perdre les modifications non enregistrées de { $markers } marqueur.
+               *[other] La connexion mettra fin à la session importée et fera perdre les modifications non enregistrées de { $markers } marqueurs.
             }
        *[both]
             { $samples ->
                 [one]
                     { $markers ->
-                        [one] La connexion met fin à la session importée et abandonnera { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueur.
-                       *[other] La connexion met fin à la session importée et abandonnera { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueurs.
+                        [one] La connexion mettra fin à la session importée et fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueur.
+                       *[other] La connexion mettra fin à la session importée et fera perdre { $samples } échantillon non exporté et les modifications non enregistrées de { $markers } marqueurs.
                     }
                *[other]
                     { $markers ->
-                        [one] La connexion met fin à la session importée et abandonnera { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueur.
-                       *[other] La connexion met fin à la session importée et abandonnera { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueurs.
+                        [one] La connexion mettra fin à la session importée et fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueur.
+                       *[other] La connexion mettra fin à la session importée et fera perdre { $samples } échantillons non exportés et les modifications non enregistrées de { $markers } marqueurs.
                     }
             }
     }
@@ -282,7 +282,7 @@ export-failed = Échec de l’export : { $reason }
 # The save dialog went away without saying which file to write.
 export-failed-dialog = Échec de l’export : la boîte de dialogue d’enregistrement s’est fermée sans réponse
 # The part of the app writing the file stopped without saying how it went.
-export-failed-writer = Échec de l’export : l’écriture du fichier s’est arrêtée sans réponse
+export-failed-writer = Échec de l’export : l’écriture du fichier s’est arrêtée sans indiquer de résultat
 # The samples to export were dropped while the save dialog was open, so
 # the file would not hold what was asked for.
 export-failed-changed = Échec de l’export : les échantillons ont changé pendant que la boîte de dialogue d’enregistrement était ouverte

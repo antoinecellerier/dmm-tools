@@ -94,7 +94,7 @@ connect-not-identified =
 connect-not-identified-name-it =
     Si le multimètre est allumé et transmet, mais n’est toujours pas reconnu, précisez son modèle :
     {"  "}{ $command }      ({ $help } liste les identifiants)
-    et signalez-le avec la sortie de { $logging } à l’adresse
+    et signalez-le à l’adresse ci-dessous, en joignant la sortie obtenue avec { $logging } :
     {"  "}{ $url }
 
 ## --adapter, a command-line option, named a USB device that isn't there.

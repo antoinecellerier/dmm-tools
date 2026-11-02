@@ -73,10 +73,10 @@ top-bar-link-live =
 # A recording being played back: how it was recorded.
 top-bar-link-recorded =
     { $link ->
-        [usb] Enregistré par le câble USB
-        [adapter] Enregistré par l’adaptateur Bluetooth
-        [radio] Enregistré par la liaison Bluetooth
-       *[none] Enregistré par une liaison non précisée
+        [usb] Enregistré via le câble USB
+        [adapter] Enregistré via l’adaptateur Bluetooth
+        [radio] Enregistré via la liaison Bluetooth
+       *[none] Enregistré via une liaison non précisée
     }
 # $path is the file's full path.
 top-bar-replaying = Relecture de { $path }

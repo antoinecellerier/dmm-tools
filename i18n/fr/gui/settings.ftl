@@ -75,9 +75,9 @@ settings-interval-every-reading = Chaque mesure
 settings-interval-chip =
     .hover =
         { $unit ->
-            [second] Au plus une mesure par seconde : celle la plus proche de chaque top
-            [seconds] Au plus une mesure toutes les { $n } s : celle la plus proche de chaque top
-           *[ms] Au plus une mesure toutes les { $n } ms : celle la plus proche de chaque top
+            [second] Au plus une mesure par seconde : la plus proche de chaque top
+            [seconds] Au plus une mesure toutes les { $n } s : la plus proche de chaque top
+           *[ms] Au plus une mesure toutes les { $n } ms : la plus proche de chaque top
         }
 
 settings-buffer-size = Taille du tampon :
@@ -92,13 +92,13 @@ settings-buffer-size-chip =
         { $pace ->
             [every-reading]
                 { $count ->
-                    [one] Conserver jusqu’à { $samples } échantillon dans le graphique et pour l’export ({ $memory }, environ { $span } à 10 mesures par seconde). Un enregistrement arrêté conservé en plus peut en prendre encore autant
-                   *[other] Conserver jusqu’à { $samples } échantillons dans le graphique et pour l’export ({ $memory }, environ { $span } à 10 mesures par seconde). Un enregistrement arrêté conservé en plus peut en prendre encore autant
+                    [one] Conserver jusqu’à { $samples } échantillon dans le graphique et pour l’export ({ $memory }, environ { $span } à 10 mesures par seconde). Un enregistrement arrêté, s’il est conservé, peut occuper autant de mémoire en plus
+                   *[other] Conserver jusqu’à { $samples } échantillons dans le graphique et pour l’export ({ $memory }, environ { $span } à 10 mesures par seconde). Un enregistrement arrêté, s’il est conservé, peut occuper autant de mémoire en plus
                 }
            *[interval]
                 { $count ->
-                    [one] Conserver jusqu’à { $samples } échantillon dans le graphique et pour l’export ({ $memory }, environ { $span } à l’intervalle d’échantillonnage actuel). Un enregistrement arrêté conservé en plus peut en prendre encore autant
-                   *[other] Conserver jusqu’à { $samples } échantillons dans le graphique et pour l’export ({ $memory }, environ { $span } à l’intervalle d’échantillonnage actuel). Un enregistrement arrêté conservé en plus peut en prendre encore autant
+                    [one] Conserver jusqu’à { $samples } échantillon dans le graphique et pour l’export ({ $memory }, environ { $span } à l’intervalle d’échantillonnage actuel). Un enregistrement arrêté, s’il est conservé, peut occuper autant de mémoire en plus
+                   *[other] Conserver jusqu’à { $samples } échantillons dans le graphique et pour l’export ({ $memory }, environ { $span } à l’intervalle d’échantillonnage actuel). Un enregistrement arrêté, s’il est conservé, peut occuper autant de mémoire en plus
                 }
         }
 # After the Buffer size chips: what the picked size costs. $memory is the
@@ -109,7 +109,7 @@ settings-buffer-cost = ({ $memory }, environ { $span })
 ## on one row.
 
 settings-graph = Graphique
-    .hover = Afficher le graphique défilant des mesures dans le temps
+    .hover = Afficher l’évolution des mesures sur un graphique défilant
 # σ is the standard deviation, as the Statistics panel writes it.
 settings-statistics = Statistiques
     .hover = Afficher Min / Max / Moyenne / σ / intégrale pour la session en cours
@@ -225,7 +225,7 @@ settings-announce-never = Jamais
 # A checkbox at the end of the same row, or under it when the row wraps.
 # Focus is keyboard focus, or where the screen reader's cursor is.
 settings-announce-focused = Seulement quand la mesure a le focus
-    .hover = Annoncer la mesure seulement quand le lecteur d’écran est dessus, au rythme choisi. La touche Tab y mène.
+    .hover = Annoncer la mesure, au rythme choisi, seulement quand le lecteur d’écran se trouve dessus. La touche Tab permet d’y accéder.
 
 ## How the graph's lines look, the last row.
 
@@ -233,6 +233,6 @@ settings-graph-lines = Courbes :
 # Sub-value lines are the extra traces a meter that shows several values
 # at once draws beside the main one.
 settings-graph-lines-patterned = À motifs
-    .hover = Valeurs secondaires en tirets et en pointillés, distinctes sans la couleur
+    .hover = Valeurs secondaires en tirets et en pointillés, reconnaissables même sans la couleur
 settings-graph-lines-solid = Pleines
     .hover = Lignes continues, distinguées par la couleur et la légende

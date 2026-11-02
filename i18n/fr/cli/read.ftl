@@ -34,8 +34,8 @@ read-replay-format-needs-meter = --format replay demande un vrai multimètre : 
 # $flag is the option given that would change the readings, e.g. --scale or
 # --integrate.
 read-replay-format-keeps-frames = un fichier de relecture contient les propres trames du multimètre : indiquez { $flag } en le relisant
-read-import-no-frames = un fichier CSV ou JSON ne contient aucune trame de multimètre à écrire en relecture : pour cela, utilisez --import avec un fichier de relecture
-read-import-no-interval = --interval-ms trie les mesures au fil de leur envoi par un multimètre : un fichier contient déjà toutes les siennes
+read-import-no-frames = un fichier CSV ou JSON ne contient aucune trame de multimètre à écrire dans un fichier de relecture : pour cela, donnez un fichier de relecture à --import
+read-import-no-interval = --interval-ms trie les mesures au fur et à mesure qu’un multimètre les envoie : un fichier contient déjà toutes ses mesures
 
 ## Why --mock-clock-scale's value was refused, at the end of a line from the
 ## command-line parser, which stays English: "error: invalid value 'abc' for
@@ -154,6 +154,6 @@ read-alarm-counts =
     }
 # -o without a file name: the run named the file after its first reading.
 # $path is the file.
-read-written-to = Écrit dans { $path }
+read-written-to = Mesures écrites dans { $path }
 # -o without a file name, and no reading came to name the file after.
 read-nothing-written = Aucune mesure reçue, aucun fichier n’a donc été écrit

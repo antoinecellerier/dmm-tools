@@ -13,7 +13,7 @@
 # Before the list of devices.
 help-device-intro = Appareil auquel se connecter.
 # Before the list of the simulated meter's modes.
-help-mock-mode-intro = Fixer l’appareil simulé sur un mode de mesure précis au lieu de parcourir les modes automatiquement. N’a d’effet qu’avec --device mock. Sans cette option, le mock_mode du fichier de paramètres (le mode simulé de dmm-gui) le fixe.
+help-mock-mode-intro = Fixer l’appareil simulé sur un mode de mesure précis au lieu de parcourir les modes automatiquement. N’a d’effet qu’avec --device mock. Sans cette option, c’est le mock_mode du fichier de paramètres (le mode simulé de dmm-gui) qui le fixe.
 
 ## The words around every command's help: its headings, what follows an
 ## option, and the help of the built-in -h, -V and help. They are the same
@@ -40,8 +40,8 @@ help-flag-long = Afficher l’aide (résumé avec '-h')
 # What -V and --version do.
 help-version-flag = Afficher la version
 # The help command, listed among the commands, and its argument.
-help-command = Afficher ce message ou l’aide des commandes données
-help-command-subcommand = Afficher l’aide des commandes données
+help-command = Afficher ce message ou l’aide des commandes indiquées
+help-command-subcommand = Afficher l’aide des commandes indiquées
 
 ## After the options of dmm-cli -h.
 
@@ -81,7 +81,7 @@ help-env-language =
 # POSIX are the locale names that mean English, on every system.
 help-env-lc-all =
     C ou POSIX dans la première variable définie parmi LC_ALL, LC_MESSAGES et LANG
-    signifie l’anglais, quel que soit LANGUAGE.
+    impose l’anglais, quelle que soit la valeur de LANGUAGE.
 
 ## After the options of dmm-cli completions --help. The command line for
 ## each shell follows.

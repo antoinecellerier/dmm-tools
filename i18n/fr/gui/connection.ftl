@@ -139,7 +139,7 @@ connection-other-model = Le multimètre indique « { $reported } », et non le
 # Settings now names that model.
 connection-named-after-detection =
     { $saved ->
-        [yes] Le multimètre indique « { $reported } », enregistré comme votre appareil : reconnectez-le pour le lire en tant que { $named }.
+        [yes] Le multimètre indique « { $reported } » et ce modèle est enregistré comme votre appareil : reconnectez-le pour le lire en tant que { $named }.
        *[no] Le multimètre indique « { $reported } » : reconnectez-le pour le lire en tant que { $named }.
     }
 
@@ -148,8 +148,8 @@ connection-named-after-detection =
 # written short, e.g. 1.2K. Export… is a button.
 connection-buffer-shrunk =
     { $count ->
-        [one] Enregistrement arrêté : { $kept } échantillon conservé, « Exporter… » le sauvegarde
-       *[other] Enregistrement arrêté : { $kept } échantillons conservés, « Exporter… » les sauvegarde
+        [one] Enregistrement arrêté : { $kept } échantillon conservé, à sauvegarder avec « Exporter… »
+       *[other] Enregistrement arrêté : { $kept } échantillons conservés, à sauvegarder avec « Exporter… »
     }
 # The recording filled the buffer. $count is its size in samples, $kept the
 # same number written short, e.g. 500K.

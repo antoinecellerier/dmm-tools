@@ -81,7 +81,7 @@ capture-needs-heading = Vous aurez besoin de :
 capture-needs-item = { $item }  (étapes : { $steps })
 # The user types the numbers in brackets of what they don't have, or just
 # presses Enter.
-capture-needs-prompt = Numéros de ce qui vous manque (Entrée = vous avez tout) :
+capture-needs-prompt = Numéros de ce qui vous manque (Entrée = rien ne manque) :
 # What the user typed at a numbers prompt (this one or the review's) isn't
 # one of the numbers listed. $token is what they typed, in quotes; $max the
 # last number listed.
@@ -107,7 +107,7 @@ capture-need-pv-adapter = adaptateur d’irradiance LX-925
 # Bold, between heavy lines.
 capture-modes-heading = Modes de mesure
 # Dim, under the heading. $skip and $quit are the keys: s and q.
-capture-modes-keys = chaque étape se capture d’elle-même une fois le multimètre stabilisé : Entrée=capturer maintenant, { $skip }=passer une étape, { $quit }=passer à la fin et enregistrer
+capture-modes-keys = chaque étape est capturée automatiquement une fois le multimètre stabilisé : Entrée=capturer maintenant, { $skip }=passer une étape, { $quit }=passer à la fin et enregistrer
 # Dim, after a step's instruction: the step the rest of the run relies on.
 capture-gate-mark = (étape clé)
 # A resumed run passes over a step the report already has. $step is the
@@ -298,7 +298,7 @@ capture-detect-checking = Vérification de la détection automatique…
 # what to do, the step's own instruction, in English.
 capture-detect-now = Maintenant : { $instruction }
 # Dim. $skip is the key that skips: s.
-capture-detect-read-keys = La mesure est prise une fois le multimètre stabilisé : Entrée la prend tout de suite, { $skip } passe.
+capture-detect-read-keys = La mesure est prise une fois le multimètre stabilisé : Entrée pour la prendre tout de suite, { $skip } pour passer.
 
 ## The line the check ends on: dim when detection found the meter, yellow
 ## with advice when it didn't. $found is the model detection picked, e.g.
@@ -327,11 +327,11 @@ capture-complete = Capture terminée !
 capture-report-saved = Rapport enregistré : { $path }
 # The run followed a list of steps a maintainer wrote (a "plan"). $plan is
 # its file; $covered and $total count its steps.
-capture-plan-covered = Plan { $plan } : { $covered } sur { $total } étapes capturées
-capture-nothing-new = Aucune étape non vérifiée n’a été capturée, donc rien de nouveau à signaler.
+capture-plan-covered = Plan { $plan } : { $covered } des { $total } étapes capturées
+capture-nothing-new = Aucune étape non vérifiée n’a été capturée : rien de nouveau à signaler.
 # $covered and $total count the meter's steps that hardware hasn't confirmed
 # yet; $meter is its name, e.g. UNI-T UT61E+.
-capture-covered = { $covered } sur { $total } étapes non vérifiées couvertes pour le multimètre { $meter }.
+capture-covered = Étapes non vérifiées couvertes pour le multimètre { $meter } : { $covered } sur { $total }.
 # $resume is the key that resumes, r (capture-resume-prompt).
 capture-not-finished = Capture inachevée : relancez la même commande et répondez { $resume } pour reprendre.
 # $flag is the option as typed, --steps <ids>.
@@ -377,7 +377,7 @@ capture-instructions-next = Traduisez-les, puis lancez : { $command }
 capture-instructions-changed = Ces étapes ont changé depuis l’export de { $path } et affichent votre traduction de leur ancien texte : { $steps }. Exportez un nouveau fichier pour voir le nouveau texte anglais.
 # One problem in the file, on a line of its own under
 # capture-error-instructions-unreadable. $line is a line number.
-capture-instructions-problem-syntax = ligne { $line } : pas un identifiant d’étape suivi de « = » et de son texte
+capture-instructions-problem-syntax = ligne { $line } : un identifiant d’étape suivi de « = » et de son texte est attendu
 # Another problem. $id is a step id, e.g. dcv.
 capture-instructions-problem-not-text = { $id } : le texte contient des accolades, supprimez-les
 # Another problem. $id is a step id, e.g. dcv.
@@ -406,4 +406,4 @@ capture-error-instructions-device = { $path } contient les instructions de l’a
 # The --instructions file names steps this run doesn't have, most likely a
 # step id that was translated. $path is the file; $ids the ids not found,
 # e.g. "vcc, retencao"; $known the ids the run has, e.g. "dcv, acv, hold".
-capture-error-instructions-ids = { $path } nomme des étapes absentes de cette exécution : { $ids }. Gardez chaque identifiant d’étape tel qu’il a été exporté. Étapes disponibles : { $known }.
+capture-error-instructions-ids = { $path } mentionne des étapes absentes de cette exécution : { $ids }. Gardez chaque identifiant d’étape tel qu’il a été exporté. Étapes disponibles : { $known }.

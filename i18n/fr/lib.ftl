@@ -506,8 +506,8 @@ model-mock-zt-5b = ZT-5B simulé
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 activation-bm52x =
     1. Fixez le câble BU-86X sur le port optique PC-Comm à l’arrière du multimètre et branchez-le
-    2. Allumez le multimètre sur une fonction de tension
-    Remarque : le multimètre s’éteint après environ 17 minutes d’inactivité sur un BM869s ou un BM867s, 30 minutes sur les autres. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver cet arrêt.
+    2. Allumez le multimètre en position tension
+    Remarque : le multimètre s’éteint après environ 17 minutes d’inactivité sur un BM869s ou un BM867s, 30 minutes sur les autres. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver l’arrêt automatique.
 # Used by: UT8802, UT8803
 activation-ut8802 =
     1. Branchez le câble USB sur le multimètre
@@ -527,7 +527,7 @@ activation-ut181a =
 activation-ut71ab =
     1. Branchez le câble USB sur le multimètre
     2. Allumez le multimètre
-    3. Maintenez la touche MAX MIN enfoncée pendant 1 s, ou appuyez sur SEND sur un UT71A : l’écran affiche SEND
+    3. Maintenez la touche MAX MIN enfoncée pendant 1 s ou, sur un UT71A, appuyez sur SEND : l’écran affiche SEND
     Remarque : la touche EXIT désactive SEND.
 # Used by: UT803
 activation-ut803 =
@@ -547,90 +547,90 @@ activation-vc650bt =
     3. Appuyez sur le bouton PC du multimètre
 # Used by: BM788BT/BM787BT
 activation-bm78xbt =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Tournez le commutateur rotatif sur n’importe quelle fonction sauf Auto V/LoZ
     3. Maintenez la touche Δ enfoncée pendant au moins une seconde, jusqu’à ce que ((D)) s’affiche à l’écran
-    Remarque : le multimètre s’éteint après 15 à 30 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver cet arrêt (dSAPO s’affiche).
+    Remarque : le multimètre s’éteint après 15 à 30 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver l’arrêt automatique (dSAPO s’affiche).
     Si le multimètre est introuvable ou si son mot de passe de connexion a été modifié, maintenez la touche Hz enfoncée en tournant le commutateur de OFF à la position capacité en moins de 0.6 s : le multimètre affiche « Org », et son mot de passe de connexion et son nom Bluetooth reviennent aux réglages d’usine.
 # Used by: OW69B
 activation-ow69b =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche < enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
 # Used by: OW67B
 activation-ow67b =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche < enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
     Remarque : le Bluetooth se désactive après 5 minutes d’inactivité. Maintenez de nouveau la touche < enfoncée pour le réactiver.
 # Used by: VC915, VC925 PV
 activation-vc915 =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez le bouton BLE enfoncé pendant environ 2 secondes, jusqu’à ce que le multimètre émette un bip sonore et que le symbole Bluetooth s’affiche
 # Used by: VC871, VC891
 activation-vc871 =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez le bouton BLE enfoncé pendant environ 2 secondes, jusqu’à ce que le multimètre émette un bip sonore et que le symbole Bluetooth s’affiche en haut à gauche
     Remarque : le Bluetooth est désactivé à chaque mise en marche du multimètre. Maintenez alors de nouveau le bouton BLE enfoncé.
 # Used by: OW18B/OW16B, OW18E
 activation-ow18b =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche Hz/Duty△/ᛒ enfoncée jusqu’à ce que l’icône ᛒ s’affiche
-    Remarque : le Bluetooth se désactive après 10 minutes d’inactivité, après deux bips sonores. Maintenez de nouveau la touche Hz/Duty△/ᛒ enfoncée pour le réactiver.
+    Remarque : après 10 minutes d’inactivité, le multimètre émet deux bips sonores et le Bluetooth se désactive. Maintenez de nouveau la touche Hz/Duty△/ᛒ enfoncée pour le réactiver.
 # Used by: OW65B
 activation-ow65b =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche SETUP enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
     Remarque : maintenez de nouveau la touche SETUP enfoncée pour désactiver le Bluetooth.
 # Used by: CMS061, CMS101
 activation-cms061 =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche Tab⇌ enfoncée (BLE inscrit au-dessus) jusqu’à ce que l’icône Bluetooth s’affiche
     Remarque : le multimètre ne s’éteint pas de lui-même tant que le Bluetooth est activé.
 # Used by: CM2100B
 activation-cm2100b =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche ZERO/ᛒ enfoncée pendant environ 2 secondes, jusqu’à ce que l’icône ᛒ s’affiche en haut à gauche de l’écran
-    Remarque : le Bluetooth se désactive après 5 minutes d’inactivité, ou quand la touche ZERO/ᛒ est de nouveau maintenue enfoncée. Le multimètre s’éteint après environ 15 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver cet arrêt jusqu’à sa prochaine mise hors tension.
+    Remarque : le Bluetooth se désactive après 5 minutes d’inactivité, ou quand vous maintenez de nouveau la touche ZERO/ᛒ enfoncée. Le multimètre s’éteint après environ 15 minutes d’inactivité. Maintenez la touche SELECT enfoncée en allumant le multimètre pour désactiver l’arrêt automatique jusqu’à la prochaine mise hors tension.
 # Used by: B33
 activation-b33 =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche △/ᛒ enfoncée jusqu’à ce que l’icône ᛒ s’affiche
-    Remarque : le Bluetooth se désactive après 10 minutes d’inactivité, après deux bips sonores, et à la fin d’un enregistrement hors ligne. Maintenez de nouveau la touche △/ᛒ enfoncée pour le réactiver.
+    Remarque : après 10 minutes d’inactivité, le multimètre émet deux bips sonores et le Bluetooth se désactive. Le Bluetooth se désactive aussi à la fin d’un enregistrement hors ligne. Maintenez de nouveau la touche △/ᛒ enfoncée pour le réactiver.
 # Used by: B35T+, B41T+
 activation-b35t-plus =
-    1. Déconnectez le multimètre de toute application pour téléphone
+    1. Déconnectez le multimètre de toute application mobile
     2. Allumez le multimètre
     3. Maintenez la touche △/ᛒ enfoncée jusqu’à ce que l’icône ᛒ s’affiche
-    Remarque : le Bluetooth se désactive après 10 minutes d’inactivité, après deux bips sonores. Maintenez de nouveau la touche △/ᛒ enfoncée pour le réactiver.
+    Remarque : après 10 minutes d’inactivité, le multimètre émet deux bips sonores et le Bluetooth se désactive. Maintenez de nouveau la touche △/ᛒ enfoncée pour le réactiver.
 # Used by: ZT-5B
 activation-zt5b =
     1. Maintenez le bouton rouge enfoncé pendant 2 secondes pour allumer le multimètre
     2. Appuyez brièvement sur le bouton rouge : le symbole Bluetooth s’affiche
-    Remarque : le multimètre s’éteint après 15 minutes d’inactivité. Appuyez sur NCV avant d’allumer le multimètre pour désactiver cet arrêt.
+    Remarque : le multimètre s’éteint après 15 minutes d’inactivité. Appuyez sur NCV avant d’allumer le multimètre pour désactiver l’arrêt automatique.
 # Used by: UT161B, UT161D, UT161E, UT61B+, UT61D+, UT61E+
 activation-ut161b =
     1. Insérez le module USB dans le multimètre
     2. Allumez le multimètre
     3. Appuyez longuement sur le bouton USB/Hz
-    4. L’icône S apparaît sur l’écran LCD
+    4. L’icône S s’affiche à l’écran LCD
 # Used by: 121GW
 activation-121gw =
     1. Tournez le commutateur rotatif sur n’importe quelle fonction
     2. Maintenez la touche 1ms PEAK enfoncée jusqu’à ce que BT s’affiche à l’écran
-    Remarque : le multimètre s’éteint après 30 minutes. Réglez APO.oF dans SETUP pour désactiver cet arrêt.
+    Remarque : le multimètre s’éteint après 30 minutes. Réglez APO.oF dans SETUP pour désactiver l’arrêt automatique.
 # Used by: ZT-300AB
 activation-zt300ab =
     1. Allumez le multimètre
     2. Maintenez le bouton Hz% enfoncé pendant 2 secondes : le symbole Bluetooth s’affiche
-    Remarque : le multimètre s’éteint après 15 minutes d’inactivité. Maintenez la touche SEL enfoncée en allumant le multimètre pour désactiver cet arrêt.
+    Remarque : le multimètre s’éteint après 15 minutes d’inactivité. Maintenez la touche SEL enfoncée en allumant le multimètre pour désactiver l’arrêt automatique.
 # Used by: UT60BT
 activation-ut60bt =
     1. Allumez le multimètre
@@ -639,12 +639,12 @@ activation-ut60bt =
 activation-zt5566se =
     1. Allumez le multimètre
     2. Appuyez sur POWER pour activer le Bluetooth : le symbole Bluetooth clignote
-    Remarque : le manuel ne documente le Bluetooth que pour son haut-parleur. Les mesures transmises par ce biais ne sont pas vérifiées.
+    Remarque : le manuel ne décrit le Bluetooth que pour le haut-parleur du multimètre. Les mesures transmises par ce biais ne sont pas vérifiées.
 # Used by: ZT-5BQ
 activation-zt5bq =
     1. Allumez le multimètre
     2. Appuyez simultanément sur Power et Hz : le symbole Bluetooth s’affiche
-    Remarque : le multimètre s’éteint après 15 minutes d’inactivité. Maintenez la touche Hz/NCV enfoncée en allumant le multimètre pour désactiver cet arrêt.
+    Remarque : le multimètre s’éteint après 15 minutes d’inactivité. Maintenez la touche Hz/NCV enfoncée en allumant le multimètre pour désactiver l’arrêt automatique.
 # Used by: UT202BT
 activation-ut202bt =
     1. Allumez le multimètre
@@ -773,9 +773,9 @@ table-k-transistor = K. Transistor
 # Used by: UT804
 table-l-4-20-ma-loop-current = L. Courant de boucle 4~20 mA
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-line-level-frequency-hz = Fréquence au niveau secteur (~Hz)
+table-line-level-frequency-hz = Fréquence de niveau secteur (~Hz)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
-table-logic-level-frequency-hz-duty-cycle = Fréquence au niveau logique (⎍Hz) et rapport cyclique (D%)
+table-logic-level-frequency-hz-duty-cycle = Fréquence de niveau logique (⎍Hz) et rapport cyclique (D%)
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 table-non-contact-ef-detection = Détection EF sans contact
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
@@ -936,7 +936,7 @@ note-400ohm-accuracy-plus-test-lead-open = 400Ω : précision + valeur des cord
 note-40nf-accuracy-plus-open-circuit-test = 40nF : précision + capacité des cordons de mesure en circuit ouvert
 # Used by: UT804
 # In: L. 4~20 mA loop current
-note-4ma-shows-0-pct-20ma-shows = 4mA affiche 0%, 20mA affiche 100%
+note-4ma-shows-0-pct-20ma-shows = À 4mA, l’écran affiche 0% ; à 20mA, 100%
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Capacitance
 note-6-000mf-manual-range-not-specified = 6.000mF, plage manuelle : non spécifié en dessous de 0.54mF
@@ -978,7 +978,7 @@ note-9-999v-1khz-20khz-specified-for = 9.999V, 1kHz ~ 20kHz : spécifié pour 1
 note-9-999v-3khz-20khz-specified-for = 9.999V, 3kHz ~ 20kHz : spécifié pour 3kHz ~ 15kHz uniquement
 # Used by: UT804
 # In: L. 4~20 mA loop current
-note-4ma-shows-lo-20ma-shows-hi = <4mA affiche LO, >20mA affiche HI
+note-4ma-shows-lo-20ma-shows-hi = <4mA : l’écran affiche LO ; >20mA : HI
 # Used by: 7 meters
 # In: AC Current; DC Current
 note-5a-max-10s-rest-15-min = >5A : 10s max., repos ≥15 min
@@ -1125,7 +1125,7 @@ note-frequency-response-40hz-1khz = Réponse en fréquence 40Hz–1kHz
 note-good-silicon-junction-0-5v-0 = Jonction silicium saine : 0.5V–0.8V
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-hold-sel-ncv-for-ncv = Appui long sur SEL/NCV pour la NCV
+note-hold-sel-ncv-for-ncv = Appui long sur SEL/NCV pour la fonction NCV
 # Used by: UT181A
 # In: (8) Conductance
 note-humidity-50-pct = Humidité <50%
@@ -1182,7 +1182,7 @@ note-input-at-zero-dc-level-50mhz = Entrée à niveau DC nul ; >50MHz non spéc
 note-k-type-thermocouple-only = Thermocouple de type K uniquement
 # Used by: UT181A
 # In: (10) Temperature
-note-k-type-thermocouple-two-channels-via = Thermocouple de type K ; deux voies par les connecteurs de température
+note-k-type-thermocouple-two-channels-via = Thermocouple de type K ; deux voies sur les connecteurs de température
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: AutoCheck™ (DCV)
 note-lo-z-threshold-plus-1-5vdc = Seuil Lo-Z : > +1.5VDC ou < -1.0VDC nominal
@@ -1257,7 +1257,7 @@ note-open-circuit-residual-5-digits = Circuit ouvert : résidu ≤5 points
 note-over-2a-measure-for-less-than = Au-delà de 2A : mesurez pendant moins de 3s
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: dBm
-note-range-accuracy-depend-on-acmv-acv = La plage et la précision dépendent de ACmV/ACV et de l’impédance de référence
+note-range-accuracy-depend-on-acmv-acv = La plage et la précision dépendent de la fonction ACmV/ACV et de l’impédance de référence
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Capacitance
 note-ranges-2-2uf-add-10-digits = Plages ≤2.2µF : ajoutez 10 points quand la précision est ≤3%
@@ -1269,19 +1269,19 @@ note-reading-for-reference-only = Mesure à titre de référence uniquement
 note-record-specified-accuracy-adds-10-digits = Enregistrement : précision spécifiée + 10 points pour les variations > 100 ms
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-a-ma-picks = Cordon rouge dans A mA : sélectionne le courant
+note-red-lead-in-a-ma-picks = Cordon rouge sur la borne A mA : sélectionne le courant
 # Used by: Mock ZT-5B, ZT-5B
 # In: Auto
-note-red-lead-in-vohm-picks-v = Cordon rouge dans VΩ : sélectionne V au-dessus de 0.8V, sinon Ω
+note-red-lead-in-vohm-picks-v = Cordon rouge sur la borne VΩ : sélectionne V au-dessus de 0.8V, sinon Ω
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s
 # In: Audible Continuity Tester
 note-response-time-100us = Temps de réponse < 100µs
 # Used by: UT161B, UT161D, UT61B+, UT61D+
 # In: Capacitance
-note-result-reading-open-lead-capacitance-1uf = Résultat = mesure − capacité des cordons ouverts ; ≤1µF : utilisez REL
+note-result-reading-open-lead-capacitance-1uf = Résultat = mesure − capacité des cordons en circuit ouvert ; ≤1µF : utilisez REL
 # Used by: Mock UT61E+, UT161E, UT61E+
 # In: Capacitance
-note-result-reading-open-lead-capacitance-22nf = Résultat = mesure − capacité des cordons ouverts ; ≤22nF : utilisez REL
+note-result-reading-open-lead-capacitance-22nf = Résultat = mesure − capacité des cordons en circuit ouvert ; ≤22nF : utilisez REL
 # Used by: 7 meters
 # In: Resistance
 note-result-reading-shorted-lead-resistance = Résultat = mesure − résistance des cordons court-circuités

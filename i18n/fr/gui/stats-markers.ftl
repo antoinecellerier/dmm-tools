@@ -47,7 +47,7 @@ stats-gaps =
         [one] ⚠ { $count } interruption >{ $limit }s ignorée
        *[other] ⚠ { $count } interruptions >{ $limit }s ignorées
     }
-    .hover = Les périodes de plus de { $limit } s sans mesure ne sont pas intégrées : 5 intervalles d’échantillonnage, et au moins 2 s. L’intégrale est partielle.
+    .hover = Les périodes de plus de { $limit } s sans mesure (5 intervalles d’échantillonnage, 2 s au minimum) ne sont pas intégrées. L’intégrale est partielle.
 # While the Alarm row under the reading has limits set: how many times the
 # reading went past each. $limits is both while there is a high and a low
 # limit, high or low while there is only that one; $high and $low are the
