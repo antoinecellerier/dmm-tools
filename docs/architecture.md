@@ -349,6 +349,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `protocol/framing.rs` | The shared read loop and the frame shapes several families send |
 | `protocol/cycle.rs` | Reaching a mode, range or flag by pressing a button and reading back |
 | `protocol/unrecognised.rs` | `report_unknown()`, once per process |
+| `protocol/capture_step.rs` | `CaptureStep` and `Need`: what a capture step asks the user to set up |
 | `protocol/expect.rs` | `Expect`: what a correct reading looks like after a capture step |
 | `protocol/steps.rs` | The gate capture steps every family starts with |
 | `detect.rs` | The detection engine behind `auto` |
