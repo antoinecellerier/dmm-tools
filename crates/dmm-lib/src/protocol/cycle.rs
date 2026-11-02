@@ -113,7 +113,7 @@ impl DialPosition {
     ///
     /// A table with two rings and no shared mode is a table bug — the second
     /// ring would be unreachable — which is why
-    /// [`assert_table_invariants`] checks for exactly one.
+    /// `assert_table_invariants` checks for exactly one.
     pub(crate) fn junction(&self) -> Option<u16> {
         let [first, second] = self.rings else {
             return None;

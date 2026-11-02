@@ -33,7 +33,7 @@ pub(crate) const NOTIFICATION_LEN: usize = INFO_LEN + 4 * READING_LEN;
 
 /// CRC-16/MODBUS, as r4 prints it in C (spec §4): start at 0xFFFF; XOR in
 /// each byte, then shift right 8 times, XOR-ing 0xA001 whenever bit 0 was
-/// set; no final XOR. A packet carries it over [2] up to the byte before
+/// set; no final XOR. A packet carries it over `[2]` up to the byte before
 /// it, low byte first (spec §4, §5).
 pub(crate) fn crc16(bytes: &[u8]) -> u16 {
     let mut crc = 0xFFFF_u16;
@@ -56,7 +56,7 @@ pub(crate) fn stored_crc(p: &[u8]) -> u16 {
     u16::from_le_bytes([p[at], p[at + 1]])
 }
 
-/// The CRC of a packet's [2] up to its stored CRC (spec §4).
+/// The CRC of a packet's `[2]` up to its stored CRC (spec §4).
 pub(crate) fn computed_crc(p: &[u8]) -> u16 {
     crc16(&p[2..p.len() - 4])
 }
@@ -137,7 +137,7 @@ pub(super) fn extract(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
 }
 
 /// The first CRC-valid reading packet anywhere in `buf` that says it is a
-/// meter's ([17] = `01`, spec §6.2), for detection.
+/// meter's (`[17]` = `01`, spec §6.2), for detection.
 pub(super) fn first_meter_reading(buf: &[u8]) -> Option<&[u8]> {
     buf.windows(READING_LEN)
         .find(|w| is_reading(w) && w[17] == 0x01)

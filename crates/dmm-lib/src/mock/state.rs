@@ -1,6 +1,6 @@
 //! What the mock's buttons change, and what that does to a reading.
 //!
-//! The scenario ([`super::scenarios`]) decides the raw value; everything
+//! The scenario ([`scenarios`](mod@super::scenarios)) decides the raw value; everything
 //! here is the meter's own doing — the display frozen by HOLD, the baseline
 //! REL subtracts, the rung RANGE stepped to, and the extremes MIN/MAX and
 //! Peak report instead of the live reading. Each press is modelled on the

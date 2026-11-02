@@ -5,7 +5,7 @@
 //! share the same acquisition logic. The interval means one thing for every
 //! meter — at most one reading per interval, a zero interval every reading
 //! the meter produces — and is met two ways, by the meter's
-//! [`Delivery`](crate::protocol::Delivery):
+//! [`Delivery`]:
 //!
 //! - **Polled**: the stream sleeps to each tick, then asks for a reading.
 //! - **Streamed**: the stream reads every frame as it arrives, so none waits

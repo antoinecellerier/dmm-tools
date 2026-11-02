@@ -199,7 +199,7 @@ macro_rules! prefixed {
 /// The index into [`UNITS`]' rows that has no prefix.
 const NO_PREFIX: usize = 3;
 
-/// r4's ten function units, [26], each with every prefix (spec §6.4).
+/// r4's ten function units, `[26]`, each with every prefix (spec §6.4).
 /// µ is U+00B5 and Ω U+03A9, the characters `transform::si_prefix` reads.
 const UNITS: [(u8, [&str; 7]); 10] = [
     (0x02, prefixed!("V")),
@@ -215,14 +215,14 @@ const UNITS: [(u8, [&str; 7]); 10] = [
     (0x4F, prefixed!("%")),
 ];
 
-/// The metric prefix [25] as an index into [`UNITS`]' rows: a signed power
+/// The metric prefix `[25]` as an index into [`UNITS`]' rows: a signed power
 /// of ten, −9 to 9 in steps of 3 (spec §6.3). `None` for anything else.
 pub(super) fn prefix_index(byte: u8) -> Option<usize> {
     let power = i8::from_le_bytes([byte]);
     (power % 3 == 0 && (-9..=9).contains(&power)).then(|| (power / 3 + 3) as usize)
 }
 
-/// The unit [26] names with the prefix at `prefix` (from [`prefix_index`],
+/// The unit `[26]` names with the prefix at `prefix` (from [`prefix_index`],
 /// or the unprefixed one). `None` for a unit code r4 does not list.
 pub(super) fn unit(code: u8, prefix: Option<usize>) -> Option<&'static str> {
     let (_, row) = UNITS.iter().find(|(c, _)| *c == code)?;

@@ -932,7 +932,7 @@ const SELECT_SETTLE_READS: usize = 3;
 
 /// Modes where a HOLD press (0x4A) leaves the flag where it was.
 ///
-/// [VERIFIED] on a UT61E+ (`ut61eplus-verify4.yaml`, step `ncv/hold:on`) and a
+/// `[VERIFIED]` on a UT61E+ (`ut61eplus-verify4.yaml`, step `ncv/hold:on`) and a
 /// UT61B+ (issue #19, same step): "HOLD did nothing in off". Everywhere else
 /// HOLD took, continuity, diode, capacitance, Hz, duty and AC+DC V included,
 /// and diode's frames carry the HOLD flag over an OL reading — so OL is no

@@ -5,7 +5,7 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// Device table for the UNI-T UT61B+ (and UT161B).
 ///
 /// 6,000-count (3¾ digit) model. Range values from the UT61+ Series User
-/// Manual. Ascending index order is [VERIFIED] at the rungs four UT61B+
+/// Manual. Ascending index order is `[VERIFIED]` at the rungs four UT61B+
 /// captures reached (2026-09-09 to 2026-09-11, issue #19): every Ω rung,
 /// every DC V rung, AC V 0 and 2, capacitance 0 and 5, both mV rung 0s, and
 /// µA, mA and A 0-1. The rungs left over sit *between* measured ends of an
@@ -113,7 +113,7 @@ impl Default for Ut61bPlusTable {
     }
 }
 
-/// Dial positions of the UT61B+/UT161B — [MANUAL], UT61+ Series User Manual
+/// Dial positions of the UT61B+/UT161B — `[MANUAL]`, UT61+ Series User Manual
 /// §VII "Function Dial" (printed page 9).
 ///
 /// Membership only: the driver presses until the target shows, so no ring

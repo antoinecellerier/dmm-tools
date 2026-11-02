@@ -659,8 +659,8 @@ fn secondary(
 }
 
 /// The annunciators that are flags (spec §5.1, §5.5, §6.1, §6.5). CREST
-/// shows its MAX or MIN beside [C] (BM860s manual p.12, BM820s manual
-/// p.13); [R] and [C] together are Recall on a logging model, which
+/// shows its MAX or MIN beside `[C]` (BM860s manual p.12, BM820s manual
+/// p.13); `[R]` and `[C]` together are Recall on a logging model, which
 /// `decode` reads first, and no state any other series' manual gives.
 fn flags(lit: Lit, report: &impl Fn(&'static str)) -> StatusFlags {
     let crest = lit.has(Ann::Crest);

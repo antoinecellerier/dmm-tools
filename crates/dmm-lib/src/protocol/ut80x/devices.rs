@@ -13,7 +13,7 @@ use crate::transport::ch9325;
 /// UT71 and Voltcraft VC9x0, which send the UT804's packets, are taken to use
 /// it too (docs/research/ut71/reverse-engineered-protocol.md §1). No
 /// Bluetooth: UNI-T's accessory page lists the UT71 for the UT-D07A only
-/// (https://meters.uni-trend.com/product/ut-d-series/, read 2026-09-22),
+/// (<https://meters.uni-trend.com/product/ut-d-series/>, read 2026-09-22),
 /// whose GATT layout we have not seen.
 const LINKS: &[&str] = &[ch9325::NAME];
 

@@ -38,7 +38,7 @@ ut61_family_factory!(new_ut202bt, "ut202bt");
 /// `docs/supported-devices.md`), and the CH9329 variant is confirmed on a
 /// UT61B+ (issue #19). The UT-D07B Bluetooth adapter names the UT61+ and
 /// UT161 series on UNI-T's accessory page
-/// (https://meters.uni-trend.com/product/ut-d-series/, read 2026-09-22).
+/// (<https://meters.uni-trend.com/product/ut-d-series/>, read 2026-09-22).
 /// The adapter is last: it is a transparent bridge, so any meter with the
 /// matching socket can sit behind it, but the cable is what is usually plugged
 /// in.

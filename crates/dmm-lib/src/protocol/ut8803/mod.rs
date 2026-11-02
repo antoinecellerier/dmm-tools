@@ -3,8 +3,12 @@
 //! Streaming protocol: the meter streams 21-byte measurement frames
 //! continuously at ~2-3 Hz, unprompted; the host sends nothing.
 //!
-//! Frame format: AB CD [byte2] 02 [mode] [range] [byte6] [display x5]
+//! Frame format:
+//!
+//! ```text
+//! AB CD [byte2] 02 [mode] [range] [byte6] [display x5]
 //!   [flags0 x2] [flags1 x2] [flags2 x2] [flags3] [chk_hi] [chk_lo]
+//! ```
 //!
 //! Based on reverse engineering of uci.dll (Ghidra decompilation).
 //! See docs/research/ut8803/reverse-engineered-protocol.md

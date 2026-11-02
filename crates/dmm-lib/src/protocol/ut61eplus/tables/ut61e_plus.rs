@@ -118,7 +118,7 @@ impl Default for Ut61ePlusTable {
     }
 }
 
-/// Dial positions of the UT61E+/UT161E — [MANUAL], UT61+ Series User Manual
+/// Dial positions of the UT61E+/UT161E — `[MANUAL]`, UT61+ Series User Manual
 /// §VII "Function Dial" (printed page 9).
 ///
 /// Membership only: the driver presses until the target shows, so no ring

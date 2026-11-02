@@ -13,7 +13,7 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// Does NOT have: hFE, LPF, AC+DC, Inrush.
 ///
 /// Range values from the UT61+ Series User Manual, range index
-/// ordering is [DEDUCED] (ascending assumed). No UT61D+ has been connected;
+/// ordering is `[DEDUCED]` (ascending assumed). No UT61D+ has been connected;
 /// the V tables follow the UT61B+, whose bottom rung was verified by a
 /// capture on 2026-09-09 — see issue #7.
 pub struct Ut61dPlusTable {
@@ -115,7 +115,7 @@ impl Default for Ut61dPlusTable {
     }
 }
 
-/// Dial positions of the UT61D+/UT161D — [MANUAL], UT61+ Series User Manual
+/// Dial positions of the UT61D+/UT161D — `[MANUAL]`, UT61+ Series User Manual
 /// §VII "Function Dial" (printed page 9), plus §11 for the temperature pair
 /// ("Short press the SELECT button to switch between °C and °F").
 ///

@@ -11,7 +11,7 @@ use crate::transport::{ch9329, cp2110};
 /// covers the UT171x and the CH9329 variant is sold for the UT171 series (the
 /// cable table in `docs/supported-devices.md`); the UT-D07B Bluetooth adapter
 /// names the UT171 series on UNI-T's accessory page
-/// (https://meters.uni-trend.com/product/ut-d-series/, read 2026-09-22).
+/// (<https://meters.uni-trend.com/product/ut-d-series/>, read 2026-09-22).
 /// The adapter is last: it is a transparent bridge, so any meter with the
 /// matching socket can sit behind it, but the cable is what is usually plugged
 /// in.

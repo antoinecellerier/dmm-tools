@@ -127,7 +127,7 @@ fn range_table(function: u8) -> &'static [RangeEntry] {
 }
 
 /// The dial, position by position, and the functions SHIFT/SETUP reaches on
-/// each -- [MANUAL], no hardware has confirmed it.
+/// each -- `[MANUAL]`, no hardware has confirmed it.
 ///
 /// From the "Drehschalter (4)" figure on printed page 10 of the VC880 manual
 /// (the red symbols beside a position are its SHIFT/SETUP sub-functions, §3)
@@ -259,14 +259,17 @@ fn report_unrecognised_results(cmd: u8, drained: &[u8]) {
 /// What the shared Voltcraft driver needs to speak VC-880.
 ///
 /// Live data payload — everything between the length byte and the checksum:
-///   payload[0]  = type byte (0x01, already filtered by the accept fn)
-///   payload[1]  = function code (0x00-0x12)
-///   payload[2]  = range byte (0x30-based ASCII)
-///   payload[3..10]  = main display value (7 ASCII bytes)
-///   payload[10..17] = sub display 1 (7 ASCII bytes)
-///   payload[17..24] = sub display 2 (7 ASCII bytes)
-///   payload[24..27] = bar graph / sub display 3 (3 bytes)
-///   payload[27..34] = status flag bytes (7 bytes)
+///
+/// ```text
+/// payload[0]  = type byte (0x01, already filtered by the accept fn)
+/// payload[1]  = function code (0x00-0x12)
+/// payload[2]  = range byte (0x30-based ASCII)
+/// payload[3..10]  = main display value (7 ASCII bytes)
+/// payload[10..17] = sub display 1 (7 ASCII bytes)
+/// payload[17..24] = sub display 2 (7 ASCII bytes)
+/// payload[24..27] = bar graph / sub display 3 (3 bytes)
+/// payload[27..34] = status flag bytes (7 bytes)
+/// ```
 pub(crate) struct Vc880Model;
 
 impl Vc8x0Model for Vc880Model {
@@ -308,7 +311,7 @@ impl Vc8x0Model for Vc880Model {
         flags.low_battery = status[3] & 0x08 != 0;
     }
 
-    /// Status byte 6 (payload[33]) bit 1: Setup (spec §4.3).
+    /// Status byte 6 (`payload[33]`) bit 1: Setup (spec §4.3).
     fn setup_screen(status: &[u8]) -> bool {
         status[6] & 0x02 != 0
     }

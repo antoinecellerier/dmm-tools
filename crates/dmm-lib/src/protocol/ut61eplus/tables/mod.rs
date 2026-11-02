@@ -122,7 +122,7 @@ pub trait DeviceTable: Send {
 
 /// Modes where the RANGE button (0x46) does nothing on any model of the family.
 ///
-/// [VERIFIED] on two meters: a RANGE press left a UT61E+ in Auto in both
+/// `[VERIFIED]` on two meters: a RANGE press left a UT61E+ in Auto in both
 /// (`ut61eplus-verify4.yaml`, steps `capacitance/range:22nF` and
 /// `hz/range:22Hz`) and a UT61B+ likewise (issue #19, the same steps at 60nF
 /// and 60Hz). The tables still name these modes' rungs — auto-ranging reaches

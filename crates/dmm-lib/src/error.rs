@@ -264,10 +264,10 @@ impl Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Coarse classification of an [`Error`] for consumers that need to branch
+/// Coarse classification of an [`Error`](enum@Error) for consumers that need to branch
 /// on the failure category without matching every variant. Small and
 /// `Copy` so it can be sent across channels or stored in UI state without
-/// moving the underlying [`Error`].
+/// moving the underlying [`Error`](enum@Error).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     /// USB adapter not found on the bus (unplugged, permissions, wrong VID/PID).

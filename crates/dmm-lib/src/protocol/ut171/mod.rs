@@ -172,7 +172,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 /// range byte is >= 2 and again when >= 5 — i.e. ranges 2-4 read in kΩ
 /// and 5-6 in MΩ. We keep the wire value and put the magnitude in the
 /// unit instead. Scaling for other modes (capacitance, conductance) is
-/// [UNVERIFIED]; they keep the base unit.
+/// `[UNVERIFIED]`; they keep the base unit.
 fn display_unit(mode_byte: u8, range_byte: u8, base_unit: &'static str) -> &'static str {
     match (mode_byte, range_byte) {
         (0x0A, 2..=4) => "kΩ",
@@ -483,7 +483,7 @@ fn report_float(what: &'static str, bytes: [u8; 4], mode_byte: u8) {
 /// - byte 3:   mode byte
 /// - byte 4:   range byte (raw, 1-based)
 /// - bytes 5-8: main value (float32 LE)
-/// - byte 9:   status2 (0x40=DC, 0x20=AC — capture-deduced, [UNVERIFIED])
+/// - byte 9:   status2 (0x40=DC, 0x20=AC — capture-deduced, `[UNVERIFIED]`)
 /// - byte 10:  unknown
 /// - bytes 11-14: aux value (float32 LE)
 /// - extended frames continue with a third float at bytes 17-20 (unparsed)

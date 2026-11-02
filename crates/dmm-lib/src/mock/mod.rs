@@ -8,7 +8,7 @@
 //! and a fresh frame being the next synthesised reading. Only the mode
 //! selector is its own (see [`MockProtocol::mode_choices`]).
 //!
-//! [`scenarios`] holds what it measures, [`state`] what its buttons do.
+//! [`scenarios`](mod@scenarios) holds what it measures, [`state`] what its buttons do.
 
 pub(crate) mod devices;
 mod scenarios;

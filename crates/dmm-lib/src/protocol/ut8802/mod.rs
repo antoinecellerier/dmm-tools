@@ -3,7 +3,7 @@
 //! Streaming protocol: the host sends nothing after CP2110 init, and the
 //! meter streams 8-byte measurement frames continuously.
 //!
-//! Frame format: AC [position] [d1d2] [d3d4] [d5xx] [dp+flags] [status] [sign]
+//! Frame format: `AC [position] [d1d2] [d3d4] [d5xx] [dp+flags] [status] [sign]`
 //!
 //! Key difference from UT8803: single-byte 0xAC header, BCD-encoded display,
 //! combined position codes (function + range), no checksum.

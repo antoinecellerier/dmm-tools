@@ -62,7 +62,7 @@ const FLAG_CONFIRM_READS: usize = 3;
 /// SET_MODE (opcode 0x01) carrying `word` as uint16 LE.
 ///
 /// See docs/research/ut181/reverse-engineered-protocol.md
-/// §6.1 Mode switching (SET_MODE) -- [VENDOR].
+/// §6.1 Mode switching (SET_MODE) -- `[VENDOR]`.
 pub(super) fn build_set_mode(word: u16) -> Vec<u8> {
     let [lo, hi] = word.to_le_bytes();
     build_command(&[0x01, lo, hi])
@@ -155,7 +155,7 @@ impl Ut181aProtocol {
     /// where the vendor app enables it (`mode::rel_supported`); MIN/MAX is
     /// SET_MIN_MAX's on/off byte, not the MAX/MIN ring the cycling meters
     /// walk, and a Peak variant refuses it (`mode::is_peak`). Peak is a mode
-    /// variant on this meter, reached through [`Setting::Mode`], so it is not
+    /// variant on this meter, reached through [`Setting::Mode`](crate::protocol::Setting::Mode), so it is not
     /// offered here.
     pub(super) fn flag_states(setting: FlagSetting, mode: u16) -> &'static [u16] {
         match setting {

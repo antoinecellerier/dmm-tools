@@ -16,7 +16,7 @@ const PACKET_LEN: usize = 32;
 /// Arg0-13, bytes 14-27 (§5).
 const ARGS: std::ops::Range<usize> = 14..28;
 /// A command's and a response's first four bytes: head, `01`, length 32,
-/// packet type [3] (§4, §5).
+/// packet type `[3]` (§4, §5).
 const COMMAND_HEAD: [u8; 4] = [0xFF, 0x01, 0x20, 0x01];
 const RESPONSE_HEAD: [u8; 4] = [0xFF, 0x01, 0x20, 0x02];
 
@@ -70,7 +70,7 @@ enum Reply {
 }
 
 /// A command packet (§5): protocol version `01`, `code` low byte first in
-/// [11..13], [13] = `01`, `args` from Arg0 (the rest `00`), then sealed.
+/// `[11..13]`, `[13]` = `01`, `args` from Arg0 (the rest `00`), then sealed.
 fn command(mac: Mac, code: u16, args: &[u8]) -> [u8; PACKET_LEN] {
     let mut packet = [0u8; PACKET_LEN];
     packet[..4].copy_from_slice(&COMMAND_HEAD);

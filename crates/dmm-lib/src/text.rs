@@ -12,7 +12,7 @@
 //! and lists the pattern, so an app can translate the word once rather than
 //! every combination.
 //!
-//! [`all_texts`] lists every such string, for the app side to keep its
+//! `all_texts` lists every such string, for the app side to keep its
 //! translation catalogue complete. Fallbacks the library builds from bytes it
 //! did not recognise (`Unknown(0x..)`, `range 3`) are not listed: they stay
 //! English, as a diagnostic.

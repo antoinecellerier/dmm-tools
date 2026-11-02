@@ -7,7 +7,7 @@
 //!
 //! Every word here is traced from the vendor app: see
 //! `docs/research/ut181/reverse-engineered-protocol.md`
-//! §6.1 Mode switching (SET_MODE) -- [VENDOR]. A real meter has since sent 58
+//! §6.1 Mode switching (SET_MODE) -- `[VENDOR]`. A real meter has since sent 58
 //! of them and taken SET_MODE and SET_RANGE within a family (§6, §7).
 
 use super::parse::{decode_mode_word, lookup_range_label};

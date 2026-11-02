@@ -60,7 +60,7 @@ pub(super) const SHIPPED: &[Language] = &[
     },
 ];
 
-/// The shipped languages, plus any [`L10N_DIR_VAR`] holds a folder for.
+/// The shipped languages, plus any [`L10N_DIR_VAR`](super::L10N_DIR_VAR) holds a folder for.
 ///
 /// Built once: the variable is read at the first call, as a translator
 /// sets it before starting the app.

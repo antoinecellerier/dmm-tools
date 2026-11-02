@@ -94,14 +94,14 @@ fn check(p: &[u8], what: &str, is_packet: fn(&[u8]) -> bool) -> Result<()> {
     ))
 }
 
-/// Flag0 [14] (spec §6.6).
+/// Flag0 `[14]` (spec §6.6).
 const CREST: u8 = 0x80;
 const REL: u8 = 0x40;
 const HOLD: u8 = 0x20;
 const AUTO_RANGE: u8 = 0x10;
 const AUTO_HOLD: u8 = 0x08;
 const ASCII: u8 = 0x04;
-/// Flag1 [15] (spec §6.6).
+/// Flag1 `[15]` (spec §6.6).
 const SIGN: u8 = 0x40;
 const OL: u8 = 0x20;
 const RECORD: u8 = 0x10;

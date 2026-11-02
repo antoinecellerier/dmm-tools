@@ -19,8 +19,8 @@ const LINKS: &[&str] = &[crate::BLUETOOTH];
 /// "BDM" is the default name every manual's app pairs with (spec §2); a
 /// B41T+ also gives "LILLIPUT" as its GAP device name, and a B35T+ showed
 /// as "Lilliput" on Windows (spec §14.4). The owner can rename a meter
-/// (spec §7.2); a renamed one opens with `--device <id> --adapter
-/// <address>`.
+/// (spec §7.2); a renamed one opens with
+/// `--device <id> --adapter <address>`.
 const NAMES: &[&str] = &["BDM", "LILLIPUT"];
 
 /// The 15-byte OWON meters' manuals show "BDM" in the app's list (spec §2).

@@ -194,7 +194,7 @@ fn range_table(function: u8) -> &'static [RangeEntry] {
 }
 
 /// The dial, position by position, and the functions SHIFT/SETUP reaches on
-/// each -- [MANUAL], no hardware has confirmed it.
+/// each -- `[MANUAL]`, no hardware has confirmed it.
 ///
 /// From Fig. 1 on printed page 54 of the English VC-890 operating
 /// instructions (the red symbols beside a position are its SHIFT/SETUP
@@ -285,26 +285,29 @@ const SETTLE: Settle = Settle {
 /// What the shared Voltcraft driver needs to speak VC-890.
 ///
 /// Live data payload (from VC890Reading.SetReadingValue + SetStatus):
-///   payload[0]     = type byte (0x01)
-///   payload[1]     = function code (0x00-0x12)
-///   payload[2]     = range byte (0x30-based)
-///   payload[3..10] = value 1: main display (7 ASCII bytes)
-///   payload[10..18]= value 2: sub display (8 ASCII bytes)
-///   payload[18..28]= value 3: (10 bytes)
-///   payload[28..36]= value 4: (8 bytes)
-///   payload[36..44]= value 5: (8 bytes)
-///   payload[44..47]= second freq unit (3 bytes)
-///   payload[47..51]= value 6: (4 bytes)
-///   payload[51..53]= bar graph (2 bytes)
-///   payload[53]    = status 0: COMP_Max(0), COMP_Min(1), Sign1(2), Sign2(3)
-///   payload[54]    = status 1: Rel(0), Avg(1), Min(2), Max(3)
-///   payload[55]    = status 2: Hold(0), Manual(1), OL1(2), OL2(3)
-///   payload[56]    = status 3: AutoPower(0), Warning(1), Loz(2), Void(3)
-///   payload[57]    = status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
-///   payload[58]    = status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
-///   payload[59]    = battery level (low nibble)
-///   payload[60]    = misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
-///     3=V err — DMSShare_decompiled.cs:23649-23665)
+///
+/// ```text
+/// payload[0]     = type byte (0x01)
+/// payload[1]     = function code (0x00-0x12)
+/// payload[2]     = range byte (0x30-based)
+/// payload[3..10] = value 1: main display (7 ASCII bytes)
+/// payload[10..18]= value 2: sub display (8 ASCII bytes)
+/// payload[18..28]= value 3: (10 bytes)
+/// payload[28..36]= value 4: (8 bytes)
+/// payload[36..44]= value 5: (8 bytes)
+/// payload[44..47]= second freq unit (3 bytes)
+/// payload[47..51]= value 6: (4 bytes)
+/// payload[51..53]= bar graph (2 bytes)
+/// payload[53]    = status 0: COMP_Max(0), COMP_Min(1), Sign1(2), Sign2(3)
+/// payload[54]    = status 1: Rel(0), Avg(1), Min(2), Max(3)
+/// payload[55]    = status 2: Hold(0), Manual(1), OL1(2), OL2(3)
+/// payload[56]    = status 3: AutoPower(0), Warning(1), Loz(2), Void(3)
+/// payload[57]    = status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
+/// payload[58]    = status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
+/// payload[59]    = battery level (low nibble)
+/// payload[60]    = misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
+///   3=V err — DMSShare_decompiled.cs:23649-23665)
+/// ```
 pub(crate) struct Vc890Model;
 
 impl Vc8x0Model for Vc890Model {

@@ -7,7 +7,7 @@
 //! `docs/localization-design.md`.
 //!
 //! - Resources live in `i18n/<locale>/` at the workspace root, `en-US` being
-//!   the reference, and are compiled in with [`ftl!`], each binary taking only
+//!   the reference, and are compiled in with [`ftl!`](crate::ftl!), each binary taking only
 //!   the files it shows.
 //! - A [`Localizer`] is a handle, not a global: the GUI keeps one in its app
 //!   state and swaps it when the language changes, the CLI builds one at
@@ -305,7 +305,7 @@ fn format<'b>(
     format_at(bundle, id, args, log::Level::Warn)
 }
 
-/// [`format`], logging a failure at `level`, once per id and process: a
+/// [`format`](fn@format), logging a failure at `level`, once per id and process: a
 /// message drawn every frame would otherwise flood the log.
 fn format_at<'b>(
     bundle: &'b FluentBundle<FluentResource>,

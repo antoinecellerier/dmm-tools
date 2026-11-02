@@ -18,7 +18,7 @@
 //! the binary words once clap has built the tree (dmm-cli's `help_layout`);
 //! help the binary builds at run time, translated where it is built; and
 //! clap's errors, worded where the binary prints them (`arg_errors`). The en-US file is generated from the tree by
-//! [`render`].
+//! `render`.
 
 use super::Localizer;
 use clap::builder::{PossibleValue, ValueParser};
@@ -29,7 +29,7 @@ use clap::{Arg, Command};
 /// the argument does (`ignore_case`). clap keeps the type behind the
 /// parser it holds, so only the binary, which knows it, can rebuild one
 /// (`PossibleValuesParser::new(values).try_map(…)`); `None` leaves the
-/// values' help English, which [`unmapped_values`] lets a test catch.
+/// values' help English, which `unmapped_values` lets a test catch.
 pub type ValuesParser<'a> = &'a dyn Fn(&str, Vec<PossibleValue>, bool) -> Option<ValueParser>;
 
 /// `cmd` with the help it carries in `l`'s language.
@@ -52,7 +52,7 @@ struct Walk<'a> {
     root: String,
     l: &'a Localizer,
     values: ValuesParser<'a>,
-    /// What [`unmapped_values`] reports.
+    /// What `unmapped_values` reports.
     unmapped: Vec<String>,
 }
 

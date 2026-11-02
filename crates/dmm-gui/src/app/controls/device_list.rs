@@ -205,7 +205,8 @@ impl DeviceListLayout {
 /// as many columns as the window has room for. Returns the id picked this
 /// frame, [`registry::AUTO_DEVICE_ID`] for Auto-detect.
 ///
-/// Keyboard as in every choice list ([`listbox_dropdown`]), plus Left/Right
+/// Keyboard as in every choice list ([`listbox_dropdown`](crate::listbox::listbox_dropdown)),
+/// plus Left/Right
 /// to the nearest entry of the next column over. The list's layout is worked
 /// out only while it is open: the closed box is drawn every frame the
 /// Settings panel is.
@@ -313,7 +314,8 @@ pub(super) fn device_dropdown(
 
 /// Left/Right in the open **Device** list: focus moves to the entry of the
 /// next column over nearest the focused one's height. Up/Down and the rest
-/// are [`navigate_choice_entries`]'s, run after this.
+/// are [`navigate_choice_entries`](crate::listbox::navigate_choice_entries)'s,
+/// run after this.
 fn navigate_columns(ctx: &egui::Context, entries: &[(egui::Response, Option<usize>)]) {
     let Some((focused, Some(column))) = entries
         .iter()

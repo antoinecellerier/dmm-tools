@@ -139,10 +139,10 @@ impl App {
         }
     }
 
-    /// Paint the big meter toggle button at a given rect (overlay, no layout impact).
-    /// Width the toggle drawn by [`show_big_meter_toggle_at`]
-    /// (Self::show_big_meter_toggle_at) covers at the right edge of the
-    /// controls row, so that row can keep its last chip clear of it.
+    /// Width the toggle drawn by
+    /// [`show_big_meter_toggle_at`](Self::show_big_meter_toggle_at) covers at
+    /// the right edge of the controls row, so that row can keep its last chip
+    /// clear of it.
     pub(crate) fn big_meter_toggle_width(ui: &Ui) -> f32 {
         // Both icons are the same glyph width; measure the one shown when
         // the toggle sits on the controls row.
@@ -165,6 +165,7 @@ impl App {
         RichText::new(icon).size(14.0)
     }
 
+    /// Paint the big meter toggle button at a given rect (overlay, no layout impact).
     pub(super) fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
         let icon = Self::big_meter_toggle_icon(self.big_meter_mode);
         let keys = Shortcut::CycleBigMeter.keys(ui.ctx(), &self.l10n);
