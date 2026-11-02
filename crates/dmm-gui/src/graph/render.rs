@@ -6,8 +6,8 @@ use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
-    AxisHints, GridInput, GridMark, HoverPosition, Line, Plot, PlotBounds, PlotPoint, PlotPoints,
-    PlotTransform, Points, Span, VLine,
+    AxisHints, GridInput, GridMark, Line, Plot, PlotBounds, PlotPoint, PlotPoints, PlotTransform,
+    Points, Span, VLine,
 };
 use std::cell::RefCell;
 use std::time::Instant;
@@ -611,104 +611,351 @@ pub(super) fn stacks_that_fit(mids: &[f32], height: f32, room: egui::Rangef) -> 
     kept
 }
 
-/// The value a drawn trace has at time `t`: its nearest point within the
-/// segment spanning `t`, or `None` in a break between segments.
-pub(super) fn trace_value_at(segments: &[Vec<[f64; 2]>], t: f64) -> Option<f64> {
-    let seg = segments
-        .iter()
-        .find(|s| s.first().is_some_and(|p| p[0] <= t) && s.last().is_some_and(|p| p[0] >= t))?;
-    let i = seg.partition_point(|p| p[0] < t);
-    let after = seg.get(i);
+/// The segment spanning time `t`, from segments in time order: found by
+/// its start, as the hover asks on every frame the pointer moves.
+fn segment_spanning(segments: &[Vec<[f64; 2]>], t: f64) -> Option<&[[f64; 2]]> {
+    let after = segments.partition_point(|s| s.first().is_none_or(|p| p[0] <= t));
+    let seg = segments.get(after.checked_sub(1)?)?;
+    seg.last()
+        .is_some_and(|p| p[0] >= t)
+        .then_some(seg.as_slice())
+}
+
+/// The reading of a drawn trace that answers for time `t`, as `[time,
+/// value]`: in the segment spanning `t`, the nearest one — or, for a trace
+/// drawn as steps, the level held at `t`, the last reading at or before it,
+/// placed at `t` where the step is. `None` in a break between segments.
+pub(super) fn reading_at(segments: &[Vec<[f64; 2]>], t: f64, stepped: bool) -> Option<[f64; 2]> {
+    let seg = segment_spanning(segments, t)?;
+    let i = seg.partition_point(|p| p[0] <= t);
     let before = i.checked_sub(1).and_then(|j| seg.get(j));
+    let after = seg.get(i);
     match (before, after) {
-        (Some(b), Some(a)) => Some(if t - b[0] <= a[0] - t { b[1] } else { a[1] }),
-        (Some(p), None) | (None, Some(p)) => Some(p[1]),
+        (Some(b), _) if stepped => Some([t, b[1]]),
+        (Some(b), Some(a)) => Some(if t - b[0] <= a[0] - t { *b } else { *a }),
+        (Some(p), None) | (None, Some(p)) => Some(*p),
         (None, None) => None,
     }
 }
 
-/// One series in the hover readout with right axes: its drawn segments,
-/// at their own values, and its unit.
+/// The reading the pointer at `pos` is on, as its time and its drawn height:
+/// among every drawn series, the line passing nearest the pointer on screen,
+/// if within `radius` points — between its readings too, as a steep stretch
+/// leaves them far apart — and on it, the reading nearest the pointer. The
+/// crosshair snaps onto a curve only when the pointer is on one, as
+/// egui_plot's did; away from the curves it stays with the pointer, so on a
+/// scrolling graph a still pointer keeps a still line. Only a reading in
+/// `view` is one to land on: a line crossing the plot from a reading beyond
+/// its edge snaps to its end in view, or not at all. `window` is the span of
+/// times within `radius` of the pointer, and `to_screen` places a time and a
+/// height on screen.
+pub(super) fn reading_near(
+    series: &[HoverSeries],
+    (lo, hi): (f64, f64),
+    (view_min, view_max): (f64, f64),
+    pos: egui::Pos2,
+    radius: f32,
+    to_screen: impl Fn(f64, f64) -> egui::Pos2,
+) -> Option<[f64; 2]> {
+    let mut best: Option<([f64; 2], f32)> = None;
+    for s in series {
+        let drawn = |p: [f64; 2]| s.drawn(p);
+        // The segments overlapping the window, found by their ends: they are
+        // in time order.
+        let first = s
+            .segments
+            .partition_point(|g| g.last().is_some_and(|p| p[0] < lo));
+        let last = s
+            .segments
+            .partition_point(|g| g.first().is_none_or(|p| p[0] <= hi));
+        for seg in s.segments.get(first..last).unwrap_or_default() {
+            // The readings in reach, and one either side for the lines that
+            // cross the window from beyond it.
+            let from = seg.partition_point(|p| p[0] < lo).saturating_sub(1);
+            let to = (seg.partition_point(|p| p[0] <= hi) + 1).min(seg.len());
+            let Some(near) = seg.get(from..to) else {
+                continue;
+            };
+            let screen = |p: [f64; 2]| to_screen(p[0], p[1]);
+            let mut consider = |piece: (egui::Pos2, egui::Pos2), readings: &[[f64; 2]]| {
+                let distance = segment_distance(piece, pos);
+                // Off at infinity, as a Y range of "inf" puts a line, is never
+                // near.
+                if !distance.is_finite()
+                    || distance > radius
+                    || best.is_some_and(|(_, d)| d <= distance)
+                {
+                    return;
+                }
+                let in_view = |p: &[f64; 2]| p[0] >= view_min && p[0] <= view_max;
+                let on = readings
+                    .iter()
+                    .copied()
+                    .filter(in_view)
+                    .map(drawn)
+                    .min_by(|a, b| {
+                        screen(*a)
+                            .distance(pos)
+                            .total_cmp(&screen(*b).distance(pos))
+                    });
+                if let Some(on) = on {
+                    best = Some((on, distance));
+                }
+            };
+            if let [only] = near {
+                let at = screen(drawn(*only));
+                consider((at, at), &[*only]);
+            }
+            for pair in near.windows(2) {
+                let (a, b) = (drawn(pair[0]), drawn(pair[1]));
+                if s.stepped {
+                    // A level held, then the riser to the next one.
+                    let corner = to_screen(b[0], a[1]);
+                    consider((screen(a), corner), &pair[..1]);
+                    consider((corner, screen(b)), &pair[1..]);
+                } else {
+                    consider((screen(a), screen(b)), pair);
+                }
+            }
+        }
+    }
+    best.map(|(point, _)| point)
+}
+
+/// How far `p` is from the segment between `a` and `b`, on screen.
+fn segment_distance((a, b): (egui::Pos2, egui::Pos2), p: egui::Pos2) -> f32 {
+    let ab = b - a;
+    let along = if ab.length_sq() > 0.0 {
+        ((p - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (a + ab * along).distance(p)
+}
+
+/// One series in the hover readout: its drawn segments, at their own values,
+/// and its unit.
 pub(super) struct HoverSeries<'a> {
     pub name: String,
     pub segments: &'a [Vec<[f64; 2]>],
     pub unit: String,
-    /// Its line's colour, for its row of the readout.
+    /// Its line's colour, for its row of the readout and its dot.
     pub color: egui::Color32,
+    /// Drawn as steps, a level held until the next reading.
+    pub stepped: bool,
+    /// Its right axis, for a unit other than the plotted one.
+    pub map: Option<AxisMap>,
 }
 
-/// The rows of the hover readout with right axes, after the time: every
-/// series with a value at `t` in its own unit, the one named `hovered`
-/// first, each with its index in `series`. The plotted series (first in
+impl HoverSeries<'_> {
+    /// A reading at the height its line is drawn: on its right axis's scale.
+    fn drawn(&self, [t, v]: [f64; 2]) -> [f64; 2] {
+        [t, self.map.map_or(v, |map| map.height_of(v))]
+    }
+}
+
+/// One row of the hover readout: the index of its series, its text, and the
+/// reading it gives, for the dot on the line — none for an overload.
+pub(super) type HoverRow = (usize, String, Option<[f64; 2]>);
+
+/// The rows of the hover readout, after the time: every series with a value
+/// at `t` in its own unit, in the key's order, each named when there are
+/// several — with one series the number alone says it. The plotted series (first in
 /// `series`) reads "overload" inside its band.
 pub(super) fn hover_lines(
     l10n: &Localizer,
     series: &[HoverSeries],
-    hovered: &str,
     t: f64,
     overload: bool,
     decimals: usize,
-) -> Vec<(usize, String)> {
-    let first = series.iter().position(|s| s.name == hovered);
-    let order = first
-        .into_iter()
-        .chain((0..series.len()).filter(|&i| Some(i) != first));
-    order
-        .filter_map(|i| {
-            let HoverSeries {
-                name,
-                segments,
-                unit,
-                ..
-            } = &series[i];
-            let line = if i == 0 && overload {
-                Some(tr!(l10n, "graph-hover-overload-series", series = name).into_owned())
+) -> Vec<HoverRow> {
+    let named = series.len() > 1;
+    series
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| {
+            let name = &s.name;
+            if i == 0 && overload {
+                let text = if named {
+                    tr!(l10n, "graph-hover-overload-series", series = name).into_owned()
+                } else {
+                    tr!(l10n, "graph-hover-overload").into_owned()
+                };
+                return Some((i, text, None));
+            }
+            let point = reading_at(s.segments, t, s.stepped)?;
+            let value = format!("{:.decimals$}", point[1]);
+            let text = if named {
+                tr!(
+                    l10n,
+                    "graph-hover-series",
+                    series = name,
+                    value = value,
+                    unit = s.unit.as_str()
+                )
+                .into_owned()
             } else {
-                trace_value_at(segments, t).map(|v| {
-                    let value = format!("{v:.decimals$}");
-                    tr!(
-                        l10n,
-                        "graph-hover-series",
-                        series = name,
-                        value = value,
-                        unit = unit
-                    )
-                    .into_owned()
-                })
+                format!("{value} {}", s.unit).trim_end().to_string()
             };
-            line.map(|l| (i, l))
+            Some((i, text, Some(point)))
         })
         .collect()
 }
 
-/// Show the hover readout with right axes where egui_plot shows its own, by
-/// the pointer: the time, then a row per series in its line's colour where
-/// that reads as text on the tooltip, as the axes do. egui_plot's readout is
-/// one string in one colour, so [`Graph::show_main`] keeps it empty here.
+/// The decimals a height on an axis takes: as many as one point of the plot
+/// resolves, `per_point` being the axis's units per point. `None` on a span
+/// with no finite size, such as a Y: Fixed range of "inf".
+pub(super) fn height_decimals(per_point: f64) -> Option<usize> {
+    (per_point.is_finite() && per_point > 0.0)
+        .then(|| (-per_point.log10()).ceil().clamp(0.0, 6.0) as usize)
+}
+
+/// The tags where the horizontal crosshair meets the axes, for a pointer at
+/// height `y`: the plotted unit's on the left, then one per right axis, each
+/// with its index in `maps`.
+/// `per_point` is the plotted unit per point of the plot, and `max_decimals`
+/// caps the left tag's decimals (a level is a whole number). `None` where
+/// the height has no finite value.
+pub(super) fn height_tags(
+    y: f64,
+    per_point: f64,
+    unit: &str,
+    maps: &[(String, AxisMap)],
+    max_decimals: usize,
+) -> Option<(String, Vec<(usize, String)>)> {
+    if !y.is_finite() {
+        return None;
+    }
+    let tag = |value: f64, decimals: usize, unit: &str| {
+        let val = eframe::emath::format_with_decimals_in_range(value, decimals..=decimals);
+        format!("{val} {unit}").trim_end().to_string()
+    };
+    let left = tag(y, height_decimals(per_point)?.min(max_decimals), unit);
+    let right = maps
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (unit, map))| {
+            let value = map.value_at(y);
+            let per_point = (map.value_at(y + per_point) - value).abs();
+            height_decimals(per_point)
+                .filter(|_| value.is_finite())
+                .map(|d| (i, tag(value, d, unit)))
+        })
+        .collect();
+    Some((left, right))
+}
+
+/// Show the hover readout beside the vertical crosshair at `at` (its x, the
+/// pointer's height): the time, then a row per series in its line's colour
+/// where that reads as text on the tooltip, as the axes do. To the line's
+/// right, or its left where there is no room, never over it: the dots on
+/// the line are what tie each row to its trace.
 fn show_hover_readout(
     plot: &egui::Response,
+    at: egui::Pos2,
     time_label: &str,
     series: &[HoverSeries],
-    lines: &[(usize, String)],
+    lines: &[HoverRow],
 ) {
+    const SIDES: [egui::RectAlign; 4] = [
+        egui::RectAlign::RIGHT_START,
+        egui::RectAlign::LEFT_START,
+        egui::RectAlign::RIGHT_END,
+        egui::RectAlign::LEFT_END,
+    ];
     let mut tooltip = egui::Tooltip::always_open(
         plot.ctx.clone(),
         plot.layer_id,
         plot.id,
-        egui::PopupAnchor::Pointer,
+        egui::PopupAnchor::Position(at),
     );
     let width = plot.ctx.global_style().spacing.tooltip_width;
-    tooltip.popup = tooltip.popup.width(width);
+    tooltip.popup = tooltip
+        .popup
+        .width(width)
+        .align(SIDES[0])
+        .align_alternatives(&SIDES);
     tooltip.gap(12.0).show(|ui| {
         ui.set_max_width(width);
         ui.label(time_label);
         let ground = ui.visuals().window_fill;
-        for (i, line) in lines {
+        for (i, line, _) in lines {
             let color = crate::theme::legible_on(series[*i].color, ground)
                 .unwrap_or(ui.visuals().text_color());
             ui.label(egui::RichText::new(line).color(color));
         }
     });
+}
+
+/// A dot on each line at the reading its row of the readout gives, ringed in
+/// the plot's background so it reads over the grid and the other lines: it
+/// ties the row to its line by place, not by colour alone.
+fn paint_hover_dots(
+    ui: &Ui,
+    body: egui::Rect,
+    transform: &PlotTransform,
+    series: &[HoverSeries],
+    rows: &[HoverRow],
+    halo: egui::Color32,
+) {
+    let painter = ui.painter().with_clip_rect(body);
+    for (i, _, point) in rows {
+        let Some(point) = *point else { continue };
+        let s = &series[*i];
+        let [t, height] = s.drawn(point);
+        let at = transform.position_from_point(&PlotPoint::new(t, height));
+        painter.circle(at, 3.5, s.color, egui::Stroke::new(1.5, halo));
+    }
+}
+
+/// The tags where the horizontal crosshair meets the axes, centred on `y`
+/// and kept within the plot body's height: `left` against the plot body's
+/// left edge, `right` stacked against its right one, each row in its axis's
+/// colour. A tag wider than its strip runs into the plot rather than out of
+/// `outer`, so the strips never widen on a hover.
+fn paint_height_tags(
+    ui: &Ui,
+    (outer, body): (egui::Rect, egui::Rect),
+    y: f32,
+    left: &[(String, egui::Color32)],
+    right: &[(String, egui::Color32)],
+    border: egui::Color32,
+) {
+    const PAD: egui::Vec2 = egui::vec2(3.0, 1.0);
+    let painter = ui.painter().with_clip_rect(outer);
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let fill = ui.visuals().panel_fill;
+    let tag = |rows: &[(String, egui::Color32)], place: &dyn Fn(f32) -> f32| {
+        if rows.is_empty() {
+            return;
+        }
+        let galleys: Vec<_> = rows
+            .iter()
+            .map(|(text, color)| painter.layout_no_wrap(text.clone(), font.clone(), *color))
+            .collect();
+        let width = galleys.iter().map(|g| g.size().x).fold(0.0, f32::max) + 2.0 * PAD.x;
+        let height = galleys.iter().map(|g| g.size().y).sum::<f32>() + 2.0 * PAD.y;
+        let top = (y - height / 2.0)
+            .min(body.bottom() - height)
+            .max(body.top());
+        let rect =
+            egui::Rect::from_min_size(egui::pos2(place(width), top), egui::vec2(width, height));
+        painter.rect(
+            rect,
+            2.0,
+            fill,
+            egui::Stroke::new(1.0, border),
+            egui::StrokeKind::Inside,
+        );
+        let mut row_top = rect.top() + PAD.y;
+        for (galley, (_, color)) in galleys.into_iter().zip(rows) {
+            let row_height = galley.size().y;
+            painter.galley(egui::pos2(rect.left() + PAD.x, row_top), galley, *color);
+            row_top += row_height;
+        }
+    };
+    tag(left, &|width| (body.left() - width).max(outer.left()));
+    tag(right, &|width| body.right().min(outer.right() - width));
 }
 
 /// The Y grid of a level's axis: egui_plot's decade steps, the finest of
@@ -1075,9 +1322,10 @@ impl Graph {
         }
     }
 
-    /// The series the hover lists with right axes: the plotted one, named
-    /// `main_name`, then each drawn trace, every one with its unit and by
-    /// its name on screen.
+    /// The series the hover lists, in the key's order: the plotted one,
+    /// named `main_name`, then each drawn trace with its right axis
+    /// (`maps`, by trace), every one with its unit and by its name on
+    /// screen.
     fn hover_series<'a>(
         &self,
         l10n: &Localizer,
@@ -1085,19 +1333,27 @@ impl Graph {
         main_name: &str,
         plotted: &'a [Vec<[f64; 2]>],
         traces: &'a [OverlayTrace],
+        maps: &[Option<AxisMap>],
     ) -> Vec<HoverSeries<'a>> {
         let plotted = HoverSeries {
             name: main_name.to_string(),
             segments: plotted,
             unit: self.current_unit.clone(),
             color: tc.graph_line(),
+            stepped: self.levels,
+            map: None,
         };
-        let traces = traces.iter().map(|(k, label, segments)| HoverSeries {
-            name: self.series_text(l10n, label).into_owned(),
-            segments: segments.as_slice(),
-            unit: self.overlay_unit(label).to_string(),
-            color: tc.graph_overlay(*k),
-        });
+        let traces = traces
+            .iter()
+            .zip(maps)
+            .map(|((k, label, segments), map)| HoverSeries {
+                name: self.series_text(l10n, label).into_owned(),
+                segments: segments.as_slice(),
+                unit: self.overlay_unit(label).to_string(),
+                color: tc.graph_overlay(*k),
+                stepped: false,
+                map: *map,
+            });
         std::iter::once(plotted).chain(traces).collect()
     }
 
@@ -1250,12 +1506,12 @@ impl Graph {
         let ext_end = (vis_end + 1).min(self.history.len());
         let (visible_segments, visible_gaps) = self.build_segments_for_range(ext_start, ext_end);
         // Drawn lines are thinned to a few points per bucket about half a
-        // pixel wide, and the crosshair snaps to those drawn points;
-        // everything that answers with a value (statistics, cursors,
-        // crossings, the Y range) still reads the full slice. At a
-        // whole pixel, a column could fall between two buckets' vertical
-        // strokes and a dense band drew with dark streaks through it. The
-        // width is taken before the plot, axis included, so it errs finer.
+        // pixel wide; everything that answers with a value (statistics,
+        // cursors, crossings, the hover, the Y range) still reads the full
+        // slice. At a whole pixel, a column could fall between two buckets'
+        // vertical strokes and a dense band drew with dark streaks through
+        // it. The width is taken before the plot, axis included, so it errs
+        // finer.
         let bucket = bucket_secs(
             (view_max - view_min)
                 / f64::from(2.0 * ui.available_width() * ui.ctx().pixels_per_point()),
@@ -1300,9 +1556,9 @@ impl Graph {
         let env_color = tc.graph_envelope();
         let limit_color = tc.status_error();
 
-        // Every drawn line carries the name of its series as the screen
-        // shows it, which is what the hover label reports; every helper item
-        // is named "" and falls through to the plain form.
+        // The plotted series' name as the screen shows it, which the hover's
+        // row names it by. The lines themselves are unnamed: nothing reads
+        // their names now that the hover is ours.
         let plotted_name = self.plotted_series_name();
         let main_name = self.series_text(l10n, &plotted_name).into_owned();
 
@@ -1348,7 +1604,6 @@ impl Graph {
         let right = self.right_axes(ui, (view_min, view_max), (y_min, y_max));
         self.axis_maps.clone_from(&right.maps);
         let grid_step = right.step;
-        let multi_axis = grid_step.is_some();
         let map_of = |label: &str| right.map_of(self.overlay_unit(label));
 
         // Sub-value traces over the same window as the main series, minus
@@ -1363,7 +1618,6 @@ impl Graph {
             .map(|(_, label, _)| map_of(label))
             .collect();
         let key_entries = self.key_entries(l10n, &overlay_traces, !visible_segments.is_empty());
-        let multi_series = !overlay_traces.is_empty();
 
         let mut y_axes = vec![self.left_axis(ui, grid_step, line_color)];
         // The right axes share one column, their labels painted once the plot
@@ -1454,26 +1708,8 @@ impl Graph {
             .and_then(|t| self.nearest_point(t).map(|(_, v)| v));
         let mean_value = self.visible_stats().and_then(|s| s.avg());
 
-        let cursor_unit = self.current_unit.clone();
         let (point_decimals, other_decimals) = (self.decimals(true), self.decimals(false));
         let levels = self.levels;
-        // Moved into the label_formatter closure, which is rebuilt each frame.
-        let tooltip_spans = overload_spans.clone();
-        let overload_word = tr!(l10n, "graph-hover-overload").into_owned();
-        // With a right axis, a height on the plot means a different value on
-        // each axis, so the readout lists every drawn series at the hovered
-        // time instead, in its own unit — the one under the pointer first.
-        // What the pointer is over with right axes, left by the formatter
-        // for `show_hover_readout`: the time's label, the series under the
-        // pointer, the time, and whether it is in an overload.
-        let hover_hit: std::cell::RefCell<Option<(String, String, f64, bool)>> =
-            std::cell::RefCell::new(None);
-        let hit = &hover_hit;
-        let hover_series = if multi_axis {
-            self.hover_series(l10n, tc, &main_name, &visible_segments, &overlay_traces)
-        } else {
-            Vec::new()
-        };
         // The readout under the pointer would cover the menu's entry, which
         // opens where the pointer is.
         let menu_open = egui::Popup::is_id_open(ui.ctx(), plot_menu_id());
@@ -1506,60 +1742,11 @@ impl Graph {
             .custom_x_axes(vec![x_axis])
             .custom_y_axes(y_axes)
             .y_axis_min_width(60.0)
-            .cursor_color(tc.graph_crosshair())
-            .label_formatter(move |pos| {
-                // 0.37 replaced the `(name, point)` pair with `HoverPosition`.
-                // A hover that isn't near a data point used to arrive as an
-                // empty name, so map it back to one and keep the branches below
-                // unchanged. The data points are the drawn ones: zoomed out, a
-                // pixel column keeps its first, last and extremes, and the
-                // pointer between them reads as Elsewhere.
-                let (name, point) = match pos {
-                    HoverPosition::NearDataPoint {
-                        plot_name,
-                        position,
-                        ..
-                    } => (*plot_name, position),
-                    HoverPosition::Elsewhere { position } => ("", position),
-                };
-                if menu_open {
-                    return None;
-                }
-                let t = point.x;
-                let time_label = format_pointer_time(t);
-                // Inside a band there is no measured value to report, and
-                // `Span` can't be hovered itself (its geometry is None), so
-                // this is where the condition gets named. It is also the only
-                // cue that isn't visual.
-                let overload = tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b);
-                if multi_axis {
-                    *hit.borrow_mut() = Some((time_label, name.to_string(), t, overload));
-                    return None;
-                }
-                if overload {
-                    return Some(format!("{time_label}\n{overload_word}"));
-                }
-                // Only a named item is a trace, so only its y is a point; a
-                // helper's, or the pointer's own, is a height on the axis.
-                let decimals = if name.is_empty() {
-                    other_decimals
-                } else {
-                    point_decimals
-                };
-                // With several traces on the same axes the number alone is
-                // ambiguous, so name the one being hovered. Helper items carry
-                // an empty name and fall through to the plain form.
-                if multi_series && !name.is_empty() {
-                    return Some(format!(
-                        "{time_label}\n{name}: {:.decimals$} {cursor_unit}",
-                        point.y
-                    ));
-                }
-                Some(format!(
-                    "{time_label}\n{:.decimals$} {cursor_unit}",
-                    point.y
-                ))
-            });
+            // The hover is ours, painted after `plot.show` below: egui_plot's
+            // snaps to the nearest drawn point and reads the height there, so
+            // one number was a reading or a height with nothing to say which.
+            .show_x(false)
+            .show_y(false);
         // egui_plot's own range, set here as `time_marks` reckons with it.
         plot = plot
             .grid_spacing(egui::Rangef::new(MIN_GRID_SPACING, 300.0))
@@ -1635,7 +1822,7 @@ impl Graph {
                     // once the buffer's bound starts dropping them.
                     patterns.line(
                         plot_ui,
-                        Line::new(self.series_text(l10n, label), PlotPoints::new(points)),
+                        Line::new("", PlotPoints::new(points)),
                         color,
                         style,
                         PatternKey::Overlay(label.clone()),
@@ -1650,7 +1837,7 @@ impl Graph {
                 .collect();
             for seg in drawn_trace.iter().filter(|s| !s.is_empty()) {
                 plot_ui.add(SegmentedLine::new(
-                    Line::new(main_name.clone(), PlotPoints::new(seg.clone())),
+                    Line::new("", PlotPoints::new(seg.clone())),
                     line_color,
                 ));
             }
@@ -1755,9 +1942,54 @@ impl Graph {
         self.dash_phases = phases.into_inner();
         self.plot_rect = Some(response.response.rect);
         self.plot_transform = Some(response.transform);
-        if let Some((time_label, name, t, overload)) = hover_hit.take() {
-            let lines = hover_lines(l10n, &hover_series, &name, t, overload, point_decimals);
-            show_hover_readout(&response.response, &time_label, &hover_series, &lines);
+        // The hover: the pointer on screen, its height, the time it reads at
+        // and whether that is inside an overload. The readout under the
+        // pointer would cover the menu's entry, which opens where it is.
+        let body = response.response.rect;
+        let hover = response
+            .response
+            .hover_pos()
+            .filter(|pos| !menu_open && body.contains(*pos))
+            .map(|pos| {
+                let transform = &response.transform;
+                let series = self.hover_series(
+                    l10n,
+                    tc,
+                    &main_name,
+                    &visible_segments,
+                    &overlay_traces,
+                    &trace_maps,
+                );
+                let p = transform.value_from_position(pos);
+                let radius = ui.style().interaction.interact_radius;
+                let reach = |dx: f32| transform.value_from_position(pos + egui::vec2(dx, 0.0)).x;
+                let [t, y] = reading_near(
+                    &series,
+                    (reach(-radius), reach(radius)),
+                    (view_min, view_max),
+                    pos,
+                    radius,
+                    |t, h| transform.position_from_point(&PlotPoint::new(t, h)),
+                )
+                .unwrap_or([p.x, p.y]);
+                // Strictly inside: a band's edges are readings that keep
+                // their values.
+                let overload = overload_spans.iter().any(|&(a, b)| a < t && t < b);
+                // A height off at infinity, as a Y range of "inf" gives, has
+                // no place on screen: the crosshair stays on the pointer.
+                let at = Some(transform.position_from_point(&PlotPoint::new(t, y)))
+                    .filter(|at| at.is_finite())
+                    .unwrap_or(pos);
+                (at, y, t, overload, series)
+            });
+        // The crosshair under the labels, where egui_plot's sat: on the
+        // reading it snapped to, or on the pointer.
+        if let Some(&(at, ..)) = hover.as_ref() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            let painter = ui.painter().with_clip_rect(body);
+            let stroke = egui::Stroke::new(1.0, tc.graph_crosshair());
+            painter.vline(at.x, body.y_range(), stroke);
+            painter.hline(body.x_range(), at.y, stroke);
         }
         Self::paint_stacked_ticks(
             ui,
@@ -1826,6 +2058,52 @@ impl Graph {
             &overlay,
             taken,
         );
+        // The dots, the height's tags and the readout over everything else.
+        if let Some((at, y, t, overload, series)) = hover {
+            let rows = hover_lines(l10n, &series, t, overload, point_decimals);
+            paint_hover_dots(
+                ui,
+                body,
+                &response.transform,
+                &series,
+                &rows,
+                tc.plot_background(),
+            );
+            let per_point = response.transform.dvalue_dpos()[1].abs();
+            let max_decimals = if levels { other_decimals } else { usize::MAX };
+            if let Some((left, right_tags)) =
+                height_tags(y, per_point, &self.current_unit, &right.maps, max_decimals)
+            {
+                let left_color = if grid_step.is_some() {
+                    tick_color(ui, line_color)
+                } else {
+                    ui.visuals().text_color()
+                };
+                let right_rows: Vec<_> = right_tags
+                    .into_iter()
+                    .map(|(i, text)| (text, right_labels[i].1))
+                    .collect();
+                paint_height_tags(
+                    ui,
+                    (complete_rect, body),
+                    at.y,
+                    &[(left, left_color)],
+                    &right_rows,
+                    tc.graph_crosshair(),
+                );
+            }
+            // The time alone where no series has a reading. Not over the box
+            // being drawn.
+            if self.box_zoom.is_none() {
+                show_hover_readout(
+                    &response.response,
+                    at,
+                    &format_pointer_time(t),
+                    &series,
+                    &rows,
+                );
+            }
+        }
         self.handle_interaction(ui, &response.response, &response.transform);
         self.show_context_menu(
             l10n,

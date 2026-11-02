@@ -143,9 +143,11 @@ by construction, several share one column, each gridline's values stacked:
 one label's width rather than one per unit, so they fit far narrower
 windows before the column is dropped.
 Where lines of two units cross means nothing, so the analysis tools and the
-minimap stay on the plotted series, which **Plot:** picks, and with a right
-axis the hover lists every series at its time rather than one height. Stacked
-lanes, one per unit, were the alternative: no false crossings, but every lane
+minimap stay on the plotted series, which **Plot:** picks. The hover keeps
+readings and heights apart: its tooltip lists every series at a reading's
+time, and the crosshair's height is tagged on each axis, against its scale,
+so no number leaves you guessing which it is. Stacked lanes, one per unit,
+were the alternative: no false crossings, but every lane
 shorter ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
 A change of mode or unit clears the graph: the old and new scales are
 incompatible.

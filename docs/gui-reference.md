@@ -181,9 +181,9 @@ in a narrow graph.
 
 - Time-series line plot with auto-scaling Y axis
 - Axis labels include units (e.g. "1.0 mV", "10 s")
-- Crosshair tooltip shows time and value with units, and names the series it
-  is over when several are drawn; with a right axis it lists every series'
-  value at that time, the one under the pointer first
+- The crosshair follows the pointer and snaps onto a reading near it, its
+  height tagged on each axis; its tooltip shows the time and every drawn
+  series' value there, each marked by a dot on its line
 - No-data gaps (disconnect, pause, slow sample interval) shown as dashed
   vertical line pairs
 - Overloads shown as a filled band in the error colour, drawn at their true
