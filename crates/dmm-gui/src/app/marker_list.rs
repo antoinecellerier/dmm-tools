@@ -68,6 +68,12 @@ fn tag_shape(slot: egui::Rect, label_width: f32) -> (egui::Rect, egui::Pos2) {
     (body, egui::pos2(body.left() - TAG_TIP, body.center().y))
 }
 
+/// Where a tag in `body`, with its point at `tip`, takes a click: the body
+/// and the point's reach.
+fn tag_hit_rect(body: egui::Rect, tip: egui::Pos2) -> egui::Rect {
+    egui::Rect::from_min_max(egui::pos2(tip.x, body.top()), body.max)
+}
+
 /// The list's own state, between frames.
 #[derive(Debug, Default)]
 pub(super) struct MarkerList {
@@ -472,7 +478,6 @@ impl App {
         }
         // A handle, as the end of the log borrows the app.
         let l10n = self.l10n.clone();
-        let recording_role = self.capture.recording.role() == BufferRole::Recording;
         let (samples, recorded) = self.capture.recording.recording_slice();
         if recorded.is_empty() && self.markers.is_empty() {
             return;
@@ -518,40 +523,24 @@ impl App {
 
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         // The graph's flag colours, a pair its contrast test covers.
-        let (color, tag_text) = (tc.graph_marker(), tc.plot_background());
+        let (flag, flag_text) = (tc.graph_marker(), tc.plot_background());
         let recording = &self.capture.recording;
         let graph = &self.graph;
         let list = &mut self.marker_list;
         let mut markers: Vec<&mut Marker> = self.markers.iter_mut().collect();
         let times: Vec<Instant> = markers.iter().map(|m| m.at).collect();
         let rows = LogRows::new(samples, first..recorded.end, &times);
-        // Each marker row's reading, and what the row says of a reading the
-        // graph or the recording has dropped.
         let labels: Vec<(String, Option<Cow<str>>)> = rows
             .markers
             .iter()
             .map(|&(_, i, sample)| {
-                let m = &markers[i];
-                let reading = match sample {
-                    Some(k) => log_line(&l10n, &samples[k].measurement),
-                    None => m.reading.clone(),
-                };
-                let tag = if !graph.holds(m.at) {
-                    Some(tr!(l10n, "markers-off-graph"))
-                } else if recording_role && !recording.in_recording(m.at) {
-                    Some(tr!(l10n, "markers-off-recording"))
-                } else {
-                    None
-                };
-                (
-                    format!("{}  {reading}", m.wall_time.format("%H:%M:%S%.3f")),
-                    tag,
-                )
+                let sample = sample.map(|k| &samples[k].measurement);
+                marker_row_label(&l10n, markers[i], sample, graph, recording)
             })
             .collect();
         // The marker column starts past the widest of them, so it lines up
         // on every row.
-        let small = egui::TextStyle::Small.resolve(ui.style());
+        let reading_width = reading_column_width(ui, &labels, weak);
         let spacing = ui.spacing().item_spacing.x;
         // A floating scroll bar is drawn over the rows' right end: the ×
         // stays clear of it.
@@ -561,20 +550,6 @@ impl App {
         } else {
             0.0
         };
-        let reading_width = ui.fonts_mut(|f| {
-            labels
-                .iter()
-                .map(|(text, tag)| {
-                    let mut width = |text: &str, font: &egui::FontId| {
-                        f.layout_no_wrap(text.to_string(), font.clone(), weak)
-                            .size()
-                            .x
-                    };
-                    let reading = width(text, &log_font());
-                    reading + tag.as_deref().map_or(0.0, |t| spacing + width(t, &small))
-                })
-                .fold(0.0, f32::max)
-        });
         let mut labels = labels.into_iter();
         let mut reveal = None;
         let mut delete = None;
@@ -633,11 +608,24 @@ impl App {
             drawn.dedup();
             let origin = ui.max_rect().min;
             let width = ui.available_width();
-            // Where the marker column starts, the same on every row.
+            // `LogLayout::fixed`'s terms, kept in this order: the column lands
+            // on the same pixel as it always has.
             let column = reading_width
                 .min(width - number_width - delete_width - 3.0 * spacing - gutter - MIN_NOTE_WIDTH)
                 .max(0.0);
-            let row_spacing = ui.spacing().item_spacing.y;
+            let layout = LogLayout {
+                line,
+                number_width,
+                delete_width,
+                spacing,
+                row_spacing: ui.spacing().item_spacing.y,
+                gutter,
+                column,
+                narrow,
+                flag,
+                flag_text,
+                weak,
+            };
             for r in drawn {
                 let row = rows.row(r);
                 let at = match row {
@@ -652,80 +640,14 @@ impl App {
                         .scope_id(egui::Id::unique(("log_row", at)))
                         .max_rect(egui::Rect::from_min_size(
                             origin + egui::vec2(0.0, geometry.top(r)),
-                            egui::vec2(width, geometry.height(r) - row_spacing),
+                            egui::vec2(width, geometry.height(r) - layout.row_spacing),
                         ))
                         .layout(egui::Layout::top_down(egui::Align::Min)),
                 );
                 let i = match row {
                     Row::Sample(k) => {
-                        let s = &samples[k];
-                        let time = s.wall_time.format("%H:%M:%S%.3f");
-                        let row_rect = ui.max_rect();
-                        // One line, cut short of the tag it may offer: a
-                        // wrapped line would run into the row below.
-                        ui.set_max_width((row_rect.width() - number_width - spacing).max(0.0));
-                        let label = ui.add(
-                            egui::Label::new(
-                                RichText::new(format!(
-                                    "{time}  {}",
-                                    log_line(&l10n, &s.measurement)
-                                ))
-                                .font(log_font()),
-                            )
-                            .truncate(),
-                        );
-                        // A hovered row offers a marker: a faint tag where a
-                        // marker's would be, or past a longer reading. Over
-                        // the row's share of the gaps too, so the tag doesn't
-                        // flicker off between rows.
-                        let pitch_rect = row_rect.expand2(egui::vec2(0.0, row_spacing / 2.0));
-                        if ui.rect_contains_pointer(pitch_rect) {
-                            let column = if narrow { 0.0 } else { column };
-                            let x = (label.rect.width().max(column) + spacing)
-                                .min(row_rect.width() - number_width);
-                            let slot = egui::Rect::from_min_size(
-                                row_rect.min + egui::vec2(x, 0.0),
-                                egui::vec2(number_width, line),
-                            );
-                            let plus = ui.painter().layout_no_wrap("+".into(), log_font(), color);
-                            let (body, tip) = tag_shape(slot, plus.size().x);
-                            let add = tr!(l10n, "markers-add", time = time.to_string());
-                            let response = ui
-                                .interact(
-                                    egui::Rect::from_min_max(
-                                        egui::pos2(tip.x, body.top()),
-                                        body.max,
-                                    ),
-                                    egui::Id::unique(("marker_add", s.measurement.timestamp)),
-                                    egui::Sense::CLICK,
-                                )
-                                .on_hover_text(add.as_ref())
-                                .on_hover_cursor(egui::CursorIcon::PointingHand);
-                            response.widget_info(|| {
-                                egui::WidgetInfo::labeled(egui::Role::Button, true, add.as_ref())
-                            });
-                            let stroke = egui::Stroke::new(
-                                if response.hovered() { 1.5 } else { 1.0 },
-                                color,
-                            );
-                            ui.painter().add(egui::Shape::closed_line(
-                                vec![
-                                    tip,
-                                    body.left_top(),
-                                    body.right_top(),
-                                    body.right_bottom(),
-                                    body.left_bottom(),
-                                ],
-                                stroke,
-                            ));
-                            ui.painter()
-                                .galley(body.center() - plus.size() / 2.0, plus, color);
-                            if response.clicked() {
-                                mark = Some((
-                                    s.measurement.timestamp,
-                                    log_line(&l10n, &s.measurement),
-                                ));
-                            }
+                        if let Some(offered) = sample_row(ui, &layout, &l10n, &samples[k]) {
+                            mark = Some(offered);
                         }
                         continue;
                     }
@@ -734,207 +656,53 @@ impl App {
                 let m = &mut *markers[i];
                 let number = m.number;
                 let at = m.at;
-                // Keyed by the reading, not the number: numbers start
-                // over once the list empties, and a new marker must not
-                // inherit an old note's undo history.
-                let id = egui::Id::unique(("marker_note", at));
                 let on_graph = graph.holds(at);
                 // One per marker row, and every marker row is drawn, in order.
                 let Some((text, tag)) = labels.next() else {
                     continue;
                 };
-                // The tag keeps its room: the reading is what gets cut.
-                let reading_label = |ui: &mut Ui| {
-                    let tag = tag.as_deref().map(|tag| {
-                        egui::WidgetText::from(RichText::new(tag).small().color(weak)).into_galley(
-                            ui,
-                            Some(egui::TextWrapMode::Extend),
-                            f32::INFINITY,
-                            egui::TextStyle::Small,
-                        )
-                    });
-                    let tag_width = tag
-                        .as_ref()
-                        .map_or(0.0, |g| g.size().x + ui.spacing().item_spacing.x);
-                    ui.allocate_ui_with_layout(
-                        egui::vec2((ui.available_width() - tag_width).max(0.0), line),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            ui.add(
-                                egui::Label::new(RichText::new(&text).font(log_font())).truncate(),
-                            )
-                        },
-                    );
-                    if let Some(tag) = tag {
-                        ui.label(tag);
-                    }
-                };
-                // The number is a button, so Tab stops on it: pressing
-                // it brings the marker into view, where tabbing past it
-                // moves nothing. Drawn as the graph's flag, pointing at its
-                // reading, and greyed once the graph has dropped the
-                // reading, with nowhere left to show it.
-                let number_button = |ui: &mut Ui| {
-                    let show = tr!(l10n, "markers-show", number = number);
-                    let tag = |ui: &mut Ui| {
-                        let (slot, _) = ui.allocate_exact_size(
-                            egui::vec2(number_width, line),
-                            egui::Sense::hover(),
-                        );
-                        let fill = if ui.is_enabled() { color } else { weak };
-                        let galley =
-                            ui.painter()
-                                .layout_no_wrap(number.to_string(), log_font(), tag_text);
-                        let (body, tip) = tag_shape(slot, galley.size().x);
-                        let response = ui.interact(
-                            egui::Rect::from_min_max(egui::pos2(tip.x, body.top()), body.max),
-                            egui::Id::unique(("marker_tag", at)),
-                            egui::Sense::click(),
-                        );
-                        let painter = ui.painter();
-                        painter.add(egui::Shape::convex_polygon(
-                            vec![body.left_top(), tip, body.left_bottom()],
-                            fill,
-                            egui::Stroke::NONE,
-                        ));
-                        painter.rect_filled(
-                            body,
-                            egui::CornerRadius {
-                                nw: 0,
-                                ne: 3,
-                                sw: 0,
-                                se: 3,
-                            },
-                            fill,
-                        );
-                        painter.galley(body.center() - galley.size() / 2.0, galley, tag_text);
-                        response.widget_info(|| {
-                            egui::WidgetInfo::labeled(
-                                egui::Role::Button,
-                                ui.is_enabled(),
-                                show.as_ref(),
-                            )
-                        });
-                        response
-                    };
-                    let button = ui
-                        .add_enabled(on_graph, tag)
-                        .on_hover_text(show.as_ref())
-                        .on_hover_cursor(egui::CursorIcon::PointingHand)
-                        .on_disabled_hover_text(
-                            tr!(l10n, "markers-show.hover-disabled", number = number).as_ref(),
-                        )
-                        .a11y_label(&show);
-                    crate::a11y::paint_focus_ring(ui, &button);
-                    button.clicked()
-                };
-                let delete_button = |ui: &mut Ui| {
-                    let label = tr!(l10n, "markers-delete", number = number);
-                    ui.add_sized(
-                        [delete_width, line],
-                        egui::Button::new(RichText::new("\u{00D7}").font(log_font())),
-                    )
-                    .on_hover_text(label.as_ref())
-                    .a11y_label(&label)
-                    .clicked()
-                };
-                let note = |ui: &mut Ui, width: f32, note: &mut String| {
-                    ui.add(
-                        egui::TextEdit::singleline(note)
-                            .id(id)
-                            .hint_text(RichText::new(tr!(l10n, "markers-note")).font(log_font()))
-                            .font(log_font())
-                            .margin(egui::Margin::symmetric(4, 0))
-                            .char_limit(NOTE_MAX_CHARS)
-                            .desired_width(width),
-                    )
-                    .a11y_label(&tr!(
-                        l10n,
-                        "markers-note.a11y",
-                        number = number
-                    ))
-                };
                 // number, note, ×, in that order for Tab.
                 let mut marker_column = |ui: &mut Ui, note_width: f32| {
-                    if number_button(ui) {
+                    if number_tag(ui, &layout, &l10n, m, on_graph) {
                         reveal = Some(at);
                     }
-                    let response = note(ui, note_width, &mut m.note);
-                    if delete_button(ui) {
+                    let response = note_field(ui, &l10n, m, note_width);
+                    if delete_button(ui, &layout, &l10n, number) {
                         delete = Some(number);
                     }
                     response
                 };
-                let response = if narrow {
-                    reading_label(ui);
+                let response = if layout.narrow {
+                    reading_label(ui, &layout, &text, tag.as_deref());
                     ui.horizontal(|ui| {
-                        let fixed = number_width + delete_width + 3.0 * spacing + gutter;
-                        marker_column(ui, (ui.available_width() - fixed).max(40.0))
+                        marker_column(ui, (ui.available_width() - layout.fixed()).max(40.0))
                     })
                     .inner
                 } else {
                     ui.horizontal(|ui| {
-                        let fixed = number_width + delete_width + 3.0 * spacing + gutter;
-                        let width = column;
                         // Its own rect, whatever the reading's text: a child
                         // ui would hand back only as much as its text took.
-                        let (rect, _) =
-                            ui.allocate_exact_size(egui::vec2(width, line), egui::Sense::hover());
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::vec2(layout.column, layout.line),
+                            egui::Sense::hover(),
+                        );
                         reading_label(
                             &mut ui.new_child(
                                 egui::UiBuilder::new()
                                     .max_rect(rect)
                                     .layout(egui::Layout::left_to_right(egui::Align::Center)),
                             ),
+                            &layout,
+                            &text,
+                            tag.as_deref(),
                         );
-                        let note_width = ui.available_width() - fixed + spacing;
+                        let note_width = ui.available_width() - layout.fixed() + layout.spacing;
                         marker_column(ui, note_width.max(MIN_NOTE_WIDTH))
                     })
                     .inner
                 };
-
-                if list.focus == Some(number) {
-                    response.request_focus();
-                    // Only when out of view: a scroll that isn't needed
-                    // would unstick the log from its newest row.
-                    if !ui.clip_rect().contains_rect(response.rect) {
-                        response.scroll_to_me(None);
-                    }
-                    // Asked again next frame after a click — a marker's flag,
-                    // the row's +: egui takes the focus back from a note on
-                    // a click outside it, the next time it reads the note.
-                    if !ui.input(|i| i.pointer.any_click()) {
-                        list.focus = None;
-                    }
-                }
-                if response.gained_focus() {
-                    list.editing = Some(NoteEdit {
-                        number,
-                        before: m.note.clone(),
-                        revealed: false,
-                        following: list.following,
-                    });
-                }
-                // Acting on a note brings its marker into view: a click,
-                // or the first keystroke of an edit. Tabbing through the
-                // list does not, and neither do the keystrokes after —
-                // by then the view is the user's, live or not.
-                let edit = list.editing.as_mut().filter(|e| e.number == number);
-                if let Some(edit) = edit
-                    && (response.clicked() || response.changed() && !edit.revealed)
-                {
-                    edit.revealed = true;
+                if list.track_note(ui, &response, number, &mut m.note) {
                     reveal = Some(at);
-                } else if response.clicked() {
-                    reveal = Some(at);
-                }
-                if response.lost_focus()
-                    && let Some(edit) = list.editing.take_if(|e| e.number == number)
-                {
-                    if ui.input(|i| i.key_pressed(Key::Escape)) {
-                        m.note = edit.before;
-                    }
-                    list.refollow = edit.following;
                 }
             }
             // Tab and Shift+Tab reach every row, drawn or scrolled out of
@@ -954,6 +722,341 @@ impl App {
             self.mark_reading(at, reading, true);
         }
     }
+}
+
+impl MarkerList {
+    /// The focus and the edit of marker `number`'s note, whose field gave
+    /// `response`: focus it when `focus` names it (Ctrl+N, a flag clicked),
+    /// start an edit as it gains the focus, put the note back on Esc and
+    /// follow the log again as the edit ends. Called each frame the field is
+    /// drawn, after it. Whether to bring the marker into view: acting on a
+    /// note does.
+    fn track_note(
+        &mut self,
+        ui: &Ui,
+        response: &egui::Response,
+        number: u32,
+        note: &mut String,
+    ) -> bool {
+        if self.focus == Some(number) {
+            response.request_focus();
+            // Only when out of view: a scroll that isn't needed would unstick
+            // the log from its newest row.
+            if !ui.clip_rect().contains_rect(response.rect) {
+                response.scroll_to_me(None);
+            }
+            // Asked again next frame after a click — a marker's flag, the
+            // row's +: egui takes the focus back from a note on a click
+            // outside it, the next time it reads the note.
+            if !ui.input(|i| i.pointer.any_click()) {
+                self.focus = None;
+            }
+        }
+        if response.gained_focus() {
+            self.editing = Some(NoteEdit {
+                number,
+                before: note.clone(),
+                revealed: false,
+                following: self.following,
+            });
+        }
+        // Acting on a note brings its marker into view: a click, or the first
+        // keystroke of an edit. Tabbing through the list does not, and neither
+        // do the keystrokes after — by then the view is the user's, live or
+        // not.
+        let edit = self.editing.as_mut().filter(|e| e.number == number);
+        let reveal =
+            response.clicked() || response.changed() && edit.as_ref().is_some_and(|e| !e.revealed);
+        if reveal && let Some(edit) = edit {
+            edit.revealed = true;
+        }
+        if response.lost_focus()
+            && let Some(edit) = self.editing.take_if(|e| e.number == number)
+        {
+            if ui.input(|i| i.key_pressed(Key::Escape)) {
+                *note = edit.before;
+            }
+            self.refollow = edit.following;
+        }
+        reveal
+    }
+}
+
+/// What the log's rows are sized and coloured by, this frame.
+#[derive(Clone, Copy)]
+struct LogLayout {
+    /// One line of the log font: a row's height, a marked one's too (two in a
+    /// narrow panel).
+    line: f32,
+    /// A marker's number tag, with room for three digits.
+    number_width: f32,
+    /// The × that deletes a marker.
+    delete_width: f32,
+    /// The gap between the items of a row.
+    spacing: f32,
+    /// The gap between rows.
+    row_spacing: f32,
+    /// What a floating scroll bar takes of the rows' right end.
+    gutter: f32,
+    /// Where the marker column starts, the same on every row.
+    column: f32,
+    /// A panel too narrow for the marker column beside the reading, which
+    /// puts it on a line of its own.
+    narrow: bool,
+    /// A marker tag's fill, the graph's flag colour, and the faint `+` tag's
+    /// outline.
+    flag: egui::Color32,
+    /// A marker's number on its tag.
+    flag_text: egui::Color32,
+    /// A dropped reading's tag, and a greyed number tag's fill.
+    weak: egui::Color32,
+}
+
+impl LogLayout {
+    /// What a marker row's number, ×, three gaps and the scroll bar's gutter
+    /// take, the note aside.
+    fn fixed(&self) -> f32 {
+        self.number_width + self.delete_width + 3.0 * self.spacing + self.gutter
+    }
+}
+
+/// A marker row's text, its wall time then its reading — the sample's line
+/// when the log shows it, otherwise the line the marker kept — and what the
+/// row says of a reading the graph or the recording has dropped.
+fn marker_row_label<'a>(
+    l10n: &'a Localizer,
+    m: &Marker,
+    sample: Option<&Measurement>,
+    graph: &crate::graph::Graph,
+    recording: &crate::recording::Recording,
+) -> (String, Option<Cow<'a, str>>) {
+    let reading = match sample {
+        Some(measurement) => log_line(l10n, measurement),
+        None => m.reading.clone(),
+    };
+    let tag = if !graph.holds(m.at) {
+        Some(tr!(l10n, "markers-off-graph"))
+    } else if recording.role() == BufferRole::Recording && !recording.in_recording(m.at) {
+        Some(tr!(l10n, "markers-off-recording"))
+    } else {
+        None
+    };
+    (
+        format!("{}  {reading}", m.wall_time.format("%H:%M:%S%.3f")),
+        tag,
+    )
+}
+
+/// The widest of the marker rows' readings with their tags: where the
+/// marker column starts, room permitting.
+fn reading_column_width(
+    ui: &Ui,
+    labels: &[(String, Option<Cow<str>>)],
+    weak: egui::Color32,
+) -> f32 {
+    let small = egui::TextStyle::Small.resolve(ui.style());
+    let spacing = ui.spacing().item_spacing.x;
+    ui.fonts_mut(|f| {
+        labels
+            .iter()
+            .map(|(text, tag)| {
+                let mut width = |text: &str, font: &egui::FontId| {
+                    f.layout_no_wrap(text.to_string(), font.clone(), weak)
+                        .size()
+                        .x
+                };
+                let reading = width(text, &log_font());
+                reading + tag.as_deref().map_or(0.0, |t| spacing + width(t, &small))
+            })
+            .fold(0.0, f32::max)
+    })
+}
+
+/// A sample's row: its line, and while the pointer is on the row, a faint
+/// tag where a marker's would be that marks it. The reading to mark when
+/// the tag was clicked.
+fn sample_row(
+    ui: &mut Ui,
+    layout: &LogLayout,
+    l10n: &Localizer,
+    s: &Sample,
+) -> Option<(Instant, String)> {
+    let time = s.wall_time.format("%H:%M:%S%.3f");
+    let row_rect = ui.max_rect();
+    // One line, cut short of the tag it may offer: a wrapped line would run
+    // into the row below.
+    ui.set_max_width((row_rect.width() - layout.number_width - layout.spacing).max(0.0));
+    let label = ui.add(
+        egui::Label::new(
+            RichText::new(format!("{time}  {}", log_line(l10n, &s.measurement))).font(log_font()),
+        )
+        .truncate(),
+    );
+    // A hovered row offers a marker: a faint tag where a marker's would be,
+    // or past a longer reading. Over the row's share of the gaps too, so the
+    // tag doesn't flicker off between rows.
+    let pitch_rect = row_rect.expand2(egui::vec2(0.0, layout.row_spacing / 2.0));
+    if !ui.rect_contains_pointer(pitch_rect) {
+        return None;
+    }
+    let column = if layout.narrow { 0.0 } else { layout.column };
+    let x = (label.rect.width().max(column) + layout.spacing)
+        .min(row_rect.width() - layout.number_width);
+    let slot = egui::Rect::from_min_size(
+        row_rect.min + egui::vec2(x, 0.0),
+        egui::vec2(layout.number_width, layout.line),
+    );
+    let plus = ui
+        .painter()
+        .layout_no_wrap("+".into(), log_font(), layout.flag);
+    let (body, tip) = tag_shape(slot, plus.size().x);
+    let add = tr!(l10n, "markers-add", time = time.to_string());
+    let response = ui
+        .interact(
+            tag_hit_rect(body, tip),
+            egui::Id::unique(("marker_add", s.measurement.timestamp)),
+            egui::Sense::CLICK,
+        )
+        .on_hover_text(add.as_ref())
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, add.as_ref()));
+    let stroke = egui::Stroke::new(if response.hovered() { 1.5 } else { 1.0 }, layout.flag);
+    ui.painter().add(egui::Shape::closed_line(
+        vec![
+            tip,
+            body.left_top(),
+            body.right_top(),
+            body.right_bottom(),
+            body.left_bottom(),
+        ],
+        stroke,
+    ));
+    ui.painter()
+        .galley(body.center() - plus.size() / 2.0, plus, layout.flag);
+    response
+        .clicked()
+        .then(|| (s.measurement.timestamp, log_line(l10n, &s.measurement)))
+}
+
+/// A marker row's reading and its tag, if any. The tag keeps its room: the
+/// reading is what gets cut.
+fn reading_label(ui: &mut Ui, layout: &LogLayout, text: &str, tag: Option<&str>) {
+    let tag = tag.map(|tag| {
+        egui::WidgetText::from(RichText::new(tag).small().color(layout.weak)).into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Small,
+        )
+    });
+    let tag_width = tag.as_ref().map_or(0.0, |g| g.size().x + layout.spacing);
+    ui.allocate_ui_with_layout(
+        egui::vec2((ui.available_width() - tag_width).max(0.0), layout.line),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| ui.add(egui::Label::new(RichText::new(text).font(log_font())).truncate()),
+    );
+    if let Some(tag) = tag {
+        ui.label(tag);
+    }
+}
+
+/// Marker `m`'s number tag: a button, so Tab stops on it, that brings the
+/// marker into view, where tabbing past it moves nothing. Drawn as the
+/// graph's flag, pointing at its reading, and greyed once the graph has
+/// dropped the reading (`on_graph`), with nowhere left to show it. Whether
+/// it was pressed.
+fn number_tag(
+    ui: &mut Ui,
+    layout: &LogLayout,
+    l10n: &Localizer,
+    m: &Marker,
+    on_graph: bool,
+) -> bool {
+    let (number, at) = (m.number, m.at);
+    let show = tr!(l10n, "markers-show", number = number);
+    let tag = |ui: &mut Ui| {
+        let (slot, _) = ui.allocate_exact_size(
+            egui::vec2(layout.number_width, layout.line),
+            egui::Sense::hover(),
+        );
+        let fill = if ui.is_enabled() {
+            layout.flag
+        } else {
+            layout.weak
+        };
+        let galley = ui
+            .painter()
+            .layout_no_wrap(number.to_string(), log_font(), layout.flag_text);
+        let (body, tip) = tag_shape(slot, galley.size().x);
+        let response = ui.interact(
+            tag_hit_rect(body, tip),
+            egui::Id::unique(("marker_tag", at)),
+            egui::Sense::click(),
+        );
+        let painter = ui.painter();
+        painter.add(egui::Shape::convex_polygon(
+            vec![body.left_top(), tip, body.left_bottom()],
+            fill,
+            egui::Stroke::NONE,
+        ));
+        painter.rect_filled(
+            body,
+            egui::CornerRadius {
+                nw: 0,
+                ne: 3,
+                sw: 0,
+                se: 3,
+            },
+            fill,
+        );
+        painter.galley(
+            body.center() - galley.size() / 2.0,
+            galley,
+            layout.flag_text,
+        );
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), show.as_ref())
+        });
+        response
+    };
+    let button = ui
+        .add_enabled(on_graph, tag)
+        .on_hover_text(show.as_ref())
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_disabled_hover_text(tr!(l10n, "markers-show.hover-disabled", number = number).as_ref())
+        .a11y_label(&show);
+    crate::a11y::paint_focus_ring(ui, &button);
+    button.clicked()
+}
+
+/// Marker `number`'s ×, which deletes it. Whether it was pressed.
+fn delete_button(ui: &mut Ui, layout: &LogLayout, l10n: &Localizer, number: u32) -> bool {
+    let label = tr!(l10n, "markers-delete", number = number);
+    ui.add_sized(
+        [layout.delete_width, layout.line],
+        egui::Button::new(RichText::new("\u{00D7}").font(log_font())),
+    )
+    .on_hover_text(label.as_ref())
+    .a11y_label(&label)
+    .clicked()
+}
+
+/// Marker `m`'s note, `width` wide.
+fn note_field(ui: &mut Ui, l10n: &Localizer, m: &mut Marker, width: f32) -> egui::Response {
+    let number = m.number;
+    // Keyed by the reading, not the number: numbers start over once the list
+    // empties, and a new marker must not inherit an old note's undo history.
+    let id = egui::Id::unique(("marker_note", m.at));
+    ui.add(
+        egui::TextEdit::singleline(&mut m.note)
+            .id(id)
+            .hint_text(RichText::new(tr!(l10n, "markers-note")).font(log_font()))
+            .font(log_font())
+            .margin(egui::Margin::symmetric(4, 0))
+            .char_limit(NOTE_MAX_CHARS)
+            .desired_width(width),
+    )
+    .a11y_label(&tr!(l10n, "markers-note.a11y", number = number))
 }
 
 #[cfg(test)]
