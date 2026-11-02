@@ -1,0 +1,320 @@
+english	japanese	part_of_speech/counter	context (where it appears)	source (URL or file + page)	notes
+DC voltage	直流電圧	n.	spec table titles (table-*-dc-voltage), prose, notes	Sanwa CD772 JP PDF p.25 “DCV直流電圧”; KEW1062 JP PDF p.6 “4.3.2 直流電圧測定”; Sanwa PC773 JP PDF p.3	Mode labels keep the meter's DC V / V DC (STYLE §6). Never «DCV 電圧» in prose.
+AC voltage	交流電圧	n.	spec table titles, prose	Sanwa CD772 JP PDF p.25 “ACV 交流電圧”; KEW1062 JP PDF p.6 “4.3.1 交流電圧測定”	
+AC+DC voltage	交流+直流電圧	n.	table-3-ac-voltage-plus-dc-voltage, table-ac-plus-dc-voltage	partial: Sanwa PC7000 JP PDF p.2 “直流+交流電圧 (mV)”; KEW1062 JP PDF p.6 “4.3.11 DC+AC 電流測定”; Fluke 289 JP PDF p.20 “AC+DC 電圧測定”	"Provisional ruling (STYLE §0 item 10): full words in titles and prose, in the English's AC+DC order. The makers write DC first («直流+交流»): that order is the alternative. Mode labels and notes keep AC+DC. ""AC Voltage + DC Voltage"" → «交流電圧+直流電圧»."
+voltage	電圧	n.	aux-voltage, prose	Sanwa PM3 JP PDF p.1 “5-2-1 電圧（Ｖ）測定”; KEW1062 JP PDF p.9	
+current	電流	n.	aux-current, key-current	KEW1062 JP PDF p.6 “4.3.10 電流測定”; MS-T current => 電流	
+DC current	直流電流	n.	spec table titles	KEW1062 JP PDF p.9 “直流電圧，交流電圧，直流電流，交流電流”; Sanwa PC7000 JP PDF p.2	
+AC current	交流電流	n.	spec table titles	KEW1062 JP PDF p.9; KEW MATE 2000A JP PDF p.1 “交流電流 Ａ”	
+4–20 mA loop current	4-20 mA ループ電流	n.	table-l-4-20-ma-loop-current, notes	partial: Sanwa PC7000 JP PDF p.7 “[ mA/% 4～20 mA ]” (the function, no name for the loop)	«ループ電流» itself has no approved source. Keep the hyphen as the English writes the range; never «～» (MS-SG p.26).
+resistance	抵抗	n.	mode, table titles	Sanwa CD800a JP PDF p.1 “5-3 抵抗（Ω）測定”; KEW1062 JP PDF p.6 “4.3.5 抵抗測定（Ω）”; MS-T resistance => 抵抗	
+Ohms (table title)	抵抗	n.	table-ohms, table-autocheck-ohms	KEW1062 JP PDF p.6 “抵抗測定（Ω）”; Fluke 289 JP PDF p.39 “オーム (Ω) で抵抗を測定します”	Keep «Ohms» inside the AutoCheck™ (Ohms) trademark title, as fr does.
+continuity	導通	n.	mode-continuity, aux-continuity	Sanwa PC7000 JP PDF p.2 “導通チェック”; KEW1062 JP PDF p.6 “4.3.7 導通チェック”; Fluke 80V JP PDF p.3 “導通試験”	
+continuity test	導通チェック	n.	table-14-continuity-test, table-f-continuity-test	Sanwa CD772 JP PDF p.3 “導通チェック”; KEW1062 JP PDF p.6; alt. «導通試験» Fluke 80V JP PDF p.3, Fluke 289 JP PDF p.4	Japanese makers say «チェック»; pick it everywhere.
+audible continuity tester	導通ブザー	n.	table-audible-continuity-tester	KEW MATE 2000A JP PDF p.1 “30±10Ω以下で導通ブザー鳴動”; Sanwa CD772 JP PDF p.6 “導通チェックは、ブザー音と赤色LEDランプ点灯で確認”	
+diode	ダイオード	n.	mode-diode, range-diode	Sanwa PM3 JP PDF p.1 “：ダイオード”; KEW1062 JP PDF p.6	
+diode test	ダイオードテスト	n.	table-15-diode-test, table-diode-tester	Sanwa CD772 JP PDF p.3 “ダイオードテスト”; KEW1062 JP PDF p.6 “4.3.8 ダイオードテスト”	Diode Tester → «ダイオードテスト». Fluke writes «ダイオード試験» (289 JP PDF p.4).
+capacitance	静電容量	n.	mode-capacitance, tables	Sanwa CD772 JP PDF p.3 “5－05 静電容量測定”; Fluke 80V JP PDF p.3 “静電容量の測定”	KEW writes «キャパシタンス» (KEW1062 JP PDF p.9): rejected for the kanji term most makers use.
+frequency	周波数	n.	mode-frequency, aux-frequency	Sanwa CD772 JP PDF p.3 “5－04 周波数測定（Hz）”; KEW1062 JP PDF p.6; MS-T frequency => 周波数	
+duty cycle	デューティー比	n.	mode-duty-pct, range-duty, aux-duty, table-12-duty-cycle	Sanwa CD800a JP PDF p.1 “％：デューティー比”; Sanwa PM3 JP PDF p.1 “DUTY：デューティー比”; alt. «デューティ比» Sanwa PC7000 JP PDF p.3, KEW1062 JP PDF p.6; «デューティー･サイクル» Fluke 80V JP PDF p.4	The long vowel follows MS-SG p.35 (fewer than 4 counted characters), as Sanwa's CD800a and PM3 write it.
+Duty % (mode label)	デューティー比 %	n.	mode-duty-pct	as duty cycle; Sanwa CD800a JP PDF p.1 “％：デューティー比”	7 wide characters against 6 Latin ones: about 2.5× on screen. Fallback if the mode line wraps: keep «Duty %», as the meters print D%.
+pulse width	パルス幅	n.	mode-pulse-width, table-13-pulse-width	Fluke 80V JP PDF p.4 “パルス幅の測定”; Fluke 289 JP PDF p.5	
+temperature	温度	n.	mode-temperature, aux-temperature	Sanwa CD772 JP PDF p.3 “5－06 温度測定”; KEW1062 JP PDF p.6 “4.3.9 温度測定（TEMP）”	Temp °C → «温度 °C». Keep °C as two characters, never ℃ (U+2103), which the manuals print (STYLE §6).
+internal temperature	内部温度	n.	aux-internal-temperature	no approved source found	Plain Japanese.
+K-type thermocouple	K 型熱電対	n.	notes (note-k-type-thermocouple-*)	Sanwa PC7000 JP PDF p.4 “K 型熱電対温度センサ対応”; Fluke 80V JP PDF p.16 “K 型熱電対”	Sanwa CD772 writes «Kタイプ熱電対» (PDF p.6). Half-width space after K (MS-SG p.32).
+temperature probe	温度プローブ	n.	notes	KEW1052 JP PDF p.12 “温度プローブ：K タイプ温度プローブ”; Sanwa PC773 JP PDF p.25 “温度プローブ（T-300PC）による測定”	point-contact probe → «接触型プローブ», rod-type probe → «棒状プローブ» (no source for either).
+hFE	トランジスタの電流増幅率 (hFE)	n.	mode-hfe, aux-hfe, table-k-transistor	partial: MS-SG p.38 “transistor トランジスタ” (no long vowel, a listed exception); «電流増幅率» no approved source found	"Mode labels keep hFE. ""Transistor Magnification"" → «トランジスタの電流増幅率 (hFE)»."
+NCV	NCV (非接触検電)	n.	mode-ncv, aux-ncv, reading-spoken-ncv, read-error-not-an-ncv-level	partial: Sanwa CD800a JP PDF p.1 “5-9 検電（EF:Electric Field 検知）”; Sanwa PC710 JP PDF p.4 “接触／非接触により導体の通電／非通電を調べられる”	"Keep «NCV» in labels; spell out only in prose. Spoken ""NCV level n"" → «NCV レベル { $level }»."
+EF / non-contact EF detection	EF / 非接触電界検出	n.	mode-ef*, table-non-contact-ef-detection	Sanwa PC710 JP PDF p.2 “電界検出 (EF-Detection) 機能”; PDF p.7 “非接触 EF”; PDF p.3 “EF：電界”	Keep EF, EF-H, EF-L as printed.
+LoZ	LoZ (低インピーダンス)	n.	mode-loz-*, flag-loz	Sanwa PC720M JP PDF p.3 “：低入力インピーダンス”; PDF p.2 “ローインピーダンス電圧・抵抗 (AutoΩ・V)”; Fluke 289 JP PDF p.4 “電圧測定用 LoZ の使用”	"Spoken (reading-spoken-loz): «低インピーダンス». ""Lo-Z threshold"" → «Lo-Z しきい値»."
+low-pass filter / LPF	ローパスフィルター / LPF	n.	mode-acv-lpf, qualifier-lpf-mode, aux-lpf-v	KEW1062 JP PDF p.9 “● ローパスフィルタ”; Sanwa PC7000 JP PDF p.4 “LPF 内蔵”; MS-T filter => フィルター	Long vowel per MS-SG p.35 (-er) and MS-T; KEW writes «フィルタ». Keep LPF in labels (qualifier-lpf-mode = «LPF { $mode }»).
+VFD	VFD	—	mode-vfd-*	Sanwa PC7000 JP PDF p.2 “5-2 可変周波数駆動 (VFD)”	Keep as printed; in prose «可変周波数駆動 (VFD)».
+VFC	VFC	—	mode-vfc	no approved source found	Keep as printed.
+dBm / dBV	dBm / dBV	unit	mode-v-ac-dbm, notes	KEW1062 JP PDF p.6 “4.3.20 デシベル演算機能（dBm，dBV）”	Unit symbols: never change.
+dBm reference	dBm 基準値	n.	mode-dbm-reference	Fluke 289 JP PDF p.5 “カスタム dBm 基準値の設定”; Sanwa PC7000 JP PDF p.13 “基準インピーダンス”	
+inductance	インダクタンス	n.	mode-inductance*	no approved source found	Q and R sub-labels unchanged.
+conductance	コンダクタンス	n.	table-8-conductance	Sanwa PC710 JP PDF p.2 “コンダクタンス (nS) 測定”; Fluke 80V JP PDF p.3	
+power	電力	n.	mode-power*	Sanwa CD772 JP PDF p.4 “電力ライン”; Sanwa CD800a JP PDF p.1 “消費電力”	AC power W → «AC 電力 W» (mode labels keep AC/DC as printed).
+apparent power (VA)	皮相電力 (VA)	n.	notes, VA modes	no approved source found	Keep the unit symbol whenever the English gives it (fr ruling). No en-US text uses the term today.
+power factor / PF	力率 / PF	n.	mode-power-factor, aux-pf	no approved source found	Keep «PF» where the meter prints it.
+inrush current	突入電流	n.	mode-inrush, aux-inrush	Fluke 80V JP PDF p.32 “電源のサージや突入電流を記録”; Fluke 289 JP PDF p.27	Mode label Inrush → «突入電流».
+True RMS	真の実効値 (True RMS)	n.	notes (note-true-rms-*)	Sanwa PC7000 JP PDF p.4 “交流（AC）測定は真の実効値方式。（True RMS）”; Sanwa CD772 JP PDF p.6; Fluke 289 JP PDF p.79	Notes may keep «True RMS» alone where the meter prints it.
+RMS (sine RMS)	正弦波の実効値	n.	"notes ""sensitivity 40mV (sine RMS)"""	Sanwa CD800a JP PDF p.1 “交流電圧は正弦波交流の実効値での値”; Sanwa PM3 JP PDF p.1	"""sensitivity 40mV (sine RMS)"" → «感度 40mV (正弦波の実効値)»."
+crest factor	クレストファクター	n.	notes	Fluke 289 JP PDF p.4 “クレスト･ファクターの測定”; Sanwa CD772 JP PDF p.3 “クレストファクタ（波高率）”	Long vowel per MS-SG p.35 (-or); Sanwa and KEW write «クレストファクタ». No middle dot: MS-SG p.31 keeps «・» for names.
+peak	ピーク	n.	mode-*-peak, qualifier-peak-mode, qualifier-mode-peak, aux-peak-min, main-label-peak-max, CLI Peak	KEW1062 JP PDF p.6 “4.3.18 ピークホールド機能”; Sanwa PC7000 JP PDF p.2 “キャプチャ（ピークホールド）機能”	Keep PEAK as a key/flag name. qualifier-mode-peak → «{ $mode } ピーク».
+peak max / peak min	ピーク最大 / ピーク最小	n.	main-label-peak-max, aux-peak-min, spoken «crête maximale / minimale»	Fluke 80V JP PDF p.12 “ピーク最大最小”	Flags P-MAX / P-MIN stay as printed. Spoken «ピーク最大値», «ピーク最小値».
+period	周期	n.	aux-period	Fluke 289 JP PDF p.36 “周期測定”	
+impedance	インピーダンス	n.	aux-impedance	KEW MATE 2000A JP PDF p.1 “入力インピーダンス :10M Ω”; Sanwa PC773 JP PDF p.14	
+burden voltage	バーデン電圧	n.	aux-burden-voltage, note-burden-voltage-*	no approved source found	No manual term found. Alternative: «電流測定時の電圧降下» (Sanwa writes «電圧降下» for diodes, PC7000 JP PDF p.23).
+clamp	クランプ	n.	mode-clamp-*, aux-clamp-*	Sanwa CD772 JP PDF p.24 “クランププローブ”; KEW MATE 2000A JP PDF p.1 “クランプセンサー”	Clamp AC A → «クランプ AC A».
+power (mains) line	ライン	n.	mode-line-hz, table-line-level-frequency-hz	Sanwa PC7000 JP PDF p.3 “Hz：ライン周波数”	Line Hz → «ライン Hz».
+logic level	ロジックレベル	n.	mode-logic-hz, table-logic-level-*	Sanwa PC7000 JP PDF p.33 “ロジック・レベル周波数(Hz)”; PDF p.2 “ロジック周波数”	Logic Hz → «ロジック Hz».
+Motor / Solar / Tachometer / Compass / Angle / Time / Scope	モーター / ソーラー / 回転計 / コンパス / 角度 / 時間 / オシロスコープ	n.	mode-motor, mode-solar, mode-tachometer, mode-compass, mode-angle, mode-time, mode-scope	partial: Fluke 80V JP PDF p.15 “モーター･ドライブ” (motor); others no approved source found	Long vowel on «モーター» per MS-SG p.35 (-or); Sanwa writes «モータ» (CD772 JP PDF p.4). Check each against the meter when it is reviewed.
+Live (mode: live-wire detection)	活線	n.	mode-live, aux-live	no approved source found	Not «ライブ»: that is the graph's LIVE chip. Alternative: «充電部».
+Recall	データ呼び出し	n.	mode-recall	Sanwa PC720M JP PDF p.11 “（Recall）するとデータ呼び出し”	
+Battery (sub-value)	電池	n.	aux-battery	Sanwa CD772 JP PDF p.3 “電池、ヒューズの交換”; KEW1062 JP PDF p.4	«バッテリー» (MS-T) only for a rechargeable pack.
+HOLD (flag / key)	HOLD	—	flag-hold, remote panel, CLI settings	Sanwa CD800a JP PDF p.1 “4-5 HOLD（データホールド）ボタン”; KEW1062 JP PDF p.43 “HOLD キー”	Keep on the display text. Prose: «データホールド».
+data hold / hold (spoken)	データホールド	n.	reading-spoken-hold, remote-hold hover	Sanwa CD772 JP PDF p.3 “4－03 データホールド”; Sanwa PM3 JP PDF p.1 “DATA HOLD（データホールド）スイッチ”	"Hover ""Freeze the current reading"" → «現在の測定値を固定します»."
+REL (flag / key)	REL	—	flag-rel, qualifier-mode-rel, CLI	KEW1062 JP PDF p.6 “4.3.19 REL ⊿／％演算”; Sanwa CD800a JP PDF p.1 “△RELボタン”	Keep.
+relative	相対値	n.	main-label-relative, reading-spoken-rel, remote-rel hover	Sanwa CD772 JP PDF p.3 “リラティブ測定（相対値測定）”; Sanwa PC7000 JP PDF p.2 “相対値（リラティブ）測定機能”	Main label «相対値»; spoken flag REL: «相対値». «リラティブ» only in a key's description.
+reference	基準値	n.	aux-reference, graph Ref	Sanwa PC7000 JP PDF p.9 “ある基準値からの相対値を表示”; KEW1062 JP PDF p.26 “リラティブ演算時の基準値表示”	aux-reference → «基準値».
+absolute	絶対値	n.	aux-absolute	no approved source found	
+AUTO (flag)	AUTO	—	flag-auto-range, remote AUTO	Sanwa CD800a JP PDF p.1 “表示器に AUTO が点灯します”	Keep.
+auto range / auto-ranging	オートレンジ	n.	reading-spoken-auto-range, remote-auto, settings-auto-*, errors	Sanwa CD772 JP PDF p.8 “オートレンジモード動作表示”; Sanwa PM3 JP PDF p.1 “オートレンジに復帰”	Meter now auto-ranging (6V) → «マルチメーターはオートレンジになりました (6V)».
+manual range	マニュアルレンジ	n.	settings-switched [range], remote-range	Sanwa CD800a JP PDF p.1 “オートレンジあるいはマニュアルレンジ”; Sanwa PC773 JP PDF p.10	Fluke writes «手動レンジ» (289 JP PDF p.23).
+range	レンジ	n.	reading-range, range menu, CLI settings, errors	Sanwa CD772 JP PDF p.24 “レンジ切り換え オート及びマニュアル”; KEW1062 JP PDF p.24; Fluke 289 JP PDF p.18 “レンジ表示”	"Every maker says «レンジ». MS-T range => 範囲 is the generic sense: keep «範囲» for value ranges (""Y axis 0 to 5"")."
+RANGE (key)	RANGE	—	remote-range hover, errors	KEW1062 JP PDF p.24 “RANGE キーを 1 秒以上押して”; Sanwa CD800a JP PDF p.1 “RANGE ボタンを押すと”	Keep.
+MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	Sanwa CD800a JP PDF p.1 “MAX/MIN ボタン”; KEW1062 JP PDF p.24 “表示部に“MIN” “MAX” “AVG”が表示されます”	Keep.
+minimum / maximum (spoken)	最小値 / 最大値	n.	reading-spoken-min/max, stats	Sanwa PC7000 JP PDF p.2 “4-12 最大値 / 最小値 / 平均値レコード機能”; KEW1062 JP PDF p.9	
+AVG (flag) / average	AVG / 平均値	n.	flag-avg, reading-spoken-avg, aux-average	Sanwa PC7000 JP PDF p.2; Fluke 80V JP PDF p.8 “AVG （平均）”	Keep AVG on the display; spoken «平均値».
+SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	KEW1062 JP PDF p.22 “SELECT (PRINT)キー”; Sanwa PM3 JP PDF p.1 “SELECT（セレクト）スイッチ”	Keep.
+secondary function	サブ機能	n.	remote-select hover	Fluke 289 JP PDF p.24 “主要な測定機能 (ロータリー･スイッチの位置) には、サブ機能や…”; KEW1062 JP PDF p.23 “1）の測定ポジションで別の測定機能を選択”	
+backlight / LIGHT	バックライト / LIGHT	n.	remote-light hover	Sanwa CD772 JP PDF p.3 “4－04 バックライト”; KEW1062 JP PDF p.9	Keep the key name LIGHT.
+ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	KEW1062 JP PDF p.9 “ゼロ調整（Ω /CAP）” (action)	Keep the key name.
+overload / OL	オーバーレンジ / OL	n.	reading-spoken-overload, graph-hover-overload, graph legends	KEW1062 JP PDF p.11 “オーバーレンジ表示 …「 ＯＬ 」表示”; Sanwa PC7000 JP PDF p.33 “レンジオーバーに対し、数字部に「OL」を表示”	What OL means. «過負荷» is for overload protection only. Keep «OL» where the English writes OL.
+over range	オーバーレンジ	n.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	KEW1062 JP PDF p.11; KEW1052 JP PDF p.8	currently over range. → «現在オーバーレンジです。»
+LOW BAT (flag)	LOW BAT	—	flag-low-battery	Sanwa CD772 JP PDF p.3 “4－08 電池消耗警告表示”	Keep: it stands for the battery icon. Spoken: «電池消耗».
+HV! (flag)	HV!	—	flag-hv-warning; spoken reading-spoken-hv-warning	Sanwa CD772 JP PDF p.4 “：高電圧注意”; Fluke 80V JP PDF p.11 “高電圧入力が存在することを示します”	Spoken: «高電圧警告».
+LEAD ERR (flag)	LEAD ERR	—	flag-lead-error; spoken reading-spoken-lead-error	Sanwa PC7000 JP PDF p.2 “4-10 テストリードプラグ誤挿入警告機能”	Spoken: «テストリード誤挿入».
+COMP (flag) / compare	COMP / 比較	n.	flag-comp, reading-spoken-comp, aux-comp-*	no approved source found	COMP High/Low → «COMP 上» / «COMP 下». Spoken «比較».
+REC (flag) / record (meter memory)	REC / 記録	n.	flag-record, reading-spoken-record	KEW1062 JP PDF p.24 “キーを押すと記録が開始され”; Fluke 289 JP PDF p.5 “測定データの記録”	Spoken «記録中».
+VOID (flag)	VOID / 無効	adj.	flag-void, reading-spoken-void	MS-T invalid => 無効	Spoken: «無効».
+annunciator / status flag	インジケーター	n.	translator comments only	Fluke 289 JP PDF p.9 “16. 導通インジケーター”; MS-SG p.64 “インジケーター”	Sanwa says «～動作表示» (CD772 JP PDF p.8). Translator comments only.
+key (on the meter)	キー / ボタン	n.	remote panel, activation steps, key hovers	KEW1062 JP PDF p.22 “SELECT (PRINT)キー”; Sanwa CD772 JP PDF p.7 “セレクトボタン”	"Follow the English: ""key"" → «キー», ""button"" → «ボタン» (the makers use both). The app's own buttons are always «ボタン»."
+press (briefly) / short press	押す	v.	activation steps, key hovers	Sanwa PC7000 JP PDF p.6 (the manual calls a short press “押す” and a long one “1 秒以上押す”)	"""Short press X"" → «X を短く押す» where the English insists on short."
+hold (a key) / long press	長押しする / 押し続ける	v.	activation steps	Sanwa CD800a JP PDF p.1 “MAX/MIN ボタンを長押しするか”; Fluke 80V JP PDF p.8 “1 秒間押し続けます”; KEW1062 JP PDF p.24 “RANGE キーを 1 秒以上押して”	Hold X while turning on → «X を押しながら電源を入れます» (KEW1062 JP PDF p.43 «HOLD キーを押しながらファンクションスイッチを…»).
+dial	ファンクションスイッチ	n.	"activation steps, errors ""turn the dial first"""	Sanwa PC7000 JP PDF p.2 “電源兼ファンクションスイッチ”; KEW1062 JP PDF p.22; Sanwa PM3 JP PDF p.1	"Fluke says «ロータリー･スイッチ» (80V JP PDF p.7). ""turn the dial first"" → «先にファンクションスイッチを回してください»."
+dial position	ファンクションスイッチの位置	n.	errors, remote-select hover	Sanwa CD772 JP PDF p.19 “スイッチの位置が違っていたり”; Fluke 80V JP PDF p.7 “ロータリー･スイッチの位置”	
+function (dial)	測定機能	n.	"activation steps ""Turn the dial to any function"""	KEW1062 JP PDF p.43 “ファンクションスイッチを各測定機能にします”; Sanwa CD800a JP PDF p.1 “他のファンクション”	"""Turn the dial to any function"" → «ファンクションスイッチを任意の測定機能に合わせます»."
+mode	モード	n.	reading-mode, mode menu, CLI settings	Sanwa CD772 JP PDF p.8 “リラティブモード動作表示”; MS-T mode => モード	Put «モード» after a placeable: «{ $mode } モード».
+display (the meter's)	ディスプレイ	n.	"activation steps ""shows on the display"""	Fluke 80V JP PDF p.7 “ディスプレイに短時間表示されます”; alt. «表示器» Sanwa CD772 JP PDF p.3, «表示部» KEW1062 JP PDF p.22	"""shows on the display"" → «ディスプレイに表示されます»."
+beep	ビープ音	n.	activation notes, settings-device-name	Fluke 80V JP PDF p.9 “本器はビープ音を発し”; Fluke 289 JP PDF p.5; alt. «ブザー音» Sanwa PC7000 JP PDF p.2	Count with «回»: two beeps → «ビープ音が 2 回鳴った後».
+auto power-off	オートパワーオフ	n.	"activation notes ""switches off after 15 minutes idle"""	Sanwa CD800a JP PDF p.1 “4-8 オートパワーオフ”; KEW1062 JP PDF p.6 “4.5 オートパワーオフ機能”	Keep APO as printed.
+on / off (meter setting)	オン / オフ	adj.	toggle-on, toggle-off	MS-SG p.30 “On/Off オン/オフ”	toggle-on «オン», toggle-off «オフ».
+specifications	仕様	n.	specs-heading, settings-specs	Sanwa CD772 JP PDF p.3 “【8】仕 様”; KEW1062 JP PDF p.3	
+resolution	分解能	n.	specs-resolution, settings-specs-resolution	KEW1062 JP PDF p.13 (table header “レンジ 分解能”); Sanwa PC773 JP PDF p.6 “最小分解能”	"MS-T resolution => 解像度 is the screen sense: avoid. Short ""Res:"" → «分解能:»."
+accuracy	確度	n.	specs-accuracy, settings-specs-accuracy, notes	KEW1062 JP PDF p.6 “3.2 確度”; Sanwa CD772 JP PDF p.3 “測定範囲および確度”; Fluke 80V JP PDF p.14	"MS-T accuracy => 正確性 is the general sense: avoid. Short ""Acc:"" → «確度:»."
+input impedance / Input Z	入力インピーダンス	n.	specs-input-impedance, settings-specs-input-z	KEW MATE 2000A JP PDF p.1 “入力インピーダンス :10M Ω”; Fluke 289 JP PDF p.20 “低入力インピーダンス”	The specs row and its setting say «入力インピーダンス» in full (fr ruling).
+overload protection	過負荷保護	n.	spec input rows	Sanwa CD772 JP PDF p.3 “1－03 過負荷保護”; KEW MATE 2000A JP PDF p.1 “●過負荷保護”	
+of reading (±(a% of reading + b))	読み取り値	n.	notes, accuracy bands	Sanwa CD772 JP PDF p.25 “rdg(reading)：読み取り値 dgt(digit)：最終桁のカウント数”; Fluke 80V JP PDF p.43 “±（[読みの %] + [最下位の数]）”	In formulas the makers write «%rdg» (Sanwa PM3 JP PDF p.1 «±（10 %rdg+5dgt）»); in words «読み取り値の a%».
+digits / counts (accuracy, residual)	カウント	n.	"notes ""add 10 digits"", ""residual ≤10 digits"", ""Display digits: 6000"""	Fluke 80V JP PDF p.15 “1～30 カウントの残余読み取りが表示されます”; Sanwa CD800a JP PDF p.1 “0入力時に3〜9カウント程度、数字が残ります”	"""add 10 digits"" → «10 カウントを加算»; ""residual ≤10 digits"" → «残留 ≤10 カウント». «dgt» stays inside a formula the English writes that way."
+display counts (6000-count display)	6000 カウント	n.	note-display-digits-6000, note-true-rms-crest-factor-*	Sanwa PC773 JP PDF p.6 “11000 カウントフルスケール表示”; KEW1062 JP PDF p.29 “最大 5000 カウント表示”	Do not write «6,000»: the spec check rejects regrouped thousands.
+Not specified / Unspec'd	規定なし	n.	"band-not-specified, notes ""not specified above 10A"""	Sanwa PC710 JP PDF p.29 “規定されず”; Sanwa PC720M JP PDF p.34	In a sentence: «規定されていません» (MS-SG p.9 prefers that to a «未～» form). Short band label: «規定なし».
+for reference only	参考値	n.	band-only-for-reference, note-reading-for-reference-only	no approved source found	"""for reference only"" → «参考値»; ""the reading is for reference only"" → «測定値は参考値です»."
+of range (10%–100% of range)	レンジの	loc.	notes	Fluke 80V JP PDF p.43 “レンジの 3 % から 100 % まで有効です”	Use «レンジ» per the range decision.
+sensitivity	感度	n.	notes	Sanwa CD772 JP PDF p.16 “入力感度: 3 Vrms以上”; Fluke 289 JP PDF p.6	
+temperature coefficient / tempco	温度係数	n.	note-60-00mohm-tempco-*	Sanwa PC7000 JP PDF p.33 “温度係数 0.15 × (23 ± 5 ℃での確度 ) / ℃”; KEW1062 JP PDF p.11	
+humidity	湿度	n.	note-humidity-50-pct	Sanwa CD772 JP PDF p.24 “動作温度/湿度”; Fluke 289 JP PDF p.78 “相対湿度”	
+typical / typ.	標準 / TYP.	adj.	notes	Sanwa PC7000 JP PDF p.23 “テスト電流は 0.4 mA（標準）です”; Sanwa PC773 JP PDF p.30 “約 7.5 mW TYP.”	Never drop it (STYLE §12).
+open circuit	開放	n.	"notes ""Open circuit ≈3V"""	Sanwa CD800a JP PDF p.1 “入力端子間の開放電圧は約3.0 Vです”; KEW1062 JP PDF p.19 “開放電圧”	Open circuit ≈3V → «開放電圧 ≈3V».
+shorted leads	テストリード短絡時	n.	notes	partial: Sanwa CD772 JP PDF p.3 “テストリード”; Fluke 80V JP PDF p.13 “短絡状態”	The phrase itself has no source.
+test lead	テストリード	n.	notes, lead error	Sanwa CD772 JP PDF p.3 “3－02 テストリード”; Fluke 289 JP PDF p.39	KEW says «測定コード» (KEW1062 JP PDF p.5). Probe tips are «テストピン» (Sanwa).
+fuse	ヒューズ	n.	"input-fuse-* (""Fuse 10A 1000V"")"	Sanwa CD772 JP PDF p.3 “電池、ヒューズの交換”; KEW1062 JP PDF p.4	"""Fuse 10A 1000V"" → «ヒューズ 10A 1000V»."
+nominal	定格	n.	input-*-nominal	Sanwa CD772 JP PDF p.4 “最大定格入力値”; KEW1062 JP PDF p.5 “指定された定格のヒューズ”	input-*-nominal; check each against its English.
+response time	応答時間	n.	note-response-time-100us	Sanwa PC7000 JP PDF p.19 “応答時間 100 μs 以下”; KEW1062 JP PDF p.13	
+meter / multimeter	マルチメーター	n.	"everywhere (""the meter"")"	MS-SG p.35 (-er takes «ー»: «コンピューター»); Fluke 289 JP PDF p.11 “デジタル･マルチメーター”; alt. «マルチメータ» Sanwa CD772 JP PDF p.1, KEW1062 JP PDF p.1	"Provisional ruling (§0 item 5): the MS-SG long-vowel rule over the Japanese makers' «マルチメータ». Put the noun before a model name: «マルチメーター { $model }». Never «本器» (the manuals' ""this instrument"") in the app."
+device	デバイス	n.	settings-device, device lists, CLI list	MS-T device => デバイス; MS-T Device Manager => デバイス マネージャー	
+simulated / mock	シミュレーション	n.	brand-simulated, mock models, settings-mock-*	MS-T simulation => シミュレーション; simulator => シミュレーター	"""Mock UT61E+"" → «UT61E+ (シミュレーション)». ""Simulated"" heading → «シミュレーション»."
+USB cable	USB ケーブル	n.	link-name-usb-cable, link-usb-cable, notices	KEW1062 JP PDF p.9 “USB 通信セット”; MS-SG p.32 (space between Latin and katakana)	
+Bluetooth adapter	Bluetooth アダプター	n.	link-name-bluetooth-adapter, notices	MS-T Bluetooth adapter => Bluetooth アダプター	
+Bluetooth link (built-in Bluetooth)	Bluetooth リンク	n.	link-name-bluetooth-link, top-bar-link-*	MS-T link => リンク (closest)	Keeps the app's link/connection distinction. No manual names it.
+connection	接続	n.	top bar, notices, errors	MS-T connection => 接続; Sanwa PC773 JP PDF p.3 “パソコンとの接続”	
+connect / Connect	接続 / 接続する	v.	top-bar-connect, shortcuts-connect	MS-T connect => 接続する | 接続	Button «接続» (noun phrase, MS-SG p.43).
+disconnect / Disconnect	切断 / 切断する	v.	top-bar-disconnect, top-bar-stop-retrying	MS-T disconnect => 切断	Status «切断済み».
+reconnect / Reconnecting…	再接続 / 再接続中…	v.	top-bar-reconnecting*	partial: MS-T connect => 接続; MS-SG p.41 continuous operations “～中”	Reconnecting (attempt 3)... → «再接続中 (3 回目)…» (MS-T retry => 再試行).
+pair / paired	ペアリング / ペアリング済み	n.	list-not-heard	MS-T pair => ペアリングする; pairing => ペアリング | ペア設定	
+data transmission	データ転送	n.	connection notices, activation (title), shared help	KEW1062 JP PDF p.9 “パソコンへの測定データ転送が可能です”; Sanwa PC7000 JP PDF p.6 “パソコンへ測定データを転送しているとき”	
+detect / Auto-detect	検出 / 自動検出	v.	settings-auto-detect, top-bar-auto-detect, device-auto, toasts	MS-T detect => 検出する; MS-SG p.43 “デバイスが検出されます”	"Detected X → «X を検出しました». ""Detecting the meter…"" → «マルチメーターを検出中…»."
+scan (Bluetooth) / Scanning…	スキャン / スキャン中…	v.	list-scanning, setup-bluetooth-scan	MS-T scan => スキャン	Unlike fr, Japanese «スキャン» has no paper-only sense.
+in range (Bluetooth)	通信範囲内	loc.	"list, errors ""in Bluetooth range"""	no approved source found	«Bluetooth の通信範囲内».
+adapter (any --adapter target)	アダプター	n.	connection-adapter-*, CLI	MS-T adapter => アダプター	
+identify itself (a meter)	識別	v.	connection-not-identified, no-meter-answered	no approved source found	No meter answered → «応答したマルチメーターはありません».
+driver	ドライバー	n.	setup-usb-windows-warning	MS-T driver => ドライバー	
+Device Manager	デバイス マネージャー	n.	setup-usb-windows-open	MS-T Device Manager => デバイス マネージャー; MS support ja-jp (touchscreen page) “[ デバイス マネージャー ] を選択します”	Windows names must be Windows' own Japanese names: «ヒューマン インターフェイス デバイス» (MS support ja-jp touchscreen page; MS-T HID), «ほかのデバイス» (MS support ja-jp Bluetooth page, in Device Manager). 'USB Input Device' «USB 入力デバイス» is unverified (MS-T input device => 入力デバイス): check on a Japanese Windows.
+System Settings > Privacy & Security (macOS)	システム設定 > プライバシーとセキュリティ > 入力監視; … > Bluetooth	n.	setup-usb-macos-privacy, setup-bluetooth-macos-privacy	Apple support ja-jp mchl211c911f (“アップルメニュー ＞「システム設定」と選択し、サイドバーで「プライバシーとセキュリティ」”, “入力監視”, “Bluetooth”); mchl4cedafb6	"Written with the app's [ ] and "" > "" (STYLE §4); Apple's own pages write 「」 and «＞»."
+settings file	設定ファイル	n.	CLI help, connect-saved-mock-mode	MS-T settings => 設定	
+command-line option / flag	コマンド ライン オプション	n.	comments, notices naming --flags	MS-T command-line option => コマンド ライン オプション	The --flag itself is verbatim.
+timeout	タイムアウト	n.	error-timeout, debug-timeout	MS-T timeout => タイムアウト	error-timeout → «応答待ちがタイムアウトしました».
+checksum	チェックサム	n.	error-checksum-mismatch	MS-T checksum => チェックサム	checksum mismatch → «チェックサムが一致しません».
+frame (protocol)	フレーム	n.	read-unreadable-frame, error-wrong-meter-*	MS-T frame => フレーム	Not «枠» (that is the window frame).
+support (of a meter by the app)	対応	n.	stability-warning, error-bluetooth-only-not-built	KEW1062 JP PDF p.9 “● 通信対応”; Sanwa PC7000 JP PDF p.4 “オートレンジ対応”	MS-T support => サポート is customer support: avoid. «{ $model } への対応は検証済みです».
+verified / partly verified / experimental	検証済み / 一部検証済み / 試験的	adj.	stability-*, top-bar-badge-*, settings-device-entry	no approved source found	Badges: «検証済み», «一部検証済み», «試験的». No capitals in Japanese.
+reading (a value the meter sent)	測定値	n.	reading-none, markers, export/import, graph menu, CLI	KEW1062 JP PDF p.36 “自動的に測定値を検出し HOLD する”; Sanwa PC7000 JP PDF p.6 “測定値”	"Provisional (§0 item 13). Alternative: «読み取り値» (Sanwa CD772 JP PDF p.25, Fluke) — kept for ""of reading"" in accuracy. No reading → «測定値なし»."
+measured value	測定値	n.	reading-spoken, hovers	KEW1062 JP PDF p.36	Same word as reading.
+sample	サンプル	n.	recording, graph, export, CLI summary	MS-T sample => サンプル; Fluke 289 JP PDF p.64 “サンプル”	Counter «件» (STYLE §5).
+sample interval	サンプリング間隔	n.	settings-sample-interval, CLI --interval-ms	MS-T sampling interval => サンプリング間隔	Every reading chip → «すべての測定値».
+buffer / Buffer size	バッファー / バッファー サイズ	n.	settings-buffer-size, recording-status-full	MS-T buffer => バッファー	buffer full → «バッファーがいっぱい».
+recording	記録	n.	recording panel, settings-recording, toasts	KEW1062 JP PDF p.24 “記録が開始され”; Fluke 289 JP PDF p.5 “測定データの記録”; MS-T record => 記録	MS-T recording => レコーディング is audio/video: avoid.
+Record (button)	記録	n.	"recording-record (""● Record"")"	MS-T record => 記録する | 記録	"""● Record"" → «● 記録»."
+Stop (button)	停止	n.	"recording-stop (""■ Stop"")"	MS-T stop => 停止; MS-T stop recording => 記録の停止	"""■ Stop"" → «■ 停止»."
+Discard	破棄	n.	recording-discard, export-unsaved-*-confirm	MS-T discard => 破棄	"""Discard and record"" → «破棄して記録»; ""Recording discarded"" → «記録を破棄しました»."
+export / Export…	エクスポート / エクスポート…	n.	export-button, shortcuts-export, toasts	MS-T export => エクスポート	
+import / Import…	インポート / インポート…	n.	import-button, toasts, CLI --import	MS-T import => インポート	"Import failed → «インポートできませんでした» (MS-SG p.52 ""Failed to …"")."
+replay (file) / replaying	リプレイ / リプレイ中	n.	export-replay, top-bar-replaying, --replay help	partial: MS-T playback => 再生	"The file format name «リプレイ»; ""Replaying { $path }"" → «{ $path } をリプレイ中». Alternative: «再生»."
+file type	ファイルの種類	n.	export-menu .a11y, import-file-type	MS-T file type => ファイルの種類	
+unsaved / unexported	保存されていない / エクスポートされていない	adj.	export-unsaved-*	MS-SG p.9 (“xx されていません” over “未 xx”)	"""Discard unexported samples?"" → «エクスポートされていないサンプルを破棄しますか?»"
+timestamp	タイムスタンプ	n.	read-error, CSV help	MS-T timestamp => タイムスタンプ	The CSV column name `timestamp` stays English.
+marker	マーカー	n.	markers-*, graph menu	MS-T marker => マーカー	Counter «個».
+note (on a marker)	メモ	n.	markers-note, markers-add	MS-T note => メモ	
+graph	グラフ	n.	settings-graph, toasts, shortcuts	MS-T chart => グラフ; graph => グラフ	
+plot (noun)	プロット	n.	"graph-plot-a11y-title ""Measurement plot."""	MS-T plot => プロット	"""Measurement plot."" → «測定値のプロット。»"
+plot (verb) / Plot:	プロットする / プロット:	v.	graph-plot, graph-plot-*	MS-T plot => プロット	
+series	系列	n.	graph comments, graph-show-chip	MS-T data series => データ系列	
+trace (a series' line)	トレース	n.	graph-show-chip, settings-graph-lines	MS-T trace => トレース (debugging sense too)	"Provisional. Alternative: «線» (MS-T line => 線). ""Hide the { $series } trace"" → «{ $series } のトレースを非表示»."
+main reading	メイン測定値	n.	"graph-plot-main (""Main"")"	partial: Sanwa PC7000 JP PDF p.6 “メイン表示部”	"Chip ""Main"" → «メイン»."
+sub-value	サブ表示値	n.	graph-plot-series hover, colors-swatch-overlay-*	partial: Sanwa PC7000 JP PDF p.6 “サブ表示部”; KEW1062 JP PDF p.11 “サブ表示”	
+axis / Y axis	軸 / Y 軸	n.	graph-y-*, graph-plot-a11y-y-axis	MS-T axis => 軸	Y:Fixed / Y:Auto → «Y:固定» / «Y:自動» (notation, no space).
+cursor	カーソル	n.	graph-cursors, graph menu, shortcuts	MS-T cursor => カーソル	Cursors A and B keep their letters: «カーソル A».
+reference line / Ref	基準線 / 基準	n.	graph-ref, graph-menu-*-ref	partial: Sanwa PC7000 JP PDF p.9 “基準値”	MS-T gridline => 目盛線 is a different line. Chip «基準».
+triggers (crossings of a reference line)	トリガー	n.	graph-triggers, shortcuts-graph-triggers, colors-swatch-crossing	MS-T trigger => トリガー; Sanwa PC7000 JP PDF p.12 “トリガーレベル”	"""crossing"" → «交差» (MS-T intersection => 交差)."
+histogram	ヒストグラム	n.	graph-histogram*	MS-T histogram => ヒストグラム	
+minimap	ミニマップ	n.	graph-minimap	MS-T minimap => ミニマップ	
+zoom / zoom in / zoom out	ズーム / 拡大 / 縮小	n.	settings-zoom, graph, shortcuts-zoom	MS-T zoom => ズーム; zoom in => 拡大; zoom out => 縮小	
+Reset Zoom	ズームのリセット	n.	graph-reset-zoom, shortcuts-zoom-reset	MS-T reset => リセット; MS-SG p.43 (buttons as noun phrases, “変更箇所の表示”)	
+pan	スクロール	v.	graph-live hover, shortcuts-mouse-drag, minimap	MS-T scroll => スクロール	MS-T pan => パン is the hand-tool sense: avoid.
+drag	ドラッグ	v.	gestures	MS-T drag => ドラッグ	"Gesture label ""Drag"" → «ドラッグ»."
+right-click	右クリック	n.	shortcuts-mouse-menu, Wayland notes	MS-T right-click => 右クリック	
+double-click	ダブルクリック	n.	shortcuts-mouse-reset, graph-reset-zoom hover	MS-T double-click => ダブルクリック; MS-SG p.19 (no space for a hyphenated compound)	
+scroll wheel	マウス ホイール	n.	"gestures ""Ctrl + scroll wheel"""	MS-T scroll wheel => マウス ホイール | スクロール ホイール	"""Ctrl + scroll wheel"" → «Ctrl + マウス ホイール»."
+live / LIVE (chip)	ライブ	n.	graph-live, graph-plot-a11y-state, top-bar status	MS-T live => ライブ	Chip «ライブ»; a11y state «ライブ。».
+bounding box	境界ボックス	n.	shortcuts-mouse-box-zoom	MS-T bounding box => 境界ボックス	
+time window	時間幅	n.	graph-window, shortcuts-graph-window	no approved source found	MS-T window => ウィンドウ is the window on screen.
+envelope (min/max band)	エンベロープ	n.	graph-envelope*, colors-swatch-envelope	MS-T envelope => エンベロープ	
+crosshair	十字線	n.	colors-swatch-crosshair	no approved source found	
+gap (in recorded data)	欠落	n.	stats-gaps, colors-swatch-gap, read-skipped-intervals	no approved source found	"""⚠ 3 gaps >2s skipped"" → «⚠ 2 秒超の欠落 3 件をスキップ»."
+viewport (minimap bracket)	ビューポート	n.	colors-swatch-viewport, shortcuts-mouse-minimap	MS-T viewport => ビューポート	
+statistics	統計	n.	stats-heading, settings-statistics	no approved source found (MS-T Statistics is a product name)	
+mean	平均値	n.	stats-mean, graph-mean, read-summary	Sanwa PC7000 JP PDF p.2 “平均値”; Fluke 289 JP PDF p.27 “読み値の平均値”	Caption «平均値:».
+standard deviation / σ	標準偏差 / σ	n.	stats-sd, graph-histogram-a11y-sd, hovers	MS-T standard deviation => 標準偏差	
+readings (count of)	測定値の数	n.	stats-count, graph-readout-count, read-summary, graph-histogram-a11y*	as reading	"Statistics caption ""Readings: 12"" → «測定値: 12 件»; read-out «測定値=12»."
+integral	積分	n.	stats-integral, read-integral, --integrate help	MS-T integral => 積分	
+Visible (block of figures)	表示範囲	n.	stats-visible	no approved source found	
+Reset (statistics)	リセット	n.	stats-reset	MS-T reset => リセット	
+alarm	アラーム	n.	alarm-*, reading badges, CLI	MS-T alarm => アラーム	
+high limit / low limit	上限 / 下限	n.	alarm-high/low, alarm-breach, graph-menu-set-alarm	no approved source found	"Fields ""Low""/""High"" → «下限»/«上限». Badges HI LIMIT / LO LIMIT → «上限超過» / «下限未満»."
+threshold	しきい値	n.	"notes ""Audible threshold"", ""Lo-Z threshold"""	MS-T threshold => しきい値; Fluke 80V JP PDF p.27 “しきい値レベル”	Sanwa writes «閾値» (PC7000 JP PDF p.19): use the kana form.
+hysteresis	ヒステリシス	n.	alarm-hysteresis, alarm-band hover, --alarm-hysteresis	no approved source found	
+scale / scaling	スケール / スケーリング	n.	scale-chip, scale-on toast, reading-badge-scaled, --scale	MS-T scale => スケール; scaling => スケーリング	Chip and badge «スケール»; spoken «ソフトウェアでスケーリング済み».
+scale factor	倍率	n.	scale-factor, --scale help	MS-T scale factor => 倍率 | スケール ファクター	
+offset	オフセット	n.	scale-offset, --offset help	MS-T offset => オフセット; Sanwa PC7000 JP PDF p.9	In the Scale row's narrow field the placeholder is «加算» (scale-offset): «オフセット» is cut to «オフ…» there and reads like the Off button beside it.
+unit / unit label	単位 / 単位ラベル	n.	scale-unit, alarm-unit, --unit	MS-T unit => 単位; label => ラベル	
+Apply	適用	n.	scale-apply, alarm-apply	MS-T apply => 適用する	
+Off (button)	オフ	n.	scale-off, alarm-off	MS-SG p.30 “オン/オフ”	"Toasts ""Alarm off"" → «アラーム オフ»."
+Settings	設定	n.	"top-bar-settings, every ""in Settings (⚙)"""	MS-T settings => 設定	"Every ""in Settings (⚙)"" → «[設定] (⚙) で»."
+theme	テーマ	n.	colors-theme*	MS-T theme => テーマ	
+Dark / Light / System	ダーク / ライト / システム	n.	colors-theme-*, settings-language-system	MS-T dark mode => ダーク モード; light mode => ライト モード; system => システム	«ダーク (カスタマイズ済み)».
+colours	色	n.	colors-colors, colors-customize	MS-T theme color => テーマの色	
+High Contrast	ハイ コントラスト	n.	colors-preset-high-contrast	MS-T high contrast => ハイ コントラスト	
+Colorblind (preset)	色覚サポート	n.	colors-preset-colorblind	no approved source found	Alternative: «色覚多様性».
+Default (preset)	既定	n.	colors-preset-default	MS-T default => 既定値 | デフォルト	
+customized / Customize colors	カスタマイズ済み / 色のカスタマイズ	adj.	colors-*-customized, colors-customize	MS-T customize => カスタマイズする	
+accent	アクセント	n.	colors-swatch-accent	MS-T accent color => アクセント カラー	
+background	背景	n.	"colors-swatch-background, ""Plot bg"" → «Fond du tracé»"	MS-T background => 背景	"""Plot bg"" → «プロット背景»."
+border	境界線	n.	colors-swatch-border	MS-T border => 境界線	
+frame (colour surface)	枠	n.	colors-swatch-frame	MS-T frame => 枠; window frame => ウィンドウ枠	
+heading	見出し	n.	colors-swatch-heading	MS-T heading => 見出し	
+weak text	補助テキスト	n.	colors-swatch-weak-text	no approved source found	"The hover says ""Secondary text""."
+palette	パレット	n.	colors-preset-* hovers	MS-T palette => パレット	
+keyboard shortcut	キーボード ショートカット	n.	shortcuts-*, top-bar-shortcuts	MS-T keyboard shortcut => キーボード ショートカット	
+Keyboard & Mouse	キーボードとマウス	n.	shortcuts-title	MS-T keyboard => キーボード; mouse => マウス; MS-SG p.29 (& only inside names)	
+key names in prose (Up/Down, Left/Right, Escape, Space, Shift, PgUp/PgDn, Home/End)	↑/↓, ←/→, Esc, Space, Shift, PageUp/PageDown, Home/End + キー	n.	shortcuts-note, divider .a11y texts, gestures	MS-SG p.51 (arrow keys “→キー”, read “右方向キー”); MS-SG p.56–57 (key names, “Enter△キー”); MS-T spacebar => Space キー	In prose a key name takes «キー» after a half-width space: «Esc キー», «Space キー»; arrows take it with no space: «←キー». The shortcut list (shortcuts-key-*) writes the bare names. In .a11y text say «左右方向キー», «上下方向キー».
+tooltip / hover text	ヒント	n.	translator comments only	MS-T tooltip => ヒント	Translator comments only.
+toast	通知	n.	translator comments only	MS-T toast => トースト | トースト通知; notification => 通知	Use «通知» if the word ever reaches the screen.
+drop-down	ドロップダウン リスト	n.	.a11y names, comments	MS-T drop-down list => ドロップダウン リスト	
+checkbox	チェック ボックス	n.	"bluetooth-off-* (""Tick …"")"	MS-T check box => チェック ボックス	MS-SG p.61 writes «チェックボックス»: MS-T wins. Tick → «オンにします».
+panel	パネル	n.	recording-resize .a11y, settings, big meter	MS-T panel => パネル	
+button	ボタン	n.	notices naming buttons	MS-T button => ボタン	MS-SG p.61: a button's name in [ ] needs no «ボタン» after it.
+screen reader	スクリーン リーダー	n.	comments only	MS-T screen reader => スクリーン リーダー	
+Help & Feedback	ヘルプとフィードバック	n.	project-link (top bar, --help last line)	MS-T help => ヘルプ; feedback => フィードバック	
+report feedback	フィードバックを送る	v.	connection-feedback, top-bar-badge-hover, connect-report-feedback	MS-T feedback => フィードバック	Click to report feedback. → «クリックしてフィードバックを送ってください。»
+What's New	最新情報	n.	top-bar-version, whats-new-title*	MS-T What's New => 新着情報 | 最新情報	What's New in v{ $version } → «v{ $version } の最新情報».
+release notes	リリース ノート	n.	top-bar-version hover	MS-T release notes => リリース ノート	
+update / new version	更新 / 新しいバージョン	n.	settings-check-updates, settings-update-*	MS-T update => 更新; version => バージョン	Newer dev build ↗ → «新しい開発ビルド ↗» (MS-T build => ビルド).
+machine-translated	自動翻訳	n.	settings-language-machine-translated, -unreviewed	MS-T machine translation => 自動翻訳	Provisional. Alternative: «機械翻訳» (the everyday word).
+language	言語	n.	settings-language	MS-T language => 言語	Caption «言語 (Language):» per the en-US comment.
+Always on top	常に手前に表示	n.	settings-always-on-top, shortcuts-always-on-top	MS-T Always on Top => 常に手前に表示	
+fullscreen	全画面表示	n.	shortcuts-fullscreen, big meter hover	MS-T full screen => 全画面表示	
+minimise	最小化	v.	shortcuts-minimize	MS-T minimize => 最小化する	
+title bar	タイトル バー	n.	Wayland notes	MS-T title bar => タイトル バー; MS-SG p.19 (space before バー)	
+window decorations	ウィンドウ枠	n.	settings-hide-decorations, shortcuts-decorations	MS-T window frame => ウィンドウ枠 (closest)	Hide window decorations → «ウィンドウ枠を非表示にする».
+Quit	終了	n.	shortcuts-quit	MS-T exit => 終了	
+Dismiss	閉じる	v.	connection-dismiss	MS-T dismiss => 無視 | 閉じる	
+Copy / copied	コピー / コピーしました	n.	graph-menu-copy, connection-late-copy, toasts	MS-T copy => コピー	Command copied → «コマンドをコピーしました».
+clipboard	クリップボード	n.	comments	MS-T clipboard => クリップボード	
+Cancel	キャンセル	n.	export-unsaved-cancel	MS-T cancel => キャンセル	
+Clear	クリア	n.	top-bar-clear, shortcuts-clear	MS-T clear => クリア | 消去する	
+Pause / Resume	一時停止 / 再開	n.	top-bar-pause, top-bar-resume, shortcuts-pause	MS-T pause => 一時停止; resume => 再開	"""▶ Resume"" → «▶ 再開», ""⏸ Pause"" → «⏸ 一時停止»."
+acquisition	データ取得	n.	top-bar-pause hover, connection-acquisition-stopped	MS-T data acquisition => データ取得	
+Error: / Warning: / Note: / Tip:	エラー: / 警告: / 注意: / ヒント:	n.	cli/common.ftl, list-select-tip, settings-tip-*	MS-T error => エラー; warning => 警告; tip => ヒント; MS-SG p.31 “注意:”	
+volt	ボルト	n.	reading-unit-volt (spoken)	Fluke 80V JP PDF p.12 “V、mV ボルト、ミリボルト”	No plural in Japanese: one variant (STYLE §10).
+ampere	アンペア	n.	reading-unit-ampere (spoken)	Fluke 80V JP PDF p.12 “アンペア、マイクロアンペア”; Sanwa PC7000 JP PDF p.29 “A( アンペア )”	Fluke 289 writes «アンペアー» once (PDF p.18): not followed.
+ohm	オーム	n.	reading-unit-ohm (spoken)	Fluke 80V JP PDF p.12 “オーム、メグオーム、キロオーム”; Fluke 289 JP PDF p.39	kΩ, MΩ spoken «キロオーム», «メガオーム»: the prefix joined whole, as for every unit. Fluke 80V's «メグオーム» (the English contraction) is not followed.
+hertz	ヘルツ	n.	reading-unit-hertz (spoken)	Fluke 80V JP PDF p.12 “Hz、kHz ヘルツ、キロヘルツ”	
+farad	ファラド	n.	reading-unit-farad (spoken)	Fluke 80V JP PDF p.12 “μF、nF マイクロファラド、ナノファラド”; Fluke 289 JP PDF p.45	
+siemens	ジーメンス	n.	reading-unit-siemens (spoken)	Sanwa PC7000 JP PDF p.3 “ナノ・ジーメンス（コンダクタンス）”; Fluke 80V JP PDF p.12 “nS ナノジーメンス”; Fluke 289 JP PDF p.44	Joined with no middle dot: «ナノジーメンス» (Fluke).
+watt	ワット	n.	reading-unit-watt (spoken)	Fluke 289 JP PDF p.33 “1 ミリワット”	
+volt-ampere	ボルトアンペア	n.	reading-unit-volt-ampere (spoken)	no approved source found	One word, no hyphen (MS-SG p.19).
+henry	ヘンリー	n.	reading-unit-henry (spoken)	no approved source found	
+second	秒	n.	reading-unit-second (spoken)	KEW MATE 2000A JP PDF p.1 “AC/DC720V／10秒間”	«ミリ秒» (Fluke 80V JP PDF p.32 «100 ミリ秒»).
+percent	パーセント	n.	reading-unit-percent (spoken)	KEW1062 JP PDF p.24 “パーセント（％）演算”; Fluke 80V JP PDF p.12	Said after the number: «50.0 パーセント».
+SI prefixes	ピコ, ナノ, マイクロ, ミリ, キロ, メガ, ギガ	prefix	reading-unit-prefix-* (spoken)	Fluke 80V JP PDF p.12 (ミリ, キロ, マイクロ, ナノ); Sanwa PC7000 JP PDF p.19 “ギガオーム”	Joined whole to the unit's name: «ミリボルト», «キロオーム», «メガヘルツ». pico/mega: no approved source found.
+Screen reader updates	スクリーン リーダーの読み上げ	n.	settings-announce	MS-T screen reader => スクリーン リーダー; speak => 読み上げ	The settings-announce-* hovers keep the verb «読み上げる». Every reading → «すべての測定値» (the Sample interval chip); Never → «読み上げない».
+focus (keyboard)	フォーカス	n.	shortcuts-note, a11y	MS-T focus => フォーカス	«キーボード フォーカス».
+Space (key name)	Space	key	shortcuts-key-space	MS-SG p.56 (key names list: “Space”); MS-T spacebar => Space キー	In prose «Space キー».
+Esc (key name)	Esc	key	shortcuts-key-escape	MS-SG p.56 (“Esc”); MS-T Esc key => Esc キー	In prose «Esc キー».
+Left / Right (key names)	← / →	key	shortcuts-key-left, shortcuts-key-right	MS-SG p.51 (“→キー”, “←キー”)	In prose «←キー» with no space (MS-SG p.57). Screen-reader text: «左方向キー» / «右方向キー».
+Home / End (key names)	Home / End	key	shortcuts-key-home, shortcuts-key-end	MS-SG p.56 (“Home, End”)	In prose «Home キー».
+Plus / Minus (key names)	プラス / マイナス	key	shortcuts-key-plus, shortcuts-key-minus	no approved source found (MS-T plus sign => 正符号 is the maths sense)	Ctrl+Plus/Minus → «Ctrl+プラス/マイナス». Alternative: the symbols «+» / «-».
+PgUp / PgDn (key names in prose)	PageUp / PageDown	key	shortcuts-note	MS-SG p.56 (“PageDown, PageUp”); MS-T Page Up key => PageUp キー	No space inside the name (MS-SG p.56).
+counter for readings, samples, records	件	counter	recording-count, read-summary-count, import-done, stats	MS-SG p.18 (counters follow numerals, “5個”); Sanwa PC720M JP PDF p.8 “87,328 件”	«{ $count } 件のサンプル»; half-width space between the number and the counter (MS-SG p.32 «第 3 章»).
+counter for markers, files, items	個	counter	markers, colors-skipped	MS-SG p.18 “5個”	«マーカー { $count } 個», «テーマ ファイル { $count } 個».
+counter for times, attempts, presses, beeps, crossings	回 / 回目	counter	top-bar-reconnecting-attempt, alarm counts, error-rejected-gave-up	Sanwa PC7000 JP PDF p.4 “5 回 / 秒”	Ordinal: «3 回目».
+Usage: / Commands: / Arguments: / Options:	使用法: / コマンド: / 引数: / オプション:	n.	cli/help.ftl help-usage etc.	MS-T usage => 使用; argument => 引数; options => オプション	«使用法» has no exact MS-T entry.
+[default: …] / [possible values: …]	[既定値: …] / [指定可能な値: …]	n.	help-default, help-possible-values, args-possible-values	MS-T default => 既定値; value => 値	
+subcommand	サブコマンド	n.	cli/args.ftl, help-command	MS-T subcommand => サブコマンド	
+environment variable / ENVIRONMENT:	環境変数 / 環境変数:	n.	help-environment	MS-T environment variable => 環境変数	Capital headings become plain headings: CONFIGURATION: → «構成:» (MS-T configuration => 構成).
+Print help / Print version	ヘルプを表示する / バージョンを表示する	v.	help-flag, help-version-flag	MS-SG p.58 “ヘルプを表示する”	Option descriptions in the plain form (STYLE §0 item 1).
+error: / tip: (clap)	エラー: / ヒント:	n.	args-error, args-tip	MS-T error => エラー; tip => ヒント	
+Human Interface Devices (Windows group)	ヒューマン インターフェイス デバイス	n.	setup-usb-windows-cp2110, setup-usb-windows-input	MS support ja-jp, Enable and disable a touchscreen (“[ヒューマン インターフェイス デバイス] で、HID 準拠のタッチ スクリーン”); MS-T HID	"The en-US says ""HID devices"": use Windows' own name."
+Other devices (Windows group)	ほかのデバイス	n.	setup-usb-windows-warning	MS support ja-jp, Fix Bluetooth problems in Windows (“デバイス マネージャーで … [ほかのデバイス] を確認します”)	The Settings page's «その他のデバイス» is a different place.
+USB Input Device (Windows device name)	USB 入力デバイス	n.	setup-usb-windows-input	partial: MS-T input device => 入力デバイス	UNVERIFIED: check on a Japanese Windows; mark the message `# UNVERIFIED Windows name`.
+Input Monitoring (macOS)	入力監視	n.	setup-usb-macos-privacy	Apple support ja-jp mchl4cedafb6 “Macの入力監視へのアクセスを制御する”	
+degrees C / degrees F (spoken)	摂氏度 / 華氏度	n.	reading-spoken-celsius, reading-spoken-fahrenheit	partial: Fluke 80V JP PDF p.16 “摂氏または華氏を選択します”	
+model (a meter's model)	機種	n.	connect-*, error-wrong-meter-*, connection notices	Sanwa CD772 JP PDF p.23 “機種名”; Sanwa PC773 JP PDF p.29	MS-T «モデル» is the generic sense; a meter's model is «機種».
+manual (the maker's user manual)	取扱説明書	n.	specs-manual, activation-*	Sanwa CD772 JP PDF p.1, p.4	
+square wave	方形波	n.	note-*	Sanwa CD772 JP PDF p.11	
+tolerance	許容差	n.	note-*	Sanwa CD772 JP PDF p.22; Sanwa PC7000 JP PDF p.32	
+factory settings	工場出荷時の設定	n.	error-bluetooth-reset-gesture, activation-bm78xbt	partial: Sanwa CD772 JP PDF p.20 “工場出荷時”	
+rise time	立ち上がり時間	n.	note-*	Fluke 80V JP PDF p.50; Fluke 289 JP PDF p.86	
+frequency response	周波数特性	n.	note-*	Sanwa PM3 JP PDF p.1; KEW1062 JP PDF p.50	
+forward voltage drop	順方向電圧降下	n.	note-diode-*	Sanwa PC7000 JP PDF p.23	
+field strength	電界強度	n.	note-*	Sanwa PC7000 JP PDF p.33	
+trigger level	トリガーレベル	n.	note-*	partial: Fluke 289 JP PDF p.86 “トリガー･レベル”	Long vowel per STYLE ruling 5.
+mouse pointer	マウス ポインター	n.	shortcuts-mouse-*	MS-T mouse pointer	«カーソル» is the graph's measuring cursor; the mouse's is «マウス ポインター».
+status (a label)	状態	n.	colors-group-status, info/debug labels	MS-T status	
+session (recorded or imported)	セッション	n.	export-*, import-*	MS-T session	
+legend (graph)	凡例	n.	graph legend	MS-T legend	
+password	パスワード	n.	error-bluetooth-login-*	MS-T password	
+standard output	標準出力	n.	dmm-cli help	MS-T standard output	
+parser	パーサー	n.	dmm-cli help	MS-T parser	
+baud	ボー	n.	lib-errors	MS-T baud	
+widget	コントロール	n.	shortcuts-note	MS-T control	
+General (heading)	全般	n.	shortcuts-section-general	MS-T General	
+opaque	不透明	adj.	colors-*	MS-T opaque	
+connector	コネクタ	n.	note-*	MS-T connector	An MS-SG exception to the long-vowel rule (STYLE ruling 5).
+remote command / remote keys	リモート コマンド / リモート キー	n.	command, specs-remote	partial: MS-T remote => リモート	
+shell completions	シェル補完	n.	completions help	partial: MS-T shell => シェル	
+big meter (display mode)	大型表示	n.	shortcuts-big-meter, big-meter-*	no approved source found	Alternative: ビッグメーター.
+limit (one alarm limit, generic)	制限値	n.	read-alarm-idle, alarm-invalid-limit, alarm-band, input-percent-of-zero	no approved source found	High and low together: «上限と下限».
+raw (value)	元の値	n.	raw-label	no approved source found	Alternatives: 生の値, 生データ.
+wire format	通信データ	n.	export-no-wire-format, error-unsupported-no-wire-format	no approved source found	
+digital multimeter	デジタル マルチメーター	n.	desktop-comment, dmm-cli about	no approved source found	
+live follow	ライブ追従	n.	shortcuts-mouse-reset	no approved source found	
+off graph / off recording (tags)	グラフ外 / 記録外	n.	stats-markers	no approved source found	
+headless machine	ディスプレイのないマシン	n.	setup-usb-linux-*	no approved source found	
+terminal bell	端末のベル	n.	read--alarm-bell help	no approved source found	
+expected / got	期待値 / 受信値	n.	lib-errors	no approved source found	
+release page	リリース ページ	n.	top-bar update link	no approved source found	
+frame (a 6-byte frame)	6 バイト フレーム	n.	lib-errors	no approved source found	
+characteristic (Bluetooth LE)	キャラクタリスティック	n.	lib-errors	no approved source found	
+step (capture)	ステップ	n.	capture help	no approved source found	
