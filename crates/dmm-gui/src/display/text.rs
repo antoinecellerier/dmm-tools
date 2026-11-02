@@ -7,7 +7,7 @@ use dmm_lib::alarm::Zone;
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use dmm_lib::text::TextKind;
-use dmm_shared::l10n::Localizer;
+use dmm_shared::l10n::{Arg, Localizer};
 use dmm_shared::tr;
 use std::borrow::Cow;
 
@@ -86,7 +86,7 @@ pub(super) fn live_region_label(
         MeasuredValue::Absent => Cow::Borrowed(""),
     };
     if !value.is_empty() {
-        let value = with_unit(&value, &spoken_unit(l10n, &m.unit));
+        let value = spoken_amount(l10n, &value, &m.unit);
         // Spoken where it is drawn, ahead of the digits — and, as there,
         // not for a frame without its main reading.
         phrases.push(match m.main_label.filter(|_| m.has_main_reading()) {
@@ -103,7 +103,11 @@ pub(super) fn live_region_label(
     // twice reads as two things.
     let mode_is_the_word = matches!(m.value, MeasuredValue::NoReading(word) if word == m.mode);
     if !m.mode.is_empty() && !mode_is_the_word {
-        phrases.push(l10n.label(TextKind::Mode, &m.mode));
+        phrases.push(spoken_mode(
+            l10n,
+            &m.mode,
+            l10n.label(TextKind::Mode, &m.mode),
+        ));
     }
     // Sub-values sit between the mode and the flags. Whether the rows are
     // drawn under the reading or beside it depends on the window, so the
@@ -111,10 +115,8 @@ pub(super) fn live_region_label(
     // Without them a UT181A user in MIN/MAX hears only the live value and
     // never the extremes the meter is actually displaying.
     for aux in m.present_aux() {
-        let value = with_unit(
-            &spoken_aux_value(l10n, aux),
-            &spoken_unit(l10n, aux.unit_or(&m.unit)),
-        );
+        let shown = spoken_aux_value(l10n, aux);
+        let value = spoken_amount(l10n, &shown, aux.unit_or(&m.unit));
         let label = l10n.label(TextKind::Aux, &aux.label);
         phrases.push(match aux.elapsed_secs {
             // The visible row ends in "@12s"; spelling it out is the only
@@ -156,12 +158,31 @@ pub(super) fn live_region_label(
     phrases.join(&*tr!(l10n, "reading-spoken-separator"))
 }
 
-/// A spoken value and its spoken unit, which may be empty.
-fn with_unit(value: &str, unit: &str) -> String {
-    if unit.is_empty() {
-        value.to_string()
+/// `value` as shown, then `unit` (its symbol, which may be empty) said by
+/// name: one message joins the two, so a language can put a unit before
+/// its number, as Chinese says 百分之五十 for 50 %.
+pub(crate) fn spoken_amount(l10n: &Localizer, value: &str, unit: &str) -> String {
+    let name = spoken_unit(l10n, unit, value);
+    if name.is_empty() {
+        return value.to_string();
+    }
+    tr!(
+        l10n,
+        "reading-spoken-amount",
+        kind = amount_kind(value, unit),
+        value = value,
+        unit = name
+    )
+    .into_owned()
+}
+
+/// The `$kind` `reading-spoken-amount` selects on: `percent` only for a
+/// number, so that "overload" keeps the order it reads in.
+fn amount_kind(value: &str, unit: &str) -> &'static str {
+    if unit == "%" && value.trim().parse::<f64>().is_ok() {
+        "percent"
     } else {
-        format!("{value} {unit}")
+        "other"
     }
 }
 
@@ -181,18 +202,153 @@ fn spoken_no_reading<'a>(l10n: &'a Localizer, word: &str) -> Cow<'a, str> {
     tr!(l10n, "reading-spoken-no-reading", word = word)
 }
 
-/// Spoken form of a unit string.
+/// Spoken form of a unit string after `value`, the number as shown (its
+/// plural picks the name's form): the unit's name, in the language.
 ///
-/// Only the degree symbol is rewritten: screen readers differ on whether they
-/// read "°" at all, so a temperature sub-value could otherwise be announced as
-/// a bare "24.1 C". The substitution is confined to the spoken label — the
-/// visible rows keep the symbol.
-fn spoken_unit<'a>(l10n: &'a Localizer, unit: &'a str) -> Cow<'a, str> {
+/// Screen readers spell a symbol out letter by letter ("mV" as "m V"), and
+/// differ on whether they read "°" at all, so a temperature could be
+/// announced as a bare "24.1 C". A unit with no name here — dBm, VAC, a
+/// prefixed rpm — is said as its symbol. The names are confined to the
+/// spoken label: the visible rows keep the symbols.
+pub(crate) fn spoken_unit<'a>(l10n: &'a Localizer, unit: &'a str, value: &str) -> Cow<'a, str> {
     match unit {
-        "\u{00B0}C" => tr!(l10n, "reading-spoken-celsius"),
-        "\u{00B0}F" => tr!(l10n, "reading-spoken-fahrenheit"),
-        other => Cow::Borrowed(other),
+        "\u{00B0}C" => return tr!(l10n, "reading-spoken-celsius"),
+        "\u{00B0}F" => return tr!(l10n, "reading-spoken-fahrenheit"),
+        _ => {}
     }
+    if let Some(name) = unit_name(l10n, Scale::None, unit, value) {
+        return name;
+    }
+    let mut chars = unit.chars();
+    chars
+        .next()
+        .and_then(Scale::from_symbol)
+        .and_then(|scale| unit_name(l10n, scale, chars.as_str(), value))
+        .unwrap_or(Cow::Borrowed(unit))
+}
+
+/// The mode's name as `shown`, with each word that is a unit in its English
+/// name (`english`) spoken as the unit's name: "DC mV" as "DC millivolts".
+/// Only the English decides which words are units, so a translated word
+/// that happens to read like one ("A", "s") is left alone. No number goes
+/// before these, so each takes the form a unit's name has after most numbers.
+fn spoken_mode<'a>(l10n: &'a Localizer, english: &str, shown: Cow<'a, str>) -> Cow<'a, str> {
+    let units: Vec<&str> = english
+        .split(' ')
+        .filter(|w| spoken_unit(l10n, w, "") != *w)
+        .collect();
+    if units.is_empty() {
+        return shown;
+    }
+    let spoken: Vec<Cow<'_, str>> = shown
+        .split(' ')
+        .map(|w| {
+            if units.contains(&w) {
+                spoken_unit(l10n, w, "")
+            } else {
+                Cow::Borrowed(w)
+            }
+        })
+        .collect();
+    Cow::Owned(spoken.join(" "))
+}
+
+/// An SI prefix a unit's name can carry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scale {
+    None,
+    Pico,
+    Nano,
+    Micro,
+    Milli,
+    Kilo,
+    Mega,
+    Giga,
+}
+
+impl Scale {
+    fn from_symbol(c: char) -> Option<Self> {
+        Some(match c {
+            'p' => Self::Pico,
+            'n' => Self::Nano,
+            '\u{00B5}' | '\u{03BC}' | 'u' => Self::Micro,
+            'm' => Self::Milli,
+            'k' => Self::Kilo,
+            'M' => Self::Mega,
+            'G' => Self::Giga,
+            _ => return None,
+        })
+    }
+
+    /// The `$scale` key the unit messages select on.
+    fn key(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Pico => "pico",
+            Self::Nano => "nano",
+            Self::Micro => "micro",
+            Self::Milli => "milli",
+            Self::Kilo => "kilo",
+            Self::Mega => "mega",
+            Self::Giga => "giga",
+        }
+    }
+
+    /// The prefix's word in the language, empty for none.
+    fn word(self, l10n: &Localizer) -> Cow<'_, str> {
+        match self {
+            Self::None => Cow::Borrowed(""),
+            Self::Pico => tr!(l10n, "reading-unit-prefix-pico"),
+            Self::Nano => tr!(l10n, "reading-unit-prefix-nano"),
+            Self::Micro => tr!(l10n, "reading-unit-prefix-micro"),
+            Self::Milli => tr!(l10n, "reading-unit-prefix-milli"),
+            Self::Kilo => tr!(l10n, "reading-unit-prefix-kilo"),
+            Self::Mega => tr!(l10n, "reading-unit-prefix-mega"),
+            Self::Giga => tr!(l10n, "reading-unit-prefix-giga"),
+        }
+    }
+}
+
+/// The name of `base` (V, Ω, Hz…) under `scale`, after `value`; `None` for a
+/// base with no name. A percentage takes no prefix.
+///
+/// One message per base unit, given the prefix's word and the number: the
+/// word leads the name. Ohm is also given the prefix's key, for the pairs a
+/// language contracts, as English writes kilohm. Joining a prefix to a unit
+/// holds in every language the apps speak, where joining other fragments
+/// would not (`docs/localization-design.md`).
+fn unit_name<'a>(
+    l10n: &'a Localizer,
+    scale: Scale,
+    base: &str,
+    value: &str,
+) -> Option<Cow<'a, str>> {
+    // Built only for a unit with a name: every word of a mode comes here.
+    let p = || scale.word(l10n);
+    let v = || Arg::decimal(value.to_owned());
+    Some(match base {
+        "V" => tr!(l10n, "reading-unit-volt", prefix = p(), value = v()),
+        "A" => tr!(l10n, "reading-unit-ampere", prefix = p(), value = v()),
+        "\u{03A9}" | "\u{2126}" | "ohm" => {
+            let key = scale.key();
+            tr!(
+                l10n,
+                "reading-unit-ohm",
+                scale = key,
+                prefix = p(),
+                value = v()
+            )
+        }
+        "Hz" => tr!(l10n, "reading-unit-hertz", prefix = p(), value = v()),
+        "F" => tr!(l10n, "reading-unit-farad", prefix = p(), value = v()),
+        "S" => tr!(l10n, "reading-unit-siemens", prefix = p(), value = v()),
+        "W" => tr!(l10n, "reading-unit-watt", prefix = p(), value = v()),
+        "VA" => tr!(l10n, "reading-unit-volt-ampere", prefix = p(), value = v()),
+        "H" => tr!(l10n, "reading-unit-henry", prefix = p(), value = v()),
+        "s" => tr!(l10n, "reading-unit-second", prefix = p(), value = v()),
+        "%" if scale == Scale::None => tr!(l10n, "reading-unit-percent"),
+        _ => return None,
+    })
 }
 
 /// The single order the flags are presented in: `show_flags` paints the
@@ -469,7 +625,7 @@ mod tests {
                 ReadingState::PLAIN,
                 NO_READING_TITLE
             ),
-            "no reading (Auto), DC V"
+            "no reading (Auto), DC volts"
         );
 
         let mut over = m.clone();
@@ -498,8 +654,8 @@ mod tests {
             },
         );
         let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
-        assert!(label.contains("V"), "got {label:?}");
-        assert!(label.contains("DC V"), "got {label:?}");
+        assert!(label.contains("5.678 volts"), "got {label:?}");
+        assert!(label.contains("DC volts"), "got {label:?}");
         assert!(label.contains("auto range"), "got {label:?}");
         assert!(label.contains("hold"), "got {label:?}");
     }
@@ -769,9 +925,9 @@ mod tests {
         ];
 
         let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
-        assert!(label.contains("Frequency 50.01 Hz"), "got {label:?}");
-        assert!(label.contains("Period 20.00 ms"), "got {label:?}");
-        let mode = label.find("DC V").expect("mode still announced");
+        assert!(label.contains("Frequency 50.01 hertz"), "got {label:?}");
+        assert!(label.contains("Period 20.00 milliseconds"), "got {label:?}");
+        let mode = label.find("DC volts").expect("mode still announced");
         let freq = label.find("Frequency").expect("sub-value announced");
         let auto = label.find("auto range").expect("flags still announced");
         assert!(mode < freq && freq < auto, "got {label:?}");
@@ -791,7 +947,7 @@ mod tests {
         m.main_label = Some(dmm_lib::measurement::MainLabel::Dc);
         m.aux_values = vec![aux("AC", " 0.0123", "")];
         let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
-        assert_eq!(label, "DC 1.6112 V, AC+DC V, AC 0.0123 V");
+        assert_eq!(label, "DC 1.6112 volts, AC+DC volts, AC 0.0123 volts");
     }
 
     #[test]
@@ -806,13 +962,13 @@ mod tests {
 
         assert_eq!(format_value_display(&m), "       ");
         let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
-        assert_eq!(label, "AC+DC V, AC 0.0123 V");
+        assert_eq!(label, "AC+DC volts, AC 0.0123 volts");
 
         // As the decoder sends it, named DC on both kinds of frame: with no
         // DC value there is nothing for the name to name.
         m.main_label = Some(dmm_lib::measurement::MainLabel::Dc);
         let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
-        assert_eq!(label, "AC+DC V, AC 0.0123 V");
+        assert_eq!(label, "AC+DC volts, AC 0.0123 volts");
     }
 
     /// A MIN/MAX extreme is only half a reading without the moment it was
@@ -832,12 +988,15 @@ mod tests {
 
         let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
         assert!(
-            label.contains("Max 5.9010 V at 12 seconds"),
+            label.contains("Max 5.9010 volts at 12 seconds"),
             "got {label:?}"
         );
-        assert!(label.contains("Min 4.1200 V at 1 second,"), "got {label:?}");
+        assert!(
+            label.contains("Min 4.1200 volts at 1 second,"),
+            "got {label:?}"
+        );
         // A sub-value without a timestamp must not grow a phantom one.
-        assert!(label.ends_with("Avg 4.5000 V"), "got {label:?}");
+        assert!(label.ends_with("Avg 4.5000 volts"), "got {label:?}");
     }
 
     /// The unit falls back to the main reading's when the sub-value doesn't
@@ -854,14 +1013,70 @@ mod tests {
         m.aux_values = vec![max, min];
 
         let label = live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE);
-        assert!(label.contains("Max 5.0123 V"), "got {label:?}");
-        assert!(label.contains("Min overload V"), "got {label:?}");
+        assert!(label.contains("Max 5.0123 volts"), "got {label:?}");
+        assert!(label.contains("Min overload volts"), "got {label:?}");
     }
 
     /// Degree symbols are spelled out only in the spoken string — screen
     /// readers differ on whether they voice "°" at all, and "24.1 C" is not
     /// a temperature. The main reading and its sub-values get the same
     /// treatment, so a dual-thermocouple reading is voiced consistently.
+    /// Units are said by name, prefix and plural included, kilohm and
+    /// megohm as English writes them; a unit with no name keeps its symbol,
+    /// and a mode's name has its unit words said too.
+    #[test]
+    fn units_are_spoken_by_name() {
+        let en = en();
+        for (unit, value, said) in [
+            ("V", "1", "volt"),
+            ("V", "1.000", "volts"),
+            ("mV", "-0.52", "millivolts"),
+            ("\u{00B5}A", "12.3", "microamperes"),
+            ("uA", "12.3", "microamperes"),
+            ("\u{03A9}", "1", "ohm"),
+            ("k\u{03A9}", "2.200", "kilohms"),
+            ("M\u{03A9}", "1", "megohm"),
+            ("G\u{03A9}", "1.5", "gigaohms"),
+            ("kHz", "1.000", "kilohertz"),
+            ("nF", "470", "nanofarads"),
+            ("nS", "5.0", "nanosiemens"),
+            ("mVA", "1.5", "millivolt-amperes"),
+            ("mH", "1", "millihenry"),
+            ("ms", "16.657", "milliseconds"),
+            ("%", "50.0", "percent"),
+            ("V", "overload", "volts"),
+            ("dBm", "-10.0", "dBm"),
+            ("VAC", "230", "VAC"),
+            ("k%", "1", "k%"),
+            ("", "1", ""),
+        ] {
+            assert_eq!(spoken_unit(&en, unit, value), said, "{value} {unit}");
+        }
+        assert_eq!(
+            spoken_mode(&en, "AC V Hz", "AC V Hz".into()),
+            "AC volts hertz"
+        );
+        assert_eq!(spoken_mode(&en, "Diode", "Diode".into()), "Diode");
+        // Only words that are units in the English are named: a translated
+        // label's "A" that the English does not have stays a word.
+        assert_eq!(spoken_mode(&en, "DC V", "A DC V".into()), "A DC volts");
+        assert_eq!(spoken_mode(&en, "DC A", "CC A".into()), "CC amperes");
+    }
+
+    /// Only a number before % is a percentage a language may say the other
+    /// way round; a word such as "overload" keeps its place.
+    #[test]
+    fn only_a_number_makes_a_percentage() {
+        assert_eq!(amount_kind("50.0", "%"), "percent");
+        assert_eq!(amount_kind(" -1.5", "%"), "percent");
+        assert_eq!(amount_kind("overload", "%"), "other");
+        assert_eq!(amount_kind("50.0", "V"), "other");
+        let en = en();
+        assert_eq!(spoken_amount(&en, "50.0", "%"), "50.0 percent");
+        assert_eq!(spoken_amount(&en, "1.000", "mV"), "1.000 millivolts");
+        assert_eq!(spoken_amount(&en, "1.000", ""), "1.000");
+    }
+
     #[test]
     fn live_region_label_spells_out_degrees() {
         let mut m = Measurement::test_fixture(
@@ -895,7 +1110,7 @@ mod tests {
         assert!(m.aux_values.is_empty());
         assert_eq!(
             live_region_label(&en(), Some(&m), ReadingState::PLAIN, NO_READING_TITLE),
-            "5.678 V, DC V, hold"
+            "5.678 volts, DC volts, hold"
         );
     }
 
@@ -988,8 +1203,8 @@ mod tests {
     }
 
     /// The spoken English, whole, for readings of each kind: the phrases,
-    /// their order and the separator all come from `reading.ftl` now, and
-    /// this is what they said when they were written out here.
+    /// their order, the separator and the unit names all come from
+    /// `reading.ftl`.
     #[test]
     fn the_spoken_english_is_unchanged() {
         let en = en();
@@ -1003,7 +1218,10 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(say(&held, ReadingState::PLAIN), "5.678 V, DC V, hold");
+        assert_eq!(
+            say(&held, ReadingState::PLAIN),
+            "5.678 volts, DC volts, hold"
+        );
 
         let over = Measurement::test_fixture(
             MeasuredValue::Overload,
@@ -1015,7 +1233,7 @@ mod tests {
         );
         assert_eq!(
             say(&over, ReadingState::PLAIN),
-            "overload \u{03A9}, DC V, auto range"
+            "overload ohms, DC volts, auto range"
         );
 
         let mut extremes = Measurement::test_fixture(
@@ -1041,7 +1259,7 @@ mod tests {
         };
         assert_eq!(
             say(&extremes, breached),
-            "23.5 degrees C, DC V, Max 24.10 degrees C at 1 second, \
+            "23.5 degrees C, DC volts, Max 24.10 degrees C at 1 second, \
              Min overload degrees C at 12 seconds, T2 22.00 degrees F, maximum, \
              software scaled, above the high limit"
         );
@@ -1074,7 +1292,7 @@ mod tests {
         );
         assert_eq!(
             say(&dashes, below),
-            "no reading (----) V, DC V, below the low limit"
+            "no reading (----) volts, DC volts, below the low limit"
         );
 
         assert_eq!(

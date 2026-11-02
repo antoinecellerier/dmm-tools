@@ -168,9 +168,9 @@ graph-plot-a11y-title = 测量绘图。
 graph-plot-a11y-title-series = { $series } 的测量绘图。
 # How much time the plot shows: $seconds is a whole number of seconds.
 graph-plot-a11y-window = 时间窗口 { $seconds } 秒。
-# The range of the left axis: $min and $max are numbers, $unit the plotted
-# unit, e.g. V; it can be empty.
-graph-plot-a11y-y-axis = Y 轴 { $min } 到 { $max } { $unit }。
+# The range of the left axis: $min is a number, $max a number with the
+# plotted unit (reading-spoken-amount), e.g. 5.000 volts, or a bare number.
+graph-plot-a11y-y-axis = Y 轴 { $min } 到 { $max }。
 # $count is how many samples the graph holds.
 graph-plot-a11y-samples = { $count } 个样本。
 # Only when other traces are drawn beside the plotted series: $series lists
@@ -192,8 +192,8 @@ graph-plot-a11y-state =
        *[paused] 已暂停。
     }
 # The last sentence: $value is the meter's last reading as it showed it,
-# $unit its unit, e.g. V; it can be empty.
-graph-plot-a11y-reading = 最后读数 { $value } { $unit }。
+# with its unit (reading-spoken-amount), e.g. 1.6112 volts.
+graph-plot-a11y-reading = 最后读数 { $value }。
 # The last sentence while the meter reads over range (shows OL).
 graph-plot-a11y-over-range = 当前超量程。
 # The last sentence before any reading.
@@ -202,8 +202,9 @@ graph-plot-a11y-no-data = 无数据。
 ## The histogram, beside the plot or under the minimap.
 
 # The bar's range in its hover, and in graph-histogram-a11y-most: from
-# $low to $high, numbers, in $unit, e.g. V.
-graph-histogram-range = { $low } 到 { $high } { $unit }
+# $low, a number, to $high, a number with its unit: 3.299 V in the hover,
+# 3.299 volts spoken (reading-spoken-amount).
+graph-histogram-range = { $low } 到 { $high }
 # A bar when hovered. $range is the values it spans, e.g. "3.200 to 3.299
 # V" (see graph-histogram-range); $count how many readings in view fall
 # there; $percent what share of them, a number with one decimal.
@@ -237,8 +238,9 @@ graph-histogram-a11y-interval-separator = {"；"}
 # $count is how many readings are in view.
 graph-histogram-a11y = { $count } 个可见读数的直方图
 # After graph-histogram-a11y, and after graph-histogram-a11y-interval: how
-# far the readings spread. $value is a number, $unit its unit, e.g. V.
-graph-histogram-a11y-sd = 标准差 { $value } { $unit }
+# far the readings spread. $value is a number with its unit
+# (reading-spoken-amount), e.g. 0.002 volts.
+graph-histogram-a11y-sd = 标准差 { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
 graph-histogram-a11y-most = 最多的读数在 { $range } ({ $count })

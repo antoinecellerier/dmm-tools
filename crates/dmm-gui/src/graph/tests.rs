@@ -6063,26 +6063,25 @@ fn toolbar_fields_leave_its_height_alone() {
     assert_eq!(height(&mut g), plain, "fixed Y bounds fields");
 }
 
-/// The plot's name for a screen reader reads as it did before its
-/// sentences moved into Fluent.
+/// The plot's name for a screen reader, whole, its units said by name.
 #[test]
-fn the_plots_spoken_label_reads_as_before() {
+fn the_plots_spoken_label_reads_whole() {
     let (mut g, _) = graph_over(30);
     let ctx = crate::app::styled_context();
     graph_frame(&mut g, &ctx, vec![]);
     assert_eq!(
         g.a11y_label,
-        "Measurement plot. 10 second window. Y axis 1.000 to 1.000 V. 31 samples. live. \
-         last reading 1.0000 V."
+        "Measurement plot. 10 second window. Y axis 1.000 to 1.000 volts. 31 samples. live. \
+         last reading 1.0000 volts."
     );
     g.show_histogram = true;
     g.live = false;
     graph_frame(&mut g, &ctx, vec![]);
     assert_eq!(
         g.a11y_label,
-        "Measurement plot. 10 second window. Y axis 1.000 to 1.000 V. 31 samples. \
-         Histogram of 11 visible readings, standard deviation 0.0000 V, most at 1.0000 to \
-         1.0000 V (11). paused. last reading 1.0000 V."
+        "Measurement plot. 10 second window. Y axis 1.000 to 1.000 volts. 31 samples. \
+         Histogram of 11 visible readings, standard deviation 0.0000 volts, most at 1.0000 to \
+         1.0000 volts (11). paused. last reading 1.0000 volts."
     );
 
     // Traces drawn beside it, one on an axis of its own, and the readings
@@ -6115,9 +6114,9 @@ fn the_plots_spoken_label_reads_as_before() {
     graph_frame(&mut g, &ctx, vec![]);
     assert_eq!(
         g.a11y_label,
-        "Measurement plot. 10 second window. Y axis 19.000 to 31.000 \u{00B0}C. 11 samples. \
-         Also showing T2, Frequency in Hz on a right axis. Histogram of 11 visible readings, \
-         standard deviation 0.8312 \u{00B0}C, most at 20 \u{00B0}C (4); 4 readings between the \
-         cursors, standard deviation 0.9574 \u{00B0}C. live. last reading 21.0000 \u{00B0}C."
+        "Measurement plot. 10 second window. Y axis 19.000 to 31.000 degrees C. 11 samples. \
+         Also showing T2, Frequency in hertz on a right axis. Histogram of 11 visible readings, \
+         standard deviation 0.8312 degrees C, most at 20 degrees C (4); 4 readings between the \
+         cursors, standard deviation 0.9574 degrees C. live. last reading 21.0000 degrees C."
     );
 }

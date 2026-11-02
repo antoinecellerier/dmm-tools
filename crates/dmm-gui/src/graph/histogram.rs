@@ -47,6 +47,15 @@ fn fixed(v: f64, d: usize) -> String {
     format!("{:.d$}", (v * scale).round() / scale + 0.0)
 }
 
+/// A number as shown, then its unit's symbol, if any, as the screen writes it.
+fn with_symbol(value: &str, unit: &str) -> String {
+    if unit.is_empty() {
+        value.to_owned()
+    } else {
+        format!("{value} {unit}")
+    }
+}
+
 /// Where the pane sits this frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Dock {
@@ -420,12 +429,16 @@ impl Histogram {
 
     /// The readings bin `i` holds, as its hover names them: one value when a
     /// bin is one step wide, else the first and last a reading can take.
-    fn range_label(&self, l10n: &Localizer, i: usize, unit: &str) -> String {
+    ///
+    /// `amount` gives a number as shown with its unit: the symbol on
+    /// screen, the name a screen reader hears, whose plural follows the
+    /// number. The range's last number carries the unit.
+    fn range_label(&self, l10n: &Localizer, i: usize, amount: impl Fn(&str) -> String) -> String {
         let d = self.decimals;
         let (low, high) = self.edges(i);
         let (first, last) = (low + self.quantum / 2.0, high - self.quantum / 2.0);
         if self.quantum > 0.0 && (last - first).abs() < self.quantum / 2.0 {
-            format!("{first:.d$} {unit}")
+            amount(&format!("{first:.d$}"))
         } else {
             let (low, high) = if self.quantum > 0.0 {
                 (first, last)
@@ -436,8 +449,7 @@ impl Histogram {
                 l10n,
                 "graph-histogram-range",
                 low = format!("{low:.d$}"),
-                high = format!("{high:.d$}"),
-                unit = unit
+                high = amount(&format!("{high:.d$}"))
             )
             .into_owned()
         }
@@ -450,7 +462,7 @@ impl Histogram {
         let mut text = tr!(
             l10n,
             "graph-histogram-bin.hover",
-            range = self.range_label(l10n, i, unit),
+            range = self.range_label(l10n, i, |v| with_symbol(v, unit)),
             count = self.view.counts[i],
             percent = percent(&self.view)
         )
@@ -490,15 +502,12 @@ impl Histogram {
 
     /// What a screen reader hears of the pane: one sentence, which the
     /// plot's label takes among its own.
+    /// Units are said by name, as the reading says them.
     pub(super) fn spoken(&self, l10n: &Localizer, unit: &str) -> String {
         let d = self.sigma_decimals;
         let sd = |sd: f64| {
-            tr!(
-                l10n,
-                "graph-histogram-a11y-sd",
-                value = format!("{sd:.d$}"),
-                unit = unit
-            )
+            let value = crate::display::spoken_amount(l10n, &format!("{sd:.d$}"), unit);
+            tr!(l10n, "graph-histogram-a11y-sd", value = value)
         };
         let comma = tr!(l10n, "graph-histogram-a11y-separator");
         let mut text =
@@ -521,7 +530,7 @@ impl Histogram {
             let most = tr!(
                 l10n,
                 "graph-histogram-a11y-most",
-                range = self.range_label(l10n, i, unit),
+                range = self.range_label(l10n, i, |v| crate::display::spoken_amount(l10n, v, unit)),
                 count = c
             );
             clause(&mut text, &comma, &most);
@@ -1108,7 +1117,23 @@ mod tests {
         let h = Histogram::new(i(&values), (5.0, 5.004), target_bins(1000.0), (4, 4)).unwrap();
         assert_eq!(h.width, 1e-3);
         assert_eq!(h.view.counts, vec![0, 10, 20, 30, 0]);
-        assert_eq!(h.range_label(&crate::l10n::english(), 2, "V"), "5.002 V");
+        let symbol = |v: &str| with_symbol(v, "V");
+        assert_eq!(h.range_label(&crate::l10n::english(), 2, symbol), "5.002 V");
+    }
+
+    /// Spoken, a bin's unit takes the form its number calls for: one volt,
+    /// two volts.
+    #[test]
+    fn a_spoken_bin_takes_its_numbers_plural() {
+        let values = times(&[1.0, 1.0, 2.0, 2.0, 2.0], 10);
+        let h = Histogram::new(i(&values), (0.0, 3.0), target_bins(1000.0), (0, 0)).unwrap();
+        let en = crate::l10n::english();
+        let say = |v: &str| crate::display::spoken_amount(&en, v, "V");
+        let labels: Vec<String> = (0..h.view.counts.len())
+            .filter(|&b| h.view.counts[b] > 0)
+            .map(|b| h.range_label(&en, b, say))
+            .collect();
+        assert_eq!(labels, ["1 volt", "2 volts"]);
     }
 
     /// Too little room for a bin per step: bins a round number of steps
@@ -1125,7 +1150,7 @@ mod tests {
             h.view.counts
         );
         assert_eq!(
-            h.range_label(&crate::l10n::english(), 0, "V"),
+            h.range_label(&crate::l10n::english(), 0, |v| with_symbol(v, "V")),
             "0.000 to 0.009 V"
         );
     }
@@ -1176,7 +1201,7 @@ mod tests {
         let h = Histogram::new(i(&values), (5.0, 5.005), target_bins(400.0), (3, 4)).unwrap();
         assert!(
             h.spoken(&crate::l10n::english(), "V")
-                .contains("standard deviation 0.0002 V")
+                .contains("standard deviation 0.0002 volts")
         );
     }
 
@@ -1265,7 +1290,7 @@ mod tests {
         );
         assert!(
             h.spoken(&crate::l10n::english(), "V")
-                .ends_with("; 4 readings between the cursors, standard deviation 3.6 V.")
+                .ends_with("; 4 readings between the cursors, standard deviation 3.6 volts.")
         );
     }
 
@@ -1364,7 +1389,7 @@ mod tests {
         let h = Histogram::new(i(&values), (0.0, 3.0), target_bins(300.0), (0, 1)).unwrap();
         assert_eq!(
             h.spoken(&crate::l10n::english(), "V"),
-            "Histogram of 30 visible readings, standard deviation 0.5 V, most at 2 V (20)."
+            "Histogram of 30 visible readings, standard deviation 0.5 volts, most at 2 volts (20)."
         );
     }
 }

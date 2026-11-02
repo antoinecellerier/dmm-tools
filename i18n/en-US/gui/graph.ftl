@@ -172,9 +172,9 @@ graph-plot-a11y-window =
         [one] { $seconds } second window.
        *[other] { $seconds } second window.
     }
-# The range of the left axis: $min and $max are numbers, $unit the plotted
-# unit, e.g. V; it can be empty.
-graph-plot-a11y-y-axis = Y axis { $min } to { $max } { $unit }.
+# The range of the left axis: $min is a number, $max a number with the
+# plotted unit (reading-spoken-amount), e.g. 5.000 volts, or a bare number.
+graph-plot-a11y-y-axis = Y axis { $min } to { $max }.
 # $count is how many samples the graph holds.
 graph-plot-a11y-samples =
     { $count ->
@@ -204,8 +204,8 @@ graph-plot-a11y-state =
        *[paused] paused.
     }
 # The last sentence: $value is the meter's last reading as it showed it,
-# $unit its unit, e.g. V; it can be empty.
-graph-plot-a11y-reading = last reading { $value } { $unit }.
+# with its unit (reading-spoken-amount), e.g. 1.6112 volts.
+graph-plot-a11y-reading = last reading { $value }.
 # The last sentence while the meter reads over range (shows OL).
 graph-plot-a11y-over-range = currently over range.
 # The last sentence before any reading.
@@ -214,8 +214,9 @@ graph-plot-a11y-no-data = no data.
 ## The histogram, beside the plot or under the minimap.
 
 # The bar's range in its hover, and in graph-histogram-a11y-most: from
-# $low to $high, numbers, in $unit, e.g. V.
-graph-histogram-range = { $low } to { $high } { $unit }
+# $low, a number, to $high, a number with its unit: 3.299 V in the hover,
+# 3.299 volts spoken (reading-spoken-amount).
+graph-histogram-range = { $low } to { $high }
 # A bar when hovered. $range is the values it spans, e.g. "3.200 to 3.299
 # V" (see graph-histogram-range); $count how many readings in view fall
 # there; $percent what share of them, a number with one decimal.
@@ -261,8 +262,9 @@ graph-histogram-a11y =
        *[other] Histogram of { $count } visible readings
     }
 # After graph-histogram-a11y, and after graph-histogram-a11y-interval: how
-# far the readings spread. $value is a number, $unit its unit, e.g. V.
-graph-histogram-a11y-sd = standard deviation { $value } { $unit }
+# far the readings spread. $value is a number with its unit
+# (reading-spoken-amount), e.g. 0.002 volts.
+graph-histogram-a11y-sd = standard deviation { $value }
 # The bar holding the most readings: $range is its values (see
 # graph-histogram-range), $count how many it holds.
 graph-histogram-a11y-most = most at { $range } ({ $count })

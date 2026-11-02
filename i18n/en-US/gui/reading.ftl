@@ -82,6 +82,101 @@ reading-spoken-no-reading = no reading ({ $word })
 reading-spoken-celsius = degrees C
 reading-spoken-fahrenheit = degrees F
 
+## Unit names, said after a number in place of the unit's symbol, which a
+## screen reader spells out letter by letter (mV as "m V"). The screen keeps
+## the symbols; only the spoken reading says these.
+##
+## $value is the number the name follows, as the screen shows it, e.g.
+## 1.000 or -0.52, to choose the plural by; after "overload", or in a mode's
+## name (DC volts), it is no number and the last form is taken. $prefix is
+## the SI prefix's word below, empty for none, and leads the name. Only
+## reading-unit-ohm is also given $scale, which prefix it is (none, pico,
+## nano, micro, milli, kilo, mega or giga), for a pair the language writes
+## its own way, as English contracts kilohm and megohm. reading-unit-percent
+## is given none of these.
+
+# The SI prefixes, as they lead a unit's name (milli in millivolt).
+reading-unit-prefix-pico = pico
+reading-unit-prefix-nano = nano
+reading-unit-prefix-micro = micro
+reading-unit-prefix-milli = milli
+reading-unit-prefix-kilo = kilo
+reading-unit-prefix-mega = mega
+reading-unit-prefix-giga = giga
+reading-unit-volt =
+    { $prefix }{ $value ->
+        [one] volt
+       *[other] volts
+    }
+reading-unit-ampere =
+    { $prefix }{ $value ->
+        [one] ampere
+       *[other] amperes
+    }
+reading-unit-ohm =
+    { $scale ->
+        [kilo]
+            { $value ->
+                [one] kilohm
+               *[other] kilohms
+            }
+        [mega]
+            { $value ->
+                [one] megohm
+               *[other] megohms
+            }
+       *[other]
+            { $prefix }{ $value ->
+                [one] ohm
+               *[other] ohms
+            }
+    }
+reading-unit-hertz =
+    { $prefix }{ $value ->
+       *[other] hertz
+    }
+reading-unit-farad =
+    { $prefix }{ $value ->
+        [one] farad
+       *[other] farads
+    }
+reading-unit-siemens =
+    { $prefix }{ $value ->
+       *[other] siemens
+    }
+reading-unit-watt =
+    { $prefix }{ $value ->
+        [one] watt
+       *[other] watts
+    }
+reading-unit-volt-ampere =
+    { $prefix }{ $value ->
+        [one] volt-ampere
+       *[other] volt-amperes
+    }
+reading-unit-henry =
+    { $prefix }{ $value ->
+        [one] henry
+       *[other] henries
+    }
+reading-unit-second =
+    { $prefix }{ $value ->
+        [one] second
+       *[other] seconds
+    }
+# The % sign; it takes no prefix.
+reading-unit-percent = percent
+# A number and its unit's name: $value is the number as the screen shows
+# it, e.g. 1.6112, or a word such as "overload"; $unit is one of the names
+# above, e.g. millivolts. $kind is percent for a number followed by
+# reading-unit-percent, for a language that says percent before the
+# number, and other otherwise.
+reading-spoken-amount =
+    { $kind ->
+        [percent] { $value } { $unit }
+       *[other] { $value } { $unit }
+    }
+
 ## The meter's badges spoken, one phrase each.
 
 # HV!: the probes are on a dangerous voltage.

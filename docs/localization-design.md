@@ -23,7 +23,7 @@ Stays English:
 - logs, including the library warnings shown by default
 - in `capture`: the step instructions, unless the user translates them for themselves; the readings it echoes and the report; `--list-steps` and `triage`
 - What's New (`CHANGELOG.md`), doc screenshots, `dmm-gui --help`, the shell completion scripts
-- unit symbols, decimal points, timestamps
+- unit symbols, decimal points, timestamps — except in what a screen reader says (see [Writing messages](#writing-messages))
 - theme names, which are also setting values, `--theme` arguments and file names
 
 About 1,450 messages in all, plus about 240 attributes for tooltips, accessibility names and long help:
@@ -135,6 +135,7 @@ The library's `Display` stays the English rendering, used by logs and by library
 ## Writing messages
 
 - **Whole sentences.** A message never joins fragments. What would otherwise be assembled from pieces is one message using Fluent selectors and CLDR plural rules: the "{n} unexported {samples} and unsaved changes to {markers}" prompt, its plural nouns, and the screen reader's live-region summary.
+- **Spoken units by name.** A screen reader spells a unit symbol out letter by letter ("mV" as "m V"), so the spoken reading and the plot's summary say units by name, in the language. One message per base unit takes the SI prefix's word: joining a prefix to a unit is the one fragment join allowed, as it holds in every language the apps speak. Ohm also takes the prefix's key, for the pairs a language contracts (English kilohm). The plural follows the number as shown (`Arg::Decimal`), so English says "1.000 volts" and French "1.5 volt". One message joins a number and its unit's name, told whether the unit is a percentage, as Chinese says percent before the number (百分之五十). The screen keeps the symbols.
 - **Shortcuts as placeables.** Tooltips take their shortcut text from the key bindings instead of a hard-coded "(Ctrl+O)", which also shows Cmd on macOS.
 - **Key names are messages.** Keyboards print their keys in the local language, so Ctrl, Space and the arrows each have a message (`shortcuts-key-*`); on a Mac the modifiers show as symbols.
 - **Easy to miss:** the file-type names in rfd's save and open dialogs, accessibility names set through `WidgetInfo`, and the `Comment` line of the Linux desktop entry: the GUI writes the entry from `assets/dmm-tools.desktop`, which stays English, adding a `Comment[<locale>]` line for each language that translates `desktop-comment`, as the desktop picks the line by its own locale, not the app's.

@@ -116,11 +116,24 @@ impl Options {
 ///
 /// Numbers go in as integers, for plural selection, or as text already
 /// formatted the app's way: a raw `f64` would lose its precision ("5.0"
-/// prints as "5"), so there is deliberately no float variant.
+/// prints as "5"), so there is deliberately no float variant. A number shown
+/// with decimals goes in as that text, [`Arg::Decimal`], which keeps them.
 #[derive(Debug, Clone)]
 pub enum Arg<'a> {
     Str(Cow<'a, str>),
     Int(i64),
+    /// A number as the app shows it ("1.000", "-0.52"), to select a plural
+    /// on: its decimals count, as the language's rules want (English says
+    /// "1 volt" but "1.000 volts"). Text that is no number — "overload" —
+    /// selects as text, which matches no plural and takes the default form.
+    Decimal(Cow<'a, str>),
+}
+
+impl<'a> Arg<'a> {
+    /// [`Arg::Decimal`] from `shown`.
+    pub fn decimal(shown: impl Into<Cow<'a, str>>) -> Self {
+        Self::Decimal(shown.into())
+    }
 }
 
 impl<'a> From<&'a str> for Arg<'a> {
@@ -347,6 +360,11 @@ fn fluent_args<'a>(args: &'a [(&'a str, Arg<'a>)]) -> Option<FluentArgs<'a>> {
         let value = match value {
             Arg::Str(s) => FluentValue::from(s.as_ref()),
             Arg::Int(n) => FluentValue::from(*n),
+            Arg::Decimal(s) => s
+                .trim()
+                .parse::<fluent_bundle::types::FluentNumber>()
+                .map(FluentValue::Number)
+                .unwrap_or_else(|_| FluentValue::from(s.as_ref())),
         };
         out.set(*name, value);
     }
@@ -494,6 +512,30 @@ button = Effacer
         let l = Localizer::en_us(RESOURCES);
         assert_eq!(tr!(l, "samples", n = 1usize), "One sample");
         assert_eq!(tr!(l, "samples", n = 3u32), "3 samples");
+    }
+
+    /// A number as shown selects with its decimals, by each language's
+    /// rules, prints as shown, and text that is no number takes the default.
+    #[test]
+    fn plurals_select_on_numbers_as_shown() {
+        let l = Localizer::en_us(RESOURCES);
+        assert_eq!(tr!(l, "samples", n = Arg::decimal("1")), "One sample");
+        assert_eq!(
+            tr!(l, "samples", n = Arg::decimal("1.000")),
+            "1.000 samples"
+        );
+        assert_eq!(tr!(l, "samples", n = Arg::decimal("-1")), "One sample");
+        assert_eq!(tr!(l, "samples", n = Arg::decimal("OL")), "OL samples");
+        static FR_LANG: Language = FRENCH;
+        let fr = Localizer::new(&FR_LANG, RESOURCES, &Options::default());
+        assert_eq!(
+            tr!(fr, "samples", n = Arg::decimal("1.5")),
+            "Un échantillon"
+        );
+        assert_eq!(
+            tr!(fr, "samples", n = Arg::decimal("2.0")),
+            "2.0 échantillons"
+        );
     }
 
     #[test]

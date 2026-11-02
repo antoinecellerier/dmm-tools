@@ -21,6 +21,7 @@ use text::{
     badge_order, format_aux_value, format_value_display, live_region_context,
     live_region_fingerprint, live_region_label,
 };
+pub(crate) use text::{spoken_amount, spoken_unit};
 
 /// Base font size for the primary reading in the wide (side panel) layout.
 pub(crate) const BASE_READING_FONT_SIZE: f32 = 36.0;
@@ -2969,7 +2970,7 @@ mod tests {
                 let (leaf, node) = spoken_reading(&f.nodes, &what);
                 let said = node.value().unwrap_or_default();
                 assert!(
-                    said.contains("5.678") && said.contains("DC V") && said.contains("60.000"),
+                    said.contains("5.678") && said.contains("DC volts") && said.contains("60.000"),
                     "{what}: {said:?}"
                 );
                 assert!(

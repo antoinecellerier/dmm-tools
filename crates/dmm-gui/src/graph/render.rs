@@ -1913,7 +1913,7 @@ impl Graph {
                                 l10n,
                                 "graph-plot-a11y-also-axis",
                                 series = label,
-                                unit = unit
+                                unit = crate::display::spoken_unit(l10n, unit, "")
                             )
                             .into_owned(),
                             None => label.into_owned(),
@@ -1950,18 +1950,17 @@ impl Graph {
                 // meter has nothing to measure. The band is otherwise a
                 // purely visual cue.
                 _ if self.breaks.overloaded() => tr!(l10n, "graph-plot-a11y-over-range"),
+                // Units by name, as the reading says them.
                 (Some(raw), _) => tr!(
                     l10n,
                     "graph-plot-a11y-reading",
-                    value = raw.trim(),
-                    unit = unit
+                    value = crate::display::spoken_amount(l10n, raw.trim(), unit)
                 ),
-                (None, Some(v)) => tr!(
-                    l10n,
-                    "graph-plot-a11y-reading",
-                    value = format!("{v:.prec$}", prec = self.decimals(true)),
-                    unit = unit
-                ),
+                (None, Some(v)) => {
+                    let value = format!("{v:.prec$}", prec = self.decimals(true));
+                    let value = crate::display::spoken_amount(l10n, &value, unit);
+                    tr!(l10n, "graph-plot-a11y-reading", value = value)
+                }
                 (None, None) => tr!(l10n, "graph-plot-a11y-no-data"),
             };
             // The plot draws several traces at once for a multi-display
@@ -1989,8 +1988,7 @@ impl Graph {
                 l10n,
                 "graph-plot-a11y-y-axis",
                 min = format!("{y_min:.3}"),
-                max = format!("{y_max:.3}"),
-                unit = unit
+                max = crate::display::spoken_amount(l10n, &format!("{y_max:.3}"), unit)
             );
             let samples = tr!(l10n, "graph-plot-a11y-samples", count = self.history.len());
             let sentences = [
