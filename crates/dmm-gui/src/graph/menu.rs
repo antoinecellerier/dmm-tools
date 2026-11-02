@@ -184,6 +184,141 @@ enum CursorEntry {
     Move,
 }
 
+/// Draw the menu's headings and entries for `menu` — a flag's Delete
+/// marker, the reading group, then the height group, as its scope offers
+/// them — and return each entry's response with what picking it does.
+fn add_entries(
+    ui: &mut egui::Ui,
+    l10n: &Localizer,
+    menu: &MenuPoint,
+    unit: &str,
+    cursors: super::MeasureCursors,
+    reading_secs: Option<f64>,
+) -> Vec<(egui::Response, Pick)> {
+    let reading = menu.reading.as_ref();
+    let has_reading = reading.is_some();
+    // Two groups, each under a muted heading naming what its entries act on —
+    // the reading nearest the click, the height clicked — so the entries are
+    // verbs alone. A screen reader walks the entries, not the headings: each is
+    // named in full for it.
+    let mut entries: Vec<(egui::Response, Pick)> = Vec::new();
+    let no_reading = tr!(l10n, "graph-menu-no-reading");
+    let mut entry = |ui: &mut egui::Ui, enabled, short: String, spoken: String, pick| {
+        let response = ui
+            .add_enabled(enabled, egui::Button::new(short))
+            .on_disabled_hover_text(&*no_reading)
+            .a11y_label(&spoken);
+        entries.push((response, pick));
+    };
+    // An entry whose label is its whole name.
+    let plain = |text: std::borrow::Cow<'_, str>| {
+        let text = text.into_owned();
+        (text.clone(), text)
+    };
+
+    if let MenuScope::Flag(number) = menu.scope {
+        let (short, spoken) = plain(tr!(l10n, "graph-menu-delete-marker", number = number));
+        entry(ui, true, short, spoken, Pick::DeleteMarker(number));
+    }
+    if menu.scope.offers_reading() {
+        let time = reading.map(|r| r.time.as_str());
+        let (has, time_arg) = match time {
+            Some(t) => ("some", t),
+            None => ("none", ""),
+        };
+        match reading {
+            Some(r) => heading(
+                ui,
+                &tr!(l10n, "graph-menu-reading-heading", time = &r.time),
+                Some(&r.time),
+            ),
+            None => heading(ui, &no_reading, None),
+        }
+        entry(
+            ui,
+            has_reading,
+            tr!(l10n, "graph-menu-mark").into_owned(),
+            tr!(l10n, "graph-menu-mark.a11y", reading = has, time = time_arg).into_owned(),
+            Pick::Mark,
+        );
+        let (short, spoken) = plain(match reading {
+            Some(r) => tr!(l10n, "graph-menu-copy-digits", digits = &r.digits),
+            None => tr!(l10n, "graph-menu-copy"),
+        });
+        entry(ui, has_reading, short, spoken, Pick::Copy);
+        if let Some(number) = menu.marker {
+            let (short, spoken) = plain(tr!(l10n, "graph-menu-delete-marker", number = number));
+            entry(ui, true, short, spoken, Pick::DeleteMarker(number));
+        }
+        for (kind, which) in cursor_entries(cursors, reading_secs) {
+            let (short, spoken) = cursor_entry_text(l10n, kind, which, time);
+            entry(ui, has_reading, short, spoken, Pick::SetCursor(which));
+        }
+        if let Some(which) = menu.cursor {
+            let (short, spoken) =
+                plain(tr!(l10n, "graph-menu-remove-cursor", cursor = which.name()));
+            entry(ui, true, short, spoken, Pick::RemoveCursor(which));
+        }
+        if cursors.placed().next().is_some() {
+            let (short, spoken) = plain(tr!(l10n, "graph-menu-remove-cursors"));
+            entry(ui, true, short, spoken, Pick::RemoveCursors);
+        }
+    }
+    if menu.scope == MenuScope::Plot {
+        ui.separator();
+    }
+    if menu.scope.offers_value() {
+        let height = with_unit(menu.y, unit);
+        heading(
+            ui,
+            &tr!(l10n, "graph-menu-height-heading", height = &height),
+            Some(&height),
+        );
+        // Not over a line at that very height, where it would add none.
+        if menu.ref_line != Some(menu.y) {
+            entry(
+                ui,
+                true,
+                tr!(l10n, "graph-menu-add-ref").into_owned(),
+                tr!(l10n, "graph-menu-add-ref.a11y", height = &height).into_owned(),
+                Pick::AddRefLine,
+            );
+        }
+        if let Some(v) = menu.ref_line {
+            let (short, spoken) = plain(tr!(
+                l10n,
+                "graph-menu-remove-ref",
+                height = with_unit(v, unit)
+            ));
+            entry(ui, true, short, spoken, Pick::RemoveRefLine(v));
+        }
+        if menu.limits_apply {
+            for side in [LimitSide::High, LimitSide::Low] {
+                let side_arg = side_arg(side);
+                entry(
+                    ui,
+                    true,
+                    tr!(l10n, "graph-menu-set-alarm", side = side_arg).into_owned(),
+                    tr!(
+                        l10n,
+                        "graph-menu-set-alarm.a11y",
+                        side = side_arg,
+                        height = &height
+                    )
+                    .into_owned(),
+                    Pick::SetLimit(side),
+                );
+            }
+            if let Some(side) = menu.limit {
+                let (short, spoken) =
+                    plain(tr!(l10n, "graph-menu-remove-alarm", side = side_arg(side)));
+                entry(ui, true, short, spoken, Pick::ClearLimit(side));
+            }
+        }
+    }
+    entries
+}
+
 /// The entries putting a cursor on the menu's reading, each with the
 /// cursor it sets: one for the first cursor, then one placing the missing
 /// cursor and one moving each placed one not already on the reading at
@@ -454,132 +589,7 @@ impl Graph {
             .open_memory(open)
             .at_pointer_fixed()
             .show(|ui| {
-                let reading = menu.reading.as_ref();
-                let has_reading = reading.is_some();
-                // Two groups, each under a muted heading naming what its entries
-                // act on — the reading nearest the click, the height clicked —
-                // so the entries are verbs alone. A screen reader walks the
-                // entries, not the headings: each is named in full for it.
-                let mut entries: Vec<(egui::Response, Pick)> = Vec::new();
-                let no_reading = tr!(l10n, "graph-menu-no-reading");
-                let mut entry =
-                    |ui: &mut egui::Ui, enabled, short: String, spoken: String, pick| {
-                        let response = ui
-                            .add_enabled(enabled, egui::Button::new(short))
-                            .on_disabled_hover_text(&*no_reading)
-                            .a11y_label(&spoken);
-                        entries.push((response, pick));
-                    };
-                // An entry whose label is its whole name.
-                let plain = |text: std::borrow::Cow<'_, str>| {
-                    let text = text.into_owned();
-                    (text.clone(), text)
-                };
-
-                if let MenuScope::Flag(number) = menu.scope {
-                    let (short, spoken) =
-                        plain(tr!(l10n, "graph-menu-delete-marker", number = number));
-                    entry(ui, true, short, spoken, Pick::DeleteMarker(number));
-                }
-                if menu.scope.offers_reading() {
-                    let time = reading.map(|r| r.time.as_str());
-                    let (has, time_arg) = match time {
-                        Some(t) => ("some", t),
-                        None => ("none", ""),
-                    };
-                    match reading {
-                        Some(r) => heading(
-                            ui,
-                            &tr!(l10n, "graph-menu-reading-heading", time = &r.time),
-                            Some(&r.time),
-                        ),
-                        None => heading(ui, &no_reading, None),
-                    }
-                    entry(
-                        ui,
-                        has_reading,
-                        tr!(l10n, "graph-menu-mark").into_owned(),
-                        tr!(l10n, "graph-menu-mark.a11y", reading = has, time = time_arg)
-                            .into_owned(),
-                        Pick::Mark,
-                    );
-                    let (short, spoken) = plain(match reading {
-                        Some(r) => tr!(l10n, "graph-menu-copy-digits", digits = &r.digits),
-                        None => tr!(l10n, "graph-menu-copy"),
-                    });
-                    entry(ui, has_reading, short, spoken, Pick::Copy);
-                    if let Some(number) = menu.marker {
-                        let (short, spoken) =
-                            plain(tr!(l10n, "graph-menu-delete-marker", number = number));
-                        entry(ui, true, short, spoken, Pick::DeleteMarker(number));
-                    }
-                    for (kind, which) in cursor_entries(cursors, reading_secs) {
-                        let (short, spoken) = cursor_entry_text(l10n, kind, which, time);
-                        entry(ui, has_reading, short, spoken, Pick::SetCursor(which));
-                    }
-                    if let Some(which) = menu.cursor {
-                        let (short, spoken) =
-                            plain(tr!(l10n, "graph-menu-remove-cursor", cursor = which.name()));
-                        entry(ui, true, short, spoken, Pick::RemoveCursor(which));
-                    }
-                    if cursors.placed().next().is_some() {
-                        let (short, spoken) = plain(tr!(l10n, "graph-menu-remove-cursors"));
-                        entry(ui, true, short, spoken, Pick::RemoveCursors);
-                    }
-                }
-                if menu.scope == MenuScope::Plot {
-                    ui.separator();
-                }
-                if menu.scope.offers_value() {
-                    let height = with_unit(menu.y, &unit);
-                    heading(
-                        ui,
-                        &tr!(l10n, "graph-menu-height-heading", height = &height),
-                        Some(&height),
-                    );
-                    // Not over a line at that very height, where it would add none.
-                    if menu.ref_line != Some(menu.y) {
-                        entry(
-                            ui,
-                            true,
-                            tr!(l10n, "graph-menu-add-ref").into_owned(),
-                            tr!(l10n, "graph-menu-add-ref.a11y", height = &height).into_owned(),
-                            Pick::AddRefLine,
-                        );
-                    }
-                    if let Some(v) = menu.ref_line {
-                        let (short, spoken) = plain(tr!(
-                            l10n,
-                            "graph-menu-remove-ref",
-                            height = with_unit(v, &unit)
-                        ));
-                        entry(ui, true, short, spoken, Pick::RemoveRefLine(v));
-                    }
-                    if menu.limits_apply {
-                        for side in [LimitSide::High, LimitSide::Low] {
-                            let side_arg = side_arg(side);
-                            entry(
-                                ui,
-                                true,
-                                tr!(l10n, "graph-menu-set-alarm", side = side_arg).into_owned(),
-                                tr!(
-                                    l10n,
-                                    "graph-menu-set-alarm.a11y",
-                                    side = side_arg,
-                                    height = &height
-                                )
-                                .into_owned(),
-                                Pick::SetLimit(side),
-                            );
-                        }
-                        if let Some(side) = menu.limit {
-                            let (short, spoken) =
-                                plain(tr!(l10n, "graph-menu-remove-alarm", side = side_arg(side)));
-                            entry(ui, true, short, spoken, Pick::ClearLimit(side));
-                        }
-                    }
-                }
-
+                let entries = add_entries(ui, l10n, &menu, &unit, cursors, reading_secs);
                 let enabled: Vec<egui::Response> = entries
                     .iter()
                     .filter(|(entry, _)| entry.enabled())
