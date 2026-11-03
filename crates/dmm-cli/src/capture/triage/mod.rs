@@ -135,6 +135,7 @@ impl<'a> Triage<'a> {
             Some(dmm_lib::BLUETOOTH) => dmm_lib::transport::Link::Bluetooth,
             _ => dmm_lib::transport::Link::UsbCable,
         };
+        let info = device_information(report);
         let steps = report
             .steps
             .iter()
@@ -142,7 +143,7 @@ impl<'a> Triage<'a> {
                 let mut view = parse_step(result, protocol.as_deref());
                 view.wire = device
                     .filter(|_| !result.frames.is_empty())
-                    .map(|d| decode::decode(&result.frames, d, Some(link)));
+                    .map(|d| decode::decode(&result.frames, d, Some(link), info.as_deref()));
                 view
             })
             .collect();
@@ -152,6 +153,15 @@ impl<'a> Triage<'a> {
             definitions,
             steps,
         }
+    }
+
+    /// The entry the meter's own name names when it is not the one the
+    /// steps are decoded as: a UT217A run as `--device cms101` named itself
+    /// the CMS061 (#45), whose keys and tables are its own.
+    fn named_other_entry(&self) -> Option<&'static SelectableDevice> {
+        let device = self.device?;
+        let named = (device.new_protocol)().entry_named(&self.report.device_name)?;
+        (named.id != device.id).then_some(named)
     }
 
     /// The definition a step ran from: a sub-step's is its base step's.
@@ -205,6 +215,13 @@ impl<'a> Triage<'a> {
                  over {transport}, the meter named itself {:?}\n",
                 r.device_name
             )),
+        }
+        if let Some(named) = self.named_other_entry() {
+            out.push_str(&format!(
+                "  that name is the {} entry's: decode as it with `dmm-cli --device {} triage <report>`\n",
+                named.display_name(),
+                named.id
+            ));
         }
 
         let mut run = Vec::new();
@@ -394,6 +411,15 @@ fn tally(items: impl IntoIterator<Item = String>) -> Vec<(String, usize)> {
     out
 }
 
+/// The device information the capture's link read at connect (OWON's
+/// FFF2), from the note the Bluetooth transport ends `transport_info` with:
+/// a protocol that reads it decodes the steps as the live run did.
+fn device_information(report: &CaptureReport) -> Option<Vec<u8>> {
+    let info = report.transport_info.as_deref()?;
+    let (_, hex) = info.rsplit_once(", device information: ")?;
+    hex_bytes(hex)
+}
+
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
@@ -434,6 +460,51 @@ pub(super) mod tests {
             steps,
             ..CaptureReport::default()
         }
+    }
+
+    /// The FFF2 bytes come from the Bluetooth transport's note; none when
+    /// it was not read, or the link reads none.
+    #[test]
+    fn device_information_is_read_off_the_transport_note() {
+        let report = |info: &str| CaptureReport {
+            transport_info: Some(info.to_string()),
+            ..CaptureReport::default()
+        };
+        let read = report("BDM (12:34:56:78:9A:BC), device information: 3D 00 01 04 00 00");
+        assert_eq!(
+            device_information(&read),
+            Some(vec![0x3D, 0x00, 0x01, 0x04, 0x00, 0x00])
+        );
+        let unread = report("BDM (12:34:56:78:9A:BC), device information: not read");
+        assert_eq!(device_information(&unread), None);
+        assert_eq!(device_information(&report("CP2110 (/dev/hidraw3)")), None);
+        assert_eq!(device_information(&CaptureReport::default()), None);
+    }
+
+    /// A meter whose own name is another entry's is pointed at that entry,
+    /// and one that names the entry decoding it is not (#45).
+    #[test]
+    fn a_meter_naming_another_entry_is_pointed_at_it() {
+        let report = |name: &str| CaptureReport {
+            device_id: Some("cms101".to_string()),
+            device_name: name.to_string(),
+            transport_name: Some("Bluetooth".to_string()),
+            ..CaptureReport::default()
+        };
+        let header = |report: &CaptureReport| {
+            let mut out = String::new();
+            Triage::new(report, find_device("cms101"), None).header(&mut out);
+            out
+        };
+        let other = header(&report("OWON CMS061"));
+        assert!(
+            other.contains(
+                "that name is the OWON CMS061 entry's: decode as it with \
+                 `dmm-cli --device cms061 triage <report>`"
+            ),
+            "{other}"
+        );
+        assert!(!header(&report("OWON CMS101")).contains("that name is"));
     }
 
     fn triage(report: &CaptureReport) -> String {

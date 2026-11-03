@@ -62,7 +62,8 @@ impl Wire {
     }
 }
 
-/// `frames` decoded by a fresh `device` protocol over `link`.
+/// `frames` decoded by a fresh `device` protocol over `link`, which read
+/// `info` as the meter's device information, as the capture's link did.
 ///
 /// Fast whatever the step's length: every read path gives up on an empty
 /// transport after a bounded number of reads, not at a deadline. The waits
@@ -73,9 +74,10 @@ pub(super) fn decode(
     frames: &[FrameRecord],
     device: &SelectableDevice,
     link: Option<Link>,
+    info: Option<&[u8]>,
 ) -> Wire {
     let records = records(frames);
-    let replay = Replay::new(&records, link);
+    let replay = Replay::new(&records, link, info);
     let mut protocol = (device.new_protocol)();
     let mut events = Vec::new();
 
@@ -221,7 +223,7 @@ pub(super) mod tests {
             (280, "rx", HELD),
         ]);
         for recorded in [new_order, old_order] {
-            let wire = decode(&recorded, ut61eplus, Some(Link::UsbCable));
+            let wire = decode(&recorded, ut61eplus, Some(Link::UsbCable), None);
             assert!(wire.polled);
             assert_eq!(shown(&wire), ["DC V -0.0065", "DC V -0.0031"]);
             assert_eq!(wire.commands, [2]);
@@ -246,7 +248,7 @@ pub(super) mod tests {
             (100, "tx", other),
             (180, "rx", HELD),
         ]);
-        let wire = decode(&recorded, ut61eplus, Some(Link::UsbCable));
+        let wire = decode(&recorded, ut61eplus, Some(Link::UsbCable), None);
         assert_eq!(shown(&wire), ["DC V -0.0065", "DC V -0.0031"]);
         assert!(wire.commands.is_empty(), "{:?}", wire.commands);
     }
@@ -257,7 +259,7 @@ pub(super) mod tests {
     fn an_unanswered_request_is_reported() {
         let ut61eplus = find_device("ut61eplus").unwrap();
         let recorded = frames(&[(0, "tx", POLL), (200, "tx", POLL), (280, "rx", HELD)]);
-        let wire = decode(&recorded, ut61eplus, Some(Link::UsbCable));
+        let wire = decode(&recorded, ut61eplus, Some(Link::UsbCable), None);
         assert!(matches!(wire.events[0].kind, EventKind::Timeout));
         assert_eq!(shown(&wire), ["DC V -0.0031"]);
     }
@@ -283,7 +285,7 @@ pub(super) mod tests {
             (520, "rx", reply[1]),
             (530, "rx", reply[2]),
         ]);
-        let wire = decode(&recorded, bm86x, Some(Link::UsbCable));
+        let wire = decode(&recorded, bm86x, Some(Link::UsbCable), None);
         assert_eq!(shown(&wire), ["AC V 312.71", "AC V 312.71"]);
         assert!(wire.commands.is_empty());
     }
@@ -291,6 +293,31 @@ pub(super) mod tests {
     /// The ZT-5B streams, scrambled: the key's frame and its acknowledgement
     /// are passed over, and a blank-display packet is skipped with the line
     /// the library logs for it.
+    /// A UT217A's step opened under the CMS101's entry (#45): with the
+    /// FFF2 value its link read, the backlog of whole frames each step
+    /// starts on decodes as the live run read it, every frame a reading.
+    #[test]
+    fn a_15_byte_step_decodes_with_the_device_information_read() {
+        super::log::install();
+        let cms101 = find_device("cms101").unwrap();
+        const OHMS: &str = "22 01 F0 07 00 00 20 00 F0 00 00 00 04 00 00";
+        let backlog = [OHMS; 74].join(" ");
+        let recorded = frames(&[(0, "rx", &backlog), (195, "rx", OHMS), (390, "rx", OHMS)]);
+        let info = [0x3D, 0x00, 0x01, 0x04, 0x00, 0x00];
+        let wire = decode(&recorded, cms101, Some(Link::Bluetooth), Some(&info));
+        let errors: Vec<&str> = wire
+            .events
+            .iter()
+            .filter_map(|e| match &e.kind {
+                EventKind::Error(e) => Some(e.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(wire.readings().count(), 76);
+        assert!(wire.readings().all(|(_, m)| m.mode == "Ω"));
+    }
+
     #[test]
     fn a_streamed_step_decodes_past_a_key() {
         super::log::install();
@@ -305,7 +332,7 @@ pub(super) mod tests {
             (900, "rx", "1B 84 71 55 A2 C1 22 F1 6C AA"),
             (1240, "rx", "1B 84 71 57 A2 21 BD FE 66 EA"),
         ]);
-        let wire = decode(&recorded, zt5b, Some(Link::Bluetooth));
+        let wire = decode(&recorded, zt5b, Some(Link::Bluetooth), None);
         assert!(!wire.polled);
         assert_eq!(wire.commands, [2]);
         let readings: Vec<(String, bool)> = wire

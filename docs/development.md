@@ -115,14 +115,16 @@ format and the JSON shape are in the header of
 
 `dmm-cli triage <report>` reads a report a `capture` run wrote, with this
 build's parser and no meter. It takes the meter from the report's
-`device_id`; a v0.6.0 report has none, so name it, as in
-`dmm-cli --device <id> triage <report>`. A plan run's expectations need its
-plan file, passed as `--plan`.
+`device_id`; a v0.6.0 report has none, and a meter run under another
+model's entry has the wrong one (the header names the entry the meter's own
+name points to), so name it, as in `dmm-cli --device <id> triage <report>`.
+A plan run's expectations need its plan file, passed as `--plan`.
 
 Each step's recorded frames are played back to the device's own protocol
 (`capture/triage/replay.rs`), so the decode is the driver's, not a script's.
-A request the protocol writes releases the reply recorded after it, and the
-keys the capture pressed stay in place.
+A request the protocol writes releases the reply recorded after it, the
+keys the capture pressed stay in place, and the device information the
+link read at connect (`transport_info`) is read again.
 
 It prints four sections:
 - a header: the run's tier, sessions, truncation and diagnostics;

@@ -1,11 +1,13 @@
 //! `--fixtures`: each distinct sample payload as a golden fixture, in the
 //! shape `crates/dmm-lib/tests/golden/` holds, printed for a maintainer to
 //! pick from. Nothing is written: a fixture needs a first line saying what
-//! its frame shows, which only someone who read the step can write.
+//! its frame shows and the reporter's handle, which only someone who read
+//! the step and the issue can write.
 
 use super::Triage;
 use crate::capture::report::SampleData;
 use dmm_lib::flags::{Flag, StatusFlags};
+use dmm_lib::protocol::registry;
 
 pub(super) fn render(triage: &Triage) -> String {
     let mut out = String::from("\nFixtures\n");
@@ -18,6 +20,18 @@ pub(super) fn render(triage: &Triage) -> String {
     let link = report.transport_name.as_deref().unwrap_or("its cable");
     // "0.8.0-dev (eea85ba)" as the fixtures cite it: "0.8.0-dev eea85ba".
     let version = report.tool_version.replace(['(', ')'], "");
+    // The meter as the run picked it, a rebrand under its own name; the
+    // reporter's handle is the one field the report cannot fill.
+    let meter = report
+        .picked_as
+        .as_deref()
+        .and_then(registry::find_listing)
+        .filter(|l| l.device.id == device.id)
+        .map_or_else(|| device.display_name(), |l| l.display_name());
+    let issue = (device.new_protocol)()
+        .profile()
+        .verification_issue
+        .map_or_else(|| "TODO".to_string(), |n| n.to_string());
     // A family that sends sub-values gets `aux: []` on a reading without
     // them, so the fixture still asserts there are none.
     let with_aux = triage
@@ -40,14 +54,24 @@ pub(super) fn render(triage: &Triage) -> String {
             out.push_str(&format!("--- {}/{name}.yaml\n", device.id));
             out.push_str("# TODO: what this frame shows.\n");
             out.push_str(&format!(
-                "# Captured {date} from a {} over {link} (issue #TODO, {version} report, step {}).\n",
-                device.display_name(),
+                "# Captured {date} from {} {meter} over {link} (issue #{issue}, @TODO, {version} \
+                 report, step {}).\n",
+                article(meter),
                 step.id()
             ));
             out.push_str(&fixture(&SampleData::from_measurement(m), with_aux));
         }
     }
     out
+}
+
+/// "an" before a name read with a vowel first ("an OWON CMS061"), "a"
+/// otherwise; a leading U is read "you" ("a UNI-T UT61E+").
+fn article(name: &str) -> &'static str {
+    match name.chars().next() {
+        Some('A' | 'E' | 'I' | 'O') => "an",
+        _ => "a",
+    }
 }
 
 /// A step id as a file name: `dcv/range:22V` is `dcv_range_22V`.
@@ -110,12 +134,50 @@ mod tests {
         assert!(
             text.contains(
                 "--- ut61eplus/dcv_range_2.2V_2.yaml\n# TODO: what this frame shows.\n\
-                 # Captured 2026-10-03 from a UNI-T UT61E+ over CP2110 (issue #TODO, 0.8.0-dev test report, step dcv/range:2.2V).\n\
+                 # Captured 2026-10-03 from a UNI-T UT61E+ over CP2110 (issue #TODO, @TODO, 0.8.0-dev test report, step dcv/range:2.2V).\n\
                  raw_hex: \"02 31 20 30 2E 30 30 30 32 00 00 30 30 30\"\n\
                  mode: \"DC V\"\nvalue: \"0.0002\"\nunit: \"V\"\nrange_label: \"22V\"\n\
                  flags:\n  auto_range: true\n"
             ),
             "{text}"
+        );
+    }
+
+    /// A run picked by another brand's name is captured from that meter,
+    /// with the entry's verification issue and the article its name reads
+    /// with.
+    #[test]
+    fn a_fixture_names_the_meter_as_picked_and_its_issue() {
+        // A UT217A's Ω frame with the probe tips together (#45).
+        let cms061 = find_device("cms061").unwrap();
+        let ohms = (cms061.new_protocol)()
+            .parse_payload(&[
+                0x22, 0x01, 0xF0, 0x07, 0x00, 0x00, 0x20, 0x00, 0xF0, 0x00, 0x00, 0x00, 0x04, 0x00,
+                0x00,
+            ])
+            .unwrap();
+        let mut report = ut61eplus_report(vec![step(
+            "ohm_short",
+            vec![SampleData::from_measurement(&ohms)],
+        )]);
+        report.device_id = Some("cms061".to_string());
+        report.transport_name = Some("Bluetooth".to_string());
+        report.date = "2026-11-03T11:12:35+01:00".to_string();
+        let header = |report: &crate::capture::report::CaptureReport| {
+            let text = render(&Triage::new(report, Some(cms061), None));
+            let line = text.lines().find(|l| l.starts_with("# Captured"));
+            line.unwrap().to_string()
+        };
+        assert_eq!(
+            header(&report),
+            "# Captured 2026-11-03 from an OWON CMS061 over Bluetooth (issue #45, @TODO, \
+             0.8.0-dev test report, step ohm_short)."
+        );
+        report.picked_as = Some("ut217a".to_string());
+        assert!(
+            header(&report).contains("from a UNI-T UT217A over Bluetooth (issue #45,"),
+            "{}",
+            header(&report)
         );
     }
 }

@@ -38,6 +38,8 @@ pub(super) fn records(frames: &[FrameRecord]) -> Vec<Record> {
 pub(super) struct Replay<'a> {
     records: &'a [Record],
     link: Option<Link>,
+    /// The device information the capture's link read (OWON's FFF2).
+    info: Option<&'a [u8]>,
     /// Closed while the protocol's `init` runs: what it writes is kept, but
     /// it reads nothing, so a purge there cannot eat the step.
     open: Cell<bool>,
@@ -60,10 +62,11 @@ pub(super) struct Replay<'a> {
 }
 
 impl<'a> Replay<'a> {
-    pub(super) fn new(records: &'a [Record], link: Option<Link>) -> Self {
+    pub(super) fn new(records: &'a [Record], link: Option<Link>, info: Option<&'a [u8]>) -> Self {
         Replay {
             records,
             link,
+            info,
             open: Cell::new(false),
             polled: Cell::new(false),
             cursor: Cell::new(0),
@@ -197,5 +200,9 @@ impl Transport for Replay<'_> {
 
     fn link(&self) -> Option<Link> {
         self.link
+    }
+
+    fn info_characteristic(&self) -> Option<&[u8]> {
+        self.info
     }
 }

@@ -254,6 +254,7 @@ mod tests {
             &recorded,
             find_device("ut61eplus").unwrap(),
             Some(Link::UsbCable),
+            None,
         );
         let lines: Vec<String> = lines(&wire).iter().map(|l| l.trim().to_string()).collect();
         let dcv = "RX DC V 2.2V: -0.0065 V [AUTO] [02 30 2D 30 2E 30 30 36 35 00 00 30 30 30]";
