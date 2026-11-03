@@ -113,8 +113,7 @@ impl Protocol for Bm78xbtProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // The extractor never fails, so the recovery mode and the skip
-        // pattern are never used.
+        // The extractor never fails, so the recovery mode is never used.
         let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
@@ -122,7 +121,6 @@ impl Protocol for Bm78xbtProtocol {
             |_| true,
             FrameErrorRecovery::Propagate,
             LOG,
-            &packet::READING_HEAD,
         )?;
         decode::decode(&payload)
     }

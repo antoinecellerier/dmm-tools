@@ -144,9 +144,10 @@ impl Protocol for Ut181aProtocol {
                 report_unknown_frame_type(p);
                 p.first() == Some(&parse::RESPONSE_MEASUREMENT)
             },
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry {
+                header: &framing::HEADER,
+            },
             "ut181a",
-            &framing::HEADER,
         )?;
         let measurement = parse_measurement(&payload)?;
         // The stream is the only place the meter states its dial position, so

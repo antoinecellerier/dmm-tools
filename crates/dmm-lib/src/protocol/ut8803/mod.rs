@@ -201,9 +201,10 @@ impl Protocol for Ut8803Protocol {
             transport,
             frame::extract_frame_ut8803,
             |_| true,
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry {
+                header: &framing::HEADER,
+            },
             "ut8803",
-            &framing::HEADER,
         )?;
         parse_measurement(&payload)
     }

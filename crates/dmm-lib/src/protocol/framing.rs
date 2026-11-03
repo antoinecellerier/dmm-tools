@@ -12,8 +12,9 @@ use std::time::{Duration, Instant};
 pub(crate) enum FrameErrorRecovery {
     /// Propagate the error immediately (UT61E+ behavior).
     Propagate,
-    /// Skip past the current ABCD header and retry (UT8803/UT171/UT181A behavior).
-    SkipAndRetry,
+    /// Drop the buffer up to and past the next `header` and retry
+    /// (the UT8802, UT8803, UT171, UT181A and VC8x0 behavior).
+    SkipAndRetry { header: &'static [u8] },
 }
 
 /// Real time [`read_frame`] waits for a frame: it bounds the total time spent
@@ -107,9 +108,6 @@ pub(crate) fn discard_queued(transport: &dyn Transport) -> Result<()> {
 ///   to filter non-measurement frames).
 /// - `recovery`: whether to skip-and-retry on frame errors or propagate them.
 /// - `label`: protocol label for log messages (e.g. `"ut8803"`).
-/// - `skip_header`: byte pattern to scan for when skipping past a bad frame
-///   during error recovery. Typically `&HEADER` (`[0xAB, 0xCD]`) for ABCD
-///   protocols, or the family's own header for the others.
 ///
 /// Waits up to [`READ_TIMEOUT`] and examines up to [`MAX_FRAMES_EXAMINED`]
 /// frames. The first accepted frame is the answer, oldest first: a polled
@@ -122,7 +120,6 @@ pub(crate) fn read_frame<F, A>(
     accept_fn: A,
     recovery: FrameErrorRecovery,
     label: &str,
-    skip_header: &[u8],
 ) -> Result<Vec<u8>>
 where
     F: Fn(&[u8]) -> Result<Option<(Vec<u8>, usize)>>,
@@ -180,13 +177,13 @@ where
                     rx_buf.clear();
                     return Err(e);
                 }
-                FrameErrorRecovery::SkipAndRetry => {
+                FrameErrorRecovery::SkipAndRetry { header } => {
                     // Per bad frame, e.g. joining a stream mid-frame; a
                     // stream of nothing else ends in a reported timeout.
                     examined += 1;
                     reads = 0;
                     debug!("{label}: frame error: {e}, skipping");
-                    skip_past_header(rx_buf, skip_header);
+                    skip_past_header(rx_buf, header);
                 }
             },
         }
@@ -672,7 +669,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
@@ -696,7 +692,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
@@ -717,9 +712,8 @@ mod tests {
             &mock,
             extract_frame_abcd_be16,
             |_| true,
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry { header: &HEADER },
             "test",
-            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
@@ -741,9 +735,8 @@ mod tests {
             &mock,
             extract_frame_abcd_be16,
             |_| true,
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry { header: &HEADER },
             "test",
-            &HEADER,
         );
         assert_eq!(result.unwrap(), payload);
     }
@@ -778,7 +771,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         );
         assert!(matches!(result, Err(Error::Timeout)));
         assert_eq!(noise.0.get(), MAX_READS_PER_FRAME);
@@ -805,9 +797,8 @@ mod tests {
                 refused.set(refused.get() + 1);
                 false
             },
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry { header: &HEADER },
             "test",
-            &HEADER,
         );
         assert!(matches!(result, Err(Error::Timeout)));
         assert_eq!(refused.get(), 64);
@@ -832,7 +823,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
@@ -850,7 +840,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         );
         assert!(matches!(result, Err(Error::Timeout)));
     }
@@ -871,7 +860,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         );
         assert!(matches!(result, Err(Error::ChecksumMismatch { .. })));
     }
@@ -897,9 +885,8 @@ mod tests {
             &mock,
             extract_frame_abcd_be16,
             |_| true,
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry { header: &HEADER },
             "test",
-            &HEADER,
         )
         .unwrap();
         assert_eq!(result, good_payload);
@@ -925,7 +912,6 @@ mod tests {
             |p| !p.is_empty() && p[0] == 0x02,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         )
         .unwrap();
         assert_eq!(result, accepted_payload);
@@ -946,7 +932,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
@@ -970,7 +955,6 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
-            &HEADER,
         );
         assert!(matches!(result, Err(Error::Timeout)));
         // Cap path clears rx_buf; the MAX_FRAMES_EXAMINED exit path does not.

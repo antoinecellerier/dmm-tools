@@ -293,10 +293,9 @@ impl Protocol for OwonProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // The extractors never fail, so the skip pattern is never used;
-        // only the stream check below does, and the error goes out. About 2
-        // frames a second arrive (spec §5, §14.4), several inside
-        // read_frame's 2 s.
+        // The extractors never fail, so the recovery mode only matters for
+        // the stream check below, and its error goes out. About 2 frames a
+        // second arrive (spec §5, §14.4), several inside read_frame's 2 s.
         let (opened, aligned) = (self.model, self.aligned);
         let kind = opened.frame;
         // Checked once per read: a frame `kept` turns down may leave fewer
@@ -327,7 +326,6 @@ impl Protocol for OwonProtocol {
             |frame| kind == FrameKind::Six || frame15::kept(frame),
             FrameErrorRecovery::Propagate,
             LOG,
-            &[],
         );
         // A frame read leaves the buffer at the next one's start; a failed
         // read may have cleared it anywhere.

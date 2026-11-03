@@ -160,9 +160,10 @@ impl Protocol for Ut8802Protocol {
             transport,
             frame::extract_frame_ut8802,
             |_| true,
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry {
+                header: &frame::UT8802_HEADER,
+            },
             "ut8802",
-            &frame::UT8802_HEADER,
         )?;
         parse_measurement(&payload)
     }

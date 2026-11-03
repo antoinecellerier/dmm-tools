@@ -1044,8 +1044,7 @@ impl Protocol for Ut80xProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // `extract_packet` never fails, so the skip pattern is never used;
-        // `read_frame` only needs it non-empty, and CR is always 0x0D.
+        // `extract_packet` never fails, so the recovery mode is never used.
         let packet = framing::read_frame(
             &mut self.rx_buf,
             transport,
@@ -1053,7 +1052,6 @@ impl Protocol for Ut80xProtocol {
             |_| true,
             FrameErrorRecovery::Propagate,
             "ut80x",
-            &[CR],
         )?;
         self.parse_payload(&packet)
     }

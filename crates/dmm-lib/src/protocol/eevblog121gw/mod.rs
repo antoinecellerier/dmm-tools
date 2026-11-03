@@ -156,9 +156,9 @@ impl Protocol for Eevblog121gwProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // The extractor never fails, so the recovery mode and the skip
-        // pattern are never used. About 2 packets a second arrive (spec
-        // §15.4), several inside read_frame's 2 s.
+        // The extractor never fails, so the recovery mode is never used.
+        // About 2 packets a second arrive (spec §15.4), several inside
+        // read_frame's 2 s.
         let read = framing::read_frame(
             &mut self.rx_buf,
             transport,
@@ -166,7 +166,6 @@ impl Protocol for Eevblog121gwProtocol {
             |_| true,
             FrameErrorRecovery::Propagate,
             LOG,
-            &[packet::START],
         );
         match read {
             Ok(p) => decode::decode(&p),

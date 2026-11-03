@@ -211,7 +211,6 @@ impl Ut61PlusProtocol {
             |_| true,
             FrameErrorRecovery::Propagate,
             "ut61eplus",
-            &framing::HEADER,
         )
     }
 

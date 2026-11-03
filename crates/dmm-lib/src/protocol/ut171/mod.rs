@@ -270,9 +270,10 @@ impl Protocol for Ut171Protocol {
             // 0x000F LE) and gulux/Uni-T-CP2110's capture-driven parser.
             framing::extract_frame_abcd_2byte_le16,
             is_measurement_frame,
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry {
+                header: &framing::HEADER,
+            },
             "ut171",
-            &framing::HEADER,
         )?;
         parse_measurement(&payload)
     }

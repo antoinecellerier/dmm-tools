@@ -147,9 +147,10 @@ pub(crate) fn read_device_name(
         transport,
         framing::extract_frame_abcd_be16,
         |p| !p.is_empty() && p[0] == 0x00, // DeviceID type
-        FrameErrorRecovery::SkipAndRetry,
+        FrameErrorRecovery::SkipAndRetry {
+            header: &framing::HEADER,
+        },
         &format!("{label}-id"),
-        &framing::HEADER,
     ) {
         Ok(payload) if payload.len() >= 21 => {
             let name = String::from_utf8_lossy(&payload[1..21]).trim().to_string();
@@ -417,9 +418,10 @@ pub(crate) fn read_live<M: Vc8x0Model>(
             }
             None => false,
         },
-        FrameErrorRecovery::SkipAndRetry,
+        FrameErrorRecovery::SkipAndRetry {
+            header: &framing::HEADER,
+        },
         M::LOG,
-        &framing::HEADER,
     )
 }
 

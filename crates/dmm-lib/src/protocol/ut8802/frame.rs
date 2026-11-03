@@ -264,9 +264,10 @@ mod tests {
             &mock,
             extract_frame_ut8802,
             |_| true,
-            FrameErrorRecovery::SkipAndRetry,
+            FrameErrorRecovery::SkipAndRetry {
+                header: &UT8802_HEADER,
+            },
             "test",
-            &UT8802_HEADER,
         )
         .unwrap();
         assert_eq!(result[0], 0x05); // position code of the real frame

@@ -153,12 +153,11 @@ impl Protocol for ZotekProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // The extractor never fails, so the recovery mode and the skip
-        // pattern are never used, and it only cuts packets of the four
-        // types, each with a layout. About 3 packets a second arrive (spec
-        // §3), well inside read_frame's 2 s. A packet with no digit
-        // lit on the main display has no reading, so it is skipped for the
-        // next one.
+        // The extractor never fails, so the recovery mode is never used,
+        // and it only cuts packets of the four types, each with a layout.
+        // About 3 packets a second arrive (spec §3), well inside
+        // read_frame's 2 s. A packet with no digit lit on the main display
+        // has no reading, so it is skipped for the next one.
         let packet = framing::read_frame(
             &mut self.rx_buf,
             transport,
@@ -166,7 +165,6 @@ impl Protocol for ZotekProtocol {
             layout::shows_digits,
             FrameErrorRecovery::Propagate,
             LOG,
-            &frame::RAW_HEADER,
         )?;
         if let Some(other) = self.other_layout(packet[frame::TYPE_AT]) {
             warn!(
