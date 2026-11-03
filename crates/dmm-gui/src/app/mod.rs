@@ -333,6 +333,22 @@ impl Default for Connection {
 }
 
 impl Connection {
+    /// Stop the acquisition thread and forget everything about the link.
+    /// Nothing is connected, so nothing is identified: under Auto-detect the
+    /// next connect asks the cable again. The waiting count goes too: only an
+    /// incoming measurement clears it otherwise, and there won't be one.
+    /// Only the error that ended the link and a pending reconnect survive.
+    fn hang_up(&mut self) {
+        if let Some(worker) = self.worker.take() {
+            worker.stop();
+        }
+        *self = Self {
+            last_error: self.last_error.take(),
+            needs_reconnect: self.needs_reconnect,
+            ..Self::default()
+        };
+    }
+
     /// What the readout dropdowns offer: the listed choices, and the
     /// meter's function keys.
     pub(super) fn readouts(&self) -> display::ReadoutChoices<'_> {

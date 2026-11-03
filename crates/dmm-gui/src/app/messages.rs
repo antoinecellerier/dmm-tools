@@ -434,23 +434,7 @@ impl App {
         // Data stops here. The graph keeps its history across a reconnect, so
         // the resulting hole needs marking as a genuine gap.
         self.mark_data_loss();
-        if let Some(worker) = self.connection.worker.take() {
-            worker.stop();
-        }
-        self.connection.state = ConnectionState::Disconnected;
-        // Nothing is connected, so nothing is identified: under Auto-detect
-        // the next connect asks the cable again.
-        self.connection.meter = None;
-        self.connection.choices.clear();
-        self.connection.paused = false;
-        self.connection.reconnect_attempt = 0;
-        self.connection.reconnect_last_error = None;
-        // Otherwise only an incoming measurement clears this, and there won't
-        // be one — a meter that went quiet before the user disconnected left
-        // "Waiting for meter…" on screen for the whole disconnected session.
-        self.connection.waiting_timeouts = 0;
-        self.connection.ended = false;
-        self.connection.late_readings = None;
+        self.connection.hang_up();
     }
 
     /// [`disconnect`](Self::disconnect), then wait for the acquisition
