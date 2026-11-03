@@ -97,7 +97,8 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | OWON B35T+ | — | 🧪 Expérimental (intégré) | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
 | OWON B41T+ | — | 🧪 Expérimental (intégré) | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
 | OWON CM2100B | — | 🧪 Expérimental (intégré) | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
-| OWON CMS101/CMS061 (UNI-T UT217B/UT217A) | — | 🧪 Expérimental (intégré) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON CMS061 (UNI-T UT217A) | — | 🟡 Partiellement vérifié (intégré) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON CMS101 (UNI-T UT217B) | — | 🧪 Expérimental (intégré) | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
 | OWON OW18B/OW16B | — | 🧪 Expérimental (intégré) | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
 | OWON OW18E | — | 🧪 Expérimental (intégré) | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
 | OWON OW65B | — | 🧪 Expérimental (intégré) | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |

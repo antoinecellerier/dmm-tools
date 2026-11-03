@@ -1,0 +1,11 @@
+# DC A after HOLD held zeroed it
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step dca_zero).
+raw_hex: "A2 00 F0 00 00 00 A3 01 F0 00 00 00 04 00 00"
+mode: "DC A"
+value: "0"
+unit: "A"
+range_label: ""
+flags:
+  auto_range: true
+  dc: true
+aux: []

@@ -1,0 +1,10 @@
+# DC V on the 20 V manual range, leads open
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step manual_range).
+raw_hex: "23 00 F0 00 00 00 20 00 F0 00 00 00 00 00 00"
+mode: "DC V"
+value: "0"
+unit: "V"
+range_label: ""
+flags:
+  dc: true
+aux: []

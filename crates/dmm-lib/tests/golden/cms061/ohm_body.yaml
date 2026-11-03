@@ -1,0 +1,10 @@
+# Ω across a body: 0.9117 MΩ
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step ohm_body).
+raw_hex: "34 01 F0 9D 23 00 20 00 F0 00 00 00 04 00 00"
+mode: "Ω"
+value: "0.9117"
+unit: "MΩ"
+range_label: ""
+flags:
+  auto_range: true
+aux: []

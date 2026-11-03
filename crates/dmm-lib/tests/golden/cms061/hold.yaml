@@ -1,0 +1,11 @@
+# DC V with the leads open under HOLD
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step hold).
+raw_hex: "24 00 F0 03 00 00 20 00 F0 00 00 00 01 00 00"
+mode: "DC V"
+value: "0.0003"
+unit: "V"
+range_label: ""
+flags:
+  hold: true
+  dc: true
+aux: []

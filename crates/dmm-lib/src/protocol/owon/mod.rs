@@ -161,6 +161,18 @@ pub(crate) struct OwonProtocol {
     kind_known: bool,
 }
 
+/// How far real meters have confirmed `model`. A UT217A, the CMS061, has
+/// run its main modes and been detected after a restart (#45); its remote
+/// keys, NCV, negative DC V, MaxMin's sub-value and the scope have not.
+/// PartlyVerified keeps the warning and the badge linking to the issue. No
+/// other OWON or Voltcraft meter has run the tool.
+const fn stability(model: &Model) -> Stability {
+    match model.code {
+        61 => Stability::PartlyVerified,
+        _ => Stability::Experimental,
+    }
+}
+
 impl OwonProtocol {
     /// `issue` is the entry's verification issue, one per hardware twin.
     fn new(model: &'static Model, issue: u16) -> Self {
@@ -170,7 +182,7 @@ impl OwonProtocol {
             profile: DeviceProfile {
                 family_name: "OWON",
                 id: model.id,
-                stability: Stability::Experimental,
+                stability: stability(model),
                 supported_commands: model.commands,
                 max_aux_values: model.frame.max_aux_values(),
                 verification_issue: Some(issue),
@@ -1127,7 +1139,12 @@ mod tests {
             let profile = proto.profile();
             assert_eq!(profile.family_name, "OWON");
             assert_eq!(profile.id, entry.id);
-            assert_eq!(profile.stability, Stability::Experimental);
+            let stability = if m.code == 61 {
+                Stability::PartlyVerified
+            } else {
+                Stability::Experimental
+            };
+            assert_eq!(profile.stability, stability, "{}", m.id);
             assert_eq!(profile.supported_commands, m.commands);
             assert_eq!(profile.max_aux_values, m.frame.max_aux_values());
             issues.push(profile.verification_issue);

@@ -885,14 +885,15 @@ mod tests {
     /// captures (issue #7, both 2026-10-21). The UT181A, the Brymen BM82x
     /// from one reporter's BM827s (issue #35, 2026-10-27 and 2026-10-28) and
     /// the Brymen BM52x from the same reporter's BM525s (issue #36,
-    /// 2026-10-28) have run for their main modes only, so they are
+    /// 2026-10-28) and the OWON CMS061 from one reporter's UT217A (issue
+    /// #45, 2026-11-03) have run for their main modes only, so they are
     /// PartlyVerified (see their profiles). Everything else
     /// must stay flagged so the GUI shows the stability badge and links to the
     /// verification issue.
     #[test]
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut161e", "ut804", "zt5b"];
-        const PARTLY_VERIFIED: &[&str] = &["ut181a", "bm82x", "bm52x"];
+        const PARTLY_VERIFIED: &[&str] = &["ut181a", "bm82x", "bm52x", "cms061"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

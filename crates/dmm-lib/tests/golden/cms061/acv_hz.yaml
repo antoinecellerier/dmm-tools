@@ -1,0 +1,13 @@
+# Hz/V on AC V: 49.96 Hz, the AC V sent as the sub-value
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step acv_hz).
+raw_hex: "A2 11 F0 84 13 00 64 10 F0 15 04 00 04 00 00"
+mode: "Hz"
+value: "49.96"
+unit: "Hz"
+range_label: ""
+flags:
+  auto_range: true
+aux:
+  - label: "AC V"
+    value: "0.1045"
+    unit: "V"

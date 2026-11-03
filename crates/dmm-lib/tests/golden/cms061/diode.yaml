@@ -1,0 +1,9 @@
+# Diode with the leads open: OL
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step diode).
+raw_hex: "A4 02 F0 30 75 10 A4 01 F0 00 00 00 00 00 00"
+mode: "Diode"
+value: "OL"
+unit: "V"
+range_label: ""
+flags: {}
+aux: []

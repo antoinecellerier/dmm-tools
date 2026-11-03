@@ -1,0 +1,10 @@
+# Capacitance with the leads open
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step cap).
+raw_hex: "4B 01 F0 0A 00 00 A4 01 F0 00 00 00 04 00 00"
+mode: "Capacitance"
+value: "0.01"
+unit: "nF"
+range_label: ""
+flags:
+  auto_range: true
+aux: []

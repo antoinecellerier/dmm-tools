@@ -97,7 +97,8 @@ $ dmm-cli read --interval-ms 2500 --count 5
 | OWON B35T+ | — | 🧪 实验性（内置） | [#42](https://github.com/antoinecellerier/dmm-tools/issues/42) |
 | OWON B41T+ | — | 🧪 实验性（内置） | [#43](https://github.com/antoinecellerier/dmm-tools/issues/43) |
 | OWON CM2100B | — | 🧪 实验性（内置） | [#44](https://github.com/antoinecellerier/dmm-tools/issues/44) |
-| OWON CMS101/CMS061 (UNI-T UT217B/UT217A) | — | 🧪 实验性（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON CMS061 (UNI-T UT217A) | — | 🟡 部分验证（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
+| OWON CMS101 (UNI-T UT217B) | — | 🧪 实验性（内置） | [#45](https://github.com/antoinecellerier/dmm-tools/issues/45) |
 | OWON OW18B/OW16B | — | 🧪 实验性（内置） | [#39](https://github.com/antoinecellerier/dmm-tools/issues/39) |
 | OWON OW18E | — | 🧪 实验性（内置） | [#40](https://github.com/antoinecellerier/dmm-tools/issues/40) |
 | OWON OW65B | — | 🧪 实验性（内置） | [#46](https://github.com/antoinecellerier/dmm-tools/issues/46) |

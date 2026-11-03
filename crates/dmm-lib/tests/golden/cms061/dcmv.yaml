@@ -1,0 +1,11 @@
+# mV DC with the leads open
+# Captured 2026-11-03 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.9.0 6749b6a report, step dcmv).
+raw_hex: "1B 00 F0 6A 12 00 A2 01 F0 00 00 00 04 00 00"
+mode: "DC V"
+value: "4.714"
+unit: "mV"
+range_label: ""
+flags:
+  auto_range: true
+  dc: true
+aux: []
