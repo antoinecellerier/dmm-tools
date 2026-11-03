@@ -10,7 +10,7 @@
 //! run can name the steps whose English has changed since, and the English
 //! itself on the comment's next lines, for the user to compare.
 
-use super::ftl_text::escape;
+use dmm_shared::l10n::escape;
 use fluent_syntax::ast::{
     Comment, Entry, Expression, Identifier, InlineExpression, Message, Pattern, PatternElement,
     Resource, Term,
@@ -22,14 +22,14 @@ const DEVICE_TERM: &str = "device";
 const ENGLISH_MARK: &str = "en:";
 
 /// A step instruction to export: the step's id and its English.
-pub struct Exported<'a> {
-    pub id: &'a str,
-    pub english: &'a str,
+pub(crate) struct Exported<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) english: &'a str,
 }
 
 /// The file for `device`'s `steps`, under `header`'s lines as the file's
 /// comment.
-pub fn export(header: &[String], device: &str, steps: &[Exported<'_>]) -> String {
+pub(crate) fn export(header: &[String], device: &str, steps: &[Exported<'_>]) -> String {
     let mut body = vec![
         Entry::ResourceComment(Comment {
             content: header.to_vec(),
@@ -68,7 +68,7 @@ pub fn export(header: &[String], device: &str, steps: &[Exported<'_>]) -> String
 
 /// A short fingerprint of `english`: FNV-1a, 32 bits, in hex. It only has to
 /// tell one wording of a step from the next.
-pub fn fingerprint(english: &str) -> String {
+pub(crate) fn fingerprint(english: &str) -> String {
     let hash = english.bytes().fold(0x811c_9dc5_u32, |h, b| {
         (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
     });
@@ -77,25 +77,25 @@ pub fn fingerprint(english: &str) -> String {
 
 /// A file read back: the device it names and each step's text.
 #[derive(Debug, Default, PartialEq)]
-pub struct Instructions {
+pub(crate) struct Instructions {
     /// The `-device` term; `None` when the user deleted it.
-    pub device: Option<String>,
-    pub steps: Vec<Instruction>,
+    pub(crate) device: Option<String>,
+    pub(crate) steps: Vec<Instruction>,
 }
 
 /// One step's text in the user's file.
 #[derive(Debug, PartialEq)]
-pub struct Instruction {
-    pub id: String,
-    pub text: String,
+pub(crate) struct Instruction {
+    pub(crate) id: String,
+    pub(crate) text: String,
     /// The fingerprint of the English it was translated from, when its
     /// comment survived.
-    pub english: Option<String>,
+    pub(crate) english: Option<String>,
 }
 
 /// What keeps a file from being read, by line where there is one.
 #[derive(Debug, PartialEq)]
-pub enum Problem {
+pub(crate) enum Problem {
     /// A line that isn't `id = text`, a comment or a term.
     Syntax { line: usize },
     /// A step whose text holds a `{ … }` other than a quoted literal.
@@ -108,7 +108,7 @@ pub enum Problem {
 
 /// The steps in `source`, a file [`export`] wrote and the user edited. A
 /// UTF-8 byte-order mark and Windows line endings are fine.
-pub fn read(source: &str) -> Result<Instructions, Vec<Problem>> {
+pub(crate) fn read(source: &str) -> Result<Instructions, Vec<Problem>> {
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
     // fluent-syntax 0.12 panics on a `\u` escape short of its hex digits
     // when a non-ASCII character follows (`{ "\u√" }`), printing a Rust

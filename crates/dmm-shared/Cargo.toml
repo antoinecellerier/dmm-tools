@@ -17,7 +17,7 @@ csv.workspace = true
 env_logger.workspace = true
 log.workspace = true
 fluent-bundle = "0.16.0"
-fluent-syntax = "0.12.0" # the message scan behind test-support; already in the tree for fluent-bundle
+fluent-syntax = "0.12.0" # parses and writes Fluent source; already in the tree for fluent-bundle
 sys-locale = "0.3.2"
 unic-langid = "0.9.6"
 

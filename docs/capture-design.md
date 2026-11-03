@@ -268,8 +268,8 @@ run before its first step: a machine translator turning `hold` into `retenção`
 A device's file also serves a plan run on it. A
 step whose English changed since the export is named before the first step and shows the old
 translation. The report keeps the English `instruction` and adds `instruction_shown` with the
-text the operator read. The file format is `dmm_shared::l10n::instructions`; the run's side is
-`capture/instructions.rs`.
+text the operator read. The file format is `capture/instructions/file_format.rs`; the run's side
+is `capture/instructions.rs`.
 
 ## Report format
 

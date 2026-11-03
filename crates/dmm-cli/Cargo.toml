@@ -23,6 +23,7 @@ log.workspace = true
 console = "0.16"
 serde-saphyr.workspace = true
 csv.workspace = true
+fluent-syntax = "0.12.0" # the capture instruction files; already in the tree for fluent-bundle
 
 [dev-dependencies]
 dmm-shared = { path = "../dmm-shared", features = ["test-support"] }

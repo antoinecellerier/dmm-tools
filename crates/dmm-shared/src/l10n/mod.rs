@@ -23,7 +23,6 @@ pub mod check;
 pub mod clap_help;
 mod errors;
 mod ftl_text;
-pub mod instructions;
 mod lang;
 #[cfg(test)]
 mod lib_ftl;
@@ -33,6 +32,7 @@ mod pseudo;
 #[cfg(test)]
 mod translations;
 
+pub use ftl_text::escape;
 pub use lang::{EN_US, Language, find, find_in, languages, resolve};
 pub use lib_index::{LIB_RESOURCES, is_units_only};
 

@@ -1,5 +1,6 @@
-//! Text as Fluent source: the escaping both generated files need,
-//! `lib.ftl` (the `lib_ftl` test) and `cli-help.ftl` (`clap_help::render`).
+//! Text as Fluent source: the escaping the generated files need, `lib.ftl`
+//! (the `lib_ftl` test), `cli-help.ftl` (`clap_help::render`) and dmm-cli's
+//! capture instruction files.
 
 use fluent_syntax::ast::{Expression, InlineExpression, PatternElement};
 
@@ -19,7 +20,7 @@ fn literal(s: &str) -> PatternElement<String> {
 /// spaces Fluent trims and the `[`, `*` or `.` it would read as a variant
 /// or an attribute. Each line is a text element of its own, ending at its
 /// `\n`, which is where the serializer indents a multi-line pattern.
-pub(crate) fn escape(text: &str) -> Vec<PatternElement<String>> {
+pub fn escape(text: &str) -> Vec<PatternElement<String>> {
     let mut out = Vec::new();
     let mut buffer = String::new();
     let flush = |buffer: &mut String, out: &mut Vec<PatternElement<String>>| {

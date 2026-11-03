@@ -1130,6 +1130,7 @@ dependencies = [
  "ctrlc",
  "dmm-lib",
  "dmm-shared",
+ "fluent-syntax",
  "hidapi",
  "log",
  "serde",

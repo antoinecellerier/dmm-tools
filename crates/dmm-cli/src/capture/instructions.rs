@@ -1,5 +1,5 @@
 //! Step instructions in the user's own translation: `--export-instructions`
-//! writes the run's steps to a file ([`dmm_shared::l10n::instructions`]),
+//! writes the run's steps to a file ([`file_format`]),
 //! and `--instructions` shows the file's text in each step's place. The rest
 //! of the run is unchanged, and the report keeps the English beside the text
 //! shown.
@@ -8,11 +8,13 @@
 //! localizer is: the step header and the detection check's read-back, which
 //! rebuilds its step from the protocol, both find it there.
 
+mod file_format;
+
 use super::CaptureStep;
 use console::style;
 use dmm_lib::protocol::registry::SelectableDevice;
-use dmm_shared::l10n::instructions::{self, Exported, Problem};
 use dmm_shared::tr;
+use file_format::{Exported, Problem};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
@@ -179,7 +181,7 @@ pub(crate) fn export(
             english: s.instruction,
         })
         .collect();
-    let text = instructions::export(&header, device.id, &exported);
+    let text = file_format::export(&header, device.id, &exported);
     file.write_all(text.as_bytes())?;
     file.sync_all()?;
     let written = written.display().to_string();
@@ -218,7 +220,7 @@ pub(super) fn install(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let source =
         std::fs::read_to_string(path).map_err(|e| crate::output::at_path(Path::new(path), e))?;
-    let file = instructions::read(&source).map_err(|problems| Unreadable {
+    let file = file_format::read(&source).map_err(|problems| Unreadable {
         path: path.to_string(),
         problems,
     })?;
@@ -261,7 +263,7 @@ pub(super) fn install(
             s.english
                 .as_deref()
                 .zip(english(&s.id))
-                .is_some_and(|(was, now)| was != instructions::fingerprint(now))
+                .is_some_and(|(was, now)| was != file_format::fingerprint(now))
         })
         .map(|s| s.id.as_str())
         .collect();
@@ -392,7 +394,7 @@ mod tests {
                 english: s.instruction,
             })
             .collect();
-        instructions::export(&["Header".to_string()], device.id, &exported)
+        file_format::export(&["Header".to_string()], device.id, &exported)
     }
 
     /// `text` in a file of this process's own, named after the test.
@@ -413,7 +415,7 @@ mod tests {
     fn every_meters_steps_export_and_read_back() {
         for device in registry::DEVICES {
             let steps = run_steps(device, None);
-            let read = instructions::read(&file_for(device)).unwrap();
+            let read = file_format::read(&file_for(device)).unwrap();
             assert_eq!(read.device.as_deref(), Some(device.id));
             let back: Vec<(&str, &str)> = read
                 .steps
