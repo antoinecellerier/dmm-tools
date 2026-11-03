@@ -1,7 +1,7 @@
 use super::{GAP, ModeTables, RangeInfo, r};
 use crate::protocol::cycle::DialPosition;
 use crate::protocol::steps::{self, Ohms, Volts};
-use crate::protocol::ut61eplus::command_steps;
+use crate::protocol::ut61eplus::capture::command_steps;
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
 
