@@ -6,7 +6,7 @@ use dmm_shared::SharedSettings;
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -473,6 +473,19 @@ pub struct Settings {
     /// rather than copied: the settings are cloned on every save.
     #[serde(skip)]
     pub(crate) user_themes: Arc<ThemeCatalog>,
+    /// The settings file was there but could not be loaded, so these are
+    /// the defaults (not serialized). The first frame tells the user.
+    #[serde(skip)]
+    pub(crate) load_problem: Option<LoadProblem>,
+}
+
+/// A settings file that could not be loaded: where it is, and where a copy
+/// of it was kept before the first save writes over it — none when it could
+/// not be read at all, or the copy failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LoadProblem {
+    pub(crate) path: PathBuf,
+    pub(crate) kept: Option<PathBuf>,
 }
 
 impl Default for Settings {
@@ -516,6 +529,7 @@ impl Default for Settings {
             hidden_series: BTreeSet::new(),
             overrides: Overrides::default(),
             user_themes: Arc::default(),
+            load_problem: None,
         }
     }
 }
@@ -577,9 +591,8 @@ impl Settings {
     }
 
     pub fn load() -> Self {
-        let mut s: Settings = Self::config_path()
-            .and_then(|path| std::fs::read_to_string(&path).ok())
-            .and_then(|contents| serde_json::from_str(&contents).ok())
+        let mut s = Self::config_path()
+            .map(|path| Self::read(&path))
             .unwrap_or_default();
         // Through the shared resolver so the GUI and the CLI read the same
         // file the same way. There is no `--device` to weigh here — that
@@ -595,6 +608,26 @@ impl Settings {
         s.shared.device_family = family;
         s.sanitize();
         s
+    }
+
+    /// The settings in the file at `path`: the defaults when there is none,
+    /// and when it can't be loaded, with [`Self::load_problem`] set. One bad
+    /// value fails the whole file, and the first save writes over it, so a
+    /// file that can't be loaded is copied to `<file>.bad` first — one that
+    /// can't be opened at all fails the copy too.
+    fn read(path: &Path) -> Self {
+        let error = match dmm_shared::load_json::<Settings>(path) {
+            Ok(found) => return found.unwrap_or_default(),
+            Err(error) => error,
+        };
+        log::error!("{error}; using the default settings");
+        Settings {
+            load_problem: Some(LoadProblem {
+                path: path.to_path_buf(),
+                kept: keep_copy(path),
+            }),
+            ..Settings::default()
+        }
     }
 
     /// Pull values a hand-edited config file could put out of range back in.
@@ -636,13 +669,37 @@ impl Settings {
             if let Some(original) = self.overrides.bluetooth {
                 to_save.shared.bluetooth = original;
             }
-            if let Ok(json) = serde_json::to_string_pretty(&to_save) {
-                // Atomic (.tmp + fsync + rename) so a kill or disk-full
-                // mid-write can't corrupt the existing config file.
-                if let Err(e) = dmm_shared::write_atomic(&path, json.as_bytes()) {
-                    log::warn!("failed to save settings to {}: {e}", path.display());
+            match serde_json::to_string_pretty(&to_save) {
+                Ok(json) => {
+                    // Atomic (.tmp + fsync + rename) so a kill or disk-full
+                    // mid-write can't corrupt the existing config file.
+                    if let Err(e) = dmm_shared::write_atomic(&path, json.as_bytes()) {
+                        log::warn!("failed to save settings to {}: {e}", path.display());
+                    }
                 }
+                Err(e) => log::warn!("failed to serialize the settings: {e}"),
             }
+        }
+    }
+}
+
+/// Copy the settings file at `path` to `<file>.bad` beside it, replacing an
+/// older copy: where it went, or `None` if it could not be copied.
+fn keep_copy(path: &Path) -> Option<PathBuf> {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".bad");
+    let copy = PathBuf::from(name);
+    match std::fs::read(path).and_then(|bytes| dmm_shared::write_atomic(&copy, &bytes)) {
+        Ok(()) => {
+            log::warn!("kept a copy of the settings file as {}", copy.display());
+            Some(copy)
+        }
+        Err(e) => {
+            log::error!(
+                "failed to copy the settings file to {}: {e}",
+                copy.display()
+            );
+            None
         }
     }
 }
@@ -698,6 +755,111 @@ impl DeferredSave {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A folder of its own under the system's temp folder, removed again
+    /// when the test ends.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir()
+                .join(format!("dmm-gui-settings-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            TempDir(dir)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A file that can't be parsed, as JSON or as these settings, loads as
+    /// the defaults with the problem reported, and is kept as `.bad` beside
+    /// itself, byte for byte, over an older copy, the original left in place.
+    #[test]
+    fn a_broken_settings_file_is_kept_as_bad() {
+        for (name, contents) in [
+            ("json", r#"{"theme": "Light","#),
+            ("enum", r#"{"theme": "Sepia", "show_graph": false}"#),
+        ] {
+            let dir = TempDir::new(name);
+            let path = dir.0.join("settings.json");
+            let bad = dir.0.join("settings.json.bad");
+            std::fs::write(&bad, "an older copy").unwrap();
+            std::fs::write(&path, contents).unwrap();
+            let s = Settings::read(&path);
+            assert_eq!(
+                s.load_problem,
+                Some(LoadProblem {
+                    path: path.clone(),
+                    kept: Some(bad.clone()),
+                }),
+                "{name}"
+            );
+            assert_eq!(s.theme, ThemeMode::Dark, "{name}: not the defaults");
+            assert!(s.show_graph, "{name}: not the defaults");
+            assert_eq!(std::fs::read_to_string(&bad).unwrap(), contents, "{name}");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), contents, "{name}");
+        }
+    }
+
+    /// A file that isn't UTF-8 fails to read as text, and is kept as `.bad`
+    /// all the same, byte for byte, the original left in place.
+    #[test]
+    fn a_settings_file_that_is_not_text_is_kept_as_bad() {
+        let dir = TempDir::new("not-text");
+        let path = dir.0.join("settings.json");
+        let bad = dir.0.join("settings.json.bad");
+        let contents = b"{\"theme\": \"\xff\"}";
+        std::fs::write(&path, contents).unwrap();
+        let s = Settings::read(&path);
+        assert_eq!(
+            s.load_problem,
+            Some(LoadProblem {
+                path: path.clone(),
+                kept: Some(bad.clone()),
+            })
+        );
+        assert_eq!(s.theme, ThemeMode::Dark, "not the defaults");
+        assert_eq!(std::fs::read(&bad).unwrap(), contents);
+        assert_eq!(std::fs::read(&path).unwrap(), contents);
+    }
+
+    /// A file that is there but can't be read is reported, with no copy.
+    #[test]
+    fn an_unreadable_settings_file_is_reported() {
+        let dir = TempDir::new("unreadable");
+        // A folder in the file's place: it exists, and reading it fails.
+        let path = dir.0.join("settings.json");
+        std::fs::create_dir(&path).unwrap();
+        let s = Settings::read(&path);
+        assert_eq!(
+            s.load_problem,
+            Some(LoadProblem {
+                path: path.clone(),
+                kept: None,
+            })
+        );
+        assert!(!dir.0.join("settings.json.bad").exists());
+    }
+
+    /// A good file, or none, is no problem and leaves no copy.
+    #[test]
+    fn a_good_or_missing_settings_file_is_no_problem() {
+        let dir = TempDir::new("good");
+        let path = dir.0.join("settings.json");
+        let s = Settings::read(&path);
+        assert_eq!(s.load_problem, None, "missing");
+        assert_eq!(s.theme, ThemeMode::Dark, "missing: not the defaults");
+        std::fs::write(&path, r#"{"theme": "Light"}"#).unwrap();
+        let s = Settings::read(&path);
+        assert_eq!(s.load_problem, None, "valid");
+        assert_eq!(s.theme, ThemeMode::Light, "valid: not read");
+        assert!(!dir.0.join("settings.json.bad").exists());
+    }
 
     /// A drag that keeps changing the colour saves once, half a second
     /// after it stops. Explicit instants: nothing here touches the real
@@ -862,6 +1024,7 @@ mod tests {
             hidden_series: BTreeSet::from(["Period".to_string()]),
             overrides: Overrides::default(),
             user_themes: Arc::default(),
+            load_problem: None,
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();

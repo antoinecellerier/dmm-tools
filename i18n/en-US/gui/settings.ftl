@@ -237,3 +237,14 @@ settings-graph-lines-patterned = Patterned
     .hover = Dashed and dotted sub-value lines, told apart without colour
 settings-graph-lines-solid = Solid
     .hover = Continuous lines, told apart by colour and the key
+
+## A toast at launch, when the settings file was there but could not be
+## loaded: the window opens with the default settings.
+
+# The file could not be understood, so a copy of it was kept before it is
+# written over. $path is the copy's full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.bad.
+settings-load-failed-kept = Your settings file could not be read, so the defaults are in use. A copy of it is kept as { $path }.
+# The file could not be opened at all. $path is its full path, e.g.
+# /home/ana/.config/dmm-tools/settings.json.
+settings-load-failed = Your settings file { $path } could not be read, so the defaults are in use.

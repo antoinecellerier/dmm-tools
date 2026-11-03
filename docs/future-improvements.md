@@ -493,6 +493,12 @@ Use cases: organizing and identifying captures, adding test context without exte
 
 The top bar links to a newer release's page on GitHub. The What's New window could show that release's notes instead, from the same response the update check already reads — at the cost of rendering Markdown fetched from the network.
 
+### Stacked toasts
+
+**Complexity:** Medium
+
+The GUI shows one toast at a time and a newer one replaces it, so two messages a second apart leave only the second on screen. One case is guarded by hand: a detection notice holds back while an error toast is up (`remember_detected_device` in `app/messages.rs`). Stacking concurrent toasts, each with its own timer and close button, would keep every message without such rules at each site.
+
 ### A reporter's say on a key the capture judged dead
 
 **Complexity:** Low

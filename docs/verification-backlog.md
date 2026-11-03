@@ -271,10 +271,12 @@ Bugs a reader can reproduce: symptom, cause, and the fix where known.
   step, up to six, and the auto range presumably collapses around a constant.
   Replay one frame of `crates/dmm-lib/tests/golden/ut61eplus/lpfv.yaml`.
 - **A settings file this build can't parse is replaced by defaults.**
-  `Settings::load` (`dmm-gui/src/settings.rs`) falls back to the defaults and
-  the next save writes them over the file — likely after a downgrade, meeting
-  a theme or colour preset only a newer build knows. Fix, untried: deserialize
-  field by field from a `serde_json::Value`, defaulting only those that fail.
+  `Settings::load` (`dmm-gui/src/settings.rs`) falls back to the defaults,
+  keeps a copy as `settings.json.bad` and says so; the next save writes the
+  defaults over the file — likely after a downgrade, meeting a theme or colour
+  preset only a newer build knows. A file it cannot read at all gets no copy.
+  Fix, untried: deserialize field by field from a `serde_json::Value`,
+  defaulting only those that fail.
 - **A narrow window shows ∫ twice in the statistics.** At quarter width the
   Visible row's ∫ wraps onto a line of its own, just above the session's ∫
   line. Fix, untried: keep that ∫ with its row, or draw the session's ∫

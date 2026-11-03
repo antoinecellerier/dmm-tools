@@ -905,8 +905,9 @@ impl App {
     }
 
     /// The first frame's one-off work: the window's always-on-top and
-    /// maximized state, the import `--import` named or the auto-connect, and
-    /// What's New after an upgrade.
+    /// maximized state, the import `--import` named or the auto-connect,
+    /// What's New after an upgrade, and the toast for a settings file that
+    /// could not be loaded.
     fn on_first_frame(&mut self, ctx: &egui::Context) {
         if self.settings.always_on_top && !self.on_wayland {
             self.apply_always_on_top(ctx);
@@ -933,6 +934,28 @@ impl App {
         {
             self.open_whats_new();
         }
+        // Last, so a toast raised above can't replace it.
+        self.settings_load_toast();
+    }
+
+    /// Tell the user, once, that their settings file could not be loaded and
+    /// the defaults are in use — the log alone would go unseen until the
+    /// first save had written over it.
+    fn settings_load_toast(&mut self) {
+        let Some(problem) = self.settings.load_problem.take() else {
+            return;
+        };
+        let message = match problem.kept {
+            Some(copy) => {
+                let path = copy.display().to_string();
+                dmm_shared::tr!(self.l10n, "settings-load-failed-kept", path = path)
+            }
+            None => {
+                let path = problem.path.display().to_string();
+                dmm_shared::tr!(self.l10n, "settings-load-failed", path = path)
+            }
+        };
+        self.toast = Some(Toast::error(message));
     }
 
     /// Keep the window's minimum size, and its size, fitting what this frame
@@ -1191,6 +1214,41 @@ mod tests {
         // As after `--mock-mode`: the pin on screen is an override.
         settings.overrides.mock_mode = Some(String::new());
         App::from_settings(settings, dmm_lib::Clock::real())
+    }
+
+    /// A settings file that could not be loaded raises one error toast,
+    /// naming the copy kept when there is one, else the file.
+    #[test]
+    fn a_settings_load_problem_is_toasted_once() {
+        let file = std::path::PathBuf::from("/config/settings.json");
+        let copy = std::path::PathBuf::from("/config/settings.json.bad");
+        for (kept, expected) in [
+            (
+                Some(copy),
+                "Your settings file could not be read, so the defaults are in use. \
+                 A copy of it is kept as /config/settings.json.bad.",
+            ),
+            (
+                None,
+                "Your settings file /config/settings.json could not be read, \
+                 so the defaults are in use.",
+            ),
+        ] {
+            let settings = Settings {
+                load_problem: Some(crate::settings::LoadProblem {
+                    path: file.clone(),
+                    kept,
+                }),
+                ..Settings::default()
+            };
+            let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+            app.settings_load_toast();
+            let toast = app.toast.take().expect("no toast");
+            assert!(toast.is_error);
+            assert_eq!(toast.message, expected);
+            app.settings_load_toast();
+            assert!(app.toast.is_none(), "raised twice");
+        }
     }
 
     /// The most strings the main scenes may draw without going through the

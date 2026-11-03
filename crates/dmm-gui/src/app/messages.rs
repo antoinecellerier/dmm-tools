@@ -182,6 +182,16 @@ impl App {
             self.settings.shared.device_family = id.to_string();
             self.settings.save();
         }
+        // Good news never covers a failure still on screen: the notice that
+        // the settings file could not be read goes up as the auto-connect
+        // starts, and detection answers a moment later.
+        if self
+            .toast
+            .as_ref()
+            .is_some_and(|t| t.is_error && !t.expired())
+        {
+            return;
+        }
         self.toast = Some(Toast::info(detected_toast(
             &self.l10n,
             device,
@@ -1348,6 +1358,17 @@ mod tests {
         // The session is already talking to that meter; re-opening it would
         // cost a reconnect and a hole in the graph for nothing.
         assert!(!app.connection.needs_reconnect);
+    }
+
+    /// The detection notice leaves an error on screen in place, and still
+    /// saves the meter.
+    #[test]
+    fn detection_does_not_cover_an_error() {
+        let mut app = app(registry::AUTO_DEVICE_ID, false);
+        app.toast = Some(Toast::error("settings could not be read"));
+        app.remember_detected_device(Some("ut61eplus"), "UT61E+");
+        assert_eq!(toast_text(&app), Some("settings could not be read"));
+        assert_eq!(app.settings.shared.device_family, "ut61eplus");
     }
 
     /// A reconnect under a saved or picked meter has nothing to announce —
