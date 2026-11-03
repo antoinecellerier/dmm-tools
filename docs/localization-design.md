@@ -187,7 +187,7 @@ The README is translated; the other user docs stay English for now. `scripts/pac
 
 **The README comes first.** It is the page a visitor and a search engine meet before anything is installed, about 1,300 words, and it is where a reader learns that the apps speak their language. A copy is `README.<lang>.md` beside the English, `<lang>` being the `i18n/` locale id: the usual convention, found in the root listing, and the English relative links work unchanged. A row under the badges names English and each language that has a copy, by its own name in the order of `SHIPPED`, and every copy carries the same row. A language may ship before its copy exists; the release check asks for one.
 
-**A copy is refreshed at release.** Its first line records the `git hash-object` of the English it was translated from, so `git cat-file blob` gives that English back for a diff against the current one. The English changes on its own; before each release, with the messages, every copy whose hash is stale is brought up to date. A copy as of the last release describes the binary people download. Copies are not in the archives, whose English README links to them on GitHub.
+**A copy is refreshed at release.** Its first line records the `git hash-object` of the English it was translated from, so `git cat-file blob` gives that English back for a diff against the current one. The English changes on its own; before each release, with the messages, every copy whose hash is stale is brought up to date. A copy as of the last release describes the binary people download. The archives carry every copy beside the English, as Markdown and HTML.
 
 What a copy keeps besides the prose:
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Assemble the docs that ship in the release archives.
 
-Writes the user docs to OUT_DIR as Markdown and as HTML rendered by pandoc,
-next to LICENSE and the images they reference, in the repository's layout so
-their relative links keep working. A relative link to anything else (design
-notes, the backlog, research) points at GitHub at the commit being built. A
-relative link to a missing file fails the run. Each HTML page ends with a link
-to the repository and to that commit. Given THIRD_PARTY, the HTML fragment
-cargo-about renders from scripts/third-party-licenses.hbs, it also writes
-THIRD-PARTY-LICENSES.html in the same style.
+Writes the user docs and the README's translations to OUT_DIR as Markdown and
+as HTML rendered by pandoc, next to LICENSE and the images they reference, in
+the repository's layout so their relative links keep working. A relative link
+to anything else (design notes, the backlog, research) points at GitHub at the
+commit being built. A relative link to a missing file fails the run. Each HTML
+page ends with a link to the repository and to that commit. Given THIRD_PARTY,
+the HTML fragment cargo-about renders from scripts/third-party-licenses.hbs, it
+also writes THIRD-PARTY-LICENSES.html in the same style.
 
 Usage: scripts/package-docs.py OUT_DIR [THIRD_PARTY]    (needs pandoc on PATH)
 """
@@ -21,10 +21,14 @@ from pathlib import Path, PurePosixPath
 
 REPO_URL = "https://github.com/antoinecellerier/dmm-tools"
 
+ROOT = Path(__file__).resolve().parent.parent
 # The user-facing docs: the `paths:` of .claude/rules/docs-user-facing.md, plus
-# the changelog. A new user doc goes in both places.
+# the changelog. A new user doc goes in both places. The README's translations,
+# README.<lang>.md, come in by name.
+TRANSLATIONS = sorted(p.name for p in ROOT.glob("README.*.md"))
 DOCS = [
     "README.md",
+    *TRANSLATIONS,
     "CHANGELOG.md",
     "CONTRIBUTING.md",
     "docs/setup.md",
@@ -43,7 +47,6 @@ footer {{ margin-top: 3em; padding-top: 1em; border-top: 1px solid #d1d9e0;
   font-size: 85%; color: #59636e; }}
 </style>"""
 
-ROOT = Path(__file__).resolve().parent.parent
 # Inline link or image target, up to an optional title or the closing paren.
 LINK = re.compile(r"\]\(([^)\s]+)")
 SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
@@ -87,11 +90,12 @@ def git(*args):
     ).stdout.strip()
 
 
-def render(text, source_format, title, footer, html):
+def render(text, source_format, title, footer, html, lang="en"):
     """Render text to the standalone page html, in the docs' shared style."""
     subprocess.run(
         ["pandoc", "-f", source_format, "-t", "html5", "-s",
-         "--metadata", f"pagetitle={title}", "-V", "maxwidth=60em",
+         "--metadata", f"pagetitle={title}", "--metadata", f"lang={lang}",
+         "-V", "maxwidth=60em",
          "-V", "mainfont=system-ui, sans-serif", "-V", "linkcolor=#0969da",
          "-V", f"monobackgroundcolor={CODE_BACKGROUND}",
          "-V", f"header-includes={STYLE}", "-V", f"include-after={footer}",
@@ -117,7 +121,11 @@ def main():
         md.parent.mkdir(parents=True, exist_ok=True)
         md.write_text(rewrite(doc, text, out, sha, html=False), encoding="utf-8")
         title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), doc)
-        render(rewrite(doc, text, out, sha, html=True), "gfm", title, footer, html)
+        # README.<lang>.md: the <html lang> picks the script's fonts (Japanese
+        # and Chinese draw the same characters differently).
+        lang = doc.split(".")[1] if doc in TRANSLATIONS else "en"
+        render(rewrite(doc, text, out, sha, html=True), "gfm", title, footer,
+               html, lang)
     if len(sys.argv) == 3:
         fragment = Path(sys.argv[2]).read_text(encoding="utf-8")
         render(fragment, "html", "Third-party licences", footer,

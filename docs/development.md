@@ -461,7 +461,7 @@ The archives carry only the user docs, as Markdown and as HTML, with LICENSE,
 THIRD-PARTY-LICENSES.html and the images the docs show. `scripts/package-docs.py` assembles them once per run for
 every archive. Relative links to any other doc become GitHub links at the built
 commit, and a link to a missing file fails the build. A new user doc goes into
-its `DOCS` list. To look at the result locally (needs `pandoc`):
+its `DOCS` list; the README's translations are picked up by name. To look at the result locally (needs `pandoc`):
 
 ```sh
 scripts/package-docs.py /tmp/package-docs
