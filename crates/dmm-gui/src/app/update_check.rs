@@ -16,13 +16,14 @@
 //! and its HTTP and TLS crates are left out, and the Settings row never shows.
 
 use std::path::PathBuf;
-use std::sync::mpsc;
 
 use chrono::{DateTime, SubsecRound, TimeDelta, Utc};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
+
+use super::task::Task;
 
 /// Set by the workflows that publish binaries (`build-matrix.yml`'s
 /// `published` input). Read at compile time, so cargo rebuilds when it changes.
@@ -247,7 +248,7 @@ enum Mode {
 pub(super) struct UpdateCheck {
     mode: Mode,
     available: Option<Tag>,
-    pending: Option<mpsc::Receiver<Answer>>,
+    pending: Option<Task<Answer>>,
 }
 
 impl UpdateCheck {
@@ -294,15 +295,12 @@ impl UpdateCheck {
         let Mode::Live { cache, running } = &mut self.mode else {
             return;
         };
-        if let Some(rx) = &self.pending {
-            let answer = match rx.try_recv() {
-                Err(mpsc::TryRecvError::Empty) => return,
-                Ok(answer) => answer,
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    Err("the check ended without an answer".to_string())
-                }
+        if let Some(task) = &self.pending {
+            let Some(answer) = task.poll() else {
+                return;
             };
             self.pending = None;
+            let answer = answer.and_then(|answer| answer);
             match answer {
                 Ok(found) => {
                     match &found {
@@ -327,7 +325,7 @@ impl UpdateCheck {
             return;
         }
         if enabled && cache.is_due(now(), running) {
-            self.pending = Some(spawn(ctx.clone()));
+            self.pending = Some(Task::spawn("update-check", ctx, fetch));
         }
     }
 }
@@ -337,24 +335,7 @@ fn now() -> DateTime<Utc> {
     Utc::now().trunc_subsecs(0)
 }
 
-/// Ask GitHub on a thread of its own; the answer arrives on the receiver.
-fn spawn(ctx: egui::Context) -> mpsc::Receiver<Answer> {
-    let (tx, rx) = mpsc::channel();
-    let spawned = std::thread::Builder::new()
-        .name("update-check".to_string())
-        .spawn(move || {
-            let answer = std::panic::catch_unwind(fetch)
-                .unwrap_or_else(|panic| Err(super::connection::panic_text(&*panic)));
-            let _ = tx.send(answer);
-            // An idle window doesn't repaint on its own.
-            ctx.request_repaint();
-        });
-    if let Err(e) = spawned {
-        log::debug!("update check: could not start a thread: {e}");
-    }
-    rx
-}
-
+/// Ask GitHub, on a thread of its own.
 fn fetch() -> Answer {
     let version = env!("CARGO_PKG_VERSION");
     let dev = version.contains("-dev");

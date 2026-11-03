@@ -12,7 +12,6 @@
 //! view can still be worked on and exported again.
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime};
 
 use dmm_lib::alarm::Alarm;
@@ -21,10 +20,11 @@ use dmm_lib::transport::Link;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui;
-use log::{info, warn};
+use log::{error, info, warn};
 
 use super::App;
 use super::capture::CaptureLayout;
+use super::task::Task;
 use super::toast::Toast;
 use crate::recording::Recording;
 
@@ -53,8 +53,9 @@ pub(super) struct SessionSource {
     pub(super) requeue_replay: bool,
     /// `--import`'s file, imported on the first frame.
     pub(super) cli_import: Option<PathBuf>,
-    /// Import…'s open dialog, answering on its own thread.
-    pub(super) import_dialog: Option<mpsc::Receiver<Option<PathBuf>>>,
+    /// Import…'s open dialog, answering on its own thread: the file
+    /// picked, `None` when dismissed.
+    pub(super) import_dialog: Option<Task<Option<PathBuf>>>,
     /// An Import… under way: the file parsing, or its readings going in.
     pub(super) import_job: Option<ImportJob>,
     /// The file the session was imported from, once it is in.
@@ -122,8 +123,8 @@ pub(super) struct Loaded {
 pub(super) enum ImportError {
     /// The file, then why it does not read.
     Read(PathBuf, Unreadable),
-    /// The loader thread panicked reading the file.
-    Crashed(PathBuf),
+    /// The loader thread panicked reading the file, saying this.
+    Crashed(PathBuf, String),
 }
 
 /// Why a file does not read, kept as it came so that only the toast words
@@ -175,7 +176,7 @@ impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Read(path, why) => write!(f, "{}: {why}", path.display()),
-            Self::Crashed(path) => write!(f, "{}: the import failed", path.display()),
+            Self::Crashed(path, why) => write!(f, "{}: the import failed: {why}", path.display()),
         }
     }
 }
@@ -188,7 +189,7 @@ impl ImportError {
                 let path = path.display().to_string();
                 tr!(l10n, "import-failed", path = path, reason = why.text(l10n))
             }
-            Self::Crashed(path) => {
+            Self::Crashed(path, _) => {
                 let path = path.display().to_string();
                 tr!(l10n, "import-failed-crashed", path = path)
             }
@@ -199,8 +200,8 @@ impl ImportError {
 
 /// An import under way.
 pub(super) enum ImportJob {
-    /// Parsing on the loader thread.
-    Loading(mpsc::Receiver<Result<Loaded, ImportError>>),
+    /// The file, parsing on the loader thread.
+    Loading(PathBuf, Task<Result<Loaded, ImportError>>),
     /// Going through the pipeline a chunk per frame.
     Ingesting(Ingest),
 }
@@ -377,45 +378,38 @@ pub(super) fn dialog_folder(last: Option<&Path>) -> Option<PathBuf> {
 impl App {
     /// Import… or `Ctrl+I`: pick a file in the system's open dialog, on a
     /// thread of its own as Export…'s save dialog is, answered next frame.
-    pub(super) fn begin_import(&mut self) {
+    pub(super) fn begin_import(&mut self, ctx: &egui::Context) {
         if self.source.import_dialog.is_some() {
             return;
         }
-        let (tx, rx) = mpsc::channel();
         let last = self.settings.last_folder.clone();
         let file_type = tr!(self.l10n, "import-file-type").into_owned();
-        std::thread::spawn(move || {
-            let picked = std::panic::catch_unwind(|| {
-                let mut dialog = rfd::FileDialog::new().add_filter(file_type, &IMPORT_EXTENSIONS);
-                if let Some(dir) = dialog_folder(last.as_deref()) {
-                    dialog = dialog.set_directory(dir);
-                }
-                dialog.pick_file()
-            })
-            .unwrap_or_else(|_| {
-                warn!("the open dialog failed");
-                None
-            });
-            let _ = tx.send(picked);
-        });
-        self.source.import_dialog = Some(rx);
+        self.source.import_dialog = Some(Task::spawn("import-dialog", ctx, move || {
+            let mut dialog = rfd::FileDialog::new().add_filter(file_type, &IMPORT_EXTENSIONS);
+            if let Some(dir) = dialog_folder(last.as_deref()) {
+                dialog = dialog.set_directory(dir);
+            }
+            dialog.pick_file()
+        }));
     }
 
     /// The file the open dialog answered with, once it has.
-    pub(super) fn poll_import_dialog(&mut self) {
-        let Some(rx) = &self.source.import_dialog else {
+    pub(super) fn poll_import_dialog(&mut self, ctx: &egui::Context) {
+        let Some(answer) = self.source.import_dialog.as_ref().and_then(Task::poll) else {
             return;
         };
-        match rx.try_recv() {
-            Ok(picked) => {
-                self.source.import_dialog = None;
-                if let Some(path) = picked {
-                    self.remember_folder(&path);
-                    self.request_import(path);
-                }
+        self.source.import_dialog = None;
+        match answer {
+            Ok(Some(path)) => {
+                self.remember_folder(&path);
+                self.request_import(ctx, path);
             }
-            Err(mpsc::TryRecvError::Empty) => {}
-            Err(mpsc::TryRecvError::Disconnected) => self.source.import_dialog = None,
+            Ok(None) => {}
+            Err(why) => {
+                error!("the open dialog failed: {why}");
+                let message = tr!(self.l10n, "import-dialog-failed");
+                self.toast = Some(Toast::error(message.into_owned()));
+            }
         }
     }
 
@@ -434,16 +428,16 @@ impl App {
 
     /// Import `path`, asking first if the session holds samples or markers
     /// no file does: the import replaces it.
-    pub(super) fn request_import(&mut self, path: PathBuf) {
+    pub(super) fn request_import(&mut self, ctx: &egui::Context, path: PathBuf) {
         if self.ask_before_importing(path.clone()) {
             return;
         }
-        self.import_file(path);
+        self.import_file(ctx, path);
     }
 
     /// Import `path`: a fresh session, the meter disconnected, the file read
     /// on a thread of its own and taken in over the next frames.
-    pub(super) fn import_file(&mut self, path: PathBuf) {
+    pub(super) fn import_file(&mut self, ctx: &egui::Context, path: PathBuf) {
         self.disconnect();
         // The file stands in for the meter, so a failed connect has nothing
         // left to explain; the next Connect reports afresh.
@@ -453,13 +447,9 @@ impl App {
         let base = self.clock.now();
         // No more than the recording it goes into can hold.
         let limit = self.settings.max_samples;
-        let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let loaded = std::panic::catch_unwind(|| load(&path, base, limit))
-                .unwrap_or(Err(ImportError::Crashed(path)));
-            let _ = tx.send(loaded);
-        });
-        self.source.import_job = Some(ImportJob::Loading(rx));
+        let file = path.clone();
+        let loader = Task::spawn("import-load", ctx, move || load(&file, base, limit));
+        self.source.import_job = Some(ImportJob::Loading(path, loader));
     }
 
     /// Drop everything the last session holds: an import, or the first
@@ -478,29 +468,29 @@ impl App {
     }
 
     /// Take the next chunk of an import under way, or pick up the parsed
-    /// file. Every frame; asks for another while there is more.
+    /// file. Every frame; asks for another while readings are going in.
     pub(super) fn step_import(&mut self, ctx: &egui::Context) {
         let Some(job) = self.source.import_job.take() else {
             return;
         };
         let job = match job {
-            ImportJob::Loading(rx) => match rx.try_recv() {
-                Ok(Ok(loaded)) => self.begin_ingest(loaded),
-                Ok(Err(why)) => {
-                    warn!("import failed: {why}");
-                    self.toast = Some(Toast::error(why.text(&self.l10n)));
-                    None
-                }
-                Err(mpsc::TryRecvError::Empty) => Some(ImportJob::Loading(rx)),
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    let message = tr!(self.l10n, "import-failed-unexplained");
-                    self.toast = Some(Toast::error(message.into_owned()));
-                    None
+            ImportJob::Loading(path, loader) => match loader.poll() {
+                None => Some(ImportJob::Loading(path, loader)),
+                Some(loaded) => {
+                    match loaded.unwrap_or_else(|panic| Err(ImportError::Crashed(path, panic))) {
+                        Ok(loaded) => self.begin_ingest(loaded),
+                        Err(why) => {
+                            warn!("import failed: {why}");
+                            self.toast = Some(Toast::error(why.text(&self.l10n)));
+                            None
+                        }
+                    }
                 }
             },
             ImportJob::Ingesting(ingest) => self.ingest_chunk(ingest),
         };
-        if job.is_some() {
+        // The loader asks for a frame when it is done.
+        if matches!(job, Some(ImportJob::Ingesting(_))) {
             ctx.request_repaint();
         }
         self.source.import_job = job;
@@ -728,7 +718,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// Import `path` and run frames until it is in.
     fn import(app: &mut App, path: PathBuf) {
         let ctx = crate::app::styled_context();
-        app.import_file(path);
+        app.import_file(&ctx, path);
         for _ in 0..10_000 {
             app.step_import(&ctx);
             if app.source.import_job.is_none() {
@@ -898,8 +888,8 @@ timestamp,mode,value,unit,range,flags,marker,note
         let mut app = app();
         let path = file("large.csv", &text);
         let ctx = crate::app::styled_context();
-        app.import_file(path.clone());
-        while matches!(app.source.import_job, Some(ImportJob::Loading(_))) {
+        app.import_file(&ctx, path.clone());
+        while matches!(app.source.import_job, Some(ImportJob::Loading(..))) {
             app.step_import(&ctx);
             std::thread::sleep(Duration::from_millis(1));
         }
@@ -1046,10 +1036,11 @@ mod folder_tests {
     fn the_open_dialog_s_answer_is_remembered() {
         let mut app = app();
         let dir = std::env::temp_dir().join(format!("dmm-gui-folder-{}", std::process::id()));
-        let (tx, rx) = mpsc::channel();
-        tx.send(Some(dir.join("x.json"))).expect("the app listens");
-        app.source.import_dialog = Some(rx);
-        app.poll_import_dialog();
+        let (tx, dialog) = Task::by_hand();
+        tx.send(Ok(Some(dir.join("x.json"))))
+            .expect("the app listens");
+        app.source.import_dialog = Some(dialog);
+        app.poll_import_dialog(&crate::app::styled_context());
         assert_eq!(app.settings.last_folder, Some(dir));
         app.source.import_job = None;
     }
@@ -1070,7 +1061,7 @@ mod prompt_tests {
             std::env::temp_dir().join(format!("dmm-gui-import-{}-ask.csv", std::process::id()));
         std::fs::write(&path, super::tests_support::CSV).expect("write");
 
-        app.request_import(path.clone());
+        app.request_import(&crate::app::styled_context(), path.clone());
         assert!(
             app.source.import_job.is_some(),
             "nothing to lose: imported at once"
@@ -1084,7 +1075,7 @@ mod prompt_tests {
             dmm_lib::flags::StatusFlags::default(),
         );
         app.capture.recording.push(&m, 0);
-        app.request_import(path.clone());
+        app.request_import(&crate::app::styled_context(), path.clone());
         assert!(app.source.import_job.is_none(), "waits for the answer");
         assert!(!app.recording_panel_idle(), "the prompt is up");
         let _ = std::fs::remove_file(path);
@@ -1105,7 +1096,7 @@ mod connect_tests {
             std::env::temp_dir().join(format!("dmm-gui-import-{}-connect.csv", std::process::id()));
         std::fs::write(&path, super::tests_support::CSV).expect("write");
         let ctx = crate::app::styled_context();
-        app.import_file(path.clone());
+        app.import_file(&ctx, path.clone());
         while app.source.import_job.is_some() {
             app.step_import(&ctx);
             std::thread::sleep(Duration::from_millis(1));

@@ -34,6 +34,7 @@ mod shortcuts;
 pub(crate) use shortcuts::key_name;
 mod stats_panel;
 mod system_fonts;
+mod task;
 mod toast;
 mod top_bar;
 mod transform_ui;
@@ -925,7 +926,7 @@ impl App {
         }
         if let Some(path) = self.source.cli_import.take() {
             // The file is the session: no meter is opened beside it.
-            self.import_file(path);
+            self.import_file(ctx, path);
         } else if self.settings.auto_connect {
             self.connect(ctx);
         }
@@ -1031,7 +1032,7 @@ impl eframe::App for App {
         // Shortcuts first: `N` marks the reading the user saw, not one that
         // arrives with this frame.
         self.drain_messages();
-        self.poll_import_dialog();
+        self.poll_import_dialog(&ctx);
         self.step_import(&ctx);
         self.trim_markers();
         self.poll_export(&ctx);

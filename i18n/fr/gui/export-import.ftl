@@ -256,8 +256,8 @@ import-empty = { $file } ne contient aucune mesure
 import-failed = Échec de l’importation : { $path } : { $reason }
 # Reading the file stopped on an internal error. $path is where it is.
 import-failed-crashed = Échec de l’importation : { $path } : l’importation a échoué
-# The reader stopped without saying why.
-import-failed-unexplained = Échec de l’importation
+# The file dialog of Import… failed.
+import-dialog-failed = Échec de l’importation
 # After Export… saved the file. $count is how many samples it holds; $file
 # its name, e.g. measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv.
 export-done =
@@ -279,10 +279,6 @@ export-in-progress = Un export est déjà en cours : terminez-le d’abord
 # The file could not be written. $reason is why, in the words of the
 # system or the file writer, often in English.
 export-failed = Échec de l’export : { $reason }
-# The save dialog went away without saying which file to write.
-export-failed-dialog = Échec de l’export : la boîte de dialogue d’enregistrement s’est fermée sans réponse
-# The part of the app writing the file stopped without saying how it went.
-export-failed-writer = Échec de l’export : l’écriture du fichier s’est arrêtée sans indiquer de résultat
 # The samples to export were dropped while the save dialog was open, so
 # the file would not hold what was asked for.
 export-failed-changed = Échec de l’export : les échantillons ont changé pendant que la boîte de dialogue d’enregistrement était ouverte

@@ -14,10 +14,11 @@ use dmm_shared::l10n::{EN_US, Language, Localizer, Options};
 use dmm_shared::tr;
 use eframe::egui;
 use egui::epaint::text::{FallbackRequest, FontFamily, FontProvider};
-use std::sync::{Arc, OnceLock, mpsc};
+use std::sync::{Arc, OnceLock};
 
 use super::App;
 use super::system_fonts::SystemFonts;
+use super::task::Task;
 use super::toast::Toast;
 
 /// Where the notice under the **Language** row sends a reader who can help
@@ -42,7 +43,7 @@ pub(super) struct Speech {
     /// How many providers were installed: one at startup, one per switch.
     pub(super) font_installs: u32,
     /// The look for a font that draws the language's script, while it runs.
-    font_check: Option<mpsc::Receiver<Option<bool>>>,
+    font_check: Option<Task<bool>>,
     /// Each machine-translated language's mark, in its own words: built on
     /// first use ([`Speech::own_mark`]).
     own_marks: OnceLock<Vec<OwnMark>>,
@@ -210,25 +211,20 @@ impl App {
         self.speech.font_installs += 1;
         log::debug!("UI: system fonts for {} ({locale:?})", language.id);
         self.speech.font_check =
-            script_probe(language).map(|probe| check_font(ctx.clone(), provider, probe));
+            script_probe(language).map(|probe| check_font(ctx, provider, probe));
     }
 
     /// Take in the font check's answer. With no font for the language's
     /// script, a toast names what to install — in English, which the bundled
     /// fonts draw, where the language's own words would be boxes.
     pub(super) fn poll_font_check(&mut self) {
-        let Some(check) = &self.speech.font_check else {
+        let Some(found) = self.speech.font_check.as_ref().and_then(Task::poll) else {
             return;
-        };
-        let found = match check.try_recv() {
-            Err(mpsc::TryRecvError::Empty) => return,
-            Ok(found) => found,
-            Err(mpsc::TryRecvError::Disconnected) => None,
         };
         self.speech.font_check = None;
         match found {
-            Some(true) => {}
-            Some(false) => {
+            Ok(true) => {}
+            Ok(false) => {
                 log::warn!(
                     "UI: no system font draws {}",
                     self.l10n.language().native_name
@@ -241,7 +237,7 @@ impl App {
                 .into_owned();
                 self.toast = Some(Toast::error(message));
             }
-            None => log::warn!("UI: the font check stopped without an answer"),
+            Err(why) => log::warn!("UI: the font check failed: {why}"),
         }
     }
 
@@ -261,31 +257,15 @@ impl App {
 
 /// Ask `provider`, on a thread of its own, whether any system font draws
 /// `probe`. The provider waits for its font enumeration first, which takes
-/// a moment the window shouldn't. The answer is `None` if the look itself
-/// failed.
-fn check_font(
-    ctx: egui::Context,
-    provider: Arc<SystemFonts>,
-    probe: &'static str,
-) -> mpsc::Receiver<Option<bool>> {
-    let (tx, rx) = mpsc::channel();
-    let spawned = std::thread::Builder::new()
-        .name("font-check".into())
-        .spawn(move || {
-            let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let request = FallbackRequest {
-                    cluster: probe,
-                    family: &FontFamily::Proportional,
-                };
-                provider.font_for(&request).is_some()
-            }));
-            let _ = tx.send(found.ok());
-            ctx.request_repaint();
-        });
-    if let Err(e) = spawned {
-        log::warn!("UI: can't start the font check: {e}");
-    }
-    rx
+/// a moment the window shouldn't.
+fn check_font(ctx: &egui::Context, provider: Arc<SystemFonts>, probe: &'static str) -> Task<bool> {
+    Task::spawn("font-check", ctx, move || {
+        let request = FallbackRequest {
+            cluster: probe,
+            family: &FontFamily::Proportional,
+        };
+        provider.font_for(&request).is_some()
+    })
 }
 
 #[cfg(test)]

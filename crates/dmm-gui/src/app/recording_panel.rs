@@ -236,7 +236,7 @@ impl App {
             DiscardFor::Discard => self.apply_discard(),
             DiscardFor::Import => {
                 if let Some(path) = self.recording_panel.pending_import.take() {
-                    self.import_file(path);
+                    self.import_file(ctx, path);
                 }
             }
         }
@@ -373,7 +373,7 @@ impl App {
                 .on_hover_text(tr!(l10n, "import-button.hover", keys = &keys))
                 .clicked()
             {
-                self.begin_import();
+                self.begin_import(ui.ctx());
             }
             // An imported session takes no readings: nothing to record, and
             // its recording is the file, which Discard would only lose.

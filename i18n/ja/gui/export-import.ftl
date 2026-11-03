@@ -156,8 +156,8 @@ import-empty = { $file } には測定値がありません。
 import-failed = インポートできませんでした: { $path }: { $reason }
 # Reading the file stopped on an internal error. $path is where it is.
 import-failed-crashed = インポートできませんでした: { $path }: インポート処理が失敗しました。
-# The reader stopped without saying why.
-import-failed-unexplained = インポートできませんでした。
+# The file dialog of Import… failed.
+import-dialog-failed = インポートできませんでした。
 # After Export… saved the file. $count is how many samples it holds; $file
 # its name, e.g. measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv.
 export-done = { $count } 件のサンプルを { $file } にエクスポートしました。
@@ -175,10 +175,6 @@ export-in-progress = エクスポートはすでに実行中です。先にそ�
 # The file could not be written. $reason is why, in the words of the
 # system or the file writer, often in English.
 export-failed = エクスポートできませんでした: { $reason }
-# The save dialog went away without saying which file to write.
-export-failed-dialog = エクスポートできませんでした: 保存先が選択されないまま保存ダイアログが閉じました。
-# The part of the app writing the file stopped without saying how it went.
-export-failed-writer = エクスポートできませんでした: 書き込み処理が結果を返さずに停止しました。
 # The samples to export were dropped while the save dialog was open, so
 # the file would not hold what was asked for.
 export-failed-changed = エクスポートできませんでした: 保存ダイアログが開いている間にサンプルが変更されました。

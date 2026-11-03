@@ -151,7 +151,7 @@ pub(super) fn on_frame(ui: &mut egui::Ui, fill: egui::Color32) {
 #[derive(Default)]
 pub(super) struct ThemeScan {
     /// The read in flight; `None` once its result is taken in.
-    rx: Option<std::sync::mpsc::Receiver<Option<crate::theme::named::ThemeCatalog>>>,
+    read: Option<super::task::Task<crate::theme::named::ThemeCatalog>>,
     /// The app changed the folder since the read in flight started, so the
     /// read may not have seen it and is dropped rather than taken in over it.
     stale: bool,
@@ -160,20 +160,15 @@ pub(super) struct ThemeScan {
 impl ThemeScan {
     /// Start a read, unless one is already under way.
     pub(super) fn start(&mut self, ctx: &egui::Context) {
-        if self.rx.is_some() {
+        if self.read.is_some() {
             return;
         }
         let Some(dir) = crate::theme::named::user_dir() else {
             return;
         };
-        let (tx, rx) = std::sync::mpsc::channel();
-        let ctx = ctx.clone();
-        std::thread::spawn(move || {
-            let catalog = std::panic::catch_unwind(|| crate::theme::named::discover(&dir)).ok();
-            let _ = tx.send(catalog);
-            ctx.request_repaint();
-        });
-        self.rx = Some(rx);
+        self.read = Some(super::task::Task::spawn("theme-scan", ctx, move || {
+            crate::theme::named::discover(&dir)
+        }));
         self.stale = false;
     }
 
@@ -185,19 +180,20 @@ impl ThemeScan {
 
     /// The catalog of a read that finished and is not stale.
     fn poll(&mut self) -> Option<crate::theme::named::ThemeCatalog> {
-        let result = match self.rx.as_ref()?.try_recv() {
-            Ok(result) => result,
-            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
-        };
-        self.rx = None;
+        let result = self.read.as_ref()?.poll()?;
+        self.read = None;
         if self.stale {
             return None; // Started before a save it can't have seen.
         }
-        if result.is_none() {
-            log::error!("reading the themes folder failed; keeping the themes already read");
+        match result {
+            Ok(catalog) => Some(catalog),
+            Err(why) => {
+                log::error!(
+                    "reading the themes folder failed ({why}); keeping the themes already read"
+                );
+                None
+            }
         }
-        result
     }
 }
 

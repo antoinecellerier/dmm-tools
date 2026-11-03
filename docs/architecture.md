@@ -402,6 +402,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/mod.rs` | `App`, `ConnectionState`, the per-frame `ui` |
 | `app/connection.rs` | The acquisition thread and its channel types |
 | `app/messages.rs` | The UI side of the channel: connect, disconnect, drain |
+| `app/task.rs` | One-shot work off the UI thread: file dialogs, import and export file reads and writes, the theme and font checks, the update check |
 | `app/connection_issue.rs` | Why there is nothing to read, as text |
 | `app/capture.rs` | The reading pipeline and the stores it fills |
 | `app/plot_input.rs` | What the graph plots from one reading |

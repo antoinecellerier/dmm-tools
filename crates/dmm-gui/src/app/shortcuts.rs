@@ -602,7 +602,7 @@ impl App {
                 Shortcut::ExportRecording => {
                     self.export_recording(ctx, super::export::ExportFormat::Csv)
                 }
-                Shortcut::ImportFile => self.begin_import(),
+                Shortcut::ImportFile => self.begin_import(ctx),
                 Shortcut::AddMarker => self.add_marker(false),
                 Shortcut::AddMarkerAndNote => self.add_marker(true),
                 // Transient window state, deliberately not saved in settings:

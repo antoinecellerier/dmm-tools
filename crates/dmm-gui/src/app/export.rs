@@ -15,9 +15,8 @@ use log::{error, info, warn};
 use std::collections::HashSet;
 use std::collections::vec_deque;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
 
-use super::connection::panic_text;
+use super::task::Task;
 use super::toast::Toast;
 use super::{App, ConnectionState};
 use crate::markers::Marker;
@@ -57,10 +56,6 @@ pub(super) enum ExportError {
 pub(super) enum Failure {
     /// The file system's, the renderer's or a panic's own words.
     Said(String),
-    /// The save dialog went away without an answer.
-    DialogGone,
-    /// The writer thread went away without an answer.
-    WriterGone,
     /// The pinned samples were dropped while the dialog was open.
     SamplesChanged,
 }
@@ -69,8 +64,6 @@ impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Said(why) => why,
-            Self::DialogGone => "the save dialog closed without an answer",
-            Self::WriterGone => "the writer stopped without an answer",
             Self::SamplesChanged => "the samples changed while the save dialog was open",
         })
     }
@@ -105,8 +98,6 @@ impl ExportError {
             Self::NoWireFormat => tr!(l10n, "export-no-wire-format"),
             Self::InProgress => tr!(l10n, "export-in-progress"),
             Self::Failed(Failure::Said(why)) => tr!(l10n, "export-failed", reason = why),
-            Self::Failed(Failure::DialogGone) => tr!(l10n, "export-failed-dialog"),
-            Self::Failed(Failure::WriterGone) => tr!(l10n, "export-failed-writer"),
             Self::Failed(Failure::SamplesChanged) => tr!(l10n, "export-failed-changed"),
         }
         .into_owned()
@@ -255,21 +246,18 @@ impl ExportRequest {
     }
 }
 
-/// What the save dialog answered: the path picked, `None` when dismissed,
-/// or the text of a panic in the dialog thread.
-type DialogResult = Result<Option<PathBuf>, String>;
-
 /// An export under way: at most one at a time.
 pub(super) enum PendingExport {
     /// Its save dialog is open.
     Choosing {
         /// Boxed: it holds the rendered view text and the markers, far
-        /// larger than the other state's receiver.
+        /// larger than the other state's task.
         request: Box<ExportRequest>,
-        rx: mpsc::Receiver<DialogResult>,
+        /// The path picked, `None` when dismissed.
+        dialog: Task<Option<PathBuf>>,
     },
     /// Rendered and being written.
-    Writing(mpsc::Receiver<ExportOutcome>),
+    Writing(Task<ExportOutcome>),
 }
 
 /// Write one export to the path the user chose and say how it went.
@@ -447,63 +435,52 @@ impl App {
         }
     }
 
-    /// Take the click: pin the samples, and hand back the channel the save
-    /// dialog answers on and the name it opens with. Refused while an
+    /// Take the click: pin the samples, and open the save dialog with
+    /// `open_dialog`, handed the name it opens with. Refused while an
     /// earlier export is under way, or with nothing to save.
     ///
-    /// Opens no dialog, so tests drive the answer by hand.
+    /// Tests pass a dialog they answer by hand.
     fn begin_export(
         &mut self,
         format: ExportFormat,
-    ) -> Result<(mpsc::Sender<DialogResult>, String), ExportError> {
+        open_dialog: impl FnOnce(String) -> Task<Option<PathBuf>>,
+    ) -> Result<(), ExportError> {
         if self.export.is_some() {
             return Err(ExportError::InProgress);
         }
         let request = self.prepare_export(format)?;
         let pinned = self.capture.recording.pin_export();
         debug_assert_eq!(pinned, request.sample_count);
-        let (tx, rx) = mpsc::channel();
         info!(
             "export of {} samples: waiting for the save dialog",
             request.sample_count
         );
-        let name = request.default_name.clone();
+        let dialog = open_dialog(request.default_name.clone());
         // Stored here, with the pin, so the two cannot come apart.
         self.export = Some(PendingExport::Choosing {
             request: Box::new(request),
-            rx,
+            dialog,
         });
-        Ok((tx, name))
+        Ok(())
     }
 
     pub(super) fn export_recording(&mut self, ctx: &egui::Context, format: ExportFormat) {
-        let (tx, default_name) = match self.begin_export(format) {
-            Ok(begun) => begun,
-            Err(why) => {
-                self.toast = Some(Toast::error(why.text(&self.l10n)));
-                return;
-            }
-        };
-        let ctx = ctx.clone();
         let last = self.settings.last_folder.clone();
         let file_type = format.file_type(&self.l10n);
-        std::thread::spawn(move || {
-            let extension = format.extension();
-            let answer = std::panic::catch_unwind(|| {
+        let open_dialog = |default_name| {
+            Task::spawn("export-dialog", ctx, move || {
                 let mut dialog = rfd::FileDialog::new()
                     .set_file_name(default_name)
-                    .add_filter(file_type, &[extension]);
+                    .add_filter(file_type, &[format.extension()]);
                 if let Some(dir) = super::import::dialog_folder(last.as_deref()) {
                     dialog = dialog.set_directory(dir);
                 }
                 dialog.save_file()
             })
-            .map_err(|panic| panic_text(panic.as_ref()));
-            let _ = tx.send(answer);
-            // The answer is polled from `ui`; a paused app draws nothing
-            // until asked.
-            ctx.request_repaint();
-        });
+        };
+        if let Err(why) = self.begin_export(format, open_dialog) {
+            self.toast = Some(Toast::error(why.text(&self.l10n)));
+        }
     }
 
     /// Whether the exported readings came off a protocol short of verified:
@@ -530,11 +507,9 @@ impl App {
     pub(super) fn poll_export(&mut self, ctx: &egui::Context) {
         match &self.export {
             None => {}
-            Some(PendingExport::Choosing { rx, .. }) => {
-                let answer = match rx.try_recv() {
-                    Err(mpsc::TryRecvError::Empty) => return,
-                    Ok(answer) => answer.map_err(Failure::Said),
-                    Err(mpsc::TryRecvError::Disconnected) => Err(Failure::DialogGone),
+            Some(PendingExport::Choosing { dialog, .. }) => {
+                let Some(answer) = dialog.poll() else {
+                    return;
                 };
                 let Some(PendingExport::Choosing { request, .. }) = self.export.take() else {
                     return;
@@ -554,28 +529,22 @@ impl App {
                     Err(why) => {
                         self.capture.recording.unpin_export();
                         error!("export failed: {why}");
-                        let message = ExportError::Failed(why).text(&self.l10n);
+                        let message = ExportError::Failed(Failure::Said(why)).text(&self.l10n);
                         self.toast = Some(Toast::error(message));
                     }
                 }
             }
-            Some(PendingExport::Writing(rx)) => {
-                let outcome = match rx.try_recv() {
-                    Err(mpsc::TryRecvError::Empty) => return,
-                    Ok(outcome) => outcome,
-                    Err(mpsc::TryRecvError::Disconnected) => {
-                        // The pin went with the render; releasing it again
-                        // is a no-op, but this arm must not leave the next
-                        // Export… refused as one in progress.
-                        self.capture.recording.unpin_export();
-                        let why = Failure::WriterGone;
-                        error!("export failed: {why}");
-                        ExportOutcome {
-                            written: Err(ExportError::Failed(why)),
-                            exported: None,
-                        }
-                    }
+            Some(PendingExport::Writing(writer)) => {
+                let Some(outcome) = writer.poll() else {
+                    return;
                 };
+                let outcome = outcome.unwrap_or_else(|why| {
+                    error!("export failed: {why}");
+                    ExportOutcome {
+                        written: Err(ExportError::Failed(Failure::Said(why))),
+                        exported: None,
+                    }
+                });
                 if let Some((mark, count)) = outcome.exported {
                     // Samples that arrived while the export ran are not in
                     // that file, so mark only what was actually written — and
@@ -625,28 +594,14 @@ impl App {
         bytes: Vec<u8>,
         request: ExportRequest,
     ) {
-        let (tx, rx) = mpsc::channel::<ExportOutcome>();
-        let ctx = ctx.clone();
         let ExportRequest {
             sample_count, mark, ..
         } = request;
-        std::thread::spawn(move || {
-            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                write_export(&path, &bytes, sample_count, mark)
-            }))
-            .unwrap_or_else(|panic| {
-                let message = panic_text(panic.as_ref());
-                error!("export failed: {message}");
-                ExportOutcome {
-                    written: Err(ExportError::Failed(Failure::Said(message))),
-                    exported: None,
-                }
-            });
-            let _ = tx.send(outcome);
-            // The result is polled from `ui`; nothing else may be drawing.
-            ctx.request_repaint();
-        });
-        self.export = Some(PendingExport::Writing(rx));
+        self.export = Some(PendingExport::Writing(Task::spawn(
+            "export-write",
+            ctx,
+            move || write_export(&path, &bytes, sample_count, mark),
+        )));
     }
 }
 
@@ -1059,10 +1014,20 @@ mod tests {
 
     /// Hand `outcome` to the app the way the writer thread does.
     fn deliver_outcome(app: &mut App, outcome: ExportOutcome) {
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(outcome).expect("the channel is open");
-        app.export = Some(PendingExport::Writing(rx));
+        let (tx, writer) = Task::by_hand();
+        tx.send(Ok(outcome)).expect("the channel is open");
+        app.export = Some(PendingExport::Writing(writer));
         app.poll_export(&crate::app::styled_context());
+    }
+
+    /// Take the click as Export… does, with a save dialog answered through
+    /// the sender handed back.
+    fn begin(
+        app: &mut App,
+        format: ExportFormat,
+    ) -> Result<std::sync::mpsc::Sender<Result<Option<PathBuf>, String>>, ExportError> {
+        let (tx, dialog) = Task::by_hand();
+        app.begin_export(format, |_| dialog).map(|()| tx)
     }
 
     /// The request of the export waiting on its dialog, taken out of the
@@ -1086,7 +1051,7 @@ mod tests {
             app.csv_layout(),
         )
         .expect("rendering the fixture buffer");
-        app.begin_export(ExportFormat::Csv).expect("three samples");
+        begin(&mut app, ExportFormat::Csv).expect("three samples");
         assert!(app.capture.recording.is_pinned());
 
         let t0 = Instant::now();
@@ -1135,7 +1100,7 @@ mod tests {
             view.as_deref(),
         )
         .expect("rendering the fixture buffer");
-        app.begin_export(ExportFormat::Json).expect("two samples");
+        begin(&mut app, ExportFormat::Json).expect("two samples");
         for m in app.markers.iter_mut() {
             m.note = "written after the click".into();
         }
@@ -1154,9 +1119,9 @@ mod tests {
     #[test]
     fn a_second_export_waits_for_the_first() {
         let mut app = app_holding(0, 0, &[0, 0]);
-        app.begin_export(ExportFormat::Csv).expect("two samples");
+        begin(&mut app, ExportFormat::Csv).expect("two samples");
         assert_eq!(
-            app.begin_export(ExportFormat::Json).map(|_| ()),
+            begin(&mut app, ExportFormat::Json).map(|_| ()),
             Err(ExportError::InProgress)
         );
         assert!(matches!(app.export, Some(PendingExport::Choosing { .. })));
@@ -1170,7 +1135,7 @@ mod tests {
         let mut app = app_holding(0, 0, &[0, 0]);
         let ctx = crate::app::styled_context();
 
-        let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
+        let tx = begin(&mut app, ExportFormat::Csv).expect("two samples");
         tx.send(Ok(None)).expect("the app listens");
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
@@ -1181,7 +1146,7 @@ mod tests {
             "a cancel picks no folder"
         );
 
-        let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
+        let tx = begin(&mut app, ExportFormat::Csv).expect("two samples");
         tx.send(Err("boom".into())).expect("the app listens");
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
@@ -1190,7 +1155,7 @@ mod tests {
             Some(("Export failed: boom".to_string(), true))
         );
 
-        let (tx, _) = app.begin_export(ExportFormat::Csv).expect("two samples");
+        let tx = begin(&mut app, ExportFormat::Csv).expect("two samples");
         drop(tx);
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
@@ -1203,13 +1168,13 @@ mod tests {
     #[test]
     fn a_writer_gone_without_an_answer_ends_the_export() {
         let mut app = app_holding(0, 0, &[0, 0]);
-        let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
+        let (tx, writer) = Task::<ExportOutcome>::by_hand();
         drop(tx);
-        app.export = Some(PendingExport::Writing(rx));
+        app.export = Some(PendingExport::Writing(writer));
         app.poll_export(&crate::app::styled_context());
         assert!(app.export.is_none());
         assert!(app.toast.take().is_some_and(|t| t.is_error));
-        assert!(app.begin_export(ExportFormat::Csv).is_ok());
+        assert!(begin(&mut app, ExportFormat::Csv).is_ok());
     }
 
     /// A replay of samples with no meter frame is refused at the click, not
@@ -1225,7 +1190,7 @@ mod tests {
             app.prepare_export(ExportFormat::Replay).map(|_| ()),
             Err(ExportError::NoWireFormat)
         );
-        assert!(app.begin_export(ExportFormat::Replay).is_err());
+        assert!(begin(&mut app, ExportFormat::Replay).is_err());
         assert!(!app.capture.recording.is_pinned());
     }
 
@@ -1318,8 +1283,6 @@ mod tests {
             ExportError::NoWireFormat,
             ExportError::InProgress,
             ExportError::Failed(Failure::Said("disk full".into())),
-            ExportError::Failed(Failure::DialogGone),
-            ExportError::Failed(Failure::WriterGone),
             ExportError::Failed(Failure::SamplesChanged),
         ] {
             assert_eq!(why.text(&l10n), why.to_string());

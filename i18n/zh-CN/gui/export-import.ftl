@@ -156,8 +156,8 @@ import-empty = { $file } 中没有读数
 import-failed = 导入失败: { $path }: { $reason }
 # Reading the file stopped on an internal error. $path is where it is.
 import-failed-crashed = 导入失败: { $path }: 导入过程出错
-# The reader stopped without saying why.
-import-failed-unexplained = 导入失败
+# The file dialog of Import… failed.
+import-dialog-failed = 导入失败
 # After Export… saved the file. $count is how many samples it holds; $file
 # its name, e.g. measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv.
 export-done = 已将 { $count } 个样本导出到 { $file }
@@ -175,10 +175,6 @@ export-in-progress = 已有导出正在进行: 请先等它完成
 # The file could not be written. $reason is why, in the words of the
 # system or the file writer, often in English.
 export-failed = 导出失败: { $reason }
-# The save dialog went away without saying which file to write.
-export-failed-dialog = 导出失败: 保存对话框未返回结果就已关闭
-# The part of the app writing the file stopped without saying how it went.
-export-failed-writer = 导出失败: 写入程序未返回结果就已停止
 # The samples to export were dropped while the save dialog was open, so
 # the file would not hold what was asked for.
 export-failed-changed = 导出失败: 保存对话框打开期间样本已更改

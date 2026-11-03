@@ -11,24 +11,21 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver};
 
 use dmm_shared::tr;
 use eframe::egui::{self, Ui};
 
 use crate::app::App;
+use crate::app::task::Task;
 use crate::app::toast::Toast;
 use crate::settings::PaletteOverrides;
 use crate::theme::named::{self, NamedTheme};
 
-/// The answer of a save dialog: the path picked, `None` when cancelled, or
-/// `Err` when the dialog itself fell over.
-type DialogAnswer = Result<Option<PathBuf>, ()>;
-
 /// The save dialog, while it is open.
 #[derive(Default)]
 pub(in crate::app) struct ThemeSave {
-    dialog: Option<Receiver<DialogAnswer>>,
+    /// The path picked, `None` when cancelled.
+    dialog: Option<Task<Option<PathBuf>>>,
 }
 
 impl App {
@@ -70,34 +67,21 @@ impl App {
             None => "my-theme.json".to_string(),
         };
         let file_type = tr!(self.l10n, "colors-save-file-type").into_owned();
-        let (tx, rx) = mpsc::channel();
-        let ctx = ctx.clone();
-        std::thread::spawn(move || {
-            let answer = std::panic::catch_unwind(|| {
-                let mut dialog = rfd::FileDialog::new()
-                    .set_file_name(file_name)
-                    .add_filter(file_type, &["json"]);
-                if let Some(dir) = dir {
-                    dialog = dialog.set_directory(dir);
-                }
-                dialog.save_file()
-            })
-            .map_err(|_| ());
-            let _ = tx.send(answer);
-            ctx.request_repaint();
-        });
-        self.theme_save.dialog = Some(rx);
+        self.theme_save.dialog = Some(Task::spawn("theme-save-dialog", ctx, move || {
+            let mut dialog = rfd::FileDialog::new()
+                .set_file_name(file_name)
+                .add_filter(file_type, &["json"]);
+            if let Some(dir) = dir {
+                dialog = dialog.set_directory(dir);
+            }
+            dialog.save_file()
+        }));
     }
 
     /// Take in the save dialog's answer, and save.
     pub(in crate::app) fn poll_theme_save(&mut self) {
-        let Some(rx) = &self.theme_save.dialog else {
+        let Some(answer) = self.theme_save.dialog.as_ref().and_then(Task::poll) else {
             return;
-        };
-        let answer = match rx.try_recv() {
-            Ok(answer) => answer,
-            Err(mpsc::TryRecvError::Empty) => return,
-            Err(mpsc::TryRecvError::Disconnected) => Err(()),
         };
         // The colours on screen when the answer comes: the theme may have
         // changed while the dialog was open.
@@ -109,7 +93,8 @@ impl App {
                 self.save_theme(path, dark, folder.as_deref());
             }
             Ok(None) => {}
-            Err(()) => {
+            Err(why) => {
+                log::error!("the theme's save dialog failed: {why}");
                 let message = tr!(self.l10n, "colors-save-dialog-failed");
                 self.toast = Some(Toast::error(message));
             }
