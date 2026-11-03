@@ -2,12 +2,12 @@
 //! text, CSV, JSON or the meter's own frames, with the closing summary.
 
 use super::setup_ctrlc;
-use crate::cli::{ClockScale, TransformArgs};
+use crate::cli::{ClockScale, ReadArgs, TransformArgs};
 use crate::format::{self, OutputFormat};
 use crate::l10n::{note_label, warning_label};
 use crate::open::{
-    open_mock_device, open_with_help, opened_device, print_no_response_help, requires_hardware,
-    selection_id,
+    open_mock_device, open_with_help, opened_device, pinned_mock_mode, print_no_response_help,
+    requires_hardware, selection_id,
 };
 use crate::output;
 use console::style;
@@ -27,38 +27,199 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-#[expect(clippy::too_many_arguments, reason = "one argument per `read` option")]
-pub(crate) fn cmd_read(
+/// A `read` run with its flags settled and checked against each other, so
+/// that every refusal comes before anything opens or prints.
+pub(crate) struct ReadPlan {
     selection: Selection,
-    opts: dmm_lib::OpenOptions<'_>,
+    source: Source,
     interval_ms: u64,
     format: OutputFormat,
+    // What the format and the `-o` file make of each other, printed once
+    // the run is sure to start.
+    note: Option<String>,
+    // As typed: a meter run reads the settings file's when the mock opens.
+    mock_mode: Option<dmm_lib::mock::MockMode>,
+    // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
+    clock: dmm_lib::Clock,
+    options: RunOptions,
+}
+
+/// Where a `read` run's readings come from.
+enum Source {
+    /// The meter the selection names or detection finds, or the mock.
+    Meter,
+    /// A recording played back: `--replay`, or a replay file `--import`ed.
+    Replay(PathBuf),
+    /// A CSV or JSON export read back.
+    Import(PathBuf),
+}
+
+/// The `read` options every source honours: what each reading goes
+/// through and where it is written.
+struct RunOptions {
     destination: output::Destination,
     count: usize,
     integrate: bool,
-    transform: &Transform,
+    // Applied to every reading before anything else sees it; the identity
+    // transform (no --scale/--offset/--unit) is a no-op.
+    transform: Transform,
     alarm: Option<AlarmOptions>,
-    mock_mode: Option<dmm_lib::mock::MockMode>,
-    replay: Option<PathBuf>,
-    // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
-    clock: dmm_lib::Clock,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(path) = &replay {
-        // No cable to pace this run, so the clock flags apply as they do to
-        // the mock and `refuse_clock_on_hardware` is not consulted.
-        return read_replay(
-            path,
+}
+
+impl ReadPlan {
+    /// Settle `args` for a run on `selection`, or say why they are refused.
+    /// `device_named` is whether `--device` was typed, as opposed to coming
+    /// from the settings file or detection.
+    pub(crate) fn new(
+        l: &Localizer,
+        args: ReadArgs,
+        selection: Selection,
+        device_named: bool,
+    ) -> Result<Self, Refused> {
+        let ReadArgs {
             interval_ms,
             format,
-            destination,
+            output,
             count,
             integrate,
             transform,
             alarm,
+            mock_mode,
+            replay,
+            import,
+            mock_clock_scale,
+            mock_clock_preseed,
+        } = args;
+        let alarm = alarm
+            .limits(l)
+            .map_err(Refused::Alarm)?
+            .map(|(limits, hysteresis)| AlarmOptions {
+                limits,
+                hysteresis,
+                bell: alarm.alarm_bell,
+            });
+        // An import names its own meter, as a replay does; a replay file
+        // imported is a replay played without waiting.
+        // Detected as the GUI detects it: an extensionless replay file is
+        // still a replay.
+        let import_replay = import.as_ref().is_some_and(|p| {
+            dmm_shared::export::ExportKind::of_file(p)
+                .is_ok_and(|kind| kind == dmm_shared::export::ExportKind::Replay)
+        });
+        let (replay, import, mock_clock_scale) = match import {
+            Some(path) if import_replay => (Some(path), None, Some(ClockScale::Max)),
+            other => (replay, other, mock_clock_scale),
+        };
+        // `from_flags` names the offending value, not the flag it came from,
+        // so that both binaries can reuse the sentence.
+        let clock = session_clock(l, mock_clock_scale, mock_clock_preseed, replay.is_some())
+            .map_err(Refused::Clock)?;
+        // A replay file names its own meter, so a `--device` alongside it
+        // would either be ignored or contradict the file. Only a typed flag is
+        // refused: the settings file names a meter for every run, and a replay
+        // must not need it edited.
+        if replay.is_some() && device_named {
+            return Err(Refused::ReplayNamesItsDevice);
+        }
+        // Settled before anything opens, so a run that cannot write what it
+        // was asked for fails with no meter attached.
+        let (format, destination, note) = resolve_output(l, &format, output);
+        let source = match (import, replay) {
+            (Some(path), _) => {
+                if device_named {
+                    return Err(Refused::ImportNamesItsDevice);
+                }
+                if let Some(refused) = refuse_for_import(format, interval_ms) {
+                    return Err(refused);
+                }
+                Source::Import(path)
+            }
+            (None, replay) => {
+                if let Some(refused) =
+                    refuse_replay_format(format, selection, replay.is_some(), &transform, integrate)
+                {
+                    return Err(refused);
+                }
+                match replay {
+                    // No cable to pace this run, so the clock flags apply as
+                    // they do to the mock.
+                    Some(path) => Source::Replay(path),
+                    None => {
+                        refuse_clock_on_hardware(selection, &clock)?;
+                        Source::Meter
+                    }
+                }
+            }
+        };
+        Ok(Self {
+            selection,
+            source,
+            interval_ms,
+            format,
+            note,
+            mock_mode,
             clock,
-        );
+            options: RunOptions {
+                destination,
+                count,
+                integrate,
+                transform: transform.to_transform(),
+                alarm,
+            },
+        })
     }
-    refuse_clock_on_hardware(selection, &clock)?;
+
+    /// Run it: the note on where the output goes, then the meter, the
+    /// recording or the export read. `settings` gives the mock its saved
+    /// mode.
+    pub(crate) fn run(
+        self,
+        opts: dmm_lib::OpenOptions<'_>,
+        settings: Option<&dmm_shared::SharedSettings>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let Self {
+            selection,
+            source,
+            interval_ms,
+            format,
+            note,
+            mock_mode,
+            clock,
+            options,
+        } = self;
+        if let Some(note) = note {
+            eprintln!("{} {note}", note_label());
+        }
+        match source {
+            Source::Import(path) => read_import(&path, format, options),
+            Source::Replay(path) => read_replay(&path, interval_ms, format, options, clock),
+            Source::Meter => {
+                let mock_mode = pinned_mock_mode(selection, mock_mode, settings);
+                read_meter(
+                    selection,
+                    opts,
+                    interval_ms,
+                    format,
+                    options,
+                    mock_mode,
+                    clock,
+                )
+            }
+        }
+    }
+}
+
+/// Read the meter `selection` names, on its cable or simulated.
+fn read_meter(
+    selection: Selection,
+    opts: dmm_lib::OpenOptions<'_>,
+    interval_ms: u64,
+    format: OutputFormat,
+    options: RunOptions,
+    mock_mode: Option<dmm_lib::mock::MockMode>,
+    clock: dmm_lib::Clock,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let markers = options.alarm.is_some();
     if requires_hardware(selection) {
         let (mut dmm, device) = open_with_help(selection, opts)?;
         // Once, before the loop: on a UT61+ asking the meter its name is a
@@ -70,25 +231,26 @@ pub(crate) fn cmd_read(
         // The link these readings come over, so a session played back from
         // the file says what it was recorded on rather than nothing.
         let link = dmm.transport().link();
-        let out = read_output(format, &dmm, transform, integrate, alarm.is_some(), || {
-            format::ReplayHeader {
+        let out = read_output(
+            format,
+            &dmm,
+            &options.transform,
+            options.integrate,
+            markers,
+            || format::ReplayHeader {
                 device: crate::open::meter_listing(device).id().to_string(),
                 model,
                 link,
-            }
-        });
+            },
+        );
         info!("connected, starting measurement loop");
         run_read_loop(
             &mut dmm,
             interval_ms,
+            options,
             out,
-            destination,
             crate::open::meter_name(device),
-            count,
             Some(device),
-            integrate,
-            transform,
-            alarm,
             Vec::new(),
         )
     } else {
@@ -99,13 +261,18 @@ pub(crate) fn cmd_read(
                 .as_millis() as u64;
         // `--format replay` is refused for a device that synthesises its
         // readings, so the header below is never built.
-        let out = read_output(format, &dmm, transform, integrate, alarm.is_some(), || {
-            format::ReplayHeader {
+        let out = read_output(
+            format,
+            &dmm,
+            &options.transform,
+            options.integrate,
+            markers,
+            || format::ReplayHeader {
                 device: selection_id(selection).to_string(),
                 model: None,
                 link: None,
-            }
-        });
+            },
+        );
         // Not hardware, so the selection names a registry entry — `auto` is a
         // cable to open and never lands here.
         let meter_name = opened_device(selection)
@@ -114,14 +281,10 @@ pub(crate) fn cmd_read(
         run_read_loop(
             &mut dmm,
             interval_ms,
+            options,
             out,
-            destination,
             meter_name,
-            count,
             None,
-            integrate,
-            transform,
-            alarm,
             Vec::new(),
         )
     }
@@ -189,7 +352,7 @@ fn resolve_format(
 
 /// What `read` writes, where it goes, and the note the pair earns — printed
 /// by the caller, which knows whether the run is going to happen at all.
-pub(crate) fn resolve_output(
+fn resolve_output(
     l: &Localizer,
     asked: &Option<OutputFormat>,
     output: Option<Option<String>>,
@@ -211,7 +374,7 @@ pub(crate) fn resolve_output(
 ///
 /// A replay file holds the meter's own frames, so what to make of them is a
 /// choice for the run that plays them back.
-pub(crate) fn refuse_replay_format(
+fn refuse_replay_format(
     format: OutputFormat,
     selection: Selection,
     // A run already playing a recording has the frames to copy, whatever the
@@ -232,10 +395,20 @@ pub(crate) fn refuse_replay_format(
     Some(Refused::ReplayKeepsFrames(flag))
 }
 
-/// Why `read` refused its flags before opening anything, once the run
-/// knows it will: the closing `Error:` line ([`crate::l10n::Localized`]).
-#[derive(Debug, Clone, Copy)]
+/// Why `read` refused its flags before opening anything: the one `Error:`
+/// line `main` prints ([`crate::l10n::Localized`]).
+#[derive(Debug)]
 pub(crate) enum Refused {
+    /// The `--alarm-*` flags, as they word it.
+    Alarm(String),
+    /// The `--mock-clock-*` flags; the value they could not take, worded.
+    Clock(String),
+    /// A bent session clock on a meter paced by its cable.
+    ClockNeedsMock,
+    /// `--device` alongside a `--replay`.
+    ReplayNamesItsDevice,
+    /// `--device` alongside an `--import`.
+    ImportNamesItsDevice,
     /// `--format replay` on a device that synthesises its readings; its id.
     ReplayNeedsMeter(&'static str),
     /// `--format replay` with a flag that changes the reading; that flag.
@@ -248,11 +421,27 @@ pub(crate) enum Refused {
 
 impl crate::l10n::Localized for Refused {
     fn text<'a>(&'a self, l: &'a Localizer) -> Cow<'a, str> {
-        match *self {
+        match self {
+            Self::Alarm(message) => Cow::Borrowed(message),
+            Self::Clock(reason) => tr!(
+                l,
+                "read-flag-refused",
+                flags = "--mock-clock-scale/--mock-clock-preseed",
+                reason = reason.as_str()
+            ),
+            Self::ClockNeedsMock => l.help().mock_clock_mock_only(),
+            Self::ReplayNamesItsDevice => tr!(
+                l,
+                "read-replay-names-its-device",
+                command = "dmm-cli read --replay FILE"
+            ),
+            Self::ImportNamesItsDevice => tr!(l, "read-import-names-its-device"),
             Self::ReplayNeedsMeter(device) => {
-                tr!(l, "read-replay-format-needs-meter", device = device)
+                tr!(l, "read-replay-format-needs-meter", device = *device)
             }
-            Self::ReplayKeepsFrames(flag) => tr!(l, "read-replay-format-keeps-frames", flag = flag),
+            Self::ReplayKeepsFrames(flag) => {
+                tr!(l, "read-replay-format-keeps-frames", flag = *flag)
+            }
             Self::ImportHasNoFrames => tr!(l, "read-import-no-frames"),
             Self::ImportHasNoInterval => tr!(l, "read-import-no-interval"),
         }
@@ -261,33 +450,16 @@ impl crate::l10n::Localized for Refused {
 
 crate::l10n::localized_error!(Refused);
 
-/// Why `--device` is refused alongside `--replay`.
-pub(crate) fn replay_names_its_device(l: &Localizer) -> Cow<'_, str> {
-    tr!(
-        l,
-        "read-replay-names-its-device",
-        command = "dmm-cli read --replay FILE"
-    )
-}
-
 /// Play a recording back as the session, with no meter on the cable.
 ///
 /// The clock carries the recording's own start, so every reading exports at
 /// the wall time it was measured at and two runs of the same file print the
 /// same timestamps.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the `read` options a replay honours"
-)]
 fn read_replay(
     path: &Path,
     interval_ms: u64,
     format: OutputFormat,
-    destination: output::Destination,
-    count: usize,
-    integrate: bool,
-    transform: &Transform,
-    alarm: Option<AlarmOptions>,
+    options: RunOptions,
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let l = crate::l10n::get();
@@ -295,7 +467,7 @@ fn read_replay(
     // The file names its meter, by the row it was recorded under.
     crate::open::note_picked(replay.listing.id(), crate::open::PickedBy::Recording);
     // On screen the pace is the point; into a file it is only a wait.
-    if clock.is_real() && !matches!(destination, output::Destination::Stdout) {
+    if clock.is_real() && !matches!(options.destination, output::Destination::Stdout) {
         let hint = tr!(l, "read-paced-replay", flag = "--mock-clock-scale max");
         eprintln!(
             "{}",
@@ -311,9 +483,9 @@ fn read_replay(
     let out = read_output(
         format,
         &dmm,
-        transform,
-        integrate,
-        !replay.markers.is_empty() || alarm.is_some(),
+        &options.transform,
+        options.integrate,
+        !replay.markers.is_empty() || options.alarm.is_some(),
         || {
             format::ReplayHeader {
                 device: replay.listing.id().to_string(),
@@ -337,26 +509,22 @@ fn read_replay(
     run_read_loop(
         &mut dmm,
         interval_ms,
+        options,
         out,
-        destination,
         // The meter the file names, as the registry spells it — the name the
         // recording's own meter reported stays in the `# model:` line.
         replay.listing.display_name(),
-        count,
         // A gap in the recording plays back as timeouts, and they are not a
         // quiet meter: there is no `--device` to check and nothing on the
         // cable to enable data transmission on.
         None,
-        integrate,
-        transform,
-        alarm,
         replay.markers.clone(),
     )
 }
 
 /// The session clock the `--mock-clock-*` flags ask for, or why they can't
 /// be honoured, naming the value rather than the flag.
-pub(crate) fn session_clock(
+fn session_clock(
     l: &Localizer,
     scale: Option<ClockScale>,
     preseed: Option<f64>,
@@ -383,12 +551,9 @@ pub(crate) fn session_clock(
 /// Checked before the device is opened, so a hardware `--device` with the
 /// clock flags fails with no meter attached and nothing to plug in — and so
 /// does Auto, which has a cable to open before it knows anything at all.
-fn refuse_clock_on_hardware(
-    selection: Selection,
-    clock: &dmm_lib::Clock,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn refuse_clock_on_hardware(selection: Selection, clock: &dmm_lib::Clock) -> Result<(), Refused> {
     if requires_hardware(selection) && !clock.is_real() {
-        return Err(crate::l10n::get().help().mock_clock_mock_only().into());
+        return Err(Refused::ClockNeedsMock);
     }
     Ok(())
 }
@@ -396,11 +561,11 @@ fn refuse_clock_on_hardware(
 /// One `read` run's output side, whatever the readings come from: the file
 /// or stream they are written to, the statistics behind the closing summary,
 /// and the transform every reading goes through first.
-struct Run<'a> {
+struct Run {
     writer: output::Writer,
     out: format::Output,
     session: dmm_lib::stats::SeriesStats,
-    transform: &'a Transform,
+    transform: Transform,
     integrate: bool,
     alarm: Option<Alarm>,
     // Ring the terminal bell on a breach: asked for, and stderr a terminal.
@@ -412,25 +577,25 @@ struct Run<'a> {
     noted_idle: Option<String>,
 }
 
-impl<'a> Run<'a> {
+impl Run {
     /// Open the output and write its header. `meter_name` is the meter's
     /// brand and model, as this run calls it: what the CSV comment and the
     /// JSON metadata carry, and, brand aside, what a file the run names
     /// itself is named after, the rule the GUI's Export… names its files by.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the output settings `read` was given"
-    )]
     fn open(
-        destination: output::Destination,
+        options: RunOptions,
         meter_name: &str,
         out: format::Output,
-        transform: &'a Transform,
-        integrate: bool,
         tick: Duration,
-        alarm: Option<AlarmOptions>,
         next_marker: u32,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        let RunOptions {
+            destination,
+            count: _,
+            integrate,
+            transform,
+            alarm,
+        } = options;
         let l = crate::l10n::get();
         let mut writer = output::Writer::new(destination, meter_name)?;
         // Dim, "Note:" included: these say how the run was set up.
@@ -743,29 +908,20 @@ fn next_marker_number(numbers: impl Iterator<Item = u32>) -> u32 {
     numbers.max().map_or(1, |n| n + 1)
 }
 
-/// Shared measurement loop for both real and mock devices.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the `read` options live and mock runs share"
-)]
+/// Shared measurement loop for meters, the mock and recordings.
 fn run_read_loop<T: dmm_lib::transport::Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     interval_ms: u64,
+    options: RunOptions,
     out: format::Output,
-    destination: output::Destination,
     // The meter a file the run has to name is named after; see `Run::open`.
     meter_name: &str,
-    count: usize,
     // When set, timeout warnings include device-specific activation instructions.
     device: Option<&'static SelectableDevice>,
-    integrate: bool,
-    // Applied to every reading before anything else sees it; the identity
-    // transform (no --scale/--offset/--unit) is a no-op.
-    transform: &Transform,
-    alarm: Option<AlarmOptions>,
     // A recording's markers, in file order; none for a meter.
     markers: Vec<dmm_lib::replay::ReplayMarker>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let count = options.count;
     let running = setup_ctrlc()?;
     // Each marker goes on the first reading played at or after its offset,
     // one per reading, so a frame `--interval-ms` or `--count` skips passes
@@ -778,16 +934,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     };
     let tick = Duration::from_millis(interval_ms);
     let first_marker = next_marker_number(markers.iter().map(|m| m.number));
-    let mut run = Run::open(
-        destination,
-        meter_name,
-        out,
-        transform,
-        integrate,
-        tick,
-        alarm,
-        first_marker,
-    )?;
+    let mut run = Run::open(options, meter_name, out, tick, first_marker)?;
 
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
@@ -863,7 +1010,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 
 /// Why `--import` refuses a flag alongside a CSV or JSON file: the readings
 /// are already taken, and the file holds no frames to copy.
-pub(crate) fn refuse_for_import(format: OutputFormat, interval_ms: u64) -> Option<Refused> {
+fn refuse_for_import(format: OutputFormat, interval_ms: u64) -> Option<Refused> {
     if format == OutputFormat::Replay {
         return Some(Refused::ImportHasNoFrames);
     }
@@ -873,14 +1020,10 @@ pub(crate) fn refuse_for_import(format: OutputFormat, interval_ms: u64) -> Optio
 /// `read --import`: a CSV or JSON export read back and written out again, in
 /// any format but a replay, with its markers and — into JSON — its view,
 /// and the closing summary. The readings are the file's, so nothing waits.
-pub(crate) fn read_import(
+fn read_import(
     path: &Path,
     format: OutputFormat,
-    destination: output::Destination,
-    count: usize,
-    integrate: bool,
-    transform: &Transform,
-    alarm: Option<AlarmOptions>,
+    options: RunOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use dmm_shared::export::{ExportKind, read_csv_from, read_json_from};
     let fail = |e: String| format!("{}: {e}", path.display());
@@ -899,9 +1042,9 @@ pub(crate) fn read_import(
         .unwrap_or_else(|| "unknown".to_string());
     let layout = dmm_shared::export::CsvLayout {
         family_slots: imported.aux_slots,
-        extra_slots: transform.extra_aux_count(),
-        integral: integrate,
-        markers: !imported.markers.is_empty() || alarm.is_some(),
+        extra_slots: options.transform.extra_aux_count(),
+        integral: options.integrate,
+        markers: !imported.markers.is_empty() || options.alarm.is_some(),
     };
     let experimental = imported.readings.iter().any(|r| r.experimental);
     let out = format::Output::new(format, layout, experimental, unreachable_replay_header)
@@ -911,16 +1054,8 @@ pub(crate) fn read_import(
     let offsets = imported.offsets();
     let tick = dmm_shared::export::median_spacing(&offsets);
     let first_marker = next_marker_number(imported.markers.iter().map(|m| m.number));
-    let mut run = Run::open(
-        destination,
-        &device,
-        out,
-        transform,
-        integrate,
-        tick,
-        alarm,
-        first_marker,
-    )?;
+    let count = options.count;
+    let mut run = Run::open(options, &device, out, tick, first_marker)?;
     let base = std::time::Instant::now();
     let mut markers = imported.markers.iter().peekable();
     for (i, (reading, offset)) in imported.readings.into_iter().zip(offsets).enumerate() {

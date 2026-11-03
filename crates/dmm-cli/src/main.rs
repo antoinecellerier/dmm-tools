@@ -13,19 +13,19 @@ mod test_fixtures;
 
 use clap::FromArgMatches;
 use clap_complete::Shell;
-use cli::{CaptureArgs, Cli, Cmd, ReadArgs};
+use cli::{CaptureArgs, Cli, Cmd};
 use cmd::command::cmd_command;
 use cmd::debug::cmd_debug;
 use cmd::info::cmd_info;
 use cmd::list::cmd_list;
-use cmd::read::{cmd_read, refuse_replay_format, resolve_output};
+use cmd::read::ReadPlan;
 use cmd::settings::{cmd_get, cmd_set};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_shared::help::LinksSearched;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
-use l10n::{error_label, note_label};
+use l10n::{Localized, error_label};
 use log::error;
 use open::{
     device_for_listing, open_recording_with_help, opened_device, pinned_mock_mode,
@@ -117,7 +117,12 @@ fn main() {
 
     // Device-independent commands — handle before mock/real split
     let result = match cli.command {
-        Cmd::List => cmd_list(bluetooth),
+        Cmd::List => {
+            if !cmd_list(bluetooth) {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         // Run and returned from before the settings file was read.
         Cmd::Triage(_) => Ok(()),
         Cmd::Completions { shell } => {
@@ -137,7 +142,10 @@ fn main() {
         )),
 
         Cmd::Info => cmd_info(selection, opts),
-        Cmd::Read(args) => run_read(l, args, selection, opts, device_named, settings.as_ref()),
+        Cmd::Read(args) => match ReadPlan::new(l, args, selection, device_named) {
+            Ok(plan) => plan.run(opts, settings.as_ref()),
+            Err(refused) => fail(refused.text(l)),
+        },
         Cmd::Command { action } => cmd_command(selection, opts, action),
         Cmd::Get {
             setting,
@@ -170,7 +178,9 @@ fn main() {
     }
 }
 
-/// Print `message` after the error label and end the run.
+/// Print `message` after the error label and end the run: a command line
+/// refused before anything opened, said once, as clap says its own. A
+/// command that ran and failed goes through [`report_failure`].
 fn fail(message: impl std::fmt::Display) -> ! {
     eprintln!("{} {message}", error_label());
     std::process::exit(1);
@@ -198,123 +208,6 @@ fn print_completions(l: &Localizer, shell: Option<Shell>) {
             }
         }
     }
-}
-
-/// `read`: its flags settled and checked against each other before
-/// anything opens, then the import read or the meter or replay run.
-fn run_read(
-    l: &Localizer,
-    args: ReadArgs,
-    selection: Selection,
-    opts: dmm_lib::OpenOptions<'_>,
-    device_named: bool,
-    settings: Option<&dmm_shared::SharedSettings>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let ReadArgs {
-        interval_ms,
-        format,
-        output,
-        count,
-        integrate,
-        transform,
-        alarm,
-        mock_mode,
-        replay,
-        import,
-        mock_clock_scale,
-        mock_clock_preseed,
-    } = args;
-    let alarm = match alarm.limits(l) {
-        Ok(limits) => limits.map(|(limits, hysteresis)| cmd::read::AlarmOptions {
-            limits,
-            hysteresis,
-            bell: alarm.alarm_bell,
-        }),
-        Err(msg) => fail(msg),
-    };
-    // An import names its own meter, as a replay does; a replay file imported
-    // is a replay played without waiting.
-    // Detected as the GUI detects it: an extensionless replay file is still a
-    // replay.
-    let import_replay = import.as_ref().is_some_and(|p| {
-        dmm_shared::export::ExportKind::of_file(p)
-            .is_ok_and(|kind| kind == dmm_shared::export::ExportKind::Replay)
-    });
-    let (replay, import, mock_clock_scale) = match import {
-        Some(path) if import_replay => (Some(path), None, Some(cli::ClockScale::Max)),
-        other => (replay, other, mock_clock_scale),
-    };
-    // `from_flags` names the offending value, not the flag it came from, so
-    // that both binaries can reuse the sentence.
-    let clock =
-        match cmd::read::session_clock(l, mock_clock_scale, mock_clock_preseed, replay.is_some()) {
-            Ok(clock) => clock,
-            Err(msg) => fail(tr!(
-                l,
-                "read-flag-refused",
-                flags = "--mock-clock-scale/--mock-clock-preseed",
-                reason = msg
-            )),
-        };
-    // A replay file names its own meter, so a `--device` alongside it would
-    // either be ignored or contradict the file. Only a typed flag is refused:
-    // the settings file names a meter for every run, and a replay must not need
-    // it edited.
-    if replay.is_some() && device_named {
-        fail(cmd::read::replay_names_its_device(l));
-    }
-    // Settled before anything opens, so a run that cannot write what it was
-    // asked for fails with no meter attached.
-    let (format, destination, note) = resolve_output(l, &format, output);
-    if let Some(path) = import {
-        if device_named {
-            fail(tr!(l, "read-import-names-its-device"));
-        }
-        if let Some(message) = cmd::read::refuse_for_import(format, interval_ms) {
-            return Err(message.into());
-        }
-        if let Some(note) = note {
-            eprintln!("{} {note}", note_label());
-        }
-        return cmd::read::read_import(
-            &path,
-            format,
-            destination,
-            count,
-            integrate,
-            &transform.to_transform(),
-            alarm,
-        );
-    }
-    if let Some(message) =
-        refuse_replay_format(format, selection, replay.is_some(), &transform, integrate)
-    {
-        return Err(message.into());
-    }
-    // After the refusals: a note about where output goes reads as a run that
-    // started, and this one may not.
-    if let Some(note) = note {
-        eprintln!("{} {note}", note_label());
-    }
-    cmd_read(
-        selection,
-        opts,
-        interval_ms,
-        format,
-        destination,
-        count,
-        integrate,
-        &transform.to_transform(),
-        alarm,
-        // A replay opens no mock: its saved mode is not read.
-        if replay.is_some() {
-            mock_mode
-        } else {
-            pinned_mock_mode(selection, mock_mode, settings)
-        },
-        replay,
-        clock,
-    )
 }
 
 /// `capture`: its instructions exported or its steps listed, without

@@ -238,7 +238,7 @@ pub(crate) enum Cmd {
     Triage(TriageArgs),
 }
 
-/// The `read` flags, handed to [`crate::run_read`] whole.
+/// The `read` flags, handed to [`crate::cmd::read::ReadPlan::new`] whole.
 #[derive(clap::Args)]
 pub(crate) struct ReadArgs {
     /// Keep at most one reading per interval, in milliseconds (0 = every reading the meter produces)

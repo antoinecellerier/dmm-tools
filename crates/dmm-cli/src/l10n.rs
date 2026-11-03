@@ -177,7 +177,6 @@ fn ours<'e>(e: &'e (dyn std::error::Error + 'static)) -> Option<&'e dyn Localize
         e.downcast_ref::<T>().map(|t| t as &dyn Localized)
     }
     of::<crate::open::OpenFailed>(e)
-        .or_else(|| of::<crate::cmd::read::Refused>(e))
         .or_else(|| of::<crate::cmd::settings::SetFailed>(e))
         .or_else(|| of::<crate::format::NoFrame>(e))
         .or_else(|| of::<crate::capture::NotResponding>(e))

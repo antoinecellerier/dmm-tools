@@ -382,7 +382,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 
 | Module | Responsibility |
 |---|---|
-| `main.rs` | Resolves the device, dispatches the subcommand, prints the help for a failed run |
+| `main.rs` | Resolves the device, dispatches the subcommand, prints a refusal or the help for a failed run; the only place a run exits |
 | `cli.rs` | The clap types, value parsers and runtime help text |
 | `arg_errors.rs` | clap's command-line errors, worded in the user's language |
 | `help_layout.rs` | clap's help headings, defaults and built-in flags, worded in the user's language |

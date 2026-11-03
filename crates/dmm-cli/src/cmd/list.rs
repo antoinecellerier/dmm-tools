@@ -24,8 +24,10 @@ fn scans_bluetooth(bluetooth: bool) -> bool {
 }
 
 /// List what is reachable: the cables on the bus, and the adapters and meters
-/// in range when `bluetooth` says the radio may be searched.
-pub(crate) fn cmd_list(bluetooth: bool) -> Result<(), Box<dyn std::error::Error>> {
+/// in range when `bluetooth` says the radio may be searched. False when the
+/// cables could not be listed and nothing else turned up: the error is
+/// printed already, and only the exit status is left to say it.
+pub(crate) fn cmd_list(bluetooth: bool) -> bool {
     let l = crate::l10n::get();
     // A HID API that cannot enumerate is no reason to skip the radio: the
     // error goes out now and the scan still runs.
@@ -88,17 +90,13 @@ pub(crate) fn cmd_list(bluetooth: bool) -> Result<(), Box<dyn std::error::Error>
         print_setup_sections(links_searched(bluetooth));
     }
     if found == 0 {
-        // Already reported above; the status still says the listing failed.
-        if cables_failed {
-            std::process::exit(1);
-        }
-        return Ok(());
+        return !cables_failed;
     }
     if found + not_heard.len() > 1 {
         let tip = tr!(l, "list-select-tip", selector = ADAPTER_SELECTOR);
         eprintln!("\n{}", style(tip).dim());
     }
-    Ok(())
+    true
 }
 
 #[cfg(test)]
