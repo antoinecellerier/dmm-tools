@@ -32,11 +32,17 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
 - Post via `gh` only when told to; the user often posts themselves. Re-read the draft file first — the user may have edited it.
 - End every reply with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
+## In a Claude Code cloud session
+
+- `gh` only searches there; the GitHub MCP tools do the rest: `issue_read` (`get`, `get_comments`) for `gh issue view`, `list_issues` / `list_pull_requests` for the lists, `add_issue_comment` for `gh issue comment`, `issue_write` for `gh issue edit`, `actions_run_trigger` for `gh workflow run`, `get_release_by_tag` for `gh release view`. Nothing renders GFM: read the draft against "Formatting for GitHub" instead of the `/markdown` check.
+- An attachment link (`github.com/user-attachments/files/…`) is refused to `curl` (403). WebFetch it: the result is a signed `objects.githubusercontent.com` redirect, valid for five minutes, which `curl -o` downloads into a new scratchpad directory.
+
 ## Establish what is known before drafting
 
 - Read the whole thread and any linked PR. Supersede stale commands quoted earlier in the thread (e.g. the `ut61eplus` → `dmm-cli` rename) in a footnote instead of repeating them.
 - Treat the reporter's observed evidence (their `lsusb`/`system_profiler` paste, the meter's beep, the LCD) as authoritative over any decompile- or manual-derived inference (PR #8: our "Communication ON is sufficient" inference was wrong; the reporter's trace proved SET_MONITOR is required).
 - Read an attached capture report with `cargo run --bin dmm-cli -- triage <report>` (add `--timeline=<steps>` for the frames, `--fixtures` for golden fixtures) before writing any script of your own (`docs/development.md`, Triaging a capture report). Extend the subcommand when a question recurs that it can't answer.
+- An `[lcd]` finding is the reporter answering `n` and typing the screen, not a decode bug until compared: leading zeros (`039.30V` against `39.30 V`) are a match, a sign or unit left out is a question for the reporter, and a range still moving when the samples were taken (`OL kΩ` against `OL MΩ`) is the capture's timing. When most `n` answers are matches, explain Enter and `n` in the reply.
 - Note which build the reporter ran (`--version`, the archive's folder name) and check that every flag, step id and quoted string exists at the commit of the build you point them at (`git grep '<string>' <sha>`).
 - Check the family's `docs/research/<family>/verification.md` (what is open), its spec's `[HARDWARE]`/`[VERIFIED]` facts (what is confirmed), `docs/verification-backlog.md` for cross-family checks, and the cable/bridge table in `docs/supported-devices.md` before asking for anything — never ask for what is already verified. Check what a doc's "confirmed" rests on before treating a report as re-confirmation (setup.md's macOS line once rested on a single CH9329 cable, so a CP2110-on-macOS report was a new data point).
 - Read the meter's manual in `references/<device>/` before theorising about its cable, modes or ranges — a lookup you perform, not an ask you send.
@@ -117,7 +123,8 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 - Reporter-verified item → delete it from the family's `verification.md` and record the result per `.claude/rules/verification-docs.md`: what the meter does as a spec fact tagged `[HARDWARE]` (`[VERIFIED]` in the UT61 specs) with the issue, the cable and `@user`; what our driver does as a code comment with the issue. Community-sourced but unrun → `per <source>`, no tag.
 - Verification issue body → updated in the same round as the reply: regenerate the checklist (`dmm-cli --device <id> capture --list-steps --format md`, never hand-edited — a verified item flips the step's `.verified()` in the code), and update the summary, and the dev-build line where it names a `dev-<sha>`. Show it, then `gh issue edit` on a go-ahead.
 - A `CHANGELOG.md` entry saying a model works or is verified, with credit, lands in the commit that records the reporter's confirmation, not before; a targeted fix with credible evidence gets its entry with the fix (`.claude/rules/changelog.md`).
-- Model meets the Verified gate → follow the sign-off in `docs/adding-devices.md` (Stability flip, golden tests, `docs/supported-devices.md`).
+- Steps flipped `.verified()` → golden fixtures in the same round, one per step whose reading the screen confirmed: `dmm-cli --device <entry id> triage <report> --fixtures`, saved under `crates/dmm-lib/tests/golden/<entry id>/` with each first line saying what the frame shows and the reporter's handle in place of `@TODO` (`docs/development.md`, Golden file tests).
+- Model meets the PartlyVerified or Verified bar in `docs/adding-devices.md` (Verification sign-off) → flip it in the same round: the profile's `stability`, `only_hardware_backed_models_are_verified` in the registry, `UPDATE_DOCS=1 cargo test -p dmm-cli` for the CLI reference's device table, the README's row and its translations' (split a shared row when the twins' statuses differ), `docs/supported-devices.md`'s row and paragraph, and the `### Devices` changelog entry crediting the reporter.
 - New unknown from the thread → the family's `verification.md`, or `docs/verification-backlog.md` when it spans families. Doc gap the reporter hit → fix it in the same commit and link it from the reply.
 - Two to three weeks of silence on an ask → one polite nudge.
 
