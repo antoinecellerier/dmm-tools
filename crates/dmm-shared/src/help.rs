@@ -475,13 +475,44 @@ impl<'a> Help<'a> {
     }
 }
 
+/// `--mock-mode`'s parser in both binaries: what `MockMode`'s own parser
+/// takes (a label or an alias, in any letter case), and anything else
+/// refused as clap refuses a value outside its list, which
+/// [`arg_errors`](crate::l10n::arg_errors) words in the user's language.
+/// `MockMode`'s own refusal is the library's English. It offers clap no
+/// possible values: `--help` lists the modes itself
+/// ([`Help::mock_mode_help`]).
+#[derive(Clone, Copy, Debug)]
+pub struct MockModeParser;
+
+impl clap::builder::TypedValueParser for MockModeParser {
+    type Value = MockMode;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<MockMode, clap::Error> {
+        if let Some(mode) = value.to_str().and_then(|s| s.parse().ok()) {
+            return Ok(mode);
+        }
+        // A label is lower case, so the parse above took any that matches:
+        // this only words the refusal.
+        let labels = MockMode::ALL.iter().map(|m| m.label());
+        clap::builder::PossibleValuesParser::new(labels)
+            .try_map(|label| label.parse::<MockMode>())
+            .parse_ref(cmd, arg, value)
+    }
+}
+
 /// `cmd`, with the `--device` and `--mock-mode` flags on it and its
 /// subcommands offering their values, for a completion script.
 ///
-/// A bad value gets our own error — `--device`'s, or the mock's list of
-/// valid modes from the `MockMode` parser — and clap's possible values would
-/// replace it with its own. So they are added only to the command a script
-/// is generated from, never to the one that parses. Aliases are left out:
+/// A bad `--device` gets our own error, and clap's possible values would
+/// replace it with its own; `--mock-mode`'s would add a second list of the
+/// modes to `--help`. So they are added only to the command a script is
+/// generated from, never to the one that parses. Aliases are left out:
 /// the ids cover every device, and `ut61e+` would need quoting. In English:
 /// a completion script outlives the language it was generated in.
 pub fn with_completion_values(mut cmd: clap::Command) -> clap::Command {
@@ -735,6 +766,47 @@ mod tests {
         assert_eq!(devices.len(), registry::listings().count() + 1);
         let read = cmd.find_subcommand_mut("read").unwrap();
         assert_eq!(values(read, "mock_mode").len(), MockMode::ALL.len());
+    }
+
+    /// `--mock-mode` takes what `MockMode`'s parser takes, and refuses the
+    /// rest as a value outside clap's list, which `arg_errors` words: no
+    /// English reason from the library, and no list in `--help`.
+    #[test]
+    fn mock_mode_parser_takes_aliases_and_words_a_refusal() {
+        let cmd = || {
+            clap::Command::new("t").arg(
+                clap::Arg::new("mock_mode")
+                    .long("mock-mode")
+                    .value_parser(MockModeParser),
+            )
+        };
+        let parse = |value: &str| {
+            cmd()
+                .try_get_matches_from(["t", "--mock-mode", value])
+                .map(|m| *m.get_one::<MockMode>("mock_mode").unwrap())
+        };
+        for value in ["dcv", "DCV", "Dc-V", "ohms", "OVERLOAD", "acv-hz"] {
+            assert_eq!(parse(value).ok(), value.parse::<MockMode>().ok(), "{value}");
+            assert!(parse(value).is_ok(), "{value}");
+        }
+        let e = parse("volts").unwrap_err();
+        assert_eq!(e.kind(), clap::error::ErrorKind::InvalidValue);
+        let rendered = crate::l10n::arg_errors::render(&e, english().0, &[]);
+        let rendered = rendered.to_string();
+        assert!(
+            rendered.starts_with(&format!(
+                "error: invalid value 'volts' for '--mock-mode <mock_mode>'\n  \
+                 [possible values: {}]\n",
+                MockMode::label_list()
+            )),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("unknown mock mode"), "{rendered}");
+        assert!(
+            cmd()
+                .get_arguments()
+                .all(|a| a.get_possible_values().is_empty())
+        );
     }
 
     #[test]

@@ -51,7 +51,7 @@ struct Args {
     device: Option<String>,
 
     /// Pin mock device to a specific mode (implies --device mock)
-    #[arg(long)]
+    #[arg(long, value_parser = dmm_shared::help::MockModeParser)]
     mock_mode: Option<dmm_lib::mock::MockMode>,
 
     /// Theme override

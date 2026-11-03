@@ -10,6 +10,7 @@ use dmm_lib::alarm::{Hysteresis, Limits};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
+use dmm_shared::help::MockModeParser;
 use dmm_shared::input;
 use dmm_shared::l10n::{self, Language, Localizer, clap_help, help_layout};
 use dmm_shared::tr;
@@ -198,7 +199,7 @@ pub(crate) enum Cmd {
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, the settings file's mock mode applies, else the
         /// mock cycles through all modes.
-        #[arg(long)]
+        #[arg(long, value_parser = MockModeParser)]
         mock_mode: Option<MockMode>,
     },
     /// Switch one of the meter's settings without touching the meter.
@@ -212,7 +213,7 @@ pub(crate) enum Cmd {
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, the settings file's mock mode applies, else the
         /// mock cycles through all modes.
-        #[arg(long)]
+        #[arg(long, value_parser = MockModeParser)]
         mock_mode: Option<MockMode>,
     },
     /// Raw hex dump mode for protocol debugging
@@ -264,7 +265,7 @@ pub(crate) struct ReadArgs {
     /// Pin mock device to a specific mode (only with --device mock).
     /// Without this, the settings file's mock mode applies, else the
     /// mock cycles through all modes.
-    #[arg(long)]
+    #[arg(long, value_parser = MockModeParser)]
     pub(crate) mock_mode: Option<MockMode>,
     /// Play back a file written by --format replay instead of opening a meter; ends with the file
     #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
