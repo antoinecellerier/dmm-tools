@@ -10,7 +10,7 @@ use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use super::alarm::PendingBreach;
 use super::connection::{
@@ -21,6 +21,10 @@ use super::connection_issue::{ConnectionIssue, NoticeKind};
 use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
 use super::{App, ConnectionState, named_device};
 use crate::settings::format_sample_count;
+
+/// How long quitting waits for the meter to be let go: a read already in
+/// flight, then the transport's own bounded disconnect.
+const EXIT_DISCONNECT_WAIT: Duration = Duration::from_secs(4);
 
 /// The meter a `Connected` identified for a session that was told none, or
 /// `None` when there is nothing to tell the user.
@@ -438,6 +442,34 @@ impl App {
         self.connection.waiting_timeouts = 0;
         self.connection.ended = false;
         self.connection.late_readings = None;
+    }
+
+    /// [`disconnect`](Self::disconnect), then wait for the acquisition
+    /// thread to end, so its transport is closed cleanly before the process
+    /// exits.
+    ///
+    /// The thread holds the only senders of the message channel and drops
+    /// its `Dmm` before them, so the channel hanging up means the transport
+    /// has closed. Returns at once when nothing is connected; a thread stuck
+    /// past [`EXIT_DISCONNECT_WAIT`] is left behind.
+    pub(super) fn disconnect_and_wait(&mut self) {
+        let Some(rx) = self.connection.rx.take() else {
+            return;
+        };
+        self.disconnect();
+        let deadline = Instant::now() + EXIT_DISCONNECT_WAIT;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            match rx.recv_timeout(left) {
+                Ok(_) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                Err(mpsc::RecvTimeoutError::Timeout) => break,
+            }
+        }
+        warn!("the acquisition thread did not stop within {EXIT_DISCONNECT_WAIT:?}");
     }
 
     /// Drop everything derived from the sample stream: graph history and
@@ -1121,6 +1153,60 @@ mod tests {
         let left: Vec<u32> = app.replay_markers.iter().map(|m| m.number).collect();
         assert_eq!(left, [3], "queued again, less the ones passed");
         assert!(app.replay_view.is_some(), "the view is queued again");
+    }
+
+    /// Quitting waits for the acquisition thread to close its transport:
+    /// the process exits as soon as `on_exit` returns.
+    #[test]
+    fn quitting_waits_for_the_meter_to_be_let_go() {
+        let mut app = app("ut61eplus", false);
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        let released = Arc::new(AtomicBool::new(false));
+        app.connection.rx = Some(msg_rx);
+        app.connection.stop_flag = Some(Arc::clone(&stop));
+        let worker = {
+            let (stop, released) = (Arc::clone(&stop), Arc::clone(&released));
+            // Readings until the stop request, then a transport slow to
+            // close, as a Bluetooth one is, before the channel hangs up.
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let _ = msg_tx.send(DmmMessage::WaitingForMeter(1));
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+                released.store(true, Ordering::Relaxed);
+                drop(msg_tx);
+            })
+        };
+        let quit = Instant::now();
+        eframe::App::on_exit(&mut app, None);
+        assert!(released.load(Ordering::Relaxed), "the meter was let go");
+        assert!(
+            quit.elapsed() < EXIT_DISCONNECT_WAIT,
+            "not left to time out"
+        );
+        worker.join().expect("the worker ends");
+    }
+
+    /// The mock's own acquisition thread ends on quit, well before the bound.
+    #[test]
+    fn quitting_stops_the_mock() {
+        let mut app = app("mock", false);
+        app.connect(&crate::app::styled_context());
+        let quit = Instant::now();
+        eframe::App::on_exit(&mut app, None);
+        assert!(app.connection.rx.is_none());
+        assert!(quit.elapsed() < EXIT_DISCONNECT_WAIT, "the thread ended");
+    }
+
+    /// With nothing connected there is nothing to wait for.
+    #[test]
+    fn quitting_unconnected_returns_at_once() {
+        let mut app = app("ut61eplus", false);
+        let quit = Instant::now();
+        eframe::App::on_exit(&mut app, None);
+        assert!(quit.elapsed() < Duration::from_millis(100));
     }
 
     /// A replay's saved view waits until the playback reaches the furthest

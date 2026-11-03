@@ -95,8 +95,11 @@ const INTERVAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 /// How long `hcitool con` may take to list the links ([`connection_handle`]).
 #[cfg(target_os = "linux")]
 const HANDLE_LOOKUP_TIMEOUT: Duration = Duration::from_secs(1);
-/// How long taking a link down may take, after a failed open or on drop.
-const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long taking a link down is waited for, after a failed open or on
+/// drop: long enough for the request to reach the stack, which carries it
+/// out without us. BlueZ takes longer than this to confirm one on the
+/// UT-D07B, and finishes it after the program has exited (research doc §3).
+const DISCONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// A peer, open and subscribed.
 pub(crate) struct Ble {

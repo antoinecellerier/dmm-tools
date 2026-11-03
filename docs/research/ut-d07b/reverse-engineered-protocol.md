@@ -134,6 +134,14 @@ Windows does not keep the link [HARDWARE]: in both sessions watched, the
 adapter was back to its waiting flash once the program had closed its
 connection.
 
+BlueZ 5.87 does keep it [HARDWARE] (2026-11-03): a client killed mid-stream
+left the link up for the 30 s it was watched, `bluetoothctl info` reporting
+`Connected: yes` each second, so a host has to ask for the disconnect itself.
+That disconnect takes BlueZ about 2.6 s to confirm (`bluetoothctl
+disconnect`), and BlueZ completes it after a client that gave up waiting has
+exited: with the client gone 2 s after its request, the link was down about
+3 s after it; gone after 0.5 s, about 2.6 s after it.
+
 ## 4. The adapter sleeps
 
 An adapter that cannot be reached is asleep, not broken [HARDWARE]. After a

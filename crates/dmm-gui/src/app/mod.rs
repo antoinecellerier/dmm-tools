@@ -1153,10 +1153,13 @@ impl eframe::App for App {
 
     /// Quitting inside a deferred save's delay still saves. Not `Drop`: tests
     /// build and drop `App`s, and must never write the real settings file.
+    /// The save goes first, so a slow disconnect never loses it.
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         if self.settings_save.take_pending() {
             self.settings.save();
         }
+        // `main` returns, and the process exits, as soon as this does.
+        self.disconnect_and_wait();
     }
 }
 
