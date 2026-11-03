@@ -277,7 +277,8 @@ pub(crate) static CMS061: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(CMS_PAGE),
     links: LINKS,
-    detection_verified: &[],
+    // A UT217A detected after a restart, #45.
+    detection_verified: &[crate::BLUETOOTH],
     bluetooth_names: NAMES_15,
 };
 

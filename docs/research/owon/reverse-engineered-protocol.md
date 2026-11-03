@@ -171,7 +171,7 @@ same for every code but 55 [VENDOR, both]. The manuals' counts are in §9.1.
 | Item | Value | Source | Tag |
 |---|---|---|---|
 | Advertised name | "BDM" by default: the app's device list shows it ("select BDM", "Click 'BDM' in the device list to pair") | B35-UM p.26/21; OW18-UM p.24/19; OW16-UM p.25/20; B33-UM p.24/19; CM2100-UM p.17/14-18/15 | [KNOWN] (cross-reference §14) |
-| Name, 15-byte meters | "BDM" in the app's list in the CMS and OW6x manuals, and on every device card and controls screen of VAPP, whose controls screen shows the VC925's key list (§10.8). Voltcraft's meter manuals say to select "VC871", "VC891" or "VCxxx"; VC-APP's screenshots show "VC8xx_1" and "VC8xx_2" | CMS101-UM p.34/29; OW65-UM p.28/23-29/24; OW67-UM p.33/28-34/29; OW69-UM p.30/25-31/26; VAPP p.6-8, p.11, p.14-15, p.20, p.22-23; VC871-UM p.92; VC891-UM p.82; VC915-UM p.88; VC925-UM p.94; VC-APP p.12, p.15 | [KNOWN]; which name a Voltcraft meter advertises out of the box is [UNVERIFIED] (cross-reference §14) |
+| Name, 15-byte meters | "BDM" in the app's list in the CMS and OW6x manuals, and on every device card and controls screen of VAPP, whose controls screen shows the VC925's key list (§10.8). Voltcraft's meter manuals say to select "VC871", "VC891" or "VCxxx"; VC-APP's screenshots show "VC8xx_1" and "VC8xx_2" | CMS101-UM p.34/29; OW65-UM p.28/23-29/24; OW67-UM p.33/28-34/29; OW69-UM p.30/25-31/26; VAPP p.6-8, p.11, p.14-15, p.20, p.22-23; VC871-UM p.92; VC891-UM p.82; VC915-UM p.88; VC925-UM p.94; VC-APP p.12, p.15 | [KNOWN]; a UT217A advertised "BDM" [HARDWARE]; which name a Voltcraft meter advertises out of the box is [UNVERIFIED] (cross-reference §14) |
 | Rename | the app can rename the meter; the name "will be memorized in the device"; "Only digits, letters and underscore can be entered". Voltcraft: "The new name is permanently stored on the multimeter" | B35-UM p.28/23; VAPP p.7 | [KNOWN]; the command is §7.2 |
 | Renamed name advertised | the app shows only advertised names in its list, and the manual says the name is stored in the meter | — | [INFERRED]; [UNVERIFIED] on a meter (cross-reference §14) |
 | Name filter | none in either program. The app shows any peer whose name, stripped to `[0-9a-zA-Z_]`, is not empty, de-duplicated by id (`device_add_view_model.dart:202-563`; `built_in_ble_device.dart:36-78`); the PC lists every advertiser by address, its name field left `""` with the comment `// "BDM"` (`kernal/Event.java:178-191`, `:188`) | app, PC | [VENDOR, both] |
@@ -762,8 +762,8 @@ size and weight are CMS061-UM's, and its jaws (31 and 38 mm) split 600 A
 and 1000 A as the CMS061 and CMS101 do [INFERRED from comparing the
 manuals]. UNI-T files the manual as material from an outside vendor, and
 its UT217 app is OWON's (approach, source 9) [VENDOR, UNI-T]. UNI-T's
-product page gives 20000 counts for both. The model code a UT217 sends on
-FFF2 is [UNVERIFIED].
+product page gives 20000 counts for both. A UT217A sends model code 61 on
+FFF2, the CMS061's (§12.2) [HARDWARE]; the UT217B's code is [UNVERIFIED].
 
 | | CMS101, CMS061 | OW65B | OW67B, VC871 | OW69B, VC891 | VC915 | VC925 PV |
 |---|---|---|---|---|---|---|
@@ -797,7 +797,11 @@ VC915-UM p.88, VC925-UM p.94. Also [KNOWN]:
 - **CMS scope mode.** The power key toggles DMM and oscilloscope; the scope
   is one channel, 5 MSa/s (CMS101-UM p.30/25-33/28, p.37/32). Whether
   Bluetooth streams in scope mode is not stated; the ᛒ icon is part of the
-  scope's status bar (p.31/26).
+  scope's status bar (p.31/26). A UT217A keeps streaming in scope mode,
+  each frame with OSC (§10.6) set and main function 15 at prefix 4, decimal
+  code 2, G24 bit 12 clear (bytes 6-8 hold the stale Hz word other modes
+  carry), while its LCD showed "00.04A --- Hz" [HARDWARE]; what function 15
+  names there is [UNVERIFIED].
 - **VC925 PV adaptor.** The VC925 PV searches for and connects to its
   LX-925 irradiance adaptor over Bluetooth, "Default adaptor name: "PV adaptor VC92"", from
   the PV position's Find page (VC925-UM p.89-90, p.92). In VAPP, F2 (APPS) or
@@ -834,7 +838,11 @@ p.71).
 
 **Sub-display.** MAX/MIN shows the live value and REL the reference on
 the OW65, OW67 and VC871, while the CMS's MaxMin row shows Min, Max and Avg
-(CMS101-UM p.27/22); the frequency or duty beside AC V and Hz; W with VA, V, A, PF
+(CMS101-UM p.27/22). A UT217A sends REL's reference as its sub-value, and
+in MaxMin the live value as the main reading, status bit 5 (MAX) and one
+DC V sub-value, 39.36 V beside a live 39.30 V [HARDWARE]; which of Min, Max
+and Avg that is, is [UNVERIFIED]. In Hz it sends Hz as the main reading and
+duty as the sub-value, and in duty the two swapped [HARDWARE]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
 or Hz on the power functions; VAC or VDC beside AC+DC (VC915-UM p.73); the
 voltage in Motor (p.76); irradiance or temperature in PV mode (VC925-UM
 p.69). Cites: OW65-UM p.26/21-27/22; OW67-UM p.14/9, p.27/22-32/27;
@@ -887,11 +895,14 @@ included (§10.10) [VENDOR, app]. The VC831 and VC851 have no Bluetooth
 
 Each notification is cut into 15-byte chunks and a shorter remainder dropped
 (BM:367-399); nothing is kept between notifications, so a frame split across
-two is lost to the app (BM:357-405) [VENDOR, app]. Whether a meter ever
-splits one, or sends several per notification, is [UNVERIFIED]
-(cross-reference §14). A chunk whose byte 14 is `FF` is skipped (BM:399-405); that
-the byte tested is the last is [INFERRED from the listing selector read as
-`last`]. Whether real frames end in `FF` filler is [UNVERIFIED].
+two is lost to the app (BM:357-405) [VENDOR, app]. A UT217A sends one whole
+frame per notification, about every 195 ms, none ending in `FF`, and sets
+none of G24 bits 11 and 13-15 or V24 bit 19 in any mode it ran (§10.3,
+§10.4) [HARDWARE]; whether another model splits a frame, or sends several
+per notification, is [UNVERIFIED] (cross-reference §14). A chunk whose byte
+14 is `FF` is skipped (BM:399-405); that the byte tested is the last is
+[INFERRED from the listing selector read as `last`]. Whether any meter's
+frames end in `FF` filler is [UNVERIFIED].
 
 | Bytes | Field |
 |---|---|
@@ -987,6 +998,9 @@ PE:3534-3917. Each set bit's name is shown as a chip on the control page
 frame (PE:3447-3533). With OSC set, the app neither charts the reading nor
 keeps it in record lists (PE:6334-6393, :6505-6554;
 `data_logger_client.dart:44-113`) [VENDOR, app].
+
+A UT217A sets bit 17 in its Inrush mode and bit 18 in scope mode
+(§9.4) [HARDWARE].
 
 ### 10.7 VC871 (code 87)
 
@@ -1111,6 +1125,16 @@ Decode [INFERRED, from §4]: code 0x12 = 18 (app OW18B, PC `OW18_16`),
 battery 0x63 = 99 % (PC), firmware 4.0.9 (≥ 12, so `*READ1?` and the dated
 header), byte 5 `00`: offline record supported, not recording. Bytes 6-15
 are `00`, read by neither program.
+
+A UT217A's FFF2 value, 16 bytes [HARDWARE]:
+
+```
+3D 00 01 04 00 00 00 00 00 00 00 00 00 00 00 00
+```
+
+Decode [INFERRED, from §4]: code 0x3D = 61 (CMS061, so the UT217A is
+OWON's CMS061 on the wire), byte 1 `00`, firmware 1.4.0 by the app's reading,
+byte 5 `00`.
 
 ### 12.3 OWON's key press
 

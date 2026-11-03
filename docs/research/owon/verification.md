@@ -24,7 +24,8 @@ and each still wants a capture of our own.
 
 - The advertised name, a GATT discovery, the FFF2 value and a few seconds of
   raw FFF4 notifications in DC V with the LCD noted — settles most items
-  below at once. Needs any model.
+  below at once. Needs any 6-byte model (a UT217A's covers the 15-byte
+  frame, #45).
 - A first confirmed report per model — gates the spec tables (range,
   resolution, accuracy), which wait for a first hardware capture; the
   manuals and product pages disagree in places (approach doc, "Source
@@ -209,15 +210,15 @@ and each still wants a capture of our own.
 
 ## 15-byte frame
 
-- A first trace per 15-byte model in DC V — settles [§10.2](reverse-engineered-protocol.md#102-framing)'s
+- A first trace per 15-byte model in DC V but the CMS061 — settles [§10.2](reverse-engineered-protocol.md#102-framing)'s
   frames per notification and `FF` skip, G24 bits 11 and 13-23 and V24 bit 19
-  (as on a VC871, §14.2, §14.4). With no model code read, a read waits for
-  two frames whole in their notifications before it trusts either frame
-  kind. Needs the gate steps on each.
-- FFF2 byte 0 per 15-byte model: 101, 61, 65, 67, 69, 87, 89, 91, 92 by the
-  app's names ([§10.1](reverse-engineered-protocol.md#101-models)), and
-  whether a UT217B/UT217A sends 101/61 (§9.4) — decides which entry
-  detection opens. Needs `dmm-cli info` on each.
+  (as on a VC871, §14.2, §14.4) for that model. With no model code read, a
+  read waits for two frames whole in their notifications before it trusts
+  either frame kind. Needs the gate steps on each.
+- FFF2 byte 0 per 15-byte model: 101, 65, 67, 69, 87, 89, 91, 92 by the
+  app's names ([§10.1](reverse-engineered-protocol.md#101-models); 61 on a
+  UT217A, §12.2), and whether a UT217B sends 101 (§9.4) — decides which
+  entry detection opens. Needs `dmm-cli info` on each.
 - The advertised name of a Voltcraft meter out of the box: "BDM", "VC871",
   "VC891", "VCxxx" or "VC8xx_1" (§2; Windows listed a VC871 as "VC871",
   §14.4) — decides the entries' names, "BDM", "VC8" and "VC9" today. Needs
@@ -240,9 +241,9 @@ and each still wants a capture of our own.
   §10.3 bit 12 and §10.7. Needs `rel`, `max`, `min`, `hz`, `acv_freq` and
   the power steps on a VC871 and an OW67B.
 - Status bits 6-18 per mode on a 15-byte meter (§6.6, §10.6; AC and DC
-  bits seen on a VC871, §14.4): LoZ, LPF, Peak and the CMS's Inrush —
-  decides their names and the mode names they add. Needs `loz`, `acv_lpf`,
-  `acv_peak`, `inrush` and `minmax_hold`.
+  bits seen on a VC871, §14.4; Inrush on a UT217A, §10.6): LoZ, LPF and
+  Peak — decides their names and the mode names they add. Needs `loz`,
+  `acv_lpf`, `acv_peak` and `minmax_hold`.
 - Status bit 16 as the wrong-socket warning (§10.6; set after a VC871's
   dial moved from mA to A, §14.4) — settles the lead-error flag. Needs
   `check_input` on a VC871 or VC891.
@@ -263,9 +264,16 @@ and each still wants a capture of our own.
 - Whether a meter streams and keeps its clock with no `#TIMEsync` written
   (§10.8) — decides whether a client may skip it. Needs an OW67B/69B or a
   VC871/891/915/925.
-- Whether Bluetooth streams in the CMS's scope mode, and what OSC (bit 18)
-  marks ([§9.4](reverse-engineered-protocol.md#94-the-15-byte-meters)) —
-  decides the scope mode's readings. Needs `scope` on a CMS101 or CMS061.
+- What main function 15 names in the CMS's scope mode, read as VA while a
+  UT217A showed A ([§9.4](reverse-engineered-protocol.md#94-the-15-byte-meters))
+  — decides the scope readings' unit. Needs `scope` from DC V on a battery
+  and from AC A, the LCD noted, on a CMS101 or CMS061.
+- Which of Min, Max and Avg the CMS's MaxMin sends as its sub-value (§9.4;
+  39.36 V beside a live 39.30 V on a UT217A) — decides the sub-value's
+  label. Needs `maxmin` with the three values on the LCD noted.
+- On the CMS, which reading is the large digits in Hz/A: the frames make
+  Hz the main reading, as in Hz/V, whose LCD showed the frequency (§9.4) —
+  decides whether the decoder swaps them. Needs `aca_hz` with an LCD photo.
 - Bluetooth off and idle-off on each model (OW67B 5 min; the others not
   stated, §9.4) — decides whether a long session ends by itself. Needs a
   connected meter left idle.

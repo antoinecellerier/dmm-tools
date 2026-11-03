@@ -295,7 +295,8 @@ impl Protocol for OwonProtocol {
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         // The extractors never fail, so the recovery mode only matters for
         // the stream check below, and its error goes out. About 2 frames a
-        // second arrive (spec §5, §14.4), several inside read_frame's 2 s.
+        // second arrive (spec §5, §14.4), 5 on a UT217A (§10.2), several
+        // inside read_frame's 2 s.
         let (opened, aligned) = (self.model, self.aligned);
         let kind = opened.frame;
         // Checked once per read: a frame `kept` turns down may leave fewer

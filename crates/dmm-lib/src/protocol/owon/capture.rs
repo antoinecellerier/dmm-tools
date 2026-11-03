@@ -42,7 +42,7 @@ pub(super) fn steps(code: u8) -> Vec<CaptureStep> {
         35 => (b35t_plus(), b35_b41_keys()),
         41 => (b41t_plus(), b35_b41_keys()),
         21 => (cm2100b(), cm2100b_keys()),
-        101 | 61 => (cms(), cms_keys()),
+        101 | 61 => (cms(code), cms_keys()),
         65 => (ow65b(), ow65b_keys()),
         67 => (ow67b(), ow67b_keys()),
         69 => (ow69b(), ow69b_keys()),
@@ -1108,9 +1108,10 @@ const LEAD_ERROR: &[(Flag, bool)] = &[(Flag::LeadError, true)];
 /// MaxMin, Rel, Inrush and Hz/A on AC A, and Hz/V on AC V (p.14/9,
 /// p.27/22). ▲ and ▼ go to manual range and A back to auto (p.11/6). Current
 /// is the jaws only; HOLD held zeroes DC A (p.13/8, p.18/13). The power key
-/// switches between the multimeter and the oscilloscope (p.13/8); whether
-/// Bluetooth streams there is open (spec §9.4).
-fn cms() -> Vec<CaptureStep> {
+/// switches between the multimeter and the oscilloscope (p.13/8), where
+/// Bluetooth keeps streaming (spec §9.4). The CMS061's [`CMS061_VERIFIED`]
+/// steps are confirmed; `code` is the entry's model code.
+fn cms(code: u8) -> Vec<CaptureStep> {
     let mut steps = steps::gate_steps(
         Volts::DcV,
         CaptureStep::basic(
@@ -1242,8 +1243,44 @@ fn cms() -> Vec<CaptureStep> {
         )
         .wait_for_enter(),
     ]);
+    if code == 61 {
+        for step in &mut steps {
+            step.verified = CMS061_VERIFIED.contains(&step.id);
+        }
+    }
     steps
 }
+
+/// The steps a UT217A (the CMS061) confirmed, #45: the readings decoded as
+/// its LCD showed them. Its OL was sampled mid-autorange, but its frames
+/// settle at OL MΩ, as the LCD showed. Hz and duty rest on the same LCD
+/// text, Hz first: only the hz step decodes in that order. Its negative
+/// DC V, MaxMin's sub-value, duty, Hz/A, NCV and the scope wait for a second
+/// capture.
+const CMS061_VERIFIED: &[&str] = &[
+    "dcv",
+    "dcv_short",
+    "ohm_ol",
+    "ohm_body",
+    "ohm_short",
+    "hold",
+    "manual_range",
+    "range_auto",
+    "rel",
+    "maxmin_exit",
+    "dcmv",
+    "acv",
+    "acv_hz",
+    "acmv",
+    "cont",
+    "diode",
+    "cap",
+    "hz",
+    "dca",
+    "dca_zero",
+    "aca",
+    "inrush",
+];
 
 /// The CMS entries' keys: Select, Range, Hold, Rel, Hz/Duty, Max/Min and
 /// Inrush, all taps (spec §10.8). The CMS has no SELECT key and no key
@@ -2730,12 +2767,14 @@ mod tests {
     }
 
     #[test]
-    fn the_gate_leads_and_nothing_is_verified() {
+    fn the_gate_leads_and_only_the_cms061_is_verified() {
         for (code, _) in entries() {
             let steps = steps(code);
             assert!(steps[..6].iter().all(|s| s.gate), "{code}");
             assert!(steps[6..].iter().all(|s| !s.gate), "{code}");
-            assert!(steps.iter().all(|s| !s.verified), "{code}");
+            let verified: Vec<&str> = steps.iter().filter(|s| s.verified).map(|s| s.id).collect();
+            let want: &[&str] = if code == 61 { CMS061_VERIFIED } else { &[] };
+            assert_eq!(verified, want, "{code}");
             let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
             ids.sort_unstable();
             ids.dedup();
