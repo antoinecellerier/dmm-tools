@@ -145,12 +145,22 @@ pub(super) fn on_frame(ui: &mut egui::Ui, fill: egui::Color32) {
     }
 }
 
-impl App {
-    /// Read the user's themes folder on a thread of its own: a folder on a
-    /// slow or network home costs a moment before the chips update, never a
-    /// frame. One read at a time.
-    pub(super) fn start_theme_scan(&mut self, ctx: &egui::Context) {
-        if self.theme_scan.is_some() {
+/// A read of the user's themes folder on a thread of its own: a folder on a
+/// slow or network home costs a moment before the chips update, never a
+/// frame. One read at a time.
+#[derive(Default)]
+pub(super) struct ThemeScan {
+    /// The read in flight; `None` once its result is taken in.
+    rx: Option<std::sync::mpsc::Receiver<Option<crate::theme::named::ThemeCatalog>>>,
+    /// The app changed the folder since the read in flight started, so the
+    /// read may not have seen it and is dropped rather than taken in over it.
+    stale: bool,
+}
+
+impl ThemeScan {
+    /// Start a read, unless one is already under way.
+    pub(super) fn start(&mut self, ctx: &egui::Context) {
+        if self.rx.is_some() {
             return;
         }
         let Some(dir) = crate::theme::named::user_dir() else {
@@ -163,27 +173,39 @@ impl App {
             let _ = tx.send(catalog);
             ctx.request_repaint();
         });
-        self.theme_scan = Some(rx);
-        self.theme_scan_started_at = self.theme_folder_writes;
+        self.rx = Some(rx);
+        self.stale = false;
     }
 
+    /// The app itself wrote to the themes folder: a read already under way
+    /// is dropped when it finishes.
+    pub(super) fn folder_written(&mut self) {
+        self.stale = true;
+    }
+
+    /// The catalog of a read that finished and is not stale.
+    fn poll(&mut self) -> Option<crate::theme::named::ThemeCatalog> {
+        let result = match self.rx.as_ref()?.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        self.rx = None;
+        if self.stale {
+            return None; // Started before a save it can't have seen.
+        }
+        if result.is_none() {
+            log::error!("reading the themes folder failed; keeping the themes already read");
+        }
+        result
+    }
+}
+
+impl App {
     /// Take in a finished read of the themes folder: new chips, and new
     /// colours if the theme in use was edited.
     pub(super) fn poll_theme_scan(&mut self) {
-        let Some(rx) = &self.theme_scan else {
-            return;
-        };
-        let result = match rx.try_recv() {
-            Ok(result) => result,
-            Err(std::sync::mpsc::TryRecvError::Empty) => return,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
-        };
-        self.theme_scan = None;
-        if self.theme_scan_started_at != self.theme_folder_writes {
-            return; // Started before a save it can't have seen.
-        }
-        let Some(catalog) = result else {
-            log::error!("reading the themes folder failed; keeping the themes already read");
+        let Some(catalog) = self.theme_scan.poll() else {
             return;
         };
         if catalog != *self.settings.user_themes {

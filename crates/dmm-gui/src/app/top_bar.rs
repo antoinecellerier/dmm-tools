@@ -493,7 +493,7 @@ impl App {
             self.settings_open = !self.settings_open;
             if self.settings_open {
                 // A theme file dropped or edited since shows on the Theme row.
-                self.start_theme_scan(ui.ctx());
+                self.theme_scan.start(ui.ctx());
             }
         }
 

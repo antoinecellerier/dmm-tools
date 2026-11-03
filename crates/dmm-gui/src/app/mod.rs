@@ -392,15 +392,8 @@ pub struct App {
     /// The languages on offer and what follows the one spoken.
     speech: language::Speech,
     pub(super) settings_open: bool,
-    /// A read of the user's themes folder in flight, started when Settings
-    /// opens; `None` once its result is taken in.
-    theme_scan: Option<std::sync::mpsc::Receiver<Option<crate::theme::named::ThemeCatalog>>>,
-    /// Bumped by every change the app itself makes to the themes folder, so
-    /// a read started before one — which would not have seen it — is
-    /// dropped rather than taken in over it.
-    theme_folder_writes: u64,
-    /// `theme_folder_writes` when the read in flight started.
-    theme_scan_started_at: u64,
+    /// Reads of the user's themes folder, started when Settings opens.
+    theme_scan: appearance::ThemeScan,
     /// A settings write waiting for a control to stop moving (colour edits).
     settings_save: DeferredSave,
 
@@ -551,9 +544,7 @@ impl App {
             l10n: crate::l10n::english(),
             speech: language::Speech::default(),
             settings_open: false,
-            theme_scan: None,
-            theme_folder_writes: 0,
-            theme_scan_started_at: 0,
+            theme_scan: appearance::ThemeScan::default(),
             settings_save: DeferredSave::default(),
             connection: Connection::default(),
             last_measurement: None,

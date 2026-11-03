@@ -194,7 +194,7 @@ impl App {
         // The catalog takes the file at once, so the switch below lands on
         // it; the next read of the folder finds the same, and one already
         // under way, which might not, is dropped.
-        self.theme_folder_writes += 1;
+        self.theme_scan.folder_written();
         let mut catalog = (*self.settings.user_themes).clone();
         catalog.themes.retain(|t| t.file.as_deref() != Some(&file));
         catalog.skipped.retain(|(f, _)| *f != file);
