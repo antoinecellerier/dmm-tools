@@ -18,7 +18,7 @@ egui_commonmark = "0.26"
 # egui_system_font_provider 0.37 (already in the tree through eframe).
 # On an egui update, check whether upstream now asks the language's own
 # font first (docs/future-improvements.md, "Localization follow-ups").
-fontique = "0.11"
+fontique = "0.12"
 skrifa = "0.46"
 sys-locale = "0.3"
 unicode-script = "0.5"
