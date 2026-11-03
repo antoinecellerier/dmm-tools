@@ -52,6 +52,18 @@ capture-status-partly-verified-detail = The modes still unconfirmed are what thi
 capture-status-experimental = experimental — the protocol is reverse-engineered, not confirmed
 capture-status-experimental-detail = Please complete as many steps as possible and share the report.
 
+## The meter names another model than the one the run opened (a CMS061
+## opened as a CMS101): asked before the report file is touched, so the
+## operator can run again with the right meter. $named and $opened are
+## meter names; $id is the --device id that opens the named one.
+
+# Yellow and bold, after the status banner.
+capture-other-model = The meter reports itself as the { $named }, not the { $opened } this run opened.
+capture-other-model-detail = Its steps and remote keys would be the { $opened }'s.
+# $yes and $no are the keys that answer: y and n. Any other key quits.
+capture-other-model-confirm = Capture it as the { $opened } anyway? { $yes }/{ $no }:
+capture-other-model-rerun = Run the capture again with --device { $id }.
+
 ## A report from an earlier run is already in the file: resume it, start
 ## again or stop. Each prompt waits for one key, after a space.
 

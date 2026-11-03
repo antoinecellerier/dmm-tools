@@ -89,6 +89,13 @@ pub(crate) fn cmd_capture(
     };
 
     let input = Input::start();
+    if let Some(named) = dmm.named_other_model() {
+        let opened = crate::open::meter_listing(device);
+        let named = dmm_lib::protocol::registry::named_under_pick(Some(opened), named);
+        if !session::confirm_other_model(&input, opened, named)? {
+            return Ok(());
+        }
+    }
     let (mut report, output_path) =
         match load_or_create_report(output_override, device.id, plan_path.as_deref(), &input)? {
             Some(pair) => pair,

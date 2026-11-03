@@ -4,7 +4,7 @@
 use super::step::{DETECTION_STEP_ID, FREEFORM_STEP_ID};
 use clap::ValueEnum;
 use console::style;
-use dmm_lib::protocol::registry::SelectableDevice;
+use dmm_lib::protocol::registry::{Listing, SelectableDevice};
 
 /// How `capture --list-steps` prints the step list. `Md` is the checklist the
 /// device verification issues carry, so the issue and the code can't drift.
@@ -24,16 +24,20 @@ pub(crate) enum StepListFormat {
 pub(crate) fn list_steps(device: &'static SelectableDevice, format: StepListFormat) {
     let protocol = (device.new_protocol)();
     let steps = protocol.capture_steps();
+    // The row picked: a UT217A pick is told `--device ut217a`, not the
+    // CMS061 entry it opens.
+    let listing = crate::open::meter_listing(device);
     match format {
-        StepListFormat::Text => eprint!("{}", render_step_list(device, &steps)),
+        StepListFormat::Text => eprint!("{}", render_step_list(listing, &steps)),
         // stdout: the checklist is meant to be piped or pasted into the issue.
-        StepListFormat::Md => print!("{}", render_step_checklist(device, &steps)),
+        StepListFormat::Md => print!("{}", render_step_checklist(listing, &steps)),
     }
 }
 
-/// The one-line ask a reporter runs to cover what hardware has not confirmed.
-fn unverified_ask(device: &'static SelectableDevice) -> String {
-    format!("dmm-cli --device {} capture --unverified", device.id)
+/// The one-line ask a reporter runs to cover what hardware has not confirmed,
+/// by the id the meter was picked as.
+fn unverified_ask(listing: Listing) -> String {
+    format!("dmm-cli --device {} capture --unverified", listing.id())
 }
 
 /// How many of `steps` still lack hardware evidence.
@@ -43,14 +47,12 @@ fn unverified_count(steps: &[dmm_lib::protocol::CaptureStep]) -> usize {
 
 /// The human listing: a mark per step, so reporter and maintainer read the
 /// same verification state, and the ask that covers what is left.
-fn render_step_list(
-    device: &'static SelectableDevice,
-    steps: &[dmm_lib::protocol::CaptureStep],
-) -> String {
+fn render_step_list(listing: Listing, steps: &[dmm_lib::protocol::CaptureStep]) -> String {
+    let device = listing.device;
     let mut out = format!(
         "{} {}\n\n",
         style("Available capture steps for").bold(),
-        style(crate::open::meter_name(device)).bold().cyan()
+        style(listing.display_name()).bold().cyan()
     );
     if steps.is_empty() {
         out.push_str("  This device declares no capture steps.\n");
@@ -95,7 +97,7 @@ fn render_step_list(
     if unverified > 0 {
         out.push_str(&format!(
             "Run only those with: {}\n",
-            unverified_ask(device)
+            unverified_ask(listing)
         ));
     }
     out
@@ -116,16 +118,13 @@ fn detection_confirmed(device: &SelectableDevice) -> String {
 
 /// The checklist the device verification issues carry, generated so the issue
 /// and the step list cannot drift. No colour: it is pasted into GitHub.
-fn render_step_checklist(
-    device: &'static SelectableDevice,
-    steps: &[dmm_lib::protocol::CaptureStep],
-) -> String {
+fn render_step_checklist(listing: Listing, steps: &[dmm_lib::protocol::CaptureStep]) -> String {
     let mut out = String::from("## What needs verification\n\n");
     for s in steps {
         let mark = if s.verified { 'x' } else { ' ' };
         out.push_str(&format!("- [{mark}] `{}` — {}\n", s.id, s.instruction));
     }
-    out.push_str(&format!("\n```bash\n{}\n```\n", unverified_ask(device)));
+    out.push_str(&format!("\n```bash\n{}\n```\n", unverified_ask(listing)));
     out
 }
 
@@ -232,12 +231,33 @@ mod tests {
         dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry has the UT61E+")
     }
 
+    fn row(id: &str) -> Listing {
+        dmm_lib::protocol::registry::find_listing(id).expect("registry has the row")
+    }
+
+    /// A meter picked by another brand's name is asked for by that name, in
+    /// the heading and the ask: `ut217a`, not the `cms061` entry it opens.
+    #[test]
+    fn a_rebrand_pick_is_listed_and_asked_for_by_its_own_name() {
+        let steps = vec![lib_step("dcv", false, true)];
+        let out = console::strip_ansi_codes(&render_step_list(row("ut217a"), &steps)).into_owned();
+        assert!(out.contains("UNI-T UT217A"), "{out}");
+        assert!(
+            out.contains("dmm-cli --device ut217a capture --unverified"),
+            "{out}"
+        );
+        assert!(
+            render_step_checklist(row("ut217a"), &steps)
+                .contains("dmm-cli --device ut217a capture --unverified")
+        );
+    }
+
     /// The issue checklist is generated, so its shape is asserted line by line.
     #[test]
     fn markdown_listing_is_the_issue_checklist() {
         let steps = vec![lib_step("dcv", true, true), lib_step("temp", false, false)];
         assert_eq!(
-            render_step_checklist(ut61eplus(), &steps),
+            render_step_checklist(row("ut61eplus"), &steps),
             "## What needs verification\n\
              \n\
              - [x] `dcv` — do the thing\n\
@@ -252,7 +272,8 @@ mod tests {
     #[test]
     fn text_listing_marks_each_step_and_asks_for_what_is_left() {
         let steps = vec![lib_step("dcv", true, true), lib_step("temp", false, false)];
-        let out = console::strip_ansi_codes(&render_step_list(ut61eplus(), &steps)).into_owned();
+        let out =
+            console::strip_ansi_codes(&render_step_list(row("ut61eplus"), &steps)).into_owned();
         assert!(out.contains("\u{2713} dcv"), "{out}");
         assert!(out.contains("\u{b7} temp"), "{out}");
         assert!(out.contains("gate"), "{out}");
@@ -267,7 +288,8 @@ mod tests {
     #[test]
     fn text_listing_omits_the_ask_when_nothing_is_unverified() {
         let steps = vec![lib_step("dcv", true, false)];
-        let out = console::strip_ansi_codes(&render_step_list(ut61eplus(), &steps)).into_owned();
+        let out =
+            console::strip_ansi_codes(&render_step_list(row("ut61eplus"), &steps)).into_owned();
         assert!(out.contains("0 of 1 steps still unverified."), "{out}");
         assert!(!out.contains("--unverified\n"), "{out}");
     }

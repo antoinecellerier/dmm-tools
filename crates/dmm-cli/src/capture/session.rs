@@ -15,6 +15,7 @@ use super::step::{
 };
 use crate::open::BoxedDmm;
 use console::style;
+use dmm_lib::protocol::registry;
 use dmm_lib::protocol::{Need, Stability};
 use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
@@ -157,6 +158,58 @@ pub(super) fn verify_meter(
         reported.unwrap_or_else(|| "unknown".to_string()),
         stability.is_verified(),
     ))
+}
+
+/// A meter that names another model than the one the run opened, `opened`:
+/// say so and ask whether to go on, so an operator who missed the connect
+/// warning can run again with the named model's `--device` before any step
+/// is captured (#45). Returns whether to go on; anything but `y` stops.
+pub(super) fn confirm_other_model(
+    input: &Input,
+    opened: registry::Listing,
+    named: registry::Listing,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let l = crate::l10n::get();
+    let (opened_name, named_name) = (
+        l.label(TextKind::Model, opened.display_name()),
+        l.label(TextKind::Model, named.display_name()),
+    );
+    eprintln!(
+        "{}",
+        style(tr!(
+            l,
+            "capture-other-model",
+            named = named_name.as_ref(),
+            opened = opened_name.as_ref()
+        ))
+        .yellow()
+        .bold()
+    );
+    eprintln!(
+        "{}",
+        tr!(
+            l,
+            "capture-other-model-detail",
+            opened = opened_name.as_ref()
+        )
+    );
+    let answer = input.key(&format!(
+        "{} ",
+        tr!(
+            l,
+            "capture-other-model-confirm",
+            opened = opened_name.as_ref(),
+            yes = "y",
+            no = "n"
+        )
+    ))?;
+    if matches!(answer, 'y' | 'Y') {
+        eprintln!();
+        return Ok(true);
+    }
+    eprintln!("{}", tr!(l, "capture-other-model-rerun", id = named.id()));
+    eprintln!("{}", tr!(l, "capture-aborted"));
+    Ok(false)
 }
 
 /// What the protocol pass left behind: whether the operator asked to finish,
@@ -599,6 +652,51 @@ mod tests {
     use super::*;
     use crate::capture::report::ConfirmedBy;
     use crate::capture::step::cli_step;
+
+    fn typed(keys: &[console::Key]) -> Input {
+        let (tx, input) = Input::typed();
+        for key in keys {
+            tx.send(key.clone()).unwrap();
+        }
+        // Keep the channel open: a closed one reads as a keyboard gone away.
+        std::mem::forget(tx);
+        input
+    }
+
+    /// A UT217A opened as a CMS101 (#45): only `y` captures it as the
+    /// CMS101; `n`, Enter or another key stops before the report is touched.
+    #[test]
+    fn a_meter_naming_another_model_captures_only_on_yes() {
+        use console::Key;
+        let opened = registry::find_listing("cms101").unwrap();
+        let named = registry::find_listing("cms061").unwrap();
+        for (key, go_on) in [
+            (Key::Char('y'), true),
+            (Key::Char('Y'), true),
+            (Key::Char('n'), false),
+            (Key::Enter, false),
+            (Key::Char('q'), false),
+        ] {
+            let input = typed(std::slice::from_ref(&key));
+            assert_eq!(
+                confirm_other_model(&input, opened, named).unwrap(),
+                go_on,
+                "{key:?}"
+            );
+        }
+    }
+
+    /// The model offered is the one the meter names, under the brand picked:
+    /// a UT217B pick on a meter sending the CMS061's code is told `ut217a`.
+    #[test]
+    fn the_model_offered_keeps_the_picked_brand() {
+        let picked = registry::find_listing("ut217b").unwrap();
+        let named = registry::find_device("cms061").unwrap();
+        assert_eq!(
+            registry::named_under_pick(Some(picked), named).id(),
+            "ut217a"
+        );
+    }
 
     /// The freeform prompt takes a description, so only `q` itself finishes
     /// the run: any word starting with `q` used to, and "quick check on Ω"
