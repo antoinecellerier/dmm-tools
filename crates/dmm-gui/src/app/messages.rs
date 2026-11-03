@@ -2,7 +2,6 @@
 //! the messages the device thread sends, and drawing the connection help the
 //! reading column shows when there is nothing to read.
 
-use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
@@ -370,22 +369,18 @@ impl App {
                 thread_ctx,
             );
         } else if let Some(device) = device_entry.filter(|d| !d.requires_hardware) {
-            let mock_mode: Option<MockMode> = if self.settings.shared.mock_mode.is_empty() {
-                None
-            } else {
-                match self.settings.shared.mock_mode.parse() {
-                    Ok(mode) => Some(mode),
-                    // Only a hand-edited settings file reaches this: clap
-                    // rejects a bad `--mock-mode` and the Settings row writes
-                    // labels. Auto-cycling silently looked like the pin was
-                    // ignored, so say so — the toast takes the first line and
-                    // the log the mode list that follows it.
-                    Err(message) => {
-                        warn!("{message}");
-                        let headline = message.lines().next().unwrap_or_default().to_string();
-                        self.toast = Some(Toast::error(headline));
-                        None
-                    }
+            let mock_mode = match self.settings.shared.mock_mode() {
+                Ok(mode) => mode,
+                // Only a hand-edited settings file reaches this: clap
+                // rejects a bad `--mock-mode` and the Settings row writes
+                // labels. Auto-cycling silently looked like the pin was
+                // ignored, so say so — the toast takes the first line and
+                // the log the mode list that follows it.
+                Err(message) => {
+                    warn!("{message}");
+                    let headline = message.lines().next().unwrap_or_default().to_string();
+                    self.toast = Some(Toast::error(headline));
+                    None
                 }
             };
             thread_ctx.simulated = true;
