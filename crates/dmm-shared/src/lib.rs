@@ -146,12 +146,15 @@ fn appdata_config_path(appdata: &Path) -> PathBuf {
 
 /// Write `bytes` to `path` so that a crash, kill or full disk mid-write leaves
 /// either the old file or the new one, never a torn file: the bytes go to
-/// `<path>.tmp` (same directory, same filesystem), are synced, then renamed
-/// over `path`.
+/// `<path>.<pid>.tmp` (same directory, same filesystem), are synced, then
+/// renamed over `path`. The pid keeps two processes saving the same file (two
+/// dmm-gui windows) off each other's half-written temp file.
 ///
 /// The parent directory is created if missing. If anything fails after the
 /// temp file was created it is removed on a best-effort basis, so a failed
-/// save doesn't litter the directory with `.tmp` files.
+/// save doesn't litter the directory with `.tmp` files. A temp file left by a
+/// crashed process stays, though: the next write has another pid, so it never
+/// looks at that name.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let Some(file_name) = path.file_name() else {
         return Err(io::Error::new(
@@ -166,19 +169,20 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    // `settings.json` -> `settings.json.tmp`: append rather than replace the
-    // extension, so a name that already has one keeps it (and two different
-    // files in the same directory can't collide on a shared temp name).
+    // `settings.json` -> `settings.json.<pid>.tmp`: append rather than replace
+    // the extension, so a name that already has one keeps it (and two
+    // different files in the same directory can't collide on a shared temp
+    // name).
     let mut tmp_name = file_name.to_os_string();
-    tmp_name.push(".tmp");
+    tmp_name.push(format!(".{}.tmp", std::process::id()));
     let tmp = path.with_file_name(tmp_name);
 
     fn write_and_sync(tmp: &Path, bytes: &[u8]) -> io::Result<()> {
-        // A `.tmp` already there is a crash's leftover, or something planted:
-        // a link to another file, which `File::create` would follow and
-        // truncate. Remove it (the link, not what it points at) and create
-        // the temp file exclusively, which never follows a link and fails if
-        // one is put back in between.
+        // A temp file already there is the leftover of a crashed process that
+        // had the same pid, or something planted: a link to another file,
+        // which `File::create` would follow and truncate. Remove it (the link,
+        // not what it points at) and create the temp file exclusively, which
+        // never follows a link and fails if one is put back in between.
         let _ = fs::remove_file(tmp);
         let mut file = fs::OpenOptions::new()
             .write(true)
@@ -310,6 +314,11 @@ mod tests {
         }
     }
 
+    /// The temp file `write_atomic` uses for `file_name` in this process.
+    fn temp_name(file_name: &str) -> String {
+        format!("{file_name}.{}.tmp", std::process::id())
+    }
+
     #[test]
     fn write_atomic_round_trips() {
         let dir = TempDir::new("round-trip");
@@ -323,7 +332,7 @@ mod tests {
         );
         // The temp file must be gone: the rename consumed it.
         assert!(
-            !dir.path().join("settings.json.tmp").exists(),
+            !dir.path().join(temp_name("settings.json")).exists(),
             "temp file should not survive a successful write"
         );
     }
@@ -337,7 +346,7 @@ mod tests {
         write_atomic(&path, b"new").unwrap();
 
         assert_eq!(fs::read(&path).unwrap(), b"new");
-        assert!(!dir.path().join("report.yaml.tmp").exists());
+        assert!(!dir.path().join(temp_name("report.yaml")).exists());
     }
 
     #[test]
@@ -517,7 +526,7 @@ mod tests {
         let victim = dir.path().join("victim");
         fs::write(&victim, b"keep me").unwrap();
         let path = dir.path().join("theme.json");
-        std::os::unix::fs::symlink(&victim, dir.path().join("theme.json.tmp")).unwrap();
+        std::os::unix::fs::symlink(&victim, dir.path().join(temp_name("theme.json"))).unwrap();
 
         write_atomic(&path, b"{}").unwrap();
 
