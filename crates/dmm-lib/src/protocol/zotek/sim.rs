@@ -577,6 +577,10 @@ impl Transport for SimulatedMeter {
 /// The simulated meter lives here rather than in the session's transport so
 /// that every path that opens a registry entry by its factory opens it
 /// whole, as it does the UT61E+ mock.
+///
+/// It forwards every method the driver overrides but `capture_steps`: a
+/// capture confirms a decoder against a meter, and this one is drawn from
+/// that decoder, so it has nothing to confirm.
 pub(crate) struct MockZt5b {
     meter: SimulatedMeter,
     driver: ZotekProtocol,
@@ -589,7 +593,7 @@ impl MockZt5b {
         let driver = ZotekProtocol::new_zt5b();
         let profile = DeviceProfile {
             family_name: "mock",
-            id: "mock-zt5b",
+            id: MOCK_ID,
             // As the UT61E+ mock: a simulation needs no hardware run, and
             // the GUI shows no stability badge for it.
             stability: Stability::Verified,

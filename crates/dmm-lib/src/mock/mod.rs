@@ -555,6 +555,9 @@ impl Default for MockProtocol {
     }
 }
 
+/// The UT61E+'s answers, from the mock's own state rather than a wrapped
+/// driver. `capture_steps` stays empty on purpose: a capture confirms a
+/// decoder against a meter, and the mock has neither.
 impl Protocol for MockProtocol {
     // Answers each request at once, like the UT61E+ on its cable.
     fn delivery(&self) -> crate::protocol::Delivery {

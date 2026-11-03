@@ -517,6 +517,12 @@ fn takes_no_commands(what: impl std::fmt::Display) -> Error {
 /// Everything read-only delegates to the family's own protocol, so the specs
 /// panel, the choice lists and the profile look exactly as they would on the
 /// meter; only I/O and the device name are answered from the file.
+///
+/// Left on the trait defaults on purpose: `entry_named`, since the file
+/// fixes the entry and a "pick another model" warning could not be acted
+/// on; `name_before_init`, since there is no meter to start; and
+/// `spec_sheet`, which is read only off registry factories, never off an
+/// open session.
 struct ReplayProtocol {
     inner: Box<dyn Protocol>,
     /// The [`Replay`]'s own frames, shared.
