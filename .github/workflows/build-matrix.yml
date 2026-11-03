@@ -50,25 +50,30 @@ jobs:
           # native: the runner can execute what it just built, so the
           #   embedded-version check below can run there.
           # ci: part of the cheaper subset ci.yml builds on every push and PR.
+          # also_target, also_slug: a second target the same job cross-builds
+          #   and packages. macOS Intel rides on the macOS ARM job: both need
+          #   the scarce macos-latest runners, and a job GitHub finds no
+          #   runner for is cancelled, holding the dev release back.
           cat > targets.json <<'JSON'
           [
             {"name": "Linux",         "os": "ubuntu-latest",    "target": "x86_64-unknown-linux-gnu",  "slug": "linux-x86_64",    "ext": "tar.gz", "native": true, "ci": true},
             {"name": "Windows",       "os": "windows-latest",   "target": "x86_64-pc-windows-msvc",    "slug": "windows-x86_64",  "ext": "zip",    "native": true, "ci": true},
-            {"name": "macOS (ARM)",   "os": "macos-latest",     "target": "aarch64-apple-darwin",      "slug": "macos-aarch64",   "ext": "tar.gz", "native": true, "ci": true},
-            {"name": "macOS (Intel)", "os": "macos-latest",     "target": "x86_64-apple-darwin",       "slug": "macos-x86_64",    "ext": "tar.gz"},
+            {"name": "macOS",         "os": "macos-latest",     "target": "aarch64-apple-darwin",      "slug": "macos-aarch64",   "ext": "tar.gz", "native": true, "ci": true,
+             "also_target": "x86_64-apple-darwin", "also_slug": "macos-x86_64"},
             {"name": "Linux (ARM)",   "os": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "slug": "linux-aarch64",   "ext": "tar.gz", "native": true},
             {"name": "Windows (ARM)", "os": "windows-latest",   "target": "aarch64-pc-windows-msvc",   "slug": "windows-aarch64", "ext": "zip"}
           ]
           JSON
           case "$SUBSET" in
             all) INCLUDE=$(jq -c '.' targets.json) ;;
-            ci)  INCLUDE=$(jq -c '[.[] | select(.ci)]' targets.json) ;;
+            # CI's smoke build skips the second targets.
+            ci)  INCLUDE=$(jq -c '[.[] | select(.ci) | del(.also_target, .also_slug)]' targets.json) ;;
             *)
               echo "::error::unknown subset '$SUBSET'; expected 'all' or 'ci'"
               exit 1
               ;;
           esac
-          echo "Building: $(jq -r '[.[].name] | join(", ")' <<<"$INCLUDE")"
+          echo "Building: $(jq -r '[.[] | .slug, (.also_slug // empty)] | join(", ")' <<<"$INCLUDE")"
           echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
 
   # The docs every archive carries, rendered once here rather than on each
@@ -126,6 +131,8 @@ jobs:
     timeout-minutes: 30
     env:
       ARCHIVE: ${{ inputs.archive-prefix }}-${{ matrix.slug }}
+      # The second target's archive, when the entry has one.
+      ALSO_ARCHIVE: ${{ matrix.also_slug && format('{0}-{1}', inputs.archive-prefix, matrix.also_slug) || '' }}
     strategy:
       # One broken target should not hide the state of the others.
       fail-fast: false
@@ -134,7 +141,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.target }}${{ matrix.also_target && format(',{0}', matrix.also_target) || '' }}
 
       # Off by default: release and nightly builds are unattended, and the 10 GB
       # repository cache is worth more to the CI call, whose caches decide
@@ -156,7 +163,9 @@ jobs:
       - name: Build
         env:
           DMM_PUBLISHED_BUILD: ${{ inputs.published && '1' || '' }}
-        run: cargo build --workspace --release --target ${{ matrix.target }}
+        run: >
+          cargo build --workspace --release --target ${{ matrix.target }}
+          ${{ matrix.also_target && format('--target {0}', matrix.also_target) || '' }}
 
       # build.rs only re-runs when .git/HEAD changes, so a bad incremental state
       # could ship a binary reporting the wrong commit -- which would quietly
@@ -212,7 +221,17 @@ jobs:
 
       - name: Package (macOS)
         if: inputs.upload-artifacts && runner.os == 'macOS'
+        env:
+          ALSO_TARGET: ${{ matrix.also_target }}
         run: |
+          # The second archive takes a copy of the docs before the first
+          # archive's binaries go in.
+          if [ -n "$ALSO_ARCHIVE" ]; then
+            cp -R "$ARCHIVE" "$ALSO_ARCHIVE"
+            cp "target/$ALSO_TARGET/release/dmm-cli" "$ALSO_ARCHIVE/"
+            cp "target/$ALSO_TARGET/release/dmm-gui" "$ALSO_ARCHIVE/"
+            tar czf "$ALSO_ARCHIVE.${{ matrix.ext }}" "$ALSO_ARCHIVE/"
+          fi
           cp target/${{ matrix.target }}/release/dmm-cli "$ARCHIVE/"
           cp target/${{ matrix.target }}/release/dmm-gui "$ARCHIVE/"
           tar czf "$ARCHIVE.${{ matrix.ext }}" "$ARCHIVE/"
@@ -231,3 +250,10 @@ jobs:
         with:
           name: ${{ env.ARCHIVE }}
           path: ${{ env.ARCHIVE }}.${{ matrix.ext }}
+
+      - name: Upload the second target's artifact
+        if: inputs.upload-artifacts && matrix.also_slug
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ALSO_ARCHIVE }}
+          path: ${{ env.ALSO_ARCHIVE }}.${{ matrix.ext }}
