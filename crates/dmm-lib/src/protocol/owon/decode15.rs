@@ -204,8 +204,10 @@ fn reading(v: u32, function: u8, dp: u8, model: &Model, report: &dyn Fn(&'static
         _ => {}
     }
     if function == function::NCV && model.function13 == Function13::Ncv {
-        if dp == 0 && !negative && magnitude <= 4 {
-            // Spec §6.7's EF and dashes.
+        // Spec §6.7's EF and dashes, as the count whatever the decimal
+        // code: a UT217A (CMS061) sends every level with code 1 and shows
+        // the count's dashes (#45).
+        if dp <= 1 && !negative && magnitude <= 4 {
             return (MeasuredValue::NcvLevel(magnitude as u8), None);
         }
         report("NCV level");
@@ -464,7 +466,7 @@ pub(super) fn all_labels(model: &Model, out: &mut crate::text::Labels) {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::super::frame15::tests::VECTORS;
-    use super::super::model::{CMS101, OW67B, OW69B, VC871, VC915, VC925PV};
+    use super::super::model::{CMS061, CMS101, OW67B, OW69B, VC871, VC915, VC925PV};
     use super::*;
     use crate::protocol::capture_reports;
 
@@ -714,20 +716,45 @@ pub(crate) mod tests {
         assert_eq!(value(&m.value), "Normal(4.0)");
     }
 
-    /// NCV on a CMS: levels 0-4 (spec §6.7); function 13 elsewhere is
-    /// reported.
+    /// NCV on a CMS: levels 0-4 (spec §6.7), with decimal code 0 or 1;
+    /// function 13 elsewhere is reported.
     #[test]
     fn ncv_is_read_on_the_cms_only() {
-        for level in 0..=4 {
-            let p = frame(g24(13, 4, 0, false), level, 0, 0, 0);
-            let m = quiet(&p, &CMS101);
+        for dp in 0..=1 {
+            for level in 0..=4 {
+                let p = frame(g24(13, 4, dp, false), level, 0, 0, 0);
+                let m = quiet(&p, &CMS101);
+                assert_eq!(m.mode, "NCV");
+                assert_eq!(value(&m.value), format!("NcvLevel({level})"));
+                let (m, reports) = reported(&p, &VC871);
+                assert_eq!(reports.len(), 1, "{reports:?}");
+                assert!(reports[0].contains("function code"), "{reports:?}");
+                assert_eq!(m.mode, "Unknown(0x0d)");
+            }
+        }
+    }
+
+    /// A UT217A's (CMS061's) NCV frames from #45, EF and one to four
+    /// dashes, sent with decimal code 1: each its level, nothing reported.
+    #[test]
+    fn the_ut217a_ncv_frames_give_their_levels() {
+        for level in 0..=4u8 {
+            let p = [
+                0x61, 0x03, 0xF0, level, 0x00, 0x00, 0xA3, 0x01, 0xF0, 0x00, 0x00, 0x00, 0x04,
+                0x00, 0x00,
+            ];
+            let m = quiet(&p, &CMS061);
             assert_eq!(m.mode, "NCV");
             assert_eq!(value(&m.value), format!("NcvLevel({level})"));
-            let (m, reports) = reported(&p, &VC871);
-            assert_eq!(reports.len(), 1, "{reports:?}");
-            assert!(reports[0].contains("function code"), "{reports:?}");
-            assert_eq!(m.mode, "Unknown(0x0d)");
         }
+    }
+
+    /// An NCV count with a decimal code above 1 is no level: reported.
+    #[test]
+    fn an_ncv_count_with_decimal_code_2_is_reported() {
+        let (_, reports) = reported(&frame(g24(13, 4, 2, false), 4, 0, 0, 0), &CMS101);
+        assert_eq!(reports.len(), 1, "{reports:?}");
+        assert!(reports[0].contains("NCV level"), "{reports:?}");
     }
 
     /// The status word's mode context (spec §10.6): the scope, inrush,

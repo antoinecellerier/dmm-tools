@@ -86,7 +86,9 @@ Confidence levels:
 - **[INFERRED]** — deduction from the above, reason given
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter ([verification.md](verification.md) lists the checks)
-- **[HARDWARE]** — seen on a real meter: none yet
+- **[HARDWARE]** — seen on a real meter, the issue named: so far one UNI-T
+  UT217A (the CMS061) over Bluetooth on Linux, @jkay-png's capture in
+  [#45](https://github.com/antoinecellerier/dmm-tools/issues/45)
 - **[COMMUNITY]** — from a community source, §14 only
 
 ---
@@ -500,6 +502,11 @@ code 0 [VENDOR, both]. The CM2100 shows "EF" below
 90 V and one to four dashes above, by field strength (CM2100-UM p.13/10)
 [KNOWN]. The OW16 and OW18 signal NCV with an LED and a beep and name no
 display word (OW18-UM p.19/14-20/15) [KNOWN] (cross-reference §14).
+
+A UT217A (15-byte frame, §10) sends NCV as function 13, prefix 4, decimal
+code 1, with counts 0 to 4, and its LCD shows "EF" at 0 and four dashes at
+4: the count is the table's value whatever the decimal code [HARDWARE]. Read
+as the PC reads it, scaled and truncated, every level would be EF.
 
 ## 7. Commands
 
