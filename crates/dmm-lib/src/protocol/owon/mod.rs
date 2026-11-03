@@ -127,12 +127,14 @@ fn other_frame(opened: &Model, sent: FrameKind) -> WrongMeter {
     }
 }
 
-/// The frame kind `buf` shows: two whole frames of it in a row, running to
-/// the buffer's end (spec §5, §10.2). The 6-byte test goes first, as in
+/// The frame kind `buf` shows: whole frames of it in a row, running to the
+/// buffer's end (spec §5, §10.2), three for the 6-byte frame, so that a
+/// 15-byte backlog a read cut mid-frame does not pass
+/// ([`frame::tiles_past_a_pair`]). The 6-byte test goes first, as in
 /// detection: it passes on a 15-byte stream only for a reading above every
 /// model's count.
 fn stream_kind(buf: &[u8]) -> Option<FrameKind> {
-    if frame::tiles(buf) {
+    if frame::tiles_past_a_pair(buf) {
         Some(FrameKind::Six)
     } else if frame15::tiles(buf) {
         Some(FrameKind::Fifteen)
@@ -638,7 +640,9 @@ mod tests {
             match proto.request_measurement(&meter) {
                 Err(Error::WrongMeter { reason, raw }) => {
                     assert_eq!(reason, other_frame(opened, sent));
-                    assert_eq!(raw.len(), 2 * size, "{}", opened.id);
+                    // Three 6-byte frames, two 15-byte ones.
+                    let frames = if sent == FrameKind::Six { 3 } else { 2 };
+                    assert_eq!(raw.len(), frames * size, "{}", opened.id);
                 }
                 other => panic!("{}: {other:?}", opened.id),
             }
@@ -911,6 +915,27 @@ mod tests {
         let mock = MockTransport::new(vec![[filler, VC871_STREAM[1]].concat()]);
         let m = proto(&model::VC871).request_measurement(&mock).unwrap();
         assert_eq!(m.raw_payload, VC871_STREAM[1]);
+    }
+
+    /// A UT217A's backlog with no model code read, in reads that end 13
+    /// bytes into a frame, as the Bluetooth transport's 64-byte reads of a
+    /// longer backlog can (#45): every frame is a reading, none taken for
+    /// the 6-byte frame.
+    #[test]
+    fn a_15_byte_backlog_in_reads_cut_mid_frame_is_read() {
+        let frame = [
+            0x22, 0x01, 0xF0, 0x07, 0x00, 0x00, 0x20, 0x00, 0xF0, 0x00, 0x00, 0x00, 0x04, 0x00,
+            0x00,
+        ];
+        let backlog = frame.repeat(20);
+        let meter = Meter::new(None, pieces(&backlog, 3 * 15 + 13));
+        let mut proto = proto(&model::CMS061);
+        let (init, _) = capture_reports(|| proto.init(&meter));
+        init.unwrap();
+        for i in 0..20 {
+            let (m, _) = capture_reports(|| proto.request_measurement(&meter));
+            assert_eq!(m.unwrap().raw_payload, frame, "{i}");
+        }
     }
 
     /// Joined anywhere in a 15-byte frame, the next whole frame is read.

@@ -79,13 +79,30 @@ fn plausible(frame: &[u8]) -> bool {
 /// apart to pass as markers, with clear bytes where the pair's status
 /// words fall, which no VC871 frame of spec §14.5 has.
 pub(super) fn tiles(buf: &[u8]) -> bool {
+    tiling(buf, 0)
+}
+
+/// [`tiles`] with at least one marked step after the pair: what a read
+/// takes to tell the frame kind with no model code. Reads can end mid-frame
+/// (the Bluetooth transport hands a backlog over 64 bytes at a time), and a
+/// 15-byte backlog cut two steps past byte 1 of a frame passes [`tiles`],
+/// its `F0`s at bytes 2 and 8 the pair's markers (#45). The step after them
+/// holds the 15-byte frame's status bits 16-23, whose marker would need
+/// bits 20-23 set, which no capture shows (spec §10.6, §14.4).
+pub(super) fn tiles_past_a_pair(buf: &[u8]) -> bool {
+    tiling(buf, 1)
+}
+
+/// Two plausible frames, then at least `more` steps, every one marked, to
+/// the end of `buf`.
+fn tiling(buf: &[u8], more: usize) -> bool {
     buf.windows(2 * FRAME_LEN).enumerate().any(|(start, w)| {
+        let rest = &buf[start + 2 * FRAME_LEN..];
         (buf.len() - start).is_multiple_of(FRAME_LEN)
+            && rest.len() >= more * FRAME_LEN
             && plausible(&w[..FRAME_LEN])
             && plausible(&w[FRAME_LEN..])
-            && buf[start + 2 * FRAME_LEN..]
-                .chunks(FRAME_LEN)
-                .all(|step| has_marker(step[1]))
+            && rest.chunks(FRAME_LEN).all(|step| has_marker(step[1]))
     })
 }
 
@@ -226,6 +243,29 @@ pub(crate) mod tests {
                 assert!(!tiles(&frames[skip..]), "{count} {skip}");
             }
         }
+    }
+
+    /// A UT217A's 15-byte backlog cut 13 bytes into a frame (#45): its
+    /// `F0`s at bytes 2 and 8 make a pair that [`tiles`] takes, but no
+    /// marked step follows them, so it does not tile past a pair. Whole
+    /// 6-byte frames do once a third has come.
+    #[test]
+    fn a_15_byte_backlog_cut_mid_frame_does_not_tile_past_a_pair() {
+        let frame = [
+            0x22, 0x01, 0xF0, 0x07, 0x00, 0x00, 0x20, 0x00, 0xF0, 0x00, 0x00, 0x00, 0x04, 0x00,
+            0x00,
+        ];
+        let backlog = frame.repeat(5);
+        for frames in 0..5 {
+            let cut = &backlog[..15 * frames + 13];
+            assert!(tiles(cut), "{frames}");
+            assert!(!tiles_past_a_pair(cut), "{frames}");
+        }
+        let stream = stream();
+        assert!(!tiles_past_a_pair(&stream[..2 * FRAME_LEN]));
+        assert!(tiles_past_a_pair(&stream[..3 * FRAME_LEN]));
+        // Joined mid-frame: three whole frames after the part one.
+        assert!(tiles_past_a_pair(&stream[3..4 * FRAME_LEN]));
     }
 
     /// A buffer cut short of a frame boundary does not tile yet: its last

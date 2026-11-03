@@ -33,6 +33,7 @@
 - **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
+- **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
 - **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
 - **dmm-gui rescales when dragged to a monitor with another display scale** — it kept the scale of the monitor it opened on.
 

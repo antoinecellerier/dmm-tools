@@ -213,8 +213,8 @@ and each still wants a capture of our own.
 - A first trace per 15-byte model in DC V but the CMS061 — settles [§10.2](reverse-engineered-protocol.md#102-framing)'s
   frames per notification and `FF` skip, G24 bits 11 and 13-23 and V24 bit 19
   (as on a VC871, §14.2, §14.4) for that model. With no model code read, a
-  read waits for two frames whole in their notifications before it trusts
-  either frame kind. Needs the gate steps on each.
+  read waits for three 6-byte or two 15-byte frames before it trusts either
+  frame kind. Needs the gate steps on each.
 - FFF2 byte 0 per 15-byte model: 101, 65, 67, 69, 87, 89, 91, 92 by the
   app's names ([§10.1](reverse-engineered-protocol.md#101-models); 61 on a
   UT217A, §12.2), and whether a UT217B sends 101 (§9.4) — decides which
