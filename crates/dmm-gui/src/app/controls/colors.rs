@@ -125,7 +125,6 @@ impl App {
                 }
                 // Clear the override — user explicitly chose a theme
                 self.settings.overrides.theme = None;
-                self.settings.save();
             }
             let skipped = &self.settings.user_themes.skipped;
             if !skipped.is_empty() {
@@ -198,7 +197,6 @@ impl App {
                 self.settings.color_overrides.dark = PaletteOverrides::default();
                 self.settings.color_overrides.light = PaletteOverrides::default();
                 self.applied.ui_colors = None; // force reapply
-                self.settings.save();
             }
             if has_overrides {
                 ui.label(
@@ -387,9 +385,6 @@ impl App {
 
                 if changed {
                     self.applied.ui_colors = None; // force reapply
-                    // Deferred: a drag or a held arrow key changes the
-                    // colour every frame, and each save is an fsync.
-                    self.settings_save.schedule(std::time::Instant::now());
                 }
             });
         let header_id = collapsing.header_response.id;

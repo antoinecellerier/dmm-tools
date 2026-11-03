@@ -445,7 +445,6 @@ impl App {
             .find(|&&z| z > self.settings.zoom_pct)
         {
             self.settings.zoom_pct = next;
-            self.settings.save();
         }
     }
 
@@ -456,13 +455,11 @@ impl App {
             .find(|&&z| z < self.settings.zoom_pct)
         {
             self.settings.zoom_pct = prev;
-            self.settings.save();
         }
     }
 
     pub(super) fn zoom_reset(&mut self) {
         self.settings.zoom_pct = 100;
-        self.settings.save();
     }
 
     pub(super) fn apply_always_on_top(&self, ctx: &egui::Context) {

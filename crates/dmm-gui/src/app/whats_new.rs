@@ -12,7 +12,6 @@ impl App {
     pub(super) fn open_whats_new(&mut self) {
         self.whats_new.open = true;
         self.settings.last_seen_version = Some(env!("CARGO_PKG_VERSION").to_string());
-        self.settings.save();
     }
 
     pub(super) fn show_whats_new(&mut self, ctx: &egui::Context) {

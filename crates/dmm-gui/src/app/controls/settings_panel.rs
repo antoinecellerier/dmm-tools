@@ -54,13 +54,13 @@ fn setting_checkbox(ui: &mut Ui, value: &mut bool, label: &str, tooltip: &str) -
 /// placed so the wrapped row moves it to the next line whole, and it wraps
 /// within itself only when a whole line is too narrow for it (`color_edit`
 /// says why a `ui.horizontal` can't do this). Returns whether the panel
-/// checkbox changed, and whether a field did.
+/// checkbox changed.
 fn specs_checkboxes(
     ui: &mut Ui,
     l10n: &Localizer,
     show: &mut bool,
     fields: &mut SpecFields,
-) -> (bool, bool) {
+) -> bool {
     // Read before a click can flip it, so the frame draws what it measured.
     let on = *show;
     let panel_label = tr!(
@@ -113,11 +113,10 @@ fn specs_checkboxes(
         |ui| {
             let panel_changed =
                 setting_checkbox(ui, show, &panel_label, &tr!(l10n, "settings-specs.hover"));
-            let mut fields_changed = false;
             for (value, label, tooltip) in &mut field_boxes[..shown] {
-                fields_changed |= setting_checkbox(ui, value, label, tooltip);
+                setting_checkbox(ui, value, label, tooltip);
             }
-            (panel_changed, fields_changed)
+            panel_changed
         },
     )
     .inner
@@ -305,16 +304,13 @@ impl App {
             let caption = tr!(l10n, "settings-announce");
             if let Some(secs) = chip_row(ui, &caption, chips) {
                 self.settings.announce_interval_secs = secs;
-                self.settings.save();
             }
-            if setting_checkbox(
+            setting_checkbox(
                 ui,
                 &mut self.settings.announce_only_focused,
                 &tr!(l10n, "settings-announce-focused"),
                 &tr!(l10n, "settings-announce-focused.hover"),
-            ) {
-                self.settings.save();
-            }
+            );
         });
     }
 
@@ -361,7 +357,6 @@ impl App {
                 self.settings.shared.device_family = id.to_string();
                 // Clear the override — user explicitly chose a device
                 self.settings.overrides.device_family = None;
-                self.settings.save();
                 // Auto-reconnect if currently connected
                 if self.connection.state != crate::app::ConnectionState::Disconnected {
                     self.connection.needs_reconnect = true;
@@ -408,7 +403,6 @@ impl App {
                     self.settings.shared.mock_mode = mock_mode;
                     // Clear the override — user explicitly chose a mock mode
                     self.settings.overrides.mock_mode = None;
-                    self.settings.save();
                     if self.connection.state != crate::app::ConnectionState::Disconnected {
                         self.connection.needs_reconnect = true;
                     }
@@ -417,12 +411,13 @@ impl App {
         }
 
         ui.horizontal_wrapped(|ui| {
-            let changed = setting_checkbox(
+            setting_checkbox(
                 ui,
                 &mut self.settings.auto_connect,
                 &tr!(l10n, "settings-auto-connect"),
                 &tr!(l10n, "settings-auto-connect.hover"),
-            ) | setting_checkbox(
+            );
+            setting_checkbox(
                 ui,
                 &mut self.settings.query_device_name,
                 &tr!(l10n, "settings-device-name"),
@@ -437,19 +432,15 @@ impl App {
             // No reconnect: a session already running over an adapter would
             // be dropped by one, and the setting only decides what the next
             // connect looks at.
-            let bluetooth_changed = setting_checkbox(
+            if setting_checkbox(
                 ui,
                 &mut self.settings.shared.bluetooth,
                 &label,
                 &tr!(l10n, "settings-bluetooth.hover"),
-            );
-            if bluetooth_changed {
+            ) {
                 // Cleared like every other row the user sets by hand: the
                 // value they picked is theirs to keep.
                 self.settings.overrides.bluetooth = None;
-            }
-            if changed || bluetooth_changed {
-                self.settings.save();
             }
         });
     }
@@ -471,7 +462,6 @@ impl App {
             let caption = tr!(l10n, "settings-sample-interval");
             if let Some(ms) = chip_row(ui, &caption, chips) {
                 self.settings.sample_interval_ms = ms;
-                self.settings.save();
                 self.apply_sample_interval();
             }
         });
@@ -517,7 +507,6 @@ impl App {
             let caption = tr!(l10n, "settings-buffer-size");
             if let Some(n) = chip_row(ui, &caption, chips) {
                 self.settings.max_samples = n;
-                self.settings.save();
                 // Live: the graph and the history behind Export… evict down
                 // to the new bound on the spot, and a recording already past
                 // it stops rather than losing the samples it has.
@@ -561,7 +550,7 @@ impl App {
                 &tr!(l10n, "settings-recording"),
                 &tr!(l10n, "settings-recording.hover"),
             );
-            let (specs_changed, fields_changed) = specs_checkboxes(
+            let specs_changed = specs_checkboxes(
                 ui,
                 l10n,
                 &mut self.settings.show_specs,
@@ -570,9 +559,6 @@ impl App {
             if changed || specs_changed {
                 // Manual settings change exits big meter toggle.
                 self.big_meter_mode = BigMeterMode::Off;
-            }
-            if changed || specs_changed || fields_changed {
-                self.settings.save();
             }
         });
     }
@@ -610,7 +596,6 @@ impl App {
             let caption = tr!(l10n, "settings-zoom");
             if let Some(level) = chip_row(ui, &caption, chips) {
                 self.settings.zoom_pct = level;
-                self.settings.save();
             }
         });
         self.keep_zoom_row_in_view(ui, &zoom_row.response);
@@ -630,7 +615,6 @@ impl App {
                 ),
             ) {
                 self.apply_decorations(ui.ctx());
-                self.settings.save();
             }
             // Greyed rather than hidden on Wayland, and the saved value is
             // left alone: a `true` written on an X11 session still applies
@@ -649,7 +633,6 @@ impl App {
             .on_disabled_hover_text(tr!(l10n, "settings-always-on-top.wayland"));
             if response.changed() {
                 self.apply_always_on_top(ui.ctx());
-                self.settings.save();
             }
             if self.on_wayland {
                 ui.label(
@@ -663,14 +646,12 @@ impl App {
         // Only downloaded builds ask, so only they have the row.
         if self.update_check.applies() {
             ui.horizontal_wrapped(|ui| {
-                if setting_checkbox(
+                setting_checkbox(
                     ui,
                     &mut self.settings.check_for_updates,
                     &tr!(l10n, "settings-check-updates"),
                     &tr!(l10n, "settings-check-updates.hover"),
-                ) {
-                    self.settings.save();
-                }
+                );
             });
         }
     }
@@ -732,7 +713,6 @@ impl App {
             let caption = tr!(l10n, "settings-graph-lines");
             if let Some(lines) = chip_row(ui, &caption, chips) {
                 self.settings.graph_lines = lines;
-                self.settings.save();
             }
         });
     }

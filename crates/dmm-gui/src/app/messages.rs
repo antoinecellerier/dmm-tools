@@ -180,7 +180,6 @@ impl App {
         if let Some(id) = to_save {
             info!("UI: saving detected device {id} as the selected device");
             self.settings.shared.device_family = id.to_string();
-            self.settings.save();
         }
         // Good news never covers a failure still on screen: the notice that
         // the settings file could not be read goes up as the auto-connect

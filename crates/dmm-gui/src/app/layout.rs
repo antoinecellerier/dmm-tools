@@ -13,7 +13,6 @@ use crate::a11y::ResponseA11yExt;
 use crate::display;
 use crate::settings::DEFAULT_WINDOW_SIZE;
 use crate::specs;
-use std::time::Instant;
 
 /// The wide layout's resizable reading panel, as `Panel::left` names it.
 pub(super) const READING_PANEL: &str = "reading_panel";
@@ -220,13 +219,11 @@ impl App {
             let v = i.viewport();
             (v.maximized, v.fullscreen, v.minimized)
         });
-        let mut changed = false;
         if fullscreen != Some(true) && minimized != Some(true) {
             if let Some(maximized) = maximized
                 && maximized != self.settings.window_maximized
             {
                 self.settings.window_maximized = maximized;
-                changed = true;
             }
             let size = (ctx.content_rect().size() * ctx.zoom_factor()).round();
             let kept = self.settings.window_size.unwrap_or(DEFAULT_WINDOW_SIZE);
@@ -236,7 +233,6 @@ impl App {
                 && size != egui::Vec2::from(kept)
             {
                 self.settings.window_size = Some(size.into());
-                changed = true;
             }
         }
         // egui stores the panel's state when a drag ends, not during it.
@@ -244,11 +240,7 @@ impl App {
             let width = panel.outer_rect.width().round();
             if width.is_finite() && width != self.settings.reading_panel_width {
                 self.settings.reading_panel_width = width;
-                changed = true;
             }
-        }
-        if changed {
-            self.settings_save.schedule(Instant::now());
         }
     }
 
@@ -265,7 +257,6 @@ impl App {
                     self.settings.show_recording = true;
                     self.settings.show_stats = true;
                     self.settings.show_specs = true;
-                    self.settings.save();
                 } else {
                     self.big_meter_mode = BigMeterMode::Full;
                 }
@@ -322,7 +313,6 @@ impl App {
         });
         if toggled {
             self.settings.specs_expanded = !expanded;
-            self.settings.save();
         }
     }
 
@@ -653,7 +643,7 @@ mod tests {
             normal(),
         );
         assert_eq!(app.settings.window_size, None);
-        assert!(!app.settings_save.take_pending(), "the default size");
+        assert!(!app.settings_save_owed(), "the default size");
 
         track(&mut app, &ctx, [1300.0, 900.0], 1.5, normal());
         assert_eq!(
@@ -661,9 +651,9 @@ mod tests {
             Some([1300.0, 900.0]),
             "zoom undone"
         );
-        assert!(app.settings_save.take_pending(), "resized");
+        assert!(app.settings_save_owed(), "resized");
         track(&mut app, &ctx, [1300.0, 900.0], 1.0, normal());
-        assert!(!app.settings_save.take_pending(), "a zoom change alone");
+        assert!(!app.settings_save_owed(), "a zoom change alone");
 
         let maximized = ViewportInfo {
             maximized: Some(true),
@@ -672,7 +662,7 @@ mod tests {
         track(&mut app, &ctx, [1920.0, 1080.0], 1.0, maximized);
         assert_eq!(app.settings.window_size, Some([1300.0, 900.0]));
         assert!(app.settings.window_maximized);
-        assert!(app.settings_save.take_pending(), "maximized");
+        assert!(app.settings_save_owed(), "maximized");
 
         for info in [
             ViewportInfo {
@@ -689,15 +679,15 @@ mod tests {
             track(&mut app, &ctx, [640.0, 480.0], 1.0, info);
             assert_eq!(app.settings.window_size, Some([1300.0, 900.0]));
             assert!(app.settings.window_maximized);
-            assert!(!app.settings_save.take_pending());
+            assert!(!app.settings_save_owed());
         }
 
         track(&mut app, &ctx, [1300.0, 900.0], 1.0, normal());
         assert!(!app.settings.window_maximized, "un-maximized");
-        app.settings_save.take_pending();
+        app.settings_save_owed();
         app.big_meter_mode = BigMeterMode::Minimal;
         track(&mut app, &ctx, [300.0, 200.0], 1.0, normal());
         assert_eq!(app.settings.window_size, Some([1300.0, 900.0]));
-        assert!(!app.settings_save.take_pending(), "a big meter readout");
+        assert!(!app.settings_save_owed(), "a big meter readout");
     }
 }

@@ -591,13 +591,11 @@ impl App {
                     } else {
                         self.settings.always_on_top = !self.settings.always_on_top;
                         self.apply_always_on_top(ctx);
-                        self.settings.save();
                     }
                 }
                 Shortcut::ToggleDecorations => {
                     self.settings.hide_decorations = !self.settings.hide_decorations;
                     self.apply_decorations(ctx);
-                    self.settings.save();
                 }
                 Shortcut::ExportRecording => {
                     self.export_recording(ctx, super::export::ExportFormat::Csv)

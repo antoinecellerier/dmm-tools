@@ -556,13 +556,14 @@ impl App {
         graph.histogram_sizes = (settings.histogram_width, settings.histogram_height);
         let capture = Capture::new(settings.max_samples);
         let selection = SelectedDevice::for_family(&settings.shared.device_family);
+        let settings_save = DeferredSave::new(&settings);
         Self {
             settings,
             l10n: crate::l10n::english(),
             speech: language::Speech::default(),
             settings_open: false,
             theme_scan: appearance::ThemeScan::default(),
-            settings_save: DeferredSave::default(),
+            settings_save,
             connection: Connection::default(),
             last_measurement: None,
             held: held_reading::HeldReading::default(),
@@ -677,8 +678,8 @@ impl App {
         }
         // Only the mode pin: `settings.shared.mock_mode` names a scenario, and a
         // range pick leaves the mock in the scenario it is already pinned to.
-        if setting == Setting::Mode && self.repin_mock(id) {
-            self.settings.save();
+        if setting == Setting::Mode {
+            self.repin_mock(id);
         }
     }
 
@@ -686,29 +687,27 @@ impl App {
     ///
     /// `settings.shared.mock_mode` is the scenario the mock is pinned to at connect;
     /// a pick moves the mock's live scenario without a reconnect, so a pinned
-    /// mock is re-pinned to the scenario picked. Returns whether the settings
-    /// changed (and so need saving). No `needs_reconnect`: the mock has
+    /// mock is re-pinned to the scenario picked. No `needs_reconnect`: the mock has
     /// already switched, and a reconnect would restart it. An auto-cycling
     /// mock (empty pin) is left alone — it carries on cycling from the picked
     /// scenario, so the row stays right. The SELECT button has the same
     /// desync and is left alone: the GUI cannot learn which scenario the
     /// mock cycled to.
-    fn repin_mock(&mut self, id: u16) -> bool {
+    fn repin_mock(&mut self, id: u16) {
         if self
             .selected_device()
             .is_none_or(|d| d.id != dmm_lib::mock::MOCK.id)
             || self.settings.shared.mock_mode.is_empty()
         {
-            return false;
+            return;
         }
         let Some(mode) = MockMode::from_choice_id(id) else {
-            return false;
+            return;
         };
         self.settings.shared.mock_mode = mode.label().to_string();
         // An explicit choice, as in the Settings row: it replaces a
         // `--mock-mode` override rather than being saved under it.
         self.settings.overrides.mock_mode = None;
-        true
     }
 
     /// The meter the user named, or `None` when the one on the cable is to be
@@ -1172,7 +1171,9 @@ impl eframe::App for App {
         // Last, so a change made this frame is seen this frame. A paused or
         // disconnected app draws nothing by itself, so a pending save asks
         // for the frame it is due in.
-        match self.settings_save.poll(std::time::Instant::now()) {
+        let now = std::time::Instant::now();
+        self.settings_save.check(&self.settings, now);
+        match self.settings_save.poll(now) {
             SaveDue::Idle => {}
             SaveDue::Wait(delay) => ctx.request_repaint_after(delay),
             SaveDue::Now => self.settings.save(),
@@ -1183,6 +1184,8 @@ impl eframe::App for App {
     /// build and drop `App`s, and must never write the real settings file.
     /// The save goes first, so a slow disconnect never loses it.
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.settings_save
+            .check(&self.settings, std::time::Instant::now());
         if self.settings_save.take_pending() {
             self.settings.save();
         }
@@ -1205,6 +1208,17 @@ pub(crate) fn styled_context() -> egui::Context {
     ctx.set_os(egui::os::OperatingSystem::Nix);
     appearance::install_styles(&ctx);
     ctx
+}
+
+#[cfg(test)]
+impl App {
+    /// Whether the settings changed since the last check, as the end of a
+    /// frame would find, and so a save is owed; taken.
+    fn settings_save_owed(&mut self) -> bool {
+        self.settings_save
+            .check(&self.settings, std::time::Instant::now());
+        self.settings_save.take_pending()
+    }
 }
 
 #[cfg(test)]
@@ -1705,7 +1719,7 @@ mod tests {
     #[test]
     fn a_pick_re_pins_a_pinned_mock_without_reconnecting() {
         let mut app = app("mock", "temp2");
-        assert!(app.repin_mock(choice_id_of(MockMode::TempDiff)));
+        app.repin_mock(choice_id_of(MockMode::TempDiff));
         assert_eq!(app.settings.shared.mock_mode, "temp-diff");
         assert_eq!(
             app.settings.overrides.mock_mode, None,
@@ -1714,12 +1728,26 @@ mod tests {
         assert!(!app.connection.needs_reconnect);
     }
 
+    /// A change made outside the Settings panel is saved too, with no call
+    /// of its own: the end of the frame finds it.
+    #[test]
+    fn a_change_anywhere_is_owed_a_save() {
+        let mut app = app("mock", "temp2");
+        assert!(!app.settings_save_owed(), "as loaded");
+        app.zoom_in();
+        assert!(app.settings_save_owed(), "a zoom shortcut");
+        app.select(Setting::Mode, choice_id_of(MockMode::TempDiff));
+        assert!(app.settings_save_owed(), "a mock re-pin");
+        app.select(Setting::Mode, choice_id_of(MockMode::TempDiff));
+        assert!(!app.settings_save_owed(), "the same pick again");
+    }
+
     /// An auto-cycling mock keeps cycling from the picked scenario, so the
     /// row's "Auto (cycle)" stays true and is left alone.
     #[test]
     fn a_pick_leaves_an_auto_cycling_mock_unpinned() {
         let mut app = app("mock", "");
-        assert!(!app.repin_mock(choice_id_of(MockMode::TempDiff)));
+        app.repin_mock(choice_id_of(MockMode::TempDiff));
         assert_eq!(app.settings.shared.mock_mode, "");
         assert!(!app.connection.needs_reconnect);
     }
@@ -1800,7 +1828,7 @@ mod tests {
     #[test]
     fn a_pick_on_a_real_meter_leaves_the_mock_pin_alone() {
         let mut app = app("ut181a", "temp2");
-        assert!(!app.repin_mock(0x1121));
+        app.repin_mock(0x1121);
         assert_eq!(app.settings.shared.mock_mode, "temp2");
     }
 

@@ -419,11 +419,7 @@ impl App {
         let Some(folder) = file.parent().filter(|p| !p.as_os_str().is_empty()) else {
             return;
         };
-        if self.settings.last_folder.as_deref() == Some(folder) {
-            return;
-        }
         self.settings.last_folder = Some(folder.to_path_buf());
-        self.settings_save.schedule(Instant::now());
     }
 
     /// Import `path`, asking first if the session holds samples or markers
@@ -1020,9 +1016,9 @@ mod folder_tests {
             app.settings.last_folder.as_deref(),
             Some(Path::new("/data/bench"))
         );
-        assert!(app.settings_save.take_pending(), "saved");
+        assert!(app.settings_save_owed(), "saved");
         app.remember_folder(Path::new("/data/bench/b.json"));
-        assert!(!app.settings_save.take_pending(), "unchanged");
+        assert!(!app.settings_save_owed(), "unchanged");
         app.remember_folder(Path::new("bare.csv"));
         assert_eq!(
             app.settings.last_folder.as_deref(),

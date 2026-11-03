@@ -470,7 +470,8 @@ pub struct Settings {
     #[serde(skip)]
     pub overrides: Overrides,
     /// The user's themes folder, as last read (not serialized). Shared
-    /// rather than copied: the settings are cloned on every save.
+    /// rather than copied: the settings are cloned every frame, to check
+    /// for a change to save.
     #[serde(skip)]
     pub(crate) user_themes: Arc<ThemeCatalog>,
     /// The settings file was there but could not be loaded, so these are
@@ -654,22 +655,7 @@ impl Settings {
     /// developer's own settings.
     pub fn save(&self) {
         if let Some(path) = Self::config_path() {
-            // Restore original values for CLI-overridden fields before saving.
-            let mut to_save = self.clone();
-            if let Some(ref original) = self.overrides.device_family {
-                to_save.shared.device_family = original.clone();
-            }
-            if let Some(ref original) = self.overrides.mock_mode {
-                to_save.shared.mock_mode = original.clone();
-            }
-            if let Some((mode, ref named)) = self.overrides.theme {
-                to_save.theme = mode;
-                to_save.named_theme = named.clone();
-            }
-            if let Some(original) = self.overrides.bluetooth {
-                to_save.shared.bluetooth = original;
-            }
-            match serde_json::to_string_pretty(&to_save) {
+            match self.file_contents() {
                 Ok(json) => {
                     // Atomic (.tmp + fsync + rename) so a kill or disk-full
                     // mid-write can't corrupt the existing config file.
@@ -680,6 +666,26 @@ impl Settings {
                 Err(e) => log::warn!("failed to serialize the settings: {e}"),
             }
         }
+    }
+
+    /// What [`Settings::save`] writes: the CLI-overridden fields as they were
+    /// before the override, so a flag changes this session, never the file.
+    fn file_contents(&self) -> serde_json::Result<String> {
+        let mut to_save = self.clone();
+        if let Some(ref original) = self.overrides.device_family {
+            to_save.shared.device_family = original.clone();
+        }
+        if let Some(ref original) = self.overrides.mock_mode {
+            to_save.shared.mock_mode = original.clone();
+        }
+        if let Some((mode, ref named)) = self.overrides.theme {
+            to_save.theme = mode;
+            to_save.named_theme = named.clone();
+        }
+        if let Some(original) = self.overrides.bluetooth {
+            to_save.shared.bluetooth = original;
+        }
+        serde_json::to_string_pretty(&to_save)
     }
 }
 
@@ -707,13 +713,17 @@ fn keep_copy(path: &Path) -> Option<PathBuf> {
 /// How long a deferred save waits after the last change.
 const SAVE_DELAY: Duration = Duration::from_millis(500);
 
-/// A settings write held back while a control is still moving — a colour
-/// drag changes the value every frame, and each write is an fsync.
+/// Saves the settings once they stop changing, [`SAVE_DELAY`] after the
+/// last change: a colour drag changes them every frame, and each write is an
+/// fsync. [`DeferredSave::check`] runs once a frame and compares what the
+/// file would hold with the last check, so no control has to ask for its
+/// save, and a new one can't forget to.
 ///
 /// Real time, not the session clock: this is UI cadence.
-#[derive(Default)]
 pub(crate) struct DeferredSave {
     due: Option<Instant>,
+    /// What [`Settings::save`] would have written at the last check.
+    seen: Option<String>,
 }
 
 /// What [`DeferredSave::poll`] asks of the caller this frame.
@@ -728,9 +738,24 @@ pub(crate) enum SaveDue {
 }
 
 impl DeferredSave {
-    /// A change was made: save [`SAVE_DELAY`] after the last one.
-    pub(crate) fn schedule(&mut self, now: Instant) {
-        self.due = Some(now + SAVE_DELAY);
+    /// Nothing owed for `settings` as they are: they came from the file, or
+    /// from flags the file never takes.
+    pub(crate) fn new(settings: &Settings) -> Self {
+        Self {
+            due: None,
+            seen: settings.file_contents().ok(),
+        }
+    }
+
+    /// Owe a save if `settings` would write something else than at the last
+    /// check. It changes the file, not the session alone: a CLI-overridden
+    /// field is not saved, and a choice that clears the override is.
+    pub(crate) fn check(&mut self, settings: &Settings, now: Instant) {
+        let contents = settings.file_contents().ok();
+        if contents != self.seen {
+            self.seen = contents;
+            self.due = Some(now + SAVE_DELAY);
+        }
     }
 
     /// `Now` once, when the delay has run out; the caller saves.
@@ -868,24 +893,64 @@ mod tests {
     fn a_colour_drag_saves_once_after_it_settles() {
         let ms = Duration::from_millis;
         let t0 = Instant::now();
-        let mut save = DeferredSave::default();
-        assert_eq!(save.poll(t0), SaveDue::Idle);
-        save.schedule(t0);
+        let mut s = Settings::default();
+        let mut save = DeferredSave::new(&s);
+        save.check(&s, t0);
+        assert_eq!(save.poll(t0), SaveDue::Idle, "nothing changed");
+        s.color_overrides.dark.accent = Some(HexColor(Color32::from_rgb(1, 2, 3)));
+        save.check(&s, t0);
         assert_eq!(save.poll(t0 + ms(200)), SaveDue::Wait(ms(300)));
-        save.schedule(t0 + ms(400));
+        save.check(&s, t0 + ms(300));
+        assert_eq!(save.poll(t0 + ms(300)), SaveDue::Wait(ms(200)), "unchanged");
+        s.color_overrides.dark.accent = Some(HexColor(Color32::from_rgb(4, 5, 6)));
+        save.check(&s, t0 + ms(400));
         assert_eq!(save.poll(t0 + ms(600)), SaveDue::Wait(ms(300)));
         assert_eq!(save.poll(t0 + ms(900)), SaveDue::Now, "exactly due");
+        save.check(&s, t0 + ms(1000));
         assert_eq!(save.poll(t0 + ms(1000)), SaveDue::Idle);
     }
 
     /// Quitting mid-delay still owes the save, once.
     #[test]
     fn a_pending_save_is_taken_once() {
-        let mut save = DeferredSave::default();
+        let mut s = Settings::default();
+        let mut save = DeferredSave::new(&s);
         assert!(!save.take_pending());
-        save.schedule(Instant::now());
+        s.zoom_pct = 150;
+        save.check(&s, Instant::now());
         assert!(save.take_pending());
         assert!(!save.take_pending());
+    }
+
+    /// Any field the file holds is saved when it changes, with no call
+    /// from the control that changed it; a CLI override is not, until a
+    /// choice clears it.
+    #[test]
+    fn a_change_to_the_file_is_owed_a_save() {
+        let owed = |save: &mut DeferredSave, s: &Settings| {
+            save.check(s, Instant::now());
+            save.take_pending()
+        };
+        let mut s = Settings::default();
+        let mut save = DeferredSave::new(&s);
+        s.show_stats = !s.show_stats;
+        assert!(owed(&mut save, &s), "a top-level field");
+        s.shared.language = "fr".to_string();
+        assert!(owed(&mut save, &s), "a shared field");
+        s.hidden_series.insert("Max".to_string());
+        assert!(owed(&mut save, &s), "a collection");
+        assert!(!owed(&mut save, &s), "saved, then unchanged");
+
+        s.overrides.mock_mode = Some(s.shared.mock_mode.clone());
+        s.shared.mock_mode = "dcv".to_string();
+        assert!(!owed(&mut save, &s), "under a flag: the file keeps its own");
+        s.overrides.mock_mode = None;
+        assert!(owed(&mut save, &s), "picked: the file takes it");
+        s.load_problem = Some(LoadProblem {
+            path: PathBuf::new(),
+            kept: None,
+        });
+        assert!(!owed(&mut save, &s), "not in the file");
     }
 
     /// Every field is on unless the user turned it off, including one a

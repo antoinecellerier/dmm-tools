@@ -637,7 +637,6 @@ impl App {
                 self.settings.histogram_width,
                 self.settings.histogram_height,
             ) = sizes;
-            self.settings_save.schedule(std::time::Instant::now());
         }
         if let Some((label, hidden)) = self.graph.take_trace_choice() {
             if hidden {
@@ -645,7 +644,6 @@ impl App {
             } else {
                 self.settings.hidden_series.remove(&label);
             }
-            self.settings_save.schedule(std::time::Instant::now());
         }
     }
 
@@ -706,9 +704,6 @@ impl App {
             );
             if delta != 0.0 {
                 self.settings.recording_height = fit(self.settings.recording_height + delta);
-            }
-            if self.settings.recording_height != before {
-                self.settings_save.schedule(std::time::Instant::now());
             }
             crate::a11y::paint_focus_ring(ui, &sep_response);
             if sep_response.hovered() || sep_response.dragged() {
@@ -823,15 +818,15 @@ mod tests {
         app.graph.click_overlay_chip("Period".to_string());
         app.take_graph_actions(&ctx);
         assert!(app.settings.hidden_series.contains("Period"));
-        assert!(app.settings_save.take_pending());
+        assert!(app.settings_save_owed());
 
         app.take_graph_actions(&ctx);
-        assert!(!app.settings_save.take_pending(), "no click, no save");
+        assert!(!app.settings_save_owed(), "no click, no save");
 
         app.graph.click_overlay_chip("Period".to_string());
         app.take_graph_actions(&ctx);
         assert!(app.settings.hidden_series.is_empty());
-        assert!(app.settings_save.take_pending());
+        assert!(app.settings_save_owed());
     }
 
     /// The recording row in a headless window, driven a frame at a time.

@@ -199,7 +199,6 @@ impl App {
             .set_for_theme(&name, PaletteOverrides::default());
         self.settings.named_theme = Some(name.clone());
         self.settings.overrides.theme = None;
-        self.settings.save();
         self.applied.ui_colors = None;
         self.toast = Some(Toast::info(tr!(self.l10n, "colors-saved", name = &name)));
     }

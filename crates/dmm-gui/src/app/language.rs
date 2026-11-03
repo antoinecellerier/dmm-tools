@@ -178,7 +178,6 @@ impl App {
             LanguageChoice::Language(l) => (l.id, l),
         };
         self.settings.shared.language = setting.to_string();
-        self.settings.save();
         if language.id == self.l10n.language().id {
             return;
         }
