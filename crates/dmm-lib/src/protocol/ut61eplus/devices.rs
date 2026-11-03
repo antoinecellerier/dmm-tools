@@ -3,35 +3,9 @@
 //! [`DEVICES`]: crate::protocol::registry::DEVICES
 
 use super::{FINGERPRINT, Ut61PlusProtocol};
+use crate::protocol::DeviceFamily;
 use crate::protocol::registry::{Brand, SelectableDevice};
-use crate::protocol::{DeviceFamily, Protocol};
 use crate::transport::{ch9329, cp2110};
-
-/// Build a UT61+/UT161 protocol for one specific model.
-///
-/// Every entry in the family goes through here rather than sharing a factory,
-/// so a meter reports the model the user actually selected. The UT161x models
-/// reuse their UT61x+ counterpart's table, and deriving the profile from the
-/// table would make a UT161E introduce itself as a verified UT61E+.
-macro_rules! ut61_family_factory {
-    ($name:ident, $model:literal) => {
-        fn $name() -> Box<dyn Protocol> {
-            Box::new(
-                Ut61PlusProtocol::for_model($model)
-                    .expect(concat!($model, " must be a known UT61+/UT161 model")),
-            )
-        }
-    };
-}
-
-ut61_family_factory!(new_ut61eplus, "ut61e+");
-ut61_family_factory!(new_ut61bplus, "ut61b+");
-ut61_family_factory!(new_ut61dplus, "ut61d+");
-ut61_family_factory!(new_ut161e, "ut161e");
-ut61_family_factory!(new_ut161b, "ut161b");
-ut61_family_factory!(new_ut161d, "ut161d");
-ut61_family_factory!(new_ut60bt, "ut60bt");
-ut61_family_factory!(new_ut202bt, "ut202bt");
 
 /// The links the UT61+/UT161 meters are found on, most likely first. The
 /// CP2110 UT-D09 covers the UT61x+ and UT161x (the cable table in
@@ -73,7 +47,7 @@ pub(crate) static UT61EPLUS: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut61eplus,
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT61EPLUS.id)),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
@@ -91,7 +65,7 @@ pub(crate) static UT61BPLUS: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut61bplus,
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT61BPLUS.id)),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
@@ -109,7 +83,7 @@ pub(crate) static UT61DPLUS: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut61dplus,
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT61DPLUS.id)),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     links: LINKS,
@@ -126,7 +100,7 @@ pub(crate) static UT161B: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut161b, // same table as UT61B+
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT161B.id)), // same table as UT61B+
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
@@ -143,7 +117,7 @@ pub(crate) static UT161D: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut161d, // same table as UT61D+
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT161D.id)), // same table as UT61D+
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
@@ -160,7 +134,7 @@ pub(crate) static UT161E: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT61EPLUS,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut161e, // same table as UT61E+
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT161E.id)), // same table as UT61E+
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     links: LINKS,
@@ -178,7 +152,7 @@ pub(crate) static UT60BT: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT60BT,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut60bt,
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT60BT.id)),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com.cn/content/1298.html"),
     // Bluetooth built in, no cable.
@@ -198,7 +172,7 @@ pub(crate) static UT202BT: SelectableDevice = SelectableDevice {
     requires_hardware: true,
     activation_instructions: ACTIVATION_UT202BT,
     family: DeviceFamily::Ut61EPlus,
-    new_protocol: new_ut202bt,
+    new_protocol: || Box::new(Ut61PlusProtocol::for_model(UT202BT.id)),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com.cn/content/1341.html"),
     // Bluetooth built in, no cable.

@@ -226,8 +226,8 @@ struct SelectedDevice {
     family: String,
     listing: Option<registry::Listing>,
     /// Two render paths need it every frame, and building a protocol to read
-    /// it allocates — the UT61E+ factory lowercases its model string, boxes a
-    /// device table and reserves an rx buffer.
+    /// it allocates — the UT61E+ factory boxes a device table and reserves an
+    /// rx buffer.
     profile: Option<dmm_lib::protocol::DeviceProfile>,
 }
 

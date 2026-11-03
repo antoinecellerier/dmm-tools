@@ -78,87 +78,79 @@ impl Ut61PlusProtocol {
         )
     }
 
-    /// Create a protocol instance for a specific model name.
-    ///
-    /// Recognized model strings (case-insensitive):
-    /// - "ut61e+" (Verified), "ut161e" (Verified) -> UT61E+ table
-    /// - "ut61b+" (Verified), "ut161b" -> UT61B+ table
-    /// - "ut61d+", "ut161d" -> UT61D+ table
-    /// - "ut60bt", "ut202bt" -> their own tables
+    /// The protocol for the family's registry entry `id`; an id outside the
+    /// family gets the UT61E+'s, as a name no entry claims does.
     ///
     /// Several models share a table — the UT161x meters are believed to speak
     /// the same protocol as their UT61x+ counterparts — so the reported model
-    /// name and stability come from the requested model, not from the table.
-    /// Otherwise a UT161E would introduce itself as a verified UT61E+.
-    ///
-    /// Returns `None` if the model string is not recognized.
-    pub(crate) fn for_model(model: &str) -> Option<Self> {
+    /// and stability come from the entry, not from the table. Otherwise a
+    /// UT161E would introduce itself as a verified UT61E+.
+    pub(crate) fn for_model(id: &str) -> Self {
         // (table, the entry's registry id, stability, manual spec tables)
-        let (table, id, stability, specs): (Box<dyn DeviceTable>, _, _, _) =
-            match model.to_lowercase().as_str() {
-                "ut61e+" => (
-                    Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
-                    "ut61eplus",
-                    Stability::Verified,
-                    SpecModel::Ut61ePlus,
-                ),
-                // Verified by two captures reported in issue #7 (@frixit,
-                // CP2110), both 2026-10-21: its frames carried the UT61E+'s
-                // mode, range and flag bytes except after one AC+DC V range
-                // press (family spec §2.2), and the second run passed the
-                // gate and drove every command. What is left open on this
-                // model is in `docs/research/ut61-family/verification.md`.
-                "ut161e" => (
-                    Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
-                    "ut161e",
-                    Stability::Verified,
-                    SpecModel::Ut161e,
-                ),
-                // Verified by three captures reported in issue #19,
-                // 2026-09-09 to 2026-09-11: every mode its dial reaches
-                // decoded correctly, every command moved the flag it should,
-                // the second run passed the gate outright and the third
-                // walked the Ω and DC V ladders. What is left open on this
-                // model is in `docs/research/ut61-family/verification.md`.
-                "ut61b+" => (
-                    Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
-                    "ut61b+",
-                    Stability::Verified,
-                    SpecModel::Ut61bPlus,
-                ),
-                "ut161b" => (
-                    Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
-                    "ut161b",
-                    Stability::Experimental,
-                    SpecModel::Ut161b,
-                ),
-                "ut61d+" => (
-                    Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
-                    "ut61d+",
-                    Stability::Experimental,
-                    SpecModel::Ut61dPlus,
-                ),
-                "ut161d" => (
-                    Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
-                    "ut161d",
-                    Stability::Experimental,
-                    SpecModel::Ut161d,
-                ),
-                "ut60bt" => (
-                    Box::new(tables::ut60bt::Ut60btTable::new()),
-                    "ut60bt",
-                    Stability::Experimental,
-                    SpecModel::Untranscribed,
-                ),
-                "ut202bt" => (
-                    Box::new(tables::ut202bt::Ut202btTable::new()),
-                    "ut202bt",
-                    Stability::Experimental,
-                    SpecModel::Untranscribed,
-                ),
-                _ => return None,
-            };
-        Some(Self::with_profile(table, id, stability, specs))
+        let (table, id, stability, specs): (Box<dyn DeviceTable>, _, _, _) = match id {
+            // Verified by two captures reported in issue #7 (@frixit,
+            // CP2110), both 2026-10-21: its frames carried the UT61E+'s
+            // mode, range and flag bytes except after one AC+DC V range
+            // press (family spec §2.2), and the second run passed the
+            // gate and drove every command. What is left open on this
+            // model is in `docs/research/ut61-family/verification.md`.
+            "ut161e" => (
+                Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
+                "ut161e",
+                Stability::Verified,
+                SpecModel::Ut161e,
+            ),
+            // Verified by three captures reported in issue #19,
+            // 2026-09-09 to 2026-09-11: every mode its dial reaches
+            // decoded correctly, every command moved the flag it should,
+            // the second run passed the gate outright and the third
+            // walked the Ω and DC V ladders. What is left open on this
+            // model is in `docs/research/ut61-family/verification.md`.
+            "ut61b+" => (
+                Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
+                "ut61b+",
+                Stability::Verified,
+                SpecModel::Ut61bPlus,
+            ),
+            "ut161b" => (
+                Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
+                "ut161b",
+                Stability::Experimental,
+                SpecModel::Ut161b,
+            ),
+            "ut61d+" => (
+                Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
+                "ut61d+",
+                Stability::Experimental,
+                SpecModel::Ut61dPlus,
+            ),
+            "ut161d" => (
+                Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
+                "ut161d",
+                Stability::Experimental,
+                SpecModel::Ut161d,
+            ),
+            "ut60bt" => (
+                Box::new(tables::ut60bt::Ut60btTable::new()),
+                "ut60bt",
+                Stability::Experimental,
+                SpecModel::Untranscribed,
+            ),
+            "ut202bt" => (
+                Box::new(tables::ut202bt::Ut202btTable::new()),
+                "ut202bt",
+                Stability::Experimental,
+                SpecModel::Untranscribed,
+            ),
+            // "ut61eplus", and any id outside the family.
+            _ => (
+                Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
+                FALLBACK_ID,
+                Stability::Verified,
+                SpecModel::Ut61ePlus,
+            ),
+        };
+        Self::with_profile(table, id, stability, specs)
     }
 
     fn with_profile(
@@ -882,19 +874,15 @@ const FALLBACK_ID: &str = devices::UT61EPLUS.id;
 /// Only [`DeviceFamily::Ut61EPlus`] entries are considered: the name frame is
 /// that family's alone, so matching the whole registry would let a meter that
 /// happens to report "mock" or "UT171" pick an entry whose framing it does not
-/// speak. The model first, then aliases, both case-insensitive — the models
-/// are exactly what the meters send.
+/// speak. Matched case-insensitively against the model alone: the models are
+/// exactly what the meters send, and the aliases are what users type.
 fn device_for_reported_name(name: &str) -> Option<&'static SelectableDevice> {
-    let wanted = name.trim().to_lowercase();
-    let family = || {
-        DEVICES
-            .iter()
-            .copied()
-            .filter(|d| d.family == DeviceFamily::Ut61EPlus)
-    };
-    family()
-        .find(|d| d.model.to_lowercase() == wanted)
-        .or_else(|| family().find(|d| d.aliases.iter().any(|a| a.to_lowercase() == wanted)))
+    let wanted = name.trim();
+    DEVICES
+        .iter()
+        .copied()
+        .filter(|d| d.family == DeviceFamily::Ut61EPlus)
+        .find(|d| d.model.eq_ignore_ascii_case(wanted))
 }
 
 /// How long a press waits for the meter's ack before the next command goes
@@ -1313,13 +1301,11 @@ fn secondary_label(mode: Mode) -> &'static str {
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     use crate::text::TextKind;
-    let models = [
-        "ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d", "ut60bt", "ut202bt",
-    ];
-    for model in models {
-        let Some(protocol) = Ut61PlusProtocol::for_model(model) else {
-            continue;
-        };
+    for device in DEVICES
+        .iter()
+        .filter(|d| d.family == DeviceFamily::Ut61EPlus)
+    {
+        let protocol = Ut61PlusProtocol::for_model(device.id);
         let by = protocol.profile.id;
         let table = protocol.table.as_ref();
         for &mode in Mode::ALL {
@@ -1612,13 +1598,12 @@ mod tests {
     fn capture_steps_follow_the_model_s_dial() {
         let ids = |model: &str| -> Vec<&'static str> {
             Ut61PlusProtocol::for_model(model)
-                .expect("known model")
                 .capture_steps()
                 .iter()
                 .map(|s| s.id)
                 .collect()
         };
-        let e_plus = ids("ut61e+");
+        let e_plus = ids("ut61eplus");
         assert!(e_plus.contains(&"acua"));
         for id in ["temp", "tempf", "loz"] {
             assert!(!e_plus.contains(&id), "{id} asked for on the E+");
@@ -1658,7 +1643,6 @@ mod tests {
     fn ut60bt_steps_follow_its_dial() {
         let text = |model: &str, id: &str| -> &'static str {
             Ut61PlusProtocol::for_model(model)
-                .expect("known model")
                 .capture_steps()
                 .iter()
                 .find(|s| s.id == id)
@@ -1679,15 +1663,15 @@ mod tests {
             "Hz/% position: press SELECT for Duty %."
         );
         assert_eq!(
-            text("ut61e+", "acv"),
+            text("ut61eplus", "acv"),
             "Set meter to AC V (V~). Leave leads open."
         );
         assert_eq!(
-            text("ut61e+", "ohm"),
+            text("ut61eplus", "ohm"),
             "Set meter to \u{03A9}. Leave leads open (should show OL)."
         );
         assert_eq!(
-            text("ut61e+", "duty"),
+            text("ut61eplus", "duty"),
             "Hz/% position: short-press the USB button for Duty %."
         );
     }
@@ -1696,7 +1680,7 @@ mod tests {
     /// commands, and every mode its steps assert is one its table has.
     #[test]
     fn ut202bt_steps_follow_its_buttons() {
-        let proto = Ut61PlusProtocol::for_model("ut202bt").expect("known model");
+        let proto = Ut61PlusProtocol::for_model("ut202bt");
         let steps = proto.capture_steps();
         let ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
         for id in [
@@ -1730,11 +1714,17 @@ mod tests {
     fn each_model_offers_the_commands_its_buttons_take() {
         let commands = |model| {
             Ut61PlusProtocol::for_model(model)
-                .expect("known model")
                 .profile
                 .supported_commands
         };
-        for model in ["ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d"] {
+        for model in [
+            "ut61eplus",
+            "ut161e",
+            "ut61b+",
+            "ut161b",
+            "ut61d+",
+            "ut161d",
+        ] {
             assert_eq!(commands(model), UT61EPLUS_COMMANDS, "{model}");
         }
         assert_eq!(
@@ -1743,8 +1733,8 @@ mod tests {
         );
         assert_eq!(commands("ut202bt"), ["hold", "range"]);
 
-        for model in ["ut61e+", "ut61b+", "ut61d+", "ut60bt", "ut202bt"] {
-            let proto = Ut61PlusProtocol::for_model(model).expect("known model");
+        for model in ["ut61eplus", "ut61b+", "ut61d+", "ut60bt", "ut202bt"] {
+            let proto = Ut61PlusProtocol::for_model(model);
             for step in proto.capture_steps() {
                 if let Some(command) = step.command {
                     assert!(commands(model).contains(&command), "{model}: {}", step.id);
@@ -1758,12 +1748,12 @@ mod tests {
     #[test]
     fn a_command_the_model_does_not_take_is_refused() {
         let mock = MockTransport::new(vec![]);
-        let mut ut60bt = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        let mut ut60bt = Ut61PlusProtocol::for_model("ut60bt");
         assert!(matches!(
             ut60bt.send_command(&mock, "minmax"),
             Err(Error::UnsupportedCommand(Unsupported::Command(c))) if c == "minmax"
         ));
-        let mut ut202bt = Ut61PlusProtocol::for_model("ut202bt").expect("known model");
+        let mut ut202bt = Ut61PlusProtocol::for_model("ut202bt");
         for command in ["auto", "rel", "peak"] {
             assert!(
                 matches!(
@@ -1785,13 +1775,13 @@ mod tests {
     fn the_new_models_offer_only_the_settings_their_buttons_take() {
         use cycle::{CycleMeter, FlagSetting};
         let (dcv, acv) = (u16::from(Mode::DcV as u8), u16::from(Mode::AcV as u8));
-        let ut60bt = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        let ut60bt = Ut61PlusProtocol::for_model("ut60bt");
         assert!(ut60bt.flag_states(FlagSetting::MinMax, dcv).is_empty());
         assert_eq!(ut60bt.flag_states(FlagSetting::Rel, dcv), [0, 1]);
         assert_eq!(ut60bt.flag_states(FlagSetting::Hold, dcv), [0, 1]);
         assert!(!ut60bt.range_ladder(dcv).is_empty());
 
-        let ut202bt = Ut61PlusProtocol::for_model("ut202bt").expect("known model");
+        let ut202bt = Ut61PlusProtocol::for_model("ut202bt");
         for setting in [FlagSetting::Rel, FlagSetting::MinMax, FlagSetting::Peak] {
             assert!(ut202bt.flag_states(setting, acv).is_empty(), "{setting:?}");
         }
@@ -1879,9 +1869,16 @@ mod tests {
     #[test]
     fn only_the_flagged_models_want_their_name_first_and_only_on_bluetooth() {
         for model in [
-            "ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d", "ut60bt", "ut202bt",
+            "ut61eplus",
+            "ut161e",
+            "ut61b+",
+            "ut161b",
+            "ut61d+",
+            "ut161d",
+            "ut60bt",
+            "ut202bt",
         ] {
-            let p = Ut61PlusProtocol::for_model(model).expect("known model");
+            let p = Ut61PlusProtocol::for_model(model);
             let flagged = matches!(model, "ut60bt" | "ut202bt");
             let radio = BluetoothMock(MockTransport::new(vec![]));
             assert_eq!(p.name_before_init(&radio), flagged, "{model}");
@@ -1891,7 +1888,7 @@ mod tests {
             );
         }
         let mock = BluetoothMock(MockTransport::new(vec![]));
-        let mut p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        let mut p = Ut61PlusProtocol::for_model("ut60bt");
         p.init(&mock).unwrap();
         assert_eq!(
             mock.0.written.borrow().as_slice(),
@@ -1910,7 +1907,7 @@ mod tests {
                 test_frame_be16(name.as_bytes()),
                 frame_in(0x02),
             ]));
-            let p = Ut61PlusProtocol::for_model(model).expect("known model");
+            let p = Ut61PlusProtocol::for_model(model);
             let mut dmm = crate::Dmm::new(mock, Box::new(p)).unwrap();
             assert_eq!(
                 dmm.transport().0.written.borrow().as_slice(),
@@ -1961,7 +1958,7 @@ mod tests {
             mock: MockTransport::new(vec![ACK.to_vec(), head.to_vec(), tail.to_vec()]),
             log: RefCell::new(Vec::new()),
         };
-        let p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        let p = Ut61PlusProtocol::for_model("ut60bt");
         let dmm = crate::Dmm::new(link, Box::new(p)).unwrap();
         assert_eq!(
             *dmm.transport().log.borrow(),
@@ -1974,7 +1971,7 @@ mod tests {
     #[test]
     fn a_meter_that_gives_no_name_is_still_started() {
         let mock = BluetoothMock(MockTransport::new(vec![]));
-        let p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        let p = Ut61PlusProtocol::for_model("ut60bt");
         let mut dmm = crate::Dmm::new(mock, Box::new(p)).unwrap();
         assert_eq!(
             dmm.transport().0.written.borrow().as_slice(),
@@ -2031,7 +2028,7 @@ mod tests {
     }
 
     fn ut202bt() -> Ut61PlusProtocol {
-        Ut61PlusProtocol::for_model("ut202bt").expect("known model")
+        Ut61PlusProtocol::for_model("ut202bt")
     }
 
     /// Only the UT202BT has a secondary display, so only it has a sub-value
@@ -2039,10 +2036,17 @@ mod tests {
     #[test]
     fn a_sub_value_slot_for_a_secondary_display_or_ac_dc_v() {
         for model in [
-            "ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d", "ut60bt", "ut202bt",
+            "ut61eplus",
+            "ut161e",
+            "ut61b+",
+            "ut161b",
+            "ut61d+",
+            "ut161d",
+            "ut60bt",
+            "ut202bt",
         ] {
-            let p = Ut61PlusProtocol::for_model(model).expect("known model");
-            let want = usize::from(matches!(model, "ut202bt" | "ut61e+" | "ut161e"));
+            let p = Ut61PlusProtocol::for_model(model);
+            let want = usize::from(matches!(model, "ut202bt" | "ut61eplus" | "ut161e"));
             assert_eq!(p.profile().max_aux_values, want, "{model}");
         }
     }
@@ -2156,8 +2160,8 @@ mod tests {
     /// carries it whole, so a second meter that sends one shows up.
     #[test]
     fn a_secondary_frame_on_a_model_without_one_is_an_unknown_mode() {
-        for model in ["ut61e+", "ut60bt"] {
-            let mut p = Ut61PlusProtocol::for_model(model).expect("known model");
+        for model in ["ut61eplus", "ut60bt"] {
+            let mut p = Ut61PlusProtocol::for_model(model);
             let frame = secondary(0x04, 0x00, b"  50.02");
             let (reading, reports) = capture_reports(|| p.take_reading(&frame));
             assert!(
@@ -2621,7 +2625,6 @@ mod tests {
     fn verified_models_are_asked_for_nothing() {
         let unverified = |model: &str| -> Vec<&'static str> {
             Ut61PlusProtocol::for_model(model)
-                .expect("known model")
                 .capture_steps()
                 .into_iter()
                 .filter(|s| !s.verified)
@@ -2629,9 +2632,9 @@ mod tests {
                 .collect()
         };
         assert!(
-            unverified("ut61e+").is_empty(),
+            unverified("ut61eplus").is_empty(),
             "the UT61E+ has run every step it declares: {:?}",
-            unverified("ut61e+")
+            unverified("ut61eplus")
         );
         assert!(
             unverified("ut61b+").is_empty(),
@@ -2683,8 +2686,8 @@ mod tests {
     /// no ladder is offered there even though both tables name their rungs.
     #[test]
     fn capacitance_and_hz_offer_no_range_ladder() {
-        for model in ["ut61e+", "ut61b+", "ut61d+"] {
-            let proto = Ut61PlusProtocol::for_model(model).expect("known model");
+        for model in ["ut61eplus", "ut61b+", "ut61d+"] {
+            let proto = Ut61PlusProtocol::for_model(model);
             for mode in [0x09u8, 0x04] {
                 let m = make_test_measurement(mode, 0x00, b"   0.00", (0, 0), (0, 0, 0));
                 assert!(
@@ -2716,7 +2719,7 @@ mod tests {
     /// effect" (research spec §4 and §6).
     #[test]
     fn the_b_plus_offers_no_peak_anywhere() {
-        let proto = Ut61PlusProtocol::for_model("ut61b+").expect("known model");
+        let proto = Ut61PlusProtocol::for_model("ut61b+");
         let ac = make_test_measurement(0x01, 0x00, b"  8.700", (0, 0), (0, 0, 0));
         assert!(proto.choices(Setting::Peak, &ac).is_empty());
         // The buttons it does have are still offered.
@@ -3235,7 +3238,7 @@ raw_payload=14"#
         // Range byte 0 of DC V is 999.9 mV on a UT60BT, 9.999 V on a UT202BT.
         let payload = make_payload(0x02, 0, b" 12.345", (0, 0), (0, 0, 0));
         let unit = |id| {
-            let proto = Ut61PlusProtocol::for_model(id).expect("known model");
+            let proto = Ut61PlusProtocol::for_model(id);
             proto.parse_payload(&payload).expect("parses").unit
         };
         assert_eq!(unit("ut60bt"), "mV");
@@ -3696,8 +3699,8 @@ raw_payload=14"#
         let all = crate::text::listed();
         // A frame in every mode each model's table names, at its first
         // range, as a main and as a secondary display.
-        for model in ["ut61e+", "ut61b+", "ut61d+", "ut60bt", "ut202bt"] {
-            let protocol = Ut61PlusProtocol::for_model(model).unwrap();
+        for model in ["ut61eplus", "ut61b+", "ut61d+", "ut60bt", "ut202bt"] {
+            let protocol = Ut61PlusProtocol::for_model(model);
             let by = protocol.profile.id;
             for &mode in Mode::ALL {
                 let Some(range) =

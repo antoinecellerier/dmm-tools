@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Each model, with the id its protocol is built from.
 const MODELS: &[(SpecModel, &str)] = &[
-    (SpecModel::Ut61ePlus, "ut61e+"),
+    (SpecModel::Ut61ePlus, "ut61eplus"),
     (SpecModel::Ut61bPlus, "ut61b+"),
     (SpecModel::Ut61dPlus, "ut61d+"),
     (SpecModel::Ut161e, "ut161e"),
@@ -25,7 +25,7 @@ const UT161: &[(SpecModel, SpecModel)] = &[
 /// A reading of `mode` at range byte `range`, as the model's parser gives
 /// it, and whether the parser reported anything in it.
 fn parse(id: &str, mode: u8, range: u8) -> (Option<Measurement>, bool) {
-    let proto = Ut61PlusProtocol::for_model(id).unwrap();
+    let proto = Ut61PlusProtocol::for_model(id);
     // "3" reads as a number, and in NCV as a level.
     let payload = make_payload(mode, range, b"      3", (0, 0), (0, 0, 0));
     let (m, reports) = crate::protocol::capture_reports(|| proto.parse_payload(&payload));
@@ -73,7 +73,7 @@ fn every_reading_has_a_spec_or_is_listed() {
     let lists = [MODE_SPEC_ONLY, NO_SPEC];
     let mut listed_reached = HashSet::new();
     for &(model, id) in MODELS {
-        let proto = Ut61PlusProtocol::for_model(id).unwrap();
+        let proto = Ut61PlusProtocol::for_model(id);
         let mut rows_reached = HashSet::new();
         for m in accepted_readings(id) {
             let (mode, range) = (mode_of(&m), m.range_raw);
@@ -426,7 +426,7 @@ fn ac_v_has_no_lpf_band() {
 /// with LPF on, it is the only band that applies.
 #[test]
 fn lpf_v_has_only_the_lpf_band() {
-    let (model, id) = (SpecModel::Ut61ePlus, "ut61e+");
+    let (model, id) = (SpecModel::Ut61ePlus, "ut61eplus");
     for range in 0..=3 {
         let lpf = model.row(&reading(id, Mode::LpfV, range)).unwrap();
         let ac = model.row(&reading(id, Mode::AcV, range)).unwrap();

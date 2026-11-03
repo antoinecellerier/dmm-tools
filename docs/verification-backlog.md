@@ -95,8 +95,8 @@ with, and how well that probe is backed:
   (reasoned, not observed; likelier behind a UT-D07B, see
   [Connection](#connection)) — decides the probe order. Needs a reply timed. (#5)
 - The UT61D+ and UT161B/D reported names: an unrecognised one falls back to
-  the UT61E+ tables and is logged, and a reporter's `RUST_LOG=dmm_lib=debug`
-  output turns it into a registry alias. (#7)
+  the UT61E+ tables and is logged; a reporter's `RUST_LOG=dmm_lib=debug`
+  output shows whether `device_for_reported_name` needs more than the model. (#7)
 - Whether a VC-890 answers `0x5E` on the first attempt: the vendor software
   retries up to 10 times, flushing between — decides whether one poll is
   enough. Needs a VC-890 under `auto`. (#14)

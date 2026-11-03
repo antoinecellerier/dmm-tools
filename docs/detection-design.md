@@ -143,10 +143,10 @@ bridges' (see [Bridges and adapters](#bridges-and-adapters)).
 ## Names and the registry
 
 A name frame resolves through `protocol/ut61eplus`'s `device_for_reported_name(name)`, which
-matches `model` then aliases, case-insensitively, across the UT61+/UT161 entries only. An
-unrecognised name falls back to `ut61eplus`, keeps the reported name on `Detected`, and warns:
-a UT61D+ or a UT161x still reads, with UT61E+ tables, and the user is told which name to
-report so an alias can absorb it.
+matches `model`, case-insensitively, across the UT61+/UT161 entries only; the aliases are what
+users type, not what meters send. An unrecognised name falls back to `ut61eplus`, keeps the
+reported name on `Detected`, and warns: a meter of the family still reads, with UT61E+ tables,
+and the user is told which name to report.
 
 A meter with Bluetooth built in names itself before any frame: `Ble` reports the name the peer
 advertised (`Transport::advertised_name()`). `built_in_meters()` in `lib.rs` looks that name up
@@ -246,7 +246,7 @@ what gives a slow streamer (the UT8803) the whole walk instead of one window.
 | UT181A vs UT171 ambiguity | Same framing and type byte, overlapping lengths | Wrong one of the two | Each rule declines the other's frames ([overlaps](#evidence-strength)) |
 | VC650BT reported as VC-880 | Byte-identical protocol | The wrong name, readings unaffected | Pick the VC650BT in the GUI, or `--device vc650bt` |
 | UT71 or VC9x0 reported as UT804 | They send the UT804's packets | The wrong name, specs and range labels | Pick the model in the GUI once, or `--device` |
-| Unknown UT61+ name | A name not seen yet, or a future model | Reading works, tables may be off | Fallback tables, `reported_name` kept; aliases absorb variants |
+| Unknown UT61+ name | A name not seen yet, or a future model | Reading works, tables may be off | Fallback tables, `reported_name` kept, the name to report |
 | Probe side effect on the wrong meter | The UT171 connect is UT181A start recording | A recording started, a beep, or nothing | [Probe order](#the-cascade) (`send_after`); `--device` skips probing |
 | Probe changes meter state | SET_MONITOR left on; the VC-890 ack burst | None expected | Both are sent in normal use anyway |
 | Slow or sparse replies | Slow streamers; late Brymen answers | A missed frame in a short window | `WINDOW`, `LISTEN_ONLY_WINDOW`; the buffer persists across steps |
