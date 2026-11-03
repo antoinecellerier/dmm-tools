@@ -10,7 +10,7 @@ git config core.hooksPath git-hooks
 
 `pre-commit` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` before each commit. `commit-msg` rejects a `Claude-Session:` trailer in the message; `Co-Authored-By` trailers are fine.
 
-On Linux the build needs `libudev-dev` for hidapi and `libdbus-1-dev` for the Bluetooth transport (`systemd-devel` and `dbus-devel` on Fedora); see [`setup.md`](setup.md) for the full list. `cargo check -p dmm-lib --no-default-features` builds the library without Bluetooth, and `cargo check -p dmm-gui --no-default-features` the GUI without its update check; CI runs both.
+On Linux the build needs `libudev-dev` for hidapi and `libdbus-1-dev` for the Bluetooth transport (`systemd-devel` and `dbus-devel` on Fedora); see [`setup.md`](setup.md) for the full list. A Claude Code cloud session does both steps itself, through `.claude/hooks/session-start.sh`. `cargo check -p dmm-lib --no-default-features` builds the library without Bluetooth, and `cargo check -p dmm-gui --no-default-features` the GUI without its update check; CI runs both.
 
 Shell completions are in the [CLI reference](cli-reference.md#dmm-cli-completions) and the [GUI reference](gui-reference.md#command-line-options).
 
