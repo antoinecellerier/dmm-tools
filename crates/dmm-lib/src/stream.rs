@@ -46,7 +46,10 @@ pub const NO_RESPONSE_TIMEOUTS: u32 = 5;
 /// The `Measurement` variant carries the full parsed struct, which is larger
 /// than the `Timeout` variant but short-lived — events are matched on the
 /// same thread they're produced and do not accumulate.
-#[allow(clippy::large_enum_variant)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "short-lived: matched on the thread that made it, never stored"
+)]
 #[derive(Debug)]
 pub enum StreamEvent {
     /// Measurement received. The consecutive-timeout counter has been reset.

@@ -45,7 +45,10 @@ impl FormattedStats {
     /// Max are whole numbers.
     ///
     /// [`Graph::decimals`]: crate::graph::Graph::decimals
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the whole and visible statistics side by side"
+    )]
     fn new(
         l10n: &Localizer,
         stats: &RunningStats,

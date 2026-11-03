@@ -496,7 +496,10 @@ fn skipped(report: &mut CaptureReport, step: &CaptureStep, quit: bool) -> StepOu
 }
 
 /// Run one capture step. Returns Ok(true) if user wants to quit.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the capture run state, passed down"
+)]
 pub(crate) fn run_capture_step(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: &SharedRecorder,

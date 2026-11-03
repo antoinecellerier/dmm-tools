@@ -47,3 +47,6 @@ update-check = ["dep:ureq", "dep:rustls"]
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
 dmm-shared = { path = "../dmm-shared", features = ["test-support"] }
+
+[lints]
+workspace = true

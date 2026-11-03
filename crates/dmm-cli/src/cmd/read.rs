@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "one argument per `read` option")]
 pub(crate) fn cmd_read(
     selection: Selection,
     opts: dmm_lib::OpenOptions<'_>,
@@ -275,7 +275,10 @@ pub(crate) fn replay_names_its_device(l: &Localizer) -> Cow<'_, str> {
 /// The clock carries the recording's own start, so every reading exports at
 /// the wall time it was measured at and two runs of the same file print the
 /// same timestamps.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the `read` options a replay honours"
+)]
 fn read_replay(
     path: &Path,
     interval_ms: u64,
@@ -414,7 +417,10 @@ impl<'a> Run<'a> {
     /// brand and model, as this run calls it: what the CSV comment and the
     /// JSON metadata carry, and, brand aside, what a file the run names
     /// itself is named after, the rule the GUI's Export… names its files by.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the output settings `read` was given"
+    )]
     fn open(
         destination: output::Destination,
         meter_name: &str,
@@ -738,7 +744,10 @@ fn next_marker_number(numbers: impl Iterator<Item = u32>) -> u32 {
 }
 
 /// Shared measurement loop for both real and mock devices.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the `read` options live and mock runs share"
+)]
 fn run_read_loop<T: dmm_lib::transport::Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     interval_ms: u64,

@@ -202,7 +202,10 @@ fn value_display(m: &Measurement, tc: &ThemeColors, state: ReadingState) -> (Str
 /// after it in the same row rather than inside it, so the spoken reading's
 /// bounds stop at the value and a screen reader exploring by pointer finds
 /// the dropdowns as themselves. `draw_value` paints the value and unit labels.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one draw call per layout, fed piecewise"
+)]
 fn show_reading_line_with_selector(
     ui: &mut Ui,
     l10n: &Localizer,
@@ -466,7 +469,10 @@ fn no_reading_placeholder(
 /// Render the primary reading display at the given font size (two-line layout).
 ///
 /// Returns the setting and value the user picked from a selector, if any.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one draw call per layout, fed piecewise"
+)]
 fn show_reading_sized(
     ui: &mut Ui,
     l10n: &Localizer,
@@ -597,7 +603,10 @@ const SEPARATOR_WIDTH: f32 = 6.0;
 /// Returns the setting and value the user picked from a selector, if any,
 /// and the size of the line alone, the space under it included — what the
 /// fit measures the one-row layouts by.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one draw call per layout, fed piecewise"
+)]
 fn show_reading_inline(
     ui: &mut Ui,
     l10n: &Localizer,
@@ -776,7 +785,10 @@ pub fn show_reading(
 ///
 /// `no_reading` is what takes the reading's place when there is none — the
 /// connection issue's title, where the caller has one.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one draw call per layout, fed piecewise"
+)]
 pub fn show_reading_large(
     ui: &mut Ui,
     l10n: &Localizer,

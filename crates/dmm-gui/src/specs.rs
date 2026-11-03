@@ -154,7 +154,10 @@ fn summary_line(parts: &[String], joiner: &str, link_follows: bool) -> Option<St
 /// The caller owns `expanded`, a saved setting: this returns `true` when the
 /// heading was clicked this frame, and the caller flips it. `heading` is the
 /// palette's heading colour, which the title is drawn in.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the panel draws from separate app state"
+)]
 pub fn show_specs(
     ui: &mut Ui,
     l10n: &Localizer,

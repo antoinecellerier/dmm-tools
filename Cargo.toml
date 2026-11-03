@@ -23,3 +23,12 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde-saphyr = { version = "2", default-features = false, features = ["serialize", "deserialize"] }
 directories = "6"
+
+# The coding rules in CLAUDE.md, enforced by the compiler; clippy.toml lets
+# tests unwrap.
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+allow_attributes_without_reason = "warn"

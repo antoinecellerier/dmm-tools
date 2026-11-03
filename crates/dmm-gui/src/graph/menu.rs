@@ -518,7 +518,10 @@ impl Graph {
     /// be picked takes the focus as the menu opens, the arrows move it, and
     /// Tab or Esc close the menu. The focus then goes nowhere rather than to
     /// the plot, where it would turn the graph's keys off.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the menu reads separate graph and app state"
+    )]
     pub(super) fn show_context_menu(
         &mut self,
         l10n: &Localizer,

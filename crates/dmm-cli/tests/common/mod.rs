@@ -1,6 +1,6 @@
 //! Helpers shared by the integration tests. Each test compiles its own copy
 //! and uses only some of them, hence the `dead_code` allowance.
-#![allow(dead_code)]
+#![allow(dead_code, reason = "each test crate uses a different subset")]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

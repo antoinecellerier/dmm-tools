@@ -1511,6 +1511,10 @@ fn make_payload(
 }
 
 #[cfg(any(test, feature = "test-support"))]
+#[expect(
+    clippy::unwrap_used,
+    reason = "a test fixture: a payload that fails to parse fails the test"
+)]
 pub fn make_test_measurement(
     mode: u8,
     range: u8,

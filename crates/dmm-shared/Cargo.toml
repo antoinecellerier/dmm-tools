@@ -29,3 +29,6 @@ intl_pluralrules = "7.0.2" # the plural forms a translation must have; fluent-bu
 [features]
 # The message scan the binaries' tests run over their sources (l10n::check).
 test-support = []
+
+[lints]
+workspace = true

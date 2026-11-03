@@ -318,8 +318,10 @@ pub(crate) struct TriageArgs {
 #[derive(clap::Args)]
 pub(crate) struct CaptureArgs {
     /// Output file (default: capture-<device>.yaml). Overrides auto-naming.
-    // The line above is the --help text, so `<device>` stays as users read it.
-    #[allow(rustdoc::invalid_html_tags)]
+    #[expect(
+        rustdoc::invalid_html_tags,
+        reason = "the doc comment is --help text, so `<device>` stays as users read it"
+    )]
     #[arg(short, long)]
     pub(crate) output: Option<String>,
     /// Only run specific steps (comma-separated IDs, e.g. "dcmv,temp,duty")

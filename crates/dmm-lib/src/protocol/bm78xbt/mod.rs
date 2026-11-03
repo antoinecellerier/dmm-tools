@@ -32,8 +32,13 @@ macro_rules! reset_gesture {
 mod capture;
 mod decode;
 pub(crate) mod devices;
-// The Bluetooth transport and the tests are its users.
-#[cfg_attr(not(feature = "bluetooth"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "bluetooth"),
+    expect(
+        dead_code,
+        reason = "the Bluetooth transport and the tests are its users"
+    )
+)]
 pub(crate) mod login;
 pub(crate) mod packet;
 mod tables;

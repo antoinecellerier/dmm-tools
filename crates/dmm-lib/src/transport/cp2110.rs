@@ -145,7 +145,10 @@ impl Cp2110 {
     ///
     /// This function is not called during normal operation; kept as a
     /// diagnostic for a bridge left in a bad state by an interrupted session.
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "a diagnostic for a bridge an interrupted session left stuck"
+    )]
     pub(crate) fn reset(&self) -> Result<()> {
         debug!("{NAME}: resetting device");
         self.device

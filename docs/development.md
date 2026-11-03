@@ -39,6 +39,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```
 
+The lints every crate shares (no `unsafe`, no `unwrap()` outside tests, a
+reason on every `allow`) are in the root `Cargo.toml`'s `[workspace.lints]`
+and in `clippy.toml`.
+
 ## Build artifacts & disk usage
 
 Cargo does not garbage-collect `target/` — old hash-suffixed artifacts in

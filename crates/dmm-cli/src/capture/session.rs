@@ -136,7 +136,10 @@ pub(super) struct ProtocolPass {
 
 /// Run the device's own capture steps: modes, flags, and the manual range
 /// sweep, in the order the protocol declares them.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the capture run state, passed down"
+)]
 pub(super) fn run_protocol_capture(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: &SharedRecorder,

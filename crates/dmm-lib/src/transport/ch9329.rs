@@ -48,7 +48,10 @@ impl Ch9329 {
     /// This function is not called during normal operation (config init is
     /// skipped), and the UT181A cables reported so far stream without it
     /// (issue #5). Kept as a diagnostic for a cable that does not.
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "a diagnostic for a cable that does not stream unconfigured"
+    )]
     pub(crate) fn read_config(&self) -> Result<[u8; 128]> {
         let mut config = [0u8; 128];
         let offsets: [u8; 4] = [0x00, 0x20, 0x40, 0x60];

@@ -623,7 +623,10 @@ fn hover_bin(
 /// round shares about `spacing` points apart; the interval's outline over
 /// the bars; and `lines` across them. Returns the gridlines, as distances
 /// from the bars' base and their labels, for the caller's scale.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one paint call per part, fed piecewise"
+)]
 fn paint_bins(
     ui: &Ui,
     dock: Dock,
@@ -776,7 +779,10 @@ fn percent(share: f64) -> String {
 /// reads over a bar. At the top end, the over-range readings after them,
 /// `OL` with their share of every reading. Stacked from `corner` away from
 /// it, aligned by `align`.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one paint call per part, fed piecewise"
+)]
 fn paint_beyond(
     ui: &Ui,
     painter: &egui::Painter,
@@ -820,7 +826,10 @@ fn paint_beyond(
 /// The strip right of `plot`, `area` tall, its bars at the heights
 /// `transform` gives their values. The σ caption goes under the plot, in
 /// the time axis's row.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one paint call per part, fed piecewise"
+)]
 pub(super) fn paint_side(
     ui: &Ui,
     l10n: &Localizer,
@@ -890,7 +899,10 @@ pub(super) fn paint_side(
 
 /// The band under the minimap, values across `x_range` (the plot's own
 /// width, so it lines up with the plot above) between `lo` and `hi`.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one paint call per part, fed piecewise"
+)]
 pub(super) fn paint_below(
     ui: &Ui,
     l10n: &Localizer,

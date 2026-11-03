@@ -49,6 +49,10 @@ fn help_speaks_the_pseudo_locale() {
 /// A folder for `DMM_TOOLS_L10N_DIR` with two languages the build lacks,
 /// each naming itself in the top-level help and in `info`'s: what
 /// `--lang`, the settings file and the environment can then pick from.
+#[expect(
+    clippy::unwrap_used,
+    reason = "a test helper: a folder it cannot write fails the test"
+)]
 fn languages_dir() -> &'static std::path::Path {
     static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
     DIR.get_or_init(|| {

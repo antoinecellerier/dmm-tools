@@ -519,7 +519,10 @@ struct Driven {
 /// protocol may simply be wrong about this family. `proven` says the setting
 /// has already worked this run, which is what decides whether the refusal is
 /// worth a maintainer's attention.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the capture run state, passed down"
+)]
 fn drive_choice(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: &SharedRecorder,
