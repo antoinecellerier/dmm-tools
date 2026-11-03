@@ -727,7 +727,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::Settings;
+    use crate::app::test_support::{key_tap, test_app};
     use eframe::egui::{Pos2, Rect, vec2};
     use std::time::Instant;
 
@@ -737,7 +737,7 @@ mod tests {
     /// leaves the floor alone.
     #[test]
     fn a_histogram_band_raises_the_split_floor() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         assert_eq!(app.min_split_height(400.0), MIN_SPLIT_HEIGHT);
         app.graph.show_histogram = true;
         app.graph.histogram_sizes.1 = 400.0;
@@ -761,7 +761,7 @@ mod tests {
     fn the_menu_copies_the_meters_digits() {
         use dmm_lib::flags::StatusFlags;
         use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let at = Instant::now();
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(1.234), "V", StatusFlags::default());
@@ -773,11 +773,7 @@ mod tests {
             display_raw: Some(" 9.876".to_string()),
             elapsed_secs: None,
         }];
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(super::super::connection::DmmMessage::Measurement(m))
-            .expect("the channel is open");
-        app.connection.worker = Some(crate::app::Worker::reading(rx));
-        app.drain_messages();
+        app.deliver(super::super::connection::DmmMessage::Measurement(m));
         let recording = &app.capture.recording;
         assert_eq!(
             reading_digits(recording, at, None).as_deref(),
@@ -813,7 +809,7 @@ mod tests {
     /// it back on forgets it.
     #[test]
     fn a_hidden_trace_is_remembered() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let ctx = crate::app::styled_context();
         app.graph.click_overlay_chip("Period".to_string());
         app.take_graph_actions(&ctx);
@@ -849,7 +845,7 @@ mod tests {
 
     impl MenuRun {
         fn new() -> Self {
-            let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+            let mut app = test_app();
             // A meter's readings, so the Replay… entry is enabled.
             app.capture.history_layout.device_id = Some("ut61eplus");
             let ctx = crate::app::styled_context();
@@ -913,17 +909,7 @@ mod tests {
 
         /// A key pressed and released within one frame, then a settling frame.
         fn key(&mut self, key: Key) {
-            let events = [true, false]
-                .into_iter()
-                .map(|pressed| egui::Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed,
-                    repeat: false,
-                    modifiers: Modifiers::NONE,
-                })
-                .collect();
-            self.frame(1.0, events);
+            self.frame(1.0, key_tap(key));
             self.frame(1.0, vec![]);
         }
 

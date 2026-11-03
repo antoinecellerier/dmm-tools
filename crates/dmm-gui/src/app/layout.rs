@@ -329,6 +329,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::test_app;
     use crate::settings::{
         SIDE_PANEL_DEFAULT_WIDTH, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, Settings,
     };
@@ -593,7 +594,7 @@ mod tests {
     /// the parent ui's scope, and the width silently stopped being kept.
     #[test]
     fn the_reading_panel_width_is_kept() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let ctx = crate::app::styled_context();
         let width = app.settings.reading_panel_width + 40.0;
         for _ in 0..2 {
@@ -625,7 +626,7 @@ mod tests {
     /// minimized or big-meter window change nothing but the maximized flag.
     #[test]
     fn the_window_size_is_kept_only_when_the_user_picked_it() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let ctx = crate::app::styled_context();
 
         track(

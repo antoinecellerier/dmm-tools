@@ -437,6 +437,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::test_app;
     use crate::settings::Settings;
 
     /// The carets draw from the bundled fonts, not as the replacement box
@@ -471,7 +472,7 @@ mod tests {
     /// typed it switches the alarm on, and again off, the fields kept.
     #[test]
     fn the_alarm_body_switches_with_its_fields() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.toggle_alarm();
         assert!(app.alarm_editor.open && app.alarm.is_none());
         app.alarm_editor.open = false;
@@ -488,7 +489,7 @@ mod tests {
 
     #[test]
     fn the_scale_body_switches_with_its_fields() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.toggle_scale();
         assert!(app.transform_editor.open && app.transform.is_identity());
         app.transform_editor.scale = "100".to_string();
@@ -503,7 +504,7 @@ mod tests {
     /// the body out rather than opening a row it can't show.
     #[test]
     fn the_big_meter_chips_have_no_caret() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.big_meter_mode = crate::app::BigMeterMode::Full;
         let ctx = crate::app::styled_context();
         let chip = app.alarm_chip(&ctx);
@@ -517,7 +518,7 @@ mod tests {
     /// cycles big-meter views that have none.
     #[test]
     fn the_greyed_chip_names_the_way_to_its_row() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.big_meter_mode = crate::app::BigMeterMode::Full;
         let ctx = crate::app::styled_context();
         let chip = app.scale_chip(&ctx);
@@ -543,7 +544,7 @@ mod tests {
     /// One row under the chips: opening either closes the other.
     #[test]
     fn opening_a_row_closes_the_other() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.toggle_transform_editor();
         app.toggle_alarm_editor();
         assert!(app.alarm_editor.open && !app.transform_editor.open);

@@ -35,6 +35,8 @@ pub(crate) use shortcuts::key_name;
 mod stats_panel;
 mod system_fonts;
 mod task;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod toast;
 mod top_bar;
 mod transform_ui;
@@ -1680,11 +1682,7 @@ mod tests {
             display_raw: Some(" 9.876".to_string()),
             elapsed_secs: None,
         }];
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(connection::DmmMessage::Measurement(m))
-            .expect("the channel is open");
-        app.connection.worker = Some(Worker::reading(rx));
-        app.drain_messages();
+        app.deliver(connection::DmmMessage::Measurement(m));
 
         let out = last_frame(&mut app);
         let texts = drawn_texts(&out);

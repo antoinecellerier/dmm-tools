@@ -662,7 +662,7 @@ pub(super) fn file_name(path: &Path) -> String {
 mod tests {
     use super::*;
     use crate::app::connection_issue::ConnectionIssue;
-    use crate::settings::Settings;
+    use crate::app::test_support::test_app;
 
     /// A library error stays whole until the toast words it, so the log
     /// line is its English whatever the GUI's language.
@@ -699,10 +699,6 @@ timestamp,mode,value,unit,range,flags,marker,note
 2026-09-02T10:00:00.200+00:00,\u{3a9},80.45,k\u{3a9},220k\u{3a9},AUTO,,
 ";
 
-    fn app() -> App {
-        App::from_settings(Settings::default(), dmm_lib::Clock::real())
-    }
-
     /// `text` as a file named `name` of this test's own.
     fn file(name: &str, text: &str) -> PathBuf {
         let path =
@@ -730,7 +726,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// as saved, and the session names the file.
     #[test]
     fn a_csv_import_fills_a_saved_recording() {
-        let mut app = app();
+        let mut app = test_app();
         let path = file("three.csv", CSV);
         import(&mut app, path.clone());
         assert_eq!(app.capture.recording.export_samples().len(), 3);
@@ -754,7 +750,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// live ones: the crossing adds its note to the file's marker on it.
     #[test]
     fn an_import_is_judged_by_the_alarm() {
-        let mut app = app();
+        let mut app = test_app();
         let limits = dmm_lib::alarm::Limits::check(None, Some(1.61095)).unwrap();
         app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
         let path = file("alarm.csv", CSV);
@@ -773,7 +769,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// user's.
     #[test]
     fn an_import_applies_no_transform_and_saves_no_device() {
-        let mut app = app();
+        let mut app = test_app();
         let family = app.settings.shared.device_family.clone();
         app.transform = dmm_lib::transform::Transform::linear(2.0, 0.0, None);
         let path = file("scaled.csv", CSV);
@@ -798,7 +794,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// session over.
     #[test]
     fn a_connect_after_an_import_starts_afresh() {
-        let mut app = app();
+        let mut app = test_app();
         // The mock: Auto-detect would probe the machine's USB and Bluetooth
         // from a thread that outlives the test.
         app.settings.shared.device_family = "mock".to_string();
@@ -816,7 +812,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// troubleshooting notice goes with it.
     #[test]
     fn an_import_drops_the_connection_notice() {
-        let mut app = app();
+        let mut app = test_app();
         app.connection.last_error = Some(ConnectionIssue::DeviceNotFound {
             bluetooth_searched: true,
         });
@@ -831,7 +827,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// recording fills, and says what was left out.
     #[test]
     fn an_oversized_file_keeps_its_first_readings() {
-        let mut app = app();
+        let mut app = test_app();
         app.capture.recording.set_max_samples(2);
         let path = file("oversized.csv", CSV);
         import(&mut app, path.clone());
@@ -852,7 +848,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// long the file, and counts what it left out.
     #[test]
     fn the_loader_keeps_no_more_than_the_buffer() {
-        let mut app = app();
+        let mut app = test_app();
         app.settings.max_samples = 2;
         app.capture.recording.set_max_samples(2);
         let path = file("bounded.csv", CSV);
@@ -881,7 +877,7 @@ timestamp,mode,value,unit,range,flags,marker,note
                 i % 1000
             ));
         }
-        let mut app = app();
+        let mut app = test_app();
         let path = file("large.csv", &text);
         let ctx = crate::app::styled_context();
         app.import_file(&ctx, path.clone());
@@ -901,7 +897,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// parser with its markers on their readings.
     #[test]
     fn json_and_replay_files_import_too() {
-        let mut app = app();
+        let mut app = test_app();
         let json = "{\"_metadata\":{\"device\":\"UT61E+\"}}\n\
             {\"timestamp\":\"2026-09-02T10:00:00+00:00\",\"mode\":\"DC V\",\"value\":1.6109,\"unit\":\"V\",\"range\":\"2.2V\",\"display_raw\":\"1.6109\",\"progress\":null,\"experimental\":false,\"flags\":{},\"marker\":1,\"note\":\"\"}\n";
         let path = file("one.json", json);
@@ -936,7 +932,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// overlays and cursors, times counted from the file's first reading.
     #[test]
     fn an_import_puts_the_saved_view_back() {
-        let mut app = app();
+        let mut app = test_app();
         let json = "{\"_metadata\":{\"device\":\"UT61E+\",\"view\":{\"window\":0.1,\"start\":0.05,\"mean\":true,\"cursors\":{\"a\":0.1}}}}\n\
             {\"timestamp\":\"2026-09-02T10:00:00+00:00\",\"mode\":\"DC V\",\"value\":1.0,\"unit\":\"V\",\"range\":\"2.2V\",\"flags\":{}}\n\
             {\"timestamp\":\"2026-09-02T10:00:00.100+00:00\",\"mode\":\"DC V\",\"value\":2.0,\"unit\":\"V\",\"range\":\"2.2V\",\"flags\":{}}\n\
@@ -953,7 +949,7 @@ timestamp,mode,value,unit,range,flags,marker,note
     /// are judged by, whatever the Sample interval is set to meanwhile.
     #[test]
     fn a_files_spacing_outlasts_a_sample_interval_change() {
-        let mut app = app();
+        let mut app = test_app();
         let csv = "timestamp,mode,value,unit,range,flags\n\
             2026-09-02T10:00:00+00:00,DC V,1.0,V,2.2V,\n\
             2026-09-02T10:00:10+00:00,DC V,1.0,V,2.2V,\n\
@@ -968,7 +964,7 @@ timestamp,mode,value,unit,range,flags,marker,note
 
     #[test]
     fn a_file_that_does_not_read_says_why() {
-        let mut app = app();
+        let mut app = test_app();
         let path = file("broken.csv", "timestamp,mode\nnot a time,DC V\n");
         import(&mut app, path.clone());
         let toast = app
@@ -985,11 +981,7 @@ timestamp,mode,value,unit,range,flags,marker,note
 #[cfg(test)]
 mod folder_tests {
     use super::*;
-    use crate::settings::Settings;
-
-    fn app() -> App {
-        App::from_settings(Settings::default(), dmm_lib::Clock::real())
-    }
+    use crate::app::test_support::test_app;
 
     /// The remembered folder wins while it is there; a missing or relative
     /// one falls back to Documents, or to the system's own choice.
@@ -1010,7 +1002,7 @@ mod folder_tests {
     /// asks for no save.
     #[test]
     fn a_picked_file_s_folder_is_remembered() {
-        let mut app = app();
+        let mut app = test_app();
         app.remember_folder(Path::new("/data/bench/a.csv"));
         assert_eq!(
             app.settings.last_folder.as_deref(),
@@ -1030,7 +1022,7 @@ mod folder_tests {
     /// makes of the file.
     #[test]
     fn the_open_dialog_s_answer_is_remembered() {
-        let mut app = app();
+        let mut app = test_app();
         let dir = std::env::temp_dir().join(format!("dmm-gui-folder-{}", std::process::id()));
         let (tx, dialog) = Task::by_hand();
         tx.send(Ok(Some(dir.join("x.json"))))
@@ -1045,14 +1037,14 @@ mod folder_tests {
 #[cfg(test)]
 mod prompt_tests {
     use super::*;
-    use crate::settings::Settings;
+    use crate::app::test_support::test_app;
     use dmm_lib::measurement::MeasuredValue;
 
     /// An import replaces the session: with unexported samples it asks
     /// first and waits, with nothing to lose it goes straight ahead.
     #[test]
     fn an_import_over_unexported_samples_asks_first() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let path =
             std::env::temp_dir().join(format!("dmm-gui-import-{}-ask.csv", std::process::id()));
         std::fs::write(&path, super::tests_support::CSV).expect("write");
@@ -1081,13 +1073,13 @@ mod prompt_tests {
 #[cfg(test)]
 mod connect_tests {
     use super::*;
-    use crate::settings::Settings;
+    use crate::app::test_support::test_app;
 
     /// Connect after an import asks first once markers were added to the
     /// imported session, and goes straight ahead when nothing changed.
     #[test]
     fn a_connect_over_new_markers_asks_first() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let path =
             std::env::temp_dir().join(format!("dmm-gui-import-{}-connect.csv", std::process::id()));
         std::fs::write(&path, super::tests_support::CSV).expect("write");

@@ -721,10 +721,10 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::{key_tap, test_app};
 
     use crate::app::language::LanguageChoice;
     use crate::app::update_check::{Tag, UpdateCheck};
-    use crate::settings::Settings;
     use eframe::egui::scroll_area::ScrollAreaOutput;
     use eframe::egui::{Pos2, Rect, vec2};
 
@@ -757,7 +757,7 @@ mod tests {
 
     impl SettingsRun {
         fn new(w: f32, h: f32) -> Self {
-            let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+            let mut app = test_app();
             app.settings_open = true;
             // As a downloaded build, which has one row more, and with its
             // notice on the bar — forced, so nothing is fetched or saved.
@@ -859,25 +859,6 @@ mod tests {
         run.frame(vec![])
     }
 
-    /// Tab pressed and released within one frame.
-    fn tab() -> Vec<egui::Event> {
-        press(egui::Key::Tab)
-    }
-
-    /// `key` pressed and released within one frame.
-    fn press(key: egui::Key) -> Vec<egui::Event> {
-        [true, false]
-            .into_iter()
-            .map(|pressed| egui::Event::Key {
-                key,
-                physical_key: None,
-                pressed,
-                repeat: false,
-                modifiers: egui::Modifiers::NONE,
-            })
-            .collect()
-    }
-
     /// Whether the focused node is one named `label`, as its label or as its
     /// value, which is how the Device box names the selected meter.
     fn focused_on(frame: &SettingsFrame, label: &str) -> bool {
@@ -909,14 +890,14 @@ mod tests {
         run.frame(vec![]);
         let mut reached = false;
         for _ in 0..60 {
-            let frame = run.frame(tab());
+            let frame = run.frame(key_tap(egui::Key::Tab));
             if focused_on(&frame, "Device") {
                 reached = true;
                 break;
             }
         }
         assert!(reached, "Tab never reached the Device box");
-        run.frame(press(egui::Key::Space));
+        run.frame(key_tap(egui::Key::Space));
         run.frame(vec![])
     }
 
@@ -941,14 +922,14 @@ mod tests {
         let mut run = SettingsRun::new(1600.0, 1000.0);
         run.app.settings.shared.device_family = "ut61eplus".to_string();
         open_device_list(&mut run);
-        let frame = run.frame(press(egui::Key::ArrowDown));
+        let frame = run.frame(key_tap(egui::Key::ArrowDown));
         assert!(focused_on_entry(&frame, "UNI-T UT71A/B"));
-        let frame = run.frame(press(egui::Key::ArrowRight));
+        let frame = run.frame(key_tap(egui::Key::ArrowRight));
         assert!(
             focused_on_entry(&frame, "Voltcraft VC891"),
             "Right left the row"
         );
-        let frame = run.frame(press(egui::Key::ArrowLeft));
+        let frame = run.frame(key_tap(egui::Key::ArrowLeft));
         assert!(focused_on_entry(&frame, "UNI-T UT71A/B"));
     }
 
@@ -959,8 +940,8 @@ mod tests {
         let mut run = SettingsRun::new(1600.0, 1000.0);
         run.app.settings.shared.device_family = "ut61eplus".to_string();
         open_device_list(&mut run);
-        run.frame(press(egui::Key::ArrowDown));
-        run.frame(press(egui::Key::Enter));
+        run.frame(key_tap(egui::Key::ArrowDown));
+        run.frame(key_tap(egui::Key::Enter));
         let frame = run.frame(vec![]);
         assert_eq!(run.app.settings.shared.device_family, "ut71ab");
         assert!(!device_list_open(&frame), "the list stayed open");
@@ -981,8 +962,8 @@ mod tests {
         let mut run = SettingsRun::new(1600.0, 1000.0);
         run.app.settings.shared.device_family = "ut61eplus".to_string();
         open_device_list(&mut run);
-        run.frame(press(egui::Key::ArrowDown));
-        run.frame(press(egui::Key::Escape));
+        run.frame(key_tap(egui::Key::ArrowDown));
+        run.frame(key_tap(egui::Key::Escape));
         let frame = run.frame(vec![]);
         assert_eq!(run.app.settings.shared.device_family, "ut61eplus");
         assert!(!device_list_open(&frame), "the list stayed open");
@@ -1028,7 +1009,7 @@ mod tests {
         let mut run = SettingsRun::new(1600.0, 1000.0);
         open_device_list(&mut run);
         run.screen = Rect::from_min_size(Pos2::ZERO, vec2(700.0, 1000.0));
-        run.frame(press(egui::Key::Escape));
+        run.frame(key_tap(egui::Key::Escape));
         for _ in 0..3 {
             let frame = run.frame(vec![]);
             assert!(!device_list_open(&frame), "the list opened again");
@@ -1175,7 +1156,7 @@ mod tests {
         let mut rows_focused = 0;
         let mut scrolled_down = false;
         for _ in 0..60 {
-            run.frame(tab());
+            run.frame(key_tap(egui::Key::Tab));
             // Focus moves within the Tab frame and the scroller is asked at
             // once, but egui animates the move and places the content a frame
             // behind the offset — a person sees it settle within two frames.
@@ -1555,14 +1536,14 @@ mod tests {
         let mut run = multilingual_run(&dir);
         let mut reached = false;
         for _ in 0..120 {
-            let frame = run.frame(tab());
+            let frame = run.frame(key_tap(egui::Key::Tab));
             if focused_on(&frame, "Language") {
                 reached = true;
                 break;
             }
         }
         assert!(reached, "Tab never reached the Language box");
-        run.frame(press(egui::Key::Space));
+        run.frame(key_tap(egui::Key::Space));
         let frame = run.frame(vec![]);
         assert!(
             focused_on(&frame, "System (English)"),
@@ -1580,9 +1561,9 @@ mod tests {
             );
         }
         // System, English, then Français.
-        run.frame(press(egui::Key::ArrowDown));
-        run.frame(press(egui::Key::ArrowDown));
-        run.frame(press(egui::Key::Enter));
+        run.frame(key_tap(egui::Key::ArrowDown));
+        run.frame(key_tap(egui::Key::ArrowDown));
+        run.frame(key_tap(egui::Key::Enter));
         let mut frame = run.frame(vec![]);
         for _ in 0..3 {
             frame = run.frame(vec![]);
@@ -1820,14 +1801,14 @@ mod tests {
         open_customize_colors(&mut run);
         let mut on_reset = false;
         for _ in 0..120 {
-            let frame = run.frame(tab());
+            let frame = run.frame(key_tap(egui::Key::Tab));
             if focused_on(&frame, "Reset colors") {
                 on_reset = true;
                 break;
             }
         }
         assert!(on_reset, "Tab never reached Reset colors");
-        run.frame(press(egui::Key::Enter));
+        run.frame(key_tap(egui::Key::Enter));
         let frame = run.frame(vec![]);
         assert!(
             !has_node(&frame, "Reset colors"),

@@ -175,7 +175,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::BigMeterMode;
-    use crate::settings::Settings;
+    use crate::app::test_support::test_app;
     use eframe::egui::accesskit::{Node, NodeId, Role};
     use eframe::egui::{Id, Pos2, Rect, vec2};
 
@@ -206,7 +206,7 @@ mod tests {
             let ctx = crate::app::styled_context();
             ctx.enable_accesskit();
             Self {
-                app: App::from_settings(Settings::default(), dmm_lib::Clock::real()),
+                app: test_app(),
                 ctx,
                 screen: Rect::from_min_size(Pos2::ZERO, vec2(w, h)),
                 seconds: 0.0,

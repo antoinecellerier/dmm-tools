@@ -291,6 +291,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::controls::remote::SCALE_RULE_WIDTH;
+    use crate::app::test_support::test_app;
     use crate::settings::Settings;
     use eframe::egui::accesskit::Node;
     use eframe::egui::{Pos2, Rect, vec2};
@@ -465,11 +466,7 @@ mod tests {
         app.set_transform(Transform::linear(2.0, 0.0, None));
         assert_eq!(app.capture.recording.export_samples().len(), 0);
 
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(DmmMessage::Measurement(reading()))
-            .expect("the channel is open");
-        app.connection.worker = Some(crate::app::Worker::reading(rx));
-        app.drain_messages();
+        app.deliver(DmmMessage::Measurement(reading()));
         assert_eq!(app.capture.recording.export_samples().len(), 1);
         assert_eq!(
             app.capture
@@ -493,7 +490,7 @@ mod tests {
     /// a new scale turns the alarm off, and says so.
     #[test]
     fn a_new_scale_turns_the_alarm_off() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let limits = dmm_lib::alarm::Limits::check(None, Some(5.0)).unwrap();
         app.set_limits(limits, dmm_lib::alarm::Hysteresis::Auto);
         app.set_transform(Transform::linear(100.0, 0.0, Some("A".to_string())));
@@ -510,7 +507,7 @@ mod tests {
     /// sentence: a recording going on, and the alarm turned off.
     #[test]
     fn the_scale_toast_says_what_came_with_it() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.capture.recording.active = true;
         app.set_transform(Transform::linear(2.0, 0.5, None));
         assert_eq!(

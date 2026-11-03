@@ -7,6 +7,7 @@ use super::render::{
 };
 use super::toolbar::{overlay_chip_label, series_chip_label};
 use super::*;
+use crate::app::test_support::key_tap;
 use crate::settings::{ColorPreset, PaletteOverrides};
 use std::time::Duration;
 
@@ -2291,7 +2292,7 @@ fn tab_reaches_the_strip_divider_before_the_minimap() {
         let events = if k < 2 {
             Vec::new()
         } else {
-            key_press(egui::Key::Tab)
+            key_tap(egui::Key::Tab)
         };
         let input = egui::RawInput {
             screen_rect: Some(gesture_screen()),
@@ -3813,20 +3814,6 @@ fn ctrl_wheel_off_the_plot_changes_nothing() {
 // already shows the new state — which is what lets the `R` test read the
 // caret off the field it opens.
 
-/// A key pressed and released within one frame.
-fn key_press(key: egui::Key) -> Vec<egui::Event> {
-    [true, false]
-        .into_iter()
-        .map(|pressed| egui::Event::Key {
-            key,
-            physical_key: None,
-            pressed,
-            repeat: false,
-            modifiers: egui::Modifiers::NONE,
-        })
-        .collect()
-}
-
 /// One headless frame of the whole graph — toolbar included — with `events`
 /// delivered to it.
 fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
@@ -3861,12 +3848,12 @@ fn graph_frame_in(l10n: &Localizer, g: &mut Graph, ctx: &egui::Context, events: 
 fn m_and_x_toggle_the_mean_and_the_envelope() {
     let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
-    graph_frame(&mut g, &ctx, key_press(egui::Key::M));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::M));
     assert!(g.show_mean, "M did not draw the mean line");
-    graph_frame(&mut g, &ctx, key_press(egui::Key::X));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::X));
     assert!(g.show_envelope, "X did not draw the min/max band");
-    graph_frame(&mut g, &ctx, key_press(egui::Key::M));
-    graph_frame(&mut g, &ctx, key_press(egui::Key::X));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::M));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::X));
     assert!(
         !g.show_mean && !g.show_envelope,
         "a second press left them on"
@@ -3880,13 +3867,13 @@ fn t_waits_for_the_reference_lines() {
     let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
     let crossings = g.show_crossings;
-    graph_frame(&mut g, &ctx, key_press(egui::Key::T));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::T));
     assert_eq!(
         g.show_crossings, crossings,
         "T moved the triggers with Ref off"
     );
     g.show_ref_line = true;
-    graph_frame(&mut g, &ctx, key_press(egui::Key::T));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::T));
     assert_eq!(
         g.show_crossings, !crossings,
         "T left the triggers alone with Ref on"
@@ -3899,7 +3886,7 @@ fn t_waits_for_the_reference_lines() {
 fn r_opens_the_reference_field_and_takes_the_caret_to_it() {
     let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
-    graph_frame(&mut g, &ctx, key_press(egui::Key::R));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::R));
     assert!(g.show_ref_line, "R did not switch the reference lines on");
     assert!(
         !g.focus_ref_field,
@@ -3915,10 +3902,10 @@ fn r_opens_the_reference_field_and_takes_the_caret_to_it() {
 fn a_focused_field_keeps_the_overlay_keys() {
     let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
-    graph_frame(&mut g, &ctx, key_press(egui::Key::R));
-    graph_frame(&mut g, &ctx, key_press(egui::Key::M));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::R));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::M));
     assert!(!g.show_mean, "M drew the mean line from inside the field");
-    graph_frame(&mut g, &ctx, key_press(egui::Key::R));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::R));
     assert!(
         g.show_ref_line,
         "R switched the lines off from their own field"
@@ -3932,12 +3919,12 @@ fn a_focused_field_keeps_the_overlay_keys() {
 fn c_clears_the_cursors_on_the_way_off() {
     let ctx = crate::app::styled_context();
     let mut g = graph_with_a_minute_of_data();
-    graph_frame(&mut g, &ctx, key_press(egui::Key::C));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::C));
     assert!(g.cursors.active, "C did not switch the cursors on");
     g.cursors.a = Some(1.0);
     g.cursors.b = Some(2.0);
     g.cursors.next_is_b = true;
-    graph_frame(&mut g, &ctx, key_press(egui::Key::C));
+    graph_frame(&mut g, &ctx, key_tap(egui::Key::C));
     assert!(!g.cursors.active, "C did not switch the cursors off");
     assert_eq!(
         (g.cursors.a, g.cursors.b),
@@ -4285,14 +4272,7 @@ fn esc_closes_the_menu_and_leaves_no_focus() {
         ctx.memory(|m| m.focused()).is_some(),
         "the entry has the focus"
     );
-    let esc = |pressed| egui::Event::Key {
-        key: egui::Key::Escape,
-        physical_key: None,
-        pressed,
-        repeat: false,
-        modifiers: egui::Modifiers::NONE,
-    };
-    menu_frame(&mut g, &ctx, vec![esc(true), esc(false)]);
+    menu_frame(&mut g, &ctx, key_tap(egui::Key::Escape));
     menu_frame(&mut g, &ctx, vec![]);
     assert!(!egui::Popup::is_any_open(&ctx), "Esc closed it");
     assert!(
@@ -4732,18 +4712,9 @@ fn the_menu_answers_the_arrows() {
     let (mut g, _) = graph_over(30);
     let ctx = open_menu(&mut g, |plot| plot.center());
     menu_frame(&mut g, &ctx, vec![]);
-    let key = |key| {
-        [true, false].map(|pressed| egui::Event::Key {
-            key,
-            physical_key: None,
-            pressed,
-            repeat: false,
-            modifiers: egui::Modifiers::NONE,
-        })
-    };
-    menu_frame(&mut g, &ctx, key(egui::Key::ArrowDown).to_vec());
+    menu_frame(&mut g, &ctx, key_tap(egui::Key::ArrowDown));
     menu_frame(&mut g, &ctx, vec![]);
-    menu_frame(&mut g, &ctx, key(egui::Key::Enter).to_vec());
+    menu_frame(&mut g, &ctx, key_tap(egui::Key::Enter));
     menu_frame(&mut g, &ctx, vec![]);
     assert!(!egui::Popup::is_any_open(&ctx), "Enter picked");
     assert!(

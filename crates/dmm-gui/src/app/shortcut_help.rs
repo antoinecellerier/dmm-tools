@@ -445,7 +445,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::Settings;
+    use crate::app::test_support::{key_tap, test_app};
     use eframe::egui::accesskit::{Node, NodeId};
     use eframe::egui::{Id, Pos2, Rect, vec2};
 
@@ -455,7 +455,7 @@ mod tests {
     }
 
     fn help_app() -> App {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.shortcut_help.open = true;
         app
     }
@@ -514,20 +514,6 @@ mod tests {
     fn next_second() -> f64 {
         static SECONDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         SECONDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64
-    }
-
-    /// A key pressed and released within one frame.
-    fn key(key: egui::Key) -> Vec<egui::Event> {
-        [true, false]
-            .into_iter()
-            .map(|pressed| egui::Event::Key {
-                key,
-                physical_key: None,
-                pressed,
-                repeat: false,
-                modifiers: egui::Modifiers::NONE,
-            })
-            .collect()
     }
 
     /// Where a grid heading sits on screen, as AccessKit reports it. A label
@@ -590,7 +576,7 @@ mod tests {
         let screen = short_window();
         run_frame(&ctx, &mut app, screen, vec![]);
         let before = row_top(&run_frame(&ctx, &mut app, screen, vec![]), "Graph (mouse)");
-        run_frame(&ctx, &mut app, screen, key(egui::Key::ArrowDown));
+        run_frame(&ctx, &mut app, screen, key_tap(egui::Key::ArrowDown));
         // egui animates the move and places the content a frame behind the
         // offset, so the rows have moved two frames after the key.
         run_frame(&ctx, &mut app, screen, vec![]);
@@ -608,7 +594,7 @@ mod tests {
     fn arrow_keys_keep_focus_on_the_close_button() {
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let screen = short_window();
         // Closed for the first frame, so the widget under the modal registers
         // its interest in focus first, the way the top bar does.
@@ -616,7 +602,7 @@ mod tests {
         app.shortcut_help.open = true;
         app.shortcut_help.focus_pending = true;
         run_frame(&ctx, &mut app, screen, vec![]);
-        let frame = run_frame(&ctx, &mut app, screen, key(egui::Key::ArrowDown));
+        let frame = run_frame(&ctx, &mut app, screen, key_tap(egui::Key::ArrowDown));
         let close = frame
             .nodes
             .iter()
@@ -665,7 +651,7 @@ mod tests {
         // view, so the scroll itself is read off a heading that stays.
         let mouse_at_top = row_top(&first, "Graph (mouse)");
 
-        run_frame(&ctx, &mut app, short_window(), key(egui::Key::End));
+        run_frame(&ctx, &mut app, short_window(), key_tap(egui::Key::End));
         run_frame(&ctx, &mut app, short_window(), vec![]);
         let scrolled = run_frame(&ctx, &mut app, short_window(), vec![]);
         assert!(

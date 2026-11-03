@@ -270,7 +270,7 @@ fn check_font(ctx: &egui::Context, provider: Arc<SystemFonts>, probe: &'static s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::Settings;
+    use crate::app::test_support::test_app;
 
     /// Every language but English gets its own shapes, Chinese in the
     /// simplified script, and Chinese and Japanese check for a font.
@@ -304,7 +304,7 @@ mod tests {
     /// pass after pass.
     #[test]
     fn the_screen_reader_hears_the_language() {
-        let app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let app = test_app();
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         for _ in 0..2 {

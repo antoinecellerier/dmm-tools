@@ -1064,11 +1064,10 @@ fn note_field(ui: &mut Ui, l10n: &Localizer, m: &mut Marker, width: f32) -> egui
 mod tests {
     use super::*;
     use crate::app::connection::DmmMessage;
+    use crate::app::test_support::test_app;
     use crate::recording::Recording;
-    use crate::settings::Settings;
     use dmm_lib::flags::StatusFlags;
     use eframe::egui::{Event, Modifiers, Pos2, Rect, vec2};
-    use std::sync::mpsc;
     use std::time::Duration;
 
     /// The log and the CSV must never disagree about an overload or an NCV
@@ -1175,7 +1174,7 @@ mod tests {
     /// menu, opens the note already there.
     #[test]
     fn marking_a_marked_reading_opens_its_note() {
-        let mut app = app();
+        let mut app = test_app();
         let at = Instant::now();
         send(&mut app, "DC V", at);
         app.add_marker(false);
@@ -1189,7 +1188,7 @@ mod tests {
     /// marker the next trim takes away.
     #[test]
     fn marking_a_reading_no_longer_held_says_so() {
-        let mut app = app();
+        let mut app = test_app();
         let at = Instant::now();
         send(&mut app, "DC V", at);
         send(&mut app, "AC V", at + Duration::from_secs(1));
@@ -1204,7 +1203,7 @@ mod tests {
     #[ignore = "timing-sensitive; run with --release"]
     fn a_log_frame_costs_the_same_however_long_the_recording() {
         fn measure(samples: u64) -> Duration {
-            let mut app = app();
+            let mut app = test_app();
             app.capture.recording.set_max_samples(samples as usize);
             app.toggle_recording();
             let t0 = Instant::now();
@@ -1245,10 +1244,6 @@ mod tests {
         assert!(ratio < 2.0, "a log frame's cost grew with the recording");
     }
 
-    fn app() -> App {
-        App::from_settings(Settings::default(), dmm_lib::Clock::real())
-    }
-
     /// Hand `app` a 1.234 reading in `mode` taken at `at`, then run the
     /// per-frame trim, as a frame does after draining.
     fn send(app: &mut App, mode: &'static str, at: Instant) {
@@ -1256,11 +1251,7 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(1.234), "V", StatusFlags::default());
         m.mode = mode.into();
         m.timestamp = at;
-        let (tx, rx) = mpsc::channel();
-        tx.send(DmmMessage::Measurement(m))
-            .expect("the channel is open");
-        app.connection.worker = Some(crate::app::Worker::reading(rx));
-        app.drain_messages();
+        app.deliver(DmmMessage::Measurement(m));
         app.trim_markers();
     }
 
@@ -1278,7 +1269,7 @@ mod tests {
 
     #[test]
     fn nothing_is_marked_before_a_reading() {
-        let mut app = app();
+        let mut app = test_app();
         app.add_marker(false);
         assert!(app.markers.is_empty());
         assert_eq!(toast(&app), Some("No reading to mark yet"));
@@ -1287,7 +1278,7 @@ mod tests {
     /// The reading on screen is what gets marked, once.
     #[test]
     fn n_marks_the_reading_on_screen() {
-        let mut app = app();
+        let mut app = test_app();
         let t0 = Instant::now();
         send(&mut app, "DC V", t0);
         send(&mut app, "DC V", secs(t0, 1));
@@ -1315,7 +1306,7 @@ mod tests {
     /// on record somewhere.
     #[test]
     fn nothing_is_marked_after_clear() {
-        let mut app = app();
+        let mut app = test_app();
         send(&mut app, "DC V", Instant::now());
         app.clear_session();
         app.add_marker(false);
@@ -1327,7 +1318,7 @@ mod tests {
     /// written.
     #[test]
     fn a_hidden_panel_says_how_to_bring_it_back() {
-        let mut app = app();
+        let mut app = test_app();
         let t0 = Instant::now();
         send(&mut app, "DC V", t0);
         app.settings.show_recording = false;
@@ -1350,7 +1341,7 @@ mod tests {
     /// With nothing recorded, markers go with the readings the graph drops.
     #[test]
     fn history_markers_go_with_the_graph_restart() {
-        let mut app = app();
+        let mut app = test_app();
         let t0 = Instant::now();
         send(&mut app, "DC V", t0);
         app.add_marker(false);
@@ -1362,7 +1353,7 @@ mod tests {
     /// the markers on it.
     #[test]
     fn markers_placed_before_record_stay_while_the_graph_holds_them() {
-        let mut app = app();
+        let mut app = test_app();
         let t0 = Instant::now();
         send(&mut app, "DC V", t0);
         app.add_marker(false);
@@ -1388,7 +1379,7 @@ mod tests {
     /// A recording spans the graph's restarts, and so do its markers.
     #[test]
     fn a_recordings_markers_outlive_the_graph_restart() {
-        let mut app = app();
+        let mut app = test_app();
         let t0 = Instant::now();
         app.toggle_recording();
         send(&mut app, "DC V", t0);
@@ -1410,7 +1401,7 @@ mod tests {
     /// and neither is an edit that ends where the file has it.
     #[test]
     fn a_recordings_marker_changes_count_as_unsaved() {
-        let mut app = app();
+        let mut app = test_app();
         let t0 = Instant::now();
         send(&mut app, "DC V", t0);
         app.add_marker(false); // on the history, before Record
@@ -1453,7 +1444,7 @@ mod tests {
     /// held by neither, and goes.
     #[test]
     fn a_marker_between_a_recording_and_a_restarted_graph_goes() {
-        let mut app = app();
+        let mut app = test_app();
         let t0 = Instant::now();
         app.toggle_recording();
         send(&mut app, "DC V", t0);
@@ -1472,7 +1463,7 @@ mod tests {
     /// the panel notes are written in.
     #[test]
     fn a_flag_click_opens_the_note() {
-        let mut app = app();
+        let mut app = test_app();
         send(&mut app, "DC V", Instant::now());
         app.add_marker(false);
         app.open_marker_note(1);
@@ -1492,7 +1483,7 @@ mod tests {
     /// the panel hidden, the toast doesn't claim it was added.
     #[test]
     fn ctrl_n_on_a_marked_reading_says_so() {
-        let mut app = app();
+        let mut app = test_app();
         send(&mut app, "DC V", Instant::now());
         app.add_marker(false);
         app.big_meter_mode = BigMeterMode::Full;
@@ -1513,7 +1504,7 @@ mod tests {
 
     impl Run {
         fn new() -> Self {
-            let mut app = app();
+            let mut app = test_app();
             send(&mut app, "DC V", Instant::now());
             Self {
                 app,

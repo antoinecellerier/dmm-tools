@@ -880,6 +880,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::connection::ConnectedMeter;
+    use crate::app::test_support::test_app;
     use crate::settings::Settings;
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::{MeasuredValue, Measurement};
@@ -905,16 +906,6 @@ mod tests {
         app.toast.as_ref().map(|t| t.message.as_str())
     }
 
-    /// Hand `app` one message from the acquisition thread. The sender is
-    /// still alive while it drains, so the channel is not taken for one whose
-    /// thread has died.
-    fn deliver(app: &mut App, msg: DmmMessage) {
-        let (tx, rx) = mpsc::channel();
-        tx.send(msg).expect("the channel is open");
-        app.connection.worker = Some(Worker::reading(rx));
-        app.drain_messages();
-    }
-
     /// The notice for readings arriving in pairs stays until the link goes:
     /// its command names that link, and a new link says so again itself.
     #[test]
@@ -923,15 +914,12 @@ mod tests {
             command: Some("sudo hcitool lecup --handle 2048".to_string()),
         };
         let mut app = app("ut61eplus", false);
-        deliver(&mut app, DmmMessage::LateReadings(notice()));
+        app.deliver(DmmMessage::LateReadings(notice()));
         assert_eq!(app.connection.late_readings, Some(notice()));
-        deliver(
-            &mut app,
-            DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost),
-        );
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
         assert_eq!(app.connection.late_readings, None, "the link went");
 
-        deliver(&mut app, DmmMessage::LateReadings(notice()));
+        app.deliver(DmmMessage::LateReadings(notice()));
         app.disconnect();
         assert_eq!(app.connection.late_readings, None, "disconnected");
     }
@@ -966,7 +954,7 @@ mod tests {
             dmm_lib::flags::StatusFlags::default(),
         );
         app.last_measurement = Some(reading);
-        deliver(&mut app, DmmMessage::Ended);
+        app.deliver(DmmMessage::Ended);
         let n = app.connection_notice().expect("a notice");
         assert_eq!(n.kind, NoticeKind::Ended);
         assert_eq!(n.title, "The recording has ended");
@@ -982,10 +970,9 @@ mod tests {
     fn a_replay_gap_is_not_a_quiet_meter() {
         let mut app = app("ut61eplus", false);
         app.source.replay = Some(crate::ReplaySource::fixture());
-        deliver(
-            &mut app,
-            DmmMessage::WaitingForMeter(dmm_lib::stream::NO_RESPONSE_TIMEOUTS),
-        );
+        app.deliver(DmmMessage::WaitingForMeter(
+            dmm_lib::stream::NO_RESPONSE_TIMEOUTS,
+        ));
 
         assert!(app.connection.last_error.is_none(), "no failure on record");
         let n = app.connection_notice().expect("the gap is still reported");
@@ -998,10 +985,9 @@ mod tests {
     #[test]
     fn a_quiet_meter_still_gets_the_no_response_help() {
         let mut app = app("ut61eplus", false);
-        deliver(
-            &mut app,
-            DmmMessage::WaitingForMeter(dmm_lib::stream::NO_RESPONSE_TIMEOUTS),
-        );
+        app.deliver(DmmMessage::WaitingForMeter(
+            dmm_lib::stream::NO_RESPONSE_TIMEOUTS,
+        ));
 
         let n = app.connection_notice().expect("a quiet meter is a failure");
         assert_eq!(n.kind, NoticeKind::NoResponse);
@@ -1017,7 +1003,7 @@ mod tests {
     /// parsed dropped whatever fell due while the window was starting.
     #[test]
     fn a_replay_pins_session_zero_at_the_first_connect() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.source.replay = Some(crate::ReplaySource::fixture());
         let recorded = app.source.replay.as_ref().expect("the recording").recorded;
         assert!(
@@ -1052,7 +1038,7 @@ mod tests {
     /// resumes the playback and queues nothing again.
     #[test]
     fn a_replays_markers_go_on_their_readings() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let mut source = crate::ReplaySource::fixture();
         source.replay = Arc::new(
             dmm_lib::replay::Replay::parse(
@@ -1080,7 +1066,7 @@ mod tests {
                 dmm_lib::flags::StatusFlags::default(),
             );
             m.timestamp = start + Duration::from_millis(ms);
-            deliver(app, DmmMessage::Measurement(m));
+            app.deliver(DmmMessage::Measurement(m));
         };
         for ms in [0, 100, 250, 300] {
             play(&mut app, ms);
@@ -1215,7 +1201,7 @@ mod tests {
     /// moment it shows, then goes in once.
     #[test]
     fn a_replays_view_waits_for_its_readings() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let mut source = crate::ReplaySource::fixture();
         source.replay = Arc::new(
             dmm_lib::replay::Replay::parse(
@@ -1239,7 +1225,7 @@ mod tests {
                 dmm_lib::flags::StatusFlags::default(),
             );
             m.timestamp = start + Duration::from_millis(ms);
-            deliver(app, DmmMessage::Measurement(m));
+            app.deliver(DmmMessage::Measurement(m));
         };
         play(&mut app, 0);
         assert!(!app.graph.show_mean, "the cursor's reading has not played");
@@ -1380,14 +1366,11 @@ mod tests {
     fn a_meter_naming_another_model_says_so() {
         let connect = |named: Option<&str>| {
             let mut app = app("ut61eplus", false);
-            deliver(
-                &mut app,
-                DmmMessage::Connected(ConnectedMeter {
-                    name: Some("UT161E".to_string()),
-                    named_other: named.and_then(dmm_lib::protocol::registry::find_device),
-                    ..ConnectedMeter::test_fixture(Some("ut61eplus"))
-                }),
-            );
+            app.deliver(DmmMessage::Connected(ConnectedMeter {
+                name: Some("UT161E".to_string()),
+                named_other: named.and_then(dmm_lib::protocol::registry::find_device),
+                ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+            }));
             toast_text(&app).map(str::to_owned)
         };
         assert_eq!(
@@ -1411,10 +1394,10 @@ mod tests {
                 ..ConnectedMeter::test_fixture(Some("ut61eplus"))
             })
         };
-        deliver(&mut app, hello());
+        app.deliver(hello());
         assert!(toast_text(&app).is_some());
         app.toast = None;
-        deliver(&mut app, hello());
+        app.deliver(hello());
         assert_eq!(toast_text(&app), None);
     }
 
@@ -1423,14 +1406,11 @@ mod tests {
     #[test]
     fn a_name_heard_after_a_fallback_saves_the_named_meter() {
         let mut app = app(registry::AUTO_DEVICE_ID, false);
-        deliver(
-            &mut app,
-            DmmMessage::Connected(ConnectedMeter {
-                name: Some("UT161E".to_string()),
-                named_other: dmm_lib::protocol::registry::find_device("ut161e"),
-                ..ConnectedMeter::test_fixture(Some("ut61eplus"))
-            }),
-        );
+        app.deliver(DmmMessage::Connected(ConnectedMeter {
+            name: Some("UT161E".to_string()),
+            named_other: dmm_lib::protocol::registry::find_device("ut161e"),
+            ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+        }));
         assert_eq!(app.settings.shared.device_family, "ut161e");
         assert_eq!(
             toast_text(&app),
@@ -1465,14 +1445,14 @@ mod tests {
     fn deliver_readings(app: &mut App, modes: &[(&'static str, MeasuredValue)]) {
         for (mode, value) in modes {
             let m = reading(mode, value.clone(), Instant::now());
-            deliver(app, DmmMessage::Measurement(m));
+            app.deliver(DmmMessage::Measurement(m));
         }
     }
 
     /// A UT61E+ connected and sending, with nothing recorded.
     fn connected_app() -> App {
         let mut app = app("ut61eplus", false);
-        deliver(&mut app, connected("ut61eplus", Stability::Verified, 0));
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
         app
     }
 
@@ -1525,7 +1505,7 @@ mod tests {
         let first = app.graph.first_point_time();
         let mut idle = reading("Auto", MeasuredValue::NoReading("Auto"), Instant::now());
         idle.unit = "".into();
-        deliver(&mut app, DmmMessage::Measurement(idle));
+        app.deliver(DmmMessage::Measurement(idle));
         deliver_readings(&mut app, &[DC]);
         assert_eq!(modes(&app), ["DC V", "Auto", "DC V"]);
         assert!(first.is_some());
@@ -1566,7 +1546,7 @@ mod tests {
                 }];
                 ac
             };
-            deliver(&mut app, DmmMessage::Measurement(m));
+            app.deliver(DmmMessage::Measurement(m));
         }
         assert_eq!(modes(&app), ["AC+DC V"; 4]);
         assert_eq!(app.graph.overlays_len(), 1, "AC drawn beside DC");
@@ -1583,7 +1563,7 @@ mod tests {
     fn switching_plot_to_another_unit_keeps_both_series() {
         use crate::graph::GapKind;
         let mut app = app("ut181a", false);
-        deliver(&mut app, connected("ut181a", Stability::PartlyVerified, 4));
+        app.deliver(connected("ut181a", Stability::PartlyVerified, 4));
         let t0 = Instant::now();
         let at = |ms: u64| t0 + Duration::from_millis(ms);
         let frame = |ms: u64, hz: Option<MeasuredValue>| {
@@ -1604,12 +1584,12 @@ mod tests {
             DmmMessage::Measurement(m)
         };
         for i in 0..3 {
-            deliver(&mut app, frame(i * 100, Some(MeasuredValue::Normal(50.0))));
+            app.deliver(frame(i * 100, Some(MeasuredValue::Normal(50.0))));
         }
 
         app.graph.select_series(Some("Frequency"));
-        deliver(&mut app, frame(300, Some(MeasuredValue::Overload)));
-        deliver(&mut app, frame(400, Some(MeasuredValue::Normal(50.1))));
+        app.deliver(frame(300, Some(MeasuredValue::Overload)));
+        app.deliver(frame(400, Some(MeasuredValue::Normal(50.1))));
         assert_eq!(app.graph.plotted_unit(), "Hz");
         assert_eq!(app.graph.len(), 4, "the kept frequency and the new point");
         assert_eq!(app.graph.overlay_values("Main").len(), 5);
@@ -1622,7 +1602,7 @@ mod tests {
         // The meter stops sending the frequency: once the graph gives the
         // selection up, the voltage comes back with its past.
         for i in 5..=20 {
-            deliver(&mut app, frame(i * 100, None));
+            app.deliver(frame(i * 100, None));
         }
         assert_eq!(app.graph.plotted_unit(), "V");
         assert!(app.graph.len() > 5, "got {}", app.graph.len());
@@ -1682,7 +1662,7 @@ mod tests {
     #[test]
     fn the_history_names_the_meter_it_came_from() {
         let mut app = app("ut181a", false);
-        deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
         deliver_readings(&mut app, &[DC]);
 
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
@@ -1703,7 +1683,7 @@ mod tests {
     #[test]
     fn a_mock_history_has_no_replay_file() {
         let mut app = app("mock", false);
-        deliver(&mut app, connected("mock", Stability::Verified, 0));
+        app.deliver(connected("mock", Stability::Verified, 0));
         deliver_readings(&mut app, &[DC]);
         assert_eq!(app.capture.history_layout.device_id, None);
         assert_eq!(app.replay_device_id(), None);
@@ -1716,11 +1696,8 @@ mod tests {
         let mut app = connected_app();
         deliver_readings(&mut app, &[DC, DC]);
 
-        deliver(
-            &mut app,
-            DmmMessage::Disconnected(dmm_lib::error::Error::Timeout),
-        );
-        deliver(&mut app, connected("ut61eplus", Stability::Verified, 0));
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::Timeout));
+        app.deliver(connected("ut61eplus", Stability::Verified, 0));
         deliver_readings(&mut app, &[DC]);
         assert_eq!(
             app.capture.recording.export_samples().len(),
@@ -1728,7 +1705,7 @@ mod tests {
             "the same meter came back"
         );
 
-        deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
         deliver_readings(&mut app, &[DC]);
         assert_eq!(app.capture.recording.export_samples().len(), 1);
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
@@ -1745,7 +1722,7 @@ mod tests {
         let mut app = connected_app();
         app.toggle_recording();
         deliver_readings(&mut app, &[DC]);
-        deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
+        app.deliver(connected("ut181a", Stability::Experimental, 4));
         deliver_readings(&mut app, &[DC]);
 
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");

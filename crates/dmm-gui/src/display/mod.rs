@@ -1488,6 +1488,7 @@ mod tests {
 
     // ---- the mode selector ------------------------------------------------
 
+    use crate::app::test_support::{key_tap, key_tap_with};
     use eframe::egui;
     use eframe::egui::accesskit::{Node, NodeId, Role, Toggled};
 
@@ -1651,20 +1652,6 @@ mod tests {
             .iter()
             .find(|(_, n)| n.label() == Some(label))
             .map(|(id, _)| *id)
-    }
-
-    /// A key pressed and released within one frame.
-    fn key(key: egui::Key, modifiers: egui::Modifiers) -> Vec<egui::Event> {
-        [true, false]
-            .into_iter()
-            .map(|pressed| egui::Event::Key {
-                key,
-                physical_key: None,
-                pressed,
-                repeat: false,
-                modifiers,
-            })
-            .collect()
     }
 
     /// Every node under `root`, however deep.
@@ -2145,9 +2132,9 @@ mod tests {
         let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, both);
 
         run_frame(&ctx, vec![], &mut draw);
-        let f = run_frame(&ctx, key(egui::Key::Tab, egui::Modifiers::NONE), &mut draw);
+        let f = run_frame(&ctx, key_tap(egui::Key::Tab), &mut draw);
         assert_eq!(f.focus, node_id_labelled(&f.nodes, "Mode"), "first Tab");
-        let f = run_frame(&ctx, key(egui::Key::Tab, egui::Modifiers::NONE), &mut draw);
+        let f = run_frame(&ctx, key_tap(egui::Key::Tab), &mut draw);
         assert_eq!(f.focus, node_id_labelled(&f.nodes, "Range"), "second Tab");
     }
 
@@ -2183,7 +2170,7 @@ mod tests {
             m
         };
         let (a, b) = (reading("1.234"), reading("5.678"));
-        let tab = || key(egui::Key::Tab, egui::Modifiers::NONE);
+        let tab = || key_tap(egui::Key::Tab);
         let reading_id = Some(crate::a11y::reading_region_id().accesskit_id());
 
         frame(Some(&a), vec![]);
@@ -2263,12 +2250,12 @@ mod tests {
         mut draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
     ) -> Frame {
         run_frame(ctx, vec![], &mut draw);
-        let f = run_frame(ctx, key(egui::Key::Tab, egui::Modifiers::NONE), &mut draw);
+        let f = run_frame(ctx, key_tap(egui::Key::Tab), &mut draw);
         let combo = node_with_role(&f.nodes, Role::ComboBox)
             .expect("combo box")
             .0;
         assert_eq!(f.focus, Some(combo), "Tab must reach the readout");
-        run_frame(ctx, key(egui::Key::Enter, egui::Modifiers::NONE), &mut draw);
+        run_frame(ctx, key_tap(egui::Key::Enter), &mut draw);
         run_frame(ctx, vec![], &mut draw)
     }
 
@@ -2350,29 +2337,17 @@ mod tests {
         };
         open_with_keyboard(&ctx, &mut draw);
 
-        run_frame(
-            &ctx,
-            key(egui::Key::ArrowDown, egui::Modifiers::NONE),
-            &mut draw,
-        );
+        run_frame(&ctx, key_tap(egui::Key::ArrowDown), &mut draw);
         let f = run_frame(&ctx, vec![], &mut draw);
         let other = node_id_labelled(&f.nodes, OTHER).expect("other entry");
         assert_eq!(f.focus, Some(other));
 
-        let f = run_frame(
-            &ctx,
-            key(egui::Key::ArrowDown, egui::Modifiers::NONE),
-            &mut draw,
-        );
+        let f = run_frame(&ctx, key_tap(egui::Key::ArrowDown), &mut draw);
         assert_eq!(f.picked, None, "moving is not picking");
         let f = run_frame(&ctx, vec![], &mut draw);
         assert_eq!(f.focus, Some(other), "clamped at the last entry");
 
-        let f = run_frame(
-            &ctx,
-            key(egui::Key::Enter, egui::Modifiers::NONE),
-            &mut draw,
-        );
+        let f = run_frame(&ctx, key_tap(egui::Key::Enter), &mut draw);
         assert_eq!(f.picked, Some(ReadoutPick::Select(Setting::Mode, 0x1121)));
         assert_closed_on_the_readout(&ctx, &mut draw);
     }
@@ -2400,7 +2375,7 @@ mod tests {
             (egui::Key::End, other, "End jumps to the last entry"),
             (egui::Key::Home, live, "Home jumps to the first entry"),
         ] {
-            run_frame(&ctx, key(k, egui::Modifiers::NONE), &mut draw);
+            run_frame(&ctx, key_tap(k), &mut draw);
             let f = run_frame(&ctx, vec![], &mut draw);
             assert_eq!(f.focus, Some(want), "{what}");
             assert!(
@@ -2425,16 +2400,8 @@ mod tests {
             )
         };
         open_with_keyboard(&ctx, &mut draw);
-        run_frame(
-            &ctx,
-            key(egui::Key::ArrowDown, egui::Modifiers::NONE),
-            &mut draw,
-        );
-        let f = run_frame(
-            &ctx,
-            key(egui::Key::Escape, egui::Modifiers::NONE),
-            &mut draw,
-        );
+        run_frame(&ctx, key_tap(egui::Key::ArrowDown), &mut draw);
+        let f = run_frame(&ctx, key_tap(egui::Key::Escape), &mut draw);
         assert_eq!(f.picked, None);
         assert_closed_on_the_readout(&ctx, &mut draw);
     }
@@ -2457,12 +2424,8 @@ mod tests {
                 )
             };
             open_with_keyboard(&ctx, &mut draw);
-            run_frame(
-                &ctx,
-                key(egui::Key::ArrowDown, egui::Modifiers::NONE),
-                &mut draw,
-            );
-            let f = run_frame(&ctx, key(egui::Key::Tab, modifiers), &mut draw);
+            run_frame(&ctx, key_tap(egui::Key::ArrowDown), &mut draw);
+            let f = run_frame(&ctx, key_tap_with(egui::Key::Tab, modifiers), &mut draw);
             assert_eq!(f.picked, None, "{modifiers:?}");
             assert_closed_on_the_readout(&ctx, &mut draw);
         }

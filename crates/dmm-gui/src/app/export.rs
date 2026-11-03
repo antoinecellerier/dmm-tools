@@ -609,6 +609,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::connection::ConnectedMeter;
+    use crate::app::test_support::test_app;
     use crate::settings::Settings;
     use chrono::TimeZone;
     use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
@@ -635,7 +636,7 @@ mod tests {
     /// `extra_slots` trailing ones, holding one buffered sample per entry of
     /// `aux_counts`.
     fn app_holding(aux_slots: usize, extra_slots: usize, aux_counts: &[usize]) -> App {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         app.capture.recording_layout.aux_slots = aux_slots;
         app.capture.recording_layout.extra_slots = extra_slots;
         app.capture.recording.toggle(std::time::Instant::now());
@@ -663,7 +664,7 @@ mod tests {
     /// saves them with the ones before, markers included.
     #[test]
     fn export_after_discard_saves_the_graphs_readings_and_markers() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let t0 = Instant::now();
         let before = push_at(&mut app, t0, 0..2);
         app.markers
@@ -690,7 +691,7 @@ mod tests {
     /// history took after it.
     #[test]
     fn a_stopped_recording_exports_only_itself() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let t0 = Instant::now();
         push_at(&mut app, t0, 0..3);
         app.capture.recording.toggle(t0);
@@ -843,15 +844,11 @@ mod tests {
         );
 
         // The meter answers, on a protocol no report has confirmed.
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(DmmMessage::Connected(ConnectedMeter {
+        app.deliver(DmmMessage::Connected(ConnectedMeter {
             name: Some("UT181A".to_string()),
             stability: Stability::Experimental,
             ..ConnectedMeter::test_fixture(Some("ut181a"))
-        }))
-        .expect("the channel is open");
-        app.connection.worker = Some(crate::app::Worker::reading(rx));
-        app.drain_messages();
+        }));
         app.capture.recording.push(&measurement(0), 0);
 
         assert_eq!(app.capture.recording_layout.experimental, Some(true));
@@ -882,7 +879,7 @@ mod tests {
     /// Nothing buffered: no dialog, and a toast saying what to do instead.
     #[test]
     fn an_empty_buffer_prepares_no_export() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         let message = |app: &App| match app.prepare_export(ExportFormat::Csv) {
             Ok(_) => panic!("an empty buffer has nothing to write"),
             Err(why) => why.to_string(),
@@ -905,7 +902,7 @@ mod tests {
     /// still asks before it is discarded.
     #[test]
     fn a_history_export_saves_the_buffer_and_marks_nothing() {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let mut app = test_app();
         for _ in 0..3 {
             app.capture.recording.push(&measurement(0), 0);
         }

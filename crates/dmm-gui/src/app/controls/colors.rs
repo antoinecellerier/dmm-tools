@@ -935,16 +935,7 @@ fn keep_focus_with_popup(ui: &Ui, popup_id: egui::Id, btn_id: egui::Id) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn key(key: egui::Key, pressed: bool) -> egui::Event {
-        egui::Event::Key {
-            key,
-            physical_key: None,
-            pressed,
-            repeat: false,
-            modifiers: egui::Modifiers::NONE,
-        }
-    }
+    use crate::app::test_support::key_tap;
 
     /// A lone Background swatch, one frame at a time, a second apart.
     struct Swatch {
@@ -999,16 +990,13 @@ mod tests {
             seconds: 0.0,
         };
         swatch.frame(vec![]);
-        swatch.frame(vec![key(egui::Key::Tab, true), key(egui::Key::Tab, false)]);
-        swatch.frame(vec![
-            key(egui::Key::Enter, true),
-            key(egui::Key::Enter, false),
-        ]);
+        swatch.frame(key_tap(egui::Key::Tab));
+        swatch.frame(key_tap(egui::Key::Enter));
         swatch.frame(vec![]);
         // Tab to the saturation-value square.
         let mut square = None;
         for _ in 0..12 {
-            swatch.frame(vec![key(egui::Key::Tab, true), key(egui::Key::Tab, false)]);
+            swatch.frame(key_tap(egui::Key::Tab));
             if let Some(rect) = swatch.focused_rect()
                 && rect.width() >= 50.0
                 && (rect.width() - rect.height()).abs() < 2.0
@@ -1018,9 +1006,13 @@ mod tests {
             }
         }
         let square = square.expect("Tab reaches the saturation-value square");
-        swatch.frame(vec![key(egui::Key::ArrowUp, true)]);
+        // The arrow held over a frame: pressed, then released two frames on.
+        let [press, release]: [egui::Event; 2] = key_tap(egui::Key::ArrowUp)
+            .try_into()
+            .expect("a press and a release");
+        swatch.frame(vec![press]);
         swatch.frame(vec![]);
-        swatch.frame(vec![key(egui::Key::ArrowUp, false)]);
+        swatch.frame(vec![release]);
         swatch.frame(vec![]);
         assert_eq!(swatch.focused_rect(), Some(square));
         assert_ne!(
