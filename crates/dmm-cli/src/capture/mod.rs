@@ -29,6 +29,7 @@ pub(crate) use step::{
 pub(crate) use triage::{cmd_triage, install_triage_logger};
 
 use crate::cli::CaptureArgs;
+use crate::open::BoxedDmm;
 use console::style;
 use detection::run_detection_check;
 use dmm_lib::text::TextKind;
@@ -39,7 +40,7 @@ use report::{
     FrameRecord, Trust, captured_count, load_or_create_report, no_response_path,
     populate_report_metadata,
 };
-use session::{run_batch_review, run_freeform_captures, run_protocol_capture, verify_meter};
+use session::{CaptureRun, verify_meter};
 
 /// The id the run was picked by, when it is not the entry's own.
 fn picked_as(device: &'static dmm_lib::protocol::registry::SelectableDevice) -> Option<String> {
@@ -49,7 +50,7 @@ fn picked_as(device: &'static dmm_lib::protocol::registry::SelectableDevice) -> 
 
 pub(crate) fn cmd_capture(
     args: CaptureArgs,
-    mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    mut dmm: BoxedDmm,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
     detected_at_open: Option<&dmm_lib::detect::Detected>,
@@ -138,39 +139,37 @@ pub(crate) fn cmd_capture(
         .copied()
         .filter(|s| !(unverified_only && s.verified))
         .collect();
-    let mut trust = Trust::new(
+    let trust = Trust::new(
         sniff,
         supported || gate_already_confirmed(&cli_steps, &gate_scope),
         &gate_scope,
     );
     report.tier = Some(trust.tier);
-    let mut driver = drive::Driver::new(!no_drive).settling(settle);
-    let pass = run_protocol_capture(
-        &mut dmm,
-        &recorder,
-        &cli_steps,
-        &step_filter,
-        unverified_only,
-        &mut report,
-        &output_path,
-        &input,
-        &mut trust,
-        &mut driver,
-    )?;
-    report.drive = Some(drive::Drive::merged(report.drive, driver.state()));
+    let mut run = CaptureRun {
+        dmm,
+        recorder,
+        report,
+        output_path,
+        input,
+        trust,
+        driver: drive::Driver::new(!no_drive).settling(settle),
+    };
+    let pass = run.protocol_pass(&cli_steps, &step_filter, unverified_only)?;
+    run.report.drive = Some(drive::Drive::merged(run.report.drive, run.driver.state()));
 
-    run_batch_review(&mut report, &pass.to_review, &output_path, &input)?;
+    run.batch_review(&pass.to_review)?;
 
     if !pass.quit {
-        run_freeform_captures(
-            &mut dmm,
-            &recorder,
-            &step_filter,
-            &mut report,
-            &output_path,
-            &input,
-        )?;
+        run.freeform_pass(&step_filter)?;
     }
+    let CaptureRun {
+        dmm,
+        recorder,
+        mut report,
+        output_path,
+        input,
+        ..
+    } = run;
 
     report.wire_events_dropped = recording::lock(&recorder).dropped();
     save_report(&report, &output_path)?;
@@ -278,9 +277,6 @@ fn gate_already_confirmed(steps: &[CaptureStep], in_scope: &[CaptureStep]) -> bo
     steps.iter().any(|s| s.gate) && !in_scope.iter().any(|s| s.gate)
 }
 
-/// The way back into a run that left steps undone. A capture that ended on the
-/// first `q` signs off with the same "Capture complete!" as one that walked
-/// every step, and said nothing about the report being resumable.
 /// Whether `--unverified` leaves the detection check out: a report has
 /// already confirmed detection of `device` over `bridge`, as `.verified()`
 /// marks a step, and `--steps` does not name it.
@@ -293,6 +289,9 @@ fn detection_already_confirmed(
     unverified_only && step_filter.is_none() && device.detection_verified.contains(&bridge)
 }
 
+/// The way back into a run that left steps undone. A capture that ended on the
+/// first `q` signs off with the same "Capture complete!" as one that walked
+/// every step, and said nothing about the report being resumable.
 fn resume_hint(
     l: &dmm_shared::l10n::Localizer,
     covered: usize,
@@ -315,7 +314,7 @@ fn resume_hint(
 /// it went and where to send it, or why it could not be saved.
 fn save_no_response(
     l: &dmm_shared::l10n::Localizer,
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    dmm: &mut BoxedDmm,
     recorder: &SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
     output_override: Option<&str>,
@@ -355,7 +354,7 @@ fn save_no_response(
 /// being brought up, bytes that did not decode are all the evidence there is.
 /// Returns the file written and how many bytes it holds.
 fn write_no_response_report(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    dmm: &mut BoxedDmm,
     recorder: &SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
     output_override: Option<&str>,
@@ -477,8 +476,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// A run that stopped early has to say it can be picked up; one that
-    /// covered everything has nothing to add.
     /// `--unverified` skips the check over a link detection is confirmed
     /// on, and only there; a plain run, or `--steps detect`, still runs it.
     #[test]
@@ -508,6 +505,8 @@ mod tests {
         assert!(!detection_already_confirmed(true, &None, ut181a, "CH9329"));
     }
 
+    /// A run that stopped early has to say it can be picked up; one that
+    /// covered everything has nothing to add.
     #[test]
     fn an_unfinished_run_says_how_to_resume() {
         let l = crate::l10n::english();

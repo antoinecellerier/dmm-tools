@@ -225,7 +225,7 @@ pub(in crate::capture) fn tool_version() -> String {
 /// Populate report metadata (date, version, device info).
 pub(in crate::capture) fn populate_report_metadata(
     report: &mut CaptureReport,
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    dmm: &mut crate::open::BoxedDmm,
     device_name: String,
     supported: bool,
 ) {

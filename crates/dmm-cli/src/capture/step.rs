@@ -2,12 +2,13 @@
 //! asks for, and the frames that wait puts on the wire.
 
 use super::input::{ErrorLog, Input};
-use super::recording::{self, SharedRecorder, WireEvent};
+use super::recording::{self, WireEvent};
 use super::report::{
-    CaptureReport, FrameRecord, SampleData, StepResult, StepStatus, Trust, already_captured,
-    needs_attention, upsert_step,
+    FrameRecord, SampleData, StepResult, StepStatus, already_captured, needs_attention, upsert_step,
 };
+use super::session::CaptureRun;
 use super::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
+use crate::open::BoxedDmm;
 use console::{Key, style};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::{Mismatch, RangeExpect, RangeShown, Shown, ValueExpect};
@@ -61,7 +62,7 @@ pub(super) fn empty_result(
 /// we misread would otherwise end the step on the first bad frame, and the
 /// report showed neither a sample nor a reason.
 pub(crate) fn capture_samples(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    dmm: &mut BoxedDmm,
     n: usize,
     errors: &mut ErrorLog,
 ) -> Vec<Measurement> {
@@ -93,9 +94,7 @@ fn is_blank(m: &Measurement) -> bool {
 
 /// The first reading that is not a blank display, or the last blank one once
 /// [`BLANK_READS`] have gone by.
-pub(crate) fn read_past_blank(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-) -> dmm_lib::error::Result<Measurement> {
+pub(crate) fn read_past_blank(dmm: &mut BoxedDmm) -> dmm_lib::error::Result<Measurement> {
     let mut reading = dmm.request_measurement()?;
     for _ in 1..BLANK_READS {
         if !is_blank(&reading) {
@@ -109,7 +108,7 @@ pub(crate) fn read_past_blank(
 /// `n` samples after a switch the tool made, the first of them once the
 /// display is back.
 pub(crate) fn samples_after_switch(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    dmm: &mut BoxedDmm,
     n: usize,
     errors: &mut ErrorLog,
 ) -> Vec<Measurement> {
@@ -190,9 +189,9 @@ impl StepOutcome {
 
     /// The step captured nothing — skipped, refused or ignored — so the next
     /// one has no reading to compare against.
-    fn nothing(quit: bool) -> Self {
+    fn nothing() -> Self {
         StepOutcome {
-            quit,
+            quit: false,
             last: None,
             to_review: false,
         }
@@ -211,17 +210,24 @@ enum Watched {
     Quit,
 }
 
+/// What a wait for a step's state does once its timeout passes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OnTimeout {
+    /// End the wait: [`Watched::TimedOut`].
+    GiveUp,
+    /// Offer the keyboard and keep waiting: a step whose instruction takes a
+    /// while to carry out must not file whatever the meter happened to be
+    /// showing.
+    OfferKeys,
+}
+
 /// Read until the meter shows what the step asked for.
-///
-/// `hint` offers the keyboard once the timeout passes rather than giving up:
-/// a step whose instruction takes a while to carry out must not file whatever
-/// the meter happened to be showing.
 fn watch_for_state(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    dmm: &mut BoxedDmm,
     input: &Input,
     watcher: &mut StateWatcher,
     timeout: Duration,
-    hint: bool,
+    on_timeout: OnTimeout,
     errors: &mut ErrorLog,
 ) -> Result<Watched, Box<dyn std::error::Error>> {
     let l = crate::l10n::get();
@@ -258,7 +264,7 @@ fn watch_for_state(
             .checked_duration_since(start)
             .unwrap_or_default();
         if waited >= timeout {
-            if !hint {
+            if on_timeout == OnTimeout::GiveUp {
                 return Ok(Watched::TimedOut(last));
             }
             if !hinted {
@@ -378,16 +384,22 @@ impl Confirmation {
     /// line — so a reporter answering "correct" had that filed as what the
     /// meter showed, marking the gate step they had just confirmed as failed.
     ///
-    /// `retake` is false where there is nothing to redo, and `r` is then not
-    /// one of the answers.
-    fn of(answer: &str, retake: bool) -> Option<Self> {
+    /// Where there is nothing to redo, `r` is not one of the answers.
+    fn of(answer: &str, retake: Retake) -> Option<Self> {
         match answer.to_ascii_lowercase().as_str() {
             "" => Some(Confirmation::Yes),
             "n" | "no" => Some(Confirmation::No),
-            "r" | "retake" if retake => Some(Confirmation::Retake),
+            "r" | "retake" if retake == Retake::Offered => Some(Confirmation::Retake),
             _ => None,
         }
     }
+}
+
+/// Whether a confirmation prompt offers to do the step over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Retake {
+    Offered,
+    NotOffered,
 }
 
 /// What a confirmation prompt settled on.
@@ -407,10 +419,13 @@ pub(super) enum Confirmed {
 /// never filed as the meter's screen.
 pub(super) fn ask_confirmation(
     input: &Input,
-    retake: bool,
+    retake: Retake,
 ) -> Result<Confirmed, Box<dyn std::error::Error>> {
     let l = crate::l10n::get();
-    let retake_arg = if retake { "yes" } else { "no" };
+    let retake_arg = match retake {
+        Retake::Offered => "yes",
+        Retake::NotOffered => "no",
+    };
     loop {
         let question = tr!(
             l,
@@ -452,21 +467,6 @@ pub(super) fn ask_confirmation(
     }
 }
 
-/// File a step that ended before it sampled: the frames it did put on the
-/// wire are drained out of the recorder and into its result.
-fn finish_failed_step(
-    recorder: &SharedRecorder,
-    report: &mut CaptureReport,
-    step_id: &str,
-    mut result: StepResult,
-) {
-    let mut rec = recording::lock(recorder);
-    rec.set_step(None);
-    (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step_id);
-    result.needs_attention = true;
-    upsert_step(report, result);
-}
-
 /// The mode a step's samples left, and the first one they showed instead.
 ///
 /// Only when the first sample is in the step's expected mode: the operator
@@ -489,287 +489,309 @@ fn left_mode<'a>(
         .map(|m| (want, m.mode.as_ref()))
 }
 
-/// File the step as skipped, and say whether the run stops here.
-fn skipped(report: &mut CaptureReport, step: &CaptureStep, quit: bool) -> StepOutcome {
-    upsert_step(report, empty_result(step, StepStatus::Skipped, None));
-    StepOutcome::nothing(quit)
-}
+impl CaptureRun {
+    /// File a step that ended before it sampled: the frames it did put on the
+    /// wire are drained out of the recorder and into its result.
+    fn finish_failed_step(&mut self, step_id: &str, mut result: StepResult) {
+        let mut rec = recording::lock(&self.recorder);
+        rec.set_step(None);
+        (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step_id);
+        result.needs_attention = true;
+        upsert_step(&mut self.report, result);
+    }
 
-/// Run one capture step. Returns Ok(true) if user wants to quit.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the capture run state, passed down"
-)]
-pub(crate) fn run_capture_step(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-    recorder: &SharedRecorder,
-    step: &CaptureStep,
-    report: &mut CaptureReport,
-    interactive: bool,
-    input: &Input,
-    prev: &PrevState,
-    trust: &Trust,
-    driver: &mut super::drive::Driver,
-) -> Result<StepOutcome, Box<dyn std::error::Error>> {
-    let l = crate::l10n::get();
-    // Check if already captured (resume)
-    if already_captured(report, step.id) {
-        eprintln!(
-            "  {}",
-            tr!(
-                l,
-                "capture-already-captured",
-                step = style(step.id).dim().to_string(),
-            )
+    /// File the step as skipped; the run goes on.
+    fn skip(&mut self, step: &CaptureStep) -> StepOutcome {
+        upsert_step(
+            &mut self.report,
+            empty_result(step, StepStatus::Skipped, None),
         );
-        return Ok(StepOutcome::nothing(false));
+        StepOutcome::nothing()
     }
 
-    if interactive {
-        eprintln!();
-    }
-    eprintln!("{}", header(l, step));
-
-    recording::lock(recorder).set_step(Some(step.id));
-    let mut errors = ErrorLog::default();
-    let expect = trust.expect(step);
-
-    // A mode a button on the meter reaches — continuity from Ω, duty
-    // from Hz — is the tool's to switch to; only the dial is the operator's.
-    if interactive && trust.drives() {
-        super::drive::switch_mode_from(dmm, recorder, step, prev.last.as_ref(), driver, report)?;
+    /// File the step as skipped, and stop the run here.
+    fn quit(&mut self, step: &CaptureStep) -> StepOutcome {
+        StepOutcome {
+            quit: true,
+            ..self.skip(step)
+        }
     }
 
-    // One pass per attempt: `r` at the confirmation prompt drops the samples
-    // and runs the same wait again, on the same previous state. The recorder
-    // is not drained in between, so every attempt's frames reach the report.
-    let mut attempt = 0usize;
-    let (sample_data, mut measurements, confirmation) = loop {
-        attempt += 1;
-        // Anything typed before the step was announced answered the last
-        // prompt, not this step's wait.
-        input.drain_keys();
-        // The frame the watcher accepted, kept as the step's first sample: it
-        // is the one reading known to be in the state the step asked for.
-        // `--settle` drops it below — there it is the transient.
-        let mut settled: Option<Measurement> = None;
-
-        // A retake re-samples; it does not press the button again, which on a
-        // toggle like HOLD would undo the state the first press reached.
-        if let Some(cmd) = step.command.filter(|_| attempt == 1) {
-            // What the meter shows before the button is pressed, so a command
-            // that changes nothing can be told from one that works.
-            let before = capture_samples(dmm, STABLE_FRAMES, &mut errors);
-
-            if let Err(e) = dmm.send_command(cmd) {
-                eprintln!(
-                    "  {}",
-                    style(tr!(l, "capture-command-failed", error = l.error(&e))).red()
-                );
-                let result = empty_result(step, StepStatus::Error, Some(e.to_string()));
-                finish_failed_step(recorder, report, step.id, result);
-                return Ok(StepOutcome::nothing(false));
-            }
-
-            let mut watcher = StateWatcher::for_command(expect, &before, trust.reads_parse());
-            match watch_for_state(
-                dmm,
-                input,
-                &mut watcher,
-                COMMAND_TIMEOUT,
-                false,
-                &mut errors,
-            )? {
-                Watched::Ready(m) => {
-                    driver.prove_command(cmd);
-                    settled = m;
-                }
-                Watched::TimedOut(last) => {
-                    // No samples: filing pre-command frames as the step's result
-                    // is what made a dead command look like a captured state.
-                    let error = did_nothing(crate::l10n::english(), cmd, last.as_ref());
-                    eprintln!("  {}", style(did_nothing(l, cmd, last.as_ref())).yellow());
-                    let mut result = empty_result(step, StepStatus::Error, Some(error));
-                    result.diagnostics = errors.into_diagnostics();
-                    finish_failed_step(recorder, report, step.id, result);
-                    return Ok(StepOutcome::nothing(false));
-                }
-                Watched::Skip => return Ok(skipped(report, step, false)),
-                Watched::Quit => return Ok(skipped(report, step, true)),
-            }
-        } else if interactive && input.is_tty() {
-            // A step whose expectation the previous reading already satisfies
-            // cannot be seen arriving — DC V with the leads open and shorted
-            // both read about zero — so it is Enter-only and the keyboard is
-            // offered at once. A mode the tool just switched to is a change, so
-            // this is false there. A step that declares it waits for Enter is
-            // Enter-only wherever it runs.
-            let ask = step.wait_for_enter || enter_only(expect, prev.last.as_ref());
-            // Something has to go on the probes, and the dial is usually
-            // turned first: Enter is offered at once, and the watcher only
-            // captures on its own once it has seen the reading fail first.
-            let gated = !step.needs.is_empty();
-            let timeout = if ask || gated {
-                Duration::ZERO
-            } else {
-                STEP_TIMEOUT
-            };
-            let mut watcher = StateWatcher::for_step(expect, prev.baseline.as_ref(), !ask);
-            if gated {
-                watcher = watcher.gated();
-            }
-            match watch_for_state(dmm, input, &mut watcher, timeout, true, &mut errors)? {
-                Watched::Ready(m) => settled = m,
-                // `hint` keeps the wait open, so the timeout never ends it.
-                Watched::TimedOut(_) => {}
-                Watched::Skip => return Ok(skipped(report, step, false)),
-                Watched::Quit => return Ok(skipped(report, step, true)),
-            }
-        } else if interactive {
-            // No terminal to poll: ask, the way this step always did.
-            let ch = input.key(&format!(
-                "  {} ",
-                style(tr!(l, "capture-any-key", skip = "s", quit = "q")).dim()
-            ))?;
-            if ch == 'q' || ch == 'Q' {
-                return Ok(skipped(report, step, true));
-            }
-            if ch == 's' || ch == 'S' {
-                return Ok(skipped(report, step, false));
-            }
-        }
-
-        // The wait covers the operator's own changes as much as the tool's:
-        // whatever ended this step's wait, `--settle` says the reading behind
-        // it needs longer. The frame that ended the wait was read before it,
-        // so a run that waits reads its whole batch afterwards.
-        if driver.wait_to_settle() {
-            settled = None;
-        }
-        // A display that is blank for a moment after the change is read past,
-        // unless no reading is what the step is there to see.
-        let expects_blank = expect.is_some_and(|e| e.value == Some(ValueExpect::NoReading));
-        if !expects_blank && settled.as_ref().is_none_or(is_blank) {
-            settled = read_past_blank(dmm).ok();
-        }
-        let mut measurements: Vec<Measurement> = settled.into_iter().collect();
-        let wanted = step.samples.saturating_sub(measurements.len());
-        measurements.extend(capture_samples(dmm, wanted, &mut errors));
-
-        // Only where the wait offers s and q: a meter that keeps leaving
-        // would otherwise retake the step for ever.
-        if interactive
-            && input.is_tty()
-            && let Some((mode, other)) = left_mode(expect.as_ref(), &measurements)
-        {
+    /// Run one capture step, and say what it left behind for the next.
+    pub(super) fn capture_step(
+        &mut self,
+        step: &CaptureStep,
+        interactive: bool,
+        prev: &PrevState,
+    ) -> Result<StepOutcome, Box<dyn std::error::Error>> {
+        let l = crate::l10n::get();
+        // Check if already captured (resume)
+        if already_captured(&self.report, step.id) {
             eprintln!(
                 "  {}",
-                style(tr!(
+                tr!(
                     l,
-                    "capture-left-mode",
-                    mode = l.label(TextKind::Mode, mode),
-                    other = l.label(TextKind::Mode, other),
-                ))
-                .yellow()
+                    "capture-already-captured",
+                    step = style(step.id).dim().to_string(),
+                )
             );
-            continue;
+            return Ok(StepOutcome::nothing());
         }
 
-        let sample_data: Vec<SampleData> = measurements
-            .iter()
-            .map(SampleData::from_measurement)
-            .collect();
+        if interactive {
+            eprintln!();
+        }
+        eprintln!("{}", header(l, step));
 
-        for (i, s) in sample_data.iter().enumerate() {
-            eprintln!(
-                "    {} mode={}({}) range={} display={:?}",
-                style(format!("[{i}]")).dim(),
-                s.mode_byte,
-                s.mode,
-                s.range_label,
-                s.shown()
-            );
+        recording::lock(&self.recorder).set_step(Some(step.id));
+        let mut errors = ErrorLog::default();
+        let expect = self.trust.expect(step);
+
+        // A mode a button on the meter reaches — continuity from Ω, duty
+        // from Hz — is the tool's to switch to; only the dial is the operator's.
+        if interactive && self.trust.drives() {
+            self.switch_mode_from(step, prev.last.as_ref())?;
         }
 
-        let confirmation = if let Some(last) = sample_data.last() {
-            if interactive {
+        // One pass per attempt: `r` at the confirmation prompt drops the samples
+        // and runs the same wait again, on the same previous state. The recorder
+        // is not drained in between, so every attempt's frames reach the report.
+        let mut attempt = 0usize;
+        let (sample_data, mut measurements, confirmation) = loop {
+            attempt += 1;
+            // Anything typed before the step was announced answered the last
+            // prompt, not this step's wait.
+            self.input.drain_keys();
+            // The frame the watcher accepted, kept as the step's first sample: it
+            // is the one reading known to be in the state the step asked for.
+            // `--settle` drops it below — there it is the transient.
+            let mut settled: Option<Measurement> = None;
+
+            // A retake re-samples; it does not press the button again, which on a
+            // toggle like HOLD would undo the state the first press reached.
+            if let Some(cmd) = step.command.filter(|_| attempt == 1) {
+                // What the meter shows before the button is pressed, so a command
+                // that changes nothing can be told from one that works.
+                let before = capture_samples(&mut self.dmm, STABLE_FRAMES, &mut errors);
+
+                if let Err(e) = self.dmm.send_command(cmd) {
+                    eprintln!(
+                        "  {}",
+                        style(tr!(l, "capture-command-failed", error = l.error(&e))).red()
+                    );
+                    let result = empty_result(step, StepStatus::Error, Some(e.to_string()));
+                    self.finish_failed_step(step.id, result);
+                    return Ok(StepOutcome::nothing());
+                }
+
+                let mut watcher =
+                    StateWatcher::for_command(expect, &before, self.trust.reads_parse());
+                match watch_for_state(
+                    &mut self.dmm,
+                    &self.input,
+                    &mut watcher,
+                    COMMAND_TIMEOUT,
+                    OnTimeout::GiveUp,
+                    &mut errors,
+                )? {
+                    Watched::Ready(m) => {
+                        self.driver.prove_command(cmd);
+                        settled = m;
+                    }
+                    Watched::TimedOut(last) => {
+                        // No samples: filing pre-command frames as the step's result
+                        // is what made a dead command look like a captured state.
+                        let error = did_nothing(crate::l10n::english(), cmd, last.as_ref());
+                        eprintln!("  {}", style(did_nothing(l, cmd, last.as_ref())).yellow());
+                        let mut result = empty_result(step, StepStatus::Error, Some(error));
+                        result.diagnostics = errors.into_diagnostics();
+                        self.finish_failed_step(step.id, result);
+                        return Ok(StepOutcome::nothing());
+                    }
+                    Watched::Skip => return Ok(self.skip(step)),
+                    Watched::Quit => return Ok(self.quit(step)),
+                }
+            } else if interactive && self.input.is_tty() {
+                // A step whose expectation the previous reading already satisfies
+                // cannot be seen arriving — DC V with the leads open and shorted
+                // both read about zero — so it is Enter-only and the keyboard is
+                // offered at once. A mode the tool just switched to is a change, so
+                // this is false there. A step that declares it waits for Enter is
+                // Enter-only wherever it runs.
+                let ask = step.wait_for_enter || enter_only(expect, prev.last.as_ref());
+                // Something has to go on the probes, and the dial is usually
+                // turned first: Enter is offered at once, and the watcher only
+                // captures on its own once it has seen the reading fail first.
+                let gated = !step.needs.is_empty();
+                let timeout = if ask || gated {
+                    Duration::ZERO
+                } else {
+                    STEP_TIMEOUT
+                };
+                let mut watcher = StateWatcher::for_step(expect, prev.baseline.as_ref(), !ask);
+                if gated {
+                    watcher = watcher.gated();
+                }
+                match watch_for_state(
+                    &mut self.dmm,
+                    &self.input,
+                    &mut watcher,
+                    timeout,
+                    OnTimeout::OfferKeys,
+                    &mut errors,
+                )? {
+                    Watched::Ready(m) => settled = m,
+                    // `OfferKeys` keeps the wait open, so the timeout never ends it.
+                    Watched::TimedOut(_) => {}
+                    Watched::Skip => return Ok(self.skip(step)),
+                    Watched::Quit => return Ok(self.quit(step)),
+                }
+            } else if interactive {
+                // No terminal to poll: ask, the way this step always did.
+                let ch = self.input.key(&format!(
+                    "  {} ",
+                    style(tr!(l, "capture-any-key", skip = "s", quit = "q")).dim()
+                ))?;
+                if ch == 'q' || ch == 'Q' {
+                    return Ok(self.quit(step));
+                }
+                if ch == 's' || ch == 'S' {
+                    return Ok(self.skip(step));
+                }
+            }
+
+            // The wait covers the operator's own changes as much as the tool's:
+            // whatever ended this step's wait, `--settle` says the reading behind
+            // it needs longer. The frame that ended the wait was read before it,
+            // so a run that waits reads its whole batch afterwards.
+            if self.driver.wait_to_settle() {
+                settled = None;
+            }
+            // A display that is blank for a moment after the change is read past,
+            // unless no reading is what the step is there to see.
+            let expects_blank = expect.is_some_and(|e| e.value == Some(ValueExpect::NoReading));
+            if !expects_blank && settled.as_ref().is_none_or(is_blank) {
+                settled = read_past_blank(&mut self.dmm).ok();
+            }
+            let mut measurements: Vec<Measurement> = settled.into_iter().collect();
+            let wanted = step.samples.saturating_sub(measurements.len());
+            measurements.extend(capture_samples(&mut self.dmm, wanted, &mut errors));
+
+            // Only where the wait offers s and q: a meter that keeps leaving
+            // would otherwise retake the step for ever.
+            if interactive
+                && self.input.is_tty()
+                && let Some((mode, other)) = left_mode(expect.as_ref(), &measurements)
+            {
                 eprintln!(
                     "  {}",
-                    tr!(
+                    style(tr!(
                         l,
-                        "capture-we-read",
-                        reading = style(last.summary()).green().to_string(),
-                    )
+                        "capture-left-mode",
+                        mode = l.label(TextKind::Mode, mode),
+                        other = l.label(TextKind::Mode, other),
+                    ))
+                    .yellow()
+                );
+                continue;
+            }
+
+            let sample_data: Vec<SampleData> = measurements
+                .iter()
+                .map(SampleData::from_measurement)
+                .collect();
+
+            for (i, s) in sample_data.iter().enumerate() {
+                eprintln!(
+                    "    {} mode={}({}) range={} display={:?}",
+                    style(format!("[{i}]")).dim(),
+                    s.mode_byte,
+                    s.mode,
+                    s.range_label,
+                    s.shown()
                 );
             }
-            // A trusted run doesn't stop here: the reading is listed with the
-            // others in the one review at the end.
-            //
-            // `is_tty`, as the end-of-run review does: a piped run's stdin
-            // answers every prompt with the empty line EOF gives, which reads
-            // as "yes, that is what the meter showed" — and a gate confirmed
-            // that way promotes the run and writes `core_semantics: confirmed`
-            // into the report without anyone having looked at the meter.
-            if interactive && input.is_tty() && trust.confirm_inline(step) {
-                match ask_confirmation(input, true)? {
-                    Confirmed::Retake => {
-                        eprintln!("  {}", style(tr!(l, "capture-retaking")).dim());
-                        continue;
+
+            let confirmation = if let Some(last) = sample_data.last() {
+                if interactive {
+                    eprintln!(
+                        "  {}",
+                        tr!(
+                            l,
+                            "capture-we-read",
+                            reading = style(last.summary()).green().to_string(),
+                        )
+                    );
+                }
+                // A trusted run doesn't stop here: the reading is listed with the
+                // others in the one review at the end.
+                //
+                // `is_tty`, as the end-of-run review does: a piped run's stdin
+                // answers every prompt with the empty line EOF gives, which reads
+                // as "yes, that is what the meter showed" — and a gate confirmed
+                // that way promotes the run and writes `core_semantics: confirmed`
+                // into the report without anyone having looked at the meter.
+                if interactive && self.input.is_tty() && self.trust.confirm_inline(step) {
+                    match ask_confirmation(&self.input, Retake::Offered)? {
+                        Confirmed::Retake => {
+                            eprintln!("  {}", style(tr!(l, "capture-retaking")).dim());
+                            continue;
+                        }
+                        Confirmed::Reading(shown) => Some(shown),
                     }
-                    Confirmed::Reading(shown) => Some(shown),
+                } else {
+                    None
                 }
             } else {
+                eprintln!("  {}", style(tr!(l, "capture-no-response")).yellow());
                 None
-            }
-        } else {
-            eprintln!("  {}", style(tr!(l, "capture-no-response")).yellow());
-            None
+            };
+
+            break (sample_data, measurements, confirmation);
         };
 
-        break (sample_data, measurements, confirmation);
-    };
+        let diagnostics = errors.into_diagnostics();
+        let (frames, frames_dropped) = {
+            let mut rec = recording::lock(&self.recorder);
+            rec.set_step(None);
+            frames_for_step(&rec.drain(), step.id)
+        };
 
-    let diagnostics = errors.into_diagnostics();
-    let (frames, frames_dropped) = {
-        let mut rec = recording::lock(recorder);
-        rec.set_step(None);
-        frames_for_step(&rec.drain(), step.id)
-    };
+        let status = if sample_data.is_empty() {
+            StepStatus::Timeout
+        } else if sample_data.len() < step.samples {
+            eprintln!(
+                "  {} {}",
+                style(tr!(l, "capture-few-samples-label")).yellow(),
+                tr!(
+                    l,
+                    "capture-few-samples",
+                    got = sample_data.len(),
+                    wanted = step.samples,
+                )
+            );
+            StepStatus::Captured
+        } else {
+            StepStatus::Captured
+        };
 
-    let status = if sample_data.is_empty() {
-        StepStatus::Timeout
-    } else if sample_data.len() < step.samples {
-        eprintln!(
-            "  {} {}",
-            style(tr!(l, "capture-few-samples-label")).yellow(),
-            tr!(
-                l,
-                "capture-few-samples",
-                got = sample_data.len(),
-                wanted = step.samples,
-            )
-        );
-        StepStatus::Captured
-    } else {
-        StepStatus::Captured
-    };
+        let to_review = confirmation.is_none() && status == StepStatus::Captured;
+        let mut result = StepResult {
+            needs_attention: needs_attention(&sample_data, step.samples, &diagnostics),
+            samples: sample_data,
+            frames,
+            frames_dropped,
+            diagnostics,
+            ..StepResult::new(step.id, step.instruction, status)
+        };
+        if let Some(shown) = confirmation {
+            result.set_inline_confirmation(shown);
+        }
 
-    let to_review = confirmation.is_none() && status == StepStatus::Captured;
-    let mut result = StepResult {
-        needs_attention: needs_attention(&sample_data, step.samples, &diagnostics),
-        samples: sample_data,
-        frames,
-        frames_dropped,
-        diagnostics,
-        ..StepResult::new(step.id, step.instruction, status)
-    };
-    if let Some(shown) = confirmation {
-        result.set_inline_confirmation(shown);
+        upsert_step(&mut self.report, result);
+        self.report.wire_events_dropped = recording::lock(&self.recorder).dropped();
+        Ok(StepOutcome::done(measurements.pop(), to_review))
     }
-
-    upsert_step(report, result);
-    report.wire_events_dropped = recording::lock(recorder).dropped();
-    Ok(StepOutcome::done(measurements.pop(), to_review))
 }
 
 #[cfg(test)]
@@ -800,6 +822,16 @@ mod tests {
         let sum = f.iter().fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
         f.extend_from_slice(&sum.to_be_bytes());
         f
+    }
+
+    /// A run on `dmm` whose frames go nowhere: the step's frames are recorded
+    /// through the transport the recorder wraps, and this one only has to
+    /// exist.
+    fn run_on(dmm: BoxedDmm) -> CaptureRun {
+        let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
+            dmm_lib::transport::NullTransport,
+        ));
+        CaptureRun::on(dmm, recorder)
     }
 
     fn measurement_frame() -> Vec<u8> {
@@ -881,9 +913,7 @@ mod tests {
         }
     }
 
-    fn dmm_replaying(
-        responses: Vec<Vec<u8>>,
-    ) -> dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>> {
+    fn dmm_replaying(responses: Vec<Vec<u8>>) -> BoxedDmm {
         let transport = QueuedTransport {
             responses: Mutex::new(responses.into()),
         };
@@ -1104,24 +1134,30 @@ mod tests {
     /// what the meter showed — failing the gate step it had just confirmed.
     #[test]
     fn the_confirmation_prompt_takes_only_its_own_answers() {
-        assert_eq!(Confirmation::of("", true), Some(Confirmation::Yes));
+        let offered = Retake::Offered;
+        assert_eq!(Confirmation::of("", offered), Some(Confirmation::Yes));
         for no in ["n", "N", "no", "No"] {
-            assert_eq!(Confirmation::of(no, true), Some(Confirmation::No), "{no:?}");
+            assert_eq!(
+                Confirmation::of(no, offered),
+                Some(Confirmation::No),
+                "{no:?}"
+            );
         }
         for retake in ["r", "R", "retake", "Retake"] {
             assert_eq!(
-                Confirmation::of(retake, true),
+                Confirmation::of(retake, offered),
                 Some(Confirmation::Retake),
                 "{retake:?}"
             );
         }
         for typed in ["correct", "yes", "y", "5.68 V", "rel", "R 0.5", "OL"] {
-            assert_eq!(Confirmation::of(typed, true), None, "{typed:?}");
+            assert_eq!(Confirmation::of(typed, offered), None, "{typed:?}");
         }
         // Where nothing can be redone, `r` is not one of the answers either.
-        assert_eq!(Confirmation::of("r", false), None);
-        assert_eq!(Confirmation::of("", false), Some(Confirmation::Yes));
-        assert_eq!(Confirmation::of("n", false), Some(Confirmation::No));
+        let not_offered = Retake::NotOffered;
+        assert_eq!(Confirmation::of("r", not_offered), None);
+        assert_eq!(Confirmation::of("", not_offered), Some(Confirmation::Yes));
+        assert_eq!(Confirmation::of("n", not_offered), Some(Confirmation::No));
     }
 
     /// Duplicate IDs would make resume and `--steps` ambiguous, and a step
@@ -1233,7 +1269,6 @@ mod tests {
     #[test]
     fn a_settling_step_files_only_what_it_read_after_the_wait() {
         use crate::capture::drive::Driver;
-        use crate::capture::input::Input;
 
         // Same reading with HOLD on, as the meter sends it (flag nibbles
         // "201"): a state the baseline has not seen, so the watcher takes it.
@@ -1260,27 +1295,11 @@ mod tests {
             responses.push(frame(&[0xFF, 0x00])); // the press's ack
             responses.extend(vec![held(b"  5.678"); 3]); // ends the watcher's wait
             responses.extend(vec![held(b"  1.234"); 2]); // what it settles to
-            let mut dmm = dmm_replaying(responses);
-            // The step's frames are recorded through the transport the
-            // recorder wraps; this one only has to exist.
-            let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
-                dmm_lib::transport::NullTransport,
-            ));
-            let mut report = CaptureReport::default();
-            let mut driver = Driver::new(false).settling(settle);
-            run_capture_step(
-                &mut dmm,
-                &recorder,
-                &step,
-                &mut report,
-                false,
-                &Input::piped(),
-                &PrevState::default(),
-                &Trust::new(false, true, &[]),
-                &mut driver,
-            )
-            .unwrap();
-            let displays: Vec<String> = report.steps[0]
+            let mut run = run_on(dmm_replaying(responses));
+            run.driver = Driver::new(false).settling(settle);
+            run.capture_step(&step, false, &PrevState::default())
+                .unwrap();
+            let displays: Vec<String> = run.report.steps[0]
                 .samples
                 .iter()
                 .map(|s| s.display_raw.clone())
@@ -1326,9 +1345,6 @@ mod tests {
     /// back, unless no reading is what the step expects.
     #[test]
     fn a_step_samples_once_the_display_is_back() {
-        use crate::capture::drive::Driver;
-        use crate::capture::input::Input;
-
         // Hz blank just after a switch, then 50.05 Hz — both from the capture.
         let blank = ut181a_frame(
             "02 08 00 11 71 01 00 00 00 00 33 48 7A 00 00 10 00 00 00 00 00 00 00 \
@@ -1342,15 +1358,12 @@ mod tests {
             let mut responses = vec![blank.clone(); 3];
             responses.extend(vec![hz.clone(); 5]);
             let device = dmm_lib::protocol::registry::find_device("ut181a").unwrap();
-            let mut dmm = dmm_lib::Dmm::new(
+            let dmm = dmm_lib::Dmm::new(
                 Box::new(StreamingTransport::new(responses))
                     as Box<dyn dmm_lib::transport::Transport>,
                 (device.new_protocol)(),
             )
             .unwrap();
-            let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
-                dmm_lib::transport::NullTransport,
-            ));
             let step = CaptureStep {
                 samples: 3,
                 expect: Some(dmm_lib::protocol::Expect {
@@ -1359,20 +1372,10 @@ mod tests {
                 }),
                 ..cli_step("hz", false, false)
             };
-            let mut report = CaptureReport::default();
-            run_capture_step(
-                &mut dmm,
-                &recorder,
-                &step,
-                &mut report,
-                false,
-                &Input::piped(),
-                &PrevState::default(),
-                &Trust::new(false, true, &[]),
-                &mut Driver::new(false),
-            )
-            .unwrap();
-            report.steps[0]
+            let mut run = run_on(dmm);
+            run.capture_step(&step, false, &PrevState::default())
+                .unwrap();
+            run.report.steps[0]
                 .samples
                 .iter()
                 .map(|s| s.value.clone())
@@ -1398,7 +1401,6 @@ mod tests {
     /// whose samples leave its mode is retaken and files only its own.
     #[test]
     fn a_step_the_meter_left_while_sampling_is_retaken() {
-        use crate::capture::drive::Driver;
         use crate::capture::input::Input;
 
         let (cont, diode) = (mode_frame(0x07), mode_frame(0x08));
@@ -1407,10 +1409,6 @@ mod tests {
         responses.extend([diode.clone(), diode, cont.clone()]);
         // The retake's wait and samples.
         responses.extend(vec![cont; 3 + 4]);
-        let mut dmm = dmm_replaying(responses);
-        let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
-            dmm_lib::transport::NullTransport,
-        ));
         let step = CaptureStep {
             expect: Some(dmm_lib::protocol::Expect::mode("Continuity")),
             ..cli_step("cont", false, false)
@@ -1426,21 +1424,13 @@ mod tests {
                 (0x00, 0x00, 0x00),
             )),
         };
-        let mut report = CaptureReport::default();
-        run_capture_step(
-            &mut dmm,
-            &recorder,
-            &step,
-            &mut report,
-            true,
-            &Input::untouched(),
-            &prev,
-            &Trust::new(false, true, &[]),
-            &mut Driver::new(false),
-        )
-        .unwrap();
+        let mut run = CaptureRun {
+            input: Input::untouched(),
+            ..run_on(dmm_replaying(responses))
+        };
+        run.capture_step(&step, true, &prev).unwrap();
 
-        let modes: Vec<&str> = report.steps[0]
+        let modes: Vec<&str> = run.report.steps[0]
             .samples
             .iter()
             .map(|s| s.mode.as_str())
@@ -1454,8 +1444,6 @@ mod tests {
     /// pressed. A step that waits for Enter files what the meter shows then.
     #[test]
     fn a_step_that_waits_for_enter_ignores_the_states_before_it() {
-        use crate::capture::drive::Driver;
-
         /// Presses Enter as it hands out response `at`: the operator reads
         /// the new state off the LCD, then presses the key.
         struct PressesEnter {
@@ -1522,33 +1510,22 @@ mod tests {
             key: Mutex::new(key),
         };
         let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
-        let mut dmm = dmm_lib::Dmm::new(
+        let dmm = dmm_lib::Dmm::new(
             Box::new(transport) as Box<dyn dmm_lib::transport::Transport>,
             (device.new_protocol)(),
         )
         .unwrap();
-        let (_unused, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
-            dmm_lib::transport::NullTransport,
-        ));
         let step = CaptureStep {
             wait_for_enter: true,
             ..cli_step("rel", false, false)
         };
-        let mut report = CaptureReport::default();
-        run_capture_step(
-            &mut dmm,
-            &recorder,
-            &step,
-            &mut report,
-            true,
-            &input,
-            &prev,
-            &Trust::new(false, true, &[]),
-            &mut Driver::new(false),
-        )
-        .unwrap();
+        let mut run = CaptureRun {
+            input,
+            ..run_on(dmm)
+        };
+        run.capture_step(&step, true, &prev).unwrap();
 
-        let rel: Vec<bool> = report.steps[0]
+        let rel: Vec<bool> = run.report.steps[0]
             .samples
             .iter()
             .map(|s| s.flags.rel)

@@ -184,7 +184,7 @@ pub(crate) type Reopen<'a> = Box<
 /// `dmm` is closed before the operator restarts the meter, so a Bluetooth
 /// link is let go of rather than dropped from the meter's end.
 pub(super) fn run_detection_check(
-    dmm: dmm_lib::Dmm<Box<dyn Transport>>,
+    dmm: crate::open::BoxedDmm,
     device: &'static SelectableDevice,
     detected_at_open: Option<&Detected>,
     previous: Option<&DetectionCheck>,
@@ -597,11 +597,11 @@ mod tests {
         }
     }
 
-    fn capture_dmm() -> dmm_lib::Dmm<Box<dyn Transport>> {
+    fn capture_dmm() -> crate::open::BoxedDmm {
         dmm_on(None)
     }
 
-    fn dmm_on(link: Option<Link>) -> dmm_lib::Dmm<Box<dyn Transport>> {
+    fn dmm_on(link: Option<Link>) -> crate::open::BoxedDmm {
         dmm_lib::Dmm::new(
             Box::new(CaptureLink(link)) as Box<dyn Transport>,
             (ut61eplus().new_protocol)(),

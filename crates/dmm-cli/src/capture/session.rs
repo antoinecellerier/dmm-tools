@@ -1,6 +1,7 @@
 //! The passes a capture run makes: the meter handshake, the device's own
 //! steps and the equipment they ask for, the end-of-run review, and freeform.
 
+use super::drive::Driver;
 use super::input::{ErrorLog, Input};
 use super::listing::step_included;
 use super::recording::{self, SharedRecorder};
@@ -9,9 +10,10 @@ use super::report::{
     baseline_from_report, needs_attention, save_report, upsert_step,
 };
 use super::step::{
-    CaptureStep, Confirmed, PrevState, ask_confirmation, capture_samples, empty_result,
-    frames_for_step, run_capture_step,
+    CaptureStep, Confirmed, PrevState, Retake, ask_confirmation, capture_samples, empty_result,
+    frames_for_step,
 };
+use crate::open::BoxedDmm;
 use console::style;
 use dmm_lib::protocol::{Need, Stability};
 use dmm_lib::text::TextKind;
@@ -32,6 +34,36 @@ impl crate::l10n::Localized for NotResponding {
 }
 
 crate::l10n::localized_error!(NotResponding);
+
+/// What every pass of a capture run works on: the meter and the recording
+/// of its wire, the report and the file it is saved to, the keyboard, what
+/// the gate has ruled, and the sweeps' budget.
+pub(super) struct CaptureRun {
+    pub(super) dmm: BoxedDmm,
+    pub(super) recorder: SharedRecorder,
+    pub(super) report: CaptureReport,
+    pub(super) output_path: String,
+    pub(super) input: Input,
+    pub(super) trust: Trust,
+    pub(super) driver: Driver,
+}
+
+#[cfg(test)]
+impl CaptureRun {
+    /// A run on `dmm` for a test: nobody at the keyboard, an empty report
+    /// with no file behind it, a trusted parser and no sweeps.
+    pub(super) fn on(dmm: BoxedDmm, recorder: SharedRecorder) -> Self {
+        CaptureRun {
+            dmm,
+            recorder,
+            report: CaptureReport::default(),
+            output_path: String::new(),
+            input: Input::piped(),
+            trust: Trust::new(false, true, &[]),
+            driver: Driver::new(false),
+        }
+    }
+}
 
 /// What the status banner says about the model the run was started for: the
 /// headline, and the line under it for a family hardware has not fully
@@ -59,7 +91,7 @@ fn status_banner(l: &Localizer, stability: Stability) -> (Cow<'_, str>, Option<C
 /// A name the detection probe already got is the session's: the meter has
 /// answered once, so it is neither asked again nor made to beep again.
 pub(super) fn verify_meter(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    dmm: &mut BoxedDmm,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
 ) -> Result<(String, bool), Box<dyn std::error::Error>> {
     let l = crate::l10n::get();
@@ -134,116 +166,106 @@ pub(super) struct ProtocolPass {
     pub(super) to_review: Vec<String>,
 }
 
-/// Run the device's own capture steps: modes, flags, and the manual range
-/// sweep, in the order the protocol declares them.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the capture run state, passed down"
-)]
-pub(super) fn run_protocol_capture(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-    recorder: &SharedRecorder,
-    all_steps: &[CaptureStep],
-    step_filter: &Option<std::collections::HashSet<String>>,
-    unverified_only: bool,
-    report: &mut CaptureReport,
-    output_path: &str,
-    input: &Input,
-    trust: &mut Trust,
-    driver: &mut super::drive::Driver,
-) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
-    // Keep only what this run selects: the checklist below covers the steps
-    // that will actually run.
-    let mut steps: Vec<CaptureStep> = all_steps
-        .iter()
-        .copied()
-        .filter(|s| step_selected(s, step_filter, unverified_only))
-        .collect();
+impl CaptureRun {
+    /// Run the device's own capture steps: modes, flags, and the manual range
+    /// sweep, in the order the protocol declares them.
+    pub(super) fn protocol_pass(
+        &mut self,
+        all_steps: &[CaptureStep],
+        step_filter: &Option<std::collections::HashSet<String>>,
+        unverified_only: bool,
+    ) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
+        // Keep only what this run selects: the checklist below covers the steps
+        // that will actually run.
+        let mut steps: Vec<CaptureStep> = all_steps
+            .iter()
+            .copied()
+            .filter(|s| step_selected(s, step_filter, unverified_only))
+            .collect();
 
-    // Only what is still to do: a resumed run must not ask for the equipment
-    // of a step it already has samples for, nor overwrite that step's result.
-    let pending: Vec<CaptureStep> = steps
-        .iter()
-        .filter(|s| !already_captured(report, s.id))
-        .copied()
-        .collect();
-    let missing = ask_missing_needs(&pending, input)?;
-    let dropped = steps_without(&pending, &missing);
-    for (step, label) in &dropped {
-        let result = StepResult {
-            // Never shown: the step is dropped before its header prints.
-            instruction_shown: None,
-            ..empty_result(
-                step,
-                StepStatus::Skipped,
-                Some(format!("skipped: no {label}")),
-            )
-        };
-        upsert_step(report, result);
+        // Only what is still to do: a resumed run must not ask for the equipment
+        // of a step it already has samples for, nor overwrite that step's result.
+        let pending: Vec<CaptureStep> = steps
+            .iter()
+            .filter(|s| !already_captured(&self.report, s.id))
+            .copied()
+            .collect();
+        let missing = ask_missing_needs(&pending, &self.input)?;
+        let dropped = steps_without(&pending, &missing);
+        for (step, label) in &dropped {
+            let result = StepResult {
+                // Never shown: the step is dropped before its header prints.
+                instruction_shown: None,
+                ..empty_result(
+                    step,
+                    StepStatus::Skipped,
+                    Some(format!("skipped: no {label}")),
+                )
+            };
+            upsert_step(&mut self.report, result);
+        }
+        if !dropped.is_empty() {
+            let ids: Vec<&str> = dropped.iter().map(|(s, _)| s.id).collect();
+            steps.retain(|s| !ids.contains(&s.id));
+            save_report(&self.report, &self.output_path)?;
+        }
+
+        let l = crate::l10n::get();
+        eprintln!(
+            "{}",
+            style(heading(&tr!(l, "capture-modes-heading"))).bold()
+        );
+        eprintln!(
+            "{}",
+            style(tr!(l, "capture-modes-keys", skip = "s", quit = "q")).dim()
+        );
+
+        // A resumed run inherits the gate its earlier half already passed.
+        self.trust.update(&mut self.report);
+
+        // What the meter was left showing, so the next step can tell a new state
+        // from it.
+        let mut prev = PrevState::default();
+        let mut to_review = Vec::new();
+        for step in &steps {
+            let outcome = self.capture_step(step, true, &prev)?;
+            if outcome.to_review {
+                to_review.push(step.id.to_string());
+            }
+            self.trust.update(&mut self.report);
+            // After the gate, and only for a step the operator set by hand: a
+            // command step's own flag is what the sweep would be undoing. A step
+            // the report already holds captures nothing, so a resumed run does
+            // not sweep it — the dial is no longer where its sub-steps assume.
+            if self.trust.drives()
+                && !step.gate
+                && step.command.is_none()
+                && let Some(last) = &outcome.last
+            {
+                self.sweep_step(step, last)?;
+            }
+            prev.last = outcome.last;
+            // From the report, so a resumed run gets its baseline from the steps
+            // it skipped as already captured. A step that captured nothing leaves
+            // the previous baseline standing: it is still the last state the
+            // meter was seen in.
+            if let Some(next) = baseline_from_report(&self.report, step.id) {
+                prev.baseline = Some(next);
+            }
+            save_report(&self.report, &self.output_path)?;
+            if outcome.quit {
+                return Ok(ProtocolPass {
+                    quit: true,
+                    to_review,
+                });
+            }
+        }
+
+        Ok(ProtocolPass {
+            quit: false,
+            to_review,
+        })
     }
-    if !dropped.is_empty() {
-        let ids: Vec<&str> = dropped.iter().map(|(s, _)| s.id).collect();
-        steps.retain(|s| !ids.contains(&s.id));
-        save_report(report, output_path)?;
-    }
-
-    let l = crate::l10n::get();
-    eprintln!(
-        "{}",
-        style(heading(&tr!(l, "capture-modes-heading"))).bold()
-    );
-    eprintln!(
-        "{}",
-        style(tr!(l, "capture-modes-keys", skip = "s", quit = "q")).dim()
-    );
-
-    // A resumed run inherits the gate its earlier half already passed.
-    trust.update(report);
-
-    // What the meter was left showing, so the next step can tell a new state
-    // from it.
-    let mut prev = PrevState::default();
-    let mut to_review = Vec::new();
-    for step in &steps {
-        let outcome = run_capture_step(
-            dmm, recorder, step, report, true, input, &prev, trust, driver,
-        )?;
-        if outcome.to_review {
-            to_review.push(step.id.to_string());
-        }
-        trust.update(report);
-        // After the gate, and only for a step the operator set by hand: a
-        // command step's own flag is what the sweep would be undoing. A step
-        // the report already holds captures nothing, so a resumed run does
-        // not sweep it — the dial is no longer where its sub-steps assume.
-        if trust.drives()
-            && !step.gate
-            && step.command.is_none()
-            && let Some(last) = &outcome.last
-        {
-            super::drive::sweep_step(dmm, recorder, step, last, driver, report, output_path)?;
-        }
-        prev.last = outcome.last;
-        // From the report, so a resumed run gets its baseline from the steps
-        // it skipped as already captured. A step that captured nothing leaves
-        // the previous baseline standing: it is still the last state the
-        // meter was seen in.
-        if let Some(next) = baseline_from_report(report, step.id) {
-            prev.baseline = Some(next);
-        }
-        save_report(report, output_path)?;
-        if outcome.quit {
-            return Ok(ProtocolPass {
-                quit: true,
-                to_review,
-            });
-        }
-    }
-
-    Ok(ProtocolPass {
-        quit: false,
-        to_review,
-    })
 }
 
 /// Whether the protocol pass runs this step: `--steps` and `--unverified`
@@ -407,55 +429,56 @@ fn apply_review(report: &mut CaptureReport, answers: &[(String, Option<String>)]
     }
 }
 
-/// Ask about every reading the run captured without stopping for it, once.
-///
-/// A piped run has nobody to ask, so those readings stay unconfirmed rather
-/// than being recorded as agreed. There is no retake here, unlike the inline
-/// prompt: by now the dial has moved on from every step listed.
-pub(super) fn run_batch_review(
-    report: &mut CaptureReport,
-    to_review: &[String],
-    output_path: &str,
-    input: &Input,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let rows: Vec<(String, String)> = to_review
-        .iter()
-        .filter_map(|id| {
-            let step = report.steps.iter().find(|s| s.id == *id)?;
-            Some((id.clone(), step.samples.last()?.summary()))
-        })
-        .collect();
-    if rows.is_empty() || !input.is_tty() {
-        return Ok(());
-    }
-
-    let l = crate::l10n::get();
-    eprintln!(
-        "\n{}",
-        style(heading(&tr!(l, "capture-review-heading"))).bold()
-    );
-    eprint!("{}", render_review_table(&rows));
-
-    let wrong = loop {
-        let answer = input.line(&format!("{} ", tr!(l, "capture-review-prompt")))?;
-        match parse_review_indices(l, &answer, rows.len()) {
-            Ok(indices) => break indices,
-            Err(e) => eprintln!("  {}", style(e).yellow()),
+impl CaptureRun {
+    /// Ask about every reading the run captured without stopping for it, once.
+    ///
+    /// A piped run has nobody to ask, so those readings stay unconfirmed rather
+    /// than being recorded as agreed. There is no retake here, unlike the inline
+    /// prompt: by now the dial has moved on from every step listed.
+    pub(super) fn batch_review(
+        &mut self,
+        to_review: &[String],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let input = &self.input;
+        let rows: Vec<(String, String)> = to_review
+            .iter()
+            .filter_map(|id| {
+                let step = self.report.steps.iter().find(|s| s.id == *id)?;
+                Some((id.clone(), step.samples.last()?.summary()))
+            })
+            .collect();
+        if rows.is_empty() || !input.is_tty() {
+            return Ok(());
         }
-    };
 
-    let mut answers: Vec<(String, Option<String>)> = Vec::with_capacity(rows.len());
-    for (i, (id, _)) in rows.iter().enumerate() {
-        let lcd = if wrong.contains(&i) {
-            Some(input.line(&format!("[{id}] {} ", tr!(l, "capture-what-shown")))?)
-        } else {
-            None
+        let l = crate::l10n::get();
+        eprintln!(
+            "\n{}",
+            style(heading(&tr!(l, "capture-review-heading"))).bold()
+        );
+        eprint!("{}", render_review_table(&rows));
+
+        let wrong = loop {
+            let answer = input.line(&format!("{} ", tr!(l, "capture-review-prompt")))?;
+            match parse_review_indices(l, &answer, rows.len()) {
+                Ok(indices) => break indices,
+                Err(e) => eprintln!("  {}", style(e).yellow()),
+            }
         };
-        answers.push((id.clone(), lcd));
+
+        let mut answers: Vec<(String, Option<String>)> = Vec::with_capacity(rows.len());
+        for (i, (id, _)) in rows.iter().enumerate() {
+            let lcd = if wrong.contains(&i) {
+                Some(input.line(&format!("[{id}] {} ", tr!(l, "capture-what-shown")))?)
+            } else {
+                None
+            };
+            answers.push((id.clone(), lcd));
+        }
+        apply_review(&mut self.report, &answers);
+        save_report(&self.report, &self.output_path)?;
+        Ok(())
     }
-    apply_review(report, &answers);
-    save_report(report, output_path)?;
-    Ok(())
 }
 
 /// Samples taken per freeform capture.
@@ -468,107 +491,107 @@ fn ends_freeform(desc: &str) -> bool {
     desc.is_empty() || desc.eq_ignore_ascii_case("q") || desc.eq_ignore_ascii_case("quit")
 }
 
-/// Part 1: Run measurement mode capture steps. Returns true if user wants to quit.
-/// Part 4: Freeform additional captures.
-pub(super) fn run_freeform_captures(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-    recorder: &SharedRecorder,
-    step_filter: &Option<std::collections::HashSet<String>>,
-    report: &mut CaptureReport,
-    output_path: &str,
-    input: &Input,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let is_filtered = step_filter.is_some();
-    if is_filtered && !step_included(step_filter, "extra") {
-        return Ok(());
-    }
-
-    let l = crate::l10n::get();
-    eprintln!(
-        "\n{}",
-        style(heading(&tr!(l, "capture-freeform-heading"))).bold()
-    );
-    eprintln!("{}\n", tr!(l, "capture-freeform-intro"));
-
-    // A resumed report keeps its freeform steps: number on from them.
-    let mut extra = report
-        .steps
-        .iter()
-        .filter_map(|s| s.id.strip_prefix("extra_")?.parse::<u32>().ok())
-        .max()
-        .map_or(0, |n| n + 1);
-    loop {
-        let desc = input.line(&format!(
-            "[extra_{extra}] {} ",
-            tr!(l, "capture-freeform-prompt", quit = "q")
-        ))?;
-        if ends_freeform(&desc) {
-            break;
+impl CaptureRun {
+    /// Capture whatever the operator describes beyond the device's own steps,
+    /// until they answer with an empty line or `q`.
+    pub(super) fn freeform_pass(
+        &mut self,
+        step_filter: &Option<std::collections::HashSet<String>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let (dmm, recorder, input) = (&mut self.dmm, &self.recorder, &self.input);
+        let is_filtered = step_filter.is_some();
+        if is_filtered && !step_included(step_filter, "extra") {
+            return Ok(());
         }
 
-        let step_id = format!("extra_{extra}");
-        recording::lock(recorder).set_step(Some(&step_id));
-        let mut errors = ErrorLog::default();
-        let measurements = capture_samples(dmm, FREEFORM_SAMPLES, &mut errors);
-        let diagnostics = errors.into_diagnostics();
-        let sample_data: Vec<SampleData> = measurements
+        let l = crate::l10n::get();
+        eprintln!(
+            "\n{}",
+            style(heading(&tr!(l, "capture-freeform-heading"))).bold()
+        );
+        eprintln!("{}\n", tr!(l, "capture-freeform-intro"));
+
+        // A resumed report keeps its freeform steps: number on from them.
+        let mut extra = self
+            .report
+            .steps
             .iter()
-            .map(SampleData::from_measurement)
-            .collect();
-        let (frames, frames_dropped) = {
-            let mut rec = recording::lock(recorder);
-            rec.set_step(None);
-            frames_for_step(&rec.drain(), &step_id)
-        };
-
-        for (i, s) in sample_data.iter().enumerate() {
-            eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
-        }
-
-        let confirmation = if let Some(last) = sample_data.last() {
-            eprintln!(
-                "  {}",
-                tr!(
-                    l,
-                    "capture-we-read",
-                    reading = style(last.summary()).green().to_string(),
-                )
-            );
-            match ask_confirmation(input, false)? {
-                Confirmed::Reading(shown) => Some(shown),
-                // No retake is offered above, so this cannot come back; a step
-                // left unanswered is the one outcome that records nothing the
-                // operator did not say.
-                Confirmed::Retake => None,
+            .filter_map(|s| s.id.strip_prefix("extra_")?.parse::<u32>().ok())
+            .max()
+            .map_or(0, |n| n + 1);
+        loop {
+            let desc = input.line(&format!(
+                "[extra_{extra}] {} ",
+                tr!(l, "capture-freeform-prompt", quit = "q")
+            ))?;
+            if ends_freeform(&desc) {
+                break;
             }
-        } else {
-            eprintln!("  {}", tr!(l, "capture-no-response"));
-            None
-        };
 
-        let status = if sample_data.is_empty() {
-            StepStatus::Timeout
-        } else {
-            StepStatus::Captured
-        };
-        let mut result = StepResult {
-            needs_attention: needs_attention(&sample_data, FREEFORM_SAMPLES, &diagnostics),
-            samples: sample_data,
-            frames,
-            frames_dropped,
-            diagnostics,
-            ..StepResult::new(&step_id, &desc, status)
-        };
-        if let Some(shown) = confirmation {
-            result.set_inline_confirmation(shown);
+            let step_id = format!("extra_{extra}");
+            recording::lock(recorder).set_step(Some(&step_id));
+            let mut errors = ErrorLog::default();
+            let measurements = capture_samples(dmm, FREEFORM_SAMPLES, &mut errors);
+            let diagnostics = errors.into_diagnostics();
+            let sample_data: Vec<SampleData> = measurements
+                .iter()
+                .map(SampleData::from_measurement)
+                .collect();
+            let (frames, frames_dropped) = {
+                let mut rec = recording::lock(recorder);
+                rec.set_step(None);
+                frames_for_step(&rec.drain(), &step_id)
+            };
+
+            for (i, s) in sample_data.iter().enumerate() {
+                eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
+            }
+
+            let confirmation = if let Some(last) = sample_data.last() {
+                eprintln!(
+                    "  {}",
+                    tr!(
+                        l,
+                        "capture-we-read",
+                        reading = style(last.summary()).green().to_string(),
+                    )
+                );
+                match ask_confirmation(input, Retake::NotOffered)? {
+                    Confirmed::Reading(shown) => Some(shown),
+                    // No retake is offered above, so this cannot come back; a step
+                    // left unanswered is the one outcome that records nothing the
+                    // operator did not say.
+                    Confirmed::Retake => None,
+                }
+            } else {
+                eprintln!("  {}", tr!(l, "capture-no-response"));
+                None
+            };
+
+            let status = if sample_data.is_empty() {
+                StepStatus::Timeout
+            } else {
+                StepStatus::Captured
+            };
+            let mut result = StepResult {
+                needs_attention: needs_attention(&sample_data, FREEFORM_SAMPLES, &diagnostics),
+                samples: sample_data,
+                frames,
+                frames_dropped,
+                diagnostics,
+                ..StepResult::new(&step_id, &desc, status)
+            };
+            if let Some(shown) = confirmation {
+                result.set_inline_confirmation(shown);
+            }
+            upsert_step(&mut self.report, result);
+            self.report.wire_events_dropped = recording::lock(recorder).dropped();
+            save_report(&self.report, &self.output_path)?;
+            extra += 1;
         }
-        upsert_step(report, result);
-        report.wire_events_dropped = recording::lock(recorder).dropped();
-        save_report(report, output_path)?;
-        extra += 1;
-    }
 
-    Ok(())
+        Ok(())
+    }
 }
 
 #[cfg(test)]
