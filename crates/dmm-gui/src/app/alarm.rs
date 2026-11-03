@@ -136,7 +136,7 @@ impl App {
     /// Whether the readings the alarm judges went through the scale: a
     /// file's never do, it holds them as they were shown.
     pub(super) fn alarm_scaled(&self) -> bool {
-        !self.transform.is_identity() && self.imported.is_none() && self.import_job.is_none()
+        !self.transform.is_identity() && !self.source.is_import()
     }
 
     /// What the reading display adds to the meter's reading.

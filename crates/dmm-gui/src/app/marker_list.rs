@@ -275,13 +275,14 @@ impl App {
                 .is_some_and(|at| at <= m.timestamp)
         };
         if !self
+            .source
             .replay_markers
             .front()
             .is_some_and(|next| due(next.offset))
         {
             return;
         }
-        let Some(next) = self.replay_markers.pop_front() else {
+        let Some(next) = self.source.replay_markers.pop_front() else {
             return;
         };
         let wall_time = m.wall_time.into();
@@ -293,7 +294,7 @@ impl App {
             log_line(&self.l10n, m),
         ) {
             // A marker the user put on this reading first: this one waits.
-            self.replay_markers.push_front(next);
+            self.source.replay_markers.push_front(next);
         }
     }
 
@@ -311,9 +312,9 @@ impl App {
             .now()
             .saturating_duration_since(start)
             .saturating_sub(cadence);
-        let before = self.replay_markers.len();
-        self.replay_markers.retain(|m| m.offset >= resume);
-        let dropped = before - self.replay_markers.len();
+        let before = self.source.replay_markers.len();
+        self.source.replay_markers.retain(|m| m.offset >= resume);
+        let dropped = before - self.source.replay_markers.len();
         if dropped > 0 {
             log::info!("replay resumed past {dropped} markers; they are left out");
         }
@@ -326,12 +327,12 @@ impl App {
         let Some((start, _)) = self.clock.wall_origin() else {
             return;
         };
-        let due = self.replay_view.as_ref().is_some_and(|(_, reach)| {
+        let due = self.source.replay_view.as_ref().is_some_and(|(_, reach)| {
             start
                 .checked_add(*reach)
                 .is_some_and(|at| at <= m.timestamp)
         });
-        if due && let Some((view, _)) = self.replay_view.take() {
+        if due && let Some((view, _)) = self.source.replay_view.take() {
             self.graph.apply_view_state(&view, start);
         }
     }

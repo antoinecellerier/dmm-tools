@@ -401,27 +401,9 @@ pub struct App {
     /// Markers the user placed on readings, kept while the graph or the
     /// sample buffer holds their reading.
     markers: crate::markers::Markers,
-    /// The `--replay` file's markers still waiting for their reading, in
-    /// offset order: each goes on the first reading played at or after its
-    /// offset (see `place_replay_marker`).
-    replay_markers: std::collections::VecDeque<dmm_lib::replay::ReplayMarker>,
-    /// The `--replay` file's saved view, waiting until the playback reaches
-    /// the furthest moment it shows (see `import::view_reach`).
-    replay_view: Option<(crate::graph::ViewState, std::time::Duration)>,
-    /// An import cleared a `--replay` session: its next Connect queues the
-    /// recording's markers and view again.
-    requeue_replay: bool,
-    /// An Import… under way: the file parsing, or its readings going in.
-    import_job: Option<import::ImportJob>,
-    /// The file the session was imported from, once it is in.
-    imported: Option<import::ImportedFrom>,
-    /// How far apart the imported file's readings are, in milliseconds:
-    /// what the graph judges its gaps by while the session is that file's.
-    import_cadence_ms: Option<u32>,
-    /// `--import`'s file, imported on the first frame.
-    pending_import: Option<std::path::PathBuf>,
-    /// Import…'s open dialog, answering on its own thread.
-    import_dialog: Option<mpsc::Receiver<Option<std::path::PathBuf>>>,
+    /// The `--replay` recording or the imported file the session holds
+    /// instead of a meter's readings.
+    source: import::SessionSource,
     marker_list: marker_list::MarkerList,
     /// Time base the session's readings are stamped with — real unless a
     /// `--mock-clock-*` flag was given. Cloned into the acquisition thread so
@@ -429,10 +411,6 @@ pub struct App {
     /// session age (the recording duration) agree. UI cadence — toasts,
     /// repaint, control-channel waits — stays on real time.
     clock: dmm_lib::Clock,
-    /// The recording this session plays instead of opening a meter, from
-    /// `--replay`. Session-only, like the clock: the meter it names reaches
-    /// the settings as an override, so nothing about a playback is saved.
-    replay: Option<crate::ReplaySource>,
 
     /// What `settings.shared.device_family` names, read through
     /// [`Self::selection`].
@@ -526,8 +504,8 @@ impl App {
         }
         settings.overrides.adapter = cli.adapter;
         let mut app = Self::from_settings(settings, cli.clock);
-        app.replay = cli.replay;
-        app.pending_import = cli.import;
+        app.source.replay = cli.replay;
+        app.source.cli_import = cli.import;
         app
     }
 
@@ -560,17 +538,9 @@ impl App {
             graph,
             capture,
             markers: crate::markers::Markers::default(),
-            replay_markers: std::collections::VecDeque::new(),
-            replay_view: None,
-            requeue_replay: false,
-            import_job: None,
-            imported: None,
-            import_cadence_ms: None,
-            pending_import: None,
-            import_dialog: None,
+            source: import::SessionSource::default(),
             marker_list: marker_list::MarkerList::default(),
             clock,
-            replay: None,
             selection: std::cell::RefCell::new(selection),
             recording_panel: RecordingPanel::default(),
             first_frame: true,
@@ -919,7 +889,7 @@ impl App {
         if self.settings.window_maximized {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
-        if let Some(path) = self.pending_import.take() {
+        if let Some(path) = self.source.cli_import.take() {
             // The file is the session: no meter is opened beside it.
             self.import_file(path);
         } else if self.settings.auto_connect {
@@ -1041,7 +1011,7 @@ impl eframe::App for App {
         // applies at the next Connect, which asks about unsaved markers.
         if self.connection.needs_reconnect {
             self.connection.needs_reconnect = false;
-            if self.imported.is_none() && self.import_job.is_none() {
+            if !self.source.is_import() {
                 self.connect(&ctx);
             }
         }
@@ -1847,7 +1817,10 @@ mod tests {
             Some("mock"),
             "the saved device is the one Settings::save puts back"
         );
-        assert!(app.replay.is_some(), "the session plays the recording");
+        assert!(
+            app.source.replay.is_some(),
+            "the session plays the recording"
+        );
     }
 
     /// A named meter still resolves to its entry, aliases included; `auto`

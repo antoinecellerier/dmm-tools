@@ -33,6 +33,57 @@ use crate::recording::Recording;
 /// the window still answering.
 const CHUNK: usize = 20_000;
 
+/// Where the session's readings come from when it is not a meter: the
+/// `--replay` recording it plays, or a file Import… takes in.
+#[derive(Default)]
+pub(super) struct SessionSource {
+    /// The recording this session plays instead of opening a meter, from
+    /// `--replay`. Session-only, like the clock: the meter it names reaches
+    /// the settings as an override, so nothing about a playback is saved.
+    pub(super) replay: Option<crate::ReplaySource>,
+    /// The `--replay` file's markers still waiting for their reading, in
+    /// offset order: each goes on the first reading played at or after its
+    /// offset (see `place_replay_marker`).
+    pub(super) replay_markers: std::collections::VecDeque<dmm_lib::replay::ReplayMarker>,
+    /// The `--replay` file's saved view, waiting until the playback reaches
+    /// the furthest moment it shows (see `view_reach`).
+    pub(super) replay_view: Option<(crate::graph::ViewState, Duration)>,
+    /// An import cleared a `--replay` session: its next Connect queues the
+    /// recording's markers and view again.
+    pub(super) requeue_replay: bool,
+    /// `--import`'s file, imported on the first frame.
+    pub(super) cli_import: Option<PathBuf>,
+    /// Import…'s open dialog, answering on its own thread.
+    pub(super) import_dialog: Option<mpsc::Receiver<Option<PathBuf>>>,
+    /// An Import… under way: the file parsing, or its readings going in.
+    pub(super) import_job: Option<ImportJob>,
+    /// The file the session was imported from, once it is in.
+    pub(super) imported: Option<ImportedFrom>,
+    /// How far apart the imported file's readings are, in milliseconds:
+    /// what the graph judges its gaps by while the session is that file's.
+    pub(super) import_cadence_ms: Option<u32>,
+}
+
+impl SessionSource {
+    /// The session is an imported file's, in or still coming in.
+    pub(super) fn is_import(&self) -> bool {
+        self.imported.is_some() || self.import_job.is_some()
+    }
+
+    /// Forget the last session's import and replay progress: an import, or
+    /// the first Connect after one, starts from nothing. The `--replay`
+    /// recording stays, and its markers and view go back in with its next
+    /// Connect.
+    fn reset(&mut self) {
+        self.replay_markers.clear();
+        self.replay_view = None;
+        self.requeue_replay = self.replay.is_some();
+        self.import_job = None;
+        self.imported = None;
+        self.import_cadence_ms = None;
+    }
+}
+
 /// What the top bar and the recording panel say about an imported session.
 #[derive(Debug, Clone)]
 pub(super) struct ImportedFrom {
@@ -327,7 +378,7 @@ impl App {
     /// Import… or `Ctrl+I`: pick a file in the system's open dialog, on a
     /// thread of its own as Export…'s save dialog is, answered next frame.
     pub(super) fn begin_import(&mut self) {
-        if self.import_dialog.is_some() {
+        if self.source.import_dialog.is_some() {
             return;
         }
         let (tx, rx) = mpsc::channel();
@@ -347,24 +398,24 @@ impl App {
             });
             let _ = tx.send(picked);
         });
-        self.import_dialog = Some(rx);
+        self.source.import_dialog = Some(rx);
     }
 
     /// The file the open dialog answered with, once it has.
     pub(super) fn poll_import_dialog(&mut self) {
-        let Some(rx) = &self.import_dialog else {
+        let Some(rx) = &self.source.import_dialog else {
             return;
         };
         match rx.try_recv() {
             Ok(picked) => {
-                self.import_dialog = None;
+                self.source.import_dialog = None;
                 if let Some(path) = picked {
                     self.remember_folder(&path);
                     self.request_import(path);
                 }
             }
             Err(mpsc::TryRecvError::Empty) => {}
-            Err(mpsc::TryRecvError::Disconnected) => self.import_dialog = None,
+            Err(mpsc::TryRecvError::Disconnected) => self.source.import_dialog = None,
         }
     }
 
@@ -408,7 +459,7 @@ impl App {
                 .unwrap_or(Err(ImportError::Crashed(path)));
             let _ = tx.send(loaded);
         });
-        self.import_job = Some(ImportJob::Loading(rx));
+        self.source.import_job = Some(ImportJob::Loading(rx));
     }
 
     /// Drop everything the last session holds: an import, or the first
@@ -418,14 +469,7 @@ impl App {
         self.capture.recording.discard();
         self.capture.recording.clear_history();
         self.markers.clear();
-        self.replay_markers.clear();
-        self.import_cadence_ms = None;
-        self.replay_view = None;
-        // A `--replay` session's markers and view go back in with its next
-        // Connect.
-        self.requeue_replay = self.replay.is_some();
-        self.imported = None;
-        self.import_job = None;
+        self.source.reset();
         // A file, or the meter after one, is judged afresh: bound to its own
         // first reading, not to the quantity and zone the last session left.
         if let Some(alarm) = &self.alarm {
@@ -436,7 +480,7 @@ impl App {
     /// Take the next chunk of an import under way, or pick up the parsed
     /// file. Every frame; asks for another while there is more.
     pub(super) fn step_import(&mut self, ctx: &egui::Context) {
-        let Some(job) = self.import_job.take() else {
+        let Some(job) = self.source.import_job.take() else {
             return;
         };
         let job = match job {
@@ -459,7 +503,7 @@ impl App {
         if job.is_some() {
             ctx.request_repaint();
         }
-        self.import_job = job;
+        self.source.import_job = job;
     }
 
     /// Latch what the recording is exported under and start it.
@@ -492,7 +536,7 @@ impl App {
             extra_slots: 0,
         };
         let ms = u32::try_from(cadence.as_millis()).unwrap_or(u32::MAX);
-        self.import_cadence_ms = Some(ms);
+        self.source.import_cadence_ms = Some(ms);
         self.set_gap_interval(self.settings.sample_interval_ms);
         let total = readings.len();
         let first = readings.first().map(|m| m.timestamp);
@@ -592,7 +636,7 @@ impl App {
             )
         };
         self.toast = Some(Toast::info(message.into_owned()));
-        self.imported = Some(ImportedFrom {
+        self.source.imported = Some(ImportedFrom {
             path: ingest.path,
             readings: ingest.taken,
         });
@@ -687,7 +731,7 @@ timestamp,mode,value,unit,range,flags,marker,note
         app.import_file(path);
         for _ in 0..10_000 {
             app.step_import(&ctx);
-            if app.import_job.is_none() {
+            if app.source.import_job.is_none() {
                 return;
             }
             std::thread::sleep(Duration::from_millis(1));
@@ -715,7 +759,7 @@ timestamp,mode,value,unit,range,flags,marker,note
             app.capture.recording_layout.device.as_deref(),
             Some("UT61E+")
         );
-        assert_eq!(app.imported.as_ref().map(|f| f.readings), Some(3));
+        assert_eq!(app.source.imported.as_ref().map(|f| f.readings), Some(3));
         assert!(!app.graph.live, "the whole file, not the newest reading");
         let _ = std::fs::remove_file(path);
     }
@@ -776,7 +820,7 @@ timestamp,mode,value,unit,range,flags,marker,note
         import(&mut app, path.clone());
         app.connect(&crate::app::styled_context());
         app.disconnect();
-        assert!(app.imported.is_none());
+        assert!(app.source.imported.is_none());
         assert!(app.markers.is_empty());
         assert_eq!(app.capture.recording.export_samples().len(), 0);
         let _ = std::fs::remove_file(path);
@@ -855,14 +899,14 @@ timestamp,mode,value,unit,range,flags,marker,note
         let path = file("large.csv", &text);
         let ctx = crate::app::styled_context();
         app.import_file(path.clone());
-        while matches!(app.import_job, Some(ImportJob::Loading(_))) {
+        while matches!(app.source.import_job, Some(ImportJob::Loading(_))) {
             app.step_import(&ctx);
             std::thread::sleep(Duration::from_millis(1));
         }
         app.step_import(&ctx);
         assert_eq!(app.capture.recording.export_samples().len(), CHUNK);
         app.step_import(&ctx);
-        assert!(app.import_job.is_none());
+        assert!(app.source.import_job.is_none());
         assert_eq!(app.capture.recording.export_samples().len(), CHUNK + 5);
         let _ = std::fs::remove_file(path);
     }
@@ -947,7 +991,7 @@ timestamp,mode,value,unit,range,flags,marker,note
             .map(|t| t.message.clone())
             .unwrap_or_default();
         assert!(toast.starts_with("Import failed:"), "{toast}");
-        assert!(app.imported.is_none());
+        assert!(app.source.imported.is_none());
         let _ = std::fs::remove_file(path);
     }
 }
@@ -1004,10 +1048,10 @@ mod folder_tests {
         let dir = std::env::temp_dir().join(format!("dmm-gui-folder-{}", std::process::id()));
         let (tx, rx) = mpsc::channel();
         tx.send(Some(dir.join("x.json"))).expect("the app listens");
-        app.import_dialog = Some(rx);
+        app.source.import_dialog = Some(rx);
         app.poll_import_dialog();
         assert_eq!(app.settings.last_folder, Some(dir));
-        app.import_job = None;
+        app.source.import_job = None;
     }
 }
 
@@ -1028,10 +1072,10 @@ mod prompt_tests {
 
         app.request_import(path.clone());
         assert!(
-            app.import_job.is_some(),
+            app.source.import_job.is_some(),
             "nothing to lose: imported at once"
         );
-        app.import_job = None;
+        app.source.import_job = None;
 
         app.capture.recording.toggle(Instant::now());
         let m = Measurement::test_fixture(
@@ -1041,7 +1085,7 @@ mod prompt_tests {
         );
         app.capture.recording.push(&m, 0);
         app.request_import(path.clone());
-        assert!(app.import_job.is_none(), "waits for the answer");
+        assert!(app.source.import_job.is_none(), "waits for the answer");
         assert!(!app.recording_panel_idle(), "the prompt is up");
         let _ = std::fs::remove_file(path);
     }
@@ -1062,14 +1106,17 @@ mod connect_tests {
         std::fs::write(&path, super::tests_support::CSV).expect("write");
         let ctx = crate::app::styled_context();
         app.import_file(path.clone());
-        while app.import_job.is_some() {
+        while app.source.import_job.is_some() {
             app.step_import(&ctx);
             std::thread::sleep(Duration::from_millis(1));
         }
         app.add_marker(false);
         app.request_connect(&ctx);
         assert!(!app.recording_panel_idle(), "the prompt is up");
-        assert!(app.imported.is_some(), "the session waits for the answer");
+        assert!(
+            app.source.imported.is_some(),
+            "the session waits for the answer"
+        );
         let _ = std::fs::remove_file(path);
     }
 }

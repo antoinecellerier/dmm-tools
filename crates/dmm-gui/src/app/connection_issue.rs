@@ -351,7 +351,7 @@ impl App {
             // A stretch of the recording with nothing in it, which no meter
             // and no cable can be asked about. Said plainly and left there:
             // the file plays on by itself once the gap is over.
-            if self.replay.is_some() {
+            if self.source.replay.is_some() {
                 return Some(notice(
                     NoticeKind::Waiting,
                     tr!(l10n, "connection-no-frames").into_owned(),

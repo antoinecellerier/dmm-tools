@@ -87,7 +87,7 @@ impl App {
             //
             // An imported session is the file's meter's, whatever Settings
             // names.
-            let imported_meter: Option<String> = self.imported.as_ref().map(|_| {
+            let imported_meter: Option<String> = self.source.imported.as_ref().map(|_| {
                 self.capture
                     .recording_layout
                     .device
@@ -132,7 +132,7 @@ impl App {
                         (green, text)
                     }
                 }
-                ConnectionState::Disconnected => match (&self.imported, imported_meter) {
+                ConnectionState::Disconnected => match (&self.source.imported, imported_meter) {
                     // The file stands where a link would: what the session
                     // is on, dropped first when the bar runs out of room.
                     (Some(from), Some(meter)) => {
@@ -168,7 +168,7 @@ impl App {
                 // the middle of the status.
                 let (rect, dot) =
                     ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                if self.imported.is_some() {
+                if self.source.imported.is_some() {
                     // A ring, not a dot: no meter is on the other end, and a
                     // shape says so where a colour alone would not.
                     ui.painter().circle_stroke(
@@ -207,7 +207,7 @@ impl App {
             // would add. Only the first reaches the window's minimum size.
             let link_w = if self.connection.state == ConnectionState::Connected {
                 link_suffix_width(ui, l10n, self.connection.link())
-            } else if let Some(from) = &self.imported {
+            } else if let Some(from) = &self.source.imported {
                 // The meter's name stands in for itself: only the difference
                 // the file makes is wanted.
                 let meter = "M";
@@ -327,14 +327,14 @@ impl App {
                 l10n,
                 self.connection.link(),
                 built_in_radio,
-                self.replay.is_some(),
+                self.source.replay.is_some(),
             ));
         }
-        if let Some(source) = &self.replay {
+        if let Some(source) = &self.source.replay {
             let path = source.path.display().to_string();
             hover.push(tr!(l10n, "top-bar-replaying", path = path).into_owned());
         }
-        if let Some(from) = &self.imported {
+        if let Some(from) = &self.source.imported {
             let path = from.path.display().to_string();
             hover.push(
                 tr!(
@@ -355,7 +355,7 @@ impl App {
     /// thing that names a meter at all — and from the selected entry's
     /// profile otherwise.
     fn stability_badge(&self, l10n: &Localizer) -> Option<(String, Stability, String)> {
-        if self.imported.is_some() {
+        if self.source.imported.is_some() {
             // No protocol is decoding anything.
             None
         } else if self.connection.state == ConnectionState::Connected {

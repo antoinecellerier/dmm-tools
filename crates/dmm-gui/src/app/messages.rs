@@ -233,8 +233,8 @@ impl App {
     /// than the file has them, and judged by the viewer's interval alone a
     /// recording spaced wider than it broke at every point.
     pub(super) fn gap_interval_ms(&self, ms: u32) -> u32 {
-        let file = self.import_cadence_ms.or_else(|| {
-            self.replay.as_ref().map(|source| {
+        let file = self.source.import_cadence_ms.or_else(|| {
+            self.source.replay.as_ref().map(|source| {
                 u32::try_from(source.replay.cadence().as_millis()).unwrap_or(u32::MAX)
             })
         });
@@ -292,7 +292,7 @@ impl App {
         self.disconnect();
         // An imported session's readings are the file's, stamped on a time
         // base of their own: a meter's never join them.
-        if self.imported.is_some() || self.import_job.is_some() {
+        if self.source.is_import() {
             self.reset_session_for_import();
         }
 
@@ -324,21 +324,22 @@ impl App {
             stop_flag,
         };
 
-        let source = self
+        let playback = self
+            .source
             .replay
             .as_ref()
             .map(|source| (Arc::clone(&source.replay), source.recorded));
-        if let Some((replay, recorded)) = source {
+        if let Some((replay, recorded)) = playback {
             // Queued at the first Connect, and again after an import cleared
             // the session; a plain Disconnect/Connect resumes the playback,
             // and the markers already played are on their readings.
-            if self.pin_replay_origin(recorded) || std::mem::take(&mut self.requeue_replay) {
+            if self.pin_replay_origin(recorded) || std::mem::take(&mut self.source.requeue_replay) {
                 let mut markers = replay.markers.clone();
                 markers.sort_by_key(|m| m.offset);
                 self.markers
                     .reserve(markers.iter().map(|m| m.number).max().unwrap_or(0));
-                self.replay_markers = markers.into();
-                self.replay_view = replay
+                self.source.replay_markers = markers.into();
+                self.source.replay_view = replay
                     .view
                     .as_deref()
                     .and_then(super::import::parse_view)
@@ -719,7 +720,7 @@ impl App {
         // recording plays back as timeouts and reaches it too. It is not a
         // quiet meter: there is no device selection to check, no USB mode to
         // switch on, and the file carries on by itself once the gap is over.
-        if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.replay.is_none() {
+        if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.source.replay.is_none() {
             // The log stays English.
             error!(
                 "UI: error: {}",
@@ -972,7 +973,7 @@ mod tests {
     #[test]
     fn a_replay_that_ended_says_so() {
         let mut app = app("ut61eplus", false);
-        app.replay = Some(crate::ReplaySource::fixture());
+        app.source.replay = Some(crate::ReplaySource::fixture());
         let reading = Measurement::test_fixture(
             MeasuredValue::Normal(1.0),
             "V",
@@ -994,7 +995,7 @@ mod tests {
     #[test]
     fn a_replay_gap_is_not_a_quiet_meter() {
         let mut app = app("ut61eplus", false);
-        app.replay = Some(crate::ReplaySource::fixture());
+        app.source.replay = Some(crate::ReplaySource::fixture());
         deliver(
             &mut app,
             DmmMessage::WaitingForMeter(dmm_lib::stream::NO_RESPONSE_TIMEOUTS),
@@ -1031,8 +1032,8 @@ mod tests {
     #[test]
     fn a_replay_pins_session_zero_at_the_first_connect() {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
-        app.replay = Some(crate::ReplaySource::fixture());
-        let recorded = app.replay.as_ref().expect("the recording").recorded;
+        app.source.replay = Some(crate::ReplaySource::fixture());
+        let recorded = app.source.replay.as_ref().expect("the recording").recorded;
         assert!(
             app.clock.wall_origin().is_none(),
             "nothing pinned at launch"
@@ -1079,11 +1080,11 @@ mod tests {
             )
             .expect("a well-formed recording"),
         );
-        app.replay = Some(source);
+        app.source.replay = Some(source);
         let ctx = crate::app::styled_context();
         app.connect(&ctx);
         app.disconnect();
-        assert_eq!(app.replay_markers.len(), 3);
+        assert_eq!(app.source.replay_markers.len(), 3);
 
         let (start, _) = app.clock.wall_origin().expect("the Connect pins it");
         let play = |app: &mut App, ms| {
@@ -1116,7 +1117,10 @@ mod tests {
 
         app.connect(&ctx);
         app.disconnect();
-        assert!(app.replay_markers.is_empty(), "queued once per session");
+        assert!(
+            app.source.replay_markers.is_empty(),
+            "queued once per session"
+        );
         // A marker placed by hand numbers on past the file's.
         play(&mut app, 400);
         app.add_marker(false);
@@ -1144,25 +1148,25 @@ mod tests {
             )
             .expect("a well-formed recording"),
         );
-        app.replay = Some(source);
+        app.source.replay = Some(source);
         let ctx = crate::app::styled_context();
         app.connect(&ctx);
         app.disconnect();
-        assert_eq!(app.replay_markers.len(), 3);
+        assert_eq!(app.source.replay_markers.len(), 3);
 
         app.clock.sleep(Duration::from_secs(100));
         app.connect(&ctx);
         app.disconnect();
-        let left: Vec<u32> = app.replay_markers.iter().map(|m| m.number).collect();
+        let left: Vec<u32> = app.source.replay_markers.iter().map(|m| m.number).collect();
         assert_eq!(left, [3], "the playback resumed past the first two");
 
         app.reset_session_for_import();
-        assert!(app.replay_markers.is_empty() && app.replay_view.is_none());
+        assert!(app.source.replay_markers.is_empty() && app.source.replay_view.is_none());
         app.connect(&ctx);
         app.disconnect();
-        let left: Vec<u32> = app.replay_markers.iter().map(|m| m.number).collect();
+        let left: Vec<u32> = app.source.replay_markers.iter().map(|m| m.number).collect();
         assert_eq!(left, [3], "queued again, less the ones passed");
-        assert!(app.replay_view.is_some(), "the view is queued again");
+        assert!(app.source.replay_view.is_some(), "the view is queued again");
     }
 
     /// Quitting waits for the acquisition thread to close its transport:
@@ -1235,7 +1239,7 @@ mod tests {
             )
             .expect("a well-formed recording"),
         );
-        app.replay = Some(source);
+        app.source.replay = Some(source);
         let ctx = crate::app::styled_context();
         app.connect(&ctx);
         app.disconnect();
@@ -1254,7 +1258,7 @@ mod tests {
         play(&mut app, 100);
         assert!(app.graph.show_mean);
         assert!(app.graph.cursors.active);
-        assert!(app.replay_view.is_none(), "applied once");
+        assert!(app.source.replay_view.is_none(), "applied once");
     }
 
     /// The mitigation itself: the meter that answered the probe is saved, so

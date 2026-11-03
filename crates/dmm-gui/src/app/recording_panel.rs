@@ -204,9 +204,7 @@ impl App {
     /// markers or notes added to it since the import are asked about first,
     /// as Record and Import ask.
     pub(super) fn request_connect(&mut self, ctx: &egui::Context) {
-        if (self.imported.is_some() || self.import_job.is_some())
-            && self.discard_losses(DiscardFor::Connect) != (0, 0)
-        {
+        if self.source.is_import() && self.discard_losses(DiscardFor::Connect) != (0, 0) {
             self.ask_before_discarding(DiscardFor::Connect);
             return;
         }
@@ -364,7 +362,7 @@ impl App {
         };
 
         // An import under way counts: its recording is filling.
-        let imported = self.imported.is_some() || self.import_job.is_some();
+        let imported = self.source.is_import();
         ui.horizontal(|ui| {
             // First, apart from the recording's own controls: an import
             // replaces the session, where the rest act on the recording and
@@ -420,7 +418,7 @@ impl App {
         });
 
         let history = self.capture.recording.history_samples().len();
-        let caption = match &self.imported {
+        let caption = match &self.source.imported {
             Some(from) => Some(imported_hint(l10n, from)),
             None => (self.capture.recording.role() == BufferRole::History && history > 0)
                 .then(|| history_hint(l10n, history)),

@@ -248,7 +248,7 @@ impl App {
     /// hardware `--device`), so picking a meter would leave the session timing
     /// its recording and dating its exports by a clock no meter ever ran on.
     fn device_row_pin<'a>(&self, l10n: &'a Localizer) -> Option<Cow<'a, str>> {
-        if self.replay.is_some() {
+        if self.source.replay.is_some() {
             Some(tr!(l10n, "settings-device-replay"))
         } else if !self.clock.is_real() {
             Some(tr!(l10n, "settings-device-clock"))
@@ -1372,7 +1372,7 @@ mod tests {
     #[test]
     fn a_replay_pins_the_device_row() {
         let mut run = SettingsRun::new(1200.0, 900.0);
-        run.app.replay = Some(crate::ReplaySource::fixture());
+        run.app.source.replay = Some(crate::ReplaySource::fixture());
         run.ctx.enable_accesskit();
         run.frame(vec![]);
         let frame = run.frame(vec![]);
