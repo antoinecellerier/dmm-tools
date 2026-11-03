@@ -28,7 +28,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol,
-    Setting, check_len, unknown_mode, unsupported_setting,
+    Setting, check_len, display_number, unknown_mode, unsupported_setting,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -358,20 +358,13 @@ pub(crate) fn parse_value(
     if overloaded(ol1, trimmed) {
         return MeasuredValue::Overload;
     }
-    match trimmed.parse::<f64>() {
-        // Sign is in the ASCII string itself (leading '-')
-        Ok(v) => MeasuredValue::Normal(v),
-        Err(_) => {
-            if !setup {
-                report_unknown(
-                    family,
-                    "display text",
-                    format_args!("{trimmed:?}, shown as OL"),
-                );
-            }
-            MeasuredValue::Overload
-        }
+    // The sign is in the ASCII string itself (leading '-').
+    if setup {
+        return trimmed
+            .parse()
+            .map_or(MeasuredValue::Overload, MeasuredValue::Normal);
     }
+    display_number(family, trimmed)
 }
 
 /// Live-data message type byte: what both meters mark a reading frame with.

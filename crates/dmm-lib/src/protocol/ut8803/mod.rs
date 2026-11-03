@@ -22,7 +22,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol, Stability,
-    check_len, unknown_mode,
+    check_len, display_number, unknown_mode,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -421,21 +421,15 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let unit = display_unit(mode_byte, range_idx);
 
-    let value = if overload {
-        MeasuredValue::Overload
-    } else if let Ok(v) = display_trimmed.parse::<f64>() {
-        // The vendor parser (spec §2.3) checks status-word bit
-        // 19 and negates the parsed float when set.
-        MeasuredValue::Normal(if negative { -v } else { v })
-    } else if display_trimmed.contains("OL") {
+    let value = if overload || display_trimmed.contains("OL") {
         MeasuredValue::Overload
     } else {
-        report_unknown(
-            "ut8803",
-            "display text",
-            format_args!("{display_trimmed:?}, shown as OL"),
-        );
-        MeasuredValue::Overload
+        match display_number("ut8803", &display_trimmed) {
+            // The vendor parser (spec §2.3) checks status-word bit
+            // 19 and negates the parsed float when set.
+            MeasuredValue::Normal(v) if negative => MeasuredValue::Normal(-v),
+            value => value,
+        }
     };
 
     Ok(Measurement {

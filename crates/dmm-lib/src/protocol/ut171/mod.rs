@@ -204,14 +204,18 @@ const SHORT_REPLY_PAYLOAD: RangeInclusive<usize> = 2..=8;
 /// longer is some other family's frame — the UT181A's, on this framing.
 const MAX_MEASUREMENT_PAYLOAD: usize = 21;
 
-/// Known UT171 command frames (complete wire bytes from RE docs).
-/// Frame format: AB CD len_lo len_hi payload chk_lo chk_hi, where the
-/// LE16 length counts payload + checksum (same framing as UT181A).
-///
-/// The connect frame is `pub(crate)` because detection sends it too
+/// Connect (command 0x0A, 1 = start streaming), in the UT181A's framing
 /// (`docs/research/ut171/reverse-engineered-protocol.md` §4.3).
-pub(crate) const UT171_CMD_CONNECT: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x00];
-const UT171_CMD_PAUSE: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x00, 0x0E, 0x00];
+///
+/// `pub(crate)` because detection sends it too.
+pub(crate) fn connect_frame() -> Vec<u8> {
+    framing::build_abcd_le16(&[0x0A, 0x01])
+}
+
+/// Pause (command 0x0A, 0 = stop streaming), spec §4.3.
+fn pause_frame() -> Vec<u8> {
+    framing::build_abcd_le16(&[0x0A, 0x00])
+}
 
 /// Protocol implementation for the UT171A/B/C.
 pub(crate) struct Ut171Protocol {
@@ -256,7 +260,7 @@ impl Protocol for Ut171Protocol {
         // Send connect command to start streaming.
         // User must also enable "Communication ON" on the meter.
         debug!("ut171: sending connect command");
-        transport.write(UT171_CMD_CONNECT)?;
+        transport.write(&connect_frame())?;
         Ok(())
     }
 
@@ -284,12 +288,12 @@ impl Protocol for Ut171Protocol {
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let frame = match command {
-            "connect" => UT171_CMD_CONNECT,
-            "pause" => UT171_CMD_PAUSE,
+            "connect" => connect_frame(),
+            "pause" => pause_frame(),
             _ => return Err(Unsupported::Command(command.to_string()).into()),
         };
         debug!("ut171: sending command {command}: {:02X?}", frame);
-        transport.write(frame)?;
+        transport.write(&frame)?;
         Ok(())
     }
 
@@ -609,7 +613,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 
 /// Start the stream — the same frame [`Protocol::init`] writes.
 fn send_connect(transport: &dyn Transport) -> Result<()> {
-    transport.write(UT171_CMD_CONNECT)
+    transport.write(&connect_frame())
 }
 
 /// A measurement frame this meter could have sent, and that its twin the
@@ -1012,7 +1016,7 @@ raw_payload=15"#
     /// UT181A would have answered that one.
     #[test]
     fn a_measurement_frame_after_the_connect_is_a_ut171() {
-        let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
+        let frame = framing::build_abcd_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
         let probing = Probing {
             sent: vec![DeviceFamily::Ut171],
             ..Probing::default()
@@ -1030,7 +1034,7 @@ raw_payload=15"#
     /// likelier source than a UT181A left streaming, and the engine warns.
     #[test]
     fn a_measurement_frame_before_any_trigger_is_still_a_ut171() {
-        let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
+        let frame = framing::build_abcd_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
         assert_eq!(
             recognised(&frame, &Probing::default()),
             Some(Evidence::Model {
@@ -1046,7 +1050,7 @@ raw_payload=15"#
     fn a_payload_longer_than_the_extended_frame_is_not_a_ut171() {
         let mut payload = make_payload(0x01, 0x01, 1.0, 0x00);
         payload.resize(MAX_MEASUREMENT_PAYLOAD + 4, 0);
-        let frame = framing::test_frame_le16(&payload);
+        let frame = framing::build_abcd_le16(&payload);
         for probing in [
             Probing::default(),
             Probing {
@@ -1062,7 +1066,7 @@ raw_payload=15"#
     /// sent: the frame it asked for is its own.
     #[test]
     fn a_measurement_frame_right_after_set_monitor_is_not_a_ut171() {
-        let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
+        let frame = framing::build_abcd_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
         let probing = Probing {
             sent: vec![DeviceFamily::Ut181a],
             ..Probing::default()
@@ -1075,8 +1079,21 @@ raw_payload=15"#
     /// stream filter is what keeps them out of the parser.
     #[test]
     fn a_frame_of_another_type_identifies_nothing() {
-        let frame = framing::test_frame_le16(&[0x01, 0x00, 0x00, 0x00]);
+        let frame = framing::build_abcd_le16(&[0x01, 0x00, 0x00, 0x00]);
         assert_eq!(recognised(&frame, &Probing::default()), None);
+    }
+
+    /// The command frames are the captured bytes (spec §4.3).
+    #[test]
+    fn command_frames_match_the_captures() {
+        assert_eq!(
+            connect_frame(),
+            [0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x00]
+        );
+        assert_eq!(
+            pause_frame(),
+            [0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x00, 0x0E, 0x00]
+        );
     }
 
     // --- Unrecognised data (protocol::unrecognised) -----------------------
@@ -1170,10 +1187,10 @@ raw_payload=15"#
             .map(|len| {
                 let mut reply = vec![0x00; len];
                 reply[0] = RESPONSE_MEASUREMENT;
-                framing::test_frame_le16(&reply)
+                framing::build_abcd_le16(&reply)
             })
             .collect();
-        frames.push(framing::test_frame_le16(&make_payload(
+        frames.push(framing::build_abcd_le16(&make_payload(
             0x02, 0x01, 12.345, 0x00,
         )));
         let mock = MockTransport::new(frames);
@@ -1183,7 +1200,7 @@ raw_payload=15"#
         });
         assert_eq!(first.unwrap().mode, "V DC");
         assert!(reports.is_empty(), "{reports:?}");
-        mock.push_response(framing::test_frame_le16(&make_extended_payload(
+        mock.push_response(framing::build_abcd_le16(&make_extended_payload(
             0x03, 230.0, 0x00, 230.1,
         )));
         let (second, reports) = capture_reports(|| proto.request_measurement(&mock));
@@ -1199,11 +1216,11 @@ raw_payload=15"#
         let mut short = vec![0x00; 12];
         short[0] = RESPONSE_MEASUREMENT;
         let mock = MockTransport::new(vec![
-            framing::test_frame_le16(&[0x01, 0x4F, 0x4B, 0x00]),
-            framing::test_frame_le16(&short),
-            framing::test_frame_le16(&[RESPONSE_MEASUREMENT]),
-            framing::test_frame_le16(&[]),
-            framing::test_frame_le16(&make_payload(0x02, 0x01, 12.345, 0x00)),
+            framing::build_abcd_le16(&[0x01, 0x4F, 0x4B, 0x00]),
+            framing::build_abcd_le16(&short),
+            framing::build_abcd_le16(&[RESPONSE_MEASUREMENT]),
+            framing::build_abcd_le16(&[]),
+            framing::build_abcd_le16(&make_payload(0x02, 0x01, 12.345, 0x00)),
         ]);
         let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
         assert_eq!(m.unwrap().display_raw.as_deref(), Some("12.345"));

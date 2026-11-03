@@ -12,7 +12,8 @@ use crate::protocol::registry::{DEVICES, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol,
-    Setting, Stability, check_len, cycle, unknown_mode, unknown_mode16, unsupported_setting,
+    Setting, Stability, check_len, cycle, display_number, unknown_mode, unknown_mode16,
+    unsupported_setting,
 };
 use crate::transport::{Link, Transport};
 use command::Command;
@@ -23,7 +24,8 @@ use std::borrow::Cow;
 use std::time::{Duration, Instant};
 use tables::DeviceTable;
 
-const UT61EPLUS_COMMANDS: &[&str] = &[
+/// The commands the family takes; the mock, a UT61E+, offers the same.
+pub(crate) const UT61EPLUS_COMMANDS: &[&str] = &[
     "hold",
     "minmax",
     "exit_minmax",
@@ -740,7 +742,7 @@ pub(crate) fn is_ack(payload: &[u8]) -> bool {
 
 /// The whole ack frame on the wire: [`is_ack`]'s payload with its header,
 /// length and checksum.
-const ACK_FRAME: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
+const ACK_FRAME: [u8; 7] = framing::build_abcd_be16(0xFF, &[0x00]);
 
 /// The model name in a Get Name reply, `None` for a payload that is not one.
 ///
@@ -1444,17 +1446,7 @@ fn display_value(mode: Mode, display_raw: &str) -> MeasuredValue {
     } else if is_overload(&display_compact) {
         MeasuredValue::Overload
     } else {
-        match display_compact.parse::<f64>() {
-            Ok(v) => MeasuredValue::Normal(v),
-            Err(_) => {
-                report_unknown(
-                    "ut61eplus",
-                    "display text",
-                    format_args!("{display_compact:?}, shown as OL"),
-                );
-                MeasuredValue::Overload
-            }
-        }
+        display_number("ut61eplus", &display_compact)
     }
 }
 

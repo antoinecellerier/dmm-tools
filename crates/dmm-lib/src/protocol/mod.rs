@@ -27,7 +27,7 @@ pub use unrecognised::capture_reports;
 pub use ut61eplus::make_test_measurement;
 
 use crate::error::{Error, Result, Unsupported};
-use crate::measurement::Measurement;
+use crate::measurement::{MeasuredValue, Measurement};
 use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 use std::borrow::Cow;
@@ -47,6 +47,23 @@ pub(crate) fn check_len(family: &str, payload: &[u8], expected: usize) -> Result
         ));
     }
     Ok(())
+}
+
+/// The number a display's text spells, for a family that has already
+/// handled its own overload text: anything else is reported as unrecognised
+/// display text and shown as OL.
+pub(crate) fn display_number(family: &'static str, text: &str) -> MeasuredValue {
+    match text.parse::<f64>() {
+        Ok(v) => MeasuredValue::Normal(v),
+        Err(_) => {
+            unrecognised::report_unknown(
+                family,
+                "display text",
+                format_args!("{text:?}, shown as OL"),
+            );
+            MeasuredValue::Overload
+        }
+    }
 }
 
 /// The `Unknown(0x..)` mode string a parser falls back to for a one-byte code

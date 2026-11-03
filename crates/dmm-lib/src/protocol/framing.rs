@@ -438,13 +438,11 @@ pub(crate) fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8
     Ok(Some((payload, consumed)))
 }
 
-/// Build a valid UT181A/UT171 frame (2-byte LE length, LE checksum) around
-/// `payload` — the write side of [`extract_frame_abcd_2byte_le16`].
-///
-/// Shared with the detection tests, which need the same frames to arrive from
-/// a probe rather than from a parser's own transport.
-#[cfg(test)]
-pub(crate) fn test_frame_le16(payload: &[u8]) -> Vec<u8> {
+/// Build the `AB CD <len LE16> <payload> <LE16 checksum>` frame the UT181A
+/// and UT171 send their commands in — the write side of
+/// [`extract_frame_abcd_2byte_le16`]. The length counts payload and checksum;
+/// the checksum sums the length field and the payload.
+pub(crate) fn build_abcd_le16(payload: &[u8]) -> Vec<u8> {
     let len_val = (payload.len() + 2) as u16;
     let mut frame = vec![0xAB, 0xCD];
     frame.extend_from_slice(&len_val.to_le_bytes());
@@ -621,7 +619,7 @@ mod tests {
     #[test]
     fn le16_leading_garbage() {
         let payload = vec![0x02, 0x00, 0x11, 0x31];
-        let frame = test_frame_le16(&payload);
+        let frame = build_abcd_le16(&payload);
         let mut buf = vec![0xFF, 0xFE, 0xFD];
         buf.extend_from_slice(&frame);
         let (p, consumed) = extract_frame_abcd_2byte_le16(&buf).unwrap().unwrap();
@@ -633,7 +631,7 @@ mod tests {
     /// little-endian read of the corrupted trailer, not a byte-swap of it.
     #[test]
     fn le16_bad_checksum() {
-        let mut frame = test_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
+        let mut frame = build_abcd_le16(&[0x02, 0x00, 0x11, 0x31]);
         let last = frame.len() - 1;
         frame[last] ^= 0xFF;
         assert!(matches!(
@@ -648,7 +646,7 @@ mod tests {
     /// As `abcd_be16_one_byte_short_is_incomplete`, for the 2-byte length.
     #[test]
     fn le16_one_byte_short_is_incomplete() {
-        let frame = test_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
+        let frame = build_abcd_le16(&[0x02, 0x00, 0x11, 0x31]);
         let truncated = &frame[..frame.len() - 1];
         assert!(extract_frame_abcd_2byte_le16(truncated).unwrap().is_none());
     }

@@ -24,6 +24,20 @@ pub(super) const RESPONSE_MEASUREMENT: u8 = 0x02;
 /// two families are told apart by which trigger elicited the frame.
 pub(super) const EXCLUSIVE_PAYLOAD_MIN: usize = 31;
 
+/// The header every measurement payload opens with: type(1) + misc(1) +
+/// misc2(1) + mode(2) + range(1). The format's values follow it.
+const HEADER_LEN: usize = 6;
+
+/// A "full value": float32(4) + precision(1) + unit string(8).
+const FULL_VALUE_LEN: usize = 13;
+
+/// A "short value": float32(4) + precision(1).
+const SHORT_VALUE_LEN: usize = 5;
+
+/// The Min/Max format's values: current(5) + max(5)+ts(4) + avg(5)+ts(4) +
+/// min(5)+ts(4) + unit(8).
+const MINMAX_VALUES_LEN: usize = 40;
+
 /// Decode a UT181A mode word (uint16 LE) into a human-readable string.
 ///
 /// A word research spec §6 lists is named from a table built once from
@@ -497,12 +511,7 @@ pub(super) fn all_labels(out: &mut crate::text::Labels, by: &'static str) {
 /// Short value = 5 bytes: float32(4) + precision(1)
 /// Parse a 13-byte "full value": float32(4) + precision(1) + unit_string(8).
 fn parse_full_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>, Cow<'static, str>)> {
-    if data.len() < 13 {
-        return Err(Error::invalid_response_msg(format!(
-            "ut181a full value too short: {} bytes, need 13",
-            data.len()
-        )));
-    }
+    check_len("ut181a full value", data, FULL_VALUE_LEN)?;
     let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     let unit = parse_unit_string(&data[5..13]);
     let (value, display) = read_value(float, data[4]);
@@ -511,12 +520,7 @@ fn parse_full_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>, Cow<'
 
 /// Parse a 5-byte "short value": float32(4) + precision(1).
 fn parse_short_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>)> {
-    if data.len() < 5 {
-        return Err(Error::invalid_response_msg(format!(
-            "ut181a short value too short: {} bytes, need 5",
-            data.len()
-        )));
-    }
+    check_len("ut181a short value", data, SHORT_VALUE_LEN)?;
     let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     Ok(read_value(float, data[4]))
 }
@@ -571,8 +575,7 @@ struct Parsed {
 }
 
 pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    // Minimum header: type(1) + misc(1) + misc2(1) + mode(2) + range(1) = 6
-    check_len("ut181a", payload, 6)?;
+    check_len("ut181a", payload, HEADER_LEN)?;
 
     // The meter answers commands on the same stream it measures on, and only
     // type 0x02 carries a reading. `request_measurement` filters the stream
@@ -652,14 +655,12 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                 "format type",
                 format_args!("{:#04x}, read as normal", misc & 0x70),
             );
-            let data = &payload[6..];
-            if data.len() < 13 {
-                return Err(Error::invalid_response(
-                    format!("ut181a unknown format too short: {} bytes", payload.len()),
-                    payload,
-                ));
-            }
-            let (value, display_raw, unit) = parse_full_value(data)?;
+            check_len(
+                "ut181a unknown format",
+                payload,
+                HEADER_LEN + FULL_VALUE_LEN,
+            )?;
+            let (value, display_raw, unit) = parse_full_value(&payload[HEADER_LEN..])?;
             Parsed {
                 value,
                 display_raw,
@@ -703,31 +704,26 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 /// bargraph and COMP extension that misc's bits and misc2's COMP bit say
 /// follow it.
 fn parse_normal(payload: &[u8], misc: u8, mode_word: u16, comp_active: bool) -> Result<Parsed> {
-    let data = &payload[6..];
-    if data.len() < 13 {
-        return Err(Error::invalid_response(
-            format!("ut181a normal format too short: {} bytes", payload.len()),
-            payload,
-        ));
-    }
+    check_len("ut181a normal format", payload, HEADER_LEN + FULL_VALUE_LEN)?;
+    let data = &payload[HEADER_LEN..];
     let (value, display_raw, unit) = parse_full_value(data)?;
     let mut aux = Vec::new();
-    let mut offset = 13;
+    let mut offset = FULL_VALUE_LEN;
     let (aux1_label, aux2_label) = aux_labels(mode_word);
 
     // Aux1 (optional, misc bit 1)
-    if misc & 0x02 != 0 && data.len() >= offset + 13 {
+    if misc & 0x02 != 0 && data.len() >= offset + FULL_VALUE_LEN {
         let (av, ad, au) = parse_full_value(&data[offset..])?;
         report_positional_aux(aux1_label, mode_word);
         aux.push(make_aux(aux1_label, av, au, ad, None));
-        offset += 13;
+        offset += FULL_VALUE_LEN;
     }
     // Aux2 (optional, misc bit 2)
-    if misc & 0x04 != 0 && data.len() >= offset + 13 {
+    if misc & 0x04 != 0 && data.len() >= offset + FULL_VALUE_LEN {
         let (av, ad, au) = parse_full_value(&data[offset..])?;
         report_positional_aux(aux2_label, mode_word);
         aux.push(make_aux(aux2_label, av, au, ad, None));
-        offset += 13;
+        offset += FULL_VALUE_LEN;
     }
     // Bargraph (optional, misc bit 3): the meter's fast sample, not the
     // reading on its display (research spec §5.3), so it is skipped.
@@ -809,19 +805,15 @@ fn parse_comp(comp: &[u8], unit: Cow<'static, str>) -> Vec<AuxValue> {
 /// The relative format (misc 0x10, format type 1): three full values —
 /// the relative reading (the delta), the reference and the absolute.
 fn parse_relative(payload: &[u8]) -> Result<Parsed> {
-    let data = &payload[6..];
-    if data.len() < 39 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut181a relative format too short: {} bytes, need >= 45",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    check_len(
+        "ut181a relative format",
+        payload,
+        HEADER_LEN + 3 * FULL_VALUE_LEN,
+    )?;
+    let data = &payload[HEADER_LEN..];
     let (value, display_raw, unit) = parse_full_value(data)?;
-    let (ref_val, ref_disp, ref_unit) = parse_full_value(&data[13..])?;
-    let (abs_val, abs_disp, abs_unit) = parse_full_value(&data[26..])?;
+    let (ref_val, ref_disp, ref_unit) = parse_full_value(&data[FULL_VALUE_LEN..])?;
+    let (abs_val, abs_disp, abs_unit) = parse_full_value(&data[2 * FULL_VALUE_LEN..])?;
     // Main value = delta (matches meter display)
     Ok(Parsed {
         value,
@@ -838,17 +830,12 @@ fn parse_relative(payload: &[u8]) -> Result<Parsed> {
 /// the maximum, average and minimum, each with its timestamp, sharing one
 /// unit string.
 fn parse_minmax(payload: &[u8]) -> Result<Parsed> {
-    let data = &payload[6..];
-    // current(5) + max(5)+ts(4) + avg(5)+ts(4) + min(5)+ts(4) + unit(8) = 40
-    if data.len() < 40 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut181a minmax format too short: {} bytes, need >= 46",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    check_len(
+        "ut181a minmax format",
+        payload,
+        HEADER_LEN + MINMAX_VALUES_LEN,
+    )?;
+    let data = &payload[HEADER_LEN..];
     let (value, display_raw) = parse_short_value(data)?;
 
     let (max_val, max_disp) = parse_short_value(&data[5..])?;
@@ -878,18 +865,14 @@ fn parse_minmax(payload: &[u8]) -> Result<Parsed> {
 /// The Peak format (misc 0x40, format type 4): two full values, the peak
 /// maximum and the peak minimum.
 fn parse_peak(payload: &[u8]) -> Result<Parsed> {
-    let data = &payload[6..];
-    if data.len() < 26 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut181a peak format too short: {} bytes, need >= 32",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    check_len(
+        "ut181a peak format",
+        payload,
+        HEADER_LEN + 2 * FULL_VALUE_LEN,
+    )?;
+    let data = &payload[HEADER_LEN..];
     let (value, display_raw, unit) = parse_full_value(data)?;
-    let (pmin_val, pmin_disp, pmin_unit) = parse_full_value(&data[13..])?;
+    let (pmin_val, pmin_disp, pmin_unit) = parse_full_value(&data[FULL_VALUE_LEN..])?;
     Ok(Parsed {
         value,
         display_raw,

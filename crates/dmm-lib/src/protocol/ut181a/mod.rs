@@ -35,7 +35,7 @@ mod specs;
 use crate::error::{Result, Sent, Unsupported};
 use crate::measurement::Measurement;
 use crate::protocol::cycle::FlagSetting;
-use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::framing::{self, FrameErrorRecovery, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     AUTO_RANGE_ID, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing,
@@ -44,7 +44,7 @@ use crate::protocol::{
 use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 pub(crate) use command::set_monitor_frame;
-use command::{UT181A_COMMANDS, build_command, build_set_mode};
+use command::{UT181A_COMMANDS, build_set_mode};
 use log::debug;
 use parse::{decode_mode_word, parse_measurement};
 
@@ -178,7 +178,7 @@ impl Protocol for Ut181aProtocol {
             // 0x12 = button-press command, 0x5A = HOLD button code, the two
             // bytes the vendor app sends and a real meter toggles HOLD on
             // (spec §4.2). Bare [0x12] is untested.
-            "hold" => build_command(&[0x12, 0x5A]),
+            "hold" => build_abcd_le16(&[0x12, 0x5A]),
             // REL is not its own opcode: it is SET_MODE with nibble 0 flipped
             // between 1 (plain) and 2 (relative), which is also how it turns
             // back off (research spec §6.1).
@@ -205,15 +205,15 @@ impl Protocol for Ut181aProtocol {
                     }
                     .into());
                 };
-                build_command(&[0x02, next])
+                build_abcd_le16(&[0x02, next])
             }
-            "auto" => build_command(&[0x02, 0x00]),
+            "auto" => build_abcd_le16(&[0x02, 0x00]),
             // SET_MIN_MAX takes a single argument byte, as the vendor app
             // sends it (spec §4.2).
-            "minmax" => build_command(&[0x04, 0x01]),
-            "exit_minmax" => build_command(&[0x04, 0x00]),
-            "monitor" => build_command(&[0x05, 0x01]),
-            "save" => build_command(&[0x06]),
+            "minmax" => build_abcd_le16(&[0x04, 0x01]),
+            "exit_minmax" => build_abcd_le16(&[0x04, 0x00]),
+            "monitor" => build_abcd_le16(&[0x05, 0x01]),
+            "save" => build_abcd_le16(&[0x06]),
             _ => return Err(Unsupported::Command(command.to_string()).into()),
         };
         self.send_frame(transport, &frame, &Sent::Command(command.to_string()))
@@ -314,7 +314,7 @@ impl Protocol for Ut181aProtocol {
                 };
                 // The id came from the ladder, so it fits the command's byte.
                 let what = Sent::Range(choice.label.clone());
-                self.send_frame(transport, &build_command(&[0x02, id as u8]), &what)
+                self.send_frame(transport, &build_abcd_le16(&[0x02, id as u8]), &what)
             }
             flag => match FlagSetting::of(flag) {
                 Some(flag) => self.select_flag(transport, flag, id),
@@ -734,7 +734,7 @@ mod tests {
     pub(super) fn proto_in(mode_word: u16, range: u8) -> (Ut181aProtocol, MockTransport) {
         let mut payload = make_payload(mode_word, 1.0, 0x20, b"VDC\0\0\0\0\0", 0x00, 0x01);
         payload[5] = range;
-        let mock = MockTransport::new(vec![build_command(&payload)]);
+        let mock = MockTransport::new(vec![build_abcd_le16(&payload)]);
         let mut proto = Ut181aProtocol::new();
         let m = proto.request_measurement(&mock).unwrap();
         assert_eq!(m.mode_raw, mode_word);
@@ -811,7 +811,7 @@ mod tests {
     /// learn which mode word to toggle.
     #[test]
     fn rel_reads_the_mode_when_none_has_arrived_yet() {
-        let frame = build_command(&make_payload(
+        let frame = build_abcd_le16(&make_payload(
             0x1111,
             1.0,
             0x20,
@@ -1165,7 +1165,7 @@ mod tests {
     #[test]
     fn an_er_reply_rejects_a_range_selection() {
         let (mut proto, mock) = proto_in(0x1111, 1);
-        mock.push_response(build_command(&[0x01, b'E', b'R']));
+        mock.push_response(build_abcd_le16(&[0x01, b'E', b'R']));
         let err = proto.select(&mock, Setting::Range, 3).unwrap_err();
         assert!(
             matches!(err, Error::CommandRejected(_)),
@@ -1177,11 +1177,11 @@ mod tests {
 
     /// The OK reply the meter answers a command with (spec §4.1).
     fn ok_reply() -> Vec<u8> {
-        build_command(&[0x01, b'O', b'K'])
+        build_abcd_le16(&[0x01, b'O', b'K'])
     }
 
     fn er_reply() -> Vec<u8> {
-        build_command(&[0x01, b'E', b'R'])
+        build_abcd_le16(&[0x01, b'E', b'R'])
     }
 
     /// A meter that answers a command only once it is written: `stream` is
@@ -1233,7 +1233,7 @@ mod tests {
 
     /// A plain V DC frame, with `misc` carrying the HOLD bit when set.
     fn plain_frame(mode: u16, misc: u8) -> Vec<u8> {
-        build_command(&make_payload(mode, 1.0, 0x20, b"VDC\0\0\0\0\0", misc, 0x01))
+        build_abcd_le16(&make_payload(mode, 1.0, 0x20, b"VDC\0\0\0\0\0", misc, 0x01))
     }
 
     #[test]
@@ -1295,7 +1295,7 @@ mod tests {
     fn selecting_minmax_sends_the_single_argument_byte() {
         let meter = AnswersAfterWrite::new(
             vec![plain_frame(0x3111, 0x00)],
-            vec![ok_reply(), build_command(&minmax_payload(0x3111))],
+            vec![ok_reply(), build_abcd_le16(&minmax_payload(0x3111))],
         );
         let mut proto = Ut181aProtocol::new();
         proto.select(&meter, Setting::MinMax, 1).expect("recording");
@@ -1327,7 +1327,7 @@ mod tests {
             vec![
                 ok_reply(),
                 // The REL frame format (misc format_type 1) is what lights REL.
-                build_command(&make_relative_payload(0x1112, 2.0, 10.0, 12.0)),
+                build_abcd_le16(&make_relative_payload(0x1112, 2.0, 10.0, 12.0)),
             ],
         );
         let mut proto = Ut181aProtocol::new();
@@ -1432,7 +1432,7 @@ mod tests {
             parse::tests::real_frame_temp_dual_probe(),
             parse::tests::real_frame_vac_hz(),
         ] {
-            let frame = framing::test_frame_le16(&payload);
+            let frame = build_abcd_le16(&payload);
             for probing in [Probing::default(), after(DeviceFamily::Ut171)] {
                 assert_eq!(
                     recognised(&frame, &probing),
@@ -1450,7 +1450,7 @@ mod tests {
     fn a_short_frame_is_a_ut181a_only_after_set_monitor() {
         let mut payload = vec![0u8; 19];
         payload[0] = parse::RESPONSE_MEASUREMENT;
-        let frame = framing::test_frame_le16(&payload);
+        let frame = build_abcd_le16(&payload);
         assert_eq!(recognised(&frame, &after(DeviceFamily::Ut181a)), ut181a());
         assert_eq!(recognised(&frame, &after(DeviceFamily::Ut171)), None);
         assert_eq!(recognised(&frame, &Probing::default()), None);
@@ -1459,7 +1459,7 @@ mod tests {
     /// An OK/ER reply names no model, whatever asked for it.
     #[test]
     fn a_command_reply_identifies_nothing() {
-        let reply = framing::test_frame_le16(&[0x01, 0x4F, 0x4B]);
+        let reply = build_abcd_le16(&[0x01, 0x4F, 0x4B]);
         assert_eq!(recognised(&reply, &after(DeviceFamily::Ut181a)), None);
     }
 
@@ -1483,7 +1483,7 @@ mod tests {
             &[],
             &reading,
         ];
-        let mock = MockTransport::new(frames.iter().map(|p| build_command(p)).collect());
+        let mock = MockTransport::new(frames.iter().map(|p| build_abcd_le16(p)).collect());
         let mut proto = Ut181aProtocol::new();
         let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
         assert_eq!(m.unwrap().mode_raw, 0x3111);
@@ -1500,8 +1500,8 @@ mod tests {
     /// Detection reads bytes other meters sent, so it reports nothing.
     #[test]
     fn detection_reports_no_frame_type() {
-        let mut buf = framing::test_frame_le16(&[0x06, 0x01, 0x02]);
-        buf.extend(framing::test_frame_le16(&[0x00; 40]));
+        let mut buf = build_abcd_le16(&[0x06, 0x01, 0x02]);
+        buf.extend(build_abcd_le16(&[0x00; 40]));
         let (evidence, reports) =
             capture_reports(|| recognised(&buf, &after(DeviceFamily::Ut181a)));
         assert_eq!(evidence, None);

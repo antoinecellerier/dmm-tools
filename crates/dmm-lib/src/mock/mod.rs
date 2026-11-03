@@ -24,6 +24,7 @@ use crate::error::{Error, Rejected, Result, Unsupported};
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::cycle::{self, CycleButton, CycleMeter, FlagSetting};
 use crate::protocol::registry::SelectableDevice;
+use crate::protocol::ut61eplus::UT61EPLUS_COMMANDS;
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::specs::SpecModel;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
@@ -37,20 +38,6 @@ use scenarios::{AuxSpec, Scenario, scenarios};
 use state::MeterState;
 use std::borrow::Cow;
 use std::time::{Duration, Instant};
-
-const MOCK_COMMANDS: &[&str] = &[
-    "hold",
-    "minmax",
-    "exit_minmax",
-    "range",
-    "auto",
-    "rel",
-    "select2",
-    "select",
-    "light",
-    "peak",
-    "exit_peak",
-];
 
 /// Short identifier for a mock scenario, usable from CLI `--mock-mode` and GUI selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -322,7 +309,7 @@ impl MockProtocol {
                 // Verified so the GUI doesn't show the stability badge —
                 // mock behavior is deterministic and needs no hardware validation.
                 stability: Stability::Verified,
-                supported_commands: MOCK_COMMANDS,
+                supported_commands: UT61EPLUS_COMMANDS,
                 max_aux_values: 2,
                 verification_issue: None,
                 meter_keys: MeterKeys::NONE,
@@ -1682,14 +1669,14 @@ mod tests {
 
     #[test]
     fn test_commands_match_profile() {
-        // Every command in MOCK_COMMANDS must be accepted by send_command,
-        // and every accepted command should be listed in MOCK_COMMANDS.
+        // Every command the mock lists must be accepted by send_command,
+        // and every accepted command should be listed.
         let mut proto = MockProtocol::new();
         let transport = NullTransport;
-        for &cmd in MOCK_COMMANDS {
+        for &cmd in UT61EPLUS_COMMANDS {
             assert!(
                 proto.send_command(&transport, cmd).is_ok(),
-                "MOCK_COMMANDS lists '{cmd}' but send_command rejects it"
+                "the mock lists '{cmd}' but send_command rejects it"
             );
         }
         // Verify unlisted commands are rejected

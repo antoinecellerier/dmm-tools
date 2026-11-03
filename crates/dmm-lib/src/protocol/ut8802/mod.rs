@@ -20,7 +20,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol, Stability,
-    check_len, unknown_mode,
+    check_len, display_number, unknown_mode,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -319,17 +319,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         MeasuredValue::Overload
     } else {
         let trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
-        match trimmed.parse::<f64>() {
-            Ok(v) => MeasuredValue::Normal(v),
-            Err(_) => {
-                report_unknown(
-                    "ut8802",
-                    "display text",
-                    format_args!("{trimmed:?}, shown as OL"),
-                );
-                MeasuredValue::Overload
-            }
-        }
+        display_number("ut8802", &trimmed)
     };
 
     // Flag bit positions from the vendor's UT8802 parser (status-word

@@ -512,9 +512,9 @@ fn pin(id: &'static str) -> &'static SelectableDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::framing::{test_frame_be16, test_frame_le16};
+    use crate::protocol::framing::{build_abcd_le16, test_frame_be16};
     use crate::protocol::ut61eplus::command::Command;
-    use crate::protocol::ut171::UT171_CMD_CONNECT;
+    use crate::protocol::ut171::connect_frame;
     use crate::protocol::ut181a::parse::tests::{real_frame_temp_dual_probe, real_frame_vac_hz};
     use crate::protocol::ut181a::set_monitor_frame;
     use crate::protocol::ut8803::frame::{test_frame_ut8803, test_ut8803_body};
@@ -798,7 +798,7 @@ mod tests {
         vec![
             Command::GetName.encode().to_vec(),
             set_monitor_frame(),
-            UT171_CMD_CONNECT.to_vec(),
+            connect_frame(),
         ]
     }
 
@@ -868,7 +868,7 @@ mod tests {
         // The UT181A goes first, as its constraint with the UT171 says.
         assert_eq!(
             meter.inner.written.take(),
-            [set_monitor_frame(), UT171_CMD_CONNECT.to_vec()]
+            [set_monitor_frame(), connect_frame()]
         );
 
         let meter = Advertising::new("Shared DMM", vec![]);
@@ -956,7 +956,7 @@ mod tests {
     #[test]
     fn ut181a_real_frames_after_set_monitor() {
         for payload in [real_frame_temp_dual_probe(), real_frame_vac_hz()] {
-            let meter = ScriptedMeter::answering(&set_monitor_frame(), test_frame_le16(&payload));
+            let meter = ScriptedMeter::answering(&set_monitor_frame(), build_abcd_le16(&payload));
             let detected = detect(&meter).unwrap();
             assert_eq!(detected.device.id, "ut181a", "payload {}", payload.len());
             assert_eq!(detected.reported_name, None);
@@ -969,7 +969,7 @@ mod tests {
     fn a_short_le16_frame_after_set_monitor_is_a_ut181a() {
         let meter = ScriptedMeter::answering(
             &set_monitor_frame(),
-            test_frame_le16(&le16_measurement_payload(19)),
+            build_abcd_le16(&le16_measurement_payload(19)),
         );
         let detected = detect(&meter).unwrap();
         assert_eq!(detected.device.id, "ut181a");
@@ -980,8 +980,8 @@ mod tests {
     #[test]
     fn a_short_le16_frame_after_the_connect_is_a_ut171() {
         let meter = ScriptedMeter::answering(
-            UT171_CMD_CONNECT,
-            test_frame_le16(&le16_measurement_payload(15)),
+            &connect_frame(),
+            build_abcd_le16(&le16_measurement_payload(15)),
         );
         let detected = detect(&meter).unwrap();
         assert_eq!(detected.device.id, "ut171");
@@ -1189,7 +1189,7 @@ mod tests {
             vec![
                 Command::GetName.encode().to_vec(),
                 set_monitor_frame(),
-                UT171_CMD_CONNECT.to_vec(),
+                connect_frame(),
                 ACK_FRAME.to_vec(),
                 ACK_FRAME.to_vec(),
                 ACK_FRAME.to_vec(),

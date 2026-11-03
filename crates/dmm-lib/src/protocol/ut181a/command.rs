@@ -7,7 +7,7 @@ use super::mode;
 use super::parse::decode_mode_word;
 use crate::error::{Rejected, Result, Sent, Unsupported};
 use crate::protocol::cycle::{self, FlagSetting};
-use crate::protocol::framing;
+use crate::protocol::framing::{self, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{Protocol, unsupported_setting};
 use crate::transport::Transport;
@@ -26,21 +26,6 @@ pub(super) const UT181A_COMMANDS: &[&str] = &[
     "save",
 ];
 
-/// Build a UT181A command frame: AB CD len_lo len_hi payload chk_lo chk_hi.
-/// Length = payload.len() + 2 (includes checksum).
-/// Checksum = LE sum of length field + payload bytes.
-pub(super) fn build_command(payload: &[u8]) -> Vec<u8> {
-    let len_val = (payload.len() + 2) as u16;
-    let mut frame = vec![0xAB, 0xCD];
-    frame.push((len_val & 0xFF) as u8);
-    frame.push((len_val >> 8) as u8);
-    frame.extend_from_slice(payload);
-    let checksum: u16 = frame[2..].iter().map(|&b| b as u16).sum();
-    frame.push((checksum & 0xFF) as u8);
-    frame.push((checksum >> 8) as u8);
-    frame
-}
-
 /// SET_MONITOR (opcode `0x05`, enable = 1): the meter is silent until it
 /// arrives, then streams measurement frames
 /// (`docs/research/ut181/reverse-engineered-protocol.md` §4.2, §11.2). Verified
@@ -49,7 +34,7 @@ pub(super) fn build_command(payload: &[u8]) -> Vec<u8> {
 /// `pub(crate)` because detection sends it too, and a UT181A that answers the
 /// probe is left in the state opening it would have produced anyway.
 pub(crate) fn set_monitor_frame() -> Vec<u8> {
-    build_command(&[0x05, 0x01])
+    build_abcd_le16(&[0x05, 0x01])
 }
 
 /// Readings taken after a setting command before concluding it did nothing.
@@ -65,7 +50,7 @@ const FLAG_CONFIRM_READS: usize = 3;
 /// §6.1 Mode switching (SET_MODE) -- `[VENDOR]`.
 pub(super) fn build_set_mode(word: u16) -> Vec<u8> {
     let [lo, hi] = word.to_le_bytes();
-    build_command(&[0x01, lo, hi])
+    build_abcd_le16(&[0x01, lo, hi])
 }
 
 impl Ut181aProtocol {
@@ -256,14 +241,14 @@ impl Ut181aProtocol {
             // 0x12 = button-press command, 0x5A = HOLD button code, as in
             // `send_command`. The only toggle here, so the fresh reading
             // above is what decides whether to send it at all.
-            FlagSetting::Hold => build_command(&[0x12, 0x5A]),
+            FlagSetting::Hold => build_abcd_le16(&[0x12, 0x5A]),
             FlagSetting::Rel => {
                 // `check_flag_id` already refused a mode with no REL.
                 let word = mode::rel_word(reading.mode_raw, id != cycle::OFF_STATE)
                     .ok_or_else(|| unsupported_setting(setting.setting()))?;
                 build_set_mode(word)
             }
-            FlagSetting::MinMax => build_command(&[0x04, id as u8]),
+            FlagSetting::MinMax => build_abcd_le16(&[0x04, id as u8]),
             FlagSetting::Peak => return Err(unsupported_setting(setting.setting())),
         };
         let target = Self::flag_label(setting, id);
@@ -319,31 +304,31 @@ mod tests {
     use crate::error::Error;
 
     #[test]
-    fn build_command_hold() {
+    fn command_frame_hold() {
         // Button-press (0x12) with HOLD button code (0x5A), as the vendor app
         // sends it (spec §4.2).
-        let frame = build_command(&[0x12, 0x5A]);
+        let frame = build_abcd_le16(&[0x12, 0x5A]);
         // len = 2 + 2 = 4; checksum = 04 + 00 + 12 + 5A = 0x70
         assert_eq!(frame, vec![0xAB, 0xCD, 0x04, 0x00, 0x12, 0x5A, 0x70, 0x00]);
     }
 
     #[test]
-    fn build_command_set_range_auto() {
-        let frame = build_command(&[0x02, 0x00]);
+    fn command_frame_set_range_auto() {
+        let frame = build_abcd_le16(&[0x02, 0x00]);
         // AB CD 04 00 02 00 06 00
         assert_eq!(frame, vec![0xAB, 0xCD, 0x04, 0x00, 0x02, 0x00, 0x06, 0x00]);
     }
 
     #[test]
-    fn build_command_set_minmax_on() {
-        let frame = build_command(&[0x04, 0x01]);
+    fn command_frame_set_minmax_on() {
+        let frame = build_abcd_le16(&[0x04, 0x01]);
         // AB CD 04 00 04 01 09 00
         assert_eq!(frame, vec![0xAB, 0xCD, 0x04, 0x00, 0x04, 0x01, 0x09, 0x00]);
     }
 
     #[test]
-    fn build_command_monitor_on() {
-        let frame = build_command(&[0x05, 0x01]);
+    fn command_frame_monitor_on() {
+        let frame = build_abcd_le16(&[0x05, 0x01]);
         // AB CD 04 00 05 01 0A 00
         assert_eq!(frame, vec![0xAB, 0xCD, 0x04, 0x00, 0x05, 0x01, 0x0A, 0x00]);
     }
@@ -351,14 +336,14 @@ mod tests {
     #[test]
     fn an_ok_reply_completes_the_command() {
         let (mut proto, mock) = proto_in(0x3111, 0);
-        mock.push_response(build_command(&[0x01, b'O', b'K']));
+        mock.push_response(build_abcd_le16(&[0x01, b'O', b'K']));
         proto.send_command(&mock, "auto").unwrap();
     }
 
     #[test]
     fn an_er_reply_becomes_a_rejection() {
         let (mut proto, mock) = proto_in(0x3111, 0);
-        mock.push_response(build_command(&[0x01, b'E', b'R']));
+        mock.push_response(build_abcd_le16(&[0x01, b'E', b'R']));
         let err = proto.send_command(&mock, "auto").unwrap_err();
         assert!(
             matches!(err, Error::CommandRejected(_)),
@@ -379,7 +364,7 @@ mod tests {
     #[test]
     fn a_measurement_frame_before_the_reply_is_skipped() {
         let (mut proto, mock) = proto_in(0x3111, 0);
-        mock.push_response(build_command(&make_payload(
+        mock.push_response(build_abcd_le16(&make_payload(
             0x3111,
             2.0,
             0x20,
@@ -387,7 +372,7 @@ mod tests {
             0x00,
             0x01,
         )));
-        mock.push_response(build_command(&[0x01, b'E', b'R']));
+        mock.push_response(build_abcd_le16(&[0x01, b'E', b'R']));
         let err = proto.send_command(&mock, "auto").unwrap_err();
         assert!(
             matches!(err, Error::CommandRejected(_)),
@@ -400,8 +385,8 @@ mod tests {
     #[test]
     fn bytes_after_the_reply_stay_buffered_for_the_next_measurement() {
         let (mut proto, mock) = proto_in(0x3111, 0);
-        let mut burst = build_command(&[0x01, b'O', b'K']);
-        burst.extend_from_slice(&build_command(&make_payload(
+        let mut burst = build_abcd_le16(&[0x01, b'O', b'K']);
+        burst.extend_from_slice(&build_abcd_le16(&make_payload(
             0x3111,
             7.5,
             0x20,
@@ -427,7 +412,7 @@ mod tests {
     #[test]
     fn an_unknown_reply_code_is_reported_and_accepted() {
         let (mut proto, mock) = proto_in(0x3111, 0);
-        mock.push_response(build_command(&[0x01, b'N', b'O']));
+        mock.push_response(build_abcd_le16(&[0x01, b'N', b'O']));
         let (result, reports) = capture_reports(|| proto.send_command(&mock, "auto"));
         result.unwrap();
         assert_eq!(
@@ -437,7 +422,7 @@ mod tests {
 
         for reply in [&[0x01, b'O', b'K', 0x00][..], &[0x01, b'E', b'R', 0x00]] {
             let (mut proto, mock) = proto_in(0x3111, 0);
-            mock.push_response(build_command(reply));
+            mock.push_response(build_abcd_le16(reply));
             let (_, reports) = capture_reports(|| proto.send_command(&mock, "auto"));
             assert!(reports.is_empty(), "{reply:02X?}: {reports:?}");
         }
@@ -450,9 +435,9 @@ mod tests {
         let (mut proto, mock) = proto_in(0x3111, 0);
         let reading = make_payload(0x3111, 2.0, 0x20, b"VDC\0\0\0\0\0", 0x00, 0x01);
         for payload in [&reading[..], &[0x72, 0x00], &[0x10, 0x00, 0x00, 0x00]] {
-            mock.push_response(build_command(payload));
+            mock.push_response(build_abcd_le16(payload));
         }
-        mock.push_response(build_command(&[0x01, b'O', b'K']));
+        mock.push_response(build_abcd_le16(&[0x01, b'O', b'K']));
         let (result, reports) = capture_reports(|| proto.send_command(&mock, "auto"));
         result.unwrap();
         assert_eq!(reports, ["ut181a: unrecognised frame type: 0x10, 4 bytes"]);
