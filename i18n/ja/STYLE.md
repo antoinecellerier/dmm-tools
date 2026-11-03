@@ -156,7 +156,7 @@ So:
 ## 8. Command lines, options, files and keys
 
 - **Verbatim**, as for fr: every `--flag` and its values, `dmm-cli`, `dmm-gui`, subcommands, quoted command lines, device and step ids, setting ids, settings-file keys, environment variables, file names and patterns, CSV column names and JSON keys, the backquoted text in `read-error-*`, RFC 3339, the password `0000`. The translation check fails a message that loses a `code` span or an `--option`. Put a space between them and the Japanese around them (§4).
-- **clap's words** are translated too (`cli/help.ftl`, `cli/args.ftl`): «使用法:», «コマンド:», «引数:», «オプション:», «[既定値: { $value }]», «[指定可能な値: { $values }]», «エラー:», «ヒント:». Value names in capitals (`<FORMAT>`) and the usage line's syntax stay as clap writes them; in errors, keep the names in their straight quotes, as typed. CLI headings in capitals («CONFIGURATION:») become plain headings: «構成:», «環境変数:».
+- **clap's words** are translated too (`shared.ftl`): «使用法:», «コマンド:», «引数:», «オプション:», «[既定値: { $value }]», «[指定可能な値: { $values }]», «エラー:», «ヒント:». Value names in capitals (`<FORMAT>`) and the usage line's syntax stay as clap writes them; in errors, keep the names in their straight quotes, as typed. CLI headings in capitals («CONFIGURATION:») become plain headings: «構成:», «環境変数:».
 - **Windows and macOS names** must match what a Japanese system shows (ruling 16). 'CP2110 USB to UART Bridge' is the device's own name and stays English.
 - **Computer key names** are messages of their own (`shortcuts-key-*`): ruling 14. MS-SG p.56 capitalises each word and joins them («PageUp», «CapsLock»); p.16 lets a tight label drop «キー». Letters, digits, F1–F12 and macOS's ⌘ ⇧ ⌥ stay.
 

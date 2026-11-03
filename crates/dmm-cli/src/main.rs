@@ -1,10 +1,8 @@
-mod arg_errors;
 mod capture;
 mod choice;
 mod cli;
 mod cmd;
 mod format;
-mod help_layout;
 mod l10n;
 mod open;
 mod output;
@@ -23,7 +21,7 @@ use cmd::settings::{cmd_get, cmd_set};
 use console::style;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_shared::help::LinksSearched;
-use dmm_shared::l10n::Localizer;
+use dmm_shared::l10n::{Localizer, arg_errors, help_layout};
 use dmm_shared::tr;
 use l10n::{Localized, error_label};
 use log::error;
@@ -62,7 +60,7 @@ fn main() {
             // with `--help` would otherwise never hear what loading it found.
             dmm_shared::logging::init();
             l10n::get().log_load_report();
-            arg_errors::exit(e)
+            arg_errors::exit(e, l10n::get(), &cli::hidden_subcommands())
         });
     debug_assert_eq!(cli.lang, lang, "the pre-scan read --lang as clap does");
     // Before the settings file's meter applies: a report names its own meter,

@@ -1,25 +1,26 @@
 //! The words clap puts around `--help` in the user's language: the "Usage:",
 //! "Commands:", "Arguments:" and "Options:" headings, `[default: …]` and
 //! `[possible values: …]` after an option, the long help's "Possible
-//! values:" list, and the help of clap's own `-h`, `-V` and `help`.
+//! values:" list, and the help of clap's own `-h`, `-V` and `help`. The same
+//! in dmm-cli and dmm-gui, so the messages are in `shared.ftl`.
 //!
 //! clap writes these in English with no hook to change them, so [`localize`]
 //! takes them over once clap has built the tree (which is when it adds its
 //! own flags): a help template per command with the headings worded, and
 //! each option's defaults and values hidden from clap and written after its
 //! help the way clap lays them out. English keeps clap's own layout
-//! untouched; a test lays it out this way in English too and compares, so
-//! the two stay alike.
+//! untouched; each binary's test lays its tree out this way in English too
+//! and compares ([`english_layout_differences`]), so the two stay alike.
 
 use std::fmt::Write as _;
 
+use super::Localizer;
+use crate::tr;
 use clap::builder::styling::Styles;
 use clap::{Arg, Command};
-use dmm_shared::l10n::Localizer;
-use dmm_shared::tr;
 
 /// `cmd`'s help layout in `l`'s language; English is left to clap.
-pub(crate) fn localize(cmd: Command, l: &Localizer) -> Command {
+pub fn localize(cmd: Command, l: &Localizer) -> Command {
     if l.plain_english() {
         return cmd;
     }
@@ -28,8 +29,8 @@ pub(crate) fn localize(cmd: Command, l: &Localizer) -> Command {
 
 /// `cmd` named as the binary was run (`dmm-cli.exe` on Windows), as clap
 /// names it once it parses the command line: building the tree before that
-/// would fix the subcommands' usage lines to `dmm-cli`.
-pub(crate) fn invoked_as(cmd: Command) -> Command {
+/// would fix the subcommands' usage lines to the command's own name.
+pub fn invoked_as(cmd: Command) -> Command {
     let name = std::env::args_os().next().and_then(|arg| {
         std::path::Path::new(&arg)
             .file_name()
@@ -241,102 +242,148 @@ fn quoted(value: &str) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn english() -> Localizer {
-        Localizer::en_us(&crate::l10n::resources())
-    }
-
-    /// Every command's path below the root, the root first.
-    fn paths(cmd: &Command) -> Vec<Vec<String>> {
-        let mut out = vec![Vec::new()];
-        for c in cmd.get_subcommands().filter(|c| !c.is_hide_set()) {
-            for mut p in paths(c) {
-                p.insert(0, c.get_name().to_string());
-                out.push(p);
-            }
-        }
-        out
-    }
-
-    fn find<'c>(cmd: &'c mut Command, path: &[String]) -> &'c mut Command {
-        match path.split_first() {
-            None => cmd,
-            Some((first, rest)) => {
-                find(cmd.find_subcommand_mut(first).expect("a subcommand"), rest)
+/// Every page of `cmd` whose layout by [`localize`] in English, forced,
+/// differs from clap's own, with both texts: none, but for the spaces clap
+/// leaves off the empty line before a "Possible values:" list, which nobody
+/// sees. `l` is an English localizer.
+#[cfg(any(test, feature = "test-support"))]
+pub fn english_layout_differences(cmd: Command, l: &Localizer) -> Vec<String> {
+    let mut clap = cmd.clone();
+    clap.build();
+    let mut ours = lay_out(cmd, l);
+    let mut out = Vec::new();
+    for path in paths(&clap) {
+        let (a, b) = (find(&mut clap, &path), find(&mut ours, &path));
+        for (flag, theirs, mine) in [
+            ("-h", a.render_help(), b.render_help()),
+            ("--help", a.render_long_help(), b.render_long_help()),
+        ] {
+            let (theirs, mine) = (
+                trimmed(theirs.ansi().to_string()),
+                trimmed(mine.ansi().to_string()),
+            );
+            if theirs != mine {
+                out.push(format!("{path:?} {flag}\nclap:\n{theirs}\nours:\n{mine}"));
             }
         }
     }
+    out
+}
 
-    /// `text` without the spaces that end its lines.
-    fn trimmed(text: String) -> String {
-        text.lines()
-            .map(str::trim_end)
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    /// Laid out by us in English, every command's short and long help reads
-    /// exactly as clap's own, but for the spaces clap leaves off the empty
-    /// line before a "Possible values:" list, which nobody sees.
-    #[test]
-    fn english_layout_is_claps() {
-        let l = english();
-        let mut clap = crate::cli::command(&l);
-        clap.build();
-        let mut ours = lay_out(crate::cli::command(&l), &l);
-        for path in paths(&clap) {
-            let (a, b) = (find(&mut clap, &path), find(&mut ours, &path));
-            assert_eq!(
-                trimmed(b.render_help().ansi().to_string()),
-                trimmed(a.render_help().ansi().to_string()),
-                "{path:?} -h"
-            );
-            assert_eq!(
-                trimmed(b.render_long_help().ansi().to_string()),
-                trimmed(a.render_long_help().ansi().to_string()),
-                "{path:?} --help"
-            );
-        }
-    }
-
-    /// Under the pseudo-locale, which marks every translated word, no
-    /// heading or note of clap's is left in English.
-    #[test]
-    fn no_english_layout_is_left() {
-        let options = dmm_shared::l10n::Options {
-            pseudo: true,
-            ..Default::default()
-        };
-        let l = Localizer::new(
-            &dmm_shared::l10n::EN_US,
-            &crate::l10n::resources(),
-            &options,
-        );
-        let mut cmd = localize(crate::cli::command(&l), &l);
-        for path in paths(&cmd) {
-            let c = find(&mut cmd, &path);
-            for text in [
-                c.render_help().to_string(),
-                c.render_long_help().to_string(),
+/// The English words of clap's that a page of `cmd`, laid out by
+/// [`localize`] under `pseudo`, the pseudo-locale, still shows: none, as it
+/// marks every word it translates.
+#[cfg(any(test, feature = "test-support"))]
+pub fn english_left(cmd: Command, pseudo: &Localizer) -> Vec<String> {
+    let mut cmd = localize(cmd, pseudo);
+    let mut out = Vec::new();
+    for path in paths(&cmd) {
+        let c = find(&mut cmd, &path);
+        for text in [
+            c.render_help().to_string(),
+            c.render_long_help().to_string(),
+        ] {
+            for english in [
+                "Usage:",
+                "Commands:",
+                "Arguments:",
+                "Options:",
+                "[default:",
+                "[possible values:",
+                "Possible values:",
+                "Print help",
+                "Print version",
+                "Print this message",
             ] {
-                for english in [
-                    "Usage:",
-                    "Commands:",
-                    "Arguments:",
-                    "Options:",
-                    "[default:",
-                    "[possible values:",
-                    "Possible values:",
-                    "Print help",
-                    "Print version",
-                    "Print this message",
-                ] {
-                    assert!(!text.contains(english), "{path:?}: {english}\n{text}");
+                if text.contains(english) {
+                    out.push(format!("{path:?}: {english}\n{text}"));
                 }
             }
         }
+    }
+    out
+}
+
+/// Every command's path below the root, the root first.
+#[cfg(any(test, feature = "test-support"))]
+fn paths(cmd: &Command) -> Vec<Vec<String>> {
+    let mut out = vec![Vec::new()];
+    for c in cmd.get_subcommands().filter(|c| !c.is_hide_set()) {
+        for mut p in paths(c) {
+            p.insert(0, c.get_name().to_string());
+            out.push(p);
+        }
+    }
+    out
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn find<'c>(cmd: &'c mut Command, path: &[String]) -> &'c mut Command {
+    match path.split_first() {
+        None => cmd,
+        Some((first, rest)) => find(cmd.find_subcommand_mut(first).expect("a subcommand"), rest),
+    }
+}
+
+/// `text` without the spaces that end its lines.
+#[cfg(any(test, feature = "test-support"))]
+fn trimmed(text: String) -> String {
+    text.lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::l10n::{EN_US, Options};
+    use clap::ArgAction;
+
+    /// A command with every part the layout words: a subcommand, a
+    /// positional, a default, plain and described values, a long help.
+    fn made_up() -> Command {
+        Command::new("t")
+            .version("1.0")
+            .arg(Arg::new("level").long("level").default_value("3"))
+            .arg(
+                Arg::new("color")
+                    .long("color")
+                    .value_parser(["auto", "never"])
+                    .help("When to colour"),
+            )
+            .subcommand(
+                Command::new("run")
+                    .about("Run it")
+                    .arg(Arg::new("file").help("What to run"))
+                    .arg(
+                        Arg::new("mode")
+                            .long("mode")
+                            .long_help("How to run it")
+                            .value_parser([
+                                clap::builder::PossibleValue::new("fast").help("Quickly"),
+                                clap::builder::PossibleValue::new("safe").help("Carefully"),
+                            ]),
+                    )
+                    .arg(Arg::new("dry").long("dry").action(ArgAction::SetTrue)),
+            )
+    }
+
+    #[test]
+    fn english_layout_is_claps() {
+        let l = Localizer::en_us(crate::help::RESOURCES);
+        let differences = english_layout_differences(made_up(), &l);
+        assert!(differences.is_empty(), "{}", differences.join("\n\n"));
+    }
+
+    #[test]
+    fn no_english_layout_is_left() {
+        let options = Options {
+            pseudo: true,
+            ..Default::default()
+        };
+        let l = Localizer::new(&EN_US, crate::help::RESOURCES, &options);
+        let left = english_left(made_up(), &l);
+        assert!(left.is_empty(), "{}", left.join("\n\n"));
     }
 }

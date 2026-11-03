@@ -18,11 +18,13 @@
 //!   back to en-US on its own.
 
 mod alarm;
+pub mod arg_errors;
 #[cfg(any(test, feature = "test-support"))]
 pub mod check;
 pub mod clap_help;
 mod errors;
 mod ftl_text;
+pub mod help_layout;
 mod lang;
 #[cfg(test)]
 mod lib_ftl;

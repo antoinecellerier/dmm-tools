@@ -1,5 +1,6 @@
-### Text both dmm-cli and dmm-gui show: the shared parts of their --help,
-### the setup help when no meter is found, and the notices both print.
+### Text both dmm-cli and dmm-gui show: the shared parts of their --help
+### and the words clap puts around it, their command-line errors, the
+### setup help when no meter is found, and the notices both print.
 ###
 ### Command lines, file paths and web addresses are never part of a message.
 ### Words in --flag form, and 'dmm-cli list', are typed by the user and stay
@@ -169,3 +170,145 @@ read-error-not-a-marker-number = `{ $text }` não é um número de marcador
 # $text is a timestamp from the file, or a recording's "# recorded:" line;
 # RFC 3339 is the standard date format the files use.
 read-error-not-a-date = `{ $text }` não é uma data RFC 3339: { $detail }
+
+## The words clap puts around every page of dmm-cli's and dmm-gui's --help:
+## its headings, what follows an option, and the help of the built-in -h,
+## -V and help. They are the same on every page.
+
+# The headings, each before its list.
+help-usage = Uso:
+help-commands = Comandos:
+help-arguments = Argumentos:
+help-options = Opções:
+# After an option's help, in brackets. $value is what the option is when not
+# given, e.g. 500.
+help-default = [padrão: { $value }]
+# After an option's help, in brackets. $values is the values it takes,
+# separated by commas.
+help-possible-values = [valores possíveis: { $values }]
+# Before the list of values an option takes, each with what it does.
+help-possible-values-heading = Valores possíveis:
+# What -h and --help do: on a command with more detail under --help, the two
+# notes say how to see more or less.
+help-flag = Exibir a ajuda
+help-flag-short = Exibir a ajuda (veja mais com '--help')
+help-flag-long = Exibir a ajuda (veja um resumo com '-h')
+# What -V and --version do.
+help-version-flag = Exibir a versão
+# The help command, listed among the commands, and its argument.
+help-command = Exibir esta mensagem ou a ajuda dos subcomandos informados
+help-command-subcommand = Exibir a ajuda dos subcomandos
+
+## Mistakes on dmm-cli's and dmm-gui's command line: an unknown option, a
+## missing command, a value the program doesn't take. Printed on the
+## terminal as
+##
+##     error: invalid value 'xml' for '--format <FORMAT>'
+##       [possible values: csv, json, replay]
+##
+##     Usage: dmm-cli read [OPTIONS]
+##
+##     For more information, try '--help'.
+##
+## The usage line's syntax stays English after its heading. Names in quotes
+## ($arg, $value, $command, $names) are what the user typed or must type:
+## they arrive as they are, sometimes coloured, and stay in the quotes. $arg
+## is an option, often with its value's name, e.g. --format <FORMAT>.
+
+# At the start of every message, as the terminal shows errors.
+args-error = erro:
+
+# An option that takes no value after "=" was given without one.
+args-equals-needed = é necessário um sinal de igual para atribuir valores a '{ $arg }'
+# An option was given without its value.
+args-value-required = '{ $arg }' requer um valor, mas nenhum foi fornecido
+# A value the option doesn't take. A list of the ones it takes may follow
+# on the next line (args-possible-values).
+args-invalid-value = valor '{ $value }' inválido para '{ $arg }'
+# The same, with the reason the value was refused. $reason may be English.
+args-invalid-value-because = valor '{ $value }' inválido para '{ $arg }': { $reason }
+# The values an option takes, on a line of their own under the error. $values
+# is the list, separated by commas.
+args-possible-values = [valores possíveis: { $values }]
+# A command the program doesn't have, e.g. 'lst'.
+args-unrecognized-subcommand = subcomando '{ $command }' não reconhecido
+# Options that must be given, listed one per line under this.
+args-missing-required = os seguintes argumentos obrigatórios não foram fornecidos:
+# The program was run without a command. $command is the program, e.g.
+# dmm-cli. The commands follow on the next line (args-subcommands).
+args-missing-subcommand = '{ $command }' requer um subcomando, mas nenhum foi fornecido
+# The commands, on a line of their own under the error. $values is the list,
+# separated by commas.
+args-subcommands = [subcomandos: { $values }]
+# A value after an option that takes no more.
+args-unexpected-value = valor '{ $value }' inesperado para '{ $arg }'; nenhum outro era esperado
+# Too few values after an option. $needed and $given are numbers; $count is
+# $given, for choosing the verb's form ([0] and [one]: one value or none).
+args-too-few-values =
+    { $count ->
+        [0] '{ $arg }' requer { $needed } valores; nenhum foi fornecido
+        [one] '{ $arg }' requer { $needed } valores; apenas { $given } foi fornecido
+       *[other] '{ $arg }' requer { $needed } valores; apenas { $given } foram fornecidos
+    }
+# The wrong number of values after an option. $needed and $given are
+# numbers; $count is $given, for choosing the verb's form.
+args-wrong-number-of-values =
+    { $count ->
+        [0] '{ $arg }' requer { $needed } valores, mas nenhum foi fornecido
+        [one] '{ $arg }' requer { $needed } valores, mas { $given } foi fornecido
+       *[other] '{ $arg }' requer { $needed } valores, mas { $given } foram fornecidos
+    }
+# An option the program doesn't have, or one this command doesn't take.
+args-unexpected-argument = argumento '{ $arg }' inesperado
+# An option given twice that can only be given once.
+args-repeated = o argumento '{ $arg }' não pode ser usado mais de uma vez
+# Two options, or an option and a command, that can't go together. $what is
+# argument or subcommand; $name and $other are what the user typed.
+args-conflict-with =
+    { $what ->
+        [subcommand] o subcomando '{ $name }' não pode ser usado com '{ $other }'
+       *[argument] o argumento '{ $name }' não pode ser usado com '{ $other }'
+    }
+# Two options, or an option and a command, that can't go together, with
+# the others listed one per line under this. $what is argument or
+# subcommand; $name is what the user typed.
+args-conflict-with-list =
+    { $what ->
+        [subcommand] o subcomando '{ $name }' não pode ser usado com:
+       *[argument] o argumento '{ $name }' não pode ser usado com:
+    }
+# The same, when the others aren't named. $what is argument or
+# subcommand; $name is what the user typed.
+args-conflict-with-others =
+    { $what ->
+        [subcommand] o subcomando '{ $name }' não pode ser usado com um ou mais dos outros argumentos informados
+       *[argument] o argumento '{ $name }' não pode ser usado com um ou mais dos outros argumentos informados
+    }
+
+## Hints after the error.
+
+# Before a hint, indented on its own line.
+args-tip = dica:
+# A name close to what was typed. $what is subcommand, argument or value;
+# $names is one or more quoted names, separated by commas; $count is how
+# many.
+args-similar =
+    { $what ->
+        [subcommand]
+            { $count ->
+                [one] existe um subcomando parecido: { $names }
+               *[other] existem subcomandos parecidos: { $names }
+            }
+        [argument]
+            { $count ->
+                [one] existe um argumento parecido: { $names }
+               *[other] existem argumentos parecidos: { $names }
+            }
+       *[value]
+            { $count ->
+                [one] existe um valor parecido: { $names }
+               *[other] existem valores parecidos: { $names }
+            }
+    }
+# The last line. $help is --help.
+args-more-info = Para mais informações, use '{ $help }'.

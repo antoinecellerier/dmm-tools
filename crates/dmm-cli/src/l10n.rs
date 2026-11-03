@@ -27,7 +27,6 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "cli/settings.ftl"),
     dmm_shared::ftl!("en-US", "cli/capture.ftl"),
     dmm_shared::ftl!("en-US", "cli/help.ftl"),
-    dmm_shared::ftl!("en-US", "cli/args.ftl"),
     dmm_shared::ftl!("fr", "cli/common.ftl"),
     dmm_shared::ftl!("fr", "cli/connect.ftl"),
     dmm_shared::ftl!("fr", "cli/read.ftl"),
@@ -38,7 +37,6 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("fr", "cli/settings.ftl"),
     dmm_shared::ftl!("fr", "cli/capture.ftl"),
     dmm_shared::ftl!("fr", "cli/help.ftl"),
-    dmm_shared::ftl!("fr", "cli/args.ftl"),
     dmm_shared::ftl!("pt-BR", "cli/common.ftl"),
     dmm_shared::ftl!("pt-BR", "cli/connect.ftl"),
     dmm_shared::ftl!("pt-BR", "cli/read.ftl"),
@@ -49,7 +47,6 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("pt-BR", "cli/settings.ftl"),
     dmm_shared::ftl!("pt-BR", "cli/capture.ftl"),
     dmm_shared::ftl!("pt-BR", "cli/help.ftl"),
-    dmm_shared::ftl!("pt-BR", "cli/args.ftl"),
     dmm_shared::ftl!("zh-CN", "cli/common.ftl"),
     dmm_shared::ftl!("zh-CN", "cli/connect.ftl"),
     dmm_shared::ftl!("zh-CN", "cli/read.ftl"),
@@ -60,7 +57,6 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("zh-CN", "cli/settings.ftl"),
     dmm_shared::ftl!("zh-CN", "cli/capture.ftl"),
     dmm_shared::ftl!("zh-CN", "cli/help.ftl"),
-    dmm_shared::ftl!("zh-CN", "cli/args.ftl"),
     dmm_shared::ftl!("es", "cli/common.ftl"),
     dmm_shared::ftl!("es", "cli/connect.ftl"),
     dmm_shared::ftl!("es", "cli/read.ftl"),
@@ -71,7 +67,6 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("es", "cli/settings.ftl"),
     dmm_shared::ftl!("es", "cli/capture.ftl"),
     dmm_shared::ftl!("es", "cli/help.ftl"),
-    dmm_shared::ftl!("es", "cli/args.ftl"),
     dmm_shared::ftl!("ja", "cli/common.ftl"),
     dmm_shared::ftl!("ja", "cli/connect.ftl"),
     dmm_shared::ftl!("ja", "cli/read.ftl"),
@@ -81,7 +76,6 @@ const CLI: &[Resource] = &[
     dmm_shared::ftl!("ja", "cli/command.ftl"),
     dmm_shared::ftl!("ja", "cli/settings.ftl"),
     dmm_shared::ftl!("ja", "cli/help.ftl"),
-    dmm_shared::ftl!("ja", "cli/args.ftl"),
 ];
 
 /// What each command and option does, as `--help` says it: generated from

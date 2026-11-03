@@ -15,34 +15,6 @@ help-device-intro = 接続するデバイス。
 # Before the list of the simulated meter's modes.
 help-mock-mode-intro = シミュレーション デバイスの測定モードを、自動で切り替えずに特定のモードに固定する。--device mock を指定したときのみ有効。指定しない場合は、設定ファイルの mock_mode (dmm-gui のシミュレーション モード) で固定される。
 
-## The words around every command's help: its headings, what follows an
-## option, and the help of the built-in -h, -V and help. They are the same
-## on every page of dmm-cli --help and dmm-cli <command> --help.
-
-# The headings, each before its list.
-help-usage = 使用法:
-help-commands = コマンド:
-help-arguments = 引数:
-help-options = オプション:
-# After an option's help, in brackets. $value is what the option is when not
-# given, e.g. 500.
-help-default = [既定値: { $value }]
-# After an option's help, in brackets. $values is the values it takes,
-# separated by commas.
-help-possible-values = [指定可能な値: { $values }]
-# Before the list of values an option takes, each with what it does.
-help-possible-values-heading = 指定可能な値:
-# What -h and --help do: on a command with more detail under --help, the two
-# notes say how to see more or less.
-help-flag = ヘルプを表示する
-help-flag-short = ヘルプを表示する (詳しくは '--help')
-help-flag-long = ヘルプを表示する (概要は '-h')
-# What -V and --version do.
-help-version-flag = バージョンを表示する
-# The help command, listed among the commands, and its argument.
-help-command = このメッセージ、または指定したサブコマンドのヘルプを表示する
-help-command-subcommand = 指定したサブコマンドのヘルプを表示する
-
 ## After the options of dmm-cli -h.
 
 help-see-long-help = 対応デバイスの一覧と共有設定ファイルのパスを見るには、--help を付けて実行してください。

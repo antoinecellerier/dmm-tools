@@ -32,10 +32,10 @@ About 1,450 messages in all, plus about 240 attributes for tooltips, accessibili
 | Source | Messages |
 |---|---|
 | GUI (`gui/`) | ~480 |
-| CLI prose and clap's words (`cli/`) | ~140 |
+| CLI prose (`cli/`) | ~105 |
 | `capture`'s own text (`cli/capture.ftl`) | ~110 |
 | CLI `--help` (`cli-help.ftl`) | ~50 |
-| `dmm_shared::help` (`shared.ftl`) | ~60 |
+| `dmm_shared::help`, clap's words and errors (`shared.ftl`) | ~95 |
 | Library labels and keys (`lib.ftl`) | ~220 |
 | Activation steps (`lib.ftl`) | 28 |
 | Spec text (`lib.ftl`) | ~250 |

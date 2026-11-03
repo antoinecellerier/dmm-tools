@@ -15,34 +15,6 @@ help-device-intro = Device to connect to.
 # Before the list of the simulated meter's modes.
 help-mock-mode-intro = Pin the mock device to a specific measurement mode instead of auto-cycling. Only effective with --device mock. Without it, the settings file's mock_mode (dmm-gui's Mock mode) pins it.
 
-## The words around every command's help: its headings, what follows an
-## option, and the help of the built-in -h, -V and help. They are the same
-## on every page of dmm-cli --help and dmm-cli <command> --help.
-
-# The headings, each before its list.
-help-usage = Usage:
-help-commands = Commands:
-help-arguments = Arguments:
-help-options = Options:
-# After an option's help, in brackets. $value is what the option is when not
-# given, e.g. 500.
-help-default = [default: { $value }]
-# After an option's help, in brackets. $values is the values it takes,
-# separated by commas.
-help-possible-values = [possible values: { $values }]
-# Before the list of values an option takes, each with what it does.
-help-possible-values-heading = Possible values:
-# What -h and --help do: on a command with more detail under --help, the two
-# notes say how to see more or less.
-help-flag = Print help
-help-flag-short = Print help (see more with '--help')
-help-flag-long = Print help (see a summary with '-h')
-# What -V and --version do.
-help-version-flag = Print version
-# The help command, listed among the commands, and its argument.
-help-command = Print this message or the help of the given subcommand(s)
-help-command-subcommand = Print help for the subcommand(s)
-
 ## After the options of dmm-cli -h.
 
 help-see-long-help = Run with --help for the full list of supported devices and the shared-settings file path.

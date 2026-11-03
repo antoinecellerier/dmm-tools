@@ -11,7 +11,7 @@ use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
 use dmm_shared::input;
-use dmm_shared::l10n::{self, Language, Localizer, clap_help};
+use dmm_shared::l10n::{self, Language, Localizer, clap_help, help_layout};
 use dmm_shared::tr;
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -538,7 +538,17 @@ pub(crate) enum SettingsFormat {
 /// run time. What `main` parses with and prints `--help` from.
 pub(crate) fn command(l: &Localizer) -> clap::Command {
     let cmd = clap_help::translate(<Cli as clap::CommandFactory>::command(), l, &values_parser);
-    crate::help_layout::localize(with_run_time_help(cmd, l), l)
+    help_layout::localize(with_run_time_help(cmd, l), l)
+}
+
+/// The subcommands kept out of `--help`, which clap still names among the
+/// ones it expected, and [`dmm_shared::l10n::arg_errors`] leaves out.
+pub(crate) fn hidden_subcommands() -> Vec<String> {
+    <Cli as clap::CommandFactory>::command()
+        .get_subcommands()
+        .filter(|c| c.is_hide_set())
+        .map(|c| c.get_name().to_string())
+        .collect()
 }
 
 /// The parser of an argument whose possible values' help is translated: the
@@ -1242,7 +1252,7 @@ read--interval-ms.help what its --interval-ms option does. clap wraps each
 paragraph to the terminal's width: keep a paragraph on one line. Option
 names (--device), values (auto, mock) and command lines ('dmm-cli list')
 stay as they are. clap's own words around these texts (Usage:, Options:,
-[default: …], [possible values: …]) are in cli/help.ftl.";
+[default: …], [possible values: …]) are in shared.ftl.";
 
     /// `cli-help.ftl` holds the doc comments as they are now.
     #[test]
@@ -1397,5 +1407,74 @@ stay as they are. clap's own words around these texts (Usage:, Options:,
             }
         }
         assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// Laid out by the shared help layout in English, every page reads
+    /// exactly as clap's own.
+    #[test]
+    fn english_layout_is_claps() {
+        let l = crate::l10n::english();
+        let differences = help_layout::english_layout_differences(command(l), l);
+        assert!(differences.is_empty(), "{}", differences.join("\n\n"));
+    }
+
+    /// Under the pseudo-locale, which marks every translated word, no
+    /// heading or note of clap's is left in English.
+    #[test]
+    fn no_english_layout_is_left() {
+        use dmm_shared::l10n::{EN_US, Options};
+        let options = Options {
+            pseudo: true,
+            ..Options::default()
+        };
+        let l = Localizer::new(&EN_US, &crate::l10n::resources(), &options);
+        let left = help_layout::english_left(command(&l), &l);
+        assert!(left.is_empty(), "{}", left.join("\n\n"));
+    }
+
+    /// What clap prints for `args`, less the hidden subcommands, and what
+    /// the shared renderer makes of the same error in English.
+    fn both_errors(args: &[&str]) -> (String, String) {
+        use dmm_shared::l10n::arg_errors;
+        let e = command(crate::l10n::english())
+            .try_get_matches_from(args)
+            .expect_err("an error");
+        let ours = arg_errors::render(&e, crate::l10n::english(), &hidden_subcommands());
+        let mut clap = e.render().to_string();
+        for h in hidden_subcommands() {
+            clap = clap
+                .replace(&format!(", {h}"), "")
+                .replace(&format!("{h}, "), "");
+        }
+        (clap, ours.to_string())
+    }
+
+    /// Mistakes users make on dmm-cli itself read as clap words them.
+    #[test]
+    fn errors_match_clap_on_dmm_cli() {
+        for args in [
+            &["dmm-cli", "--lang", "en-US"][..],
+            &["dmm-cli", "lst"],
+            &["dmm-cli", "read", "--fromat", "csv"],
+            &["dmm-cli", "read", "--format", "xml"],
+            &["dmm-cli", "read", "--format"],
+            &["dmm-cli", "read", "--interval-ms", "fast"],
+            &["dmm-cli", "--lang", "xx", "list"],
+            &["dmm-cli", "list", "extra"],
+            &["dmm-cli", "set"],
+        ] {
+            let (clap, ours) = both_errors(args);
+            assert_eq!(ours, clap, "{args:?}");
+        }
+    }
+
+    /// The listed subcommands leave out the hidden ones.
+    #[test]
+    fn hidden_subcommands_are_not_offered() {
+        let (_, ours) = both_errors(&["dmm-cli", "--lang", "en-US"]);
+        assert!(!hidden_subcommands().is_empty());
+        for h in hidden_subcommands() {
+            assert!(!ours.contains(&format!(" {h},")), "{ours}");
+        }
     }
 }

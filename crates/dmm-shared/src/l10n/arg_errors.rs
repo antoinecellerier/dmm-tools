@@ -1,35 +1,45 @@
 //! clap's command-line errors in the user's language: an unknown option, a
-//! missing command, a value clap refuses.
+//! missing command, a value clap refuses. The same in dmm-cli and dmm-gui,
+//! so the messages are in `shared.ftl`.
 //!
 //! clap words them in English inside its `RichFormatter`, whose layout this
-//! follows line for line, with each sentence taken from `cli/args.ftl`. In
+//! follows line for line, with each sentence taken from the messages. In
 //! English the result is byte for byte clap's own, which a test holds it
 //! to, but for the hidden subcommands clap would list among the expected
-//! ones.
-//! What clap builds as text of its own stays English: the usage line's
-//! syntax after its worded heading, and the rare `tip:` hints that are
-//! whole sentences (`to pass '--x' as a value, use '-- --x'`). Kinds that are not errors (help, version) and the
-//! ones this doesn't word go to clap as they are.
+//! ones. What clap builds as text of its own stays English: the usage
+//! line's syntax after its worded heading, and the rare `tip:` hints that
+//! are whole sentences (`to pass '--x' as a value, use '-- --x'`). Kinds
+//! that are not errors (help, version) and the ones this doesn't word go to
+//! clap as they are.
 
 use std::fmt::Write as _;
+use std::sync::OnceLock;
 
+use super::{Arg, Localizer};
+use crate::tr;
 use clap::builder::StyledStr;
 use clap::builder::styling::Styles;
 use clap::error::{ContextKind, ContextValue, ErrorFormatter, ErrorKind};
-use dmm_shared::l10n::{Arg, Localizer};
-use dmm_shared::tr;
 
 /// Two spaces, as clap indents a list under its error line.
 const TAB: &str = "  ";
 
-/// Print `e` in the user's language and exit, as [`clap::Error::exit`] does.
-pub(crate) fn exit(e: clap::Error) -> ! {
+/// Print `e` in `l`'s language and exit, as [`clap::Error::exit`] does.
+/// `hidden` names the subcommands kept out of `--help`, which clap still
+/// lists among the ones it expected.
+pub fn exit(e: clap::Error, l: &Localizer, hidden: &[String]) -> ! {
     if worded(e.kind()) {
-        e.apply::<Localized>().exit()
+        // clap's formatter hook takes no state, so the text is worded here
+        // and handed to it: the process ends on this error.
+        let _ = WORDED.set(render(&e, l, hidden));
+        e.apply::<Worded>().exit()
     } else {
         e.exit()
     }
 }
+
+/// What [`exit`] worded, for [`Worded`] to print.
+static WORDED: OnceLock<StyledStr> = OnceLock::new();
 
 /// The kinds [`render`] words; the others are help, version or I/O.
 fn worded(kind: ErrorKind) -> bool {
@@ -44,24 +54,32 @@ fn worded(kind: ErrorKind) -> bool {
     )
 }
 
-/// clap's formatter hook, on the CLI's localizer.
-pub(crate) struct Localized;
+/// clap's formatter hook: the text [`exit`] worded, else English.
+struct Worded;
 
-impl ErrorFormatter for Localized {
+impl ErrorFormatter for Worded {
     fn format_error(error: &clap::error::Error<Self>) -> StyledStr {
-        render(error, crate::l10n::get())
+        WORDED
+            .get()
+            .cloned()
+            .unwrap_or_else(|| render(error, &Localizer::en_us(crate::help::RESOURCES), &[]))
     }
 }
 
 /// `error` laid out as clap's `RichFormatter` lays it out, in `l`'s
-/// language. dmm-cli keeps clap's default styles and its `--help` flag.
-fn render<F: ErrorFormatter>(error: &clap::error::Error<F>, l: &Localizer) -> StyledStr {
+/// language, leaving the `hidden` subcommands out of a list. Both binaries
+/// keep clap's default styles and its `--help` flag.
+pub fn render<F: ErrorFormatter>(
+    error: &clap::error::Error<F>,
+    l: &Localizer,
+    hidden: &[String],
+) -> StyledStr {
     let styles = Styles::styled();
     let paint = Paint(&styles);
     let mut out = StyledStr::new();
     let e = styles.get_error();
     let _ = write!(out, "{e}{}{e:#} ", tr!(l, "args-error"));
-    let _ = write!(out, "{}", message(error, l, &paint));
+    let _ = write!(out, "{}", message(error, l, &paint, hidden));
 
     let mut suggested = false;
     for (kind, what) in [
@@ -145,30 +163,21 @@ fn escaped(value: &str) -> String {
     }
 }
 
-/// The subcommands dmm-cli keeps out of `--help`, which clap still names
-/// among the ones it expected.
-fn hidden_subcommands() -> Vec<String> {
-    crate::cli::command(&Localizer::en_us(&crate::l10n::resources()))
-        .get_subcommands()
-        .filter(|c| c.is_hide_set())
-        .map(|c| c.get_name().to_string())
-        .collect()
-}
-
 /// `[possible values: …]` and its like on a line of its own, empty when
-/// clap gave no values.
-fn values_list(l: &Localizer, paint: &Paint, id: &str, values: Option<&ContextValue>) -> String {
+/// clap gave no values. A subcommand list leaves out the `hidden` ones.
+fn values_list(
+    l: &Localizer,
+    paint: &Paint,
+    id: &str,
+    values: Option<&ContextValue>,
+    hidden: &[String],
+) -> String {
     let Some(ContextValue::Strings(values)) = values else {
         return String::new();
     };
-    let hidden = if id == "args-subcommands" {
-        hidden_subcommands()
-    } else {
-        Vec::new()
-    };
     let shown: Vec<String> = values
         .iter()
-        .filter(|v| !hidden.contains(v))
+        .filter(|v| id != "args-subcommands" || !hidden.contains(v))
         .map(|v| paint.valid(&escaped(v)))
         .collect();
     if shown.is_empty() {
@@ -187,6 +196,7 @@ fn message<F: ErrorFormatter>(
     error: &clap::error::Error<F>,
     l: &Localizer,
     paint: &Paint,
+    hidden: &[String],
 ) -> String {
     let arg = || string(error, ContextKind::InvalidArg).map(|a| paint.invalid(a));
     let literal_arg = || string(error, ContextKind::InvalidArg).map(|a| paint.literal(a));
@@ -215,6 +225,7 @@ fn message<F: ErrorFormatter>(
                     paint,
                     "args-possible-values",
                     error.get(ContextKind::ValidValue),
+                    hidden,
                 );
                 format!("{line}{list}")
             }
@@ -252,6 +263,7 @@ fn message<F: ErrorFormatter>(
                     paint,
                     "args-subcommands",
                     error.get(ContextKind::ValidSubcommand),
+                    hidden,
                 );
                 format!("{line}{list}")
             })
@@ -403,50 +415,19 @@ mod tests {
     use super::*;
 
     fn english() -> Localizer {
-        Localizer::en_us(&crate::l10n::resources())
+        Localizer::en_us(crate::help::RESOURCES)
     }
 
     /// What clap prints for `args` on `cmd`, and what [`render`] makes of
     /// the same error in English, without colour.
     fn both(cmd: clap::Command, args: &[&str]) -> (String, String) {
         let e = cmd.try_get_matches_from(args).expect_err("an error");
-        let ours = render(&e, &english()).to_string();
+        let ours = render(&e, &english(), &[]).to_string();
         (e.render().to_string(), ours)
     }
 
-    /// Mistakes users make on dmm-cli itself read as clap words them.
-    #[test]
-    fn english_matches_clap_on_dmm_cli() {
-        let cmd = || crate::cli::command(&english());
-        for args in [
-            &["dmm-cli", "--lang", "en-US"][..],
-            &["dmm-cli", "lst"],
-            &["dmm-cli", "read", "--fromat", "csv"],
-            &["dmm-cli", "read", "--format", "xml"],
-            &["dmm-cli", "read", "--format"],
-            &["dmm-cli", "read", "--interval-ms", "fast"],
-            &["dmm-cli", "--lang", "xx", "list"],
-            &["dmm-cli", "list", "extra"],
-            &["dmm-cli", "set"],
-        ] {
-            let (clap, ours) = both(cmd(), args);
-            let clap = remove_hidden(&clap);
-            assert_eq!(ours, clap, "{args:?}");
-        }
-    }
-
-    /// clap's list less the hidden subcommands, which `render` leaves out.
-    fn remove_hidden(text: &str) -> String {
-        let mut out = text.to_string();
-        for h in hidden_subcommands() {
-            out = out
-                .replace(&format!(", {h}"), "")
-                .replace(&format!("{h}, "), "");
-        }
-        out
-    }
-
-    /// The kinds dmm-cli's own arguments can't produce, on a made-up command.
+    /// Every kind this words, on a made-up command; each binary's tests
+    /// hold its own command to clap's words too.
     #[test]
     fn english_matches_clap_on_every_kind() {
         use clap::{Arg, ArgAction, Command};
@@ -474,32 +455,19 @@ mod tests {
         }
     }
 
-    /// The listed subcommands leave out the hidden ones.
-    #[test]
-    fn hidden_subcommands_are_not_offered() {
-        let (_, ours) = both(
-            crate::cli::command(&english()),
-            &["dmm-cli", "--lang", "en-US"],
-        );
-        assert!(!hidden_subcommands().is_empty());
-        for h in hidden_subcommands() {
-            assert!(!ours.contains(&format!(" {h},")), "{ours}");
-        }
-    }
-
     /// In another language the sentences change and the names typed stay.
     #[test]
     fn errors_are_worded_in_the_language() {
-        static MADE_UP: dmm_shared::l10n::Language = dmm_shared::l10n::Language {
+        static MADE_UP: crate::l10n::Language = crate::l10n::Language {
             id: "fr-CA",
             native_name: "Français (Canada)",
             reviewed: true,
         };
         let resources = [
-            crate::l10n::resources(),
-            vec![dmm_shared::l10n::Resource {
+            crate::help::RESOURCES,
+            &[crate::l10n::Resource {
                 locale: "fr-CA",
-                path: "cli/args.ftl",
+                path: "shared.ftl",
                 source: "args-error = erreur :\n\
                          args-invalid-value = valeur « { $value } » refusée pour « { $arg } »\n\
                          args-possible-values = [valeurs possibles : { $values }]\n",
@@ -507,13 +475,18 @@ mod tests {
         ]
         .concat();
         let l = Localizer::new(&MADE_UP, &resources, &Default::default());
-        let e = crate::cli::command(&english())
-            .try_get_matches_from(["dmm-cli", "read", "--format", "xml"])
+        let e = clap::Command::new("t")
+            .arg(
+                clap::Arg::new("format")
+                    .long("format")
+                    .value_parser(["text", "csv"]),
+            )
+            .try_get_matches_from(["t", "--format", "xml"])
             .expect_err("an error");
         assert_eq!(
-            render(&e, &l).to_string(),
-            "erreur : valeur « xml » refusée pour « --format <FORMAT> »\n  \
-             [valeurs possibles : text, csv, json, replay]\n\n\
+            render(&e, &l, &[]).to_string(),
+            "erreur : valeur « xml » refusée pour « --format <format> »\n  \
+             [valeurs possibles : text, csv]\n\n\
              For more information, try '--help'.\n"
         );
     }

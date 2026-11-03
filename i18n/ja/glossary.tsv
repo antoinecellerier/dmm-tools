@@ -269,9 +269,9 @@ PgUp / PgDn (key names in prose)	PageUp / PageDown	key	shortcuts-note	MS-SG p.56
 counter for readings, samples, records	件	counter	recording-count, read-summary-count, import-done, stats	MS-SG p.18 (counters follow numerals, “5個”); Sanwa PC720M JP PDF p.8 “87,328 件”	«{ $count } 件のサンプル»; half-width space between the number and the counter (MS-SG p.32 «第 3 章»).
 counter for markers, files, items	個	counter	markers, colors-skipped	MS-SG p.18 “5個”	«マーカー { $count } 個», «テーマ ファイル { $count } 個».
 counter for times, attempts, presses, beeps, crossings	回 / 回目	counter	top-bar-reconnecting-attempt, alarm counts, error-rejected-gave-up	Sanwa PC7000 JP PDF p.4 “5 回 / 秒”	Ordinal: «3 回目».
-Usage: / Commands: / Arguments: / Options:	使用法: / コマンド: / 引数: / オプション:	n.	cli/help.ftl help-usage etc.	MS-T usage => 使用; argument => 引数; options => オプション	«使用法» has no exact MS-T entry.
+Usage: / Commands: / Arguments: / Options:	使用法: / コマンド: / 引数: / オプション:	n.	shared.ftl help-usage etc.	MS-T usage => 使用; argument => 引数; options => オプション	«使用法» has no exact MS-T entry.
 [default: …] / [possible values: …]	[既定値: …] / [指定可能な値: …]	n.	help-default, help-possible-values, args-possible-values	MS-T default => 既定値; value => 値	
-subcommand	サブコマンド	n.	cli/args.ftl, help-command	MS-T subcommand => サブコマンド	
+subcommand	サブコマンド	n.	shared.ftl args-*, help-command	MS-T subcommand => サブコマンド	
 environment variable / ENVIRONMENT:	環境変数 / 環境変数:	n.	help-environment	MS-T environment variable => 環境変数	Capital headings become plain headings: CONFIGURATION: → «構成:» (MS-T configuration => 構成).
 Print help / Print version	ヘルプを表示する / バージョンを表示する	v.	help-flag, help-version-flag	MS-SG p.58 “ヘルプを表示する”	Option descriptions in the plain form (STYLE §0 item 1).
 error: / tip: (clap)	エラー: / ヒント:	n.	args-error, args-tip	MS-T error => エラー; tip => ヒント	

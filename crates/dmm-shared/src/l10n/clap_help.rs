@@ -15,10 +15,10 @@
 //! What the walk leaves alone: hidden commands and arguments, which stay
 //! English; clap's own words ("Usage:", "Options:", `[default: …]`, the
 //! built-in `help` and `version`, which clap adds after the walk), which
-//! the binary words once clap has built the tree (dmm-cli's `help_layout`);
+//! [`help_layout`](super::help_layout) words once clap has built the tree;
 //! help the binary builds at run time, translated where it is built; and
-//! clap's errors, worded where the binary prints them (`arg_errors`). The en-US file is generated from the tree by
-//! `render`.
+//! clap's errors, which [`arg_errors`](super::arg_errors) words. The en-US
+//! file is generated from the tree by `render`.
 
 use super::Localizer;
 use clap::builder::{PossibleValue, ValueParser};

@@ -144,7 +144,7 @@ So:
 ## 8. Command lines, options, files and keys
 
 - **Verbatim**, as for fr: every `--flag` and its values, `dmm-cli`, `dmm-gui`, subcommands, quoted command lines, device and step ids, setting ids, settings-file keys, environment variables, file names and patterns, CSV column names and JSON keys, the backquoted text in `read-error-*`, RFC 3339, the password `0000`. The translation check fails a message that loses a `code` span or an `--option`. Put a space between them and the Chinese around them (§4).
-- **clap's words** are translated too (`cli/help.ftl`, `cli/args.ftl`): «用法:», «命令:», «参数:», «选项:», «[默认值: { $value }]», «[可能的值: { $values }]». Value names in capitals (`<FORMAT>`) and the usage line's syntax stay as clap writes them; in errors, keep the names in their straight quotes, as typed. CLI headings in capitals («CONFIGURATION:») become plain Chinese headings: «配置:», «环境变量:».
+- **clap's words** are translated too (`shared.ftl`): «用法:», «命令:», «参数:», «选项:», «[默认值: { $value }]», «[可能的值: { $values }]». Value names in capitals (`<FORMAT>`) and the usage line's syntax stay as clap writes them; in errors, keep the names in their straight quotes, as typed. CLI headings in capitals («CONFIGURATION:») become plain Chinese headings: «配置:», «环境变量:».
 - **Windows and macOS names** must match what a Chinese system shows (§0 item 15). 'CP2110 USB to UART Bridge' is the device's own name and stays English.
 - **Computer key names** are messages of their own (`shortcuts-key-*`): §0 item 11. Prose names keys the same way: «按 Esc», «Shift + 拖动», «用向上键/向下键滚动». Letters, digits, F1–F12 and macOS's ⌘ ⇧ ⌥ stay.
 

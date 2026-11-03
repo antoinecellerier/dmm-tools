@@ -213,8 +213,9 @@ errors are worded by variant from `lib-errors.ftl`; the GUI words one when it ar
 or toast already on screen keeps its language after a switch. clap has no translation hook, so the
 CLI walks its command tree at start-up and swaps each command's and option's help for its message in
 `cli-help.ftl`, generated from the doc comments. clap's own words around that help (headings,
-defaults, its built-in flags) and its command-line errors are worded by the CLI too, from
-`cli/help.ftl` and `cli/args.ftl`; only the shell completion scripts stay English. A message a
+defaults, its built-in flags) and its command-line errors are worded in `dmm-shared`, from
+`shared.ftl`, so each binary that parses its command line in the user's language words them
+alike; only the shell completion scripts stay English. A message a
 language lacks falls back to English alone, and `LC_ALL=C` means English unless `--lang` or the
 saved Language setting names another.
 
@@ -375,7 +376,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/read.rs` | Reading an export back |
 | `replay.rs` | What `--replay` opens |
 | `help.rs` | Help and version text both binaries print |
-| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator, the `--help` walker |
+| `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator, the `--help` walker, clap's help layout and command-line errors in the user's language |
 | `logging.rs` | The logger both binaries install |
 
 ### dmm-cli
@@ -384,8 +385,6 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 |---|---|
 | `main.rs` | Resolves the device, dispatches the subcommand, prints a refusal or the help for a failed run; the only place a run exits |
 | `cli.rs` | The clap types, value parsers and runtime help text |
-| `arg_errors.rs` | clap's command-line errors, worded in the user's language |
-| `help_layout.rs` | clap's help headings, defaults and built-in flags, worded in the user's language |
 | `l10n.rs` | The CLI's message catalogs and the language it speaks |
 | `cmd/` | One module per subcommand, and the Ctrl+C flag |
 | `open.rs` | Opening the meter a command runs against, and the setup help |
