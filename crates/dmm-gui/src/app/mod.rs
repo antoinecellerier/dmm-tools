@@ -830,17 +830,20 @@ impl App {
                         },
                         _ => display::NoReadingText::Plain,
                     };
+                    let cx = display::ReadingCtx {
+                        l10n: &self.l10n,
+                        tc: &tc,
+                        state: self.reading_state(),
+                        choices: self.connection.readouts(),
+                    };
                     let (scale, measured_ratios, picked) = display::show_reading_large(
                         ui,
-                        &self.l10n,
+                        &cx,
                         self.last_measurement.as_ref(),
                         display::ReadingFit {
                             base_content_height: content_h,
                             ratios: &self.meter_fit.reading_ratios,
                         },
-                        &tc,
-                        self.reading_state(),
-                        self.connection.readouts(),
                         no_reading,
                     );
                     if let Some(pick) = picked {

@@ -603,145 +603,308 @@ fn point(dock: Dock, bars: Rect, at: f32, length: f32) -> egui::Pos2 {
     }
 }
 
-/// Hover: the bin under the pointer, lit, with its readings and shares.
-fn hover_bin(
-    ui: &Ui,
-    l10n: &Localizer,
-    rect: Rect,
-    hist: &Histogram,
-    unit: &str,
-    bin_at: impl Fn(egui::Pos2) -> Option<usize>,
-) -> Option<usize> {
-    let response = ui.interact(rect, ui.scope_id().with("histogram"), Sense::hover());
-    let bin = response.hover_pos().and_then(bin_at)?;
-    response.on_hover_text_at_pointer(hist.hover_text(l10n, bin, unit));
-    Some(bin)
+/// What the pane paints this frame, in either dock: the histogram, the
+/// lines across it, the unit its labels carry and the colours.
+pub(super) struct Pane<'a> {
+    pub(super) ui: &'a Ui,
+    pub(super) l10n: &'a Localizer,
+    pub(super) hist: &'a Histogram,
+    pub(super) lines: &'a [Line],
+    pub(super) unit: &'a str,
+    pub(super) colors: HistogramColors,
 }
 
-/// The bars in `bars`, growing from its left edge (side) or bottom (below),
-/// each spanning the positions `along` gives its edges; faint gridlines at
-/// round shares about `spacing` points apart; the interval's outline over
-/// the bars; and `lines` across them. Returns the gridlines, as distances
-/// from the bars' base and their labels, for the caller's scale.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one paint call per part, fed piecewise"
-)]
-fn paint_bins(
-    ui: &Ui,
-    dock: Dock,
-    bars: Rect,
-    hist: &Histogram,
-    along: impl Fn(f64) -> f32,
-    hovered: Option<usize>,
-    lines: &[Line],
-    spacing: f32,
-    colors: &HistogramColors,
-) -> Vec<(f32, String)> {
-    let painter = ui
-        .painter_at(bars.expand(2.0))
-        .with_clip_rect(bars.expand(2.0));
-    painter.rect_filled(bars, 0.0, colors.background);
-    let room = match dock {
-        Dock::Side => bars.width(),
-        Dock::Below => bars.height(),
-    } - 2.0;
-    let peak_share = hist.peak_share();
-    let peak = peak_share.max(f64::MIN_POSITIVE);
-    let length = |c: &Counts, count: u32| (room as f64 * c.share(count) / peak) as f32;
-    // No scale over bars that hold nothing: only over-range readings, say.
-    let grid: Vec<(f32, String)> = share_ticks(peak_share, room, spacing)
-        .into_iter()
-        .map(|(share, label)| ((f64::from(room) * share / peak) as f32, label))
-        .collect();
-    for (at, _) in &grid {
-        let [a, b] = match dock {
-            Dock::Side => [bars.top(), bars.bottom()].map(|y| egui::pos2(bars.left() + at, y)),
-            Dock::Below => [bars.left(), bars.right()].map(|x| egui::pos2(x, bars.bottom() - at)),
-        };
-        painter.line_segment(
-            [a, b],
-            egui::Stroke::new(1.0, colors.text.gamma_multiply(0.3)),
-        );
+impl Pane<'_> {
+    /// Hover: the bin under the pointer, lit, with its readings and shares.
+    fn hover_bin(&self, rect: Rect, bin_at: impl Fn(egui::Pos2) -> Option<usize>) -> Option<usize> {
+        let Self {
+            ui,
+            l10n,
+            hist,
+            unit,
+            ..
+        } = self;
+        let response = ui.interact(rect, ui.scope_id().with("histogram"), Sense::hover());
+        let bin = response.hover_pos().and_then(bin_at)?;
+        response.on_hover_text_at_pointer(hist.hover_text(l10n, bin, unit));
+        Some(bin)
     }
-    let pixel = 1.0 / ui.ctx().pixels_per_point();
-    let snap = |x: f32| (x / pixel).round() * pixel;
-    let span = |i: usize| {
-        let (low, high) = hist.edges(i);
-        let (a, b) = (along(low), along(high));
-        (a.min(b), a.max(b))
-    };
-    let mut hovered_bar = None;
-    for (i, &count) in hist.view.counts.iter().enumerate() {
-        if count == 0 {
-            continue;
-        }
-        // Edges on whole pixels, and one pixel of air between bars wide
-        // enough to spare it: on fractional edges the gap smears over one
-        // pixel here and two there, and the bars look unevenly spaced.
-        let (a, b) = span(i);
-        let (a, b) = (snap(a), snap(b));
-        let air = if b - a >= 3.0 * pixel { pixel } else { 0.0 };
-        let (a, b) = (a, (b - air).max(a + pixel));
-        let len = length(&hist.view, count).max(1.0);
-        let bar = Rect::from_two_pos(point(dock, bars, a, 0.0), point(dock, bars, b, len))
-            .intersect(bars);
-        painter.rect_filled(bar, 0.0, colors.bar);
-        if hovered == Some(i) {
-            hovered_bar = Some(bar);
-        }
-    }
-    for line in lines {
-        let [a, b] = across(dock, bars, along(line.value));
-        painter.extend(super::render::styled_line(a, b, line.stroke, line.style));
-    }
-    if let Some(interval) = &hist.interval {
-        // A stepped outline along the bins' ends, one line per run of
-        // filled bins from the base and back, so it reads as a second
-        // histogram over the bars rather than as more of them.
-        let mut runs: Vec<Vec<egui::Pos2>> = vec![Vec::new()];
-        for (i, &count) in interval.counts.iter().enumerate() {
-            let (low, high) = hist.edges(i);
-            let run = runs.last_mut().expect("never empty");
-            if count == 0 {
-                if !run.is_empty() {
-                    runs.push(Vec::new());
+
+    /// The bars in `bars`, growing from its left edge (side) or bottom (below),
+    /// each spanning the positions `along` gives its edges; faint gridlines at
+    /// round shares about `spacing` points apart; the interval's outline over
+    /// the bars; and the pane's lines across them. Returns the gridlines, as
+    /// distances from the bars' base and their labels, for the caller's scale.
+    fn paint_bins(
+        &self,
+        dock: Dock,
+        bars: Rect,
+        along: impl Fn(f64) -> f32,
+        hovered: Option<usize>,
+        spacing: f32,
+    ) -> Vec<(f32, String)> {
+        let Self {
+            ui,
+            hist,
+            lines,
+            colors,
+            ..
+        } = self;
+        let painter = ui
+            .painter_at(bars.expand(2.0))
+            .with_clip_rect(bars.expand(2.0));
+        painter.rect_filled(bars, 0.0, colors.background);
+        let room = match dock {
+            Dock::Side => bars.width(),
+            Dock::Below => bars.height(),
+        } - 2.0;
+        let peak_share = hist.peak_share();
+        let peak = peak_share.max(f64::MIN_POSITIVE);
+        let length = |c: &Counts, count: u32| (room as f64 * c.share(count) / peak) as f32;
+        // No scale over bars that hold nothing: only over-range readings, say.
+        let grid: Vec<(f32, String)> = share_ticks(peak_share, room, spacing)
+            .into_iter()
+            .map(|(share, label)| ((f64::from(room) * share / peak) as f32, label))
+            .collect();
+        for (at, _) in &grid {
+            let [a, b] = match dock {
+                Dock::Side => [bars.top(), bars.bottom()].map(|y| egui::pos2(bars.left() + at, y)),
+                Dock::Below => {
+                    [bars.left(), bars.right()].map(|x| egui::pos2(x, bars.bottom() - at))
                 }
+            };
+            painter.line_segment(
+                [a, b],
+                egui::Stroke::new(1.0, colors.text.gamma_multiply(0.3)),
+            );
+        }
+        let pixel = 1.0 / ui.ctx().pixels_per_point();
+        let snap = |x: f32| (x / pixel).round() * pixel;
+        let span = |i: usize| {
+            let (low, high) = hist.edges(i);
+            let (a, b) = (along(low), along(high));
+            (a.min(b), a.max(b))
+        };
+        let mut hovered_bar = None;
+        for (i, &count) in hist.view.counts.iter().enumerate() {
+            if count == 0 {
                 continue;
             }
-            let len = length(interval, count).max(1.0);
-            if run.is_empty() {
-                run.push(point(dock, bars, along(low), 0.0));
-            } else {
-                // Close the previous bin on this edge; the next step starts here.
-                run.pop();
-            }
-            run.push(point(dock, bars, along(low), len));
-            run.push(point(dock, bars, along(high), len));
-            run.push(point(dock, bars, along(high), 0.0));
-        }
-        // Haloed in the background colour, to stand off the bars it crosses.
-        for stroke in [
-            egui::Stroke::new(3.5, colors.background),
-            egui::Stroke::new(1.5, colors.cursor),
-        ] {
-            for run in runs.iter().filter(|r| !r.is_empty()) {
-                painter.add(egui::Shape::line(run.clone(), stroke));
+            // Edges on whole pixels, and one pixel of air between bars wide
+            // enough to spare it: on fractional edges the gap smears over one
+            // pixel here and two there, and the bars look unevenly spaced.
+            let (a, b) = span(i);
+            let (a, b) = (snap(a), snap(b));
+            let air = if b - a >= 3.0 * pixel { pixel } else { 0.0 };
+            let (a, b) = (a, (b - air).max(a + pixel));
+            let len = length(&hist.view, count).max(1.0);
+            let bar = Rect::from_two_pos(point(dock, bars, a, 0.0), point(dock, bars, b, len))
+                .intersect(bars);
+            painter.rect_filled(bar, 0.0, colors.bar);
+            if hovered == Some(i) {
+                hovered_bar = Some(bar);
             }
         }
+        for line in lines.iter() {
+            let [a, b] = across(dock, bars, along(line.value));
+            painter.extend(super::render::styled_line(a, b, line.stroke, line.style));
+        }
+        if let Some(interval) = &hist.interval {
+            // A stepped outline along the bins' ends, one line per run of
+            // filled bins from the base and back, so it reads as a second
+            // histogram over the bars rather than as more of them.
+            let mut runs: Vec<Vec<egui::Pos2>> = vec![Vec::new()];
+            for (i, &count) in interval.counts.iter().enumerate() {
+                let (low, high) = hist.edges(i);
+                let run = runs.last_mut().expect("never empty");
+                if count == 0 {
+                    if !run.is_empty() {
+                        runs.push(Vec::new());
+                    }
+                    continue;
+                }
+                let len = length(interval, count).max(1.0);
+                if run.is_empty() {
+                    run.push(point(dock, bars, along(low), 0.0));
+                } else {
+                    // Close the previous bin on this edge; the next step starts here.
+                    run.pop();
+                }
+                run.push(point(dock, bars, along(low), len));
+                run.push(point(dock, bars, along(high), len));
+                run.push(point(dock, bars, along(high), 0.0));
+            }
+            // Haloed in the background colour, to stand off the bars it crosses.
+            for stroke in [
+                egui::Stroke::new(3.5, colors.background),
+                egui::Stroke::new(1.5, colors.cursor),
+            ] {
+                for run in runs.iter().filter(|r| !r.is_empty()) {
+                    painter.add(egui::Shape::line(run.clone(), stroke));
+                }
+            }
+        }
+        // Last, over the neighbouring bars, the lines and the outline, in the
+        // strongest text colour, haloed in the background's: a pale theme's bars
+        // can be as light as the outline, and the halo keeps it off them.
+        if let Some(bar) = hovered_bar {
+            for stroke in [
+                egui::Stroke::new(4.0, colors.background),
+                egui::Stroke::new(2.0, ui.visuals().strong_text_color()),
+            ] {
+                painter.rect_stroke(bar.expand(2.0), 0.0, stroke, egui::StrokeKind::Middle);
+            }
+        }
+        grid
     }
-    // Last, over the neighbouring bars, the lines and the outline, in the
-    // strongest text colour, haloed in the background's: a pale theme's bars
-    // can be as light as the outline, and the halo keeps it off them.
-    if let Some(bar) = hovered_bar {
-        for stroke in [
-            egui::Stroke::new(4.0, colors.background),
-            egui::Stroke::new(2.0, ui.visuals().strong_text_color()),
-        ] {
-            painter.rect_stroke(bar.expand(2.0), 0.0, stroke, egui::StrokeKind::Middle);
+
+    /// The readings beyond one end of the Y range, as shares at the end of the
+    /// bars they would lie past: `arrow` and the view's share of its readings,
+    /// then `A–B` and the interval's in the cursor colour, each boxed so it
+    /// reads over a bar. At the top end, the over-range readings after them,
+    /// `OL` with their share of every reading. Stacked from `corner` away from
+    /// it, aligned by `align`.
+    fn paint_beyond(
+        &self,
+        painter: &egui::Painter,
+        above: bool,
+        arrow: char,
+        corner: egui::Pos2,
+        align: egui::Align2,
+    ) {
+        let Self {
+            ui, hist, colors, ..
+        } = self;
+        let (view, interval) = hist.beyond(above);
+        let (view_ol, interval_ol) = if above {
+            hist.overload_shares()
+        } else {
+            (None, None)
+        };
+        let text = ui.visuals().text_color();
+        let rows = [
+            view.map(|s| (format!("{arrow}{}", percent(s)), text)),
+            interval.map(|s| (format!("A\u{2013}B {arrow}{}", percent(s)), colors.cursor)),
+            view_ol.map(|s| (format!("OL {}", percent(s)), text)),
+            interval_ol.map(|s| (format!("A\u{2013}B OL {}", percent(s)), colors.cursor)),
+        ];
+        let font = egui::TextStyle::Small.resolve(ui.style());
+        let step = ui.text_style_height(&egui::TextStyle::Small) + 2.0;
+        let step = if align.y() == egui::Align::Max {
+            -step
+        } else {
+            step
+        };
+        let mut at = corner;
+        for (text, color) in rows.into_iter().flatten() {
+            let galley = painter.layout_no_wrap(text, font.clone(), color);
+            let rect = align.anchor_size(at, galley.size());
+            painter.rect_filled(rect.expand(1.0), 2.0, colors.background);
+            painter.galley(rect.min, galley, color);
+            at.y += step;
         }
     }
-    grid
+
+    /// The strip right of `plot`, `area` tall, its bars at the heights
+    /// `transform` gives their values. The σ caption goes under the plot, in
+    /// the time axis's row.
+    pub(super) fn paint_side(&self, area: Rect, plot: Rect, transform: &PlotTransform) {
+        let Self {
+            ui, hist, colors, ..
+        } = self;
+        let strip = Rect::from_x_y_ranges(area.left() + DIVIDER..=area.right(), plot.y_range());
+        let x = transform.bounds().min()[0];
+        let y_of = |v: f64| transform.position_from_point(&PlotPoint::new(x, v)).y;
+        let hovered = self.hover_bin(strip, |pos| {
+            hist.bin_of(transform.value_from_position(pos).y)
+        });
+        let grid = self.paint_bins(Dock::Side, strip, y_of, hovered, 28.0);
+        let painter = ui.painter_at(area);
+        let inset = egui::vec2(-3.0, 3.0);
+        let top = strip.right_top() + inset;
+        self.paint_beyond(&painter, true, '\u{2191}', top, egui::Align2::RIGHT_TOP);
+        let bottom = strip.right_bottom() - inset;
+        let bottom = egui::pos2(top.x, bottom.y);
+        self.paint_beyond(
+            &painter,
+            false,
+            '\u{2193}',
+            bottom,
+            egui::Align2::RIGHT_BOTTOM,
+        );
+        // The scale under the strip, in the time axis's row: each label under
+        // its gridline, shifted in from the strip's right end it would overhang.
+        let font = egui::TextStyle::Small.resolve(ui.style());
+        let painter = ui.painter();
+        for (at, label) in grid {
+            let galley = painter.layout_no_wrap(label, font.clone(), colors.text);
+            let x = strip.left() + at;
+            let rect = egui::Align2::CENTER_TOP
+                .anchor_size(egui::pos2(x, plot.bottom() + 4.0), galley.size());
+            let shift = (strip.right() - rect.right()).min(0.0);
+            painter.galley(rect.min + egui::vec2(shift, 0.0), galley, colors.text);
+        }
+    }
+
+    /// The band under the minimap, values across `x_range` (the plot's own
+    /// width, so it lines up with the plot above) between `lo` and `hi`.
+    pub(super) fn paint_below(&self, area: Rect, x_range: egui::Rangef, (lo, hi): (f64, f64)) {
+        let Self {
+            ui,
+            hist,
+            unit,
+            colors,
+            ..
+        } = self;
+        let font = egui::TextStyle::Small.resolve(ui.style());
+        let row = ui.text_style_height(&egui::TextStyle::Small);
+        let bars = Rect::from_x_y_ranges(x_range, area.top()..=area.bottom() - row - 2.0);
+        let x_of = |v: f64| bars.left() + ((v - lo) / (hi - lo)) as f32 * bars.width();
+        let hovered = self.hover_bin(bars, |pos| {
+            let share = f64::from((pos.x - bars.left()) / bars.width());
+            hist.bin_of(lo + share * (hi - lo))
+        });
+        let grid = self.paint_bins(Dock::Below, bars, x_of, hovered, 24.0);
+        let painter = ui.painter_at(area);
+        // Values run across the band, so readings below the axis lie past its
+        // left end and those above past its right.
+        let left = bars.left_top() + egui::vec2(3.0, 3.0);
+        self.paint_beyond(&painter, false, '\u{2190}', left, egui::Align2::LEFT_TOP);
+        let right = bars.right_top() + egui::vec2(-3.0, 3.0);
+        self.paint_beyond(&painter, true, '\u{2192}', right, egui::Align2::RIGHT_TOP);
+        // The scale up the left side, in the room the plot keeps for its axis.
+        for (at, label) in grid {
+            painter.text(
+                egui::pos2(bars.left() - 4.0, bars.bottom() - at),
+                egui::Align2::RIGHT_CENTER,
+                label,
+                font.clone(),
+                colors.text,
+            );
+        }
+        // An axis of its own along the bottom, at round values with their unit
+        // as the plot's axis writes them. The count and σ are the statistics
+        // panel's.
+        let labels_y = bars.bottom() + 2.0;
+        for (value, decimals) in band_ticks(lo, hi, bars.width()) {
+            let x = x_of(value);
+            let text = format!("{} {unit}", fixed(value, decimals));
+            let galley = painter.layout_no_wrap(text, font.clone(), colors.text);
+            // Under its tick, shifted in from an end it would overhang: the ticks
+            // are far enough apart that a shifted label still clears the next.
+            let rect = egui::Align2::CENTER_TOP.anchor_size(egui::pos2(x, labels_y), galley.size());
+            let shift =
+                (bars.left() - rect.left()).max(0.0) + (bars.right() - rect.right()).min(0.0);
+            painter.line_segment(
+                [
+                    egui::pos2(x, bars.bottom()),
+                    egui::pos2(x, bars.bottom() + 2.0),
+                ],
+                egui::Stroke::new(1.0, colors.text),
+            );
+            painter.galley(rect.min + egui::vec2(shift, 0.0), galley, colors.text);
+        }
+    }
 }
 
 /// Round shares about `spacing` points apart along `room` points of bar, a
@@ -770,224 +933,6 @@ fn percent(share: f64) -> String {
         format!("{pct:.1}%")
     } else {
         format!("{pct:.0}%")
-    }
-}
-
-/// The readings beyond one end of the Y range, as shares at the end of the
-/// bars they would lie past: `arrow` and the view's share of its readings,
-/// then `A–B` and the interval's in the cursor colour, each boxed so it
-/// reads over a bar. At the top end, the over-range readings after them,
-/// `OL` with their share of every reading. Stacked from `corner` away from
-/// it, aligned by `align`.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one paint call per part, fed piecewise"
-)]
-fn paint_beyond(
-    ui: &Ui,
-    painter: &egui::Painter,
-    hist: &Histogram,
-    above: bool,
-    arrow: char,
-    corner: egui::Pos2,
-    align: egui::Align2,
-    colors: &HistogramColors,
-) {
-    let (view, interval) = hist.beyond(above);
-    let (view_ol, interval_ol) = if above {
-        hist.overload_shares()
-    } else {
-        (None, None)
-    };
-    let text = ui.visuals().text_color();
-    let rows = [
-        view.map(|s| (format!("{arrow}{}", percent(s)), text)),
-        interval.map(|s| (format!("A\u{2013}B {arrow}{}", percent(s)), colors.cursor)),
-        view_ol.map(|s| (format!("OL {}", percent(s)), text)),
-        interval_ol.map(|s| (format!("A\u{2013}B OL {}", percent(s)), colors.cursor)),
-    ];
-    let font = egui::TextStyle::Small.resolve(ui.style());
-    let step = ui.text_style_height(&egui::TextStyle::Small) + 2.0;
-    let step = if align.y() == egui::Align::Max {
-        -step
-    } else {
-        step
-    };
-    let mut at = corner;
-    for (text, color) in rows.into_iter().flatten() {
-        let galley = painter.layout_no_wrap(text, font.clone(), color);
-        let rect = align.anchor_size(at, galley.size());
-        painter.rect_filled(rect.expand(1.0), 2.0, colors.background);
-        painter.galley(rect.min, galley, color);
-        at.y += step;
-    }
-}
-
-/// The strip right of `plot`, `area` tall, its bars at the heights
-/// `transform` gives their values. The σ caption goes under the plot, in
-/// the time axis's row.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one paint call per part, fed piecewise"
-)]
-pub(super) fn paint_side(
-    ui: &Ui,
-    l10n: &Localizer,
-    area: Rect,
-    plot: Rect,
-    transform: &PlotTransform,
-    hist: &Histogram,
-    lines: &[Line],
-    unit: &str,
-    colors: &HistogramColors,
-) {
-    let strip = Rect::from_x_y_ranges(area.left() + DIVIDER..=area.right(), plot.y_range());
-    let x = transform.bounds().min()[0];
-    let y_of = |v: f64| transform.position_from_point(&PlotPoint::new(x, v)).y;
-    let hovered = hover_bin(ui, l10n, strip, hist, unit, |pos| {
-        hist.bin_of(transform.value_from_position(pos).y)
-    });
-    let grid = paint_bins(
-        ui,
-        Dock::Side,
-        strip,
-        hist,
-        y_of,
-        hovered,
-        lines,
-        28.0,
-        colors,
-    );
-    let painter = ui.painter_at(area);
-    let inset = egui::vec2(-3.0, 3.0);
-    let top = strip.right_top() + inset;
-    paint_beyond(
-        ui,
-        &painter,
-        hist,
-        true,
-        '\u{2191}',
-        top,
-        egui::Align2::RIGHT_TOP,
-        colors,
-    );
-    let bottom = strip.right_bottom() - inset;
-    let bottom = egui::pos2(top.x, bottom.y);
-    paint_beyond(
-        ui,
-        &painter,
-        hist,
-        false,
-        '\u{2193}',
-        bottom,
-        egui::Align2::RIGHT_BOTTOM,
-        colors,
-    );
-    // The scale under the strip, in the time axis's row: each label under
-    // its gridline, shifted in from the strip's right end it would overhang.
-    let font = egui::TextStyle::Small.resolve(ui.style());
-    let painter = ui.painter();
-    for (at, label) in grid {
-        let galley = painter.layout_no_wrap(label, font.clone(), colors.text);
-        let x = strip.left() + at;
-        let rect =
-            egui::Align2::CENTER_TOP.anchor_size(egui::pos2(x, plot.bottom() + 4.0), galley.size());
-        let shift = (strip.right() - rect.right()).min(0.0);
-        painter.galley(rect.min + egui::vec2(shift, 0.0), galley, colors.text);
-    }
-}
-
-/// The band under the minimap, values across `x_range` (the plot's own
-/// width, so it lines up with the plot above) between `lo` and `hi`.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one paint call per part, fed piecewise"
-)]
-pub(super) fn paint_below(
-    ui: &Ui,
-    l10n: &Localizer,
-    area: Rect,
-    x_range: egui::Rangef,
-    (lo, hi): (f64, f64),
-    hist: &Histogram,
-    lines: &[Line],
-    unit: &str,
-    colors: &HistogramColors,
-) {
-    let font = egui::TextStyle::Small.resolve(ui.style());
-    let row = ui.text_style_height(&egui::TextStyle::Small);
-    let bars = Rect::from_x_y_ranges(x_range, area.top()..=area.bottom() - row - 2.0);
-    let x_of = |v: f64| bars.left() + ((v - lo) / (hi - lo)) as f32 * bars.width();
-    let hovered = hover_bin(ui, l10n, bars, hist, unit, |pos| {
-        let share = f64::from((pos.x - bars.left()) / bars.width());
-        hist.bin_of(lo + share * (hi - lo))
-    });
-    let grid = paint_bins(
-        ui,
-        Dock::Below,
-        bars,
-        hist,
-        x_of,
-        hovered,
-        lines,
-        24.0,
-        colors,
-    );
-    let painter = ui.painter_at(area);
-    // Values run across the band, so readings below the axis lie past its
-    // left end and those above past its right.
-    let left = bars.left_top() + egui::vec2(3.0, 3.0);
-    paint_beyond(
-        ui,
-        &painter,
-        hist,
-        false,
-        '\u{2190}',
-        left,
-        egui::Align2::LEFT_TOP,
-        colors,
-    );
-    let right = bars.right_top() + egui::vec2(-3.0, 3.0);
-    paint_beyond(
-        ui,
-        &painter,
-        hist,
-        true,
-        '\u{2192}',
-        right,
-        egui::Align2::RIGHT_TOP,
-        colors,
-    );
-    // The scale up the left side, in the room the plot keeps for its axis.
-    for (at, label) in grid {
-        painter.text(
-            egui::pos2(bars.left() - 4.0, bars.bottom() - at),
-            egui::Align2::RIGHT_CENTER,
-            label,
-            font.clone(),
-            colors.text,
-        );
-    }
-    // An axis of its own along the bottom, at round values with their unit
-    // as the plot's axis writes them. The count and σ are the statistics
-    // panel's.
-    let labels_y = bars.bottom() + 2.0;
-    for (value, decimals) in band_ticks(lo, hi, bars.width()) {
-        let x = x_of(value);
-        let text = format!("{} {unit}", fixed(value, decimals));
-        let galley = painter.layout_no_wrap(text, font.clone(), colors.text);
-        // Under its tick, shifted in from an end it would overhang: the ticks
-        // are far enough apart that a shifted label still clears the next.
-        let rect = egui::Align2::CENTER_TOP.anchor_size(egui::pos2(x, labels_y), galley.size());
-        let shift = (bars.left() - rect.left()).max(0.0) + (bars.right() - rect.right()).min(0.0);
-        painter.line_segment(
-            [
-                egui::pos2(x, bars.bottom()),
-                egui::pos2(x, bars.bottom() + 2.0),
-            ],
-            egui::Stroke::new(1.0, colors.text),
-        );
-        painter.galley(rect.min + egui::vec2(shift, 0.0), galley, colors.text);
     }
 }
 

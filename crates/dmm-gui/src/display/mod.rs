@@ -102,6 +102,17 @@ impl ReadingState {
     }
 }
 
+/// What every reading layout draws with, whatever the reading: the language,
+/// the theme, what the app adds to the reading and what the meter can be
+/// switched to.
+#[derive(Clone, Copy)]
+pub(crate) struct ReadingCtx<'a> {
+    pub(crate) l10n: &'a Localizer,
+    pub(crate) tc: &'a ThemeColors,
+    pub(crate) state: ReadingState,
+    pub(crate) choices: ReadoutChoices<'a>,
+}
+
 /// Size of the big meter's hint line relative to the notice title above it.
 const NOTICE_HINT_SIZE_RATIO: f32 = 0.6;
 
@@ -202,20 +213,19 @@ fn value_display(m: &Measurement, tc: &ThemeColors, state: ReadingState) -> (Str
 /// after it in the same row rather than inside it, so the spoken reading's
 /// bounds stop at the value and a screen reader exploring by pointer finds
 /// the dropdowns as themselves. `draw_value` paints the value and unit labels.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one draw call per layout, fed piecewise"
-)]
 fn show_reading_line_with_selector(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     m: &Measurement,
-    state: ReadingState,
     draw_value: impl FnOnce(&mut Ui),
     mode_size: f32,
-    choices: ReadoutChoices<'_>,
-    tc: &ThemeColors,
 ) -> Option<ReadoutPick> {
+    let ReadingCtx {
+        l10n,
+        state,
+        choices,
+        ..
+    } = *cx;
     ui.horizontal(|ui| {
         ui.spoken_reading(
             state.announce,
@@ -232,7 +242,7 @@ fn show_reading_line_with_selector(
         // This line has never carried a range label, so a meter with no rung
         // to pick keeps the line it has: mode, then the badges.
         let range = show_range_readout(ui, l10n, m, mode_size, choices.range, RangeAtRest::Nothing);
-        show_flags(ui, l10n, m, mode_size, tc, state);
+        show_flags(ui, cx, m, mode_size);
         mode.or(range)
     })
     .inner
@@ -245,13 +255,12 @@ fn show_reading_line_with_selector(
 /// for the same choice.
 fn show_reading_line_plain(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     m: &Measurement,
-    state: ReadingState,
     draw_value: impl FnOnce(&mut Ui),
     mode_size: f32,
-    tc: &ThemeColors,
 ) {
+    let ReadingCtx { l10n, state, .. } = *cx;
     ui.spoken_reading(
         state.announce,
         live_region_fingerprint(l10n, Some(m), state, ""),
@@ -270,7 +279,7 @@ fn show_reading_line_plain(
                 mode = mode.small();
             }
             ui.label(mode);
-            show_flags(ui, l10n, m, mode_size, tc, state);
+            show_flags(ui, cx, m, mode_size);
         },
     );
 }
@@ -469,20 +478,19 @@ fn no_reading_placeholder(
 /// Render the primary reading display at the given font size (two-line layout).
 ///
 /// Returns the setting and value the user picked from a selector, if any.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one draw call per layout, fed piecewise"
-)]
 fn show_reading_sized(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     measurement: Option<&Measurement>,
     value_size: f32,
-    tc: &ThemeColors,
-    state: ReadingState,
-    choices: ReadoutChoices<'_>,
     no_reading: NoReadingText<'_>,
 ) -> Option<ReadoutPick> {
+    let ReadingCtx {
+        l10n,
+        tc,
+        state,
+        choices,
+    } = *cx;
     let unit_size = value_size;
     let mode_size = value_size * MODE_SIZE_RATIO;
 
@@ -523,7 +531,7 @@ fn show_reading_sized(
                 // one on a meter that lists no rung to pick.
                 let range =
                     show_range_readout(ui, l10n, m, mode_size, choices.range, RangeAtRest::Label);
-                show_flags(ui, l10n, m, mode_size, tc, state);
+                show_flags(ui, cx, m, mode_size);
                 mode.or(range)
             })
             .inner
@@ -550,14 +558,10 @@ fn show_reading_sized(
 }
 
 /// The value and its unit, as the one-row layouts draw them.
-fn show_value_and_unit(
-    ui: &mut Ui,
-    l10n: &Localizer,
-    m: &Measurement,
-    value_size: f32,
-    tc: &ThemeColors,
-    state: ReadingState,
-) {
+fn show_value_and_unit(ui: &mut Ui, cx: &ReadingCtx<'_>, m: &Measurement, value_size: f32) {
+    let ReadingCtx {
+        l10n, tc, state, ..
+    } = *cx;
     let (value_text, value_color) = value_display(m, tc, state);
     ui.label(value_label(
         ui,
@@ -603,20 +607,16 @@ const SEPARATOR_WIDTH: f32 = 6.0;
 /// Returns the setting and value the user picked from a selector, if any,
 /// and the size of the line alone, the space under it included — what the
 /// fit measures the one-row layouts by.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one draw call per layout, fed piecewise"
-)]
 fn show_reading_inline(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     measurement: Option<&Measurement>,
     value_size: f32,
-    tc: &ThemeColors,
-    state: ReadingState,
-    choices: ReadoutChoices<'_>,
     no_reading: NoReadingText<'_>,
 ) -> (Option<ReadoutPick>, Vec2) {
+    let ReadingCtx {
+        l10n, tc, state, ..
+    } = *cx;
     let mode_size = value_size * MODE_SIZE_RATIO;
     let grid_id = aux_grid_id(ui);
     let top = ui.cursor().top();
@@ -624,16 +624,14 @@ fn show_reading_inline(
 
     match measurement {
         Some(m) => {
-            let draw_value = |ui: &mut Ui| show_value_and_unit(ui, l10n, m, value_size, tc, state);
-            let picked = if !choices.any_offered() {
-                show_reading_line_plain(ui, l10n, m, state, draw_value, mode_size, tc);
+            let draw_value = |ui: &mut Ui| show_value_and_unit(ui, cx, m, value_size);
+            let picked = if !cx.choices.any_offered() {
+                show_reading_line_plain(ui, cx, m, draw_value, mode_size);
                 None
             } else {
                 ui.scope(|ui| {
                     ui.spacing_mut().item_spacing.x = one_row_spacing(mode_size);
-                    show_reading_line_with_selector(
-                        ui, l10n, m, state, draw_value, mode_size, choices, tc,
-                    )
+                    show_reading_line_with_selector(ui, cx, m, draw_value, mode_size)
                 })
                 .inner
             };
@@ -675,13 +673,16 @@ fn show_reading_inline(
 /// one-row layout measures the line for both.
 fn show_reading_beside(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     m: &Measurement,
     value_size: f32,
-    tc: &ThemeColors,
-    state: ReadingState,
-    choices: ReadoutChoices<'_>,
 ) -> (Option<ReadoutPick>, Vec2) {
+    let ReadingCtx {
+        l10n,
+        tc,
+        state,
+        choices,
+    } = *cx;
     let mode_size = value_size * MODE_SIZE_RATIO;
     let grid_id = aux_grid_id(ui);
     let grid = AuxGridMetrics::measure(ui, l10n, m, mode_size, tc).map_or(Vec2::ZERO, |g| {
@@ -710,7 +711,7 @@ fn show_reading_beside(
                             || live_region_label(l10n, Some(m), state, ""),
                             |ui| {
                                 ui.spacing_mut().item_spacing.x = 2.0;
-                                show_value_and_unit(ui, l10n, m, value_size, tc, state);
+                                show_value_and_unit(ui, cx, m, value_size);
                             },
                         );
                     },
@@ -730,7 +731,7 @@ fn show_reading_beside(
             let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
             let range =
                 show_range_readout(ui, l10n, m, mode_size, choices.range, RangeAtRest::Nothing);
-            show_flags(ui, l10n, m, mode_size, tc, state);
+            show_flags(ui, cx, m, mode_size);
             // The row is the line's height unless the grid made it taller; then
             // the value is, as the selectors centred beside it are no taller.
             let row = ui.min_rect().height();
@@ -751,26 +752,21 @@ fn show_reading_beside(
 
 /// Render the large primary reading display.
 ///
-/// `state` is what the app adds to the reading — a software transform, the
-/// alarm's verdict — which its badges and the spoken label say. `choices` are the modes and
-/// ranges the meter can be switched to; where there is more than one, that
-/// readout becomes a selector, and a pick comes back as its setting and id.
+/// `cx.state` is what the app adds to the reading — a software transform,
+/// the alarm's verdict — which its badges and the spoken label say.
+/// `cx.choices` are the modes and ranges the meter can be switched to; where
+/// there is more than one, that readout becomes a selector, and a pick comes
+/// back as its setting and id.
 pub fn show_reading(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     measurement: Option<&Measurement>,
-    tc: &ThemeColors,
-    state: ReadingState,
-    choices: ReadoutChoices<'_>,
 ) -> Option<ReadoutPick> {
     show_reading_sized(
         ui,
-        l10n,
+        cx,
         measurement,
         BASE_READING_FONT_SIZE,
-        tc,
-        state,
-        choices,
         NoReadingText::Plain,
     )
 }
@@ -785,20 +781,16 @@ pub fn show_reading(
 ///
 /// `no_reading` is what takes the reading's place when there is none — the
 /// connection issue's title, where the caller has one.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one draw call per layout, fed piecewise"
-)]
 pub fn show_reading_large(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     measurement: Option<&Measurement>,
     fit: ReadingFit<'_>,
-    tc: &ThemeColors,
-    state: ReadingState,
-    choices: ReadoutChoices<'_>,
     no_reading: NoReadingText<'_>,
 ) -> (f32, ReadingRatios, Option<ReadoutPick>) {
+    let ReadingCtx {
+        l10n, tc, choices, ..
+    } = *cx;
     let ReadingFit {
         base_content_height,
         ratios,
@@ -842,21 +834,19 @@ pub fn show_reading_large(
     let mut measured = ratios.clone();
     let picked = match (layout, measurement, grid.as_ref()) {
         (ReadingLayout::Beside, Some(m), Some(_)) => {
-            let (picked, line) = show_reading_beside(ui, l10n, m, size, tc, state, choices);
+            let (picked, line) = show_reading_beside(ui, cx, m, size);
             measured.row_w = line.x / size;
             measured.row_h = line.y / size;
             picked
         }
         (ReadingLayout::TwoLine, ..) => {
-            let picked =
-                show_reading_sized(ui, l10n, measurement, size, tc, state, choices, no_reading);
+            let picked = show_reading_sized(ui, cx, measurement, size, no_reading);
             measured.w = ui.min_rect().width() / size;
             measured.h = (ui.cursor().top() - before) / size;
             picked
         }
         _ => {
-            let (picked, line) =
-                show_reading_inline(ui, l10n, measurement, size, tc, state, choices, no_reading);
+            let (picked, line) = show_reading_inline(ui, cx, measurement, size, no_reading);
             measured.row_w = line.x / size;
             measured.row_h = line.y / size;
             picked
@@ -872,12 +862,12 @@ pub fn show_reading_large(
 /// [`show_reading`].
 pub fn show_reading_compact(
     ui: &mut Ui,
-    l10n: &Localizer,
+    cx: &ReadingCtx<'_>,
     measurement: Option<&Measurement>,
-    tc: &ThemeColors,
-    state: ReadingState,
-    choices: ReadoutChoices<'_>,
 ) -> Option<ReadoutPick> {
+    let ReadingCtx {
+        l10n, tc, state, ..
+    } = *cx;
     match measurement {
         Some(m) => {
             let value_text = format_value_display(m);
@@ -899,14 +889,14 @@ pub fn show_reading_compact(
                 );
             };
 
-            let picked = if !choices.any_offered() {
-                show_reading_line_plain(ui, l10n, m, state, draw_value, 0.0, tc);
+            let picked = if !cx.choices.any_offered() {
+                show_reading_line_plain(ui, cx, m, draw_value, 0.0);
                 None
             } else {
                 // The selectors and badges at the small text size, which is
                 // what `.small()` resolves to for the plain label.
                 let small = TextStyle::Small.resolve(ui.style()).size;
-                show_reading_line_with_selector(ui, l10n, m, state, draw_value, small, choices, tc)
+                show_reading_line_with_selector(ui, cx, m, draw_value, small)
             };
 
             // One summary line rather than the grid: the compact layout is
@@ -934,14 +924,10 @@ pub fn show_reading_compact(
     }
 }
 
-fn show_flags(
-    ui: &mut Ui,
-    l10n: &Localizer,
-    m: &Measurement,
-    font_size: f32,
-    tc: &ThemeColors,
-    state: ReadingState,
-) {
+fn show_flags(ui: &mut Ui, cx: &ReadingCtx<'_>, m: &Measurement, font_size: f32) {
+    let ReadingCtx {
+        l10n, tc, state, ..
+    } = *cx;
     let text = |label: &str, color: Color32| {
         let text = RichText::new(label).strong().color(color);
         if font_size > 0.0 {
@@ -1018,8 +1004,20 @@ mod tests {
     /// Build a sub-value the way the protocols do: digits in `display_raw`,
     /// unit empty when it matches the main reading's.
     /// The English the tests read the display in.
-    fn en() -> std::sync::Arc<Localizer> {
-        crate::l10n::english()
+    fn en() -> &'static Localizer {
+        static EN: std::sync::LazyLock<std::sync::Arc<Localizer>> =
+            std::sync::LazyLock::new(crate::l10n::english);
+        &EN
+    }
+
+    /// A reading drawn in English, with no transform or alarm on it.
+    fn plain<'a>(tc: &'a ThemeColors, choices: ReadoutChoices<'a>) -> ReadingCtx<'a> {
+        ReadingCtx {
+            l10n: en(),
+            tc,
+            state: ReadingState::PLAIN,
+            choices,
+        }
     }
 
     pub(super) fn aux(label: &'static str, display: &str, unit: &'static str) -> AuxValue {
@@ -1046,7 +1044,7 @@ mod tests {
         for _ in 0..3 {
             rects.clear();
             let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
-                rects = show_aux_rows(ui, &en(), aux_grid_id(ui), m, font_size, &tc);
+                rects = show_aux_rows(ui, en(), aux_grid_id(ui), m, font_size, &tc);
             });
             // See `run_frame`: epaint 0.36 debug-asserts that texture deltas
             // were applied before being dropped.
@@ -1105,7 +1103,7 @@ mod tests {
         let mut job = LayoutJob::default();
         let mut weak = Color32::TRANSPARENT;
         let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
-            job = aux_summary_job(ui, &en(), &m, &tc);
+            job = aux_summary_job(ui, en(), &m, &tc);
             weak = ui.visuals().weak_text_color();
         });
         out.textures_delta.clear();
@@ -1154,7 +1152,17 @@ mod tests {
             let mut width = 0.0;
             let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
                 width = ui
-                    .horizontal(|ui| show_flags(ui, &en(), &m, 14.0, &tc, state))
+                    .horizontal(|ui| {
+                        show_flags(
+                            ui,
+                            &ReadingCtx {
+                                state,
+                                ..plain(&tc, Default::default())
+                            },
+                            &m,
+                            14.0,
+                        )
+                    })
                     .response
                     .rect
                     .width();
@@ -1193,7 +1201,7 @@ mod tests {
                 let mut row = |ui: &mut Ui| {
                     let mode = ui
                         .scope(|ui| {
-                            show_choice_readout(ui, &en(), &MODE_READOUT, "DC mA", mode_size, &[])
+                            show_choice_readout(ui, en(), &MODE_READOUT, "DC mA", mode_size, &[])
                         })
                         .response
                         .rect;
@@ -1201,7 +1209,7 @@ mod tests {
                         .scope(|ui| {
                             show_choice_readout(
                                 ui,
-                                &en(),
+                                en(),
                                 &RANGE_READOUT,
                                 "220mA",
                                 mode_size,
@@ -1211,7 +1219,7 @@ mod tests {
                         .response
                         .rect;
                     let badge = ui
-                        .scope(|ui| show_flags(ui, &en(), &m, mode_size, &tc, ReadingState::PLAIN))
+                        .scope(|ui| show_flags(ui, &plain(&tc, Default::default()), &m, mode_size))
                         .response
                         .rect;
                     rects = [mode, range, badge];
@@ -1284,7 +1292,7 @@ mod tests {
             let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
                 let id = aux_grid_id(ui);
                 rect = ui
-                    .scope(|ui| show_aux_rows(ui, &en(), id, m, font_size, &tc))
+                    .scope(|ui| show_aux_rows(ui, en(), id, m, font_size, &tc))
                     .response
                     .rect;
             });
@@ -1299,7 +1307,7 @@ mod tests {
         let mut metrics = None;
         let mut min_cell = Vec2::ZERO;
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-            metrics = AuxGridMetrics::measure(ui, &en(), m, font_size, &tc);
+            metrics = AuxGridMetrics::measure(ui, en(), m, font_size, &tc);
             min_cell = ui.spacing().interact_size;
         });
         out.textures_delta.clear();
@@ -1366,16 +1374,7 @@ mod tests {
                 let mut nodes = Vec::new();
                 for _ in 0..3 {
                     nodes = run_frame(&ctx, Vec::new(), |ui| {
-                        show_reading_beside(
-                            ui,
-                            &en(),
-                            &m,
-                            size,
-                            &tc,
-                            ReadingState::PLAIN,
-                            ReadoutChoices::default(),
-                        )
-                        .0
+                        show_reading_beside(ui, &plain(&tc, ReadoutChoices::default()), &m, size).0
                     })
                     .nodes;
                 }
@@ -1418,25 +1417,13 @@ mod tests {
                     for _ in 0..3 {
                         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
                             lines[i] = if beside {
-                                show_reading_beside(
-                                    ui,
-                                    &en(),
-                                    &m,
-                                    size,
-                                    &tc,
-                                    ReadingState::PLAIN,
-                                    choices,
-                                )
-                                .1
+                                show_reading_beside(ui, &plain(&tc, choices), &m, size).1
                             } else {
                                 show_reading_inline(
                                     ui,
-                                    &en(),
+                                    &plain(&tc, choices),
                                     Some(&m),
                                     size,
-                                    &tc,
-                                    ReadingState::PLAIN,
-                                    choices,
                                     NoReadingText::Plain,
                                 )
                                 .1
@@ -1470,24 +1457,13 @@ mod tests {
             let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
                 passes += 1;
                 if beside {
-                    let _ = show_reading_beside(
-                        ui,
-                        &en(),
-                        &m,
-                        130.0,
-                        &tc,
-                        ReadingState::PLAIN,
-                        Default::default(),
-                    );
+                    let _ = show_reading_beside(ui, &plain(&tc, Default::default()), &m, 130.0);
                 } else {
                     let _ = show_reading_inline(
                         ui,
-                        &en(),
+                        &plain(&tc, Default::default()),
                         Some(&m),
                         130.0,
-                        &tc,
-                        ReadingState::PLAIN,
-                        Default::default(),
                         NoReadingText::Plain,
                     );
                 }
@@ -1588,40 +1564,23 @@ mod tests {
         match layout {
             "two-line" => show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, choices),
                 Some(m),
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                choices,
                 NoReadingText::Plain,
             ),
             "inline" => {
                 show_reading_inline(
                     ui,
-                    &en(),
+                    &plain(&tc, choices),
                     Some(m),
                     BASE_READING_FONT_SIZE,
-                    &tc,
-                    ReadingState::PLAIN,
-                    choices,
                     NoReadingText::Plain,
                 )
                 .0
             }
-            "beside" => {
-                show_reading_beside(
-                    ui,
-                    &en(),
-                    m,
-                    BASE_READING_FONT_SIZE,
-                    &tc,
-                    ReadingState::PLAIN,
-                    choices,
-                )
-                .0
-            }
-            _ => show_reading_compact(ui, &en(), Some(m), &tc, ReadingState::PLAIN, choices),
+            "beside" => show_reading_beside(ui, &plain(&tc, choices), m, BASE_READING_FONT_SIZE).0,
+            _ => show_reading_compact(ui, &plain(&tc, choices), Some(m)),
         }
     }
 
@@ -1959,12 +1918,9 @@ mod tests {
         let f = run_frame(&ctx, vec![], |ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&[])),
                 None,
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&[]),
                 NoReadingText::Plain,
             )
         });
@@ -1988,12 +1944,9 @@ mod tests {
         let f = run_frame(&ctx, vec![], |ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&[])),
                 None,
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&[]),
                 notice,
             )
         });
@@ -2018,12 +1971,9 @@ mod tests {
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&choices)),
                 Some(&m),
                 200.0,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&choices),
                 NoReadingText::Plain,
             )
         };
@@ -2065,12 +2015,9 @@ mod tests {
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&choices)),
                 Some(&m),
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&choices),
                 NoReadingText::Plain,
             )
         };
@@ -2220,12 +2167,12 @@ mod tests {
             run_frame(&ctx, events, |ui| {
                 show_reading_sized(
                     ui,
-                    &en(),
+                    &ReadingCtx {
+                        state,
+                        ..plain(&tc, modes(&modes_offered))
+                    },
                     m,
                     BASE_READING_FONT_SIZE,
-                    &tc,
-                    state,
-                    modes(&modes_offered),
                     NoReadingText::Plain,
                 )
             })
@@ -2360,12 +2307,9 @@ mod tests {
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&choices)),
                 Some(&m),
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&choices),
                 NoReadingText::Plain,
             )
         };
@@ -2398,12 +2342,9 @@ mod tests {
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&choices)),
                 Some(&m),
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&choices),
                 NoReadingText::Plain,
             )
         };
@@ -2444,12 +2385,9 @@ mod tests {
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&choices)),
                 Some(&m),
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&choices),
                 NoReadingText::Plain,
             )
         };
@@ -2480,12 +2418,9 @@ mod tests {
         let mut draw = |ui: &mut Ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, modes(&choices)),
                 Some(&m),
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                modes(&choices),
                 NoReadingText::Plain,
             )
         };
@@ -2515,12 +2450,9 @@ mod tests {
             let mut draw = |ui: &mut Ui| {
                 show_reading_sized(
                     ui,
-                    &en(),
+                    &plain(&tc, modes(&choices)),
                     Some(&m),
                     BASE_READING_FONT_SIZE,
-                    &tc,
-                    ReadingState::PLAIN,
-                    modes(&choices),
                     NoReadingText::Plain,
                 )
             };
@@ -2570,12 +2502,9 @@ mod tests {
         move |ui: &mut Ui| {
             show_reading_sized(
                 ui,
-                &en(),
+                &plain(&tc, keys(KEYS)),
                 Some(&m),
                 BASE_READING_FONT_SIZE,
-                &tc,
-                ReadingState::PLAIN,
-                keys(KEYS),
                 NoReadingText::Plain,
             )
         }

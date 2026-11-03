@@ -60,23 +60,16 @@ impl App {
     /// centre panel (wide).
     pub(super) fn show_reading_column(&mut self, ui: &mut Ui, layout: ContentLayout) {
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
+        let cx = display::ReadingCtx {
+            l10n: &self.l10n,
+            tc: &tc,
+            state: self.reading_state(),
+            choices: self.connection.readouts(),
+        };
+        let measurement = self.last_measurement.as_ref();
         let picked = match layout {
-            ContentLayout::Wide => display::show_reading(
-                ui,
-                &self.l10n,
-                self.last_measurement.as_ref(),
-                &tc,
-                self.reading_state(),
-                self.connection.readouts(),
-            ),
-            ContentLayout::Narrow => display::show_reading_compact(
-                ui,
-                &self.l10n,
-                self.last_measurement.as_ref(),
-                &tc,
-                self.reading_state(),
-                self.connection.readouts(),
-            ),
+            ContentLayout::Wide => display::show_reading(ui, &cx, measurement),
+            ContentLayout::Narrow => display::show_reading_compact(ui, &cx, measurement),
         };
         if let Some(pick) = picked {
             self.apply_pick(pick);

@@ -276,31 +276,25 @@ impl Graph {
         ) else {
             return;
         };
-        let colors = histogram::HistogramColors {
-            bar: tc.graph_line(),
-            cursor: tc.graph_cursor(),
-            background: tc.plot_background(),
-            text: ui.visuals().weak_text_color(),
-        };
         let lines = self.histogram_lines(hist, tc, limits);
-        let unit = self.current_unit.as_str();
+        let pane = histogram::Pane {
+            ui,
+            l10n,
+            hist,
+            lines: &lines,
+            unit: &self.current_unit,
+            colors: histogram::HistogramColors {
+                bar: tc.graph_line(),
+                cursor: tc.graph_cursor(),
+                background: tc.plot_background(),
+                text: ui.visuals().weak_text_color(),
+            },
+        };
         match place.dock {
-            histogram::Dock::Side => {
-                histogram::paint_side(ui, l10n, area, plot, transform, hist, &lines, unit, &colors);
-            }
+            histogram::Dock::Side => pane.paint_side(area, plot, transform),
             histogram::Dock::Below => {
                 let bounds = transform.bounds();
-                histogram::paint_below(
-                    ui,
-                    l10n,
-                    area,
-                    plot.x_range(),
-                    (bounds.min()[1], bounds.max()[1]),
-                    hist,
-                    &lines,
-                    unit,
-                    &colors,
-                );
+                pane.paint_below(area, plot.x_range(), (bounds.min()[1], bounds.max()[1]));
             }
         }
     }
