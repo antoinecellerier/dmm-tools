@@ -14,6 +14,7 @@ Translated:
 - library errors, device names, activation steps, alarm limits and breach notes
 - spec-data notes, guarded (see [Library fixed text](#library-fixed-text))
 - the CLI's stderr prose and `--help`, clap's headings and command-line errors included
+- dmm-gui's `--help` and the command-line errors it prints before its window opens
 - `capture`'s own prompts, notices and closing lines, which a shipped language may leave English
 
 Stays English:
@@ -22,7 +23,7 @@ Stays English:
 - `read`'s stdout line, `get --format json`, and every token typed on a command line, such as `set` arguments
 - logs, including the library warnings shown by default
 - in `capture`: the step instructions, unless the user translates them for themselves; the readings it echoes and the report; `--list-steps` and `triage`
-- What's New (`CHANGELOG.md`), `dmm-gui --help`, the shell completion scripts
+- What's New (`CHANGELOG.md`), the shell completion scripts
 - the user docs and their screenshots, but for the README and its picture (see [User documentation](#user-documentation))
 - unit symbols, decimal points, timestamps — except in what a screen reader says (see [Writing messages](#writing-messages))
 - theme names, which are also setting values, `--theme` arguments and file names
@@ -35,6 +36,7 @@ About 1,450 messages in all, plus about 240 attributes for tooltips, accessibili
 | CLI prose (`cli/`) | ~105 |
 | `capture`'s own text (`cli/capture.ftl`) | ~110 |
 | CLI `--help` (`cli-help.ftl`) | ~50 |
+| GUI `--help` (`gui-help.ftl`, `gui/command-line.ftl`) | ~15 |
 | `dmm_shared::help`, clap's words and errors (`shared.ftl`) | ~95 |
 | Library labels and keys (`lib.ftl`) | ~220 |
 | Activation steps (`lib.ftl`) | 28 |
@@ -68,7 +70,7 @@ An `l10n` module in `dmm-shared` holds the loader, the language choice and the s
 
 **Translations can be tried without a build.** `DMM_TOOLS_L10N_DIR` points at a folder whose `<locale>/` files load over the built-in ones, and a folder for a new locale makes that language selectable. A translator can then check their work in a release binary.
 
-**A handle in the GUI, one localizer per run in the CLI.** The GUI keeps its localizer in its app state, and switching language replaces it. Tests use an immutable English localizer, or build one pinned to the pseudo-locale, so tests running in parallel don't race on shared state. A dmm-cli run speaks one language from its first line to its last, from every corner of the command tree, so `main` sets one process-wide localizer; unit tests never set it, and read English.
+**A handle in the GUI, one localizer per run in the CLI.** The GUI keeps its localizer in its app state, and switching language replaces it. Tests use an immutable English localizer, or build one pinned to the pseudo-locale, so tests running in parallel don't race on shared state. A dmm-cli run speaks one language from its first line to its last, from every corner of the command tree, so `main` sets one process-wide localizer; unit tests never set it, and read English. dmm-gui's `main` builds the first localizer before it parses the command line, so `--help` and the errors before the window opens speak the window's language, then hands it to the app state.
 
 **Embedded resources.** The `.ftl` files are compiled into the binaries, so a release archive keeps working wherever it is unpacked.
 
@@ -80,7 +82,7 @@ An `l10n` module in `dmm-shared` holds the loader, the language choice and the s
 
 ## Choosing the language
 
-A `language` field in `SharedSettings` (empty means follow the system) is shared by both binaries. dmm-cli takes `--lang`, and the GUI's Settings has a Language row listing System, then each language by its own name. The GUI switches immediately, because an immediate-mode UI redraws every label on the next frame anyway; a notice or toast already on screen keeps its language.
+A `language` field in `SharedSettings` (empty means follow the system) is shared by both binaries. dmm-cli takes `--lang`, and the GUI's Settings has a Language row listing System, then each language by its own name. dmm-gui takes no `--lang`: its `--help` speaks the language its window would. The GUI switches immediately, because an immediate-mode UI redraws every label on the next frame anyway; a notice or toast already on screen keeps its language.
 
 Without a setting, `sys-locale` reports the system language: the UI language on Windows, the preferred-languages list on macOS, and the locale variables on Unix. On Unix it returns `LANGUAGE` first and reduces `C.UTF-8` to "C", so it can't apply gettext's C-locale rule itself.
 
@@ -177,7 +179,7 @@ The cost continues after launch:
 
 - Every new or reworded string also touches `en-US/*.ftl`.
 - Maintainers can't review languages they don't read.
-- Bug reports will come with screenshots in other languages. That is why logs stay English and `--lang en-US` is there.
+- Bug reports will come with screenshots in other languages. That is why logs stay English and `--lang en-US` is there; dmm-gui has no `--lang`, so `LC_ALL=C dmm-gui --help` prints its help in English, unless the Language setting names another language.
 
 ## User documentation
 

@@ -142,21 +142,17 @@ fn script_probe(language: &Language) -> Option<&'static str> {
 }
 
 impl App {
-    /// Speak the language `setting` names (empty: follow the system), as the
-    /// app does at startup in this process's environment.
-    pub(super) fn start_speaking(&mut self, ctx: &egui::Context) {
-        let setting = &self.settings.shared.language;
-        let language = dmm_shared::l10n::resolve_from_env(None, setting);
+    /// Speak `l10n`, the language `main` chose for the session from the
+    /// settings and this process's environment ([`crate::l10n::startup`]),
+    /// and offer the others.
+    pub(super) fn start_speaking(&mut self, ctx: &egui::Context, l10n: Arc<Localizer>) {
         self.speech = Speech {
             languages: dmm_shared::l10n::languages(),
             system: dmm_shared::l10n::resolve_from_env(None, ""),
             options: Options::from_env(),
             ..Speech::default()
         };
-        let l10n = Localizer::new(language, &crate::l10n::resources(), &self.speech.options);
-        // `main` installs the logger first, so what loading found is logged.
-        l10n.log_load_report();
-        self.l10n = Arc::new(l10n);
+        self.l10n = l10n;
         self.install_fonts(ctx);
     }
 

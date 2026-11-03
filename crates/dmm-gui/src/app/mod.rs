@@ -478,11 +478,13 @@ pub struct App {
 
 impl App {
     /// `settings` are loaded by `main`, which sizes the window from them
-    /// before this runs.
+    /// before this runs, and so is `l10n`, the language they choose, which
+    /// `main` prints `--help` in.
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         settings: Settings,
         cli: crate::CliOverrides,
+        l10n: Arc<dmm_shared::l10n::Localizer>,
     ) -> Self {
         install_styles(&cc.egui_ctx);
         cc.egui_ctx.set_fonts(font_definitions());
@@ -497,7 +499,7 @@ impl App {
         app.on_wayland = on_wayland;
         // Here and not in `from_settings`, so tests speak English whatever
         // the desktop does, and install no system fonts.
-        app.start_speaking(&cc.egui_ctx);
+        app.start_speaking(&cc.egui_ctx, l10n);
         // Here and not in `from_settings`, so a test build can never reach
         // the network or the cache file.
         app.update_check = update_check::UpdateCheck::new(update_notice);

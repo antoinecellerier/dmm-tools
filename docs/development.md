@@ -300,7 +300,10 @@ the test fails until then. The run lists the IDs whose English changed:
 where the meaning changed too, delete those messages from the other
 languages' `cli-help.ftl`, so they show in English until translated again.
 The help the CLI builds as it runs, such as the device list and the notes
-after the options, is in `cli/help.ftl`.
+after the options, is in `cli/help.ftl`. `i18n/en-US/gui-help.ftl` is
+generated the same way from the doc comments in `crates/dmm-gui/src/main.rs`,
+by `UPDATE_L10N=1 cargo test -p dmm-gui gui_help_ftl`; the help dmm-gui
+builds as it runs is in `gui/command-line.ftl`.
 
 ## Hidden flags
 

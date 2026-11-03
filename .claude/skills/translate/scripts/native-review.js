@@ -19,7 +19,7 @@ const WRITE = args.writeModel ? { model: args.writeModel } : {}
 const GROUPS = TARGET === 'readme'
   ? [{ key: 'readme', files: lang => [`README.${lang}.md`], english: 'README.md' }]
   : [
-      { key: 'gui', files: lang => [`i18n/${lang}/gui/*.ftl`], english: 'i18n/en-US/gui/*.ftl' },
+      { key: 'gui', files: lang => [`i18n/${lang}/gui/*.ftl`, `i18n/${lang}/gui-help.ftl`], english: 'i18n/en-US/gui/*.ftl, i18n/en-US/gui-help.ftl' },
       { key: 'cli', files: lang => [`i18n/${lang}/cli/*.ftl`, `i18n/${lang}/cli-help.ftl`], english: 'i18n/en-US/cli/*.ftl, i18n/en-US/cli-help.ftl' },
       { key: 'shared', files: lang => ['shared.ftl', 'lib-names.ftl', 'lib-alarm.ftl', 'lib-errors.ftl'].map(f => `i18n/${lang}/${f}`), english: 'the same files under i18n/en-US/' },
       { key: 'lib', files: lang => [`i18n/${lang}/lib.ftl`], english: 'i18n/en-US/lib.ftl' },

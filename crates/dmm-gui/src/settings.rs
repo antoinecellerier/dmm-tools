@@ -489,6 +489,28 @@ pub(crate) struct LoadProblem {
     pub(crate) kept: Option<PathBuf>,
 }
 
+/// A settings file that could not be loaded, before anything is done about
+/// it. [`Unreadable::keep`] logs it and keeps a copy; `main` calls it once
+/// the command line has parsed, so `--help`, `--version` and a refused flag
+/// leave no trace.
+#[derive(Debug)]
+pub(crate) struct Unreadable {
+    path: PathBuf,
+    error: dmm_shared::LoadError,
+}
+
+impl Unreadable {
+    /// Log the failure and copy the file to `<file>.bad` beside it, before
+    /// the first save writes over it: the problem the first frame reports.
+    pub(crate) fn keep(self) -> LoadProblem {
+        log::error!("{}; using the default settings", self.error);
+        LoadProblem {
+            kept: keep_copy(&self.path),
+            path: self.path,
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -591,8 +613,10 @@ impl Settings {
         dmm_shared::config_path()
     }
 
-    pub fn load() -> Self {
-        let mut s = Self::config_path()
+    /// The settings in the user's file, and what kept it from loading if
+    /// it didn't, which [`Unreadable::keep`] then reports.
+    pub fn load() -> (Self, Option<Unreadable>) {
+        let (mut s, unreadable) = Self::config_path()
             .map(|path| Self::read(&path))
             .unwrap_or_default();
         // Through the shared resolver so the GUI and the CLI read the same
@@ -608,26 +632,24 @@ impl Settings {
         );
         s.shared.device_family = family;
         s.sanitize();
-        s
+        (s, unreadable)
     }
 
     /// The settings in the file at `path`: the defaults when there is none,
-    /// and when it can't be loaded, with [`Self::load_problem`] set. One bad
-    /// value fails the whole file, and the first save writes over it, so a
-    /// file that can't be loaded is copied to `<file>.bad` first — one that
-    /// can't be opened at all fails the copy too.
-    fn read(path: &Path) -> Self {
-        let error = match dmm_shared::load_json::<Settings>(path) {
-            Ok(found) => return found.unwrap_or_default(),
-            Err(error) => error,
-        };
-        log::error!("{error}; using the default settings");
-        Settings {
-            load_problem: Some(LoadProblem {
-                path: path.to_path_buf(),
-                kept: keep_copy(path),
-            }),
-            ..Settings::default()
+    /// and when it can't be loaded, with why. One bad value fails the whole
+    /// file, and the first save writes over it, so [`Unreadable::keep`]
+    /// copies a file that can't be loaded to `<file>.bad` — one that can't
+    /// be opened at all fails the copy too.
+    fn read(path: &Path) -> (Self, Option<Unreadable>) {
+        match dmm_shared::load_json::<Settings>(path) {
+            Ok(found) => (found.unwrap_or_default(), None),
+            Err(error) => (
+                Settings::default(),
+                Some(Unreadable {
+                    path: path.to_path_buf(),
+                    error,
+                }),
+            ),
         }
     }
 
@@ -802,8 +824,9 @@ mod tests {
     }
 
     /// A file that can't be parsed, as JSON or as these settings, loads as
-    /// the defaults with the problem reported, and is kept as `.bad` beside
-    /// itself, byte for byte, over an older copy, the original left in place.
+    /// the defaults with the problem reported, and once kept is copied to
+    /// `.bad` beside itself, byte for byte, over an older copy, the original
+    /// left in place.
     #[test]
     fn a_broken_settings_file_is_kept_as_bad() {
         for (name, contents) in [
@@ -815,9 +838,14 @@ mod tests {
             let bad = dir.0.join("settings.json.bad");
             std::fs::write(&bad, "an older copy").unwrap();
             std::fs::write(&path, contents).unwrap();
-            let s = Settings::read(&path);
+            let (s, unreadable) = Settings::read(&path);
             assert_eq!(
-                s.load_problem,
+                std::fs::read_to_string(&bad).unwrap(),
+                "an older copy",
+                "{name}: copied before it was kept"
+            );
+            assert_eq!(
+                unreadable.map(Unreadable::keep),
                 Some(LoadProblem {
                     path: path.clone(),
                     kept: Some(bad.clone()),
@@ -840,9 +868,10 @@ mod tests {
         let bad = dir.0.join("settings.json.bad");
         let contents = b"{\"theme\": \"\xff\"}";
         std::fs::write(&path, contents).unwrap();
-        let s = Settings::read(&path);
+        let (s, unreadable) = Settings::read(&path);
+        assert!(!bad.exists(), "copied before it was kept");
         assert_eq!(
-            s.load_problem,
+            unreadable.map(Unreadable::keep),
             Some(LoadProblem {
                 path: path.clone(),
                 kept: Some(bad.clone()),
@@ -860,9 +889,9 @@ mod tests {
         // A folder in the file's place: it exists, and reading it fails.
         let path = dir.0.join("settings.json");
         std::fs::create_dir(&path).unwrap();
-        let s = Settings::read(&path);
+        let (_, unreadable) = Settings::read(&path);
         assert_eq!(
-            s.load_problem,
+            unreadable.map(Unreadable::keep),
             Some(LoadProblem {
                 path: path.clone(),
                 kept: None,
@@ -876,12 +905,12 @@ mod tests {
     fn a_good_or_missing_settings_file_is_no_problem() {
         let dir = TempDir::new("good");
         let path = dir.0.join("settings.json");
-        let s = Settings::read(&path);
-        assert_eq!(s.load_problem, None, "missing");
+        let (s, unreadable) = Settings::read(&path);
+        assert!(unreadable.is_none(), "missing");
         assert_eq!(s.theme, ThemeMode::Dark, "missing: not the defaults");
         std::fs::write(&path, r#"{"theme": "Light"}"#).unwrap();
-        let s = Settings::read(&path);
-        assert_eq!(s.load_problem, None, "valid");
+        let (s, unreadable) = Settings::read(&path);
+        assert!(unreadable.is_none(), "valid");
         assert_eq!(s.theme, ThemeMode::Light, "valid: not read");
         assert!(!dir.0.join("settings.json.bad").exists());
     }

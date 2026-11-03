@@ -68,7 +68,7 @@ Language: <lang>
    - Anything that needs code rather than translation becomes a fix of its own, or an entry under "Localization follow-ups" in `docs/future-improvements.md`. First check it against "Stays English" in `docs/localization-design.md`: reviewers also flag text that is English by design, such as logs and `set` tokens.
 4. **Commits.** Three, in this order. Each adds `ftl!` entries in the same order the other languages use. Each commit's hook run must see only that commit's files under `i18n/<lang>/`: a translation with no `ftl!` line fails `messages_match_their_uses`. So keep the full result under `references/l10n/<lang>/workflow/`, and copy each group back into `i18n/<lang>/` just before its commit.
    1. `shared: translate the help and the library's text into <lang>`: `shared.ftl` and the four `lib*.ftl` files, listed in `help.rs` `RESOURCES` and `lib_index.rs` `LIB_RESOURCES`.
-   2. `gui: translate the GUI and its desktop entry into <lang>`: `gui/*.ftl`, listed in `crates/dmm-gui/src/l10n.rs`.
+   2. `gui: translate the GUI and its desktop entry into <lang>`: `gui/*.ftl` and `gui-help.ftl`, listed in `crates/dmm-gui/src/l10n.rs` (GUI and GUI_HELP).
    3. `shared, cli, gui: translate dmm-cli into <lang> and offer <lang>`: `cli/*.ftl` and `cli-help.ftl`, listed in `crates/dmm-cli/src/l10n.rs` (CLI and CLI_HELP). This commit also:
       - adds the language to `SHIPPED` in `crates/dmm-shared/src/l10n/lang.rs`, with its native name and `reviewed: false`, in the place its doc comment's order gives it;
       - updates the possible-values tests in `crates/dmm-cli/src/cli.rs` and `crates/dmm-cli/tests/help.rs`;
@@ -117,7 +117,7 @@ New or reworded English ships without its translations: it shows in English unti
 ## Rewording English later
 
 - **A message whose meaning changes gets a new ID,** so stale translations fall back to English instead of saying the wrong thing. A rewording that keeps the meaning keeps its ID and its translations.
-- **`cli-help.ftl` is generated.** Regenerating it lists the IDs whose English changed (`docs/development.md`, "Translations"). Where the meaning changed, delete those messages from the other languages.
+- **`cli-help.ftl` and `gui-help.ftl` are generated.** Regenerating one lists the IDs whose English changed (`docs/development.md`, "Translations"). Where the meaning changed, delete those messages from the other languages.
 
 ## Scripts
 

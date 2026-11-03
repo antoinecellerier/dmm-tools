@@ -1,10 +1,11 @@
 //! The resources dmm-gui shows, and the localizers built from them.
 //!
-//! The app keeps its localizer in [`App`](crate::app::App) as a handle,
-//! built and swapped in `app/language.rs`; text drawn outside it (`--help`,
-//! errors before the window opens) is English.
+//! `main` builds the session's first localizer ([`startup`]) before it
+//! parses the command line, so `--help` and the errors before the window
+//! opens speak the language the window will; the window then keeps it in
+//! [`App`](crate::app::App) as a handle, swapped in `app/language.rs`.
 
-use dmm_shared::l10n::{Localizer, Resource};
+use dmm_shared::l10n::{Localizer, Options, Resource};
 use std::sync::{Arc, OnceLock};
 
 /// dmm-gui's own messages, one file per screen area under
@@ -23,6 +24,7 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("en-US", "gui/alarm-scale.ftl"),
     dmm_shared::ftl!("en-US", "gui/specs-remote.ftl"),
     dmm_shared::ftl!("en-US", "gui/desktop.ftl"),
+    dmm_shared::ftl!("en-US", "gui/command-line.ftl"),
     dmm_shared::ftl!("fr", "gui/top-bar.ftl"),
     dmm_shared::ftl!("fr", "gui/connection.ftl"),
     dmm_shared::ftl!("fr", "gui/settings.ftl"),
@@ -90,15 +92,32 @@ const GUI: &[Resource] = &[
     dmm_shared::ftl!("ja", "gui/desktop.ftl"),
 ];
 
+/// What each option does, as `--help` says it: generated from the doc
+/// comments in `main.rs` by the `gui_help_ftl` test, so the ID scan leaves
+/// it out of its unused check, as it does `lib.ftl`.
+const GUI_HELP: &[Resource] = &[dmm_shared::ftl!("en-US", "gui-help.ftl")];
+
 /// Everything the GUI shows: the shared help, the library's text and
-/// errors, and its own messages.
+/// errors, its own messages and its `--help`.
 pub(crate) fn resources() -> Vec<Resource> {
     [
         dmm_shared::help::RESOURCES,
         dmm_shared::l10n::LIB_RESOURCES,
         GUI,
+        GUI_HELP,
     ]
     .concat()
+}
+
+/// The localizer a session starts in: the language the settings file names
+/// (`setting`, empty: follow the system), else the environment's. Built once
+/// by `main`, which prints `--help` in it, then handed to the window.
+pub(crate) fn startup(setting: &str) -> Localizer {
+    Localizer::new(
+        dmm_shared::l10n::resolve_from_env(None, setting),
+        &resources(),
+        &Options::from_env(),
+    )
 }
 
 /// [`resources`] in en-US only: what a test that makes up its own
@@ -149,5 +168,13 @@ mod tests {
         let owned: Vec<&str> = GUI.iter().map(|r| r.path).collect();
         let problems = dmm_shared::l10n::check::check(&src, &resources(), &owned);
         assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// A session, and its `--help`, start in the language the settings
+    /// name, whatever the system speaks.
+    #[test]
+    fn startup_speaks_the_setting() {
+        assert_eq!(startup("fr").language().id, "fr");
+        assert_eq!(startup("en-US").language().id, "en-US");
     }
 }
