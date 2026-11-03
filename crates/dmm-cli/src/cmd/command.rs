@@ -5,10 +5,7 @@
 //! around them are in the run's language (`cli/command.ftl`).
 
 use crate::l10n::note_label;
-use crate::open::{
-    device_for_listing, open_mock_device, open_with_help, profile_name, prose_name,
-    requires_hardware,
-};
+use crate::open::{device_for_listing, open_any, profile_name, prose_name};
 use console::style;
 use dmm_lib::protocol::registry::{SelectableDevice, Selection};
 use dmm_shared::tr;
@@ -23,13 +20,7 @@ pub(crate) fn cmd_command(
         None => return print_available_commands(device_for_listing(selection, opts)?),
     };
 
-    if requires_hardware(selection) {
-        let (mut dmm, _device) = open_with_help(selection, opts)?;
-        dmm.send_command(&action)?;
-    } else {
-        let mut dmm = open_mock_device(selection, None, dmm_lib::Clock::real())?;
-        dmm.send_command(&action)?;
-    }
+    open_any(selection, opts, None)?.send_command(&action)?;
     let sent = tr!(crate::l10n::get(), "command-sent-label");
     println!("{} {action}", style(sent).green());
     Ok(())

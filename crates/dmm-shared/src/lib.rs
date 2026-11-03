@@ -80,6 +80,18 @@ fn bluetooth_default() -> bool {
     true
 }
 
+impl SharedSettings {
+    /// The mock scenario the file pins, `None` when it pins none. A name the
+    /// mock doesn't know — only a hand-edited file has one — is the mock's
+    /// error: a first line saying so, then the valid names.
+    pub fn mock_mode(&self) -> Result<Option<dmm_lib::mock::MockMode>, String> {
+        if self.mock_mode.is_empty() {
+            return Ok(None);
+        }
+        self.mock_mode.parse().map(Some)
+    }
+}
+
 impl Default for SharedSettings {
     fn default() -> Self {
         Self {
@@ -501,6 +513,23 @@ mod tests {
             resolve_device_family(Some("ut171"), None, "ut61eplus"),
             "ut171"
         );
+    }
+
+    /// Empty pins nothing; a label or alias pins that scenario; anything
+    /// else is the mock's own error, its first line naming the value.
+    #[test]
+    fn mock_mode_parses_the_saved_name() {
+        let with = |mode: &str| SharedSettings {
+            mock_mode: mode.to_string(),
+            ..Default::default()
+        };
+        assert_eq!(with("").mock_mode(), Ok(None));
+        assert_eq!(
+            with("dcv").mock_mode(),
+            Ok(Some(dmm_lib::mock::MockMode::DcV))
+        );
+        let error = with("bogus").mock_mode().unwrap_err();
+        assert_eq!(error.lines().next(), Some("unknown mock mode: bogus"));
     }
 
     #[test]

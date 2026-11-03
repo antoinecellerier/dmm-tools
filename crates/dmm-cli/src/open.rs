@@ -9,6 +9,7 @@
 use crate::capture::recording;
 use crate::l10n::{error_label, warning_label};
 use console::style;
+use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::text::TextKind;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched};
@@ -566,17 +567,14 @@ fn open_error_help(
 /// the GUI does the same with it.
 pub(crate) fn pinned_mock_mode(
     selection: Selection,
-    flag: Option<String>,
+    flag: Option<MockMode>,
     saved: Option<&dmm_shared::SharedSettings>,
-) -> Option<String> {
+) -> Option<MockMode> {
     if flag.is_some() || requires_hardware(selection) {
         return flag;
     }
-    let saved = saved
-        .map(|s| s.mock_mode.as_str())
-        .filter(|m| !m.is_empty())?;
-    match saved.parse::<dmm_lib::mock::MockMode>() {
-        Ok(_) => Some(saved.to_string()),
+    match saved?.mock_mode() {
+        Ok(mode) => mode,
         Err(message) => {
             let error = message.lines().next().unwrap_or_default();
             eprintln!(
@@ -589,31 +587,33 @@ pub(crate) fn pinned_mock_mode(
     }
 }
 
+/// Open the meter `selection` names for a command that has no clock flags:
+/// on its cable, with the setup help a failed open prints, or the simulated
+/// one, pinned to `mock_mode`.
+pub(crate) fn open_any(
+    selection: Selection,
+    opts: dmm_lib::OpenOptions<'_>,
+    mock_mode: Option<MockMode>,
+) -> Result<BoxedDmm, Box<dyn std::error::Error>> {
+    if requires_hardware(selection) {
+        Ok(open_with_help(selection, opts)?.0)
+    } else {
+        Ok(open_mock_device(selection, mock_mode, dmm_lib::Clock::real())?.boxed())
+    }
+}
+
 /// Open the simulated device `selection` names on `clock`, the UT61E+ mock
 /// pinned to `mock_mode` when one was given.
-///
-/// Shared by every subcommand that opens a device needing no hardware, so an
-/// unknown mode name is rejected with the same message (and the same list of
-/// valid names) wherever it is passed. Only `read` has clock flags; the
-/// others pass [`dmm_lib::Clock::real`].
 pub(crate) fn open_mock_device(
     selection: Selection,
-    mock_mode: Option<String>,
+    mock_mode: Option<MockMode>,
     clock: dmm_lib::Clock,
 ) -> Result<dmm_lib::Dmm<dmm_lib::transport::NullTransport>, Box<dyn std::error::Error>> {
-    let mode = match mock_mode {
-        Some(mode_str) => Some(
-            mode_str
-                .parse::<dmm_lib::mock::MockMode>()
-                .map_err(|e: String| -> Box<dyn std::error::Error> { e.into() })?,
-        ),
-        None => None,
-    };
     // Auto is a cable to open and never lands here.
     let Selection::Device(device) = selection else {
         return Err(OpenFailed::NotSimulated(selection_id(selection)).into());
     };
-    Ok(dmm_lib::mock::open_simulated(device, mode, clock)?)
+    Ok(dmm_lib::mock::open_simulated(device, mock_mode, clock)?)
 }
 
 #[cfg(test)]

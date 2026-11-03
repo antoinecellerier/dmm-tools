@@ -478,12 +478,12 @@ impl<'a> Help<'a> {
 /// `cmd`, with the `--device` and `--mock-mode` flags on it and its
 /// subcommands offering their values, for a completion script.
 ///
-/// Both flags take a plain string so a bad one gets our own error, with the
-/// hint to run `--help`; clap's possible values would replace it with its
-/// own. So they are added only to the command a script is generated from,
-/// never to the one that parses. Aliases are left out: the ids cover every
-/// device, and `ut61e+` would need quoting. In English: a completion script
-/// outlives the language it was generated in.
+/// A bad value gets our own error — `--device`'s, or the mock's list of
+/// valid modes from the `MockMode` parser — and clap's possible values would
+/// replace it with its own. So they are added only to the command a script
+/// is generated from, never to the one that parses. Aliases are left out:
+/// the ids cover every device, and `ut61e+` would need quoting. In English:
+/// a completion script outlives the language it was generated in.
 pub fn with_completion_values(mut cmd: clap::Command) -> clap::Command {
     use clap::builder::{PossibleValue, PossibleValuesParser};
 

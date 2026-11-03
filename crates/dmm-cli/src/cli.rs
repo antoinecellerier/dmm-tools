@@ -7,6 +7,7 @@ use clap::builder::{PossibleValue, PossibleValuesParser, TypedValueParser, Value
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use dmm_lib::alarm::{Hysteresis, Limits};
+use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::Setting;
 use dmm_lib::transform::{FactorError, Transform};
 use dmm_shared::input;
@@ -198,7 +199,7 @@ pub(crate) enum Cmd {
         /// Without this, the settings file's mock mode applies, else the
         /// mock cycles through all modes.
         #[arg(long)]
-        mock_mode: Option<String>,
+        mock_mode: Option<MockMode>,
     },
     /// Switch one of the meter's settings without touching the meter.
     /// Run without a choice to list what that setting reaches from here.
@@ -212,7 +213,7 @@ pub(crate) enum Cmd {
         /// Without this, the settings file's mock mode applies, else the
         /// mock cycles through all modes.
         #[arg(long)]
-        mock_mode: Option<String>,
+        mock_mode: Option<MockMode>,
     },
     /// Raw hex dump mode for protocol debugging
     Debug {
@@ -264,7 +265,7 @@ pub(crate) struct ReadArgs {
     /// Without this, the settings file's mock mode applies, else the
     /// mock cycles through all modes.
     #[arg(long)]
-    pub(crate) mock_mode: Option<String>,
+    pub(crate) mock_mode: Option<MockMode>,
     /// Play back a file written by --format replay instead of opening a meter; ends with the file
     #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
     pub(crate) replay: Option<PathBuf>,

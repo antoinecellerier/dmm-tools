@@ -38,7 +38,7 @@ pub(crate) fn cmd_read(
     integrate: bool,
     transform: &Transform,
     alarm: Option<AlarmOptions>,
-    mock_mode: Option<String>,
+    mock_mode: Option<dmm_lib::mock::MockMode>,
     replay: Option<PathBuf>,
     // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
     clock: dmm_lib::Clock,

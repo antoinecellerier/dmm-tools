@@ -10,7 +10,7 @@
 use crate::choice::{NoMatch, quote_for_shell, resolve_choice, shortest_fragment};
 use crate::cli::{SettingArg, SettingsFormat};
 use crate::l10n::note_label;
-use crate::open::{open_mock_device, open_with_help, prose_name, requires_hardware};
+use crate::open::{open_any, prose_name};
 use console::style;
 use dmm_lib::error::{ErrorKind, Rejected};
 use dmm_lib::protocol::registry::Selection;
@@ -132,16 +132,11 @@ pub(crate) fn cmd_get(
     opts: dmm_lib::OpenOptions<'_>,
     setting: Option<SettingArg>,
     format: SettingsFormat,
-    mock_mode: Option<String>,
+    mock_mode: Option<dmm_lib::mock::MockMode>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let setting = setting.map(Setting::from);
-    if requires_hardware(selection) {
-        let (mut dmm, _device) = open_with_help(selection, opts)?;
-        run_get(&mut dmm, setting, format)
-    } else {
-        let mut dmm = open_mock_device(selection, mock_mode, dmm_lib::Clock::real())?;
-        run_get(&mut dmm, setting, format)
-    }
+    let mut dmm = open_any(selection, opts, mock_mode)?;
+    run_get(&mut dmm, setting, format)
 }
 
 /// Switch one setting, or list what it reaches when no choice was named.
@@ -150,16 +145,11 @@ pub(crate) fn cmd_set(
     opts: dmm_lib::OpenOptions<'_>,
     setting: SettingArg,
     choice: Option<String>,
-    mock_mode: Option<String>,
+    mock_mode: Option<dmm_lib::mock::MockMode>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let setting = Setting::from(setting);
-    if requires_hardware(selection) {
-        let (mut dmm, _device) = open_with_help(selection, opts)?;
-        run_set(&mut dmm, setting, choice)
-    } else {
-        let mut dmm = open_mock_device(selection, mock_mode, dmm_lib::Clock::real())?;
-        run_set(&mut dmm, setting, choice)
-    }
+    let mut dmm = open_any(selection, opts, mock_mode)?;
+    run_set(&mut dmm, setting, choice)
 }
 
 fn run_get<T: dmm_lib::transport::Transport>(

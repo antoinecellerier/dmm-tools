@@ -65,6 +65,23 @@ pub struct Dmm<T: Transport> {
 /// (kernel source; not yet seen on a meter).
 const RESYNC_AFTER: Duration = Duration::from_millis(250);
 
+impl<T: Transport + 'static> Dmm<T> {
+    /// This session with its transport type erased, the type a meter opened
+    /// on a cable has: so a caller that opens either a simulated meter or a
+    /// real one gets one type back.
+    pub fn boxed(self) -> Dmm<Box<dyn Transport>> {
+        Dmm {
+            transport: Box::new(self.transport),
+            protocol: self.protocol,
+            clock: self.clock,
+            protocol_stamps: self.protocol_stamps,
+            name: self.name,
+            last_read: self.last_read,
+            timed_out: self.timed_out,
+        }
+    }
+}
+
 impl<T: Transport> Dmm<T> {
     /// Create a new Dmm with the given transport and protocol.
     pub fn new(transport: T, protocol: Box<dyn Protocol>) -> Result<Self> {
