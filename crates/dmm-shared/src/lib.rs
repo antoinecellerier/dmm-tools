@@ -9,7 +9,8 @@
 //!
 //! What belongs here: the on-disk settings contract ([`SharedSettings`],
 //! [`config_path`], and [`resolve_device_family`] — the precedence both apply
-//! to the file); durable writes ([`write_atomic`], since settings, capture
+//! to the file, and [`load_json`], which tells a broken file from a missing
+//! one); durable writes ([`write_atomic`], since settings, capture
 //! reports and exports are all user data that must survive a crash
 //! mid-write); [`export`], the shape and file name of what the two write
 //! out, so a reading saved from the GUI and one written by the CLI read the
@@ -196,18 +197,71 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     }
 }
 
+/// Why a JSON file that exists could not be loaded: [`load_json`]'s error.
+/// Its `Display` is English, naming the file and the reason, for a log line
+/// or the end of a warning.
+#[derive(Debug)]
+pub enum LoadError {
+    /// The file is there but could not be read.
+    Read { path: PathBuf, source: io::Error },
+    /// The file was read but is not valid JSON, or not of the expected shape.
+    Parse {
+        path: PathBuf,
+        source: serde_json::Error,
+    },
+}
+
+impl std::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoadError::Read { path, source } => {
+                write!(f, "cannot read {}: {source}", path.display())
+            }
+            LoadError::Parse { path, source } => {
+                write!(f, "cannot parse {}: {source}", path.display())
+            }
+        }
+    }
+}
+
+impl std::error::Error for LoadError {}
+
+/// Read `path` as JSON: `Ok(None)` when there is no such file, an error when
+/// one is there but can't be read or parsed — so a broken file is reported
+/// rather than mistaken for a missing one.
+pub fn load_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>, LoadError> {
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => {
+            return Err(LoadError::Read {
+                path: path.to_path_buf(),
+                source,
+            });
+        }
+    };
+    serde_json::from_str(&contents)
+        .map(Some)
+        .map_err(|source| LoadError::Parse {
+            path: path.to_path_buf(),
+            source,
+        })
+}
+
 impl SharedSettings {
     /// Load just the shared fields from the config file.
     ///
-    /// Returns `None` if the file is missing, unreadable, or not valid JSON.
+    /// `Ok(None)` if there is no config path or no file there; an error if
+    /// the file can't be read or isn't valid JSON, for the caller to report.
     /// Any GUI-only fields in the JSON are ignored (they don't appear on
     /// `SharedSettings`, and serde drops unknown fields by default). This is
     /// how `dmm-cli` reads the settings file that `dmm-gui` writes: the CLI
     /// sees only the shared slice of the schema.
-    pub fn load_if_exists() -> Option<Self> {
-        let path = config_path()?;
-        let contents = std::fs::read_to_string(&path).ok()?;
-        serde_json::from_str(&contents).ok()
+    pub fn load_if_exists() -> Result<Option<Self>, LoadError> {
+        match config_path() {
+            Some(path) => load_json(&path),
+            None => Ok(None),
+        }
     }
 }
 
@@ -347,6 +401,47 @@ mod tests {
         }"#;
         let s: SharedSettings = serde_json::from_str(json).unwrap();
         assert_eq!(s.device_family, "ut181a");
+    }
+
+    #[test]
+    fn load_json_reads_a_missing_file_as_none() {
+        let dir = TempDir::new("load-missing");
+        let loaded = load_json::<SharedSettings>(&dir.path().join("settings.json"));
+        assert!(matches!(loaded, Ok(None)), "{loaded:?}");
+    }
+
+    #[test]
+    fn load_json_reads_a_valid_file() {
+        let dir = TempDir::new("load-valid");
+        let path = dir.path().join("settings.json");
+        fs::write(&path, r#"{"device_family":"ut8803","theme":"Dark"}"#).unwrap();
+        let loaded = load_json::<SharedSettings>(&path).unwrap();
+        assert_eq!(loaded, Some(saved("ut8803")));
+    }
+
+    #[test]
+    fn load_json_reports_a_broken_file() {
+        let dir = TempDir::new("load-broken");
+        let path = dir.path().join("settings.json");
+        // Cut short mid-write, and a shared field of the wrong type.
+        for contents in [r#"{"device_family":"ut88"#, r#"{"bluetooth":"yes"}"#] {
+            fs::write(&path, contents).unwrap();
+            let loaded = load_json::<SharedSettings>(&path);
+            assert!(
+                matches!(&loaded, Err(LoadError::Parse { path: p, .. }) if *p == path),
+                "{contents}: {loaded:?}"
+            );
+            let message = loaded.unwrap_err().to_string();
+            assert!(message.contains("settings.json"), "{message}");
+        }
+    }
+
+    #[test]
+    fn load_json_reports_a_file_it_cannot_read() {
+        let dir = TempDir::new("load-unreadable");
+        // A directory where the file should be: there, but not readable as one.
+        let loaded = load_json::<SharedSettings>(dir.path());
+        assert!(matches!(loaded, Err(LoadError::Read { .. })), "{loaded:?}");
     }
 
     fn saved(family: &str) -> SharedSettings {

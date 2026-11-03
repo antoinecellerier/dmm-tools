@@ -37,10 +37,22 @@ fn main() {
     // included, so `--lang` and the settings file are read before the
     // command line is parsed. Chinese prints right on Windows 11, in Windows
     // Terminal and in the old console (cmd.exe) alike.
-    let settings = dmm_shared::SharedSettings::load_if_exists();
+    let (settings, unreadable) = match dmm_shared::SharedSettings::load_if_exists() {
+        Ok(settings) => (settings, None),
+        Err(e) => (None, Some(e)),
+    };
     let lang = cli::lang_from_argv(std::env::args_os().skip(1));
     l10n::init(lang, settings.as_ref().map_or("", |s| s.language.as_str()));
     let l = l10n::get();
+    // A broken file runs as if there were none, but says so: the CLI never
+    // rewrites it, so the user is the one to fix it.
+    if let Some(e) = unreadable {
+        eprintln!(
+            "{} {}",
+            l10n::warning_label(),
+            tr!(l, "connect-settings-unreadable", error = e.to_string()),
+        );
+    }
     let cli = cli::command(l)
         .try_get_matches()
         .and_then(|mut m| Cli::from_arg_matches_mut(&mut m))
