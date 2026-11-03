@@ -325,7 +325,7 @@ impl App {
         // answer, and an empty column for that long reads as a hang.
         if self.selected_device().is_none()
             && self.connection.state == ConnectionState::Disconnected
-            && self.connection.rx.is_some()
+            && self.connection.worker.is_some()
             && self.connection.last_error.is_none()
         {
             return Some(notice(

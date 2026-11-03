@@ -8,7 +8,7 @@ use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -19,7 +19,7 @@ use super::connection::{
 };
 use super::connection_issue::{ConnectionIssue, NoticeKind};
 use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
-use super::{App, ConnectionState, named_device};
+use super::{App, ConnectionState, Worker, named_device};
 use crate::settings::format_sample_count;
 
 /// How long quitting waits for the meter to be let go: a read already in
@@ -264,8 +264,10 @@ impl App {
     pub(super) fn apply_sample_interval(&mut self) {
         let ms = self.settings.sample_interval_ms;
         self.set_gap_interval(ms);
-        if let Some(tx) = &self.connection.ctrl_tx {
-            let _ = tx.send(connection::ThreadControl::SetInterval(ms));
+        if let Some(worker) = &self.connection.worker {
+            let _ = worker
+                .ctrl_tx
+                .send(connection::ThreadControl::SetInterval(ms));
         }
     }
 
@@ -302,10 +304,12 @@ impl App {
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<RemoteCommand>();
         let stop_flag = Arc::new(AtomicBool::new(false));
-        self.connection.rx = Some(msg_rx);
-        self.connection.ctrl_tx = Some(ctrl_tx);
-        self.connection.stop_flag = Some(Arc::clone(&stop_flag));
-        self.connection.cmd_tx = Some(cmd_tx);
+        self.connection.worker = Some(Worker {
+            rx: msg_rx,
+            ctrl_tx,
+            stop_flag: Arc::clone(&stop_flag),
+            cmd_tx,
+        });
         let sample_interval_ms = self.settings.sample_interval_ms;
         // `None` = Auto-detect: nothing names the meter, so the opener works
         // it out from the bytes it sends.
@@ -430,15 +434,9 @@ impl App {
         // Data stops here. The graph keeps its history across a reconnect, so
         // the resulting hole needs marking as a genuine gap.
         self.mark_data_loss();
-        // Raise the flag, then hang up: the thread may be mid-sleep, and the
-        // flag is what cuts that short; dropping the control sender ends any
-        // wait on the channel and the loop itself.
-        if let Some(flag) = self.connection.stop_flag.take() {
-            flag.store(true, Ordering::Relaxed);
+        if let Some(worker) = self.connection.worker.take() {
+            worker.stop();
         }
-        self.connection.ctrl_tx = None;
-        self.connection.rx = None;
-        self.connection.cmd_tx = None;
         self.connection.state = ConnectionState::Disconnected;
         // Nothing is connected, so nothing is identified: under Auto-detect
         // the next connect asks the cable again.
@@ -464,9 +462,10 @@ impl App {
     /// has closed. Returns at once when nothing is connected; a thread stuck
     /// past [`EXIT_DISCONNECT_WAIT`] is left behind.
     pub(super) fn disconnect_and_wait(&mut self) {
-        let Some(rx) = self.connection.rx.take() else {
+        let Some(worker) = self.connection.worker.take() else {
             return;
         };
+        let rx = worker.stop();
         self.disconnect();
         let deadline = Instant::now() + EXIT_DISCONNECT_WAIT;
         loop {
@@ -508,9 +507,9 @@ impl App {
         // its sender is the only signal that it has died.
         let mut messages: Vec<DmmMessage> = Vec::new();
         let mut thread_gone = false;
-        if let Some(rx) = self.connection.rx.as_ref() {
+        if let Some(worker) = &self.connection.worker {
             loop {
-                match rx.try_recv() {
+                match worker.rx.try_recv() {
                     Ok(msg) => messages.push(msg),
                     Err(mpsc::TryRecvError::Empty) => break,
                     Err(mpsc::TryRecvError::Disconnected) => {
@@ -902,6 +901,7 @@ mod tests {
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::{MeasuredValue, Measurement};
     use dmm_lib::protocol::Stability;
+    use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
 
     /// An app whose settings name `family`, with `overridden` saying whether
@@ -928,7 +928,7 @@ mod tests {
     fn deliver(app: &mut App, msg: DmmMessage) {
         let (tx, rx) = mpsc::channel();
         tx.send(msg).expect("the channel is open");
-        app.connection.rx = Some(rx);
+        app.connection.worker = Some(Worker::reading(rx));
         app.drain_messages();
     }
 
@@ -959,7 +959,10 @@ mod tests {
     fn a_new_sample_interval_reaches_the_session() {
         let mut app = app("ut61eplus", false);
         let (tx, rx) = mpsc::channel();
-        app.connection.ctrl_tx = Some(tx);
+        app.connection.worker = Some(Worker {
+            ctrl_tx: tx,
+            ..Worker::reading(mpsc::channel().1)
+        });
         app.settings.sample_interval_ms = 1000;
         app.apply_sample_interval();
         assert!(matches!(
@@ -1177,8 +1180,10 @@ mod tests {
         let (msg_tx, msg_rx) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let released = Arc::new(AtomicBool::new(false));
-        app.connection.rx = Some(msg_rx);
-        app.connection.stop_flag = Some(Arc::clone(&stop));
+        app.connection.worker = Some(Worker {
+            stop_flag: Arc::clone(&stop),
+            ..Worker::reading(msg_rx)
+        });
         let worker = {
             let (stop, released) = (Arc::clone(&stop), Arc::clone(&released));
             // Readings until the stop request, then a transport slow to
@@ -1210,7 +1215,7 @@ mod tests {
         app.connect(&crate::app::styled_context());
         let quit = Instant::now();
         eframe::App::on_exit(&mut app, None);
-        assert!(app.connection.rx.is_none());
+        assert!(app.connection.worker.is_none());
         assert!(quit.elapsed() < EXIT_DISCONNECT_WAIT, "the thread ended");
     }
 
@@ -1813,7 +1818,7 @@ mod tests {
                     tx.send(DmmMessage::Measurement(reading("DC V", value, at)))
                         .expect("the channel is open");
                 }
-                app.connection.rx = Some(rx);
+                app.connection.worker = Some(Worker::reading(rx));
                 let start = Instant::now();
                 app.drain_messages();
                 let elapsed = start.elapsed();

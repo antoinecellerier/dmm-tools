@@ -781,7 +781,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(super::super::connection::DmmMessage::Measurement(m))
             .expect("the channel is open");
-        app.connection.rx = Some(rx);
+        app.connection.worker = Some(crate::app::Worker::reading(rx));
         app.drain_messages();
         let recording = &app.capture.recording;
         assert_eq!(

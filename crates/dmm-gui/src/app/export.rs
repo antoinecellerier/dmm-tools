@@ -895,7 +895,7 @@ mod tests {
             ..ConnectedMeter::test_fixture(Some("ut181a"))
         }))
         .expect("the channel is open");
-        app.connection.rx = Some(rx);
+        app.connection.worker = Some(crate::app::Worker::reading(rx));
         app.drain_messages();
         app.capture.recording.push(&measurement(0), 0);
 

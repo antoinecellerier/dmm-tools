@@ -1259,7 +1259,7 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         tx.send(DmmMessage::Measurement(m))
             .expect("the channel is open");
-        app.connection.rx = Some(rx);
+        app.connection.worker = Some(crate::app::Worker::reading(rx));
         app.drain_messages();
         app.trim_markers();
     }

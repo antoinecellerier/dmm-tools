@@ -46,7 +46,7 @@ use dmm_lib::protocol::{Choice, MeterKeys, Setting, registry};
 use dmm_lib::transform::Transform;
 use eframe::egui;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
@@ -266,13 +266,8 @@ pub(super) struct Connection {
     pub(super) reconnect_attempt: u32,
     /// Last reconnect failure message, if any, worded as it arrived.
     pub(super) reconnect_last_error: Option<String>,
-    rx: Option<mpsc::Receiver<DmmMessage>>,
-    ctrl_tx: Option<mpsc::Sender<ThreadControl>>,
-    /// Stop request, readable without consuming a channel message so the
-    /// acquisition thread's pacing sleep can bail out on it mid-tick.
-    /// `ctrl_tx` stays the control path; this is the wake signal.
-    stop_flag: Option<Arc<AtomicBool>>,
-    pub(super) cmd_tx: Option<mpsc::Sender<RemoteCommand>>,
+    /// The acquisition thread's channels; `None` while none runs.
+    worker: Option<Worker>,
     /// Reconnect on next frame (device selection changed while connected).
     pub(super) needs_reconnect: bool,
     /// The replay handed out its last frame; nothing more will come until
@@ -281,6 +276,41 @@ pub(super) struct Connection {
     /// What to tell the user about readings arriving two at a time, until
     /// dismissed or the link goes ([`App::show_late_readings`]).
     pub(super) late_readings: Option<dmm_lib::transport::LateReadings>,
+}
+
+/// The app's ends of a running acquisition thread's channels, set up
+/// together on Connect and dropped together on Disconnect.
+struct Worker {
+    rx: mpsc::Receiver<DmmMessage>,
+    ctrl_tx: mpsc::Sender<ThreadControl>,
+    /// Stop request, readable without consuming a channel message so the
+    /// acquisition thread's pacing sleep can bail out on it mid-tick.
+    /// `ctrl_tx` stays the control path; this is the wake signal.
+    stop_flag: Arc<AtomicBool>,
+    cmd_tx: mpsc::Sender<RemoteCommand>,
+}
+
+impl Worker {
+    /// Raise the flag, then hang up: the thread may be mid-sleep, and the
+    /// flag is what cuts that short; dropping the control sender ends any
+    /// wait on the channel and the loop itself. The message receiver comes
+    /// back, for a caller that waits for the thread to end.
+    fn stop(self) -> mpsc::Receiver<DmmMessage> {
+        self.stop_flag.store(true, Ordering::Relaxed);
+        self.rx
+    }
+
+    /// A worker that only hands over messages: its control and command
+    /// channels lead nowhere.
+    #[cfg(test)]
+    fn reading(rx: mpsc::Receiver<DmmMessage>) -> Self {
+        Self {
+            rx,
+            ctrl_tx: mpsc::channel().0,
+            stop_flag: Arc::default(),
+            cmd_tx: mpsc::channel().0,
+        }
+    }
 }
 
 impl Default for Connection {
@@ -294,10 +324,7 @@ impl Default for Connection {
             waiting_timeouts: 0,
             reconnect_attempt: 0,
             reconnect_last_error: None,
-            rx: None,
-            ctrl_tx: None,
-            stop_flag: None,
-            cmd_tx: None,
+            worker: None,
             needs_reconnect: false,
             ended: false,
             late_readings: None,
@@ -595,14 +622,14 @@ impl App {
             self.mark_data_loss();
             self.held.clear();
         }
-        if let Some(tx) = &self.connection.ctrl_tx {
-            let _ = tx.send(ThreadControl::SetPaused(paused));
+        if let Some(worker) = &self.connection.worker {
+            let _ = worker.ctrl_tx.send(ThreadControl::SetPaused(paused));
         }
     }
 
     pub(super) fn send_command(&self, cmd: &str) {
-        if let Some(tx) = &self.connection.cmd_tx {
-            let _ = tx.send(RemoteCommand::Named(cmd.to_string()));
+        if let Some(worker) = &self.connection.worker {
+            let _ = worker.cmd_tx.send(RemoteCommand::Named(cmd.to_string()));
         }
     }
 
@@ -637,8 +664,8 @@ impl App {
     /// Ask the meter to switch `setting` to one of the values
     /// `connection.choices` listed. A refusal comes back as a toast.
     pub(super) fn select(&mut self, setting: Setting, id: u16) {
-        if let Some(tx) = &self.connection.cmd_tx {
-            let _ = tx.send(RemoteCommand::Select(setting, id));
+        if let Some(worker) = &self.connection.worker {
+            let _ = worker.cmd_tx.send(RemoteCommand::Select(setting, id));
         }
         // Only the mode pin: `settings.shared.mock_mode` names a scenario, and a
         // range pick leaves the mock in the scenario it is already pinned to.
@@ -1631,7 +1658,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(connection::DmmMessage::Measurement(m))
             .expect("the channel is open");
-        app.connection.rx = Some(rx);
+        app.connection.worker = Some(Worker::reading(rx));
         app.drain_messages();
 
         let out = last_frame(&mut app);
