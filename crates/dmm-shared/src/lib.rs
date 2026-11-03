@@ -301,31 +301,6 @@ mod tests {
         );
     }
 
-    /// A private scratch directory for one test, removed on drop so a failing
-    /// assertion doesn't leave files behind. Named per-process and per-test so
-    /// concurrently running test binaries can't collide.
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new(label: &str) -> Self {
-            let dir = std::env::temp_dir()
-                .join(format!("dmm-shared-test-{}-{label}", std::process::id()));
-            let _ = fs::remove_dir_all(&dir);
-            fs::create_dir_all(&dir).expect("create temp dir");
-            TempDir(dir)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
     /// The temp file `write_atomic` uses for `file_name` in this process.
     fn temp_name(file_name: &str) -> String {
         format!("{file_name}.{}.tmp", std::process::id())
@@ -333,7 +308,7 @@ mod tests {
 
     #[test]
     fn write_atomic_round_trips() {
-        let dir = TempDir::new("round-trip");
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.json");
 
         write_atomic(&path, br#"{"device_family":"ut61eplus"}"#).unwrap();
@@ -351,7 +326,7 @@ mod tests {
 
     #[test]
     fn write_atomic_replaces_an_existing_file() {
-        let dir = TempDir::new("replace");
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("report.yaml");
 
         write_atomic(&path, b"old contents, longer than the new ones").unwrap();
@@ -363,7 +338,7 @@ mod tests {
 
     #[test]
     fn write_atomic_creates_missing_parent_dirs() {
-        let dir = TempDir::new("parents");
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nested/deeper/settings.json");
 
         write_atomic(&path, b"{}").unwrap();
@@ -429,14 +404,14 @@ mod tests {
 
     #[test]
     fn load_json_reads_a_missing_file_as_none() {
-        let dir = TempDir::new("load-missing");
+        let dir = tempfile::tempdir().unwrap();
         let loaded = load_json::<SharedSettings>(&dir.path().join("settings.json"));
         assert!(matches!(loaded, Ok(None)), "{loaded:?}");
     }
 
     #[test]
     fn load_json_reads_a_valid_file() {
-        let dir = TempDir::new("load-valid");
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.json");
         fs::write(&path, r#"{"device_family":"ut8803","theme":"Dark"}"#).unwrap();
         let loaded = load_json::<SharedSettings>(&path).unwrap();
@@ -445,7 +420,7 @@ mod tests {
 
     #[test]
     fn load_json_reports_a_broken_file() {
-        let dir = TempDir::new("load-broken");
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.json");
         // Cut short mid-write, and a shared field of the wrong type.
         for contents in [r#"{"device_family":"ut88"#, r#"{"bluetooth":"yes"}"#] {
@@ -462,7 +437,7 @@ mod tests {
 
     #[test]
     fn load_json_reports_a_file_it_cannot_read() {
-        let dir = TempDir::new("load-unreadable");
+        let dir = tempfile::tempdir().unwrap();
         // A directory where the file should be: there, but not readable as one.
         let loaded = load_json::<SharedSettings>(dir.path());
         assert!(matches!(loaded, Err(LoadError::Read { .. })), "{loaded:?}");
@@ -551,7 +526,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_planted_temp_link_is_not_followed() {
-        let dir = TempDir::new("planted-tmp-link");
+        let dir = tempfile::tempdir().unwrap();
         let victim = dir.path().join("victim");
         fs::write(&victim, b"keep me").unwrap();
         let path = dir.path().join("theme.json");

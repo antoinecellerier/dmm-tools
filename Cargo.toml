@@ -23,6 +23,7 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde-saphyr = { version = "2", default-features = false, features = ["serialize", "deserialize"] }
 directories = "6"
+tempfile = "3"
 
 # The coding rules in CLAUDE.md, enforced by the compiler; clippy.toml lets
 # tests unwrap.

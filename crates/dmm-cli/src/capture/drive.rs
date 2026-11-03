@@ -769,8 +769,8 @@ mod tests {
 
     /// One sweep against the mock, which implements `choices`/`select` the
     /// way the four drivable families do.
-    fn swept(mode: dmm_lib::mock::MockMode, step_id: &'static str, file: &str) -> CaptureReport {
-        let (report, driver) = swept_by(mock(mode), step_id, file, Driver::new(true));
+    fn swept(mode: dmm_lib::mock::MockMode, step_id: &'static str) -> CaptureReport {
+        let (report, driver) = swept_by(mock(mode), step_id, Driver::new(true));
         assert_eq!(driver.state(), Drive::On, "the mock offers choices");
         report
     }
@@ -780,7 +780,6 @@ mod tests {
     fn swept_by(
         proto: Box<dyn dmm_lib::protocol::Protocol>,
         step_id: &'static str,
-        file: &str,
         driver: Driver,
     ) -> (CaptureReport, Driver) {
         let mut run = CaptureRun {
@@ -800,13 +799,14 @@ mod tests {
             needs: &[],
             wait_for_enter: false,
         };
-        run.output_path = std::env::temp_dir()
-            .join(file)
+        let dir = tempfile::tempdir().unwrap();
+        run.output_path = dir
+            .path()
+            .join("capture.yaml")
             .to_string_lossy()
             .to_string();
 
         run.sweep_step(&step, &last).unwrap();
-        let _ = std::fs::remove_file(&run.output_path);
         (run.report, run.driver)
     }
 
@@ -814,11 +814,7 @@ mod tests {
     /// shows the meter took it.
     #[test]
     fn the_sweep_files_a_sub_step_per_offered_value() {
-        let report = swept(
-            dmm_lib::mock::MockMode::DcV,
-            "dcv",
-            "dmm-cli-test-drive.yaml",
-        );
+        let report = swept(dmm_lib::mock::MockMode::DcV, "dcv");
 
         assert!(
             report.steps.iter().any(|s| s.id == "dcv/hold:on"),
@@ -1207,11 +1203,7 @@ mod tests {
     /// failure on asking.
     #[test]
     fn rel_is_not_swept_while_the_reading_is_ol() {
-        let report = swept(
-            dmm_lib::mock::MockMode::OhmOl,
-            "ohm_ol",
-            "dmm-cli-test-drive-ol.yaml",
-        );
+        let report = swept(dmm_lib::mock::MockMode::OhmOl, "ohm_ol");
         assert!(
             !report.steps.iter().any(|s| s.id.contains("/rel:")),
             "rel was swept on OL: {:?}",
@@ -1235,7 +1227,6 @@ mod tests {
                 Failure::Blanks(3),
             ),
             "dcv",
-            "dmm-cli-test-drive-blank.yaml",
             Driver::new(true),
         );
         let ranges: Vec<_> = report
@@ -1265,7 +1256,6 @@ mod tests {
                 Failure::Blanks(1000),
             ),
             "dcv",
-            "dmm-cli-test-drive-still-blank.yaml",
             Driver::new(true),
         );
         assert!(!report.steps.iter().any(|s| s.id.contains("/rel:")));
@@ -1303,8 +1293,10 @@ mod tests {
         run.dmm.select(Setting::Range, 2).unwrap();
         let last = run.dmm.request_measurement().unwrap();
         let start = last.range_label.to_string();
-        run.output_path = std::env::temp_dir()
-            .join("dmm-cli-test-drive-no-reset.yaml")
+        let dir = tempfile::tempdir().unwrap();
+        run.output_path = dir
+            .path()
+            .join("capture.yaml")
             .to_string_lossy()
             .to_string();
         let step = CaptureStep {
@@ -1312,7 +1304,6 @@ mod tests {
             ..mode_step("DC V")
         };
         run.sweep_step(&step, &last).unwrap();
-        let _ = std::fs::remove_file(&run.output_path);
 
         assert!(run.report.steps.iter().any(|s| s.id.contains("/range:")));
         let now = run.dmm.request_measurement().unwrap();
@@ -1343,7 +1334,6 @@ mod tests {
         let (report, driver) = swept_by(
             Fails::refusing(dmm_lib::mock::MockMode::DcV, Setting::MinMax),
             "dcv",
-            "dmm-cli-test-drive-proven.yaml",
             driver,
         );
         assert_eq!(driver.failures, 0);
@@ -1370,7 +1360,6 @@ mod tests {
             let (report, _) = swept_by(
                 Fails::boxed(dmm_lib::mock::MockMode::DcV, Setting::Hold, failure),
                 "dcv",
-                "dmm-cli-test-drive-landed.yaml",
                 Driver::new(true),
             );
             let hold = report
@@ -1404,7 +1393,6 @@ mod tests {
             let (_, driver) = swept_by(
                 Fails::boxed(dmm_lib::mock::MockMode::DcV, Setting::Hold, Failure::Silent),
                 "dcv",
-                "dmm-cli-test-drive-silent.yaml",
                 driver,
             );
             assert_eq!(driver.failures, 1, "proven: {proven}");
@@ -1424,7 +1412,6 @@ mod tests {
                 Failure::RefusedIntoAnotherMode,
             ),
             "dcv",
-            "dmm-cli-test-drive-modeless.yaml",
             driver,
         );
         assert_eq!(driver.failures, 0);
@@ -1437,7 +1424,6 @@ mod tests {
         let (report, driver) = swept_by(
             Fails::refusing(dmm_lib::mock::MockMode::DcV, Setting::MinMax),
             "dcv",
-            "dmm-cli-test-drive-unproven.yaml",
             Driver::new(true),
         );
         assert_eq!(driver.failures, 1);

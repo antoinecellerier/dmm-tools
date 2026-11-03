@@ -271,9 +271,10 @@ mod tests {
             ..CaptureReport::default()
         };
 
-        let dir = std::env::temp_dir();
+        let dir = tempfile::tempdir().unwrap();
         let path = dir
-            .join("dmm-cli-test-capture.yaml")
+            .path()
+            .join("capture.yaml")
             .to_string_lossy()
             .to_string();
 
@@ -282,8 +283,5 @@ mod tests {
         let contents = std::fs::read_to_string(&path).unwrap();
         let parsed: CaptureReport = from_yaml(&contents).unwrap();
         assert_eq!(parsed.device_name, "UT61E+");
-
-        // Cleanup
-        let _ = std::fs::remove_file(&path);
     }
 }

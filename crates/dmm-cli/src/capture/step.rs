@@ -813,6 +813,7 @@ pub(super) fn cli_step(id: &'static str, verified: bool, gate: bool) -> CaptureS
 mod tests {
     use super::*;
     use dmm_lib::protocol::make_test_measurement;
+    use dmm_lib::transport::mock::MockTransport;
     use std::sync::Mutex;
 
     /// A UT61E+ frame: AB CD, length, payload, 16-bit BE sum.
@@ -838,31 +839,6 @@ mod tests {
         frame(&[
             0x02, 0x30, b' ', b' ', b'5', b'.', b'6', b'7', b'8', 0, 0, 0x30, 0x30, 0x30,
         ])
-    }
-
-    /// Canned transport: hands out one queued response per read, then goes
-    /// silent the way a real meter does on timeout.
-    struct QueuedTransport {
-        responses: Mutex<std::collections::VecDeque<Vec<u8>>>,
-    }
-
-    impl dmm_lib::transport::Transport for QueuedTransport {
-        fn link(&self) -> Option<dmm_lib::transport::Link> {
-            None
-        }
-
-        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
-            Ok(())
-        }
-
-        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
-            let Some(next) = self.responses.lock().unwrap().pop_front() else {
-                return Ok(0);
-            };
-            let n = next.len().min(buf.len());
-            buf[..n].copy_from_slice(&next[..n]);
-            Ok(n)
-        }
     }
 
     /// A meter streaming `frames` one per [`StreamingTransport::PERIOD`] of
@@ -914,9 +890,7 @@ mod tests {
     }
 
     fn dmm_replaying(responses: Vec<Vec<u8>>) -> BoxedDmm {
-        let transport = QueuedTransport {
-            responses: Mutex::new(responses.into()),
-        };
+        let transport = MockTransport::new(responses);
         let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
         dmm_lib::Dmm::new(
             Box::new(transport) as Box<dyn dmm_lib::transport::Transport>,
@@ -1447,7 +1421,7 @@ mod tests {
         /// Presses Enter as it hands out response `at`: the operator reads
         /// the new state off the LCD, then presses the key.
         struct PressesEnter {
-            queue: QueuedTransport,
+            queue: MockTransport,
             reads: Mutex<usize>,
             at: usize,
             key: Mutex<std::sync::mpsc::Sender<Key>>,
@@ -1502,9 +1476,7 @@ mod tests {
         responses.extend(vec![rel; 6]);
         let (key, input) = Input::typed();
         let transport = PressesEnter {
-            queue: QueuedTransport {
-                responses: Mutex::new(responses.into()),
-            },
+            queue: MockTransport::new(responses),
             reads: Mutex::new(0),
             at: 4,
             key: Mutex::new(key),
