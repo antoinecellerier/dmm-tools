@@ -16,6 +16,13 @@ updates:
       minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # dmm-gui's system font lookup uses the fontique and skrifa that eframe
+      # depends on; a newer one is a second copy, so they move with egui.
+      - dependency-name: fontique
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: skrifa
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: "/"

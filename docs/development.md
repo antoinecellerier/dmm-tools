@@ -427,7 +427,9 @@ scripts/package-docs.py /tmp/package-docs /tmp/third-party.html
 
 `.github/dependabot.yml` opens weekly update pull requests for the Cargo and
 Actions dependencies, with minor and patch bumps grouped into one PR per
-ecosystem and majors left on their own.
+ecosystem and majors left on their own. The egui crates come in one PR of
+their own, and fontique and skrifa only take patch bumps there: dmm-gui
+shares eframe's copies, so they move by hand with an egui update.
 
 #### Shared build matrix
 
