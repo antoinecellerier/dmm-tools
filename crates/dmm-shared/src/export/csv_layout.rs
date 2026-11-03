@@ -8,13 +8,14 @@ use dmm_lib::measurement::{AuxValue, Measurement};
 
 /// The columns every exported row starts with, whatever the meter or the
 /// options.
-pub const CSV_BASE_COLUMNS: [&str; 6] = ["timestamp", "mode", "value", "unit", "range", "flags"];
+pub(crate) const CSV_BASE_COLUMNS: [&str; 6] =
+    ["timestamp", "mode", "value", "unit", "range", "flags"];
 
 /// The columns added when the run integrates the reading over time.
 ///
 /// They come before the sub-value groups so `--integrate` consumers keep the
 /// column positions they had before sub-values were exported.
-pub const CSV_INTEGRAL_COLUMNS: [&str; 2] = ["integral", "integral_unit"];
+pub(crate) const CSV_INTEGRAL_COLUMNS: [&str; 2] = ["integral", "integral_unit"];
 
 /// The columns added when the file carries markers: the marker's number and
 /// its note.

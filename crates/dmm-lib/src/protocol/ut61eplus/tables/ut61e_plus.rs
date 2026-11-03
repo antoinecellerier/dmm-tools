@@ -3,7 +3,7 @@ use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61E+.
-pub struct Ut61ePlusTable {
+pub(crate) struct Ut61ePlusTable {
     // Tables indexed by range byte (0x00..0x07 typically)
     dc_v: [RangeInfo; 4],
     ac_v: [RangeInfo; 4],
@@ -27,7 +27,7 @@ pub struct Ut61ePlusTable {
 }
 
 impl Ut61ePlusTable {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             // Four ranges, verified on a real UT61E+ (2026-03-21): the
             // meter never sends a fifth. The vendor software listed a

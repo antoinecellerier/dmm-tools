@@ -22,7 +22,7 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// - mA: 60mA/600mA vs 22mA/220mA
 /// - A: 6A + 10A vs 20A + 20A
 /// - No temperature, no hFE, no LoZ, no LPF, no AC+DC, no Peak
-pub struct Ut61bPlusTable {
+pub(crate) struct Ut61bPlusTable {
     dc_v: [RangeInfo; 4],
     ac_v: [RangeInfo; 4],
     dc_mv: [RangeInfo; 2],
@@ -42,7 +42,7 @@ pub struct Ut61bPlusTable {
 }
 
 impl Ut61bPlusTable {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             // Four ranges: the V⎓ position starts at 6V. Range byte 0 came
             // back as 6.000 V on a UT61B+ (capture 2026-09-09, step `dcv`:

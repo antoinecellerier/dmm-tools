@@ -21,9 +21,9 @@ use log::{debug, trace, warn};
 use std::cell::Cell;
 
 /// WCH VID (shared with CH9329).
-pub const VID: u16 = 0x1A86;
+pub(crate) const VID: u16 = 0x1A86;
 /// CH9325 PID (HID-to-UART bridge, used in UT-D04 cable and bench meters).
-pub const PID: u16 = 0xE008;
+pub(crate) const PID: u16 = 0xE008;
 /// The bridge's name in a registry entry's links, in `dmm-cli list` and in
 /// detection.
 pub(crate) const NAME: &str = "CH9325";
@@ -78,7 +78,7 @@ impl Startup {
 }
 
 /// CH9325 HID transport wrapping a `HidDevice`.
-pub struct Ch9325 {
+pub(crate) struct Ch9325 {
     device: HidDevice,
     startup: Option<Startup>,
     /// The rate the last feature report set, which the bridge is left at: a

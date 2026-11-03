@@ -21,7 +21,7 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// The dial is not described, so the meter offers no remote mode selection
 /// until one confirms its button codes
 /// (docs/research/ut61-family/verification.md).
-pub struct Ut60btTable {
+pub(crate) struct Ut60btTable {
     dc_v: [RangeInfo; 4],
     ac_v: [RangeInfo; 4],
     dc_mv: [RangeInfo; 2],
@@ -41,7 +41,7 @@ pub struct Ut60btTable {
 }
 
 impl Ut60btTable {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             // The V position starts at 999.9mV, not at a volts rung: the mV
             // position's 9.999mV and 99.99mV are the separate mV modes.

@@ -16,7 +16,7 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// ordering is `[DEDUCED]` (ascending assumed). No UT61D+ has been connected;
 /// the V tables follow the UT61B+, whose bottom rung was verified by a
 /// capture on 2026-09-09 — see issue #7.
-pub struct Ut61dPlusTable {
+pub(crate) struct Ut61dPlusTable {
     dc_v: [RangeInfo; 4],
     ac_v: [RangeInfo; 4],
     dc_mv: [RangeInfo; 2],
@@ -39,7 +39,7 @@ pub struct Ut61dPlusTable {
 }
 
 impl Ut61dPlusTable {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             // Four ranges, [DEDUCED] from the UT61B+ capture (2026-09-09):
             // same 6,000-count table shape, so range byte 0 is 6V here too and

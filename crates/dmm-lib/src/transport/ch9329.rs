@@ -4,9 +4,9 @@ use hidapi::HidDevice;
 use log::{debug, trace};
 
 /// WCH CH9329 VID.
-pub const VID: u16 = 0x1A86;
+pub(crate) const VID: u16 = 0x1A86;
 /// CH9329 PID (HID-to-UART bridge, used in UT-D09 cable).
-pub const PID: u16 = 0xE429;
+pub(crate) const PID: u16 = 0xE429;
 /// The bridge's name in a registry entry's links, in `dmm-cli list` and in
 /// detection.
 pub(crate) const NAME: &str = "CH9329";
@@ -22,7 +22,7 @@ const MAX_UART_PAYLOAD: usize = 63;
 /// - Byte 0: Report ID (always 0x00)
 /// - Byte 1: UART data length
 /// - Bytes 2..2+len: UART payload
-pub struct Ch9329 {
+pub(crate) struct Ch9329 {
     device: HidDevice,
 }
 

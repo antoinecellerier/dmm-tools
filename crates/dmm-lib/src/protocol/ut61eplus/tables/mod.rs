@@ -1,8 +1,8 @@
-pub mod ut202bt;
-pub mod ut60bt;
-pub mod ut61b_plus;
-pub mod ut61d_plus;
-pub mod ut61e_plus;
+pub(crate) mod ut202bt;
+pub(crate) mod ut60bt;
+pub(crate) mod ut61b_plus;
+pub(crate) mod ut61d_plus;
+pub(crate) mod ut61e_plus;
 
 use super::mode::Mode;
 use crate::protocol::CaptureStep;
@@ -11,7 +11,7 @@ use std::borrow::Cow;
 
 /// Information about a specific measurement range.
 #[derive(Debug, Clone)]
-pub struct RangeInfo {
+pub(crate) struct RangeInfo {
     pub label: &'static str,
     pub unit: &'static str,
 }
@@ -47,7 +47,7 @@ fn lookup_range(table: &[RangeInfo], range: u8) -> Option<&RangeInfo> {
 }
 
 /// Trait for device-specific range/unit lookup tables.
-pub trait DeviceTable: Send {
+pub(crate) trait DeviceTable: Send {
     fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo>;
     fn model_name(&self) -> &'static str;
 

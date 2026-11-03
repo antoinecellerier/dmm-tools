@@ -8,7 +8,7 @@
 /// §2.3) are left out: no UT61+ model has the features they drive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Command {
+pub(crate) enum Command {
     /// Request a measurement reading.
     GetMeasurement = 0x5E,
     /// Get device name.
@@ -50,7 +50,7 @@ pub enum Command {
 
 impl Command {
     /// Encode this command into the 6-byte wire format.
-    pub fn encode(self) -> [u8; 6] {
+    pub(crate) fn encode(self) -> [u8; 6] {
         crate::protocol::framing::build_abcd_be16(self as u8, &[])
     }
 }

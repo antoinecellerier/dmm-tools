@@ -1,3 +1,6 @@
+// `pub` only on what the binaries can reach; the rest is `pub(crate)`.
+#![warn(unreachable_pub)]
+
 pub mod alarm;
 pub mod clock;
 pub mod detect;

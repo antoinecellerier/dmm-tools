@@ -69,7 +69,7 @@ use crate::transport::Transport;
 
 /// A front-panel button that cycles the meter through a ring of modes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CycleButton {
+pub(crate) enum CycleButton {
     /// The SELECT / FUNC button: steps the dial position's main functions.
     Select,
     /// The Hz/% button: steps a position's frequency and duty-cycle modes.
@@ -91,7 +91,7 @@ pub enum CycleButton {
 /// Membership only — see the module docs. The order the meter walks them in
 /// is discovered by pressing, not declared here.
 #[derive(Debug)]
-pub struct Ring {
+pub(crate) struct Ring {
     pub(crate) button: CycleButton,
     pub(crate) modes: &'static [u16],
 }
@@ -99,7 +99,7 @@ pub struct Ring {
 /// One position of the dial: one or two rings; two rings share exactly one
 /// junction mode.
 #[derive(Debug)]
-pub struct DialPosition {
+pub(crate) struct DialPosition {
     pub(crate) rings: &'static [Ring],
 }
 

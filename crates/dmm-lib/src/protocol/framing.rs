@@ -249,7 +249,7 @@ pub(crate) fn read_uart_bytes(
 }
 
 /// Header bytes the `AB CD` families share, UNI-T's and Voltcraft's.
-pub const HEADER: [u8; 2] = [0xAB, 0xCD];
+pub(crate) const HEADER: [u8; 2] = [0xAB, 0xCD];
 
 /// Minimum valid response length: header(2) + length(1) + checksum(2) = 5
 /// (length byte value must be >= 2 to hold at least the checksum)
@@ -357,7 +357,7 @@ pub(crate) fn checksum_ok(label: &str, computed: u16, received: u16, frame: &[u8
 ///
 /// Returns `Ok(Some((payload, consumed)))` if a valid frame is found,
 /// `Ok(None)` if incomplete, `Err` on checksum mismatch.
-pub fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
+pub(crate) fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     let Some((start, remaining)) = locate(buf, &HEADER, MIN_RESPONSE_LEN) else {
         return Ok(None);
     };
@@ -402,7 +402,7 @@ pub fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
 /// Length is 2-byte LE uint16 = payload_size + 2 (includes checksum bytes).
 /// Checksum is 16-bit LE sum of bytes from offset 2 through end of payload
 /// (covers length field + payload, excludes header and checksum).
-pub fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
+pub(crate) fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     // 6 = header(2) + length(2) + checksum(2) minimum
     let Some((start, remaining)) = locate(buf, &HEADER, 6) else {
         return Ok(None);

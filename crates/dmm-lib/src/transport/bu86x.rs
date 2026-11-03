@@ -16,9 +16,9 @@ use log::{debug, trace};
 
 /// Brymen's cable VID, as Brymen's programs match it (spec §2; the sheets
 /// print 0x82).
-pub const VID: u16 = 0x0820;
+pub(crate) const VID: u16 = 0x0820;
 /// The cable's PID, as Brymen's programs match it (spec §2).
-pub const PID: u16 = 0x0001;
+pub(crate) const PID: u16 = 0x0001;
 /// The cable's name in a registry entry's links, in `dmm-cli list` and in
 /// detection: the kit's, as the manuals call it (spec §1.2).
 pub(crate) const NAME: &str = "BU-86X";
@@ -65,7 +65,7 @@ fn firmware(release: u16) -> String {
 }
 
 /// The BU-86X cable, opened.
-pub struct Bu86x {
+pub(crate) struct Bu86x {
     device: HidDevice,
     /// The USB release number, the cable's firmware version (spec §2).
     release: Option<u16>,

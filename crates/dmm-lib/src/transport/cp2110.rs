@@ -4,10 +4,10 @@ use hidapi::HidDevice;
 use log::{debug, trace};
 
 /// Silicon Labs CP2110 VID.
-pub const VID: u16 = 0x10C4;
+pub(crate) const VID: u16 = 0x10C4;
 /// The CP2110's stock PID, which the cables of the UT61E+ and several other
 /// meters keep.
-pub const PID: u16 = 0xEA80;
+pub(crate) const PID: u16 = 0xEA80;
 /// The bridge's name in a registry entry's links, in `dmm-cli list` and in
 /// detection.
 pub(crate) const NAME: &str = "CP2110";
@@ -17,7 +17,7 @@ const MAX_REPORT_PAYLOAD: usize = 63;
 
 /// CP2110 UART status from report 0x42 (AN434 §5.3).
 #[derive(Debug, Clone)]
-pub struct UartStatus {
+pub(crate) struct UartStatus {
     /// Bytes waiting in the transmit FIFO (max 480).
     pub tx_fifo: u16,
     /// Bytes waiting in the receive FIFO (max 480).
@@ -32,7 +32,7 @@ pub struct UartStatus {
 
 /// CP2110 version information from report 0x46 (AN434 §5.7).
 #[derive(Debug, Clone)]
-pub struct VersionInfo {
+pub(crate) struct VersionInfo {
     /// Part number (0x0A for CP2110).
     pub part_number: u8,
     /// Device firmware version.
@@ -40,7 +40,7 @@ pub struct VersionInfo {
 }
 
 /// CP2110 HID transport wrapping a `HidDevice`.
-pub struct Cp2110 {
+pub(crate) struct Cp2110 {
     device: HidDevice,
 }
 
@@ -76,7 +76,7 @@ impl Cp2110 {
     /// Query CP2110 version information (report 0x46, AN434 §5.7).
     ///
     /// Returns the part number (0x0A for CP2110) and device firmware version.
-    pub fn version_info(&self) -> Result<VersionInfo> {
+    pub(crate) fn version_info(&self) -> Result<VersionInfo> {
         let mut buf = [0u8; 3];
         buf[0] = 0x46; // Get Version Information report ID
         let n = self
@@ -103,7 +103,7 @@ impl Cp2110 {
     ///
     /// Returns FIFO levels, error flags, and line break status.
     /// Note: reading this report clears the error flags.
-    pub fn uart_status(&self) -> Result<UartStatus> {
+    pub(crate) fn uart_status(&self) -> Result<UartStatus> {
         let mut buf = [0u8; 7];
         buf[0] = 0x42; // Get UART Status report ID
         let n = self

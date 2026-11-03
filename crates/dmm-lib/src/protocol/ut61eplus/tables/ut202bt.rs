@@ -32,7 +32,7 @@ const PEAK_MODES: &[Mode] = &[Mode::AcV, Mode::AcA, Mode::ClampAcA];
 ///
 /// The meter's secondary display (frequency in AC V and AC A, °F beside °C)
 /// comes in frames of its own, read with this same table (family spec §2.3).
-pub struct Ut202btTable {
+pub(crate) struct Ut202btTable {
     dc_v: [RangeInfo; 3],
     ac_v: [RangeInfo; 3],
     lpf_v: [RangeInfo; 3],
@@ -48,7 +48,7 @@ pub struct Ut202btTable {
 }
 
 impl Ut202btTable {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             dc_v: [r("9.999V", "V"), r("99.99V", "V"), r("600.0V", "V")],
             ac_v: [r("9.999V", "V"), r("99.99V", "V"), r("600.0V", "V")],

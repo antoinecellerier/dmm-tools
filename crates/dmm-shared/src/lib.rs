@@ -26,6 +26,9 @@
 //! (color overrides, panel visibility, theme, …) live in `dmm-gui` and merge
 //! into the same flat JSON on disk via `#[serde(flatten)]`.
 
+// `pub` only on what the binaries can reach; the rest is `pub(crate)`.
+#![warn(unreachable_pub)]
+
 pub mod export;
 pub mod help;
 pub mod input;

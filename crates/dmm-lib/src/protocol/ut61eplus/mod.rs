@@ -1,8 +1,8 @@
-pub mod command;
+pub(crate) mod command;
 pub(crate) mod devices;
-pub mod mode;
+pub(crate) mod mode;
 pub(crate) mod specs;
-pub mod tables;
+pub(crate) mod tables;
 
 use crate::error::{Error, Result, Unsupported};
 use crate::flags::StatusFlags;
@@ -41,7 +41,7 @@ const UT61EPLUS_COMMANDS: &[&str] = &[
 const UT61EPLUS_MEASUREMENT_PAYLOAD_LEN: usize = 14;
 
 /// Protocol implementation for the UT61E+/UT61B+/UT61D+/UT161 family.
-pub struct Ut61PlusProtocol {
+pub(crate) struct Ut61PlusProtocol {
     table: Box<dyn DeviceTable>,
     /// The model's manual spec tables.
     specs: SpecModel,
@@ -69,7 +69,7 @@ impl Default for Ut61PlusProtocol {
 
 impl Ut61PlusProtocol {
     /// A UT61E+.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::with_profile(
             Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
             "UNI-T UT61E+",
@@ -92,7 +92,7 @@ impl Ut61PlusProtocol {
     /// Otherwise a UT161E would introduce itself as a verified UT61E+.
     ///
     /// Returns `None` if the model string is not recognized.
-    pub fn for_model(model: &str) -> Option<Self> {
+    pub(crate) fn for_model(model: &str) -> Option<Self> {
         // (table, the entry's registry id, stability, manual spec tables)
         let (table, id, stability, specs): (Box<dyn DeviceTable>, _, _, _) =
             match model.to_lowercase().as_str() {
@@ -1355,7 +1355,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 /// - byte 11:   flag1  (& 0x0F — has 0x30 prefix)
 /// - byte 12:   flag2  (& 0x0F — has 0x30 prefix)
 /// - byte 13:   flag3  (& 0x0F — has 0x30 prefix)
-pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Measurement> {
+pub(crate) fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Measurement> {
     check_len("ut61eplus", payload, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN)?;
     // §2.4: the measurement payload is 14 bytes; the rest is ignored.
     if payload.len() > UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {

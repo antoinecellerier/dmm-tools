@@ -10,7 +10,7 @@ use std::fmt;
 /// The mode byte does NOT have a 0x30 high nibble — use the raw value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
-pub enum Mode {
+pub(crate) enum Mode {
     AcV = 0x00,
     AcMv = 0x01,
     DcV = 0x02,
@@ -50,7 +50,7 @@ impl Mode {
     /// Every mode, in protocol byte order, for the tests and the label list
     /// that walk the whole table rather than decode one byte.
     #[cfg(any(test, feature = "test-support"))]
-    pub const ALL: &'static [Mode] = &[
+    pub(crate) const ALL: &'static [Mode] = &[
         Mode::AcV,
         Mode::AcMv,
         Mode::DcV,
@@ -84,7 +84,7 @@ impl Mode {
         Mode::Inrush,
     ];
 
-    pub fn from_byte(b: u8) -> Result<Self, Error> {
+    pub(crate) fn from_byte(b: u8) -> Result<Self, Error> {
         match b {
             0x00 => Ok(Mode::AcV),
             0x01 => Ok(Mode::AcMv),
@@ -127,7 +127,7 @@ impl Mode {
     ///
     /// Unlike `Display::fmt` / `.to_string()`, this avoids heap allocation
     /// and can be used directly in `Cow::Borrowed`.
-    pub fn as_static_str(self) -> &'static str {
+    pub(crate) fn as_static_str(self) -> &'static str {
         match self {
             Mode::AcV => "AC V",
             Mode::AcMv => "AC mV",
