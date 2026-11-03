@@ -1159,7 +1159,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "skrifa",
+ "skrifa 0.46.2",
  "sys-locale",
  "unicode-script",
  "ureq",
@@ -1414,7 +1414,7 @@ dependencies = [
  "fontique",
  "log",
  "poll-promise",
- "skrifa",
+ "skrifa 0.44.0",
  "sys-locale",
  "unicode-script",
 ]
@@ -1551,7 +1551,7 @@ dependencies = [
  "parking_lot",
  "profiling",
  "self_cell",
- "skrifa",
+ "skrifa 0.44.0",
  "smallvec",
  "unicode-general-category",
  "unicode-properties",
@@ -1747,7 +1747,7 @@ dependencies = [
  "objc2-core-text",
  "objc2-foundation 0.3.2",
  "parlance",
- "read-fonts",
+ "read-fonts 0.41.0",
  "roxmltree",
  "smallvec",
  "windows",
@@ -1959,7 +1959,7 @@ dependencies = [
  "log",
  "peniko",
  "png",
- "skrifa",
+ "skrifa 0.44.0",
  "smallvec",
  "vello_common",
 ]
@@ -2095,7 +2095,7 @@ checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.41.0",
  "smallvec",
 ]
 
@@ -3642,6 +3642,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "read-fonts"
+version = "0.43.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "005c8acf251756c478b0bf402885bfd88a1476020c4c7e6060edc1aa68da38ea"
+dependencies = [
+ "bytemuck",
+ "font-types",
+ "once_cell",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4117,7 +4128,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "819ab7d62b1d3e72d9d9dea5650bac30424f9111364bb94928dbf5ecad1baa68"
 dependencies = [
  "bytemuck",
- "read-fonts",
+ "read-fonts 0.41.0",
+]
+
+[[package]]
+name = "skrifa"
+version = "0.46.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4febebda507fb889c545a37a135517769d1391941013561292897961d1887d6"
+dependencies = [
+ "bytemuck",
+ "read-fonts 0.43.3",
 ]
 
 [[package]]
