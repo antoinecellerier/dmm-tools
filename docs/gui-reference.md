@@ -459,7 +459,9 @@ one click, on and off; with nothing typed, it opens the fields.
 
 The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
 factor survives auto-ranging: a 10 mV/A clamp is `× 100 → A`. With no unit
-label the reading shows in the base unit.
+label the reading shows in the base unit. Under REL the reading is a
+difference, so it is scaled but takes no offset: a +2.0 °C REL reading is
++3.6 °F.
 
 The meter's own reading is kept as a **Raw** sub-value in the reading
 display, the graph's **Plot:** and **Show:** groups, the recording log and

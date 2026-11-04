@@ -349,7 +349,9 @@ probe divider, °C to °F. Nothing is sent to the meter.
 The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
 factor survives auto-ranging between mV and V: a 10 mV/A clamp is
 `--scale 100`. Then `--offset` is added and `--unit` relabels the result;
-without `--unit` the reading is shown in the base unit.
+without `--unit` the reading is shown in the base unit. Under REL the reading
+is a difference, so it is scaled but takes no offset: a +2.0 °C REL reading
+is +3.6 °F.
 
 The meter's own reading is kept as a `Raw` sub-value: indented in text, in
 the JSON `aux` array, and in one extra CSV aux group, always the last.

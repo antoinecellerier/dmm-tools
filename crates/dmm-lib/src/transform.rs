@@ -187,9 +187,14 @@ impl Transform {
         let raw_display = m.display_raw.take();
         let (base, mult) = si_prefix(&raw_unit);
 
+        // Under REL the main reading is a difference from a reference, so it
+        // takes the scale but not the offset: a +2.0 °C delta is +3.6 °F, not
+        // 35.6 °F. The sub-values below (the reference, the absolute reading,
+        // MIN/MAX) are absolute and keep the full offset.
+        let main_offset = if m.flags.rel { 0.0 } else { offset };
         match &raw_value {
             MeasuredValue::Normal(x) => {
-                let (value, display) = scaled(*x, mult, scale, offset, raw_display.as_deref());
+                let (value, display) = scaled(*x, mult, scale, main_offset, raw_display.as_deref());
                 m.value = MeasuredValue::Normal(value);
                 m.display_raw = Some(display);
             }
@@ -346,6 +351,7 @@ fn decimals_of(display: &str) -> usize {
 mod tests {
     use super::*;
     use crate::flags::StatusFlags;
+    use crate::measurement::MainLabel;
 
     /// A reading with the meter's digit string spelled out (`test_fixture`
     /// always uses "  5.678").
@@ -618,6 +624,55 @@ mod tests {
         assert_eq!(raw.label, RAW_LABEL);
         assert_eq!(normal(&raw.value), 25.4);
         assert_eq!(raw.unit, "°C");
+    }
+
+    /// A REL reading is a difference: °C → °F scales it but adds no 32.
+    #[test]
+    fn a_rel_difference_takes_the_scale_but_not_the_offset() {
+        let t = Transform::linear(1.8, 32.0, Some("°F".to_string()));
+        let mut m = reading(2.0, "°C", "2.0");
+        m.flags.rel = true;
+        t.apply(&mut m);
+
+        assert_eq!(normal(&m.value), 3.6);
+        assert_eq!(m.display_raw.as_deref(), Some("3.6"));
+        assert_eq!(m.unit, "°F");
+        let raw = &m.aux_values[0];
+        assert_eq!(raw.label, RAW_LABEL);
+        assert_eq!(normal(&raw.value), 2.0);
+        assert_eq!(raw.unit, "°C");
+    }
+
+    /// The UT181A's REL frame: Relative on the main display, Reference and
+    /// Absolute beside it. After °C → °F the three still add up.
+    #[test]
+    fn a_rel_frame_keeps_absolute_minus_reference_equal_to_relative() {
+        let t = Transform::linear(1.8, 32.0, Some("°F".to_string()));
+        let mut m = reading(2.0, "°C", "2.0");
+        m.flags.rel = true;
+        m.main_label = Some(MainLabel::Relative);
+        m.aux_values.push(aux("Reference", 20.0, "°C", "20.0"));
+        m.aux_values.push(aux("Absolute", 22.0, "°C", "22.0"));
+        t.apply(&mut m);
+
+        let relative = normal(&m.value);
+        let reference = normal(&m.aux_values[0].value);
+        let absolute = normal(&m.aux_values[1].value);
+        assert_eq!(relative, 3.6);
+        assert_eq!(reference, 68.0);
+        assert_eq!(absolute, 71.6);
+        assert!((absolute - reference - relative).abs() < 1e-9);
+    }
+
+    /// Without an offset, REL changes nothing: a pure scale is linear.
+    #[test]
+    fn a_rel_reading_under_a_pure_scale_is_scaled_as_usual() {
+        let t = Transform::linear(100.0, 0.0, Some("A".to_string()));
+        let mut m = reading(123.4, "mV", "123.4");
+        m.flags.rel = true;
+        t.apply(&mut m);
+        assert_eq!(normal(&m.value), 12.34);
+        assert_eq!(m.display_raw.as_deref(), Some("12.34"));
     }
 
     /// MIN/MAX extremes come with an empty unit — "same as the main reading" —
