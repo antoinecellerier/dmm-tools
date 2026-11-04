@@ -113,6 +113,17 @@ pub(super) struct ConnectionNotice {
 }
 
 impl ConnectionNotice {
+    /// A notice with no sections and no feedback link: a title and its prose.
+    fn plain(kind: NoticeKind, title: String, body: String) -> Self {
+        Self {
+            kind,
+            title,
+            sections: Vec::new(),
+            body,
+            feedback_link: None,
+        }
+    }
+
     /// Everything under the title as one string, for the big-meter modes:
     /// they have room for the title alone and hand this to a tooltip.
     pub(super) fn help_text(&self, l10n: &Localizer) -> String {
@@ -311,13 +322,7 @@ impl App {
     /// `body` to a tooltip. The normal layouts still draw every piece.
     pub(super) fn connection_notice(&self) -> Option<ConnectionNotice> {
         let l10n = self.l10n.as_ref();
-        let notice = |kind, title: String, body: String| ConnectionNotice {
-            kind,
-            title,
-            sections: Vec::new(),
-            body,
-            feedback_link: None,
-        };
+        let notice = ConnectionNotice::plain;
 
         // The probe is still running: nothing names the meter, the channel is
         // up, and neither a connection nor a failure has come back yet. It
@@ -378,42 +383,50 @@ impl App {
         }
 
         let issue = self.connection.last_error.as_ref()?;
+        Some(self.issue_notice(issue))
+    }
 
-        if let ConnectionIssue::DeviceNotFound { bluetooth_searched } = issue {
-            // Nothing answered on the links the open path searched. The
-            // sections come from the library so the CLI's help and this panel
-            // stay the same advice; only the closing line is the GUI's, since
-            // the CLI has no Connect button.
-            let links = LinksSearched::from_usb_failure(*bluetooth_searched);
-            Some(ConnectionNotice {
-                kind: if *bluetooth_searched {
-                    NoticeKind::NoMeterFound
-                } else {
-                    NoticeKind::UsbNotFound
-                },
-                title: self.l10n.help().not_found_title(&links),
-                sections: self.l10n.help().sections(&links),
-                body: tr!(l10n, "connection-click-connect").into_owned(),
-                feedback_link: self.feedback_link(),
-            })
-        } else if let ConnectionIssue::BluetoothOnlyNotFound { model, activation } = issue {
-            // The same notice, on the radio alone and with the meter's own
-            // steps: it has no cable, and no adapter to wake.
-            let links = LinksSearched::BluetoothOnly { model, activation };
-            Some(ConnectionNotice {
-                kind: NoticeKind::BluetoothOnlyNotFound,
-                title: self.l10n.help().not_found_title(&links),
-                sections: self.l10n.help().sections(&links),
-                body: tr!(l10n, "connection-click-connect").into_owned(),
-                feedback_link: self.feedback_link(),
-            })
-        } else if let ConnectionIssue::BluetoothOnlyUnreachable {
-            model,
-            activation,
-            error,
-        } = issue
-        {
-            Some(ConnectionNotice {
+    /// The notice for a connection that failed, one arm per issue: a new
+    /// variant has to say what it shows before this compiles.
+    fn issue_notice(&self, issue: &ConnectionIssue) -> ConnectionNotice {
+        let l10n = self.l10n.as_ref();
+        let notice = ConnectionNotice::plain;
+        match issue {
+            ConnectionIssue::DeviceNotFound { bluetooth_searched } => {
+                // Nothing answered on the links the open path searched. The
+                // sections come from the library so the CLI's help and this panel
+                // stay the same advice; only the closing line is the GUI's, since
+                // the CLI has no Connect button.
+                let links = LinksSearched::from_usb_failure(*bluetooth_searched);
+                ConnectionNotice {
+                    kind: if *bluetooth_searched {
+                        NoticeKind::NoMeterFound
+                    } else {
+                        NoticeKind::UsbNotFound
+                    },
+                    title: self.l10n.help().not_found_title(&links),
+                    sections: self.l10n.help().sections(&links),
+                    body: tr!(l10n, "connection-click-connect").into_owned(),
+                    feedback_link: self.feedback_link(),
+                }
+            }
+            ConnectionIssue::BluetoothOnlyNotFound { model, activation } => {
+                // The same notice, on the radio alone and with the meter's own
+                // steps: it has no cable, and no adapter to wake.
+                let links = LinksSearched::BluetoothOnly { model, activation };
+                ConnectionNotice {
+                    kind: NoticeKind::BluetoothOnlyNotFound,
+                    title: self.l10n.help().not_found_title(&links),
+                    sections: self.l10n.help().sections(&links),
+                    body: tr!(l10n, "connection-click-connect").into_owned(),
+                    feedback_link: self.feedback_link(),
+                }
+            }
+            ConnectionIssue::BluetoothOnlyUnreachable {
+                model,
+                activation,
+                error,
+            } => ConnectionNotice {
                 kind: NoticeKind::BluetoothUnreachable,
                 title: error.clone(),
                 sections: self
@@ -422,78 +435,81 @@ impl App {
                     .sections(&LinksSearched::BluetoothOnly { model, activation }),
                 body: tr!(l10n, "connection-click-connect").into_owned(),
                 feedback_link: None,
-            })
-        } else if let ConnectionIssue::BluetoothNotSearched { message } = issue {
-            Some(notice(
+            },
+            ConnectionIssue::BluetoothNotSearched { message } => notice(
                 NoticeKind::BluetoothNotSearched,
                 tr!(l10n, "connection-bluetooth-not-searched").into_owned(),
                 message.clone(),
-            ))
-        } else if let ConnectionIssue::BluetoothNotFound { address } = issue {
-            let links = LinksSearched::BluetoothAt(address);
-            Some(ConnectionNotice {
-                kind: NoticeKind::BluetoothNotFound,
-                title: self.l10n.help().not_found_title(&links),
-                sections: self.l10n.help().sections(&links),
-                // The GUI cannot scan, so the way back in is a restart with
-                // the address the scan printed.
-                body: tr!(l10n, "connection-restart-with-address").into_owned(),
-                feedback_link: None,
-            })
-        } else if let ConnectionIssue::BluetoothUnreachable { address, error } = issue {
-            // Found, or remembered, but the link would not come up: the
-            // stack's own words first, then the steps that wake an adapter.
-            Some(ConnectionNotice {
-                kind: NoticeKind::BluetoothUnreachable,
-                title: error.clone(),
-                sections: self
-                    .l10n
-                    .help()
-                    .sections(&LinksSearched::BluetoothAt(address)),
-                body: tr!(l10n, "connection-click-connect").into_owned(),
-                feedback_link: None,
-            })
-        } else if let ConnectionIssue::AdapterNotFound { help } = issue {
-            Some(notice(
+            ),
+            ConnectionIssue::BluetoothNotFound { address } => {
+                let links = LinksSearched::BluetoothAt(address);
+                ConnectionNotice {
+                    kind: NoticeKind::BluetoothNotFound,
+                    title: self.l10n.help().not_found_title(&links),
+                    sections: self.l10n.help().sections(&links),
+                    // The GUI cannot scan, so the way back in is a restart with
+                    // the address the scan printed.
+                    body: tr!(l10n, "connection-restart-with-address").into_owned(),
+                    feedback_link: None,
+                }
+            }
+            ConnectionIssue::BluetoothUnreachable { address, error } => {
+                // Found, or remembered, but the link would not come up: the
+                // stack's own words first, then the steps that wake an adapter.
+                ConnectionNotice {
+                    kind: NoticeKind::BluetoothUnreachable,
+                    title: error.clone(),
+                    sections: self
+                        .l10n
+                        .help()
+                        .sections(&LinksSearched::BluetoothAt(address)),
+                    body: tr!(l10n, "connection-click-connect").into_owned(),
+                    feedback_link: None,
+                }
+            }
+            ConnectionIssue::AdapterNotFound { help } => notice(
                 NoticeKind::AdapterNotFound,
                 tr!(l10n, "connection-adapter-not-found").into_owned(),
                 help.clone(),
-            ))
-        } else if let ConnectionIssue::NotIdentified { help } = issue {
-            // The link is fine and the probe ran; nothing on the far end
-            // spoke a protocol we know. Which link it was is in the body —
-            // the title stays one string per notice, which is what the big
-            // meter's fit cache keys on.
-            Some(notice(
-                NoticeKind::NotIdentified,
-                self.l10n.help().no_meter_answered().into_owned(),
-                help.clone(),
-            ))
-        } else {
-            // Dongle found but meter not responding.
-            // The meter this session is talking about: the one picked, or the
-            // one detection found. Under Auto-detect, before anything answered,
-            // there is neither a model to name nor steps to give.
-            // Name the link the session is on: "adapter" now reads as the
-            // Bluetooth one, and over a cable it never was one.
-            let built_in_radio = self.active_device().is_some_and(|d| d.bluetooth_only());
-            let link = link_key(self.connection.link(), built_in_radio);
-            let instructions = match self.active_listing() {
-                Some(meter) => tr!(
-                    l10n,
-                    "connection-no-response",
-                    link = link,
-                    model = l10n.label(TextKind::Model, meter.display_name()),
-                    steps = l10n.label(TextKind::Activation, meter.device.activation_instructions)
-                ),
-                None => tr!(l10n, "connection-no-response-auto"),
+            ),
+            ConnectionIssue::NotIdentified { help } => {
+                // The link is fine and the probe ran; nothing on the far end
+                // spoke a protocol we know. Which link it was is in the body —
+                // the title stays one string per notice, which is what the big
+                // meter's fit cache keys on.
+                notice(
+                    NoticeKind::NotIdentified,
+                    self.l10n.help().no_meter_answered().into_owned(),
+                    help.clone(),
+                )
             }
-            .into_owned();
-            Some(notice(
-                NoticeKind::NoResponse,
-                self.l10n.help().no_response().into_owned(),
-                instructions,
-            ))
+            ConnectionIssue::Other(_) => {
+                // Dongle found but meter not responding.
+                // The meter this session is talking about: the one picked, or the
+                // one detection found. Under Auto-detect, before anything answered,
+                // there is neither a model to name nor steps to give.
+                // Name the link the session is on: "adapter" now reads as the
+                // Bluetooth one, and over a cable it never was one.
+                let built_in_radio = self.active_device().is_some_and(|d| d.bluetooth_only());
+                let link = link_key(self.connection.link(), built_in_radio);
+                let instructions = match self.active_listing() {
+                    Some(meter) => tr!(
+                        l10n,
+                        "connection-no-response",
+                        link = link,
+                        model = l10n.label(TextKind::Model, meter.display_name()),
+                        steps =
+                            l10n.label(TextKind::Activation, meter.device.activation_instructions)
+                    ),
+                    None => tr!(l10n, "connection-no-response-auto"),
+                }
+                .into_owned();
+                notice(
+                    NoticeKind::NoResponse,
+                    self.l10n.help().no_response().into_owned(),
+                    instructions,
+                )
+            }
         }
     }
 
