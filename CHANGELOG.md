@@ -35,6 +35,7 @@
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
 - **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
+- **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
 - **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
 - **The UT181A and UT171 keep reading after joining the stream mid-frame** — readings could stop for tens of seconds, and a refused UT181A command look accepted.
 - **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.

@@ -426,10 +426,19 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     } else {
         match display_number("ut8803", &display_trimmed) {
             // The vendor parser (spec §2.3) checks status-word bit
-            // 19 and negates the parsed float when set.
-            MeasuredValue::Normal(v) if negative => MeasuredValue::Normal(-v),
+            // 19 and negates the parsed float when set. `-abs` keeps the
+            // reading negative whether or not the field spells the minus.
+            MeasuredValue::Normal(v) if negative => MeasuredValue::Normal(-v.abs()),
             value => value,
         }
+    };
+    // Every display and export path prefers `display_raw` for a normal
+    // value, so the sign bit goes into the digits too, as on the UT8802.
+    let display_raw = match value {
+        MeasuredValue::Normal(_) if negative && !display_trimmed.starts_with('-') => {
+            format!("-{}", display_str.trim_start().trim_start_matches('+'))
+        }
+        _ => display_str,
     };
 
     Ok(Measurement {
@@ -440,10 +449,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         range_raw,
         value,
         unit: Cow::Borrowed(unit),
-        // The meter's own digits: the sign bit reaches `value` only, since
-        // whether the field spells the minus too is open
-        // (docs/research/ut8803/verification.md, "Display").
-        display_raw: Some(display_str),
+        display_raw: Some(display_raw),
         flags,
         // `range_label` keeps the default empty string: labelling a UT8803
         // range would need the full range table, which we don't have.
@@ -680,12 +686,31 @@ raw_payload=17"#
     fn parse_negative_value() {
         // Sign = payload[12] bit 3 (D19 of the status word); vendor negates
         // the parsed float when set.
-        let payload = make_payload(0x01, 0x00, b"12.34", 0x08, 0x00, 0x00);
+        // Display and export render `display_raw`, so the sign has to reach
+        // the digits as well, whether or not the field spells it.
+        for (display, value, raw) in [
+            (b"12.34", -12.34, "-12.34"),
+            (b"-12.3", -12.3, "-12.3"),
+            (b"+1.23", -1.23, "-1.23"),
+            (b"  123", -123.0, "-123"),
+        ] {
+            let payload = make_payload(0x01, 0x00, display, 0x08, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert!(
+                matches!(m.value, MeasuredValue::Normal(v) if (v - value).abs() < 1e-6),
+                "{display:?}: {:?}",
+                m.value
+            );
+            assert_eq!(m.display_raw.as_deref(), Some(raw), "{display:?}");
+        }
+    }
+
+    #[test]
+    fn parse_negative_overload_keeps_the_text() {
+        let payload = make_payload(0x01, 0x00, b"   OL", 0x08, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v + 12.34).abs() < 1e-6));
-        // The sign reaches the float only; whether the meter also spells it
-        // in the display field is open (docs/research/ut8803/verification.md).
-        assert_eq!(m.display_raw.as_deref(), Some("12.34"));
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.display_raw.as_deref(), Some("   OL"));
     }
 
     #[test]

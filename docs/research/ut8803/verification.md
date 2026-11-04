@@ -40,9 +40,9 @@ read yet: everything below comes from UNI-T's uci.dll and manuals.
 - What the five display bytes hold: ASCII digits, point, spaces, NULs, `OL`,
   or binary (§2.3, payload layout) — decides the parser's display check and float parse.
   Needs the first report's trace and `ohm` (OL). (#3)
-- Whether a negative reading spells `-` in the display field too: if so the
-  value double-negates, if not `display_raw` stays unsigned, unlike the
-  UT8802's — decides the sign handling. Needs `dcv_negative`. (#3)
+- Whether a negative reading spells `-` in the display field too — settles
+  the spec's display bytes (§2.3); the parser signs the value and digits from
+  bit 3 either way. Needs `dcv_negative`. (#3)
 
 ## Flags
 
