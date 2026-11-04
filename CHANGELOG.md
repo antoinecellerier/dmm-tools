@@ -42,6 +42,7 @@
 - **The UT181A and UT171 keep reading after joining the stream mid-frame** — readings could stop for tens of seconds, and a refused UT181A command look accepted.
 - **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
 - **dmm-gui says why a connection failed, or which data was unreadable** — a wrong cable, Bluetooth switched off or a garbled frame showed as "No response from meter".
+- **dmm-gui names and saves the meter swapped in during an Auto-detect session** — it kept the first meter's name, specifications and saved device.
 - **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
 - **A retried Connect in dmm-gui shows its own progress** — the previous failure stayed on screen, so the click looked like it did nothing.
 - **dmm-gui shows Connecting… and a Cancel button while it opens a meter** — Connect stayed clickable, and a second click opened the meter twice.

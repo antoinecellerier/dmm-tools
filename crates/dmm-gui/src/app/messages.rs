@@ -28,15 +28,16 @@ const EXIT_DISCONNECT_WAIT: Duration = Duration::from_secs(4);
 /// The meter a `Connected` identified for a session that was told none, or
 /// `None` when there is nothing to tell the user.
 ///
-/// `None` covers the two quiet cases: the settings name a meter, so the id
-/// that came back is the user's own pick returning (which is also every
-/// reconnect once a detected meter has been saved), and the mock, which is
-/// never on the far end of a cable.
+/// `None` covers the two quiet cases: the session opened a named meter
+/// (`detecting` false), so the id that came back is the user's own pick
+/// returning, and the mock, which is never on the far end of a cable. A
+/// detecting session keeps detecting through its reconnects, so a meter
+/// swapped on the cable is identified too, after the first one was saved.
 fn detected_under_auto(
-    family: &str,
+    detecting: bool,
     device_id: Option<&'static str>,
 ) -> Option<&'static registry::SelectableDevice> {
-    if named_device(family).is_some() {
+    if !detecting {
         return None;
     }
     device_id
@@ -57,15 +58,17 @@ fn detected_under_auto(
 /// alone, so a drop and reconnect doesn't rewrite the file each time.
 fn detected_device_to_save(
     family: &str,
+    detecting: bool,
     overridden: bool,
     device_id: Option<&'static str>,
 ) -> Option<&'static str> {
     if overridden {
         return None;
     }
-    detected_under_auto(family, device_id)
+    let saved = named_device(family).map(|d| d.id);
+    detected_under_auto(detecting, device_id)
         .map(|d| d.id)
-        .filter(|id| *id != family)
+        .filter(|id| saved != Some(*id))
 }
 
 /// What the toast says when a meter identifies itself under Auto-detect.
@@ -165,14 +168,24 @@ impl App {
     /// Only a session that was detecting gets here: under a named model the
     /// `Connected` id is the pick the user already made. What is saved is what
     /// the *next* session opens — this one is already running that protocol,
-    /// so nothing reconnects and no reading is lost.
-    fn remember_detected_device(&mut self, device_id: Option<&'static str>, reported: &str) {
-        let Some(device) = detected_under_auto(&self.settings.shared.device_family, device_id)
-        else {
+    /// so nothing reconnects and no reading is lost. `new_meter` is false for
+    /// a reconnect that found the meter already on screen, which changes
+    /// nothing.
+    fn remember_detected_device(
+        &mut self,
+        device_id: Option<&'static str>,
+        reported: &str,
+        new_meter: bool,
+    ) {
+        if !new_meter {
+            return;
+        }
+        let Some(device) = detected_under_auto(self.connection.detecting, device_id) else {
             return;
         };
         let to_save = detected_device_to_save(
             &self.settings.shared.device_family,
+            self.connection.detecting,
             self.settings.overrides.has_device(),
             device_id,
         );
@@ -425,6 +438,7 @@ impl App {
                 },
                 thread_ctx,
             );
+            self.connection.detecting = device_id.is_none();
         }
         // Until the thread reports the meter open, or fails to: Connect
         // turns into Cancel meanwhile, as a second open on the same meter
@@ -631,21 +645,38 @@ impl App {
                 .meter
                 .as_ref()
                 .is_some_and(|m| id(m.named_other) == id(named));
+        // A detecting reconnect saves and announces only a meter other than
+        // the one on screen: by the model it names, else the one it opened
+        // as. A name heard before and missed now is no other meter: detection
+        // that misses the name falls back to the family's first model, as a
+        // UT161E reads as the UT61E+.
+        let new_meter = !self.connection.meter.as_ref().is_some_and(|m| {
+            let before = m.named_other.or(m.device);
+            id(before) == id(named.or(picked))
+                || (m.name.is_some()
+                    && meter.name.is_none()
+                    && before
+                        .zip(picked)
+                        .is_some_and(|(before, picked)| before.family == picked.family))
+        });
         self.connection.meter = Some(meter);
         let family = &self.settings.shared.device_family;
-        let detected = detected_under_auto(family, device_id).is_some();
+        let detecting = self.connection.detecting;
+        let detected = detected_under_auto(detecting, device_id).is_some();
         match (named, picked) {
             // Detection fell back without hearing the name: the meter that then
             // named itself is the one to save.
             (Some(named), _) if detected => {
-                let saved = detected_device_to_save(
-                    family,
-                    self.settings.overrides.has_device(),
-                    Some(named.id),
-                )
-                .is_some();
-                self.remember_detected_device(Some(named.id), &reported);
-                if !told {
+                let saved = new_meter
+                    && detected_device_to_save(
+                        family,
+                        detecting,
+                        self.settings.overrides.has_device(),
+                        Some(named.id),
+                    )
+                    .is_some();
+                self.remember_detected_device(Some(named.id), &reported, new_meter);
+                if new_meter {
                     self.toast = Some(Toast::error(named_after_detection_toast(
                         &self.l10n,
                         &reported,
@@ -672,7 +703,7 @@ impl App {
             // Under Auto-detect the meter that just named itself becomes the
             // saved device, so the next session opens it pinned instead of
             // probing the cable again.
-            _ => self.remember_detected_device(device_id, &reported),
+            _ => self.remember_detected_device(device_id, &reported, new_meter),
         }
         self.connection.last_error = None;
         self.connection.reconnect_attempt = 0;
@@ -1314,7 +1345,7 @@ mod tests {
     #[test]
     fn a_detected_meter_is_saved_as_the_device() {
         assert_eq!(
-            detected_device_to_save(registry::AUTO_DEVICE_ID, false, Some("ut61eplus")),
+            detected_device_to_save(registry::AUTO_DEVICE_ID, true, false, Some("ut61eplus")),
             Some("ut61eplus")
         );
     }
@@ -1325,7 +1356,7 @@ mod tests {
     #[test]
     fn a_command_line_auto_detects_without_saving() {
         assert_eq!(
-            detected_device_to_save(registry::AUTO_DEVICE_ID, true, Some("ut61eplus")),
+            detected_device_to_save(registry::AUTO_DEVICE_ID, true, true, Some("ut61eplus")),
             None
         );
     }
@@ -1335,7 +1366,7 @@ mod tests {
     #[test]
     fn a_mock_connect_is_never_saved() {
         assert_eq!(
-            detected_device_to_save(registry::AUTO_DEVICE_ID, false, Some("mock")),
+            detected_device_to_save(registry::AUTO_DEVICE_ID, true, false, Some("mock")),
             None
         );
     }
@@ -1345,18 +1376,23 @@ mod tests {
     #[test]
     fn a_value_that_already_names_that_meter_is_not_re_saved() {
         assert_eq!(
-            detected_device_to_save("ut61eplus", false, Some("ut61eplus")),
+            detected_device_to_save("ut61eplus", true, false, Some("ut61eplus")),
             None
         );
         // Including when the file spells it as one of the entry's aliases.
         assert_eq!(
-            detected_device_to_save("ut61e", false, Some("ut61eplus")),
+            detected_device_to_save("ut61e", true, false, Some("ut61eplus")),
             None
         );
         // And a meter the user picked themselves is left as they left it.
         assert_eq!(
-            detected_device_to_save("ut61b+", false, Some("ut61eplus")),
+            detected_device_to_save("ut61b+", false, false, Some("ut61eplus")),
             None
+        );
+        // While a meter swapped in during a detecting session is saved.
+        assert_eq!(
+            detected_device_to_save("ut61eplus", true, false, Some("ut161e")),
+            Some("ut161e")
         );
     }
 
@@ -1399,7 +1435,8 @@ mod tests {
     #[test]
     fn the_toast_under_a_command_line_auto_only_names_the_meter() {
         let mut app = app(registry::AUTO_DEVICE_ID, true);
-        app.remember_detected_device(Some("ut61eplus"), "UT61E+");
+        app.connection.detecting = true;
+        app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
         assert_eq!(toast_text(&app), Some("Detected UNI-T UT61E+"));
         assert_eq!(
             app.settings.shared.device_family,
@@ -1417,7 +1454,8 @@ mod tests {
     fn detection_does_not_cover_an_error() {
         let mut app = app(registry::AUTO_DEVICE_ID, false);
         app.toast = Some(Toast::error("settings could not be read"));
-        app.remember_detected_device(Some("ut61eplus"), "UT61E+");
+        app.connection.detecting = true;
+        app.remember_detected_device(Some("ut61eplus"), "UT61E+", true);
         assert_eq!(toast_text(&app), Some("settings could not be read"));
         assert_eq!(app.settings.shared.device_family, "ut61eplus");
     }
@@ -1428,7 +1466,7 @@ mod tests {
     fn a_connect_under_a_named_meter_is_silent() {
         for family in ["ut61eplus", "mock"] {
             let mut app = app(family, false);
-            app.remember_detected_device(Some(family), "UT61E+");
+            app.remember_detected_device(Some(family), "UT61E+", true);
             assert_eq!(toast_text(&app), None, "{family} should say nothing");
         }
     }
@@ -1479,6 +1517,7 @@ mod tests {
     #[test]
     fn a_name_heard_after_a_fallback_saves_the_named_meter() {
         let mut app = app(registry::AUTO_DEVICE_ID, false);
+        app.connection.detecting = true;
         app.deliver(DmmMessage::Connected(ConnectedMeter {
             name: Some("UT161E".to_string()),
             named_other: dmm_lib::protocol::registry::find_device("ut161e"),
@@ -1491,6 +1530,71 @@ mod tests {
                 "The meter reports \"UT161E\", saved as your device: reconnect to read it as a UNI-T UT161E."
             )
         );
+    }
+
+    /// A detecting session re-identifies the meter at every reconnect: one
+    /// swapped on the cable is saved and named in its turn, and the same
+    /// meter coming back says nothing.
+    #[test]
+    fn a_meter_swapped_during_a_detecting_session_replaces_the_saved_one() {
+        let mut app = app(registry::AUTO_DEVICE_ID, false);
+        app.connection.detecting = true;
+        let hello = |id| DmmMessage::Connected(ConnectedMeter::test_fixture(Some(id)));
+        app.deliver(hello("ut61eplus"));
+        assert_eq!(app.settings.shared.device_family, "ut61eplus");
+        app.toast = None;
+        app.deliver(hello("ut161e"));
+        assert_eq!(app.settings.shared.device_family, "ut161e");
+        assert_eq!(app.active_device().map(|d| d.id), Some("ut161e"));
+        assert!(
+            toast_text(&app).is_some_and(|t| t.starts_with("Detected UNI-T UT161E")),
+            "{:?}",
+            toast_text(&app)
+        );
+        app.toast = None;
+        app.deliver(hello("ut161e"));
+        assert_eq!(toast_text(&app), None, "the same meter again");
+    }
+
+    /// A UT161E saved through the UT61E+ fallback and its name, then a
+    /// reconnect that misses the name: the fallback is the same meter, not
+    /// a UT61E+ to save over it.
+    #[test]
+    fn a_reconnect_missing_the_name_keeps_the_named_meter() {
+        let mut app = app(registry::AUTO_DEVICE_ID, false);
+        app.connection.detecting = true;
+        app.deliver(DmmMessage::Connected(ConnectedMeter {
+            name: Some("UT161E".to_string()),
+            named_other: dmm_lib::protocol::registry::find_device("ut161e"),
+            ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+        }));
+        assert_eq!(app.settings.shared.device_family, "ut161e");
+        app.toast = None;
+        app.deliver(DmmMessage::Connected(ConnectedMeter::test_fixture(Some(
+            "ut61eplus",
+        ))));
+        assert_eq!(app.settings.shared.device_family, "ut161e");
+        assert_eq!(toast_text(&app), None);
+    }
+
+    /// A UT161E detected by its own model, then a reconnect that falls back
+    /// to the UT61E+ and hears the name: the same meter, so no toast.
+    #[test]
+    fn a_reconnect_naming_the_detected_meter_says_nothing() {
+        let mut app = app(registry::AUTO_DEVICE_ID, false);
+        app.connection.detecting = true;
+        app.deliver(DmmMessage::Connected(ConnectedMeter::test_fixture(Some(
+            "ut161e",
+        ))));
+        assert_eq!(app.settings.shared.device_family, "ut161e");
+        app.toast = None;
+        app.deliver(DmmMessage::Connected(ConnectedMeter {
+            name: Some("UT161E".to_string()),
+            named_other: dmm_lib::protocol::registry::find_device("ut161e"),
+            ..ConnectedMeter::test_fixture(Some("ut61eplus"))
+        }));
+        assert_eq!(app.settings.shared.device_family, "ut161e");
+        assert_eq!(toast_text(&app), None);
     }
 
     /// A reading in `mode` stamped `at`, as the acquisition thread sends one.
