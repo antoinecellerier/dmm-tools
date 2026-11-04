@@ -290,6 +290,9 @@ impl App {
 
     pub(super) fn connect(&mut self, ctx: &egui::Context) {
         self.disconnect();
+        // A new attempt reports afresh: the last failure would otherwise hide
+        // the Detecting and Waiting notices until this attempt fails too.
+        self.connection.last_error = None;
         // An imported session's readings are the file's, stamped on a time
         // base of their own: a meter's never join them.
         if self.source.is_import() {
@@ -990,6 +993,27 @@ mod tests {
             "got {:?}",
             n.body
         );
+    }
+
+    /// A retried Connect drops the last failure, so the new attempt's own
+    /// progress shows rather than the old help, which made the click look
+    /// inert.
+    #[test]
+    fn a_retried_connect_drops_the_last_failure() {
+        // The mock: Auto-detect would probe the machine's USB and Bluetooth
+        // from a thread that outlives the test.
+        let mut app = app("mock", false);
+        app.connection.last_error = Some(ConnectionIssue::DeviceNotFound {
+            bluetooth_searched: true,
+        });
+        app.connect(&crate::app::styled_context());
+        assert!(app.connection.last_error.is_none());
+        assert!(
+            app.connection_notice()
+                .is_none_or(|n| n.kind != NoticeKind::NoMeterFound),
+            "the old failure is gone"
+        );
+        app.disconnect();
     }
 
     /// Session zero is the Connect, not the launch: playback measures every
