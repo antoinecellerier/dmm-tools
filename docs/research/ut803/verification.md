@@ -25,6 +25,9 @@ every capture step; no UT803 has been read.
 - The sign (position 8 bit 2), overload (8 bit 0), HOLD (9 bit 3) and
   AUTO, AC and DC (10) ([§7.4][s74] items 2 and 4) — decides `Ut803Fields`.
   Needs `dcv_negative`, `ohm_ol`, `hold`, `acv`. (#15)
+- The AC and DC bits (10) on µA, mA and A — decides naming those modes
+  from `coupling()` as "DC mA"/"AC mA", where today both share one trace
+  and mode name. Needs `dcua`, `acua`, `dcma`, `acma`, `dca`, `aca`. (#15)
 - The mode codes and range tables ([§3.4][s34], [§7.4][s74] item 4) —
   decides `ut803_mode_info`, and whether it gets range labels as the
   UT804's do. Needs every mode step. (#15)
