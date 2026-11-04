@@ -54,13 +54,14 @@ jobs:
           #   and packages. macOS Intel rides on the macOS ARM job: both need
           #   the scarce macos-latest runners, and a job GitHub finds no
           #   runner for is cancelled, holding the dev release back.
+          # Linux os: the runner's glibc becomes the users' floor (GLIBC_FLOOR below).
           cat > targets.json <<'JSON'
           [
-            {"name": "Linux",         "os": "ubuntu-latest",    "target": "x86_64-unknown-linux-gnu",  "slug": "linux-x86_64",    "ext": "tar.gz", "native": true, "ci": true},
+            {"name": "Linux",         "os": "ubuntu-22.04",     "target": "x86_64-unknown-linux-gnu",  "slug": "linux-x86_64",    "ext": "tar.gz", "native": true, "ci": true},
             {"name": "Windows",       "os": "windows-latest",   "target": "x86_64-pc-windows-msvc",    "slug": "windows-x86_64",  "ext": "zip",    "native": true, "ci": true},
             {"name": "macOS",         "os": "macos-latest",     "target": "aarch64-apple-darwin",      "slug": "macos-aarch64",   "ext": "tar.gz", "native": true, "ci": true,
              "also_target": "x86_64-apple-darwin", "also_slug": "macos-x86_64"},
-            {"name": "Linux (ARM)",   "os": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "slug": "linux-aarch64",   "ext": "tar.gz", "native": true},
+            {"name": "Linux (ARM)",   "os": "ubuntu-22.04-arm", "target": "aarch64-unknown-linux-gnu", "slug": "linux-aarch64",   "ext": "tar.gz", "native": true},
             {"name": "Windows (ARM)", "os": "windows-latest",   "target": "aarch64-pc-windows-msvc",   "slug": "windows-aarch64", "ext": "zip"}
           ]
           JSON
@@ -166,6 +167,32 @@ jobs:
         run: >
           cargo build --workspace --release --target ${{ matrix.target }}
           ${{ matrix.also_target && format('--target {0}', matrix.also_target) || '' }}
+
+      # A newer runner, or a dependency calling a newer glibc function, would
+      # otherwise raise the floor silently and the binaries would fail to start
+      # on older distributions. The loader enforces the version references, not
+      # the symbols: a weak symbol still adds a hard reference unless the linker
+      # flags it weak (0x02), which bfd, gold and mold don't.
+      - name: Check the glibc floor
+        if: runner.os == 'Linux'
+        env:
+          GLIBC_FLOOR: "2.35"
+        run: |
+          for bin in dmm-cli dmm-gui; do
+            NEED=$(objdump -p "target/${{ matrix.target }}/release/$bin" \
+              | sed -n '/Version References/,$p' \
+              | awk '$4 ~ /^GLIBC_[0-9.]+$/ && $2 != "0x02" {print substr($4,7)}' \
+              | sort -uV | tail -1)
+            if [ -z "$NEED" ]; then
+              echo "::error::found no GLIBC version references in $bin"
+              exit 1
+            fi
+            echo "$bin needs glibc $NEED"
+            if ! printf '%s\n' "$NEED" "$GLIBC_FLOOR" | sort -V -C; then
+              echo "::error::$bin needs glibc $NEED, newer than the $GLIBC_FLOOR floor"
+              exit 1
+            fi
+          done
 
       # build.rs only re-runs when .git/HEAD changes, so a bad incremental state
       # could ship a binary reporting the wrong commit -- which would quietly

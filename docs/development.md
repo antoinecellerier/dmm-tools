@@ -451,6 +451,11 @@ without uploading, and is the only caller setting `cache: true`: the 10 GB
 repository cache is worth more to pull-request turnaround than to unattended
 builds.
 
+The Linux targets build on pinned Ubuntu runners rather than `ubuntu-latest`:
+the runner's glibc is the oldest the binaries run on. A step after the build
+fails if either binary needs a newer glibc than the floor set there, so a
+runner or dependency change cannot raise it unnoticed.
+
 `dev-build.yml` and a tagged `release.yml` run pass `published: true`, which
 builds with `DMM_PUBLISHED_BUILD=1`. Only those binaries check GitHub for a
 newer release: any other build's commit matches no published one, so it would
