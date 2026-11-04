@@ -567,7 +567,40 @@ fn write_if_changed(path: &std::path::Path, content: &[u8]) -> bool {
     fs::write(path, content).is_ok()
 }
 
+/// Lets go of the console Windows opens beside the window when dmm-gui is
+/// started from Explorer or a shortcut, whose closing would end the app. A
+/// console holding this process alone was made for it; one a shell shares
+/// stays, so a terminal launch keeps its help, redirection and logs
+/// (docs/ux-design.md, "The console stays for terminal launches").
+#[cfg(windows)]
+#[expect(unsafe_code, reason = "three Win32 console calls, no other unsafe")]
+fn free_own_console() {
+    use windows_sys::Win32::System::Console::{
+        FreeConsole, GetConsoleProcessList, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        SetStdHandle,
+    };
+    // Two entries tell "this process alone" from "shared": with more
+    // attached, the call returns the count it would need, still above 1.
+    let mut processes = [0u32; 2];
+    // SAFETY: the buffer is valid for writes of the length passed, and
+    // outlives the call.
+    let attached = unsafe { GetConsoleProcessList(processes.as_mut_ptr(), processes.len() as u32) };
+    if attached == 1 {
+        // SAFETY: takes no arguments.
+        unsafe { FreeConsole() };
+        // The std handles still hold the freed console's handle values,
+        // which a later file open can be handed again: null them, so a log
+        // line is dropped by Rust's stdio instead of landing in that file.
+        for handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            // SAFETY: takes plain values; null is a valid "no handle".
+            unsafe { SetStdHandle(handle, std::ptr::null_mut()) };
+        }
+    }
+}
+
 fn main() -> eframe::Result<()> {
+    #[cfg(windows)]
+    free_own_console();
     dmm_shared::logging::init();
 
     // Before the command line, so `--help` and its errors speak the language

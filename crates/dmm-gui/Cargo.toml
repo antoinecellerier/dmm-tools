@@ -38,6 +38,10 @@ directories.workspace = true
 ureq = { version = "3", default-features = false, features = ["platform-verifier", "rustls-no-provider"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
 
+# Detaches from the console Windows opens for an Explorer launch (main.rs).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
+
 [features]
 default = ["update-check"]
 # The daily request for a newer release, the GUI's only network access. Without

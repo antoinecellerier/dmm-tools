@@ -22,6 +22,12 @@ saving, where Auto-detect in the panel saves what it finds.
 **Overrides are marked.** A session-only value has to be told from a saved
 one.
 
+**The console stays for terminal launches.** On Windows dmm-gui is a console
+program, so `--help`, `--completions`, redirection and logs work from a
+shell as they do elsewhere; started from Explorer, it lets go of the console
+Windows made for it, whose closing would end the app (`free_own_console` in
+`main.rs`). A GUI-subsystem build would print after the prompt returns.
+
 ## GUI layout
 
 **One width decides the layout.** The reading column sits beside the graph in
