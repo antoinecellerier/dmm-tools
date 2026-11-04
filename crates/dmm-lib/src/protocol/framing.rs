@@ -194,7 +194,7 @@ where
 
 /// Drop `rx_buf` up to and including the first `header`, so extraction
 /// resyncs on the next one; all of it if there is none.
-fn skip_past_header(rx_buf: &mut Vec<u8>, header: &[u8]) {
+pub(crate) fn skip_past_header(rx_buf: &mut Vec<u8>, header: &[u8]) {
     if let Some(pos) = rx_buf.windows(header.len()).position(|w| w == header) {
         rx_buf.drain(..pos + header.len());
     } else {
@@ -394,6 +394,13 @@ pub(crate) fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usi
     Ok(Some((payload, consumed)))
 }
 
+/// Longest length field [`extract_frame_abcd_2byte_le16`] accepts: a UT181A
+/// recording-data reply carrying the most samples (UT181A spec §10.3: the
+/// type byte, a count byte and 250 samples of 9 bytes, plus the 2-byte
+/// checksum). The UT171's longest frame has length 0x17 (UT171 spec §3.4).
+const MAX_LE16_LEN: usize = 1 + 1 + 250 * 9 + 2;
+const _: () = assert!(MAX_LE16_LEN + 4 <= MAX_RX_BUF);
+
 /// Extract a frame using UT181A format: AB CD len_lo len_hi payload chk_lo chk_hi.
 ///
 /// Length is 2-byte LE uint16 = payload_size + 2 (includes checksum bytes).
@@ -406,11 +413,13 @@ pub(crate) fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8
     };
 
     let len_val = u16::from_le_bytes([remaining[2], remaining[3]]) as usize;
-    if len_val < 2 {
+    if !(2..=MAX_LE16_LEN).contains(&len_val) {
         // See abcd_be16: Ok(None) would pin this header at the buffer
         // head until the cap clears; error out so recovery can resync.
+        // A false AB CD inside a payload claims a random length, nearly
+        // always beyond any frame either family sends.
         return Err(Error::invalid_response(
-            format!("2byte_le16 length field {len_val} < 2"),
+            format!("2byte_le16 length field {len_val} outside 2..={MAX_LE16_LEN}"),
             remaining,
         ));
     }
@@ -575,10 +584,18 @@ mod tests {
     }
 
     #[test]
+    fn abcd_2byte_le16_long_length_errors_for_resync() {
+        let mut buf = vec![0xAB, 0xCD];
+        buf.extend_from_slice(&(MAX_LE16_LEN as u16 + 1).to_le_bytes());
+        buf.extend_from_slice(&[0x00, 0x00]);
+        assert!(extract_frame_abcd_2byte_le16(&buf).is_err());
+    }
+
+    #[test]
     fn abcd_2byte_le16_checksum_overflow_does_not_panic() {
-        // ~4 KiB of 0xFF after a large length field: a plain u16 Sum over
+        // 300 bytes of 0xFF after the length field: a plain u16 Sum over
         // the checksum range would overflow-panic in debug builds.
-        let len: u16 = 4000;
+        let len: u16 = 300;
         let mut buf = vec![0xAB, 0xCD];
         buf.extend_from_slice(&len.to_le_bytes());
         buf.extend(std::iter::repeat_n(0xFFu8, len as usize + 2));
@@ -888,6 +905,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result, good_payload);
+    }
+
+    /// A false AB CD claiming a frame longer than either LE16 family sends,
+    /// as one inside float bytes can on a mid-stream join, is skipped at
+    /// once rather than waited on until the buffer cap clears it.
+    #[test]
+    fn read_frame_skips_a_false_le16_header_claiming_a_long_frame() {
+        let payload = vec![0x02, 0x00, 0x11, 0x31];
+        let mut chunk = vec![0xAB, 0xCD, 0xFF, 0xFF];
+        chunk.extend(build_abcd_le16(&payload));
+        let mock = MockTransport::new(vec![chunk]);
+        let mut rx_buf = Vec::new();
+
+        let result = read_frame(
+            &mut rx_buf,
+            &mock,
+            extract_frame_abcd_2byte_le16,
+            |_| true,
+            FrameErrorRecovery::SkipAndRetry { header: &HEADER },
+            "test",
+        )
+        .unwrap();
+        assert_eq!(result, payload);
+        assert!(rx_buf.is_empty());
     }
 
     #[test]

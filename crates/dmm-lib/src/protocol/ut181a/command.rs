@@ -11,7 +11,7 @@ use crate::protocol::framing::{self, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{Protocol, unsupported_setting};
 use crate::transport::Transport;
-use log::{debug, warn};
+use log::debug;
 use std::borrow::Cow;
 use std::time::{Duration, Instant};
 
@@ -107,10 +107,12 @@ impl Ut181aProtocol {
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    // Drop the corrupt data rather than re-extracting it every
-                    // pass; `request_measurement` resyncs on the next header.
-                    warn!("ut181a: frame error waiting for the {what} reply: {e}, clearing buffer");
-                    self.rx_buf.clear();
+                    // Resync on the next header, as `request_measurement`
+                    // does: the reply may already sit behind the bad one.
+                    // Per bad frame, so at debug like `read_frame`'s skip.
+                    debug!("ut181a: frame error waiting for the {what} reply: {e}, skipping");
+                    framing::skip_past_header(&mut self.rx_buf, &framing::HEADER);
+                    continue;
                 }
             }
 

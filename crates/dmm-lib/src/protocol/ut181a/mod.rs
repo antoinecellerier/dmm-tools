@@ -901,6 +901,21 @@ mod tests {
         );
     }
 
+    /// A false AB CD claiming a long frame, read in the same chunk as the
+    /// reply, does not hide an ER behind it.
+    #[test]
+    fn an_er_reply_behind_a_false_header_rejects_a_range_selection() {
+        let (mut proto, mock) = proto_in(0x1111, 1);
+        let mut chunk = vec![0xAB, 0xCD, 0xFF, 0xFF];
+        chunk.extend(build_abcd_le16(&[0x01, b'E', b'R']));
+        mock.push_response(chunk);
+        let err = proto.select(&mock, Setting::Range, 3).unwrap_err();
+        assert!(
+            matches!(err, Error::CommandRejected(_)),
+            "got {err:?}, want CommandRejected"
+        );
+    }
+
     // --- Flag-backed settings (HOLD, REL, MIN/MAX) ------------------------
 
     /// The OK reply the meter answers a command with (spec §4.1).
@@ -1182,6 +1197,15 @@ mod tests {
         assert_eq!(recognised(&frame, &after(DeviceFamily::Ut181a)), ut181a());
         assert_eq!(recognised(&frame, &after(DeviceFamily::Ut171)), None);
         assert_eq!(recognised(&frame, &Probing::default()), None);
+    }
+
+    /// Detection tries every header, so a false one claiming a long frame
+    /// does not hide the real frame behind it.
+    #[test]
+    fn a_false_header_does_not_hide_a_frame_from_detection() {
+        let mut buf = vec![0xAB, 0xCD, 0xFF, 0xFF];
+        buf.extend(build_abcd_le16(&parse::tests::real_frame_vac_hz()));
+        assert_eq!(recognised(&buf, &Probing::default()), ut181a());
     }
 
     /// An OK/ER reply names no model, whatever asked for it.
