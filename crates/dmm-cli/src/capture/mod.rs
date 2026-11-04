@@ -23,7 +23,7 @@ pub(crate) use report::{
 };
 pub(crate) use session::NotResponding;
 pub(crate) use step::{
-    CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, frames_for_step, read_past_blank,
+    CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, frames_for_step, link_gone, read_past_blank,
     samples_after_switch,
 };
 pub(crate) use triage::{cmd_triage, install_triage_logger};
@@ -161,13 +161,33 @@ pub(crate) fn cmd_capture(
         trust,
         driver: drive::Driver::new(!no_drive).settling(settle),
     };
-    let pass = run.protocol_pass(&cli_steps, &step_filter, unverified_only)?;
-    run.report.drive = Some(drive::Drive::merged(run.report.drive, run.driver.state()));
+    let passes = (|| {
+        let pass = run.protocol_pass(&cli_steps, &step_filter, unverified_only)?;
+        run.report.drive = Some(drive::Drive::merged(run.report.drive, run.driver.state()));
 
-    run.batch_review(&pass.to_review)?;
+        run.batch_review(&pass.to_review)?;
 
-    if !pass.quit {
-        run.freeform_pass(&step_filter)?;
+        if !pass.quit {
+            run.freeform_pass(&step_filter)?;
+        }
+        Ok::<_, Box<dyn std::error::Error>>(())
+    })();
+    if let Err(e) = passes {
+        // A pulled cable or a lost link ends the run part-way: keep what the
+        // finished steps captured, and say where and how to pick it up.
+        run.report.drive = Some(drive::Drive::merged(run.report.drive, run.driver.state()));
+        if save_report(&run.report, &run.output_path).is_ok() {
+            eprintln!(
+                "\n{}",
+                tr!(
+                    l,
+                    "capture-report-saved",
+                    path = style(&run.output_path).bold().to_string(),
+                )
+            );
+            eprintln!("{}", unfinished_hint(l, plan_path.is_some()));
+        }
+        return Err(e);
     }
     let CaptureRun {
         dmm,
@@ -305,16 +325,18 @@ fn resume_hint(
     total: usize,
     plan: bool,
 ) -> Option<String> {
-    if covered >= total {
-        return None;
-    }
+    (covered < total).then(|| unfinished_hint(l, plan))
+}
+
+/// How to resume a run, and — outside a plan — how to run named steps.
+fn unfinished_hint(l: &dmm_shared::l10n::Localizer, plan: bool) -> String {
     let mut hint = tr!(l, "capture-not-finished", resume = "r").into_owned();
     // `--steps` conflicts with `--plan`, so it is not on offer for a plan run.
     if !plan {
         hint.push('\n');
         hint.push_str(&tr!(l, "capture-steps-hint", flag = "--steps <ids>"));
     }
-    Some(hint)
+    hint
 }
 
 /// Save the no-response file ([`write_no_response_report`]) and say where

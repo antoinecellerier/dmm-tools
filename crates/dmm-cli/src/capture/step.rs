@@ -10,6 +10,7 @@ use super::session::CaptureRun;
 use super::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
 use crate::open::BoxedDmm;
 use console::{Key, style};
+use dmm_lib::error::{Error, ErrorKind};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::{Mismatch, RangeExpect, RangeShown, Shown, ValueExpect};
 use dmm_lib::text::TextKind;
@@ -56,27 +57,52 @@ pub(super) fn empty_result(
     }
 }
 
+/// Whether `e` says the meter is out of reach — a pulled cable, a dropped
+/// Bluetooth link, a Ctrl-C mid-read — rather than that one frame went
+/// wrong. Every later read fails the same way at once, so the run ends on it:
+/// polling on would spin and file empty steps.
+pub(crate) fn link_gone(e: &Error) -> bool {
+    matches!(
+        e.kind(),
+        ErrorKind::Transport | ErrorKind::DeviceNotFound | ErrorKind::Interrupted
+    )
+}
+
+/// A failed read in a sampling loop: a timeout is skipped, a lost link
+/// ([`link_gone`]) is handed back to end the run, anything else is recorded
+/// and the loop goes on.
+fn triage(e: Error, errors: &mut ErrorLog) -> dmm_lib::error::Result<()> {
+    match e {
+        Error::Timeout => Ok(()),
+        e if link_gone(&e) => Err(e),
+        e => {
+            errors.record(&e);
+            Ok(())
+        }
+    }
+}
+
 /// Poll for `n` samples.
 ///
 /// A parse rejection is recorded and polling continues: a meter whose frames
 /// we misread would otherwise end the step on the first bad frame, and the
-/// report showed neither a sample nor a reason.
+/// report showed neither a sample nor a reason. A lost link ends the poll
+/// ([`link_gone`]).
 pub(crate) fn capture_samples(
     dmm: &mut BoxedDmm,
     n: usize,
     errors: &mut ErrorLog,
-) -> Vec<Measurement> {
+) -> dmm_lib::error::Result<Vec<Measurement>> {
     let mut samples = Vec::new();
     let mut attempts = 0;
     while samples.len() < n && attempts < n * 5 {
         match dmm.request_measurement() {
             Ok(m) => samples.push(m),
-            Err(dmm_lib::error::Error::Timeout) => {}
-            Err(e) => errors.record(&e),
+            Err(e) => triage(e, errors)?,
         }
         attempts += 1;
     }
-    samples
+    Ok(samples)
 }
 
 /// Readings to wait through for a meter's display to come back after a
@@ -111,18 +137,17 @@ pub(crate) fn samples_after_switch(
     dmm: &mut BoxedDmm,
     n: usize,
     errors: &mut ErrorLog,
-) -> Vec<Measurement> {
+) -> dmm_lib::error::Result<Vec<Measurement>> {
     let mut samples = Vec::new();
     if n > 0 {
         match read_past_blank(dmm) {
             Ok(m) => samples.push(m),
-            Err(dmm_lib::error::Error::Timeout) => {}
-            Err(e) => errors.record(&e),
+            Err(e) => triage(e, errors)?,
         }
     }
     let rest = n.saturating_sub(samples.len());
-    samples.extend(capture_samples(dmm, rest, errors));
-    samples
+    samples.extend(capture_samples(dmm, rest, errors)?);
+    Ok(samples)
 }
 
 /// Wire events belonging to `step_id`, capped, and how many older ones the
@@ -251,9 +276,11 @@ fn watch_for_state(
                 }
                 Verdict::Waiting => last = Some(m),
             },
-            Err(dmm_lib::error::Error::Timeout) => {}
+            Err(Error::Timeout) => {}
+            // `?` first: the wait may have no timeout, and a link that fails
+            // every read at once would spin in it.
             Err(e) => {
-                errors.record(&e);
+                triage(e, errors)?;
                 watcher.feed_error();
             }
         }
@@ -572,16 +599,21 @@ impl CaptureRun {
             if let Some(cmd) = step.command.filter(|_| attempt == 1) {
                 // What the meter shows before the button is pressed, so a command
                 // that changes nothing can be told from one that works.
-                let before = capture_samples(&mut self.dmm, STABLE_FRAMES, &mut errors);
+                let before = capture_samples(&mut self.dmm, STABLE_FRAMES, &mut errors)?;
 
-                if let Err(e) = self.dmm.send_command(cmd) {
-                    eprintln!(
-                        "  {}",
-                        style(tr!(l, "capture-command-failed", error = l.error(&e))).red()
-                    );
-                    let result = empty_result(step, StepStatus::Error, Some(e.to_string()));
-                    self.finish_failed_step(step.id, result);
-                    return Ok(StepOutcome::nothing());
+                match self.dmm.send_command(cmd) {
+                    Ok(()) => {}
+                    // A pulled cable is no command the meter refused: the run ends on it.
+                    Err(e) if link_gone(&e) => return Err(e.into()),
+                    Err(e) => {
+                        eprintln!(
+                            "  {}",
+                            style(tr!(l, "capture-command-failed", error = l.error(&e))).red()
+                        );
+                        let result = empty_result(step, StepStatus::Error, Some(e.to_string()));
+                        self.finish_failed_step(step.id, result);
+                        return Ok(StepOutcome::nothing());
+                    }
                 }
 
                 let mut watcher =
@@ -671,11 +703,15 @@ impl CaptureRun {
             // unless no reading is what the step is there to see.
             let expects_blank = expect.is_some_and(|e| e.value == Some(ValueExpect::NoReading));
             if !expects_blank && settled.as_ref().is_none_or(is_blank) {
-                settled = read_past_blank(&mut self.dmm).ok();
+                settled = match read_past_blank(&mut self.dmm) {
+                    Ok(m) => Some(m),
+                    Err(e) if link_gone(&e) => return Err(e.into()),
+                    Err(_) => None,
+                };
             }
             let mut measurements: Vec<Measurement> = settled.into_iter().collect();
             let wanted = step.samples.saturating_sub(measurements.len());
-            measurements.extend(capture_samples(&mut self.dmm, wanted, &mut errors));
+            measurements.extend(capture_samples(&mut self.dmm, wanted, &mut errors)?);
 
             // Only where the wait offers s and q: a meter that keeps leaving
             // would otherwise retake the step for ever.
@@ -970,7 +1006,7 @@ mod tests {
 
         let mut dmm = dmm_replaying(vec![bad, measurement_frame()]);
         let mut errors = ErrorLog::default();
-        let samples = capture_samples(&mut dmm, 1, &mut errors);
+        let samples = capture_samples(&mut dmm, 1, &mut errors).unwrap();
         let diagnostics = errors.into_diagnostics();
 
         assert_eq!(samples.len(), 1, "polling must continue past the error");
@@ -987,12 +1023,161 @@ mod tests {
 
         let mut dmm = dmm_replaying(vec![bad.clone(), bad.clone(), bad]);
         let mut errors = ErrorLog::default();
-        let samples = capture_samples(&mut dmm, 1, &mut errors);
+        let samples = capture_samples(&mut dmm, 1, &mut errors).unwrap();
         let diagnostics = errors.into_diagnostics();
 
         assert!(samples.is_empty());
         assert_eq!(diagnostics.len(), 1);
         assert!(diagnostics[0].ends_with("(x3)"), "got {diagnostics:?}");
+    }
+
+    /// A cable pulled mid-run: every call fails at once, as an unplugged
+    /// CP2110 does. The calls are counted from the moment it is pulled.
+    struct Pulled {
+        pulled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl Pulled {
+        fn fail(&self) -> dmm_lib::error::Result<usize> {
+            if !self.pulled.load(std::sync::atomic::Ordering::SeqCst) {
+                return Ok(0);
+            }
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(hidapi::HidError::HidApiError {
+                message: "device disconnected".into(),
+            }
+            .into())
+        }
+    }
+
+    impl dmm_lib::transport::Transport for Pulled {
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            None
+        }
+
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            self.fail().map(|_| ())
+        }
+
+        fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            self.fail()
+        }
+    }
+
+    /// Every sampling loop sorts a failed read through one place, so a new
+    /// read site cannot forget the lost-link case.
+    #[test]
+    fn triage_skips_timeouts_ends_on_a_lost_link_and_records_the_rest() {
+        let mut errors = ErrorLog::default();
+        assert!(triage(Error::Timeout, &mut errors).is_ok());
+        let gone = Error::from(hidapi::HidError::HidApiError {
+            message: "device disconnected".into(),
+        });
+        assert!(triage(gone, &mut errors).is_err_and(|e| link_gone(&e)));
+        assert!(triage(Error::UnknownMode(0x7f), &mut errors).is_ok());
+        assert_eq!(errors.into_diagnostics(), ["unknown mode: 0x7f"]);
+    }
+
+    /// A lost link used to be recorded as a parse rejection and polled
+    /// again: an Enter-only wait spun on it at full CPU, and Enter filed an
+    /// empty step. Both now end on the first failed call.
+    #[test]
+    fn a_lost_link_ends_the_wait_and_the_sampling_at_once() {
+        use std::sync::atomic::Ordering;
+        let pulled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
+        let mut dmm = dmm_lib::Dmm::new(
+            Box::new(Pulled {
+                pulled: pulled.clone(),
+                calls: calls.clone(),
+            }) as Box<dyn dmm_lib::transport::Transport>,
+            (device.new_protocol)(),
+        )
+        .unwrap();
+        pulled.store(true, Ordering::SeqCst);
+
+        let mut errors = ErrorLog::default();
+        let mut watcher = StateWatcher::for_step(None, None, false);
+        let watched = watch_for_state(
+            &mut dmm,
+            &Input::untouched(),
+            &mut watcher,
+            Duration::ZERO,
+            OnTimeout::OfferKeys,
+            &mut errors,
+        );
+        assert!(watched.is_err());
+        assert_eq!(calls.swap(0, Ordering::SeqCst), 1);
+
+        let sampled = capture_samples(&mut dmm, 5, &mut errors);
+        assert!(sampled.is_err_and(|e| link_gone(&e)));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(errors.into_diagnostics().is_empty(), "no parse rejection");
+    }
+
+    /// A cable pulled once the baseline is read: the command's write fails.
+    struct PulledBeforeCommand {
+        frames: std::cell::RefCell<std::collections::VecDeque<Vec<u8>>>,
+    }
+
+    impl dmm_lib::transport::Transport for PulledBeforeCommand {
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            None
+        }
+
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            if self.frames.borrow().is_empty() {
+                return Err(hidapi::HidError::HidApiError {
+                    message: "device disconnected".into(),
+                }
+                .into());
+            }
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            let Some(next) = self.frames.borrow_mut().pop_front() else {
+                return Ok(0);
+            };
+            let n = next.len().min(buf.len());
+            buf[..n].copy_from_slice(&next[..n]);
+            Ok(n)
+        }
+    }
+
+    /// A lost link at the command's press used to file the step as an error,
+    /// as though the meter had refused it; the run now ends there instead.
+    #[test]
+    fn a_lost_link_at_the_command_ends_the_run_without_filing_the_step() {
+        let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
+        let dmm = dmm_lib::Dmm::new(
+            Box::new(PulledBeforeCommand {
+                frames: std::cell::RefCell::new(vec![measurement_frame(); STABLE_FRAMES].into()),
+            }) as Box<dyn dmm_lib::transport::Transport>,
+            (device.new_protocol)(),
+        )
+        .unwrap();
+        let step = CaptureStep {
+            id: "hold",
+            instruction: "press HOLD",
+            command: Some("hold"),
+            samples: 2,
+            expect: None,
+            verified: true,
+            gate: false,
+            needs: &[],
+            wait_for_enter: false,
+        };
+        let mut run = run_on(dmm);
+        let err = run
+            .capture_step(&step, false, &PrevState::default())
+            .err()
+            .expect("the run ends on a lost link");
+        let err = err.downcast_ref::<dmm_lib::error::Error>().unwrap();
+        assert!(link_gone(err), "got {err:?}");
+        assert!(run.report.steps.is_empty(), "no step filed");
     }
 
     /// A command the meter ignored has to say what it is still showing, or
@@ -1465,7 +1650,7 @@ mod tests {
         let rel = flagged(0x31, 0x30);
 
         let mut before = dmm_replaying(vec![max; 3]);
-        let payloads = capture_samples(&mut before, 3, &mut ErrorLog::default());
+        let payloads = capture_samples(&mut before, 3, &mut ErrorLog::default()).unwrap();
         let prev = PrevState {
             baseline: Baseline::from_payloads(payloads.iter().map(|m| m.raw_payload.as_slice())),
             last: None,

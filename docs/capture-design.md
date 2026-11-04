@@ -83,6 +83,10 @@ breaking out: on an unproven protocol those are the most interesting frames. A s
 unknown mode, a rejection or too few samples is flagged `needs_attention`, so a maintainer
 scanning the YAML finds it without grepping.
 
+A lost link — a pulled cable, a dropped Bluetooth connection — is no rejection: every later read
+fails at once, so polling on would spin in a step's wait and file empty steps. The run ends on it
+instead, saving the steps it finished and saying how to resume.
+
 ### The auto-detection check
 
 Reporters name their meter with `--device`, which skips detection, so without a check of their

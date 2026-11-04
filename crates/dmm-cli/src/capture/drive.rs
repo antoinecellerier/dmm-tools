@@ -11,8 +11,8 @@ use super::recording;
 use super::report::already_captured;
 use super::session::CaptureRun;
 use super::{
-    CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, frames_for_step, needs_attention,
-    read_past_blank, samples_after_switch, save_report, upsert_step,
+    CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, frames_for_step, link_gone,
+    needs_attention, read_past_blank, samples_after_switch, save_report, upsert_step,
 };
 use console::style;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
@@ -437,13 +437,17 @@ impl CaptureRun {
         );
         let id = sub_step_id(step.id, Setting::Mode, want);
         recording::lock(&self.recorder).set_step(Some(&id));
-        let selected = self.dmm.select(Setting::Mode, choice.id);
+        let selected = match self.dmm.select(Setting::Mode, choice.id) {
+            // A lost link is no meter refusing the mode: the run ends on it.
+            Err(e) if link_gone(&e) => return Err(e.into()),
+            selected => selected,
+        };
         // One reading whatever the outcome: after a refusal it is the only record
         // of where the presses left the meter, which a timeout's text never says.
         // Taken once the display is back, so the step's own samples start there
         // too.
         let mut errors = ErrorLog::default();
-        let samples: Vec<SampleData> = samples_after_switch(&mut self.dmm, 1, &mut errors)
+        let samples: Vec<SampleData> = samples_after_switch(&mut self.dmm, 1, &mut errors)?
             .iter()
             .map(SampleData::from_measurement)
             .collect();
@@ -519,12 +523,17 @@ impl CaptureRun {
         let proven = self.driver.proven(setting);
         recording::lock(&self.recorder).set_step(Some(id));
 
-        let selected = self.dmm.select(setting, choice.id);
+        let selected = match self.dmm.select(setting, choice.id) {
+            // A lost link is no meter refusing the value: the run ends on it,
+            // with nothing filed and no failure spent.
+            Err(e) if link_gone(&e) => return Err(e.into()),
+            selected => selected,
+        };
         let mut errors = ErrorLog::default();
         let measurements = match &selected {
             Ok(()) => {
                 self.driver.wait_to_settle();
-                samples_after_switch(&mut self.dmm, samples_wanted, &mut errors)
+                samples_after_switch(&mut self.dmm, samples_wanted, &mut errors)?
             }
             Err(_) => Vec::new(),
         };
@@ -622,6 +631,11 @@ impl CaptureRun {
                 return Ok(dmm.request_measurement().ok());
             }
             selected => selected.and_then(|()| read_past_blank(dmm)),
+        };
+        // A lost link is no meter refusing to go back: the run ends on it.
+        let reading = match reading {
+            Err(e) if link_gone(&e) => return Err(e.into()),
+            reading => reading,
         };
         if let Ok(m) = &reading
             && shows_target(
@@ -1036,6 +1050,8 @@ mod tests {
         /// The setting offers no reset value, as a UT181A's range in Peak
         /// offers no auto.
         NoReset,
+        /// The link drops at the press, as a Bluetooth meter walking off does.
+        LinkLost,
     }
 
     struct Fails {
@@ -1142,6 +1158,10 @@ mod tests {
                     Ok(())
                 }
                 Failure::Silent => Err(Error::Timeout),
+                Failure::LinkLost => Err(hidapi::HidError::HidApiError {
+                    message: "device disconnected".into(),
+                }
+                .into()),
                 Failure::RefusedIntoAnotherMode if id == RESET_ID => {
                     Err(Unsupported::Setting(setting).into())
                 }
@@ -1415,6 +1435,47 @@ mod tests {
             driver,
         );
         assert_eq!(driver.failures, 0);
+    }
+
+    /// A link lost at a press is no refusal: the run ends there, with no
+    /// sub-step filed against the protocol and no failure spent.
+    #[test]
+    fn a_lost_link_at_a_press_ends_the_run_without_filing_it() {
+        let mut run = run_on(Fails::boxed(
+            dmm_lib::mock::MockMode::DcV,
+            Setting::Hold,
+            Failure::LinkLost,
+        ));
+        let last = run.dmm.request_measurement().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        run.output_path = dir
+            .path()
+            .join("capture.yaml")
+            .to_string_lossy()
+            .to_string();
+        let step = CaptureStep {
+            id: "dcv",
+            samples: 1,
+            ..mode_step("DC V")
+        };
+        assert!(run.sweep_step(&step, &last).is_err());
+        assert!(
+            !run.report
+                .steps
+                .iter()
+                .any(|s| s.id.starts_with("dcv/hold:"))
+        );
+        assert_eq!(run.driver.failures, 0);
+
+        let mut bench = meter(Fails::boxed(
+            dmm_lib::mock::MockMode::AcV,
+            Setting::Mode,
+            Failure::LinkLost,
+        ));
+        let last = bench.last.clone();
+        assert!(bench.run.switch_mode(&mode_step("AC V Hz"), &last).is_err());
+        assert!(bench.ids().is_empty());
+        assert_eq!(bench.failures(), 0);
     }
 
     /// A setting nothing has driven yet is the case the budget exists for,

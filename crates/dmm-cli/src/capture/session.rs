@@ -584,7 +584,7 @@ impl CaptureRun {
             let step_id = format!("extra_{extra}");
             recording::lock(recorder).set_step(Some(&step_id));
             let mut errors = ErrorLog::default();
-            let measurements = capture_samples(dmm, FREEFORM_SAMPLES, &mut errors);
+            let measurements = capture_samples(dmm, FREEFORM_SAMPLES, &mut errors)?;
             let diagnostics = errors.into_diagnostics();
             let sample_data: Vec<SampleData> = measurements
                 .iter()

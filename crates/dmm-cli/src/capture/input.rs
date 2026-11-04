@@ -1,5 +1,5 @@
-//! The capture run's keyboard, and the log of parse rejections a step
-//! collects while it is sampling.
+//! The capture run's keyboard, and the log of read errors — parse
+//! rejections, mostly — a step collects while it is sampling.
 
 use console::Key;
 use dmm_shared::l10n::Localizer;
@@ -176,8 +176,10 @@ fn read_stdin_line() -> Result<String, Box<dyn std::error::Error>> {
     Ok(input.trim().to_string())
 }
 
-/// Parse rejections seen while a step ran, in first-seen order with a repeat
-/// count: a stuck meter otherwise fills the report with the same line.
+/// Read errors seen while a step ran — parse rejections, mostly; a lost link
+/// ends the run instead ([`super::step::link_gone`]) — in first-seen order
+/// with a repeat count: a stuck meter otherwise fills the report with the
+/// same line.
 #[derive(Default)]
 pub(crate) struct ErrorLog {
     entries: Vec<(String, usize)>,
