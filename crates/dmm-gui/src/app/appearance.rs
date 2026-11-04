@@ -77,14 +77,21 @@ fn compact_corners(visuals: &mut egui::Visuals) {
 }
 
 /// Raise egui's small text style to the 11 pt floor, keep the compact
-/// button spacing and corners, and let a popup be measured as tall as the
-/// window.
+/// button spacing and corners, let a popup be measured as tall as the
+/// window, and keep egui's theme off the native window.
 ///
 /// `all_styles_mut`, not `style_mut`: egui keeps a separate `Style` per
-/// theme, and `apply_theme` switches between them with `set_visuals`, which
-/// replaces only `style.visuals` and leaves the rest alone. Setting just the
-/// active theme's style would leave the other theme at 9 pt.
+/// theme, and `apply_theme` pins egui's theme with `set_theme` and then
+/// replaces that style's `visuals` with `set_visuals`, leaving the rest
+/// alone. Setting just the active theme's style would leave the other theme
+/// at 9 pt.
+///
+/// `sync_window_theme` off: pinning egui's theme must not pin the native
+/// window's. A window given a theme stops reporting the OS's theme changes
+/// on Windows and macOS, so `system_theme` would go stale and the System
+/// setting would stop following the OS.
 pub(super) fn install_styles(ctx: &egui::Context) {
+    ctx.options_mut(|o| o.sync_window_theme = false);
     ctx.all_styles_mut(|style| {
         style.text_styles.insert(
             egui::TextStyle::Small,
@@ -246,6 +253,16 @@ impl App {
                 egui::Visuals::light()
             };
             compact_corners(&mut visuals);
+            // Pin egui's theme to ours: left on its default System it swaps
+            // to its other style when the OS flips, under a Light or Dark
+            // setting that does not, and drops these visuals and overrides.
+            // `install_styles` keeps this pin off the native window, so
+            // `system_theme` still follows the OS.
+            ctx.set_theme(if dark {
+                egui::Theme::Dark
+            } else {
+                egui::Theme::Light
+            });
             ctx.set_visuals(visuals);
             self.applied.theme = Some(target);
             self.applied.ui_colors = None; // force reapply on top of new base
@@ -841,6 +858,91 @@ mod tests {
             );
             assert_eq!(v.widgets.hovered.bg_stroke.color, tc.border(), "{name}");
             assert_eq!(v.widgets.inactive.fg_stroke.color, tc.text(), "{name}");
+        }
+    }
+
+    /// Set to Light or Dark, the app keeps its theme and colours when the OS
+    /// flips the other way mid-session: egui follows the OS only while its
+    /// own theme preference is System.
+    #[test]
+    fn an_os_theme_flip_leaves_an_explicit_theme_alone() {
+        for dark in [true, false] {
+            let settings = Settings {
+                theme: if dark {
+                    ThemeMode::Dark
+                } else {
+                    ThemeMode::Light
+                },
+                ..Settings::default()
+            };
+            let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+            let ctx = crate::app::styled_context();
+            let tc = app.settings.theme_colors(dark);
+            let (same, flipped) = if dark {
+                (egui::Theme::Dark, egui::Theme::Light)
+            } else {
+                (egui::Theme::Light, egui::Theme::Dark)
+            };
+            for os in [same, flipped] {
+                let raw = egui::RawInput {
+                    system_theme: Some(os),
+                    ..Default::default()
+                };
+                let mut out = ctx.run_ui(raw, |ui| {
+                    app.apply_theme(ui.ctx());
+                    app.apply_color_overrides(ui.ctx());
+                });
+                out.textures_delta.clear();
+                let style = ctx.global_style();
+                assert_eq!(style.visuals.dark_mode, dark, "dark={dark} os={os:?}");
+                assert_eq!(
+                    style.visuals.panel_fill,
+                    tc.background(),
+                    "dark={dark} os={os:?}"
+                );
+            }
+        }
+    }
+
+    /// Set to System, the app follows the OS both ways mid-session, and
+    /// pinning egui's theme never reaches the native window, which would
+    /// then stop reporting the OS's theme changes.
+    #[test]
+    fn an_os_theme_flip_moves_the_system_theme() {
+        let mut app = App::from_settings(
+            Settings {
+                theme: ThemeMode::System,
+                ..Settings::default()
+            },
+            dmm_lib::Clock::real(),
+        );
+        let ctx = crate::app::styled_context();
+        assert!(!ctx.options(|o| o.sync_window_theme));
+        for os in [egui::Theme::Light, egui::Theme::Dark, egui::Theme::Light] {
+            let raw = egui::RawInput {
+                system_theme: Some(os),
+                ..Default::default()
+            };
+            let mut out = ctx.run_ui(raw, |ui| {
+                app.apply_theme(ui.ctx());
+                app.apply_color_overrides(ui.ctx());
+            });
+            out.textures_delta.clear();
+            assert!(
+                !out.viewport_output.values().any(|v| v
+                    .commands
+                    .iter()
+                    .any(|c| matches!(c, egui::ViewportCommand::SetTheme(_)))),
+                "os={os:?}"
+            );
+            let dark = os == egui::Theme::Dark;
+            let style = ctx.global_style();
+            assert_eq!(style.visuals.dark_mode, dark, "os={os:?}");
+            assert_eq!(
+                style.visuals.panel_fill,
+                app.settings.theme_colors(dark).background(),
+                "os={os:?}"
+            );
         }
     }
 

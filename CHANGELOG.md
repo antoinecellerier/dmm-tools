@@ -48,6 +48,7 @@
 - **dmm-gui shows Connecting… and a Cancel button while it opens a meter** — Connect stayed clickable, and a second click opened the meter twice.
 - **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
 - **dmm-gui rescales when dragged to a monitor with another display scale** — it kept the scale of the monitor it opened on.
+- **dmm-gui keeps its Light or Dark theme when the system's theme changes** — it switched with the system's and lost its custom colours.
 
 ## v0.9.0 — Graph Analysis and Alarms
 
