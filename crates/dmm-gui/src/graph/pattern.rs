@@ -34,6 +34,8 @@ use egui_plot::{
     PlotGeometry, PlotItem, PlotItemBase, PlotPoint, PlotTransform, PlotUi,
 };
 
+use super::labels::clip_segment;
+
 /// Rough spacing of the anchors, in points: a few times the longest
 /// pattern, so a frame has only a handful per line to remember.
 const ANCHOR_PT: f64 = 150.0;
@@ -250,9 +252,10 @@ fn wrap(phase: f64, period: f64) -> f64 {
 /// Draw `points` in `style` with the pattern `phase0` points into its
 /// period at the first point, as egui_plot draws it from phase 0: a dash
 /// as one segment per stretch between points, a dot as a disc as wide as
-/// the stroke, a lone point as a disc half as wide. A stretch wholly
-/// outside `clip` only advances the pattern: the slice reaches left of the
-/// plot, and nothing drawn there would show.
+/// the stroke, a lone point as a disc half as wide. Only the part of a
+/// stretch inside `clip` is walked; the rest just advances the pattern, so
+/// a stretch running far off the plot — the slice reaching left of it, a
+/// spike above a fixed Y range — costs no more than the clip's size.
 pub(super) fn walk_pattern(
     points: &[Pos2],
     phase0: f64,
@@ -284,6 +287,18 @@ pub(super) fn walk_pattern(
         .windows(2)
         .map(|pair| (pair[0], pair[1]))
         .filter(|(a, b)| a != b);
+    // A stretch's length, and the point `pos` along it. In f64: a stretch
+    // can run millions of points off the plot, where f32 would misplace what
+    // shows by a point or more.
+    let stretch_len =
+        |a: Pos2, b: Pos2| (f64::from(b.x) - f64::from(a.x)).hypot(f64::from(b.y) - f64::from(a.y));
+    let at = |a: Pos2, b: Pos2, pos: f64, len: f64| {
+        let along = |from: f32, to: f32| {
+            let from = f64::from(from);
+            (from + (f64::from(to) - from) * pos / len) as f32
+        };
+        Pos2::new(along(a.x, b.x), along(a.y, b.y))
+    };
     match style {
         LineStyle::Dashed { length } => {
             if highlight {
@@ -292,41 +307,53 @@ pub(super) fn walk_pattern(
             let dash = f64::from(length);
             let mut dash_from = (phase < dash).then(|| points.first().copied()).flatten();
             for (a, b) in stretches {
-                let len = f64::from((b - a).length());
-                if !clip.intersects(Rect::from_two_pos(a, b)) {
+                let len = stretch_len(a, b);
+                let Some((t0, t1)) = clip_segment(a, b, clip) else {
                     phase = wrap(phase + len, period);
                     dash_from = (phase < dash).then_some(b);
                     continue;
+                };
+                // Where the part inside the clip starts and ends along it.
+                let (start, end) = (len * t0, len * t1);
+                if start > 0.0 {
+                    // A dash under way here begins at the clip's edge, which
+                    // lies outside the plot.
+                    phase = wrap(phase + start, period);
+                    dash_from = (phase < dash).then(|| at(a, b, start, len));
                 }
-                let mut pos = 0.0;
+                let mut pos = start;
                 loop {
                     let to_event = if phase < dash {
                         dash - phase
                     } else {
                         period - phase
                     };
-                    if pos + to_event > len {
-                        phase += len - pos;
+                    if pos + to_event > end {
+                        phase += end - pos;
                         break;
                     }
                     pos += to_event;
-                    let at = a + (b - a) * (pos / len) as f32;
+                    let here = at(a, b, pos, len);
                     if phase < dash {
                         if let Some(from) = dash_from.take() {
-                            out.push(Shape::line_segment([from, at], stroke));
+                            out.push(Shape::line_segment([from, here], stroke));
                         }
                         phase = dash;
                     } else {
-                        dash_from = Some(at);
+                        dash_from = Some(here);
                         phase = 0.0;
                     }
                 }
+                let exit = if end < len { at(a, b, end, len) } else { b };
                 if let Some(from) = dash_from
-                    && from != b
+                    && from != exit
                 {
-                    out.push(Shape::line_segment([from, b], stroke));
+                    out.push(Shape::line_segment([from, exit], stroke));
                 }
-                if dash_from.is_some() {
+                if end < len {
+                    phase = wrap(phase + (len - end), period);
+                    dash_from = (phase < dash).then_some(b);
+                } else if dash_from.is_some() {
                     dash_from = Some(b);
                 }
             }
@@ -342,22 +369,33 @@ pub(super) fn walk_pattern(
                 out.push(Shape::circle_filled(first, radius, stroke.color));
             }
             for (a, b) in stretches {
-                let len = f64::from((b - a).length());
-                if !clip.intersects(Rect::from_two_pos(a, b)) {
+                let len = stretch_len(a, b);
+                let Some((t0, t1)) = clip_segment(a, b, clip) else {
                     phase = wrap(phase + len, period);
                     continue;
+                };
+                // Where the part inside the clip starts and ends along it.
+                let (start, end) = (len * t0, len * t1);
+                if start > 0.0 {
+                    phase = wrap(phase + start, period);
                 }
-                let mut pos = 0.0;
+                let mut pos = start;
                 loop {
                     let to_event = period - phase;
-                    if pos + to_event > len {
-                        phase += len - pos;
+                    if pos + to_event > end {
+                        phase += end - pos;
                         break;
                     }
                     pos += to_event;
-                    let at = a + (b - a) * (pos / len) as f32;
-                    out.push(Shape::circle_filled(at, radius, stroke.color));
+                    out.push(Shape::circle_filled(
+                        at(a, b, pos, len),
+                        radius,
+                        stroke.color,
+                    ));
                     phase = 0.0;
+                }
+                if end < len {
+                    phase = wrap(phase + (len - end), period);
                 }
             }
         }
@@ -870,7 +908,10 @@ pub(super) mod tests {
                 &mut full,
             );
             walk_pattern(&line, 3.0, style, stroke, false, clip, &mut clipped);
-            let shown = |shape: &egui::Shape| shape.visual_bounding_rect().max.x > 100.0;
+            // Past the stroke's cap: a dash ending on the clip's edge only
+            // touches it.
+            let shown =
+                |shape: &egui::Shape| shape.visual_bounding_rect().max.x > 100.0 + stroke.width;
             let near = |a: &egui::Shape, b: &egui::Shape| {
                 let (a, b) = (a.visual_bounding_rect(), b.visual_bounding_rect());
                 (a.min - b.min).length() < 1e-3 && (a.max - b.max).length() < 1e-3
@@ -886,6 +927,137 @@ pub(super) mod tests {
                 "{style:?}"
             );
             assert!(clipped.len() < full.len(), "{style:?}");
+        }
+    }
+
+    /// A stretch running millions of points off the clip, as an envelope's
+    /// edge does under a spike just scrolled out of view, draws only what
+    /// the clip shows.
+    #[test]
+    fn walk_pattern_walks_only_the_clipped_part_of_a_long_stretch() {
+        let stroke = egui::Stroke::new(1.5, egui::Color32::RED);
+        let clip = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 400.0));
+        for style in [
+            egui_plot::LineStyle::Dashed { length: 5.0 },
+            egui_plot::LineStyle::Dotted { spacing: 4.0 },
+        ] {
+            let period = period(style).unwrap();
+            let bound = (f64::from(clip.height()) / period) as usize + 2;
+            for line in [
+                [egui::pos2(50.0, 200.0), egui::pos2(50.0, -1e7)],
+                [egui::pos2(50.0, 1e7), egui::pos2(50.0, 200.0)],
+                [egui::pos2(50.0, -1e7), egui::pos2(50.0, 1e7)],
+            ] {
+                let mut out = Vec::new();
+                walk_pattern(&line, 1.0, style, stroke, false, clip, &mut out);
+                assert!(
+                    !out.is_empty() && out.len() <= bound,
+                    "{style:?} {line:?}: {} shapes",
+                    out.len()
+                );
+            }
+        }
+    }
+
+    /// Where a stretch far past f32's whole points ends inside the clip, its
+    /// dash ends and dots sit on the line at the pattern's phase.
+    #[test]
+    fn walk_pattern_places_a_far_stretch_s_pattern_exactly() {
+        let stroke = egui::Stroke::new(1.5, egui::Color32::RED);
+        let clip = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 400.0));
+        let (near, far) = (egui::pos2(50.25, 200.5), egui::pos2(50.75, -3.0e7));
+        let phase0 = 1.3;
+        for style in [
+            egui_plot::LineStyle::Dashed { length: 5.0 },
+            egui_plot::LineStyle::Dotted { spacing: 4.0 },
+        ] {
+            let period = period(style).unwrap();
+            // A pattern event — a dash's start or end, a dot — lies on one of
+            // these phases.
+            let events: &[f64] = match style {
+                egui_plot::LineStyle::Dashed { length } => &[0.0, f64::from(length)],
+                _ => &[0.0],
+            };
+            for [a, b] in [[far, near], [near, far]] {
+                let mut out = Vec::new();
+                walk_pattern(&[a, b], phase0, style, stroke, false, clip, &mut out);
+                let (ax, ay) = (f64::from(a.x), f64::from(a.y));
+                let (dx, dy) = (f64::from(b.x) - ax, f64::from(b.y) - ay);
+                let len = dx.hypot(dy);
+                let points: Vec<egui::Pos2> = out
+                    .iter()
+                    .flat_map(|shape| match shape {
+                        egui::Shape::LineSegment { points, .. } => points.to_vec(),
+                        egui::Shape::Circle(c) => vec![c.center],
+                        _ => panic!("{shape:?}"),
+                    })
+                    // Not the clip's edge or the near end, where a dash is cut.
+                    .filter(|p| *p != near && p.y.abs() > 1e-2 && (p.y - 400.0).abs() > 1e-2)
+                    .collect();
+                assert!(points.len() > 20, "{style:?} {a:?}: {}", points.len());
+                for p in points {
+                    let (px, py) = (f64::from(p.x) - ax, f64::from(p.y) - ay);
+                    let off_line = (px * dy - py * dx).abs() / len;
+                    let phase = wrap(phase0 + (px * dx + py * dy) / len, period);
+                    let off_phase = events
+                        .iter()
+                        .map(|e| (phase - e).abs().min(period - (phase - e).abs()))
+                        .fold(f64::INFINITY, f64::min);
+                    assert!(
+                        off_line < 0.05 && off_phase < 0.05,
+                        "{style:?} {a:?}: {p:?} {off_line} off the line, {off_phase} off the phase"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Cutting a stretch at the clip leaves what shows, and the pattern
+    /// carried on to the next stretch, as the whole walk has them.
+    #[test]
+    fn walk_pattern_keeps_the_phase_across_a_clipped_stretch() {
+        // Down through the clip, back up through it, then along inside it.
+        let line = [
+            egui::pos2(50.0, -3017.3),
+            egui::pos2(50.0, 2989.6),
+            egui::pos2(70.0, -4003.1),
+            egui::pos2(70.0, 50.0),
+            egui::pos2(95.0, 60.0),
+        ];
+        let stroke = egui::Stroke::new(1.5, egui::Color32::RED);
+        let clip = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 100.0));
+        let inside = clip.shrink(4.0);
+        for style in [
+            egui_plot::LineStyle::Dashed { length: 5.0 },
+            egui_plot::LineStyle::Dotted { spacing: 4.0 },
+        ] {
+            let (mut full, mut clipped) = (Vec::new(), Vec::new());
+            walk_pattern(
+                &line,
+                2.5,
+                style,
+                stroke,
+                false,
+                egui::Rect::EVERYTHING,
+                &mut full,
+            );
+            walk_pattern(&line, 2.5, style, stroke, false, clip, &mut clipped);
+            let shown = |shapes: &[egui::Shape]| -> Vec<egui::Rect> {
+                shapes
+                    .iter()
+                    .map(egui::Shape::visual_bounding_rect)
+                    .filter(|r| inside.contains_rect(*r))
+                    .collect()
+            };
+            let (full, clipped) = (shown(&full), shown(&clipped));
+            assert!(full.len() > 20, "{style:?}: {}", full.len());
+            assert_eq!(full.len(), clipped.len(), "{style:?}");
+            for (f, c) in full.iter().zip(&clipped) {
+                assert!(
+                    (f.min - c.min).length() < 1e-2 && (f.max - c.max).length() < 1e-2,
+                    "{style:?}: {f:?} vs {c:?}"
+                );
+            }
         }
     }
 

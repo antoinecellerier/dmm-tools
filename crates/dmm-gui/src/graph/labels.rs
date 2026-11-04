@@ -393,21 +393,30 @@ fn fit_level_label(
     None
 }
 
-/// Whether the straight segment from `a` to `b` passes through `rect`
-/// (Liang–Barsky: clip the segment's parameter range against each edge).
+/// Whether the straight segment from `a` to `b` passes through `rect`.
 pub(super) fn segment_hits_rect(a: egui::Pos2, b: egui::Pos2, rect: egui::Rect) -> bool {
-    let d = b - a;
-    let (mut enter, mut leave) = (0.0_f32, 1.0_f32);
+    clip_segment(a, b, rect).is_some()
+}
+
+/// The part of the straight segment from `a` to `b` inside `rect`, as the
+/// fractions of the way from `a` it enters and leaves at; `None` when it
+/// misses (Liang–Barsky: clip the parameter range against each edge). In
+/// f64, so a fraction of a segment running far off the rect still places
+/// its ends within a small fraction of a point.
+pub(super) fn clip_segment(a: egui::Pos2, b: egui::Pos2, rect: egui::Rect) -> Option<(f64, f64)> {
+    let (ax, ay) = (f64::from(a.x), f64::from(a.y));
+    let (dx, dy) = (f64::from(b.x) - ax, f64::from(b.y) - ay);
+    let (mut enter, mut leave) = (0.0_f64, 1.0_f64);
     for (p, q) in [
-        (-d.x, a.x - rect.left()),
-        (d.x, rect.right() - a.x),
-        (-d.y, a.y - rect.top()),
-        (d.y, rect.bottom() - a.y),
+        (-dx, ax - f64::from(rect.left())),
+        (dx, f64::from(rect.right()) - ax),
+        (-dy, ay - f64::from(rect.top())),
+        (dy, f64::from(rect.bottom()) - ay),
     ] {
         if p == 0.0 {
             // Parallel to this edge: outside it means outside the rect.
             if q < 0.0 {
-                return false;
+                return None;
             }
         } else {
             let r = q / p;
@@ -417,11 +426,11 @@ pub(super) fn segment_hits_rect(a: egui::Pos2, b: egui::Pos2, rect: egui::Rect) 
                 leave = leave.min(r);
             }
             if enter > leave {
-                return false;
+                return None;
             }
         }
     }
-    true
+    Some((enter, leave))
 }
 
 /// The plot's labelled horizontal lines — the mean, the reference lines, the
