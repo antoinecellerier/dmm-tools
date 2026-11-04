@@ -1267,6 +1267,38 @@ mod tests {
         assert_eq!(rows[2][6..], ["", "", "", "sub0", "0", "V"]);
     }
 
+    /// An imported CSV written with a scale on part-way exports again with
+    /// its columns where they were: `Raw` stays in the trailing group, on
+    /// the AC row beside Frequency and Period as on the DC row alone.
+    #[test]
+    fn an_imported_csv_exports_with_raw_in_its_own_column() {
+        const CSV: &str = "\
+# device: UT181A
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit
+2026-09-02T10:00:00+00:00,DC V,1.6109,V,2.2V,AUTO,,,,,,,,,
+2026-09-02T10:00:00.100+00:00,AC V,0.5137,A,2.2V,AUTO,Frequency,50.01,Hz,Period,20.00,ms,Raw,51.37,mV
+2026-09-02T10:00:00.200+00:00,DC V,0.1611,A,2.2V,AUTO,,,,,,,Raw,16.11,mV
+";
+        use crate::app::import::tests_support::{file, import};
+        let path = file("export-scaled.csv", CSV);
+        let mut app = test_app();
+        import(&mut app, path.clone());
+        let _ = std::fs::remove_file(path);
+        // Every cell but the timestamp, which is written in local time.
+        let past_timestamp = |row: &[String]| row[1..].to_vec();
+        let original: Vec<Vec<String>> = CSV
+            .lines()
+            .skip(1)
+            .map(|l| l.split(',').map(str::to_string).collect())
+            .collect();
+        let rows = exported(&app);
+        assert_eq!(rows.len(), original.len());
+        assert_eq!(rows[0], original[0], "the header");
+        for (row, want) in rows.iter().zip(&original).skip(1) {
+            assert_eq!(past_timestamp(row), past_timestamp(want));
+        }
+    }
+
     /// The toast's English is the `Display` the tests and the log read.
     #[test]
     fn every_error_reads_the_same_in_english() {

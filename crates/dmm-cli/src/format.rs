@@ -158,17 +158,20 @@ impl Output {
 
     /// Write one reading, with the number and note of the marker on it, if
     /// any: CSV and JSON carry it in their marker fields and a replay file in
-    /// a `# marker:` line after the frame. Text leaves it out.
+    /// a `# marker:` line after the frame. Text leaves it out. `extra_aux` is
+    /// how many of the reading's last sub-values software appended, which CSV
+    /// keeps in the trailing groups.
     pub fn write(
         &mut self,
         w: &mut dyn Write,
         m: &Measurement,
         integral: Option<(f64, &str)>,
+        extra_aux: usize,
         marker: Option<(u32, &str)>,
     ) -> std::io::Result<()> {
         match self {
             Self::Text => format_text(w, m, integral),
-            Self::Csv(layout) => format_csv(w, m, integral, *layout, marker),
+            Self::Csv(layout) => format_csv(w, m, integral, *layout, extra_aux, marker),
             Self::Json { experimental, .. } => format_json(w, m, *experimental, integral, marker),
             Self::Replay {
                 header,
@@ -282,6 +285,7 @@ fn format_csv(
     m: &Measurement,
     integral: Option<(f64, &str)>,
     layout: CsvLayout,
+    extra_aux: usize,
     marker: Option<(u32, &str)>,
 ) -> std::io::Result<()> {
     // Through the csv crate rather than hand-joined with commas, as the GUI
@@ -292,9 +296,8 @@ fn format_csv(
     // downstream column shifts.
     let ts = timestamp_rfc3339(m);
     // Cells resolved ahead of the writer so the borrowed ones outlive the
-    // record. `--scale` is fixed for the run, so every row carries the full
-    // extra count the layout reserves.
-    let cells = layout.row(m, &ts, integral, layout.extra_slots, marker);
+    // record.
+    let cells = layout.row(m, &ts, integral, extra_aux, marker);
     let mut wtr = csv::WriterBuilder::new()
         // One row per call, so the default 8 KiB buffer is dead weight — a row
         // is well under this.
@@ -357,7 +360,13 @@ mod tests {
     /// One reading, as `output` writes it.
     fn rendered(mut output: Output, m: &Measurement, integral: Option<(f64, &str)>) -> String {
         let mut buf = Vec::new();
-        output.write(&mut buf, m, integral, None).unwrap();
+        let extra_aux = match &output {
+            Output::Csv(layout) => layout.extra_slots,
+            _ => 0,
+        };
+        output
+            .write(&mut buf, m, integral, extra_aux, None)
+            .unwrap();
         String::from_utf8(buf).unwrap()
     }
 
@@ -835,9 +844,9 @@ mod tests {
         assert!(output.header("UNI-T UT61E+").is_none());
 
         let mut file = Vec::new();
-        output.write(&mut file, &m, None, None).unwrap();
+        output.write(&mut file, &m, None, 0, None).unwrap();
         m.timestamp = first + Duration::from_millis(250);
-        output.write(&mut file, &m, None, None).unwrap();
+        output.write(&mut file, &m, None, 0, None).unwrap();
 
         let text = String::from_utf8(file).expect("a replay file is UTF-8");
         let replay = Replay::parse(&text).expect("parses as a replay");
@@ -872,7 +881,7 @@ mod tests {
 
         let mut file = Vec::new();
         let e = output
-            .write(&mut file, &m, None, None)
+            .write(&mut file, &m, None, 0, None)
             .expect_err("a frameless reading has nothing to record");
         assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
         assert_eq!(

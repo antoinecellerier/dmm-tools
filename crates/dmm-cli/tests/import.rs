@@ -157,3 +157,57 @@ fn an_extensionless_replay_imports() {
         "comment, header and three rows: {out}"
     );
 }
+
+/// A CSV written with a scale on part-way: a DC row before it, an AC row
+/// with Frequency, Period and the scale's `Raw`, a DC row with `Raw` alone.
+const SCALED_CSV: &str = "\
+# device: UT181A
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit
+2026-09-02T10:00:00+00:00,DC V,1.6109,V,2.2V,AUTO,,,,,,,,,
+2026-09-02T10:00:00.100+00:00,AC V,0.5137,A,2.2V,AUTO,Frequency,50.01,Hz,Period,20.00,ms,Raw,51.37,mV
+2026-09-02T10:00:00.200+00:00,DC V,0.1611,A,2.2V,AUTO,,,,,,,Raw,16.11,mV
+";
+
+/// The cells of each line after the provenance comment, the timestamp left
+/// out: it is written in local time.
+fn cells_past_timestamp(csv: &str) -> Vec<Vec<String>> {
+    csv.lines()
+        .skip(1)
+        .map(|l| l.split(',').skip(1).map(str::to_string).collect())
+        .collect()
+}
+
+/// The scale's `Raw` keeps its trailing column through an import: not
+/// packed into the meter's columns, beside Frequency on one row and alone
+/// under `aux1_*` on the next.
+#[test]
+fn a_scaled_csv_keeps_the_raw_column_in_place() {
+    let dir = TestDir::new("scaled");
+    let csv = dir.path("scaled.csv");
+    std::fs::write(&csv, SCALED_CSV).expect("write the CSV");
+    let (out, err, ok) = run(&["read", "--import", p(&csv), "--format", "csv"]);
+    assert!(ok, "imports: {err}");
+    assert_eq!(cells_past_timestamp(&out), cells_past_timestamp(SCALED_CSV));
+
+    // A scale on the import appends a second `Raw`, which takes the last
+    // column on every row, the file's staying beside it where it was.
+    let (out, err, ok) = run(&[
+        "read",
+        "--import",
+        p(&csv),
+        "--format",
+        "csv",
+        "--scale",
+        "10",
+    ]);
+    assert!(ok, "imports scaled: {err}");
+    let rows = cells_past_timestamp(&out);
+    assert!(rows[0].ends_with(&["aux4_label", "aux4_value", "aux4_unit"].map(String::from)));
+    for row in &rows[1..] {
+        assert_eq!(row.len(), rows[0].len());
+        assert_eq!(row[14], "Raw", "{row:?}");
+    }
+    assert_eq!(rows[1][11..14], ["", "", ""]);
+    assert_eq!(rows[2][11..14], ["Raw", "51.37", "mV"]);
+    assert_eq!(rows[3][11..14], ["Raw", "16.11", "mV"]);
+}

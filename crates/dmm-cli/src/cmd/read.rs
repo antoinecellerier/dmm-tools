@@ -638,10 +638,13 @@ impl Run {
         })
     }
 
-    /// Write one reading, with the marker on it if any.
+    /// Write one reading, with the marker on it if any. `file_extra` is how
+    /// many of an imported reading's sub-values a scale appended when its
+    /// file was written; 0 for a meter's.
     fn take(
         &mut self,
         mut m: dmm_lib::measurement::Measurement,
+        file_extra: usize,
         marker: Option<(u32, &str)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Before everything else: the unit-change check, the stats, the
@@ -672,8 +675,9 @@ impl Run {
             _ => Some(m.mode.as_ref()),
         };
         self.writer.saw(mode, m.wall_time.into())?;
+        let extra_aux = file_extra + self.transform.extra_aux_count();
         self.out
-            .write(&mut self.writer, &m, integral_display, marker)?;
+            .write(&mut self.writer, &m, integral_display, extra_aux, marker)?;
         self.writer.flush()?;
         Ok(())
     }
@@ -954,7 +958,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                         .is_some_and(|at| at <= m.timestamp)
                 });
                 let marker = if due { markers.pop_front() } else { None };
-                run.take(m, marker.as_ref().map(|k| (k.number, k.note.as_str())))?;
+                run.take(m, 0, marker.as_ref().map(|k| (k.number, k.note.as_str())))?;
                 i += 1;
             }
             // A replay's last frame is behind us: the run ends with the file.
@@ -1040,9 +1044,11 @@ fn read_import(
         .device
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
+    // The file's appended groups stay trailing, and a `--scale` appends one
+    // more after them.
     let layout = dmm_shared::export::CsvLayout {
-        family_slots: imported.aux_slots,
-        extra_slots: options.transform.extra_aux_count(),
+        family_slots: imported.family_slots,
+        extra_slots: imported.extra_slots + options.transform.extra_aux_count(),
         integral: options.integrate,
         markers: !imported.markers.is_empty() || options.alarm.is_some(),
     };
@@ -1063,8 +1069,10 @@ fn read_import(
             break;
         }
         let marker = markers.next_if(|m| m.reading == i);
+        let file_extra = reading.extra_aux;
         run.take(
             reading.into_measurement(base + offset),
+            file_extra,
             marker.map(|m| (m.number, m.note.as_str())),
         )?;
     }

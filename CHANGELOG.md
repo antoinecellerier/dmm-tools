@@ -35,6 +35,7 @@
 - **dmm-gui takes readings in while its window is minimized or hidden** — they queued in memory, and restoring the window stalled it while they all came in.
 - **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.
 - **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
+- **A scaled CSV imported and exported again keeps Raw in its own column** — dmm-cli and dmm-gui moved it into the meter's sub-value columns.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
 - **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).

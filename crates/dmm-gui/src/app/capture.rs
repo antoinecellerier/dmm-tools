@@ -160,14 +160,20 @@ impl Capture {
     /// [`Capture::ingest`], less the software transform — the file holds the
     /// readings as they were shown, scaled or not — and less the meter the
     /// connection names: the recording the import runs was latched from the
-    /// file. Returns whether it filled the recording.
-    pub(super) fn ingest_imported(&mut self, m: &Measurement, graph: &mut Graph) -> bool {
+    /// file. `extra_aux` is how many of its sub-values a scale appended when
+    /// the file was written. Returns whether it filled the recording.
+    pub(super) fn ingest_imported(
+        &mut self,
+        m: &Measurement,
+        extra_aux: usize,
+        graph: &mut Graph,
+    ) -> bool {
         self.session.push(m);
         plot(graph, m);
         if let Some(start) = graph.first_point_time() {
             self.recording.trim_before(start);
         }
-        self.recording.push(m, 0)
+        self.recording.push(m, extra_aux)
     }
 
     /// Keep a reading: in the graph's history, which Export… saves with

@@ -12,6 +12,7 @@ use super::{ReadError, ReadReason};
 use chrono::DateTime;
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
+use dmm_lib::transform::RAW_LABEL;
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -31,10 +32,15 @@ pub struct Imported {
     pub readings: Vec<ImportedReading>,
     /// The markers, in file order.
     pub markers: Vec<ImportedMarker>,
-    /// Sub-value groups the file lays out: a CSV's `auxN_*` column groups,
-    /// empty ones included, or the most any JSON reading carries — what a
-    /// CSV written from it keeps.
-    pub aux_slots: usize,
+    /// Sub-value groups for the meter's own sub-values: a CSV's `auxN_*`
+    /// column groups, empty ones included, less [`Imported::extra_slots`];
+    /// or the most any JSON reading carries — what a CSV written from it
+    /// keeps.
+    pub family_slots: usize,
+    /// Trailing groups for the sub-values software appended (a scale's
+    /// `Raw`): the most any reading carries, so a CSV written from it keeps
+    /// them in the columns they had rather than packed into the meter's.
+    pub extra_slots: usize,
     /// Readings past the limit the file was read with, counted but not kept.
     pub left_out: usize,
 }
@@ -164,6 +170,9 @@ pub struct ImportedReading {
     pub experimental: bool,
     pub flags: StatusFlags,
     pub aux: Vec<ImportedAux>,
+    /// How many of `aux`, at its end, software appended: the trailing run of
+    /// a scale's [`RAW_LABEL`]s, which are always appended last.
+    pub extra_aux: usize,
 }
 
 /// One sub-value as an export holds it.
@@ -270,6 +279,16 @@ fn no_value(has_aux: bool) -> MeasuredValue {
     }
 }
 
+/// How many of a reading's sub-values a scale appended: the run of `Raw`s
+/// at its end, two when a scale went on an import of a scaled file. Exports
+/// write that label untranslated, so it reads back as written.
+fn extra_aux(aux: &[ImportedAux]) -> usize {
+    aux.iter()
+        .rev()
+        .take_while(|a| a.label == RAW_LABEL)
+        .count()
+}
+
 /// A CSV flags cell: the labels `StatusFlags` prints, space-separated, in
 /// [`Flag::ALL`] order — which is also the order to read them in, so a
 /// two-word label ("LOW BAT") and one that ends another ("MIN", "P-MIN")
@@ -373,7 +392,8 @@ pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Im
         view: None,
         readings: Vec::new(),
         markers: Vec::new(),
-        aux_slots: aux_groups.len(),
+        family_slots: 0,
+        extra_slots: 0,
         left_out: 0,
     };
     for (i, row) in reader.records().enumerate() {
@@ -410,6 +430,7 @@ pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Im
             progress: None,
             experimental: false,
             flags: flags_cell(line, cell(flags))?,
+            extra_aux: extra_aux(&aux),
             aux,
         });
         if let Some((number, note)) = marker
@@ -424,7 +445,28 @@ pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Im
             });
         }
     }
+    // The groups the file lays out, the appended ones last as the writer
+    // pins them, so re-export writes the header it was read from.
+    imported.extra_slots = max_extra(&imported.readings);
+    imported.family_slots = aux_groups
+        .len()
+        .saturating_sub(imported.extra_slots)
+        .max(max_family(&imported.readings));
     Ok(imported)
+}
+
+/// The most appended sub-values any reading carries.
+fn max_extra(readings: &[ImportedReading]) -> usize {
+    readings.iter().map(|r| r.extra_aux).max().unwrap_or(0)
+}
+
+/// The most of the meter's own sub-values any reading carries.
+fn max_family(readings: &[ImportedReading]) -> usize {
+    readings
+        .iter()
+        .map(|r| r.aux.len() - r.extra_aux)
+        .max()
+        .unwrap_or(0)
 }
 
 /// The first line of a JSON export.
@@ -503,7 +545,8 @@ pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Impor
         view: metadata.metadata.view.map(|v| v.get().to_string()),
         readings: Vec::new(),
         markers: Vec::new(),
-        aux_slots: 0,
+        family_slots: 0,
+        extra_slots: 0,
         left_out: 0,
     };
     for next in lines {
@@ -555,6 +598,7 @@ pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Impor
             progress: r.progress,
             experimental: r.experimental,
             flags,
+            extra_aux: extra_aux(&aux),
             aux,
         });
         if let Some(number) = r.marker {
@@ -565,12 +609,8 @@ pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Impor
             });
         }
     }
-    imported.aux_slots = imported
-        .readings
-        .iter()
-        .map(|r| r.aux.len())
-        .max()
-        .unwrap_or(0);
+    imported.family_slots = max_family(&imported.readings);
+    imported.extra_slots = max_extra(&imported.readings);
     Ok(imported)
 }
 
@@ -647,18 +687,164 @@ mod tests {
             integral: false,
             markers: true,
         };
+        let rows: Vec<_> = readings
+            .iter()
+            .zip(marks)
+            .map(|(m, k)| (m, 0, *k))
+            .collect();
+        csv_in(layout, &rows)
+    }
+
+    /// A reading to write, with how many of its sub-values were appended and
+    /// its marker.
+    type Row<'a> = (&'a Measurement, usize, Option<(u32, &'a str)>);
+
+    /// A CSV export laid out as `layout`.
+    fn csv_in(layout: CsvLayout, rows: &[Row<'_>]) -> String {
         let mut out = format!("{}\n", device_comment("UT61E+")).into_bytes();
         {
             let mut w = csv::Writer::from_writer(&mut out);
             w.write_record(layout.header().iter().map(|c| c.as_ref()))
                 .expect("header");
-            for (m, mark) in readings.iter().zip(marks) {
+            for &(m, extra_aux, mark) in rows {
                 let ts = ts(m);
-                let row = layout.row(m, &ts, None, 0, *mark);
+                let row = layout.row(m, &ts, None, extra_aux, mark);
                 w.write_record(row.iter().map(|c| c.as_ref())).expect("row");
             }
         }
         String::from_utf8(out).expect("UTF-8")
+    }
+
+    /// A UT181A-like run scaled mid-recording: a DC row before the scale, an
+    /// AC row with Frequency, Period and the scale's `Raw`, and a DC row with
+    /// `Raw` alone.
+    fn scaled_mid_run() -> Vec<(Measurement, usize)> {
+        let (shapes, _) = shapes();
+        let raw = |value: f64| AuxValue {
+            label: Cow::Borrowed(RAW_LABEL),
+            value: MeasuredValue::Normal(value),
+            unit: Cow::Borrowed("mV"),
+            display_raw: Some(format!("{value}")),
+            elapsed_secs: None,
+        };
+        let early = shapes[0].clone();
+        let mut ac = shapes[5].clone();
+        ac.aux_values[1] = AuxValue {
+            label: Cow::Borrowed("Period"),
+            value: MeasuredValue::Normal(20.0),
+            unit: Cow::Borrowed("ms"),
+            display_raw: Some("20.00".to_string()),
+            elapsed_secs: None,
+        };
+        ac.aux_values.push(raw(51.37));
+        let mut dc = shapes[0].clone();
+        dc.wall_time += Duration::from_secs(6);
+        dc.aux_values.push(raw(16.109));
+        vec![(early, 0), (ac, 1), (dc, 1)]
+    }
+
+    /// The scale's `Raw` keeps its trailing group through a CSV read back:
+    /// the file exports again as the same bytes, rather than with `Raw`
+    /// packed into the meter's groups beside Frequency on one row and alone
+    /// in `aux1_*` on the next.
+    #[test]
+    fn a_csv_import_keeps_the_raw_column_in_place() {
+        let layout = CsvLayout {
+            family_slots: 2,
+            extra_slots: 1,
+            integral: false,
+            markers: false,
+        };
+        let readings = scaled_mid_run();
+        let rows: Vec<_> = readings.iter().map(|(m, e)| (m, *e, None)).collect();
+        let text = csv_in(layout, &rows);
+        let imported = read_csv(&text).expect("a CSV export");
+        assert_eq!((imported.family_slots, imported.extra_slots), (2, 1));
+        let extras: Vec<usize> = imported.readings.iter().map(|r| r.extra_aux).collect();
+        assert_eq!(extras, [0, 1, 1]);
+        let (again, _) = rebuilt(&imported);
+        let rows: Vec<_> = again
+            .iter()
+            .zip(&imported.readings)
+            .map(|(m, r)| (m, r.extra_aux, None))
+            .collect();
+        let layout_again = CsvLayout {
+            family_slots: imported.family_slots,
+            extra_slots: imported.extra_slots,
+            ..layout
+        };
+        assert_eq!(csv_in(layout_again, &rows), text);
+    }
+
+    /// A scale on an import of a scaled file appends a second `Raw`: both
+    /// count as appended, so the file's `Raw` stays in the third group on
+    /// the DC row as on the AC one, and the file exports again as the same
+    /// bytes. The early row carries only the second scale's `Raw`.
+    #[test]
+    fn a_csv_import_keeps_two_raw_columns_in_place() {
+        let layout = CsvLayout {
+            family_slots: 2,
+            extra_slots: 2,
+            integral: false,
+            markers: false,
+        };
+        let second = AuxValue {
+            label: Cow::Borrowed(RAW_LABEL),
+            value: MeasuredValue::Normal(1.6109),
+            unit: Cow::Borrowed("V"),
+            display_raw: Some("1.6109".to_string()),
+            elapsed_secs: None,
+        };
+        let readings: Vec<(Measurement, usize)> = scaled_mid_run()
+            .into_iter()
+            .map(|(mut m, extra)| {
+                m.aux_values.push(second.clone());
+                (m, extra + 1)
+            })
+            .collect();
+        let rows: Vec<_> = readings.iter().map(|(m, e)| (m, *e, None)).collect();
+        let text = csv_in(layout, &rows);
+        let imported = read_csv(&text).expect("a CSV export");
+        assert_eq!((imported.family_slots, imported.extra_slots), (2, 2));
+        let extras: Vec<usize> = imported.readings.iter().map(|r| r.extra_aux).collect();
+        assert_eq!(extras, [1, 2, 2]);
+        let (again, _) = rebuilt(&imported);
+        let dc = layout.row(&again[2], "ts", None, imported.readings[2].extra_aux, None);
+        assert_eq!(&dc[6..12], ["", "", "", "", "", ""]);
+        assert_eq!(&dc[12..15], [RAW_LABEL, "16.109", "mV"]);
+        let rows: Vec<_> = again
+            .iter()
+            .zip(&imported.readings)
+            .map(|(m, r)| (m, r.extra_aux, None))
+            .collect();
+        assert_eq!(csv_in(layout, &rows), text);
+    }
+
+    /// JSON doesn't lay sub-values out in groups, but a CSV written from it
+    /// still keeps `Raw` in the trailing group, not the meter's.
+    #[test]
+    fn a_json_import_writes_raw_to_the_trailing_csv_group() {
+        let readings = scaled_mid_run();
+        let measurements: Vec<Measurement> = readings.iter().map(|(m, _)| m.clone()).collect();
+        let text = json_of(&measurements, &vec![None; measurements.len()]);
+        let imported = read_json(&text).expect("a JSON export");
+        assert_eq!((imported.family_slots, imported.extra_slots), (2, 1));
+        let layout = CsvLayout {
+            family_slots: imported.family_slots,
+            extra_slots: imported.extra_slots,
+            integral: false,
+            markers: false,
+        };
+        let (again, _) = rebuilt(&imported);
+        let dc = layout.row(&again[2], "ts", None, imported.readings[2].extra_aux, None);
+        assert_eq!(&dc[6..12], ["", "", "", "", "", ""]);
+        assert_eq!(&dc[12..15], [RAW_LABEL, "16.109", "mV"]);
+        let ac = layout.row(&again[1], "ts", None, imported.readings[1].extra_aux, None);
+        assert_eq!(&ac[6..9], ["Frequency", "50.01", "Hz"]);
+        assert_eq!(&ac[9..12], ["Period", "20.00", "ms"]);
+        assert_eq!(&ac[12..15], [RAW_LABEL, "51.37", "mV"]);
+        let early = layout.row(&again[0], "ts", None, imported.readings[0].extra_aux, None);
+        assert_eq!(&early[6..15], ["", "", "", "", "", "", "", "", ""]);
     }
 
     fn json_of(readings: &[Measurement], marks: &[Option<(u32, &str)>]) -> String {

@@ -103,14 +103,17 @@ pub(super) struct Loaded {
     device_id: Option<&'static str>,
     link: Option<Link>,
     experimental: bool,
-    /// Stamped `base + offset`, in file order, time never going back.
-    readings: Vec<Measurement>,
+    /// Stamped `base + offset`, in file order, time never going back, each
+    /// with how many of its sub-values a scale appended.
+    readings: Vec<(Measurement, usize)>,
     /// `(reading index, number, note)`, in reading order.
     markers: Vec<(usize, u32, String)>,
     /// How far apart the file's readings are, for the graph's gaps.
     cadence: Duration,
-    /// The most sub-values any reading carries: the CSV columns to keep.
-    aux_slots: usize,
+    /// The CSV sub-value groups to keep: the meter's own, then those for the
+    /// sub-values a scale appended.
+    family_slots: usize,
+    extra_slots: usize,
     /// The graph view the file was saved with, as its JSON text.
     view: Option<String>,
     /// Readings past the limit the file was read with, left out.
@@ -208,7 +211,7 @@ pub(super) enum ImportJob {
 
 pub(super) struct Ingest {
     path: PathBuf,
-    readings: std::vec::IntoIter<Measurement>,
+    readings: std::vec::IntoIter<(Measurement, usize)>,
     total: usize,
     /// Readings taken so far.
     taken: usize,
@@ -263,13 +266,17 @@ pub(super) fn load(path: &Path, base: Instant, limit: usize) -> Result<Loaded, I
 /// before — a clock set back mid-file must not send time backwards.
 fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded {
     let experimental = imported.readings.iter().any(|r| r.experimental);
-    let aux_slots = imported.aux_slots;
+    let (family_slots, extra_slots) = (imported.family_slots, imported.extra_slots);
     let offsets = imported.offsets();
     let readings = imported
         .readings
         .into_iter()
         .zip(&offsets)
-        .map(|(r, &offset)| r.into_measurement(base.checked_add(offset).unwrap_or(base)))
+        .map(|(r, &offset)| {
+            let extra_aux = r.extra_aux;
+            let m = r.into_measurement(base.checked_add(offset).unwrap_or(base));
+            (m, extra_aux)
+        })
         .collect();
     Loaded {
         path: PathBuf::new(),
@@ -284,7 +291,8 @@ fn from_export(imported: dmm_shared::export::Imported, base: Instant) -> Loaded 
             .map(|m| (m.reading, m.number, m.note))
             .collect(),
         cadence: dmm_shared::export::median_spacing(&offsets),
-        aux_slots,
+        family_slots,
+        extra_slots,
         view: imported.view,
         left_out: imported.left_out,
     }
@@ -304,7 +312,7 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
     let clock = clock.with_wall_origin(SystemTime::from(recorded));
     let mut dmm = replay.open(clock)?;
     let experimental = !dmm.profile().stability.is_verified();
-    let aux_slots = dmm.profile().max_aux_values;
+    let family_slots = dmm.profile().max_aux_values;
     let mut readings = Vec::new();
     let mut offsets = Vec::new();
     let mut left_out = 0;
@@ -318,7 +326,8 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
                     let offset = m.timestamp.saturating_duration_since(start);
                     m.timestamp = base.checked_add(offset).unwrap_or(base);
                     offsets.push(offset);
-                    readings.push(m);
+                    // Frames as the meter sent them: nothing appended.
+                    readings.push((m, 0));
                 }
                 Ok(StreamEvent::Ended) => break,
                 // A gap in the recording: nothing to take.
@@ -355,7 +364,8 @@ fn load_replay(text: &str, base: Instant, limit: usize) -> Result<Loaded, Unread
         readings,
         markers,
         cadence: dmm_shared::export::median_spacing(&offsets),
-        aux_slots,
+        family_slots,
+        extra_slots: 0,
         left_out,
     })
 }
@@ -503,7 +513,8 @@ impl App {
             readings,
             markers,
             cadence,
-            aux_slots,
+            family_slots,
+            extra_slots,
             view,
             left_out,
         } = loaded;
@@ -512,20 +523,20 @@ impl App {
             self.toast = Some(Toast::info(message.into_owned()));
             return None;
         }
-        self.capture.device_aux_slots = aux_slots;
+        self.capture.device_aux_slots = family_slots;
         self.capture.recording_layout = CaptureLayout {
             device: device.map(Into::into),
             device_id,
             experimental: Some(experimental),
             link,
-            aux_slots,
-            extra_slots: 0,
+            aux_slots: family_slots,
+            extra_slots,
         };
         let ms = u32::try_from(cadence.as_millis()).unwrap_or(u32::MAX);
         self.source.import_cadence_ms = Some(ms);
         self.set_gap_interval(self.settings.sample_interval_ms);
         let total = readings.len();
-        let first = readings.first().map(|m| m.timestamp);
+        let first = readings.first().map(|(m, _)| m.timestamp);
         self.markers
             .reserve(markers.iter().map(|&(_, n, _)| n).max().unwrap_or(0));
         self.capture.recording.toggle(self.clock.now());
@@ -547,10 +558,10 @@ impl App {
         let mut full = false;
         let mut breaches = Vec::new();
         for _ in 0..CHUNK {
-            let Some(m) = ingest.readings.next() else {
+            let Some((m, extra_aux)) = ingest.readings.next() else {
                 break;
             };
-            full = self.capture.ingest_imported(&m, &mut self.graph);
+            full = self.capture.ingest_imported(&m, extra_aux, &mut self.graph);
             while let Some(&(index, number, _)) = ingest.markers.front()
                 && index <= ingest.taken
             {
@@ -660,6 +671,7 @@ pub(super) fn file_name(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::tests_support::{file, import};
     use super::*;
     use crate::app::connection_issue::ConnectionIssue;
     use crate::app::test_support::test_app;
@@ -698,28 +710,6 @@ timestamp,mode,value,unit,range,flags,marker,note
 2026-09-02T10:00:00.100+00:00,DC V,1.6110,V,2.2V,AUTO,3,\"load on, 2.2 ohm\"
 2026-09-02T10:00:00.200+00:00,\u{3a9},80.45,k\u{3a9},220k\u{3a9},AUTO,,
 ";
-
-    /// `text` as a file named `name` of this test's own.
-    fn file(name: &str, text: &str) -> PathBuf {
-        let path =
-            std::env::temp_dir().join(format!("dmm-gui-import-{}-{name}", std::process::id()));
-        std::fs::write(&path, text).expect("write the test file");
-        path
-    }
-
-    /// Import `path` and run frames until it is in.
-    fn import(app: &mut App, path: PathBuf) {
-        let ctx = crate::app::styled_context();
-        app.import_file(&ctx, path);
-        for _ in 0..10_000 {
-            app.step_import(&ctx);
-            if app.source.import_job.is_none() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        panic!("the import never finished");
-    }
 
     /// Every reading goes into the recording, a dial turn inside the file
     /// included, with its marker under its own number; the recording counts
@@ -1101,10 +1091,36 @@ mod connect_tests {
 }
 
 #[cfg(test)]
-mod tests_support {
+pub(super) mod tests_support {
+    use super::App;
+    use std::path::PathBuf;
+    use std::time::Duration;
+
     /// A small CSV export, for tests outside `tests`.
     pub(super) const CSV: &str = "\
 timestamp,mode,value,unit,range,flags
 2026-09-02T10:00:00+00:00,DC V,1.6109,V,2.2V,AUTO
 ";
+
+    /// `text` as a file named `name` of this test's own.
+    pub(in crate::app) fn file(name: &str, text: &str) -> PathBuf {
+        let path =
+            std::env::temp_dir().join(format!("dmm-gui-import-{}-{name}", std::process::id()));
+        std::fs::write(&path, text).expect("write the test file");
+        path
+    }
+
+    /// Import `path` and run frames until it is in.
+    pub(in crate::app) fn import(app: &mut App, path: PathBuf) {
+        let ctx = crate::app::styled_context();
+        app.import_file(&ctx, path);
+        for _ in 0..10_000 {
+            app.step_import(&ctx);
+            if app.source.import_job.is_none() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        panic!("the import never finished");
+    }
 }

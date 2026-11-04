@@ -159,7 +159,9 @@ impl CsvLayout {
     /// empty cells when the layout has them but `integral` is `None`);
     /// `extra_aux` is how many trailing sub-values of `m` were appended by
     /// software for this sample — the GUI records it per sample, the CLI
-    /// passes `extra_slots` because its transform is fixed for the run;
+    /// adds its run's transform to what an imported reading carried; a row
+    /// claiming fewer than `extra_slots` leaves the first reserved groups
+    /// empty, so the last appended sub-value keeps the last group;
     /// `marker` is the number and note of the marker on this reading, written
     /// when the layout has marker columns (empty cells when it is `None`).
     pub fn row<'a>(
@@ -197,7 +199,19 @@ impl CsvLayout {
         // it pads the meter's own groups, pins the appended ones to the
         // trailing groups, and truncates a surplus rather than desyncing every
         // later column from the header.
-        for slot in aux_slots(m, self.family_slots, extra) {
+        let slots = aux_slots(m, self.family_slots, extra);
+        let (own, appended) = slots.split_at(self.family_slots);
+        // Reserved groups this reading didn't claim go ahead of the ones it
+        // did: the last appended sub-value keeps the last group. A scale on
+        // an import of a scaled file appends a second `Raw`, which then
+        // stays last whether or not that row carried the file's.
+        let unclaimed = std::iter::repeat_n(None, self.extra_slots - extra);
+        for slot in own
+            .iter()
+            .copied()
+            .chain(unclaimed)
+            .chain(appended.iter().copied())
+        {
             match slot {
                 Some(aux) => cells.extend(aux_cells(aux, &m.unit)),
                 None => cells.extend(std::iter::repeat_n(
@@ -206,11 +220,6 @@ impl CsvLayout {
                 )),
             }
         }
-        // Reserved groups this reading didn't claim.
-        cells.extend(std::iter::repeat_n(
-            Cow::Borrowed(""),
-            (self.extra_slots - extra) * AUX_EXPORT_COLUMNS.len(),
-        ));
         if self.markers {
             match marker {
                 Some((number, note)) => {
@@ -508,6 +517,18 @@ mod tests {
             shown("Raw", "230.0", "V"),
         ];
         assert_eq!(slot_labels(&aux_slots(&m, 2, 1)), ["Max", "Average", "Raw"]);
+    }
+
+    /// Two reserved groups, a row claiming one: it takes the last, so the
+    /// last appended sub-value holds one column across rows.
+    #[test]
+    fn a_row_claiming_fewer_extras_than_reserved_fills_the_last() {
+        let mut m = reading();
+        m.aux_values = vec![aux("Frequency", 50.01, "Hz"), aux("Raw", 2.3, "V")];
+        let row = layout(1, 2, false).row(&m, "ts", None, 1, None);
+        assert_eq!(&row[6..9], ["Frequency", "50.01", "Hz"]);
+        assert_eq!(&row[9..12], ["", "", ""]);
+        assert_eq!(&row[12..15], ["Raw", "2.3", "V"]);
     }
 
     /// A transform is on, but this frame carries nothing at all: every slot,
