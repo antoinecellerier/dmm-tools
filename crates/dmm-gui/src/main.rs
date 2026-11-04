@@ -371,6 +371,19 @@ fn completion_command() -> clap::Command {
     dmm_shared::help::with_completion_values(Args::command()).mut_arg("theme", with_theme_list)
 }
 
+/// The id `--device <raw>` is stored under, or `None` for an unknown name:
+/// the listing row's id, so a sold-as name (`ut217a`) keeps its own row
+/// rather than the maker's, as the Settings row and `dmm-cli` do; and
+/// `auto` as a choice rather than an unknown device.
+fn canonical_device(raw: &str) -> Option<String> {
+    match registry::resolve_selection(raw)? {
+        registry::Selection::Auto => Some(registry::AUTO_DEVICE_ID.to_string()),
+        registry::Selection::Device(_) => {
+            registry::resolve_listing(raw).map(|l| l.id().to_string())
+        }
+    }
+}
+
 /// The command line, worded in `l`'s language: its `--help`, and the
 /// errors that end the run before a window opens.
 fn parse_args(l: &Localizer) -> CliOverrides {
@@ -391,18 +404,13 @@ fn parse_args(l: &Localizer) -> CliOverrides {
         std::process::exit(0);
     }
 
-    // Validate and canonicalize --device if provided. Through `resolve_selection`
-    // so `--device auto` is a choice rather than an unknown device.
-    let device = args
-        .device
-        .map(|raw| match registry::resolve_selection(&raw) {
-            Some(registry::Selection::Auto) => registry::AUTO_DEVICE_ID.to_string(),
-            Some(registry::Selection::Device(d)) => d.id.to_string(),
-            None => {
-                let reason = tr!(l, "command-line-unknown-device").into_owned();
-                refuse(refused(&cmd, "device", &raw, reason))
-            }
-        });
+    // Validate and canonicalize --device if provided.
+    let device = args.device.map(|raw| {
+        canonical_device(&raw).unwrap_or_else(|| {
+            let reason = tr!(l, "command-line-unknown-device").into_owned();
+            refuse(refused(&cmd, "device", &raw, reason))
+        })
+    });
 
     // Parse --theme if provided. A named theme reads the user's themes
     // folder, whose files may replace a built-in; the modes never do.
@@ -668,6 +676,15 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_names_keep_their_listing_row() {
+        assert_eq!(canonical_device("ut217a").as_deref(), Some("ut217a"));
+        assert_eq!(canonical_device("UT61E+").as_deref(), Some("ut61eplus"));
+        assert_eq!(canonical_device("cms061").as_deref(), Some("cms061"));
+        assert_eq!(canonical_device("auto").as_deref(), Some("auto"));
+        assert_eq!(canonical_device("no-such-meter"), None);
+    }
 
     fn resolve(
         device: Option<&str>,
