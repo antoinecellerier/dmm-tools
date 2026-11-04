@@ -703,8 +703,7 @@ impl App {
                 "UI: error: {}",
                 connection::no_response(&crate::l10n::english())
             );
-            self.connection.last_error =
-                Some(ConnectionIssue::Other(connection::no_response(&self.l10n)));
+            self.connection.last_error = Some(ConnectionIssue::NoResponse);
             self.connection.state == ConnectionState::Disconnected
         } else {
             false

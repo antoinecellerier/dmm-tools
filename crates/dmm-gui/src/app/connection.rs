@@ -56,7 +56,7 @@ impl std::fmt::Display for RemoteCommand {
 /// keeping a mistyped value diagnosable.
 const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 
-/// What the UI records as the failure once that threshold is crossed.
+/// What the log says once that threshold is crossed.
 pub(super) fn no_response(l10n: &dmm_shared::l10n::Localizer) -> String {
     let title = l10n.help().no_response();
     dmm_shared::tr!(l10n, "connection-no-response-check", title = title).into_owned()

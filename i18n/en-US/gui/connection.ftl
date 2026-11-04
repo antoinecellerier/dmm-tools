@@ -94,6 +94,13 @@ connection-no-response-auto =
     Switch on the meter's data transmission,
     or pick the model in Settings (⚙).
 
+# The meter answered, but with data that could not be read: a corrupt
+# frame, or a mode this tool does not know. The error itself follows.
+connection-bad-data = Meter sent data that could not be read
+# Any other failure to connect or to keep reading. The error itself
+# follows, then connection-click-connect.
+connection-failed = Connection failed
+
 # A meter that stopped answering in the middle of a session. $title is the
 # shared notice title, "No response from meter".
 connection-no-response-check = { $title } — check device selection and data transmission

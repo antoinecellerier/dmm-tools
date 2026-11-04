@@ -6,6 +6,7 @@
 use dmm_lib::protocol::registry;
 use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
+use dmm_shared::export::escape_controls;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
@@ -62,7 +63,17 @@ pub(crate) enum ConnectionIssue {
     /// have been on that bridge — because it is built from the bridge the
     /// error names and the render path no longer has it.
     NotIdentified { help: String },
-    /// Anything else, as reported by the acquisition thread.
+    /// The meter stopped answering: the open timed out, or the stream
+    /// crossed its no-response threshold.
+    NoResponse,
+    /// The meter answered with data that could not be read — a corrupt
+    /// frame, a mode byte the tables lack. Carries what was wrong. Often
+    /// mid-session, under a live reading: nothing to switch on, nothing to
+    /// reconnect.
+    BadData(String),
+    /// Anything else — a cable that cannot carry the meter, a permission
+    /// error, a stopped thread — with its text, which is all the user has to
+    /// go on.
     Other(String),
 }
 
@@ -93,6 +104,10 @@ pub(super) enum NoticeKind {
     AdapterNotFound,
     NotIdentified,
     NoResponse,
+    /// The meter answered with data that could not be read.
+    BadData,
+    /// Any other failure: a fixed title, the error itself in the body.
+    Failed,
 }
 
 /// What the reading column has to say about why there is nothing to show,
@@ -143,7 +158,8 @@ impl ConnectionIssue {
     /// Matched by variant rather than by [`dmm_lib::error::ErrorKind`]: the
     /// help needs what each one carries — the selector the user typed, the
     /// links that were searched, the bridge nothing answered on — and the
-    /// coarse kind carries none of it. Classified once when the error
+    /// coarse kind carries none of it. Only unreadable data, which needs no
+    /// more than its text, is matched by kind. Classified once when the error
     /// arrives, not at the render site on every repaint. `adapter` is the
     /// `--adapter` value the open was given, which a stack failure is
     /// explained by when it names a Bluetooth adapter; `selected` the meter
@@ -237,6 +253,12 @@ impl ConnectionIssue {
                     .into_owned(),
                 },
             };
+        }
+        if let dmm_lib::error::Error::Timeout = err {
+            return Self::NoResponse;
+        }
+        if err.kind() == dmm_lib::error::ErrorKind::Protocol {
+            return Self::BadData(l10n.error(err));
         }
         Self::Other(l10n.error(err))
     }
@@ -483,8 +505,8 @@ impl App {
                     help.clone(),
                 )
             }
-            ConnectionIssue::Other(_) => {
-                // Dongle found but meter not responding.
+            ConnectionIssue::NoResponse => {
+                // The link is up but the meter is not responding.
                 // The meter this session is talking about: the one picked, or the
                 // one detection found. Under Auto-detect, before anything answered,
                 // there is neither a model to name nor steps to give.
@@ -510,6 +532,39 @@ impl App {
                     instructions,
                 )
             }
+            // The text says what was wrong; the title stays one string per
+            // kind, which is what the big meter's fit cache keys on. Text from
+            // a meter or a file is escaped so a control byte cannot act. Mid-read
+            // the worker keeps reading and the next good frame clears it; at the
+            // open the session has ended, so the way back in is said too.
+            ConnectionIssue::BadData(error) => {
+                let body = if matches!(
+                    self.connection.state,
+                    ConnectionState::Connected | ConnectionState::Reconnecting
+                ) {
+                    escape_controls(error).into_owned()
+                } else {
+                    format!(
+                        "{}\n\n{}",
+                        escape_controls(error),
+                        tr!(l10n, "connection-click-connect")
+                    )
+                };
+                notice(
+                    NoticeKind::BadData,
+                    tr!(l10n, "connection-bad-data").into_owned(),
+                    body,
+                )
+            }
+            ConnectionIssue::Other(error) => notice(
+                NoticeKind::Failed,
+                tr!(l10n, "connection-failed").into_owned(),
+                format!(
+                    "{}\n\n{}",
+                    escape_controls(error),
+                    tr!(l10n, "connection-click-connect")
+                ),
+            ),
         }
     }
 
@@ -600,7 +655,7 @@ mod tests {
         assert_eq!(n.title, "No meter answered");
         assert_eq!(n.body, "switch USB mode on");
 
-        let n = notice_for(&mut app, ConnectionIssue::Other("timed out".to_string()));
+        let n = notice_for(&mut app, ConnectionIssue::NoResponse);
         assert_eq!(n.kind, NoticeKind::NoResponse);
         assert_eq!(n.title, "No response from meter");
         assert!(
@@ -937,7 +992,7 @@ mod tests {
                 link: Some(dmm_lib::transport::Link::Bluetooth),
                 ..ConnectedMeter::test_fixture(None)
             });
-            let n = notice_for(&mut app, ConnectionIssue::Other("timed out".to_string()));
+            let n = notice_for(&mut app, ConnectionIssue::NoResponse);
             assert_eq!(n.kind, NoticeKind::NoResponse);
             assert!(
                 n.body
@@ -1018,18 +1073,103 @@ mod tests {
         assert_eq!(issue, expected);
     }
 
+    /// A timeout is the quiet meter, whatever reported it.
     #[test]
-    fn other_errors_keep_their_message() {
+    fn a_timeout_is_no_response() {
         let issue = ConnectionIssue::from_error(
             &crate::l10n::english(),
             &dmm_lib::error::Error::Timeout,
             None,
             None,
         );
+        assert_eq!(issue, ConnectionIssue::NoResponse);
+    }
+
+    /// Any other failure shows its own words under a fixed title, never the
+    /// quiet meter's steps: a cable that cannot carry the meter, or a radio
+    /// switched off, has nothing to do with data transmission.
+    #[test]
+    fn other_errors_show_their_message() {
+        let mut app = app("ut61eplus");
+        let ut61eplus = registry::find_device("ut61eplus").expect("registry entry");
+        for err in [
+            dmm_lib::error::Error::WrongCable {
+                cable: "BU-86X",
+                model: "UNI-T UT61E+",
+            },
+            dmm_lib::error::Error::Bluetooth(dmm_lib::error::BluetoothIssue::PoweredOff),
+        ] {
+            let text = crate::l10n::english().error(&err);
+            let issue = ConnectionIssue::from_error(
+                &crate::l10n::english(),
+                &err,
+                None,
+                Some(ut61eplus.listing()),
+            );
+            assert_eq!(issue, ConnectionIssue::Other(text.clone()));
+            let n = notice_for(&mut app, issue);
+            assert_eq!(n.kind, NoticeKind::Failed);
+            assert_eq!(n.title, "Connection failed");
+            assert_eq!(
+                n.body,
+                format!("{text}\n\nClick \"Connect\" after resolving the issue.")
+            );
+            assert!(!n.body.contains("enable data transmission"), "{}", n.body);
+        }
+    }
+
+    /// Data the meter sent that could not be read is said as such: the meter
+    /// is answering, so there is nothing to switch on, and under a live
+    /// reading nothing to reconnect.
+    #[test]
+    fn unreadable_data_is_not_a_quiet_meter() {
+        let mut app = app("ut61eplus");
+        let issue = ConnectionIssue::from_error(
+            &crate::l10n::english(),
+            &dmm_lib::error::Error::UnknownMode(0x1f),
+            None,
+            None,
+        );
         assert_eq!(
             issue,
-            ConnectionIssue::Other("timeout waiting for response".to_string())
+            ConnectionIssue::BadData("unknown mode: 0x1f".to_string())
         );
+        app.connection.state = ConnectionState::Connected;
+        let n = notice_for(&mut app, issue);
+        assert_eq!(n.kind, NoticeKind::BadData);
+        assert_eq!(n.title, "Meter sent data that could not be read");
+        assert_eq!(n.body, "unknown mode: 0x1f");
+        assert!(n.sections.is_empty());
+    }
+
+    /// Unreadable data that ended the open leaves no session running, so
+    /// the notice names the way back in, as every other failure does.
+    #[test]
+    fn unreadable_data_at_the_open_says_to_click_connect() {
+        let mut app = app("ut61eplus");
+        app.connection.state = ConnectionState::Disconnected;
+        let n = notice_for(
+            &mut app,
+            ConnectionIssue::BadData("unknown mode: 0x1f".to_string()),
+        );
+        assert_eq!(n.kind, NoticeKind::BadData);
+        assert_eq!(
+            n.body,
+            "unknown mode: 0x1f\n\nClick \"Connect\" after resolving the issue."
+        );
+    }
+
+    /// The text can carry bytes from the meter or a file: a control
+    /// character is shown as its escape, not acted on.
+    #[test]
+    fn a_control_character_in_the_text_is_escaped() {
+        let mut app = app("ut61eplus");
+        app.connection.state = ConnectionState::Connected;
+        let n = notice_for(
+            &mut app,
+            ConnectionIssue::BadData("invalid response: \u{1b}[2J".to_string()),
+        );
+        assert_eq!(n.body, "invalid response: \\u{1b}[2J");
     }
 
     /// A message that merely mentions the phrase must not be mistaken for

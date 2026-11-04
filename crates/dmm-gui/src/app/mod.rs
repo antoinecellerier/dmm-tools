@@ -1963,7 +1963,7 @@ mod tests {
         settings.shared.device_family = "ut61eplus".to_string();
         let mut app = App::from_settings(settings, dmm_lib::Clock::real());
         app.big_meter_mode = mode;
-        app.connection.last_error = Some(ConnectionIssue::Other("timed out".to_string()));
+        app.connection.last_error = Some(ConnectionIssue::NoResponse);
         app
     }
 

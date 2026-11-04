@@ -41,6 +41,7 @@
 - **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
 - **The UT181A and UT171 keep reading after joining the stream mid-frame** — readings could stop for tens of seconds, and a refused UT181A command look accepted.
 - **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
+- **dmm-gui says why a connection failed, or which data was unreadable** — a wrong cable, Bluetooth switched off or a garbled frame showed as "No response from meter".
 - **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
 - **dmm-gui rescales when dragged to a monitor with another display scale** — it kept the scale of the monitor it opened on.
 
