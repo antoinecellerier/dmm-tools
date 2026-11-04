@@ -103,6 +103,8 @@ pub(crate) enum Pair {
     Text,
     /// Its button captions on the button.
     Button,
+    /// Its text on the frame, the top bar's and Settings' surface.
+    Frame,
 }
 
 impl std::fmt::Display for ThemeIssue {
@@ -110,6 +112,7 @@ impl std::fmt::Display for ThemeIssue {
         let what = |pair: &Pair| match pair {
             Pair::Text => "text on the background",
             Pair::Button => "button text on the button",
+            Pair::Frame => "text on the frame",
         };
         match self {
             Self::Read(why) => f.write_str(why),
@@ -152,6 +155,9 @@ impl ThemeIssue {
         let what = |pair: &Pair| match pair {
             Pair::Text => "text",
             Pair::Button => "button",
+            // The frame has messages of its own, not a `$what` variant: a
+            // translation lacking the variant would name the background.
+            Pair::Frame => unreachable!("the frame has messages of its own"),
         };
         match self {
             Self::Read(why) => return why.clone(),
@@ -163,7 +169,14 @@ impl ThemeIssue {
             Self::NameReserved(name) => {
                 tr!(l10n, "colors-issue-name-reserved", name = escaped(name))
             }
+            Self::NotOpaque(Pair::Frame) => tr!(l10n, "colors-issue-frame-not-opaque"),
             Self::NotOpaque(pair) => tr!(l10n, "colors-issue-not-opaque", what = what(pair)),
+            Self::LowContrast(Pair::Frame, ratio) => tr!(
+                l10n,
+                "colors-issue-frame-low-contrast",
+                ratio = format!("{ratio:.1}"),
+                floor = MIN_READABLE_CONTRAST.to_string(),
+            ),
             Self::LowContrast(pair, ratio) => tr!(
                 l10n,
                 "colors-issue-low-contrast",
@@ -223,11 +236,11 @@ const MAX_FILE_BYTES: u64 = 64 * 1024;
 /// The longest name a theme may have, in characters: a chip, not a caption.
 const MAX_NAME_CHARS: usize = 32;
 
-/// The least contrast a theme's text may have on its panel and its button
-/// captions on their fill. Lower and the chips that would switch it away are
-/// unreadable too. Well under AA on purpose: this is a floor against a
-/// broken file, not a design bar — the built-ins are held to AA by the
-/// palette tests.
+/// The least contrast a theme's text may have on its panel and its frame,
+/// and its button captions on their fill. Lower and the chips that would
+/// switch it away are unreadable too. Well under AA on purpose: this is a
+/// floor against a broken file, not a design bar — the built-ins are held
+/// to AA by the palette tests.
 const MIN_READABLE_CONTRAST: f64 = 3.0;
 
 /// The built-in theme files, in chip order.
@@ -377,14 +390,15 @@ pub(crate) fn check_name(name: &str) -> Result<(), ThemeIssue> {
     Ok(())
 }
 
-/// A theme whose text can't be read on its panel, or whose button captions
-/// can't be read on their fill, would leave the user unable to read the very
-/// chips that switch it off.
+/// A theme whose text can't be read on its panel or on the frame that holds
+/// the Theme row, or whose button captions can't be read on their fill,
+/// would leave the user unable to read the very chips that switch it off.
 fn check_readable(theme: &NamedTheme) -> Result<(), ThemeIssue> {
     let tc = ThemeColors::new(theme.dark, theme.preset, &theme.colors);
     for (what, fg, ground) in [
         (Pair::Text, tc.text(), tc.background()),
         (Pair::Button, tc.button_text(), tc.button()),
+        (Pair::Frame, tc.text(), tc.frame()),
     ] {
         // `contrast` reads no alpha: a transparent text colour would pass.
         if !fg.is_opaque() || !ground.is_opaque() {
@@ -686,6 +700,15 @@ mod tests {
                      "colors": {"text": "#505050", "button": "#505050"}}"##,
                 "button text on the button",
             ),
+            (
+                r##"{"name": "Ghost", "mode": "dark",
+                     "colors": {"frame": "#E0E0E0", "text": "#E8E8E8"}}"##,
+                "text on the frame",
+            ),
+            (
+                r##"{"name": "Ghost", "mode": "dark", "colors": {"frame": "#E0E0E000"}}"##,
+                "text on the frame is not opaque",
+            ),
         ] {
             let err = parse(text).unwrap_err().to_string();
             assert!(err.contains(why), "{text}: {err:?} lacks {why:?}");
@@ -894,8 +917,10 @@ mod tests {
             ThemeIssue::NameReserved("Dark".into()),
             ThemeIssue::NotOpaque(Pair::Text),
             ThemeIssue::NotOpaque(Pair::Button),
+            ThemeIssue::NotOpaque(Pair::Frame),
             ThemeIssue::LowContrast(Pair::Text, 1.14),
             ThemeIssue::LowContrast(Pair::Button, 2.96),
+            ThemeIssue::LowContrast(Pair::Frame, 1.05),
             ThemeIssue::NameTaken("It's \"Dusk\"".into(), "b-dusk.json".into()),
             ThemeIssue::NameTaken("Back\\slash".into(), "c.json".into()),
             ThemeIssue::FileNameUnprintable,

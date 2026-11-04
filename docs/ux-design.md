@@ -213,8 +213,9 @@ the reading there; a live region on top would have each change read twice.
 
 **WCAG 2.1 AA in every preset and built-in theme.** Text clears 4.5:1 and
 graphical elements 3:1 in both modes, checked by tests in `theme/`. A shared
-theme file is its author's, held only to 3:1 for text and button captions, so
-the chips that switch it off stay readable.
+theme file is its author's, held only to 3:1 for text on the background and
+the frame and for button captions, so the chips that switch it off stay
+readable.
 
 **A named theme fixes its mode.** Midnight has no light form worth having, so
 a theme is one palette in one mode, beside Dark, Light and System rather than
