@@ -283,6 +283,10 @@ pub(super) struct Connection {
     pub(super) reconnect_last_error: Option<String>,
     /// The acquisition thread's channels; `None` while none runs.
     worker: Option<Worker>,
+    /// The message channel of the last thread stopped, which may still be
+    /// finishing an open: the next thread waits for it to close before
+    /// opening, and quitting waits for it too.
+    stopping: Option<mpsc::Receiver<DmmMessage>>,
     /// Reconnect on next frame (device selection changed while connected).
     pub(super) needs_reconnect: bool,
     /// The replay handed out its last frame; nothing more will come until
@@ -340,6 +344,7 @@ impl Default for Connection {
             reconnect_attempt: 0,
             reconnect_last_error: None,
             worker: None,
+            stopping: None,
             needs_reconnect: false,
             ended: false,
             late_readings: None,
@@ -352,14 +357,17 @@ impl Connection {
     /// Nothing is connected, so nothing is identified: under Auto-detect the
     /// next connect asks the cable again. The waiting count goes too: only an
     /// incoming measurement clears it otherwise, and there won't be one.
-    /// Only the error that ended the link and a pending reconnect survive.
+    /// Only the error that ended the link, a pending reconnect and the
+    /// stopped thread's channel survive.
     fn hang_up(&mut self) {
-        if let Some(worker) = self.worker.take() {
-            worker.stop();
-        }
+        let stopping = match self.worker.take() {
+            Some(worker) => Some(worker.stop()),
+            None => self.stopping.take(),
+        };
         *self = Self {
             last_error: self.last_error.take(),
             needs_reconnect: self.needs_reconnect,
+            stopping,
             ..Self::default()
         };
     }

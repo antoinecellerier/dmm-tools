@@ -45,6 +45,7 @@
 - **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
 - **A retried Connect in dmm-gui shows its own progress** — the previous failure stayed on screen, so the click looked like it did nothing.
 - **dmm-gui shows Connecting… and a Cancel button while it opens a meter** — Connect stayed clickable, and a second click opened the meter twice.
+- **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
 - **dmm-gui rescales when dragged to a monitor with another display scale** — it kept the scale of the monitor it opened on.
 
 ## v0.9.0 — Graph Analysis and Alarms

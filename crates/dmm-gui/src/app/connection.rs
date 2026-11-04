@@ -297,6 +297,11 @@ pub(super) struct ThreadContext {
     /// [`RECONNECT_INTERVAL`] outside the tests, which have no meter to wait for.
     pub reconnect_interval: Duration,
     pub stop_flag: Arc<AtomicBool>,
+    /// The message channel of the thread stopped before this one, which
+    /// closes once that thread has dropped its link. Nothing opens until
+    /// then: a Bluetooth transport disconnects its peripheral on drop, and
+    /// an earlier thread still finishing an open would cut this one's link.
+    pub after: Option<mpsc::Receiver<DmmMessage>>,
 }
 
 /// The settings the acquisition thread lists for the readout dropdowns, in
@@ -399,10 +404,26 @@ where
         simulated,
         reconnect_interval,
         stop_flag,
+        after,
     } = thread_ctx;
 
+    // Waited out even when stopped meanwhile: this thread's own channel
+    // closing is what the next one waits for, so it must not close before
+    // the one it follows.
+    if let Some(previous) = after {
+        while previous.recv().is_ok() {}
+    }
+    if stop_flag.load(Ordering::Relaxed) {
+        return;
+    }
     info!("background thread: connecting to device");
     let mut dmm = match open_fn(None) {
+        // Stopped while the open ran: drop the link now, without asking the
+        // meter its name or reporting a session nobody wants.
+        Ok(_) if stop_flag.load(Ordering::Relaxed) => {
+            info!("background thread: stopped while opening");
+            return;
+        }
         Ok((mut d, detected)) => {
             establish_connection(&mut d, detected, selected, query_name, &msg_tx, &ctx);
             d
@@ -997,6 +1018,7 @@ mod tests {
             simulated: false,
             reconnect_interval: Duration::from_millis(10),
             stop_flag: Arc::new(AtomicBool::new(false)),
+            after: None,
         }
     }
 
@@ -1030,6 +1052,102 @@ mod tests {
         drop(ctrl_tx);
         thread.join().unwrap();
         assert_eq!(open_at_reopen, 0, "the old link was still open");
+    }
+
+    /// The same across threads: a thread stopped mid-open (Disconnect, Cancel
+    /// or Stop retrying during a slow Bluetooth connect) drops its link
+    /// straight after that open, without reporting it, so the next Connect's
+    /// thread opens only after.
+    #[test]
+    fn a_new_thread_opens_after_the_stopped_one_lets_go() {
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
+        let (gate_tx, gate_rx) = mpsc::channel::<()>();
+        let (first_tx, first_rx) = mpsc::channel();
+        let (first_ctrl_tx, first_ctrl_rx) = mpsc::channel();
+        let (_first_cmd_tx, first_cmd_rx) = mpsc::channel();
+        let first_ctx = thread_context(first_tx, first_ctrl_rx, first_cmd_rx);
+        let first_stop = Arc::clone(&first_ctx.stop_flag);
+        let first_live = Arc::clone(&live);
+        let gate = std::sync::Mutex::new(gate_rx);
+        let (opening_tx, opening_rx) = mpsc::channel();
+        let first = std::thread::spawn(move || {
+            run_device_thread(
+                move |_| {
+                    let _ = opening_tx.send(());
+                    let _ = gate.lock().unwrap().recv();
+                    dmm_lib::Dmm::new(Dropout::open(&first_live), (entry.new_protocol)())
+                        .map(|d| (d, None))
+                },
+                first_ctx,
+            )
+        });
+        // Stopped while its open blocks, as Disconnect does.
+        opening_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the first thread opens");
+        first_stop.store(true, Ordering::Relaxed);
+        drop(first_ctrl_tx);
+
+        let (seen_tx, seen_rx) = mpsc::channel();
+        let (second_tx, _second_rx) = mpsc::channel();
+        let (second_ctrl_tx, second_ctrl_rx) = mpsc::channel();
+        let (_second_cmd_tx, second_cmd_rx) = mpsc::channel();
+        let mut second_ctx = thread_context(second_tx, second_ctrl_rx, second_cmd_rx);
+        second_ctx.after = Some(first_rx);
+        let second_live = Arc::clone(&live);
+        let second = std::thread::spawn(move || {
+            run_device_thread(
+                move |_| {
+                    let _ = seen_tx.send(second_live.load(Ordering::SeqCst));
+                    Err::<(dmm_lib::Dmm<Dropout>, _), _>(dmm_lib::error::Error::Timeout)
+                },
+                second_ctx,
+            )
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(
+            seen_rx.try_recv().is_err(),
+            "opened while the first was opening"
+        );
+        gate_tx.send(()).unwrap();
+        let open_at_second = seen_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the second thread opens");
+        first.join().unwrap();
+        drop(second_ctrl_tx);
+        second.join().unwrap();
+        assert_eq!(open_at_second, 0, "the first thread's link was still open");
+    }
+
+    /// A thread stopped while its open ran drops the link it got without
+    /// asking the meter's name (which beeps) or reporting `Connected`.
+    #[test]
+    fn a_thread_stopped_mid_open_drops_the_link_unreported() {
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (_ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        let mut thread_ctx = thread_context(msg_tx, ctrl_rx, cmd_rx);
+        thread_ctx.query_name = true;
+        let stop = Arc::clone(&thread_ctx.stop_flag);
+        let open_live = Arc::clone(&live);
+        run_device_thread(
+            move |_| {
+                stop.store(true, Ordering::Relaxed);
+                dmm_lib::Dmm::new(Dropout::open(&open_live), (entry.new_protocol)())
+                    .map(|d| (d, None))
+            },
+            thread_ctx,
+        );
+        assert!(
+            !msg_rx
+                .try_iter()
+                .any(|m| matches!(m, DmmMessage::Connected(_))),
+            "reported a session that was stopped"
+        );
+        assert_eq!(live.load(Ordering::SeqCst), 0, "the link stayed open");
     }
 
     /// A replay's session names the link its file was recorded over: the

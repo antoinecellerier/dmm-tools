@@ -327,6 +327,7 @@ impl App {
             simulated: false,
             reconnect_interval: RECONNECT_INTERVAL,
             stop_flag,
+            after: self.connection.stopping.take(),
         };
 
         let playback = self
@@ -444,14 +445,17 @@ impl App {
     ///
     /// The thread holds the only senders of the message channel and drops
     /// its `Dmm` before them, so the channel hanging up means the transport
-    /// has closed. Returns at once when nothing is connected; a thread stuck
-    /// past [`EXIT_DISCONNECT_WAIT`] is left behind.
+    /// has closed. A thread stopped earlier by Disconnect is waited for the
+    /// same way, and a running one only closes its channel after the one
+    /// before it. Returns at once when no thread is left; one stuck past
+    /// [`EXIT_DISCONNECT_WAIT`] is left behind.
     pub(super) fn disconnect_and_wait(&mut self) {
-        let Some(worker) = self.connection.worker.take() else {
+        if self.connection.worker.is_some() {
+            self.disconnect();
+        }
+        let Some(rx) = self.connection.stopping.take() else {
             return;
         };
-        let rx = worker.stop();
-        self.disconnect();
         let deadline = Instant::now() + EXIT_DISCONNECT_WAIT;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
@@ -1219,6 +1223,30 @@ mod tests {
             quit.elapsed() < EXIT_DISCONNECT_WAIT,
             "not left to time out"
         );
+        worker.join().expect("the worker ends");
+    }
+
+    /// A thread stopped by Disconnect but still letting go of the meter is
+    /// waited for on quit too, though nothing is connected any more.
+    #[test]
+    fn quitting_waits_for_a_thread_stopped_earlier() {
+        let mut app = app("ut61eplus", false);
+        let (msg_tx, msg_rx) = mpsc::channel::<DmmMessage>();
+        let released = Arc::new(AtomicBool::new(false));
+        app.connection.worker = Some(Worker::reading(msg_rx));
+        app.disconnect();
+        let worker = {
+            let released = Arc::clone(&released);
+            // An open that only returns after the Disconnect, then a link
+            // slow to close.
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(100));
+                released.store(true, Ordering::Relaxed);
+                drop(msg_tx);
+            })
+        };
+        eframe::App::on_exit(&mut app, None);
+        assert!(released.load(Ordering::Relaxed), "the meter was let go");
         worker.join().expect("the worker ends");
     }
 
