@@ -573,7 +573,12 @@ impl Graph {
         // Apply drag — resize uses per-frame delta, pan uses absolute position.
         let window = ViewWindow {
             center: self.view_center,
-            width: self.time_window_secs,
+            // What the plot shows: live keeps a session shorter than the
+            // window narrower than it, as a frozen view does.
+            width: {
+                let (x_min, x_max) = self.view_bounds();
+                x_max - x_min
+            },
             live: self.live,
         };
         let dragged = match self.minimap_drag {
@@ -597,9 +602,14 @@ impl Graph {
             MinimapDrag::None => None,
         };
         if let Some(next) = dragged {
+            // A pan keeps the width shown, a frozen one included; a resize
+            // picks the window's.
+            if next.width != window.width {
+                self.time_window_secs = next.width;
+                self.frozen_width = None;
+            }
+            self.set_live(next.live);
             self.view_center = next.center;
-            self.time_window_secs = next.width;
-            self.live = next.live;
         }
 
         // Reset drag state when pointer is released

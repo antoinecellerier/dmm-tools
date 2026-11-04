@@ -313,6 +313,149 @@ fn build_envelope_sliding_window_extrema() {
 }
 
 #[test]
+fn leaving_live_freezes_the_view_where_it_was() {
+    // Ten minutes on a 60 s window, with the centre where a reset left it:
+    // turning LIVE off must hold the window live was showing, not jump to
+    // the session's start.
+    let mut g = Graph::new();
+    g.time_window_secs = 60.0;
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push(2.0, t0 + Duration::from_secs(600), "DC V", "V", None);
+    g.view_center = 0.0;
+    let live_bounds = g.view_bounds();
+    g.leave_live();
+    assert!(!g.live);
+    let (x_min, x_max) = g.view_bounds();
+    assert!(
+        (x_min - live_bounds.0).abs() < 1e-9,
+        "{x_min} vs {live_bounds:?}"
+    );
+    assert!(
+        (x_max - live_bounds.1).abs() < 1e-9,
+        "{x_max} vs {live_bounds:?}"
+    );
+}
+
+#[test]
+fn leaving_live_before_the_window_fills_keeps_the_view_exactly() {
+    // 20 s of readings on a 60 s window: live shows 0–20 s, and so must the
+    // frozen view, with the window setting untouched and later readings
+    // left out of it.
+    let mut g = Graph::new();
+    g.time_window_secs = 60.0;
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push(2.0, t0 + Duration::from_secs(20), "DC V", "V", None);
+    let live_bounds = g.view_bounds();
+    assert_eq!(live_bounds, (0.0, 20.0));
+    g.leave_live();
+    assert_eq!(g.view_bounds(), live_bounds);
+    assert_eq!(g.time_window_secs, 60.0);
+    g.push(3.0, t0 + Duration::from_secs(30), "DC V", "V", None);
+    assert_eq!(g.view_bounds(), live_bounds);
+    // A pan slides the frozen width over the later readings.
+    g.apply_pan(-5.0);
+    assert_eq!(g.view_bounds(), (5.0, 25.0));
+    assert_eq!(g.time_window_secs, 60.0);
+    // An export saves the view as shown.
+    assert_eq!(g.view_state(t0).window, Some(20.0));
+}
+
+/// 20 s of readings on a 60 s window, LIVE turned off, then 20 s more.
+fn frozen_short_session() -> Graph {
+    let mut g = Graph::new();
+    g.time_window_secs = 60.0;
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push(2.0, t0 + Duration::from_secs(20), "DC V", "V", None);
+    g.leave_live();
+    g.push(3.0, t0 + Duration::from_secs(40), "DC V", "V", None);
+    g
+}
+
+#[test]
+fn a_window_change_lets_go_of_the_frozen_width_for_good() {
+    // Back on the frozen window and centre, the later readings still show.
+    let mut g = frozen_short_session();
+    g.cycle_time_window(-1);
+    g.cycle_time_window(1);
+    assert_eq!(g.time_window_secs, 60.0);
+    assert_eq!(g.view_bounds(), (0.0, 60.0));
+}
+
+#[test]
+fn a_pan_there_and_back_keeps_the_frozen_width() {
+    let mut g = frozen_short_session();
+    g.apply_pan(-5.0);
+    g.apply_pan(5.0);
+    g.scroll_view(0.25);
+    assert!(!g.live);
+    assert_eq!(g.view_bounds(), (5.0, 25.0));
+}
+
+#[test]
+fn picking_the_current_window_shows_it() {
+    let mut g = frozen_short_session();
+    g.set_time_window(60.0);
+    assert_eq!(g.view_bounds(), (0.0, 60.0));
+}
+
+#[test]
+fn a_pan_through_live_and_back_keeps_the_width_live_showed() {
+    // Data now 0–40 s on a 60 s window: live shows all 40 s, and a pan back
+    // out of it freezes that width rather than jumping to the window's.
+    let mut g = frozen_short_session();
+    g.apply_pan(-30.0);
+    assert!(g.live);
+    assert_eq!(g.view_bounds(), (0.0, 40.0));
+    g.apply_pan(5.0);
+    assert!(!g.live);
+    assert_eq!(g.view_bounds(), (0.0, 40.0));
+    g.apply_pan(-2.0);
+    assert_eq!(g.view_bounds(), (0.0, 40.0));
+}
+
+#[test]
+fn going_live_forgets_the_frozen_width() {
+    // Live again, then out of it by Home a while later: the window's width,
+    // not the one the first freeze took.
+    let mut g = frozen_short_session();
+    g.set_live(true);
+    g.push(
+        4.0,
+        g.origin.unwrap() + Duration::from_secs(600),
+        "DC V",
+        "V",
+        None,
+    );
+    g.jump_to_start();
+    assert_eq!(g.view_bounds(), (0.0, 60.0));
+}
+
+#[test]
+fn zooming_in_on_a_frozen_short_session_narrows_what_it_shows() {
+    // The plot shows 0–20 s: one notch in at 10 s narrows that, around 10 s.
+    let mut g = frozen_short_session();
+    g.zoom_time(1.1, Some(10.0));
+    let (lo, hi) = g.view_bounds();
+    assert!((hi - lo - 20.0 / 1.1).abs() < 1e-9, "{lo}..{hi}");
+    assert!(((lo + hi) / 2.0 - 10.0).abs() < 1e-9, "{lo}..{hi}");
+}
+
+#[test]
+fn zooming_in_from_live_on_a_short_session_narrows_what_it_shows() {
+    let mut g = Graph::new();
+    g.time_window_secs = 60.0;
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push(2.0, t0 + Duration::from_secs(20), "DC V", "V", None);
+    g.zoom_time(2.0, Some(20.0));
+    assert!(!g.live);
+    assert_eq!(g.view_bounds(), (10.0, 20.0));
+}
+
+#[test]
 fn apply_pan_in_browse_mode_shifts_view_center() {
     let mut g = Graph::new();
     g.live = false;

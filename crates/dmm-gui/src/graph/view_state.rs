@@ -88,7 +88,13 @@ impl Graph {
         let shift = self.origin_after(first);
         let (view_min, _) = self.view_bounds();
         ViewState {
-            window: Some(self.time_window_secs),
+            // What the view shows: a frozen one narrower than the window
+            // comes back as it was.
+            window: Some(if self.live {
+                self.time_window_secs
+            } else {
+                self.browse_width()
+            }),
             start: (!self.live).then_some(view_min + shift),
             y: self.y_axis.fixed.then(|| YRange {
                 min: self.y_axis.min.value(),
@@ -119,6 +125,7 @@ impl Graph {
         if let Some(window) = view.window.filter(usable) {
             self.time_window_secs = window.min((data_max - data_min).max(MAX_WINDOW_SECS));
         }
+        self.frozen_width = None;
         let shows_data = |s: &f64| (data_min - self.time_window_secs..=data_max).contains(s);
         match view.start.map(|s| s - shift).filter(shows_data) {
             Some(start) => {

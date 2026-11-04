@@ -222,7 +222,7 @@ impl Graph {
                 .on_hover_text(tooltip)
                 .clicked()
             {
-                self.time_window_secs = secs;
+                self.set_time_window(secs);
             }
         }
 
@@ -241,7 +241,11 @@ impl Graph {
             .add(egui::Button::new(live_text).selected(self.live))
             .on_hover_text(tr!(l10n, "graph-live.hover", keys = key(egui::Key::End)));
         if live_resp.clicked() {
-            self.live = !self.live;
+            if self.live {
+                self.leave_live();
+            } else {
+                self.set_live(true);
+            }
         }
 
         ui.add_space(6.0);

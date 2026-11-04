@@ -482,6 +482,11 @@ pub struct Graph {
     pub live: bool,
     /// User-controlled view center (seconds from origin). Used when not live.
     view_center: f64,
+    /// The width turning LIVE off froze the view at, while the session was
+    /// shorter than the window: live shows it without the empty rest of the
+    /// window, and the frozen view, panned or not, keeps that width. A zoom,
+    /// a window change or a reset clears it.
+    frozen_width: Option<f64>,
     /// Fixed Y ranges, while **Y:Fixed** is on.
     y_axis: YAxis,
     pub(crate) cursors: MeasureCursors,
@@ -604,6 +609,7 @@ impl Graph {
             time_window_secs: 60.0,
             live: true,
             view_center: 0.0,
+            frozen_width: None,
             y_axis: YAxis::default(),
             cursors: MeasureCursors::default(),
             show_mean: false,

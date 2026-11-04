@@ -292,7 +292,7 @@ impl Graph {
         self.main_hidden = false;
         self.levels = false;
         self.origin = Some(now);
-        self.live = true;
+        self.set_live(true);
         self.view_center = 0.0;
         // Drop any pinned Y range too: it was chosen for the previous
         // mode's scale, and keeping it would plot ohms against volt bounds
@@ -476,7 +476,7 @@ impl Graph {
         self.levels = false;
         self.last_display_raw = None;
         self.origin = None;
-        self.live = true;
+        self.set_live(true);
         self.view_center = 0.0;
         self.y_axis.release();
         self.cursors.clear();

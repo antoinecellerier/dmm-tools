@@ -107,7 +107,7 @@ impl Graph {
             self.jump_to_start();
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::End)) {
-            self.live = true;
+            self.set_live(true);
         }
 
         // The analysis overlays. Mean, Min/Max and Histogram are plain flags; the Ref
@@ -145,35 +145,58 @@ impl Graph {
                 .rev()
                 .find(|&&(s, _)| s < self.time_window_secs - 0.1)
             {
-                self.time_window_secs = secs;
+                self.set_time_window(secs);
             }
         } else if let Some(&(secs, _)) = TIME_WINDOWS
             .iter()
             .find(|&&(s, _)| s > self.time_window_secs + 0.1)
         {
-            self.time_window_secs = secs;
+            self.set_time_window(secs);
         }
     }
 
-    /// Scroll the view by a fraction of the current window width.
-    pub(super) fn scroll_view(&mut self, fraction: f64) {
-        let delta = self.time_window_secs * fraction;
-        let (_, data_max) = self.data_time_range();
-        let from = if self.live {
-            data_max - self.time_window_secs / 2.0
-        } else {
-            self.view_center
-        };
-        self.center_view_on(from + delta);
+    /// Pick a window width, the one already set included: the view shows
+    /// it, not the width turning LIVE off froze.
+    pub(super) fn set_time_window(&mut self, secs: f64) {
+        self.time_window_secs = secs;
+        self.frozen_width = None;
     }
 
-    /// Centre the window on `center` seconds, kept from starting before the
-    /// data; a window that reaches the newest data is live again.
+    /// The width the view shows when not live: the window's, or the
+    /// narrower one LIVE was turned off at (see `frozen_width`).
+    pub(super) fn browse_width(&self) -> f64 {
+        self.frozen_width.unwrap_or(self.time_window_secs)
+    }
+
+    /// Follow the newest data, or stop. Leaving live keeps the width live
+    /// showed (see `frozen_width`); entering it is done with that width, and
+    /// the next freeze takes its own.
+    pub(super) fn set_live(&mut self, live: bool) {
+        if live {
+            self.frozen_width = None;
+        } else if self.live {
+            let (x_min, x_max) = self.view_bounds();
+            let width = x_max - x_min;
+            self.frozen_width = (width > 0.0 && width < self.time_window_secs).then_some(width);
+        }
+        self.live = live;
+    }
+
+    /// Scroll the view by a fraction of the width it shows.
+    pub(super) fn scroll_view(&mut self, fraction: f64) {
+        if self.live {
+            self.leave_live();
+        }
+        self.center_view_on(self.view_center + self.browse_width() * fraction);
+    }
+
+    /// Centre the view on `center` seconds, kept from starting before the
+    /// data; a view that reaches the newest data is live again.
     pub(super) fn center_view_on(&mut self, center: f64) {
         let (data_min, data_max) = self.data_time_range();
-        let half = self.time_window_secs / 2.0;
+        let half = self.browse_width() / 2.0;
         self.view_center = center.max(data_min + half);
-        self.live = self.view_center + half >= data_max;
+        self.set_live(self.view_center + half >= data_max);
     }
 
     /// Show every reading the graph holds at once, not live: a file
@@ -182,14 +205,15 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         self.time_window_secs = (data_max - data_min).max(1.0);
         self.view_center = data_min + self.time_window_secs / 2.0;
+        self.frozen_width = None;
         self.live = false;
     }
 
     /// Jump view to the start of recorded data.
     pub(super) fn jump_to_start(&mut self) {
         let (data_min, _) = self.data_time_range();
-        self.view_center = data_min + self.time_window_secs / 2.0;
-        self.live = false;
+        self.set_live(false);
+        self.view_center = data_min + self.browse_width() / 2.0;
     }
 
     pub(super) fn data_time_range(&self) -> (f64, f64) {
@@ -221,7 +245,6 @@ impl Graph {
     /// Current view bounds (x_min, x_max) for the main graph.
     pub(super) fn view_bounds(&self) -> (f64, f64) {
         let (_, data_max) = self.data_time_range();
-        let half = self.time_window_secs / 2.0;
 
         if self.live {
             // "Live" means the window ends at the newest *sample*, and
@@ -233,9 +256,9 @@ impl Graph {
             let x_min = (x_max - self.time_window_secs).max(0.0);
             (x_min, x_max)
         } else {
-            let x_min = (self.view_center - half).max(0.0);
-            let x_max = x_min + self.time_window_secs;
-            (x_min, x_max)
+            let width = self.browse_width();
+            let x_min = (self.view_center - width / 2.0).max(0.0);
+            (x_min, x_min + width)
         }
     }
 
@@ -371,7 +394,7 @@ impl Graph {
     /// Return to live follow with auto Y. Shared by the double-click handler
     /// and the explicit "Reset Zoom" toolbar button.
     pub fn reset_view(&mut self) {
-        self.live = true;
+        self.set_live(true);
         self.view_center = 0.0;
         self.y_axis.release();
     }
@@ -406,6 +429,16 @@ impl Graph {
         !self.live || self.y_axis.fixed
     }
 
+    /// Freeze the view exactly where live has it, then drop out of live.
+    /// The bounds equal the live bounds — a session shorter than the window
+    /// keeps the narrower width live shows it at — and the window setting
+    /// is left as it was.
+    pub(super) fn leave_live(&mut self) {
+        let (_, x_max) = self.view_bounds();
+        self.set_live(false);
+        self.view_center = x_max - self.browse_width() / 2.0;
+    }
+
     /// Shift the view by `time_delta` seconds. The sign convention matches
     /// egui's `drag_delta().x`: positive = mouse moved right, which in the
     /// pan model reveals older data (view_center decreases).
@@ -420,20 +453,41 @@ impl Graph {
     /// future-space.
     pub(super) fn apply_pan(&mut self, time_delta: f64) {
         if self.live {
-            let (_, data_max) = self.data_time_range();
-            self.view_center = data_max - self.time_window_secs / 2.0;
-            self.live = false;
+            self.leave_live();
         }
         self.view_center -= time_delta;
 
         if time_delta < 0.0 {
             let (_, data_max) = self.data_time_range();
-            let half = self.time_window_secs / 2.0;
+            let half = self.browse_width() / 2.0;
             if self.view_center + half >= data_max {
                 self.view_center = data_max - half;
-                self.live = true;
+                self.set_live(true);
             }
         }
+    }
+
+    /// Zoom the time axis by `zoom_delta` (above 1 narrows, as wheel up and
+    /// a pinch open read), keeping `cursor_t` where it is on screen, or the
+    /// middle without one. It zooms what the plot shows, which live and a
+    /// frozen view keep narrower than the window while the session is
+    /// shorter than it, and drops out of live first as a pan does. The
+    /// width it picks is the window's from then on.
+    pub(super) fn zoom_time(&mut self, zoom_delta: f64, cursor_t: Option<f64>) {
+        if self.live {
+            self.leave_live();
+        }
+        let (shown_min, shown_max) = self.view_bounds();
+        let shown = if shown_max > shown_min {
+            shown_max - shown_min
+        } else {
+            self.time_window_secs
+        };
+        let cursor_t = cursor_t.unwrap_or(shown_min + shown / 2.0);
+        let rel = (cursor_t - shown_min) / shown;
+        self.time_window_secs = (shown / zoom_delta).clamp(2.0, 3600.0);
+        self.frozen_width = None;
+        self.view_center = cursor_t - (rel - 0.5) * self.time_window_secs;
     }
 
     /// Pure helper: given the two corners of a bbox-zoom rectangle in data
@@ -458,6 +512,7 @@ impl Graph {
         let (view_center, time_window, y_min, y_max) = Self::bbox_to_view(p0, p1);
         self.live = false;
         self.view_center = view_center;
+        self.frozen_width = None;
         self.time_window_secs = time_window.max(MIN_TIME_WINDOW_SECS);
         self.y_axis.fixed = true;
         self.y_axis.min.set(y_min);
@@ -570,31 +625,15 @@ impl Graph {
         // in the window zoomed the graph, including over the shortcut modal.
         let zoom_delta = ui.input(|i| i.zoom_delta()) as f64;
         if zoom_delta != 1.0 && plot_response.contains_pointer() {
-            if self.live {
-                // Snap to the end of data before leaving live, as the drag
-                // path does: the snapped bounds equal the live bounds on this
-                // frame, so the zoom below has no jump in front of it.
-                let (_, data_max) = self.data_time_range();
-                self.view_center = data_max - self.time_window_secs / 2.0;
-                self.live = false;
-            }
-            // Wheel up / pinch open reads as `zoom_delta > 1`, which has to
-            // narrow the window — the direction the wheel had before.
-            let old_half = self.time_window_secs / 2.0;
-            self.time_window_secs = (self.time_window_secs / zoom_delta).clamp(2.0, 3600.0);
-            let new_half = self.time_window_secs / 2.0;
             // Keep the time under the cursor where it is. `contains_pointer`
             // holds in cases `hover_pos` doesn't (another widget above the
             // plot has the hover), so fall back to the raw pointer position
             // the way egui_plot's own zoom does.
-            if let Some(hover_pos) = plot_response
+            let cursor_t = plot_response
                 .hover_pos()
                 .or_else(|| ui.input(|i| i.pointer.hover_pos()))
-            {
-                let cursor_t = transform.value_from_position(hover_pos).x;
-                let rel = (cursor_t - (self.view_center - old_half)) / (old_half * 2.0);
-                self.view_center = cursor_t - (rel - 0.5) * new_half * 2.0;
-            }
+                .map(|pos| transform.value_from_position(pos).x);
+            self.zoom_time(zoom_delta, cursor_t);
         }
 
         // Double-click to return to live mode + auto Y
