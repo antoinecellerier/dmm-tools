@@ -50,6 +50,7 @@
 - **dmm-gui names and saves the meter swapped in during an Auto-detect session** — it kept the first meter's name, specifications and saved device.
 - **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
 - **`capture` stops on a pulled cable or lost link, saying how to resume** — it spun at full CPU and filed empty steps.
+- **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.
 - **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
 - **A retried Connect in dmm-gui shows its own progress** — the previous failure stayed on screen, so the click looked like it did nothing.
 - **dmm-gui shows Connecting… and a Cancel button while it opens a meter** — Connect stayed clickable, and a second click opened the meter twice.

@@ -55,6 +55,10 @@ pub(crate) struct CaptureReport {
     /// has no steps, and `init_frames` is everything the cable delivered.
     #[serde(skip_serializing_if = "is_false", default)]
     pub no_response: bool,
+    /// Why the check gave up when `no_response` is set: a timeout, or the
+    /// error the meter's answer drew.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub no_response_error: Option<String>,
     /// The run was `--unverified`, so verified steps are absent by request
     /// rather than skipped by the operator.
     #[serde(skip_serializing_if = "is_false", default)]

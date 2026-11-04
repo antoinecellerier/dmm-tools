@@ -107,9 +107,11 @@ run and files it in the report's `detection` section; `--steps` selects it as `d
 - **Never fails the run.** What went wrong is the finding.
 
 A meter that never answers the check before the first step still leaves a report, the case
-bring-up hits most: `no_response: true`, no steps, and the bytes received in `init_frames`. It
-goes to a file of its own beside the report, so it never replaces a report in progress or an
-earlier failure.
+bring-up hits most: `no_response: true`, the error the check ended on in `no_response_error`, no
+steps, and the bytes received in `init_frames`. It goes to a file of its own beside the report,
+so it never replaces a report in progress or an earlier failure. Only a timeout gets the steps
+to enable transmission; an answer the parser refuses, or a link that fails, ends the run on its
+own error, which may name the `--device` to choose.
 
 One file to attach stays the rule: no sidecar trace.
 

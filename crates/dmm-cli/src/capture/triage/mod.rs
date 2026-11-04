@@ -257,7 +257,10 @@ impl<'a> Triage<'a> {
             ));
         }
         if r.no_response {
-            run.push("the meter never answered".to_string());
+            run.push(match &r.no_response_error {
+                Some(error) => format!("the meter never answered ({error})"),
+                None => "the meter never answered".to_string(),
+            });
         }
         if !run.is_empty() {
             out.push_str(&format!("Run: {}\n", run.join("; ")));

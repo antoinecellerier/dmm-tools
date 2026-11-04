@@ -15,6 +15,7 @@ use super::step::{
 };
 use crate::open::BoxedDmm;
 use console::style;
+use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry;
 use dmm_lib::protocol::{Need, Stability};
 use dmm_lib::text::TextKind;
@@ -35,6 +36,17 @@ impl crate::l10n::Localized for NotResponding {
 }
 
 crate::l10n::localized_error!(NotResponding);
+
+/// The run's closing error for a failed [`verify_meter`]: [`NotResponding`]
+/// for a meter that never answered, whose activation steps are already on
+/// screen, and the library's own error for anything else.
+pub(super) fn closing_error(e: dmm_lib::error::Error) -> Box<dyn std::error::Error> {
+    if e.kind() == ErrorKind::Timeout {
+        NotResponding.into()
+    } else {
+        e.into()
+    }
+}
 
 /// What every pass of a capture run works on: the meter and the recording
 /// of its wire, the report and the file it is saved to, the keyboard, what
@@ -83,7 +95,10 @@ fn status_banner(l: &Localizer, stability: Stability) -> (Cow<'_, str>, Option<C
     }
 }
 
-/// Verify that the meter is responding. Returns `(device_name, supported)` on success.
+/// Verify that the meter is responding. Returns `(device_name, supported)` on
+/// success, and on failure the measurement request's error: one of the
+/// [`ErrorKind::Timeout`] kind has had the activation steps printed, and
+/// [`closing_error`] words it for the run's closing line.
 ///
 /// The name is what the meter calls itself, and "unknown" for the families
 /// that answer no name query — the report records it as such, while the file
@@ -94,16 +109,22 @@ fn status_banner(l: &Localizer, stability: Stability) -> (Cow<'_, str>, Option<C
 pub(super) fn verify_meter(
     dmm: &mut BoxedDmm,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
-) -> Result<(String, bool), Box<dyn std::error::Error>> {
+) -> Result<(String, bool), dmm_lib::error::Error> {
     let l = crate::l10n::get();
     eprintln!("{}", style(tr!(l, "capture-checking")).dim());
     let reported = match dmm.get_name() {
         Ok(Some(name)) => Some(name),
         Ok(None) | Err(_) => {
-            // get_name failed or unsupported — try a plain measurement as fallback
+            // get_name failed or unsupported — try a plain measurement as
+            // fallback, whose error is the one that says why.
             match dmm.request_measurement() {
                 Ok(_) => None,
-                Err(_) => {
+                // A meter that answered with something the parser refuses,
+                // or a link that failed, is not cured by enabling
+                // transmission: its own error, which may name the `--device`
+                // to choose, is the run's closing line.
+                Err(e) if e.kind() != ErrorKind::Timeout => return Err(e),
+                Err(e) => {
                     eprintln!();
                     // Name the link the session is on: "adapter" now reads as
                     // the Bluetooth one, and over a cable it never was one.
@@ -126,7 +147,7 @@ pub(super) fn verify_meter(
                     }
                     eprintln!();
                     eprintln!("{}", tr!(l, "capture-run-again"));
-                    return Err(NotResponding.into());
+                    return Err(e);
                 }
             }
         }

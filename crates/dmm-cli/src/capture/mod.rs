@@ -83,8 +83,15 @@ pub(crate) fn cmd_capture(
     let (device_name, supported) = match verify_meter(&mut dmm, device) {
         Ok(verified) => verified,
         Err(e) => {
-            save_no_response(l, &mut dmm, &recorder, device, output_override.as_deref());
-            return Err(e);
+            save_no_response(
+                l,
+                &mut dmm,
+                &recorder,
+                device,
+                output_override.as_deref(),
+                &e,
+            );
+            return Err(session::closing_error(e));
         }
     };
 
@@ -347,8 +354,9 @@ fn save_no_response(
     recorder: &SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
     output_override: Option<&str>,
+    error: &dmm_lib::error::Error,
 ) {
-    match write_no_response_report(dmm, recorder, device, output_override) {
+    match write_no_response_report(dmm, recorder, device, output_override, error) {
         Ok((path, rx_bytes)) => {
             eprintln!(
                 "{}",
@@ -379,14 +387,16 @@ fn save_no_response(
     }
 }
 
-/// Keep what the cable delivered when the meter never answered: on a meter
-/// being brought up, bytes that did not decode are all the evidence there is.
+/// Keep what the cable delivered when the meter never answered, and the
+/// `error` that said so: on a meter being brought up, bytes that did not
+/// decode are all the evidence there is.
 /// Returns the file written and how many bytes it holds.
 fn write_no_response_report(
     dmm: &mut BoxedDmm,
     recorder: &SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
     output_override: Option<&str>,
+    error: &dmm_lib::error::Error,
 ) -> Result<(String, usize), Box<dyn std::error::Error>> {
     let mut report = CaptureReport::default();
     let supported = dmm.profile().stability.is_verified();
@@ -396,6 +406,8 @@ fn write_no_response_report(
     report.device_id = Some(device.id.to_string());
     report.picked_as = picked_as(device);
     report.no_response = true;
+    // In English, as the rest of the report is.
+    report.no_response_error = Some(error.to_string());
     let events = {
         let mut recorder = recording::lock(recorder);
         report.wire_events_dropped = recorder.dropped();
@@ -446,22 +458,13 @@ mod tests {
         }
     }
 
-    /// A UT804 that sends bytes the decoder never frames: the run stops at
-    /// the meter check, and the bytes land in a report of their own beside
-    /// the one `-o` names, which a later run can still resume.
-    #[test]
-    fn a_meter_that_never_answers_leaves_its_bytes_beside_the_report() {
-        let dir = std::env::temp_dir().join(format!("dmm-no-response-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let output = dir.join("capture.yaml");
-        std::fs::write(&output, "steps: []\n").unwrap();
-        let taken = dir.join("capture-no-response.yaml");
-        std::fs::write(&taken, "an earlier run\n").unwrap();
-
+    /// A capture run on a UT804 whose cable delivers `wire`, writing to
+    /// `output`: the run's error, which must come at the meter check.
+    fn capture_on_ut804(wire: Vec<Vec<u8>>, output: &std::path::Path) -> String {
         let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
-        let wire = Chunks(RefCell::new(vec![vec![0x55, 0xAA, 0x01], vec![0x02]]));
-        let (transport, recorder) =
-            crate::capture::recording::RecordingTransport::new(Box::new(wire));
+        let (transport, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
+            Chunks(RefCell::new(wire)),
+        ));
         let dmm = dmm_lib::Dmm::new(
             Box::new(transport) as Box<dyn Transport>,
             (device.new_protocol)(),
@@ -489,7 +492,23 @@ mod tests {
             None,
             Box::new(|_| panic!("the run stopped at the meter check")),
         );
-        assert_eq!(result.unwrap_err().to_string(), "meter not responding");
+        result.unwrap_err().to_string()
+    }
+
+    /// A UT804 that sends bytes the decoder never frames: the run stops at
+    /// the meter check, and the bytes land in a report of their own beside
+    /// the one `-o` names, which a later run can still resume.
+    #[test]
+    fn a_meter_that_never_answers_leaves_its_bytes_beside_the_report() {
+        let dir = std::env::temp_dir().join(format!("dmm-no-response-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let output = dir.join("capture.yaml");
+        std::fs::write(&output, "steps: []\n").unwrap();
+        let taken = dir.join("capture-no-response.yaml");
+        std::fs::write(&taken, "an earlier run\n").unwrap();
+
+        let error = capture_on_ut804(vec![vec![0x55, 0xAA, 0x01], vec![0x02]], &output);
+        assert_eq!(error, "meter not responding");
 
         assert_eq!(std::fs::read_to_string(&output).unwrap(), "steps: []\n");
         assert_eq!(std::fs::read_to_string(&taken).unwrap(), "an earlier run\n");
@@ -497,10 +516,39 @@ mod tests {
         let report: CaptureReport =
             super::report::from_yaml(&std::fs::read_to_string(&saved).unwrap()).unwrap();
         assert!(report.no_response);
+        assert_eq!(
+            report.no_response_error.as_deref(),
+            Some("timeout waiting for response")
+        );
         assert!(report.steps.is_empty());
         assert_eq!(report.device_id.as_deref(), Some("ut804"));
         let hex: Vec<&str> = report.init_frames.iter().map(|f| f.hex.as_str()).collect();
         assert_eq!(hex, ["55 AA 01 02"]);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A UT804 packet whose digit the parser refuses: enabling transmission
+    /// would not help, so the run ends on the parser's own error, and the
+    /// report keeps it next to the bytes.
+    #[test]
+    fn a_meter_whose_answer_does_not_parse_ends_on_the_parse_error() {
+        let dir = std::env::temp_dir().join(format!("dmm-bad-answer-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let output = dir.join("capture.yaml");
+
+        // Digits 1F00A: 0xF is no digit nibble.
+        let packet = vec![
+            0x31, 0x3F, 0x30, 0x30, 0x3A, 0x31, 0x31, 0x32, 0x30, 0x0D, 0x0A,
+        ];
+        let error = capture_on_ut804(vec![packet], &output);
+        assert!(error.starts_with("invalid response:"), "{error}");
+
+        let saved = dir.join("capture-no-response.yaml");
+        let report: CaptureReport =
+            super::report::from_yaml(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+        assert!(report.no_response);
+        assert_eq!(report.no_response_error.as_deref(), Some(error.as_str()));
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
