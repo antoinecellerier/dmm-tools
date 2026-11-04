@@ -24,7 +24,7 @@ const RESIZE_DEADZONE_PX: f32 = 0.1;
 
 /// How far the view window may be zoomed in and out, in seconds.
 const MIN_WINDOW_SECS: f64 = 2.0;
-const MAX_WINDOW_SECS: f64 = 3600.0;
+pub(super) const MAX_WINDOW_SECS: f64 = 3600.0;
 
 /// Tracks which part of the minimap the user is dragging.
 #[derive(Default, Clone, Copy, PartialEq)]

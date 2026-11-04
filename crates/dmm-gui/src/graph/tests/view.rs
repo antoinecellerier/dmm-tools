@@ -477,3 +477,36 @@ fn is_view_zoomed_reflects_state() {
     g.y_axis.fixed = true;
     assert!(g.is_view_zoomed());
 }
+
+/// A view from a file that lands on none of the readings, or is wider than
+/// any the graph shows, still draws: its start is left out and its window
+/// narrowed.
+#[test]
+fn a_view_past_the_readings_still_draws() {
+    let (mut g, t0) = graph_over(30);
+    let markers = marked(&[t0 + Duration::from_secs(5)]);
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let ctx = crate::app::styled_context();
+    for saved in [
+        r#"{"start": 1e20, "window": 1e20}"#,
+        r#"{"start": -1e20}"#,
+        r#"{"start": 0, "window": 1e19}"#,
+    ] {
+        let view = serde_json::from_str(saved).expect("a view");
+        g.apply_view_state(&view, t0);
+        assert!(
+            g.time_window_secs <= super::super::minimap::MAX_WINDOW_SECS,
+            "{saved}"
+        );
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
+        });
+        out.textures_delta.clear();
+    }
+    // A start on the readings still lands, its window kept.
+    g.apply_view_state(
+        &serde_json::from_str(r#"{"start": 3, "window": 20}"#).expect("a view"),
+        t0,
+    );
+    assert_eq!((g.live, g.view_bounds()), (false, (3.0, 23.0)));
+}

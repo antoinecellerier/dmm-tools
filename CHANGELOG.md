@@ -31,6 +31,7 @@
 
 ### Bug fixes
 
+- **dmm-gui imports or replays a file whose saved view lies far past its readings** — it crashed.
 - **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.

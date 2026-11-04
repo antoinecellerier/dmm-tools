@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
+use super::minimap::MAX_WINDOW_SECS;
 use super::{Graph, MeasureCursors};
 
 /// What an export saves of the view. Every field is optional on the way in,
@@ -108,16 +109,20 @@ impl Graph {
 
     /// Put back a view saved by an export whose first reading is the one
     /// taken at `first`. What makes no sense here — a window of no width, a
-    /// cursor past the readings the graph holds — is left as it is.
+    /// window or cursor on none of the readings the graph holds — is left as
+    /// it is, and a window wider than those readings and the widest zoom is
+    /// narrowed to fit.
     pub(crate) fn apply_view_state(&mut self, view: &ViewState, first: Instant) {
         let shift = self.origin_after(first);
+        let (data_min, data_max) = self.data_time_range();
         let usable = |v: &f64| v.is_finite() && *v > 0.0;
         if let Some(window) = view.window.filter(usable) {
-            self.time_window_secs = window;
+            self.time_window_secs = window.min((data_max - data_min).max(MAX_WINDOW_SECS));
         }
-        match view.start.filter(|s| s.is_finite()) {
+        let shows_data = |s: &f64| (data_min - self.time_window_secs..=data_max).contains(s);
+        match view.start.map(|s| s - shift).filter(shows_data) {
             Some(start) => {
-                self.view_center = start - shift + self.time_window_secs / 2.0;
+                self.view_center = start + self.time_window_secs / 2.0;
                 self.live = false;
             }
             None => self.live = true,
@@ -151,7 +156,6 @@ impl Graph {
         if let Some(triggers) = view.triggers {
             self.show_crossings = triggers;
         }
-        let (data_min, data_max) = self.data_time_range();
         let held = |t: f64| (t.is_finite() && (data_min..=data_max).contains(&t)).then_some(t);
         match view.cursors {
             Some(Cursors { a, b }) => self.cursors.restore(
