@@ -346,13 +346,12 @@ impl App {
         let l10n = self.l10n.as_ref();
         let notice = ConnectionNotice::plain;
 
-        // The probe is still running: nothing names the meter, the channel is
-        // up, and neither a connection nor a failure has come back yet. It
-        // spends up to a couple of seconds giving each family its turn to
-        // answer, and an empty column for that long reads as a hang.
+        // The probe is still running: nothing names the meter, and neither a
+        // connection nor a failure has come back yet. It spends up to a
+        // couple of seconds giving each family its turn to answer, and an
+        // empty column for that long reads as a hang.
         if self.selected_device().is_none()
-            && self.connection.state == ConnectionState::Disconnected
-            && self.connection.worker.is_some()
+            && self.connection.state == ConnectionState::Connecting
             && self.connection.last_error.is_none()
         {
             return Some(notice(
@@ -538,10 +537,7 @@ impl App {
             // the worker keeps reading and the next good frame clears it; at the
             // open the session has ended, so the way back in is said too.
             ConnectionIssue::BadData(error) => {
-                let body = if matches!(
-                    self.connection.state,
-                    ConnectionState::Connected | ConnectionState::Reconnecting
-                ) {
+                let body = if self.connection.state.is_linked() {
                     escape_controls(error).into_owned()
                 } else {
                     format!(
@@ -608,6 +604,21 @@ mod tests {
         app.connection.last_error = Some(issue);
         app.connection_notice()
             .expect("a failure is always a notice")
+    }
+
+    /// Under Auto-detect the probe says so while it runs; a picked meter
+    /// opening has the top bar's Connecting… alone.
+    #[test]
+    fn auto_detect_shows_detecting_while_connecting() {
+        let mut auto = app(registry::AUTO_DEVICE_ID);
+        auto.connection.state = ConnectionState::Connecting;
+        assert_eq!(
+            auto.connection_notice().map(|n| n.kind),
+            Some(NoticeKind::Detecting)
+        );
+        let mut picked = app("ut61eplus");
+        picked.connection.state = ConnectionState::Connecting;
+        assert!(picked.connection_notice().is_none());
     }
 
     /// A session with nothing wrong has nothing to say: the reading column

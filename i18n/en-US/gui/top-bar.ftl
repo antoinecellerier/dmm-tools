@@ -17,6 +17,9 @@ top-bar-imported-file = Imported file
 
 top-bar-connect = Connect
     .hover = Open USB connection to the selected meter ({ $keys })
+# In place of Connect while the meter is being opened: stops the attempt.
+top-bar-cancel = Cancel
+    .hover = Stop connecting ({ $keys })
 top-bar-disconnect = Disconnect
     .hover = Close the active meter connection ({ $keys })
 # A button; ▶ and ⏸ are part of it.
@@ -58,6 +61,10 @@ top-bar-status-link =
 # An imported file: $name is its meter, $file its file name.
 top-bar-status-file = { $name } · { $file }
 top-bar-disconnected = Disconnected
+# While the picked meter is being opened.
+top-bar-connecting = Connecting…
+# While Auto-detect asks the connected meter what it is.
+top-bar-detecting = Detecting…
 
 ## The status's hover: how the meter is connected, spelled out.
 ## $link is usb (a USB cable), adapter (a Bluetooth adapter plugged into the

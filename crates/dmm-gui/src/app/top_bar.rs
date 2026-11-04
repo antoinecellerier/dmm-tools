@@ -146,6 +146,12 @@ impl App {
                     }
                     _ => (gray, tr!(l10n, "top-bar-disconnected").into_owned()),
                 },
+                // Nothing to name yet: under Auto-detect the families are
+                // being probed, otherwise the picked meter is being opened.
+                ConnectionState::Connecting if self.selected_device().is_none() => {
+                    (gray, tr!(l10n, "top-bar-detecting").into_owned())
+                }
+                ConnectionState::Connecting => (gray, tr!(l10n, "top-bar-connecting").into_owned()),
                 ConnectionState::Reconnecting => {
                     let label = self.reconnecting_label();
                     (orange, label)
@@ -236,10 +242,21 @@ impl App {
         }
     }
 
-    /// The connection's buttons for its state: Connect; Disconnect, Pause
-    /// and Clear; or the greyed reconnect count and Stop retrying.
+    /// The connection's buttons for its state: Connect; Cancel while it
+    /// opens; Disconnect, Pause and Clear; or the greyed reconnect count and
+    /// Stop retrying.
     fn show_connection_buttons(&mut self, ui: &mut Ui, ctx: &egui::Context, l10n: &Localizer) {
         match &self.connection.state {
+            ConnectionState::Connecting => {
+                let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
+                if ui
+                    .button(tr!(l10n, "top-bar-cancel"))
+                    .on_hover_text(tr!(l10n, "top-bar-cancel.hover", keys = &keys))
+                    .clicked()
+                {
+                    self.disconnect();
+                }
+            }
             ConnectionState::Disconnected => {
                 let keys = Shortcut::ConnectToggle.keys(ctx, l10n);
                 if ui

@@ -16,9 +16,9 @@ use std::collections::HashSet;
 use std::collections::vec_deque;
 use std::path::{Path, PathBuf};
 
+use super::App;
 use super::task::Task;
 use super::toast::Toast;
-use super::{App, ConnectionState};
 use crate::markers::Marker;
 use crate::recording::{BufferRole, Recording, Sample, render_csv, render_json, render_replay};
 
@@ -428,9 +428,7 @@ impl App {
     fn nothing_to_export(&self, role: BufferRole) -> ExportError {
         match role {
             BufferRole::Recording => ExportError::NothingRecorded,
-            BufferRole::History if self.connection.state == ConnectionState::Disconnected => {
-                ExportError::NotConnected
-            }
+            BufferRole::History if !self.connection.state.is_linked() => ExportError::NotConnected,
             BufferRole::History => ExportError::NoReadings,
         }
     }
@@ -888,7 +886,7 @@ mod tests {
             message(&app),
             "Nothing to export \u{2014} connect a meter first"
         );
-        app.connection.state = ConnectionState::Connected;
+        app.connection.state = crate::app::ConnectionState::Connected;
         assert_eq!(message(&app), "Nothing to export \u{2014} no readings yet");
         app.capture.recording.toggle(Instant::now());
         assert_eq!(

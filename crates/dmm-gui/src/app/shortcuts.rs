@@ -560,9 +560,12 @@ impl App {
             match binding.shortcut {
                 Shortcut::ConnectToggle => match self.connection.state {
                     ConnectionState::Disconnected => self.request_connect(ctx),
-                    // Reconnecting cancels the retry loop, matching the
-                    // Disconnect button shown in that state.
-                    ConnectionState::Connected | ConnectionState::Reconnecting => self.disconnect(),
+                    // Connecting cancels the open and Reconnecting the retry
+                    // loop, matching the Cancel and Disconnect buttons shown
+                    // in those states.
+                    ConnectionState::Connecting
+                    | ConnectionState::Connected
+                    | ConnectionState::Reconnecting => self.disconnect(),
                 },
                 // macOS never gets here: Cmd+Q is the Quit item of winit's
                 // default menu, which calls AppKit's `terminate:`
@@ -861,5 +864,29 @@ mod tests {
             key == "⌘M" || key == "Cmd+M",
             "Minimise row reads {key:?} on macOS"
         );
+    }
+
+    /// Ctrl+O while the meter opens cancels it, as the Cancel button in
+    /// Connect's place does, rather than starting a second open.
+    #[test]
+    fn ctrl_o_cancels_a_connect() {
+        let mut settings = crate::settings::Settings::default();
+        // The mock: a real open would probe the machine's USB and Bluetooth
+        // from a thread that outlives the test.
+        settings.shared.device_family = "mock".to_string();
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        let ctx = crate::app::styled_context();
+        app.connect(&ctx);
+        assert_eq!(app.connection.state, ConnectionState::Connecting);
+        let mut out = ctx.run_ui(
+            egui::RawInput {
+                events: crate::app::test_support::key_tap_with(Key::O, Modifiers::COMMAND),
+                ..Default::default()
+            },
+            |ui| app.handle_keyboard_shortcuts(ui.ctx()),
+        );
+        out.textures_delta.clear();
+        assert_eq!(app.connection.state, ConnectionState::Disconnected);
+        assert!(app.connection.worker.is_none(), "no second open");
     }
 }

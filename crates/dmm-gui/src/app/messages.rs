@@ -425,6 +425,10 @@ impl App {
                 thread_ctx,
             );
         }
+        // Until the thread reports the meter open, or fails to: Connect
+        // turns into Cancel meanwhile, as a second open on the same meter
+        // would fight the first for its replies.
+        self.connection.state = ConnectionState::Connecting;
     }
 
     pub(super) fn disconnect(&mut self) {
@@ -542,14 +546,14 @@ impl App {
                         self.settings.overrides.adapter.as_deref(),
                         self.picked_listing(),
                     ));
-                    if self.connection.state == ConnectionState::Disconnected {
+                    if !self.connection.state.is_linked() {
                         clear_channel = true;
                     }
                 }
                 DmmMessage::ErrorText(msg) => {
                     error!("UI: error: {msg}");
                     self.connection.last_error = Some(ConnectionIssue::Other(msg));
-                    if self.connection.state == ConnectionState::Disconnected {
+                    if !self.connection.state.is_linked() {
                         clear_channel = true;
                     }
                 }
@@ -707,7 +711,7 @@ impl App {
                 connection::no_response(&crate::l10n::english())
             );
             self.connection.last_error = Some(ConnectionIssue::NoResponse);
-            self.connection.state == ConnectionState::Disconnected
+            !self.connection.state.is_linked()
         } else {
             false
         }
@@ -1014,6 +1018,29 @@ mod tests {
             "the old failure is gone"
         );
         app.disconnect();
+    }
+
+    /// A Connect is Connecting until the meter answers, then Connected.
+    #[test]
+    fn a_connect_is_connecting_until_the_meter_answers() {
+        let mut app = app("mock", false);
+        app.connect(&crate::app::styled_context());
+        assert_eq!(app.connection.state, ConnectionState::Connecting);
+        app.deliver(connected("mock", Stability::Verified, 0));
+        assert_eq!(app.connection.state, ConnectionState::Connected);
+        app.disconnect();
+    }
+
+    /// An open that fails drops back to Disconnected and lets its thread go,
+    /// so Connect comes back with the failure on screen.
+    #[test]
+    fn a_failed_open_leaves_connecting() {
+        let mut app = app("ut61eplus", false);
+        app.connection.state = ConnectionState::Connecting;
+        app.deliver(DmmMessage::ErrorText("no meter".into()));
+        assert_eq!(app.connection.state, ConnectionState::Disconnected);
+        assert!(app.connection.worker.is_none(), "the thread is let go");
+        assert!(app.connection.last_error.is_some());
     }
 
     /// Session zero is the Connect, not the launch: playback measures every

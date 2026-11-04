@@ -94,8 +94,20 @@ enum BigMeterMode {
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum ConnectionState {
     Disconnected,
+    /// The acquisition thread is opening the meter: detecting it under
+    /// Auto-detect, or connecting to the one picked. Not connected: nothing
+    /// is identified yet, and a failure drops back to `Disconnected`.
+    Connecting,
     Connected,
     Reconnecting,
+}
+
+impl ConnectionState {
+    /// Whether a meter has answered on this connection: connected, or
+    /// retrying a link that was up. Not while the first open runs.
+    pub(super) fn is_linked(&self) -> bool {
+        matches!(self, Self::Connected | Self::Reconnecting)
+    }
 }
 
 /// Keyboard shortcut help overlay: whether it is showing, and the focus

@@ -57,6 +57,10 @@ Help is shown automatically when connection fails:
 In big meter and minimal mode only the title is shown; hover it for the
 steps.
 
+While a meter is being opened, the status reads **Connecting…** (**Detecting…**
+under Auto-detect) and **Cancel** (or `Ctrl+O`) stops the attempt; the
+**Device** row waits until it is done.
+
 Auto-reconnection retries every 2 seconds after a disconnect; over Bluetooth it
 retries the same adapter. Click **Disconnect** (or press `Ctrl+O`) while it is
 retrying to stop the loop, then **Connect** to look for another adapter.
@@ -67,7 +71,7 @@ The top bar contains:
 
 - **Device label** (left) — the model picked in Settings, or the one
   Auto-detect found; reads "Auto-detect" until a meter answers.
-- **Connect / Disconnect** button
+- **Connect / Disconnect** button, **Cancel** while connecting
 - **Pause / Resume** button — halts acquisition without disconnecting; the
   meter stops being polled entirely. Use the live-view toggle instead to
   freeze the view while data keeps arriving.

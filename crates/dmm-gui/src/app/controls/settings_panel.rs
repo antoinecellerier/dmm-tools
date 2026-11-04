@@ -319,6 +319,9 @@ impl App {
     fn show_meter_rows(&mut self, ui: &mut Ui) {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
+        // A pick while the meter opens would start a second open on the same
+        // meter; the rows wait for this one to finish or be cancelled.
+        let connecting = self.connection.state == crate::app::ConnectionState::Connecting;
         ui.horizontal_wrapped(|ui| {
             let pinned = self.device_row_pin(l10n);
             let has_override = self.settings.overrides.has_device();
@@ -339,7 +342,7 @@ impl App {
             };
             let picked = ui
                 .scope(|ui| {
-                    if pinned.is_some() {
+                    if pinned.is_some() || connecting {
                         ui.disable();
                     }
                     ui.label(tr!(l10n, "settings-device"));
@@ -370,6 +373,9 @@ impl App {
             .is_some_and(|d| d.id == dmm_lib::mock::MOCK.id)
         {
             ui.horizontal_wrapped(|ui| {
+                if connecting {
+                    ui.disable();
+                }
                 let has_override = self.settings.overrides.has_mock_mode();
                 // "Auto" = cycle through all modes, and leads the row.
                 let auto_selected = self.settings.shared.mock_mode.is_empty();
@@ -1347,6 +1353,32 @@ mod tests {
         assert!(disabled, "the list is still pickable during a replay");
         // And the row says how to get the choice back.
         node_bounds(&frame, "(restart without --replay to pick a meter)");
+    }
+
+    /// A pick while the meter opens would start a second open on it, so
+    /// the Device row and the mock's chips wait until it is done.
+    #[test]
+    fn the_device_rows_wait_for_a_connect() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.app.settings.shared.device_family = dmm_lib::mock::MOCK.id.to_string();
+        run.app.connection.state = crate::app::ConnectionState::Connecting;
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        let disabled = |label: &str| {
+            frame
+                .nodes
+                .iter()
+                .find(|(_, n)| n.label() == Some(label))
+                .map(|(_, n)| n.is_disabled())
+                .unwrap_or_else(|| panic!("no {label:?} widget"))
+        };
+        assert!(disabled("Device"), "the list is pickable while connecting");
+        let auto = tr!(crate::l10n::english(), "settings-mock-auto", pinned = "no").into_owned();
+        assert!(
+            disabled(&auto),
+            "the mock chips are pickable while connecting"
+        );
     }
 
     /// The groups in the panel's order: the meter, what is kept, the

@@ -10,10 +10,10 @@ use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 use log::info;
 use std::time::Instant;
 
+use super::App;
 use super::capture::CaptureLayout;
 use super::export::{ExportError, ExportFormat};
 use super::toast::Toast;
-use super::{App, ConnectionState};
 use crate::a11y::ResponseA11yExt;
 use crate::graph::MenuAction;
 use crate::recording::{BufferRole, Recording};
@@ -275,7 +275,9 @@ impl App {
                 // the Verified default `disconnect()` restored, and latching
                 // that marked a UT181A connected after Record as a verified
                 // protocol.
-                (self.connection.state != ConnectionState::Disconnected)
+                self.connection
+                    .state
+                    .is_linked()
                     .then(|| !self.connection.stability().is_verified()),
                 // Empty while disconnected for the same reason; the export
                 // then falls back to whatever link answers during the
@@ -1846,7 +1848,7 @@ mod tests {
     fn n_waits_for_a_prompt_asked_for_in_the_same_frame() {
         let mut run = run_with_stopped_recording(2);
         // Ctrl+R only answers while connected.
-        run.app.connection.state = ConnectionState::Connected;
+        run.app.connection.state = crate::app::ConnectionState::Connected;
         run.app.last_measurement = run
             .app
             .capture
