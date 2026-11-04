@@ -146,8 +146,8 @@ fn selected_line(l: &Localizer, listing: registry::Listing, by: PickedBy) -> Str
 /// language, as [`picked_line`].
 pub(crate) fn print_reported_name(l: &Localizer, reported: Option<&str>, print: impl Fn(String)) {
     let name = match reported.filter(|n| !n.is_empty()) {
-        // The meter's own text, as it sent it.
-        Some(name) => style(name).bold().to_string(),
+        // The meter's own text, escaped as `note_detected` writes it.
+        Some(name) => style(escaped(name)).bold().to_string(),
         None => style(tr!(l, "connect-reported-name-none"))
             .dim()
             .to_string(),
@@ -658,5 +658,14 @@ mod tests {
     fn a_reported_name_is_escaped_without_its_quotes() {
         assert_eq!(escaped("UT216XD"), "UT216XD");
         assert_eq!(escaped("a\"b\n\u{1}"), "a\\\"b\\n\\u{1}");
+        let line = std::cell::RefCell::new(String::new());
+        print_reported_name(crate::l10n::english(), Some("UT\u{1b}[2J"), |l| {
+            *line.borrow_mut() = l
+        });
+        let line = line.into_inner();
+        assert!(
+            line.contains("UT\\u{1b}[2J") && !line.contains("\u{1b}[2J"),
+            "{line}"
+        );
     }
 }

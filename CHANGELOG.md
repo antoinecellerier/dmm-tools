@@ -57,6 +57,7 @@
 - **dmm-gui keeps its Light or Dark theme when the system's theme changes** — it switched with the system's and lost its custom colours.
 - **dmm-gui refuses a theme file whose text can't be read on the top bar, and says why** — its Theme chips in Settings were unreadable.
 - **Turning LIVE off in dmm-gui freezes the graph where it was** — it jumped to the session's start, or to an earlier view.
+- **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
 
 ## v0.9.0 — Graph Analysis and Alarms
 

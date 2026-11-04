@@ -988,6 +988,18 @@ mod tests {
             !message.contains('\u{1b}') && message.contains("\\u{1b}"),
             "{message}"
         );
+        // A replay's header line is quoted at no line.
+        let mut text = dmm_lib::replay::header("ut61eplus", "\u{1b}[2J", None, None);
+        text.push_str(&dmm_lib::replay::sample_line(Duration::ZERO, &[2, 3]));
+        let replay = dmm_lib::replay::Replay::parse(&text).expect("parses");
+        let e = crate::replay::recorded_at(&replay).expect_err("not a date");
+        let l = crate::l10n::Localizer::en_us(crate::help::RESOURCES);
+        for message in [e.to_string(), l.read_error(&e)] {
+            assert!(
+                !message.contains('\u{1b}') && message.contains("`# recorded: \\u{1b}[2J`"),
+                "{message}"
+            );
+        }
     }
 
     #[test]

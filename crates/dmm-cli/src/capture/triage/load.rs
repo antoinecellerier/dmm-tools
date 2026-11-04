@@ -1,9 +1,10 @@
 //! Reading a reporter's file as a capture report, whatever build wrote it
-//! and however it travelled, and keeping their meter's address out of what
-//! triage prints.
+//! and however it travelled, and keeping their meter's address and any
+//! terminal control sequence out of what triage prints.
 
 use super::super::report::{CaptureReport, from_yaml};
 use dmm_lib::protocol::registry::{self, SelectableDevice};
+use dmm_shared::export::escape_controls;
 use serde::Deserialize;
 use serde::de::IgnoredAny;
 use std::borrow::Cow;
@@ -157,6 +158,18 @@ pub(super) fn scrub_addresses(text: &str) -> String {
     out
 }
 
+/// What triage prints a reporter's text through: device addresses masked
+/// ([`scrub_addresses`]) and every control character but the line breaks
+/// escaped, so a crafted report can't send the terminal escape sequences
+/// (`\e` in a YAML string is ESC) that rewrite lines or the clipboard.
+pub(super) fn scrub(text: &str) -> String {
+    scrub_addresses(text)
+        .split('\n')
+        .map(escape_controls)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,5 +203,15 @@ mod tests {
         );
         let frame = "AB CD 03 5E 01 D9 00:11:22:33:44 Ω at 2026-10-03T12:30:05 (eea85ba)";
         assert_eq!(scrub_addresses(frame), frame);
+    }
+
+    /// Line breaks stay; a carriage return, which could overwrite a line,
+    /// and a one-byte C1 CSI are escaped.
+    #[test]
+    fn scrub_escapes_controls_but_line_breaks() {
+        assert_eq!(
+            scrub("a\rb\n\u{9b}2J 00:11:22:AA:BB:CC\n"),
+            "a\\rb\n\\u{9b}2J XX:XX:XX:XX:XX:XX\n"
+        );
     }
 }

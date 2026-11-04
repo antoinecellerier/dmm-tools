@@ -33,7 +33,7 @@ pub(crate) fn cmd_triage(
     args: &TriageArgs,
     named_device: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let report = load::load(&args.report).map_err(|e| load::scrub_addresses(&e))?;
+    let report = load::load(&args.report).map_err(|e| load::scrub(&e))?;
     let device = load::device(named_device, &report)?;
     let plan = args.plan.as_deref().map(super::plan::load).transpose()?;
     let triage = Triage::new(&report, device, plan);
@@ -44,7 +44,7 @@ pub(crate) fn cmd_triage(
     if args.fixtures {
         text.push_str(&fixtures::render(&triage));
     }
-    print!("{}", load::scrub_addresses(&text));
+    print!("{}", load::scrub(&text));
     Ok(())
 }
 
@@ -509,7 +509,7 @@ pub(super) mod tests {
 
     fn triage(report: &CaptureReport) -> String {
         let device = find_device("ut61eplus");
-        load::scrub_addresses(&Triage::new(report, device, None).render())
+        load::scrub(&Triage::new(report, device, None).render())
     }
 
     fn findings(text: &str) -> Vec<&str> {
@@ -704,7 +704,7 @@ pub(super) mod tests {
                 "5A A5 02 02 00 E0 8F 8F 00 40",
             ),
         ]);
-        let text = load::scrub_addresses(&Triage::new(&report, find_device("zt5b"), None).render());
+        let text = load::scrub(&Triage::new(&report, find_device("zt5b"), None).render());
         assert_eq!(
             findings(&text),
             [
@@ -759,7 +759,7 @@ pub(super) mod tests {
         );
         trimmed.frames.drain(..3);
         trimmed.samples.clear();
-        let text = load::scrub_addresses(
+        let text = load::scrub(
             &Triage::new(&zt5b_report(vec![trimmed]), find_device("zt5b"), None).render(),
         );
         assert_eq!(
@@ -777,6 +777,29 @@ pub(super) mod tests {
         };
         let text = triage(&planned);
         assert_eq!(findings(&text), ["none"], "{text}");
+    }
+
+    /// A step error spelling terminal escapes (`\e` in a YAML string is
+    /// ESC) reaches the output as text: no ESC or BEL goes out.
+    #[test]
+    fn a_report_cannot_send_terminal_escapes() {
+        let path = write_temp(
+            "escapes.yaml",
+            "date: x\ntool_version: 0.9.0\ndevice_name: UT61E+\nsupported: true\n\
+             steps:\n- id: dcv\n  instruction: ''\n  status: error\n  \
+             error: \"\\e[2J\\e]52;c;ZWNobw==\\a\"\n",
+        );
+        let report = load::load(&path).unwrap();
+        assert_eq!(
+            report.steps[0].error.as_deref(),
+            Some("\u{1b}[2J\u{1b}]52;c;ZWNobw==\u{7}")
+        );
+        let text = triage(&report);
+        assert!(!text.contains(['\u{1b}', '\u{7}']), "{text}");
+        assert!(
+            text.contains(r"[error] dcv: \u{1b}[2J\u{1b}]52;c;ZWNobw==\u{7}"),
+            "{text}"
+        );
     }
 
     #[test]

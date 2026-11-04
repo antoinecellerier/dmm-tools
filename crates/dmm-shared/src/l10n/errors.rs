@@ -9,11 +9,13 @@
 //! typed, hexadecimal codes. So do the developer diagnostics whose detail is
 //! built from open-ended parts: [`Error::InvalidResponse`]'s message and
 //! [`Error::Replay`]'s, which name a line of a file and quote serde, chrono
-//! or io errors. Their lead-in translates; the detail stays English. Mode,
+//! or io errors. Their lead-in translates; the detail stays English, and
+//! the replay one, quoting the file, has its control characters escaped. Mode,
 //! range and state names go through [`Localizer::label`] by the kind each
 //! field names.
 
 use super::Localizer;
+use crate::export::escape_controls;
 use crate::tr;
 use dmm_lib::error::{
     BluetoothIssue, BluetoothOnlyMiss, CharacteristicRole, Error, FrameRemedy, Rejected, Sent,
@@ -62,7 +64,12 @@ impl Localizer {
             ),
             Error::UnknownDevice(device) => tr!(self, "error-unknown-device", device = device),
             Error::NotSimulated(device) => tr!(self, "error-not-simulated", device = *device),
-            Error::Replay(detail) => tr!(self, "error-replay", detail = detail),
+            // It quotes the file, so its control characters are escaped.
+            Error::Replay(detail) => tr!(
+                self,
+                "error-replay",
+                detail = escape_controls(detail).into_owned()
+            ),
             Error::AdapterNotFound(adapter) => {
                 tr!(self, "error-adapter-not-found", adapter = adapter)
             }
@@ -869,6 +876,24 @@ mod tests {
         for reason in rejected() {
             assert_eq!(l.rejected(&reason), reason.to_string(), "{reason:?}");
         }
+    }
+
+    /// A replay file's text quoted in a refusal can't act on the terminal
+    /// it is printed to.
+    #[test]
+    fn replay_file_text_stays_inert() {
+        let l = Localizer::en_us(LIB_RESOURCES);
+        let mut text =
+            dmm_lib::replay::header("ut61eplus", "2026-10-31T10:00:00+01:00", None, None);
+        text.push_str("0 02 \u{1b}[2J\n");
+        let e = dmm_lib::replay::Replay::parse(&text)
+            .err()
+            .expect("not a hex byte");
+        let message = l.error(&e);
+        assert!(
+            !message.contains('\u{1b}') && message.contains("`\\u{1b}[2J` is not a hex byte"),
+            "{message}"
+        );
     }
 
     /// The late-readings notice reads as the library's, with and without

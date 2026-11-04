@@ -156,7 +156,8 @@ The kinds of finding:
   that wrote the report. The details follow the findings.
 - `[unrecognised]` is data the parser reported as unknown.
 
-A hardware address is masked wherever it appears. The step summary carries
+A hardware address is masked wherever it appears, and control characters
+from the report print escaped (`\u{1b}`). The step summary carries
 no times, so diffing two reports' output compares the same steps across
 runs.
 

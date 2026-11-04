@@ -88,17 +88,15 @@ impl std::fmt::Display for ReadReason {
     }
 }
 
-/// A line's reason with its control characters escaped: it quotes the
-/// file, and is printed.
+/// The reason, at its line where there is one, with its control characters
+/// escaped: it quotes the file, and is printed.
 impl std::fmt::Display for ReadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let reason = self.reason.to_string();
+        let reason = escape_controls(&reason);
         match self.line {
-            Some(line) => write!(
-                f,
-                "line {line}: {}",
-                escape_controls(&self.reason.to_string())
-            ),
-            None => self.reason.fmt(f),
+            Some(line) => write!(f, "line {line}: {reason}"),
+            None => f.write_str(&reason),
         }
     }
 }
@@ -109,13 +107,13 @@ impl Localizer {
     /// `e` in this language: what follows the file's name in `dmm-gui`'s
     /// import toast and `dmm-cli`'s `Error:` line.
     pub fn read_error(&self, e: &ReadError) -> String {
+        // Text from the file is escaped as `Display` escapes it.
+        let reason = self.read_reason(&e.reason, |t| escape_controls(t).into_owned());
         match e.line {
             Some(line) => {
-                // Text from the file is escaped as `Display` escapes it.
-                let reason = self.read_reason(&e.reason, |t| escape_controls(t).into_owned());
                 tr!(self, "read-error-at-line", line = line, reason = reason).into_owned()
             }
-            None => self.read_reason(&e.reason, str::to_string),
+            None => reason,
         }
     }
 
@@ -179,8 +177,8 @@ mod tests {
         })
     }
 
-    /// English is `Display`, byte for byte, for every reason, at a line
-    /// (control characters escaped) and at none.
+    /// English is `Display`, byte for byte, for every reason, at a line and
+    /// at none, control characters escaped either way.
     #[test]
     fn english_reads_as_display() {
         let l = Localizer::en_us(crate::help::RESOURCES);
@@ -196,5 +194,7 @@ mod tests {
         assert_eq!(seen, 11);
         let escaped = ReadError::at(2, ReadReason::NotAFlag("A\u{7}".into()));
         assert_eq!(escaped.to_string(), "line 2: `A\\u{7}` is not a flag");
+        let escaped = ReadError::whole(ReadReason::NotAFlag("A\u{7}".into()));
+        assert_eq!(escaped.to_string(), "`A\\u{7}` is not a flag");
     }
 }
