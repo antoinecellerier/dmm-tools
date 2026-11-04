@@ -210,10 +210,6 @@ Bugs a reader can reproduce: symptom, cause, and the fix where known.
   meter marked invalid, but the VC-890 manual and Conrad's document define
   the VOID symbol as empty memory (vc890 spec, byte 59). Fix: describe it as
   the meter's VOID symbol; the [VC-890 check](research/vc890/verification.md#void-with-a-live-reading) decides the rest.
-- **A UT804 LO reading is stored as 0.0.** In 4-20 mA % the LCD shows
-  `- LO. %` (ut803 spec §3.3), but the parser reports `Normal(0.0)` with the
-  text "L0.", so statistics, the graph and exports count a zero. Fix,
-  untried: `MeasuredValue::NoReading("LO")`.
 - **The `dc` flag has no definition.** `StatusFlags::dc` carries no doc, and
   families set it differently on AC+DC: the UT804 from coupling 3, the BM86x
   and BM78xBT clear it, ZOTEK from its DC annunciator, the UT61E+ within its

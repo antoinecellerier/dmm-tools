@@ -737,10 +737,11 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
 
     let dc = matches!(coupling, Some(Coupling::Dc | Coupling::AcDc));
 
-    // Overload frames: digit 1 = 0xA. The vendor reads 0.0 ("L0") when
-    // digit 2 == 0xC, and an overload (possibly negative) otherwise;
-    // digits 3-5 are ignored (spec §7.4 item 6). An idle frame (digit 4 ==
-    // 0xB) shows all zeros.
+    // Overload frames: digit 1 = 0xA. Digit 2 == 0xC is LO, anything else
+    // an overload (possibly negative); digits 3-5 are ignored (spec §7.4
+    // item 6). The vendor reads LO as 0.0, but the LCD shows LO with no
+    // number (spec §3.3), so it is no reading here: a 0 would pass for a
+    // real 4 mA. An idle frame (digit 4 == 0xB) shows all zeros.
     let (value, display_raw) = if nibbles[0] == 0xA {
         // Digit 2 is A (overload), C ("L0") or F ("HI") in the known
         // overload patterns (§8).
@@ -754,7 +755,7 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
             .flatten();
         if nibbles[1] == 0xC {
             (
-                MeasuredValue::Normal(0.0),
+                MeasuredValue::NoReading("LO"),
                 lcd.or_else(|| Some("L0".to_string())),
             )
         } else {
@@ -2153,9 +2154,9 @@ raw_payload=11"#
         );
     }
 
-    /// Digit 1 = 0xA with digit 2 = 0xC: LO, which the vendor reads as zero
-    /// rather than an overload. Issue #16's 4-20 mA % reading below its
-    /// range, as run 1 sent it.
+    /// Digit 1 = 0xA with digit 2 = 0xC: LO, recorded as no reading (the
+    /// vendor reads it as zero) rather than an overload. Issue #16's 4-20 mA
+    /// % reading below its range, as run 1 sent it.
     #[test]
     fn ut804_snapshot_l0() {
         let p = [
@@ -2167,7 +2168,7 @@ raw_payload=11"#
             r#"mode=mA%
 mode_raw=0x0f
 range_raw=0x00
-value=Normal(0.0)
+value=NoReading("LO")
 unit=%
 range_label=
 display_raw=Some("L0.")
@@ -2225,6 +2226,9 @@ raw_payload=11"#
                 (mode, unit, Some(lcd)),
                 "{packet:02X?}"
             );
+            // LO carries no number; the open leads are overloads.
+            let value = if mode == "mA%" { "LO" } else { "OL" };
+            assert_eq!(m.value.to_string(), value, "{packet:02X?}");
         }
     }
 
