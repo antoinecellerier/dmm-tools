@@ -29,6 +29,9 @@ checks that span families are in the [verification backlog](../../verification-b
   — decides `lookup_range_label` and `range_choices`. On the Hz dial switched
   to Duty, then Pulse: `command range` ×4, `read --count 1` after each, noting
   the LCD's range; then `command auto`. (#5)
+- `command range` from auto settled above rung 1 ([§7](reverse-engineered-protocol.md#7-range-byte----known))
+  steps from that rung, not auto → 1; decides `request_measurement` storing 0
+  while the auto bit is set. Needs Ω on auto past 600 Ω, `command range`, `read --count 1`. (#5)
 
 ## Display and flags
 
