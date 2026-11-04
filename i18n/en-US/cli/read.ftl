@@ -91,6 +91,16 @@ read-alarm-breach = { $breach } ({ $reading })
 # on without it. $error says why (lib-errors.ftl); $count is how many have
 # been skipped so far.
 read-unreadable-frame = { $error } (skipped { $count } so far)
+# After "Warning:". The cable or Bluetooth link to the meter dropped, and the
+# run keeps trying to open it again until it comes back or the user presses
+# Ctrl+C. $error says why (lib-errors.ftl).
+read-link-lost = link to the meter lost ({ $error }); reconnecting, Ctrl+C ends the run
+# After "Note:". The link is back and the readings resume.
+read-reconnected = reconnected; readings resume
+# After "Warning:", at the start of a run given no --adapter. $count (2 or
+# more) USB cables the meter can use are plugged in, so a reconnect could
+# open another meter's: a dropped link ends this run instead.
+read-no-reconnect-several-cables = { $count } USB cables this meter can use are plugged in, so a dropped link ends the run. Start read with --adapter to reconnect to this one.
 # After "Error:" (common.ftl), ending a --format replay run: a reading came
 # with no frame from the meter behind it, which a replay can't hold. $mode is
 # the reading's mode name (lib.ftl), e.g. DC V.

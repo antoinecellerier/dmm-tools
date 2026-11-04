@@ -59,6 +59,14 @@ fn usb_candidates<'a>(table: &'a [KnownTransport], preferred: &[&str]) -> Vec<&'
     ordered
 }
 
+/// The names of the cables [`usb_candidates`] gives for `links`.
+pub(crate) fn cable_kinds(links: &[&str]) -> Vec<&'static str> {
+    usb_candidates(KNOWN_TRANSPORTS, links)
+        .iter()
+        .map(|kt| kt.name)
+        .collect()
+}
+
 /// The Bluetooth peers an open for `device` takes, by name: UNI-T's adapters
 /// for a meter behind one, a meter with the radio built in by its own names,
 /// and every one of both for a meter not named yet (`auto`, `dmm-cli list`).
@@ -438,14 +446,10 @@ mod tests {
 
     /// The cables an open tries for `id`'s meter, `auto` for none.
     fn cables_for(id: &str) -> Vec<&'static str> {
-        let links = match id {
+        cable_kinds(match id {
             "auto" => &[][..],
             id => registry::find_device(id).unwrap().links,
-        };
-        usb_candidates(KNOWN_TRANSPORTS, links)
-            .iter()
-            .map(|kt| kt.name)
-            .collect()
+        })
     }
 
     /// The preferred cable comes first and the other relaying ones stay

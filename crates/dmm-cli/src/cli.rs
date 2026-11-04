@@ -255,6 +255,9 @@ pub(crate) struct ReadArgs {
     /// Number of readings (0 = unlimited: Ctrl+C stops it, or the end of a --replay file)
     #[arg(long, default_value = "0")]
     pub(crate) count: usize,
+    /// End the run when the link to the meter drops, instead of reconnecting
+    #[arg(long)]
+    pub(crate) no_reconnect: bool,
     /// Show cumulative time-integral (charge for current modes, V·s for voltage)
     #[arg(long)]
     pub(crate) integrate: bool,
@@ -712,6 +715,7 @@ mod tests {
                 format,
                 output,
                 count,
+                no_reconnect,
                 integrate,
                 transform,
                 alarm: _,
@@ -726,6 +730,8 @@ mod tests {
                 assert!(format.is_none());
                 assert!(output.is_none());
                 assert_eq!(count, 0);
+                // A meter whose link drops is reopened.
+                assert!(!no_reconnect);
                 assert!(!integrate);
                 // No transform flags means the identity, so `read` keeps the
                 // reading and the column layout it always had.
@@ -848,6 +854,7 @@ mod tests {
             "test.csv",
             "--count",
             "10",
+            "--no-reconnect",
         ])
         .unwrap();
         match cli.command {
@@ -856,6 +863,7 @@ mod tests {
                 format,
                 output,
                 count,
+                no_reconnect,
                 mock_mode: _,
                 integrate: _,
                 transform: _,
@@ -869,6 +877,7 @@ mod tests {
                 assert_eq!(format, Some(OutputFormat::Csv));
                 assert_eq!(output, Some(Some("test.csv".to_string())));
                 assert_eq!(count, 10);
+                assert!(no_reconnect);
             }
             _ => panic!("expected Read"),
         }

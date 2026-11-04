@@ -51,6 +51,9 @@ read--output =
 # dmm-cli read --count
 read--count =
     .help = Number of readings (0 = unlimited: Ctrl+C stops it, or the end of a --replay file)
+# dmm-cli read --no-reconnect
+read--no-reconnect =
+    .help = End the run when the link to the meter drops, instead of reconnecting
 # dmm-cli read --integrate
 read--integrate =
     .help = Show cumulative time-integral (charge for current modes, V·s for voltage)

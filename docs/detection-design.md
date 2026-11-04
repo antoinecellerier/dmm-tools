@@ -260,7 +260,8 @@ what gives a slow streamer (the UT8803) the whole walk instead of one window.
 In the GUI, a first failure shows the help and waits for Connect, while a drop mid-session
 reconnects and re-probes on its own. The session that detected keeps re-probing on every
 reconnect, since its opener was built before the meter answered; retrying the entry it detected
-before falling back to the full cascade is a follow-up. After an unknown name, the GUI saves the
+before falling back to the full cascade is a follow-up. `dmm-cli read` reopens the entry it
+first opened, detected or named, so a drop never re-probes and the output's layout still fits. After an unknown name, the GUI saves the
 fallback entry, and its toast names the model the meter reported, which is what the user has to
 quote. Auto-detect sends `0x5F`, and so beeps, whatever **Show device name on connect (beeps)**
 says. A settings file needs no change on upgrade.

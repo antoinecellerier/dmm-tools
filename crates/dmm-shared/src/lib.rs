@@ -15,8 +15,9 @@
 //! mid-write); [`export`], the shape and file name of what the two write
 //! out, so a reading saved from the GUI and one written by the CLI read the
 //! same; [`replay`], what `--replay` opens, a golden fixture included;
-//! [`help`], the help and version text both print; and [`logging`], the log
-//! levels both start with. The canonical settings location is
+//! [`help`], the help and version text both print; [`logging`], the log
+//! levels both start with; and [`RECONNECT_INTERVAL`], how often both retry
+//! a lost link. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`, or from
 //! `%APPDATA%` when set).
@@ -40,6 +41,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+/// How long a lost link waits before each attempt to reopen it, in dmm-gui
+/// and in `dmm-cli read`.
+pub const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Settings fields shared between `dmm-cli` and `dmm-gui`.
 ///

@@ -23,6 +23,7 @@
 
 - **Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish translations available** — chosen by `--lang`, dmm-gui's Language setting or the system's language.
 - **`capture` shows its step instructions in your own translation** — export them with `--export-instructions`, translate the file, and pass it back with `--instructions`.
+- **`read` reconnects to a meter whose link drops** — a pulled cable or lost Bluetooth link ended the run; `--no-reconnect` keeps that.
 - **`--help` lists each brand's own model names in name order, such as `ut217a` under UNI-T**
 - **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
 - **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.

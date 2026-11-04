@@ -490,6 +490,12 @@ pub fn devices_on_bridge(bridge: &str) -> Vec<&'static SelectableDevice> {
         .collect()
 }
 
+/// The kinds of cable ([`DeviceInfo::transport`]) an open of `device` with
+/// no adapter named may take, in the order it tries them.
+pub fn cable_kinds(device: &SelectableDevice) -> Vec<&'static str> {
+    open::cable_kinds(device.links)
+}
+
 /// Whether `device` is a hardware meter reachable over `bridge`: the test
 /// [`devices_on_bridge`] applies to the whole registry, for a caller holding
 /// only some of its entries.

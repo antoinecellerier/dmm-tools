@@ -70,7 +70,7 @@ pub(super) fn no_response(l10n: &dmm_shared::l10n::Localizer) -> String {
 const PAUSE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// How long a lost link waits before each attempt to reopen it.
-pub(super) const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
+pub(super) const RECONNECT_INTERVAL: Duration = dmm_shared::RECONNECT_INTERVAL;
 
 /// How soon a new reading is drawn.
 ///

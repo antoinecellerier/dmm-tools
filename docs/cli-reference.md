@@ -216,6 +216,7 @@ dmm-cli read [OPTIONS]
 | `--format <FORMAT>` | `text`, or what `-o`'s extension names | Output format: `text`, `csv`, `json` or `replay`. |
 | `-o, --output [<FILE>]` | stdout | Write to FILE; with no FILE, to `measurements-<meter>-<mode>-<start>.<ext>`. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited: Ctrl+C stops it, or the end of a `--replay` file. |
+| `--no-reconnect` | off | End the run, with its summary and an error, when the link to the meter drops. |
 | `--replay <FILE>` | | Play back a `--format replay` file at its recorded pace instead of opening a meter; the run ends with the file, or sooner with `--count` or Ctrl+C. |
 | `--import <FILE>` | | Read an exported CSV, JSON or replay file instead of opening a meter, without waiting: to convert it (`--format`, `-o`) or print its summary. Its markers come through; a CSV or JSON file refuses `--format replay` and `--interval-ms`. |
 | `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
@@ -298,6 +299,13 @@ Statistics and the integral cover a single mode and unit: if either changes
 mid-run — by turning the dial, or by auto-range crossing a decade — both reset
 and a note is printed to stderr, so the summary always describes one comparable
 series.
+
+When the link to a meter drops — a cable pulled, a Bluetooth adapter switched
+off — the run waits for it and reopens the meter it first opened, even under
+auto-detect, carrying on into the same output; the integral leaves the gap
+out, and Ctrl+C ends the run meanwhile. `--no-reconnect` ends the run instead,
+as does a run started with several USB cables the meter can use plugged in and
+no `--adapter` naming its cable: a reconnect could open another meter.
 
 **Examples:**
 

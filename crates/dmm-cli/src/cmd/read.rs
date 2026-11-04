@@ -24,8 +24,9 @@ use log::info;
 use std::borrow::Cow;
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 /// A `read` run with its flags settled and checked against each other, so
 /// that every refusal comes before anything opens or prints.
@@ -59,6 +60,9 @@ enum Source {
 struct RunOptions {
     destination: output::Destination,
     count: usize,
+    // Reopen a meter whose link drops; the mock and a recording have no
+    // link to lose.
+    reconnect: bool,
     integrate: bool,
     // Applied to every reading before anything else sees it; the identity
     // transform (no --scale/--offset/--unit) is a no-op.
@@ -81,6 +85,7 @@ impl ReadPlan {
             format,
             output,
             count,
+            no_reconnect,
             integrate,
             transform,
             alarm,
@@ -162,6 +167,7 @@ impl ReadPlan {
             options: RunOptions {
                 destination,
                 count,
+                reconnect: !no_reconnect,
                 integrate,
                 transform: transform.to_transform(),
                 alarm,
@@ -243,18 +249,67 @@ fn read_meter(
                 link,
             },
         );
+        // Reopened as the meter first opened, even under Auto-detect: the
+        // CSV layout and the file's name are that meter's. A Bluetooth link
+        // goes back to its own adapter, by address, as dmm-gui's does. A
+        // cable has nothing to pin it by — its path is renumbered on replug,
+        // and cables often share a serial or have none — so with several the
+        // open could take and no --adapter, a reopen could land on another
+        // meter's and write its readings on as this one's: no reconnect.
+        // Counted once, here: a count at the reopen would see only the other
+        // meter's cable while this one's is out, and let it through. A
+        // second cable plugged in mid-run goes unseen.
+        let adapter = opts
+            .adapter
+            .or(dmm.transport().bluetooth_selector())
+            .map(str::to_owned);
+        let mut reconnect = options.reconnect;
+        if reconnect && adapter.is_none() {
+            let kinds = dmm_lib::cable_kinds(device);
+            // A listing that fails counts none: the run reconnects as asked.
+            let cables = count_cables(&dmm_lib::list_devices().unwrap_or_default(), &kinds);
+            if cables > 1 {
+                reconnect = false;
+                eprintln!(
+                    "{} {}",
+                    warning_label(),
+                    tr!(
+                        crate::l10n::get(),
+                        "read-no-reconnect-several-cables",
+                        count = cables
+                    )
+                );
+            }
+        }
+        let reopen = reconnect.then(|| {
+            let bluetooth = opts.bluetooth;
+            Box::new(move || {
+                dmm_lib::open_device_by_id_auto(
+                    device.id,
+                    dmm_lib::OpenOptions {
+                        adapter: adapter.as_deref(),
+                        bluetooth,
+                    },
+                )
+            }) as Reopen<_>
+        });
         info!("connected, starting measurement loop");
         run_read_loop(
-            &mut dmm,
+            setup_ctrlc()?,
+            dmm,
             interval_ms,
             options,
             out,
             crate::open::meter_name(device),
-            Some(device),
+            Some(Meter {
+                device,
+                reopen,
+                interval: dmm_shared::RECONNECT_INTERVAL,
+            }),
             Vec::new(),
         )
     } else {
-        let mut dmm = open_mock_device(selection, mock_mode, clock)?;
+        let dmm = open_mock_device(selection, mock_mode, clock)?;
         info!("mock device connected, starting measurement loop");
         let interval_ms =
             dmm_lib::mock::simulated_tick(dmm.delivery(), Duration::from_millis(interval_ms))
@@ -277,9 +332,11 @@ fn read_meter(
         // cable to open and never lands here.
         let meter_name = opened_device(selection)
             .map_or_else(|| selection_id(selection), crate::open::meter_name);
-        // No timeout to warn about: the mock always answers.
+        // No timeout to warn about, and no link to lose: the mock always
+        // answers.
         run_read_loop(
-            &mut dmm,
+            setup_ctrlc()?,
+            dmm,
             interval_ms,
             options,
             out,
@@ -476,7 +533,7 @@ fn read_replay(
     }
     let recorded = dmm_shared::replay::recorded_at(&replay)
         .map_err(|e| format!("{}: {}", path.display(), l.read_error(&e)))?;
-    let mut dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
+    let dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
     // A copy is dated from its first frame, whose wall time the pinned
     // origin maps to when it was measured, so a copy that starts partway
     // through keeps the times of the session it came from.
@@ -507,7 +564,8 @@ fn read_replay(
     );
     // No interval floor: the file's own offsets pace the run.
     run_read_loop(
-        &mut dmm,
+        setup_ctrlc()?,
+        dmm,
         interval_ms,
         options,
         out,
@@ -516,7 +574,8 @@ fn read_replay(
         replay.listing.display_name(),
         // A gap in the recording plays back as timeouts, and they are not a
         // quiet meter: there is no `--device` to check and nothing on the
-        // cable to enable data transmission on.
+        // cable to enable data transmission on. Nor is there a link to
+        // reopen: the file ends the run.
         None,
         replay.markers.clone(),
     )
@@ -592,6 +651,7 @@ impl Run {
         let RunOptions {
             destination,
             count: _,
+            reconnect: _,
             integrate,
             transform,
             alarm,
@@ -912,21 +972,56 @@ fn next_marker_number(numbers: impl Iterator<Item = u32>) -> u32 {
     numbers.max().map_or(1, |n| n + 1)
 }
 
-/// Shared measurement loop for meters, the mock and recordings.
+/// How many of the cables `listed` are of the `kinds` an open may take.
+fn count_cables(listed: &[dmm_lib::DeviceInfo], kinds: &[&str]) -> usize {
+    listed
+        .iter()
+        .filter(|cable| kinds.contains(&cable.transport))
+        .count()
+}
+
+/// Opens a meter's link again after it drops.
+type Reopen<T> = Box<dyn Fn() -> dmm_lib::error::Result<dmm_lib::Dmm<T>>>;
+
+/// What a run on a real meter has that the mock and a recording don't.
+struct Meter<T: dmm_lib::transport::Transport> {
+    /// The meter opened: a quiet one is shown its activation steps.
+    device: &'static SelectableDevice,
+    /// Brings a lost link back; `None` with `--no-reconnect`, when a lost
+    /// link ends the run.
+    reopen: Option<Reopen<T>>,
+    /// The wait before each attempt to reopen the link.
+    interval: Duration,
+}
+
+/// Shared measurement loop for meters, the mock and recordings. `running` is
+/// the Ctrl+C flag: cleared, it ends the run.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the Ctrl+C flag comes from the caller, so a test can run the loop"
+)]
 fn run_read_loop<T: dmm_lib::transport::Transport>(
-    dmm: &mut dmm_lib::Dmm<T>,
+    running: Arc<AtomicBool>,
+    mut dmm: dmm_lib::Dmm<T>,
     interval_ms: u64,
     options: RunOptions,
     out: format::Output,
     // The meter a file the run has to name is named after; see `Run::open`.
     meter_name: &str,
-    // When set, timeout warnings include device-specific activation instructions.
-    device: Option<&'static SelectableDevice>,
+    // A real meter's; `None` for the mock and a recording.
+    meter: Option<Meter<T>>,
     // A recording's markers, in file order; none for a meter.
     markers: Vec<dmm_lib::replay::ReplayMarker>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let count = options.count;
-    let running = setup_ctrlc()?;
+    let (device, reopen) = match meter {
+        Some(Meter {
+            device,
+            reopen,
+            interval,
+        }) => (Some(device), reopen.map(|r| (r, interval))),
+        None => (None, None),
+    };
     // Each marker goes on the first reading played at or after its offset,
     // one per reading, so a frame `--interval-ms` or `--count` skips passes
     // its marker on rather than losing it — the rule the GUI plays by.
@@ -943,11 +1038,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
     let mut fatal = None;
-    // Give the pacing sleep the same Ctrl-C flag the loop checks, so a long
-    // --interval doesn't swallow the interrupt for a whole tick.
-    let cancel = running.clone();
-    let mut stream =
-        MeasurementStream::new(dmm, tick).with_cancel(move || !cancel.load(Ordering::SeqCst));
+    let mut stream = stream_over(&mut dmm, tick, &running);
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
@@ -1004,12 +1095,87 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 }
             }
             Err(e) => {
-                fatal = Some(e);
-                break;
+                let Some((reopen, interval)) = &reopen else {
+                    fatal = Some(e);
+                    break;
+                };
+                // A read cut short by Ctrl+C is the end of the run, not a
+                // link to bring back.
+                if !running.load(Ordering::SeqCst) {
+                    break;
+                }
+                log::warn!("link lost: {e}");
+                // Nothing is read while the link is down: no interval to
+                // bridge.
+                run.gap();
+                let l = crate::l10n::get();
+                eprintln!(
+                    "{} {}",
+                    warning_label(),
+                    tr!(l, "read-link-lost", error = l.error(&e))
+                );
+                // Release the old link before opening a new one: a Bluetooth
+                // transport disconnects its peripheral on drop, and dropped
+                // after the reopen that would cut the link just brought back
+                // up on the same adapter.
+                drop(dmm);
+                let Some(reopened) = reconnect(reopen, &running, *interval) else {
+                    break;
+                };
+                dmm = reopened;
+                eprintln!("{} {}", note_label(), tr!(l, "read-reconnected"));
+                stream = stream_over(&mut dmm, tick, &running);
             }
         }
     }
     run.close(protocol_errors, fatal)
+}
+
+/// A stream over `dmm` at `tick`, whose pacing sleep ends on the Ctrl+C flag
+/// the loop checks, so a long --interval doesn't swallow the interrupt for a
+/// whole tick.
+fn stream_over<'a, T: dmm_lib::transport::Transport>(
+    dmm: &'a mut dmm_lib::Dmm<T>,
+    tick: Duration,
+    running: &Arc<AtomicBool>,
+) -> MeasurementStream<'a, T> {
+    let cancel = Arc::clone(running);
+    MeasurementStream::new(dmm, tick).with_cancel(move || !cancel.load(Ordering::SeqCst))
+}
+
+/// How often the wait between reconnect attempts looks at the Ctrl+C flag.
+const RECONNECT_POLL: Duration = Duration::from_millis(50);
+
+/// Call `reopen` every `interval` until it succeeds, or return `None` once
+/// Ctrl+C clears `running`. Every failure is retried, whatever its kind: an
+/// adapter that doesn't answer yet is what the wait is for.
+fn reconnect<D>(
+    reopen: impl Fn() -> dmm_lib::error::Result<D>,
+    running: &AtomicBool,
+    interval: Duration,
+) -> Option<D> {
+    let mut attempt: u32 = 0;
+    loop {
+        let until = Instant::now() + interval;
+        loop {
+            if !running.load(Ordering::SeqCst) {
+                return None;
+            }
+            let left = until.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            std::thread::sleep(left.min(RECONNECT_POLL));
+        }
+        attempt = attempt.saturating_add(1);
+        match reopen() {
+            Ok(reopened) => {
+                info!("reconnected on attempt {attempt}");
+                return Some(reopened);
+            }
+            Err(e) => log::warn!("reconnect attempt {attempt} failed: {e}"),
+        }
+    }
 }
 
 /// Why `--import` refuses a flag alongside a CSV or JSON file: the readings
@@ -1100,6 +1266,28 @@ mod tests {
     /// The English every test reads.
     fn l() -> &'static Localizer {
         crate::l10n::english()
+    }
+
+    /// A cable listed as `transport`, as `dmm_lib::list_devices` gives it.
+    fn cable(transport: &'static str) -> dmm_lib::DeviceInfo {
+        dmm_lib::DeviceInfo {
+            path: format!("/dev/hidraw-{transport}"),
+            product: None,
+            serial: None,
+            transport,
+            not_heard: false,
+        }
+    }
+
+    /// The cables counted are every kind the open falls back to, not only
+    /// the meter's own: a UT61E+ opens on another meter's CH9329 too, but
+    /// not on a Brymen BU-86X.
+    #[test]
+    fn the_cables_counted_are_the_ones_the_open_may_take() {
+        let kinds = dmm_lib::cable_kinds(registry::find_device("ut61eplus").unwrap());
+        assert_eq!(count_cables(&[cable("CP2110")], &kinds), 1);
+        assert_eq!(count_cables(&[cable("CP2110"), cable("BU-86X")], &kinds), 1);
+        assert_eq!(count_cables(&[cable("CP2110"), cable("CH9329")], &kinds), 2);
     }
 
     /// `max` is a clock that waits for nothing: an hour slept is an hour of
@@ -1248,5 +1436,180 @@ mod tests {
             refuse_replay_format(OutputFormat::Replay, mock, true, &transform, false).is_none(),
             "a recording being copied brings its own frames"
         );
+    }
+
+    /// A lost link is retried until it opens, each failure whatever its kind.
+    #[test]
+    fn a_lost_link_is_retried_until_it_opens() {
+        let attempts = std::cell::Cell::new(0);
+        let running = AtomicBool::new(true);
+        let reopened = reconnect(
+            || {
+                attempts.set(attempts.get() + 1);
+                match attempts.get() {
+                    1 => Err(dmm_lib::error::Error::Timeout),
+                    2 => Err(dmm_lib::error::Error::AdapterNotFound("gone".into())),
+                    n => Ok(n),
+                }
+            },
+            &running,
+            Duration::from_millis(1),
+        );
+        assert_eq!(reopened, Some(3));
+    }
+
+    /// Ctrl+C ends the wait for a link that never comes back.
+    #[test]
+    fn ctrl_c_ends_the_wait_for_a_link() {
+        let running = AtomicBool::new(false);
+        let reopened = reconnect(
+            || -> dmm_lib::error::Result<()> { panic!("no attempt after Ctrl+C") },
+            &running,
+            Duration::from_millis(1),
+        );
+        assert_eq!(reopened, None);
+    }
+
+    /// A UT61E+ link that answers with its frames, then fails as a pulled
+    /// cable does, and says when it is dropped.
+    struct Unplugs {
+        queue: dmm_lib::transport::mock::MockTransport,
+        dropped: Arc<AtomicBool>,
+    }
+
+    impl dmm_lib::transport::Transport for Unplugs {
+        fn write(&self, data: &[u8]) -> dmm_lib::error::Result<()> {
+            self.queue.write(data)
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            match self.queue.read_timeout(buf, timeout_ms)? {
+                0 => Err(dmm_lib::error::Error::LinkLost),
+                n => Ok(n),
+            }
+        }
+
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            None
+        }
+    }
+
+    impl Drop for Unplugs {
+        fn drop(&mut self) {
+            self.dropped.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// A UT61E+ meter on an [`Unplugs`] link that reads 5.209 V DC `readings`
+    /// times before the link fails.
+    fn unplugging_meter(
+        readings: usize,
+        dropped: &Arc<AtomicBool>,
+    ) -> dmm_lib::error::Result<dmm_lib::Dmm<Unplugs>> {
+        let payload = [
+            0x02, 0x30, b' ', b' ', b'5', b'.', b'2', b'0', b'9', 0, 0, 0x30, 0x30, 0x30,
+        ];
+        let mut frame = vec![0xAB, 0xCD, (payload.len() + 2) as u8];
+        frame.extend_from_slice(&payload);
+        let sum = frame
+            .iter()
+            .fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
+        frame.extend_from_slice(&sum.to_be_bytes());
+        let device = registry::find_device("ut61eplus").expect("a registry device");
+        dmm_lib::Dmm::new(
+            Unplugs {
+                queue: dmm_lib::transport::mock::MockTransport::new(vec![frame; readings]),
+                dropped: Arc::clone(dropped),
+            },
+            (device.new_protocol)(),
+        )
+    }
+
+    /// Run `count` readings from `dmm` into a CSV file, reopening its link
+    /// with `reopen`, and return what the file holds.
+    fn read_through_drops(
+        dmm: dmm_lib::Dmm<Unplugs>,
+        count: usize,
+        running: Arc<AtomicBool>,
+        reopen: Reopen<Unplugs>,
+    ) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("readings.csv");
+        let transform = TransformArgs {
+            scale: None,
+            offset: None,
+            unit: None,
+        }
+        .to_transform();
+        let out = read_output(OutputFormat::Csv, &dmm, &transform, false, false, || {
+            unreachable!("a CSV run has no replay header")
+        });
+        let options = RunOptions {
+            destination: output::Destination::Path(path.clone()),
+            count,
+            reconnect: true,
+            integrate: false,
+            transform,
+            alarm: None,
+        };
+        let meter = Meter {
+            device: registry::find_device("ut61eplus").expect("a registry device"),
+            reopen: Some(reopen),
+            interval: Duration::from_millis(1),
+        };
+        run_read_loop(
+            running,
+            dmm,
+            0,
+            options,
+            out,
+            "UNI-T UT61E+",
+            Some(meter),
+            Vec::new(),
+        )
+        .expect("a lost link that comes back is not a failure");
+        std::fs::read_to_string(&path).unwrap()
+    }
+
+    /// A link that drops is let go of, reopened, and read from again: the run
+    /// carries on with the new meter's readings and ends as it would have.
+    #[test]
+    fn a_dropped_link_is_reopened_and_the_run_carries_on() {
+        let first_dropped = Arc::new(AtomicBool::new(false));
+        let dmm = unplugging_meter(1, &first_dropped).unwrap();
+        let reopens = std::rc::Rc::new(std::cell::Cell::new(0));
+        let reopen: Reopen<Unplugs> = Box::new({
+            let first_dropped = Arc::clone(&first_dropped);
+            let reopens = std::rc::Rc::clone(&reopens);
+            move || {
+                assert!(
+                    first_dropped.load(Ordering::SeqCst),
+                    "the old link is let go of first"
+                );
+                reopens.set(reopens.get() + 1);
+                unplugging_meter(1, &Arc::new(AtomicBool::new(false)))
+            }
+        });
+        let running = Arc::new(AtomicBool::new(true));
+        let csv = read_through_drops(dmm, 2, running, reopen);
+        assert_eq!(reopens.get(), 1);
+        assert_eq!(csv.matches("5.209").count(), 2, "{csv}");
+    }
+
+    /// Ctrl+C while the link is down ends the run cleanly, with the readings
+    /// taken before the drop.
+    #[test]
+    fn ctrl_c_while_the_link_is_down_ends_the_run_cleanly() {
+        let dmm = unplugging_meter(1, &Arc::new(AtomicBool::new(false))).unwrap();
+        let running = Arc::new(AtomicBool::new(true));
+        let reopen: Reopen<Unplugs> = Box::new({
+            let running = Arc::clone(&running);
+            move || {
+                running.store(false, Ordering::SeqCst);
+                Err(dmm_lib::error::Error::LinkLost)
+            }
+        });
+        let csv = read_through_drops(dmm, 2, running, reopen);
+        assert_eq!(csv.matches("5.209").count(), 1, "{csv}");
     }
 }
