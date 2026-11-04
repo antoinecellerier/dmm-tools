@@ -62,16 +62,19 @@ const TOAST_REPAINT_INTERVAL: Duration = Duration::from_millis(100);
 pub(super) struct Toast {
     pub(super) message: String,
     pub(super) is_error: bool,
-    shown_at: Instant,
+    /// When it was first drawn. A toast raised while the window is hidden
+    /// (readings drain from `App::logic` then) has its clock start when the
+    /// window comes back, so it is not gone before anyone could read it.
+    shown_at: Option<Instant>,
 }
 
 impl Toast {
-    /// Good or neutral news, shown from now.
+    /// Good or neutral news, up for its full time from its first frame.
     pub(super) fn info(message: impl Into<String>) -> Self {
         Self::new(message.into(), false)
     }
 
-    /// A failure, shown from now.
+    /// A failure, up for its full time from its first frame.
     pub(super) fn error(message: impl Into<String>) -> Self {
         Self::new(message.into(), true)
     }
@@ -80,13 +83,15 @@ impl Toast {
         Self {
             message,
             is_error,
-            shown_at: Instant::now(),
+            shown_at: None,
         }
     }
 
-    /// How long it has left on screen.
+    /// How long it has left on screen: all of it until it is first drawn.
     fn remaining(&self) -> Duration {
-        TOAST_DURATION.saturating_sub(self.shown_at.elapsed())
+        self.shown_at.map_or(TOAST_DURATION, |at| {
+            TOAST_DURATION.saturating_sub(at.elapsed())
+        })
     }
 
     /// Whether it has been up its full time.
@@ -103,9 +108,11 @@ impl App {
     /// Call after the panels — [`egui::Order::Foreground`] keeps it above
     /// them. A modal drawn later still covers it, which is what we want.
     pub(super) fn show_toast(&mut self, ctx: &egui::Context, anchor_top: f32) {
-        let Some(toast) = &self.toast else {
+        let Some(toast) = &mut self.toast else {
             return;
         };
+        toast.shown_at.get_or_insert_with(Instant::now);
+        let toast = &*toast;
 
         // Keep repainting while it is up. Nothing else repaints when
         // disconnected or paused, so without this the toast would sit there
@@ -447,18 +454,47 @@ mod tests {
     /// its kind.
     #[test]
     fn a_toast_expires_after_its_duration() {
-        let fresh = Toast::info("Exported 1234 samples");
+        let fresh = Toast {
+            shown_at: Some(Instant::now()),
+            ..Toast::info("Exported 1234 samples")
+        };
         assert!(!fresh.expired());
         assert!(fresh.remaining() > TOAST_DURATION - Duration::from_secs(1));
         let Some(long_ago) = Instant::now().checked_sub(TOAST_DURATION) else {
             return; // the monotonic clock started less than that ago
         };
         let old = Toast {
-            shown_at: long_ago,
+            shown_at: Some(long_ago),
             ..Toast::error("Export failed")
         };
         assert!(old.expired());
         assert_eq!(old.remaining(), Duration::ZERO);
+    }
+
+    /// A toast raised while the window is hidden waits for its first frame:
+    /// however long ago it was built, it has its full time once drawn.
+    #[test]
+    fn a_toast_runs_its_clock_from_its_first_frame() {
+        let mut run = ToastRun::new(900.0, 600.0);
+        run.show_toast("Command failed");
+        let toast = run.app.toast.as_ref().expect("the toast was set");
+        assert!(!toast.expired(), "an undrawn toast expired");
+        assert_eq!(toast.remaining(), TOAST_DURATION);
+
+        let before = Instant::now();
+        run.frame();
+        let shown_at = run.app.toast.as_ref().and_then(|t| t.shown_at);
+        assert!(
+            shown_at.is_some_and(|at| at >= before),
+            "drawing the toast did not start its clock"
+        );
+        let started = shown_at;
+        run.frame();
+        assert_eq!(
+            run.app.toast.as_ref().and_then(|t| t.shown_at),
+            started,
+            "a later frame restarted the clock"
+        );
     }
 
     /// Eight seconds is long enough to read a buffer-full warning and too

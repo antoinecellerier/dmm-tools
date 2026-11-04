@@ -313,7 +313,8 @@ impl App {
         }
 
         // Unbounded: `drain_messages` empties the message channel every
-        // frame, so it only ever holds what arrived since the last one.
+        // frame, and from `App::logic` while the window is hidden, so it only
+        // ever holds what arrived since the last pass.
         let (msg_tx, msg_rx) = mpsc::channel();
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<RemoteCommand>();
@@ -1653,6 +1654,35 @@ mod tests {
         assert_eq!(modes(&app), ["DC V"; 3]);
         deliver_readings(&mut app, &[AC, AC]);
         assert_eq!(modes(&app), ["AC V"; 2]);
+    }
+
+    /// A minimized window gets `logic` passes and no `ui`: the second one in
+    /// a row takes the readings in, while one right after a `ui` pass leaves
+    /// them to the next frame's.
+    #[test]
+    fn readings_come_in_while_the_window_is_hidden() {
+        let mut app = connected_app();
+        let (tx, rx) = mpsc::channel();
+        app.connection.worker = Some(Worker::reading(rx));
+        let t0 = Instant::now();
+        let send = |i: u64| {
+            tx.send(DmmMessage::Measurement(reading(
+                DC.0,
+                DC.1,
+                t0 + Duration::from_secs(i),
+            )))
+            .expect("the channel is open");
+        };
+        send(0);
+        app.ui_ran = true;
+        app.logic_pass();
+        assert!(modes(&app).is_empty(), "left to the frame being drawn");
+        app.logic_pass();
+        assert_eq!(modes(&app), ["DC V"]);
+        send(1);
+        app.logic_pass();
+        assert_eq!(modes(&app), ["DC V"; 2]);
+        assert_eq!(app.graph.len(), 2);
     }
 
     /// An over-range reading adds no graph point but is still a reading.

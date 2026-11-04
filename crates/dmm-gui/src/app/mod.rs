@@ -480,6 +480,8 @@ pub struct App {
     selection: std::cell::RefCell<SelectedDevice>,
     recording_panel: RecordingPanel,
     first_frame: bool,
+    /// A `ui` pass ran since the last `logic` call; see [`Self::logic_pass`].
+    ui_ran: bool,
     /// The window is a native Wayland surface, where the compositor owns
     /// stacking: xdg-shell has no keep-above request, so winit drops
     /// `WindowLevel` commands and "Always on top" cannot work.
@@ -608,6 +610,7 @@ impl App {
             selection: std::cell::RefCell::new(selection),
             recording_panel: RecordingPanel::default(),
             first_frame: true,
+            ui_ran: false,
             // Only `App::new` has a window to ask; tests build without one.
             on_wayland: false,
             applied: AppliedChrome::default(),
@@ -1036,8 +1039,28 @@ impl App {
     }
 }
 
+impl App {
+    /// What `App::logic` does. eframe calls `logic` before every `ui`, and
+    /// alone while the window is minimized or covered, when it skips `ui`.
+    /// Two `logic` calls in a row mean no frame is drawing, so this one takes
+    /// the readings in: the channel stays short and the recording bounded.
+    /// After a `ui` pass it leaves them to the next frame's, which drains
+    /// after the shortcuts so `N` marks the reading on screen.
+    fn logic_pass(&mut self) {
+        if !std::mem::replace(&mut self.ui_ran, false) {
+            self.drain_messages();
+            self.trim_markers();
+        }
+    }
+}
+
 impl eframe::App for App {
+    fn logic(&mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.logic_pass();
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.ui_ran = true;
         let ctx = ui.ctx().clone();
         // Deferred focus restoration after the shortcut help modal closes.
         // We only run this once `top_modal_layer` has actually cleared —

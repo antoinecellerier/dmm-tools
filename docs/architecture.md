@@ -321,7 +321,7 @@ helper work on the visible slice only, so frame cost does not grow with the sess
 
 **Bounded buffers.** The graph's points, the sample store and a recording share one user-set bound
 (`max_samples`). The GUI's measurement channel is an unbounded `mpsc`, which is safe because the UI
-drains it every frame.
+drains it every frame, and `App::logic` drains it while the window is hidden and draws no frames.
 
 ## Module map
 
