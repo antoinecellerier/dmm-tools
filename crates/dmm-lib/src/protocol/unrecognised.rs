@@ -24,33 +24,37 @@ thread_local! {
     static SILENT: Cell<Option<usize>> = const { Cell::new(None) };
 }
 
-/// Report data the parser for `family` does not recognise.
+/// Report data the parser for `device_id` does not recognise.
+///
+/// `device_id` is the registry id of the entry being read: the hint tells
+/// the user to run `--device` with it, so it must be one that opens and
+/// decodes their meter, not a family label another model shares.
 ///
 /// `what` names the kind of data (`"display text"`, `"mode byte"`), `value`
 /// what the meter sent, formatted by the caller with `format_args!` so
 /// nothing is allocated unless a line is written.
-pub(crate) fn report_unknown(family: &'static str, what: &'static str, value: fmt::Arguments) {
+pub(crate) fn report_unknown(device_id: &'static str, what: &'static str, value: fmt::Arguments) {
     if let Some(count) = SILENT.get() {
         SILENT.set(Some(count + 1));
         return;
     }
     CAPTURED.with_borrow_mut(|captured| {
         if let Some(reports) = captured {
-            reports.push(format!("{family}: unrecognised {what}: {value}"));
+            reports.push(format!("{device_id}: unrecognised {what}: {value}"));
         }
     });
     if !first(&WARNED) {
-        debug!("{family}: unrecognised {what}: {value}");
+        debug!("{device_id}: unrecognised {what}: {value}");
         return;
     }
     warn!(
-        "{family}: unrecognised {what}: {value} \u{2014} further unrecognised data is logged at debug level"
+        "{device_id}: unrecognised {what}: {value} \u{2014} further unrecognised data is logged at debug level"
     );
     // Named `--device`, not left to auto-detection: the reporter is running
     // a meter we do not fully parse, which is where detection is least sure.
     warn!(
         "report it at {REPO_ISSUES_URL}, with the meter in this state, attaching the output of: \
-         RUST_LOG=dmm_lib=trace dmm-cli --device {family} debug --count 20"
+         RUST_LOG=dmm_lib=trace dmm-cli --device {device_id} debug --count 20"
     );
     warn!(
         "RUST_LOG=dmm_lib=debug logs every occurrence; RUST_LOG=dmm_lib=error hides this warning"

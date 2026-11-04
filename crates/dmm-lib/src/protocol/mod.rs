@@ -51,13 +51,14 @@ pub(crate) fn check_len(family: &str, payload: &[u8], expected: usize) -> Result
 
 /// The number a display's text spells, for a family that has already
 /// handled its own overload text: anything else is reported as unrecognised
-/// display text and shown as OL.
-pub(crate) fn display_number(family: &'static str, text: &str) -> MeasuredValue {
+/// display text and shown as OL, under `device_id`, the registry entry
+/// being read (its report hint names it as `--device`).
+pub(crate) fn display_number(device_id: &'static str, text: &str) -> MeasuredValue {
     match text.parse::<f64>() {
         Ok(v) => MeasuredValue::Normal(v),
         Err(_) => {
             unrecognised::report_unknown(
-                family,
+                device_id,
                 "display text",
                 format_args!("{text:?}, shown as OL"),
             );

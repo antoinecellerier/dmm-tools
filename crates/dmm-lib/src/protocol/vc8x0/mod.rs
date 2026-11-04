@@ -394,10 +394,12 @@ const PAYLOAD_AT: usize = 3;
 /// The accept filter is what makes the meters' other frames — the 0xFF
 /// command result, the DeviceID answer — cost nothing: they are skipped
 /// here rather than drained by the caller. A frame of a type nobody
-/// accounts for is reported on the way.
+/// accounts for is reported on the way, under `id`, the registry entry
+/// being read.
 pub(crate) fn read_live<M: Vc8x0Model>(
     rx_buf: &mut Vec<u8>,
     transport: &dyn Transport,
+    id: &'static str,
 ) -> Result<Vec<u8>> {
     framing::read_frame(
         rx_buf,
@@ -406,7 +408,7 @@ pub(crate) fn read_live<M: Vc8x0Model>(
         |p| match p.first() {
             Some(&MSG_TYPE_LIVE_DATA) => true,
             Some(&frame_type) => {
-                report_frame_type::<M>(frame_type, p.len());
+                report_frame_type::<M>(id, frame_type, p.len());
                 false
             }
             None => false,
@@ -423,13 +425,13 @@ pub(crate) fn read_live<M: Vc8x0Model>(
 ///
 /// Only the read path calls this: detection scans every meter's bytes, and
 /// another family's frame is not this meter's unknown one.
-fn report_frame_type<M: Vc8x0Model>(frame_type: u8, len: usize) {
+fn report_frame_type<M: Vc8x0Model>(id: &'static str, frame_type: u8, len: usize) {
     // vc880 spec §3: DeviceID 0x00, LiveData 0x01, CompData 0x02, the two
     // log transfers 0x03/0x04 and Result 0xFF.
     let listed = matches!(frame_type, 0x00..=0x04 | 0xFF);
     if !listed && !M::ECHOED_COMMANDS.contains(&frame_type) {
         report_unknown(
-            M::LOG,
+            id,
             "frame type",
             format_args!("{frame_type:#04x}, {len} payload bytes"),
         );
@@ -444,7 +446,8 @@ fn report_frame_type<M: Vc8x0Model>(frame_type: u8, len: usize) {
 /// `Send + 'static` because the driver carrying it is a `Box<dyn Protocol>`,
 /// which the CLI and GUI hand to their reader threads.
 pub(crate) trait Vc8x0Model: Send + 'static {
-    /// Log target, and the family label warnings and parse errors quote.
+    /// Log target, and the family label parse errors quote. Reports of
+    /// unrecognised data name the registry entry being read instead.
     const LOG: &'static str;
 
     /// What the front panel calls this meter, for the errors a user reads.
@@ -520,7 +523,7 @@ pub(crate) trait Vc8x0Model: Send + 'static {
 
     /// Report the values in this meter's own status bytes that its spec
     /// does not document. Nothing to check by default.
-    fn report_unrecognised_status(_status: &[u8]) {}
+    fn report_unrecognised_status(_id: &'static str, _status: &[u8]) {}
 
     /// Capture steps this meter needs on top of [`capture_steps`].
     fn extra_capture_steps() -> Vec<CaptureStep> {
@@ -534,12 +537,23 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     }
 
     /// Take one live-data frame, with whatever the meter needs around the
-    /// read: the VC-880 streams, the VC-890 has to be asked.
-    fn read_live_frame(rx_buf: &mut Vec<u8>, transport: &dyn Transport) -> Result<Vec<u8>>;
+    /// read: the VC-880 streams, the VC-890 has to be asked. `id` is the
+    /// registry entry being read, for reports.
+    fn read_live_frame(
+        rx_buf: &mut Vec<u8>,
+        transport: &dyn Transport,
+        id: &'static str,
+    ) -> Result<Vec<u8>>;
 
     /// Write one button press, with whatever the meter needs around the
     /// frame so that the reading which follows describes the new state.
-    fn write_button(rx_buf: &mut Vec<u8>, transport: &dyn Transport, cmd: u8) -> Result<()>;
+    /// `id` is the registry entry being read, for reports.
+    fn write_button(
+        rx_buf: &mut Vec<u8>,
+        transport: &dyn Transport,
+        id: &'static str,
+        cmd: u8,
+    ) -> Result<()>;
 }
 
 /// Protocol implementation for both Voltcraft families, `M` supplying what
@@ -602,8 +616,8 @@ impl<M: Vc8x0Model> Protocol for Vc8x0Protocol<M> {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        let payload = M::read_live_frame(&mut self.rx_buf, transport)?;
-        let measurement = parse_measurement::<M>(&payload)?;
+        let payload = M::read_live_frame(&mut self.rx_buf, transport, self.profile.id)?;
+        let measurement = parse_measurement::<M>(self.profile.id, &payload)?;
         // Readings are the only place the meter states its function, so
         // every one of them is what keeps the dial position current.
         self.dial.observe(M::DIAL, measurement.mode_raw);
@@ -611,7 +625,7 @@ impl<M: Vc8x0Model> Protocol for Vc8x0Protocol<M> {
     }
 
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
-        parse_measurement::<M>(payload)
+        parse_measurement::<M>(self.profile.id, payload)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
@@ -668,7 +682,7 @@ impl<M: Vc8x0Model> CycleMeter for Vc8x0Protocol<M> {
             .into());
         };
         debug!("{}: pressing {name} ({cmd:#04x})", M::LOG);
-        M::write_button(&mut self.rx_buf, transport, cmd)
+        M::write_button(&mut self.rx_buf, transport, self.profile.id, cmd)
     }
 
     fn read(&mut self, transport: &dyn Transport) -> Result<Measurement> {
@@ -701,7 +715,7 @@ impl<M: Vc8x0Model> CycleMeter for Vc8x0Protocol<M> {
 
     fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
         debug!("{}: sending auto-range ({CMD_RANGE_AUTO:#04x})", M::LOG);
-        M::write_button(&mut self.rx_buf, transport, CMD_RANGE_AUTO)
+        M::write_button(&mut self.rx_buf, transport, self.profile.id, CMD_RANGE_AUTO)
     }
 
     fn flag_states(&self, setting: cycle::FlagSetting, _mode: u16) -> &'static [u16] {
@@ -715,7 +729,12 @@ impl<M: Vc8x0Model> CycleMeter for Vc8x0Protocol<M> {
                     "{}: exiting MAX/MIN/AVG ({CMD_EXIT_MAX_MIN_AVG:#04x})",
                     M::LOG
                 );
-                M::write_button(&mut self.rx_buf, transport, CMD_EXIT_MAX_MIN_AVG)
+                M::write_button(
+                    &mut self.rx_buf,
+                    transport,
+                    self.profile.id,
+                    CMD_EXIT_MAX_MIN_AVG,
+                )
             }
             // HOLD and REL press their own button back off, and neither
             // meter has Peak, so the driver never asks this of them.
@@ -761,14 +780,18 @@ fn labels_of<M: Vc8x0Model>(protocol: &Vc8x0Protocol<M>, out: &mut crate::text::
 /// and which extra flags they carry, both of which the model states; each
 /// family module maps its own payload byte for byte.
 ///
-/// Data outside the spec is reported through `report_unknown`.
-pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measurement> {
+/// Data outside the spec is reported through `report_unknown`, under `id`,
+/// the registry entry being read: the VC650BT reads with the VC-880's model.
+pub(crate) fn parse_measurement<M: Vc8x0Model>(
+    id: &'static str,
+    payload: &[u8],
+) -> Result<Measurement> {
     // vc880 spec §3/§4 (39-byte frame) and the vc890 spec's live data frame
     // (66 bytes): nothing else carries type 0x01. A longer payload parses
     // from its first bytes, a shorter one is refused.
     if payload.len() != M::PAYLOAD_LEN {
         report_unknown(
-            M::LOG,
+            id,
             "frame length",
             format_args!(
                 "{} payload bytes, expected {}",
@@ -801,8 +824,8 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measure
 
     let setup = M::setup_screen(status_bytes);
     report_unrecognised_fields::<M>(
+        id,
         function_code,
-        range_idx,
         range_raw,
         &display_trimmed,
         status_bytes,
@@ -810,7 +833,7 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measure
         overloaded(ol1, &display_trimmed),
     );
 
-    let value = parse_value(M::LOG, ol1, &display_trimmed, setup);
+    let value = parse_value(id, ol1, &display_trimmed, setup);
 
     Ok(Measurement {
         mode,
@@ -833,8 +856,8 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measure
 /// shows its setup screen, whose words are not a reading, and `overload` that
 /// it shows no reading at all.
 fn report_unrecognised_fields<M: Vc8x0Model>(
+    id: &'static str,
     function: u8,
-    range_idx: u8,
     range_raw: u8,
     display: &str,
     status: &[u8],
@@ -843,16 +866,17 @@ fn report_unrecognised_fields<M: Vc8x0Model>(
 ) {
     // vc880 spec §4.1, vc890 spec "Function Codes".
     if function > LAST_FUNCTION {
-        report_unknown(M::LOG, "function code", format_args!("{function:#04x}"));
+        report_unknown(id, "function code", format_args!("{function:#04x}"));
     }
     // vc880 spec §4.2, vc890 spec "Range Tables": the range byte is 0x30
     // plus an index into the function's table. The specs describe no range
     // byte for a single-range function (an empty table), and the vendor
     // never reads LPF's.
     let table = M::range_table(function);
+    let range_idx = range_raw.wrapping_sub(0x30);
     if function != M::LOW_PASS && !table.is_empty() && usize::from(range_idx) >= table.len() {
         report_unknown(
-            M::LOG,
+            id,
             "range byte",
             format_args!("{range_raw:#04x} for function {function:#04x}"),
         );
@@ -863,7 +887,7 @@ fn report_unrecognised_fields<M: Vc8x0Model>(
     // to sign, and neither spec says what the bit does there.
     if status[0] & STATUS0_SIGN1 != 0 && !setup && !overload && !display.contains('-') {
         report_unknown(
-            M::LOG,
+            id,
             "sign bit",
             format_args!(
                 "frame byte {} = {:#04x}, display {display:?}",
@@ -877,13 +901,13 @@ fn report_unrecognised_fields<M: Vc8x0Model>(
     for (i, (&byte, &named)) in status.iter().zip(M::NAMED_STATUS_BITS).enumerate() {
         if byte & !(named | POSSIBLE_ASCII_PREFIX) != 0 {
             report_unknown(
-                M::LOG,
+                id,
                 "status bits",
                 format_args!("frame byte {} = {byte:#04x}", M::STATUS_AT + PAYLOAD_AT + i),
             );
         }
     }
-    M::report_unrecognised_status(status);
+    M::report_unrecognised_status(id, status);
 }
 
 /// Detection for the VC-880: the meter streams live frames unprompted once
@@ -1048,6 +1072,11 @@ pub(crate) mod test_support {
     use crate::protocol::capture_reports;
     use crate::protocol::test_support::snapshot;
     use crate::transport::mock::MockTransport;
+
+    /// [`super::parse_measurement`] as `M`'s own entry reads.
+    pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measurement> {
+        super::parse_measurement::<M>(M::DETECTED_ID, payload)
+    }
 
     /// Build a live-data payload for `M`: the header, the 7-byte main
     /// display, blanks through the display fields the parser ignores, then
@@ -1611,7 +1640,8 @@ pub(crate) mod test_support {
         // `read_frame` reads at most 64 bytes at a time.
         let transport = MockTransport::new(stream.chunks(32).map(<[u8]>::to_vec).collect());
         let mut rx_buf = Vec::new();
-        let (payload, reports) = capture_reports(|| read_live::<M>(&mut rx_buf, &transport));
+        let (payload, reports) =
+            capture_reports(|| read_live::<M>(&mut rx_buf, &transport, M::DETECTED_ID));
         assert_eq!(payload.unwrap().len(), M::PAYLOAD_LEN);
         reports
     }

@@ -240,14 +240,14 @@ const LAST_RESULT_STATUS: u8 = 2;
 
 /// Report a Result frame among the bytes drained after `cmd` whose status
 /// the spec does not list. A frame cut off by the drain is not looked at.
-fn report_unrecognised_results(cmd: u8, drained: &[u8]) {
+fn report_unrecognised_results(id: &'static str, cmd: u8, drained: &[u8]) {
     for start in framing::abcd_header_offsets(drained) {
         if let Ok(Some((payload, _))) = framing::extract_frame_abcd_be16(&drained[start..])
             && let [MSG_TYPE_RESULT, status, ..] = payload[..]
             && status > LAST_RESULT_STATUS
         {
             report_unknown(
-                Vc880Model::LOG,
+                id,
                 "button result",
                 format_args!("{status:#04x} for command {cmd:#04x}"),
             );
@@ -316,8 +316,12 @@ impl Vc8x0Model for Vc880Model {
     }
 
     /// The meter streams: a frame is simply there to be read.
-    fn read_live_frame(rx_buf: &mut Vec<u8>, transport: &dyn Transport) -> Result<Vec<u8>> {
-        read_live::<Self>(rx_buf, transport)
+    fn read_live_frame(
+        rx_buf: &mut Vec<u8>,
+        transport: &dyn Transport,
+        id: &'static str,
+    ) -> Result<Vec<u8>> {
+        read_live::<Self>(rx_buf, transport, id)
     }
 
     /// Write the frame and drop what the stream had already queued.
@@ -328,7 +332,12 @@ impl Vc8x0Model for Vc880Model {
     /// The 0xFF Result frame the meter answers with goes the same way, once
     /// its status has been checked; one that arrives later is skipped by
     /// the live-frame accept filter (type byte 0x01).
-    fn write_button(rx_buf: &mut Vec<u8>, transport: &dyn Transport, cmd: u8) -> Result<()> {
+    fn write_button(
+        rx_buf: &mut Vec<u8>,
+        transport: &dyn Transport,
+        id: &'static str,
+        cmd: u8,
+    ) -> Result<()> {
         transport.write(&build_command(cmd))?;
         rx_buf.clear();
         let mut tmp = [0u8; 64];
@@ -342,7 +351,7 @@ impl Vc8x0Model for Vc880Model {
             debug!("vc880: drained {n} bytes after the command");
             drained.extend_from_slice(&tmp[..n]);
         }
-        report_unrecognised_results(cmd, &drained);
+        report_unrecognised_results(id, cmd, &drained);
         Ok(())
     }
 }
@@ -367,7 +376,7 @@ impl Vc880Protocol {
 
 #[cfg(test)]
 mod tests {
-    use super::super::parse_measurement as parse;
+    use super::super::test_support::parse_measurement as parse;
     use super::super::test_support::{self as shared, current_ids, ids};
     use super::*;
     use crate::error::Error;
@@ -531,6 +540,19 @@ mod tests {
         let payload = make_payload(0x00, 0x30, b"  Err  ", status);
         let (_, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload));
         assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A report names the entry being read, which its hint passes to
+    /// `--device`, so a VC650BT's is not sent to the VC-880 entry.
+    #[test]
+    fn a_vc650bt_report_names_the_vc650bt() {
+        let protocol = Vc880Protocol::for_model(super::super::devices::VC650BT.id);
+        let payload = make_payload(0x00, 0x30, b"  Err  ", zero_status());
+        let (_, reports) = crate::protocol::capture_reports(|| protocol.parse_payload(&payload));
+        assert_eq!(
+            reports,
+            ["vc650bt: unrecognised display text: \"Err\", shown as OL"]
+        );
     }
 
     #[test]

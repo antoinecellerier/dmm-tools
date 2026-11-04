@@ -372,12 +372,12 @@ impl Vc8x0Model for Vc890Model {
         flags.low_battery = battery_level == 0;
     }
 
-    fn report_unrecognised_status(status: &[u8]) {
+    fn report_unrecognised_status(id: &'static str, status: &[u8]) {
         // Spec byte 63: the misplug warning is the low nibble, 0 (none) to
         // 3 (V input). The high nibble is not described.
         if status[7] & 0x0F > MISPLUG_V_ERROR {
             report_unknown(
-                Self::LOG,
+                id,
                 "misplug nibble",
                 format_args!("frame byte 63 = {:#04x}", status[7]),
             );
@@ -415,11 +415,15 @@ impl Vc8x0Model for Vc890Model {
     }
 
     /// The meter is polled: ask for a reading, then confirm the frame.
-    fn read_live_frame(rx_buf: &mut Vec<u8>, transport: &dyn Transport) -> Result<Vec<u8>> {
+    fn read_live_frame(
+        rx_buf: &mut Vec<u8>,
+        transport: &dyn Transport,
+        id: &'static str,
+    ) -> Result<Vec<u8>> {
         // The ack burst and the 0x5E request — the same command as UT61E+.
         request_live(transport)?;
 
-        let payload = read_live::<Self>(rx_buf, transport)?;
+        let payload = read_live::<Self>(rx_buf, transport, id)?;
 
         // Post-confirm ack after a valid frame is reassembled.
         Self::ack(transport)?;
@@ -432,7 +436,12 @@ impl Vc8x0Model for Vc890Model {
     /// Nothing to read back here: the vendor expects the meter to echo the
     /// command in a frame of its own, and the live-frame accept filter (type
     /// byte 0x01) already skips it.
-    fn write_button(_rx_buf: &mut Vec<u8>, transport: &dyn Transport, cmd: u8) -> Result<()> {
+    fn write_button(
+        _rx_buf: &mut Vec<u8>,
+        transport: &dyn Transport,
+        _id: &'static str,
+        cmd: u8,
+    ) -> Result<()> {
         Self::ack(transport)?;
         transport.write(&build_command(cmd))
     }
@@ -443,7 +452,7 @@ pub(crate) type Vc890Protocol = Vc8x0Protocol<Vc890Model>;
 
 #[cfg(test)]
 mod tests {
-    use super::super::parse_measurement as parse;
+    use super::super::test_support::parse_measurement as parse;
     use super::super::test_support::{self as shared};
     use super::*;
     use crate::measurement::{MeasuredValue, Measurement};

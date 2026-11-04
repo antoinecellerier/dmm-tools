@@ -73,12 +73,7 @@ impl Default for Ut61PlusProtocol {
 impl Ut61PlusProtocol {
     /// A UT61E+.
     pub(crate) fn new() -> Self {
-        Self::with_profile(
-            Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
-            "UNI-T UT61E+",
-            Stability::Verified,
-            SpecModel::Ut61ePlus,
-        )
+        Self::for_model(FALLBACK_ID)
     }
 
     /// The protocol for the family's registry entry `id`; an id outside the
@@ -231,7 +226,7 @@ impl Ut61PlusProtocol {
                 payload.len(),
                 payload
             );
-            report_unknown_frame(&payload);
+            report_unknown_frame(self.profile.id, &payload);
         }
         Err(Error::Timeout)
     }
@@ -245,12 +240,12 @@ impl Ut61PlusProtocol {
         if self.table.has_secondary_display() && is_secondary(payload) {
             // An unrecognised one clears the held value too: it is older
             // than what the meter now shows beside the next reading.
-            self.secondary = parse_secondary(payload, self.table.as_ref());
+            self.secondary = parse_secondary(self.profile.id, payload, self.table.as_ref());
             return None;
         }
         let secondary = self.secondary.take();
         Some(
-            parse_measurement(payload, self.table.as_ref()).map(|mut m| {
+            parse_measurement(self.profile.id, payload, self.table.as_ref()).map(|mut m| {
                 m.aux_values.extend(secondary);
                 m
             }),
@@ -375,7 +370,7 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
-        parse_measurement(payload, self.table.as_ref())
+        parse_measurement(self.profile.id, payload, self.table.as_ref())
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
@@ -402,7 +397,7 @@ impl Protocol for Ut61PlusProtocol {
         let budget = if self.streaming { 10 } else { 3 };
         for _ in 0..budget {
             let payload = self.read_raw_payload(transport)?;
-            report_unknown_frame(&payload);
+            report_unknown_frame(self.profile.id, &payload);
             // Anything else is another frame on this wire, not a name: the
             // ack, or a reading the bridge held. Returning one as the name
             // would put it in the GUI header and `dmm-cli info`.
@@ -487,13 +482,13 @@ pub(crate) fn name_from_reply(payload: &[u8]) -> Option<String> {
 /// A measurement-sized frame is never reported here. [`Protocol::get_name`]
 /// can read a stale one ahead of the reply on a CH9329, which does not purge
 /// its RX buffer on open, and the reading path parses them instead.
-fn report_unknown_frame(payload: &[u8]) {
+fn report_unknown_frame(id: &'static str, payload: &[u8]) {
     if payload.len() != UT61EPLUS_MEASUREMENT_PAYLOAD_LEN
         && !is_ack(payload)
         && name_from_reply(payload).is_none()
     {
         report_unknown(
-            "ut61eplus",
+            id,
             "frame",
             format_args!("{} bytes: {:02X?}", payload.len(), payload),
         );
@@ -553,7 +548,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
                 {
                     Some(device) => {
                         report_unknown(
-                            "ut61eplus",
+                            device.id,
                             "model name",
                             format_args!(
                                 "{name:?}, using the {} tables, the model its Bluetooth name \
@@ -568,7 +563,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
                     }
                     None => {
                         report_unknown(
-                            "ut61eplus",
+                            FALLBACK_ID,
                             "model name",
                             format_args!("{name:?}, using the UT61E+ tables"),
                         );
@@ -889,12 +884,12 @@ fn parse_flags(mode: Mode, flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
 /// Sections are `docs/research/ut61eplus/reverse-engineered-protocol.md`;
 /// "family" is `docs/research/ut61-family/reverse-engineered-protocol.md`.
 fn report_unrecognised_fields(
+    id: &'static str,
     payload: &[u8],
     mode: Mode,
     has_range: bool,
     table: &dyn DeviceTable,
 ) {
-    const FAMILY: &str = "ut61eplus";
     let mode_byte = payload[0];
     // Family §3.1: the model's dial lists every mode it reaches, and every
     // mode the captures show is on it. A decodable byte off it is another
@@ -903,7 +898,7 @@ fn report_unrecognised_fields(
     let dial = table.dial_positions();
     if !dial.is_empty() && !dial.iter().any(|p| p.contains(u16::from(mode_byte))) {
         report_unknown(
-            FAMILY,
+            id,
             "mode byte",
             format_args!(
                 "{mode_byte:#04x} ({mode}), not on the {} dial",
@@ -915,7 +910,7 @@ fn report_unrecognised_fields(
         // every other has at least one rung, and the captures stay inside
         // them. A mode off the dial was reported above.
         report_unknown(
-            FAMILY,
+            id,
             "range byte",
             format_args!("mode {mode_byte:#04x} range {}", payload[1] & 0x0F),
         );
@@ -925,7 +920,7 @@ fn report_unrecognised_fields(
     // bits 1-2).
     if payload[13] & 0x06 != 0 && table.peak_modes().is_empty() {
         report_unknown(
-            FAMILY,
+            id,
             "flag bits",
             format_args!("{flags:02X?}, Peak on a model without it"),
         );
@@ -934,7 +929,7 @@ fn report_unrecognised_fields(
     for i in [1, 11, 12, 13] {
         if payload[i] & 0xF0 != 0x30 {
             report_unknown(
-                FAMILY,
+                id,
                 "byte prefix",
                 format_args!("payload[{i}] = {:#04x}", payload[i]),
             );
@@ -944,11 +939,7 @@ fn report_unrecognised_fields(
     // (family §2.1). The captures top out at 44.
     let (tens, ones) = (payload[9], payload[10]);
     if ones > 9 || u16::from(tens) * 10 + u16::from(ones) > 46 {
-        report_unknown(
-            FAMILY,
-            "bar graph",
-            format_args!("{:02X?}", &payload[9..11]),
-        );
+        report_unknown(id, "bar graph", format_args!("{:02X?}", &payload[9..11]));
     }
 }
 
@@ -958,11 +949,11 @@ fn report_unrecognised_fields(
 /// secondary-display frame (family spec §2.3) from a model not known to
 /// send one, so the report says so and carries the whole frame: it is what
 /// tells us another meter has a second display.
-fn report_unknown_mode(payload: &[u8]) {
+fn report_unknown_mode(id: &'static str, payload: &[u8]) {
     let mode_byte = payload[0];
     match Mode::from_byte(mode_byte & !SECONDARY) {
         Ok(function) if mode_byte & SECONDARY != 0 => report_unknown(
-            "ut61eplus",
+            id,
             "mode byte",
             format_args!(
                 "{mode_byte:#04x}, which looks like a secondary-display frame for {function} \
@@ -970,7 +961,7 @@ fn report_unknown_mode(payload: &[u8]) {
                 &payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN]
             ),
         ),
-        _ => report_unknown("ut61eplus", "mode byte", format_args!("{mode_byte:#04x}")),
+        _ => report_unknown(id, "mode byte", format_args!("{mode_byte:#04x}")),
     }
 }
 
@@ -990,21 +981,20 @@ fn is_secondary(payload: &[u8]) -> bool {
 /// display. Its bar graph and flag bytes are not read: UNI-T's app ignores
 /// them, and what they hold is unknown. The unit comes from the model's own
 /// table for that function, as a main reading's does.
-fn parse_secondary(payload: &[u8], table: &dyn DeviceTable) -> Option<AuxValue> {
-    const FAMILY: &str = "ut61eplus";
+fn parse_secondary(id: &'static str, payload: &[u8], table: &dyn DeviceTable) -> Option<AuxValue> {
     let frame = &payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN];
     let range_byte = payload[1] & 0x0F;
     let Some((mode, range)) = Mode::from_byte(payload[0] & !SECONDARY)
         .ok()
         .and_then(|mode| Some((mode, table.range_info(mode, range_byte)?)))
     else {
-        report_unknown(FAMILY, "secondary display", format_args!("{frame:02X?}"));
+        report_unknown(id, "secondary display", format_args!("{frame:02X?}"));
         return None;
     };
     let display_raw = String::from_utf8_lossy(&payload[2..9]).to_string();
     Some(AuxValue {
         label: Cow::Borrowed(secondary_label(mode)),
-        value: display_value(mode, &display_raw),
+        value: display_value(id, mode, &display_raw),
         unit: Cow::Borrowed(range.unit),
         display_raw: Some(display_raw),
         elapsed_secs: None,
@@ -1065,12 +1055,19 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 /// - byte 11:   flag1  (& 0x0F — has 0x30 prefix)
 /// - byte 12:   flag2  (& 0x0F — has 0x30 prefix)
 /// - byte 13:   flag3  (& 0x0F — has 0x30 prefix)
-pub(crate) fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Measurement> {
+///
+/// `id` is the registry entry being read, which reports name: a sibling's
+/// table can't tell it, as the UT61D+ and UT161D share one.
+pub(crate) fn parse_measurement(
+    id: &'static str,
+    payload: &[u8],
+    table: &dyn DeviceTable,
+) -> Result<Measurement> {
     check_len("ut61eplus", payload, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN)?;
     // §2.4: the measurement payload is 14 bytes; the rest is ignored.
     if payload.len() > UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
         report_unknown(
-            "ut61eplus",
+            id,
             "frame",
             format_args!("{} bytes: {:02X?}", payload.len(), payload),
         );
@@ -1091,18 +1088,18 @@ pub(crate) fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Resu
     let flag3 = payload[13] & 0x0F;
 
     // §2.5 lists no mode byte past 0x1E.
-    let mode = Mode::from_byte(mode_byte).inspect_err(|_| report_unknown_mode(payload))?;
+    let mode = Mode::from_byte(mode_byte).inspect_err(|_| report_unknown_mode(id, payload))?;
     let display_raw = String::from_utf8_lossy(display_bytes).to_string();
     let progress = bar_hi * 10 + bar_lo;
     let flags = parse_flags(mode, flag1, flag2, flag3);
 
     // Look up range info from device table
     let range_info = table.range_info(mode, range_byte);
-    report_unrecognised_fields(payload, mode, range_info.is_some(), table);
+    report_unrecognised_fields(id, payload, mode, range_info.is_some(), table);
     let unit = range_info.map(|r| r.unit).unwrap_or("");
     let range_label = range_info.map(|r| r.label).unwrap_or("");
 
-    let value = display_value(mode, &display_raw);
+    let value = display_value(id, mode, &display_raw);
     let m = Measurement {
         mode: Cow::Borrowed(mode.as_static_str()),
         mode_raw: mode_byte as u16,
@@ -1154,12 +1151,12 @@ const AC_COMPONENT_LABEL: &str = "AC";
 
 /// The value a 7-char display field shows in `mode`, the same for a main
 /// and a secondary display (UT61E+ spec §2.4).
-fn display_value(mode: Mode, display_raw: &str) -> MeasuredValue {
+fn display_value(id: &'static str, mode: Mode, display_raw: &str) -> MeasuredValue {
     let display_compact: String = display_raw.trim().chars().filter(|c| *c != ' ').collect();
     if mode == Mode::Ncv {
         let level = ncv_level(&display_compact).unwrap_or_else(|| {
             report_unknown(
-                "ut61eplus",
+                id,
                 "NCV display text",
                 format_args!("{display_compact:?}, shown as level 0"),
             );
@@ -1169,7 +1166,7 @@ fn display_value(mode: Mode, display_raw: &str) -> MeasuredValue {
     } else if is_overload(&display_compact) {
         MeasuredValue::Overload
     } else {
-        display_number("ut61eplus", &display_compact)
+        display_number(id, &display_compact)
     }
 }
 
@@ -1224,7 +1221,7 @@ pub fn make_test_measurement(
 ) -> Measurement {
     let table = tables::ut61e_plus::Ut61ePlusTable::new();
     let payload = make_payload(mode, range, display, progress, flags);
-    parse_measurement(&payload, &table).unwrap()
+    parse_measurement(FALLBACK_ID, &payload, &table).unwrap()
 }
 
 #[cfg(test)]
@@ -1232,6 +1229,12 @@ mod tests {
     use super::*;
     use crate::protocol::registry;
     use crate::protocol::test_support::snapshot;
+
+    /// [`super::parse_measurement`] as the UT61E+ entry reads: what these
+    /// tests check is the decoding, whichever model's table they pass.
+    fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Measurement> {
+        super::parse_measurement(FALLBACK_ID, payload, table)
+    }
 
     #[test]
     fn parse_no_flags_auto_on() {
@@ -1886,10 +1889,29 @@ mod tests {
             assert_eq!(
                 reports,
                 [format!(
-                    "ut61eplus: unrecognised mode byte: 0x84, which looks like a \
+                    "{model}: unrecognised mode byte: 0x84, which looks like a \
                      secondary-display frame for Hz (family spec §2.3): {frame:02X?}"
                 )],
                 "{model}"
+            );
+        }
+    }
+
+    /// A report names the entry being read, which its hint passes to
+    /// `--device`: the UT61E+ entry can't open a UT60BT or UT202BT, and
+    /// reads a UT61B+ or UT161 with the wrong tables.
+    #[test]
+    fn reports_name_the_entry_being_read() {
+        for device in DEVICES
+            .iter()
+            .filter(|d| d.family == DeviceFamily::Ut61EPlus)
+        {
+            let mut p = Ut61PlusProtocol::for_model(device.id);
+            let frame = main_frame(0x7F, 0x30, b"  0.000");
+            let (_, reports) = capture_reports(|| p.take_reading(&frame));
+            assert_eq!(
+                reports,
+                [format!("{}: unrecognised mode byte: 0x7f", device.id)]
             );
         }
     }
@@ -1907,7 +1929,7 @@ mod tests {
             assert_eq!(
                 reports,
                 [format!(
-                    "ut61eplus: unrecognised secondary display: {frame:02X?}"
+                    "ut202bt: unrecognised secondary display: {frame:02X?}"
                 )]
             );
             let m = p
@@ -2928,7 +2950,7 @@ raw_payload=14"#
         assert_eq!(
             reports,
             [
-                "ut61eplus: unrecognised model name: \"UT216XD\", using the UNI-T UT60BT tables, the \
+                "ut60bt: unrecognised model name: \"UT216XD\", using the UNI-T UT60BT tables, the \
               model its Bluetooth name advertises"
             ]
         );
@@ -3424,7 +3446,7 @@ raw_payload=14"#
                     continue;
                 };
                 let frame = main_frame(mode as u8, 0x30 | range, b"  0.000");
-                let m = parse_measurement(&frame, protocol.table.as_ref()).unwrap();
+                let m = super::parse_measurement(by, &frame, protocol.table.as_ref()).unwrap();
                 crate::text::assert_listed(all, &protocol, &m, by);
                 if protocol.table.has_secondary_display() {
                     let label = secondary_label(mode);
