@@ -124,78 +124,88 @@ pub(in crate::capture) fn load_or_create_report(
     let output_path = capture_path(output_override, device_id, plan_path);
     let l = crate::l10n::get();
 
-    let report = match std::fs::read_to_string(&output_path) {
-        Ok(contents) => match from_yaml::<CaptureReport>(&contents) {
-            Ok(mut r) => {
-                for step in &mut r.steps {
-                    step.normalize_legacy();
-                }
-                let captured = r
-                    .steps
-                    .iter()
-                    .filter(|s| s.status == StepStatus::Captured)
-                    .count();
-                let skipped = r
-                    .steps
-                    .iter()
-                    .filter(|s| s.status == StepStatus::Skipped)
-                    .count();
-                eprintln!(
-                    "{}",
-                    tr!(
-                        l,
-                        "capture-found-existing",
-                        path = &output_path,
-                        captured = captured,
-                        skipped = skipped,
-                    )
-                );
-                let ch = input.key(&format!(
-                    "{} ",
-                    tr!(
-                        l,
-                        "capture-resume-prompt",
-                        resume = "r",
-                        fresh = "n",
-                        abort = "q",
-                    )
-                ))?;
-                if ch == 'q' || ch == 'Q' {
-                    eprintln!("{}", tr!(l, "capture-aborted"));
-                    return Ok(None);
-                }
-                if ch == 'n' || ch == 'N' {
-                    let confirm = input.key(&format!(
-                        "{} ",
-                        tr!(l, "capture-overwrite-confirm", yes = "y", no = "n")
-                    ))?;
-                    if confirm != 'y' && confirm != 'Y' {
-                        eprintln!("{}", tr!(l, "capture-aborted"));
-                        return Ok(None);
-                    }
-                    CaptureReport::default()
-                } else if ch == 'r' || ch == 'R' {
-                    eprintln!("{}\n", tr!(l, "capture-resuming"));
-                    r
-                } else {
-                    eprintln!("{}", tr!(l, "capture-aborted"));
-                    return Ok(None);
-                }
+    // Only a missing file starts a fresh report: the first save replaces
+    // whatever is at the path, so a file that can't be read must not count
+    // as none. One that isn't UTF-8 (an editor re-saved it as UTF-16, say)
+    // is as unreadable as bad YAML and gets the same prompt.
+    let parsed = match std::fs::read_to_string(&output_path) {
+        Ok(contents) => Some(from_yaml::<CaptureReport>(&contents).ok()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => Some(None),
+        Err(e) => {
+            return Err(crate::output::at_path(std::path::Path::new(&output_path), e).into());
+        }
+    };
+    let report = match parsed {
+        None => CaptureReport::default(),
+        Some(Some(mut r)) => {
+            for step in &mut r.steps {
+                step.normalize_legacy();
             }
-            Err(_) => {
-                eprintln!("{}", tr!(l, "capture-unreadable", path = &output_path));
-                let ch = input.key(&format!(
+            let captured = r
+                .steps
+                .iter()
+                .filter(|s| s.status == StepStatus::Captured)
+                .count();
+            let skipped = r
+                .steps
+                .iter()
+                .filter(|s| s.status == StepStatus::Skipped)
+                .count();
+            eprintln!(
+                "{}",
+                tr!(
+                    l,
+                    "capture-found-existing",
+                    path = &output_path,
+                    captured = captured,
+                    skipped = skipped,
+                )
+            );
+            let ch = input.key(&format!(
+                "{} ",
+                tr!(
+                    l,
+                    "capture-resume-prompt",
+                    resume = "r",
+                    fresh = "n",
+                    abort = "q",
+                )
+            ))?;
+            if ch == 'q' || ch == 'Q' {
+                eprintln!("{}", tr!(l, "capture-aborted"));
+                return Ok(None);
+            }
+            if ch == 'n' || ch == 'N' {
+                let confirm = input.key(&format!(
                     "{} ",
-                    tr!(l, "capture-overwrite-unreadable", yes = "y")
+                    tr!(l, "capture-overwrite-confirm", yes = "y", no = "n")
                 ))?;
-                if ch != 'y' && ch != 'Y' {
+                if confirm != 'y' && confirm != 'Y' {
                     eprintln!("{}", tr!(l, "capture-aborted"));
                     return Ok(None);
                 }
                 CaptureReport::default()
+            } else if ch == 'r' || ch == 'R' {
+                eprintln!("{}\n", tr!(l, "capture-resuming"));
+                r
+            } else {
+                eprintln!("{}", tr!(l, "capture-aborted"));
+                return Ok(None);
             }
-        },
-        Err(_) => CaptureReport::default(),
+        }
+        Some(None) => {
+            eprintln!("{}", tr!(l, "capture-unreadable", path = &output_path));
+            let ch = input.key(&format!(
+                "{} ",
+                tr!(l, "capture-overwrite-unreadable", yes = "y")
+            ))?;
+            if ch != 'y' && ch != 'Y' {
+                eprintln!("{}", tr!(l, "capture-aborted"));
+                return Ok(None);
+            }
+            CaptureReport::default()
+        }
     };
 
     Ok(Some((report, output_path)))
@@ -283,5 +293,52 @@ mod tests {
         let contents = std::fs::read_to_string(&path).unwrap();
         let parsed: CaptureReport = from_yaml(&contents).unwrap();
         assert_eq!(parsed.device_name, "UT61E+");
+    }
+
+    /// A report an editor re-saved as UTF-16 is still someone's captures:
+    /// it gets the unreadable prompt, and declining leaves it alone, where
+    /// it used to read as no report and be replaced by the first save.
+    #[test]
+    fn a_report_that_is_not_utf8_is_asked_about_not_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("capture.yaml");
+        let utf16: Vec<u8> = [0xFF, 0xFE]
+            .into_iter()
+            .chain("date: x\n".encode_utf16().flat_map(u16::to_le_bytes))
+            .collect();
+        std::fs::write(&path, &utf16).unwrap();
+
+        let (keys, input) = Input::typed();
+        keys.send(console::Key::Char('q')).unwrap();
+        let path_str = path.to_string_lossy().to_string();
+        let loaded = load_or_create_report(Some(path_str), "ut61eplus", None, &input).unwrap();
+        assert!(loaded.is_none(), "declining must abort the run");
+        assert_eq!(std::fs::read(&path).unwrap(), utf16);
+    }
+
+    /// Only a missing file starts fresh, without a prompt; any other read
+    /// failure ends the run naming the path.
+    #[test]
+    fn only_a_missing_report_starts_fresh() {
+        let dir = tempfile::tempdir().unwrap();
+        // No keys and a closed keyboard: a prompt would fail the call.
+        let (_, input) = Input::typed();
+
+        let missing = dir
+            .path()
+            .join("capture.yaml")
+            .to_string_lossy()
+            .to_string();
+        let (report, _) = load_or_create_report(Some(missing), "ut61eplus", None, &input)
+            .unwrap()
+            .unwrap();
+        assert!(report.steps.is_empty());
+
+        // A directory where the report goes: unreadable, but not missing.
+        let dir_path = dir.path().to_string_lossy().to_string();
+        let err = load_or_create_report(Some(dir_path.clone()), "ut61eplus", None, &input)
+            .err()
+            .expect("a path that can't be read must not start a fresh report");
+        assert!(err.to_string().contains(&dir_path), "{err}");
     }
 }
