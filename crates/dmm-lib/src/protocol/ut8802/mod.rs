@@ -365,7 +365,10 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
-        display_raw: Some(display_str),
+        // On overload the vendor shows "  0L " whatever the digits say
+        // (spec §3.2), so they are not the meter's screen: with none,
+        // every renderer falls back to OL.
+        display_raw: (!overload).then_some(display_str),
         flags,
         ..Measurement::from_payload(payload)
     })
@@ -396,10 +399,8 @@ fn display_text(payload: &[u8], dp_pos: u8, sign_byte: u8) -> (String, bool) {
     // check below is kept as a defensive secondary — the vendor never
     // validates digit nibbles.
     //
-    // Both sources must be resolved before the display string is built: the
-    // decimal-point insertion below is deliberately skipped on overload, so
-    // folding the vendor bit in afterwards left an over-range frame carrying
-    // a formatted numeric display ("1234.5") next to MeasuredValue::Overload.
+    // On either source the digits are not what the meter shows, so
+    // `parse_measurement` drops them; the point and sign are left off too.
     let mut overload = sign_byte & 0x40 != 0;
     let mut chars: Vec<char> = Vec::with_capacity(6); // 5 digits + possible decimal point
     for &n in &nibbles {
@@ -633,7 +634,7 @@ range_raw=0x01
 value=Overload
 unit=mV
 range_label=200mV
-display_raw=Some("  L00")
+display_raw=None
 flags=auto_range,dc
 aux=0
 raw_payload=7"#
@@ -672,13 +673,13 @@ raw_payload=7"#
         assert_eq!(m.display_raw.as_deref(), Some("- 12.34"));
     }
 
-    /// Overload wins: the sign bit set beside OL adds no `-` to the digits.
+    /// Overload wins: the sign bit set beside OL leaves no digits behind.
     #[test]
-    fn parse_negative_overload_keeps_the_digits_unsigned() {
+    fn parse_negative_overload_carries_no_digits() {
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0xC0);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
-        assert_eq!(m.display_raw.as_deref(), Some("12345"));
+        assert_eq!(m.display_raw, None);
     }
 
     #[test]
@@ -694,11 +695,10 @@ raw_payload=7"#
     /// Vendor overload = byte 6 bit 6, with ordinary digits on the wire
     /// (spec §3.2).
     ///
-    /// The bit has to be folded in before the display string is formatted.
-    /// Inserting the decimal point first left the measurement carrying
-    /// `display_raw = "1234.5"` next to `MeasuredValue::Overload`, so anything
-    /// rendering the raw digits showed an over-range input as a plausible
-    /// reading.
+    /// The digits are dropped: capture's confirmation line and the JSON
+    /// export render `display_raw` as is, so keeping them showed an
+    /// over-range input as a plausible reading ("12345 V") while the meter
+    /// showed OL.
     #[test]
     fn overload_from_status_bit() {
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x40);
@@ -711,7 +711,7 @@ range_raw=0x05
 value=Overload
 unit=V
 range_label=200V
-display_raw=Some("12345")
+display_raw=None
 flags=auto_range,dc
 aux=0
 raw_payload=7"#

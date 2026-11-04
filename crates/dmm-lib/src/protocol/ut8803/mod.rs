@@ -421,7 +421,8 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let unit = display_unit(mode_byte, range_idx);
 
-    let value = if overload || display_trimmed.contains("OL") {
+    let spells_ol = display_trimmed.contains("OL");
+    let value = if overload || spells_ol {
         MeasuredValue::Overload
     } else {
         match display_number("ut8803", &display_trimmed) {
@@ -434,11 +435,17 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
     // Every display and export path prefers `display_raw` for a normal
     // value, so the sign bit goes into the digits too, as on the UT8802.
+    // On the OL bit the meter shows OL (spec §3.2, D7), so digits beside it
+    // are not its screen: with none, every renderer falls back to OL. An OL
+    // the field spells itself, or text we can't read, is the meter's own
+    // and stays.
     let display_raw = match value {
-        MeasuredValue::Normal(_) if negative && !display_trimmed.starts_with('-') => {
-            format!("-{}", display_str.trim_start().trim_start_matches('+'))
-        }
-        _ => display_str,
+        MeasuredValue::Normal(_) if negative && !display_trimmed.starts_with('-') => Some(format!(
+            "-{}",
+            display_str.trim_start().trim_start_matches('+')
+        )),
+        MeasuredValue::Overload if overload && !spells_ol => None,
+        _ => Some(display_str),
     };
 
     Ok(Measurement {
@@ -449,7 +456,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         range_raw,
         value,
         unit: Cow::Borrowed(unit),
-        display_raw: Some(display_raw),
+        display_raw,
         flags,
         // `range_label` keeps the default empty string: labelling a UT8803
         // range would need the full range table, which we don't have.
@@ -633,7 +640,7 @@ range_raw=0x30
 value=Overload
 unit=Ω
 range_label=
-display_raw=Some("    0")
+display_raw=None
 flags=auto_range
 aux=0
 raw_payload=17"#
@@ -765,6 +772,16 @@ flags=auto_range
 aux=0
 raw_payload=17"#
         );
+    }
+
+    /// Text the parser can't read is shown as OL but keeps the meter's own
+    /// characters: only the OL bit's digits are dropped.
+    #[test]
+    fn unreadable_display_text_keeps_its_characters() {
+        let payload = make_payload(0x01, 0x00, b" ----", 0x00, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.display_raw.as_deref(), Some(" ----"));
     }
 
     #[test]

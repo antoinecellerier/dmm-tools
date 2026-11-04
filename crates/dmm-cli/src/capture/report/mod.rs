@@ -579,6 +579,30 @@ mod tests {
         assert_eq!(s.mode, "Ω");
     }
 
+    /// A UT8802 or UT8803 overload from its status bit comes with digits on
+    /// the wire; the confirmation line has to read OL, as the meter does,
+    /// not those digits.
+    #[test]
+    fn status_bit_overload_is_shown_as_ol() {
+        for (id, payload) in [
+            // DC V, digits 1234.5, sign byte bit 6 (OL).
+            ("ut8802", vec![0x05, 0x45, 0x23, 0x01, 0x01, 0x00, 0x40]),
+            // Ω, display "    0", frame byte 14 bit 2 (OL).
+            (
+                "ut8803",
+                vec![
+                    0x00, 0x02, 0x08, 0x30, 0x00, b' ', b' ', b' ', b' ', b'0', 0x00, 0x00, 0x04,
+                    0x00, 0x00, 0x00, 0x00,
+                ],
+            ),
+        ] {
+            let device = dmm_lib::protocol::registry::find_device(id).unwrap();
+            let m = (device.new_protocol)().parse_payload(&payload).unwrap();
+            let s = SampleData::from_measurement(&m);
+            assert_eq!(s.shown(), "OL", "{id}");
+        }
+    }
+
     #[test]
     fn sample_data_from_ncv() {
         let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
