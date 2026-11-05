@@ -11,12 +11,11 @@ use super::{ID, report};
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
-use crate::protocol::{check_len, unknown_mode};
+use crate::protocol::unknown_mode;
 use std::borrow::Cow;
 
 /// Decode one 19-byte packet, `F2` first.
 pub(super) fn decode(p: &[u8]) -> Result<Measurement> {
-    check_len(ID, p, LEN)?;
     if p.len() != LEN {
         return Err(Error::invalid_response(
             format!("{ID} packet is {} bytes, expected {LEN}", p.len()),
@@ -56,11 +55,7 @@ pub(super) fn decode(p: &[u8]) -> Result<Measurement> {
                 let (value, digits) = scaled(count, range.decimals, negative);
                 (MeasuredValue::Normal(value), Some(digits))
             };
-            let name = mode_name(p, mode_raw, mode.name, coupling);
-            let unit = unit(p, mode_raw, range);
-            // Temperature is named for its unit, °C or °F as the c/F
-            // setting picks it (spec §6.4).
-            let name = if mode_raw == 5 { unit } else { name };
+            let (name, unit) = name_and_unit(p, mode_raw, mode.name, range, coupling);
             (
                 Cow::Borrowed(name),
                 Cow::Borrowed(unit),
@@ -121,12 +116,30 @@ fn scaled(count: u32, decimals: u8, negative: bool) -> (f64, String) {
     (if negative { -magnitude } else { magnitude }, digits)
 }
 
+/// The reading's name and unit. Temperature is named for its unit, °C or
+/// °F as the c/F setting picks it (spec §6.4).
+fn name_and_unit(
+    p: &[u8],
+    mode_raw: u8,
+    base: &'static str,
+    range: &Range,
+    coupling: u8,
+) -> (&'static str, &'static str) {
+    let name = mode_name(p, mode_raw, base, coupling);
+    let unit = unit(p, mode_raw, range);
+    if tables::is_temperature(mode_raw) {
+        (unit, unit)
+    } else {
+        (name, unit)
+    }
+}
+
 /// The reading's name: the table's, or the one the annunciators make of it.
 fn mode_name(p: &[u8], mode_raw: u8, base: &'static str, coupling: u8) -> &'static str {
     // The V position's third MODE step keeps the mode code and lights
     // DC+AC (spec §6.1, §15.4).
     let base = if matches!(mode_raw, 1 | 2) && coupling == 3 {
-        "AC+DC V"
+        tables::AC_DC_V
     } else {
         base
     };
@@ -146,7 +159,7 @@ fn mode_name(p: &[u8], mode_raw: u8, base: &'static str, coupling: u8) -> &'stat
 
 /// The reading's unit: the range's, or for temperature the one byte 6 names.
 fn unit(p: &[u8], mode_raw: u8, range: &Range) -> &'static str {
-    if mode_raw != 5 {
+    if !tables::is_temperature(mode_raw) {
         // Byte 6 bits 5-4 outside temperature are left alone: they may
         // mirror the c/F setting (spec §6.4).
         return range.unit;
@@ -371,11 +384,8 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
                     p[6] = b6;
                     p[15] = b15;
                     let coupling = (p[15] >> 3) & 0x03;
-                    let (name, reported) = silently(|| {
-                        let name = mode_name(&p, mode_raw, mode.name, coupling);
-                        let unit = unit(&p, mode_raw, range);
-                        if mode_raw == 5 { unit } else { name }
-                    });
+                    let (name, reported) =
+                        silently(|| name_and_unit(&p, mode_raw, mode.name, range, coupling).0);
                     if !reported {
                         out.add(TextKind::Mode, name, by);
                     }

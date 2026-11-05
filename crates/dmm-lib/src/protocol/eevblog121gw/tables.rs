@@ -149,6 +149,16 @@ pub(super) fn decodable(p: &[u8]) -> bool {
     lookup(p).is_some()
 }
 
+/// The temperature mode, named for its unit: °C or °F as the c/F setting
+/// picks it (spec §6.2, §6.4).
+pub(super) fn is_temperature(mode: u8) -> bool {
+    mode == 5
+}
+
+/// The name the V position's DC+AC step takes: mode code 1 or 2 with
+/// coupling 3 (spec §6.1).
+pub(super) const AC_DC_V: &str = "AC+DC V";
+
 /// The VA modes, whose secondary display shows the voltage and the current
 /// the power is the product of (spec §6.1, §7.1).
 pub(super) fn is_va(mode: u8) -> bool {

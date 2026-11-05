@@ -104,7 +104,7 @@ static LPF_KEY: MeterKey = MeterKey {
     hover: Some("Hold the meter's REL key (1 kHz low-pass filter)"),
     applies: |m| {
         u8::try_from(m.mode_raw).is_ok_and(|mode| tables::lpf_name(mode).is_some())
-            && m.mode != "AC+DC V"
+            && m.mode != tables::AC_DC_V
     },
 };
 
