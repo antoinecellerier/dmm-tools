@@ -151,6 +151,11 @@ pub enum Error {
         activation: &'static str,
         miss: BluetoothOnlyMiss,
     },
+
+    /// The caller called the open off through
+    /// [`OpenOptions::stop`](crate::OpenOptions::stop) before it finished.
+    #[error("open called off")]
+    Cancelled,
 }
 
 /// Why a meter with the radio built in was not opened.
@@ -284,7 +289,8 @@ pub enum ErrorKind {
     /// selector, unsupported command, a command the meter refused).
     /// Reconnect won't help — report it and carry on streaming.
     Configuration,
-    /// Interrupted system call — typically a Ctrl-C signal mid-read.
+    /// Interrupted system call — typically a Ctrl-C signal mid-read — or an
+    /// open the caller called off.
     Interrupted,
 }
 
@@ -320,6 +326,7 @@ impl Error {
             | Self::Bluetooth(_)
             | Self::BluetoothOnly { .. }
             | Self::Replay(_) => ErrorKind::Configuration,
+            Self::Cancelled => ErrorKind::Interrupted,
         }
     }
 }

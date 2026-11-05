@@ -56,6 +56,7 @@ use search::{Match, Standing, Target, by_address, is_bd_addr, is_uuid, printable
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 #[cfg(target_os = "windows")]
 use winrt::ShortInterval;
@@ -68,11 +69,14 @@ type ShortInterval = std::convert::Infallible;
 /// How long to scan before giving up on finding a peer.
 ///
 /// A peer this host is already connected to is found without a scan, so
-/// this bounds every other open — and the GUI's reconnect loop calls the
-/// opener synchronously, so a quit during a failing reconnect waits for it.
+/// this bounds every other open that is not called off sooner
+/// ([`crate::OpenOptions::stop`]).
 const SCAN_WINDOW: Duration = Duration::from_secs(3);
 /// How often the scan results are re-read while scanning.
 const SCAN_POLL: Duration = Duration::from_millis(250);
+/// How often an open looks at its stop flag ([`crate::OpenOptions::stop`]):
+/// with [`DISCONNECT_TIMEOUT`], how long an open called off takes to return.
+const STOP_POLL: Duration = Duration::from_millis(50);
 /// How long a connection attempt may take before it is abandoned.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long GATT service discovery and the subscribe may take, the one retry
@@ -153,15 +157,22 @@ impl Ble {
     }
 }
 
-/// Open the first peer in range that `peers` takes.
-pub(crate) fn open_first(peers: &BluetoothPeers) -> Result<Box<dyn Transport>> {
-    open(Target::Named(peers))
+/// Open the first peer in range that `peers` takes, unless `stop` calls it
+/// off.
+pub(crate) fn open_first(
+    peers: &BluetoothPeers,
+    stop: Option<&AtomicBool>,
+) -> Result<Box<dyn Transport>> {
+    open(Target::Named(peers), stop)
 }
 
 /// Open the peer `selector` names — an address, or the platform id
-/// [`list`] printed — whatever its name.
-pub(crate) fn open_selected(selector: &str) -> Result<Box<dyn Transport>> {
-    open(Target::At(selector))
+/// [`list`] printed — whatever its name, unless `stop` calls it off.
+pub(crate) fn open_selected(
+    selector: &str,
+    stop: Option<&AtomicBool>,
+) -> Result<Box<dyn Transport>> {
+    open(Target::At(selector), stop)
 }
 
 /// Whether `selector` names a Bluetooth peer rather than a HID device.
@@ -210,10 +221,60 @@ struct Opened {
     short_interval: Option<ShortInterval>,
 }
 
+/// What an open has started that a call-off must undo: the platform session
+/// its search scans on, and the peer it is bringing a link up to — only one
+/// it connects itself, never a link the host already had.
+#[derive(Default)]
+struct Begun {
+    session: Option<(Manager, Adapter)>,
+    connecting: Option<Peripheral>,
+}
+
 /// Open a peer and subscribe to its notifications.
-fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
+///
+/// Once `stop` is set the open is called off within [`STOP_POLL`]: the
+/// search or connect in flight is dropped, then a link it was bringing up is
+/// disconnected, as a connect that timed out is — a quit in the middle would
+/// otherwise leave it linked with nobody reading it — or else its scan is
+/// stopped, the host's to leave off. Nothing is looked for when the flag is
+/// already set.
+fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transport>> {
     let rt = runtime()?;
-    let opened = rt.block_on(connect(target))?;
+    let begun = RefCell::new(Begun::default());
+    let opened = rt.block_on(async {
+        let Some(stop) = stop else {
+            return connect(target, &begun).await;
+        };
+        let called_off = || stop.load(Ordering::Relaxed);
+        if called_off() {
+            return Err(Error::Cancelled);
+        }
+        let connecting = Box::pin(connect(target, &begun));
+        let watching = Box::pin(async {
+            while !called_off() {
+                tokio::time::sleep(STOP_POLL).await;
+            }
+        });
+        match futures::future::select(connecting, watching).await {
+            futures::future::Either::Left((opened, _)) => opened,
+            futures::future::Either::Right(((), connecting)) => {
+                // Dropped before the clean-up, which a call it left in
+                // flight would otherwise race.
+                drop(connecting);
+                let begun = begun.take();
+                debug!("Bluetooth: open called off");
+                if let Some(peripheral) = &begun.connecting {
+                    disconnect(peripheral).await;
+                } else if let Some((_manager, adapter)) = &begun.session
+                    && let Ok(Err(e)) =
+                        tokio::time::timeout(DISCONNECT_TIMEOUT, adapter.stop_scan()).await
+                {
+                    debug!("Bluetooth: stopping the scan failed: {e}");
+                }
+                Err(Error::Cancelled)
+            }
+        }
+    })?;
     // Looked up now, while the link is new, rather than from the reading
     // loop when the notice is due.
     #[cfg(target_os = "linux")]
@@ -284,10 +345,12 @@ async fn central() -> Result<(Manager, Adapter)> {
 }
 
 /// Find a peer, connect to it and subscribe to its profile's notify
-/// characteristic.
-async fn connect(target: Target<'_>) -> Result<Opened> {
+/// characteristic. What it starts goes into `begun` (see [`Begun`]) before
+/// it is started.
+async fn connect(target: Target<'_>, begun: &RefCell<Begun>) -> Result<Opened> {
     let selector = target.selector();
     let (manager, adapter) = central().await?;
+    begun.borrow_mut().session = Some((manager.clone(), adapter.clone()));
     let mut found = search(&adapter, target, Match::First).await?;
     // A named address the search did not turn up may still answer a connect.
     let mut from_address = false;
@@ -320,9 +383,11 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
 
     // A paired peer is often already linked, and BlueZ refuses a second
     // connect on one.
-    if !peripheral.is_connected().await.unwrap_or(false)
-        && let Err(e) = peripheral.connect_with_timeout(CONNECT_TIMEOUT).await
-    {
+    let linked = peripheral.is_connected().await.unwrap_or(false);
+    if !linked {
+        begun.borrow_mut().connecting = Some(peripheral.clone());
+    }
+    if !linked && let Err(e) = peripheral.connect_with_timeout(CONNECT_TIMEOUT).await {
         // The Linux backend waits for BlueZ to resolve the services inside
         // its connect, and gives up before BlueZ does on this adapter
         // (research doc §3). With the link up, discovery below waits it out.
@@ -1002,6 +1067,25 @@ mod tests {
                 bluetooth_searched: true,
                 ..
             }
+        ));
+    }
+
+    /// An open whose stop flag is already up looks for nothing: it returns
+    /// before the stack is reached, so this needs no adapter.
+    #[test]
+    fn an_open_called_off_before_it_starts_looks_for_nothing() {
+        let stop = AtomicBool::new(true);
+        assert!(matches!(
+            open_selected("12:34:56:78:9A:BC", Some(&stop)),
+            Err(Error::Cancelled)
+        ));
+        let peers = BluetoothPeers {
+            adapters: true,
+            meters: Vec::new(),
+        };
+        assert!(matches!(
+            open_first(&peers, Some(&stop)),
+            Err(Error::Cancelled)
         ));
     }
 

@@ -289,6 +289,7 @@ fn read_meter(
                     dmm_lib::OpenOptions {
                         adapter: adapter.as_deref(),
                         bluetooth,
+                        stop: None,
                     },
                 )
             }) as Reopen<_>

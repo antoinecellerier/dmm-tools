@@ -146,6 +146,7 @@ impl Localizer {
                     }
                 }
             }
+            Error::Cancelled => tr!(self, "error-cancelled"),
         }
         .into_owned()
     }
@@ -861,7 +862,8 @@ mod tests {
                     miss,
                 })
                 .collect(),
-            Some(Error::BluetoothOnly { .. }) => vec![],
+            Some(Error::BluetoothOnly { .. }) => vec![Error::Cancelled],
+            Some(Error::Cancelled) => vec![],
         })
     }
 

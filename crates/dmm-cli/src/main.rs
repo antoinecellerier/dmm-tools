@@ -111,6 +111,7 @@ fn main() {
     let opts = dmm_lib::OpenOptions {
         adapter: cli.adapter.as_deref(),
         bluetooth,
+        stop: None,
     };
 
     // Device-independent commands — handle before mock/real split

@@ -357,6 +357,13 @@ pub struct OpenOptions<'a> {
     /// Bluetooth adapter or meter in range. Off, nothing scans the radio — but an
     /// address in `adapter` is still opened, having been asked for by name.
     pub bluetooth: bool,
+    /// Calls a Bluetooth open off. Once the flag is set, a search or connect
+    /// in flight is abandoned, what it brought up is taken down, and the open
+    /// returns [`Error::Cancelled`](error::Error::Cancelled). A USB open, and
+    /// the detection that follows any open, run to their end: each is
+    /// bounded, and quick next to a Bluetooth bring-up. `None` lets every
+    /// open run to its end.
+    pub stop: Option<&'a std::sync::atomic::AtomicBool>,
 }
 
 impl<'a> OpenOptions<'a> {
@@ -366,6 +373,7 @@ impl<'a> OpenOptions<'a> {
         Self {
             adapter: None,
             bluetooth: true,
+            stop: None,
         }
     }
 }

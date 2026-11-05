@@ -22,7 +22,9 @@ use super::{App, ConnectionState, Worker, named_device};
 use crate::settings::format_sample_count;
 
 /// How long quitting waits for the meter to be let go: a read already in
-/// flight, then the transport's own bounded disconnect.
+/// flight, or an open the stop flag calls off, then the transport's own
+/// bounded disconnect. A backstop: a Bluetooth open called off returns in
+/// about half a second.
 const EXIT_DISCONNECT_WAIT: Duration = Duration::from_secs(4);
 
 /// The meter a `Connected` identified for a session that was told none, or
@@ -417,6 +419,9 @@ impl App {
             let device_id = device_entry.map(|d| d.id);
             let adapter = self.settings.overrides.adapter.clone();
             let bluetooth = self.settings.shared.bluetooth;
+            // A Bluetooth open can take seconds; stopping the thread calls it
+            // off, so Disconnect and quit don't wait for it.
+            let stop = Arc::clone(&thread_ctx.stop_flag);
             spawn_acquisition(
                 // Re-run on every reconnect, detection included: a meter that
                 // comes back is identified again rather than assumed to be the
@@ -427,6 +432,7 @@ impl App {
                     let opts = dmm_lib::OpenOptions {
                         adapter: adapter.as_deref().or(reopen_at),
                         bluetooth,
+                        stop: Some(&stop),
                     };
                     match device_id {
                         Some(id) => {
@@ -1280,6 +1286,63 @@ mod tests {
         eframe::App::on_exit(&mut app, None);
         assert!(released.load(Ordering::Relaxed), "the meter was let go");
         worker.join().expect("the worker ends");
+    }
+
+    /// Quitting while an open is in flight calls the open off instead of
+    /// waiting it out: the opener gets the thread's stop flag, and returns
+    /// once it rises, as the library's Bluetooth open does.
+    #[test]
+    fn quitting_mid_open_calls_the_open_off() {
+        type Opened = dmm_lib::error::Result<(
+            dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+            Option<dmm_lib::detect::Detected>,
+        )>;
+        let mut app = app("ut61eplus", false);
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (cmd_tx, cmd_rx) = mpsc::channel();
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        app.connection.worker = Some(Worker {
+            rx: msg_rx,
+            ctrl_tx,
+            stop_flag: Arc::clone(&stop_flag),
+            cmd_tx,
+        });
+        let (opening_tx, opening_rx) = mpsc::channel();
+        let stop = Arc::clone(&stop_flag);
+        let open_fn = move |_: Option<&str>| -> Opened {
+            let _ = opening_tx.send(());
+            while !stop.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(dmm_lib::error::Error::Cancelled)
+        };
+        spawn_acquisition(
+            open_fn,
+            ThreadContext {
+                msg_tx,
+                ctrl_rx,
+                cmd_rx,
+                ctx: crate::app::styled_context(),
+                selected: None,
+                query_name: false,
+                sample_interval_ms: 10,
+                simulated: false,
+                reconnect_interval: RECONNECT_INTERVAL,
+                stop_flag,
+                after: None,
+            },
+        );
+        opening_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the open starts");
+        let quit = Instant::now();
+        eframe::App::on_exit(&mut app, None);
+        assert!(
+            quit.elapsed() < Duration::from_secs(1),
+            "waited {:?} for an open called off",
+            quit.elapsed()
+        );
     }
 
     /// The mock's own acquisition thread ends on quit, well before the bound.

@@ -7,6 +7,7 @@
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
 use crate::transport::{BluetoothPeers, Transport};
+use std::sync::atomic::AtomicBool;
 
 /// No selector is a Bluetooth one here, so `--adapter` stays on the HID path
 /// and an address nothing answers to fails as a missing adapter.
@@ -14,11 +15,17 @@ pub(crate) fn is_bluetooth_selector(_selector: &str) -> bool {
     false
 }
 
-pub(crate) fn open_first(_peers: &BluetoothPeers) -> Result<Box<dyn Transport>> {
+pub(crate) fn open_first(
+    _peers: &BluetoothPeers,
+    _stop: Option<&AtomicBool>,
+) -> Result<Box<dyn Transport>> {
     Err(not_found())
 }
 
-pub(crate) fn open_selected(_selector: &str) -> Result<Box<dyn Transport>> {
+pub(crate) fn open_selected(
+    _selector: &str,
+    _stop: Option<&AtomicBool>,
+) -> Result<Box<dyn Transport>> {
     Err(not_found())
 }
 

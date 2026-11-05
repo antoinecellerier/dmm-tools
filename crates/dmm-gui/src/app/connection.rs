@@ -419,9 +419,14 @@ where
     info!("background thread: connecting to device");
     let mut dmm = match open_fn(None) {
         // Stopped while the open ran: drop the link now, without asking the
-        // meter its name or reporting a session nobody wants.
+        // meter its name or reporting a session nobody wants — nor an open
+        // the stop flag called off as a failure.
         Ok(_) if stop_flag.load(Ordering::Relaxed) => {
             info!("background thread: stopped while opening");
+            return;
+        }
+        Err(e) if stop_flag.load(Ordering::Relaxed) => {
+            info!("background thread: stopped while opening ({e})");
             return;
         }
         Ok((mut d, detected)) => {
@@ -595,6 +600,9 @@ where
                     // A UT-D07B switched off and on came back on the third
                     // attempt, under BlueZ and Windows 11 (#25).
                     match open_fn(reopen_at.as_deref()) {
+                        // Stopped as it ended: as for the first open, the
+                        // link is dropped unasked and unreported.
+                        Ok(_) if stop_flag.load(Ordering::Relaxed) => return,
                         Ok((mut d, detected)) => {
                             info!("background thread: reconnected on attempt {attempt}");
                             reopen_at = bluetooth_selector(&d);
@@ -604,6 +612,8 @@ where
                             dmm = d;
                             break;
                         }
+                        // Called off by the stop flag: not a failed attempt.
+                        Err(_) if stop_flag.load(Ordering::Relaxed) => return,
                         Err(err) => {
                             warn!("background thread: reconnect attempt {attempt} failed: {err}");
                             last_error = Some(err);
@@ -1148,6 +1158,28 @@ mod tests {
             "reported a session that was stopped"
         );
         assert_eq!(live.load(Ordering::SeqCst), 0, "the link stayed open");
+    }
+
+    /// An open the stop flag called off is the thread being stopped, not a
+    /// failure: nothing reaches the UI as an error.
+    #[test]
+    fn an_open_called_off_is_not_reported() {
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (_ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        let thread_ctx = thread_context(msg_tx, ctrl_rx, cmd_rx);
+        let stop = Arc::clone(&thread_ctx.stop_flag);
+        run_device_thread(
+            move |_| -> dmm_lib::error::Result<(dmm_lib::Dmm<Dropout>, Option<Detected>)> {
+                stop.store(true, Ordering::Relaxed);
+                Err(dmm_lib::error::Error::Cancelled)
+            },
+            thread_ctx,
+        );
+        assert!(
+            !msg_rx.try_iter().any(|m| matches!(m, DmmMessage::Error(_))),
+            "reported an open it stopped itself"
+        );
     }
 
     /// A replay's session names the link its file was recorded over: the

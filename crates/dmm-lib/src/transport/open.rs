@@ -172,12 +172,12 @@ pub(crate) fn open_bluetooth_only(
         if !ble::is_bluetooth_selector(selector) {
             BluetoothOnlyMiss::UsbAdapter
         } else {
-            return ble::open_selected(selector);
+            return ble::open_selected(selector, opts.stop);
         }
     } else if !opts.bluetooth {
         BluetoothOnlyMiss::SwitchedOff
     } else {
-        match ble::open_first(&bluetooth_peers(Some(entry))) {
+        match ble::open_first(&bluetooth_peers(Some(entry)), opts.stop) {
             Err(Error::NoTransportFound { .. }) => BluetoothOnlyMiss::NotInRange,
             opened => return opened,
         }
@@ -204,7 +204,7 @@ pub(crate) fn open_links(
         if let Some(meter) = meter {
             check_cable(meter, BLUETOOTH)?;
         }
-        return Ok((ble::open_selected(selector)?, BLUETOOTH));
+        return Ok((ble::open_selected(selector, opts.stop)?, BLUETOOTH));
     }
 
     let radio_gets_a_turn = bluetooth_is_next(preferred, opts);
@@ -212,8 +212,10 @@ pub(crate) fn open_links(
     match hid {
         Ok(opened) => Ok(opened),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
-            match ble::open_first(peers) {
+            match ble::open_first(peers, opts.stop) {
                 Ok(transport) => Ok((transport, BLUETOOTH)),
+                // Called off, nothing was found or missed: the caller asked.
+                Err(Error::Cancelled) => Err(Error::Cancelled),
                 Err(bluetooth_err) => {
                     // The USB error is what the user acts on: it lists the
                     // cables that were looked for. Why Bluetooth found
@@ -671,12 +673,12 @@ mod tests {
             Ok(_) => panic!("opened a meter with no radio searched"),
         };
         let switched_off = OpenOptions {
-            adapter: None,
             bluetooth: false,
+            ..OpenOptions::new()
         };
         let usb_adapter = OpenOptions {
             adapter: Some("00C5B27A"),
-            bluetooth: true,
+            ..OpenOptions::new()
         };
         let (off, usb) = if BLUETOOTH_SUPPORTED {
             (

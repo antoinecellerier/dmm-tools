@@ -96,6 +96,8 @@ error-bluetooth-only-switched-off = { $model } connects over Bluetooth only, and
 error-bluetooth-only-not-built = { $model } connects over Bluetooth only, and this build has no Bluetooth support
 # $model is the meter, e.g. UNI-T UT60BT.
 error-bluetooth-only-usb-adapter = { $model } connects over Bluetooth only, and --adapter names a USB device: pass the meter's Bluetooth address, or leave --adapter out
+# Opening the meter was stopped part-way, by Disconnect or by quitting.
+error-cancelled = open called off
 
 ## Refused before it was sent: the meter, the link or the dial position
 ## cannot do it. After "unsupported command:". $setting is a setting's

@@ -111,7 +111,9 @@ the reading `Capture::ingest` returns, after the graph and the store have taken 
 
 ### Opening a meter
 
-`OpenOptions` carries the `--adapter` selector and whether Bluetooth may be scanned. An open for a
+`OpenOptions` carries the `--adapter` selector, whether Bluetooth may be scanned, and a stop flag.
+Raising the flag calls a Bluetooth search or connect off part-way and takes down whatever link it
+had started, so the GUI's Disconnect and quit don't wait out a scan or a connect. An open for a
 named entry tries the cables listed in its `links` first, then falls back to the other bridges, so an
 unusual cable pairing still connects. The fallback reaches only cables that relay the meter's UART
 bytes. A cable that speaks its meters' protocol itself is opened only for an entry that lists it,
