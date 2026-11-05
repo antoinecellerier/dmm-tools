@@ -1,4 +1,5 @@
 use crate::measurement::{MeasuredValue, Measurement};
+use crate::transform::PrefixRatio;
 use log::debug;
 use std::time::{Duration, Instant};
 
@@ -70,6 +71,21 @@ impl RunningStats {
             let m2 = self.shifted_squares - self.shifted_sum * self.shifted_sum / n;
             (m2.max(0.0) / (n - 1.0)).sqrt()
         })
+    }
+
+    /// Re-express every figure in another prefix of the same unit, as when
+    /// the meter auto-ranges from mV to V: the sums scale with the values,
+    /// the sum of squares with their square, so the mean and spread carry on.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "awaits the statistics' auto-range step")
+    )]
+    pub(crate) fn rescale(&mut self, ratio: PrefixRatio) {
+        self.min = self.min.map(|v| ratio.apply(v));
+        self.max = self.max.map(|v| ratio.apply(v));
+        self.shift = ratio.apply(self.shift);
+        self.shifted_sum = ratio.apply(self.shifted_sum);
+        self.shifted_squares = ratio.apply(ratio.apply(self.shifted_squares));
     }
 
     /// Reset all statistics to the initial empty state.
@@ -206,6 +222,20 @@ impl Integrator {
                 last.checked_duration_since(first).map(|d| d.as_secs_f64())
             }
             _ => None,
+        }
+    }
+
+    /// Re-express the integral and the reading it continues from in another
+    /// prefix of the same unit, so the trapezoid that straddles an
+    /// auto-range step joins two values in one unit.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "awaits the statistics' auto-range step")
+    )]
+    pub(crate) fn rescale(&mut self, ratio: PrefixRatio) {
+        self.integral = ratio.apply(self.integral);
+        if let Some((value, _)) = &mut self.prev {
+            *value = ratio.apply(*value);
         }
     }
 
@@ -477,6 +507,37 @@ mod tests {
         assert!((s.std_dev().unwrap() - 2f64.sqrt()).abs() < 1e-12);
     }
 
+    /// A run in mV re-expressed in V holds the figures a run read in V from
+    /// the start would.
+    #[test]
+    fn rescale_re_expresses_every_figure() {
+        let millivolts = [898.7, 901.2, 899.9, 900.4, 1100.3];
+        let mut stepped = RunningStats::new();
+        for v in millivolts {
+            stepped.push(v);
+        }
+        stepped.rescale(crate::transform::prefix_ratio("mV", "V").unwrap());
+        stepped.push(1.0996);
+        let mut volts = RunningStats::new();
+        for v in millivolts.iter().map(|v| v / 1000.0).chain([1.0996]) {
+            volts.push(v);
+        }
+        assert_eq!(stepped.count, 6);
+        assert_eq!(stepped.min, volts.min);
+        assert_eq!(stepped.max, volts.max);
+        let close = |a: Option<f64>, b: Option<f64>| (a.unwrap() - b.unwrap()).abs() < 1e-12;
+        assert!(close(stepped.avg(), volts.avg()));
+        assert!(close(stepped.std_dev(), volts.std_dev()));
+    }
+
+    #[test]
+    fn rescale_leaves_empty_stats_empty() {
+        let mut s = RunningStats::new();
+        s.rescale(crate::transform::prefix_ratio("Ω", "kΩ").unwrap());
+        assert_eq!(s.count, 0);
+        assert!(s.min.is_none() && s.avg().is_none() && s.std_dev().is_none());
+    }
+
     #[test]
     fn reset_clears_std_dev() {
         let mut s = RunningStats::new();
@@ -585,6 +646,37 @@ mod tests {
         // Total: 1.5
         assert!((i.value() - 1.5).abs() < 1e-9);
         assert_eq!(i.count, 3);
+    }
+
+    /// 900 mV for a second, then the meter steps to V and reads 1.1 V a
+    /// second later: the straddling trapezoid joins 0.9 V and 1.1 V.
+    #[test]
+    fn integrator_rescale_carries_across_a_step() {
+        let mut i = Integrator::new();
+        let t0 = Instant::now();
+        i.push(900.0, t0);
+        i.push(900.0, t0 + Duration::from_secs(1));
+        i.rescale(crate::transform::prefix_ratio("mV", "V").unwrap());
+        assert!((i.value() - 0.9).abs() < 1e-12);
+        i.push(1.1, t0 + Duration::from_secs(2));
+        // 0.9 V·s, then (0.9 + 1.1) / 2 × 1 s = 1.0 V·s.
+        assert!((i.value() - 1.9).abs() < 1e-12);
+        assert_eq!(i.count, 3);
+    }
+
+    /// After a gap there is no previous reading to re-express; the integral
+    /// still is.
+    #[test]
+    fn integrator_rescale_after_a_gap() {
+        let mut i = Integrator::new();
+        let t0 = Instant::now();
+        i.push(2.0, t0);
+        i.push(2.0, t0 + Duration::from_secs(1));
+        i.push_gap();
+        i.rescale(crate::transform::prefix_ratio("A", "mA").unwrap());
+        assert_eq!(i.value(), 2000.0);
+        i.push(1500.0, t0 + Duration::from_secs(2));
+        assert_eq!(i.value(), 2000.0);
     }
 
     #[test]

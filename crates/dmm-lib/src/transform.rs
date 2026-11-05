@@ -66,6 +66,37 @@ pub(crate) fn si_prefix(unit: &str) -> (&str, f64) {
     }
 }
 
+/// The factor that re-expresses a figure from one prefix of a unit in
+/// another — mV → V is 10⁻³, Ω → kΩ is 10⁻³ — held as its power of ten, so
+/// the factor itself is never rounded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PrefixRatio(i32);
+
+impl PrefixRatio {
+    /// The figure re-expressed: a downward step divides by the exact power
+    /// of ten rather than multiplying by its inexact reciprocal.
+    pub(crate) fn apply(self, x: f64) -> f64 {
+        if self.0 >= 0 {
+            x * 10f64.powi(self.0)
+        } else {
+            x / 10f64.powi(-self.0)
+        }
+    }
+}
+
+/// The ratio that re-expresses a figure in `from` as one in `to`, or `None`
+/// when the two are not prefixes of one base unit (V and A, °C and °F).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "awaits the statistics' auto-range step")
+)]
+pub(crate) fn prefix_ratio(from: &str, to: &str) -> Option<PrefixRatio> {
+    let (from_base, from_mult) = si_prefix(from);
+    let (to_base, to_mult) = si_prefix(to);
+    // Both multipliers are powers of ten, so the rounded log is exact.
+    (from_base == to_base).then(|| PrefixRatio((from_mult / to_mult).log10().round() as i32))
+}
+
 /// Which arithmetic a transform applies.
 ///
 /// Single variant today. `Binary` (a second series: V×I, A−B) and `Formula`
@@ -925,6 +956,38 @@ mod tests {
     fn si_prefix_leaves_non_prefixed_units_alone() {
         for unit in ["ms", "°C", "°F", "%", "dBm", "dBV", "", "m", "M", "µ"] {
             assert_eq!(si_prefix(unit), (unit, 1.0), "unit {unit}");
+        }
+    }
+
+    #[test]
+    fn prefix_ratio_re_expresses_within_one_base_unit() {
+        for (from, to, x, expected) in [
+            ("mV", "V", 900.0, 0.9),
+            ("V", "mV", 1.1, 1100.0),
+            ("Ω", "kΩ", 950.0, 0.95),
+            ("kΩ", "MΩ", 1050.0, 1.05),
+            ("MΩ", "Ω", 1.2, 1.2e6),
+            ("µA", "mA", 450.0, 0.45),
+            ("uA", "µA", 12.5, 12.5),
+            ("Hz", "kHz", 49.99, 0.04999),
+            ("nF", "µF", 2200.0, 2.2),
+            ("°C", "°C", 21.5, 21.5),
+        ] {
+            let ratio = prefix_ratio(from, to).unwrap();
+            assert_eq!(ratio.apply(x), expected, "{x} {from} → {to}");
+        }
+    }
+
+    #[test]
+    fn prefix_ratio_is_none_across_base_units() {
+        for (from, to) in [
+            ("V", "A"),
+            ("mV", "mA"),
+            ("°C", "°F"),
+            ("kΩ", "kHz"),
+            ("ms", "s"),
+        ] {
+            assert_eq!(prefix_ratio(from, to), None, "{from} → {to}");
         }
     }
 
