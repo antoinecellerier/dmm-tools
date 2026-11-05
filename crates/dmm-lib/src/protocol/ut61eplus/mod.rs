@@ -848,7 +848,8 @@ fn ncv_level(display_compact: &str) -> Option<u8> {
     }
 }
 
-/// Decode the three UT61+ flag bytes (already masked with `& 0x0F`).
+/// Decode the three UT61+ flag bytes (already masked with `& 0x0F`). Bit map
+/// from §2.7, which marks what was verified on our UT61E+:
 ///
 /// - byte 11 (`flag1`): bit0=REL, bit1=HOLD, bit2=MIN, bit3=MAX
 /// - byte 12 (`flag2`): bit0=HV warning, bit1=Low Battery, bit2=!AUTO (inverted),

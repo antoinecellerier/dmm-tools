@@ -2,7 +2,8 @@
 ///
 /// Encoding: [0xAB, 0xCD, 0x03, cmd, (cmd+379)>>8, (cmd+379)&0xFF]
 ///
-/// Values from ljakob/unit_ut61eplus (Python), verified against real device.
+/// Values and checksum: UT61E+ spec §2.3, which also records which ones were
+/// verified on our UT61E+.
 ///
 /// The protocol deck's clamp-meter commands (0x43-0x45 and 0x4F, UT61E+ spec
 /// §2.3) are left out: no UT61+ model has the features they drive.
