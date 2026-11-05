@@ -277,30 +277,34 @@ impl Shortcut {
         Self::Quit,
     ];
 
+    /// This shortcut's rows of [`BINDINGS`] that apply on this machine, in
+    /// table order.
+    fn bindings(self, is_mac: bool) -> impl Iterator<Item = &'static Binding> {
+        BINDINGS
+            .iter()
+            .filter(move |b| b.shortcut == self && b.os.applies(is_mac))
+    }
+
     /// The keys that trigger this shortcut, as this machine renders them —
     /// for the help grid and for every tooltip that names a shortcut.
     ///
-    /// Rendered by [`shortcut_text`], not spelled out: the bindings use
+    /// Rendered from [`BINDINGS`] by [`shortcut_text`], not spelled out: a
+    /// rebinding reaches the labels, and the bindings use
     /// `Modifiers::COMMAND`, which is Cmd on macOS, so a literal "Ctrl+O"
     /// would name a key macOS users don't have.
     pub(super) fn keys(self, ctx: &egui::Context, l10n: &Localizer) -> String {
-        let keys = |modifiers: Modifiers, key: Key| shortcut_text(ctx, l10n, modifiers, key);
+        let is_mac = ctx.os().is_mac();
+        // The first row this machine answers to (F11 or the macOS chord for
+        // fullscreen, `?` before F1), else the first row anywhere: Minimize
+        // still names its key off macOS.
+        let first = |shortcut: Self| {
+            shortcut
+                .bindings(is_mac)
+                .next()
+                .or_else(|| BINDINGS.iter().find(|b| b.shortcut == shortcut))
+                .map_or_else(String::new, |b| render(ctx, l10n, b))
+        };
         match self {
-            Self::ConnectToggle => keys(Modifiers::COMMAND, Key::O),
-            Self::TogglePause => keys(Modifiers::NONE, Key::Space),
-            Self::ClearSession => keys(Modifiers::COMMAND, Key::L),
-            Self::ToggleRecording => keys(Modifiers::COMMAND, Key::R),
-            Self::CycleBigMeter => keys(Modifiers::COMMAND, Key::B),
-            Self::ToggleAlwaysOnTop => keys(Modifiers::COMMAND, Key::T),
-            Self::ToggleDecorations => keys(Modifiers::COMMAND, Key::D),
-            Self::ExportRecording => keys(Modifiers::COMMAND, Key::E),
-            Self::ImportFile => keys(Modifiers::COMMAND, Key::I),
-            Self::AddMarker => keys(Modifiers::NONE, Key::N),
-            Self::AddMarkerAndNote => keys(Modifiers::COMMAND, Key::N),
-            // Two bindings, one per OS: the one this machine answers to.
-            Self::ToggleFullscreen if ctx.os().is_mac() => keys(MAC_FULLSCREEN, Key::F),
-            Self::ToggleFullscreen => keys(Modifiers::NONE, Key::F11),
-            Self::Minimize => keys(Modifiers::MAC_CMD, Key::M),
             // One pair, named together.
             Self::ZoomIn | Self::ZoomOut => format!(
                 "{}{}/{}",
@@ -308,26 +312,25 @@ impl Shortcut {
                 tr!(l10n, "shortcuts-key-plus"),
                 tr!(l10n, "shortcuts-key-minus")
             ),
-            Self::ZoomReset => keys(Modifiers::COMMAND, Key::Num0),
             // Escape is egui's own (`Modal::should_close`), so it has no
             // binding to render — only the Ctrl+W half comes from the table.
             Self::Close => format!(
                 "{} / {}",
                 tr!(l10n, "shortcuts-key-escape"),
-                keys(Modifiers::COMMAND, Key::W)
+                first(Self::Close)
             ),
-            Self::Quit => format!(
-                "{} / {}",
-                keys(Modifiers::COMMAND, Key::Q),
-                keys(Modifiers::COMMAND, Key::W)
-            ),
-            Self::ToggleHelp => keys(Modifiers::NONE, Key::Questionmark),
+            // Ctrl+W with the help closed quits too.
+            Self::Quit => format!("{} / {}", first(Self::Quit), first(Self::Close)),
+            _ => first(self),
         }
     }
 
     /// The help's two keys, `?` and F1, for the hover that names them both.
     pub(super) fn help_keys(ctx: &egui::Context, l10n: &Localizer) -> (String, String) {
-        let f1 = shortcut_text(ctx, l10n, Modifiers::NONE, Key::F1);
+        let f1 = Self::ToggleHelp
+            .bindings(ctx.os().is_mac())
+            .nth(1)
+            .map_or_else(String::new, |b| render(ctx, l10n, b));
         (Self::ToggleHelp.keys(ctx, l10n), f1)
     }
 
@@ -378,6 +381,11 @@ impl Shortcut {
         let inert = on_wayland && self == Self::ToggleAlwaysOnTop;
         Some((key, action, inert))
     }
+}
+
+/// `binding`'s keys as this machine writes them, by [`shortcut_text`].
+fn render(ctx: &egui::Context, l10n: &Localizer, binding: &Binding) -> String {
+    shortcut_text(ctx, l10n, binding.modifiers, binding.key)
 }
 
 /// `modifiers`+`key` as this machine writes a shortcut, in the window's
@@ -714,6 +722,52 @@ mod tests {
                     .count(),
                 1,
                 "{shortcut:?} is listed twice in the help grid"
+            );
+        }
+    }
+
+    /// Every variant, as an exhaustive match and as an array, so a new
+    /// shortcut fails to compile here until it is listed.
+    macro_rules! every_shortcut {
+        ($($shortcut:ident),* $(,)?) => {{
+            let _exhaustive = |s: Shortcut| match s {
+                $(Shortcut::$shortcut)|* => {}
+            };
+            [$(Shortcut::$shortcut),*]
+        }};
+    }
+
+    /// `Shortcut::keys` names a shortcut by its first binding, so one bound
+    /// to nothing would be labelled with nothing — or, for Close and Quit, a
+    /// dangling ` / `. Every shortcut has one, `ToggleHelp` and any outside
+    /// `HELP_ORDER` included.
+    #[test]
+    fn every_shortcut_has_a_binding() {
+        let every = every_shortcut!(
+            ConnectToggle,
+            Quit,
+            ClearSession,
+            ToggleRecording,
+            CycleBigMeter,
+            ToggleAlwaysOnTop,
+            ToggleDecorations,
+            ExportRecording,
+            ImportFile,
+            ToggleFullscreen,
+            Minimize,
+            ZoomIn,
+            ZoomOut,
+            ZoomReset,
+            Close,
+            TogglePause,
+            ToggleHelp,
+            AddMarker,
+            AddMarkerAndNote,
+        );
+        for shortcut in every {
+            assert!(
+                BINDINGS.iter().any(|b| b.shortcut == shortcut),
+                "{shortcut:?} is bound to no key, so its label is empty"
             );
         }
     }
