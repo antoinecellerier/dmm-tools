@@ -78,7 +78,7 @@ flowchart TD
 A named meter is opened on its own links; `auto` takes the first cable, or else any adapter or meter
 in range, and detection picks the entry (see [Opening a meter](#opening-a-meter)). Either way `Dmm`
 asks the meter's name first when the protocol wants it, then runs `Protocol::init`. The binaries
-enter through `open_device_by_id_auto()` and `open_auto()`, or through `open_transport()` and
+enter through `open_device()` and `open_auto()`, or through `open_transport()` and
 `open_device_transport()` when they wrap the transport first.
 
 Reading, from one tick to every output:

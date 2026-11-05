@@ -284,8 +284,8 @@ fn read_meter(
         let reopen = reconnect.then(|| {
             let bluetooth = opts.bluetooth;
             Box::new(move || {
-                dmm_lib::open_device_by_id_auto(
-                    device.id,
+                dmm_lib::open_device(
+                    device,
                     dmm_lib::OpenOptions {
                         adapter: adapter.as_deref(),
                         bluetooth,

@@ -59,9 +59,9 @@ been tested.
 ## GUI coupling to the desktop platform
 
 Inspection of the GUI crate on 2026-04-19 confirms that the UI never calls
-`hidapi` directly. It opens the meter through `dmm_lib::open_device_by_id_auto`
-and communicates with the background device thread via `mpsc` channels
-defined in `crates/dmm-gui/src/app/connection.rs`. The Transport abstraction in
+`hidapi` directly. It opens the meter through `dmm_lib::open_device()` or
+`open_auto()` and communicates with the background device thread via `mpsc`
+channels defined in `crates/dmm-gui/src/app/connection.rs`. The Transport abstraction in
 `dmm-lib` is therefore the substitution point for an Android-specific USB
 backend; no GUI refactor is required to accommodate it.
 

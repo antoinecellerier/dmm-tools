@@ -279,8 +279,7 @@ pub(crate) fn open_with_help(
             (dmm, note_detected(detected).device)
         }
         Selection::Device(device) => (
-            dmm_lib::open_device_by_id_auto(device.id, opts)
-                .map_err(|e| open_error_help(selection, e))?,
+            dmm_lib::open_device(device, opts).map_err(|e| open_error_help(selection, e))?,
             device,
         ),
     };

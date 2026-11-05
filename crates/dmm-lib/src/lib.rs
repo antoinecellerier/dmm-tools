@@ -22,7 +22,7 @@ pub use clock::Clock;
 use error::{Error, Result};
 use log::{debug, info, warn};
 use protocol::Protocol;
-use protocol::registry::{self, SelectableDevice, Selection};
+use protocol::registry::{self, SelectableDevice};
 use std::time::{Duration, Instant};
 use transport::{Transport, ble, open};
 
@@ -385,23 +385,23 @@ impl Default for OpenOptions<'_> {
     }
 }
 
-/// Open a device by registry ID, automatically selecting the transport.
+/// Open a named meter, picking the link it is on.
 ///
 /// Tries the meter's USB cables, then the others it can be on (CP2110, CH9329,
 /// CH9325, BU-86X, see `usb_candidates` in `transport/open.rs`), then an
 /// adapter in Bluetooth range.
 /// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
 ///
-/// `id` may be [`registry::AUTO_DEVICE_ID`], in which case the meter is
-/// identified from the bytes it sends; a caller that wants to know which one
-/// it was calls [`open_auto`] instead.
-pub fn open_device_by_id_auto(id: &str, opts: OpenOptions<'_>) -> Result<Dmm<Box<dyn Transport>>> {
-    match selection_by_id(id)? {
-        Selection::Auto => open_auto(opts).map(|(dmm, _)| dmm),
-        Selection::Device(entry) => {
-            Dmm::new(open_device_transport(entry, opts)?, (entry.new_protocol)())
-        }
-    }
+/// The same for a meter not named yet is [`open_auto`], which identifies it
+/// from the bytes it sends.
+pub fn open_device(
+    device: &SelectableDevice,
+    opts: OpenOptions<'_>,
+) -> Result<Dmm<Box<dyn Transport>>> {
+    Dmm::new(
+        open_device_transport(device, opts)?,
+        (device.new_protocol)(),
+    )
 }
 
 /// Open the link a named meter is on, without running `Protocol::init`.
@@ -434,21 +434,6 @@ pub fn open_device_transport(
 pub fn open_auto(opts: OpenOptions<'_>) -> Result<(Dmm<Box<dyn Transport>>, detect::Detected)> {
     let (transport, detected) = open_detected(opts)?;
     Ok((Dmm::from_detected(transport, &detected)?, detected))
-}
-
-/// Resolve a device id for the open path: [`registry::AUTO_DEVICE_ID`], or an
-/// exact registry id.
-///
-/// Exact rather than [`registry::resolve_selection`]'s alias matching, because
-/// this is the internal id a binary already resolved once — the aliases are
-/// for what the user typed.
-fn selection_by_id(id: &str) -> Result<Selection> {
-    if id.eq_ignore_ascii_case(registry::AUTO_DEVICE_ID) {
-        return Ok(Selection::Auto);
-    }
-    registry::find_device(id)
-        .map(Selection::Device)
-        .ok_or_else(|| Error::UnknownDevice(id.to_string()))
 }
 
 /// Open a bridge with no family in mind and identify the meter behind it.
@@ -1277,20 +1262,5 @@ mod tests {
                 "{link}"
             );
         }
-    }
-
-    /// The open path takes ids a binary already resolved, plus `auto`.
-    #[test]
-    fn selection_by_id_accepts_auto_and_exact_ids() {
-        assert!(matches!(selection_by_id("auto"), Ok(Selection::Auto)));
-        assert!(matches!(selection_by_id("AUTO"), Ok(Selection::Auto)));
-        let Ok(Selection::Device(d)) = selection_by_id("ut8803") else {
-            panic!("ut8803 must resolve");
-        };
-        assert_eq!(d.id, "ut8803");
-        assert!(matches!(
-            selection_by_id("nonexistent"),
-            Err(Error::UnknownDevice(_))
-        ));
     }
 }

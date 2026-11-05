@@ -416,7 +416,6 @@ impl App {
                 thread_ctx,
             );
         } else {
-            let device_id = device_entry.map(|d| d.id);
             let adapter = self.settings.overrides.adapter.clone();
             let bluetooth = self.settings.shared.bluetooth;
             // A Bluetooth open can take seconds; stopping the thread calls it
@@ -434,10 +433,8 @@ impl App {
                         bluetooth,
                         stop: Some(&stop),
                     };
-                    match device_id {
-                        Some(id) => {
-                            dmm_lib::open_device_by_id_auto(id, opts).map(|dmm| (dmm, None))
-                        }
+                    match device_entry {
+                        Some(device) => dmm_lib::open_device(device, opts).map(|dmm| (dmm, None)),
                         None => {
                             dmm_lib::open_auto(opts).map(|(dmm, detected)| (dmm, Some(detected)))
                         }
@@ -445,7 +442,7 @@ impl App {
                 },
                 thread_ctx,
             );
-            self.connection.detecting = device_id.is_none();
+            self.connection.detecting = device_entry.is_none();
         }
         // Until the thread reports the meter open, or fails to: Connect
         // turns into Cancel meanwhile, as a second open on the same meter
