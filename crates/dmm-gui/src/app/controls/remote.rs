@@ -396,9 +396,10 @@ impl App {
             // wrapped off. On a line of their own the line break is the
             // boundary and the rule is dropped.
             let rule_width = SCALE_RULE_WIDTH * scale;
-            let chips_width = self.scale_chip(ui.ctx()).width(ui, font_size)
-                + spacing
-                + self.alarm_chip(ui.ctx()).width(ui, font_size);
+            let scale_chip = self.scale_chip(ui.ctx());
+            let alarm_chip = self.alarm_chip(ui.ctx());
+            let chips_width =
+                scale_chip.width(ui, font_size) + spacing + alarm_chip.width(ui, font_size);
             let needed = rule_width + spacing + chips_width + spacing + right_reserve;
             if placed && needed <= ui.available_size_before_wrap().x {
                 let height = ui.cursor().height();
@@ -412,8 +413,8 @@ impl App {
             } else if placed {
                 ui.end_row();
             }
-            scale_clicked = self.scale_chip(ui.ctx()).show(ui, font_size);
-            alarm_clicked = self.alarm_chip(ui.ctx()).show(ui, font_size);
+            scale_clicked = scale_chip.show(ui, font_size);
+            alarm_clicked = alarm_chip.show(ui, font_size);
         });
         self.take_app_chip_clicks(scale_clicked, alarm_clicked);
     }
