@@ -49,7 +49,7 @@ Recency is not an order. A new entry goes below the last entry of its tier, neve
   2. New capability: something the reader could not do before.
   3. More of an existing capability that changes the experience: a buffer going from minutes to hours, sub-values on screen, new columns, modes, shortcuts.
   4. Polish: appearance, contrast, wording, help text, focus.
-- Bug fixes, by what the defect cost: nothing worked, then wrong readings or exported data, then wrong labels, then controls that did nothing or the wrong thing, then cosmetic. A migration entry takes its place by the same ladder.
+- Bug fixes, by what the defect cost a reader likely to meet it: nothing worked, then wrong readings or exported data, then wrong labels, then controls that did nothing or the wrong thing, then cosmetic. How likely comes first: a defect any multi-monitor or Windows user hits outranks a crash only a crafted file or a rare edge case reaches. Hardening — malformed input, hostile files, races outside normal use — goes last, whatever it cost. A migration entry takes its place by the same ladder.
 - At release, the summary under the heading names the first entry or two of each section; if it names something further down, reorder.
 
 ## One entry per released change
