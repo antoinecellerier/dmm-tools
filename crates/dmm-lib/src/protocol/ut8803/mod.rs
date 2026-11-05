@@ -28,8 +28,7 @@ use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
 
-/// UT8803 position coding → (mode_name, acdc, unit_type, unit_mag).
-/// From the programming manual section 4.2.
+/// UT8803 position coding → mode label (programming manual §4.2).
 const POSITION_TABLE: &[(u8, &str)] = &[
     (0x00, "AC V"),
     (0x01, "DC V"),
@@ -319,12 +318,13 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     // Parse mode. The vendor rejects a mode byte above 0x16, the last
     // position code (spec §2.3, §4.2).
-    let mode: Cow<'static, str> = if (mode_byte as usize) < POSITION_TABLE.len() {
-        Cow::Borrowed(POSITION_TABLE[mode_byte as usize].1)
-    } else {
-        report_unknown("ut8803", "mode byte", format_args!("{mode_byte:#04x}"));
-        unknown_mode(mode_byte)
-    };
+    let mode: Cow<'static, str> =
+        if let Some(&(_, name)) = POSITION_TABLE.iter().find(|(code, _)| *code == mode_byte) {
+            Cow::Borrowed(name)
+        } else {
+            report_unknown("ut8803", "mode byte", format_args!("{mode_byte:#04x}"));
+            unknown_mode(mode_byte)
+        };
 
     // Parse display value: 5 raw ASCII bytes the vendor parser appends to a
     // string and converts to a float (spec §2.3). Validate that every byte
@@ -728,14 +728,10 @@ raw_payload=17"#
 
     #[test]
     fn parse_all_valid_modes() {
-        for (code, _name) in POSITION_TABLE {
+        for (code, name) in POSITION_TABLE {
             let payload = make_payload(*code, 0x00, b" 1.00", 0x00, 0x00, 0x00);
             let m = parse_measurement(&payload).unwrap();
-            assert!(
-                !m.mode.starts_with("Unknown"),
-                "mode {:#04x} should be known",
-                code
-            );
+            assert_eq!(m.mode, *name, "mode {code:#04x}");
         }
     }
 
