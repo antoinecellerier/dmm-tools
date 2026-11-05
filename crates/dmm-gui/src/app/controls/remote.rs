@@ -560,7 +560,10 @@ mod tests {
     /// column's scroll-to-focus must not drop a focus the click gave.
     #[test]
     fn a_caret_opens_its_row_with_the_cursor_in_the_first_field() {
-        for (caret, first_field) in [("Alarm settings", "none")] {
+        for (caret, first_field) in [
+            ("Scale settings", "Scale factor"),
+            ("Alarm settings", "none"),
+        ] {
             let mut app = connected_app(&["hold"], "V");
             let ctx = crate::app::styled_context();
             ctx.enable_accesskit();

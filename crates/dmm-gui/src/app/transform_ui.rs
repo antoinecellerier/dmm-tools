@@ -33,7 +33,7 @@ pub(super) struct TransformEditor {
     pub(super) offset: String,
     pub(super) unit: String,
     /// Put the caret in the scale field the next time the row is drawn: set
-    /// when the chip's body opens the row to have a scale typed.
+    /// when the chip opens it.
     focus: bool,
 }
 
@@ -156,10 +156,12 @@ impl App {
         }
     }
 
-    /// Open the editor row if closed, closing the Alarm row so one row sits
-    /// under the chips; close it if open.
+    /// Open the editor row if closed, with the caret in the factor field and
+    /// the Alarm row closed, so one row sits under the chips; close it if
+    /// open: the chip's caret.
     pub(super) fn toggle_transform_editor(&mut self) {
         self.transform_editor.open = !self.transform_editor.open;
+        self.transform_editor.focus = self.transform_editor.open;
         if self.transform_editor.open {
             self.alarm_editor.open = false;
         }
