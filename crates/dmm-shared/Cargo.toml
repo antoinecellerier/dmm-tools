@@ -4,7 +4,7 @@ publish = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "What dmm-cli and dmm-gui share and dmm-lib must not carry: settings schema, durable writes, export shapes and names, log setup"
+description = "What dmm-cli and dmm-gui share and dmm-lib must not carry: settings schema, durable writes, export shapes and names, localization, input wording, log setup"
 
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }

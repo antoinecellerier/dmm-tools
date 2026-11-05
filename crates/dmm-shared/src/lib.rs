@@ -15,7 +15,9 @@
 //! mid-write); [`export`], the shape and file name of what the two write
 //! out, so a reading saved from the GUI and one written by the CLI read the
 //! same; [`replay`], what `--replay` opens, a golden fixture included;
-//! [`help`], the help and version text both print; [`logging`], the log
+//! [`help`], the help and version text both print; [`l10n`], the
+//! [`Localizer`](l10n::Localizer) and resources both speak; [`input`], why a
+//! typed number was refused; [`logging`], the log
 //! levels both start with; [`RECONNECT_INTERVAL`], how often both retry
 //! a lost link; and [`stat_figure`], how both write a figure of the
 //! statistics and the integral. The canonical settings location is

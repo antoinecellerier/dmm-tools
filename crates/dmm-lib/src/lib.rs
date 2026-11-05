@@ -163,7 +163,8 @@ impl<T: Transport> Dmm<T> {
         &self.clock
     }
 
-    /// Access the underlying transport (e.g. for CP2110-specific queries).
+    /// The link this session reads through, for link-level queries: which
+    /// link, the transport's name, info and status, the Bluetooth selector.
     pub fn transport(&self) -> &T {
         &self.transport
     }

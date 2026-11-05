@@ -364,6 +364,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `alarm.rs` | `Alarm`, `Limits`: threshold alarms on the main reading |
 | `stream.rs` | `MeasurementStream` |
 | `clock.rs` | `Clock` |
+| `text.rs` | The library's words by kind, for apps that translate them |
 | `replay.rs` | `Replay`: the file format, its reader and writer, playback |
 | `mock/` | `MockProtocol`, its scenarios and button state, its registry entry |
 | `error.rs`, `error/` | `Error` and `ErrorKind`; `Unsupported` and `Rejected`, the reasons a refused command gives; `BluetoothIssue`, why the Bluetooth stack could not do what was asked; `WrongMeter`, why the meter on the link is not one the chosen entry reads |
@@ -376,8 +377,10 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/mod.rs` | The default file name and the JSON both binaries write |
 | `export/csv_layout.rs` | `CsvLayout`: the CSV header and row cells |
 | `export/read.rs` | Reading an export back |
+| `export/read_error.rs` | Why an export or a recording's header did not read |
 | `replay.rs` | What `--replay` opens |
 | `help.rs` | Help and version text both binaries print |
+| `input.rs` | Why a typed number was refused, worded once for both binaries |
 | `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator, the `--help` walker, clap's help layout and command-line errors in the user's language |
 | `logging.rs` | The logger both binaries install |
 
@@ -393,13 +396,14 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `choice.rs` | Reading the choice `set` was given |
 | `format.rs` | What a run writes per reading |
 | `output.rs` | Where a run writes it |
-| `capture/` | The guided capture run: steps, watch, drive, plan, report, recording, the closing detection check |
+| `capture/` | The guided capture run (steps, watch, drive, plan, report, recording, the closing detection check) and `triage` of a capture report |
 | `test_fixtures.rs` | Test helpers shared across modules |
 
 ### dmm-gui
 
 | Module | Responsibility |
 |---|---|
+| `main.rs` | Parses the command line, builds the first localizer, opens the window |
 | `app/mod.rs` | `App`, `ConnectionState`, the per-frame `ui` |
 | `app/connection.rs` | The acquisition thread and its channel types |
 | `app/messages.rs` | The UI side of the channel: connect, disconnect, drain |
@@ -425,6 +429,8 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `app/whats_new.rs` | The release-notes viewport |
 | `app/update_check.rs` | The daily update check |
 | `app/appearance.rs` | Fonts, theme, zoom, window commands; reading the themes folder |
+| `app/language.rs` | The language the window speaks, the Settings **Language** switch and what follows it |
+| `app/system_fonts.rs` | System fonts for the characters the bundled fonts lack |
 | `app/test_support.rs` | Test helpers shared across modules |
 | `graph/` | The graph's points, the main plot (`egui_plot`) with a right Y axis per sub-value unit, the painted minimap and histogram |
 | `display/` | The reading in its three sizes |
@@ -436,3 +442,5 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `theme/` | The palette: preset colour tables (`presets.rs`), named themes and the themes folder (`named.rs`), linked colours (`links.rs`) |
 | `a11y.rs` | AccessKit helpers |
 | `changelog.rs` | The embedded changelog |
+| `l10n.rs` | The resources dmm-gui shows and the localizers built from them |
+| `desktop_entry.rs` | The Linux desktop entry dmm-gui installs for itself |
