@@ -225,9 +225,7 @@ scene. A rerun stages the same frame, and each capture prints how many pixels
 it differs from the committed file. On a `-dev` version a picture whose only
 change is the top bar's version label is left alone, so the bump after a
 release flags nothing; the release run, on the release version, refreshes the
-pictures that show it. Pictures are written as lossless WebP; one still
-committed as a PNG is replaced, links included, only when its scene changes
-it, so git never stores the same picture twice. X rendering is not identical
+pictures that show it. Pictures are written as lossless WebP. X rendering is not identical
 across driver versions, so look at each changed picture before committing it.
 The two settings
 pictures and the connection-help one need the USB cable out; with a cable

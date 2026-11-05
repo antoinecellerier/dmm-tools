@@ -12,9 +12,7 @@
 #   scripts/doc-screenshots.sh gui-settings [...]   # the scenes that
 #                                                   # write these pictures
 #
-# Pictures are lossless WebP. One still committed as a PNG stays one until its
-# scene changes it; the WebP then replaces it and the links in README.md and
-# docs/ follow, so git never stores the same picture twice.
+# Pictures are lossless WebP.
 #
 # Session time is frozen at each scene's preseed instant (see `launch`), so a
 # rerun stages exactly the same frame. Each capture prints the pixel difference
@@ -374,25 +372,6 @@ capture() {
 	convert "$TMP/$picture.png" "${WEBP_LOSSLESS[@]}" "$ASSETS/$picture.webp"
 	[ "$(differing_pixels "$TMP/$picture.png" "$ASSETS/$picture.webp")" = 0 ] ||
 		die "$picture.webp does not decode to the shot — is ImageMagick's WebP lossless?"
-	if [ -f "$ASSETS/$picture.png" ]; then
-		relink "$picture"
-		rm "$ASSETS/$picture.png"
-		echo "$picture: now WebP"
-	fi
-}
-
-# committed <picture> — the file it is committed as: the PNG it has kept since
-# before the switch to WebP, or its WebP.
-committed() {
-	if [ -f "$ASSETS/$1.png" ]; then echo "$ASSETS/$1.png"; else echo "$ASSETS/$1.webp"; fi
-}
-
-# relink <picture> — point the links in README.md and docs/ at its WebP. The
-# `.png` after the name keeps pictures whose names share a prefix apart.
-relink() {
-	local docs=()
-	mapfile -t docs < <(grep -lF "assets/$1.png" "$ROOT/README.md" "$ROOT"/docs/*.md || true)
-	((${#docs[@]} == 0)) || sed -i "s|assets/$1\\.png|assets/$1.webp|g" "${docs[@]}"
 }
 
 # fit <width> <height> — resize and echo the geometry the window settled on.
@@ -414,7 +393,7 @@ fit() {
 # does is in the version label's band on `row` ("<top> <bottom>").
 report() {
 	local asset="$1" new="$2" row="${3:-}" old size delta
-	old="$(committed "$asset")"
+	old="$ASSETS/$asset.webp"
 	size="$(identify -format '%wx%h' "$new")"
 	if [ ! -f "$old" ]; then
 		echo "$asset: new, $size"
