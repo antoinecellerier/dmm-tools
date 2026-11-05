@@ -39,6 +39,50 @@ pub(crate) struct VersionInfo {
     pub device_version: u8,
 }
 
+/// The interrupt OUT report for `data`: a length byte, then the payload
+/// (AN434 §6.1). More than one report holds is refused unsent.
+fn output_report(data: &[u8]) -> Result<Vec<u8>> {
+    if data.len() > MAX_REPORT_PAYLOAD {
+        return Err(Error::invalid_response_msg(format!(
+            "data too large for single HID report: {} bytes (max {MAX_REPORT_PAYLOAD})",
+            data.len()
+        )));
+    }
+    let mut report = Vec::with_capacity(data.len() + 1);
+    report.push(data.len() as u8);
+    report.extend_from_slice(data);
+    Ok(report)
+}
+
+/// The UART payload of one interrupt IN report, `n` bytes of `raw`: a length
+/// byte, then the payload (AN434 §6.1). A length byte claiming more than
+/// arrived yields only the bytes that are there.
+fn rx_payload(raw: &[u8], n: usize) -> &[u8] {
+    match &raw[..n.min(raw.len())] {
+        [len, payload @ ..] => &payload[..(*len as usize).min(payload.len())],
+        [] => &[],
+    }
+}
+
+/// The fields of a UART status report 0x42 (AN434 §5.3).
+fn parse_uart_status(buf: &[u8; 7]) -> UartStatus {
+    // TX/RX FIFO counts read as 16-bit little-endian (AN434 §3.2 default byte
+    // order). UNI-T's software reads them big-endian (UT171 spec §8);
+    // idle reads give 0, which fits either, so which is right is an open check
+    // (docs/verification-backlog.md, "USB bridges").
+    let tx_fifo = u16::from_le_bytes([buf[1], buf[2]]);
+    let rx_fifo = u16::from_le_bytes([buf[3], buf[4]]);
+    // Error Status: bit 0 = parity error, bit 1 = overrun error
+    let error_status = buf[5];
+    UartStatus {
+        tx_fifo,
+        rx_fifo,
+        parity_error: error_status & 0x01 != 0,
+        overrun_error: error_status & 0x02 != 0,
+        line_break: buf[6] != 0,
+    }
+}
+
 /// CP2110 HID transport wrapping a `HidDevice`.
 pub(crate) struct Cp2110 {
     device: HidDevice,
@@ -115,21 +159,7 @@ impl Cp2110 {
                 "UART status report too short: {n} bytes"
             )));
         }
-        // TX/RX FIFO counts read as 16-bit little-endian (AN434 §3.2 default byte
-        // order). UNI-T's software reads them big-endian (UT171 spec §8);
-        // idle reads give 0, which fits either, so which is right is an open check
-        // (docs/verification-backlog.md, "USB bridges").
-        let tx_fifo = u16::from_le_bytes([buf[1], buf[2]]);
-        let rx_fifo = u16::from_le_bytes([buf[3], buf[4]]);
-        // Error Status: bit 0 = parity error, bit 1 = overrun error
-        let error_status = buf[5];
-        Ok(UartStatus {
-            tx_fifo,
-            rx_fifo,
-            parity_error: error_status & 0x01 != 0,
-            overrun_error: error_status & 0x02 != 0,
-            line_break: buf[6] != 0,
-        })
+        Ok(parse_uart_status(&buf))
     }
 
     /// Reset the CP2110 device (report 0x40, AN434 §5.1).
@@ -160,16 +190,7 @@ impl Cp2110 {
 
 impl Transport for Cp2110 {
     fn write(&self, data: &[u8]) -> Result<()> {
-        // CP2110 interrupt OUT: first byte is length, then payload (AN434 §6.1).
-        if data.len() > MAX_REPORT_PAYLOAD {
-            return Err(Error::invalid_response_msg(format!(
-                "data too large for single HID report: {} bytes (max {MAX_REPORT_PAYLOAD})",
-                data.len()
-            )));
-        }
-        let mut report = Vec::with_capacity(data.len() + 1);
-        report.push(data.len() as u8);
-        report.extend_from_slice(data);
+        let report = output_report(data)?;
         trace!("{NAME} TX: {:02X?}", report);
         self.device.write(&report)?;
         Ok(())
@@ -192,10 +213,9 @@ impl Transport for Cp2110 {
         if n == 0 {
             return Ok(0);
         }
-        // CP2110 interrupt IN: first byte is length, rest is payload
-        let payload_len = raw[0] as usize;
-        let actual = payload_len.min(n - 1).min(buf.len());
-        buf[..actual].copy_from_slice(&raw[1..1 + actual]);
+        let payload = rx_payload(&raw, n);
+        let actual = payload.len().min(buf.len());
+        buf[..actual].copy_from_slice(&payload[..actual]);
         trace!("{NAME} RX ({actual} bytes): {:02X?}", &buf[..actual]);
         Ok(actual)
     }
@@ -242,54 +262,42 @@ mod tests {
     }
 
     #[test]
-    fn uart_status_struct() {
-        let status = UartStatus {
-            tx_fifo: 100,
-            rx_fifo: 200,
-            parity_error: true,
-            overrun_error: false,
-            line_break: true,
-        };
-        assert_eq!(status.tx_fifo, 100);
-        assert_eq!(status.rx_fifo, 200);
-        assert!(status.parity_error);
-        assert!(!status.overrun_error);
-        assert!(status.line_break);
+    fn a_write_goes_out_behind_its_length() {
+        assert_eq!(output_report(&[0xAB, 0xCD]).unwrap(), [2, 0xAB, 0xCD]);
+        let full = [0x5A; MAX_REPORT_PAYLOAD];
+        assert_eq!(output_report(&full).unwrap()[..2], [63, 0x5A]);
+    }
+
+    /// More than one report holds is refused unsent.
+    #[test]
+    fn an_oversize_write_is_refused() {
+        assert!(output_report(&[0x5A; MAX_REPORT_PAYLOAD + 1]).is_err());
     }
 
     #[test]
-    fn version_info_struct() {
-        let info = VersionInfo {
-            part_number: 0x0A,
-            device_version: 5,
-        };
-        assert_eq!(info.part_number, 0x0A);
-        assert_eq!(info.device_version, 5);
+    fn a_read_is_the_bytes_its_length_names() {
+        let raw = [3, 0xAB, 0xCD, 0x03, 0x99, 0x99];
+        assert_eq!(rx_payload(&raw, 6), [0xAB, 0xCD, 0x03]);
     }
 
+    /// A length byte claiming more than arrived yields the bytes that are
+    /// there, and a lone length byte none.
     #[test]
-    fn uart_status_debug_format() {
-        // Ensure Debug derive works for diagnostic output
-        let status = UartStatus {
-            tx_fifo: 0,
-            rx_fifo: 0,
-            parity_error: false,
-            overrun_error: false,
-            line_break: false,
-        };
-        let debug = format!("{status:?}");
-        assert!(debug.contains("UartStatus"));
-        assert!(debug.contains("tx_fifo"));
+    fn a_read_is_clamped_to_what_arrived() {
+        assert_eq!(rx_payload(&[63, 0xAB], 2), [0xAB]);
+        assert!(rx_payload(&[63], 1).is_empty());
+        assert!(rx_payload(&[63, 0xAB], 0).is_empty());
     }
 
+    /// The little-endian FIFO counts pin the current reading, not a verified
+    /// one: the byte order is still an open check
+    /// (docs/verification-backlog.md, "USB bridges").
     #[test]
-    fn version_info_clone() {
-        let info = VersionInfo {
-            part_number: 0x0A,
-            device_version: 3,
-        };
-        let cloned = info.clone();
-        assert_eq!(cloned.part_number, info.part_number);
-        assert_eq!(cloned.device_version, info.device_version);
+    fn uart_status_fields() {
+        let st = parse_uart_status(&[0x42, 0x34, 0x12, 0x01, 0x00, 0x03, 0x01]);
+        assert_eq!((st.tx_fifo, st.rx_fifo), (0x1234, 1));
+        assert!(st.parity_error && st.overrun_error && st.line_break);
+        let overrun = parse_uart_status(&[0x42, 0, 0, 0, 0, 0x02, 0]);
+        assert!(!overrun.parity_error && overrun.overrun_error && !overrun.line_break);
     }
 }
