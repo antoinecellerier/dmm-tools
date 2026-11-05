@@ -34,36 +34,36 @@
 
 ### Bug fixes
 
-- **dmm-gui imports or replays a file whose saved view lies far past its readings** — it crashed.
-- **dmm-gui takes readings in while its window is minimized or hidden** — they queued in memory, and restoring the window stalled it while they all came in.
-- **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.
-- **dmm-gui started from Explorer on Windows opens no console window** — closing that window closed the app too.
-- **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
-- **A scaled CSV imported and exported again keeps Raw in its own column** — dmm-cli and dmm-gui moved it into the meter's sub-value columns.
-- **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
-- **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
-- **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
-- **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
-- **UT8802 and UT8803 overloads read OL in `capture` and JSON exports** — they showed stray digits, such as `0 Ω`.
-- **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
-- **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
-- **The UT181A and UT171 keep reading after joining the stream mid-frame** — readings could stop for tens of seconds, and a refused UT181A command look accepted.
-- **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
-- **dmm-gui says why a connection failed, or which data was unreadable** — a wrong cable, Bluetooth switched off or a garbled frame showed as "No response from meter".
-- **dmm-gui names and saves the meter swapped in during an Auto-detect session** — it kept the first meter's name, specifications and saved device.
-- **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
-- **`capture` stops on a pulled cable or lost link, saying how to resume** — it spun at full CPU and filed empty steps.
-- **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.
-- **`capture`'s report shows where each sweep left the meter** — a HOLD or manual range it couldn't undo showed only on the terminal.
-- **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
-- **A retried Connect in dmm-gui shows its own progress** — the previous failure stayed on screen, so the click looked like it did nothing.
 - **dmm-gui shows Connecting… and a Cancel button while it opens a meter** — Connect stayed clickable, and a second click opened the meter twice.
-- **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
+- **dmm-gui takes readings in while its window is minimized or hidden** — they queued in memory, and restoring the window stalled it while they all came in.
+- **dmm-gui started from Explorer on Windows opens no console window** — closing that window closed the app too.
 - **dmm-gui rescales when dragged to a monitor with another display scale** — it kept the scale of the monitor it opened on.
 - **dmm-gui keeps its Light or Dark theme when the system's theme changes** — it switched with the system's and lost its custom colours.
-- **dmm-gui refuses a theme file whose text can't be read on the top bar, and says why** — its Theme chips in Settings were unreadable.
+- **The UT181A and UT171 keep reading after joining the stream mid-frame** — readings could stop for tens of seconds, and a refused UT181A command look accepted.
+- **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
+- **`capture` stops on a pulled cable or lost link, saying how to resume** — it spun at full CPU and filed empty steps.
+- **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
+- **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
+- **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
+- **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
+- **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
+- **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
+- **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
+- **UT8802 and UT8803 overloads read OL in `capture` and JSON exports** — they showed stray digits, such as `0 Ω`.
+- **A scaled CSV imported and exported again keeps Raw in its own column** — dmm-cli and dmm-gui moved it into the meter's sub-value columns.
+- **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
+- **dmm-gui names and saves the meter swapped in during an Auto-detect session** — it kept the first meter's name, specifications and saved device.
+- **`capture`'s report shows where each sweep left the meter** — a HOLD or manual range it couldn't undo showed only on the terminal.
+- **dmm-gui says why a connection failed, or which data was unreadable** — a wrong cable, Bluetooth switched off or a garbled frame showed as "No response from meter".
+- **Screen readers speak the whole reading, mode and flags included** — Narrator cut itself off at each new value.
+- **A retried Connect in dmm-gui shows its own progress** — the previous failure stayed on screen, so the click looked like it did nothing.
 - **Turning LIVE off in dmm-gui freezes the graph where it was** — it jumped to the session's start, or to an earlier view.
+- **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
+- **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.
+- **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.
+- **dmm-gui imports or replays a file whose saved view lies far past its readings** — it crashed.
 - **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
+- **dmm-gui refuses a theme file whose text can't be read on the top bar, and says why** — its Theme chips in Settings were unreadable.
 
 ## v0.9.0 — Graph Analysis and Alarms
 
