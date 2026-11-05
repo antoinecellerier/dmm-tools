@@ -80,91 +80,104 @@ impl Startup {
 /// CH9325 HID transport wrapping a `HidDevice`.
 pub(crate) struct Ch9325 {
     device: HidDevice,
-    startup: Option<Startup>,
+    startup: Startup,
     /// The rate the last feature report set, which the bridge is left at: a
     /// protocol's `init` may change the one start-up chose (the UT803's,
     /// through `set_baud`).
-    baud: Cell<Option<u32>>,
+    baud: Cell<u32>,
 }
 
 impl Ch9325 {
     /// Take an already-opened HID device and bring the bridge up
-    /// ([`Ch9325::start_up`]).
+    /// ([`start_up`]).
     pub(crate) fn open(device: HidDevice) -> Result<Self> {
-        let mut ch = Self {
+        let startup = start_up(&device)?;
+        Ok(Self {
             device,
-            startup: None,
-            baud: Cell::new(None),
-        };
-        ch.start_up()?;
-        Ok(ch)
+            startup,
+            baud: Cell::new(startup.baud),
+        })
     }
+}
 
-    /// Wait for one raw report and return how many meter bytes it carried,
-    /// or `None` when none came.
-    fn probe(&self) -> Result<Option<usize>> {
-        let mut raw = [0u8; HID_REPORT_DATA_SIZE + 1];
-        let n = self.device.read_timeout(&mut raw, 300)?;
-        if n == 0 {
-            return Ok(None);
-        }
-        trace!("{NAME} probe report ({n} bytes): {:02X?}", &raw[..n]);
-        Ok(Some(rx_payload(&raw, n).map_or(0, |(_, len)| len)))
-    }
+/// Initialize the CH9325 transport by probing baud rates.
+///
+/// Tries primary init (2400 baud + 0x5A trigger) first, then falls back
+/// to 19200 baud if no data is received. Matches the vendor DLL probing
+/// sequence (§2.2 step 3).
+///
+/// Reference: §4.3–4.4
+fn start_up(device: &HidDevice) -> Result<Startup> {
+    debug!("{NAME}: opening device (VID={VID:#06x} PID={PID:#06x})");
 
-    /// Initialize the CH9325 transport by probing baud rates.
-    ///
-    /// Tries primary init (2400 baud + 0x5A trigger) first, then falls back
-    /// to 19200 baud if no data is received. Matches the vendor DLL probing
-    /// sequence (§2.2 step 3).
-    ///
-    /// Reference: §4.3–4.4
-    fn start_up(&mut self) -> Result<()> {
-        debug!("{NAME}: opening device (VID={VID:#06x} PID={PID:#06x})");
+    // Primary init: 2400 baud + 0x5A trigger (§4.3)
+    debug!("{NAME}: trying primary init (2400 baud + trigger)");
+    send_baud(device, 2400)?;
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
-        // Primary init: 2400 baud + 0x5A trigger (§4.3)
-        debug!("{NAME}: trying primary init (2400 baud + trigger)");
-        self.set_baud(2400)?;
-        std::thread::sleep(std::time::Duration::from_millis(100));
+    // Send 0x5A trigger byte (§4.3 step 2)
+    send_uart(device, &[0x5A])?;
 
-        // Send 0x5A trigger byte (§4.3 step 2)
-        self.write(&[0x5A])?;
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
-        // Probe: try to read data within 300ms (§2.2 step 3d). Any report
-        // counts, even one carrying no meter bytes.
-        if let Some(bytes) = self.probe()? {
-            debug!("{NAME}: primary init got a report carrying {bytes} meter bytes");
-            self.startup = Some(Startup {
-                baud: 2400,
-                probe_bytes: Some(bytes),
-            });
-            return Ok(());
-        }
-
-        // Fallback init: 19200 baud, no trigger (§4.4)
-        debug!("{NAME}: primary init failed, trying fallback (19200 baud)");
-        self.set_baud(19200)?;
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
-        // Probe again
-        let probe_bytes = self.probe()?;
-        match probe_bytes {
-            Some(bytes) => {
-                debug!("{NAME}: fallback init got a report carrying {bytes} meter bytes")
-            }
-            None => {
-                warn!("{NAME}: no data received after init — device may need manual activation")
-            }
-        }
-        self.startup = Some(Startup {
-            baud: 19200,
-            probe_bytes,
+    // Probe: try to read data within 300ms (§2.2 step 3d). Any report
+    // counts, even one carrying no meter bytes.
+    if let Some(bytes) = probe(device)? {
+        debug!("{NAME}: primary init got a report carrying {bytes} meter bytes");
+        return Ok(Startup {
+            baud: 2400,
+            probe_bytes: Some(bytes),
         });
-
-        Ok(())
     }
+
+    // Fallback init: 19200 baud, no trigger (§4.4)
+    debug!("{NAME}: primary init failed, trying fallback (19200 baud)");
+    send_baud(device, 19200)?;
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Probe again
+    let probe_bytes = probe(device)?;
+    match probe_bytes {
+        Some(bytes) => {
+            debug!("{NAME}: fallback init got a report carrying {bytes} meter bytes")
+        }
+        None => {
+            warn!("{NAME}: no data received after init — device may need manual activation")
+        }
+    }
+    Ok(Startup {
+        baud: 19200,
+        probe_bytes,
+    })
+}
+
+/// Wait for one raw report and return how many meter bytes it carried,
+/// or `None` when none came.
+fn probe(device: &HidDevice) -> Result<Option<usize>> {
+    let mut raw = [0u8; HID_REPORT_DATA_SIZE + 1];
+    let n = device.read_timeout(&mut raw, 300)?;
+    if n == 0 {
+        return Ok(None);
+    }
+    trace!("{NAME} probe report ({n} bytes): {:02X?}", &raw[..n]);
+    Ok(Some(rx_payload(&raw, n).map_or(0, |(_, len)| len)))
+}
+
+/// Send the feature report that sets the bridge to `baud`.
+fn send_baud(device: &HidDevice, baud: u32) -> Result<()> {
+    let report = baud_report(baud);
+    trace!("{NAME} feature report: {:02X?}", report);
+    device.send_feature_report(&report).map_err(Error::Hid)?;
+    Ok(())
+}
+
+/// Send `data` to the meter, in as many reports as it takes.
+fn send_uart(device: &HidDevice, data: &[u8]) -> Result<()> {
+    for report in output_reports(data) {
+        trace!("{NAME} TX: {:02X?}", &report[..2 + report[1] as usize]);
+        device.write(&report).map_err(Error::Hid)?;
+    }
+    Ok(())
 }
 
 /// The HID reports that carry `data`: up to seven UART bytes each, as
@@ -211,11 +224,7 @@ fn rx_payload(raw: &[u8], n: usize) -> Option<(usize, usize)> {
 
 impl Transport for Ch9325 {
     fn write(&self, data: &[u8]) -> Result<()> {
-        for report in output_reports(data) {
-            trace!("{NAME} TX: {:02X?}", &report[..2 + report[1] as usize]);
-            self.device.write(&report).map_err(Error::Hid)?;
-        }
-        Ok(())
+        send_uart(&self.device, data)
     }
 
     fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
@@ -250,23 +259,16 @@ impl Transport for Ch9325 {
     /// Send the feature report for `baud` and record it as the bridge's
     /// rate.
     fn set_baud(&self, baud: u32) -> Result<()> {
-        let report = baud_report(baud);
-        trace!("{NAME} feature report: {:02X?}", report);
-        self.device
-            .send_feature_report(&report)
-            .map_err(Error::Hid)?;
-        self.baud.set(Some(baud));
+        send_baud(&self.device, baud)?;
+        self.baud.set(baud);
         Ok(())
     }
 
     fn transport_info(&self) -> Result<String> {
-        Ok(match self.startup {
-            Some(startup) => {
-                let baud = self.baud.get().unwrap_or(startup.baud);
-                format!("{BRIDGE}, {}", startup.describe(baud))
-            }
-            None => BRIDGE.to_string(),
-        })
+        Ok(format!(
+            "{BRIDGE}, {}",
+            self.startup.describe(self.baud.get())
+        ))
     }
 
     fn transport_name(&self) -> &'static str {
