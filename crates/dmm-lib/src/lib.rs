@@ -97,12 +97,6 @@ impl<T: Transport> Dmm<T> {
     }
 
     fn open(transport: T, protocol: Box<dyn Protocol>, name: Option<String>) -> Result<Self> {
-        let profile = protocol.profile();
-        info!(
-            "connected to {} ({})",
-            profile.display_name(),
-            profile.family_name
-        );
         let clock = Clock::real();
         let mut dmm = Self {
             transport,
@@ -117,6 +111,12 @@ impl<T: Transport> Dmm<T> {
             dmm.ask_name_before_init();
         }
         dmm.protocol.init(&dmm.transport)?;
+        let profile = dmm.protocol.profile();
+        info!(
+            "connected to {} ({})",
+            profile.display_name(),
+            profile.family_name
+        );
         Ok(dmm)
     }
 
