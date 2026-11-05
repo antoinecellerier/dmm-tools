@@ -144,8 +144,8 @@ impl Clock {
     ///
     /// A replay's session zero is the moment its recording was made, so
     /// [`Clock::wall_time_for`] maps readings to the times the meter produced
-    /// them rather than to the run playing them back. Nothing else pins an origin: a live or mock session's zero is
-    /// simply when it started.
+    /// them rather than to the run playing them back. Nothing else pins an
+    /// origin: a live or mock session's zero is simply when it started.
     pub fn with_wall_origin(mut self, at: SystemTime) -> Self {
         self.wall_origin = Some((self.now(), at));
         self

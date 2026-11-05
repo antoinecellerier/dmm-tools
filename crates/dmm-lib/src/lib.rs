@@ -156,8 +156,9 @@ impl<T: Transport> Dmm<T> {
     /// The clock this session's readings are stamped with.
     ///
     /// Callers that need session time — the pacing loop, the wall time of a
-    /// moment with no reading ([`Clock::wall_time_for`]) — take it from here rather than reading `Instant::now()`, so a
-    /// scaled or preseeded session stays consistent with its own timestamps.
+    /// moment with no reading ([`Clock::wall_time_for`]) — take it from here
+    /// rather than reading `Instant::now()`, so a scaled or preseeded session
+    /// stays consistent with its own timestamps.
     pub fn clock(&self) -> &Clock {
         &self.clock
     }

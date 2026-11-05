@@ -188,8 +188,6 @@ fn bluetooth_only_message(model: &str, miss: &BluetoothOnlyMiss) -> String {
     format!("{model} connects over Bluetooth only, {why}")
 }
 
-/// The rest of the "nothing found" message when the radio was searched too.
-/// Saying so keeps the user from hunting for a cable fault that isn't there.
 /// The link `--adapter` named, as [`Error::WrongCable`] words it.
 fn named_link(link: &str) -> String {
     match crate::transport::Link::of_bridge(link) {
@@ -220,6 +218,8 @@ pub fn cable_ids(cables: &[&str]) -> String {
         .join(", ")
 }
 
+/// The rest of the "nothing found" message when the radio was searched too.
+/// Saying so keeps the user from hunting for a cable fault that isn't there.
 fn bluetooth_clause(searched: &bool) -> &'static str {
     if *searched {
         ", nor a Bluetooth device in range"

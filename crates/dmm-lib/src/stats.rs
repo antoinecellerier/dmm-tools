@@ -425,8 +425,8 @@ impl SeriesStats {
     /// Create an empty session.
     ///
     /// With `integrate == false` the integrator is never touched: pushing into
-    /// it anyway would log its skipped-interval warning for a feature the user
-    /// never asked for (the CLI only integrates under `--integrate`).
+    /// it anyway would log its skipped-interval debug line for a feature the
+    /// user never asked for (the CLI only integrates under `--integrate`).
     pub fn new(integrate: bool) -> Self {
         Self {
             stats: RunningStats::new(),

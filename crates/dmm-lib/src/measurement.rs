@@ -324,8 +324,8 @@ impl Measurement {
     /// column parse as text. The result is the same string the protocol
     /// parsed the value from, so it always reads back as a number.
     ///
-    /// For display use `to_string()` / `display_raw` instead: those keep the
-    /// meter's padding, which holds the on-screen width steady.
+    /// For display use [`Measurement::value_display_str`] instead, which
+    /// keeps the space after the sign and trims the padding.
     pub fn value_export_str(&self) -> Cow<'_, str> {
         export_value_str(&self.value, self.display_raw.as_deref())
     }

@@ -90,10 +90,7 @@ impl Flag {
     }
 }
 
-/// Status flags parsed from payload bytes 11-13 (after & 0x0F masking).
-///
-/// Bit mapping verified against real device captures and cross-checked
-/// with ljakob/unit_ut61eplus (Python).
+/// The status annunciators a protocol family decodes from its frames.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StatusFlags {
     pub hold: bool,
@@ -263,8 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn display_empty_when_only_auto() {
-        // AUTO alone shouldn't clutter display when it's the default
+    fn display_only_auto() {
         let flags = StatusFlags {
             auto_range: true,
             ..Default::default()
