@@ -249,8 +249,9 @@ fn wall_time(line: usize, text: &str) -> Result<SystemTime, ReadError> {
 
 /// A value as a CSV cell or a JSON sub-value string writes it: the meter's
 /// digits, `OL`, `NCV:n`, or empty. Empty is a word the meter showed or no
-/// value at all, which the caller tells apart. The digits are also returned
-/// as the display text, which re-export writes back unchanged.
+/// value at all, which the caller tells apart. A number that is not finite is
+/// no reading, without its text. The digits are also returned as the display
+/// text, which re-export writes back unchanged.
 fn value_text(
     line: usize,
     text: &str,
@@ -271,14 +272,20 @@ fn value_text(
     let number: f64 = text
         .parse()
         .map_err(|_| at(line, ReadReason::NotAValue(text.to_string())))?;
-    Ok((Some(MeasuredValue::Normal(number)), Some(text.to_string())))
+    // A scale that overflowed once wrote `inf` here. It breaks the trace even
+    // beside the Raw sub-value such a row has, and doesn't refuse the file.
+    Ok(match MeasuredValue::finite(number) {
+        Some(value) => (Some(value), Some(text.to_string())),
+        None => (Some(MeasuredValue::NoReading("")), None),
+    })
 }
 
 /// No value: a blank word in place of a reading, which breaks the trace as
-/// the meter's word did, unless the reading has sub-values — a frame that
-/// carried only its sub-values, which leaves the trace alone.
-fn no_value(has_aux: bool) -> MeasuredValue {
-    if has_aux {
+/// the meter's word did, unless the reading has sub-values of the meter's own
+/// — a frame that carried only its sub-values, which leaves the trace alone.
+/// The `Raw` a scale appended doesn't count: it goes on every row.
+fn no_value(aux: &[ImportedAux]) -> MeasuredValue {
+    if aux.len() > extra_aux(aux) {
         MeasuredValue::Absent
     } else {
         MeasuredValue::NoReading("")
@@ -429,7 +436,7 @@ pub fn read_csv_from(mut input: impl BufRead, limit: Option<usize>) -> Result<Im
         imported.readings.push(ImportedReading {
             wall_time: wall_time(line, cell(timestamp))?,
             mode: cell(mode).to_string(),
-            value: main.unwrap_or_else(|| no_value(!aux.is_empty())),
+            value: main.unwrap_or_else(|| no_value(&aux)),
             unit: cell(unit).to_string(),
             range: cell(range).to_string(),
             display_raw,
@@ -587,7 +594,7 @@ pub fn read_json_from(input: impl BufRead, limit: Option<usize>) -> Result<Impor
                 .and_then(|l| u8::try_from(l).ok())
                 .map(MeasuredValue::NcvLevel)
                 .ok_or_else(|| at(line, ReadReason::NotAValue(r.value.to_string())))?,
-            serde_json::Value::Null => no_value(!aux.is_empty()),
+            serde_json::Value::Null => no_value(&aux),
             other => return Err(at(line, ReadReason::NotAValue(other.to_string()))),
         };
         let mut flags = StatusFlags::default();
@@ -1020,6 +1027,62 @@ mod tests {
             ExportKind::Json
         );
         assert_eq!(kind("recording", "# device: UT61E+\n"), ExportKind::Csv);
+    }
+
+    /// A scale's `Raw` sits on every row, so it doesn't make a no-reading row
+    /// a frame of sub-values, which would bridge the gap in the trace.
+    #[test]
+    fn a_scaled_no_reading_row_reads_back_as_no_reading() {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::NoReading("Auto"),
+            "V",
+            StatusFlags::default(),
+        );
+        dmm_lib::transform::Transform::linear(2.0, 0.0, None).apply(&mut m);
+        let readings = [m];
+        let imported = read_csv(&csv_of(&readings, &[None])).unwrap();
+        assert!(matches!(
+            imported.readings[0].value,
+            MeasuredValue::NoReading("")
+        ));
+        let imported = read_json(&json_of(&readings, &[None])).unwrap();
+        assert!(matches!(
+            imported.readings[0].value,
+            MeasuredValue::NoReading("")
+        ));
+    }
+
+    /// `str::parse::<f64>` takes these, and a scale that overflowed wrote the
+    /// first. A JSON main value is a number, which has no way to spell the
+    /// first three, and out of range is a parse error.
+    #[test]
+    fn a_value_that_is_not_finite_reads_as_no_value() {
+        let (readings, marks) = shapes();
+        for word in ["inf", "-infinity", "NaN", "1e999"] {
+            let text = csv_of(&readings, &marks).replace("1.6109", word);
+            let imported = read_csv(&text).expect(word);
+            assert!(
+                matches!(imported.readings[0].value, MeasuredValue::NoReading("")),
+                "{word}"
+            );
+            let text = json_of(&readings, &marks).replace("\"0.2000\"", &format!("\"{word}\""));
+            let imported = read_json(&text).expect(word);
+            assert!(
+                matches!(
+                    imported.readings[4].aux[0].value,
+                    MeasuredValue::NoReading("")
+                ),
+                "{word}"
+            );
+        }
+        // Not `None`, which beside a sub-value would leave the trace unbroken.
+        assert!(matches!(
+            value_text(1, "inf"),
+            Ok((Some(MeasuredValue::NoReading("")), None))
+        ));
+        let text = json_of(&readings, &marks).replace("1.6109", "1e999");
+        let error = read_json(&text).expect_err("out of range");
+        assert!(matches!(error.reason, ReadReason::Parse(_)), "{error}");
     }
 
     #[test]

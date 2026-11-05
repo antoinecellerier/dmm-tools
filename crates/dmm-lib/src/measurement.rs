@@ -41,7 +41,7 @@ impl MeasuredValue {
 
     /// `value` as a reading, `None` when it is not finite: NaN or an infinity
     /// is no number a meter measured.
-    pub(crate) fn finite(value: f64) -> Option<Self> {
+    pub fn finite(value: f64) -> Option<Self> {
         value.is_finite().then_some(Self::Normal(value))
     }
 }
