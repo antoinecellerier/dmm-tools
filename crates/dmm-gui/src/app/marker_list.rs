@@ -158,8 +158,8 @@ enum Row {
 struct LogRows {
     /// The buffer's samples the log shows.
     shown: Range<usize>,
-    /// Each marker's row, its index and the sample it sits on, in order.
-    markers: Vec<(usize, usize, Option<usize>)>,
+    /// Each marker's row and the sample it sits on, by the marker's index.
+    markers: Vec<(usize, Option<usize>)>,
     /// The rows of the markers without a sample shown, in order.
     own: Vec<usize>,
 }
@@ -169,16 +169,16 @@ impl LogRows {
     fn new(samples: &VecDeque<Sample>, shown: Range<usize>, markers: &[Instant]) -> Self {
         let mut rows = Vec::with_capacity(markers.len());
         let mut own = Vec::new();
-        for (i, &at) in markers.iter().enumerate() {
+        for &at in markers {
             let p = samples.partition_point(|s| s.measurement.timestamp < at);
             // Every earlier own row comes before this marker: they are in
             // time order.
             let row = p.clamp(shown.start, shown.end) - shown.start + own.len();
             if shown.contains(&p) && samples[p].measurement.timestamp == at {
-                rows.push((row, i, Some(p)));
+                rows.push((row, Some(p)));
             } else {
                 own.push(row);
-                rows.push((row, i, None));
+                rows.push((row, None));
             }
         }
         Self {
@@ -193,10 +193,10 @@ impl LogRows {
     }
 
     fn row(&self, r: usize) -> Row {
-        let n = self.markers.partition_point(|&(row, ..)| row < r);
+        let n = self.markers.partition_point(|&(row, _)| row < r);
         match self.markers.get(n) {
-            Some(&(row, i, None)) if row == r => Row::Marker(i),
-            Some(&(row, i, Some(k))) if row == r => Row::Marked(k, i),
+            Some(&(row, None)) if row == r => Row::Marker(n),
+            Some(&(row, Some(k))) if row == r => Row::Marked(k, n),
             _ => Row::Sample(self.shown.start + r - self.own.partition_point(|&row| row < r)),
         }
     }
@@ -531,10 +531,12 @@ impl App {
         let mut markers: Vec<&mut Marker> = self.markers.iter_mut().collect();
         let times: Vec<Instant> = markers.iter().map(|m| m.at).collect();
         let rows = LogRows::new(samples, first..recorded.end, &times);
+        // By marker index, as the rows name them.
         let labels: Vec<(String, Option<Cow<str>>)> = rows
             .markers
             .iter()
-            .map(|&(_, i, sample)| {
+            .enumerate()
+            .map(|(i, &(_, sample))| {
                 let sample = sample.map(|k| &samples[k].measurement);
                 marker_row_label(&l10n, markers[i], sample, graph, recording)
             })
@@ -551,7 +553,6 @@ impl App {
         } else {
             0.0
         };
-        let mut labels = labels.into_iter();
         let mut reveal = None;
         let mut delete = None;
         let mut mark = None;
@@ -577,7 +578,7 @@ impl App {
             // A tag with room for three digits, so the notes line up.
             let number_width =
                 TAG_TIP + 2.0 * TAG_PAD + 3.0 * ui.fonts_mut(|f| f.glyph_width(&log_font(), '0'));
-            let marker_rows = rows.markers.iter().map(|&(row, ..)| row);
+            let marker_rows = rows.markers.iter().map(|&(row, _)| row);
             let geometry = RowGeometry::new(
                 pitch,
                 if narrow {
@@ -658,10 +659,7 @@ impl App {
                 let number = m.number;
                 let at = m.at;
                 let on_graph = graph.holds(at);
-                // One per marker row, and every marker row is drawn, in order.
-                let Some((text, tag)) = labels.next() else {
-                    continue;
-                };
+                let (text, tag) = &labels[i];
                 // number, note, ×, in that order for Tab.
                 let mut marker_column = |ui: &mut Ui, note_width: f32| {
                     if number_tag(ui, &layout, &l10n, m, on_graph) {
@@ -674,7 +672,7 @@ impl App {
                     response
                 };
                 let response = if layout.narrow {
-                    reading_label(ui, &layout, &text, tag.as_deref());
+                    reading_label(ui, &layout, text, tag.as_deref());
                     ui.horizontal(|ui| {
                         marker_column(ui, (ui.available_width() - layout.fixed()).max(40.0))
                     })
@@ -694,7 +692,7 @@ impl App {
                                     .layout(egui::Layout::left_to_right(egui::Align::Center)),
                             ),
                             &layout,
-                            &text,
+                            text,
                             tag.as_deref(),
                         );
                         let note_width = ui.available_width() - layout.fixed() + layout.spacing;
