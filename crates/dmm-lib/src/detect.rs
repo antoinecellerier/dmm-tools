@@ -226,7 +226,8 @@ fn detect_among(
     };
     // A frame that settles the family but not the model — a bare UT61+
     // reading, stale from an earlier session or caught mid-poll. Remember it
-    // and keep probing: a name frame later in the cascade outranks it.
+    // and keep listening: a name frame later in the same window outranks it,
+    // and when the window ends it settles detection (below).
     let mut family_only: Option<FamilyEvidence> = None;
 
     for fp in probes {
