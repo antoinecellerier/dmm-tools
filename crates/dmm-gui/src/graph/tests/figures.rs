@@ -77,6 +77,26 @@ fn the_cursor_readout_covers_the_readings_between_the_cursors() {
     );
 }
 
+/// The readout writes its integral as the statistics panel does: a second at
+/// 1 µA is well under what four decimals of a mAh could show.
+#[test]
+fn the_cursor_readout_writes_the_integral_in_a_readable_prefix() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(0.001, t0, "DC A", "mA", None);
+    g.push(0.001, t0 + Duration::from_secs(1), "DC A", "mA", None);
+    g.cursors.active = true;
+    g.cursors.a = Some(0.0);
+    g.cursors.b = Some(1.0);
+    let figures = g
+        .cursor_readout(&crate::l10n::english())
+        .expect("both cursors placed");
+    assert!(
+        figures.contains(&"\u{222b}=277.78 pAh".to_string()),
+        "{figures:?}"
+    );
+}
+
 /// Over-range readings count with the readings they fell between: after a
 /// range's first reading up to the one after its last, or up to now after
 /// the newest, never the stretch before the first.

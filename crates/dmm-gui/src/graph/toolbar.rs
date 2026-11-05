@@ -449,7 +449,10 @@ impl Graph {
         };
         let integral = integral
             .and_then(|raw| dmm_lib::stats::integral_display(raw, unit))
-            .map(|(value, disp_unit)| format!("\u{222b}={value:.4} {disp_unit}"));
+            .map(|(value, disp_unit)| {
+                let (number, disp_unit) = dmm_shared::stat_figure(value, disp_unit, None);
+                format!("\u{222b}={number} {disp_unit}")
+            });
         let figures = [
             Some(format!("\u{0394}T={:.2} s", (tb - ta).abs())),
             Some(format!("\u{0394}={dv} {unit}")),

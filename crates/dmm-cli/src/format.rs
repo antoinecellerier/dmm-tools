@@ -250,7 +250,8 @@ fn format_text(
         line = format!("{name:<col$}{rest}");
     }
     if let Some((val, unit)) = integral {
-        writeln!(w, "{line} [\u{222b} {val:.4} {unit}]")?;
+        let (number, unit) = dmm_shared::stat_figure(val, unit, None);
+        writeln!(w, "{line} [\u{222b} {number} {unit}]")?;
     } else {
         writeln!(w, "{line}")?;
     }
@@ -1007,6 +1008,14 @@ mod tests {
         let parsed = json_of(&m, false);
         assert_eq!(parsed["value"]["ncv_level"], 3);
         assert_eq!(parsed["mode"], "NCV");
+    }
+
+    /// The live line writes the integral as the summary does.
+    #[test]
+    fn format_text_writes_the_integral_in_a_readable_prefix() {
+        let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let output = rendered(Output::Text, &m, Some((0.00001234, "mAh")));
+        assert!(output.contains("[\u{222b} 12.340 nAh]"), "{output}");
     }
 
     #[test]
