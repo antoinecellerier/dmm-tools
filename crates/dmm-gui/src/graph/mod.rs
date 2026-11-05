@@ -1,14 +1,21 @@
 //! Real-time scrolling graph: the history buffer the App pushes samples into,
 //! and the widget that draws it.
 //!
-//! The concerns live in submodules — [`view`] (what slice is shown and the
-//! gestures that move it), [`toolbar`], [`render`] (the main plot),
-//! [`breaks`] (the interruption the trace is in before its next point),
-//! [`pattern`] (its dashed and dotted lines), [`axes`] (the Y axes of sub-values in other units), [`minimap`], [`level`] (the minimap's bucketed trace), [`analysis`]
-//! (visible-slice statistics), [`field`] (the toolbar's text-edit buffers and
-//! the values they parse to) and [`time`] (axis label formatting) — all of
-//! which add methods to the one [`Graph`] declared here, so the type's public
-//! API is unchanged by the split.
+//! The concerns live in submodules. These add methods to the one [`Graph`]
+//! declared here, so callers see a single type: [`ingest`] (taking readings
+//! in), [`view`] (what slice is shown and the gestures that move it),
+//! [`view_state`] (the view as an export saves it), [`toolbar`], [`render`]
+//! (the main plot), [`hover`] (the readings under the pointer), [`labels`]
+//! (the text painted over the plot), [`key`] (the plot key), [`menu`] (the
+//! right-click menu), [`limits`] (the alarm limits drawn), [`minimap`],
+//! [`analysis`] (visible-slice statistics) and [`figures`] (the caches the
+//! statistics and the histogram read). These hold types and functions of
+//! their own: [`breaks`] (the interruption the trace is in before its next
+//! point), [`pattern`] (its dashed and dotted lines), [`axes`] (the Y axes
+//! of sub-values in other units), [`level`] (the minimap's bucketed trace),
+//! [`histogram`] (the histogram pane), [`field`] (the toolbar's text-edit
+//! buffers and the values they parse to) and [`time`] (axis label
+//! formatting).
 //!
 //! Drawing has two tiers, so a frame costs the same an hour into a session as
 //! a minute in. The minimap shows the whole history, so it reads an
@@ -546,8 +553,9 @@ pub struct Graph {
     histogram: Option<BinnedHistogram>,
     /// The minimap's whole-session trace, bucketed at whatever width its
     /// strip last asked for. `None` until the strip first draws, and again
-    /// whenever the buckets stop meaning what they did — see `clear` and
-    /// `set_sample_interval_ms`.
+    /// whenever the buckets stop meaning what they did: a `clear` (a trace
+    /// restart included), an auto-range rescale, a swap of the plotted
+    /// series, or a lower `set_max_points`.
     minimap_level: Option<MinimapLevel>,
     /// Cached AccessKit label for the plot — rebuilt only when state changes.
     a11y_label: String,
@@ -676,16 +684,6 @@ impl Graph {
         }
     }
 
-    /// Plot `series`, in `unit`, in place of the current one by swapping the
-    /// two traces: the one of that name kept beside the plotted series becomes
-    /// the plotted one, and the plotted one is kept beside it under its own
-    /// name. `false`, touching nothing, when no such trace is kept in `unit`.
-    ///
-    /// The time axis and the cursors still apply. A switch to another unit
-    /// moves the Y axis to it and releases a pinned Y range, chosen for the
-    /// old unit's scale. A break in a sub-value's trace carries no reason, so
-    /// on becoming the plotted series it is drawn as a gap, an over-range
-    /// stretch included.
     /// Make the **Plot:** choice the plotted series now, where its trace is
     /// kept beside the plotted one; `false` when it is not, and the next
     /// sample restarts the graph on it.
@@ -706,6 +704,16 @@ impl Graph {
         self.swap_plotted_series(series.as_deref(), &unit)
     }
 
+    /// Plot `series`, in `unit`, in place of the current one by swapping the
+    /// two traces: the one of that name kept beside the plotted series becomes
+    /// the plotted one, and the plotted one is kept beside it under its own
+    /// name. `false`, touching nothing, when no such trace is kept in `unit`.
+    ///
+    /// The time axis and the cursors still apply. A switch to another unit
+    /// moves the Y axis to it and releases a pinned Y range, chosen for the
+    /// old unit's scale. A break in a sub-value's trace carries no reason, so
+    /// on becoming the plotted series it is drawn as a gap, an over-range
+    /// stretch included.
     fn swap_plotted_series(&mut self, series: Option<&str>, unit: &str) -> bool {
         let incoming_name = series.unwrap_or(self.main_name());
         let Some(i) = self
