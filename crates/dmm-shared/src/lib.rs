@@ -17,8 +17,8 @@
 //! same; [`replay`], what `--replay` opens, a golden fixture included;
 //! [`help`], the help and version text both print; [`logging`], the log
 //! levels both start with; [`RECONNECT_INTERVAL`], how often both retry
-//! a lost link; and [`stat_decimals`], how many decimals both write the
-//! statistics and the integral with. The canonical settings location is
+//! a lost link; and [`stat_figure`], how both write a figure of the
+//! statistics and the integral. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`, or from
 //! `%APPDATA%` when set).
@@ -38,7 +38,9 @@ pub mod l10n;
 pub mod logging;
 pub mod replay;
 
+use dmm_lib::stats::ShownDigits;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -48,16 +50,66 @@ use std::time::Duration;
 /// and in `dmm-cli read`.
 pub const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 
-/// How many decimals the statistics and the integral write a figure of
-/// `magnitude` with, in `dmm-cli read`'s summary and dmm-gui's session
-/// block: four, as many more as keep four significant digits below 1, so a
-/// run carried into a larger prefix (219.87 Ω into MΩ) does not round to
-/// nothing, and no more than twelve.
-pub fn stat_decimals(magnitude: f64) -> usize {
-    if !magnitude.is_finite() || magnitude == 0.0 || magnitude >= 1.0 {
-        return 4;
+/// A figure of the statistics or the integral as `dmm-cli read`'s summary
+/// and dmm-gui's statistics write it, number and unit apart.
+///
+/// With the series' [`ShownDigits`], it keeps to what the meter showed: in
+/// one of the prefixes the meter used, the largest the figure reaches 1 in
+/// (else the smallest), to the most decimals the meter showed in it. A run
+/// carried from 1.2341 MΩ down to 0.05 Ω writes its Max as 1.2341 MΩ and
+/// its Min as 0.05 Ω, and one that stays on a range writes every figure to
+/// that range's resolution. Rounded in the prefix picked, and left there:
+/// 999.996 Ω at two decimals is 1000.00 Ω, a digit more than the range
+/// shows, rather than a prefix picked again for the rounded figure.
+///
+/// Without them — nothing shown yet, a series of another quantity, the
+/// integral — the figure takes five significant digits, about what a
+/// 22 000- to 60 000-count meter shows, in the prefix of `unit` that puts
+/// one to three digits before the point, picked for this figure alone. A
+/// unit no prefix goes on (°C, %, mAh, "") keeps its own; zero is written
+/// in `unit`; and a figure that is only rounding noise stays short, at
+/// twelve decimals at most.
+pub fn stat_figure<'a>(
+    value: f64,
+    unit: &'a str,
+    shown: Option<&ShownDigits>,
+) -> (String, Cow<'a, str>) {
+    if !value.is_finite() {
+        return (value.to_string(), unit.into());
     }
-    (3 - magnitude.log10().floor() as i64).clamp(4, 12) as usize
+    if let Some((unit, ratio, decimals)) = shown.and_then(|s| s.layout(value, unit)) {
+        let mut number = format!("{:.decimals$}", ratio.apply(value));
+        // A small negative figure rounded to nothing is written as zero.
+        if number.starts_with('-') && number[1..].chars().all(|c| matches!(c, '0' | '.')) {
+            number.remove(0);
+        }
+        return (number, unit.into());
+    }
+    if value == 0.0 {
+        return ("0.0000".into(), unit.into());
+    }
+    // Rounded to five significant digits once, before the prefix is picked,
+    // so 999.996 V is written 1.0000 kV rather than 1000.00 V.
+    let (rounded, exponent) = significant(value);
+    let (value, unit) = match dmm_lib::transform::prefix_for(unit, exponent) {
+        Some((unit, ratio)) => (ratio.apply(rounded), Cow::Owned(unit)),
+        None => (rounded, Cow::Borrowed(unit)),
+    };
+    // The exponent again, of the figure as now written: 10⁻² V re-expressed
+    // may land a hair under 10 mV.
+    let (_, exponent) = significant(value);
+    let decimals = (4 - exponent).clamp(0, 12) as usize;
+    (format!("{value:.decimals$}"), unit)
+}
+
+/// `value` rounded to five significant digits, and its power of ten.
+fn significant(value: f64) -> (f64, i32) {
+    let written = format!("{value:.4e}");
+    let exponent = written
+        .split_once('e')
+        .and_then(|(_, e)| e.parse().ok())
+        .unwrap_or(0);
+    (written.parse().unwrap_or(value), exponent)
 }
 
 /// Settings fields shared between `dmm-cli` and `dmm-gui`.
@@ -307,20 +359,154 @@ impl SharedSettings {
 mod tests {
     use super::*;
 
-    /// Four decimals from 1 up, four significant digits below it: a run
-    /// carried from Ω into MΩ keeps its figures.
+    use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::{MeasuredValue, Measurement};
+    use dmm_lib::stats::SeriesStats;
+
+    /// `stat_figure` joined as the binaries write it, with nothing shown.
+    fn figure(value: f64, unit: &str) -> String {
+        let (number, unit) = stat_figure(value, unit, None);
+        format!("{number} {unit}")
+    }
+
+    /// What a series of readings showed, each its meter text and unit.
+    fn shown_by(readings: &[(&str, &'static str)]) -> SeriesStats {
+        let mut session = SeriesStats::new(false);
+        for &(display, unit) in readings {
+            let value = display.replace(' ', "").parse().unwrap();
+            let mut m = Measurement::test_fixture(
+                MeasuredValue::Normal(value),
+                unit,
+                StatusFlags::default(),
+            );
+            m.display_raw = Some(display.to_string());
+            session.push(&m);
+        }
+        session
+    }
+
+    /// `stat_figure` joined, after what `session` showed.
+    fn shown_figure(session: &SeriesStats, value: f64, unit: &str) -> String {
+        let (number, unit) = stat_figure(value, unit, Some(session.shown()));
+        format!("{number} {unit}")
+    }
+
+    /// A run across the UT61E+'s ranges, held in MΩ: each figure in the
+    /// largest range it reaches 1 in, to that range's decimals.
     #[test]
-    fn stat_figures_keep_four_significant_digits_below_one() {
-        let at = |v: f64| format!("{v:.*}", stat_decimals(v.abs()));
-        assert_eq!(at(1.05), "1.0500");
-        assert_eq!(at(219.87), "219.8700");
-        assert_eq!(at(0.95), "0.9500");
-        assert_eq!(at(0.0293), "0.02930");
-        assert_eq!(at(0.00021987), "0.0002199");
-        assert_eq!(at(-0.00021987), "-0.0002199");
-        assert_eq!(at(0.0), "0.0000");
+    fn figures_keep_the_ranges_the_meter_showed() {
+        let session = shown_by(&[
+            (" 31.300", "M\u{3a9}"),
+            (" 5.6351", "k\u{3a9}"),
+            (" 0.05", "\u{3a9}"),
+            (" 2.137", "M\u{3a9}"),
+        ]);
+        let at = |v: f64| shown_figure(&session, v, "M\u{3a9}");
+        assert_eq!(at(0.000_000_04), "0.04 \u{3a9}");
+        assert_eq!(at(31.3), "31.300 M\u{3a9}");
+        assert_eq!(at(5.6351), "5.635 M\u{3a9}");
+        assert_eq!(at(0.012_345_6), "12.3456 k\u{3a9}");
+        // Below every range: the smallest, to its decimals.
+        assert_eq!(at(0.000_000_000_3), "0.00 \u{3a9}");
+        assert_eq!(at(0.0), "0.00 \u{3a9}");
+        // Above every range: the largest.
+        assert_eq!(at(4_500.0), "4500.000 M\u{3a9}");
+    }
+
+    /// A run on one range keeps that range's resolution throughout, below
+    /// 1 and in its spread too.
+    #[test]
+    fn a_run_on_one_range_keeps_its_resolution() {
+        let session = shown_by(&[(" 1.6112", "V"), (" 0.0264", "V"), (" 0.4406", "V")]);
+        assert_eq!(shown_figure(&session, 0.0264, "V"), "0.0264 V");
+        assert_eq!(shown_figure(&session, 0.614_033, "V"), "0.6140 V");
+        assert_eq!(shown_figure(&session, -0.868_17, "V"), "-0.8682 V");
+        // A negative figure rounded to nothing is zero, not "-0.0000".
+        assert_eq!(shown_figure(&session, -0.000_04, "V"), "0.0000 V");
+        // Rounding up stays in the prefix picked.
+        let session = shown_by(&[("999.99", "\u{3a9}")]);
+        assert_eq!(
+            shown_figure(&session, 999.996, "\u{3a9}"),
+            "1000.00 \u{3a9}"
+        );
+    }
+
+    /// Another quantity than the one shown — a plotted sub-value — and a
+    /// series that showed no digits take the five significant digits.
+    #[test]
+    fn nothing_shown_falls_back_to_five_digits() {
+        let session = shown_by(&[(" 1.6112", "V")]);
+        assert_eq!(shown_figure(&session, 50.012, "Hz"), "50.012 Hz");
+        let session = SeriesStats::new(false);
+        assert_eq!(shown_figure(&session, 0.0264, "V"), "26.400 mV");
+    }
+
+    /// A unit no prefix goes on keeps its own, to the decimals shown in it.
+    #[test]
+    fn a_unit_without_prefixes_keeps_its_shown_decimals() {
+        let session = shown_by(&[(" 21.5", "\u{b0}C"), (" 21.7", "\u{b0}C")]);
+        assert_eq!(shown_figure(&session, 21.6333, "\u{b0}C"), "21.6 \u{b0}C");
+        assert_eq!(shown_figure(&session, 0.115_47, "\u{b0}C"), "0.1 \u{b0}C");
+    }
+
+    /// With nothing shown, a run from 1.2345 MΩ down to 219.9 Ω, carried in
+    /// Ω: each figure in the prefix its own size calls for, the spread too.
+    #[test]
+    fn each_figure_takes_its_own_prefix() {
+        assert_eq!(figure(219.9, "\u{3a9}"), "219.90 \u{3a9}");
+        assert_eq!(figure(1_234_500.0, "\u{3a9}"), "1.2345 M\u{3a9}");
+        assert_eq!(figure(617_359.95, "\u{3a9}"), "617.36 k\u{3a9}");
+        assert_eq!(figure(872_720.12, "\u{3a9}"), "872.72 k\u{3a9}");
+        // The same run carried in MΩ.
+        assert_eq!(figure(0.0002199, "M\u{3a9}"), "219.90 \u{3a9}");
+        assert_eq!(figure(0.6173599, "M\u{3a9}"), "617.36 k\u{3a9}");
+    }
+
+    /// With nothing shown, a run in one prefix gets five significant digits.
+    #[test]
+    fn one_prefix_runs_keep_five_digits() {
+        assert_eq!(figure(5.0, "V"), "5.0000 V");
+        assert_eq!(figure(1.61123, "V"), "1.6112 V");
+        assert_eq!(figure(0.12345, "V"), "123.45 mV");
+        assert_eq!(figure(0.0264, "V"), "26.400 mV");
+        assert_eq!(figure(107.95, "mA"), "107.95 mA");
+        assert_eq!(figure(49.092, "mA"), "49.092 mA");
+        assert_eq!(figure(0.0007071, "V"), "707.10 \u{b5}V");
+        assert_eq!(figure(2200.0, "nF"), "2.2000 \u{b5}F");
+    }
+
+    /// With nothing shown, rounding that reaches the next prefix moves up
+    /// to it.
+    #[test]
+    fn rounding_up_moves_to_the_next_prefix() {
+        assert_eq!(figure(999.996, "V"), "1.0000 kV");
+        assert_eq!(figure(0.00999996, "V"), "10.000 mV");
+        assert_eq!(figure(9.99996, "V"), "10.000 V");
+    }
+
+    #[test]
+    fn zero_and_negatives() {
+        assert_eq!(figure(0.0, "V"), "0.0000 V");
+        assert_eq!(figure(-0.0, "mA"), "0.0000 mA");
+        assert_eq!(figure(-0.0123456, "V"), "-12.346 mV");
+        assert_eq!(figure(-1_500.0, "\u{3a9}"), "-1.5000 k\u{3a9}");
+    }
+
+    /// With nothing shown, a unit no prefix goes on keeps its own, at five
+    /// significant digits.
+    #[test]
+    fn units_without_prefixes_keep_theirs() {
+        assert_eq!(figure(21.53, "\u{b0}C"), "21.530 \u{b0}C");
+        assert_eq!(figure(1234.5, "\u{b0}F"), "1234.5 \u{b0}F");
+        assert_eq!(figure(49.9, "%"), "49.900 %");
+        assert_eq!(figure(0.0293, "ms"), "0.029300 ms");
+        assert_eq!(figure(0.00001234, "mAh"), "0.000012340 mAh");
+        assert_eq!(figure(3.0, "V\u{b7}s"), "3.0000 V\u{b7}s");
+        assert_eq!(stat_figure(185.0, "", None), ("185.00".into(), "".into()));
+        // Above five digits, whole and still to five significant ones.
+        assert_eq!(figure(123_456.0, "hFE"), "123460 hFE");
         // Bounded: a figure that is only rounding noise stays short.
-        assert_eq!(at(1e-17), "0.000000000000");
+        assert_eq!(figure(1e-17, "%"), "0.000000000000 %");
     }
 
     /// `%APPDATA%` leads to the file `directories` finds, so setting it

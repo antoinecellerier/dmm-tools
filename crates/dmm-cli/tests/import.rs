@@ -224,7 +224,8 @@ timestamp,mode,value,unit,range,flags
 ";
 
 /// An auto-range step from mV to V carries the statistics and the integral
-/// on, in volts: no reset note, and the integral column continues across it.
+/// on, in volts: no reset note, each figure in a range the file showed to
+/// that range's decimals, and the integral column continues across it.
 #[test]
 fn an_auto_range_step_carries_the_statistics_and_integral_on() {
     let dir = TestDir::new("decade-step");
@@ -242,7 +243,7 @@ fn an_auto_range_step_carries_the_statistics_and_integral_on() {
     assert!(!err.contains("changed"), "no reset note: {err}");
     assert!(
         err.contains(
-            "4 readings | Min: 0.9000 V | Max: 1.1000 V | Mean: 1.0000 V | \u{3c3}: 0.1155 V"
+            "4 readings | Min: 900.0 mV | Max: 1.100 V | Mean: 1.000 V | \u{3c3}: 115.5 mV"
         ),
         "the summary: {err}"
     );

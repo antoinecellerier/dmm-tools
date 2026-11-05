@@ -264,7 +264,7 @@ $ dmm-cli read --format csv --count 1
 timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
 2026-09-02T00:00:00+00:00,V AC Hz,239.22,V,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
 
---- 1 reading | Min: 239.2200 V | Max: 239.2200 V | Mean: 239.2200 V
+--- 1 reading | Min: 239.22 V | Max: 239.22 V | Mean: 239.22 V
 ```
 <!-- /snippet -->
 
@@ -298,7 +298,7 @@ integral is also shown.
 Statistics and the integral cover a single mode and quantity: turning the
 dial resets both and prints a note to stderr, so the summary always describes
 one comparable series. Auto-range crossing a decade (mV → V, Ω → kΩ) carries
-them on, in the unit the meter shows last.
+them on, each figure in one of the ranges the meter showed.
 
 When the link to a meter drops — a cable pulled, a Bluetooth adapter switched
 off — the run waits for it and reopens the meter it first opened, even under

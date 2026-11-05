@@ -1,5 +1,7 @@
 use crate::measurement::{MeasuredValue, Measurement};
-use crate::transform::{PrefixRatio, prefix_ratio, si_prefix};
+use crate::transform::{
+    PrefixRatio, decimals_of, prefix_power, prefix_ratio, re_express, si_prefix,
+};
 use log::debug;
 use std::time::{Duration, Instant};
 
@@ -272,6 +274,97 @@ pub(crate) fn integral_unit_info(unit: &str) -> Option<(&'static str, f64)> {
     }
 }
 
+/// What the meter showed one series of readings in: each prefix of its unit
+/// it used, and the most decimals it showed in that prefix — 0.05 Ω on the
+/// UT61E+'s 220 Ω range is two, 1.2341 MΩ four.
+///
+/// The statistics are written from it ([`ShownDigits::layout`]), so a
+/// figure keeps to a range and a resolution the meter used rather than
+/// digits it never showed. Keyed by the prefix's power of ten, not by the
+/// unit the figures are held in, so an auto-range step that re-expresses
+/// those leaves it standing.
+#[derive(Debug, Clone, Default)]
+pub struct ShownDigits {
+    /// The base unit the prefixes go on ("Ω"), set by the first reading.
+    base: String,
+    /// `(power of ten of the prefix, decimals)`, at most one per prefix.
+    seen: Vec<(i32, usize)>,
+}
+
+impl ShownDigits {
+    /// Note a reading of `value` in `unit` the meter showed as `display`.
+    ///
+    /// The digits count only when they spell `value`: the meter's text
+    /// can be something else (a pattern, a word, segments read as digits
+    /// the value was not taken from), and decimals counted from it would
+    /// then be made up.
+    fn record(&mut self, value: f64, unit: &str, display: &str) {
+        // Spaces apart, the UT61E+'s "- 55.79" or a padded " 1.6112" is a
+        // number; allocating only for the one with a space inside.
+        let trimmed = display.trim();
+        let number: std::borrow::Cow<'_, str> = if trimmed.contains(' ') {
+            trimmed
+                .chars()
+                .filter(|c| *c != ' ')
+                .collect::<String>()
+                .into()
+        } else {
+            trimmed.into()
+        };
+        let Ok(shown) = number.parse::<f64>() else {
+            return;
+        };
+        let decimals = decimals_of(&number);
+        // Within half the last digit shown: a float-based family's text is
+        // its f32 rounded, the value that f32 widened.
+        let half_step = 0.5 * 10f64.powi(-(decimals as i32));
+        if !shown.is_finite() || (shown - value).abs() > half_step || decimals > 9 {
+            return;
+        }
+        let (base, power) = prefix_power(unit);
+        if self.seen.is_empty() {
+            base.clone_into(&mut self.base);
+        } else if self.base != base {
+            return;
+        }
+        match self.seen.iter_mut().find(|(p, _)| *p == power) {
+            Some((_, most)) => *most = (*most).max(decimals),
+            None => {
+                self.seen.push((power, decimals));
+                self.seen.sort_unstable_by_key(|&(p, _)| p);
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        self.seen.clear();
+    }
+
+    /// How to write a figure of `value` `unit` as the meter would: the unit
+    /// under one of the prefixes it showed, the ratio that re-expresses the
+    /// figure in it, and the decimals it showed there. The prefix is the
+    /// largest one the figure reaches 1 in, else the smallest: 31.3 MΩ in
+    /// MΩ, 0.04 Ω in Ω beside them both.
+    ///
+    /// `None` when nothing was shown yet, or `unit` is another quantity's
+    /// than the one shown (a plotted sub-value's Hz beside a V reading).
+    pub fn layout(&self, value: f64, unit: &str) -> Option<(String, PrefixRatio, usize)> {
+        let (base, from) = prefix_power(unit);
+        if base != self.base {
+            return None;
+        }
+        let (power, decimals) = self
+            .seen
+            .iter()
+            .rev()
+            .copied()
+            .find(|&(p, _)| value.abs() * 10f64.powi(from - p) >= 1.0)
+            .or_else(|| self.seen.first().copied())?;
+        let (unit, ratio) = re_express(unit, power)?;
+        Some((unit, ratio, decimals))
+    }
+}
+
 /// Why the accumulators were reset: the reading started a new series.
 ///
 /// Mode *and* unit, because neither check subsumes the other: a `--unit`
@@ -324,6 +417,8 @@ pub struct SeriesStats {
     /// names only out of range: the first reading with a value sets it, with
     /// nothing accumulated to reset.
     unit_unread: bool,
+    /// The prefixes and decimals the meter showed the series in.
+    shown: ShownDigits,
 }
 
 impl SeriesStats {
@@ -339,6 +434,7 @@ impl SeriesStats {
             integrate,
             series: None,
             unit_unread: false,
+            shown: ShownDigits::default(),
         }
     }
 
@@ -418,6 +514,7 @@ impl SeriesStats {
         if change.is_some() {
             self.stats.reset();
             self.integrator.reset();
+            self.shown.clear();
             self.series = Some((m.mode.to_string(), m.unit.to_string()));
             self.unit_unread = overload;
         } else if !overload {
@@ -427,6 +524,9 @@ impl SeriesStats {
         match &m.value {
             MeasuredValue::Normal(v) => {
                 self.stats.push(*v);
+                if let Some(display) = m.display_raw.as_deref() {
+                    self.shown.record(*v, &m.unit, display);
+                }
                 if self.integrate {
                     self.integrator.push(*v, m.timestamp);
                 }
@@ -451,6 +551,13 @@ impl SeriesStats {
     pub fn reset(&mut self) {
         self.stats.reset();
         self.integrator.reset();
+        self.shown.clear();
+    }
+
+    /// The prefixes and decimals the meter showed the series in, which the
+    /// binaries write its figures with.
+    pub fn shown(&self) -> &ShownDigits {
+        &self.shown
     }
 
     /// Mode the accumulated figures were measured in, or `None` before the
@@ -1201,6 +1308,115 @@ mod tests {
             None
         );
         assert_eq!(s.stats.count, 1);
+    }
+
+    /// A reading the meter showed as `display`, its value read off it.
+    fn shown(mode: &'static str, unit: &'static str, display: &str) -> Measurement {
+        let value = display.replace(' ', "").parse().unwrap();
+        let mut m = reading(mode, unit, value, Instant::now());
+        m.display_raw = Some(display.to_string());
+        m
+    }
+
+    /// The unit and decimals `value` `unit` is written with, if any.
+    fn written(s: &SeriesStats, value: f64, unit: &str) -> Option<(String, usize)> {
+        s.shown()
+            .layout(value, unit)
+            .map(|(unit, _, decimals)| (unit, decimals))
+    }
+
+    /// Each prefix the meter used, to the most decimals it showed there:
+    /// the largest a figure reaches 1 in, else the smallest.
+    #[test]
+    fn the_meters_prefixes_and_decimals_are_kept() {
+        let mut s = SeriesStats::new(false);
+        for (unit, display) in [
+            ("M\u{3a9}", " 31.300"),
+            ("k\u{3a9}", " 5.6351"),
+            // A float-based family's text drops a trailing zero: the most
+            // decimals shown in a prefix stand.
+            ("\u{3a9}", " 0.1"),
+            ("\u{3a9}", "- 0.05"),
+        ] {
+            s.push(&shown("\u{3a9}", unit, display));
+        }
+        let ohms = |v: f64| written(&s, v, "\u{3a9}");
+        let at = |unit: &str, decimals| Some((unit.to_string(), decimals));
+        assert_eq!(ohms(0.04), at("\u{3a9}", 2));
+        assert_eq!(ohms(999.9), at("\u{3a9}", 2));
+        assert_eq!(ohms(1_000.0), at("k\u{3a9}", 4));
+        assert_eq!(ohms(31.3e6), at("M\u{3a9}", 3));
+        assert_eq!(ohms(-5.6351e6), at("M\u{3a9}", 3));
+        assert_eq!(ohms(0.0), at("\u{3a9}", 2));
+        // Re-expressed into the unit picked.
+        let (_, ratio, _) = s.shown().layout(5_635.1, "\u{3a9}").unwrap();
+        assert!((ratio.apply(5_635.1) - 5.6351).abs() < 1e-12);
+    }
+
+    /// Keyed by the prefix, not by the unit the figures are held in: the
+    /// series moving from MΩ to Ω writes the same figure the same way.
+    #[test]
+    fn the_shown_prefixes_survive_an_auto_range_step() {
+        let mut s = SeriesStats::new(false);
+        s.push(&shown("\u{3a9}", "M\u{3a9}", " 1.2341"));
+        assert_eq!(
+            written(&s, 1.2341, "M\u{3a9}"),
+            Some(("M\u{3a9}".into(), 4))
+        );
+        s.push(&shown("\u{3a9}", "\u{3a9}", "219.82"));
+        assert_eq!(s.unit(), Some("\u{3a9}"));
+        assert_eq!(
+            written(&s, 1_234_100.0, "\u{3a9}"),
+            Some(("M\u{3a9}".into(), 4))
+        );
+        assert_eq!(written(&s, 219.82, "\u{3a9}"), Some(("\u{3a9}".into(), 2)));
+        // Another quantity's figure (a plotted sub-value) is not written
+        // from them.
+        assert_eq!(written(&s, 50.0, "Hz"), None);
+    }
+
+    /// A new series and the Reset button forget what the meter showed.
+    #[test]
+    fn a_new_series_and_reset_forget_the_shown_prefixes() {
+        let mut s = SeriesStats::new(false);
+        s.push(&shown("DC V", "V", " 1.6112"));
+        s.reset();
+        assert_eq!(written(&s, 1.6, "V"), None);
+        s.push(&shown("DC V", "V", " 1.6112"));
+        // The dial turned to mV with the probes open: a new series, and an
+        // overload shows no digits.
+        let mut ol = reading("DC mV", "mV", 0.0, Instant::now());
+        ol.value = MeasuredValue::Overload;
+        ol.display_raw = Some("    OL".into());
+        assert!(s.push(&ol).is_some());
+        assert_eq!(written(&s, 1.6, "V"), None);
+        s.push(&shown("DC mV", "mV", " 12.345"));
+        assert_eq!(written(&s, 0.012, "V"), Some(("mV".into(), 3)));
+    }
+
+    /// Digits that do not spell the value, a word in their place and a
+    /// reading without them count for nothing.
+    #[test]
+    fn only_digits_that_spell_the_value_count() {
+        let mut s = SeriesStats::new(false);
+        // test_fixture's "  5.678" beside a value of 1.
+        s.push(&reading("DC V", "V", 1.0, Instant::now()));
+        let mut none = reading("DC V", "V", 1.0, Instant::now());
+        none.display_raw = None;
+        s.push(&none);
+        let mut pattern = reading("DC V", "V", 1.0, Instant::now());
+        pattern.display_raw = Some("1.2.3.4".into());
+        s.push(&pattern);
+        let mut word = reading("DC V", "V", 1.0, Instant::now());
+        word.value = MeasuredValue::NoReading("Auto");
+        word.display_raw = Some(" 0.000".into());
+        s.push(&word);
+        assert_eq!(written(&s, 1.0, "V"), None);
+        // A float-based family's text, its f32 widened beside it.
+        let mut f32_reading = reading("DC V", "V", f64::from(12.345f32), Instant::now());
+        f32_reading.display_raw = Some(format!("{}", 12.345f32));
+        s.push(&f32_reading);
+        assert_eq!(written(&s, 1.0, "V"), Some(("V".into(), 3)));
     }
 
     /// The CLI prints these verbatim; the wording predates `SeriesChange` and

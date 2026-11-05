@@ -2,7 +2,7 @@
 //! both the session and the visible graph window, pre-formatted once and
 //! rendered in either the wide stacked rows or the compact single-line form.
 
-use dmm_lib::stats::{self, RunningStats};
+use dmm_lib::stats::{self, RunningStats, ShownDigits};
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use eframe::egui::{self, Color32, RichText, Ui};
@@ -17,7 +17,7 @@ struct FormattedStatsGroup {
     /// Sample standard deviation, written like the average.
     sd: String,
     count: u64,
-    /// The integral's line, caption and all (e.g. "∫:    0.2925 mAh (12s)"),
+    /// The integral's line, caption and all (e.g. "∫:   0.29250 mAh (12s)"),
     /// or None if not integrable.
     integral: Option<String>,
 }
@@ -39,11 +39,17 @@ impl FormattedStats {
     /// The integrals arrive already scaled to their display unit (see
     /// [`stats::integral_display`]) as `(value, display_unit, elapsed_secs)`.
     ///
-    /// The session block and both integrals take [`dmm_shared::stat_decimals`],
-    /// as `dmm-cli read`'s summary does.
-    /// `visible_decimals` is what the graph writes the plotted series with,
-    /// as ([`Graph::decimals`] of a point, of a mean): an NCV level's Min and
-    /// Max are whole numbers.
+    /// Every figure and both integrals are written by
+    /// [`dmm_shared::stat_figure`], as `dmm-cli read`'s summary writes them:
+    /// the figures in a range and to the resolution the meter showed the
+    /// session in (`shown`), the integrals to five significant digits. The
+    /// visible block takes the session's ranges too, so a window lying
+    /// wholly before a range the meter has since left may be written in a
+    /// range it did not show itself; accepted, as the two blocks then read
+    /// alike. A level's figures are not: `visible_levels` is what the graph
+    /// writes a plotted level with ([`Graph::decimals`] of a point, of a
+    /// mean), as an NCV level's Min and Max are whole numbers, and `None`
+    /// for a measured series.
     ///
     /// [`Graph::decimals`]: crate::graph::Graph::decimals
     #[expect(
@@ -54,35 +60,47 @@ impl FormattedStats {
         l10n: &Localizer,
         stats: &RunningStats,
         visible: Option<&RunningStats>,
+        shown: &ShownDigits,
         unit: &str,
         visible_unit: &str,
-        visible_decimals: (usize, usize),
+        visible_main: bool,
+        visible_levels: bool,
         integral: Option<(f64, &str, Option<f64>)>,
         visible_integral: Option<(f64, &str, Option<f64>)>,
     ) -> Self {
-        let fmt_in = |unit: &str, v: Option<f64>, decimals: usize| -> String {
-            match v {
-                Some(val) => format!("{val:>10.decimals$} {unit}"),
-                None => format!("{:>10} {unit}", crate::NO_DATA),
+        // Right-aligned to one width, so the figures line up and hold still
+        // as they update, whatever unit each one ends on.
+        let fmt_in = |unit: &str,
+                      v: Option<f64>,
+                      decimals: Option<usize>,
+                      shown: Option<&ShownDigits>|
+         -> String {
+            match (v, decimals) {
+                (Some(val), Some(decimals)) => format!("{val:>10.decimals$} {unit}"),
+                (Some(val), None) => {
+                    let (number, unit) = dmm_shared::stat_figure(val, unit, shown);
+                    format!("{number:>10} {unit}")
+                }
+                (None, _) => format!("{:>10} {unit}", crate::NO_DATA),
             }
         };
         let fmt_integral = |info: Option<(f64, &str, Option<f64>)>| -> Option<String> {
             info.map(|(val, disp_unit, dt)| {
-                let decimals = dmm_shared::stat_decimals(val.abs());
-                let value = format!("{val:>10.decimals$}");
+                let (number, disp_unit) = dmm_shared::stat_figure(val, disp_unit, None);
+                let value = format!("{number:>10}");
                 match dt {
                     Some(secs) => tr!(
                         l10n,
                         "stats-integral",
                         value = value,
-                        unit = disp_unit,
+                        unit = disp_unit.as_ref(),
                         seconds = format!("{secs:.0}")
                     ),
                     None => tr!(
                         l10n,
                         "stats-integral-untimed",
                         value = value,
-                        unit = disp_unit
+                        unit = disp_unit.as_ref()
                     ),
                 }
                 .into_owned()
@@ -90,31 +108,41 @@ impl FormattedStats {
         };
         // One accumulator type on both sides, so the two groups cannot drift
         // apart in how an absent figure is rendered.
+        // A level's points are whole numbers; its mean and σ get one decimal.
         let group = |unit: &str,
                      s: &RunningStats,
-                     (point, mean): (usize, usize),
+                     levels: bool,
+                     shown: Option<&ShownDigits>,
                      integral: Option<(f64, &str, Option<f64>)>| {
+            let (point, mean) = if levels {
+                (Some(0), Some(1))
+            } else {
+                (None, None)
+            };
             FormattedStatsGroup {
-                min: fmt_in(unit, s.min, point),
-                max: fmt_in(unit, s.max, point),
-                avg: fmt_in(unit, s.avg(), mean),
-                sd: fmt_in(unit, s.std_dev(), mean),
+                min: fmt_in(unit, s.min, point, shown),
+                max: fmt_in(unit, s.max, point, shown),
+                avg: fmt_in(unit, s.avg(), mean, shown),
+                sd: fmt_in(unit, s.std_dev(), mean, shown),
                 count: s.count,
                 integral: fmt_integral(integral),
             }
         };
-        // As `dmm-cli read`'s summary writes them: the decimals the largest
-        // figure needs, so a series carried into a larger prefix keeps its
-        // significant digits.
-        let session_decimals = dmm_shared::stat_decimals(
-            stats
-                .min
-                .zip(stats.max)
-                .map_or(0.0, |(min, max)| min.abs().max(max.abs())),
-        );
+        // What the meter showed is the main reading's: a plotted sub-value
+        // (a Raw value, a MIN/MAX in another prefix) may share its base unit
+        // and not its ranges.
+        let visible_shown = visible_main.then_some(shown);
         Self {
-            session: group(unit, stats, (session_decimals, session_decimals), integral),
-            visible: visible.map(|v| group(visible_unit, v, visible_decimals, visible_integral)),
+            session: group(unit, stats, false, Some(shown), integral),
+            visible: visible.map(|v| {
+                group(
+                    visible_unit,
+                    v,
+                    visible_levels,
+                    visible_shown,
+                    visible_integral,
+                )
+            }),
         }
     }
 }
@@ -252,9 +280,11 @@ impl App {
             &l10n,
             &self.capture.session.stats,
             visible_stats.as_ref(),
+            self.capture.session.shown(),
             unit,
             visible_unit,
-            (self.graph.decimals(true), self.graph.decimals(false)),
+            self.graph.plots_main(),
+            self.graph.plots_levels(),
             integral_info,
             visible_integral,
         );
@@ -478,9 +508,11 @@ mod tests {
             &crate::l10n::english(),
             &RunningStats::new(),
             Some(&levels),
+            &ShownDigits::default(),
             "",
             "",
-            (0, 1),
+            true,
+            true,
             None,
             None,
         );
@@ -496,29 +528,69 @@ mod tests {
         assert_eq!(stats::integral_display(6.0, ""), None);
     }
 
-    /// A series carried from Ω into MΩ keeps four significant digits, in
-    /// the figures and the integral alike, as the CLI summary writes them.
+    /// A session carried from MΩ down to Ω writes each figure in a range
+    /// the meter showed, to that range's decimals, the visible block too,
+    /// and the integral to five significant digits, as the CLI summary
+    /// writes them; the figures still end in one column.
     #[test]
-    fn small_session_figures_keep_their_digits() {
-        let mut stats = RunningStats::new();
-        for v in [0.00021987, 0.00031] {
-            stats.push(v);
+    fn session_figures_keep_the_meters_ranges() {
+        use dmm_lib::flags::StatusFlags;
+        use dmm_lib::measurement::{MeasuredValue, Measurement};
+        let mut session = dmm_lib::stats::SeriesStats::new(false);
+        for (display, value, unit) in [
+            (" 1.2341", 1.2341, "M\u{3a9}"),
+            (" 0.2201", 0.2201, "k\u{3a9}"),
+            ("219.82", 219.82, "\u{3a9}"),
+        ] {
+            let mut m = Measurement::test_fixture(
+                MeasuredValue::Normal(value),
+                unit,
+                StatusFlags::default(),
+            );
+            m.display_raw = Some(display.to_string());
+            session.push(&m);
         }
         let formatted = FormattedStats::new(
             &crate::l10n::english(),
-            &stats,
-            None,
-            "M\u{3a9}",
-            "",
-            (4, 4),
+            &session.stats,
+            Some(&session.stats),
+            session.shown(),
+            "\u{3a9}",
+            "\u{3a9}",
+            true,
+            false,
             Some((0.000_012_34, "mAh", None)),
             None,
         );
-        let s = &formatted.session;
-        assert_eq!(s.min.trim(), "0.0002199 M\u{3a9}");
-        assert_eq!(s.max.trim(), "0.0003100 M\u{3a9}");
-        let integral = s.integral.as_deref().expect("integral");
-        assert!(integral.contains("0.00001234 mAh"), "{integral}");
+        for s in [
+            &formatted.session,
+            formatted.visible.as_ref().expect("visible"),
+        ] {
+            assert_eq!(s.min, "    219.82 \u{3a9}");
+            assert_eq!(s.max, "    1.2341 M\u{3a9}");
+            assert_eq!(s.avg, "  411.5133 k\u{3a9}");
+            assert_eq!(s.sd, "  712.3810 k\u{3a9}");
+        }
+        let integral = formatted.session.integral.as_deref().expect("integral");
+        assert!(integral.contains("0.000012340 mAh"), "{integral}");
+
+        // A plotted sub-value in the same base unit isn't what the meter
+        // showed in those ranges: five significant digits in its own prefix.
+        let sub_value = FormattedStats::new(
+            &crate::l10n::english(),
+            &session.stats,
+            Some(&session.stats),
+            session.shown(),
+            "\u{3a9}",
+            "\u{3a9}",
+            false,
+            false,
+            None,
+            None,
+        );
+        let visible = sub_value.visible.expect("visible");
+        assert_eq!(visible.avg, "    411.51 k\u{3a9}");
+        assert_eq!(sub_value.session.avg, formatted.session.avg);
     }
 
     /// The captions are right-aligned to the widest, so the figures start
@@ -534,9 +606,11 @@ mod tests {
             &l10n,
             &readings,
             None,
+            &ShownDigits::default(),
             "V",
             "V",
-            (4, 4),
+            true,
+            false,
             Some((3.0, "V\u{b7}s", Some(2.0))),
             None,
         );
@@ -550,7 +624,7 @@ mod tests {
                 ("Min:".to_string(), 1.0, "    1.0000 V"),
                 ("Max:".to_string(), 1.0, "    2.0000 V"),
                 ("Mean:".to_string(), 0.0, "    1.5000 V"),
-                ("\u{3c3}:".to_string(), 3.0, "    0.7071 V"),
+                ("\u{3c3}:".to_string(), 3.0, "    707.11 mV"),
             ]
         );
         assert_eq!(

@@ -841,19 +841,21 @@ impl Run {
         if let (Some(min), Some(max), Some(avg)) =
             (session.stats.min, session.stats.max, session.stats.avg())
         {
-            // Name the unit the figures are in: the latest reading's, every
+            // The figures are held in the latest reading's unit, every
             // sample behind them re-expressed in it across an auto-range
-            // step. They reset whenever the mode or the quantity moves.
-            let unit_suffix = session
-                .unit()
-                .filter(|u| !u.is_empty())
-                .map(|u| format!(" {u}"))
-                .unwrap_or_default();
-            // Cyan figures, each with the unit after it, all to the decimals
-            // the largest of them needs.
-            let decimals = dmm_shared::stat_decimals(min.abs().max(max.abs()));
-            let figure =
-                |v: f64| format!("{}{unit_suffix}", style(format!("{v:.decimals$}")).cyan());
+            // step; they reset whenever the mode or the quantity moves.
+            let unit = session.unit().unwrap_or("");
+            // Cyan figures, each in a range and to the resolution the meter
+            // showed, with its unit after it.
+            let figure = |v: f64| {
+                let (number, unit) = dmm_shared::stat_figure(v, unit, Some(session.shown()));
+                let number = style(number).cyan();
+                if unit.is_empty() {
+                    number.to_string()
+                } else {
+                    format!("{number} {unit}")
+                }
+            };
             let count = session.stats.count;
             let (min, max, mean) = (figure(min), figure(max), figure(avg));
             // One message per cell, so a new figure leaves the others'
@@ -871,11 +873,8 @@ impl Run {
             let summary = cells.join(" | ");
             eprintln!("\n{} {summary}", style("---").dim());
             if let Some((value, disp_unit)) = session.integral_display() {
-                let decimals = dmm_shared::stat_decimals(value.abs());
-                let value = format!(
-                    "{} {disp_unit}",
-                    style(format!("{value:.decimals$}")).cyan()
-                );
+                let (number, disp_unit) = dmm_shared::stat_figure(value, disp_unit, None);
+                let value = format!("{} {disp_unit}", style(number).cyan());
                 let integral = match session.integrator.elapsed_secs() {
                     Some(s) => tr!(
                         l,

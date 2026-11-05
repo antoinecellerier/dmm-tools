@@ -59,7 +59,7 @@ $ dmm-cli read --interval-ms 2500 --count 5
 107.95 mA
 4.01 mA
 
---- 5 lecturas | Mín.: 0.0000 mA | Máx.: 107.9500 mA | Media: 49.0920 mA | σ: 52.1319 mA
+--- 5 lecturas | Mín.: 0.00 mA | Máx.: 107.95 mA | Media: 49.09 mA | σ: 52.13 mA
 ```
 <!-- /snippet -->
 

@@ -93,6 +93,61 @@ pub fn prefix_ratio(from: &str, to: &str) -> Option<PrefixRatio> {
     (from_base == to_base).then(|| PrefixRatio((from_mult / to_mult).log10().round() as i32))
 }
 
+/// The prefix of `unit`'s base unit that writes a figure of the order of
+/// 10^`exponent` `unit` with one to three digits before the point, and the
+/// ratio that re-expresses the figure in it: 10⁻² V is "mV", 10⁶ Ω is
+/// "MΩ", 10² kΩ stays "kΩ". Past either end of the prefixes the figure
+/// stays in the end one (p, G). `None` for a unit no prefix goes on
+/// ("°C", "%", "ms", "").
+pub fn prefix_for(unit: &str, exponent: i32) -> Option<(String, PrefixRatio)> {
+    let (base, from) = prefix_power(unit);
+    if !BASE_UNITS.contains(&base) {
+        return None;
+    }
+    let powers = || prefix_powers().map(|(_, e)| e);
+    let lowest = powers().min()?;
+    let highest = powers().max()?;
+    re_express(
+        unit,
+        ((exponent + from).div_euclid(3) * 3).clamp(lowest, highest),
+    )
+}
+
+/// Each prefix with its power of ten, the bare unit among them as `None`;
+/// "u" is "µ" again and is never chosen.
+fn prefix_powers() -> impl Iterator<Item = (Option<char>, i32)> {
+    SI_PREFIXES
+        .iter()
+        .filter(|(p, _)| *p != 'u')
+        .map(|&(p, m)| (Some(p), m.log10().round() as i32))
+        .chain([(None, 0)])
+}
+
+/// `unit`'s base unit and the power of ten of its prefix: "kΩ" is ("Ω", 3),
+/// "mV" ("V", -3), and a unit no prefix goes on is itself at 0 ("°C", 0).
+pub(crate) fn prefix_power(unit: &str) -> (&str, i32) {
+    let (base, mult) = si_prefix(unit);
+    // A power of ten, so the rounded log is exact.
+    (base, mult.log10().round() as i32)
+}
+
+/// `unit` re-expressed under the prefix of 10^`power` of its base unit, and
+/// the ratio from the one to the other: ("kΩ", 6) is "MΩ" and 10⁻³. A power
+/// of 0 is the base unit, even one no prefix goes on ("°C", 0 is "°C");
+/// `None` for a power no prefix has, or any other on such a unit.
+pub(crate) fn re_express(unit: &str, power: i32) -> Option<(String, PrefixRatio)> {
+    let (base, from) = prefix_power(unit);
+    if power != 0 && !BASE_UNITS.contains(&base) {
+        return None;
+    }
+    let (prefix, _) = prefix_powers().find(|&(_, e)| e == power)?;
+    let unit = match prefix {
+        Some(p) => format!("{p}{base}"),
+        None => base.to_string(),
+    };
+    Some((unit, PrefixRatio(from - power)))
+}
+
 /// Which arithmetic a transform applies.
 ///
 /// Single variant today. `Binary` (a second series: V×I, A−B) and `Formula`
@@ -367,7 +422,7 @@ fn scaled_decimals(raw_display: Option<&str>, value: f64, gain: f64) -> usize {
 ///
 /// Counts digits rather than characters, so the UT61E+'s sign-space form
 /// ("- 55.79") and any padding are measured correctly.
-fn decimals_of(display: &str) -> usize {
+pub(crate) fn decimals_of(display: &str) -> usize {
     match display.split_once('.') {
         Some((_, frac)) => frac.chars().filter(char::is_ascii_digit).count(),
         None => 0,
@@ -971,6 +1026,61 @@ mod tests {
         ] {
             let ratio = prefix_ratio(from, to).unwrap();
             assert_eq!(ratio.apply(x), expected, "{x} {from} → {to}");
+        }
+    }
+
+    /// One to three digits before the point, from the unit the figure is
+    /// in, clamped at the ends of the prefixes.
+    #[test]
+    fn prefix_for_puts_one_to_three_digits_before_the_point() {
+        for (unit, exponent, x, expected_unit, expected) in [
+            ("Ω", 6, 1_234_500.0, "MΩ", 1.2345),
+            ("Ω", 2, 219.9, "Ω", 219.9),
+            ("MΩ", -4, 0.00021987, "Ω", 219.87),
+            ("kΩ", -1, 0.2225, "Ω", 222.5),
+            ("V", -1, 0.12345, "mV", 123.45),
+            ("V", 0, 5.0, "V", 5.0),
+            ("mV", 3, 1100.0, "V", 1.1),
+            ("µA", -2, 0.045, "nA", 45.0),
+            ("uA", 0, 2.5, "µA", 2.5),
+            ("nF", 4, 22000.0, "µF", 22.0),
+            ("Hz", 4, 49990.0, "kHz", 49.99),
+            ("mVA", 0, 3.0, "mVA", 3.0),
+            // Past the ends: no prefix beyond p or G.
+            ("V", -15, 2e-15, "pV", 0.002),
+            ("Ω", 12, 3e12, "GΩ", 3000.0),
+        ] {
+            let (to, ratio) = prefix_for(unit, exponent).expect("prefixable");
+            assert_eq!(to, expected_unit, "{x} {unit}");
+            assert!(
+                (ratio.apply(x) - expected).abs() <= expected.abs() * 1e-12,
+                "{x} {unit} → {} {to}",
+                ratio.apply(x)
+            );
+        }
+    }
+
+    #[test]
+    fn re_express_takes_the_prefix_of_a_power() {
+        for (unit, power, x, expected_unit, expected) in [
+            ("kΩ", 6, 5_635.1, "MΩ", 5.6351),
+            ("MΩ", 0, 0.000_219_82, "Ω", 219.82),
+            ("V", -3, 0.0264, "mV", 26.4),
+            ("µA", 0, 2.5, "A", 0.000_002_5),
+            ("°C", 0, 21.5, "°C", 21.5),
+        ] {
+            let (to, ratio) = re_express(unit, power).expect("a prefix");
+            assert_eq!(to, expected_unit, "{x} {unit}");
+            assert!((ratio.apply(x) - expected).abs() <= expected.abs() * 1e-12);
+        }
+        assert_eq!(re_express("V", 2), None, "no prefix is 10²");
+        assert_eq!(re_express("°C", 3), None, "no prefix goes on °C");
+    }
+
+    #[test]
+    fn prefix_for_leaves_units_without_prefixes_alone() {
+        for unit in ["°C", "°F", "%", "dBm", "ms", "hFE", "", "mAh", "V\u{b7}s"] {
+            assert_eq!(prefix_for(unit, 3), None, "unit {unit}");
         }
     }
 

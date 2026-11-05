@@ -918,6 +918,18 @@ impl Graph {
         &self.current_unit
     }
 
+    /// Whether the plotted series is a level (an NCV bar), whose points
+    /// are whole numbers: see [`PlotSample::levels`].
+    pub fn plots_levels(&self) -> bool {
+        self.levels
+    }
+
+    /// Whether the history holds the meter's main reading rather than a
+    /// sub-value.
+    pub fn plots_main(&self) -> bool {
+        self.current_series.is_none()
+    }
+
     /// Decimals a figure of the plotted series is written with: four, or
     /// none for one of a level's own points, which is a whole number. A
     /// figure of a level's that isn't one of its points — a mean, a typed

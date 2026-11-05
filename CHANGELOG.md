@@ -14,7 +14,7 @@
 - **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
 - **Screen readers say units by name, such as millivolts for mV** — they spelled the symbols out letter by letter.
 - **The graph hover lists every series and tags the height per axis** — it showed one value without a right axis, and no height with one.
-- **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step, such as Ω to kΩ. Copy in the graph's menu now includes the unit, since the trace can change prefix.
+- **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω. The graph menu's Copy now includes the unit.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
@@ -25,7 +25,7 @@
 - **Brazilian Portuguese, French, Japanese, Simplified Chinese and Spanish translations available** — chosen by `--lang`, dmm-gui's Language setting or the system's language.
 - **`capture` shows its step instructions in your own translation** — export them with `--export-instructions`, translate the file, and pass it back with `--instructions`.
 - **`read` reconnects to a meter whose link drops** — a pulled cable or lost Bluetooth link ended the run; `--no-reconnect` keeps that.
-- **`read` statistics and `--integrate` carry on when the meter auto-ranges** — they restarted at each decade step, such as mV to V.
+- **`read` statistics and `--integrate` carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω.
 - **`--help` lists each brand's own model names in name order, such as `ut217a` under UNI-T**
 - **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
 - **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.

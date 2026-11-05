@@ -295,7 +295,7 @@ A thin strip below the main plot showing the full capture history.
 ## Statistics
 
 - **Min**, **Max**, **Mean** and **σ** (sample standard deviation) in monospace
-  with fixed-width formatting
+  with fixed-width formatting, in the ranges the meter showed
 - **Count** — number of samples
 - **Int** — cumulative time-integral (shown only for current and voltage modes).
   For current modes, displays charge (Ah, mAh, …). For voltage modes, V·s
@@ -305,8 +305,8 @@ A thin strip below the main plot showing the full capture history.
   set
 - **Reset** button — clears statistics, integral and alarm counts
 - Stats persist across reconnects (use Clear for full reset)
-- Stats and ∫ carry across an auto-range step (Ω→kΩ), in the unit the meter
-  shows last; turning the dial starts them again
+- Stats and ∫ carry across an auto-range step (Ω→kΩ); turning the dial
+  starts them again
 - A second row shows **visible window stats** — the same figures over the
   current graph viewport only
 - Min/Max/Mean/σ/Count/∫ track the meter's main reading whatever the graph is
