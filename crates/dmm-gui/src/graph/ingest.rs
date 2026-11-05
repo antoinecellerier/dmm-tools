@@ -320,34 +320,21 @@ impl Graph {
         self.minimap_level = None;
     }
 
-    /// Start a new trace for `mode`, `unit` and `series` at `now`.
+    /// Start a new trace for `mode`, `unit` and `series` at `now`: a
+    /// [`Graph::clear`] that keeps the stream's last frame time, so `heard`
+    /// still records a silence spanning the change, and a minimap drag the
+    /// user is in the middle of.
     fn restart_trace(&mut self, now: Instant, mode: &str, unit: &str, series: Option<&str>) {
-        self.history.clear();
-        self.overlays.clear();
+        let (last_heard, minimap_drag) = (self.last_heard, self.minimap_drag);
+        self.clear();
+        self.last_heard = last_heard;
+        self.minimap_drag = minimap_drag;
         self.current_mode = Some(mode.to_string());
         self.current_unit = unit.to_string();
         self.current_series = series.map(str::to_owned);
         // The main reading's chip hid this mode's reading, not the next's.
         self.main_hidden = false;
-        self.levels = false;
         self.origin = Some(now);
-        self.set_live(true);
-        self.view_center = 0.0;
-        // Drop any pinned Y range too: it was chosen for the previous
-        // mode's scale, and keeping it would plot ohms against volt bounds
-        // — the trace lands far outside the plot and the graph just looks
-        // empty, with the old numbers still on the axis. `clear()` and
-        // `reset_view()` both release these for the same reason.
-        self.y_axis.release();
-        self.cursors.clear();
-        self.box_zoom = None;
-        self.minimap_level = None;
-        self.restart_sequence();
-        self.last_display_raw = None;
-        self.silences.clear();
-        self.main_missing_frames = 0;
-        self.breaks = Breaks::default();
-        self.dash_phases = pattern::DashPhases::default();
     }
 
     /// Bring the kept trace `label` to `unit` if that is no longer its unit:
@@ -533,6 +520,9 @@ impl Graph {
         }
     }
 
+    /// Drop every reading and everything drawn from them, for a cleared
+    /// session. [`Graph::restart_trace`] builds on it, so a per-trace field
+    /// reset here is reset on a mode change too.
     pub fn clear(&mut self) {
         self.history.clear();
         // `selected_series` deliberately survives: Ctrl+L clears the data, not
@@ -552,6 +542,11 @@ impl Graph {
         self.origin = None;
         self.set_live(true);
         self.view_center = 0.0;
+        // Drop any pinned Y range too: it was chosen for the old trace's
+        // scale, and after a mode change keeping it would plot ohms against
+        // volt bounds — the trace lands far outside the plot and the graph
+        // just looks empty, with the old numbers still on the axis.
+        // `reset_view()` releases it for the same reason.
         self.y_axis.release();
         self.cursors.clear();
         self.minimap_drag = MinimapDrag::None;
