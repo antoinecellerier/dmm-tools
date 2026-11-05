@@ -9,7 +9,7 @@
 //! frame to parse to; playback parses the frame itself.
 
 use crate::export::{ReadError, ReadReason};
-use chrono::{DateTime, FixedOffset, SecondsFormat};
+use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
 use dmm_lib::error::{Error, Result};
 use dmm_lib::protocol::registry;
 use dmm_lib::replay::{self, Replay};
@@ -25,6 +25,12 @@ pub fn recorded_at(replay: &Replay) -> std::result::Result<DateTime<FixedOffset>
         let text = format!("# recorded: {}", replay.recorded);
         ReadError::whole(not_a_date(&text, e))
     })
+}
+
+/// `t` as a replay's `# recorded:` header line holds it, and [`recorded_at`]
+/// reads it back: RFC 3339 to the millisecond.
+pub fn recorded_text(t: DateTime<Local>) -> String {
+    t.to_rfc3339_opts(SecondsFormat::Millis, false)
 }
 
 /// Why `text`, meant as an RFC 3339 date, was refused — a replay's header or
@@ -68,7 +74,7 @@ fn fixture(dir_name: &str, text: &str) -> std::result::Result<Replay, String> {
         .find_map(|line| line.strip_prefix("raw_hex:"))
         .ok_or("no top-level `raw_hex:` line; is this a golden fixture?")?;
     let payload = decode_hex(unquote(raw_hex.trim()))?;
-    let recorded = chrono::Local::now().to_rfc3339_opts(SecondsFormat::Millis, false);
+    let recorded = recorded_text(Local::now());
     // The writers `Replay::parse` is kept in step with, rather than text of
     // our own.
     let mut recording = replay::header(device.id, &recorded, None, None);

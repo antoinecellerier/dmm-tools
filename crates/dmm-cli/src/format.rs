@@ -1,4 +1,3 @@
-use chrono::{DateTime, Local};
 use clap::ValueEnum;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::text::TextKind;
@@ -9,13 +8,6 @@ use dmm_shared::tr;
 use std::borrow::Cow;
 use std::io::Write;
 use std::time::Instant;
-
-/// The reading's wall time as RFC3339: when it was taken, not when the
-/// formatter ran.
-fn timestamp_rfc3339(m: &Measurement) -> String {
-    let dt: DateTime<Local> = m.wall_time.into();
-    dt.to_rfc3339()
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
 pub enum OutputFormat {
@@ -194,8 +186,7 @@ impl Output {
                     ));
                 }
                 if first.is_none() {
-                    let recorded: DateTime<Local> = m.wall_time.into();
-                    let recorded = recorded.to_rfc3339_opts(chrono::SecondsFormat::Millis, false);
+                    let recorded = dmm_shared::replay::recorded_text(m.wall_time.into());
                     w.write_all(
                         dmm_lib::replay::header(
                             &header.device,
@@ -294,7 +285,7 @@ fn format_csv(
     // to chars with no character-set validation, and an unrecognised mode byte
     // becomes `Unknown(0x..)`. One comma or quote in there and every
     // downstream column shifts.
-    let ts = timestamp_rfc3339(m);
+    let ts = dmm_shared::export::timestamp(m.wall_time.into());
     // Cells resolved ahead of the writer so the borrowed ones outlive the
     // record.
     let cells = layout.row(m, &ts, integral, extra_aux, marker);
@@ -324,7 +315,7 @@ fn format_json(
     dmm_shared::export::write_measurement_json(
         &mut line,
         m,
-        &timestamp_rfc3339(m),
+        &dmm_shared::export::timestamp(m.wall_time.into()),
         experimental,
         integral,
         marker,

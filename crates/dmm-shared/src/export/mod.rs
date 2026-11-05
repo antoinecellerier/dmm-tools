@@ -12,7 +12,7 @@ mod read_error;
 pub use csv_layout::{CsvLayout, device_comment};
 pub use read::{
     ExportKind, Imported, ImportedAux, ImportedMarker, ImportedReading, escape_controls,
-    median_spacing, read_csv, read_csv_from, read_json, read_json_from,
+    median_spacing, read_csv, read_csv_from, read_json, read_json_from, timestamp,
 };
 pub use read_error::{ReadError, ReadReason};
 
@@ -79,8 +79,8 @@ pub fn metadata_line(device_model: &str, view: Option<&str>) -> String {
 /// Write one reading to `w` as a JSON export line, without the newline that
 /// ends it.
 ///
-/// `timestamp_rfc3339` is the wall time the reading was taken at, which only
-/// the caller can work out: the CLI derives it from the session's clock
+/// `timestamp_rfc3339` is the wall time the reading was taken at, as
+/// [`timestamp`] formats it, which only the caller can work out: the CLI derives it from the session's clock
 /// origin, the GUI stamped it onto the sample as it arrived. `marker` is the
 /// number and note of the marker the user placed on this reading, if any.
 ///

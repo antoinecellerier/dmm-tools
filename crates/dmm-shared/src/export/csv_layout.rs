@@ -153,7 +153,8 @@ impl CsvLayout {
 
     /// One row's cells, in the same order [`CsvLayout::header`] names them.
     ///
-    /// `timestamp` is already formatted (the binaries own chrono); `integral`
+    /// `timestamp` is the reading's wall time as [`super::timestamp`] formats
+    /// it, held by the caller so the cell can borrow it; `integral`
     /// is the already-scaled `(value, display_unit)` pair, written as
     /// `{value:.6}` when the layout has integral columns (ignored otherwise;
     /// empty cells when the layout has them but `integral` is `None`);

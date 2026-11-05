@@ -9,7 +9,7 @@
 //! sub-value's unit even where the meter left it to the main reading's.
 
 use super::{ReadError, ReadReason};
-use chrono::DateTime;
+use chrono::{DateTime, Local};
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use dmm_lib::transform::RAW_LABEL;
@@ -234,7 +234,13 @@ fn device_name(name: &str) -> Option<String> {
     Some(name.trim().to_string()).filter(|n| !n.is_empty())
 }
 
-/// A timestamp cell or key: RFC 3339, as both binaries write it.
+/// A reading's wall time as both binaries write it, in a CSV `timestamp`
+/// cell or a JSON `timestamp` key: RFC 3339, which [`wall_time`] reads back.
+pub fn timestamp(t: DateTime<Local>) -> String {
+    t.to_rfc3339()
+}
+
+/// A timestamp cell or key: RFC 3339, as [`timestamp`] writes it.
 fn wall_time(line: usize, text: &str) -> Result<SystemTime, ReadError> {
     DateTime::parse_from_rfc3339(text)
         .map(SystemTime::from)

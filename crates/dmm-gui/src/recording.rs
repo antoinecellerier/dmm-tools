@@ -1,6 +1,6 @@
 use crate::markers::{Marker, Markers};
 use crate::settings::DEFAULT_MAX_SAMPLES;
-use chrono::{DateTime, Local, SecondsFormat};
+use chrono::{DateTime, Local};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::replay;
 use dmm_shared::export::{CsvLayout, device_comment};
@@ -40,7 +40,7 @@ pub fn render_csv(
         let mut wtr = csv::Writer::from_writer(&mut buf);
         wtr.write_record(layout.header().iter().map(|c| c.as_ref()))?;
         for s in samples {
-            let ts = s.wall_time.to_rfc3339();
+            let ts = dmm_shared::export::timestamp(s.wall_time);
             let marker = marks.on(s);
             let cells = layout.row(&s.measurement, &ts, None, s.extra_aux, marker);
             wtr.write_record(cells.iter().map(|c| c.as_ref()))?;
@@ -76,7 +76,7 @@ pub(crate) fn render_json(
     out.extend_from_slice(metadata.as_bytes());
     out.push(b'\n');
     for s in samples {
-        let ts = s.wall_time.to_rfc3339();
+        let ts = dmm_shared::export::timestamp(s.wall_time);
         dmm_shared::export::write_measurement_json(
             &mut out,
             &s.measurement,
@@ -145,9 +145,7 @@ pub(crate) fn render_replay(
     let mut marks = MarkCursor::new(marked);
     let mut rest = samples.peekable();
     let first = *rest.peek()?;
-    let recorded = first
-        .wall_time
-        .to_rfc3339_opts(SecondsFormat::Millis, false);
+    let recorded = dmm_shared::replay::recorded_text(first.wall_time);
     let mut out = replay::header(device_id, &recorded, model, link);
     if let Some(view) = view {
         out.push_str(&replay::view_line(view));
