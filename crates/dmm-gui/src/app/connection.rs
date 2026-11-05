@@ -554,13 +554,6 @@ where
                 // propagate within the retry interval instead of up to 2s later,
                 // and reports each attempt to the UI so the user sees progress.
                 //
-                // End the stream's borrow on `dmm` before reassigning; we
-                // rebuild the stream after reconnect so tick scheduling
-                // restarts fresh from the post-reconnect instant.
-                // (`drop()` would be clearer but clippy warns because the
-                //  stream itself has no Drop impl — the borrow-release we
-                //  actually need is what reassignment accomplishes here.)
-                let _ = stream;
                 // Release the old link before opening a new one: a Bluetooth
                 // transport disconnects its peripheral on drop, and dropped
                 // after the reopen that would cut the link just brought back
@@ -620,6 +613,8 @@ where
                         }
                     }
                 }
+                // A fresh stream restarts tick scheduling from the
+                // post-reconnect instant.
                 stream = new_stream(&mut dmm, tick, simulated, &stop_flag);
                 protocol_errors = 0;
                 // The dial may have moved while the link was down.
