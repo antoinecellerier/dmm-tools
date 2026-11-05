@@ -207,6 +207,26 @@ fn value_display(m: &Measurement, tc: &ThemeColors, state: ReadingState) -> (Str
     }
 }
 
+/// Draw `add_contents` as the spoken reading: the row a screen reader hears
+/// as one label, built from `m`, or from `no_reading` when there is no
+/// measurement (see [`live_region_label`]).
+fn spoken_measurement(
+    ui: &mut Ui,
+    l10n: &Localizer,
+    state: ReadingState,
+    m: Option<&Measurement>,
+    no_reading: &str,
+    add_contents: impl FnOnce(&mut Ui),
+) {
+    ui.spoken_reading(
+        state.announce,
+        live_region_fingerprint(l10n, m, state, no_reading),
+        live_region_context(m),
+        || live_region_label(l10n, m, state, no_reading),
+        add_contents,
+    );
+}
+
 /// Single-line reading with the mode and range selectors beside it.
 ///
 /// The value and unit form the spoken row; the selectors, controls, sit
@@ -227,16 +247,10 @@ fn show_reading_line_with_selector(
         ..
     } = *cx;
     ui.horizontal(|ui| {
-        ui.spoken_reading(
-            state.announce,
-            live_region_fingerprint(l10n, Some(m), state, ""),
-            live_region_context(Some(m)),
-            || live_region_label(l10n, Some(m), state, ""),
-            |ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                draw_value(ui);
-            },
-        );
+        spoken_measurement(ui, l10n, state, Some(m), "", |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            draw_value(ui);
+        });
         ui.separator();
         let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
         // This line has never carried a range label, so a meter with no rung
@@ -261,27 +275,21 @@ fn show_reading_line_plain(
     mode_size: f32,
 ) {
     let ReadingCtx { l10n, state, .. } = *cx;
-    ui.spoken_reading(
-        state.announce,
-        live_region_fingerprint(l10n, Some(m), state, ""),
-        live_region_context(Some(m)),
-        || live_region_label(l10n, Some(m), state, ""),
-        |ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            draw_value(ui);
-            ui.separator();
-            let mut mode = RichText::new(l10n.label(TextKind::Mode, &m.mode))
-                .color(ui.visuals().weak_text_color());
-            if mode_size > 0.0 {
-                ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
-                mode = mode.font(FontId::proportional(mode_size));
-            } else {
-                mode = mode.small();
-            }
-            ui.label(mode);
-            show_flags(ui, cx, m, mode_size);
-        },
-    );
+    spoken_measurement(ui, l10n, state, Some(m), "", |ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        draw_value(ui);
+        ui.separator();
+        let mut mode = RichText::new(l10n.label(TextKind::Mode, &m.mode))
+            .color(ui.visuals().weak_text_color());
+        if mode_size > 0.0 {
+            ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
+            mode = mode.font(FontId::proportional(mode_size));
+        } else {
+            mode = mode.small();
+        }
+        ui.label(mode);
+        show_flags(ui, cx, m, mode_size);
+    });
 }
 
 /// What stands in for a reading when there is none.
@@ -460,13 +468,7 @@ fn no_reading_placeholder(
         let separator = tr!(l10n, "reading-spoken-separator");
         Cow::Owned(format!("{title}{separator}{hint}"))
     };
-    ui.spoken_reading(
-        state.announce,
-        live_region_fingerprint(l10n, None, state, &spoken),
-        live_region_context(None),
-        || live_region_label(l10n, None, state, &spoken),
-        add_contents,
-    );
+    spoken_measurement(ui, l10n, state, None, &spoken, add_contents);
     if !help.is_empty() {
         ui.ctx()
             .accesskit_node_builder(crate::a11y::reading_region_id(), |node| {
@@ -498,29 +500,23 @@ fn show_reading_sized(
         Some(m) => {
             let (value_text, value_color) = value_display(m, tc, state);
 
-            ui.spoken_reading(
-                state.announce,
-                live_region_fingerprint(l10n, Some(m), state, ""),
-                live_region_context(Some(m)),
-                || live_region_label(l10n, Some(m), state, ""),
-                |ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
-                    ui.label(value_label(
-                        ui,
-                        l10n,
-                        m,
-                        &value_text,
-                        FontId::monospace(value_size),
-                        value_color,
-                        mode_size,
-                    ));
-                    ui.label(
-                        RichText::new(&*m.unit)
-                            .font(FontId::monospace(unit_size))
-                            .color(tc.reading()),
-                    );
-                },
-            );
+            spoken_measurement(ui, l10n, state, Some(m), "", |ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                ui.label(value_label(
+                    ui,
+                    l10n,
+                    m,
+                    &value_text,
+                    FontId::monospace(value_size),
+                    value_color,
+                    mode_size,
+                ));
+                ui.label(
+                    RichText::new(&*m.unit)
+                        .font(FontId::monospace(unit_size))
+                        .color(tc.reading()),
+                );
+            });
 
             let _ = show_aux_rows(ui, l10n, aux_grid_id(ui), m, mode_size, tc);
 
@@ -704,16 +700,10 @@ fn show_reading_beside(
                     // value's height low. From the top it fills the slot exactly.
                     Layout::left_to_right(Align::Min),
                     |ui| {
-                        ui.spoken_reading(
-                            state.announce,
-                            live_region_fingerprint(l10n, Some(m), state, ""),
-                            live_region_context(Some(m)),
-                            || live_region_label(l10n, Some(m), state, ""),
-                            |ui| {
-                                ui.spacing_mut().item_spacing.x = 2.0;
-                                show_value_and_unit(ui, cx, m, value_size);
-                            },
-                        );
+                        spoken_measurement(ui, l10n, state, Some(m), "", |ui| {
+                            ui.spacing_mut().item_spacing.x = 2.0;
+                            show_value_and_unit(ui, cx, m, value_size);
+                        });
                     },
                 )
                 .response

@@ -10,6 +10,7 @@ use dmm_lib::text::TextKind;
 use dmm_shared::l10n::{Arg, Localizer};
 use dmm_shared::tr;
 use std::borrow::Cow;
+use std::hash::{Hash, Hasher};
 
 /// Format the meter's raw 7-char display string for stable rendering.
 ///
@@ -415,7 +416,6 @@ fn flags_bits(flags: &StatusFlags) -> u16 {
 /// the spoken reading's pace (`a11y::Announcer`): its mode, the dial turned.
 /// `None` for the placeholder, which is always announced at once.
 pub(super) fn live_region_context(measurement: Option<&Measurement>) -> Option<u64> {
-    use std::hash::{Hash, Hasher};
     let m = measurement?;
     let mut h = std::collections::hash_map::DefaultHasher::new();
     m.mode.hash(&mut h);
@@ -432,7 +432,6 @@ pub(super) fn live_region_fingerprint(
     state: ReadingState,
     no_reading: &str,
 ) -> u64 {
-    use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     // The words are the language's: a switch has to rebuild the label.
     l10n.language().id.hash(&mut h);
@@ -451,26 +450,7 @@ pub(super) fn live_region_fingerprint(
         }
         Some(m) => {
             1u8.hash(&mut h);
-            match &m.value {
-                MeasuredValue::Normal(v) => {
-                    0u8.hash(&mut h);
-                    v.to_bits().hash(&mut h);
-                    // display_raw is what we actually format for Normal values,
-                    // so include it so the fingerprint catches stable-string
-                    // changes that don't show up in the f64 bits.
-                    m.display_raw.as_deref().unwrap_or("").hash(&mut h);
-                }
-                MeasuredValue::Overload => 1u8.hash(&mut h),
-                MeasuredValue::NcvLevel(l) => {
-                    2u8.hash(&mut h);
-                    l.hash(&mut h);
-                }
-                MeasuredValue::NoReading(word) => {
-                    3u8.hash(&mut h);
-                    word.hash(&mut h);
-                }
-                MeasuredValue::Absent => 4u8.hash(&mut h),
-            }
+            hash_value(&m.value, m.display_raw.as_deref(), &mut h);
             m.unit.hash(&mut h);
             m.mode.hash(&mut h);
             m.main_label.hash(&mut h);
@@ -481,23 +461,7 @@ pub(super) fn live_region_fingerprint(
             m.aux_values.len().hash(&mut h);
             for aux in &m.aux_values {
                 aux.label.hash(&mut h);
-                match &aux.value {
-                    MeasuredValue::Normal(v) => {
-                        0u8.hash(&mut h);
-                        v.to_bits().hash(&mut h);
-                        aux.display_raw.as_deref().unwrap_or("").hash(&mut h);
-                    }
-                    MeasuredValue::Overload => 1u8.hash(&mut h),
-                    MeasuredValue::NcvLevel(l) => {
-                        2u8.hash(&mut h);
-                        l.hash(&mut h);
-                    }
-                    MeasuredValue::NoReading(word) => {
-                        3u8.hash(&mut h);
-                        word.hash(&mut h);
-                    }
-                    MeasuredValue::Absent => 4u8.hash(&mut h),
-                }
+                hash_value(&aux.value, aux.display_raw.as_deref(), &mut h);
                 aux.unit.hash(&mut h);
                 aux.elapsed_secs.hash(&mut h);
             }
@@ -505,6 +469,31 @@ pub(super) fn live_region_fingerprint(
         }
     }
     h.finish()
+}
+
+/// Feed one value, the reading's or a sub-value's, into a fingerprint.
+///
+/// `display_raw` is what is actually formatted for a normal value, so it is
+/// hashed too: the fingerprint catches stable-string changes that don't show
+/// up in the f64 bits.
+fn hash_value(value: &MeasuredValue, display_raw: Option<&str>, h: &mut impl Hasher) {
+    match value {
+        MeasuredValue::Normal(v) => {
+            0u8.hash(h);
+            v.to_bits().hash(h);
+            display_raw.unwrap_or("").hash(h);
+        }
+        MeasuredValue::Overload => 1u8.hash(h),
+        MeasuredValue::NcvLevel(l) => {
+            2u8.hash(h);
+            l.hash(h);
+        }
+        MeasuredValue::NoReading(word) => {
+            3u8.hash(h);
+            word.hash(h);
+        }
+        MeasuredValue::Absent => 4u8.hash(h),
+    }
 }
 
 /// Right-align a sub-value to the primary reading's 7-character width.
