@@ -510,17 +510,8 @@ mod tests {
         status: u8,
         sign_flags: u8,
     ) -> Vec<u8> {
-        // digits[] is MSD-first; wire order is d1=b3 lo, d2=b2 hi,
-        // d3=b2 lo, d4=b1 hi, d5=b1 lo (payload bytes 1-3).
-        vec![
-            position,
-            (digits[3] << 4) | digits[4],
-            (digits[1] << 4) | digits[2],
-            digits[0],
-            (acdc_bits << 4) | dp_pos,
-            status,
-            sign_flags,
-        ]
+        frame::test_frame_ut8802(position, digits, dp_pos, acdc_bits, status, sign_flags)[1..]
+            .to_vec()
     }
 
     /// The one payload whose every parsed field is pinned: an ordinary DC V

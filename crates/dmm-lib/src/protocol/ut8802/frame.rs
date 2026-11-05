@@ -107,8 +107,9 @@ pub(super) fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)
     Ok(Some((payload, consumed)))
 }
 
-/// Build a valid UT8802 frame from components.
-/// Frame: [0xAC, position, d1d2, d3d4, d5xx, dp_flags, status, sign]
+/// Build a valid UT8802 frame from components. `digits` is MSD-first; on
+/// the wire d1 is byte 4's low nibble, d2/d3 byte 3's high/low and d4/d5
+/// byte 2's high/low (spec §3.2).
 #[cfg(test)]
 pub(super) fn test_frame_ut8802(
     position: u8,
@@ -121,9 +122,9 @@ pub(super) fn test_frame_ut8802(
     vec![
         0xAC,
         position,
-        (digits[0] << 4) | digits[1],
-        (digits[2] << 4) | digits[3],
-        digits[4], // high nibble unused
+        (digits[3] << 4) | digits[4],
+        (digits[1] << 4) | digits[2],
+        digits[0], // high nibble unused
         (acdc_bits << 4) | dp_pos,
         status,
         sign_flags,
