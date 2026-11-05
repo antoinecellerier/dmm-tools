@@ -780,26 +780,24 @@ fn parse_comp(comp: &[u8], unit: Cow<'static, str>) -> Vec<AuxValue> {
         _ => "?",
     };
     let result_str = if comp_result == 0 { "PASS" } else { "FAIL" };
-    let high_v = high_float as f64;
-    let mut aux = vec![make_aux(
-        COMP_HIGH,
-        MeasuredValue::Normal(high_v),
-        unit.clone(),
-        Some(format!("{high_v:.dp$}")),
-        None,
-    )];
+    let (high, high_digits) = comp_limit(high_float, dp);
+    let mut aux = vec![make_aux(COMP_HIGH, high, unit.clone(), high_digits, None)];
     if let Some(low_float) = low_float {
-        let low_v = low_float as f64;
-        aux.push(make_aux(
-            COMP_LOW,
-            MeasuredValue::Normal(low_v),
-            unit,
-            Some(format!("{low_v:.dp$}")),
-            None,
-        ));
+        let (low, low_digits) = comp_limit(low_float, dp);
+        aux.push(make_aux(COMP_LOW, low, unit, low_digits, None));
     }
     debug!("ut181a: COMP {comp_mode_str} {result_str} high={high_float}");
     aux
+}
+
+/// A COMP limit and its digits. A non-finite one (§5.4 defines a float32 limit,
+/// and has no overload bit) is no number the meter was set to, so no reading.
+fn comp_limit(limit: f32, dp: usize) -> (MeasuredValue, Option<String>) {
+    let limit = limit as f64;
+    match MeasuredValue::finite(limit) {
+        Some(value) => (value, Some(format!("{limit:.dp$}"))),
+        None => (MeasuredValue::UNRECOGNISED, None),
+    }
 }
 
 /// The relative format (misc 0x10, format type 1): three full values —
@@ -1932,8 +1930,30 @@ raw_payload=30"#
         );
     }
 
+    /// A limit that is not finite is no reading; the other keeps its digits.
+    #[test]
+    fn a_non_finite_comp_limit_is_no_reading() {
+        let (m, _) = parse_reporting(&comp_payload(2, 0, 0x03, f32::INFINITY, None));
+        let m = m.unwrap();
+        assert!(matches!(
+            m.aux_values[0].value,
+            MeasuredValue::NoReading("?")
+        ));
+        assert_eq!(m.aux_values[0].display_raw, None);
+
+        let (m, _) = parse_reporting(&comp_payload(0, 1, 0x03, 10.0, Some(f32::NAN)));
+        let m = m.unwrap();
+        assert!(matches!(m.aux_values[0].value, MeasuredValue::Normal(v) if v == 10.0));
+        assert_eq!(m.aux_values[0].display_raw.as_deref(), Some("10.000"));
+        assert!(matches!(
+            m.aux_values[1].value,
+            MeasuredValue::NoReading("?")
+        ));
+        assert_eq!(m.aux_values[1].display_raw, None);
+    }
+
     /// A COMP mode past ABOVE, a result past FAIL, digits past the low
-    /// nibble or a non-finite limit (§5.4); the limits parse as before.
+    /// nibble or a non-finite limit (§5.4) keep each limit's row.
     #[test]
     fn undocumented_comp_fields_are_reported() {
         for (p, limits) in [
