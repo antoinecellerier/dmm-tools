@@ -291,12 +291,8 @@ fn export_outcome(
             info!("exported {sample_count} samples to {}", path.display());
             // The file name, not the whole path: its extension names the
             // format written, which is the part the user needs confirmed.
-            let file_name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.display().to_string());
             ExportOutcome {
-                written: Ok((sample_count, file_name)),
+                written: Ok((sample_count, super::import::file_name(path))),
                 exported: mark.map(|mark| (mark, sample_count)),
             }
         }

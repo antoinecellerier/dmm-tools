@@ -1154,46 +1154,7 @@ impl eframe::App for App {
                     on_frame(ui, frame_fill);
                     self.show_reading_column_scrolled(ui, ContentLayout::Wide);
                 });
-            // egui's `Panel::left(..).resizable(true)` allocates a
-            // drag-sense resize handle at its right edge, which is focusable
-            // but has no visible focus indicator of its own and no keyboard
-            // action. Paint a focus ring and wire up Left/Right arrow keys
-            // to resize the panel, consistent with the recording-panel
-            // divider. The handle id is derived from the panel id — see
-            // `resize_widget_id` at `panel.rs:36` in egui 0.37 for the salt.
-            let reading_panel_id = layout::reading_panel_id(ui);
-            let reading_panel_resize_id = reading_panel_id.with("__resize");
-            crate::a11y::set_accessible_label(
-                ui,
-                reading_panel_resize_id,
-                &dmm_shared::tr!(self.l10n, "recording-reading-resize.a11y"),
-            );
-            if ctx.memory(|m| m.focused()) == Some(reading_panel_resize_id) {
-                let delta = crate::a11y::arrow_resize(
-                    &ctx,
-                    reading_panel_resize_id,
-                    crate::a11y::ResizeAxis::Horizontal,
-                    20.0,
-                );
-                if delta != 0.0
-                    && let Some(mut state) = egui::PanelState::load(&ctx, reading_panel_id)
-                {
-                    let new_width = (state.outer_rect.width() + delta)
-                        .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
-                    state.outer_rect.max.x = state.outer_rect.min.x + new_width;
-                    ctx.data_mut(|d| d.insert_persisted(reading_panel_id, state));
-                }
-                // Paint a 3px focus indicator on the panel's right edge —
-                // the standard focus ring is invisible on the thin vline
-                // egui uses to draw the panel boundary.
-                let panel_rect = reading_panel.response.rect;
-                let stroke_color = crate::a11y::focus_ring_color(ui.visuals());
-                ui.painter().vline(
-                    panel_rect.right(),
-                    panel_rect.y_range(),
-                    egui::Stroke::new(3.0_f32, stroke_color),
-                );
-            }
+            self.reading_panel_resize_a11y(ui, reading_panel.response.rect);
 
             // Wide: center panel for graph + recording
             egui::CentralPanel::default()

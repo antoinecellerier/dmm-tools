@@ -780,10 +780,9 @@ The handle is focusable (`Sense::click_and_drag → FOCUSABLE`) but:
 **Symptom.** Our left-panel resize handle is a Tab stop that arrow keys
 do not move and that shows no sign of holding focus.
 
-**Workaround.** Replicate the internal id salt:
+**Workaround.** Replicate the internal id salt (`layout::reading_panel_resize_id`):
 ```rust
-let reading_panel_id = layout::reading_panel_id(ui);
-let reading_panel_resize_id = reading_panel_id.with("__resize");
+reading_panel_id(ui).with("__resize")
 ```
 and use `egui::PanelState::load` + `data_mut().insert_persisted` to
 move the panel boundary in response to Left/Right arrow presses on

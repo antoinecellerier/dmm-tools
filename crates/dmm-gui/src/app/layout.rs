@@ -11,7 +11,7 @@ use eframe::egui::{self, RichText, Ui};
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
-use crate::settings::DEFAULT_WINDOW_SIZE;
+use crate::settings::{DEFAULT_WINDOW_SIZE, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH};
 use crate::specs;
 
 /// The wide layout's resizable reading panel, as `Panel::left` names it.
@@ -21,6 +21,12 @@ pub(super) const READING_PANEL: &str = "reading_panel";
 /// `ui`: the panel's salt under `ui`'s scope, the way `Panel` derives it.
 pub(super) fn reading_panel_id(ui: &Ui) -> egui::Id {
     ui.scope_id().with_salt(egui::IdSalt::new(READING_PANEL))
+}
+
+/// The id of the reading panel's resize handle: egui derives it from the
+/// panel's id in `resize_widget_id` (`containers/panel.rs`).
+fn reading_panel_resize_id(ui: &Ui) -> egui::Id {
+    reading_panel_id(ui).with("__resize")
 }
 
 /// Which of the two multi-panel layouts the reading column is rendered in.
@@ -234,6 +240,51 @@ impl App {
             if width.is_finite() && width != self.settings.reading_panel_width {
                 self.settings.reading_panel_width = width;
             }
+        }
+    }
+
+    /// Keyboard access to the wide layout's reading-panel resize handle.
+    /// egui's `Panel::left(..).resizable(true)` allocates a drag-sense
+    /// handle at the panel's right edge, which is focusable but has no
+    /// visible focus indicator and no keyboard action. This labels it, wires
+    /// Left/Right to resize the panel and paints a focus ring, consistent
+    /// with the recording-panel divider.
+    ///
+    /// `ui` is the one the reading panel is shown in, whose id it is under;
+    /// `panel_rect` is the panel's rect this frame.
+    pub(super) fn reading_panel_resize_a11y(&self, ui: &Ui, panel_rect: egui::Rect) {
+        let ctx = ui.ctx();
+        let reading_panel_id = reading_panel_id(ui);
+        let reading_panel_resize_id = reading_panel_resize_id(ui);
+        crate::a11y::set_accessible_label(
+            ui,
+            reading_panel_resize_id,
+            &tr!(self.l10n, "recording-reading-resize.a11y"),
+        );
+        if ctx.memory(|m| m.focused()) == Some(reading_panel_resize_id) {
+            let delta = crate::a11y::arrow_resize(
+                ctx,
+                reading_panel_resize_id,
+                crate::a11y::ResizeAxis::Horizontal,
+                20.0,
+            );
+            if delta != 0.0
+                && let Some(mut state) = egui::PanelState::load(ctx, reading_panel_id)
+            {
+                let new_width = (state.outer_rect.width() + delta)
+                    .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
+                state.outer_rect.max.x = state.outer_rect.min.x + new_width;
+                ctx.data_mut(|d| d.insert_persisted(reading_panel_id, state));
+            }
+            // Paint a 3px focus indicator on the panel's right edge — the
+            // standard focus ring is invisible on the thin vline egui uses
+            // to draw the panel boundary.
+            let stroke_color = crate::a11y::focus_ring_color(ui.visuals());
+            ui.painter().vline(
+                panel_rect.right(),
+                panel_rect.y_range(),
+                egui::Stroke::new(3.0_f32, stroke_color),
+            );
         }
     }
 
