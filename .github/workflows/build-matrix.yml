@@ -146,11 +146,14 @@ jobs:
 
       # Off by default: release and nightly builds are unattended, and the 10 GB
       # repository cache is worth more to the CI call, whose caches decide
-      # pull-request turnaround. See docs/development.md.
+      # pull-request turnaround. See docs/development.md. The image is in the
+      # key because rust-cache's own key names only the OS family: C objects
+      # that build scripts compiled on another image's glibc headers would be
+      # reused and fail to link (glibc 2.38's __isoc23_* symbols on 22.04).
       - uses: Swatinem/rust-cache@v2
         if: inputs.cache
         with:
-          key: ${{ matrix.target }}
+          key: ${{ matrix.os }}-${{ matrix.target }}
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
