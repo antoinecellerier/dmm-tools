@@ -279,8 +279,7 @@ fn open(target: Target<'_>, stop: Option<&AtomicBool>) -> Result<Box<dyn Transpo
     // loop when the notice is due.
     #[cfg(target_os = "linux")]
     let interval_command = if issc::is_adapter(opened.advertised_name.as_deref()) {
-        connection_handle(&opened.selector)
-            .and_then(|handle| interval_command(&opened.selector, handle))
+        connection_handle(&opened.selector).map(interval_command)
     } else {
         None
     };
@@ -533,17 +532,13 @@ async fn request_short_interval(_peripheral: &Peripheral) -> Option<ShortInterva
     None
 }
 
-/// The command that moves the link with this `handle` to the peer at
-/// `address` to a 30–50 ms interval until it disconnects: BlueZ's
-/// `hcitool`, run as root.
-///
-/// `None` for anything but a Bluetooth address, which is what makes it safe
-/// to put in a line run as root.
+/// The command that moves the link with this `handle` to a 30–50 ms
+/// interval until it disconnects: BlueZ's `hcitool`, run as root. Only the
+/// numeric handle goes into the line, so nothing from the peer reaches the
+/// root shell.
 #[cfg(any(target_os = "linux", test))]
-fn interval_command(address: &str, handle: u16) -> Option<String> {
-    is_bd_addr(address).then(|| {
-        format!("sudo hcitool lecup --handle {handle} --min 24 --max 40 --latency 0 --timeout 500")
-    })
+fn interval_command(handle: u16) -> String {
+    format!("sudo hcitool lecup --handle {handle} --min 24 --max 40 --latency 0 --timeout 500")
 }
 
 /// The handle BlueZ gave the connection to `address`, from `hcitool con`,
@@ -1007,17 +1002,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_interval_command_names_the_peer_and_nothing_else() {
+    fn the_interval_command_sets_the_handle_and_nothing_else() {
         assert_eq!(
-            interval_command("12:34:56:78:9a:bc", 2048).as_deref(),
-            Some("sudo hcitool lecup --handle 2048 --min 24 --max 40 --latency 0 --timeout 500")
+            interval_command(2048),
+            "sudo hcitool lecup --handle 2048 --min 24 --max 40 --latency 0 --timeout 500"
         );
-        // A CoreBluetooth id, or anything else, never reaches a root shell.
-        assert_eq!(
-            interval_command("1ca4b9a3-9e6f-4f1e-8b0c-2d1f3a4b5c6d", 1),
-            None
-        );
-        assert_eq!(interval_command("12:34:56:78:9A:BC; rm -rf ~", 1), None);
     }
 
     #[test]
