@@ -841,15 +841,24 @@ mod tests {
     }
 
     /// A key step sends a key its layout's entry offers, or the run files
-    /// the refusal instead of the key's effect.
+    /// the refusal instead of the key's effect; and every key offered has
+    /// a step, or capture never checks it on the meter.
     #[test]
-    fn key_steps_send_keys_the_entry_offers() {
+    fn key_steps_send_offered_keys_and_every_key_has_one() {
         for layout in LAYOUTS {
             let offered = keys::commands(layout);
-            for step in steps(layout) {
+            let steps = steps(layout);
+            for step in &steps {
                 if let Some(command) = step.command {
                     assert!(offered.contains(&command), "{} {}", layout.id, step.id);
                 }
+            }
+            for command in offered {
+                assert!(
+                    steps.iter().any(|s| s.command == Some(*command)),
+                    "{} {command}",
+                    layout.id
+                );
             }
         }
     }
