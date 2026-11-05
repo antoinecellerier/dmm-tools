@@ -10,8 +10,8 @@ use super::report::{
     baseline_from_report, needs_attention, save_report, upsert_step,
 };
 use super::step::{
-    CaptureStep, Confirmed, PrevState, Retake, ask_confirmation, capture_samples, empty_result,
-    frames_for_step,
+    CaptureStep, Confirmed, Frames, PrevState, Retake, ask_confirmation, capture_samples,
+    empty_result, file_taken, take_frames,
 };
 use crate::open::BoxedDmm;
 use console::style;
@@ -607,15 +607,10 @@ impl CaptureRun {
             let mut errors = ErrorLog::default();
             let measurements = capture_samples(dmm, FREEFORM_SAMPLES, &mut errors)?;
             let diagnostics = errors.into_diagnostics();
-            let sample_data: Vec<SampleData> = measurements
-                .iter()
-                .map(SampleData::from_measurement)
-                .collect();
-            let (frames, frames_dropped) = {
-                let mut rec = recording::lock(recorder);
-                rec.set_step(None);
-                frames_for_step(&rec.drain(), &step_id)
-            };
+            let sample_data = SampleData::from_all(&measurements);
+            // Before the prompt below, as every step takes its frames where it
+            // finished sampling.
+            let (frames, frames_dropped) = take_frames(recorder, &step_id, Frames::Drained);
 
             for (i, s) in sample_data.iter().enumerate() {
                 eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
@@ -658,8 +653,7 @@ impl CaptureRun {
             if let Some(shown) = confirmation {
                 result.set_inline_confirmation(shown);
             }
-            upsert_step(&mut self.report, result);
-            self.report.wire_events_dropped = recording::lock(recorder).dropped();
+            file_taken(&mut self.report, recorder, result);
             save_report(&self.report, &self.output_path)?;
             extra += 1;
         }

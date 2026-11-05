@@ -10,9 +10,10 @@
 use super::recording;
 use super::report::already_captured;
 use super::session::CaptureRun;
+use super::step::{Frames, file_step};
 use super::{
-    CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, frames_for_step, link_gone,
-    needs_attention, read_past_blank, samples_after_switch, save_report, upsert_step,
+    CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, link_gone, needs_attention,
+    read_past_blank, samples_after_switch, save_report,
 };
 use console::style;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
@@ -456,27 +457,18 @@ impl CaptureRun {
         // Taken once the display is back, so the step's own samples start there
         // too.
         let mut errors = ErrorLog::default();
-        let samples: Vec<SampleData> = samples_after_switch(&mut self.dmm, 1, &mut errors)?
-            .iter()
-            .map(SampleData::from_measurement)
-            .collect();
-        let (frames, frames_dropped) = {
-            let mut rec = recording::lock(&self.recorder);
-            rec.set_step(Some(step.id));
-            frames_for_step(&rec.take_step(&id), &id)
-        };
+        let samples = SampleData::from_all(&samples_after_switch(&mut self.dmm, 1, &mut errors)?);
         let landed = samples.last().is_some_and(|s| s.mode == want);
         let error = selected.as_ref().err().map(ToString::to_string);
-        upsert_step(
+        file_step(
             &mut self.report,
+            &self.recorder,
             StepResult {
                 // The ring said a press reaches this mode, so a refusal or a
                 // meter somewhere else is the family's table or its driver
                 // disagreeing with the hardware.
                 needs_attention: error.is_some() || !landed,
                 samples,
-                frames,
-                frames_dropped,
                 diagnostics: errors.into_diagnostics(),
                 error,
                 ..StepResult::new(
@@ -489,6 +481,7 @@ impl CaptureRun {
                     },
                 )
             },
+            Frames::SubStep { parent: step.id },
         );
 
         match selected {
@@ -546,16 +539,8 @@ impl CaptureRun {
             }
             Err(_) => Vec::new(),
         };
-        let samples: Vec<SampleData> = measurements
-            .iter()
-            .map(SampleData::from_measurement)
-            .collect();
+        let samples = SampleData::from_all(&measurements);
         let diagnostics = errors.into_diagnostics();
-        let (frames, frames_dropped) = {
-            let mut rec = recording::lock(&self.recorder);
-            rec.set_step(None);
-            frames_for_step(&rec.drain(), id)
-        };
 
         let hit = samples
             .iter()
@@ -587,8 +572,9 @@ impl CaptureRun {
             ),
         }
 
-        upsert_step(
+        file_step(
             &mut self.report,
+            &self.recorder,
             StepResult {
                 // A setting that has worked elsewhere in the run is refused
                 // because this mode has no such function — MIN/MAX in continuity
@@ -599,12 +585,11 @@ impl CaptureRun {
                     Ok(()) => !hit || needs_attention(&samples, samples_wanted, &diagnostics),
                 },
                 samples,
-                frames,
-                frames_dropped,
                 diagnostics,
                 error,
                 ..StepResult::new(id, &instruction, status)
             },
+            Frames::Drained,
         );
         Ok(Driven {
             last: measurements.into_iter().next_back(),
@@ -665,21 +650,15 @@ impl CaptureRun {
                 choice_slug(setting, &off.label)
             )),
         };
-        let (frames, frames_dropped) = {
-            let mut rec = recording::lock(&self.recorder);
-            rec.set_step(None);
-            frames_for_step(&rec.drain(), &id)
-        };
         // Filed as a driven choice is: an error only when a command or read
         // failed; a read-back that missed is a captured reading to look at.
         let errored = reading.is_err();
-        upsert_step(
+        file_step(
             &mut self.report,
+            &self.recorder,
             StepResult {
                 needs_attention: failure.is_some(),
                 samples: sample.into_iter().collect(),
-                frames,
-                frames_dropped,
                 error: failure.clone(),
                 ..StepResult::new(
                     &id,
@@ -691,6 +670,7 @@ impl CaptureRun {
                     },
                 )
             },
+            Frames::Drained,
         );
         // Saved now: a run cut short before the next step's save would lose
         // where the sweep left the meter.
@@ -1027,6 +1007,21 @@ mod tests {
         );
         assert!(filed.error.is_none());
         assert!(!filed.needs_attention);
+    }
+
+    /// A sub-step brings the report's count of dropped wire events up to
+    /// date, as every step does: a run cut short after it still says how many
+    /// events the recorder's bounded buffer lost.
+    #[test]
+    fn a_sub_step_files_the_dropped_wire_event_count() {
+        let mut bench = meter(mock(dmm_lib::mock::MockMode::AcV));
+        for _ in 0..recording::MAX_WIRE_EVENTS + 5 {
+            bench.run.dmm.transport().write(&[0x01]).unwrap();
+        }
+        assert!(bench.switch(&mode_step("AC V Hz")));
+        let dropped = recording::lock(&bench.run.recorder).dropped();
+        assert!(dropped >= 5, "the buffer overflowed: {dropped}");
+        assert_eq!(bench.run.report.wire_events_dropped, dropped);
     }
 
     /// Nothing earlier in the run left a reading, which is every step of a

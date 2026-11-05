@@ -2,9 +2,10 @@
 //! asks for, and the frames that wait puts on the wire.
 
 use super::input::{ErrorLog, Input};
-use super::recording::{self, WireEvent};
+use super::recording::{self, SharedRecorder, WireEvent};
 use super::report::{
-    FrameRecord, SampleData, StepResult, StepStatus, already_captured, needs_attention, upsert_step,
+    CaptureReport, FrameRecord, SampleData, StepResult, StepStatus, already_captured,
+    needs_attention, upsert_step,
 };
 use super::session::CaptureRun;
 use super::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
@@ -171,6 +172,62 @@ pub(crate) fn frames_for_step(events: &[WireEvent], step_id: &str) -> (Vec<Frame
             .collect(),
         dropped as u64,
     )
+}
+
+/// Where a step's frames come from when it is filed.
+pub(crate) enum Frames<'a> {
+    /// Everything the recorder holds: the step ran on its own, and nothing is
+    /// tagged until the next one starts.
+    Drained,
+    /// Only the sub-step's own events: it is filed partway through step
+    /// `parent`, whose frames stay buffered and which goes on recording.
+    SubStep { parent: &'a str },
+}
+
+/// Take step `id`'s frames out of the recorder, as `from` says, capped as
+/// [`frames_for_step`] caps them.
+pub(crate) fn take_frames(
+    recorder: &SharedRecorder,
+    id: &str,
+    from: Frames,
+) -> (Vec<FrameRecord>, u64) {
+    let mut rec = recording::lock(recorder);
+    match from {
+        Frames::Drained => {
+            rec.set_step(None);
+            frames_for_step(&rec.drain(), id)
+        }
+        Frames::SubStep { parent } => {
+            rec.set_step(Some(parent));
+            frames_for_step(&rec.take_step(id), id)
+        }
+    }
+}
+
+/// File `result` in the report with the frames its step left in the
+/// recorder, taken as `from` says. Take them where the step finished
+/// sampling: nothing may reach the wire between that and this.
+pub(crate) fn file_step(
+    report: &mut CaptureReport,
+    recorder: &SharedRecorder,
+    mut result: StepResult,
+    from: Frames,
+) {
+    (result.frames, result.frames_dropped) = take_frames(recorder, &result.id, from);
+    file_taken(report, recorder, result);
+}
+
+/// [`file_step`] for a result that already holds its frames, taken before
+/// the step asked the operator anything. The report's count of wire events
+/// the recorder dropped is brought up to date with it, so a run cut short
+/// after any step says how many were lost.
+pub(crate) fn file_taken(
+    report: &mut CaptureReport,
+    recorder: &SharedRecorder,
+    result: StepResult,
+) {
+    report.wire_events_dropped = recording::lock(recorder).dropped();
+    upsert_step(report, result);
 }
 
 /// How long a step watches the meter before offering the keyboard: long
@@ -519,12 +576,9 @@ fn left_mode<'a>(
 impl CaptureRun {
     /// File a step that ended before it sampled: the frames it did put on the
     /// wire are drained out of the recorder and into its result.
-    fn finish_failed_step(&mut self, step_id: &str, mut result: StepResult) {
-        let mut rec = recording::lock(&self.recorder);
-        rec.set_step(None);
-        (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step_id);
+    fn finish_failed_step(&mut self, mut result: StepResult) {
         result.needs_attention = true;
-        upsert_step(&mut self.report, result);
+        file_step(&mut self.report, &self.recorder, result, Frames::Drained);
     }
 
     /// File the step as skipped; the run goes on.
@@ -611,7 +665,7 @@ impl CaptureRun {
                             style(tr!(l, "capture-command-failed", error = l.error(&e))).red()
                         );
                         let result = empty_result(step, StepStatus::Error, Some(e.to_string()));
-                        self.finish_failed_step(step.id, result);
+                        self.finish_failed_step(result);
                         return Ok(StepOutcome::nothing());
                     }
                 }
@@ -637,7 +691,7 @@ impl CaptureRun {
                         eprintln!("  {}", style(did_nothing(l, cmd, last.as_ref())).yellow());
                         let mut result = empty_result(step, StepStatus::Error, Some(error));
                         result.diagnostics = errors.into_diagnostics();
-                        self.finish_failed_step(step.id, result);
+                        self.finish_failed_step(result);
                         return Ok(StepOutcome::nothing());
                     }
                     Watched::Skip => return Ok(self.skip(step)),
@@ -732,10 +786,7 @@ impl CaptureRun {
                 continue;
             }
 
-            let sample_data: Vec<SampleData> = measurements
-                .iter()
-                .map(SampleData::from_measurement)
-                .collect();
+            let sample_data = SampleData::from_all(&measurements);
 
             for (i, s) in sample_data.iter().enumerate() {
                 eprintln!(
@@ -787,11 +838,6 @@ impl CaptureRun {
         };
 
         let diagnostics = errors.into_diagnostics();
-        let (frames, frames_dropped) = {
-            let mut rec = recording::lock(&self.recorder);
-            rec.set_step(None);
-            frames_for_step(&rec.drain(), step.id)
-        };
 
         let status = if sample_data.is_empty() {
             StepStatus::Timeout
@@ -815,8 +861,6 @@ impl CaptureRun {
         let mut result = StepResult {
             needs_attention: needs_attention(&sample_data, step.samples, &diagnostics),
             samples: sample_data,
-            frames,
-            frames_dropped,
             diagnostics,
             ..StepResult::new(step.id, step.instruction, status)
         };
@@ -824,8 +868,7 @@ impl CaptureRun {
             result.set_inline_confirmation(shown);
         }
 
-        upsert_step(&mut self.report, result);
-        self.report.wire_events_dropped = recording::lock(&self.recorder).dropped();
+        file_step(&mut self.report, &self.recorder, result, Frames::Drained);
         Ok(StepOutcome::done(measurements.pop(), to_review))
     }
 }

@@ -19,11 +19,11 @@ pub(crate) use input::{ErrorLog, Input, InputGone};
 pub(crate) use instructions::{OtherDevice, UnknownIds, Unreadable, export as export_instructions};
 pub(crate) use listing::{StepListFormat, UnknownSteps, list_steps};
 pub(crate) use report::{
-    CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report, upsert_step,
+    CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report,
 };
 pub(crate) use session::NotResponding;
 pub(crate) use step::{
-    CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, frames_for_step, link_gone, read_past_blank,
+    CaptureStep, DETECTION_STEP_ID, FREEFORM_STEP_ID, link_gone, read_past_blank,
     samples_after_switch,
 };
 pub(crate) use triage::{cmd_triage, install_triage_logger};

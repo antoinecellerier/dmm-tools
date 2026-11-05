@@ -407,6 +407,11 @@ impl From<&SampleFlags> for StatusFlags {
 }
 
 impl SampleData {
+    /// Each of `measurements`, in order.
+    pub(crate) fn from_all(measurements: &[Measurement]) -> Vec<Self> {
+        measurements.iter().map(Self::from_measurement).collect()
+    }
+
     pub(crate) fn from_measurement(m: &Measurement) -> Self {
         // The parsed value, not `display_raw`: the report stores both, and
         // this column is the one a golden fixture is compared against.
