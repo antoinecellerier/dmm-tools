@@ -140,12 +140,11 @@ impl Capture {
 
         // Session stats follow the meter's *main* reading whatever the graph
         // plots: they describe the reading, not the view. `SeriesStats`
-        // resets them on a mode *or* unit change — a dial turn, or an
-        // auto-range step that moves the unit a decade (mV→V) without
-        // touching the mode — so the panel never labels volt-scale numbers
-        // with an ohms unit. `Graph::push_sample` clears its history on the
-        // same condition, and the GUI resets silently, so the returned
-        // `SeriesChange` is not needed here.
+        // resets them on a dial turn or a change of quantity, so the panel
+        // never labels volt-scale numbers with an ohms unit, and re-expresses
+        // them on an auto-range step that moves the unit a decade (mV→V)
+        // without touching the mode. The GUI resets silently, so the
+        // returned `SeriesChange` is not needed here.
         self.session.push(&m);
 
         plot(graph, &m);

@@ -16,8 +16,9 @@
 //! out, so a reading saved from the GUI and one written by the CLI read the
 //! same; [`replay`], what `--replay` opens, a golden fixture included;
 //! [`help`], the help and version text both print; [`logging`], the log
-//! levels both start with; and [`RECONNECT_INTERVAL`], how often both retry
-//! a lost link. The canonical settings location is
+//! levels both start with; [`RECONNECT_INTERVAL`], how often both retry
+//! a lost link; and [`stat_decimals`], how many decimals both write the
+//! statistics and the integral with. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`, or from
 //! `%APPDATA%` when set).
@@ -46,6 +47,18 @@ use std::time::Duration;
 /// How long a lost link waits before each attempt to reopen it, in dmm-gui
 /// and in `dmm-cli read`.
 pub const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
+
+/// How many decimals the statistics and the integral write a figure of
+/// `magnitude` with, in `dmm-cli read`'s summary and dmm-gui's session
+/// block: four, as many more as keep four significant digits below 1, so a
+/// run carried into a larger prefix (219.87 Ω into MΩ) does not round to
+/// nothing, and no more than twelve.
+pub fn stat_decimals(magnitude: f64) -> usize {
+    if !magnitude.is_finite() || magnitude == 0.0 || magnitude >= 1.0 {
+        return 4;
+    }
+    (3 - magnitude.log10().floor() as i64).clamp(4, 12) as usize
+}
 
 /// Settings fields shared between `dmm-cli` and `dmm-gui`.
 ///
@@ -293,6 +306,22 @@ impl SharedSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Four decimals from 1 up, four significant digits below it: a run
+    /// carried from Ω into MΩ keeps its figures.
+    #[test]
+    fn stat_figures_keep_four_significant_digits_below_one() {
+        let at = |v: f64| format!("{v:.*}", stat_decimals(v.abs()));
+        assert_eq!(at(1.05), "1.0500");
+        assert_eq!(at(219.87), "219.8700");
+        assert_eq!(at(0.95), "0.9500");
+        assert_eq!(at(0.0293), "0.02930");
+        assert_eq!(at(0.00021987), "0.0002199");
+        assert_eq!(at(-0.00021987), "-0.0002199");
+        assert_eq!(at(0.0), "0.0000");
+        // Bounded: a figure that is only rounding noise stays short.
+        assert_eq!(at(1e-17), "0.000000000000");
+    }
 
     /// `%APPDATA%` leads to the file `directories` finds, so setting it
     /// changes nothing for anyone whose variable is the system's.

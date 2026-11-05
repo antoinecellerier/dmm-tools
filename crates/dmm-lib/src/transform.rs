@@ -86,10 +86,6 @@ impl PrefixRatio {
 
 /// The ratio that re-expresses a figure in `from` as one in `to`, or `None`
 /// when the two are not prefixes of one base unit (V and A, °C and °F).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "awaits the statistics' auto-range step")
-)]
 pub(crate) fn prefix_ratio(from: &str, to: &str) -> Option<PrefixRatio> {
     let (from_base, from_mult) = si_prefix(from);
     let (to_base, to_mult) = si_prefix(to);

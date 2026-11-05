@@ -211,3 +211,58 @@ fn a_scaled_csv_keeps_the_raw_column_in_place() {
     assert_eq!(rows[2][11..14], ["Raw", "51.37", "mV"]);
     assert_eq!(rows[3][11..14], ["Raw", "16.11", "mV"]);
 }
+
+/// A second at 900 mV, then the meter auto-ranges to V and reads 1.1 V for
+/// two seconds.
+const STEP_CSV: &str = "\
+# device: UT61E+
+timestamp,mode,value,unit,range,flags
+2026-09-02T10:00:00+00:00,DC V,900.0,mV,2.2V,AUTO
+2026-09-02T10:00:01+00:00,DC V,900.0,mV,2.2V,AUTO
+2026-09-02T10:00:02+00:00,DC V,1.100,V,22V,AUTO
+2026-09-02T10:00:03+00:00,DC V,1.100,V,22V,AUTO
+";
+
+/// An auto-range step from mV to V carries the statistics and the integral
+/// on, in volts: no reset note, and the integral column continues across it.
+#[test]
+fn an_auto_range_step_carries_the_statistics_and_integral_on() {
+    let dir = TestDir::new("decade-step");
+    let csv = dir.path("step.csv");
+    std::fs::write(&csv, STEP_CSV).expect("write the CSV");
+    let (out, err, ok) = run(&[
+        "read",
+        "--import",
+        p(&csv),
+        "--format",
+        "csv",
+        "--integrate",
+    ]);
+    assert!(ok, "imports: {err}");
+    assert!(!err.contains("changed"), "no reset note: {err}");
+    assert!(
+        err.contains(
+            "4 readings | Min: 0.9000 V | Max: 1.1000 V | Mean: 1.0000 V | \u{3c3}: 0.1155 V"
+        ),
+        "the summary: {err}"
+    );
+    assert!(err.contains("Integral: 3.0000 V\u{b7}s (3.0s)"), "{err}");
+    // 0.9 V·s, then 1.0 V·s over the second that straddles the step, then
+    // 1.1 V·s: each row in the unit of its own reading.
+    let integrals: Vec<(String, String)> = cells_past_timestamp(&out)[1..]
+        .iter()
+        .map(|row| (row[5].clone(), row[6].clone()))
+        .collect();
+    let mv_s = "mV\u{b7}s".to_string();
+    let v_s = "V\u{b7}s".to_string();
+    assert_eq!(
+        integrals,
+        [
+            ("0.000000".to_string(), mv_s.clone()),
+            ("900.000000".to_string(), mv_s),
+            ("1.900000".to_string(), v_s.clone()),
+            ("3.000000".to_string(), v_s),
+        ],
+        "{out}"
+    );
+}

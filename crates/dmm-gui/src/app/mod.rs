@@ -1682,6 +1682,41 @@ mod tests {
         std::sync::Arc::new(Localizer::new(&FRENCH, &resources, &Options::default()))
     }
 
+    /// An overload in another decade ("OL MΩ" after kΩ readings) leaves the
+    /// statistics in kΩ, and the panel says so: their caption is the unit
+    /// they are held in, not the one the latest frame names.
+    #[test]
+    fn the_statistics_keep_their_unit_through_an_overload() {
+        use dmm_lib::flags::StatusFlags;
+        use dmm_lib::measurement::MeasuredValue;
+        let mut app = App::from_settings(
+            Settings {
+                auto_connect: false,
+                ..Settings::default()
+            },
+            dmm_lib::Clock::real(),
+        );
+        app.connection.state = ConnectionState::Connected;
+        app.connection.meter = Some(ConnectedMeter::test_fixture(None));
+        for (value, unit) in [
+            (MeasuredValue::Normal(1.05), "k\u{3a9}"),
+            (MeasuredValue::Overload, "M\u{3a9}"),
+        ] {
+            let mut m = Measurement::test_fixture(value, unit, StatusFlags::default());
+            m.mode = "Ohm".into();
+            app.deliver(connection::DmmMessage::Measurement(m));
+        }
+        let texts = drawn_texts(&last_frame(&mut app));
+        assert!(
+            texts.iter().any(|t| t.ends_with("1.0500 k\u{3a9}")),
+            "no kΩ figure in {texts:#?}"
+        );
+        assert!(
+            !texts.iter().any(|t| t.ends_with("1.0500 M\u{3a9}")),
+            "a kΩ figure captioned MΩ in {texts:#?}"
+        );
+    }
+
     /// The library's labels are drawn in the app's language — a mode, one
     /// the library composed around a qualifier, a flag, the main reading's
     /// name, a sub-value, a key — while a trace hidden under its English

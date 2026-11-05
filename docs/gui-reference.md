@@ -297,12 +297,15 @@ A thin strip below the main plot showing the full capture history.
   with fixed-width formatting
 - **Count** — number of samples
 - **Int** — cumulative time-integral (shown only for current and voltage modes).
-  For current modes, displays charge in Ah/mAh/µAh. For voltage modes, V·s.
+  For current modes, displays charge (Ah, mAh, …). For voltage modes, V·s
+  (mV·s, …).
   Resets with the Reset button.
 - **Alarms** — crossings of each [alarm limit](#alarm), while limits are
   set
 - **Reset** button — clears statistics, integral and alarm counts
 - Stats persist across reconnects (use Clear for full reset)
+- Stats and ∫ carry across an auto-range step (Ω→kΩ), in the unit the meter
+  shows last; turning the dial starts them again
 - A second row shows **visible window stats** — the same figures over the
   current graph viewport only
 - Min/Max/Mean/σ/Count/∫ track the meter's main reading whatever the graph is

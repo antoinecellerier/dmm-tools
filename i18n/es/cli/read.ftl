@@ -63,9 +63,10 @@ read-alarm-on = alarma activada: { $limits }
 
 # After "Note:". The statistics (and with --integrate the integral) start
 # again when the readings change what they measure. $change is mode (the
-# dial was turned), unit (the range moved), or either of them followed by
-# -integral when the integral restarts too. $before and $after are the mode
-# names, e.g. DC V and Ω, or the units, e.g. mV and V.
+# dial was turned), unit (another quantity under the same mode; a range
+# change carries on), or either of them followed by -integral when the
+# integral restarts too. $before and $after are the mode names, e.g. DC V
+# and Ω, or the units, e.g. Hz and %.
 read-series-reset =
     { $change ->
         [mode-integral] Cambio de modo ({ $before } → { $after }), estadísticas e integral restablecidas

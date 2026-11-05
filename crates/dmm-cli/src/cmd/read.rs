@@ -679,8 +679,9 @@ impl Run {
             write!(writer, "{header}")?;
         }
         // Min/Max/Mean and the integral are only meaningful within a single
-        // mode and unit; `SeriesStats` resets both whenever either moves, so
-        // the closing summary only ever covers one comparable series.
+        // mode and quantity; `SeriesStats` resets both whenever either moves,
+        // and re-expresses them across an auto-range step, so the closing
+        // summary only ever covers one comparable series.
         let mut session = dmm_lib::stats::SeriesStats::new(integrate);
         session.integrator.set_sample_interval(tick);
         Ok(Self {
@@ -714,8 +715,9 @@ impl Run {
         // millivolts the meter sent.)
         self.transform.apply(&mut m);
         // Min/Max/Mean and the integral are only meaningful within a single
-        // mode and unit, and neither check subsumes the other — see
-        // `SeriesStats`, which resets both accumulators and reports the change.
+        // mode and quantity, and neither check subsumes the other — see
+        // `SeriesStats`, which resets both accumulators and reports the
+        // change, and carries them across an auto-range step without one.
         if let Some(change) = self.session.push(&m) {
             eprintln!(
                 "{} {}",
@@ -838,16 +840,19 @@ impl Run {
         if let (Some(min), Some(max), Some(avg)) =
             (session.stats.min, session.stats.max, session.stats.avg())
         {
-            // Name the unit the figures are in. They reset whenever the mode or
-            // the unit moves, so this is the unit every sample behind them was
-            // measured in.
+            // Name the unit the figures are in: the latest reading's, every
+            // sample behind them re-expressed in it across an auto-range
+            // step. They reset whenever the mode or the quantity moves.
             let unit_suffix = session
                 .unit()
                 .filter(|u| !u.is_empty())
                 .map(|u| format!(" {u}"))
                 .unwrap_or_default();
-            // Cyan figures, each with the unit after it.
-            let figure = |v: f64| format!("{}{unit_suffix}", style(format!("{v:.4}")).cyan());
+            // Cyan figures, each with the unit after it, all to the decimals
+            // the largest of them needs.
+            let decimals = dmm_shared::stat_decimals(min.abs().max(max.abs()));
+            let figure =
+                |v: f64| format!("{}{unit_suffix}", style(format!("{v:.decimals$}")).cyan());
             let count = session.stats.count;
             let (min, max, mean) = (figure(min), figure(max), figure(avg));
             // One message per cell, so a new figure leaves the others'
@@ -865,7 +870,11 @@ impl Run {
             let summary = cells.join(" | ");
             eprintln!("\n{} {summary}", style("---").dim());
             if let Some((value, disp_unit)) = session.integral_display() {
-                let value = format!("{} {disp_unit}", style(format!("{value:.4}")).cyan());
+                let decimals = dmm_shared::stat_decimals(value.abs());
+                let value = format!(
+                    "{} {disp_unit}",
+                    style(format!("{value:.decimals$}")).cyan()
+                );
                 let integral = match session.integrator.elapsed_secs() {
                     Some(s) => tr!(
                         l,

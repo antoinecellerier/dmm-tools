@@ -1,5 +1,5 @@
 use crate::measurement::{MeasuredValue, Measurement};
-use crate::transform::PrefixRatio;
+use crate::transform::{PrefixRatio, prefix_ratio, si_prefix};
 use log::debug;
 use std::time::{Duration, Instant};
 
@@ -76,10 +76,6 @@ impl RunningStats {
     /// Re-express every figure in another prefix of the same unit, as when
     /// the meter auto-ranges from mV to V: the sums scale with the values,
     /// the sum of squares with their square, so the mean and spread carry on.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "awaits the statistics' auto-range step")
-    )]
     pub(crate) fn rescale(&mut self, ratio: PrefixRatio) {
         self.min = self.min.map(|v| ratio.apply(v));
         self.max = self.max.map(|v| ratio.apply(v));
@@ -228,10 +224,6 @@ impl Integrator {
     /// Re-express the integral and the reading it continues from in another
     /// prefix of the same unit, so the trapezoid that straddles an
     /// auto-range step joins two values in one unit.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "awaits the statistics' auto-range step")
-    )]
     pub(crate) fn rescale(&mut self, ratio: PrefixRatio) {
         self.integral = ratio.apply(self.integral);
         if let Some((value, _)) = &mut self.prev {
@@ -259,26 +251,39 @@ impl Default for Integrator {
 ///
 /// Returns `None` for units where integration is not meaningful (Ω, F, Hz, °C, %).
 pub(crate) fn integral_unit_info(unit: &str) -> Option<(&'static str, f64)> {
-    match unit {
-        "A" => Some(("Ah", 3600.0)),
-        "mA" => Some(("mAh", 3600.0)),
-        "µA" => Some(("µAh", 3600.0)),
-        "V" => Some(("V\u{00b7}s", 1.0)),
-        "mV" => Some(("mV\u{00b7}s", 1.0)),
+    // The prefix carries over, whichever one the meter auto-ranged to: nA
+    // integrates to nAh, kV to kV·s.
+    const UNITS: [(f64, &str, &str); 8] = [
+        (1e-12, "pAh", "pV\u{00b7}s"),
+        (1e-9, "nAh", "nV\u{00b7}s"),
+        (1e-6, "µAh", "µV\u{00b7}s"),
+        (1e-3, "mAh", "mV\u{00b7}s"),
+        (1.0, "Ah", "V\u{00b7}s"),
+        (1e3, "kAh", "kV\u{00b7}s"),
+        (1e6, "MAh", "MV\u{00b7}s"),
+        (1e9, "GAh", "GV\u{00b7}s"),
+    ];
+    let (base, mult) = si_prefix(unit);
+    let &(_, charge, volt_seconds) = UNITS.iter().find(|(m, _, _)| *m == mult)?;
+    match base {
+        "A" => Some((charge, 3600.0)),
+        "V" => Some((volt_seconds, 1.0)),
         _ => None,
     }
 }
 
 /// Why the accumulators were reset: the reading started a new series.
 ///
-/// Mode *and* unit, because neither check subsumes the other: auto-range
-/// moves the unit a decade without touching the mode (mV → V), while a
-/// `--unit` relabel pins the unit across a dial turn that changes the mode.
+/// Mode *and* unit, because neither check subsumes the other: a `--unit`
+/// relabel pins the unit across a dial turn that changes the mode, and a
+/// mode string may cover more than one quantity. An auto-range step that
+/// only moves the prefix (mV → V) is neither: the series carries on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeriesChange {
     /// The meter's mode string changed — typically the dial was turned.
     Mode { prev: String, new: String },
-    /// The unit changed within the same mode — typically an auto-range step.
+    /// The unit changed to another quantity within the same mode, not merely
+    /// another prefix of the same one.
     Unit { prev: String, new: String },
 }
 
@@ -292,14 +297,18 @@ impl std::fmt::Display for SeriesChange {
 }
 
 /// Session statistics of one comparable series of readings: min/max/avg and
-/// the time integral, reset together whenever the mode or the unit changes.
+/// the time integral, reset together whenever the mode or the quantity
+/// changes, and re-expressed when the meter auto-ranges.
 ///
 /// Min/Max/Avg and an integral are only meaningful within a single mode and
-/// unit. Auto-range moves the unit a decade without touching the mode string,
-/// and turning the dial changes the mode — which `--unit` would otherwise
-/// hide, as it pins the label across the change. Without both checks a run
-/// that spans a dial turn averages volts with ohms and prints bare numbers,
-/// so nothing on screen would reveal the mix.
+/// quantity. Turning the dial changes the mode — which `--unit` would
+/// otherwise hide, as it pins the label across the change. Without both
+/// checks a run that spans a dial turn averages volts with ohms and prints
+/// bare numbers, so nothing on screen would reveal the mix. Auto-range moves
+/// the unit a decade without touching the mode string (the UT61E+ shows
+/// "219.0 Ω" then "0.2200 kΩ" in one mode); the figures held so far are then
+/// re-expressed in the new prefix, so the two decades never mix and the run
+/// carries on in the unit the meter shows.
 ///
 /// Owned by the CLI read loop and the GUI message drain alike, so the two
 /// cannot drift apart on what starts a new series.
@@ -311,6 +320,10 @@ pub struct SeriesStats {
     /// `(mode, unit)` the current series accumulates in; `None` until the
     /// first reading.
     series: Option<(String, String)>,
+    /// The series began on an overload, whose unit may be a decade the meter
+    /// names only out of range: the first reading with a value sets it, with
+    /// nothing accumulated to reset.
+    unit_unread: bool,
 }
 
 impl SeriesStats {
@@ -325,6 +338,7 @@ impl SeriesStats {
             integrator: Integrator::new(),
             integrate,
             series: None,
+            unit_unread: false,
         }
     }
 
@@ -334,6 +348,15 @@ impl SeriesStats {
     /// The first reading only stores the series — it starts one rather than
     /// changing it. When both mode and unit moved, the mode is reported: it
     /// names the change the user made.
+    ///
+    /// A reading in another prefix of the same unit (mV → V, Ω → kΩ) is no
+    /// change: min/max/avg and the integral are re-expressed in its prefix
+    /// and carry on, and [`SeriesStats::unit`] follows it.
+    ///
+    /// An overload's unit never moves the series: it may be a decade the
+    /// meter only names while out of range ("OL MΩ" between kΩ readings).
+    /// Its mode does — a dial turn with the probes open starts the new
+    /// series there, as the graph's trace does.
     ///
     /// A [`MeasuredValue::NoReading`] neither continues nor starts a series:
     /// its mode is the word the meter shows ("Auto" while the probes are
@@ -356,29 +379,49 @@ impl SeriesStats {
             }
             return None;
         }
-        let change = self.series.as_ref().and_then(|(prev_mode, prev_unit)| {
-            if prev_mode.as_str() != m.mode.as_ref() {
+        let overload = matches!(m.value, MeasuredValue::Overload);
+        // Only stored when it moves: an unchanged series would otherwise
+        // allocate two strings for every sample of the run.
+        let change = match self.series.as_mut() {
+            None => {
+                self.series = Some((m.mode.to_string(), m.unit.to_string()));
+                self.unit_unread = overload;
+                None
+            }
+            Some((prev_mode, _)) if prev_mode.as_str() != m.mode.as_ref() => {
                 Some(SeriesChange::Mode {
                     prev: prev_mode.clone(),
                     new: m.mode.to_string(),
                 })
-            } else if prev_unit.as_str() != m.unit.as_ref() {
-                Some(SeriesChange::Unit {
-                    prev: prev_unit.clone(),
-                    new: m.unit.to_string(),
-                })
-            } else {
+            }
+            Some(_) if overload => None,
+            Some((_, prev_unit)) if self.unit_unread => {
+                *prev_unit = m.unit.to_string();
                 None
             }
-        });
+            Some((_, prev_unit)) if prev_unit.as_str() != m.unit.as_ref() => {
+                match prefix_ratio(prev_unit, &m.unit) {
+                    Some(ratio) => {
+                        self.stats.rescale(ratio);
+                        self.integrator.rescale(ratio);
+                        *prev_unit = m.unit.to_string();
+                        None
+                    }
+                    None => Some(SeriesChange::Unit {
+                        prev: prev_unit.clone(),
+                        new: m.unit.to_string(),
+                    }),
+                }
+            }
+            Some(_) => None,
+        };
         if change.is_some() {
             self.stats.reset();
             self.integrator.reset();
-        }
-        // Only re-store on a change: an unchanged series would otherwise
-        // allocate two strings for every sample of the run.
-        if change.is_some() || self.series.is_none() {
             self.series = Some((m.mode.to_string(), m.unit.to_string()));
+            self.unit_unread = overload;
+        } else if !overload {
+            self.unit_unread = false;
         }
 
         match &m.value {
@@ -416,8 +459,8 @@ impl SeriesStats {
         self.series.as_ref().map(|(mode, _)| mode.as_str())
     }
 
-    /// Unit the accumulated figures were measured in, or `None` before the
-    /// first reading.
+    /// Unit the accumulated figures are expressed in — the latest reading's
+    /// prefix, after an auto-range step — or `None` before the first reading.
     pub fn unit(&self) -> Option<&str> {
         self.series.as_ref().map(|(_, unit)| unit.as_str())
     }
@@ -789,6 +832,8 @@ mod tests {
         assert_eq!(integral_unit_info("A"), Some(("Ah", 3600.0)));
         assert_eq!(integral_unit_info("mA"), Some(("mAh", 3600.0)));
         assert_eq!(integral_unit_info("µA"), Some(("µAh", 3600.0)));
+        assert_eq!(integral_unit_info("uA"), Some(("µAh", 3600.0)));
+        assert_eq!(integral_unit_info("nA"), Some(("nAh", 3600.0)));
     }
 
     #[test]
@@ -799,6 +844,7 @@ mod tests {
         let (unit, div) = integral_unit_info("mV").unwrap();
         assert_eq!(unit, "mV\u{00b7}s");
         assert_eq!(div, 1.0);
+        assert_eq!(integral_unit_info("kV"), Some(("kV\u{00b7}s", 1.0)));
     }
 
     #[test]
@@ -812,6 +858,8 @@ mod tests {
         assert!(integral_unit_info("°C").is_none());
         assert!(integral_unit_info("°F").is_none());
         assert!(integral_unit_info("%").is_none());
+        assert!(integral_unit_info("mVA").is_none());
+        assert!(integral_unit_info("ms").is_none());
         assert!(integral_unit_info("").is_none());
     }
     // --- SeriesStats tests ---
@@ -836,33 +884,152 @@ mod tests {
         assert_eq!(s.stats.count, 1);
     }
 
+    /// A mode whose readings move to another quantity, as a frequency mode
+    /// showing the duty cycle does, starts a new series.
     #[test]
-    fn unit_change_resets_and_reports() {
+    fn a_change_of_quantity_resets_and_reports() {
         let t0 = Instant::now();
         let mut s = SeriesStats::new(true);
-        s.push(&reading("DC V", "mV", 100.0, t0));
-        s.push(&reading(
-            "DC V",
-            "mV",
-            200.0,
-            t0 + Duration::from_millis(100),
-        ));
+        s.push(&reading("Hz", "Hz", 50.0, t0));
+        s.push(&reading("Hz", "Hz", 50.1, t0 + Duration::from_millis(100)));
         assert_eq!(s.stats.count, 2);
 
-        let change = s.push(&reading("DC V", "V", 1.0, t0 + Duration::from_millis(200)));
+        let change = s.push(&reading("Hz", "%", 49.9, t0 + Duration::from_millis(200)));
         assert_eq!(
             change,
             Some(SeriesChange::Unit {
-                prev: "mV".to_string(),
-                new: "V".to_string(),
+                prev: "Hz".to_string(),
+                new: "%".to_string(),
             })
         );
         // Reset, then the triggering reading itself is counted.
         assert_eq!(s.stats.count, 1);
-        assert_eq!(s.stats.min, Some(1.0));
+        assert_eq!(s.stats.min, Some(49.9));
         assert_eq!(s.integrator.count, 1);
         assert_eq!(s.integrator.value(), 0.0);
+        assert_eq!(s.unit(), Some("%"));
+    }
+
+    /// An auto-range step from mV to V carries the figures and the integral
+    /// on, re-expressed in volts: no change to report.
+    #[test]
+    fn a_decade_step_carries_the_series_on() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("DC V", "mV", 900.0, t0));
+        s.push(&reading("DC V", "mV", 900.0, t0 + Duration::from_secs(1)));
+        assert_eq!(
+            s.push(&reading("DC V", "V", 1.1, t0 + Duration::from_secs(2))),
+            None
+        );
         assert_eq!(s.unit(), Some("V"));
+        assert_eq!(s.stats.count, 3);
+        assert_eq!(s.stats.min, Some(0.9));
+        assert_eq!(s.stats.max, Some(1.1));
+        assert!((s.stats.avg().unwrap() - 2.9 / 3.0).abs() < 1e-12);
+        // 0.9 V·s over the first second, then (0.9 + 1.1) / 2 over the
+        // second, which straddles the step.
+        assert_eq!(s.integrator.count, 3);
+        let (value, unit) = s.integral_display().unwrap();
+        assert!((value - 1.9).abs() < 1e-12);
+        assert_eq!(unit, "V\u{00b7}s");
+    }
+
+    /// The UT61E+ reports mode "Ohm" as both "219.0 Ω" and "0.2200 kΩ".
+    /// Across that boundary the figures hold one scale, whichever decade
+    /// each reading came in: never a max three decades out.
+    #[test]
+    fn readings_either_side_of_a_decade_never_mix() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(false);
+        for (i, (unit, value)) in [
+            ("\u{3a9}", 219.0),
+            ("k\u{3a9}", 0.2200),
+            ("k\u{3a9}", 0.2210),
+            ("\u{3a9}", 219.5),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let at = t0 + Duration::from_millis(100 * i as u64);
+            assert_eq!(
+                s.push(&reading("Ohm", unit, value, at)),
+                None,
+                "{value} {unit}"
+            );
+        }
+        assert_eq!(s.unit(), Some("\u{3a9}"));
+        assert_eq!(s.stats.count, 4);
+        let close = |a: Option<f64>, b: f64| (a.unwrap() - b).abs() < 1e-9;
+        assert!(close(s.stats.min, 219.0), "{:?}", s.stats.min);
+        assert!(close(s.stats.max, 221.0), "{:?}", s.stats.max);
+        assert!(close(s.stats.avg(), 219.875), "{:?}", s.stats.avg());
+    }
+
+    /// An overload names whatever decade the meter shows while out of range;
+    /// it moves neither the prefix nor, after a dial turn, the series: the
+    /// figures stay in the unit of the readings behind them.
+    #[test]
+    fn an_overloads_unit_leaves_the_prefix_and_its_mode_starts_a_series() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("Ohm", "k\u{3a9}", 1.05, t0));
+        let overload = |mode: &'static str, unit: &'static str, ms: u64| {
+            let mut ol = Measurement::test_fixture(
+                MeasuredValue::Overload,
+                unit,
+                crate::flags::StatusFlags::default(),
+            );
+            ol.mode = mode.into();
+            ol.timestamp = t0 + Duration::from_millis(ms);
+            ol
+        };
+        assert_eq!(s.push(&overload("Ohm", "M\u{3a9}", 100)), None);
+        assert_eq!(s.unit(), Some("k\u{3a9}"));
+        assert_eq!(
+            s.push(&reading(
+                "Ohm",
+                "k\u{3a9}",
+                1.06,
+                t0 + Duration::from_millis(200)
+            )),
+            None
+        );
+        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.stats.max, Some(1.06));
+        assert_eq!(s.integrator.overload_gaps, 1);
+
+        // The dial turned to DC V with the probes open: the Ω figures are
+        // done with, as the graph's Ω trace is.
+        assert!(matches!(
+            s.push(&overload("DC V", "V", 300)),
+            Some(SeriesChange::Mode { .. })
+        ));
+        assert_eq!(s.mode(), Some("DC V"));
+        assert_eq!(s.stats.count, 0);
+        assert_eq!(
+            s.push(&reading("DC V", "V", 1.5, t0 + Duration::from_millis(400))),
+            None
+        );
+        assert_eq!(s.stats.count, 1);
+
+        // An overload's unit that is no prefix of the reading's (none at
+        // all) is taken from the first reading, not reported as a change.
+        assert!(matches!(
+            s.push(&overload("Ohm", "", 500)),
+            Some(SeriesChange::Mode { .. })
+        ));
+        assert_eq!(
+            s.push(&reading(
+                "Ohm",
+                "\u{3a9}",
+                220.0,
+                t0 + Duration::from_millis(600)
+            )),
+            None
+        );
+        assert_eq!(s.unit(), Some("\u{3a9}"));
+        assert_eq!(s.stats.count, 1);
     }
 
     /// The reset used to watch the unit alone. `--unit` pins the label, so

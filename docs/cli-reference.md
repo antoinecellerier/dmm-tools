@@ -220,7 +220,7 @@ dmm-cli read [OPTIONS]
 | `--replay <FILE>` | | Play back a `--format replay` file at its recorded pace instead of opening a meter; the run ends with the file, or sooner with `--count` or Ctrl+C. |
 | `--import <FILE>` | | Read an exported CSV, JSON or replay file instead of opening a meter, without waiting: to convert it (`--format`, `-o`) or print its summary. Its markers come through; a CSV or JSON file refuses `--format replay` and `--interval-ms`. |
 | `--mock-mode <MODE>` | `mock_mode` in `settings.json` | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
-| `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
+| `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah, mAh, …). For voltage modes, V·s (mV·s, …). Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
 | `--offset <VALUE>` | `0` | Add VALUE after scaling. |
 | `--unit <LABEL>` | | Label the scaled reading with LABEL instead of the meter's base unit. |
@@ -295,10 +295,10 @@ from two samples, standard deviation σ, each with its unit) is printed to
 stderr. When `--integrate` is active, the total
 integral is also shown.
 
-Statistics and the integral cover a single mode and unit: if either changes
-mid-run — by turning the dial, or by auto-range crossing a decade — both reset
-and a note is printed to stderr, so the summary always describes one comparable
-series.
+Statistics and the integral cover a single mode and quantity: turning the
+dial resets both and prints a note to stderr, so the summary always describes
+one comparable series. Auto-range crossing a decade (mV → V, Ω → kΩ) carries
+them on, in the unit the meter shows last.
 
 When the link to a meter drops — a cable pulled, a Bluetooth adapter switched
 off — the run waits for it and reopens the meter it first opened, even under
