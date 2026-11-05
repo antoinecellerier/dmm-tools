@@ -100,8 +100,8 @@ pub fn write_measurement_json<W: std::io::Write + ?Sized>(
         MeasuredValue::NcvLevel(l) => json!({"ncv_level": l}),
         // Null rather than a missing key or the word: every line keeps its
         // "value" key, as `display_raw` and `progress` stay present as null
-        // when absent, and "mode" already carries the word. A frame without
-        // a main reading has its sub-values in "aux".
+        // when absent, and the word is not a value. A frame without a main
+        // reading has its sub-values in "aux".
         MeasuredValue::NoReading(_) | MeasuredValue::Absent => Value::Null,
     };
     let reading = JsonReading {

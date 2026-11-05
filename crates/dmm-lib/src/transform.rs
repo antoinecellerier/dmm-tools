@@ -276,9 +276,8 @@ impl Transform {
         let main_offset = if m.flags.rel { 0.0 } else { offset };
         match &raw_value {
             MeasuredValue::Normal(x) => {
-                let (value, display) = scaled(*x, mult, scale, main_offset, raw_display.as_deref());
-                m.value = MeasuredValue::Normal(value);
-                m.display_raw = Some(display);
+                (m.value, m.display_raw) =
+                    scaled(*x, mult, scale, main_offset, raw_display.as_deref());
             }
             // Overload, NCV, a no-reading word and a frame without a main
             // reading have no digits to scale (`display_raw` is only
@@ -327,10 +326,8 @@ impl Transform {
             // Overload and NCV have no digits to scale, exactly as on the main
             // path; they still take the output unit so the pair stays readable.
             if let MeasuredValue::Normal(x) = aux.value {
-                let (value, display) =
+                (aux.value, aux.display_raw) =
                     scaled(x, aux_mult, scale, offset, aux.display_raw.as_deref());
-                aux.value = MeasuredValue::Normal(value);
-                aux.display_raw = Some(display);
             }
             // An empty unit is left empty so the sub-value keeps inheriting
             // the main reading's — now transformed — unit.
@@ -377,10 +374,17 @@ impl Transform {
 ///
 /// `x` is a reading in a unit whose multiplier to its base is `mult`;
 /// `raw_display` is the meter's own digit string for it. Returns
-/// `scale * x_base + offset` and its display string. Shared by the main
-/// reading and by the sub-values transformed alongside it, so neither the
-/// decimals rule nor the rounding can drift between them.
-fn scaled(x: f64, mult: f64, scale: f64, offset: f64, raw_display: Option<&str>) -> (f64, String) {
+/// `scale * x_base + offset` and its display string, or no reading and no
+/// digits when the result overflows. Shared by the main reading and by the
+/// sub-values transformed alongside it, so neither the decimals rule nor the
+/// rounding can drift between them.
+fn scaled(
+    x: f64,
+    mult: f64,
+    scale: f64,
+    offset: f64,
+    raw_display: Option<&str>,
+) -> (MeasuredValue, Option<String>) {
     let y = scale * (x * mult) + offset;
     let decimals = scaled_decimals(raw_display, x, scale * mult);
     // Re-format rather than reusing the meter's digits: `{y}` on the bare f64
@@ -390,9 +394,12 @@ fn scaled(x: f64, mult: f64, scale: f64, offset: f64, raw_display: Option<&str>)
     // A transformed reading is its digits, as an untransformed one is: keeping
     // the unrounded `y` would let an offset below the displayed resolution
     // move the statistics and the `--integrate` total while never appearing in
-    // the exported column. The parse cannot fail — `{:.N}` always prints a
-    // number.
-    (display.parse::<f64>().unwrap_or(y), display)
+    // the exported column. The parse cannot fail — `{:.N}` always prints what
+    // an f64 parses back from.
+    match MeasuredValue::finite(display.parse().unwrap_or(y)) {
+        Some(value) => (value, Some(display)),
+        None => (MeasuredValue::UNRECOGNISED, None),
+    }
 }
 
 /// Decimal places for the transformed value.
@@ -461,6 +468,35 @@ mod tests {
         assert_eq!(m.unit, "mV");
         assert_eq!(m.display_raw.as_deref(), Some("123.4"));
         assert!(m.aux_values.is_empty());
+    }
+
+    /// A factor `check_scale` lets through can still overflow: no reading and
+    /// no digits, on the main reading and a sub-value of the same quantity,
+    /// and Raw keeps what the meter said.
+    #[test]
+    fn a_value_scaled_past_f64_is_no_reading() {
+        let t = Transform::linear(1e308, 0.0, None);
+        let mut m = reading(5.678, "V", "5.678");
+        m.aux_values.push(AuxValue {
+            label: Cow::Borrowed("Peak"),
+            value: MeasuredValue::Normal(6.0),
+            unit: Cow::Borrowed("V"),
+            display_raw: Some("6.000".to_string()),
+            elapsed_secs: None,
+        });
+        t.apply(&mut m);
+
+        assert!(matches!(m.value, MeasuredValue::NoReading("?")));
+        assert_eq!(m.display_raw, None);
+        assert!(matches!(
+            m.aux_values[0].value,
+            MeasuredValue::NoReading("?")
+        ));
+        assert_eq!(m.aux_values[0].display_raw, None);
+        let raw = &m.aux_values[1];
+        assert_eq!(raw.label, RAW_LABEL);
+        assert_eq!(normal(&raw.value), 5.678);
+        assert_eq!(raw.display_raw.as_deref(), Some("5.678"));
     }
 
     /// A 100 mV/A current clamp: the meter reads millivolts, the user reads

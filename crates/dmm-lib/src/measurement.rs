@@ -19,7 +19,8 @@ pub enum MeasuredValue {
     NcvLevel(u8),
     /// The meter shows a word in place of a reading (e.g. "Auto" while idle
     /// in auto mode, "----" while a clamp waits for inrush), or `?`, our own
-    /// mark for what it shows that nothing recognises.
+    /// mark for what it shows that nothing recognises, or for a value a scale
+    /// took past what a number can hold.
     ///
     /// Neither an overload nor a gap in the stream: the meter is alive, with
     /// no number to give. Carries no number, so it starts no series, feeds no
@@ -36,7 +37,8 @@ pub enum MeasuredValue {
 }
 
 impl MeasuredValue {
-    /// In place of a reading that nothing recognises.
+    /// In place of a reading that nothing recognises, or that has no number
+    /// left to show.
     pub(crate) const UNRECOGNISED: Self = Self::NoReading("?");
 
     /// `value` as a reading, `None` when it is not finite: NaN or an infinity

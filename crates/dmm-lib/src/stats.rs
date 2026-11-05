@@ -166,8 +166,14 @@ impl Integrator {
     }
 
     /// Record a normal measurement value, accumulating the trapezoidal area
-    /// since the previous sample.
+    /// since the previous sample. A value that is not finite breaks the
+    /// integration, as an overload does but without counting as one: once in
+    /// the sum, it would stay there until the next reset.
     pub fn push(&mut self, value: f64, timestamp: Instant) {
+        if !value.is_finite() {
+            self.push_gap();
+            return;
+        }
         if let Some((prev_val, prev_time)) = self.prev
             && let Some(dt) = timestamp.checked_duration_since(prev_time)
         {
@@ -210,8 +216,8 @@ impl Integrator {
         self.integral
     }
 
-    /// Elapsed time in seconds between the first and last sample pushed.
-    /// Returns `None` if fewer than 2 samples have been pushed.
+    /// Elapsed time in seconds between the first and last finite sample pushed.
+    /// Returns `None` if fewer than 2 such samples have been pushed.
     pub fn elapsed_secs(&self) -> Option<f64> {
         match (self.first_time, self.last_time) {
             (Some(first), Some(last)) if self.count >= 2 => {
@@ -453,7 +459,7 @@ impl SeriesStats {
     /// series there, as the graph's trace does.
     ///
     /// A [`MeasuredValue::NoReading`] neither continues nor starts a series:
-    /// its mode is the word the meter shows ("Auto" while the probes are
+    /// its mode can be the word the meter shows ("Auto" while the probes are
     /// lifted), so treating it as one would reset MIN/MAX/AVG on every lift.
     /// It leaves the series and min/max/avg alone and only breaks the
     /// integration interval, as an overload does: the time the meter
@@ -841,6 +847,27 @@ mod tests {
         assert_eq!(i.skipped_intervals, 0);
         // max_dt_secs should be preserved
         assert_eq!(i.max_dt_secs, 5.0);
+    }
+
+    #[test]
+    fn integrator_breaks_at_a_value_that_is_not_finite() {
+        for bad in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            let mut i = Integrator::new();
+            let t0 = Instant::now();
+            i.push(1.0, t0);
+            i.push(1.0, t0 + Duration::from_secs(1));
+
+            i.push(bad, t0 + Duration::from_secs(2));
+            assert_eq!(i.value(), 1.0, "{bad}");
+            assert_eq!(i.overload_gaps, 0, "{bad}");
+            assert_eq!(i.count, 2, "{bad}");
+
+            // The next normal sample starts fresh, bridging nothing.
+            i.push(1.0, t0 + Duration::from_secs(3));
+            assert_eq!(i.value(), 1.0, "{bad}");
+            i.push(1.0, t0 + Duration::from_secs(4));
+            assert_eq!(i.value(), 2.0, "{bad}");
+        }
     }
 
     #[test]
