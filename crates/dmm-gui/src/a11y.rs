@@ -464,24 +464,39 @@ impl UiA11yExt for Ui {
 /// and the containment check keeps a scroller from answering for a widget
 /// that lives in another. The move runs over egui's scroll animation, a few
 /// hundred milliseconds, like every other programmatic scroll.
+///
+/// The widget is looked up in the pass's widget rects, not through
+/// `Context::read_response`: building a `Response` runs egui's
+/// surrender-focus check, which drops the focus a click elsewhere gave the
+/// widget this frame (a caret click opening its row with the cursor in the
+/// first field lost the cursor in the same frame).
 pub(crate) fn scroll_to_focus(ui: &Ui) {
     let ctx = ui.ctx();
-    let Some(id) = ctx.memory(|m| m.focused()) else {
+    // `Response::gained_focus`, without the `Response`.
+    let Some(id) = ctx.memory(|m| m.focused().filter(|&id| !m.had_focus_last_frame(id))) else {
         return;
     };
-    let Some(response) = ctx.read_response(id) else {
+    // `read_response`'s lookup: this pass's rect, or the last pass's while
+    // this one has no final rect yet.
+    let Some(widget) = ctx.viewport(|v| {
+        let prev = v.prev_pass.widgets.get(id);
+        match v.this_pass.widgets.get(id) {
+            Some(w) if w.rect.is_positive() && w.rect.is_finite() => Some(*w),
+            Some(w) => Some(prev.map_or(*w, |p| egui::WidgetRect { rect: p.rect, ..*w })),
+            None => prev.copied(),
+        }
+    }) else {
         return;
     };
     // Only when the widget isn't already in view: a scroll that moves
     // nothing still unsticks a `stick_to_bottom` scroller from its end.
     // The layer too: an open popup's entry can sit over the scroller's
     // rect without being in it.
-    if response.gained_focus()
-        && response.layer_id == ui.layer_id()
-        && ui.min_rect().contains_rect(response.rect)
-        && !ui.clip_rect().contains_rect(response.rect)
+    if widget.layer_id == ui.layer_id()
+        && ui.min_rect().contains_rect(widget.rect)
+        && !ui.clip_rect().contains_rect(widget.rect)
     {
-        response.scroll_to_me(None);
+        ui.scroll_to_rect_animation(widget.rect, None, ctx.global_style().scroll_animation);
     }
 }
 

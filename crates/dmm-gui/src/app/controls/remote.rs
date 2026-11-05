@@ -438,7 +438,9 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::{a11y, connected_app, headless_frame, test_app};
+    use crate::app::test_support::{
+        a11y, click_frames, connected_app, headless_frame, node_rect, test_app,
+    };
 
     /// The carets draw from the bundled fonts, not as the replacement box
     /// (`Fonts::has_glyph` can't tell; see `.claude/rules/gui.md`).
@@ -551,6 +553,49 @@ mod tests {
         assert!(app.transform_editor.open && !app.alarm_editor.open);
         app.toggle_transform_editor();
         assert!(!app.transform_editor.open && !app.alarm_editor.open);
+    }
+
+    /// Clicking a chip's caret opens its row with the cursor in the row's
+    /// first field, in the scrolled reading column the window draws: the
+    /// column's scroll-to-focus must not drop a focus the click gave.
+    #[test]
+    fn a_caret_opens_its_row_with_the_cursor_in_the_first_field() {
+        for (caret, first_field) in [("Alarm settings", "none")] {
+            let mut app = connected_app(&["hold"], "V");
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let mut frame = |events| {
+                let out = headless_frame(&ctx, None, None, events, |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
+                        app.show_reading_column_scrolled(
+                            ui,
+                            crate::app::layout::ContentLayout::Wide,
+                        );
+                    });
+                });
+                a11y(&out)
+            };
+            let (nodes, _) = frame(vec![]);
+            let at = node_rect(&nodes, |n| n.label() == Some(caret))
+                .unwrap_or_else(|| panic!("{caret:?} is drawn"))
+                .center();
+            for events in click_frames(at, egui::PointerButton::Primary) {
+                frame(events);
+            }
+            let (nodes, focus) = frame(vec![]);
+            let focused = nodes
+                .iter()
+                .find(|(id, _)| Some(*id) == focus)
+                .map(|(_, n)| (n.role(), n.placeholder().map(str::to_string)));
+            assert_eq!(
+                focused,
+                Some((
+                    egui::accesskit::Role::TextInput,
+                    Some(first_field.to_string())
+                )),
+                "after a click on {caret:?}"
+            );
+        }
     }
 
     /// A context key offered in farads only.
