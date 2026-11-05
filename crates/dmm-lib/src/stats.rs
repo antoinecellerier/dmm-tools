@@ -1067,6 +1067,37 @@ mod tests {
         assert_eq!(unit, "V\u{00b7}s");
     }
 
+    /// Every prefixed unit steps as voltage does, and what was shown in each
+    /// prefix is kept for the figures.
+    #[test]
+    fn a_step_in_any_prefixed_unit_carries_the_series_on() {
+        let t0 = Instant::now();
+        for (mode, low, high) in [
+            ("L", "mH", "H"),
+            ("Power Wh", "mWh", "Wh"),
+            ("Power Ah", "mAh", "Ah"),
+            ("Solar", "mW/m²", "W/m²"),
+            ("Angle", "m°", "°"),
+            ("RPM", "RPM", "kRPM"),
+        ] {
+            let mut s = SeriesStats::new(false);
+            let mut before = reading(mode, low, 900.0, t0);
+            before.display_raw = Some("900.0".to_string());
+            let mut after = reading(mode, high, 1.1, t0);
+            after.display_raw = Some("1.100".to_string());
+            s.push(&before);
+            assert_eq!(s.push(&after), None, "{low} to {high}");
+            assert_eq!(s.unit(), Some(high));
+            assert_eq!(s.stats.count, 2);
+            assert_eq!(s.stats.min, Some(0.9));
+            assert_eq!(s.stats.max, Some(1.1));
+            let (unit, _, decimals) = s.shown().layout(0.9, high).unwrap();
+            assert_eq!((unit.as_str(), decimals), (low, 1));
+            let (unit, _, decimals) = s.shown().layout(1.1, high).unwrap();
+            assert_eq!((unit.as_str(), decimals), (high, 3));
+        }
+    }
+
     /// The UT61E+ reports mode "Ohm" as both "219.0 Ω" and "0.2200 kΩ".
     /// Across that boundary the figures hold one scale, whichever decade
     /// each reading came in: never a max three decades out.

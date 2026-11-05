@@ -68,7 +68,7 @@ pub const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 /// integral — the figure takes five significant digits, about what a
 /// 22 000- to 60 000-count meter shows, in the prefix of `unit` that puts
 /// one to three digits before the point, picked for this figure alone. A
-/// unit no prefix goes on (°C, %, mAh, "") keeps its own; zero is written
+/// unit no prefix goes on (°C, %, "") keeps its own; zero is written
 /// in `unit`; and a figure that is only rounding noise stays short, at
 /// twelve decimals at most.
 pub fn stat_figure<'a>(
@@ -494,6 +494,35 @@ mod tests {
         assert_eq!(figure(-1_500.0, "\u{3a9}"), "-1.5000 k\u{3a9}");
     }
 
+    /// An integral is written as any figure with nothing shown: in the prefix
+    /// that reads best, whichever unit it accumulated in.
+    #[test]
+    fn an_integral_takes_a_readable_prefix() {
+        assert_eq!(figure(0.00001234, "mAh"), "12.340 nAh");
+        assert_eq!(figure(12_345.0, "mAh"), "12.345 Ah");
+        assert_eq!(figure(0.2925, "mAh"), "292.50 µAh");
+        assert_eq!(figure(3000.0, "mV\u{b7}s"), "3.0000 V\u{b7}s");
+        assert_eq!(figure(3.0, "V\u{b7}s"), "3.0000 V\u{b7}s");
+    }
+
+    /// A `--unit pH` label is acidity, not picohenries.
+    #[test]
+    fn a_ph_label_stays_ph() {
+        assert_eq!(figure(0.5, "pH"), "0.50000 pH");
+        assert_eq!(figure(7.012, "pH"), "7.0120 pH");
+        assert_eq!(figure(1500.0, "pH"), "1500.0 pH");
+    }
+
+    /// With nothing shown, the units the meters prefix take the prefix that
+    /// reads best.
+    #[test]
+    fn a_prefixed_reading_takes_a_readable_prefix() {
+        assert_eq!(figure(1500.0, "RPM"), "1.5000 kRPM");
+        assert_eq!(figure(0.0123, "H"), "12.300 mH");
+        assert_eq!(figure(0.0123, "Wh"), "12.300 mWh");
+        assert_eq!(figure(1500.0, "W/m²"), "1.5000 kW/m²");
+    }
+
     /// With nothing shown, a unit no prefix goes on keeps its own, at five
     /// significant digits.
     #[test]
@@ -502,8 +531,6 @@ mod tests {
         assert_eq!(figure(1234.5, "\u{b0}F"), "1234.5 \u{b0}F");
         assert_eq!(figure(49.9, "%"), "49.900 %");
         assert_eq!(figure(0.0293, "ms"), "0.029300 ms");
-        assert_eq!(figure(0.00001234, "mAh"), "0.000012340 mAh");
-        assert_eq!(figure(3.0, "V\u{b7}s"), "3.0000 V\u{b7}s");
         assert_eq!(stat_figure(185.0, "", None), ("185.00".into(), "".into()));
         // Above five digits, whole and still to five significant ones.
         assert_eq!(figure(123_456.0, "hFE"), "123460 hFE");

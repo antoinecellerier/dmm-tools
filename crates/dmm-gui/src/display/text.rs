@@ -215,6 +215,8 @@ pub(crate) fn spoken_unit<'a>(l10n: &'a Localizer, unit: &'a str, value: &str) -
     match unit {
         "\u{00B0}C" => return tr!(l10n, "reading-spoken-celsius"),
         "\u{00B0}F" => return tr!(l10n, "reading-spoken-fahrenheit"),
+        // A `--unit` label for acidity, as `transform::si_prefix` reads it.
+        "pH" => return Cow::Borrowed(unit),
         _ => {}
     }
     if let Some(name) = unit_name(l10n, Scale::None, unit, value) {
@@ -515,6 +517,15 @@ mod tests {
 
     fn en() -> std::sync::Arc<Localizer> {
         crate::l10n::english()
+    }
+
+    /// A pH label is said as its symbol, not as picohenries; a prefix of a
+    /// henry still takes its name.
+    #[test]
+    fn a_ph_label_is_not_spoken_as_picohenries() {
+        let l10n = crate::l10n::english();
+        assert_eq!(spoken_unit(&l10n, "pH", "7.01"), "pH");
+        assert_ne!(spoken_unit(&l10n, "mH", "7.01"), "mH");
     }
 
     #[test]

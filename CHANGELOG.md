@@ -16,6 +16,7 @@
 - **The graph hover lists every series and tags the height per axis** — it showed one value without a right axis, and no height with one.
 - **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω. The graph menu's Copy now includes the unit.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
+- **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
@@ -26,6 +27,7 @@
 - **`capture` shows its step instructions in your own translation** — export them with `--export-instructions`, translate the file, and pass it back with `--instructions`.
 - **`read` reconnects to a meter whose link drops** — a pulled cable or lost Bluetooth link ended the run; `--no-reconnect` keeps that.
 - **`read` statistics and `--integrate` carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω.
+- **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
 - **`--help` lists each brand's own model names in name order, such as `ut217a` under UNI-T**
 - **A meter picked by another brand's name keeps that name** — `--device ut217a` shows the UNI-T UT217A in messages and exports.
 - **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.
@@ -46,6 +48,7 @@
 - **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
 - **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
 - **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
+- **Alarms and scaling use base units on every prefixed reading** — on H, Wh, Ah, W/m², ° and RPM, a range step idled the alarm and put a scale 1000× off.
 - **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **Dashes on the VC-880, VC650BT and VC-890 read as no reading** — they showed OL, and a number on a VC-880 or VC650BT setup screen counted as a measurement.

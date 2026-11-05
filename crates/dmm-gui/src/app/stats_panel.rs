@@ -17,7 +17,7 @@ struct FormattedStatsGroup {
     /// Sample standard deviation, written like the average.
     sd: String,
     count: u64,
-    /// The integral's line, caption and all (e.g. "∫:   0.29250 mAh (12s)"),
+    /// The integral's line, caption and all (e.g. "∫:   292.50 µAh (12s)"),
     /// or None if not integrable.
     integral: Option<String>,
 }
@@ -541,7 +541,7 @@ mod tests {
             assert_eq!(s.sd, "  712.3810 k\u{3a9}");
         }
         let integral = whole.integral.as_deref().expect("integral");
-        assert!(integral.contains("0.000012340 mAh"), "{integral}");
+        assert!(integral.contains("12.340 nAh"), "{integral}");
 
         // A plotted sub-value in the same base unit isn't what the meter
         // showed in those ranges: five significant digits in its own prefix.

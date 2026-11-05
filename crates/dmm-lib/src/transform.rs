@@ -40,17 +40,24 @@ const SI_PREFIXES: &[(char, f64)] = &[
 /// Units a prefix may be split off.
 ///
 /// Deliberately not exhaustive over SI — it lists only what the parsers emit,
-/// so a unit that merely starts with a prefix letter is left alone: "ms" is
-/// milliseconds, not milli-seconds ("s" is not a base here), and "°C", "°F",
-/// "%", "dBm" and "dBV" carry no prefix at all.
-const BASE_UNITS: &[&str] = &["V", "A", "Ω", "F", "Hz", "S", "W", "VA"];
+/// and "V·s" for the integrals ("Ah" is both), so a unit that merely starts
+/// with a prefix letter is left alone: "ms" is milliseconds, not milli-seconds
+/// ("s" is not a base here), and "°C", "°F", "%", "dBm" and "dBV" carry no
+/// prefix at all.
+const BASE_UNITS: &[&str] = &[
+    "V", "A", "Ω", "F", "Hz", "S", "W", "VA", "H", "Wh", "Ah", "W/m²", "°", "RPM", "V·s",
+];
 
 /// Split a meter unit into its base unit and the multiplier to that base:
 /// "mV" → ("V", 1e-3), "kΩ" → ("Ω", 1e3), "µA" → ("A", 1e-6).
 ///
 /// Unknown strings, and units that carry no prefix, pass through with a
-/// multiplier of 1.0 — "°C", "ms" and "" all return themselves.
+/// multiplier of 1.0 — "°C", "ms" and "" all return themselves. So does "pH",
+/// which a `--unit` label means as acidity: no parser emits picohenries.
 pub(crate) fn si_prefix(unit: &str) -> (&str, f64) {
+    if unit == "pH" {
+        return (unit, 1.0);
+    }
     let mut chars = unit.chars();
     let Some(first) = chars.next() else {
         return (unit, 1.0);
@@ -532,6 +539,25 @@ mod tests {
         assert_eq!(volts.display_raw.as_deref(), Some("12.34"));
         assert_eq!(millivolts.display_raw, volts.display_raw);
         assert_eq!(millivolts.unit, volts.unit);
+    }
+
+    /// As for a mV to V switch: a step from mH to H leaves the scaled figure.
+    #[test]
+    fn a_scale_reads_an_inductance_in_henries_on_either_range() {
+        let t = Transform::linear(2.0, 0.0, None);
+        let mut millihenries = reading(900.0, "mH", "900.0");
+        let mut henries = reading(0.9, "H", "0.9000");
+        t.apply(&mut millihenries);
+        t.apply(&mut henries);
+
+        let value = |m: &Measurement| match m.value {
+            MeasuredValue::Normal(v) => v,
+            _ => panic!("a number"),
+        };
+        assert!((value(&millihenries) - 1.8).abs() < 1e-9);
+        assert!((value(&henries) - 1.8).abs() < 1e-9);
+        assert_eq!(millihenries.unit, "H");
+        assert_eq!(henries.unit, "H");
     }
 
     #[test]
@@ -1032,6 +1058,22 @@ mod tests {
             ("VA", "VA", 1.0),
             ("mVA", "VA", 1e-3),
             ("µVA", "VA", 1e-6),
+            ("H", "H", 1.0),
+            ("mH", "H", 1e-3),
+            ("Wh", "Wh", 1.0),
+            ("mWh", "Wh", 1e-3),
+            ("kWh", "Wh", 1e3),
+            ("Ah", "Ah", 1.0),
+            ("mAh", "Ah", 1e-3),
+            ("mW/m²", "W/m²", 1e-3),
+            ("kW/m²", "W/m²", 1e3),
+            ("°", "°", 1.0),
+            ("m°", "°", 1e-3),
+            ("RPM", "RPM", 1.0),
+            ("kRPM", "RPM", 1e3),
+            ("MRPM", "RPM", 1e6),
+            ("V·s", "V·s", 1.0),
+            ("mV·s", "V·s", 1e-3),
         ] {
             assert_eq!(si_prefix(unit), (base, mult), "unit {unit}");
         }
@@ -1041,7 +1083,7 @@ mod tests {
     /// must pass through: "ms" is milliseconds, not milli-seconds.
     #[test]
     fn si_prefix_leaves_non_prefixed_units_alone() {
-        for unit in ["ms", "°C", "°F", "%", "dBm", "dBV", "", "m", "M", "µ"] {
+        for unit in ["ms", "°C", "°F", "%", "dBm", "dBV", "", "m", "M", "µ", "pH"] {
             assert_eq!(si_prefix(unit), (unit, 1.0), "unit {unit}");
         }
     }
@@ -1115,8 +1157,37 @@ mod tests {
 
     #[test]
     fn prefix_for_leaves_units_without_prefixes_alone() {
-        for unit in ["°C", "°F", "%", "dBm", "ms", "hFE", "", "mAh", "V\u{b7}s"] {
+        for unit in ["°C", "°F", "%", "dBm", "ms", "hFE", ""] {
             assert_eq!(prefix_for(unit, 3), None, "unit {unit}");
+        }
+    }
+
+    /// A step between two prefixes of these keeps one quantity: the reason
+    /// each is a base unit.
+    #[test]
+    fn prefix_ratio_spans_every_family_of_prefixes() {
+        for (from, to) in [
+            ("mH", "H"),
+            ("mWh", "Wh"),
+            ("Wh", "kWh"),
+            ("mAh", "Ah"),
+            ("mW/m²", "W/m²"),
+            ("m°", "°"),
+            ("RPM", "kRPM"),
+            ("mV·s", "V·s"),
+        ] {
+            let ratio = prefix_ratio(from, to).expect(from);
+            assert!((ratio.apply(900.0) - 0.9).abs() < 1e-12, "{from} to {to}");
+        }
+        // Hz, °C, Ah and pH each stay their own quantity beside their lookalike.
+        for (from, to) in [
+            ("Hz", "H"),
+            ("°C", "°"),
+            ("mAh", "mA"),
+            ("Wh", "W"),
+            ("H", "pH"),
+        ] {
+            assert!(prefix_ratio(from, to).is_none(), "{from} and {to}");
         }
     }
 

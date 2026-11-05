@@ -676,6 +676,45 @@ mod tests {
         assert_eq!(a.idle(), None);
     }
 
+    /// A step between two prefixes is one quantity, watched in its base unit
+    /// like any other reading.
+    #[test]
+    fn a_step_in_any_prefixed_unit_stays_watched_in_its_base() {
+        let t = Instant::now();
+        for (low, high, base) in [
+            ("mH", "H", "H"),
+            ("mWh", "Wh", "Wh"),
+            ("mAh", "Ah", "Ah"),
+            ("mW/m²", "W/m²", "W/m²"),
+            ("m°", "°", "°"),
+        ] {
+            let mut a = alarm(None, Some(1.0));
+            assert_eq!(limit_unit(&reading(900.0, low, t), false), Some(base));
+            assert_eq!(a.check(&reading(900.0, low, t), false), None);
+            assert_eq!(a.quantity(), Some(base));
+            assert_eq!(
+                a.check(&reading(1.2, high, t), false).map(|b| b.zone),
+                Some(Zone::Above),
+                "{low} to {high}"
+            );
+            assert_eq!(a.idle(), None);
+        }
+    }
+
+    /// An import or a replay is unscaled, so a label read as picohenries
+    /// would put the reading 10¹² below any limit typed for it.
+    #[test]
+    fn a_ph_label_is_compared_as_shown() {
+        let t = Instant::now();
+        let mut a = alarm(None, Some(7.0));
+        assert_eq!(limit_unit(&reading(6.5, "pH", t), false), Some("pH"));
+        assert_eq!(a.check(&reading(6.5, "pH", t), false), None);
+        assert_eq!(
+            a.check(&reading(7.5, "pH", t), false).map(|b| b.zone),
+            Some(Zone::Above)
+        );
+    }
+
     #[test]
     fn scaled_readings_compare_as_shown_and_bind_to_the_meters_unit() {
         let t = Instant::now();

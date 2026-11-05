@@ -83,6 +83,32 @@ fn a_decade_step_re_expresses_the_trace() {
     assert!(g.minimap_level.is_none(), "so is the minimap's level");
 }
 
+/// Every prefixed unit steps as voltage does: the trace carries on rather
+/// than restarting at each step.
+#[test]
+fn a_step_in_any_prefixed_unit_keeps_the_trace() {
+    for (low, high) in [
+        ("mH", "H"),
+        ("mWh", "Wh"),
+        ("Wh", "kWh"),
+        ("mAh", "Ah"),
+        ("mW/m²", "W/m²"),
+        ("m°", "°"),
+        ("RPM", "kRPM"),
+    ] {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(900.0, t0, "L", low, None);
+        g.push(1.1, t0 + Duration::from_secs(1), "L", high, None);
+        assert_eq!(g.current_unit, high);
+        assert_eq!(
+            g.all_segments(),
+            vec![vec![[0.0, 0.9], [1.0, 1.1]]],
+            "{low}"
+        );
+    }
+}
+
 /// What the user set against the plotted axis follows a decade step: the
 /// fixed Y range and the reference lines frame the same readings after it.
 #[test]
