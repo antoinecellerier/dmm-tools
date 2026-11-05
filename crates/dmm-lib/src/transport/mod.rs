@@ -206,18 +206,23 @@ impl Link {
             Self::Bluetooth => "Bluetooth adapter",
         }
     }
+
+    /// The link a bridge is on, by the bridge's name in an error or a
+    /// report: [`crate::BLUETOOTH`] is the radio, any other name a USB cable.
+    pub fn of_bridge(bridge: &str) -> Self {
+        if bridge == crate::BLUETOOTH {
+            Self::Bluetooth
+        } else {
+            Self::UsbCable
+        }
+    }
 }
 
 /// The full name of the link a bridge is on, by the bridge's name in an
 /// error: Bluetooth or a USB cable. `built_in_radio` as for
 /// [`Link::full_name`].
 pub fn bridge_link_name(bridge: &str, built_in_radio: bool) -> &'static str {
-    let link = if bridge == crate::BLUETOOTH {
-        Link::Bluetooth
-    } else {
-        Link::UsbCable
-    };
-    link.full_name(built_in_radio)
+    Link::of_bridge(bridge).full_name(built_in_radio)
 }
 
 /// Delegate trait through `Box<dyn Transport>` so `Dmm<Box<dyn Transport>>`

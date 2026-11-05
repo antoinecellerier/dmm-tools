@@ -8,7 +8,7 @@ use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
 use dmm_shared::export::escape_controls;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
-use dmm_shared::l10n::Localizer;
+use dmm_shared::l10n::{Localizer, link_key};
 use dmm_shared::tr;
 
 use super::{App, ConnectionState};
@@ -295,13 +295,7 @@ fn adapter_not_found_help(l10n: &Localizer, selector: &str) -> String {
 /// The meters come grouped by their steps, as the CLI lists them
 /// ([`dmm_shared::help::activation_groups`]).
 fn not_identified_help(l10n: &Localizer, bridge: &str, built_in_radio: bool) -> String {
-    // The link the bridge is on, as `bridge_link_name` tells them apart.
-    let link = if bridge == dmm_lib::BLUETOOTH {
-        Link::Bluetooth
-    } else {
-        Link::UsbCable
-    };
-    let link = link_key(Some(link), built_in_radio);
+    let link = link_key(Some(Link::of_bridge(bridge)), built_in_radio);
     let mut msg = tr!(l10n, "connection-not-identified", link = link).into_owned();
     msg.push('\n');
     for (steps, names) in dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge)) {
@@ -319,19 +313,6 @@ fn not_identified_help(l10n: &Localizer, bridge: &str, built_in_radio: bool) -> 
     msg.push_str(&tr!(l10n, "connection-not-identified-report"));
     msg.push('\n');
     msg
-}
-
-/// The key the messages select a link's name by: `usb`, `adapter` (a
-/// Bluetooth adapter on the meter), `radio` (the meter's own Bluetooth) or
-/// `none`, as [`Link::full_name`] names them. The top bar's hover selects
-/// by it too.
-pub(super) fn link_key(link: Option<Link>, built_in_radio: bool) -> &'static str {
-    match link {
-        Some(Link::UsbCable) => "usb",
-        Some(Link::Bluetooth) if built_in_radio => "radio",
-        Some(Link::Bluetooth) => "adapter",
-        None => "none",
-    }
 }
 
 impl App {

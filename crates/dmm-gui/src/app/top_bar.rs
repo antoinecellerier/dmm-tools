@@ -617,7 +617,7 @@ fn link_tooltip(
 ) -> String {
     // Nothing is on the far end of a mock session, and a recording whose
     // file names a link this build does not know says only that much.
-    let link = super::connection_issue::link_key(link, built_in_radio);
+    let link = dmm_shared::l10n::link_key(link, built_in_radio);
     if replayed {
         tr!(l10n, "top-bar-link-recorded", link = link)
     } else {

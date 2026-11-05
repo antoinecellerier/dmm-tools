@@ -192,10 +192,9 @@ fn bluetooth_only_message(model: &str, miss: &BluetoothOnlyMiss) -> String {
 /// Saying so keeps the user from hunting for a cable fault that isn't there.
 /// The link `--adapter` named, as [`Error::WrongCable`] words it.
 fn named_link(link: &str) -> String {
-    if link == crate::BLUETOOTH {
-        "a Bluetooth adapter".to_string()
-    } else {
-        format!("a {link} cable")
+    match crate::transport::Link::of_bridge(link) {
+        crate::transport::Link::Bluetooth => "a Bluetooth adapter".to_string(),
+        crate::transport::Link::UsbCable => format!("a {link} cable"),
     }
 }
 

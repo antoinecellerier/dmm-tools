@@ -193,18 +193,6 @@ fn not_identified_self_help(l: &Localizer) -> Cow<'_, str> {
     )
 }
 
-/// The key the messages choose a link's wording by — `usb`, `adapter` (a
-/// Bluetooth adapter on the meter) or `radio` (the meter's own Bluetooth) —
-/// for the link `bridge` is on, told apart as
-/// [`dmm_lib::transport::bridge_link_name`] tells them.
-fn link_key(bridge: &str, built_in_radio: bool) -> &'static str {
-    match bridge == dmm_lib::BLUETOOTH {
-        false => "usb",
-        true if built_in_radio => "radio",
-        true => "adapter",
-    }
-}
-
 /// How both `--adapter` hints spell the value: whatever `dmm-cli list`
 /// printed for that device — a USB cable's serial number or HID path, or a
 /// Bluetooth adapter's address.
@@ -504,7 +492,10 @@ fn open_error_help(
             let headline = tr!(
                 l,
                 "connect-not-identified",
-                link = link_key(bridge, built_in_radio),
+                link = dmm_shared::l10n::link_key(
+                    Some(dmm_lib::transport::Link::of_bridge(bridge)),
+                    built_in_radio
+                ),
                 title = l.help().no_meter_answered(),
             );
             eprintln!("{}", style(headline).yellow().bold());

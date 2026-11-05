@@ -81,10 +81,9 @@ impl Localizer {
             Error::WrongCable { cable, model } => tr!(
                 self,
                 "error-wrong-cable",
-                link = if *cable == dmm_lib::BLUETOOTH {
-                    "bluetooth"
-                } else {
-                    "cable"
+                link = match Link::of_bridge(cable) {
+                    Link::Bluetooth => "bluetooth",
+                    Link::UsbCable => "cable",
                 },
                 cable = *cable,
                 model = *model
@@ -96,18 +95,11 @@ impl Localizer {
             Error::DeviceNotIdentified {
                 bridge,
                 built_in_radio,
-            } => {
-                let link = if *bridge == dmm_lib::BLUETOOTH {
-                    Link::Bluetooth
-                } else {
-                    Link::UsbCable
-                };
-                tr!(
-                    self,
-                    "error-device-not-identified",
-                    link = link_key(Some(link), *built_in_radio)
-                )
-            }
+            } => tr!(
+                self,
+                "error-device-not-identified",
+                link = link_key(Some(Link::of_bridge(bridge)), *built_in_radio)
+            ),
             Error::NoTransportFound {
                 cables,
                 bluetooth_searched,
@@ -526,8 +518,9 @@ impl Localizer {
 
 /// The key the messages select a link's name by: `usb`, `adapter` (a
 /// Bluetooth adapter on the meter), `radio` (the meter's own Bluetooth) or
-/// `none`, as [`Link::full_name`] names them.
-fn link_key(link: Option<Link>, built_in_radio: bool) -> &'static str {
+/// `none`, as [`Link::full_name`] names them. The apps' own messages that
+/// name a link select by it too.
+pub fn link_key(link: Option<Link>, built_in_radio: bool) -> &'static str {
     match link {
         Some(Link::UsbCable) => "usb",
         Some(Link::Bluetooth) if built_in_radio => "radio",

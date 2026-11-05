@@ -34,6 +34,7 @@ mod pseudo;
 #[cfg(test)]
 mod translations;
 
+pub use errors::link_key;
 pub use ftl_text::escape;
 pub use lang::{EN_US, Language, find, find_in, languages, resolve};
 pub use lib_index::{LIB_RESOURCES, is_units_only};

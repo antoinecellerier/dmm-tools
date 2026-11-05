@@ -27,6 +27,7 @@ use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{CaptureStep, Expect, Protocol, RangeExpect, capture_reports};
+use dmm_lib::transport::Link;
 use findings::reparse_findings;
 
 pub(crate) fn cmd_triage(
@@ -131,10 +132,10 @@ impl<'a> Triage<'a> {
             (None, Some(_), _) => None,
             (None, None, protocol) => protocol.as_ref().map(|p| p.capture_steps()),
         };
-        let link = match report.transport_name.as_deref() {
-            Some(dmm_lib::BLUETOOTH) => dmm_lib::transport::Link::Bluetooth,
-            _ => dmm_lib::transport::Link::UsbCable,
-        };
+        let link = report
+            .transport_name
+            .as_deref()
+            .map_or(Link::UsbCable, Link::of_bridge);
         let info = device_information(report);
         let steps = report
             .steps

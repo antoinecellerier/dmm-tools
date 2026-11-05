@@ -910,11 +910,7 @@ mod tests {
             self.name
         }
         fn link(&self) -> Option<transport::Link> {
-            Some(if self.name == BLUETOOTH {
-                transport::Link::Bluetooth
-            } else {
-                transport::Link::UsbCable
-            })
+            Some(transport::Link::of_bridge(self.name))
         }
     }
 
