@@ -253,6 +253,27 @@ pub struct CliOverrides {
     pub(crate) update_notice: Option<app::update_check::Tag>,
 }
 
+#[cfg(test)]
+impl CliOverrides {
+    /// No flag given: every override unset, the clock real. Tests set the
+    /// flag they are about with struct-update syntax.
+    pub(crate) fn none() -> Self {
+        Self {
+            device: None,
+            mock_mode: None,
+            theme: None,
+            user_themes: None,
+            renderer: None,
+            adapter: None,
+            no_bluetooth: false,
+            clock: dmm_lib::Clock::real(),
+            replay: None,
+            import: None,
+            update_notice: None,
+        }
+    }
+}
+
 /// A recording to play back, and the file it came from.
 ///
 /// The parsed recording is shared rather than re-read: a Disconnect/Connect

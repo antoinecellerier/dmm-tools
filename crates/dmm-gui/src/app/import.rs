@@ -676,6 +676,7 @@ mod tests {
     use super::*;
     use crate::app::connection_issue::ConnectionIssue;
     use crate::app::test_support::test_app;
+    use dmm_lib::measurement::MeasuredValue;
 
     /// A library error stays whole until the toast words it, so the log
     /// line is its English whatever the GUI's language.
@@ -967,12 +968,6 @@ timestamp,mode,value,unit,range,flags,marker,note
         assert!(app.source.imported.is_none());
         let _ = std::fs::remove_file(path);
     }
-}
-
-#[cfg(test)]
-mod folder_tests {
-    use super::*;
-    use crate::app::test_support::test_app;
 
     /// The remembered folder wins while it is there; a missing or relative
     /// one falls back to Documents, or to the system's own choice.
@@ -1023,22 +1018,13 @@ mod folder_tests {
         assert_eq!(app.settings.last_folder, Some(dir));
         app.source.import_job = None;
     }
-}
-
-#[cfg(test)]
-mod prompt_tests {
-    use super::*;
-    use crate::app::test_support::test_app;
-    use dmm_lib::measurement::MeasuredValue;
 
     /// An import replaces the session: with unexported samples it asks
     /// first and waits, with nothing to lose it goes straight ahead.
     #[test]
     fn an_import_over_unexported_samples_asks_first() {
         let mut app = test_app();
-        let path =
-            std::env::temp_dir().join(format!("dmm-gui-import-{}-ask.csv", std::process::id()));
-        std::fs::write(&path, super::tests_support::CSV).expect("write");
+        let path = file("ask.csv", CSV);
 
         app.request_import(&crate::app::styled_context(), path.clone());
         assert!(
@@ -1059,29 +1045,16 @@ mod prompt_tests {
         assert!(!app.recording_panel_idle(), "the prompt is up");
         let _ = std::fs::remove_file(path);
     }
-}
-
-#[cfg(test)]
-mod connect_tests {
-    use super::*;
-    use crate::app::test_support::test_app;
 
     /// Connect after an import asks first once markers were added to the
     /// imported session, and goes straight ahead when nothing changed.
     #[test]
     fn a_connect_over_new_markers_asks_first() {
         let mut app = test_app();
-        let path =
-            std::env::temp_dir().join(format!("dmm-gui-import-{}-connect.csv", std::process::id()));
-        std::fs::write(&path, super::tests_support::CSV).expect("write");
-        let ctx = crate::app::styled_context();
-        app.import_file(&ctx, path.clone());
-        while app.source.import_job.is_some() {
-            app.step_import(&ctx);
-            std::thread::sleep(Duration::from_millis(1));
-        }
+        let path = file("connect.csv", CSV);
+        import(&mut app, path.clone());
         app.add_marker(false);
-        app.request_connect(&ctx);
+        app.request_connect(&crate::app::styled_context());
         assert!(!app.recording_panel_idle(), "the prompt is up");
         assert!(
             app.source.imported.is_some(),
@@ -1096,12 +1069,6 @@ pub(super) mod tests_support {
     use super::App;
     use std::path::PathBuf;
     use std::time::Duration;
-
-    /// A small CSV export, for tests outside `tests`.
-    pub(super) const CSV: &str = "\
-timestamp,mode,value,unit,range,flags
-2026-09-02T10:00:00+00:00,DC V,1.6109,V,2.2V,AUTO
-";
 
     /// `text` as a file named `name` of this test's own.
     pub(in crate::app) fn file(name: &str, text: &str) -> PathBuf {

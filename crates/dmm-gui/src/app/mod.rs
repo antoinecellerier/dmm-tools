@@ -1826,17 +1826,8 @@ mod tests {
         let app = App::from_cli(
             settings,
             crate::CliOverrides {
-                device: None,
-                mock_mode: None,
-                theme: None,
-                user_themes: None,
-                renderer: None,
-                adapter: None,
                 no_bluetooth: true,
-                clock: dmm_lib::Clock::real(),
-                replay: None,
-                import: None,
-                update_notice: None,
+                ..crate::CliOverrides::none()
             },
         );
         assert!(!app.settings.shared.bluetooth, "this session skips it");
@@ -1858,17 +1849,8 @@ mod tests {
             App::from_cli(
                 settings,
                 crate::CliOverrides {
-                    device: None,
-                    mock_mode: None,
                     theme: Some(flag),
-                    user_themes: None,
-                    renderer: None,
-                    adapter: None,
-                    no_bluetooth: false,
-                    clock: dmm_lib::Clock::real(),
-                    replay: None,
-                    import: None,
-                    update_notice: None,
+                    ..crate::CliOverrides::none()
                 },
             )
         };
@@ -1919,20 +1901,12 @@ mod tests {
             crate::CliOverrides {
                 // What `parse_args` resolves a `--replay` file to.
                 device: Some(replay.device.id.to_string()),
-                mock_mode: None,
-                theme: None,
-                user_themes: None,
-                renderer: None,
-                adapter: None,
-                no_bluetooth: false,
-                clock: dmm_lib::Clock::real(),
                 replay: Some(crate::ReplaySource {
                     replay: Arc::new(replay),
                     path: std::path::PathBuf::from("dcv-steps.replay"),
                     recorded: std::time::SystemTime::UNIX_EPOCH,
                 }),
-                import: None,
-                update_notice: None,
+                ..crate::CliOverrides::none()
             },
         );
 

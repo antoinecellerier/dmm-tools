@@ -992,8 +992,6 @@ mod tests {
     use dmm_lib::protocol::{Choice, MeterKey, Setting};
     use std::borrow::Cow;
 
-    /// Build a sub-value the way the protocols do: digits in `display_raw`,
-    /// unit empty when it matches the main reading's.
     /// The English the tests read the display in.
     fn en() -> &'static Localizer {
         static EN: std::sync::LazyLock<std::sync::Arc<Localizer>> =
@@ -1011,6 +1009,8 @@ mod tests {
         }
     }
 
+    /// Build a sub-value the way the protocols do: digits in `display_raw`,
+    /// unit empty when it matches the main reading's.
     pub(super) fn aux(label: &'static str, display: &str, unit: &'static str) -> AuxValue {
         AuxValue {
             label: label.into(),
