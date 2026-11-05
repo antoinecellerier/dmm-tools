@@ -78,16 +78,11 @@ impl Ut181aProtocol {
         /// How long to wait for the reply before assuming the meter is not
         /// going to send one.
         const REPLY_TIMEOUT: Duration = Duration::from_millis(300);
-        /// Guard against a transport that returns empty without blocking,
-        /// which would otherwise busy-spin until the deadline. Same reasoning
-        /// as `framing::read_uart_bytes`.
-        const MAX_EMPTY_READS: usize = 256;
 
         debug!("ut181a: sending {what}: {frame:02X?}");
         transport.write(frame)?;
 
         let deadline = Instant::now() + REPLY_TIMEOUT;
-        let mut empty_reads = 0usize;
         let mut tmp = [0u8; 64];
         loop {
             match framing::extract_frame_abcd_2byte_le16(&self.rx_buf) {
@@ -116,23 +111,12 @@ impl Ut181aProtocol {
                 }
             }
 
-            // `checked_duration_since` rather than a subtraction: a backward
-            // clock jump must not panic here.
-            let remaining = deadline
-                .checked_duration_since(Instant::now())
-                .unwrap_or_default();
-            let timeout_ms = i32::try_from(remaining.as_millis()).unwrap_or(i32::MAX);
-            if timeout_ms == 0 || empty_reads >= MAX_EMPTY_READS {
+            let n = framing::read_uart_bytes(transport, &mut tmp, deadline)?;
+            if n == 0 {
                 debug!("ut181a: no reply to {what} within {REPLY_TIMEOUT:?}, assuming accepted");
                 return Ok(());
             }
-            let n = transport.read_timeout(&mut tmp, timeout_ms)?;
-            if n == 0 {
-                empty_reads += 1;
-            } else {
-                empty_reads = 0;
-                self.rx_buf.extend_from_slice(&tmp[..n]);
-            }
+            self.rx_buf.extend_from_slice(&tmp[..n]);
         }
     }
 
