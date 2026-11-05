@@ -1976,7 +1976,7 @@ fn vc871() -> Vec<CaptureStep> {
         "Remove the test leads, set the dial to °C°F with the K-type wire probe in °C (+) and \
          COM (-) (temperature)",
     ));
-    steps.extend(vc8x1_current(true));
+    steps.extend(vc8x1_current(Vc::Vc871));
     steps.extend(power_steps(
         "Remove the test leads and set the dial to W cosφ, nothing in the input sockets (AC \
          power: W and VA show)",
@@ -2179,8 +2179,8 @@ fn vc_temperature(temp_c: &'static str) -> Vec<CaptureStep> {
 /// 10A; 4-20mA on DC mA (p.71). The A≅ position is
 /// first set with the red lead still in mAµA, for "Check inPut" (VC871-UM
 /// p.73; VC891-UM p.67), which a VC871 sends as status bit 16 (spec
-/// §14.4), so on the VC871 (`vc871`) that step expects the lead error.
-fn vc8x1_current(vc871: bool) -> Vec<CaptureStep> {
+/// §14.4), so on the VC871 that step expects the lead error.
+fn vc8x1_current(vc: Vc) -> Vec<CaptureStep> {
     let mut steps = vec![
         CaptureStep::basic(
             "dcua",
@@ -2212,7 +2212,7 @@ fn vc8x1_current(vc871: bool) -> Vec<CaptureStep> {
         "Set the dial to A≅ with the red lead still in mAµA (a lead in the wrong socket shows \
          Check inPut with a beep).",
     );
-    steps.push(if vc871 {
+    steps.push(if vc == Vc::Vc871 {
         check_input.expect(Expect::mode("DC A").flags(LEAD_ERROR))
     } else {
         check_input
@@ -2360,7 +2360,7 @@ fn vc891() -> Vec<CaptureStep> {
         "Remove the test leads, set the dial to °C°F with the K-type wire probe in °C (+) and \
          COM (-) (temperature)",
     ));
-    steps.extend(vc8x1_current(false));
+    steps.extend(vc8x1_current(Vc::Vc891));
     steps
 }
 
