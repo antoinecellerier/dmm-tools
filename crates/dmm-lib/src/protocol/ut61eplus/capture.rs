@@ -20,9 +20,11 @@ pub(super) fn steps(table: &dyn DeviceTable, profile: &DeviceProfile) -> Vec<Cap
     // the two ladder steps were held back that way for the B+ until it
     // walked them on 2026-09-11.
     let hw = profile.stability == Stability::Verified;
-    // Every step on this meter takes three samples and shares that
-    // hardware history, the gate steps included.
+    // Every step on this meter takes three samples. A step those models
+    // have run carries their hardware history through `mark` (the gate
+    // steps) or `ran` (the rest); a step none has run takes neither.
     let mark = |s: CaptureStep| s.samples(3).verified_if(hw);
+    let ran = |id, instruction| mark(CaptureStep::basic(id, instruction));
     let [dcv, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
         Volts::DcV,
         CaptureStep::basic("dcv", "Set meter to DC V (V\u{2393}). Leave leads open."),
@@ -58,21 +60,17 @@ pub(super) fn steps(table: &dyn DeviceTable, profile: &DeviceProfile) -> Vec<Cap
         // Gate decided. A gate step is never swept — the step after it
         // assumes the state it left — so each ladder gets a plain step of
         // its own, in the mode the run is already in.
-        CaptureStep::basic(
+        ran(
             "ohm_ranges",
             "Set meter to \u{03A9}. Leads open or shorted, either will do.",
         )
-        .samples(3)
-        .verified_if(hw)
         .expect(Expect::mode("\u{03A9}")),
         // The rest of the resistance dial position, while the leads are
         // still there.
-        CaptureStep::basic(
+        ran(
             "continuity",
             "Set meter to continuity (buzzer). Touch probes together.",
         )
-        .samples(3)
-        .verified_if(hw)
         .needs(&[Need::ShortedLeads])
         .expect(Expect::mode("Continuity").value(ValueExpect::Finite)),
         // Open leads read OL, and the meter refuses REL over OL in any
@@ -81,26 +79,20 @@ pub(super) fn steps(table: &dyn DeviceTable, profile: &DeviceProfile) -> Vec<Cap
         // — which is exactly what happened until 2026-09-10. Both are
         // now known dead here, so the step no longer sweeps them, but a
         // finite reading is still what verifies the decode.
-        CaptureStep::basic(
+        ran(
             "diode",
             "Set meter to diode. A diode across the probes if you have one, \
              otherwise leave the leads open (OL).",
         )
-        .samples(3)
-        .verified_if(hw)
         .expect(Expect::mode("Diode")),
-        CaptureStep::basic("capacitance", "Set meter to capacitance. Leave leads open.")
-            .samples(3)
-            .verified_if(hw)
+        ran("capacitance", "Set meter to capacitance. Leave leads open.")
             .expect(Expect::mode("Capacitance")),
         // Back to volts for its ladder and for the button steps below,
         // which have always assumed the dial is here.
-        CaptureStep::basic(
+        ran(
             "dcv_ranges",
             "Set meter to DC V (V\u{2393}). Leave leads open.",
         )
-        .samples(3)
-        .verified_if(hw)
         .expect(Expect::mode("DC V")),
         hold,
         hold_off,
@@ -112,74 +104,33 @@ pub(super) fn steps(table: &dyn DeviceTable, profile: &DeviceProfile) -> Vec<Cap
         auto,
         // The rest of each dial position's SELECT ring (spec §3.1): one
         // step per mode the ring reaches, in dial order.
-        CaptureStep::basic(
+        ran(
             "acdcv",
             "Set meter to V\u{2393} and press SELECT for AC+DC V.",
         )
-        .samples(3)
-        .verified_if(hw)
         .expect(Expect::mode("AC+DC V")),
-        CaptureStep::basic("acv", "Set meter to AC V (V~). Leave leads open.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("AC V")),
-        CaptureStep::basic("lpfv", "Set meter to V~ and press SELECT for LPF V.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("LPF V")),
-        CaptureStep::basic("dcmv", "Set meter to DC mV. Leave leads open.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("DC mV")),
-        CaptureStep::basic("acmv", "Set meter to mV and press SELECT for AC mV.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("AC mV")),
-        CaptureStep::basic("hz", "Set meter to the Hz/% dial position.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("Hz")),
-        CaptureStep::basic(
+        ran("acv", "Set meter to AC V (V~). Leave leads open.").expect(Expect::mode("AC V")),
+        ran("lpfv", "Set meter to V~ and press SELECT for LPF V.").expect(Expect::mode("LPF V")),
+        ran("dcmv", "Set meter to DC mV. Leave leads open.").expect(Expect::mode("DC mV")),
+        ran("acmv", "Set meter to mV and press SELECT for AC mV.").expect(Expect::mode("AC mV")),
+        ran("hz", "Set meter to the Hz/% dial position.").expect(Expect::mode("Hz")),
+        ran(
             "duty",
             "Hz/% position: short-press the USB button for Duty %.",
         )
-        .samples(3)
-        .verified_if(hw)
         .expect(Expect::mode("Duty %")),
-        CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
-            .samples(3)
-            .verified_if(hw)
+        ran("ncv", "Set meter to NCV. Hold near a live wire.")
             .needs(&[Need::LiveWire])
             .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected)),
-        CaptureStep::basic("hfe", "Set meter to hFE (transistor test).")
-            .samples(3)
-            .verified_if(hw)
+        ran("hfe", "Set meter to hFE (transistor test).")
             .needs(&[Need::Transistor])
             .expect(Expect::mode("hFE")),
-        CaptureStep::basic("dcua", "Set meter to DC µA.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("DC µA")),
-        CaptureStep::basic("acua", "Set meter to µA and press SELECT for AC µA.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("AC µA")),
-        CaptureStep::basic("dcma", "Set meter to DC mA.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("DC mA")),
-        CaptureStep::basic("acma", "Set meter to mA and press SELECT for AC mA.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("AC mA")),
-        CaptureStep::basic("dca", "Set meter to DC A (A\u{2393}).")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("DC A")),
-        CaptureStep::basic("aca", "Set meter to A and press SELECT for AC A.")
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("AC A")),
+        ran("dcua", "Set meter to DC µA.").expect(Expect::mode("DC µA")),
+        ran("acua", "Set meter to µA and press SELECT for AC µA.").expect(Expect::mode("AC µA")),
+        ran("dcma", "Set meter to DC mA.").expect(Expect::mode("DC mA")),
+        ran("acma", "Set meter to mA and press SELECT for AC mA.").expect(Expect::mode("AC mA")),
+        ran("dca", "Set meter to DC A (A\u{2393}).").expect(Expect::mode("DC A")),
+        ran("aca", "Set meter to A and press SELECT for AC A.").expect(Expect::mode("AC A")),
         // Temperature needs a thermocouple, so it has never been run.
         CaptureStep::basic("temp", "Set meter to temperature (K-type thermocouple).")
             .samples(3)
