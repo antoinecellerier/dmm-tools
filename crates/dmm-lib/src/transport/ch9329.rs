@@ -16,6 +16,21 @@ const HID_REPORT_SIZE: usize = 65;
 /// Maximum UART payload bytes per HID report (bytes 2..64).
 const MAX_UART_PAYLOAD: usize = 63;
 
+/// The HID report for `data`: report ID 0, the UART data length, then the
+/// payload, zero-padded. More than one report holds is refused unsent.
+fn output_report(data: &[u8]) -> Result<[u8; HID_REPORT_SIZE]> {
+    if data.len() > MAX_UART_PAYLOAD {
+        return Err(Error::invalid_response_msg(format!(
+            "data too large for single {NAME} HID report: {} bytes (max {MAX_UART_PAYLOAD})",
+            data.len()
+        )));
+    }
+    let mut report = [0u8; HID_REPORT_SIZE];
+    report[1] = data.len() as u8;
+    report[2..2 + data.len()].copy_from_slice(data);
+    Ok(report)
+}
+
 /// CH9329 HID transport wrapping a `HidDevice`.
 ///
 /// The CH9329 uses a simple HID report framing for UART data:
@@ -92,16 +107,7 @@ impl Ch9329 {
 
 impl Transport for Ch9329 {
     fn write(&self, data: &[u8]) -> Result<()> {
-        if data.len() > MAX_UART_PAYLOAD {
-            return Err(Error::invalid_response_msg(format!(
-                "data too large for single {NAME} HID report: {} bytes (max {MAX_UART_PAYLOAD})",
-                data.len()
-            )));
-        }
-        let mut report = [0u8; HID_REPORT_SIZE];
-        report[0] = 0x00; // report ID
-        report[1] = data.len() as u8; // UART data length
-        report[2..2 + data.len()].copy_from_slice(data);
+        let report = output_report(data)?;
         trace!("{NAME} TX: {:02X?}", &report[..2 + data.len()]);
         self.device.write(&report)?;
         Ok(())
@@ -192,17 +198,18 @@ mod tests {
 
     #[test]
     fn write_report_framing() {
-        // Verify the expected report layout for a write
         let data = [0xAB, 0xCD, 0x03, 0x5E, 0x01, 0xD9];
-        let mut report = [0u8; HID_REPORT_SIZE];
-        report[0] = 0x00;
-        report[1] = data.len() as u8;
-        report[2..2 + data.len()].copy_from_slice(&data);
+        let report = output_report(&data).unwrap();
+        assert_eq!(report[..2], [0x00, 6]); // report ID, length
+        assert_eq!(report[2..8], data);
+        assert!(report[8..].iter().all(|&b| b == 0)); // padding
+    }
 
-        assert_eq!(report[0], 0x00); // report ID
-        assert_eq!(report[1], 6); // length
-        assert_eq!(&report[2..8], &data); // payload
-        assert_eq!(report[8], 0x00); // padding
+    /// More than one report holds is refused unsent.
+    #[test]
+    fn an_oversize_write_is_refused() {
+        assert_eq!(output_report(&[0x5A; MAX_UART_PAYLOAD]).unwrap()[1], 63);
+        assert!(output_report(&[0x5A; MAX_UART_PAYLOAD + 1]).is_err());
     }
 
     /// Linux/hidraw: hidapi keeps the 0x00 report ID, so byte 1 is the length.

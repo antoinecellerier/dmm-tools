@@ -128,12 +128,7 @@ impl Ch9325 {
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Send 0x5A trigger byte (§4.3 step 2)
-        let mut tx_buf = [0u8; HID_REPORT_DATA_SIZE + 1];
-        tx_buf[0] = 0x00; // report ID for hidapi
-        tx_buf[1] = 0x01; // 1 byte of UART data
-        tx_buf[2] = 0x5A; // trigger byte
-        trace!("{NAME} TX: {:02X?}", &tx_buf[..3]);
-        self.device.write(&tx_buf).map_err(Error::Hid)?;
+        self.write(&[0x5A])?;
 
         std::thread::sleep(std::time::Duration::from_millis(500));
 
@@ -172,6 +167,17 @@ impl Ch9325 {
     }
 }
 
+/// The HID reports that carry `data`: up to seven UART bytes each, as
+/// `[report_id=0x00, length, data..., zero-padded to 8 data bytes]` (§4.2).
+fn output_reports(data: &[u8]) -> impl Iterator<Item = [u8; HID_REPORT_DATA_SIZE + 1]> + '_ {
+    data.chunks(MAX_UART_PAYLOAD).map(|chunk| {
+        let mut report = [0u8; HID_REPORT_DATA_SIZE + 1];
+        report[1] = chunk.len() as u8;
+        report[2..2 + chunk.len()].copy_from_slice(chunk);
+        report
+    })
+}
+
 /// Locate the UART payload inside one raw RX report (§4.2).
 ///
 /// The first data byte is `0xF0 + payload_length` (0xF0–0xF7). Whether
@@ -205,14 +211,8 @@ fn rx_payload(raw: &[u8], n: usize) -> Option<(usize, usize)> {
 
 impl Transport for Ch9325 {
     fn write(&self, data: &[u8]) -> Result<()> {
-        // Split UART data across multiple 8-byte HID reports if needed.
-        // Each report: [report_id=0x00, length, data..., zero-padded to 8 data bytes]
-        for chunk in data.chunks(MAX_UART_PAYLOAD) {
-            let mut report = [0u8; HID_REPORT_DATA_SIZE + 1];
-            report[0] = 0x00; // report ID for hidapi
-            report[1] = chunk.len() as u8; // UART payload length
-            report[2..2 + chunk.len()].copy_from_slice(chunk);
-            trace!("{NAME} TX: {:02X?}", &report[..2 + chunk.len()]);
+        for report in output_reports(data) {
+            trace!("{NAME} TX: {:02X?}", &report[..2 + report[1] as usize]);
             self.device.write(&report).map_err(Error::Hid)?;
         }
         Ok(())
@@ -334,103 +334,57 @@ mod tests {
         );
     }
 
+    /// The start-up trigger goes out as one report.
     #[test]
-    fn tx_report_framing_single_byte() {
-        // Trigger byte (0x5A) fits in a single report
-        let data = [0x5A];
-        let mut report = [0u8; HID_REPORT_DATA_SIZE + 1];
-        report[0] = 0x00; // report ID
-        report[1] = data.len() as u8;
-        report[2] = data[0];
-
-        assert_eq!(report[0], 0x00);
-        assert_eq!(report[1], 1);
-        assert_eq!(report[2], 0x5A);
-        // Remaining bytes zero-padded
-        assert!(report[3..].iter().all(|&b| b == 0));
+    fn a_byte_goes_out_as_one_report() {
+        let reports: Vec<_> = output_reports(&[0x5A]).collect();
+        assert_eq!(reports, [[0x00, 0x01, 0x5A, 0, 0, 0, 0, 0, 0]]);
     }
 
+    /// Eight bytes take two reports, seven then one.
     #[test]
-    fn tx_report_framing_max_payload() {
-        // 7 UART bytes fills exactly one report
-        let data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
-        assert_eq!(data.len(), MAX_UART_PAYLOAD);
-        let chunks: Vec<&[u8]> = data.chunks(MAX_UART_PAYLOAD).collect();
-        assert_eq!(chunks.len(), 1);
+    fn eight_bytes_go_out_as_two_reports() {
+        let data = [0xAC, 0x05, 0x12, 0x34, 0x50, 0x01, 0x00, 0x7E];
+        let reports: Vec<_> = output_reports(&data).collect();
+        assert_eq!(
+            reports,
+            [
+                [0x00, 0x07, 0xAC, 0x05, 0x12, 0x34, 0x50, 0x01, 0x00],
+                [0x00, 0x01, 0x7E, 0, 0, 0, 0, 0, 0],
+            ]
+        );
     }
 
-    #[test]
-    fn tx_report_framing_splits_across_reports() {
-        // 8 UART bytes requires two reports (7 + 1)
-        let data = [0xAC, 0x05, 0x12, 0x34, 0x50, 0x01, 0x00, 0x00];
-        let chunks: Vec<&[u8]> = data.chunks(MAX_UART_PAYLOAD).collect();
-        assert_eq!(chunks.len(), 2);
-        assert_eq!(chunks[0].len(), 7);
-        assert_eq!(chunks[1].len(), 1);
-    }
-
-    /// Both layouts go through the production `locate_rx_payload`. These
-    /// tests used to paste a copy of that branch into the test body, so
-    /// changing the real one — e.g. tightening the report-ID heuristic after
-    /// hardware validation — left them green.
+    /// Both layouts go through the production `rx_payload`. These tests
+    /// used to paste a copy of that branch into the test body, so changing
+    /// the real one — e.g. tightening the report-ID heuristic after hardware
+    /// validation — left them green.
     #[test]
     fn rx_parsing_no_report_id() {
         // Normal case: 8-byte read, no report ID prefix. 0xF2 = 2 payload bytes
         let raw: [u8; 8] = [0xF2, 0x35, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let (header_byte, payload_start) = locate_rx_payload(&raw, 8).expect("framing recognised");
-
-        assert_eq!(header_byte, 0xF2);
-        assert_eq!(payload_start, 1);
-
-        let payload_len = (header_byte & 0x0F) as usize;
-        assert_eq!(payload_len, 2);
-        assert_eq!(
-            &raw[payload_start..payload_start + payload_len],
-            &[0x35, 0x41]
-        );
+        let (start, len) = rx_payload(&raw, 8).expect("framing recognised");
+        assert_eq!(raw[start..start + len], [0x35, 0x41]);
     }
 
     #[test]
     fn rx_parsing_with_report_id() {
         // Platform where hidapi prepends report ID 0x00
         let raw: [u8; 9] = [0x00, 0xF3, 0xAC, 0x05, 0x12, 0x00, 0x00, 0x00, 0x00];
-        let (header_byte, payload_start) = locate_rx_payload(&raw, 9).expect("framing recognised");
-
-        assert_eq!(header_byte, 0xF3);
-        assert_eq!(payload_start, 2);
-
-        let payload_len = (header_byte & 0x0F) as usize;
-        assert_eq!(payload_len, 3);
-        assert_eq!(
-            &raw[payload_start..payload_start + payload_len],
-            &[0xAC, 0x05, 0x12]
-        );
+        let (start, len) = rx_payload(&raw, 9).expect("framing recognised");
+        assert_eq!(raw[start..start + len], [0xAC, 0x05, 0x12]);
     }
 
     /// A report matching neither layout must be reported as unrecognised, so
     /// read_timeout skips it instead of reading a bogus length.
     #[test]
     fn rx_parsing_rejects_unknown_framing() {
-        assert_eq!(locate_rx_payload(&[0x12, 0x34], 2), None);
-        assert_eq!(locate_rx_payload(&[], 0), None);
+        assert_eq!(rx_payload(&[0x12, 0x34], 2), None);
+        assert_eq!(rx_payload(&[], 0), None);
         // Report ID present but the next byte isn't a header.
-        assert_eq!(locate_rx_payload(&[0x00, 0x12], 2), None);
+        assert_eq!(rx_payload(&[0x00, 0x12], 2), None);
         // Report ID present but the read was too short to carry a header.
-        assert_eq!(locate_rx_payload(&[0x00, 0xF2], 1), None);
-    }
-
-    #[test]
-    fn rx_max_payload() {
-        // 0xF7 = 7 bytes (maximum)
-        let payload_len = (0xF7u8 & 0x0F) as usize;
-        assert_eq!(payload_len, MAX_UART_PAYLOAD);
-    }
-
-    #[test]
-    fn rx_zero_payload() {
-        // 0xF0 = 0 bytes (empty report)
-        let payload_len = (0xF0u8 & 0x0F) as usize;
-        assert_eq!(payload_len, 0);
+        assert_eq!(rx_payload(&[0x00, 0xF2], 1), None);
     }
 
     /// The probe counts meter bytes, not the report: an empty report carries
@@ -475,15 +429,5 @@ mod tests {
             startup.describe(19200),
             "19200 baud, start-up report carried 1 meter bytes at 2400"
         );
-    }
-
-    #[test]
-    fn rx_header_range() {
-        // Valid RX headers are 0xF0 through 0xF7
-        for len in 0..=7u8 {
-            let header = 0xF0 | len;
-            assert!(header >= 0xF0);
-            assert_eq!((header & 0x0F) as usize, len as usize);
-        }
     }
 }
