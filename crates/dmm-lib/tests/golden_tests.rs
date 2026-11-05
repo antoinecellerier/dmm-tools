@@ -276,3 +276,56 @@ fn unknown_fixture_flag_names_fail() {
     .expect("synthetic case must parse");
     assert_known_flag_names("typo", &case.flags);
 }
+
+/// No fixture's payload, cut short, grown by a byte or with a byte changed,
+/// panics its parser: replay files and `dmm-cli triage` hand file bytes to
+/// `parse_payload` with no checksum in front. Only that the call returns is
+/// checked, `Ok` or `Err`.
+#[test]
+fn damaged_fixture_payloads_never_panic() {
+    // A small LCG, so a failure reproduces.
+    let mut seed: u32 = 0x2545_f491;
+    let mut next = move || {
+        seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        (seed >> 24) as u8
+    };
+    let mut panics = Vec::new();
+    for (id, dir) in golden_device_dirs() {
+        let device = resolve_device(&id).expect("a registry device id");
+        let protocol = (device.new_protocol)();
+        for path in discover_golden_files(&dir) {
+            let payload = decode_hex(&load_case(&path).raw_hex);
+            let mut inputs: Vec<(String, Vec<u8>)> = (0..payload.len())
+                .map(|n| (format!("first {n} bytes"), payload[..n].to_vec()))
+                .collect();
+            let mut longer = payload.clone();
+            longer.push(next());
+            inputs.push(("a byte appended".into(), longer));
+            for i in 0..payload.len() {
+                // Zeroed, all ones, and two single bits flipped.
+                let flip = |random: u8| payload[i] ^ (1 << (random % 8));
+                for byte in [0x00, 0xFF, flip(next()), flip(next())] {
+                    let mut changed = payload.clone();
+                    changed[i] = byte;
+                    inputs.push((format!("byte {i} = {byte:02X}"), changed));
+                }
+            }
+            for (mutation, input) in inputs {
+                let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    capture_reports(|| protocol.parse_payload(&input))
+                }));
+                if parsed.is_err() {
+                    panics.push(format!(
+                        "{id} {}: {mutation}: {input:02X?}",
+                        path.file_stem().unwrap().to_string_lossy()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        panics.is_empty(),
+        "parsers panicked:\n{}",
+        panics.join("\n")
+    );
+}
