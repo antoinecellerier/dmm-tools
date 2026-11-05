@@ -3,8 +3,9 @@
 //! screen: each file parses and holds only messages and attributes its
 //! en-US file has (terms of its own aside), showing the variables the
 //! English shows; plurals have every form the language's rules name, and
-//! only those; and what must stay as it is — `code` spans,
-//! `--options`, a spec note's numbers — stays, with none the English lacks.
+//! only those, and other selectors only keys the English has; and what must
+//! stay as it is — `code` spans, `--options`, a spec note's numbers —
+//! stays, with none the English lacks.
 //!
 //! Any language may leave messages out, which show in English. Before a
 //! language ships (`lang::SHIPPED`), and before each release for those that
@@ -360,45 +361,7 @@ fn problems(locale: &str) -> Vec<String> {
         }
         for (key, t) in &tr {
             let Some(e) = en.get(key) else { continue };
-            // Every variable the English shows, and no other; one it only
-            // selects on may go, as in a language with one plural form.
-            if !t.variables.is_subset(&e.variables) || !e.shown.is_subset(&t.variables) {
-                problems.push(at(format!(
-                    "`{key}` uses {:?}, en-US {:?}",
-                    t.variables, e.variables
-                )));
-            }
-            // A key that isn't a plural form, where the English selects on
-            // that variable by plural form, would turn the check off.
-            for (variable, keys) in &t.selectors {
-                let english_plural = e.plurals.iter().any(|(v, _)| v == variable);
-                let odd: Vec<_> = keys
-                    .iter()
-                    .filter(|k| !PLURAL_KEYS.contains(&k.as_str()))
-                    .collect();
-                if english_plural && !odd.is_empty() {
-                    problems.push(at(format!(
-                        "`{key}`: the plural on ${variable} has keys that are no plural form: {odd:?}"
-                    )));
-                }
-            }
-            for (variable, keys) in &t.plurals {
-                let missing: Vec<_> = forms.difference(keys).collect();
-                if !missing.is_empty() {
-                    problems.push(at(format!(
-                        "`{key}`: the plural on ${variable} lacks {missing:?}"
-                    )));
-                }
-            }
-            let (want, have) = (verbatim(&e.text), verbatim(&t.text));
-            for (token, n) in &want {
-                if have.get(token).copied().unwrap_or(0) < *n {
-                    problems.push(at(format!("`{key}` lost {token}, which stays as it is")));
-                }
-            }
-            for token in have.keys().filter(|t| !want.contains_key(*t)) {
-                problems.push(at(format!("`{key}` has {token}, which its English lacks")));
-            }
+            problems.extend(key_problems(key, e, t, &forms).into_iter().map(at));
         }
         if path == "lib.ftl" {
             problems.extend(
@@ -407,6 +370,70 @@ fn problems(locale: &str) -> Vec<String> {
                     .map(at),
             );
         }
+    }
+    problems
+}
+
+/// What is wrong with `t`, a translation of message `key`, against its
+/// English `e`; `forms` are the plural forms the language distinguishes.
+fn key_problems(key: &str, e: &Shape, t: &Shape, forms: &BTreeSet<String>) -> Vec<String> {
+    let mut problems = Vec::new();
+    // Every variable the English shows, and no other; one it only selects
+    // on may go, as in a language with one plural form.
+    if !t.variables.is_subset(&e.variables) || !e.shown.is_subset(&t.variables) {
+        problems.push(format!(
+            "`{key}` uses {:?}, en-US {:?}",
+            t.variables, e.variables
+        ));
+    }
+    for (variable, keys) in &t.selectors {
+        if e.plurals.iter().any(|(v, _)| v == variable) {
+            // A key that isn't a plural form, where the English selects on
+            // that variable by plural form, would turn the check off.
+            let odd: Vec<_> = keys
+                .iter()
+                .filter(|k| !PLURAL_KEYS.contains(&k.as_str()))
+                .collect();
+            if !odd.is_empty() {
+                problems.push(format!(
+                    "`{key}`: the plural on ${variable} has keys that are no plural form: {odd:?}"
+                ));
+            }
+        } else if e.selectors.iter().any(|(v, _)| v == variable) {
+            // The code passes the English's keys: one it lacks, a slip like
+            // `[rang-auto]`, is never picked and the default shows instead. A
+            // key left out is not one (variants may merge), nor a selector
+            // the English has none on (the language may need its own).
+            let english: BTreeSet<&String> = e
+                .selectors
+                .iter()
+                .filter(|(v, _)| v == variable)
+                .flat_map(|(_, keys)| keys)
+                .collect();
+            let odd: Vec<_> = keys.iter().filter(|k| !english.contains(k)).collect();
+            if !odd.is_empty() {
+                problems.push(format!(
+                    "`{key}`: the selector on ${variable} has keys en-US lacks: {odd:?}"
+                ));
+            }
+        }
+    }
+    for (variable, keys) in &t.plurals {
+        let missing: Vec<_> = forms.difference(keys).collect();
+        if !missing.is_empty() {
+            problems.push(format!(
+                "`{key}`: the plural on ${variable} lacks {missing:?}"
+            ));
+        }
+    }
+    let (want, have) = (verbatim(&e.text), verbatim(&t.text));
+    for (token, n) in &want {
+        if have.get(token).copied().unwrap_or(0) < *n {
+            problems.push(format!("`{key}` lost {token}, which stays as it is"));
+        }
+    }
+    for token in have.keys().filter(|t| !want.contains_key(*t)) {
+        problems.push(format!("`{key}` has {token}, which its English lacks"));
     }
     problems
 }
@@ -565,6 +592,16 @@ d = Extra
             BTreeSet::from(["on".into(), "other".into()])
         )]
     );
+    // Off a plural, a selector's key the English lacks is never picked; one
+    // left out merges variants, and is fine.
+    let (en_case, _) = shapes("c = { $case ->\n   *[mode] A\n    [range-auto] B\n}\n");
+    let (tr_case, _) = shapes("c = { $case ->\n   *[mode] A\n    [rang-auto] B\n}\n");
+    assert_eq!(
+        key_problems("c", &en_case["c"], &tr_case["c"], &forms),
+        ["`c`: the selector on $case has keys en-US lacks: [\"rang-auto\"]"]
+    );
+    let (merged, _) = shapes("c = { $case ->\n   *[mode] A\n}\n");
+    assert!(key_problems("c", &en_case["c"], &merged["c"], &forms).is_empty());
     let (selector_only, _) = shapes("b = { $n ->\n    [one] One\n   *[other] Many\n}\n");
     assert!(selector_only["b"].variables.contains("n") && selector_only["b"].shown.is_empty());
     // An option right after a Han character is still one.
