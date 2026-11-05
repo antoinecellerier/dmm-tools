@@ -30,8 +30,8 @@ const UNKNOWN_DEVICE: &str = "unknown";
 /// `--replay` reads the file's header, not its name.
 const REPLAY_EXTENSION: &str = "replay";
 
-/// Why an export saved nothing. `Display` is the English; [`ExportError::text`]
-/// what the toast shows, in the GUI's language.
+/// Why an export saved nothing. [`ExportError::text`] is what the toast
+/// shows, in the GUI's language.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum ExportError {
     /// The recording holds no samples yet.
@@ -50,42 +50,13 @@ pub(super) enum ExportError {
     Failed(Failure),
 }
 
-/// Why a started export wrote nothing. `Display` is the reason as the log
-/// takes it, after `export failed: `.
+/// Why a started export wrote nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Failure {
     /// The file system's, the renderer's or a panic's own words.
     Said(String),
     /// The pinned samples were dropped while the dialog was open.
     SamplesChanged,
-}
-
-impl std::fmt::Display for Failure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Said(why) => why,
-            Self::SamplesChanged => "the samples changed while the save dialog was open",
-        })
-    }
-}
-
-impl std::fmt::Display for ExportError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NothingRecorded => {
-                f.write_str("Nothing to export \u{2014} the recording has no samples yet")
-            }
-            Self::NotConnected => f.write_str("Nothing to export \u{2014} connect a meter first"),
-            Self::NoReadings => f.write_str("Nothing to export \u{2014} no readings yet"),
-            Self::NoWireFormat => {
-                f.write_str("The mock has no wire format to export; connect a real meter")
-            }
-            Self::InProgress => {
-                f.write_str("An export is already in progress \u{2014} finish it first")
-            }
-            Self::Failed(why) => write!(f, "Export failed: {why}"),
-        }
-    }
 }
 
 impl ExportError {
@@ -876,7 +847,7 @@ mod tests {
         let mut app = test_app();
         let message = |app: &App| match app.prepare_export(ExportFormat::Csv) {
             Ok(_) => panic!("an empty buffer has nothing to write"),
-            Err(why) => why.to_string(),
+            Err(why) => why.text(&crate::l10n::english()),
         };
         assert_eq!(
             message(&app),
@@ -1292,23 +1263,6 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label
         assert_eq!(rows[0], original[0], "the header");
         for (row, want) in rows.iter().zip(&original).skip(1) {
             assert_eq!(past_timestamp(row), past_timestamp(want));
-        }
-    }
-
-    /// The toast's English is the `Display` the tests and the log read.
-    #[test]
-    fn every_error_reads_the_same_in_english() {
-        let l10n = crate::l10n::english();
-        for why in [
-            ExportError::NothingRecorded,
-            ExportError::NotConnected,
-            ExportError::NoReadings,
-            ExportError::NoWireFormat,
-            ExportError::InProgress,
-            ExportError::Failed(Failure::Said("disk full".into())),
-            ExportError::Failed(Failure::SamplesChanged),
-        ] {
-            assert_eq!(why.text(&l10n), why.to_string());
         }
     }
 
