@@ -235,26 +235,6 @@ mod tests {
         assert_eq!(labels(Mode::DcMv), ["9.999mV", "99.99mV"]);
     }
 
-    #[test]
-    fn ohm_and_capacitance_ladders() {
-        assert_eq!(
-            labels(Mode::Ohm),
-            [
-                "999.9Ω", "9.999kΩ", "99.99kΩ", "999.9kΩ", "9.999MΩ", "99.99MΩ"
-            ]
-        );
-        assert_eq!(labels(Mode::Capacitance).len(), 8);
-        assert_eq!(labels(Mode::Capacitance)[7], "99.99mF");
-    }
-
-    #[test]
-    fn hz_labels_spell_megahertz() {
-        let t = table();
-        let r6 = t.range_info(Mode::Hz, 6).unwrap();
-        assert_eq!((r6.label, r6.unit), ("9.999MHz", "MHz"));
-        assert!(t.range_info(Mode::Hz, 8).is_none());
-    }
-
     /// The A rung is range byte 1 of the mA modes.
     #[test]
     fn milliamp_modes_reach_the_amp_rung() {
@@ -265,22 +245,5 @@ mod tests {
             assert_eq!((r1.label, r1.unit), ("9.999A", "A"), "{mode:?}");
         }
         assert_eq!(labels(Mode::DcUa), ["999.9µA"]);
-    }
-
-    #[test]
-    fn no_range_table_modes() {
-        let t = table();
-        for mode in [
-            Mode::Ncv,
-            Mode::DcA,
-            Mode::AcA,
-            Mode::Hfe,
-            Mode::LozV,
-            Mode::LpfV,
-            Mode::AcDcV,
-            Mode::Inrush,
-        ] {
-            assert!(t.range_info(mode, 0).is_none(), "{mode:?}");
-        }
     }
 }

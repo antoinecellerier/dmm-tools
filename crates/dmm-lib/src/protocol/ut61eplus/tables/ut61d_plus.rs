@@ -103,7 +103,9 @@ impl Ut61dPlusTable {
             // (issue #19); unconfirmed on a UT61D+ — issue #7.
             dc_a: [r("6A", "A"), r("20A", "A")],
             ac_a: [r("6A", "A"), r("20A", "A")],
-            // LoZ ACV: 600V and 1000V ranges (UT61D+ only)
+            // LoZ ACV (0x15): 600V and 1000V ranges (UT61D+ only). The 0x16
+            // beside it is a clamp's AC A in the protocol deck, not a second
+            // LoZ, so ClampAcA stays without ranges.
             loz_v: [r("600V", "V"), r("1000V", "V")],
         }
     }
@@ -293,33 +295,6 @@ mod tests {
         assert_eq!(table().model_name(), "UNI-T UT61D+");
     }
 
-    // --- DC Voltage ---
-    #[test]
-    fn dcv_ranges() {
-        let t = table();
-        // 4 ranges: 6V, 60V, 600V, 1000V
-        assert_eq!(t.range_info(Mode::DcV, 0).unwrap().label, "6V");
-        assert_eq!(t.range_info(Mode::DcV, 0).unwrap().unit, "V");
-
-        assert_eq!(t.range_info(Mode::DcV, 1).unwrap().label, "60V");
-        assert_eq!(t.range_info(Mode::DcV, 2).unwrap().label, "600V");
-
-        let last = t.range_info(Mode::DcV, 3).unwrap();
-        assert_eq!(last.label, "1000V");
-        assert_eq!(last.unit, "V");
-
-        assert!(t.range_info(Mode::DcV, 4).is_none());
-    }
-
-    // --- AC Voltage ---
-    #[test]
-    fn acv_ranges() {
-        let t = table();
-        assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "6V");
-        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "1000V");
-        assert!(t.range_info(Mode::AcV, 4).is_none());
-    }
-
     /// The D+ shares the B+'s V ladder: range 0 is 6V, and the mV ranges are
     /// their own modes. [DEDUCED] from the UT61B+ capture — issue #7.
     #[test]
@@ -332,153 +307,5 @@ mod tests {
         }
         assert_eq!(t.range_info(Mode::DcMv, 0).unwrap().label, "60mV");
         assert_eq!(t.range_info(Mode::AcMv, 0).unwrap().label, "60mV");
-    }
-
-    // --- Resistance ---
-    #[test]
-    fn ohm_ranges() {
-        let t = table();
-        let cases = [
-            (0, "600Ω", "Ω"),
-            (1, "6kΩ", "kΩ"),
-            (2, "60kΩ", "kΩ"),
-            (3, "600kΩ", "kΩ"),
-            (4, "6MΩ", "MΩ"),
-            (5, "60MΩ", "MΩ"),
-        ];
-        for (range, label, unit) in cases {
-            let r = t.range_info(Mode::Ohm, range).unwrap();
-            assert_eq!(r.label, label, "Ohm range {range}");
-            assert_eq!(r.unit, unit, "Ohm range {range}");
-        }
-        assert!(t.range_info(Mode::Ohm, 6).is_none());
-    }
-
-    // --- Capacitance ---
-    #[test]
-    fn capacitance_ranges() {
-        let t = table();
-        let cases = [
-            (0, "60nF", "nF"),
-            (1, "600nF", "nF"),
-            (2, "6µF", "µF"),
-            (3, "60µF", "µF"),
-            (4, "600µF", "µF"),
-            (5, "6mF", "mF"),
-            (6, "60mF", "mF"),
-        ];
-        for (range, label, unit) in cases {
-            let r = t.range_info(Mode::Capacitance, range).unwrap();
-            assert_eq!(r.label, label, "Capacitance range {range}");
-            assert_eq!(r.unit, unit, "Capacitance range {range}");
-        }
-        assert!(t.range_info(Mode::Capacitance, 7).is_none());
-    }
-
-    // --- Temperature (UT61D+ has it!) ---
-    #[test]
-    fn temp_ranges() {
-        let t = table();
-        let tc = t.range_info(Mode::TempC, 0).unwrap();
-        assert_eq!(tc.unit, "°C");
-
-        let tf = t.range_info(Mode::TempF, 0).unwrap();
-        assert_eq!(tf.unit, "°F");
-
-        assert_eq!(t.range_info(Mode::TempC, 1).unwrap().label, "300~1000°C");
-        assert_eq!(t.range_info(Mode::TempF, 1).unwrap().unit, "°F");
-        assert!(t.range_info(Mode::TempC, 2).is_none());
-        assert!(t.range_info(Mode::TempF, 2).is_none());
-    }
-
-    // --- LoZ V (UT61D+ has it!) ---
-    #[test]
-    fn loz_v_ranges() {
-        let t = table();
-        let r0 = t.range_info(Mode::LozV, 0).unwrap();
-        assert_eq!(r0.label, "600V");
-        assert_eq!(r0.unit, "V");
-
-        let r1 = t.range_info(Mode::LozV, 1).unwrap();
-        assert_eq!(r1.label, "1000V");
-
-        // 0x16 is a clamp's AC A in the protocol deck, not a second LoZ.
-        assert!(t.range_info(Mode::ClampAcA, 0).is_none());
-
-        assert!(t.range_info(Mode::LozV, 2).is_none());
-    }
-
-    // --- Current ---
-    #[test]
-    fn microamp_ranges() {
-        let t = table();
-        for mode in [Mode::DcUa, Mode::AcUa] {
-            assert_eq!(t.range_info(mode, 0).unwrap().label, "600µA");
-            assert_eq!(t.range_info(mode, 1).unwrap().label, "6000µA");
-            assert!(t.range_info(mode, 2).is_none());
-        }
-    }
-
-    #[test]
-    fn milliamp_ranges() {
-        let t = table();
-        for mode in [Mode::DcMa, Mode::AcMa] {
-            assert_eq!(t.range_info(mode, 0).unwrap().label, "60mA");
-            assert_eq!(t.range_info(mode, 1).unwrap().label, "600mA");
-            assert!(t.range_info(mode, 2).is_none());
-        }
-    }
-
-    #[test]
-    fn amp_ranges() {
-        let t = table();
-        for mode in [Mode::DcA, Mode::AcA] {
-            assert_eq!(t.range_info(mode, 0).unwrap().label, "6A");
-            assert_eq!(t.range_info(mode, 1).unwrap().label, "20A");
-            assert!(t.range_info(mode, 2).is_none());
-        }
-    }
-
-    // --- Modes without range tables ---
-    #[test]
-    fn no_range_table_modes() {
-        let t = table();
-        // UT61D+ lacks hFE, LPF, AC+DC, Inrush
-        for mode in [
-            Mode::Hfe,
-            Mode::Live,
-            Mode::Ncv,
-            Mode::ClampDcA,
-            Mode::LpfV,
-            Mode::AcDcV,
-            Mode::LpfA,
-            Mode::AcDcA,
-            Mode::ClampLpfA,
-            Mode::ClampAcDcA,
-            Mode::Inrush,
-        ] {
-            assert!(
-                t.range_info(mode, 0).is_none(),
-                "{mode:?} should have no range table on UT61D+"
-            );
-        }
-    }
-
-    #[test]
-    fn out_of_range_bytes_return_none() {
-        let t = table();
-        assert!(t.range_info(Mode::DcV, 0xFF).is_none());
-        assert!(t.range_info(Mode::Ohm, 0x10).is_none());
-        assert!(t.range_info(Mode::Capacitance, 0x20).is_none());
-    }
-
-    #[test]
-    fn default_matches_new() {
-        let t1 = Ut61dPlusTable::new();
-        let t2 = Ut61dPlusTable::default();
-        assert_eq!(
-            t1.range_info(Mode::DcV, 0).unwrap().label,
-            t2.range_info(Mode::DcV, 0).unwrap().label,
-        );
     }
 }

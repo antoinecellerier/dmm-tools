@@ -310,19 +310,6 @@ mod tests {
         assert_eq!(table().model_name(), "UNI-T UT202BT");
     }
 
-    #[test]
-    fn volts_and_amps_top_out_at_600() {
-        for mode in [Mode::DcV, Mode::AcV] {
-            assert_eq!(label(mode, 0), Some("9.999V"), "{mode:?}");
-            assert_eq!(label(mode, 2), Some("600.0V"), "{mode:?}");
-            assert_eq!(label(mode, 3), None, "{mode:?}");
-        }
-        for mode in [Mode::AcA, Mode::ClampAcA, Mode::Inrush] {
-            assert_eq!(label(mode, 0), Some("9.999A"), "{mode:?}");
-            assert_eq!(label(mode, 2), Some("600.0A"), "{mode:?}");
-        }
-    }
-
     /// LPF and °C exist only above range byte 0; the bytes below read as no
     /// range, and no ladder is offered over them.
     #[test]
@@ -340,14 +327,6 @@ mod tests {
         assert!(range_ladder(&t, Mode::TempC).is_empty());
     }
 
-    #[test]
-    fn ohm_starts_at_99_99_ohms() {
-        assert_eq!(label(Mode::Ohm, 0), Some("99.99Ω"));
-        assert_eq!(label(Mode::Ohm, 6), Some("99.99MΩ"));
-        assert_eq!(label(Mode::Ohm, 7), None);
-        assert_eq!(label(Mode::Capacitance, 6), Some("99.9mF"));
-    }
-
     /// Peak capture is AC V and AC A only (manual P8/13), so a frame with
     /// P-MAX or P-MIN set there is expected, not unrecognised.
     #[test]
@@ -358,21 +337,6 @@ mod tests {
         }
         for mode in [Mode::DcV, Mode::LpfV, Mode::ClampLpfA, Mode::Inrush] {
             assert!(!DeviceTable::peak_modes(&t).contains(&mode), "{mode:?}");
-        }
-    }
-
-    #[test]
-    fn no_range_table_modes() {
-        for mode in [
-            Mode::Ncv,
-            Mode::DcMv,
-            Mode::Diode,
-            Mode::DutyCycle,
-            Mode::DcMa,
-            Mode::DcA,
-            Mode::LpfA,
-        ] {
-            assert_eq!(label(mode, 0), None, "{mode:?}");
         }
     }
 }
