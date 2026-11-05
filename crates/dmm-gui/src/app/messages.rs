@@ -625,7 +625,7 @@ impl App {
         // A reconnect mid-recording is the same meter, so the in-flight capture
         // picks the slot count back up — it was 0 before the first Connected of
         // the session.
-        if self.capture.recording.active {
+        if self.capture.recording.is_active() {
             self.capture.recording_layout.aux_slots = meter.max_aux_values;
             // The meter Record was pressed ahead of: the first one to answer
             // during this recording is the one its samples come from, and the

@@ -255,7 +255,6 @@ enum ExportPin {
 /// the samples its export pinned (see [`Recording::pin_export`]).
 #[derive(Debug)]
 pub struct Recording {
-    pub active: bool,
     /// Time-ordered, as readings arrive.
     store: VecDeque<Sample>,
     /// The sequence number of `store`'s first sample: one per push, counted
@@ -271,7 +270,7 @@ pub struct Recording {
     /// Session time the current recording started at, from the caller's
     /// [`Clock`](dmm_lib::Clock). Session time rather than wall time so a
     /// mock run on a bent clock shows a duration its samples agree with.
-    pub start_time: Option<Instant>,
+    start_time: Option<Instant>,
     /// How many of the recording's samples are known to have reached a file,
     /// of either export format: always its first ones, as a recording's front
     /// is never trimmed.
@@ -329,7 +328,6 @@ fn slice_holds(samples: &VecDeque<Sample>, range: Range<usize>, at: Instant) -> 
 impl Recording {
     pub fn new() -> Self {
         Self {
-            active: false,
             store: VecDeque::new(),
             front_seq: 0,
             history_start: None,
@@ -486,7 +484,7 @@ impl Recording {
     /// once and gives the memory back, as the graph does.
     pub fn set_max_samples(&mut self, n: usize) -> bool {
         self.max_samples = n;
-        let stopped = self.active && self.recording_len() >= n;
+        let stopped = self.is_active() && self.recording_len() >= n;
         if stopped {
             self.stop();
         }
@@ -506,7 +504,7 @@ impl Recording {
     /// A recording stopped before it captured anything leaves nothing to
     /// keep, so Export… goes back to the history.
     pub fn toggle(&mut self, now: Instant) {
-        if self.active {
+        if self.is_active() {
             self.stop();
             if self.recording_len() == 0 {
                 // An export never pins an empty slice.
@@ -514,7 +512,6 @@ impl Recording {
                 self.span = None;
             }
         } else {
-            self.active = true;
             self.start_new(Some(Span::InStore {
                 start: self.next_seq(),
                 end: None,
@@ -526,7 +523,6 @@ impl Recording {
 
     /// End a running recording at the samples it has.
     fn stop(&mut self) {
-        self.active = false;
         let next = self.next_seq();
         if let Some(Span::InStore {
             end: end @ None, ..
@@ -563,7 +559,6 @@ impl Recording {
     /// Drop the recording. The history is left as it is: Export… saves the
     /// readings the graph holds, the recording's among them.
     pub fn discard(&mut self) {
-        self.active = false;
         self.start_new(None);
         self.settle();
     }
@@ -791,12 +786,17 @@ impl Recording {
         let seq = self.next_seq();
         self.history_start.get_or_insert(seq);
         self.store.push_back(Sample::from_measurement(m, extra_aux));
-        let full = self.active && self.recording_len() >= self.max_samples;
+        let full = self.is_active() && self.recording_len() >= self.max_samples;
         if full {
             self.stop();
         }
         self.settle();
         full
+    }
+
+    /// Whether a recording is running: started and not yet stopped.
+    pub fn is_active(&self) -> bool {
+        matches!(self.span, Some(Span::InStore { end: None, .. }))
     }
 
     /// Whether the recording holds as many samples as it can.
@@ -846,7 +846,7 @@ mod tests {
     #[test]
     fn recording_inactive_by_default() {
         let r = Recording::new();
-        assert!(!r.active);
+        assert!(!r.is_active());
         assert_eq!(r.export_samples().len(), 0);
     }
 
@@ -854,10 +854,10 @@ mod tests {
     fn recording_toggle_starts_and_stops() {
         let mut r = Recording::new();
         r.toggle(Instant::now());
-        assert!(r.active);
+        assert!(r.is_active());
         assert!(r.start_time.is_some());
         r.toggle(Instant::now());
-        assert!(!r.active);
+        assert!(!r.is_active());
     }
 
     /// The panel counts session seconds, not real ones: on a scaled or
@@ -1008,7 +1008,7 @@ mod tests {
 
         r.discard();
         assert_eq!(r.role(), BufferRole::History);
-        assert!(!r.active);
+        assert!(!r.is_active());
         assert_eq!(r.export_samples().len(), 1, "the graph's, still");
         assert_eq!(r.unexported_count(), 0);
         assert_ne!(r.epoch(), epoch, "an export of it marks nothing now");
@@ -1432,11 +1432,11 @@ mod tests {
         // Fill to one below capacity
         for _ in 0..99 {
             assert!(!r.push(&m, 0));
-            assert!(r.active);
+            assert!(r.is_active());
         }
         // The push that hits capacity should auto-stop and return true
         assert!(r.push(&m, 0));
-        assert!(!r.active);
+        assert!(!r.is_active());
         assert_eq!(r.recording_samples().len(), 100);
         assert!(r.is_full());
     }
@@ -1450,7 +1450,7 @@ mod tests {
         for _ in 0..100 {
             r.push(&m, 0);
         }
-        assert!(!r.active);
+        assert!(!r.is_active());
         // Further pushes should be no-ops
         assert!(!r.push(&m, 0));
         assert_eq!(r.recording_samples().len(), 100);
@@ -1471,7 +1471,7 @@ mod tests {
             r.set_max_samples(20),
             "the running capture had to be stopped"
         );
-        assert!(!r.active);
+        assert!(!r.is_active());
         assert_eq!(
             r.recording_samples().len(),
             50,
@@ -1490,7 +1490,7 @@ mod tests {
             r.push(&m, 0);
         }
         assert!(!r.set_max_samples(1_000));
-        assert!(r.active);
+        assert!(r.is_active());
         assert!(!r.is_full());
         assert!(!r.push(&m, 0));
         assert_eq!(r.recording_samples().len(), 51);

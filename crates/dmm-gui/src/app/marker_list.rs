@@ -1354,7 +1354,7 @@ mod tests {
         send(&mut app, "DC V", t0);
         app.add_marker(false);
         app.toggle_recording();
-        assert!(app.capture.recording.active);
+        assert!(app.capture.recording.is_active());
         send(&mut app, "DC V", secs(t0, 1));
         assert_eq!(numbers(&app), [1]);
         assert!(

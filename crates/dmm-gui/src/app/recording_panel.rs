@@ -182,7 +182,8 @@ impl App {
     /// Ctrl+R) used to destroy an unexported capture with no prompt, no
     /// toast, and nothing in the log.
     pub(super) fn toggle_recording(&mut self) {
-        if !self.capture.recording.active && self.discard_losses(DiscardFor::Record) != (0, 0) {
+        if !self.capture.recording.is_active() && self.discard_losses(DiscardFor::Record) != (0, 0)
+        {
             self.ask_before_discarding(DiscardFor::Record);
             return;
         }
@@ -275,7 +276,7 @@ impl App {
     /// with whatever meter happened to be picked last.
     fn apply_recording_toggle(&mut self) {
         self.capture.recording.toggle(self.clock.now());
-        if self.capture.recording.active {
+        if self.capture.recording.is_active() {
             self.capture.recording_layout = CaptureLayout::new(
                 // The meter picked, or the one detection found; under
                 // Auto-detect with nothing connected there is no meter to
@@ -361,7 +362,7 @@ impl App {
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
         let keys = Shortcut::ToggleRecording.keys(ui.ctx(), l10n);
-        let (btn_label, btn_tooltip) = if self.capture.recording.active {
+        let (btn_label, btn_tooltip) = if self.capture.recording.is_active() {
             (
                 tr!(l10n, "recording-stop"),
                 tr!(l10n, "recording-stop.hover", keys = &keys),
@@ -395,7 +396,7 @@ impl App {
             self.show_export_button(ui);
             let count = self.capture.recording.recording_samples().len();
             let recorded = self.capture.recording.role() == BufferRole::Recording;
-            if recorded && !imported && !self.capture.recording.active && count > 0 {
+            if recorded && !imported && !self.capture.recording.is_active() && count > 0 {
                 let discard = ui
                     .button(tr!(l10n, "recording-discard"))
                     .on_hover_text(tr!(l10n, "recording-discard.hover"));
@@ -403,7 +404,7 @@ impl App {
                     self.discard_recording();
                 }
             }
-            if self.capture.recording.active {
+            if self.capture.recording.is_active() {
                 let seconds = format!(
                     "{:.0}",
                     self.capture.recording.duration_secs(self.clock.now())
@@ -1896,7 +1897,7 @@ mod tests {
         run.click(run.node_rect("\u{25CF} Record").center());
         assert!(run.shows_text("Starting a new recording will discard 1 unexported sample."));
         run.click(run.node_rect("Discard and record").center());
-        assert!(run.app.capture.recording.active);
+        assert!(run.app.capture.recording.is_active());
         assert_eq!(run.app.capture.recording.recording_samples().len(), 0);
     }
 }

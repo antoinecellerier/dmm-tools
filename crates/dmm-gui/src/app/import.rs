@@ -602,7 +602,7 @@ impl App {
     /// the markers it came with — and show the whole file.
     fn finish_import(&mut self, ingest: Ingest) {
         let now = self.clock.now();
-        if self.capture.recording.active {
+        if self.capture.recording.is_active() {
             self.capture.recording.toggle(now);
         }
         let marked = self.capture.recording.marked(self.markers.iter());

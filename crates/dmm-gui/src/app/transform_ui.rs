@@ -256,7 +256,7 @@ impl App {
         }
         self.transform = new;
         self.clear_session();
-        let recording = self.capture.recording.active;
+        let recording = self.capture.recording.is_active();
         if recording {
             // A scale switched on mid-capture still needs its trailing CSV
             // column. Only grows: switching back off leaves the group empty
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn the_scale_toast_says_what_came_with_it() {
         let mut app = test_app();
-        app.capture.recording.active = true;
+        app.capture.recording.toggle(app.clock.now());
         app.set_transform(Transform::linear(2.0, 0.5, None));
         assert_eq!(
             app.toast.as_ref().map(|t| t.message.as_str()),
@@ -497,7 +497,7 @@ mod tests {
                  set its limits again in the new unit"
             )
         );
-        app.capture.recording.active = false;
+        app.capture.recording.toggle(app.clock.now());
         app.set_transform(Transform::linear(3.0, 0.0, None));
         app.set_transform(Transform::default());
         assert_eq!(

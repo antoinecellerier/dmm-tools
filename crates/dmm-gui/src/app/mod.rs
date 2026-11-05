@@ -1218,7 +1218,7 @@ impl eframe::App for App {
         // The recording's elapsed time is the only thing on screen that moves
         // with time alone. Readings, connection notices and export results
         // each ask for their frame; toasts schedule their own.
-        if self.capture.recording.active {
+        if self.capture.recording.is_active() {
             ctx.request_repaint_after(RECORDING_LABEL_TICK);
         }
         self.track_layout(ui);
