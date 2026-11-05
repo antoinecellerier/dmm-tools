@@ -30,51 +30,49 @@ struct FormattedStats {
     visible: Option<FormattedStatsGroup>,
 }
 
-impl FormattedStats {
-    /// `unit` captions the session block, `visible_unit` the visible-window
-    /// block. They differ when the graph plots a sub-value: session stats
-    /// follow the meter's main reading, the visible window follows what is
-    /// drawn, and captioning Hz values with "V" would be simply wrong.
-    ///
-    /// The integrals arrive already scaled to their display unit (see
-    /// [`stats::integral_display`]) as `(value, display_unit, elapsed_secs)`.
-    ///
-    /// Every figure and both integrals are written by
-    /// [`dmm_shared::stat_figure`], as `dmm-cli read`'s summary writes them:
-    /// the figures in a range and to the resolution the meter showed the
-    /// session in (`shown`), the integrals to five significant digits. The
-    /// visible block takes the session's ranges too, so a window lying
-    /// wholly before a range the meter has since left may be written in a
-    /// range it did not show itself; accepted, as the two blocks then read
-    /// alike. A level's figures are not: `visible_levels` is what the graph
-    /// writes a plotted level with ([`Graph::decimals`] of a point, of a
-    /// mean), as an NCV level's Min and Max are whole numbers, and `None`
-    /// for a measured series.
+/// How a group writes its figures.
+#[derive(Clone, Copy)]
+enum FigureStyle<'a> {
+    /// In a range and to the resolution the meter showed the session in, by
+    /// [`dmm_shared::stat_figure`], as `dmm-cli read`'s summary writes them.
+    AsShown(&'a ShownDigits),
+    /// To five significant digits in their own prefix: what the meter
+    /// showed is the main reading's, and a plotted sub-value (a Raw value, a
+    /// MIN/MAX in another prefix) may share its base unit and not its ranges.
+    Significant,
+    /// As the graph writes a plotted level ([`Graph::decimals`] of a point,
+    /// of a mean): an NCV level's Min and Max are whole numbers, its mean
+    /// and σ get one decimal.
     ///
     /// [`Graph::decimals`]: crate::graph::Graph::decimals
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the whole and visible statistics side by side"
-    )]
+    Level,
+}
+
+impl FormattedStatsGroup {
+    /// The figures of `stats`, captioned with `unit` and written in `style`.
+    ///
+    /// The integral arrives already scaled to its display unit (see
+    /// [`stats::integral_display`]) as `(value, display_unit,
+    /// elapsed_secs)`, and is written by [`dmm_shared::stat_figure`] to five
+    /// significant digits.
+    ///
+    /// Both groups are built here, so they cannot drift apart in how an
+    /// absent figure is rendered.
     fn new(
         l10n: &Localizer,
         stats: &RunningStats,
-        visible: Option<&RunningStats>,
-        shown: &ShownDigits,
         unit: &str,
-        visible_unit: &str,
-        visible_main: bool,
-        visible_levels: bool,
+        style: FigureStyle<'_>,
         integral: Option<(f64, &str, Option<f64>)>,
-        visible_integral: Option<(f64, &str, Option<f64>)>,
     ) -> Self {
+        let (point, mean, shown) = match style {
+            FigureStyle::AsShown(shown) => (None, None, Some(shown)),
+            FigureStyle::Significant => (None, None, None),
+            FigureStyle::Level => (Some(0), Some(1), None),
+        };
         // Right-aligned to one width, so the figures line up and hold still
         // as they update, whatever unit each one ends on.
-        let fmt_in = |unit: &str,
-                      v: Option<f64>,
-                      decimals: Option<usize>,
-                      shown: Option<&ShownDigits>|
-         -> String {
+        let figure = |v: Option<f64>, decimals: Option<usize>| -> String {
             match (v, decimals) {
                 (Some(val), Some(decimals)) => format!("{val:>10.decimals$} {unit}"),
                 (Some(val), None) => {
@@ -84,65 +82,33 @@ impl FormattedStats {
                 (None, _) => format!("{:>10} {unit}", crate::NO_DATA),
             }
         };
-        let fmt_integral = |info: Option<(f64, &str, Option<f64>)>| -> Option<String> {
-            info.map(|(val, disp_unit, dt)| {
-                let (number, disp_unit) = dmm_shared::stat_figure(val, disp_unit, None);
-                let value = format!("{number:>10}");
-                match dt {
-                    Some(secs) => tr!(
-                        l10n,
-                        "stats-integral",
-                        value = value,
-                        unit = disp_unit.as_ref(),
-                        seconds = format!("{secs:.0}")
-                    ),
-                    None => tr!(
-                        l10n,
-                        "stats-integral-untimed",
-                        value = value,
-                        unit = disp_unit.as_ref()
-                    ),
-                }
-                .into_owned()
-            })
-        };
-        // One accumulator type on both sides, so the two groups cannot drift
-        // apart in how an absent figure is rendered.
-        // A level's points are whole numbers; its mean and σ get one decimal.
-        let group = |unit: &str,
-                     s: &RunningStats,
-                     levels: bool,
-                     shown: Option<&ShownDigits>,
-                     integral: Option<(f64, &str, Option<f64>)>| {
-            let (point, mean) = if levels {
-                (Some(0), Some(1))
-            } else {
-                (None, None)
-            };
-            FormattedStatsGroup {
-                min: fmt_in(unit, s.min, point, shown),
-                max: fmt_in(unit, s.max, point, shown),
-                avg: fmt_in(unit, s.avg(), mean, shown),
-                sd: fmt_in(unit, s.std_dev(), mean, shown),
-                count: s.count,
-                integral: fmt_integral(integral),
+        let integral = integral.map(|(val, disp_unit, dt)| {
+            let (number, disp_unit) = dmm_shared::stat_figure(val, disp_unit, None);
+            let value = format!("{number:>10}");
+            match dt {
+                Some(secs) => tr!(
+                    l10n,
+                    "stats-integral",
+                    value = value,
+                    unit = disp_unit.as_ref(),
+                    seconds = format!("{secs:.0}")
+                ),
+                None => tr!(
+                    l10n,
+                    "stats-integral-untimed",
+                    value = value,
+                    unit = disp_unit.as_ref()
+                ),
             }
-        };
-        // What the meter showed is the main reading's: a plotted sub-value
-        // (a Raw value, a MIN/MAX in another prefix) may share its base unit
-        // and not its ranges.
-        let visible_shown = visible_main.then_some(shown);
+            .into_owned()
+        });
         Self {
-            session: group(unit, stats, false, Some(shown), integral),
-            visible: visible.map(|v| {
-                group(
-                    visible_unit,
-                    v,
-                    visible_levels,
-                    visible_shown,
-                    visible_integral,
-                )
-            }),
+            min: figure(stats.min, point),
+            max: figure(stats.max, point),
+            avg: figure(stats.avg(), mean),
+            sd: figure(stats.std_dev(), mean),
+            count: stats.count,
+            integral,
         }
     }
 }
@@ -274,20 +240,35 @@ impl App {
         let visible_integral = visible_raw
             .and_then(|raw| stats::integral_display(raw, visible_unit))
             .map(|(value, unit)| (value, unit, self.graph.visible_data_span_secs()));
+        // The visible block takes the session's ranges too, so a window
+        // lying wholly before a range the meter has since left may be
+        // written in a range it did not show itself; accepted, as the two
+        // blocks then read alike.
+        let shown = self.capture.session.shown();
+        let visible_style = if self.graph.plots_levels() {
+            FigureStyle::Level
+        } else if self.graph.plots_main() {
+            FigureStyle::AsShown(shown)
+        } else {
+            FigureStyle::Significant
+        };
         // A handle, as the Reset button below borrows the app.
         let l10n = self.l10n.clone();
-        let formatted = FormattedStats::new(
-            &l10n,
-            &self.capture.session.stats,
-            visible_stats.as_ref(),
-            self.capture.session.shown(),
-            unit,
-            visible_unit,
-            self.graph.plots_main(),
-            self.graph.plots_levels(),
-            integral_info,
-            visible_integral,
-        );
+        // Each block captioned with its own unit: they differ when the graph
+        // plots a sub-value, and captioning Hz values with "V" would be
+        // simply wrong.
+        let formatted = FormattedStats {
+            session: FormattedStatsGroup::new(
+                &l10n,
+                &self.capture.session.stats,
+                unit,
+                FigureStyle::AsShown(shown),
+                integral_info,
+            ),
+            visible: visible_stats.as_ref().map(|v| {
+                FormattedStatsGroup::new(&l10n, v, visible_unit, visible_style, visible_integral)
+            }),
+        };
         let main_font = 12.0 * scale;
         let sub_font = 11.0 * scale;
 
@@ -504,26 +485,19 @@ mod tests {
         for l in [0.0, 2.0, 3.0] {
             levels.push(l);
         }
-        let formatted = FormattedStats::new(
-            &crate::l10n::english(),
-            &RunningStats::new(),
-            Some(&levels),
-            &ShownDigits::default(),
-            "",
-            "",
-            true,
-            true,
-            None,
-            None,
-        );
-        let vis = formatted.visible.expect("levels in view");
+        let l10n = crate::l10n::english();
+        let vis = FormattedStatsGroup::new(&l10n, &levels, "", FigureStyle::Level, None);
         let figures = [&vis.min, &vis.max, &vis.avg, &vis.sd].map(|s| s.trim().to_string());
         assert_eq!(figures, ["0", "3", "1.7", "1.5"]);
-        assert_eq!(
-            vis.min.len(),
-            formatted.session.min.len(),
-            "columns line up"
+        let shown = ShownDigits::default();
+        let session = FormattedStatsGroup::new(
+            &l10n,
+            &RunningStats::new(),
+            "",
+            FigureStyle::AsShown(&shown),
+            None,
         );
+        assert_eq!(vis.min.len(), session.min.len(), "columns line up");
         // A level has no unit, so the panel finds no integral to show.
         assert_eq!(stats::integral_display(6.0, ""), None);
     }
@@ -550,47 +524,35 @@ mod tests {
             m.display_raw = Some(display.to_string());
             session.push(&m);
         }
-        let formatted = FormattedStats::new(
-            &crate::l10n::english(),
+        let l10n = crate::l10n::english();
+        let as_shown = FigureStyle::AsShown(session.shown());
+        let whole = FormattedStatsGroup::new(
+            &l10n,
             &session.stats,
-            Some(&session.stats),
-            session.shown(),
             "\u{3a9}",
-            "\u{3a9}",
-            true,
-            false,
+            as_shown,
             Some((0.000_012_34, "mAh", None)),
-            None,
         );
-        for s in [
-            &formatted.session,
-            formatted.visible.as_ref().expect("visible"),
-        ] {
+        let visible = FormattedStatsGroup::new(&l10n, &session.stats, "\u{3a9}", as_shown, None);
+        for s in [&whole, &visible] {
             assert_eq!(s.min, "    219.82 \u{3a9}");
             assert_eq!(s.max, "    1.2341 M\u{3a9}");
             assert_eq!(s.avg, "  411.5133 k\u{3a9}");
             assert_eq!(s.sd, "  712.3810 k\u{3a9}");
         }
-        let integral = formatted.session.integral.as_deref().expect("integral");
+        let integral = whole.integral.as_deref().expect("integral");
         assert!(integral.contains("0.000012340 mAh"), "{integral}");
 
         // A plotted sub-value in the same base unit isn't what the meter
         // showed in those ranges: five significant digits in its own prefix.
-        let sub_value = FormattedStats::new(
-            &crate::l10n::english(),
+        let sub_value = FormattedStatsGroup::new(
+            &l10n,
             &session.stats,
-            Some(&session.stats),
-            session.shown(),
             "\u{3a9}",
-            "\u{3a9}",
-            false,
-            false,
-            None,
+            FigureStyle::Significant,
             None,
         );
-        let visible = sub_value.visible.expect("visible");
-        assert_eq!(visible.avg, "    411.51 k\u{3a9}");
-        assert_eq!(sub_value.session.avg, formatted.session.avg);
+        assert_eq!(sub_value.avg, "    411.51 k\u{3a9}");
     }
 
     /// The captions are right-aligned to the widest, so the figures start
@@ -602,21 +564,17 @@ mod tests {
         for v in [1.0, 2.0] {
             readings.push(v);
         }
-        let formatted = FormattedStats::new(
+        let shown = ShownDigits::default();
+        let session = FormattedStatsGroup::new(
             &l10n,
             &readings,
-            None,
-            &ShownDigits::default(),
             "V",
-            "V",
-            true,
-            false,
+            FigureStyle::AsShown(&shown),
             Some((3.0, "V\u{b7}s", Some(2.0))),
-            None,
         );
         // One cell per character, as the monospace column has them in
         // English.
-        let rows = captioned_rows(&l10n, &formatted.session, |c| c.chars().count() as f32);
+        let rows = captioned_rows(&l10n, &session, |c| c.chars().count() as f32);
         let rows = rows.map(|(caption, pad, value)| (caption.into_owned(), pad, value));
         assert_eq!(
             rows,
@@ -628,7 +586,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            formatted.session.integral.as_deref(),
+            session.integral.as_deref(),
             Some("\u{222b}:    3.0000 V\u{b7}s (2s)")
         );
     }
