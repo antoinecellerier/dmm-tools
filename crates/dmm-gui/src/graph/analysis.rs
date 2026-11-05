@@ -195,14 +195,9 @@ impl Graph {
             return None;
         }
         // Find the insertion point — the first index whose time > t.
-        let (a, b) = self.history.as_slices();
-        let a_len = a.len();
-        let pos_a = a.partition_point(|p| self.elapsed_secs(p.time) <= t);
-        let pos = if pos_a < a_len {
-            pos_a
-        } else {
-            a_len + b.partition_point(|p| self.elapsed_secs(p.time) <= t)
-        };
+        let pos = self
+            .history
+            .partition_point(|p| self.elapsed_secs(p.time) <= t);
 
         // The nearest point is either at `pos` or `pos - 1`. Check both.
         let mut best: Option<(f64, f64, f64)> = None; // (dist, time, value)

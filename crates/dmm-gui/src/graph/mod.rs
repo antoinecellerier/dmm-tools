@@ -1027,10 +1027,7 @@ impl Graph {
     /// time falls within `[x_min, x_max]`.
     ///
     /// The history and every overlay are time-ordered (push_back only,
-    /// pop_front on eviction), so we can binary-search via `partition_point`.
-    /// `VecDeque` doesn't expose a single contiguous slice, but its two halves
-    /// from `as_slices()` are each sorted, so we search both and combine the
-    /// results.
+    /// pop_front on eviction), so `partition_point` can binary-search them.
     fn time_index_range<T>(
         &self,
         points: &VecDeque<T>,
@@ -1038,26 +1035,10 @@ impl Graph {
         x_min: f64,
         x_max: f64,
     ) -> (usize, usize) {
-        let (a, b) = points.as_slices();
-        let a_len = a.len();
-
-        // Find first index with elapsed_secs >= x_min.
-        let start_a = a.partition_point(|p| self.elapsed_secs(time(p)) < x_min);
-        let start = if start_a < a_len {
-            start_a
-        } else {
-            a_len + b.partition_point(|p| self.elapsed_secs(time(p)) < x_min)
-        };
-
-        // Find first index with elapsed_secs > x_max (i.e. one past the last visible).
-        let end_a = a.partition_point(|p| self.elapsed_secs(time(p)) <= x_max);
-        let end = if end_a < a_len {
-            end_a
-        } else {
-            a_len + b.partition_point(|p| self.elapsed_secs(time(p)) <= x_max)
-        };
-
-        (start, end)
+        (
+            points.partition_point(|p| self.elapsed_secs(time(p)) < x_min),
+            points.partition_point(|p| self.elapsed_secs(time(p)) <= x_max),
+        )
     }
 
     /// Why the line breaks between `prev` and `point`, or `None` if it

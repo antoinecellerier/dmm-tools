@@ -270,6 +270,66 @@ fn nearest_point_binary_search() {
     assert!((pt - 3.0).abs() < 0.01);
 }
 
+/// A graph whose history has wrapped round its ring buffer, so
+/// `as_slices` returns two halves of four points each: a bounded history
+/// evicts from the front as it takes new points at the back.
+fn wrapped_graph() -> Graph {
+    let mut g = Graph::new();
+    g.set_max_points(8);
+    let t0 = Instant::now();
+    for i in 0..10_000 {
+        g.push(i as f64, t0 + Duration::from_secs(i), "DC V", "V", None);
+        let (a, b) = g.history.as_slices();
+        if (a.len(), b.len()) == (4, 4) {
+            return g;
+        }
+    }
+    panic!("the history never wrapped");
+}
+
+/// Times from before the first point to past the last, in quarter seconds,
+/// landing on points and between them in both halves of the ring.
+fn query_times(g: &Graph) -> Vec<f64> {
+    let first = g.elapsed_secs(g.history.front().unwrap().time);
+    let last = g.elapsed_secs(g.history.back().unwrap().time);
+    let steps = ((last - first + 4.0) * 4.0) as usize;
+    (0..=steps).map(|k| first - 2.0 + k as f64 * 0.25).collect()
+}
+
+#[test]
+fn visible_index_range_on_a_wrapped_history_matches_a_linear_scan() {
+    let g = wrapped_graph();
+    let times: Vec<f64> = g.history.iter().map(|p| g.elapsed_secs(p.time)).collect();
+    let queries = query_times(&g);
+    for &x_min in &queries {
+        for &x_max in queries.iter().filter(|&&x| x >= x_min) {
+            let start = times
+                .iter()
+                .position(|&t| t >= x_min)
+                .unwrap_or(times.len());
+            let end = times.iter().position(|&t| t > x_max).unwrap_or(times.len());
+            assert_eq!(
+                g.visible_index_range(x_min, x_max),
+                (start, end),
+                "[{x_min}, {x_max}]"
+            );
+        }
+    }
+}
+
+#[test]
+fn nearest_point_on_a_wrapped_history_matches_a_linear_scan() {
+    let g = wrapped_graph();
+    for t in query_times(&g) {
+        let expected = g
+            .history
+            .iter()
+            .map(|p| (g.elapsed_secs(p.time), p.value))
+            .min_by(|a, b| (a.0 - t).abs().total_cmp(&(b.0 - t).abs()));
+        assert_eq!(g.nearest_point(t), expected, "t = {t}");
+    }
+}
+
 #[test]
 fn build_envelope_sliding_window_extrema() {
     // Place points one second apart so each subsequent sample is one
