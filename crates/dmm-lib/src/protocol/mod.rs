@@ -49,22 +49,39 @@ pub(crate) fn check_len(family: &str, payload: &[u8], expected: usize) -> Result
     Ok(())
 }
 
-/// The number a display's text spells, for a family that has already
-/// handled its own overload text: anything else is reported as unrecognised
-/// display text and shown as OL, under `device_id`, the registry entry
+/// Whether a display's whitespace-free text is the word OL, with an optional
+/// sign and wherever a decimal point lands among the letters.
+///
+/// A UT61+ display field is a segment dump: the meter lights the decimal point
+/// belonging to the rung it is on and puts `O` and `L` in the digit slots
+/// either side of it, so overload arrives as ` .OL   `, `  O.L  ` or `  OL.  `
+/// (ut61-family spec §5.8). Any other text around the letters is not OL, and
+/// goes on to be reported.
+pub(crate) fn spells_ol(text: &str) -> bool {
+    let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+    let mut letters = unsigned.bytes().filter(|&b| b != b'.');
+    letters.next() == Some(b'O') && letters.next() == Some(b'L') && letters.next().is_none()
+}
+
+/// The number a display's text spells, for a family that has already handled
+/// its own overload text: an optional sign, then digits and a decimal point.
+///
+/// Anything else, `nan`, `inf` and exponents included, is no reading, and is
+/// reported as unrecognised display text under `device_id`, the registry entry
 /// being read (its report hint names it as `--device`).
 pub(crate) fn display_number(device_id: &'static str, text: &str) -> MeasuredValue {
-    match text.parse::<f64>() {
-        Ok(v) => MeasuredValue::Normal(v),
-        Err(_) => {
-            unrecognised::report_unknown(
-                device_id,
-                "display text",
-                format_args!("{text:?}, shown as OL"),
-            );
-            MeasuredValue::Overload
-        }
+    let digits = text.strip_prefix(['+', '-']).unwrap_or(text);
+    let spells_number = digits.bytes().any(|b| b.is_ascii_digit())
+        && digits.bytes().all(|b| b.is_ascii_digit() || b == b'.');
+    if spells_number && let Some(value) = text.parse().ok().and_then(MeasuredValue::finite) {
+        return value;
     }
+    unrecognised::report_unknown(
+        device_id,
+        "display text",
+        format_args!("{text:?}, shown as no reading"),
+    );
+    MeasuredValue::UNRECOGNISED
 }
 
 /// The `Unknown(0x..)` mode string a parser falls back to for a one-byte code
@@ -740,6 +757,74 @@ pub trait Protocol: Send {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_number_reads_a_sign_digits_and_a_point() {
+        for (text, number) in [
+            ("5", 5.0),
+            ("-5.0", -5.0),
+            ("+5.0", 5.0),
+            ("5.", 5.0),
+            (".5", 0.5),
+            ("-.5", -0.5),
+            ("00.123", 0.123),
+        ] {
+            let (value, reports) = capture_reports(|| display_number("test", text));
+            assert!(
+                matches!(value, MeasuredValue::Normal(v) if v == number),
+                "{text}: {value:?}"
+            );
+            assert!(reports.is_empty(), "{text}: {reports:?}");
+        }
+    }
+
+    /// `str::parse::<f64>` takes the first five of these, and the digits
+    /// past f64's range parse as an infinity.
+    #[test]
+    fn display_number_reports_anything_else_as_no_reading() {
+        let too_long = "9".repeat(400);
+        for text in [
+            "nan",
+            "inf",
+            "-infinity",
+            "1e3",
+            "1e999",
+            too_long.as_str(),
+            "CUT",
+            "",
+            "-",
+            "+",
+            ".",
+            "1.2.3",
+            "--1",
+            "1-",
+        ] {
+            let (value, reports) = capture_reports(|| display_number("test", text));
+            assert!(
+                matches!(value, MeasuredValue::NoReading("?")),
+                "{text}: {value:?}"
+            );
+            assert_eq!(
+                reports,
+                [format!(
+                    "test: unrecognised display text: {text:?}, shown as no reading"
+                )]
+            );
+        }
+    }
+
+    #[test]
+    fn spells_ol_finds_the_word_wherever_the_point_lands() {
+        for text in ["OL", ".OL", "O.L", "OL.", "-OL", "-O.L", "+OL"] {
+            assert!(spells_ol(text), "{text}");
+        }
+        for text in [
+            "", "1.234", "-0.5", "----", "EF", "CUT", "L0", "LO", "O", "L", "0L", "OLD", "HOLD",
+            "COOL", "--OL",
+        ] {
+            assert!(!spells_ol(text), "{text}");
+        }
+    }
 
     #[test]
     fn the_unknown_mode_fallbacks_are_recognised() {

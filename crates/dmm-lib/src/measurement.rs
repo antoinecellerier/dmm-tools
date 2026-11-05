@@ -4,6 +4,11 @@ use std::borrow::Cow;
 use std::time::{Instant, SystemTime};
 
 /// Represents a parsed measurement value.
+///
+/// [`Overload`](Self::Overload) is only for an explicit OL: the text on the
+/// meter's display, or its family's OL bit. Dashes, a setup screen and text
+/// nothing recognises are a [`NoReading`](Self::NoReading), and unrecognised
+/// text is reported once.
 #[derive(Debug, Clone)]
 pub enum MeasuredValue {
     /// A normal numeric reading.
@@ -13,11 +18,12 @@ pub enum MeasuredValue {
     /// NCV (non-contact voltage) detection level (0-4 typically).
     NcvLevel(u8),
     /// The meter shows a word in place of a reading (e.g. "Auto" while idle
-    /// in auto mode, "----" while a clamp waits for inrush).
+    /// in auto mode, "----" while a clamp waits for inrush), or `?`, our own
+    /// mark for what it shows that nothing recognises.
     ///
-    /// Neither an overload nor a gap in the stream: the meter is alive and
-    /// says there is nothing to measure yet. Carries no number, so it starts
-    /// no series, feeds no statistics and exports an empty value cell.
+    /// Neither an overload nor a gap in the stream: the meter is alive, with
+    /// no number to give. Carries no number, so it starts no series, feeds no
+    /// statistics and exports an empty value cell.
     NoReading(&'static str),
     /// This frame carries no main reading, only sub-values: the meter sends
     /// the parts of one reading in frames of their own, and this is one of
@@ -27,6 +33,17 @@ pub enum MeasuredValue {
     /// in this frame. It feeds no statistics, exports an empty value cell and
     /// leaves the plotted trace untouched.
     Absent,
+}
+
+impl MeasuredValue {
+    /// In place of a reading that nothing recognises.
+    pub(crate) const UNRECOGNISED: Self = Self::NoReading("?");
+
+    /// `value` as a reading, `None` when it is not finite: NaN or an infinity
+    /// is no number a meter measured.
+    pub(crate) fn finite(value: f64) -> Option<Self> {
+        value.is_finite().then_some(Self::Normal(value))
+    }
 }
 
 /// The parsed value's canonical string — the form the capture report and the
@@ -56,8 +73,8 @@ impl std::fmt::Display for MeasuredValue {
 /// decides OL/NCV first, the meter's own digits are preferred over the
 /// re-formatted float, and any space the meter puts between the sign and the
 /// digits is removed. A [`MeasuredValue::NoReading`] exports empty: the word
-/// is not a value, and the mode column already carries it. So does a
-/// [`MeasuredValue::Absent`], which has nothing to export.
+/// is not a value. So does a [`MeasuredValue::Absent`], which has nothing to
+/// export.
 fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) -> Cow<'a, str> {
     match value {
         MeasuredValue::Normal(_) => match display_raw {

@@ -734,10 +734,10 @@ fn unrecognised_data_warns_once_by_default() {
     );
     let (stdout, stderr, ok) = read_csv(&path, &[]);
     assert!(ok, "replay failed: {stderr}");
-    assert_eq!(stdout.matches(",OL,").count(), 3, "got {stdout}");
+    assert_eq!(stdout.matches(",DC V,,V,").count(), 3, "got {stdout}");
     assert_eq!(
         stderr
-            .matches("unrecognised display text: \"CUT\", shown as OL")
+            .matches("unrecognised display text: \"CUT\", shown as no reading")
             .count(),
         1,
         "got {stderr}"

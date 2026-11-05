@@ -1088,7 +1088,7 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
             unrecognised.report("display text");
             (MeasuredValue::Overload, shown_function)
         }
-        // Reported by the reader; shown as OL, as the other families do.
+        // Reported by the reader; shown as OL.
         Shown::Unrecognised => (MeasuredValue::Overload, shown_function),
     };
 

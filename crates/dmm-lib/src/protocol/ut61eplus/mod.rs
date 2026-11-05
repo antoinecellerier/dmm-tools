@@ -13,7 +13,7 @@ use crate::protocol::registry::{DEVICES, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol,
-    Setting, Stability, check_len, cycle, display_number, unknown_mode, unknown_mode16,
+    Setting, Stability, check_len, cycle, display_number, spells_ol, unknown_mode, unknown_mode16,
     unsupported_setting,
 };
 use crate::transport::{Link, Transport};
@@ -814,20 +814,6 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     }
 }
 
-/// Whether the display spells overload.
-///
-/// The 7-char field is a segment dump: the meter lights the decimal point
-/// belonging to the rung it is on and puts `O` and `L` in the digit slots
-/// either side of it, so the point lands anywhere among the letters. All
-/// three forms are on record, on both meters and across ranges — ` .OL   `
-/// (E+ 2.2MΩ and diode, B+ diode), `  O.L  ` (E+ 22kΩ, B+ 60MΩ) and
-/// `  OL.  ` (E+ 220kΩ, 220MΩ, 220mV and continuity). Dropping the point is
-/// what makes the middle one read as overload rather than fall through to
-/// the "could not parse" branch.
-fn is_overload(display_compact: &str) -> bool {
-    display_compact.replace('.', "").contains("OL")
-}
-
 /// What the NCV display shows while no field is detected.
 const NCV_IDLE: &str = "EF";
 
@@ -1161,7 +1147,7 @@ fn display_value(id: &'static str, mode: Mode, display_raw: &str) -> MeasuredVal
             0
         });
         MeasuredValue::NcvLevel(level)
-    } else if is_overload(&display_compact) {
+    } else if spells_ol(&display_compact) {
         MeasuredValue::Overload
     } else {
         display_number(id, &display_compact)
@@ -2695,10 +2681,8 @@ raw_payload=14"#
         assert!(s.contains("AUTO"));
     }
 
-    /// Every form the overload display takes, taken off the captures named
-    /// in `is_overload`. `O.L` used to miss the check and reach `Overload`
-    /// only through the "could not parse" fallback, which would have
-    /// swallowed a corrupt display just as quietly.
+    /// Every form the overload display takes, taken off the captures in the
+    /// ut61-family spec §5.8.
     #[test]
     fn overload_is_read_wherever_the_decimal_point_lands() {
         let table = &UT61E_PLUS;
@@ -2759,7 +2743,7 @@ raw_payload=14"#
     }
 
     /// Text no form covers — e.g. the "CUT" the manual says an overheated
-    /// meter shows — still reads as OL, and is reported; the idle "EF" is not.
+    /// meter shows — is no reading, and is reported; the idle "EF" is not.
     #[test]
     fn unrecognised_display_text_is_reported() {
         let table = &UT61E_PLUS;
@@ -2769,10 +2753,10 @@ raw_payload=14"#
         };
 
         let (m, reports) = parse(0x06, b"  CUT  ");
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert!(matches!(m.value, MeasuredValue::NoReading("?")));
         assert_eq!(
             reports,
-            ["ut61eplus: unrecognised display text: \"CUT\", shown as OL"]
+            ["ut61eplus: unrecognised display text: \"CUT\", shown as no reading"]
         );
 
         let (m, reports) = parse(0x14, b"  ?!   ");

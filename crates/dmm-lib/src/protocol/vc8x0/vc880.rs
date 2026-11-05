@@ -474,11 +474,15 @@ mod tests {
         shared::assert_overload_flag::<Vc880Model>(0x06);
     }
 
+    /// `OL`, `.OL` and `OL.` (vc880 spec §4, "Display values"); a point
+    /// between the letters reads the same.
     #[test]
     fn parse_overload_display_string() {
-        let payload = make_payload(0x06, 0x30, b"     OL", zero_status());
-        let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        for display in [b"     OL", b"    .OL", b"    O.L", b"    OL."] {
+            let payload = make_payload(0x06, 0x30, display, zero_status());
+            let m = parse_measurement(&payload).unwrap();
+            assert!(matches!(m.value, MeasuredValue::Overload), "{display:?}");
+        }
     }
 
     #[test]
@@ -529,10 +533,10 @@ mod tests {
     fn unrecognised_display_text_is_reported_outside_setup() {
         let payload = make_payload(0x00, 0x30, b"  Err  ", zero_status());
         let (m, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload));
-        assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+        assert!(matches!(m.unwrap().value, MeasuredValue::NoReading("?")));
         assert_eq!(
             reports,
-            ["vc880: unrecognised display text: \"Err\", shown as OL"]
+            ["vc880: unrecognised display text: \"Err\", shown as no reading"]
         );
 
         let mut status = zero_status();
@@ -551,7 +555,7 @@ mod tests {
         let (_, reports) = crate::protocol::capture_reports(|| protocol.parse_payload(&payload));
         assert_eq!(
             reports,
-            ["vc650bt: unrecognised display text: \"Err\", shown as OL"]
+            ["vc650bt: unrecognised display text: \"Err\", shown as no reading"]
         );
     }
 
@@ -800,8 +804,7 @@ raw_payload=34"#
         );
     }
 
-    /// An all-spaces display: nothing to parse, so the reading falls back to
-    /// Overload.
+    /// An all-spaces display: nothing to parse, so no reading.
     #[test]
     fn snapshot_blank_display() {
         assert_eq!(
@@ -809,7 +812,7 @@ raw_payload=34"#
             r#"mode=DC V
 mode_raw=0x00
 range_raw=0x31
-value=Overload
+value=NoReading("?")
 unit=V
 range_label=40V
 display_raw=Some("       ")
@@ -819,7 +822,7 @@ raw_payload=34"#
         );
     }
 
-    /// Digits that are not a number: same Overload fallback as a blank one.
+    /// Digits that are not a number: no reading, as with a blank one.
     #[test]
     fn snapshot_unparsable_display() {
         assert_eq!(
@@ -827,7 +830,7 @@ raw_payload=34"#
             r#"mode=DC V
 mode_raw=0x00
 range_raw=0x31
-value=Overload
+value=NoReading("?")
 unit=V
 range_label=40V
 display_raw=Some("1.2.3.4")

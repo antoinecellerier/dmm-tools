@@ -22,7 +22,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol, Stability,
-    check_len, display_number, unknown_mode,
+    check_len, display_number, spells_ol, unknown_mode,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -421,8 +421,10 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let unit = display_unit(mode_byte, range_idx);
 
-    let spells_ol = display_trimmed.contains("OL");
-    let value = if overload || spells_ol {
+    // A zero for the `O` is a precaution: what this field holds is unverified,
+    // and the display check above lets digits, `O` and `L` through.
+    let spelled_ol = display_trimmed.contains('L') && spells_ol(&display_trimmed.replace('0', "O"));
+    let value = if overload || spelled_ol {
         MeasuredValue::Overload
     } else {
         match display_number("ut8803", &display_trimmed) {
@@ -444,7 +446,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             "-{}",
             display_str.trim_start().trim_start_matches('+')
         )),
-        MeasuredValue::Overload if overload && !spells_ol => None,
+        MeasuredValue::Overload if overload && !spelled_ol => None,
         _ => Some(display_str),
     };
 
@@ -770,14 +772,25 @@ raw_payload=17"#
         );
     }
 
-    /// Text the parser can't read is shown as OL but keeps the meter's own
+    /// Text the parser can't read is no reading but keeps the meter's own
     /// characters: only the OL bit's digits are dropped.
     #[test]
     fn unreadable_display_text_keeps_its_characters() {
         let payload = make_payload(0x01, 0x00, b" ----", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert!(matches!(m.value, MeasuredValue::NoReading("?")));
         assert_eq!(m.display_raw.as_deref(), Some(" ----"));
+    }
+
+    /// The field can spell OL without the OL bit, with a point among the
+    /// letters or a zero for the `O`.
+    #[test]
+    fn overload_spelled_in_the_field_reads_as_overload() {
+        for display in [b"   OL", b"  .OL", b"  O.L", b"  OL.", b"   0L", b"  0.L"] {
+            let payload = make_payload(0x01, 0x00, display, 0x00, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert!(matches!(m.value, MeasuredValue::Overload), "{display:?}");
+        }
     }
 
     #[test]

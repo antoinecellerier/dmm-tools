@@ -874,7 +874,7 @@ raw_payload=61"#
         );
     }
 
-    /// An all-spaces display falls back to Overload.
+    /// An all-spaces display: nothing to parse, so no reading.
     #[test]
     fn snapshot_blank_display() {
         assert_eq!(
@@ -882,7 +882,7 @@ raw_payload=61"#
             r#"mode=AC V
 mode_raw=0x00
 range_raw=0x31
-value=Overload
+value=NoReading("?")
 unit=V
 range_label=60V
 display_raw=Some("       ")
@@ -892,7 +892,7 @@ raw_payload=61"#
         );
     }
 
-    /// Digits that are not a number: same Overload fallback as a blank one.
+    /// Digits that are not a number: no reading, as with a blank one.
     #[test]
     fn snapshot_unparsable_display() {
         assert_eq!(
@@ -900,7 +900,7 @@ raw_payload=61"#
             r#"mode=AC V
 mode_raw=0x00
 range_raw=0x31
-value=Overload
+value=NoReading("?")
 unit=V
 range_label=60V
 display_raw=Some("1.2.3.4")

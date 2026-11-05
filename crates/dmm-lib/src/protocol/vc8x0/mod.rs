@@ -28,7 +28,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol,
-    Setting, check_len, display_number, unknown_mode, unsupported_setting,
+    Setting, check_len, display_number, spells_ol, unknown_mode, unsupported_setting,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -342,7 +342,7 @@ pub(crate) fn common_flags(status: &[u8]) -> (StatusFlags, bool) {
 /// Whether the main display carries no reading: the overload bit, or the
 /// text the meter puts there instead (vc880 spec §4, "Display values").
 pub(crate) fn overloaded(ol1: bool, trimmed: &str) -> bool {
-    ol1 || trimmed.contains("OL") || trimmed.contains("---")
+    ol1 || spells_ol(trimmed) || trimmed.contains("---")
 }
 
 /// Turn the decoded main display into a `MeasuredValue`.

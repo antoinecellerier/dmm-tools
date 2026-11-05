@@ -131,7 +131,9 @@ Offset  Size  Field           Description
 
 **Display values**: 7 bytes each, parsed as ASCII strings via
 `Encoding.ASCII.GetString()`. Right-justified with leading spaces.
-"OL" for overload. All-dashes means "no reading" in pylablib (it
+"OL" for overload; the manual also shows `.OL` on a reversed diode (§8f)
+and `OL.` on continuity (§8g) and temperature (§8i) [MANUAL], [UNVERIFIED]
+whether the point reaches the wire. All-dashes means "no reading" in pylablib (it
 returns None — distinct from overload; corrected 2026-06). The vendor
 displays the raw string either way; [UNVERIFIED] when each occurs on
 the wire. [VENDOR: `SetReadingValue()` line 16726]
