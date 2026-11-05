@@ -2,7 +2,7 @@
 //! note.
 //!
 //! Kept apart from both stores of the sample stream, because neither outlives
-//! the other: the graph restarts on every mode or unit change while a
+//! the other: the graph restarts on every mode or quantity change while a
 //! recording carries on, and Record empties the sample buffer while the graph
 //! keeps its trace. A marker lives as long as its reading is in either — see
 //! [`Markers::retain`].

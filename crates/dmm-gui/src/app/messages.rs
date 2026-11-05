@@ -1656,6 +1656,26 @@ mod tests {
         assert_eq!(modes(&app), ["AC V"; 2]);
     }
 
+    /// An auto-range step is no dial turn: the graph keeps its trace, and
+    /// the history every reading, each in the unit the meter showed.
+    #[test]
+    fn an_auto_range_step_keeps_the_history() {
+        let mut app = connected_app();
+        for (value, unit) in [(900.0, "mV"), (950.0, "mV"), (1.1, "V")] {
+            let mut m = reading("DC V", MeasuredValue::Normal(value), Instant::now());
+            m.unit = unit.into();
+            app.deliver(DmmMessage::Measurement(m));
+        }
+        let units: Vec<&str> = app
+            .capture
+            .recording
+            .export_samples()
+            .map(|s| s.measurement.unit.as_ref())
+            .collect();
+        assert_eq!(units, ["mV", "mV", "V"]);
+        assert_eq!(app.graph.len(), 3);
+    }
+
     /// A minimized window gets `logic` passes and no `ui`: the second one in
     /// a row takes the readings in, while one right after a `ui` pass leaves
     /// them to the next frame's.

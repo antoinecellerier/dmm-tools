@@ -322,8 +322,8 @@ graph-menu-mark = Marquer
         }
 # Copies the reading while none is in view (greyed out).
 graph-menu-copy = Copier
-# Copies the reading: $digits are its digits as the meter showed them, e.g.
-# 3.249.
+# Copies the reading: $digits are its digits as the meter showed them and
+# its unit, e.g. 3.249 V.
 graph-menu-copy-digits = Copier { $digits }
 # Deletes the marker under the pointer, or the one whose flag was
 # right-clicked. $number is its number.

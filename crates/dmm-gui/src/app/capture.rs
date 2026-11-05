@@ -180,9 +180,11 @@ impl Capture {
     /// recording. Returns whether it filled the recording.
     ///
     /// Runs after the graph has taken the reading, so a mode change the graph
-    /// restarted on already shows as its first point. An empty graph cuts
-    /// nothing: over-range readings add no point, and are still readings to
-    /// export.
+    /// restarted on already shows as its first point. An auto-range step
+    /// (mV→V) cuts nothing: the graph keeps the trace before it, in the new
+    /// prefix, while the history keeps each reading as shown. An empty graph
+    /// cuts nothing: over-range readings add no point, and are still readings
+    /// to export.
     fn keep_sample(
         &mut self,
         m: &Measurement,

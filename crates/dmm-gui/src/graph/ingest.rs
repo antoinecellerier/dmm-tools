@@ -1,9 +1,12 @@
 //! Taking readings in: pushing samples and sub-values, the breaks an
 //! overload, a no-reading or a dropout leaves, restarting the trace on a
-//! mode or unit change, and evicting the oldest points.
+//! mode or quantity change, re-expressing it on an auto-range step, and
+//! evicting the oldest points.
 
 use std::collections::VecDeque;
 use std::time::Instant;
+
+use dmm_lib::transform::{PrefixRatio, prefix_ratio};
 
 use super::breaks::Breaks;
 use super::minimap::MinimapDrag;
@@ -124,9 +127,10 @@ impl Graph {
     ///
     /// A sample without a value (a frame carrying only sub-values) records
     /// its overlay points and switches or restarts the trace on a change of
-    /// mode, unit or series like any other, but leaves the history, the
-    /// minimap, an open break and the spoken last reading alone. A sample
-    /// with neither (an over-range reading) restarts on a new mode only.
+    /// mode, quantity or series like any other, but leaves the history, the
+    /// minimap, an open break and the spoken last reading alone, and never
+    /// re-expresses a trace in its unit's other prefix. A sample with neither
+    /// (an over-range reading) restarts on a new mode only.
     pub fn push_sample(&mut self, sample: PlotSample<'_>) {
         let (value, timestamp, mode, unit, display_raw) = (
             sample.value,
@@ -153,26 +157,44 @@ impl Graph {
         }
         self.main_label = sample.main_label;
 
-        // A unit change is as much a scale change as a mode change. Auto-range
-        // keeps the mode string fixed while the unit moves a decade (Ω→kΩ,
-        // mV→V, nF→µF), so comparing only the mode let the trace collapse by
-        // 1000x mid-plot with the axis relabelled and no gap to show why.
-        // A change of plotted series restarts the trace for the same reason:
-        // two sub-values can share a mode *and* a unit (T1 and T2 are both
-        // "DC V"/"°C"), so switching from one to the other would otherwise
-        // append onto the previous one's trace with nothing to mark the join —
-        // unless the new series is already kept beside the old one, and the
-        // two traces only change places. The kept traces take this frame's
-        // units first, so a switch on the frame a unit steps lands on the one
-        // trace that restarted.
+        // Auto-range keeps the mode string fixed while the unit moves a
+        // decade (Ω→kΩ, mV→V, nF→µF): the trace is re-expressed in the new
+        // prefix rather than left 1000x off its axis, so a sweep across the
+        // step stays one trace. A change of quantity is a new scale, and
+        // restarts it as a mode change does.
+        // A change of plotted series restarts the trace too: two sub-values
+        // can share a mode *and* a unit (T1 and T2 are both "DC V"/"°C"), so
+        // switching from one to the other would otherwise append onto the
+        // previous one's trace with nothing to mark the join — unless the new
+        // series is already kept beside the old one, and the two traces only
+        // change places. The kept traces take this frame's units first, so a
+        // switch on the frame a unit steps lands on a trace in that unit.
         self.reconcile_overlay_units(sample.overlays);
         let incoming = sample.series.unwrap_or(self.main_name());
-        self.restart_on_unit_change(incoming, unit);
+        self.follow_unit(incoming, unit, value.is_some());
         let same_mode = self.current_mode.as_deref() == Some(mode);
         let series_changed = self.current_series.as_deref() != sample.series;
-        let swapped = same_mode && series_changed && self.swap_plotted_series(sample.series, unit);
+        // A frame over range in another decade left the kept trace in the
+        // prefix its readings are in, and it is plotted in that prefix.
+        let swap_unit = self
+            .overlays
+            .iter()
+            .find(|o| o.label == incoming && prefix_ratio(&o.unit, unit).is_some())
+            .map_or_else(|| unit.to_string(), |o| o.unit.clone());
+        let swapped =
+            same_mode && series_changed && self.swap_plotted_series(sample.series, &swap_unit);
         if !swapped && (!same_mode || self.current_unit != unit || series_changed) {
-            self.restart_trace(now, mode, unit, sample.series);
+            let step = (same_mode && !series_changed)
+                .then(|| prefix_ratio(&self.current_unit, unit))
+                .flatten();
+            match step {
+                Some(ratio) if value.is_some() => self.rescale(ratio, unit),
+                // A frame over range in another decade ("OL MΩ" between kΩ
+                // readings) with its sub-values still coming: the trace
+                // stays in the prefix its readings are in.
+                Some(_) => {}
+                None => self.restart_trace(now, mode, unit, sample.series),
+            }
         }
         self.heard(now);
         self.register_overlays(sample.overlays);
@@ -271,14 +293,31 @@ impl Graph {
         self.history_epoch += 1;
     }
 
-    /// Restart each kept trace whose unit moved in this frame (a frequency
-    /// auto-ranging Hz→kHz): it drops its points, as the plotted series does
-    /// on a decade step, and restarts alone. The series being plotted is
-    /// checked by the caller: a frame carries it apart from the others.
+    /// Bring each kept trace to the unit it has in this frame (see
+    /// [`Graph::follow_unit`]). The series being plotted is checked by the
+    /// caller: a frame carries it apart from the others.
     fn reconcile_overlay_units(&mut self, overlays: &[(&str, &str, Option<f64>)]) {
-        for &(label, unit, _) in overlays {
-            self.restart_on_unit_change(label, unit);
+        for &(label, unit, v) in overlays {
+            self.follow_unit(label, unit, v.is_some());
         }
+    }
+
+    /// Re-express the plotted trace in `unit`, the prefix `ratio` takes its
+    /// unit to: the meter auto-ranged a decade (Ω→kΩ). Everything drawn
+    /// against the plotted axis follows — the fixed Y range and the typed
+    /// reference lines — so the view keeps framing the same readings.
+    fn rescale(&mut self, ratio: PrefixRatio, unit: &str) {
+        for p in &mut self.history {
+            p.value = ratio.apply(p.value);
+        }
+        self.current_unit = unit.to_string();
+        self.y_axis.min.rescale(ratio);
+        self.y_axis.max.rescale(ratio);
+        self.ref_lines.rescale(ratio);
+        // The same readings, numbered as before, but every figure cached on
+        // them and every bucket of the minimap is in the old prefix.
+        self.history_epoch += 1;
+        self.minimap_level = None;
     }
 
     /// Start a new trace for `mode`, `unit` and `series` at `now`.
@@ -311,17 +350,52 @@ impl Graph {
         self.dash_phases = pattern::DashPhases::default();
     }
 
-    /// Restart the kept trace `label` if its unit is no longer `unit`.
-    fn restart_on_unit_change(&mut self, label: &str, unit: &str) {
-        if let Some(o) = self.overlays.iter_mut().find(|o| o.label == label)
-            && o.unit != unit
-        {
-            // A range fixed for the old unit means nothing in the new one,
+    /// Bring the kept trace `label` to `unit` if that is no longer its unit:
+    /// re-expressed when `unit` is another prefix of it (a frequency
+    /// auto-ranging Hz→kHz), with its right axis's fixed range, else
+    /// restarted alone. A point without a value (`valued` false) re-expresses
+    /// nothing: an over-range sub-value in another decade leaves its trace in
+    /// the prefix its readings are in.
+    fn follow_unit(&mut self, label: &str, unit: &str, valued: bool) {
+        let Some(i) = self
+            .overlays
+            .iter()
+            .position(|o| o.label == label && o.unit != unit)
+        else {
+            return;
+        };
+        let ratio = prefix_ratio(&self.overlays[i].unit, unit);
+        if ratio.is_some() && !valued {
+            return;
+        }
+        let old = std::mem::replace(&mut self.overlays[i].unit, unit.to_string());
+        // Another trace still on the old unit's axis keeps its range.
+        let pin = if self.overlays.iter().any(|o| o.unit == old) {
+            self.y_axis.pins.get(&old).copied()
+        } else {
+            self.y_axis.pins.remove(&old)
+        };
+        let o = &mut self.overlays[i];
+        match ratio {
+            Some(ratio) => {
+                for v in o.points.iter_mut().filter_map(|p| p.value.as_mut()) {
+                    *v = ratio.apply(*v);
+                }
+                if let Some((lo, hi)) = pin
+                    && unit != self.current_unit
+                {
+                    self.y_axis
+                        .pins
+                        .entry(unit.to_string())
+                        .or_insert((ratio.apply(lo), ratio.apply(hi)));
+                }
+            }
+            // A range fixed for another quantity means nothing in this one,
             // nor when the unit comes back: the axis fits its data again.
-            self.y_axis.pins.remove(&o.unit);
-            o.unit = unit.to_string();
-            o.points.clear();
-            o.missing_frames = 0;
+            None => {
+                o.points.clear();
+                o.missing_frames = 0;
+            }
         }
     }
 

@@ -43,7 +43,7 @@ recording-discarded = 記録を破棄しました。
 # that saves them. $count is how many it holds.
 recording-discarded-graph-keeps = 記録を破棄しました。[エクスポート…] でグラフのサンプル { $count } 件を保存できます。
 # After Copy in the graph's right-click menu. $digits is the reading as the
-# meter showed it, e.g. 1.6109, which is now on the clipboard.
+# meter showed it, with its unit, e.g. 1.6109 V, which is now on the clipboard.
 recording-copied = { $digits } をコピーしました。
 
 ## The dividers dragged to resize the panels. Read by screen readers only:

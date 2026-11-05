@@ -61,31 +61,85 @@ fn mode_change_clears_history() {
     assert_eq!(g.len(), 1);
 }
 
-/// Auto-range crossing a decade keeps the mode string but moves the unit,
-/// so 219 Ω and 0.22 kΩ would otherwise share one series — the trace
-/// collapses 1000x mid-plot and the axis silently relabels.
+/// Auto-range crossing a decade keeps the mode string but moves the unit:
+/// the trace carries on, its earlier points re-expressed in the new prefix,
+/// so 219 Ω and 0.22 kΩ sit side by side rather than 1000x apart.
 #[test]
-fn unit_change_clears_history() {
+fn a_decade_step_re_expresses_the_trace() {
     let mut g = Graph::new();
-    g.push(150.0, Instant::now(), "Ω", "Ω", None);
-    g.push(219.0, Instant::now(), "Ω", "Ω", None);
-    assert_eq!(g.len(), 2);
-    g.push(0.22, Instant::now(), "Ω", "kΩ", None);
-    assert_eq!(g.len(), 1, "kΩ points must not share a series with Ω");
-    assert_eq!(g.current_unit, "kΩ");
+    let t0 = Instant::now();
+    let at = |s: u64| t0 + Duration::from_secs(s);
+    g.push(150.0, at(0), "\u{3a9}", "\u{3a9}", None);
+    g.push(219.0, at(1), "\u{3a9}", "\u{3a9}", None);
+    let epoch = g.history_epoch;
+    g.push(0.22, at(2), "\u{3a9}", "k\u{3a9}", None);
+    assert_eq!(g.current_unit, "k\u{3a9}");
+    assert_eq!(
+        g.all_segments(),
+        vec![vec![[0.0, 0.15], [1.0, 0.219], [2.0, 0.22]]]
+    );
+    assert_eq!(g.origin, Some(t0), "the time axis stays where it was");
+    assert_ne!(g.history_epoch, epoch, "figures cached in Ω are stale");
+    assert!(g.minimap_level.is_none(), "so is the minimap's level");
 }
 
-/// The pinned Y range is chosen for the old decade's numbers; keeping it
-/// across a unit change plots the new scale far outside the view.
+/// What the user set against the plotted axis follows a decade step: the
+/// fixed Y range and the reference lines frame the same readings after it.
 #[test]
-fn unit_change_releases_the_pinned_y_range() {
+fn a_decade_step_re_expresses_the_fixed_range_and_reference_lines() {
     let mut g = Graph::new();
-    g.push(150.0, Instant::now(), "Ω", "Ω", None);
+    g.push(150.0, Instant::now(), "\u{3a9}", "\u{3a9}", None);
     g.y_axis.fixed = true;
     g.y_axis.user_set = true;
-    g.push(0.22, Instant::now(), "Ω", "kΩ", None);
+    g.y_axis.min.set(100.0);
+    g.y_axis.max.set(1500.0);
+    *g.ref_lines.text_mut() = "200, 950 x".to_string();
+    g.ref_lines.parse();
+    g.push(1.05, Instant::now(), "\u{3a9}", "k\u{3a9}", None);
+    assert!(g.y_axis.fixed && g.y_axis.user_set);
+    assert_eq!((g.y_axis.min.value(), g.y_axis.max.value()), (0.1, 1.5));
+    assert_eq!((g.y_axis.min.text(), g.y_axis.max.text()), ("0.1", "1.5"));
+    assert_eq!(g.ref_lines.values(), [0.2, 0.95]);
+    assert_eq!(g.ref_lines.text_mut().as_str(), "0.2, 0.95, x");
+}
+
+/// A change of quantity under one mode string is a new scale: the trace
+/// restarts, and a range pinned for the old quantity is released.
+#[test]
+fn a_change_of_quantity_clears_the_trace_and_its_pinned_range() {
+    let mut g = Graph::new();
+    g.push(150.0, Instant::now(), "Temp", "\u{b0}C", None);
+    g.push(151.0, Instant::now(), "Temp", "\u{b0}C", None);
+    g.y_axis.fixed = true;
+    g.y_axis.user_set = true;
+    g.push(302.0, Instant::now(), "Temp", "\u{b0}F", None);
+    assert_eq!(g.len(), 1, "°F points must not share a trace with °C");
     assert!(!g.y_axis.fixed);
     assert!(!g.y_axis.user_set);
+}
+
+/// A frame over range in another decade ("OL MΩ" among kΩ readings) whose
+/// sub-values still come leaves the trace in the prefix of its readings.
+#[test]
+fn an_overload_in_another_decade_leaves_the_trace_alone() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.05, t0, "\u{3a9}", "k\u{3a9}", None);
+    let epoch = g.history_epoch;
+    g.push_sample(PlotSample {
+        value: None,
+        timestamp: t0 + Duration::from_secs(1),
+        mode: "\u{3a9}",
+        unit: "M\u{3a9}",
+        display_raw: None,
+        series: None,
+        main_label: None,
+        levels: false,
+        overlays: &[("Max", "k\u{3a9}", Some(1.05))],
+    });
+    assert_eq!(g.current_unit, "k\u{3a9}");
+    assert_eq!(g.history_epoch, epoch);
+    assert_eq!(g.all_segments(), vec![vec![[0.0, 1.05]]]);
 }
 
 /// A brief over-range excursion leaves no hole in the timestamps, so

@@ -14,7 +14,7 @@
 - **Choose how often a screen reader announces the reading** — every 5s by default, or only while the reading has focus.
 - **Screen readers say units by name, such as millivolts for mV** — they spelled the symbols out letter by letter.
 - **The graph hover lists every series and tags the height per axis** — it showed one value without a right axis, and no height with one.
-- **Statistics and the integral carry on when the meter auto-ranges** — they restarted at each decade step, such as Ω to kΩ.
+- **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step, such as Ω to kΩ. Copy in the graph's menu now includes the unit, since the trace can change prefix.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.

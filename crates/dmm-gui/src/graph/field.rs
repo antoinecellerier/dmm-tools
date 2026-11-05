@@ -6,10 +6,34 @@
 //! and did so through four assignments — and the rule that an unparseable
 //! draft leaves the last good value alone was restated at every edit site.
 
+use dmm_lib::transform::PrefixRatio;
+
 /// Digits the fields show when a value is written into them by the graph
 /// rather than typed. Enough to keep a millivolt reading distinct, few
 /// enough to stay editable.
 const SET_PRECISION: usize = 4;
+
+/// Significant digits a field keeps of a number it re-expresses in another
+/// prefix: all a typed one has, none of the float error of the step
+/// (`3.29 × 1000` is `3290.0000000000005`).
+const RESCALED_DIGITS: i32 = 12;
+
+/// `text` re-expressed by `ratio` when it reads as a number, at most
+/// [`RESCALED_DIGITS`] significant digits and no trailing zeros; `None` when
+/// it doesn't, for a draft the user is still typing to be left as it is.
+fn rescaled_text(text: &str, ratio: PrefixRatio) -> Option<String> {
+    let v = ratio.apply(text.trim().parse::<f64>().ok()?);
+    if v == 0.0 || !v.is_finite() {
+        return Some(if v == 0.0 { "0".into() } else { v.to_string() });
+    }
+    let decimals = (RESCALED_DIGITS - 1 - v.abs().log10().floor() as i32).max(0) as usize;
+    let s = format!("{v:.decimals$}");
+    Some(if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    })
+}
 
 /// A number the user types, beside the value it last parsed to.
 #[derive(Debug)]
@@ -67,6 +91,16 @@ impl NumberField {
     pub(super) fn set(&mut self, value: f64) {
         self.value = value;
         self.text = format!("{value:.SET_PRECISION$}");
+    }
+
+    /// Re-express the number in another prefix of its unit: the trace it is
+    /// read against stepped a decade (Ω→kΩ). A draft that doesn't read as a
+    /// number is left as typed, and takes the new prefix once it does.
+    pub(super) fn rescale(&mut self, ratio: PrefixRatio) {
+        self.value = ratio.apply(self.value);
+        if let Some(text) = rescaled_text(&self.text, ratio) {
+            self.text = text;
+        }
     }
 
     /// Put back a value a user typed and a file saved: shown as short as it
@@ -130,6 +164,23 @@ impl NumberListField {
             .filter(|s| !s.is_empty() && s.parse::<f64>().ok() != Some(v))
             .collect::<Vec<_>>()
             .join(", ");
+        self.parse();
+    }
+
+    /// Re-express every number in the draft in another prefix of its unit,
+    /// keeping the entries that don't read as one as they are typed, as
+    /// [`push`](Self::push) and [`remove`](Self::remove) do.
+    pub(super) fn rescale(&mut self, ratio: PrefixRatio) {
+        self.text = self
+            .text
+            .split(SEPARATORS)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| rescaled_text(s, ratio).unwrap_or_else(|| s.to_string()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        // From the text, so that the menu finds each line by the number it
+        // shows.
         self.parse();
     }
 
@@ -199,6 +250,35 @@ mod tests {
         assert_eq!(f.text(), "2.0000");
         assert!(f.parse(), "what it shows has to read back");
         assert_eq!(f.value(), 2.0);
+    }
+
+    /// A decade step re-expresses what the fields hold without float noise,
+    /// and leaves a draft being typed as it is.
+    #[test]
+    fn a_rescale_re_expresses_the_numbers_and_keeps_the_draft() {
+        use dmm_lib::transform::prefix_ratio;
+        let to_mv = prefix_ratio("V", "mV").expect("one base unit");
+        let to_kohm = prefix_ratio("\u{3a9}", "k\u{3a9}").expect("one base unit");
+
+        let mut f = NumberListField::default();
+        *f.text_mut() = "3.29; 0.1 x, -".to_string();
+        f.parse();
+        f.rescale(to_mv);
+        assert_eq!(f.text_mut().as_str(), "3290, 100, x, -");
+        assert_eq!(f.values(), [3290.0, 100.0]);
+        f.rescale(to_kohm);
+        assert_eq!(f.text_mut().as_str(), "3.29, 0.1, x, -");
+        assert_eq!(f.values(), [3.29, 0.1], "back to the numbers typed");
+
+        let mut f = NumberField::new("-1", -1.0);
+        f.set(219.87);
+        f.rescale(to_kohm);
+        assert_eq!(f.text(), "0.21987");
+        assert!((f.value() - 0.21987).abs() < 1e-15);
+        f.text_mut().clear();
+        f.rescale(to_mv);
+        assert_eq!(f.text(), "", "the draft stays as typed");
+        assert!((f.value() - 219.87).abs() < 1e-12);
     }
 
     #[test]

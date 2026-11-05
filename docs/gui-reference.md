@@ -204,8 +204,9 @@ in a narrow graph.
   marker's flag that marker's deletion
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
-  dropped). A change of mode or unit clears the graph — including auto-range
-  crossing a decade (Ω→kΩ)
+  dropped). A change of mode or quantity clears the graph; auto-range crossing
+  a decade (Ω→kΩ) keeps it, with the fixed Y range and reference lines, in
+  the unit the meter shows last
 
 Two cases the graph does not draw faithfully: a connection loss entirely
 inside a continuing overload is absorbed into the band instead of splitting

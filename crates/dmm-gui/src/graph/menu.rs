@@ -44,7 +44,7 @@ struct MenuReading {
     /// reading only: a marker or cursor goes on `at`, exactly.
     time: String,
     /// What "Copy" puts on the clipboard: the meter's digits, else the
-    /// trace's value as the crosshair writes it.
+    /// trace's value as the crosshair writes it, followed by its unit.
     digits: String,
 }
 
@@ -73,8 +73,9 @@ pub(super) struct MenuPoint {
     /// The alarm limit whose line is under the pointer.
     limit: Option<LimitSide>,
     /// The history the menu was opened over. Once restarted — a clear, a
-    /// unit's decade step, another series plotted — the times and heights
-    /// above are another trace's, and the menu closes unpicked.
+    /// mode change, another series plotted — the times and heights above are
+    /// another trace's, and once re-expressed by a decade step its heights
+    /// are in another prefix: the menu closes unpicked.
     epoch: u64,
 }
 
@@ -495,7 +496,13 @@ impl Graph {
                 digits: digits(at, plotted)
                     .map(|d| d.trim().to_string())
                     .filter(|d| !d.is_empty())
-                    .unwrap_or_else(|| format!("{value:.prec$}", prec = self.decimals(true))),
+                    .unwrap_or_else(|| {
+                        let digits = format!("{value:.prec$}", prec = self.decimals(true));
+                        match self.current_unit.as_str() {
+                            "" => digits,
+                            unit => format!("{digits} {unit}"),
+                        }
+                    }),
             });
         MenuPoint {
             reading,

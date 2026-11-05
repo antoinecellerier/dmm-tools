@@ -144,19 +144,29 @@ pub(super) struct RecordingPanel {
 
 /// The digits the meter showed for its reading taken at `at`, of the
 /// sub-value `label` or of the main reading on `None`, as Export… writes
-/// them; `None` once `recording` no longer holds the reading. What the
-/// graph's menu offers to copy.
+/// them, followed by the unit the meter showed them in; `None` once
+/// `recording` no longer holds the reading. What the graph's menu offers to
+/// copy: the trace may have been re-expressed in another prefix since
+/// (950.0 Ω on a kΩ axis), so the digits alone would not say which.
 fn reading_digits(recording: &Recording, at: Instant, label: Option<&str>) -> Option<String> {
     let m = &recording.sample_at(at)?.measurement;
-    let digits = match label {
-        None => m.value_export_str(),
-        Some(label) => m
-            .aux_values
-            .iter()
-            .find(|a| a.label == label)?
-            .value_export_str(),
+    let (digits, unit) = match label {
+        None => (m.value_export_str(), &*m.unit),
+        Some(label) => {
+            let aux = m.aux_values.iter().find(|a| a.label == label)?;
+            (aux.value_export_str(), aux.unit_or(&m.unit))
+        }
     };
-    Some(digits.into_owned())
+    let digits = digits.trim();
+    if digits.is_empty() {
+        // Nothing to name a unit for: the caller falls back to the trace.
+        return None;
+    }
+    Some(if unit.is_empty() {
+        digits.to_string()
+    } else {
+        format!("{digits} {unit}")
+    })
 }
 
 impl App {
@@ -779,14 +789,33 @@ mod tests {
         let recording = &app.capture.recording;
         assert_eq!(
             reading_digits(recording, at, None).as_deref(),
-            Some("5.678"),
-            "the fixture's digits"
+            Some("5.678 V"),
+            "the fixture's digits, in the reading's unit"
         );
         assert_eq!(
             reading_digits(recording, at, Some("Max")).as_deref(),
-            Some("9.876")
+            Some("9.876 V"),
+            "a sub-value without a unit of its own is in the reading's"
         );
         assert_eq!(reading_digits(recording, at, Some("Min")), None);
+        let mut absent =
+            Measurement::test_fixture(MeasuredValue::Normal(2.5), "V", StatusFlags::default());
+        absent.timestamp = at + std::time::Duration::from_millis(500);
+        absent.aux_values = vec![AuxValue {
+            label: "Max".into(),
+            value: MeasuredValue::Absent,
+            unit: "".into(),
+            display_raw: None,
+            elapsed_secs: None,
+        }];
+        let absent_at = absent.timestamp;
+        app.deliver(super::super::connection::DmmMessage::Measurement(absent));
+        let recording = &app.capture.recording;
+        assert_eq!(
+            reading_digits(recording, absent_at, Some("Max")),
+            None,
+            "no digits, so not a bare unit either"
+        );
         let later = at + std::time::Duration::from_secs(1);
         assert_eq!(reading_digits(recording, later, None), None);
 

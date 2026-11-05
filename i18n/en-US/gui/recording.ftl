@@ -55,7 +55,7 @@ recording-discarded-graph-keeps =
        *[other] Recording discarded. "Export…" saves the graph's { $count } samples.
     }
 # After Copy in the graph's right-click menu. $digits is the reading as the
-# meter showed it, e.g. 1.6109, which is now on the clipboard.
+# meter showed it, with its unit, e.g. 1.6109 V, which is now on the clipboard.
 recording-copied = Copied { $digits }
 
 ## The dividers dragged to resize the panels. Read by screen readers only:

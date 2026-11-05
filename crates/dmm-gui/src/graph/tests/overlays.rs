@@ -495,22 +495,27 @@ fn a_series_change_to_another_unit_swaps_the_traces() {
     assert_eq!(g.overlay_values("Frequency").len(), 5);
 }
 
-/// A kept trace whose unit steps (a frequency auto-ranging Hz→kHz) starts
-/// over alone; the others and the plotted series keep their past. Switching
-/// on the very frame it steps swaps onto the restarted trace rather than
-/// clearing everything.
+/// A kept trace whose unit steps a decade (a frequency auto-ranging
+/// Hz→kHz) carries on, re-expressed; the others and the plotted series
+/// keep their past untouched. Switching on the very frame it steps swaps
+/// onto the re-expressed trace.
 #[test]
-fn a_kept_trace_restarts_alone_on_its_own_unit_change() {
+fn a_kept_trace_follows_its_own_decade_step() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     let at = |s: u64| t0 + Duration::from_secs(s);
     for i in 0..3 {
         push_vac_hz(&mut g, at(i), None, 230.0, (999.0, "Hz"));
     }
+    let epoch = g.history_epoch;
     push_vac_hz(&mut g, at(3), None, 230.0, (1.001, "kHz"));
     assert_eq!(g.len(), 4);
-    assert_eq!(g.overlay_values("Frequency"), vec![Some(1.001)]);
+    assert_eq!(
+        g.overlay_values("Frequency"),
+        vec![Some(0.999), Some(0.999), Some(0.999), Some(1.001)]
+    );
     assert_eq!(g.overlay_values("Period").len(), 4);
+    assert_eq!(g.history_epoch, epoch, "the plotted trace is as it was");
 
     let mut g = Graph::new();
     for i in 0..3 {
@@ -518,9 +523,125 @@ fn a_kept_trace_restarts_alone_on_its_own_unit_change() {
     }
     push_vac_hz(&mut g, at(3), Some("Frequency"), 230.0, (1.001, "kHz"));
     assert_eq!(g.plotted_unit(), "kHz");
-    assert_eq!(g.len(), 1, "only the restarted frequency");
+    assert_eq!(g.len(), 4, "the whole frequency trace, in kHz");
     assert_eq!(g.overlay_values("Main").len(), 4, "the voltage is kept");
     assert_eq!(g.origin, Some(t0));
+}
+
+/// A kept trace changing quantity starts over alone.
+#[test]
+fn a_kept_trace_restarts_alone_on_a_change_of_quantity() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |s: u64| t0 + Duration::from_secs(s);
+    for i in 0..3 {
+        push_vac_hz(&mut g, at(i), None, 230.0, (50.0, "Hz"));
+    }
+    push_vac_hz(&mut g, at(3), None, 230.0, (20.0, "%"));
+    assert_eq!(g.len(), 4);
+    assert_eq!(g.overlay_values("Frequency"), vec![Some(20.0)]);
+    assert_eq!(g.overlay_values("Period").len(), 4);
+}
+
+/// The fixed range of a kept trace's right axis follows its decade step,
+/// and moves to the new unit's axis; a range another trace still uses on
+/// the old one stays there.
+#[test]
+fn a_kept_traces_pinned_range_follows_its_decade_step() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |s: u64| t0 + Duration::from_secs(s);
+    push_vac_hz(&mut g, at(0), None, 230.0, (999.0, "Hz"));
+    g.y_axis.fixed = true;
+    g.y_axis.pins.insert("Hz".into(), (900.0, 1100.0));
+    g.y_axis.pins.insert("ms".into(), (0.0, 40.0));
+    push_vac_hz(&mut g, at(1), None, 230.0, (1.001, "kHz"));
+    assert_eq!(g.y_axis.pins.get("kHz"), Some(&(0.9, 1.1)));
+    assert_eq!(g.y_axis.pins.get("Hz"), None, "no trace left in Hz");
+    assert_eq!(g.y_axis.pins.get("ms"), Some(&(0.0, 40.0)));
+
+    // A second trace in Hz keeps the Hz axis and its range.
+    let mut g = Graph::new();
+    let push = |g: &mut Graph, t: Instant, hz: (f64, &str)| {
+        g.push_sample(PlotSample {
+            value: Some(230.0),
+            timestamp: t,
+            mode: "V AC Hz",
+            unit: "V",
+            display_raw: None,
+            series: None,
+            main_label: None,
+            levels: false,
+            overlays: &[("Frequency", hz.1, Some(hz.0)), ("Max", "Hz", Some(999.0))],
+        });
+    };
+    push(&mut g, at(0), (999.0, "Hz"));
+    g.y_axis.fixed = true;
+    g.y_axis.pins.insert("Hz".into(), (900.0, 1100.0));
+    push(&mut g, at(1), (1.001, "kHz"));
+    assert_eq!(g.y_axis.pins.get("kHz"), Some(&(0.9, 1.1)));
+    assert_eq!(g.y_axis.pins.get("Hz"), Some(&(900.0, 1100.0)));
+}
+
+/// An over-range sub-value in another decade re-expresses nothing: its
+/// trace breaks and stays in the prefix of its readings.
+#[test]
+fn an_over_range_sub_value_in_another_decade_leaves_its_trace_alone() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |s: u64| t0 + Duration::from_secs(s);
+    push_vac_hz(&mut g, at(0), None, 230.0, (999.0, "Hz"));
+    g.push_sample(PlotSample {
+        value: Some(230.0),
+        timestamp: at(1),
+        mode: "V AC Hz",
+        unit: "V",
+        display_raw: None,
+        series: None,
+        main_label: None,
+        levels: false,
+        overlays: &[("Frequency", "MHz", None), ("Period", "ms", Some(20.0))],
+    });
+    assert_eq!(g.overlay_values("Frequency"), vec![Some(999.0), None]);
+    assert!(
+        g.overlays
+            .iter()
+            .any(|o| o.label == "Frequency" && o.unit == "Hz")
+    );
+}
+
+/// Switching to a kept trace on a frame where it is over range in another
+/// decade swaps onto it in the prefix its readings are in, and the next
+/// reading in the new decade re-expresses it; nothing is cleared.
+#[test]
+fn a_switch_on_an_over_range_frame_in_another_decade_swaps_the_traces() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |s: u64| t0 + Duration::from_secs(s);
+    for i in 0..3 {
+        push_vac_hz(&mut g, at(i), None, 230.0, (999.0, "Hz"));
+    }
+    g.push_sample(PlotSample {
+        value: None,
+        timestamp: at(3),
+        mode: "V AC Hz",
+        unit: "kHz",
+        display_raw: None,
+        series: Some("Frequency"),
+        main_label: None,
+        levels: false,
+        overlays: &[("Period", "ms", Some(20.0)), ("Main", "V", Some(230.0))],
+    });
+    assert_eq!(g.plotted_unit(), "Hz");
+    assert_eq!(g.len(), 3, "the frequency trace, still in Hz");
+    assert_eq!(g.overlay_values("Main").len(), 4, "the voltage is kept");
+    assert_eq!(g.overlay_values("Period").len(), 4);
+    assert_eq!(g.origin, Some(t0));
+
+    push_vac_hz(&mut g, at(4), Some("Frequency"), 230.0, (1.001, "kHz"));
+    assert_eq!(g.plotted_unit(), "kHz");
+    assert_eq!(g.len(), 4, "the whole frequency trace, in kHz");
+    assert_eq!(g.overlay_values("Main").len(), 5);
 }
 
 /// A held UT61E+ in AC+DC V sends only its AC component. A switch to AC

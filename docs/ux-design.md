@@ -155,8 +155,12 @@ time, and the crosshair's height is tagged on each axis, against its scale,
 so no number leaves you guessing which it is. Stacked lanes, one per unit,
 were the alternative: no false crossings, but every lane
 shorter ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
-A change of mode or unit clears the graph: the old and new scales are
-incompatible.
+A change of mode or quantity clears the graph: the old and new scales are
+incompatible. An auto-range step (Ω→kΩ) keeps the quantity, so the trace,
+the fixed Y range and the reference lines are re-expressed in the new prefix:
+a sweep across a decade stays one trace, and the axis reads in the unit the
+meter shows. A copied reading carries its own unit, since the trace it sits on
+may be in another prefix by then.
 
 **The histogram shares the plot's Y axis.** Each bar sits at the height of
 the readings it counts, so a second level or an outlier lines up with the

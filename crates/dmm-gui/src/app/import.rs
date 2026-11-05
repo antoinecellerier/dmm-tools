@@ -5,8 +5,9 @@
 //! the frame loop then takes them through the pipeline a chunk at a time, so
 //! a half-million-reading file neither freezes the window nor arrives as one
 //! enormous frame. They go into a recording, stopped and marked saved: a
-//! mode or unit change inside the file restarts the graph's trace as a live
-//! one would, and the recording keeps every reading for Export… regardless.
+//! mode or quantity change inside the file restarts the graph's trace as a
+//! live one would, and the recording keeps every reading for Export…
+//! regardless.
 //!
 //! No meter is attached, so nothing new arrives; the readings, markers and
 //! view can still be worked on and exported again.

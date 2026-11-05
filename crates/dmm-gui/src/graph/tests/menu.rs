@@ -199,7 +199,7 @@ fn the_menu_names_the_reading() {
     let entries = menu_entries(&mut g, &ctx);
     for entry in [
         "Mark the reading at 30.0 s",
-        "Copy 1.0000",
+        "Copy 1.0000 V",
         "Put a cursor on the reading at 30.0 s",
     ] {
         assert!(
@@ -637,8 +637,8 @@ fn the_menu_answers_the_arrows() {
     );
 }
 
-/// A trace restarted under the open menu — here a decade step — takes the
-/// menu with it: its heights and times were the old trace's.
+/// A trace re-expressed under the open menu — here a decade step — takes
+/// the menu with it: its heights were in the old prefix.
 #[test]
 fn a_restart_closes_the_menu() {
     let (mut g, t0) = graph_over(30);

@@ -70,12 +70,12 @@ pub(crate) fn si_prefix(unit: &str) -> (&str, f64) {
 /// another — mV → V is 10⁻³, Ω → kΩ is 10⁻³ — held as its power of ten, so
 /// the factor itself is never rounded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct PrefixRatio(i32);
+pub struct PrefixRatio(i32);
 
 impl PrefixRatio {
     /// The figure re-expressed: a downward step divides by the exact power
     /// of ten rather than multiplying by its inexact reciprocal.
-    pub(crate) fn apply(self, x: f64) -> f64 {
+    pub fn apply(self, x: f64) -> f64 {
         if self.0 >= 0 {
             x * 10f64.powi(self.0)
         } else {
@@ -86,7 +86,7 @@ impl PrefixRatio {
 
 /// The ratio that re-expresses a figure in `from` as one in `to`, or `None`
 /// when the two are not prefixes of one base unit (V and A, °C and °F).
-pub(crate) fn prefix_ratio(from: &str, to: &str) -> Option<PrefixRatio> {
+pub fn prefix_ratio(from: &str, to: &str) -> Option<PrefixRatio> {
     let (from_base, from_mult) = si_prefix(from);
     let (to_base, to_mult) = si_prefix(to);
     // Both multipliers are powers of ten, so the rounded log is exact.
