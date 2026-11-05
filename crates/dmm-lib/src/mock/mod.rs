@@ -35,12 +35,15 @@ use crate::protocol::{
     Choice, DeviceProfile, MeterKeys, Protocol, Setting, Stability, unsupported_setting,
 };
 use crate::transport::{NullTransport, Transport};
-use scenarios::{AuxSpec, Scenario, scenarios};
+use scenarios::{AuxSpec, SCENARIOS, Scenario};
 use state::MeterState;
 use std::borrow::Cow;
 use std::time::{Duration, Instant};
 
 /// Short identifier for a mock scenario, usable from CLI `--mock-mode` and GUI selector.
+///
+/// Declared in [`SCENARIOS`] order: a variant's discriminant is its index
+/// there, which a const assertion beside the table checks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MockMode {
     DcV,
@@ -59,113 +62,12 @@ pub enum MockMode {
     Noise,
 }
 
-/// One row of the mode table: everything `MockMode` exposes for a variant.
-struct MockModeInfo {
-    mode: MockMode,
-    /// Short string label for CLI and display.
-    label: &'static str,
-    description: &'static str,
-    /// Extra spellings `FromStr` accepts, beyond `label`.
-    aliases: &'static [&'static str],
-}
-
-/// Every mode, in auto-cycle order. The order of the first nine entries is
-/// load-bearing for the GUI demo and several tests; the multi-display and
-/// differential modes, and the noisy one after them, were appended so it
-/// stayed unchanged.
-const MODES: [MockModeInfo; 14] = [
-    MockModeInfo {
-        mode: MockMode::DcV,
-        label: "dcv",
-        description: "DC Voltage (sine wave around 5V)",
-        aliases: &["dc-v", "dc_v"],
-    },
-    MockModeInfo {
-        mode: MockMode::AcV,
-        label: "acv",
-        description: "AC Voltage (sine wave around 120V)",
-        aliases: &["ac-v", "ac_v"],
-    },
-    MockModeInfo {
-        mode: MockMode::Ohm,
-        label: "ohm",
-        description: "Resistance (step 1-10 kΩ)",
-        aliases: &["ohms", "resistance"],
-    },
-    MockModeInfo {
-        mode: MockMode::Capacitance,
-        label: "cap",
-        description: "Capacitance (ramp 1-20 µF)",
-        aliases: &["capacitance"],
-    },
-    MockModeInfo {
-        mode: MockMode::Hz,
-        label: "hz",
-        description: "Frequency (sine wave around 60Hz)",
-        aliases: &["freq", "frequency"],
-    },
-    MockModeInfo {
-        mode: MockMode::Temp,
-        label: "temp",
-        description: "Temperature (ramp 20-30°C)",
-        aliases: &["temperature"],
-    },
-    MockModeInfo {
-        mode: MockMode::DcMa,
-        label: "dcma",
-        description: "DC mA (sine wave around 50mA)",
-        aliases: &["dc-ma", "dc_ma", "ma"],
-    },
-    MockModeInfo {
-        mode: MockMode::OhmOl,
-        label: "ohm-ol",
-        description: "Resistance overload (OL)",
-        aliases: &["ohm_ol", "ol", "overload"],
-    },
-    MockModeInfo {
-        mode: MockMode::Ncv,
-        label: "ncv",
-        description: "NCV (cycling levels 0-4)",
-        aliases: &[],
-    },
-    MockModeInfo {
-        mode: MockMode::AcVHz,
-        label: "acv-hz",
-        description: "AC Voltage with frequency and period sub-displays",
-        aliases: &["acvhz", "acv_hz"],
-    },
-    MockModeInfo {
-        mode: MockMode::TempDual,
-        label: "temp2",
-        description: "Temperature with a second thermocouple (T2)",
-        aliases: &["temp-dual", "temp_dual"],
-    },
-    MockModeInfo {
-        mode: MockMode::TempDiff,
-        label: "temp-diff",
-        description: "Temperature difference T1-T2",
-        aliases: &["tempdiff", "temp_diff"],
-    },
-    MockModeInfo {
-        mode: MockMode::TempDiffRev,
-        label: "temp-diff-rev",
-        description: "Temperature difference T2-T1",
-        aliases: &["tempdiffrev", "temp_diff_rev"],
-    },
-    MockModeInfo {
-        mode: MockMode::Noise,
-        label: "noise",
-        description: "DC mV, noisy with spikes (for graph and minimap checks)",
-        aliases: &["noisy", "spikes"],
-    },
-];
-
-/// `MODES` projected to bare variants, so `ALL` can't drift from the table.
-const fn all_modes() -> [MockMode; MODES.len()] {
-    let mut out = [MockMode::DcV; MODES.len()];
+/// [`SCENARIOS`] projected to bare variants, so `ALL` can't drift from the table.
+const fn all_modes() -> [MockMode; SCENARIOS.len()] {
+    let mut out = [MockMode::DcV; SCENARIOS.len()];
     let mut i = 0;
-    while i < MODES.len() {
-        out[i] = MODES[i].mode;
+    while i < SCENARIOS.len() {
+        out[i] = SCENARIOS[i].id;
         i += 1;
     }
     out
@@ -175,32 +77,26 @@ impl MockMode {
     /// All available modes in scenario order.
     pub const ALL: &[MockMode] = &all_modes();
 
-    /// This mode's table row. `every_mode_has_exactly_one_table_entry`
-    /// guarantees the lookup finds one.
-    fn info(self) -> &'static MockModeInfo {
-        MODES
-            .iter()
-            .find(|info| info.mode == self)
-            .expect("MODES must contain every MockMode variant")
+    /// This mode's scenario: its row in [`SCENARIOS`], which lists the
+    /// variants in declaration order.
+    fn scenario(self) -> &'static Scenario {
+        &SCENARIOS[self as usize]
     }
 
     /// Short string label for CLI and display.
     pub fn label(self) -> &'static str {
-        self.info().label
+        self.scenario().label
     }
 
     /// Human-readable description.
     pub fn description(self) -> &'static str {
-        self.info().description
+        self.scenario().description
     }
 
     /// This mode's index in [`MockMode::ALL`] — the id the mock hands to
     /// `Protocol::choices` and takes back in `Protocol::select`.
-    fn choice_id(self) -> Option<u16> {
-        MockMode::ALL
-            .iter()
-            .position(|m| *m == self)
-            .and_then(|i| u16::try_from(i).ok())
+    fn choice_id(self) -> u16 {
+        self as u16
     }
 
     /// Every label, comma-separated: the list `--mock-mode` help and the
@@ -217,7 +113,7 @@ impl MockMode {
     /// [`Self::choice_id`], for a consumer that has to name the scenario it
     /// just picked (the GUI re-pins its Settings row with it).
     pub fn from_choice_id(id: u16) -> Option<MockMode> {
-        MockMode::ALL.get(usize::from(id)).copied()
+        SCENARIOS.get(usize::from(id)).map(|s| s.id)
     }
 }
 
@@ -242,9 +138,9 @@ impl std::str::FromStr for MockMode {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let needle = s.to_lowercase();
-        for info in &MODES {
-            if info.label == needle || info.aliases.contains(&needle.as_str()) {
-                return Ok(info.mode);
+        for scenario in &SCENARIOS {
+            if scenario.label == needle || scenario.aliases.contains(&needle.as_str()) {
+                return Ok(scenario.id);
             }
         }
         Err(format!(
@@ -269,8 +165,8 @@ impl std::fmt::Display for MockMode {
 /// auto-cycling mock keeps auto-cycling — it resumes the cycle from the
 /// selected scenario rather than pinning to it, so the demo keeps moving.
 pub struct MockProtocol {
-    scenarios: Vec<Scenario>,
-    current_scenario: usize,
+    /// The live scenario.
+    current: MockMode,
     /// Session instant the current scenario started. Values are evaluated at
     /// `now - scenario_started`, so the waveform is a smooth function of time
     /// regardless of read cadence. On scenario advance, this is reset to `now`.
@@ -294,8 +190,7 @@ impl MockProtocol {
     pub fn new() -> Self {
         let clock = Clock::real();
         Self {
-            scenarios: scenarios(),
-            current_scenario: 0,
+            current: SCENARIOS[0].id,
             scenario_started: clock.now(),
             clock,
             auto_cycle: true,
@@ -318,14 +213,8 @@ impl MockProtocol {
     /// Create a mock protocol pinned to a specific mode.
     /// The mode repeats indefinitely; use `select`/`select2` commands to switch manually.
     pub fn with_mode(mode: MockMode) -> Self {
-        let all = scenarios();
-        // test_with_mode_covers_all_variants below enforces this lookup can't fail.
-        let idx = all
-            .iter()
-            .position(|s| s.id == mode)
-            .expect("scenarios() must contain every MockMode variant");
         let mut proto = Self::new();
-        proto.current_scenario = idx;
+        proto.current = mode;
         proto.auto_cycle = false;
         proto
     }
@@ -343,15 +232,15 @@ impl MockProtocol {
 
     /// Return the current scenario's `MockMode`.
     pub fn current_mode(&self) -> MockMode {
-        self.scenarios[self.current_scenario].id
+        self.current
     }
 
-    fn current_scenario(&self) -> &Scenario {
-        &self.scenarios[self.current_scenario]
+    fn current_scenario(&self) -> &'static Scenario {
+        self.current.scenario()
     }
 
     fn advance_scenario(&mut self) {
-        self.current_scenario = (self.current_scenario + 1) % self.scenarios.len();
+        self.current = SCENARIOS[(self.current as usize + 1) % SCENARIOS.len()].id;
         self.scenario_started = self.clock.now();
         self.state.leave_scenario();
     }
@@ -414,13 +303,10 @@ impl MockProtocol {
         };
         group
             .iter()
-            .filter_map(|&mode| {
-                let scenario = self.scenarios.iter().find(|s| s.id == mode)?;
-                Some(Choice {
-                    id: mode.choice_id()?,
-                    label: Cow::Borrowed(scenario.mode),
-                    current: mode == live,
-                })
+            .map(|&mode| Choice {
+                id: mode.choice_id(),
+                label: Cow::Borrowed(mode.scenario().mode),
+                current: mode == live,
             })
             .collect()
     }
@@ -431,16 +317,14 @@ impl MockProtocol {
     /// there is no ring to walk, so the scenario is switched outright and its
     /// waveform restarted.
     fn select_scenario(&mut self, id: u16) -> Result<()> {
-        let scenario = MockMode::from_choice_id(id)
-            .and_then(|mode| self.scenarios.iter().position(|s| s.id == mode));
-        let Some(idx) = scenario else {
+        let Some(mode) = MockMode::from_choice_id(id) else {
             return Err(Unsupported::NoSuchChoice {
                 setting: Setting::Mode,
                 id,
             }
             .into());
         };
-        self.current_scenario = idx;
+        self.current = mode;
         self.scenario_started = self.clock.now();
         // A UT61E+ switch never ends held: SELECT clears HOLD, and the
         // driver releases it for the Hz/% press HOLD drops.
@@ -572,9 +456,7 @@ impl Protocol for MockProtocol {
 
     fn request_measurement(&mut self, _transport: &dyn Transport) -> Result<Measurement> {
         let elapsed = self.elapsed_secs();
-        // A copy, so the meter state can be borrowed mutably below while the
-        // reading is still being built from the scenario.
-        let scenario = *self.current_scenario();
+        let scenario = self.current_scenario();
         let raw = (scenario.value_fn)(elapsed, scenario.duration_secs);
         let aux_values = Self::aux_values(
             scenario.aux,
@@ -588,7 +470,7 @@ impl Protocol for MockProtocol {
             mode: Cow::Borrowed(scenario.mode),
             mode_raw: scenario.mode_raw,
             range_raw,
-            range_label: self.range_label(&scenario, range_raw),
+            range_label: self.range_label(scenario, range_raw),
             unit: Cow::Borrowed(scenario.unit),
             display_raw: Self::format_display(&value),
             progress: Self::compute_progress(&value, scenario.range_max),
@@ -623,7 +505,7 @@ impl Protocol for MockProtocol {
 
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
         let elapsed = self.elapsed_secs();
-        let scenario = *self.current_scenario();
+        let scenario = self.current_scenario();
         match command {
             "hold" => {
                 let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
@@ -779,7 +661,7 @@ impl CycleMeter for MockProtocol {
         if live.mode_raw == mode {
             return Cow::Borrowed(live.mode);
         }
-        match self.scenarios.iter().find(|s| s.mode_raw == mode) {
+        match SCENARIOS.iter().find(|s| s.mode_raw == mode) {
             Some(scenario) => Cow::Borrowed(scenario.mode),
             None => Cow::Owned(format!("mode {mode:#06x}")),
         }
@@ -846,7 +728,7 @@ impl CycleMeter for MockProtocol {
 pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     use crate::text::TextKind;
     let by = devices::MOCK.id;
-    for scenario in scenarios() {
+    for scenario in &SCENARIOS {
         out.add(TextKind::Mode, scenario.mode, by);
         out.add(TextKind::Range, scenario.range_label, by);
         for aux in scenario.aux {
@@ -941,34 +823,22 @@ mod tests {
         open_mock_clocked(None, Clock::real())
     }
 
-    /// The table is the single source of truth for `ALL`, `label()`,
-    /// `description()` and `FromStr`; `info()` looks a mode up there instead of
-    /// matching, so a missing or duplicated row must fail here.
-    #[test]
-    fn every_mode_has_exactly_one_table_entry() {
-        assert_eq!(MODES.len(), MockMode::ALL.len());
-        for mode in MockMode::ALL {
-            let matches = MODES.iter().filter(|info| info.mode == *mode).count();
-            assert_eq!(matches, 1, "{mode:?} has {matches} table entries");
-        }
-    }
-
     #[test]
     fn labels_and_aliases_are_unique_and_round_trip() {
         let mut seen: Vec<&str> = Vec::new();
-        for info in &MODES {
-            for name in std::iter::once(&info.label).chain(info.aliases) {
-                assert!(!seen.contains(name), "'{name}' appears twice in MODES");
+        for scenario in &SCENARIOS {
+            for name in std::iter::once(&scenario.label).chain(scenario.aliases) {
+                assert!(!seen.contains(name), "'{name}' appears twice in SCENARIOS");
                 seen.push(name);
                 assert_eq!(
                     name.parse::<MockMode>().unwrap(),
-                    info.mode,
+                    scenario.id,
                     "'{name}' should parse as {:?}",
-                    info.mode
+                    scenario.id
                 );
             }
-            assert_eq!(info.mode.label(), info.label);
-            assert_eq!(info.mode.to_string(), info.label);
+            assert_eq!(scenario.id.label(), scenario.label);
+            assert_eq!(scenario.id.to_string(), scenario.label);
         }
     }
 
@@ -1193,7 +1063,7 @@ mod tests {
     fn profile_max_aux_values_covers_every_scenario() {
         // The CLI and GUI size their fixed sub-value columns from this, so a
         // scenario may never emit more than the profile promises.
-        let widest = scenarios().iter().map(|s| s.aux.len()).max().unwrap_or(0);
+        let widest = SCENARIOS.iter().map(|s| s.aux.len()).max().unwrap_or(0);
         assert_eq!(MockProtocol::new().profile().max_aux_values, widest);
     }
 
@@ -1320,18 +1190,6 @@ mod tests {
         }
 
         proto.send_command(&transport, "exit_minmax").unwrap();
-    }
-
-    #[test]
-    fn test_with_mode_covers_all_variants() {
-        // with_mode() panics if scenarios() is missing a MockMode variant.
-        // Iterate every known variant to guarantee the lookup never fails —
-        // a new variant without a matching scenario would trip this test
-        // before it reaches a caller.
-        for mode in MockMode::ALL {
-            let proto = MockProtocol::with_mode(*mode);
-            assert_eq!(proto.current_mode(), *mode);
-        }
     }
 
     #[test]
@@ -1697,10 +1555,10 @@ mod tests {
 
                 let current: Vec<&Choice> = choices.iter().filter(|c| c.current).collect();
                 assert_eq!(current.len(), 1, "{mode:?} flagged {current:?} as current");
-                assert_eq!(current[0].id, mode.choice_id().unwrap());
+                assert_eq!(current[0].id, mode.choice_id());
 
                 let ids: Vec<u16> = choices.iter().map(|c| c.id).collect();
-                let expected: Vec<u16> = group.iter().map(|m| m.choice_id().unwrap()).collect();
+                let expected: Vec<u16> = group.iter().map(|m| m.choice_id()).collect();
                 assert_eq!(ids, expected, "{mode:?}");
 
                 // The GUI shows these as popup entries, so two choices that
@@ -1751,7 +1609,7 @@ mod tests {
     fn select_mode_switches_the_live_scenario() {
         let transport = NullTransport;
         let mut proto = MockProtocol::with_mode(MockMode::Temp);
-        let id = MockMode::TempDual.choice_id().unwrap();
+        let id = MockMode::TempDual.choice_id();
         proto.select(&transport, Setting::Mode, id).unwrap();
         assert_eq!(proto.current_mode(), MockMode::TempDual);
         let m = proto.request_measurement(&transport).unwrap();
@@ -1766,11 +1624,7 @@ mod tests {
         let clock = Clock::manual();
         let mut proto = MockProtocol::new().with_clock(clock.clone());
         proto
-            .select(
-                &transport,
-                Setting::Mode,
-                MockMode::AcVHz.choice_id().unwrap(),
-            )
+            .select(&transport, Setting::Mode, MockMode::AcVHz.choice_id())
             .unwrap();
         assert_eq!(proto.current_mode(), MockMode::AcVHz);
         // Run the scenario past its duration: the cycle must advance.
@@ -1824,7 +1678,7 @@ mod tests {
         assert!(!proto.request_measurement(&transport).unwrap().flags.hold);
 
         proto.send_command(&transport, "hold").unwrap();
-        let id = MockMode::AcVHz.choice_id().unwrap();
+        let id = MockMode::AcVHz.choice_id();
         proto.select(&transport, Setting::Mode, id).unwrap();
         assert_eq!(proto.current_mode(), MockMode::AcVHz);
         assert!(!proto.request_measurement(&transport).unwrap().flags.hold);
@@ -2091,7 +1945,7 @@ mod tests {
     #[test]
     fn choice_ids_round_trip() {
         for mode in MockMode::ALL {
-            let id = mode.choice_id().expect("every mode has a choice id");
+            let id = mode.choice_id();
             assert_eq!(MockMode::from_choice_id(id), Some(*mode), "{mode:?}");
         }
         assert_eq!(MockMode::from_choice_id(MockMode::ALL.len() as u16), None);

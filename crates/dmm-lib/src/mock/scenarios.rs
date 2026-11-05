@@ -1,8 +1,8 @@
 //! The scenario catalogue: what the mock measures and how its readings move.
 //!
-//! One entry per [`MockMode`], each a mode's fixed fields plus the waveform
-//! its readings trace. Nothing here knows about button presses or meter
-//! state — [`super::state`] holds that.
+//! One entry per [`MockMode`], each a mode's names, its fixed fields and the
+//! waveform its readings trace. Nothing here knows about button presses or
+//! meter state — [`super::state`] holds that.
 
 use std::f64::consts::TAU;
 
@@ -16,12 +16,13 @@ use crate::measurement::{MainLabel, MeasuredValue};
 /// scheduling jitter. Each waveform is periodic over `duration_secs` — it
 /// returns identical values at `t = 0` and `t = duration_secs`, so the
 /// scenario can loop without a visible jump when it wraps.
-///
-/// `Copy` so a reading can be built from a snapshot of the live scenario
-/// while the meter state it is applied to is borrowed mutably.
-#[derive(Clone, Copy)]
 pub(super) struct Scenario {
     pub(super) id: MockMode,
+    /// Short string label for CLI and display.
+    pub(super) label: &'static str,
+    pub(super) description: &'static str,
+    /// Extra spellings `FromStr` accepts, beyond `label`.
+    pub(super) aliases: &'static [&'static str],
     pub(super) mode: &'static str,
     pub(super) mode_raw: u16,
     pub(super) range_raw: u8,
@@ -299,221 +300,281 @@ const TEMP_BOTH_AUX: &[AuxSpec] = &[
     },
 ];
 
-pub(super) fn scenarios() -> Vec<Scenario> {
-    vec![
-        Scenario {
-            id: MockMode::DcV,
-            mode: "DC V",
-            mode_raw: 0x02,
-            range_raw: 1,
-            unit: "V",
-            range_label: "22V",
-            range_max: 22.0,
-            duration_secs: 10.0,
-            value_fn: dcv_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::AcV,
-            mode: "AC V",
-            mode_raw: 0x00,
-            range_raw: 2,
-            unit: "V",
-            range_label: "220V",
-            range_max: 220.0,
-            duration_secs: AC_DURATION_SECS,
-            value_fn: acv_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::Ohm,
-            mode: "\u{03A9}",
-            mode_raw: 0x06,
-            range_raw: 2,
-            unit: "k\u{03A9}",
-            range_label: "22k\u{03A9}",
-            range_max: 22.0,
-            duration_secs: 10.0,
-            value_fn: ohm_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::Capacitance,
-            mode: "Capacitance",
-            mode_raw: 0x09,
-            range_raw: 3,
-            unit: "\u{00B5}F",
-            range_label: "22\u{00B5}F",
-            range_max: 22.0,
-            duration_secs: 10.0,
-            value_fn: cap_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::Hz,
-            mode: "Hz",
-            mode_raw: 0x04,
-            range_raw: 1,
-            unit: "Hz",
-            range_label: "220Hz",
-            range_max: 220.0,
-            duration_secs: 8.0,
-            value_fn: hz_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::Temp,
-            mode: "Temp \u{00B0}C",
-            mode_raw: 0x0A,
-            range_raw: 0,
-            unit: "\u{00B0}C",
-            range_label: "",
-            range_max: 400.0,
-            duration_secs: 8.0,
-            value_fn: temp_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::DcMa,
-            mode: "DC mA",
-            mode_raw: 0x0E,
-            range_raw: 1,
-            unit: "mA",
-            range_label: "220mA",
-            range_max: 220.0,
-            duration_secs: 8.0,
-            value_fn: dcma_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::OhmOl,
-            mode: "\u{03A9}",
-            mode_raw: 0x06,
-            range_raw: 5,
-            unit: "M\u{03A9}",
-            range_label: "22M\u{03A9}",
-            range_max: 22.0,
-            duration_secs: 2.0,
-            value_fn: ohm_ol_value,
-            aux: &[],
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::Ncv,
-            mode: "NCV",
-            mode_raw: 0x14,
-            range_raw: 0,
-            unit: "",
-            range_label: "",
-            range_max: 4.0,
-            duration_secs: 4.0,
-            value_fn: ncv_value,
-            aux: &[],
-            main_label: None,
-        },
-        // Multi-display scenarios, appended so the auto-cycle order of the
-        // single-display ones above is unchanged. They exercise the
-        // `aux_values` path (UT181A, UT171) without the hardware.
-        //
-        // Their mode strings name the sub-displays, as a multi-display meter
-        // does — the UT181A calls `0x1121` "V AC Hz", not "V AC". Without
-        // that, each of these read identically to the single-display scenario
-        // it sits beside, and the mode selector would offer two entries with
-        // the same label.
-        Scenario {
-            id: MockMode::AcVHz,
-            mode: "AC V Hz",
-            mode_raw: 0x00,
-            range_raw: 2,
-            unit: "V",
-            range_label: "220V",
-            range_max: 220.0,
-            duration_secs: AC_DURATION_SECS,
-            value_fn: acv_value,
-            aux: ACV_HZ_AUX,
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::TempDual,
-            mode: "Temp \u{00B0}C T1 (T2)",
-            mode_raw: 0x0A,
-            range_raw: 0,
-            unit: "\u{00B0}C",
-            range_label: "",
-            range_max: 400.0,
-            duration_secs: 8.0,
-            value_fn: temp_value,
-            aux: TEMP_DUAL_AUX,
-            main_label: Some(MainLabel::T1),
-        },
-        // The temperature dial's two arithmetic arrangements, so the mode
-        // group has the four entries a real UT181A offers there. They run on
-        // the same 8 s clock as `temp` and `temp2` and subtract those very
-        // waveforms, so the four readings agree with each other, and carry
-        // both probes beside the difference the way the meter does.
-        Scenario {
-            id: MockMode::TempDiff,
-            mode: "Temp \u{00B0}C T1-T2",
-            mode_raw: 0x0A,
-            range_raw: 0,
-            unit: "\u{00B0}C",
-            range_label: "",
-            range_max: 400.0,
-            duration_secs: 8.0,
-            value_fn: temp_diff_value,
-            aux: TEMP_BOTH_AUX,
-            main_label: None,
-        },
-        Scenario {
-            id: MockMode::TempDiffRev,
-            mode: "Temp \u{00B0}C T2-T1",
-            mode_raw: 0x0A,
-            range_raw: 0,
-            unit: "\u{00B0}C",
-            range_label: "",
-            range_max: 400.0,
-            duration_secs: 8.0,
-            value_fn: temp_diff_rev_value,
-            aux: TEMP_BOTH_AUX,
-            main_label: None,
-        },
-        // Appended last for the reason the block above was: the auto-cycle
-        // order of everything before it stays unchanged.
-        //
-        // The one scenario that is not a smooth curve, and the one that runs
-        // a minute — the spike trains need room to repeat, and a graph filled
-        // with a minute of 100 ms samples is what the minimap has to condense.
-        Scenario {
-            id: MockMode::Noise,
-            mode: "DC mV",
-            mode_raw: 0x03,
-            range_raw: 0,
-            unit: "mV",
-            range_label: "220mV",
-            range_max: 220.0,
-            duration_secs: 60.0,
-            value_fn: noise_value,
-            aux: &[],
-            main_label: None,
-        },
-    ]
-}
+/// Every scenario, in auto-cycle order, which is also [`MockMode`]'s
+/// declaration order: a mode's index here is its discriminant, its place in
+/// [`MockMode::ALL`] and its `Protocol::choices` id. The order of the first
+/// nine entries is load-bearing for the GUI demo and several tests; the
+/// multi-display and differential modes, and the noisy one after them, were
+/// appended so it stayed unchanged.
+pub(super) static SCENARIOS: [Scenario; 14] = [
+    Scenario {
+        id: MockMode::DcV,
+        label: "dcv",
+        description: "DC Voltage (sine wave around 5V)",
+        aliases: &["dc-v", "dc_v"],
+        mode: "DC V",
+        mode_raw: 0x02,
+        range_raw: 1,
+        unit: "V",
+        range_label: "22V",
+        range_max: 22.0,
+        duration_secs: 10.0,
+        value_fn: dcv_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::AcV,
+        label: "acv",
+        description: "AC Voltage (sine wave around 120V)",
+        aliases: &["ac-v", "ac_v"],
+        mode: "AC V",
+        mode_raw: 0x00,
+        range_raw: 2,
+        unit: "V",
+        range_label: "220V",
+        range_max: 220.0,
+        duration_secs: AC_DURATION_SECS,
+        value_fn: acv_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::Ohm,
+        label: "ohm",
+        description: "Resistance (step 1-10 kΩ)",
+        aliases: &["ohms", "resistance"],
+        mode: "\u{03A9}",
+        mode_raw: 0x06,
+        range_raw: 2,
+        unit: "k\u{03A9}",
+        range_label: "22k\u{03A9}",
+        range_max: 22.0,
+        duration_secs: 10.0,
+        value_fn: ohm_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::Capacitance,
+        label: "cap",
+        description: "Capacitance (ramp 1-20 µF)",
+        aliases: &["capacitance"],
+        mode: "Capacitance",
+        mode_raw: 0x09,
+        range_raw: 3,
+        unit: "\u{00B5}F",
+        range_label: "22\u{00B5}F",
+        range_max: 22.0,
+        duration_secs: 10.0,
+        value_fn: cap_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::Hz,
+        label: "hz",
+        description: "Frequency (sine wave around 60Hz)",
+        aliases: &["freq", "frequency"],
+        mode: "Hz",
+        mode_raw: 0x04,
+        range_raw: 1,
+        unit: "Hz",
+        range_label: "220Hz",
+        range_max: 220.0,
+        duration_secs: 8.0,
+        value_fn: hz_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::Temp,
+        label: "temp",
+        description: "Temperature (ramp 20-30°C)",
+        aliases: &["temperature"],
+        mode: "Temp \u{00B0}C",
+        mode_raw: 0x0A,
+        range_raw: 0,
+        unit: "\u{00B0}C",
+        range_label: "",
+        range_max: 400.0,
+        duration_secs: 8.0,
+        value_fn: temp_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::DcMa,
+        label: "dcma",
+        description: "DC mA (sine wave around 50mA)",
+        aliases: &["dc-ma", "dc_ma", "ma"],
+        mode: "DC mA",
+        mode_raw: 0x0E,
+        range_raw: 1,
+        unit: "mA",
+        range_label: "220mA",
+        range_max: 220.0,
+        duration_secs: 8.0,
+        value_fn: dcma_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::OhmOl,
+        label: "ohm-ol",
+        description: "Resistance overload (OL)",
+        aliases: &["ohm_ol", "ol", "overload"],
+        mode: "\u{03A9}",
+        mode_raw: 0x06,
+        range_raw: 5,
+        unit: "M\u{03A9}",
+        range_label: "22M\u{03A9}",
+        range_max: 22.0,
+        duration_secs: 2.0,
+        value_fn: ohm_ol_value,
+        aux: &[],
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::Ncv,
+        label: "ncv",
+        description: "NCV (cycling levels 0-4)",
+        aliases: &[],
+        mode: "NCV",
+        mode_raw: 0x14,
+        range_raw: 0,
+        unit: "",
+        range_label: "",
+        range_max: 4.0,
+        duration_secs: 4.0,
+        value_fn: ncv_value,
+        aux: &[],
+        main_label: None,
+    },
+    // Multi-display scenarios, appended so the auto-cycle order of the
+    // single-display ones above is unchanged. They exercise the
+    // `aux_values` path (UT181A, UT171) without the hardware.
+    //
+    // Their mode strings name the sub-displays, as a multi-display meter
+    // does — the UT181A calls `0x1121` "V AC Hz", not "V AC". Without
+    // that, each of these read identically to the single-display scenario
+    // it sits beside, and the mode selector would offer two entries with
+    // the same label.
+    Scenario {
+        id: MockMode::AcVHz,
+        label: "acv-hz",
+        description: "AC Voltage with frequency and period sub-displays",
+        aliases: &["acvhz", "acv_hz"],
+        mode: "AC V Hz",
+        mode_raw: 0x00,
+        range_raw: 2,
+        unit: "V",
+        range_label: "220V",
+        range_max: 220.0,
+        duration_secs: AC_DURATION_SECS,
+        value_fn: acv_value,
+        aux: ACV_HZ_AUX,
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::TempDual,
+        label: "temp2",
+        description: "Temperature with a second thermocouple (T2)",
+        aliases: &["temp-dual", "temp_dual"],
+        mode: "Temp \u{00B0}C T1 (T2)",
+        mode_raw: 0x0A,
+        range_raw: 0,
+        unit: "\u{00B0}C",
+        range_label: "",
+        range_max: 400.0,
+        duration_secs: 8.0,
+        value_fn: temp_value,
+        aux: TEMP_DUAL_AUX,
+        main_label: Some(MainLabel::T1),
+    },
+    // The temperature dial's two arithmetic arrangements, so the mode
+    // group has the four entries a real UT181A offers there. They run on
+    // the same 8 s clock as `temp` and `temp2` and subtract those very
+    // waveforms, so the four readings agree with each other, and carry
+    // both probes beside the difference the way the meter does.
+    Scenario {
+        id: MockMode::TempDiff,
+        label: "temp-diff",
+        description: "Temperature difference T1-T2",
+        aliases: &["tempdiff", "temp_diff"],
+        mode: "Temp \u{00B0}C T1-T2",
+        mode_raw: 0x0A,
+        range_raw: 0,
+        unit: "\u{00B0}C",
+        range_label: "",
+        range_max: 400.0,
+        duration_secs: 8.0,
+        value_fn: temp_diff_value,
+        aux: TEMP_BOTH_AUX,
+        main_label: None,
+    },
+    Scenario {
+        id: MockMode::TempDiffRev,
+        label: "temp-diff-rev",
+        description: "Temperature difference T2-T1",
+        aliases: &["tempdiffrev", "temp_diff_rev"],
+        mode: "Temp \u{00B0}C T2-T1",
+        mode_raw: 0x0A,
+        range_raw: 0,
+        unit: "\u{00B0}C",
+        range_label: "",
+        range_max: 400.0,
+        duration_secs: 8.0,
+        value_fn: temp_diff_rev_value,
+        aux: TEMP_BOTH_AUX,
+        main_label: None,
+    },
+    // Appended last for the reason the block above was: the auto-cycle
+    // order of everything before it stays unchanged.
+    //
+    // The one scenario that is not a smooth curve, and the one that runs
+    // a minute — the spike trains need room to repeat, and a graph filled
+    // with a minute of 100 ms samples is what the minimap has to condense.
+    Scenario {
+        id: MockMode::Noise,
+        label: "noise",
+        description: "DC mV, noisy with spikes (for graph and minimap checks)",
+        aliases: &["noisy", "spikes"],
+        mode: "DC mV",
+        mode_raw: 0x03,
+        range_raw: 0,
+        unit: "mV",
+        range_label: "220mV",
+        range_max: 220.0,
+        duration_secs: 60.0,
+        value_fn: noise_value,
+        aux: &[],
+        main_label: None,
+    },
+];
+
+// `MockMode::scenario` indexes the table by discriminant, so every entry must
+// sit at its own variant's index, and the table must reach the last variant
+// (`Noise` — a variant declared after it moves the second check there).
+const _: () = {
+    let mut i = 0;
+    while i < SCENARIOS.len() {
+        assert!(
+            SCENARIOS[i].id as usize == i,
+            "SCENARIOS must list MockMode's variants in declaration order"
+        );
+        i += 1;
+    }
+    assert!(
+        MockMode::Noise as usize + 1 == SCENARIOS.len(),
+        "SCENARIOS must have one entry per MockMode variant"
+    );
+};
 
 /// Duration of the scenario driving `mode`, for sampling its waveforms.
 #[cfg(test)]
 pub(super) fn scenario_duration(mode: MockMode) -> f64 {
-    scenarios()
-        .into_iter()
-        .find(|s| s.id == mode)
-        .unwrap_or_else(|| panic!("no scenario for {mode:?}"))
-        .duration_secs
+    mode.scenario().duration_secs
 }
 
 #[cfg(test)]
@@ -524,7 +585,7 @@ mod tests {
     /// make the whole scenario NaN. All current entries use 2–20 s.
     #[test]
     fn every_scenario_has_a_positive_duration() {
-        for s in scenarios() {
+        for s in &SCENARIOS {
             assert!(s.duration_secs > 0.0, "{:?}: {}", s.id, s.duration_secs);
         }
     }
@@ -585,7 +646,7 @@ mod tests {
             }
         }
 
-        for s in scenarios() {
+        for s in &SCENARIOS {
             assert_loops(
                 &(s.value_fn)(0.0, s.duration_secs),
                 &(s.value_fn)(s.duration_secs, s.duration_secs),
