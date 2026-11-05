@@ -498,6 +498,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::{headless_frame, headless_run};
     use crate::settings::{HexColor, PaletteOverrides, Settings};
     use eframe::egui::Color32;
 
@@ -540,8 +541,7 @@ mod tests {
                 .native_pixels_per_point = Some(native);
             // Twice: a zoom set during a pass applies from the next one.
             for _ in 0..2 {
-                let mut out = ctx.run_ui(raw.clone(), |ui| app.apply_zoom(ui.ctx()));
-                out.textures_delta.clear();
+                headless_run(&ctx, raw.clone(), |ui| app.apply_zoom(ui.ctx()));
             }
             assert!(
                 (ctx.pixels_per_point() - native * 1.5).abs() < 1e-4,
@@ -888,11 +888,10 @@ mod tests {
                     system_theme: Some(os),
                     ..Default::default()
                 };
-                let mut out = ctx.run_ui(raw, |ui| {
+                headless_run(&ctx, raw, |ui| {
                     app.apply_theme(ui.ctx());
                     app.apply_color_overrides(ui.ctx());
                 });
-                out.textures_delta.clear();
                 let style = ctx.global_style();
                 assert_eq!(style.visuals.dark_mode, dark, "dark={dark} os={os:?}");
                 assert_eq!(
@@ -923,11 +922,10 @@ mod tests {
                 system_theme: Some(os),
                 ..Default::default()
             };
-            let mut out = ctx.run_ui(raw, |ui| {
+            let out = headless_run(&ctx, raw, |ui| {
                 app.apply_theme(ui.ctx());
                 app.apply_color_overrides(ui.ctx());
             });
-            out.textures_delta.clear();
             assert!(
                 !out.viewport_output.values().any(|v| v
                     .commands
@@ -981,7 +979,7 @@ mod tests {
         let ctx = crate::app::styled_context();
         ctx.set_fonts(font_definitions());
         let font = egui::FontId::proportional(12.0);
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             let atlas_rect = |text: &str| {
                 let galley = ui.painter().layout_no_wrap(
                     text.to_string(),
@@ -995,7 +993,6 @@ mod tests {
                 assert_ne!(atlas_rect(arrow), replacement, "{arrow:?}");
             }
         });
-        out.textures_delta.clear();
     }
 
     /// `apply_theme` puts egui's stock visuals back, so it has to set the

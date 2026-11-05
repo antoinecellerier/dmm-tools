@@ -445,7 +445,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::{key_tap, test_app};
+    use crate::app::test_support::{a11y, headless_frame, key_tap, test_app};
     use eframe::egui::accesskit::{Node, NodeId};
     use eframe::egui::{Id, Pos2, Rect, vec2};
 
@@ -475,37 +475,21 @@ mod tests {
         screen: Rect,
         events: Vec<egui::Event>,
     ) -> TestFrame {
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                screen_rect: Some(screen),
-                events,
-                time: Some(next_second()),
-                ..Default::default()
-            },
-            |ui| {
-                let ctx = ui.ctx().clone();
-                app.handle_shortcut_help_keys(&ctx);
-                // A widget under the modal, low enough to be where an
-                // unhandled ArrowDown would send the focus: egui searches its
-                // focus cache, which keeps whatever registered interest
-                // before the modal opened — the real top bar included.
-                ui.add_space(screen.height() - 40.0);
-                let _ = ui.add_sized(
-                    vec2(screen.width(), 20.0),
-                    egui::Button::new("under the modal"),
-                );
-                app.show_shortcut_help(&ctx);
-            },
-        );
-        // epaint 0.36 added a `Drop` guard on `TexturesDelta` that
-        // debug-asserts the deltas were applied. This harness renders without
-        // a painter, so discard them explicitly.
-        out.textures_delta.clear();
-        let (nodes, focus) = out
-            .platform_output
-            .accesskit_update
-            .map(|update| (update.nodes, Some(update.focus)))
-            .unwrap_or_default();
+        let out = headless_frame(ctx, Some(screen), Some(next_second()), events, |ui| {
+            let ctx = ui.ctx().clone();
+            app.handle_shortcut_help_keys(&ctx);
+            // A widget under the modal, low enough to be where an
+            // unhandled ArrowDown would send the focus: egui searches its
+            // focus cache, which keeps whatever registered interest
+            // before the modal opened — the real top bar included.
+            ui.add_space(screen.height() - 40.0);
+            let _ = ui.add_sized(
+                vec2(screen.width(), 20.0),
+                egui::Button::new("under the modal"),
+            );
+            app.show_shortcut_help(&ctx);
+        });
+        let (nodes, focus) = a11y(&out);
         TestFrame { nodes, focus }
     }
 

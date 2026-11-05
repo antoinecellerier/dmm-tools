@@ -995,6 +995,7 @@ mod tests {
     use super::aux_grid::AuxRowRects;
     use super::readout::{MODE_READOUT, RANGE_READOUT, show_choice_readout};
     use super::*;
+    use crate::app::test_support::{a11y, click_frames, headless_frame, to_rect};
     use crate::listbox::LIVE_CHOICE_MARK;
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::AuxValue;
@@ -1043,12 +1044,9 @@ mod tests {
         let mut rects = Vec::new();
         for _ in 0..3 {
             rects.clear();
-            let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
+            headless_frame(&ctx, None, None, vec![], |ui| {
                 rects = show_aux_rows(ui, en(), aux_grid_id(ui), m, font_size, &tc);
             });
-            // See `run_frame`: epaint 0.36 debug-asserts that texture deltas
-            // were applied before being dropped.
-            out.textures_delta.clear();
         }
         rects
     }
@@ -1102,11 +1100,10 @@ mod tests {
         let tc = crate::settings::Settings::default().theme_colors(true);
         let mut job = LayoutJob::default();
         let mut weak = Color32::TRANSPARENT;
-        let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             job = aux_summary_job(ui, en(), &m, &tc);
             weak = ui.visuals().weak_text_color();
         });
-        out.textures_delta.clear();
 
         assert_eq!(job.text, m.aux_summary());
         // `append` merges neighbours of one format into a section, and the
@@ -1150,7 +1147,7 @@ mod tests {
                 ..ReadingState::PLAIN
             };
             let mut width = 0.0;
-            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            headless_frame(&ctx, None, None, vec![], |ui| {
                 width = ui
                     .horizontal(|ui| {
                         show_flags(
@@ -1167,7 +1164,6 @@ mod tests {
                     .rect
                     .width();
             });
-            out.textures_delta.clear();
             width
         };
         let inside = width(Some(Zone::Inside), true);
@@ -1197,7 +1193,7 @@ mod tests {
         let ranges = range_choices();
         let mut rects = [egui::Rect::NOTHING; 3];
         for _ in 0..2 {
-            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            headless_frame(&ctx, None, None, vec![], |ui| {
                 let mut row = |ui: &mut Ui| {
                     let mode = ui
                         .scope(|ui| {
@@ -1235,7 +1231,6 @@ mod tests {
                     });
                 }
             });
-            out.textures_delta.clear();
         }
         rects
     }
@@ -1289,14 +1284,13 @@ mod tests {
         let tc = crate::settings::Settings::default().theme_colors(true);
         let mut rect = egui::Rect::NOTHING;
         for _ in 0..3 {
-            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            headless_frame(&ctx, None, None, vec![], |ui| {
                 let id = aux_grid_id(ui);
                 rect = ui
                     .scope(|ui| show_aux_rows(ui, en(), id, m, font_size, &tc))
                     .response
                     .rect;
             });
-            out.textures_delta.clear();
         }
         rect
     }
@@ -1306,11 +1300,10 @@ mod tests {
         let tc = crate::settings::Settings::default().theme_colors(true);
         let mut metrics = None;
         let mut min_cell = Vec2::ZERO;
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             metrics = AuxGridMetrics::measure(ui, en(), m, font_size, &tc);
             min_cell = ui.spacing().interact_size;
         });
-        out.textures_delta.clear();
         (metrics.expect("the reading has sub-values"), min_cell)
     }
 
@@ -1352,11 +1345,7 @@ mod tests {
             .iter()
             .find(|(_, n)| n.live().is_none() && n.value().is_some_and(|t| t.contains(needle)))
             .unwrap_or_else(|| panic!("no label reads {needle:?}"));
-        let b = node.bounds().expect("drawn widgets have bounds");
-        egui::Rect::from_min_max(
-            egui::pos2(b.x0 as f32, b.y0 as f32),
-            egui::pos2(b.x1 as f32, b.y1 as f32),
-        )
+        to_rect(node.bounds().expect("drawn widgets have bounds"))
     }
 
     /// Value │ sub-values │ mode: the three blocks run left to right and sit
@@ -1415,7 +1404,7 @@ mod tests {
                 let mut lines = [Vec2::ZERO; 2];
                 for (i, beside) in [false, true].into_iter().enumerate() {
                     for _ in 0..3 {
-                        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                        headless_frame(&ctx, None, None, vec![], |ui| {
                             lines[i] = if beside {
                                 show_reading_beside(ui, &plain(&tc, choices), &m, size).1
                             } else {
@@ -1429,7 +1418,6 @@ mod tests {
                                 .1
                             };
                         });
-                        out.textures_delta.clear();
                     }
                 }
                 let [below, beside] = lines;
@@ -1454,7 +1442,7 @@ mod tests {
         // shows as the closure running twice.
         let passes = |beside: bool| {
             let mut passes = 0;
-            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            headless_frame(&ctx, None, None, vec![], |ui| {
                 passes += 1;
                 if beside {
                     let _ = show_reading_beside(ui, &plain(&tc, Default::default()), &m, 130.0);
@@ -1468,7 +1456,6 @@ mod tests {
                     );
                 }
             });
-            out.textures_delta.clear();
             passes
         };
         for _ in 0..3 {
@@ -1612,23 +1599,8 @@ mod tests {
     ) -> Frame {
         ctx.enable_accesskit();
         let mut picked = None;
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                events,
-                time,
-                ..Default::default()
-            },
-            |ui| picked = draw(ui),
-        );
-        // epaint 0.36 added a `Drop` guard on `TexturesDelta` that
-        // debug-asserts the deltas were applied. This harness renders without
-        // a painter, so discard them explicitly.
-        out.textures_delta.clear();
-        let (nodes, focus) = out
-            .platform_output
-            .accesskit_update
-            .map(|update| (update.nodes, Some(update.focus)))
-            .unwrap_or_default();
+        let out = headless_frame(ctx, None, time, events, |ui| picked = draw(ui));
+        let (nodes, focus) = a11y(&out);
         Frame {
             picked,
             nodes,
@@ -1670,21 +1642,7 @@ mod tests {
     }
 
     fn centre(node: &Node) -> egui::Pos2 {
-        let b = node.bounds().expect("drawn widgets have bounds");
-        egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32)
-    }
-
-    fn pointer(pos: egui::Pos2, pressed: Option<bool>) -> Vec<egui::Event> {
-        let mut events = vec![egui::Event::PointerMoved(pos)];
-        if let Some(pressed) = pressed {
-            events.push(egui::Event::PointerButton {
-                pos,
-                button: egui::PointerButton::Primary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            });
-        }
-        events
+        to_rect(node.bounds().expect("drawn widgets have bounds")).center()
     }
 
     /// Click `pos` the way a mouse does — move, press, release on successive
@@ -1694,9 +1652,10 @@ mod tests {
         pos: egui::Pos2,
         mut draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
     ) -> Frame {
-        run_frame(ctx, pointer(pos, None), &mut draw);
-        run_frame(ctx, pointer(pos, Some(true)), &mut draw);
-        run_frame(ctx, pointer(pos, Some(false)), &mut draw)
+        let [moved, pressed, released] = click_frames(pos, egui::PointerButton::Primary);
+        run_frame(ctx, moved, &mut draw);
+        run_frame(ctx, pressed, &mut draw);
+        run_frame(ctx, released, &mut draw)
     }
 
     /// Meters without remote mode selection keep the readout they had: a

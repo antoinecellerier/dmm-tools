@@ -665,6 +665,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::headless_frame;
 
     /// Rows are rendered per OS, so the tests that pin their text say which
     /// OS they are pinning. `Nix` is the `Ctrl` rendering — the one the docs
@@ -864,10 +865,9 @@ mod tests {
         let ctx = crate::app::styled_context();
         let l10n = crate::l10n::english();
         let mut keys = (String::new(), String::new());
-        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             keys = Shortcut::help_keys(ui.ctx(), &l10n);
         });
-        output.textures_delta.clear();
         assert_eq!(keys, ("?".to_string(), "F1".to_string()));
     }
 
@@ -884,14 +884,11 @@ mod tests {
         // exist inside a pass.
         let l10n = crate::l10n::english();
         let mut rows = Vec::new();
-        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             rows = help_rows(ui.ctx(), &l10n, false)
                 .map(|(key, action, inert)| (key, action.into_owned(), inert))
                 .collect::<Vec<_>>();
         });
-        // The pass built a font atlas that a real app would upload; nothing
-        // here paints, and TexturesDelta panics if it is dropped unapplied.
-        output.textures_delta.clear();
 
         let (connect, _, _) = &rows[0];
         assert!(
@@ -932,14 +929,13 @@ mod tests {
         let ctx = crate::app::styled_context();
         app.connect(&ctx);
         assert_eq!(app.connection.state, ConnectionState::Connecting);
-        let mut out = ctx.run_ui(
-            egui::RawInput {
-                events: crate::app::test_support::key_tap_with(Key::O, Modifiers::COMMAND),
-                ..Default::default()
-            },
+        headless_frame(
+            &ctx,
+            None,
+            None,
+            crate::app::test_support::key_tap_with(Key::O, Modifiers::COMMAND),
             |ui| app.handle_keyboard_shortcuts(ui.ctx()),
         );
-        out.textures_delta.clear();
         assert_eq!(app.connection.state, ConnectionState::Disconnected);
         assert!(app.connection.worker.is_none(), "no second open");
     }

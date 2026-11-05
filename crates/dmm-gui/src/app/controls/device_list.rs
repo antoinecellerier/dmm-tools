@@ -349,27 +349,21 @@ fn navigate_columns(ctx: &egui::Context, entries: &[(egui::Response, Option<usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::headless_frame;
 
     /// The layout a frame of a `width`-wide window gets, with a frame run
     /// first so a zoom set before it has settled.
     fn layout_at(ctx: &egui::Context, width: f32) -> DeviceListLayout {
         let mut layout = None;
         for _ in 0..2 {
-            let input = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(width, 800.0),
-                )),
-                ..Default::default()
-            };
-            let mut out = ctx.run_ui(input, |ui| {
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 800.0));
+            headless_frame(ctx, Some(screen), None, vec![], |ui| {
                 layout = Some(DeviceListLayout::current(
                     ui.ctx(),
                     ui.style(),
                     &crate::l10n::english(),
                 ));
             });
-            out.textures_delta.clear();
         }
         layout.expect("the frame ran")
     }

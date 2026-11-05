@@ -1278,6 +1278,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::{a11y, click_frames, headless_frame, node_rect, to_rect};
     use egui::accesskit::{Node, NodeId};
 
     fn app(device: &str, mock_mode: &str) -> App {
@@ -1464,16 +1465,9 @@ mod tests {
         let mut frame = eframe::Frame::_new_kittest();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
         let mut run = |app: &mut App, events: Vec<egui::Event>| {
-            let mut o = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    events,
-                    ..Default::default()
-                },
-                |ui| eframe::App::ui(app, ui, &mut frame),
-            );
-            o.textures_delta.clear();
-            o
+            headless_frame(&ctx, Some(screen), None, events, |ui| {
+                eframe::App::ui(app, ui, &mut frame)
+            })
         };
         let mut out = run(app, vec![]);
         for _ in 0..3 {
@@ -1481,15 +1475,10 @@ mod tests {
         }
         for (i, click) in clicks.iter().enumerate() {
             let (pos, button) = click(app, &out).unwrap_or_else(|| panic!("click {i}: no target"));
-            let press = |pressed| egui::Event::PointerButton {
-                pos,
-                button,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            };
-            run(app, vec![egui::Event::PointerMoved(pos)]);
-            run(app, vec![egui::Event::PointerMoved(pos), press(true)]);
-            out = run(app, vec![egui::Event::PointerMoved(pos), press(false)]);
+            let [moved, pressed, released] = click_frames(pos, button);
+            run(app, moved);
+            run(app, pressed);
+            out = run(app, released);
             for _ in 0..4 {
                 out = run(app, vec![]);
             }
@@ -1499,11 +1488,7 @@ mod tests {
 
     /// The centre of the first AccessKit node whose label `label` accepts.
     fn node_centre(out: &egui::FullOutput, label: impl Fn(&str) -> bool) -> Option<egui::Pos2> {
-        a11y_nodes(out)
-            .iter()
-            .find(|(_, n)| n.label().is_some_and(&label))
-            .and_then(|(_, n)| n.bounds())
-            .map(|b| egui::pos2((b.x0 + b.x1) as f32 / 2.0, (b.y0 + b.y1) as f32 / 2.0))
+        node_rect(&a11y(out).0, |n| n.label().is_some_and(&label)).map(|r| r.center())
     }
 
     /// Connected to the mock UT61E+, with a few seconds of its readings
@@ -1542,21 +1527,12 @@ mod tests {
         for clipped in &out.shapes {
             walk(&clipped.shape, &mut texts);
         }
-        for (_, node) in a11y_nodes(out) {
+        for (_, node) in a11y(out).0 {
             texts.extend(node.label().map(str::to_string));
             texts.extend(node.value().map(str::to_string));
             texts.extend(node.description().map(str::to_string));
         }
         texts
-    }
-
-    /// The AccessKit nodes a frame sent.
-    fn a11y_nodes(out: &egui::FullOutput) -> Vec<(NodeId, Node)> {
-        out.platform_output
-            .accesskit_update
-            .clone()
-            .map(|u| u.nodes)
-            .unwrap_or_default()
     }
 
     /// Text that never went through the localizer shows unbracketed under
@@ -1781,7 +1757,8 @@ mod tests {
         for english in ["V DC REL", "Max", "ZERO", "DC"] {
             assert!(!texts.contains(english), "{english:?} drawn in {texts:#?}");
         }
-        let chip = a11y_nodes(&out)
+        let chip = a11y(&out)
+            .0
             .into_iter()
             .find(|(_, n)| n.label() == Some("Show Maxi trace"))
             .map(|(_, n)| n.toggled())
@@ -2063,21 +2040,8 @@ mod tests {
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
         let mut nodes = Vec::new();
         for _ in 0..6 {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    ..Default::default()
-                },
-                |ui| draw(app, ui),
-            );
-            // epaint 0.36 debug-asserts on dropping unapplied texture deltas;
-            // this harness renders without a painter.
-            out.textures_delta.clear();
-            nodes = out
-                .platform_output
-                .accesskit_update
-                .map(|update| update.nodes)
-                .unwrap_or_default();
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| draw(app, ui));
+            nodes = a11y(&out).0;
         }
         nodes
     }
@@ -2112,11 +2076,7 @@ mod tests {
         let (_, node) = nodes
             .iter()
             .find(|(_, n)| node_text(n).is_some_and(|t| t.contains(needle)))?;
-        let b = node.bounds().expect("a drawn label has bounds");
-        Some(egui::Rect::from_min_max(
-            egui::pos2(b.x0 as f32, b.y0 as f32),
-            egui::pos2(b.x1 as f32, b.y1 as f32),
-        ))
+        Some(to_rect(node.bounds().expect("a drawn label has bounds")))
     }
 
     /// The big meter fills the window with the reading, so the connection
@@ -2156,11 +2116,7 @@ mod tests {
     /// region's sentence and the top bar's longer strings never match.
     fn label_exact(nodes: &[(NodeId, Node)], text: &str) -> Option<egui::Rect> {
         let (_, node) = nodes.iter().find(|(_, n)| n.value() == Some(text))?;
-        let b = node.bounds().expect("a drawn label has bounds");
-        Some(egui::Rect::from_min_max(
-            egui::pos2(b.x0 as f32, b.y0 as f32),
-            egui::pos2(b.x1 as f32, b.y1 as f32),
-        ))
+        Some(to_rect(node.bounds().expect("a drawn label has bounds")))
     }
 
     /// The user's case: a T2-T1 difference with T1 and T2 under it, in a

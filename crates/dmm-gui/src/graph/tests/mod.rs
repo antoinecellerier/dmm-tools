@@ -2,7 +2,7 @@
 
 use super::view::pad_range;
 use super::*;
-use crate::app::test_support::key_tap;
+use crate::app::test_support::{a11y, click_frames, headless_frame, key_tap, node_rect};
 use crate::settings::{ColorPreset, PaletteOverrides};
 use std::time::Duration;
 
@@ -167,25 +167,16 @@ fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
 /// [`graph_frame`] in `l10n`'s language.
 fn graph_frame_in(l10n: &Localizer, g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
-    let mut output = ctx.run_ui(
-        egui::RawInput {
-            screen_rect: Some(gesture_screen()),
-            events,
-            ..Default::default()
-        },
-        |ui| {
-            g.show(
-                ui,
-                l10n,
-                &tc,
-                &crate::markers::Markers::default(),
-                None,
-                NO_DIGITS,
-            )
-        },
-    );
-    // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
-    output.textures_delta.clear();
+    headless_frame(ctx, Some(gesture_screen()), None, events, |ui| {
+        g.show(
+            ui,
+            l10n,
+            &tc,
+            &crate::markers::Markers::default(),
+            None,
+            NO_DIGITS,
+        )
+    });
 }
 
 /// A reading a second for `secs` seconds on a 10 s window, and when it began.

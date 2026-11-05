@@ -727,7 +727,9 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::{key_tap, test_app};
+    use crate::app::test_support::{
+        a11y, click_frames, headless_frame, key_tap, test_app, to_rect,
+    };
 
     use crate::app::language::LanguageChoice;
     use crate::app::update_check::{Tag, UpdateCheck};
@@ -787,38 +789,24 @@ mod tests {
             let mut scrolled = None;
             let app = &mut self.app;
             self.seconds += secs;
-            let mut out = self.ctx.run_ui(
-                egui::RawInput {
-                    // In points, as egui-winit passes it: the window's size
-                    // over the scale, so a zoom shrinks it as on screen.
-                    screen_rect: Some(Rect::from_min_size(
-                        Pos2::ZERO,
-                        self.screen.size() / self.ctx.pixels_per_point(),
-                    )),
-                    events,
-                    time: Some(self.seconds),
-                    ..Default::default()
-                },
-                |ui| {
-                    // As the app does at the start of every frame.
-                    app.apply_zoom(ui.ctx());
-                    panel = egui::Panel::top("top_bar")
-                        .show(ui, |ui| {
-                            let ctx = ui.ctx().clone();
-                            app.show_top_bar(ui, &ctx);
-                            bar_bottom = ui.min_rect().bottom();
-                            scrolled = app.show_settings_panel(ui);
-                        })
-                        .response
-                        .rect;
-                },
-            );
-            out.textures_delta.clear();
-            let (nodes, focus) = out
-                .platform_output
-                .accesskit_update
-                .map(|update| (update.nodes, Some(update.focus)))
-                .unwrap_or_default();
+            // In points, as egui-winit passes it: the window's size over the
+            // scale, so a zoom shrinks it as on screen.
+            let screen =
+                Rect::from_min_size(Pos2::ZERO, self.screen.size() / self.ctx.pixels_per_point());
+            let out = headless_frame(&self.ctx, Some(screen), Some(self.seconds), events, |ui| {
+                // As the app does at the start of every frame.
+                app.apply_zoom(ui.ctx());
+                panel = egui::Panel::top("top_bar")
+                    .show(ui, |ui| {
+                        let ctx = ui.ctx().clone();
+                        app.show_top_bar(ui, &ctx);
+                        bar_bottom = ui.min_rect().bottom();
+                        scrolled = app.show_settings_panel(ui);
+                    })
+                    .response
+                    .rect;
+            });
+            let (nodes, focus) = a11y(&out);
             SettingsFrame {
                 ctx: self.ctx.clone(),
                 bar_bottom,
@@ -833,15 +821,10 @@ mod tests {
         /// successive frames — and return the release frame. The release
         /// follows the press within egui's click window, not a second later.
         fn click(&mut self, pos: Pos2) -> SettingsFrame {
-            let button = |pressed| egui::Event::PointerButton {
-                pos,
-                button: egui::PointerButton::Primary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            };
-            self.frame(vec![egui::Event::PointerMoved(pos)]);
-            self.frame(vec![egui::Event::PointerMoved(pos), button(true)]);
-            self.frame_after(0.1, vec![egui::Event::PointerMoved(pos), button(false)])
+            let [moved, pressed, released] = click_frames(pos, egui::PointerButton::Primary);
+            self.frame(moved);
+            self.frame(pressed);
+            self.frame_after(0.1, released)
         }
     }
 
@@ -1422,10 +1405,7 @@ mod tests {
         for (chip, want) in [("Never", None), ("30s", Some(30))] {
             let frame = run.frame(vec![]);
             let b = node_bounds(&frame, chip);
-            run.click(Pos2::new(
-                ((b.x0 + b.x1) / 2.0) as f32,
-                ((b.y0 + b.y1) / 2.0) as f32,
-            ));
+            run.click(to_rect(b).center());
             assert_eq!(run.app.settings.announce_interval_secs, want, "{chip}");
             assert_eq!(
                 run.app.reading_state().announce,
@@ -1435,10 +1415,7 @@ mod tests {
         }
         let frame = run.frame(vec![]);
         let b = node_bounds(&frame, "Only while the reading has focus");
-        run.click(Pos2::new(
-            ((b.x0 + b.x1) / 2.0) as f32,
-            ((b.y0 + b.y1) / 2.0) as f32,
-        ));
+        run.click(to_rect(b).center());
         assert!(run.app.settings.announce_only_focused);
         assert!(run.app.reading_state().announce.focus_only);
     }

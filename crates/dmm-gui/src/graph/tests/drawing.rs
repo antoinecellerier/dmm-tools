@@ -18,7 +18,7 @@ fn a_solid_line_draws_one_segment_per_straight_run() {
     let bounds = PlotBounds::from_min_max([0.0, 0.0], [10.0, 10.0]);
     let transform = PlotTransform::new(frame, bounds, false);
     let ctx = crate::app::styled_context();
-    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+    headless_frame(&ctx, None, None, vec![], |ui| {
         let shapes_of = |points: Vec<[f64; 2]>| {
             let mut shapes = Vec::new();
             let line =
@@ -40,7 +40,6 @@ fn a_solid_line_draws_one_segment_per_straight_run() {
             [egui::Shape::Circle(_)]
         ));
     });
-    out.textures_delta.clear();
 }
 
 /// A noisy line with samples every `step` seconds, from a fixed seed.
@@ -146,14 +145,9 @@ fn a_wide_window_draws_about_as_much_as_a_narrow_one() {
         let mut count = 0;
         // The axes settle on the first frame.
         for _ in 0..2 {
-            let input = egui::RawInput {
-                screen_rect: Some(screen),
-                ..Default::default()
-            };
-            let mut out = ctx.run_ui(input, |ui| {
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
                 g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
             });
-            out.textures_delta.clear();
             count = ctx
                 .tessellate(out.shapes, out.pixels_per_point)
                 .iter()
@@ -285,14 +279,9 @@ fn pattern_frame(g: &mut Graph, ctx: &egui::Context, tc: &ThemeColors) -> Patter
     // Twice: the axes settle on the first, and a discarded frame is run
     // again just so.
     for _ in 0..2 {
-        let input = egui::RawInput {
-            screen_rect: Some(gesture_screen()),
-            ..Default::default()
-        };
-        let mut out = ctx.run_ui(input, |ui| {
+        let out = headless_frame(ctx, Some(gesture_screen()), None, vec![], |ui| {
             g.show_main(ui, &crate::l10n::english(), tc, &markers, None, NO_DIGITS)
         });
-        out.textures_delta.clear();
         shapes = out.shapes;
     }
     let plot = g.plot_rect.expect("drawn");
@@ -389,18 +378,13 @@ fn toolbar_fields_leave_its_height_alone() {
         let mut h = 0.0;
         // The second frame: the first lays out the fonts.
         for _ in 0..2 {
-            let input = egui::RawInput {
-                screen_rect: Some(gesture_screen()),
-                ..Default::default()
-            };
-            let mut out = ctx.run_ui(input, |ui| {
+            headless_frame(&ctx, Some(gesture_screen()), None, vec![], |ui| {
                 h = ui
                     .scope(|ui| g.show_toolbar(ui, &crate::l10n::english(), &tc))
                     .response
                     .rect
                     .height();
             });
-            out.textures_delta.clear();
         }
         h
     };

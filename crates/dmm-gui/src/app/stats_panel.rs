@@ -434,6 +434,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::headless_frame;
 
     /// In English the rows draw every figure where the space-padded text
     /// they were drew it, in the session's font and the visible block's.
@@ -456,8 +457,7 @@ mod tests {
         }
         let drawn = |draw: &dyn Fn(&mut Ui)| {
             let ctx = crate::app::styled_context();
-            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| draw(ui));
-            out.textures_delta.clear();
+            let out = headless_frame(&ctx, None, None, vec![], |ui| draw(ui));
             let mut found = Vec::new();
             for clipped in &out.shapes {
                 glyphs(&clipped.shape, &mut found);

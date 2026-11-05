@@ -182,7 +182,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::BigMeterMode;
-    use crate::app::test_support::test_app;
+    use crate::app::test_support::{a11y, headless_frame, node_rect, test_app};
     use eframe::egui::accesskit::{Node, NodeId, Role};
     use eframe::egui::{Id, Pos2, Rect, vec2};
 
@@ -231,13 +231,11 @@ mod tests {
             self.seconds += 1.0;
             let app = &mut self.app;
             let minimal = app.big_meter_mode == BigMeterMode::Minimal;
-            let mut out = self.ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(self.screen),
-                    time: Some(self.seconds),
-                    events,
-                    ..Default::default()
-                },
+            let out = headless_frame(
+                &self.ctx,
+                Some(self.screen),
+                Some(self.seconds),
+                events,
                 |ui| {
                     let ctx = ui.ctx().clone();
                     let mut anchor_top = ctx.content_rect().top();
@@ -250,16 +248,9 @@ mod tests {
                     app.show_toast(&ctx, anchor_top);
                 },
             );
-            // epaint 0.36 added a `Drop` guard on `TexturesDelta` that
-            // debug-asserts the deltas were applied. This harness renders
-            // without a painter, so discard them explicitly.
-            out.textures_delta.clear();
-            let nodes = out
-                .platform_output
-                .accesskit_update
-                .map(|update| update.nodes)
-                .unwrap_or_default();
-            ToastFrame { nodes }
+            ToastFrame {
+                nodes: a11y(&out).0,
+            }
         }
 
         /// Three frames: an `Area` sizes itself from the previous one, and
@@ -327,30 +318,14 @@ mod tests {
     /// carries its text as the node's value, and only the widget nodes carry
     /// bounds — the landmark scope around it has none.
     fn text_bounds(frame: &ToastFrame, text: &str) -> Rect {
-        let b = frame
-            .nodes
-            .iter()
-            .find(|(_, n)| n.value() == Some(text))
-            .and_then(|(_, n)| n.bounds())
-            .expect("the toast label is in the tree");
-        Rect::from_min_max(
-            Pos2::new(b.x0 as f32, b.y0 as f32),
-            Pos2::new(b.x1 as f32, b.y1 as f32),
-        )
+        node_rect(&frame.nodes, |n| n.value() == Some(text))
+            .expect("the toast label is in the tree")
     }
 
     /// Where the node with this accessible label was drawn.
     fn labelled_bounds(frame: &ToastFrame, label: &str) -> Rect {
-        let b = frame
-            .nodes
-            .iter()
-            .find(|(_, n)| n.label() == Some(label))
-            .and_then(|(_, n)| n.bounds())
-            .unwrap_or_else(|| panic!("no node labelled {label:?} in the tree"));
-        Rect::from_min_max(
-            Pos2::new(b.x0 as f32, b.y0 as f32),
-            Pos2::new(b.x1 as f32, b.y1 as f32),
-        )
+        node_rect(&frame.nodes, |n| n.label() == Some(label))
+            .unwrap_or_else(|| panic!("no node labelled {label:?} in the tree"))
     }
 
     /// A press and release at `pos`, as the pointer would deliver them.
@@ -536,7 +511,7 @@ mod tests {
             );
             galley.rows[0].row.glyphs[0].uv_rect
         };
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             let replacement = atlas_rect(ui, "\u{25FB}");
             for glyph in [OK_GLYPH, ERROR_GLYPH] {
                 assert_ne!(
@@ -546,6 +521,5 @@ mod tests {
                 );
             }
         });
-        out.textures_delta.clear();
     }
 }

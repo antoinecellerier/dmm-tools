@@ -437,8 +437,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::test_app;
-    use crate::settings::Settings;
+    use crate::app::test_support::{a11y, connected_app, headless_frame, test_app};
 
     /// The carets draw from the bundled fonts, not as the replacement box
     /// (`Fonts::has_glyph` can't tell; see `.claude/rules/gui.md`).
@@ -455,7 +454,7 @@ mod tests {
             );
             galley.rows[0].row.glyphs[0].uv_rect
         };
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             let replacement = atlas_rect(ui, "\u{25FB}");
             for caret in [FOLDED, OPEN] {
                 assert_ne!(
@@ -465,7 +464,6 @@ mod tests {
                 );
             }
         });
-        out.textures_delta.clear();
     }
 
     /// The body with nothing typed opens the row to type in; with limits
@@ -565,39 +563,21 @@ mod tests {
     /// The labels of the buttons the connected reading column draws for a
     /// reading in `unit`, on a meter with HOLD and [`ZERO_IN_FARADS`].
     fn chips_for(unit: &'static str) -> Vec<String> {
-        let settings = Settings {
-            // No acquisition thread: the connected state is set by hand.
-            auto_connect: false,
-            ..Settings::default()
+        let mut app = connected_app(&["hold", "zero"], unit);
+        let meter = app.connection.meter.as_mut().expect("a connected meter");
+        meter.meter_keys = dmm_lib::protocol::MeterKeys {
+            functions: &[],
+            context: ZERO_IN_FARADS,
         };
-        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
-        app.connection.state = crate::app::ConnectionState::Connected;
-        app.connection.meter = Some(crate::app::ConnectedMeter {
-            supported_commands: vec!["hold".to_string(), "zero".to_string()],
-            meter_keys: dmm_lib::protocol::MeterKeys {
-                functions: &[],
-                context: ZERO_IN_FARADS,
-            },
-            ..crate::app::ConnectedMeter::test_fixture(None)
-        });
-        app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
-            dmm_lib::measurement::MeasuredValue::Normal(1.234),
-            unit,
-            dmm_lib::flags::StatusFlags::default(),
-        ));
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let out = headless_frame(&ctx, None, None, vec![], |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
                 app.show_reading_column(ui, crate::app::layout::ContentLayout::Wide);
             });
         });
-        // This harness renders without a painter.
-        out.textures_delta.clear();
-        out.platform_output
-            .accesskit_update
-            .map(|update| update.nodes)
-            .unwrap_or_default()
+        a11y(&out)
+            .0
             .into_iter()
             .filter(|(_, n)| n.role() == egui::accesskit::Role::Button)
             .filter_map(|(_, n)| n.label().map(str::to_string))

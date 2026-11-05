@@ -199,23 +199,14 @@ fn tab_reaches_the_strip_divider_before_the_minimap() {
         } else {
             key_tap(egui::Key::Tab)
         };
-        let input = egui::RawInput {
-            screen_rect: Some(gesture_screen()),
-            events,
-            ..Default::default()
-        };
-        let mut out = ctx.run_ui(input, |ui| {
+        let out = headless_frame(&ctx, Some(gesture_screen()), None, events, |ui| {
             g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
         });
-        out.textures_delta.clear();
-        let focused = out.platform_output.accesskit_update.and_then(|update| {
-            let focus = update.focus;
-            update
-                .nodes
-                .iter()
-                .find(|(id, _)| *id == focus)
-                .and_then(|(_, node)| node.label().map(str::to_owned))
-        });
+        let (nodes, focus) = a11y(&out);
+        let focused = nodes
+            .iter()
+            .find(|(id, _)| Some(*id) == focus)
+            .and_then(|(_, node)| node.label().map(str::to_owned));
         order.extend(focused);
     }
     let at = |prefix: &str| order.iter().position(|l| l.starts_with(prefix));
@@ -237,27 +228,15 @@ fn dragging_the_divider_resizes_the_histogram() {
     g.show_histogram = true;
     // One frame `width` wide; where the divider was drawn.
     let frame = |g: &mut Graph, width: f32, events: Vec<egui::Event>| {
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(width, 600.0),
-            )),
-            events,
-            ..Default::default()
-        };
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 600.0));
         let markers = crate::markers::Markers::default();
-        let mut out = ctx.run_ui(input, |ui| {
+        let out = headless_frame(&ctx, Some(screen), None, events, |ui| {
             g.show(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
         });
-        out.textures_delta.clear();
-        out.platform_output.accesskit_update.and_then(|update| {
-            update
-                .nodes
-                .iter()
-                .find(|(_, n)| n.label() == Some("Resize the histogram (Left/Right to adjust)"))
-                .and_then(|(_, n)| n.bounds())
-                .map(|b| egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32))
+        node_rect(&a11y(&out).0, |n| {
+            n.label() == Some("Resize the histogram (Left/Right to adjust)")
         })
+        .map(|r| r.center())
     };
     let drag = |g: &mut Graph, dx: f32| {
         frame(g, 800.0, vec![]);

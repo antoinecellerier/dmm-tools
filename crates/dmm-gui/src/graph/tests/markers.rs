@@ -103,36 +103,20 @@ fn clicking_a_flag_reports_its_marker() {
     ctx.enable_accesskit();
     // One frame; where the flag labelled for marker 1 was drawn.
     let frame = |g: &mut Graph, events: Vec<egui::Event>| {
-        let input = egui::RawInput {
-            screen_rect: Some(gesture_screen()),
-            events,
-            ..Default::default()
-        };
-        let mut out = ctx.run_ui(input, |ui| {
+        let out = headless_frame(&ctx, Some(gesture_screen()), None, events, |ui| {
             g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
         });
-        out.textures_delta.clear();
-        out.platform_output.accesskit_update.and_then(|update| {
-            update
-                .nodes
-                .iter()
-                .find(|(_, n)| n.label() == Some("Write marker 1's note"))
-                .and_then(|(_, n)| n.bounds())
-                .map(|b| egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32))
+        node_rect(&a11y(&out).0, |n| {
+            n.label() == Some("Write marker 1's note")
         })
+        .map(|r| r.center())
     };
     // The axes settle on the first frame, and the flag with them.
     frame(&mut g, vec![]);
     let at = frame(&mut g, vec![]).expect("the flag is drawn and labelled");
-    let button = |pressed| egui::Event::PointerButton {
-        pos: at,
-        button: egui::PointerButton::Primary,
-        pressed,
-        modifiers: egui::Modifiers::NONE,
-    };
-    frame(&mut g, vec![egui::Event::PointerMoved(at)]);
-    frame(&mut g, vec![egui::Event::PointerMoved(at), button(true)]);
-    frame(&mut g, vec![egui::Event::PointerMoved(at), button(false)]);
+    for events in click_frames(at, egui::PointerButton::Primary) {
+        frame(&mut g, events);
+    }
     assert_eq!(g.take_clicked_marker(), Some(1));
     assert!(
         g.cursors.a.is_none(),

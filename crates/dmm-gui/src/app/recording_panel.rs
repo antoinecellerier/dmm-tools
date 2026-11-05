@@ -739,7 +739,9 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::{key_tap, test_app};
+    use crate::app::test_support::{
+        a11y, click_frames, focused_rect, headless_frame, key_tap, node_rect, test_app, to_rect,
+    };
     use eframe::egui::{Pos2, Rect, vec2};
     use std::time::Instant;
 
@@ -821,10 +823,9 @@ mod tests {
 
         app.graph.request(MenuAction::Copy("5.678".to_string()));
         let ctx = crate::app::styled_context();
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let out = headless_frame(&ctx, None, None, vec![], |ui| {
             app.take_graph_actions(ui.ctx());
         });
-        out.textures_delta.clear();
         let copied = out.platform_output.commands.iter().find_map(|c| match c {
             egui::OutputCommand::CopyText(text) => Some(text.as_str()),
             _ => None,
@@ -895,46 +896,32 @@ mod tests {
         fn frame(&mut self, secs: f64, events: Vec<egui::Event>) {
             self.seconds += secs;
             let app = &mut self.app;
-            let mut out = self.ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(self.width, 400.0))),
-                    events,
-                    time: Some(self.seconds),
-                    ..Default::default()
-                },
-                |ui| {
-                    let ctx = ui.ctx().clone();
-                    app.handle_keyboard_shortcuts(&ctx);
-                    // The row is drawn inside the page scroller, which reads
-                    // the focused widget back to bring it into view — and that
-                    // read is what takes the focus off a menu entry the
-                    // opening click landed outside of.
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        app.show_recording_section(ui, false);
-                        crate::a11y::scroll_to_focus(ui);
-                    });
-                    let ctx = ui.ctx().clone();
-                    app.show_discard_confirmation(&ctx);
-                },
-            );
-            out.textures_delta.clear();
-            if let Some(update) = out.platform_output.accesskit_update {
-                self.tree = update.nodes;
-                self.focus = Some(update.focus);
+            let screen = Rect::from_min_size(Pos2::ZERO, vec2(self.width, 400.0));
+            let out = headless_frame(&self.ctx, Some(screen), Some(self.seconds), events, |ui| {
+                let ctx = ui.ctx().clone();
+                app.handle_keyboard_shortcuts(&ctx);
+                // The row is drawn inside the page scroller, which reads
+                // the focused widget back to bring it into view — and that
+                // read is what takes the focus off a menu entry the
+                // opening click landed outside of.
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    app.show_recording_section(ui, false);
+                    crate::a11y::scroll_to_focus(ui);
+                });
+                let ctx = ui.ctx().clone();
+                app.show_discard_confirmation(&ctx);
+            });
+            if out.platform_output.accesskit_update.is_some() {
+                (self.tree, self.focus) = a11y(&out);
             }
         }
 
         /// Move, press and release on successive frames, as a mouse does.
         fn click(&mut self, pos: Pos2) {
-            let button = |pressed| egui::Event::PointerButton {
-                pos,
-                button: egui::PointerButton::Primary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            };
-            self.frame(1.0, vec![egui::Event::PointerMoved(pos)]);
-            self.frame(1.0, vec![egui::Event::PointerMoved(pos), button(true)]);
-            self.frame(0.1, vec![egui::Event::PointerMoved(pos), button(false)]);
+            let [moved, pressed, released] = click_frames(pos, egui::PointerButton::Primary);
+            self.frame(1.0, moved);
+            self.frame(1.0, pressed);
+            self.frame(0.1, released);
             self.frame(1.0, vec![]);
         }
 
@@ -946,11 +933,7 @@ mod tests {
 
         /// Where the widget AccessKit labels `label` was drawn last frame.
         fn node_rect(&self, label: &str) -> Rect {
-            self.tree
-                .iter()
-                .find(|(_, n)| n.label() == Some(label))
-                .and_then(|(_, n)| n.bounds())
-                .map(to_rect)
+            node_rect(&self.tree, |n| n.label() == Some(label))
                 .unwrap_or_else(|| panic!("no {label:?} widget in the row"))
         }
 
@@ -969,20 +952,8 @@ mod tests {
         /// The tree's root carries no bounds, and that is what an unfocused
         /// frame names, so nothing focused reads as `None`.
         fn focused_rect(&self) -> Option<Rect> {
-            let focus = self.focus?;
-            self.tree
-                .iter()
-                .find(|(id, _)| *id == focus)
-                .and_then(|(_, n)| n.bounds())
-                .map(to_rect)
+            focused_rect(&self.tree, self.focus)
         }
-    }
-
-    fn to_rect(b: egui::accesskit::Rect) -> Rect {
-        Rect::from_min_max(
-            Pos2::new(b.x0 as f32, b.y0 as f32),
-            Pos2::new(b.x1 as f32, b.y1 as f32),
-        )
     }
 
     /// The menu's keyboard contract — the readout lists' — end to end:
@@ -1091,14 +1062,13 @@ mod tests {
             );
             galley.rows[0].row.glyphs[0].uv_rect
         };
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             assert_ne!(
                 atlas_rect(ui, EXPORT_MENU_ARROW),
                 atlas_rect(ui, "\u{25FB}"),
                 "the arrow draws as the replacement box"
             );
         });
-        out.textures_delta.clear();
     }
 
     /// A 1.234 V reading, as the drain hands the buffer one.
@@ -1752,12 +1722,10 @@ mod tests {
             .sample_at(at)
             .expect("a buffered sample");
         let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
-        run.tree
-            .iter()
-            .find(|(_, n)| n.value().is_some_and(|v| v.starts_with(&time)))
-            .and_then(|(_, n)| n.bounds())
-            .map(to_rect)
-            .expect("the row is drawn")
+        node_rect(&run.tree, |n| {
+            n.value().is_some_and(|v| v.starts_with(&time))
+        })
+        .expect("the row is drawn")
     }
 
     /// Hovering a sample's row offers a marker; clicking it marks that

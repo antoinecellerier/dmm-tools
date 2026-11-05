@@ -291,7 +291,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::controls::remote::SCALE_RULE_WIDTH;
-    use crate::app::test_support::test_app;
+    use crate::app::test_support::{a11y, connected_app, headless_frame, test_app};
     use crate::settings::Settings;
     use eframe::egui::accesskit::Node;
     use eframe::egui::{Pos2, Rect, vec2};
@@ -307,50 +307,23 @@ mod tests {
     /// The bounds of each labelled widget in the connected reading column,
     /// laid out as [`chip_bounds`] says.
     fn column_bounds(width: f32) -> impl Fn(&str) -> egui::accesskit::Rect {
-        let settings = Settings {
-            // No acquisition thread: the connected state is set by hand.
-            auto_connect: false,
-            ..Settings::default()
-        };
-        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
-        app.connection.state = super::super::ConnectionState::Connected;
-        app.connection.meter = Some(super::super::ConnectedMeter {
-            supported_commands: [
+        let mut app = connected_app(
+            &[
                 "hold", "rel", "range", "auto", "minmax", "peak", "select", "light",
-            ]
-            .map(String::from)
-            .to_vec(),
-            ..super::super::ConnectedMeter::test_fixture(None)
-        });
-        app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
-            dmm_lib::measurement::MeasuredValue::Normal(1.234),
+            ],
             "V",
-            dmm_lib::flags::StatusFlags::default(),
-        ));
-
+        );
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(width, 600.0));
         let mut nodes: Vec<(egui::accesskit::NodeId, Node)> = Vec::new();
         for _ in 0..2 {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    ..Default::default()
-                },
-                |ui| {
-                    egui::CentralPanel::default().show(ui, |ui| {
-                        app.show_reading_column(ui, super::super::layout::ContentLayout::Narrow);
-                    });
-                },
-            );
-            // This harness renders without a painter.
-            out.textures_delta.clear();
-            nodes = out
-                .platform_output
-                .accesskit_update
-                .map(|update| update.nodes)
-                .unwrap_or_default();
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    app.show_reading_column(ui, super::super::layout::ContentLayout::Narrow);
+                });
+            });
+            (nodes, _) = a11y(&out);
         }
         move |label: &str| {
             nodes

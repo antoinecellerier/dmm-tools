@@ -444,6 +444,7 @@ pub fn show_manual_only(ui: &mut Ui, l10n: &Localizer, url: &str, scale: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::headless_frame;
     use dmm_lib::specs::AccuracyBand;
     use egui::{Pos2, vec2};
 
@@ -516,17 +517,9 @@ mod tests {
                 _ => {}
             }
         }
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                Pos2::ZERO,
-                vec2(COLUMN_WIDTH, 600.0),
-            )),
-            events,
-            time: Some(time),
-            ..Default::default()
-        };
+        let screen = egui::Rect::from_min_size(Pos2::ZERO, vec2(COLUMN_WIDTH, 600.0));
         let mut toggled = false;
-        let mut out = ctx.run_ui(input, |ui| {
+        let out = headless_frame(ctx, Some(screen), Some(time), events, |ui| {
             toggled = show_specs(
                 ui,
                 l10n,
@@ -539,7 +532,6 @@ mod tests {
                 Color32::GRAY,
             );
         });
-        out.textures_delta.clear();
         let mut texts = Vec::new();
         for clipped in &out.shapes {
             collect(&clipped.shape, &mut texts);

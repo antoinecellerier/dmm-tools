@@ -266,7 +266,7 @@ fn check_font(ctx: &egui::Context, provider: Arc<SystemFonts>, probe: &'static s
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::test_app;
+    use crate::app::test_support::{headless_frame, test_app};
 
     /// Every language but English gets its own shapes, Chinese in the
     /// simplified script, and Chinese and Japanese check for a font.
@@ -304,11 +304,10 @@ mod tests {
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         for _ in 0..2 {
-            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let out = headless_frame(&ctx, None, None, vec![], |ui| {
                 app.tell_screen_reader_language(ui.ctx());
                 ui.label("Settings");
             });
-            out.textures_delta.clear();
             let update = out.platform_output.accesskit_update.expect("a tree");
             let root = egui::accesskit_root_id().accesskit_id();
             let (_, node) = update

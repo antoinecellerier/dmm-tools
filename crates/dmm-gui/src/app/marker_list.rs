@@ -1064,7 +1064,7 @@ fn note_field(ui: &mut Ui, l10n: &Localizer, m: &mut Marker, width: f32) -> egui
 mod tests {
     use super::*;
     use crate::app::connection::DmmMessage;
-    use crate::app::test_support::test_app;
+    use crate::app::test_support::{headless_frame, test_app};
     use crate::recording::Recording;
     use dmm_lib::flags::StatusFlags;
     use eframe::egui::{Event, Modifiers, Pos2, Rect, vec2};
@@ -1217,15 +1217,11 @@ mod tests {
                 app.capture.recording.push(&m, 0);
             }
             let ctx = crate::app::styled_context();
+            let screen = Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0));
             let frame = |app: &mut App| {
-                let mut out = ctx.run_ui(
-                    egui::RawInput {
-                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0))),
-                        ..Default::default()
-                    },
-                    |ui| app.show_log(ui, false),
-                );
-                out.textures_delta.clear();
+                headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                    app.show_log(ui, false)
+                });
             };
             for _ in 0..3 {
                 frame(&mut app);
@@ -1542,20 +1538,12 @@ mod tests {
         fn frame_held(&mut self, events: Vec<Event>) {
             self.seconds += 1.0;
             let app = &mut self.app;
-            let mut out = self.ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0))),
-                    events,
-                    time: Some(self.seconds),
-                    ..Default::default()
-                },
-                |ui| {
-                    let ctx = ui.ctx().clone();
-                    app.handle_keyboard_shortcuts(&ctx);
-                    app.show_log(ui, false);
-                },
-            );
-            out.textures_delta.clear();
+            let screen = Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0));
+            headless_frame(&self.ctx, Some(screen), Some(self.seconds), events, |ui| {
+                let ctx = ui.ctx().clone();
+                app.handle_keyboard_shortcuts(&ctx);
+                app.show_log(ui, false);
+            });
         }
 
         /// A new reading, one second after the last.

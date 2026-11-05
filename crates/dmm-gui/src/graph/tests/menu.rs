@@ -23,52 +23,30 @@ fn menu_frame(
     events: Vec<egui::Event>,
 ) -> Vec<(egui::accesskit::NodeId, egui::accesskit::Node)> {
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
-    let input = egui::RawInput {
-        screen_rect: Some(gesture_screen()),
-        events,
-        ..Default::default()
-    };
-    let mut out = MENU_SCENE.with_borrow(|(markers, limits, shown)| {
+    let out = MENU_SCENE.with_borrow(|(markers, limits, shown)| {
         // The meter's digits for its main reading; none for a sub-value.
         let digits = |_, series: Option<&str>| series.is_none().then(|| shown.clone()).flatten();
         let digits: ReadingDigits = &digits;
-        ctx.run_ui(input, |ui| {
+        headless_frame(ctx, Some(gesture_screen()), None, events, |ui| {
             g.show_main(ui, &crate::l10n::english(), &tc, markers, *limits, digits)
         })
     });
-    out.textures_delta.clear();
-    out.platform_output
-        .accesskit_update
-        .map(|update| update.nodes)
-        .unwrap_or_default()
+    a11y(&out).0
 }
 
-fn node_rect(
+/// Where the first node whose label `label` accepts was drawn.
+fn labelled_rect(
     tree: &[(egui::accesskit::NodeId, egui::accesskit::Node)],
     label: impl Fn(&str) -> bool,
 ) -> Option<egui::Rect> {
-    tree.iter()
-        .find(|(_, n)| n.label().is_some_and(&label))
-        .and_then(|(_, n)| n.bounds())
-        .map(|b| {
-            egui::Rect::from_min_max(
-                egui::pos2(b.x0 as f32, b.y0 as f32),
-                egui::pos2(b.x1 as f32, b.y1 as f32),
-            )
-        })
+    node_rect(tree, |n| n.label().is_some_and(&label))
 }
 
 /// A press and release of `button` at `pos`, on frames of their own.
 fn menu_click(g: &mut Graph, ctx: &egui::Context, pos: egui::Pos2, button: egui::PointerButton) {
-    let event = |pressed| egui::Event::PointerButton {
-        pos,
-        button,
-        pressed,
-        modifiers: egui::Modifiers::NONE,
-    };
-    menu_frame(g, ctx, vec![egui::Event::PointerMoved(pos)]);
-    menu_frame(g, ctx, vec![egui::Event::PointerMoved(pos), event(true)]);
-    menu_frame(g, ctx, vec![egui::Event::PointerMoved(pos), event(false)]);
+    for events in click_frames(pos, button) {
+        menu_frame(g, ctx, events);
+    }
 }
 
 /// Right-click at `x` across the plot (0 its left edge, 1 its right), then
@@ -97,7 +75,7 @@ fn open_menu(g: &mut Graph, at: impl FnOnce(egui::Rect) -> egui::Pos2) -> egui::
     ctx.enable_accesskit();
     menu_frame(g, &ctx, vec![]);
     let tree = menu_frame(g, &ctx, vec![]);
-    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    let plot = labelled_rect(&tree, |l| l.contains("last reading")).expect("the plot");
     menu_click(g, &ctx, at(plot), egui::PointerButton::Secondary);
     assert!(egui::Popup::is_any_open(&ctx), "the menu opened");
     ctx
@@ -117,7 +95,7 @@ fn menu_entries(g: &mut Graph, ctx: &egui::Context) -> Vec<String> {
 /// Click the open menu's entry whose label passes `label`.
 fn pick_entry(g: &mut Graph, ctx: &egui::Context, label: impl Fn(&str) -> bool) {
     let tree = menu_frame(g, ctx, vec![]);
-    let entry = node_rect(&tree, label).expect("the entry");
+    let entry = labelled_rect(&tree, label).expect("the entry");
     menu_click(g, ctx, entry.center(), egui::PointerButton::Primary);
     assert!(!egui::Popup::is_any_open(ctx), "picking closes it");
 }
@@ -172,7 +150,7 @@ fn esc_closes_the_menu_and_leaves_no_focus() {
     ctx.enable_accesskit();
     menu_frame(&mut g, &ctx, vec![]);
     let tree = menu_frame(&mut g, &ctx, vec![]);
-    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    let plot = labelled_rect(&tree, |l| l.contains("last reading")).expect("the plot");
     menu_click(&mut g, &ctx, plot.center(), egui::PointerButton::Secondary);
     menu_frame(&mut g, &ctx, vec![]);
     assert!(
@@ -425,7 +403,7 @@ fn the_click_closing_the_menu_places_no_cursor() {
     g.cursors.active = true;
     let ctx = open_menu(&mut g, |plot| plot.center());
     let tree = menu_frame(&mut g, &ctx, vec![]);
-    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    let plot = labelled_rect(&tree, |l| l.contains("last reading")).expect("the plot");
     let elsewhere = egui::pos2(plot.left() + 0.8 * plot.width(), plot.top() + 10.0);
     menu_click(&mut g, &ctx, elsewhere, egui::PointerButton::Primary);
     assert!(!egui::Popup::is_any_open(&ctx), "the click closed it");
@@ -536,23 +514,17 @@ fn dragging_an_axis_leaves_the_view() {
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
     let markers = crate::markers::Markers::default();
     let frame = |g: &mut Graph, events: Vec<egui::Event>| {
-        let input = egui::RawInput {
-            screen_rect: Some(gesture_screen()),
-            events,
-            ..Default::default()
-        };
-        let mut out = ctx.run_ui(input, |ui| {
+        headless_frame(&ctx, Some(gesture_screen()), None, events, |ui| {
             g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
-        });
-        out.textures_delta.clear();
-        out.platform_output
+        })
+        .platform_output
     };
     frame(&mut g, vec![]);
     let tree = frame(&mut g, vec![])
         .accesskit_update
         .map(|update| update.nodes)
         .unwrap_or_default();
-    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    let plot = labelled_rect(&tree, |l| l.contains("last reading")).expect("the plot");
     let bounds = *g.plot_transform.expect("drawn").bounds();
     for (axis, from, to) in [
         (
@@ -602,7 +574,7 @@ fn a_flag_opens_the_menu_for_its_marker() {
     ctx.enable_accesskit();
     menu_frame(&mut g, &ctx, vec![]);
     let tree = menu_frame(&mut g, &ctx, vec![]);
-    let flag = node_rect(&tree, |l| l == "Write marker 1's note").expect("the flag");
+    let flag = labelled_rect(&tree, |l| l == "Write marker 1's note").expect("the flag");
     menu_click(&mut g, &ctx, flag.center(), egui::PointerButton::Secondary);
     let entries: Vec<String> = menu_entries(&mut g, &ctx)
         .into_iter()

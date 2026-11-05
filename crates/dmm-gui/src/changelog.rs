@@ -117,6 +117,7 @@ pub(crate) fn show_changelog(ui: &mut Ui, cache: &mut CommonMarkCache, version: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::test_support::{a11y, headless_frame};
 
     #[test]
     fn has_section_for_known_version() {
@@ -186,25 +187,12 @@ mod tests {
         let mut cache = CommonMarkCache::default();
         let mut nodes = Vec::new();
         for _ in 0..2 {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    ..Default::default()
-                },
-                |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        show_changelog(ui, &mut cache, version);
-                    });
-                },
-            );
-            // epaint 0.36 debug-asserts on dropping unapplied texture deltas;
-            // this harness renders without a painter.
-            out.textures_delta.clear();
-            nodes = out
-                .platform_output
-                .accesskit_update
-                .map(|update| update.nodes.into_iter().map(|(_, n)| n).collect())
-                .unwrap_or_default();
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    show_changelog(ui, &mut cache, version);
+                });
+            });
+            nodes = a11y(&out).0.into_iter().map(|(_, n)| n).collect();
         }
         nodes
     }

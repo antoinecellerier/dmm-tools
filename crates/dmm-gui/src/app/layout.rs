@@ -329,7 +329,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::test_app;
+    use crate::app::test_support::{headless_frame, headless_run, test_app};
     use crate::settings::{
         SIDE_PANEL_DEFAULT_WIDTH, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH, Settings,
     };
@@ -414,49 +414,40 @@ mod tests {
         let mut columns = None;
 
         for _ in 0..3 {
-            let mut out = ctx.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(screen),
-                    ..Default::default()
-                },
-                |ui| {
-                    let ctx = ui.ctx().clone();
-                    egui::Panel::top("top_bar").show(ui, |ui| {
-                        app.show_top_bar(ui, &ctx);
-                        app.show_settings_panel(ui);
-                    });
-                    columns = Some(if wide {
-                        let reading = egui::Panel::left(READING_PANEL)
-                            .default_size(SIDE_PANEL_DEFAULT_WIDTH)
-                            .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
-                            .resizable(true)
-                            .show(ui, |ui| {
-                                app.show_reading_column_scrolled(ui, ContentLayout::Wide)
-                            })
-                            .inner;
-                        let graph = egui::CentralPanel::default()
-                            .show(ui, |ui| app.show_graph_column(ui))
-                            .inner;
-                        Columns {
-                            reading,
-                            graph: Some(graph),
-                        }
-                    } else {
-                        let reading = egui::CentralPanel::default()
-                            .show(ui, |ui| {
-                                app.show_reading_column_scrolled(ui, ContentLayout::Narrow)
-                            })
-                            .inner;
-                        Columns {
-                            reading,
-                            graph: None,
-                        }
-                    });
-                },
-            );
-            // epaint 0.36 debug-asserts on dropping unapplied texture deltas;
-            // this harness renders without a painter.
-            out.textures_delta.clear();
+            headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                let ctx = ui.ctx().clone();
+                egui::Panel::top("top_bar").show(ui, |ui| {
+                    app.show_top_bar(ui, &ctx);
+                    app.show_settings_panel(ui);
+                });
+                columns = Some(if wide {
+                    let reading = egui::Panel::left(READING_PANEL)
+                        .default_size(SIDE_PANEL_DEFAULT_WIDTH)
+                        .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
+                        .resizable(true)
+                        .show(ui, |ui| {
+                            app.show_reading_column_scrolled(ui, ContentLayout::Wide)
+                        })
+                        .inner;
+                    let graph = egui::CentralPanel::default()
+                        .show(ui, |ui| app.show_graph_column(ui))
+                        .inner;
+                    Columns {
+                        reading,
+                        graph: Some(graph),
+                    }
+                } else {
+                    let reading = egui::CentralPanel::default()
+                        .show(ui, |ui| {
+                            app.show_reading_column_scrolled(ui, ContentLayout::Narrow)
+                        })
+                        .inner;
+                    Columns {
+                        reading,
+                        graph: None,
+                    }
+                });
+            });
         }
 
         columns.expect("the layout closure runs every frame")
@@ -575,8 +566,7 @@ mod tests {
                 viewports: std::iter::once((egui::ViewportId::ROOT, info.clone())).collect(),
                 ..Default::default()
             };
-            let mut out = ctx.run_ui(raw, |ui| app.track_layout(ui));
-            out.textures_delta.clear();
+            headless_run(ctx, raw, |ui| app.track_layout(ui));
         }
     }
 
@@ -606,7 +596,7 @@ mod tests {
                 viewports: std::iter::once((egui::ViewportId::ROOT, normal())).collect(),
                 ..Default::default()
             };
-            let mut out = ctx.run_ui(raw, |ui| {
+            headless_run(&ctx, raw, |ui| {
                 egui::Panel::left(READING_PANEL)
                     .default_size(width)
                     .resizable(true)
@@ -616,7 +606,6 @@ mod tests {
                     .show(ui, |ui| ui.allocate_space(ui.available_size()));
                 app.track_layout(ui);
             });
-            out.textures_delta.clear();
         }
         assert_eq!(app.settings.reading_panel_width, width);
     }

@@ -641,10 +641,9 @@ fn a_view_past_the_readings_still_draws() {
             g.time_window_secs <= super::super::minimap::MAX_WINDOW_SECS,
             "{saved}"
         );
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        headless_frame(&ctx, None, None, vec![], |ui| {
             g.show_main(ui, &crate::l10n::english(), &tc, &markers, None, NO_DIGITS)
         });
-        out.textures_delta.clear();
     }
     // A start on the readings still lands, its window kept.
     g.apply_view_state(

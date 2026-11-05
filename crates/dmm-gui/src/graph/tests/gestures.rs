@@ -34,13 +34,9 @@ fn wheel_event(modifiers: egui::Modifiers) -> egui::Event {
 /// every caller runs a warm-up frame first.
 fn gesture_frame(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events: &[egui::Event]) {
     let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
-    let mut input = egui::RawInput {
-        screen_rect: Some(gesture_screen()),
-        ..Default::default()
-    };
-    input.events.push(egui::Event::PointerMoved(pointer));
-    input.events.extend_from_slice(events);
-    let mut output = ctx.run_ui(input, |ui| {
+    let mut input = vec![egui::Event::PointerMoved(pointer)];
+    input.extend_from_slice(events);
+    headless_frame(ctx, Some(gesture_screen()), None, input, |ui| {
         g.show_main(
             ui,
             &crate::l10n::english(),
@@ -50,8 +46,6 @@ fn gesture_frame(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events
             NO_DIGITS,
         )
     });
-    // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
-    output.textures_delta.clear();
 }
 
 /// The panels the graph sits in need the plain wheel for scrolling, so a bare

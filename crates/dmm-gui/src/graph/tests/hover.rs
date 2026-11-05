@@ -251,22 +251,22 @@ fn hover_texts(g: &mut Graph, pointer: egui::Pos2) -> Vec<String> {
     let mut texts = Vec::new();
     // A tooltip shows from its second frame: the first only sizes it.
     for _ in 0..3 {
-        let input = egui::RawInput {
-            screen_rect: Some(gesture_screen()),
-            events: vec![egui::Event::PointerMoved(pointer)],
-            ..Default::default()
-        };
-        let mut output = ctx.run_ui(input, |ui| {
-            g.show_main(
-                ui,
-                &crate::l10n::english(),
-                &tc,
-                &crate::markers::Markers::default(),
-                None,
-                NO_DIGITS,
-            )
-        });
-        output.textures_delta.clear();
+        let output = headless_frame(
+            &ctx,
+            Some(gesture_screen()),
+            None,
+            vec![egui::Event::PointerMoved(pointer)],
+            |ui| {
+                g.show_main(
+                    ui,
+                    &crate::l10n::english(),
+                    &tc,
+                    &crate::markers::Markers::default(),
+                    None,
+                    NO_DIGITS,
+                )
+            },
+        );
         texts.clear();
         for clipped in &output.shapes {
             walk(&clipped.shape, &mut texts);

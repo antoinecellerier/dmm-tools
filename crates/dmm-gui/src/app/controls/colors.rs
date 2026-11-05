@@ -935,7 +935,7 @@ fn keep_focus_with_popup(ui: &Ui, popup_id: egui::Id, btn_id: egui::Id) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::test_support::key_tap;
+    use crate::app::test_support::{headless_frame, key_tap};
 
     /// A lone Background swatch, one frame at a time, a second apart.
     struct Swatch {
@@ -948,17 +948,9 @@ mod tests {
     impl Swatch {
         fn frame(&mut self, events: Vec<egui::Event>) {
             self.seconds += 1.0;
-            let raw = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(800.0, 600.0),
-                )),
-                events,
-                time: Some(self.seconds),
-                ..Default::default()
-            };
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
             let (overrides, colors) = (&mut self.overrides, &self.colors);
-            let mut out = self.ctx.run_ui(raw, |ui| {
+            headless_frame(&self.ctx, Some(screen), Some(self.seconds), events, |ui| {
                 let l10n = &crate::l10n::english();
                 color_edit(
                     ui,
@@ -969,7 +961,6 @@ mod tests {
                     colors,
                 );
             });
-            out.textures_delta.clear();
         }
 
         fn focused_rect(&self) -> Option<egui::Rect> {
