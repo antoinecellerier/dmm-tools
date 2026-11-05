@@ -190,12 +190,8 @@ impl PaletteField {
 /// Colours the app leaves on egui's values read their fallback from here
 /// rather than from a copied literal, so they keep tracking whatever egui
 /// ships across upgrades instead of freezing at the value of the day.
-fn egui_visuals(dark: bool) -> egui::Visuals {
-    if dark {
-        egui::Visuals::dark()
-    } else {
-        egui::Visuals::light()
-    }
+pub(crate) fn egui_visuals(dark: bool) -> egui::Visuals {
+    egui::Theme::from_dark_mode(dark).default_visuals()
 }
 
 /// The caption a button gets when the user has set no text colour: egui's,

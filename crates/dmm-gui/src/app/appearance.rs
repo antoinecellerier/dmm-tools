@@ -247,11 +247,7 @@ impl App {
         if self.applied.theme != Some(target) {
             // Only on change: set_visuals every frame resets egui's internal
             // panel state (resize positions, scroll offsets).
-            let mut visuals = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
+            let mut visuals = crate::theme::egui_visuals(dark);
             compact_corners(&mut visuals);
             // Pin egui's theme to ours: left on its default System it swaps
             // to its other style when the OS flips, under a Light or Dark
@@ -320,11 +316,7 @@ impl App {
         // from `Visuals` rather than copied as a literal, so it keeps
         // tracking egui across upgrades, and assigned either way so that
         // clearing an override restores it without a theme switch.
-        let stock = if dark {
-            egui::Visuals::dark()
-        } else {
-            egui::Visuals::light()
-        };
+        let stock = crate::theme::egui_visuals(dark);
         let (trough, trough_weak) = if bg_overridden {
             (bg, bg)
         } else {
@@ -571,11 +563,7 @@ mod tests {
     #[test]
     fn the_scrollbar_trough_tracks_egui_until_the_background_is_overridden() {
         for dark in [true, false] {
-            let stock = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
+            let stock = crate::theme::egui_visuals(dark);
             let (ctx, _) = themed_app(dark, PaletteOverrides::default());
             assert_eq!(
                 ctx.global_style().visuals.widgets.noninteractive.bg_fill,
@@ -604,11 +592,7 @@ mod tests {
     #[test]
     fn the_open_combo_box_tracks_egui_until_the_button_is_overridden() {
         for dark in [true, false] {
-            let stock = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
+            let stock = crate::theme::egui_visuals(dark);
             let (ctx, _) = themed_app(dark, PaletteOverrides::default());
             assert_eq!(
                 ctx.global_style().visuals.widgets.open.weak_bg_fill,
@@ -638,11 +622,7 @@ mod tests {
     #[test]
     fn button_captions_track_egui_until_the_text_is_overridden() {
         for dark in [true, false] {
-            let stock = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
+            let stock = crate::theme::egui_visuals(dark);
             let (ctx, _) = themed_app(dark, PaletteOverrides::default());
             let style = ctx.global_style();
             let w = &style.visuals.widgets;
@@ -701,11 +681,7 @@ mod tests {
     #[test]
     fn borders_track_egui_until_the_border_is_overridden() {
         for dark in [true, false] {
-            let stock = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
+            let stock = crate::theme::egui_visuals(dark);
             let (ctx, _) = themed_app(dark, PaletteOverrides::default());
             let style = ctx.global_style();
             let v = &style.visuals;
@@ -780,11 +756,7 @@ mod tests {
     #[test]
     fn the_selection_tracks_egui_until_the_accent_is_overridden() {
         for dark in [true, false] {
-            let stock = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
+            let stock = crate::theme::egui_visuals(dark);
             let (ctx, _) = themed_app(dark, PaletteOverrides::default());
             let style = ctx.global_style();
             let selection = &style.visuals.selection;

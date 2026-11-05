@@ -497,11 +497,7 @@ mod tests {
     #[test]
     fn the_focus_ring_stays_visible_on_the_panel() {
         for dark in [true, false] {
-            let stock = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
+            let stock = crate::theme::egui_visuals(dark);
             let accent = if dark {
                 egui::Color32::from_rgb(100, 180, 255)
             } else {
