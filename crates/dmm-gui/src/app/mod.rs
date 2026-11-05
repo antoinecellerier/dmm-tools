@@ -271,7 +271,9 @@ pub(super) struct Connection {
     /// Values the meter can be switched to for each setting the readout
     /// draws, as last listed by the acquisition thread.
     pub(super) choices: SettingChoices,
-    /// When true, incoming measurements are ignored (connection stays alive).
+    /// Acquisition is halted: the thread stops reading the meter, though
+    /// device commands still reach it ([`App::set_paused`]). Not the
+    /// live-view scroll-lock.
     pub(super) paused: bool,
     pub(super) last_error: Option<ConnectionIssue>,
     /// Consecutive timeout count (0 = not waiting).

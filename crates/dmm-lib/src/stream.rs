@@ -18,13 +18,12 @@
 //! notification was a reading, DC and AC alternating, none dropped; over its
 //! CP2110 cable both intervals read as before, also after a replug.
 //!
-//! The stream intentionally does not own cancellation — the CLI uses an
-//! `AtomicBool` driven by the Ctrl-C handler while the GUI uses an `mpsc`
-//! stop channel, and neither fits naturally inside the other. Callers check
-//! their own stop signal around each [`MeasurementStream::tick`] call, and
-//! can hand the stream a predicate via [`MeasurementStream::with_cancel`] so
-//! the wait for a reading gives up on that same signal instead of running
-//! to term.
+//! The stream does not own cancellation: each binary has its own stop
+//! signal (the CLI's Ctrl-C flag, the GUI's stop flag, raised when it stops
+//! its acquisition thread). Callers check it around each
+//! [`MeasurementStream::tick`] call and hand it to
+//! [`MeasurementStream::with_cancel`], so the wait for a reading gives up on
+//! that same signal instead of running to term.
 
 use crate::Dmm;
 use crate::clock::Clock;
