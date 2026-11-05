@@ -1,4 +1,4 @@
-use super::{ModeTables, RangeInfo, m, r};
+use super::{DeviceTable, RangeInfo, m, r};
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
@@ -119,7 +119,7 @@ impl Default for Ut61bPlusTable {
 /// Membership only: the driver presses until the target shows, so no ring
 /// here claims a press order. No press has been observed on this model; see
 /// `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1.
-const DIAL: &[DialPosition] = &[
+pub(super) const DIAL: &[DialPosition] = &[
     // Hz/% — the dedicated frequency position, listed first because it is the
     // smallest one reaching Hz and Duty %, which every ring below also reaches.
     DialPosition {
@@ -217,9 +217,14 @@ const DIAL: &[DialPosition] = &[
     },
 ];
 
-impl ModeTables for Ut61bPlusTable {
-    const DIAL_POSITIONS: &'static [DialPosition] = DIAL;
-    const MODEL_NAME: &'static str = "UNI-T UT61B+";
+impl DeviceTable for Ut61bPlusTable {
+    fn model_name(&self) -> &'static str {
+        "UNI-T UT61B+"
+    }
+
+    fn dial_positions(&self) -> &'static [DialPosition] {
+        DIAL
+    }
 
     fn entry(&self, mode: Mode) -> Option<&[RangeInfo]> {
         Some(match mode {
@@ -262,7 +267,6 @@ impl ModeTables for Ut61bPlusTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::ut61eplus::tables::DeviceTable;
 
     fn table() -> Ut61bPlusTable {
         Ut61bPlusTable::new()

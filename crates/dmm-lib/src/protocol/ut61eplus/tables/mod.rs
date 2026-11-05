@@ -46,10 +46,28 @@ fn lookup_range(table: &[RangeInfo], range: u8) -> Option<&RangeInfo> {
     table.get(range as usize).filter(|r| !r.is_gap())
 }
 
-/// Trait for device-specific range/unit lookup tables.
+/// One model's range tables, dial and quirks. The specs are the manual's
+/// tables in `ut61eplus/specs/`.
 pub(crate) trait DeviceTable: Send {
-    fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo>;
     fn model_name(&self) -> &'static str;
+
+    /// The range table for `mode`, in range-byte order; a skipped range byte
+    /// is a [`GAP`]. `None` for a mode this model does not have, or that has
+    /// no ranges (NCV).
+    fn entry(&self, mode: Mode) -> Option<&[RangeInfo]>;
+
+    /// The rung the meter reports as `range` in `mode`; `None` for a mode
+    /// without a table, past the table's end or at a [`GAP`].
+    fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo> {
+        self.entry(mode)
+            .and_then(|table| lookup_range(table, range))
+    }
+
+    /// The range labels this model lists for `mode`, in range-byte order;
+    /// empty where [`DeviceTable::entry`] is `None`.
+    fn ranges(&self, mode: Mode) -> &[RangeInfo] {
+        self.entry(mode).unwrap_or(&[])
+    }
 
     /// The model's dial positions, for the cycle-to-target mode driver in
     /// `protocol::cycle`.
@@ -60,22 +78,19 @@ pub(crate) trait DeviceTable: Send {
         &[]
     }
 
-    /// The range labels this model lists for `mode`, in range-byte order;
-    /// a skipped range byte is a [`GAP`].
-    fn ranges(&self, _mode: Mode) -> &[RangeInfo] {
-        &[]
-    }
-
     /// Every mode the model reaches, for a model whose dial is not described
-    /// ([`DeviceTable::dial_positions`] empty); empty for one whose dial is.
+    /// ([`DeviceTable::dial_positions`] empty), and only for one; empty for
+    /// one whose dial is.
     fn modes(&self) -> &'static [Mode] {
         &[]
     }
 
     /// Whether RANGE is dead in `mode` on this model, so no ladder is
-    /// offered even though the table lists more than one entry.
-    fn range_is_fixed(&self, _mode: Mode) -> bool {
-        false
+    /// offered even though the table lists more than one entry. Default:
+    /// [`FAMILY_FIXED_RANGE_MODES`]. A model that fixes more of them
+    /// overrides this and folds the default back in.
+    fn range_is_fixed(&self, mode: Mode) -> bool {
+        FAMILY_FIXED_RANGE_MODES.contains(&mode)
     }
 
     /// Modes where the Peak command (0x4D) does something on this model.
@@ -89,7 +104,8 @@ pub(crate) trait DeviceTable: Send {
     }
 
     /// The commands this model's buttons take, by the names `send_command`
-    /// answers. Default: the family's whole list.
+    /// answers. Default: the family's whole list; a model whose buttons are
+    /// known to take fewer sets its own.
     fn commands(&self) -> &'static [&'static str] {
         super::UT61EPLUS_COMMANDS
     }
@@ -160,107 +176,6 @@ pub(crate) fn range_ladder(table: &dyn DeviceTable, mode: Mode) -> Vec<Cow<'stat
     )
 }
 
-/// Per-model data behind `DeviceTable`. The specs are the manual's tables in
-/// `ut61eplus/specs/`.
-pub(crate) trait ModeTables: Send {
-    /// Model name reported by `DeviceTable::model_name`. An associated const
-    /// rather than a method so it cannot collide with the trait method the
-    /// blanket impl below derives from it.
-    const MODEL_NAME: &'static str;
-
-    /// Dial table returned by `DeviceTable::dial_positions`.
-    const DIAL_POSITIONS: &'static [DialPosition];
-
-    /// Modes returned by `DeviceTable::modes`: set by a table whose
-    /// `DIAL_POSITIONS` is empty, and only by one.
-    const MODES: &'static [Mode] = &[];
-
-    /// The range table for `mode`, in range-byte order; `None` for a mode
-    /// this model does not have, or that has no ranges (NCV).
-    fn entry(&self, mode: Mode) -> Option<&[RangeInfo]>;
-
-    /// Modes this model's RANGE button cannot change. Default:
-    /// [`FAMILY_FIXED_RANGE_MODES`]. A model that fixes more of them
-    /// overrides this and folds the default back in.
-    fn range_is_fixed(&self, mode: Mode) -> bool {
-        FAMILY_FIXED_RANGE_MODES.contains(&mode)
-    }
-
-    /// Modes where Peak works on this model. Default: none.
-    fn peak_modes(&self) -> &'static [Mode] {
-        &[]
-    }
-
-    /// Commands returned by `DeviceTable::commands`: set by a model whose
-    /// buttons are known to take fewer.
-    const COMMANDS: &'static [&'static str] = super::UT61EPLUS_COMMANDS;
-
-    /// Returned by `DeviceTable::step_instructions`.
-    const STEP_INSTRUCTIONS: &'static [(&'static str, &'static str)] = &[];
-
-    /// Returned by `DeviceTable::name_before_stream`.
-    const NAME_BEFORE_STREAM: bool = false;
-
-    /// Returned by `DeviceTable::has_secondary_display`.
-    const SECONDARY_DISPLAY: bool = false;
-
-    /// Returned by `DeviceTable::capture_steps`. Default: the family list.
-    fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
-        None
-    }
-}
-
-impl<T: ModeTables> DeviceTable for T {
-    fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo> {
-        self.entry(mode)
-            .and_then(|table| lookup_range(table, range))
-    }
-
-    fn model_name(&self) -> &'static str {
-        T::MODEL_NAME
-    }
-
-    fn dial_positions(&self) -> &'static [DialPosition] {
-        T::DIAL_POSITIONS
-    }
-
-    fn ranges(&self, mode: Mode) -> &[RangeInfo] {
-        self.entry(mode).unwrap_or(&[])
-    }
-
-    fn modes(&self) -> &'static [Mode] {
-        T::MODES
-    }
-
-    fn range_is_fixed(&self, mode: Mode) -> bool {
-        ModeTables::range_is_fixed(self, mode)
-    }
-
-    fn peak_modes(&self) -> &'static [Mode] {
-        ModeTables::peak_modes(self)
-    }
-
-    fn commands(&self) -> &'static [&'static str] {
-        T::COMMANDS
-    }
-
-    fn step_instructions(&self) -> &'static [(&'static str, &'static str)] {
-        T::STEP_INSTRUCTIONS
-    }
-
-    fn name_before_stream(&self) -> bool {
-        T::NAME_BEFORE_STREAM
-    }
-
-    fn has_secondary_display(&self) -> bool {
-        T::SECONDARY_DISPLAY
-    }
-
-    fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
-        ModeTables::capture_steps(self)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::ut61b_plus::Ut61bPlusTable;
@@ -276,9 +191,9 @@ mod tests {
     const BUTTONS: &[CycleButton] = &[CycleButton::Select, CycleButton::Hz];
 
     const DIAL_TABLES: [(&str, &[DialPosition]); 3] = [
-        ("UT61E+", Ut61ePlusTable::DIAL_POSITIONS),
-        ("UT61B+", Ut61bPlusTable::DIAL_POSITIONS),
-        ("UT61D+", Ut61dPlusTable::DIAL_POSITIONS),
+        ("UT61E+", ut61e_plus::DIAL),
+        ("UT61B+", ut61b_plus::DIAL),
+        ("UT61D+", ut61d_plus::DIAL),
     ];
 
     fn label(mode: u16) -> Cow<'static, str> {
@@ -332,7 +247,7 @@ mod tests {
     #[test]
     fn ut61e_plus_ac_volts_reaches_lpf_and_the_hz_ring() {
         assert_eq!(
-            modes_at(Ut61ePlusTable::DIAL_POSITIONS, Mode::AcV),
+            modes_at(ut61e_plus::DIAL, Mode::AcV),
             sorted(vec![
                 m(Mode::AcV),
                 m(Mode::LpfV),
@@ -346,7 +261,7 @@ mod tests {
     /// ring at all — only the Hz/% one.
     #[test]
     fn ut61b_plus_ac_volts_has_only_the_hz_ring() {
-        let positions = Ut61bPlusTable::DIAL_POSITIONS;
+        let positions = ut61b_plus::DIAL;
         assert_eq!(
             modes_at(positions, Mode::AcV),
             sorted(vec![m(Mode::AcV), m(Mode::Hz), m(Mode::DutyCycle)])
@@ -365,7 +280,7 @@ mod tests {
     #[test]
     fn ut61d_plus_combines_ac_and_dc_volts_on_one_position() {
         assert_eq!(
-            modes_at(Ut61dPlusTable::DIAL_POSITIONS, Mode::AcV),
+            modes_at(ut61d_plus::DIAL, Mode::AcV),
             sorted(vec![
                 m(Mode::AcV),
                 m(Mode::DcV),
@@ -378,7 +293,7 @@ mod tests {
     /// Manual §11: "Short press the SELECT button to switch between °C and °F".
     #[test]
     fn ut61d_plus_switches_temperature_units_with_select() {
-        let positions = Ut61dPlusTable::DIAL_POSITIONS;
+        let positions = ut61d_plus::DIAL;
         assert_eq!(
             modes_at(positions, Mode::TempC),
             sorted(vec![m(Mode::TempC), m(Mode::TempF)])
@@ -395,14 +310,14 @@ mod tests {
     /// press the ring all the way round looking for it.
     #[test]
     fn dial_tables_list_no_mode_the_model_lacks() {
-        let b_plus = all_modes(Ut61bPlusTable::DIAL_POSITIONS);
+        let b_plus = all_modes(ut61b_plus::DIAL);
         for absent in [Mode::Hfe, Mode::TempC, Mode::TempF, Mode::LozV] {
             assert!(!b_plus.contains(&m(absent)), "UT61B+ has no {absent:?}");
         }
         // 0x15/0x16/0x17 were unreachable from every UT61E+ dial position
         // (ut61-family spec §3.1); the protocol deck makes them LoZ and two
         // clamp functions.
-        let e_plus = all_modes(Ut61ePlusTable::DIAL_POSITIONS);
+        let e_plus = all_modes(ut61e_plus::DIAL);
         for absent in [Mode::LozV, Mode::ClampAcA, Mode::ClampDcA] {
             assert!(
                 !e_plus.contains(&m(absent)),
@@ -443,9 +358,10 @@ mod tests {
     #[test]
     fn a_gap_reads_as_no_range_and_breaks_the_ladder() {
         struct Sparse;
-        impl ModeTables for Sparse {
-            const MODEL_NAME: &'static str = "sparse";
-            const DIAL_POSITIONS: &'static [DialPosition] = &[];
+        impl DeviceTable for Sparse {
+            fn model_name(&self) -> &'static str {
+                "sparse"
+            }
             fn entry(&self, mode: Mode) -> Option<&[RangeInfo]> {
                 const ROW: [RangeInfo; 3] = [GAP, r("2V", "V"), r("20V", "V")];
                 (mode == Mode::DcV).then_some(&ROW[..])

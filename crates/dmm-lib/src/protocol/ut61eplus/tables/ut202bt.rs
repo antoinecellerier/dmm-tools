@@ -1,5 +1,4 @@
-use super::{GAP, ModeTables, RangeInfo, r};
-use crate::protocol::cycle::DialPosition;
+use super::{DeviceTable, GAP, RangeInfo, r};
 use crate::protocol::steps::{self, Ohms, Volts};
 use crate::protocol::ut61eplus::capture::command_steps;
 use crate::protocol::ut61eplus::mode::Mode;
@@ -108,34 +107,47 @@ impl Default for Ut202btTable {
     }
 }
 
-impl ModeTables for Ut202btTable {
-    const DIAL_POSITIONS: &'static [DialPosition] = &[];
-    const MODEL_NAME: &'static str = "UNI-T UT202BT";
+impl DeviceTable for Ut202btTable {
+    fn model_name(&self) -> &'static str {
+        "UNI-T UT202BT"
+    }
+
     /// Of the commands here, the only ones UNI-T's app sends this meter
     /// (family spec §6.5). Its other bytes, 0x31-0x37, have no command here;
     /// Peak stays off until 0x37 or 0x4D is known to start it.
-    const COMMANDS: &'static [&'static str] = &["hold", "range"];
+    fn commands(&self) -> &'static [&'static str] {
+        &["hold", "range"]
+    }
+
     /// UNI-T's app asks the name first, and a UT60BT is reported to need it
     /// (family spec §6.4).
-    const NAME_BEFORE_STREAM: bool = true;
+    fn name_before_stream(&self) -> bool {
+        true
+    }
+
     /// Frequency beside AC V and AC A, °F beside °C (family spec §2.3).
-    const SECONDARY_DISPLAY: bool = true;
-    const MODES: &'static [Mode] = &[
-        Mode::AcV,
-        Mode::DcV,
-        Mode::Hz,
-        Mode::Ohm,
-        Mode::Continuity,
-        Mode::Capacitance,
-        Mode::TempC,
-        Mode::TempF,
-        Mode::AcA,
-        Mode::Ncv,
-        Mode::ClampAcA,
-        Mode::LpfV,
-        Mode::ClampLpfA,
-        Mode::Inrush,
-    ];
+    fn has_secondary_display(&self) -> bool {
+        true
+    }
+
+    fn modes(&self) -> &'static [Mode] {
+        &[
+            Mode::AcV,
+            Mode::DcV,
+            Mode::Hz,
+            Mode::Ohm,
+            Mode::Continuity,
+            Mode::Capacitance,
+            Mode::TempC,
+            Mode::TempF,
+            Mode::AcA,
+            Mode::Ncv,
+            Mode::ClampAcA,
+            Mode::LpfV,
+            Mode::ClampLpfA,
+            Mode::Inrush,
+        ]
+    }
 
     fn peak_modes(&self) -> &'static [Mode] {
         PEAK_MODES
@@ -295,7 +307,7 @@ fn capture_steps() -> Vec<CaptureStep> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::ut61eplus::tables::{DeviceTable, range_ladder};
+    use crate::protocol::ut61eplus::tables::range_ladder;
 
     fn table() -> Ut202btTable {
         Ut202btTable::new()
@@ -333,10 +345,10 @@ mod tests {
     fn peak_is_ac_volts_and_amps_only() {
         let t = table();
         for mode in [Mode::AcV, Mode::AcA, Mode::ClampAcA] {
-            assert!(DeviceTable::peak_modes(&t).contains(&mode), "{mode:?}");
+            assert!(t.peak_modes().contains(&mode), "{mode:?}");
         }
         for mode in [Mode::DcV, Mode::LpfV, Mode::ClampLpfA, Mode::Inrush] {
-            assert!(!DeviceTable::peak_modes(&t).contains(&mode), "{mode:?}");
+            assert!(!t.peak_modes().contains(&mode), "{mode:?}");
         }
     }
 }

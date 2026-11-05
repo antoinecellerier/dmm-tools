@@ -1,5 +1,4 @@
-use super::{ModeTables, RangeInfo, r};
-use crate::protocol::cycle::DialPosition;
+use super::{DeviceTable, RangeInfo, r};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT60BT, a handheld with Bluetooth built in.
@@ -120,50 +119,63 @@ impl Default for Ut60btTable {
     }
 }
 
-impl ModeTables for Ut60btTable {
-    const DIAL_POSITIONS: &'static [DialPosition] = &[];
-    const MODEL_NAME: &'static str = "UNI-T UT60BT";
+impl DeviceTable for Ut60btTable {
+    fn model_name(&self) -> &'static str {
+        "UNI-T UT60BT"
+    }
+
     /// The bytes UNI-T's app sends this meter (family spec §6.5): HOLD,
     /// RANGE and its long press, REL and SELECT. It disables MAX/MIN, and
     /// sends no Peak, SELECT2 or backlight.
-    const COMMANDS: &'static [&'static str] = &["hold", "range", "auto", "rel", "select"];
+    fn commands(&self) -> &'static [&'static str] {
+        &["hold", "range", "auto", "rel", "select"]
+    }
+
     /// Its dial (manual P1, Figure 1): one V position, DC with AC on
     /// SELECT; the Ω position starts on continuity; the Hz/% position takes
     /// SELECT, not the USB button (§VIII).
-    const STEP_INSTRUCTIONS: &'static [(&'static str, &'static str)] = &[
-        (
-            "ohm",
-            "Set meter to the \u{03A9} position and press SELECT for \u{03A9}. \
-             Leave leads open (should show OL).",
-        ),
-        (
-            "acv",
-            "Set meter to V and press SELECT for AC V. Leave leads open.",
-        ),
-        ("duty", "Hz/% position: press SELECT for Duty %."),
-    ];
+    fn step_instructions(&self) -> &'static [(&'static str, &'static str)] {
+        &[
+            (
+                "ohm",
+                "Set meter to the \u{03A9} position and press SELECT for \u{03A9}. \
+                 Leave leads open (should show OL).",
+            ),
+            (
+                "acv",
+                "Set meter to V and press SELECT for AC V. Leave leads open.",
+            ),
+            ("duty", "Hz/% position: press SELECT for Duty %."),
+        ]
+    }
+
     /// UNI-T's app asks the name first, and a UT60BT is reported to need it
     /// (family spec §6.4).
-    const NAME_BEFORE_STREAM: bool = true;
-    const MODES: &'static [Mode] = &[
-        Mode::AcV,
-        Mode::AcMv,
-        Mode::DcV,
-        Mode::DcMv,
-        Mode::Hz,
-        Mode::DutyCycle,
-        Mode::Ohm,
-        Mode::Continuity,
-        Mode::Diode,
-        Mode::Capacitance,
-        Mode::TempC,
-        Mode::TempF,
-        Mode::DcUa,
-        Mode::AcUa,
-        Mode::DcMa,
-        Mode::AcMa,
-        Mode::Ncv,
-    ];
+    fn name_before_stream(&self) -> bool {
+        true
+    }
+
+    fn modes(&self) -> &'static [Mode] {
+        &[
+            Mode::AcV,
+            Mode::AcMv,
+            Mode::DcV,
+            Mode::DcMv,
+            Mode::Hz,
+            Mode::DutyCycle,
+            Mode::Ohm,
+            Mode::Continuity,
+            Mode::Diode,
+            Mode::Capacitance,
+            Mode::TempC,
+            Mode::TempF,
+            Mode::DcUa,
+            Mode::AcUa,
+            Mode::DcMa,
+            Mode::AcMa,
+            Mode::Ncv,
+        ]
+    }
 
     fn entry(&self, mode: Mode) -> Option<&[RangeInfo]> {
         Some(match mode {
@@ -207,7 +219,6 @@ impl ModeTables for Ut60btTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::ut61eplus::tables::DeviceTable;
 
     fn table() -> Ut60btTable {
         Ut60btTable::new()

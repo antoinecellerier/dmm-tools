@@ -3223,15 +3223,15 @@ raw_payload=14"#
     /// A table that describes no dial, with a rung for every mode.
     struct NoDial;
 
-    static ANY_RUNG: RangeInfo = tables::r("any", "V");
+    static ANY_RUNG: [RangeInfo; 1] = [tables::r("any", "V")];
 
     impl DeviceTable for NoDial {
-        fn range_info(&self, _mode: Mode, _range: u8) -> Option<&RangeInfo> {
-            Some(&ANY_RUNG)
-        }
-
         fn model_name(&self) -> &'static str {
             "no dial"
+        }
+
+        fn entry(&self, _mode: Mode) -> Option<&[RangeInfo]> {
+            Some(&ANY_RUNG)
         }
     }
 

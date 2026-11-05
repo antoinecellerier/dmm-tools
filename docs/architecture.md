@@ -284,7 +284,7 @@ GUI's fields. Renaming or retyping a shared field breaks both builds at once, ra
 binary silently losing the setting.
 
 **Per-model tables behind a trait.** Where a family's models share one driver, what differs sits
-behind a per-model trait (`ModeTables`, `Vc8x0Model`), so a model is one implementation plus its
+behind a per-model trait (`DeviceTable`, `Vc8x0Model`), so a model is one implementation plus its
 spec tables.
 
 **No parser combinators.** Frames are short and positional, so direct indexing reads more clearly
