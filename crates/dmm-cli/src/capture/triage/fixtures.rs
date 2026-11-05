@@ -74,10 +74,17 @@ fn article(name: &str) -> &'static str {
     }
 }
 
-/// A step id as a file name: `dcv/range:22V` is `dcv_range_22V`.
+/// A step id as a file name: `dcv/range:22V` is `dcv_range_22V`, and
+/// `dcv/range~restore` is `dcv_range_restore`.
 fn file_name(id: &str) -> String {
     id.chars()
-        .map(|c| if matches!(c, '/' | ':' | ' ') { '_' } else { c })
+        .map(|c| {
+            if matches!(c, '/' | ':' | '~' | ' ') {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
@@ -141,6 +148,12 @@ mod tests {
             ),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_fixture_is_named_after_its_step() {
+        assert_eq!(file_name("dcv/range:22V"), "dcv_range_22V");
+        assert_eq!(file_name("dcv/range~restore"), "dcv_range_restore");
     }
 
     /// A run picked by another brand's name is captured from that meter,

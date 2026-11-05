@@ -720,13 +720,15 @@ pub(super) mod tests {
 
     /// A sub-step is held to the setting its id names; a step this build
     /// dropped says so, and a plan run's steps are left alone without the
-    /// plan.
+    /// plan. A restore names no value, and the capture already flagged one
+    /// that failed.
     #[test]
     fn a_sub_step_must_show_its_setting() {
         let report = ut61eplus_report(vec![
             step("dcv/range:2.2V", vec![dcv(b" 0.0001")]),
             step("dcv/mode:AC V", vec![dcv(b" 0.0001")]),
             step("dcv/hold:on", vec![dcv(b" 0.0001")]),
+            step("dcv/range~restore", vec![dcv(b" 0.0001")]),
             step("rpm", vec![dcv(b" 0.0001")]),
         ]);
         let text = triage(&report);

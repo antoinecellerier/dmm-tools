@@ -186,6 +186,13 @@ fn sub_step_id(step_id: &str, setting: Setting, label: &str) -> String {
     )
 }
 
+/// The id a setting's restore after its sweep is filed under:
+/// `dcv/range~restore`. No `:`, so triage never takes `restore` for a
+/// choice the meter should show, and no choice label can collide with it.
+fn restore_id(step_id: &str, setting: Setting) -> String {
+    format!("{step_id}/{}~restore", setting.name())
+}
+
 /// The label as it reads in an id and an instruction. Range and mode labels
 /// are the meter's own (`22V`, `AC V`); on/off-style labels read better
 /// lowercased.
@@ -355,7 +362,9 @@ impl CaptureRun {
             // that fails after a failure already charged is not charged again: a
             // meter that went quiet fails both, and that is one fault, not two.
             // After an uncharged one it is, or a quiet meter never ends the sweeps.
-            if moved && let Some(m) = self.restore(setting, &choices, !charged)? {
+            // Not counted against the cap: it puts the meter back, and the cap
+            // is about how many values one step asks for.
+            if moved && let Some(m) = self.restore(step.id, setting, &choices, !charged)? {
                 current = m;
             }
             if exhausted {
@@ -607,13 +616,18 @@ impl CaptureRun {
     /// Put the setting back to auto range or off before the next mode step, and
     /// say so when the meter would not go. `charge` says whether that failure
     /// spends one of the run's failures.
+    ///
+    /// Filed as the sub-step `<step>/<setting>~restore` whatever the outcome,
+    /// with its frames and the reading it left: a restore that failed leaves
+    /// HOLD latched or a manual range under every later step, and in issue #20
+    /// the report had nothing to explain the step that then went wrong.
     fn restore(
         &mut self,
+        step_id: &str,
         setting: Setting,
         choices: &[dmm_lib::protocol::Choice],
         charge: bool,
     ) -> Result<Option<Measurement>, Box<dyn std::error::Error>> {
-        let dmm = &mut self.dmm;
         // Back to auto range or off — or, on a setting with no such value (a
         // UT181A in Peak has no auto range), to the value the sweep started on.
         let Some(off) = choices
@@ -623,28 +637,65 @@ impl CaptureRun {
         else {
             return Ok(None);
         };
-        let reading = match dmm.select(setting, off.id) {
-            // A failed walk can leave the meter in a mode without this setting
-            // (RANGE once flipped a UT61E+ into AC+DC V): nothing to put back,
-            // but the next setting is offered from where the meter is now.
-            Err(dmm_lib::error::Error::UnsupportedCommand(_)) => {
-                return Ok(dmm.request_measurement().ok());
-            }
-            selected => selected.and_then(|()| read_past_blank(dmm)),
+        let id = restore_id(step_id, setting);
+        recording::lock(&self.recorder).set_step(Some(&id));
+        let selected = self.dmm.select(setting, off.id);
+        // A failed walk can leave the meter in a mode without this setting
+        // (RANGE once flipped a UT61E+ into AC+DC V): nothing to put back, but
+        // the next setting is offered from where the meter is now.
+        let gone_elsewhere = matches!(selected, Err(dmm_lib::error::Error::UnsupportedCommand(_)));
+        let reading = if gone_elsewhere {
+            self.dmm.request_measurement()
+        } else {
+            selected.and_then(|()| read_past_blank(&mut self.dmm))
         };
         // A lost link is no meter refusing to go back: the run ends on it.
         let reading = match reading {
             Err(e) if link_gone(&e) => return Err(e.into()),
             reading => reading,
         };
-        if let Ok(m) = &reading
-            && shows_target(
-                setting,
-                off.id,
-                &off.label,
-                &SampleData::from_measurement(m),
-            )
-        {
+        let sample = reading.as_ref().ok().map(SampleData::from_measurement);
+        let failure = match (&reading, &sample) {
+            (Err(e), _) => Some(e.to_string()),
+            _ if gone_elsewhere => None,
+            (Ok(_), Some(s)) if shows_target(setting, off.id, &off.label, s) => None,
+            (Ok(_), _) => Some(format!(
+                "the meter did not read back {} {}",
+                setting.name(),
+                choice_slug(setting, &off.label)
+            )),
+        };
+        let (frames, frames_dropped) = {
+            let mut rec = recording::lock(&self.recorder);
+            rec.set_step(None);
+            frames_for_step(&rec.drain(), &id)
+        };
+        // Filed as a driven choice is: an error only when a command or read
+        // failed; a read-back that missed is a captured reading to look at.
+        let errored = reading.is_err();
+        upsert_step(
+            &mut self.report,
+            StepResult {
+                needs_attention: failure.is_some(),
+                samples: sample.into_iter().collect(),
+                frames,
+                frames_dropped,
+                error: failure.clone(),
+                ..StepResult::new(
+                    &id,
+                    &sub_step_instruction(setting, &off.label),
+                    if errored {
+                        StepStatus::Error
+                    } else {
+                        StepStatus::Captured
+                    },
+                )
+            },
+        );
+        // Saved now: a run cut short before the next step's save would lose
+        // where the sweep left the meter.
+        save_report(&self.report, &self.output_path)?;
+        if failure.is_none() {
             return Ok(reading.ok());
         }
         eprintln!(
@@ -1052,6 +1103,9 @@ mod tests {
         NoReset,
         /// The link drops at the press, as a Bluetooth meter walking off does.
         LinkLost,
+        /// Every value lands, and the press back to off or auto is accepted
+        /// and does nothing.
+        IgnoresReset,
     }
 
     struct Fails {
@@ -1147,6 +1201,8 @@ mod tests {
         ) -> dmm_lib::error::Result<()> {
             use dmm_lib::error::{Error, Rejected, Unsupported};
             use dmm_lib::text::TextKind;
+            // A press on the wire, so a sub-step's frames show it was sent.
+            t.write(&[0xAB, 0xCD, id as u8])?;
             if setting != self.setting {
                 return self.inner.select(t, setting, id);
             }
@@ -1165,7 +1221,9 @@ mod tests {
                 Failure::RefusedIntoAnotherMode if id == RESET_ID => {
                     Err(Unsupported::Setting(setting).into())
                 }
+                Failure::IgnoresReset if id == RESET_ID => Ok(()),
                 _ if id == RESET_ID => self.inner.select(t, setting, id),
+                Failure::IgnoresReset => self.inner.select(t, setting, id),
                 Failure::Refused | Failure::RefusedIntoAnotherMode => Err(Rejected::DidNothing {
                     button: "SELECT",
                     state: "AC V".into(),
@@ -1419,13 +1477,122 @@ mod tests {
         }
     }
 
+    fn filed<'a>(report: &'a CaptureReport, id: &str) -> &'a StepResult {
+        report
+            .steps
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap_or_else(|| panic!("{id} is not filed"))
+    }
+
+    /// A clean sweep files where each setting was left: a reading showing
+    /// auto range and HOLD off, nothing flagged.
+    #[test]
+    fn a_clean_sweep_files_where_each_setting_was_left() {
+        let report = swept(dmm_lib::mock::MockMode::DcV, "dcv");
+        let range = filed(&report, "dcv/range~restore");
+        let hold = filed(&report, "dcv/hold~restore");
+        for restore in [range, hold] {
+            assert_eq!(restore.status, StepStatus::Captured, "{:?}", restore.error);
+            assert!(!restore.needs_attention, "{} was flagged", restore.id);
+            assert!(restore.error.is_none());
+        }
+        assert_eq!(range.instruction, "range \u{2192} Auto (sent by the tool)");
+        assert!(range.samples.last().is_some_and(|s| s.flags.auto_range));
+        assert_eq!(hold.instruction, "hold \u{2192} off (sent by the tool)");
+        assert!(hold.samples.last().is_some_and(|s| !s.flags.hold));
+    }
+
+    /// A restore the meter would not take reaches the report flagged — an
+    /// error when the meter didn't answer, a captured reading when it
+    /// answered from where it was left — with the frames of the presses: the
+    /// evidence issue #20 lacked.
+    #[test]
+    fn a_failed_restore_is_filed_and_flagged() {
+        let (report, _) = swept_by(
+            Fails::boxed(dmm_lib::mock::MockMode::DcV, Setting::Hold, Failure::Silent),
+            "dcv",
+            Driver::new(true),
+        );
+        let restore = filed(&report, "dcv/hold~restore");
+        assert_eq!(restore.status, StepStatus::Error);
+        assert!(restore.needs_attention);
+        assert!(restore.error.is_some());
+        assert!(!restore.frames.is_empty(), "the press was not kept");
+
+        let (report, _) = swept_by(
+            Fails::boxed(
+                dmm_lib::mock::MockMode::DcV,
+                Setting::Hold,
+                Failure::IgnoresReset,
+            ),
+            "dcv",
+            Driver::new(true),
+        );
+        let restore = filed(&report, "dcv/hold~restore");
+        assert_eq!(restore.status, StepStatus::Captured);
+        assert!(restore.needs_attention);
+        assert_eq!(
+            restore.error.as_deref(),
+            Some("the meter did not read back hold off")
+        );
+        assert!(!restore.frames.is_empty(), "the press was not kept");
+        assert!(restore.samples.last().is_some_and(|s| s.flags.hold));
+    }
+
+    /// A press that landed before its error is still put back, and the
+    /// restore says so with the reading it left.
+    #[test]
+    fn a_restore_after_a_landed_failure_shows_the_setting_back_off() {
+        let (report, _) = swept_by(
+            Fails::boxed(
+                dmm_lib::mock::MockMode::DcV,
+                Setting::Hold,
+                Failure::TimedOutAfterLanding,
+            ),
+            "dcv",
+            Driver::new(true),
+        );
+        let restore = filed(&report, "dcv/hold~restore");
+        assert_eq!(restore.status, StepStatus::Captured, "{:?}", restore.error);
+        assert!(!restore.needs_attention);
+        assert!(!restore.frames.is_empty(), "the press was not kept");
+        assert!(restore.samples.last().is_some_and(|s| !s.flags.hold));
+    }
+
+    /// A resumed run sweeps nothing its report already holds, so it neither
+    /// retakes a restore nor files a second one.
+    #[test]
+    fn a_resumed_sweep_leaves_the_restores_alone() {
+        let mut run = run_on(mock(dmm_lib::mock::MockMode::DcV));
+        let last = run.dmm.request_measurement().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        run.output_path = dir
+            .path()
+            .join("capture.yaml")
+            .to_string_lossy()
+            .to_string();
+        let step = CaptureStep {
+            id: "dcv",
+            ..mode_step("DC V")
+        };
+        run.sweep_step(&step, &last).unwrap();
+        let before = serde_json::to_string(&run.report.steps).unwrap();
+        assert!(before.contains("dcv/hold~restore"));
+
+        run.driver = Driver::new(true);
+        run.sweep_step(&step, &last).unwrap();
+        assert_eq!(serde_json::to_string(&run.report.steps).unwrap(), before);
+    }
+
     /// A proven setting refused is the meter being right, and a mode left
-    /// with no such setting has nothing to restore: neither costs a failure.
+    /// with no such setting has nothing to restore: neither costs a failure,
+    /// and the restore files the reading of where the meter went.
     #[test]
     fn a_restore_with_nothing_to_restore_costs_no_failure() {
         let mut driver = Driver::new(true);
         driver.prove_command("hold");
-        let (_, driver) = swept_by(
+        let (report, driver) = swept_by(
             Fails::boxed(
                 dmm_lib::mock::MockMode::DcV,
                 Setting::Hold,
@@ -1435,6 +1602,10 @@ mod tests {
             driver,
         );
         assert_eq!(driver.failures, 0);
+        let restore = filed(&report, "dcv/hold~restore");
+        assert_eq!(restore.status, StepStatus::Captured, "{:?}", restore.error);
+        assert!(!restore.needs_attention);
+        assert_eq!(restore.samples.len(), 1);
     }
 
     /// A link lost at a press is no refusal: the run ends there, with no

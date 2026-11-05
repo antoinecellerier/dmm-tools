@@ -173,9 +173,11 @@ Driving relies on reading mode, range and flags back correctly, so:
   already worked this run is refused because the mode lacks it (MIN/MAX in continuity), so that
   refusal is neither counted nor flagged. `DRIVE_FAILURE_BUDGET` counted failures disable the
   sweeps for the rest of the run, and `MAX_DRIVE_SUBSTEPS_PER_STEP` caps one mode step.
-- The baseline (auto range, flags off) is restored with a read-back before the next mode step,
-  even once the budget is spent: a meter left latched in HOLD is worse than one more command. A
-  range with no auto — a UT181A's in Peak — goes back to the rung the sweep started on.
+- Each swept setting goes back to the baseline (auto range, flags off) with a read-back before
+  the next one, even once the budget is spent: a meter left latched in HOLD is worse than one more
+  command. A range with no auto — a UT181A's in Peak — goes back to the rung the sweep started on.
+  The restore is a sub-step of its own, `<step>/<setting>~restore`, flagged when the meter would
+  not go back, so a HOLD left latched explains the steps after it (issue #20).
 - Range sweeps go through `choices(Range)` only, which cycles to target with read-back and stops
   when the read-back stops moving. No blind repeated presses.
 
