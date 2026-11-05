@@ -107,6 +107,25 @@ pub fn is_unknown_mode(mode: &str) -> bool {
 pub(crate) mod test_support {
     use crate::measurement::Measurement;
 
+    /// A small xorshift generator, so the fuzz tests need no new
+    /// dependency. Each test seeds its own state, so its inputs stay fixed.
+    pub(crate) fn pseudo_random(seed: &mut u64) -> u64 {
+        *seed ^= *seed << 13;
+        *seed ^= *seed >> 7;
+        *seed ^= *seed << 17;
+        *seed
+    }
+
+    /// Hex as the specs and capture reports write it (spaces optional).
+    pub(crate) fn hex(s: &str) -> Vec<u8> {
+        let clean: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(clean.len().is_multiple_of(2), "odd-length hex: {clean}");
+        (0..clean.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&clean[i..i + 2], 16).expect("valid hex"))
+            .collect()
+    }
+
     /// `unit` without its SI prefix: "kHz" is "Hz", "°C" stays "°C". The
     /// spec tests compare a row's resolution with the reading's unit by it.
     pub(crate) fn unit_family(unit: &str) -> &str {

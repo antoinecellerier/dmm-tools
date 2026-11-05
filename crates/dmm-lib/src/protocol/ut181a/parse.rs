@@ -884,7 +884,7 @@ fn parse_peak(payload: &[u8]) -> Result<Parsed> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::protocol::test_support::snapshot;
+    use crate::protocol::test_support::{hex, snapshot};
 
     pub(crate) fn make_payload(
         mode: u16,
@@ -1115,16 +1115,6 @@ raw_payload=19"#
         // Everything else keeps the positional labels.
         assert_eq!(aux_labels(0x3111), ("Aux1", "Aux2"));
         assert_eq!(aux_labels(0x1141), ("Aux1", "Aux2"));
-    }
-
-    /// Hex as a capture report writes it in `raw_hex` (spaces optional).
-    pub(crate) fn hex(s: &str) -> Vec<u8> {
-        let clean: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-        assert!(clean.len().is_multiple_of(2), "odd-length hex: {clean}");
-        (0..clean.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&clean[i..i + 2], 16).expect("valid hex"))
-            .collect()
     }
 
     /// Real UT181A frame: temperature with two thermocouples connected

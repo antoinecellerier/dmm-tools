@@ -323,10 +323,10 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::packet::tests::{example_info, example_reading, hex, sealed};
+    use super::super::packet::tests::{example_info, example_reading, sealed};
     use super::*;
     use crate::protocol::capture_reports;
-    use crate::protocol::test_support::snapshot;
+    use crate::protocol::test_support::{hex, pseudo_random, snapshot};
 
     /// A numeric reading's value, `None` for any other kind.
     fn normal(v: &MeasuredValue) -> Option<f64> {
@@ -792,15 +792,6 @@ mod tests {
         }
         assert_eq!(quiet(&with(0x23, 0x00, 5000, |_| {})).mode, "Line Hz");
         assert_eq!(quiet(&with(0x02, 0x02, 5000, |_| {})).mode, "LoZ Ω");
-    }
-
-    /// A small xorshift generator, so arbitrary input needs no new
-    /// dependency.
-    fn pseudo_random(seed: &mut u64) -> u64 {
-        *seed ^= *seed << 13;
-        *seed ^= *seed >> 7;
-        *seed ^= *seed << 17;
-        *seed
     }
 
     /// Any field values in a CRC-valid packet decode without a panic.

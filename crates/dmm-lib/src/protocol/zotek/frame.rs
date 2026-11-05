@@ -102,6 +102,7 @@ pub(super) fn extract_packet(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+    use crate::protocol::test_support::pseudo_random;
 
     /// Spec §9's four packets, on air and descrambled.
     pub(crate) const EXAMPLES: [(&[u8], &[u8]); 4] = [
@@ -254,15 +255,6 @@ pub(super) mod tests {
         assert_eq!(packet_at(&buf, 0), None);
         assert_eq!(packet_at(&buf, 1).as_deref(), Some(plain));
         assert_eq!(packet_at(&buf[..buf.len() - 1], 1), None);
-    }
-
-    /// A small xorshift generator, so arbitrary input needs no new
-    /// dependency.
-    pub(crate) fn pseudo_random(seed: &mut u64) -> u64 {
-        *seed ^= *seed << 13;
-        *seed ^= *seed >> 7;
-        *seed ^= *seed << 17;
-        *seed
     }
 
     /// Arbitrary bytes, headers sprinkled in to reach the length checks,

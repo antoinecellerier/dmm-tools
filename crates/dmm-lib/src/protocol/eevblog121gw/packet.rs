@@ -159,6 +159,7 @@ pub(super) fn holds_ascii_packet(buf: &[u8]) -> bool {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+    use crate::protocol::test_support::pseudo_random;
 
     /// Spec §13's worked examples 1-4; bytes 1-4 are the spec's invented
     /// identity.
@@ -418,15 +419,6 @@ pub(super) mod tests {
             odd[at] |= mask;
             assert_eq!(first_decodable(&sealed(odd)), None, "byte {at} {mask:#04x}");
         }
-    }
-
-    /// A small xorshift generator, so arbitrary input needs no new
-    /// dependency.
-    fn pseudo_random(seed: &mut u64) -> u64 {
-        *seed ^= *seed << 13;
-        *seed ^= *seed >> 7;
-        *seed ^= *seed << 17;
-        *seed
     }
 
     /// Arbitrary bytes, with `F2` and packets sprinkled in to reach every

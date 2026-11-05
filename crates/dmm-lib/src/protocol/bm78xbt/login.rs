@@ -173,8 +173,8 @@ pub(crate) fn refusal_reason(code: u16) -> &'static str {
 pub(crate) mod tests {
     use super::*;
     use crate::protocol::bm78xbt::packet::crc16;
-    use crate::protocol::bm78xbt::packet::tests::hex;
     use crate::protocol::capture_reports;
+    use crate::protocol::test_support::hex;
 
     /// The MAC of the spec's example 2, 11:22:33:44:55:66 (invented), in
     /// the wire's order (§10).

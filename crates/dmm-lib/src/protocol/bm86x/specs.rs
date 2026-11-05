@@ -1730,6 +1730,7 @@ mod tests {
     use super::super::reply::tests::ScriptedCable;
     use super::super::{Bm86xProtocol, Series, reply};
     use super::*;
+    use crate::protocol::test_support::hex;
     use crate::protocol::{Protocol, capture_reports, is_unknown_mode, registry};
     use Ann::*;
     use std::collections::HashSet;
@@ -2404,12 +2405,6 @@ mod tests {
         assert_eq!(DBM.mode.input_impedance, Some("10MΩ, 50pF nominal"));
     }
 
-    fn reply(hex: &str) -> Vec<u8> {
-        hex.split(' ')
-            .map(|b| u8::from_str_radix(b, 16).unwrap())
-            .collect()
-    }
-
     /// Replies a BM827s (ET-2517A, #35) and a BM525s (ET-2615A, #36) sent,
     /// as the golden fixtures and the captures hold them, with the table
     /// and row each reads against.
@@ -2417,7 +2412,7 @@ mod tests {
     fn real_replies_take_their_rows() {
         let line = "Line Level Frequency (~Hz)";
         let logic = "Logic Level Frequency (⎍Hz) & Duty Cycle (D%)";
-        for (series, hex, table_name, label) in [
+        for (series, raw_hex, table_name, label) in [
             // bm82x/acmv.yaml: 11.72 mV AC.
             (
                 Series::Bm82x,
@@ -2579,9 +2574,9 @@ mod tests {
                 None,
             ),
         ] {
-            let data = reply(hex);
+            let data = hex(raw_hex);
             let (m, reports) = capture_reports(|| decode::decode(&data, series));
-            assert!(reports.is_empty(), "{hex}: {reports:?}");
+            assert!(reports.is_empty(), "{raw_hex}: {reports:?}");
             let m = m.unwrap();
             assert_eq!(table(&m).map(|(t, _)| t.name), table_name, "{}", what(&m));
             assert_eq!(row(&m).map(|r| r.label), label, "{}", what(&m));
@@ -2592,7 +2587,7 @@ mod tests {
     /// bm82x/hz_acmv.yaml, on the cable.
     #[test]
     fn a_reading_through_dmm_carries_its_spec() {
-        let data = reply("00 00 00 6F BF AF A0 40 A0 DB 6F A0 90 10 00 00 82 82 82 82 10 00 00 00");
+        let data = hex("00 00 00 6F BF AF A0 40 A0 DB 6F A0 90 10 00 00 82 82 82 82 10 00 00 00");
         let reports = data.chunks(8).map(<[u8]>::to_vec).collect();
         let cable = ScriptedCable::new(reply::request(0x82), reports, Vec::new());
         let entry = registry::find_device("bm82x").unwrap();

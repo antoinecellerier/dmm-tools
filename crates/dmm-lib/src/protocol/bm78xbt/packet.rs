@@ -150,13 +150,7 @@ pub(super) fn first_meter_reading(buf: &[u8]) -> Option<&[u8]> {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
-
-    /// Parse the spec's space-separated hex.
-    pub(crate) fn hex(text: &str) -> Vec<u8> {
-        text.split_whitespace()
-            .map(|b| u8::from_str_radix(b, 16).unwrap())
-            .collect()
-    }
+    use crate::protocol::test_support::{hex, pseudo_random};
 
     /// Spec §10 example 1: −1.2345 V DC, autorange.
     pub(crate) fn example_reading() -> Vec<u8> {
@@ -339,15 +333,6 @@ pub(super) mod tests {
         assert_eq!(first_meter_reading(&sealed(sensor)), None, "a sensor's");
         assert_eq!(first_meter_reading(&n[..INFO_LEN + READING_LEN - 1]), None);
         assert_eq!(first_meter_reading(&example_info()), None);
-    }
-
-    /// A small xorshift generator, so arbitrary input needs no new
-    /// dependency.
-    fn pseudo_random(seed: &mut u64) -> u64 {
-        *seed ^= *seed << 13;
-        *seed ^= *seed >> 7;
-        *seed ^= *seed << 17;
-        *seed
     }
 
     /// Arbitrary bytes, with heads and packets sprinkled in to reach every

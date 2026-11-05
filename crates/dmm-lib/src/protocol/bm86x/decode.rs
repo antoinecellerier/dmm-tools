@@ -851,7 +851,7 @@ pub(super) mod tests {
     use super::super::reply::tests::bm820_example;
     use super::*;
     use crate::protocol::capture_reports;
-    use crate::protocol::test_support::snapshot;
+    use crate::protocol::test_support::{hex, pseudo_random, snapshot};
     use Ann::*;
 
     /// The sheet's example (spec §9.1) as its hex column prints it, the
@@ -1426,14 +1426,6 @@ pub(super) mod tests {
         ));
     }
 
-    /// A small xorshift generator, so arbitrary input needs no dependency.
-    fn pseudo_random(seed: &mut u64) -> u64 {
-        *seed ^= *seed << 13;
-        *seed ^= *seed >> 7;
-        *seed ^= *seed << 17;
-        *seed
-    }
-
     #[test]
     fn arbitrary_bytes_never_panic() {
         let mut seed = 0x9E37_79B9_7F4A_7C15;
@@ -1864,28 +1856,23 @@ pub(super) mod tests {
     #[test]
     fn et2517a_replies_after_a_change() {
         let s = Series::Bm82x;
-        let reply = |hex: &str| -> Vec<u8> {
-            hex.split(' ')
-                .map(|b| u8::from_str_radix(b, 16).unwrap())
-                .collect()
-        };
         // RANGE pressed in Hz V~: AC V, dashes beside the small Hz.
         let m = quiet_as(
-            &reply("00 10 00 AF BF CB EF 00 50 40 40 40 00 01 20 06 82 82 82 82 00 00 00 00"),
+            &hex("00 10 00 AF BF CB EF 00 50 40 40 40 00 01 20 06 82 82 82 82 00 00 00 00"),
             s,
         );
         assert_eq!((m.mode.as_ref(), normal(&m)), ("AC V", Some(0.28)));
         assert!(m.aux_values.is_empty());
         // The small display blank but for a point, beside Hz.
         let m = quiet_as(
-            &reply("00 10 00 AF BF E4 6F 00 00 10 00 00 00 01 20 00 82 82 82 82 00 00 00 00"),
+            &hex("00 10 00 AF BF E4 6F 00 00 10 00 00 00 01 20 00 82 82 82 82 00 00 00 00"),
             s,
         );
         assert_eq!((m.mode.as_ref(), normal(&m)), ("AC V", Some(0.46)));
         assert!(m.aux_values.is_empty());
         // SELECT to Hz on the main display: dashes there, AC V on the small.
         let m = quiet_as(
-            &reply("00 00 00 50 40 40 40 40 BF AF CB 6D 10 10 00 00 82 82 82 82 10 00 00 00"),
+            &hex("00 00 00 50 40 40 40 40 BF AF CB 6D 10 10 00 00 82 82 82 82 10 00 00 00"),
             s,
         );
         assert_eq!(m.mode, "Hz");
@@ -1897,10 +1884,7 @@ pub(super) mod tests {
     /// beside D%, going into a logging session; report IDs left out (#36).
     #[test]
     fn et2615a_main_blank_but_for_its_point() {
-        let reply = "00 00 00 00 10 00 00 00 00 00 00 00 00 00 04 00 52 52 52 52 10 00 00 00"
-            .split(' ')
-            .map(|b| u8::from_str_radix(b, 16).unwrap())
-            .collect::<Vec<u8>>();
+        let reply = hex("00 00 00 00 10 00 00 00 00 00 00 00 00 00 04 00 52 52 52 52 10 00 00 00");
         let m = quiet_as(&reply, Series::Bm52x);
         assert_eq!(m.mode, "Duty %");
         assert!(matches!(m.value, MeasuredValue::NoReading("---")));

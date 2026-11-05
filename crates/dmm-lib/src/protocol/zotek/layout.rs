@@ -1146,7 +1146,8 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
 mod tests {
     use super::*;
     use crate::protocol::capture_reports;
-    use crate::protocol::zotek::frame::tests::{EXAMPLES, pseudo_random};
+    use crate::protocol::test_support::pseudo_random;
+    use crate::protocol::zotek::frame::tests::EXAMPLES;
     use crate::protocol::zotek::glyph::tests::segments;
 
     /// Bytes 3-7 of a types 1-3 packet showing `glyphs` (four characters,
