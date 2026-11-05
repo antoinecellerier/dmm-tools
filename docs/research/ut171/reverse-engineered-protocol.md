@@ -181,7 +181,8 @@ Totals corrected 2026-06: the length field is a 2-byte LE value
 counting payload + 2-byte checksum, so total = length + 4 (identical
 to UT181A framing). Confirmed by the connect-command capture
 `AB CD 04 00 0A 01 0F 00` (len 4, checksum 0x04+0x00+0x0A+0x01 =
-0x000F LE) and by gulux/Uni-T-CP2110's capture-driven parser.
+0x000F LE); a capture-driven community parser agrees (§10,
+Cross-Reference with Community Sources).
 
 | Length | Total | Purpose |
 |--------|-------|---------|
@@ -325,11 +326,12 @@ total is 21 bytes, not 22.)
 | 9-12 | 4 | Main value | IEEE 754 float32, LE | [VENDOR] |
 | 13 | 1 | Status2 | 0x40=DC, 0x20=AC | [DEDUCED from captures; no decompile evidence] |
 | 14 | 1 | Unknown | Values 0x00, 0x01 | [UNVERIFIED] |
-| 15-18 | 4 | Aux value | IEEE 754 float32, LE; frequency in kHz on V AC / mV AC per gulux | [VENDOR] |
+| 15-18 | 4 | Aux value | IEEE 754 float32, LE; frequency in kHz on V AC / mV AC | [VENDOR]; kHz unit [UNVERIFIED] |
 | 19-20 | 2 | Checksum | uint16 LE | [VENDOR] |
 
-The resistance float is range-relative: kΩ on ranges 2–4, MΩ on 5–6, per
-gulux; capacitance and conductance scaling [UNVERIFIED].
+The resistance float is range-relative: kΩ on ranges 2–4, MΩ on 5–6
+[UNVERIFIED] (community source only, §10 Cross-Reference); capacitance and
+conductance scaling [UNVERIFIED].
 
 ### 5.2 Extended Frame (27 bytes, length = 0x17)
 
@@ -509,7 +511,7 @@ What UNI-T's copy of Silicon Labs' HID-to-UART library does with the bridge:
 | Finding | Level |
 |---------|-------|
 | Frame header 0xABCD, 16-bit LE checksum | [VENDOR] |
-| 2-byte LE length (payload+2), from the captures and gulux (§3.4) | [DEDUCED] |
+| 2-byte LE length (payload+2), from the captures (§3.4) | [DEDUCED] |
 | 26 mode bytes mapped (24 single-byte + 2 special) | [VENDOR] |
 | 13 mode bytes USB-capture confirmed | [VENDOR] |
 | AUTO flag: bit 6 inverted (clear = active) | [VENDOR] |
@@ -546,3 +548,5 @@ The open checks are in [verification.md](verification.md).
 | CP2110 feature report map | SLAB DLL Ghidra (new) | Not in gulux | New |
 | Mode transition commands | Ghidra (new) | Not in gulux | New |
 | Resistance range-relative (kΩ ranges 2–4, MΩ 5–6) | Not in our RE | gulux scaling | gulux only |
+| Aux value: frequency in kHz on V AC / mV AC | Not in our RE | gulux unit label | gulux only |
+| Short replies share response type 0x02 (lengths 4–8) | Not in our RE | gulux observation | gulux only |

@@ -166,12 +166,10 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 
 /// Display unit for a (mode, range) pair.
 ///
-/// The resistance float is range-relative: gulux/Uni-T-CP2110
-/// (capture-driven against real hardware) multiplies by 1000 when the
-/// range byte is >= 2 and again when >= 5 — i.e. ranges 2-4 read in kΩ
-/// and 5-6 in MΩ. We keep the wire value and put the magnitude in the
-/// unit instead. Scaling for other modes (capacitance, conductance) is
-/// `[UNVERIFIED]`; they keep the base unit.
+/// The resistance float is range-relative: ranges 2-4 read in kΩ and 5-6
+/// in MΩ (spec §5.1, `[UNVERIFIED]` on our hardware). We keep the wire
+/// value and put the magnitude in the unit instead. Scaling for other modes
+/// (capacitance, conductance) is `[UNVERIFIED]`; they keep the base unit.
 fn display_unit(mode_byte: u8, range_byte: u8, base_unit: &'static str) -> &'static str {
     match (mode_byte, range_byte) {
         (0x0A, 2..=4) => "kΩ",
@@ -183,8 +181,8 @@ fn display_unit(mode_byte: u8, range_byte: u8, base_unit: &'static str) -> &'sta
 const UT171_COMMANDS: &[&str] = &["connect", "pause"];
 
 /// Response type of a measurement frame; the meter's short replies share it
-/// (gulux observes lengths 4-8), which is why the stream filter asks for a
-/// measurement-sized payload as well
+/// (lengths 4-8, spec §10 Cross-Reference, `[UNVERIFIED]`), which is why the
+/// stream filter asks for a measurement-sized payload as well
 /// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4).
 const RESPONSE_MEASUREMENT: u8 = 0x02;
 
@@ -271,7 +269,7 @@ impl Protocol for Ut171Protocol {
             // UT171 framing is identical to UT181A: 2-byte LE length =
             // payload + checksum, LE16 sum. Verified against the connect
             // command (AB CD 04 00 0A 01 0F 00: len 4, sum 04+00+0A+01 =
-            // 0x000F LE) and gulux/Uni-T-CP2110's capture-driven parser.
+            // 0x000F LE), spec §3.4.
             framing::extract_frame_abcd_2byte_le16,
             is_measurement_frame,
             FrameErrorRecovery::SkipAndRetry {
@@ -553,9 +551,9 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         | MeasuredValue::Absent => None,
     };
 
-    // Aux float32 at payload[11..15]. gulux/Uni-T-CP2110 (capture-driven)
-    // labels the aux value "kHz" for the AC voltage modes; other modes'
-    // aux semantics are unknown, so they get a neutral label and no unit.
+    // Aux float32 at payload[11..15]: the frequency in kHz on the AC voltage
+    // modes (spec §5.1, [UNVERIFIED]); other modes' aux semantics are
+    // unknown, so they get a neutral label and no unit.
     // Gate on finite + non-zero so static-layout modes that never use the
     // aux slot don't emit a spurious "Aux: 0" entry.
     let aux_bytes: [u8; 4] = [payload[11], payload[12], payload[13], payload[14]];
@@ -753,7 +751,7 @@ raw_payload=15"#
     #[test]
     fn parse_ohm() {
         // Range 1 reads in Ω; ranges 2-4 are range-relative kΩ and 5-6 MΩ
-        // (gulux scales ×1000 at range >= 2 and again at >= 5).
+        // (spec §5.1).
         let payload = make_payload(0x0A, 0x01, 470.5, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "Ω");
@@ -939,7 +937,7 @@ raw_payload=15"#
 
     #[test]
     fn aux_value_populated_when_nonzero() {
-        // V AC (0x03): aux is the frequency readout in kHz per gulux.
+        // V AC (0x03): aux is the frequency readout in kHz per spec §5.1.
         let payload = make_payload_with_aux(0x03, 0x00, 230.0, 0x00, 50.0);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(
