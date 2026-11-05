@@ -3,7 +3,8 @@
 //! screen: each file parses and holds only messages and attributes its
 //! en-US file has (terms of its own aside), showing the variables the
 //! English shows; plurals have every form the language's rules name, and
-//! only those, and other selectors only keys the English has; and what must
+//! only those — a language with one form may drop the selector, no other
+//! may — and other selectors only keys the English has; and what must
 //! stay as it is — `code` spans, `--options`, a spec note's numbers —
 //! stays, with none the English lacks.
 //!
@@ -361,7 +362,7 @@ fn problems(locale: &str) -> Vec<String> {
         }
         for (key, t) in &tr {
             let Some(e) = en.get(key) else { continue };
-            problems.extend(key_problems(key, e, t, &forms).into_iter().map(at));
+            problems.extend(key_problems(key, e, t, locale, &forms).into_iter().map(at));
         }
         if path == "lib.ftl" {
             problems.extend(
@@ -374,12 +375,19 @@ fn problems(locale: &str) -> Vec<String> {
     problems
 }
 
-/// What is wrong with `t`, a translation of message `key`, against its
-/// English `e`; `forms` are the plural forms the language distinguishes.
-fn key_problems(key: &str, e: &Shape, t: &Shape, forms: &BTreeSet<String>) -> Vec<String> {
+/// What is wrong with `t`, `locale`'s translation of message `key`, against
+/// its English `e`; `forms` are the plural forms `locale` distinguishes.
+fn key_problems(
+    key: &str,
+    e: &Shape,
+    t: &Shape,
+    locale: &str,
+    forms: &BTreeSet<String>,
+) -> Vec<String> {
     let mut problems = Vec::new();
     // Every variable the English shows, and no other; one it only selects
-    // on may go, as in a language with one plural form.
+    // on may go with its selector, though a plural's only in a language with
+    // one plural form (below).
     if !t.variables.is_subset(&e.variables) || !e.shown.is_subset(&t.variables) {
         problems.push(format!(
             "`{key}` uses {:?}, en-US {:?}",
@@ -424,6 +432,24 @@ fn key_problems(key: &str, e: &Shape, t: &Shape, forms: &BTreeSet<String>) -> Ve
             problems.push(format!(
                 "`{key}`: the plural on ${variable} lacks {missing:?}"
             ));
+        }
+    }
+    // Dropping the selector is for a language with one plural form only:
+    // with several, "{ $count } mesures" reads "1 mesures".
+    if forms.len() > 1 {
+        // By variable: the English may select on one twice.
+        let picked: BTreeSet<&String> = e
+            .plurals
+            .iter()
+            .filter(|(_, keys)| keys.iter().any(|k| k != "other"))
+            .map(|(variable, _)| variable)
+            .collect();
+        for variable in picked {
+            if !t.selectors.iter().any(|(v, _)| v == variable) {
+                problems.push(format!(
+                    "`{key}`: en-US picks a plural on ${variable}; {locale} has several plural forms but no selector on it"
+                ));
+            }
         }
     }
     let (want, have) = (verbatim(&e.text), verbatim(&t.text));
@@ -597,11 +623,31 @@ d = Extra
     let (en_case, _) = shapes("c = { $case ->\n   *[mode] A\n    [range-auto] B\n}\n");
     let (tr_case, _) = shapes("c = { $case ->\n   *[mode] A\n    [rang-auto] B\n}\n");
     assert_eq!(
-        key_problems("c", &en_case["c"], &tr_case["c"], &forms),
+        key_problems("c", &en_case["c"], &tr_case["c"], "fr", &forms),
         ["`c`: the selector on $case has keys en-US lacks: [\"rang-auto\"]"]
     );
     let (merged, _) = shapes("c = { $case ->\n   *[mode] A\n}\n");
-    assert!(key_problems("c", &en_case["c"], &merged["c"], &forms).is_empty());
+    assert!(key_problems("c", &en_case["c"], &merged["c"], "fr", &forms).is_empty());
+    // A language with several plural forms keeps the English's plural, or
+    // shows "1 mesures"; an English "plural" with no form but `other` picks
+    // nothing, so dropping it is fine.
+    let (dropped, _) = shapes("a2 = { $count } mesures\nh = hertz\n");
+    assert_eq!(
+        key_problems("a2", &en["a"], &dropped["a2"], "fr", &forms),
+        ["`a2`: en-US picks a plural on $count; fr has several plural forms but no selector on it"]
+    );
+    let (en_other, _) = shapes("h = { $v ->\n   *[other] hertz\n}\n");
+    assert!(key_problems("h", &en_other["h"], &dropped["h"], "fr", &forms).is_empty());
+    // Once, though the English selects on $count twice.
+    let (twice, _) = shapes(
+        "t = { $count ->\n    [one] a\n   *[other] b\n} { $count ->\n    [one] c\n   *[other] d\n}\n",
+    );
+    assert_eq!(
+        key_problems("t", &twice["t"], &dropped["a2"], "fr", &forms).len(),
+        1
+    );
+    let zh = plural_forms("zh-CN");
+    assert!(key_problems("a2", &en["a"], &dropped["a2"], "zh-CN", &zh).is_empty());
     let (selector_only, _) = shapes("b = { $n ->\n    [one] One\n   *[other] Many\n}\n");
     assert!(selector_only["b"].variables.contains("n") && selector_only["b"].shown.is_empty());
     // An option right after a Han character is still one.
