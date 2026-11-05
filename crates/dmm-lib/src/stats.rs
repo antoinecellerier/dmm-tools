@@ -172,14 +172,12 @@ impl Integrator {
             && let Some(dt) = timestamp.checked_duration_since(prev_time)
         {
             let dt_secs = dt.as_secs_f64();
-            if dt_secs <= self.max_dt_secs.max(self.carried_max_dt_secs) {
+            let limit = self.max_dt_secs.max(self.carried_max_dt_secs);
+            if dt_secs <= limit {
                 self.integral += (prev_val + value) / 2.0 * dt_secs;
             } else {
                 // The binaries show the skip count; this only says which gap.
-                debug!(
-                    "integrator: skipping {dt_secs:.2}s interval (max {:.2}s)",
-                    self.max_dt_secs
-                );
+                debug!("integrator: skipping {dt_secs:.2}s interval (max {limit:.2}s)");
                 self.skipped_intervals += 1;
             }
         }
