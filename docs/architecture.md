@@ -283,9 +283,9 @@ its own `Settings`, so the file stays flat, and the CLI reads the same file into
 GUI's fields. Renaming or retyping a shared field breaks both builds at once, rather than one
 binary silently losing the setting.
 
-**Per-model tables behind a trait.** Where a family's models share one driver, what differs sits
-behind a per-model trait (`DeviceTable`, `Vc8x0Model`), so a model is one implementation plus its
-spec tables.
+**Per-model tables.** Where a family's models share one driver, what differs sits in one per-model
+place: a static table (`ModelTable`) where it is only data, a trait (`Vc8x0Model`) where it carries
+code. A model is that one table or implementation plus its spec tables.
 
 **No parser combinators.** Frames are short and positional, so direct indexing reads more clearly
 than `nom`, and `dmm-lib` stays within its dependency rule.

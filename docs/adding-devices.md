@@ -163,11 +163,11 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 
 **A new UT61+ model** (the same protocol, its own dial and ranges):
 
-1. Add `protocol/ut61eplus/tables/<model>.rs` implementing `DeviceTable`: its model name, one `entry` match returning the range table per mode, and whatever it does differently from the trait's defaults (dial, Peak modes, commands). Declare it in `tables/mod.rs`.
+1. Add `protocol/ut61eplus/tables/<model>.rs` with its `static` `ModelTable`: its model name, an `entry` function matching each mode to its range rows, and whatever it does differently from `BASE` (dial, Peak modes, commands). Declare it in `tables/mod.rs`.
 2. Map the entry's registry id to its table and its `SpecModel` in `Ut61PlusProtocol::for_model` (`ut61eplus/mod.rs`). Until its spec tables exist, the model takes `SpecModel::Untranscribed`.
 3. Add its `SelectableDevice` entry in `ut61eplus/devices.rs` and list it in `DEVICES`.
 
-`DeviceTable` and `SpecModel` belong to the UT61+ family alone. Other families lay out their models their own way, such as `Vc8x0Model` in `vc8x0/` or the per-model parsers in `ut80x/`; a new model there follows its family's `mod.rs`.
+`ModelTable` and `SpecModel` belong to the UT61+ family alone. Other families lay out their models their own way, such as `Vc8x0Model` in `vc8x0/` or the per-model parsers in `ut80x/`; a new model there follows its family's `mod.rs`.
 
 **A new family** gets its own module, `protocol/<family>/`:
 

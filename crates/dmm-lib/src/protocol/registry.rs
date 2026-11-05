@@ -346,7 +346,7 @@ pub(crate) fn factory<P: Protocol + Default + 'static>() -> Box<dyn Protocol> {
 /// place that orders them. Auto-detection probes in this order, and the
 /// device lists show each brand's entries in it ([`brand_groups`]).
 pub static DEVICES: &[&SelectableDevice] = &[
-    // UT61E+ family — each model has its own DeviceTable
+    // UT61E+ family — each model has its own ModelTable
     &ut61eplus::devices::UT61EPLUS,
     &ut61eplus::devices::UT61BPLUS,
     &ut61eplus::devices::UT61DPLUS,

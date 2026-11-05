@@ -27,8 +27,9 @@ use crate::protocol::registry::SelectableDevice;
 use crate::protocol::ut61eplus::UT61EPLUS_COMMANDS;
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::specs::SpecModel;
-use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
-use crate::protocol::ut61eplus::tables::{self, DeviceTable};
+// The mock stands in for a UT61E+, so it labels its ranges from the UT61E+
+// table rather than carrying a second copy that can drift.
+use crate::protocol::ut61eplus::tables::{self, ut61e_plus::UT61E_PLUS};
 use crate::protocol::zotek;
 use crate::protocol::{
     Choice, DeviceProfile, MeterKeys, Protocol, Setting, Stability, unsupported_setting,
@@ -286,9 +287,6 @@ pub struct MockProtocol {
     /// infer (see [`MockProtocol::dial_positions`]).
     dial: cycle::DialState,
     profile: DeviceProfile,
-    /// The mock stands in for a UT61E+, so it labels its ranges from the
-    /// UT61E+ table rather than carrying a second copy that can drift.
-    table: Ut61ePlusTable,
 }
 
 impl MockProtocol {
@@ -314,7 +312,6 @@ impl MockProtocol {
                 verification_issue: None,
                 meter_keys: MeterKeys::NONE,
             },
-            table: Ut61ePlusTable::new(),
         }
     }
 
@@ -381,7 +378,7 @@ impl MockProtocol {
     fn range_label(&self, scenario: &Scenario, range_raw: u8) -> Cow<'static, str> {
         if self.state.on_a_manual_rung()
             && let Some(info) = Self::table_mode(scenario.mode_raw)
-                .and_then(|mode| self.table.range_info(mode, range_raw))
+                .and_then(|mode| UT61E_PLUS.range_info(mode, range_raw))
         {
             return Cow::Borrowed(info.label);
         }
@@ -802,7 +799,7 @@ impl CycleMeter for MockProtocol {
     /// the same table the range labels come from.
     fn range_ladder(&self, mode: u16) -> Vec<Cow<'static, str>> {
         match Self::table_mode(mode) {
-            Some(mode) => tables::range_ladder(&self.table, mode),
+            Some(mode) => tables::range_ladder(&UT61E_PLUS, mode),
             None => Vec::new(),
         }
     }
@@ -859,7 +856,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
         if let Some(mode) = MockProtocol::table_mode(scenario.mode_raw) {
             // The range byte is a nibble (UT61+ family spec §2.4).
             for range in 0..=0x0F {
-                if let Some(info) = mock.table.range_info(mode, range) {
+                if let Some(info) = UT61E_PLUS.range_info(mode, range) {
                     out.add(TextKind::Range, info.label, by);
                 }
             }

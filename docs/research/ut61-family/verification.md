@@ -49,8 +49,9 @@ families are in the [verification backlog](../../verification-backlog.md).
 ## Range commands
 
 - RANGE on the 6,000-count mV ladders, where the B+'s other two-rung ladders
-  step ([§5.5][s55]) — decides `range_is_fixed`. A plain `capture` on a UT61B+
-  or UT61D+ files `dcmv/range:600mV` or "RANGE did nothing". (#7)
+  step ([§5.5][s55]) — decides whether `range_ladder` offers them. A plain
+  `capture` on a UT61B+ or UT61D+ files `dcmv/range:600mV` or "RANGE did
+  nothing". (#7)
 - A UT61B+ Ω walk: four presses from 600kΩ auto read 3, 4, 5, 0, then 1
   unpressed, though its rungs hold ([§6.1][s61]) — a press doubled by the
   CH9329 or the meter. Needs RANGE walks on a UT61+ over a CH9329 (a

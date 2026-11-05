@@ -1,4 +1,4 @@
-use super::{DeviceTable, GAP, RangeInfo, r};
+use super::{BASE, GAP, ModelTable, RangeInfo, r};
 use crate::protocol::steps::{self, Ohms, Volts};
 use crate::protocol::ut61eplus::capture::command_steps;
 use crate::protocol::ut61eplus::mode::Mode;
@@ -31,168 +31,131 @@ const PEAK_MODES: &[Mode] = &[Mode::AcV, Mode::AcA, Mode::ClampAcA];
 ///
 /// The meter's secondary display (frequency in AC V and AC A, °F beside °C)
 /// comes in frames of its own, read with this same table (family spec §2.3).
-pub(crate) struct Ut202btTable {
-    dc_v: [RangeInfo; 3],
-    ac_v: [RangeInfo; 3],
-    lpf_v: [RangeInfo; 3],
-    ac_a: [RangeInfo; 3],
-    lpf_a: [RangeInfo; 3],
-    inrush: [RangeInfo; 3],
-    ohm: [RangeInfo; 7],
-    capacitance: [RangeInfo; 7],
-    hz: [RangeInfo; 6],
-    continuity: [RangeInfo; 2],
-    temp_c: [RangeInfo; 2],
-    temp_f: [RangeInfo; 1],
-}
+pub(crate) static UT202BT: ModelTable = ModelTable {
+    name: "UNI-T UT202BT",
+    entry,
+    modes: &[
+        Mode::AcV,
+        Mode::DcV,
+        Mode::Hz,
+        Mode::Ohm,
+        Mode::Continuity,
+        Mode::Capacitance,
+        Mode::TempC,
+        Mode::TempF,
+        Mode::AcA,
+        Mode::Ncv,
+        Mode::ClampAcA,
+        Mode::LpfV,
+        Mode::ClampLpfA,
+        Mode::Inrush,
+    ],
+    peak_modes: PEAK_MODES,
+    // Of the commands here, the only ones UNI-T's app sends this meter
+    // (family spec §6.5). Its other bytes, 0x31-0x37, have no command here;
+    // Peak stays off until 0x37 or 0x4D is known to start it.
+    commands: &["hold", "range"],
+    // Frequency beside AC V and AC A, °F beside °C (family spec §2.3).
+    secondary_display: true,
+    // UNI-T's app asks the name first, and a UT60BT is reported to need it
+    // (family spec §6.4).
+    name_before_stream: true,
+    // No dial and colour-coded buttons: a list of its own.
+    capture_steps: Some(capture_steps),
+    ..BASE
+};
 
-impl Ut202btTable {
-    pub(crate) fn new() -> Self {
-        Self {
-            dc_v: [r("9.999V", "V"), r("99.99V", "V"), r("600.0V", "V")],
-            ac_v: [r("9.999V", "V"), r("99.99V", "V"), r("600.0V", "V")],
-            // Listed at range byte 2 only, by the asset and the manual alike.
-            lpf_v: [GAP, GAP, r("600.0V", "V")],
-            ac_a: [r("9.999A", "A"), r("99.99A", "A"), r("600.0A", "A")],
-            lpf_a: [GAP, GAP, r("600.0A", "A")],
-            // The manual's inrush table has 99.99A and 600A; rung 0 is the
-            // asset's alone. [UNVERIFIED]
-            inrush: [r("9.999A", "A"), r("99.99A", "A"), r("600.0A", "A")],
-            // The UT202BT's own table (P16/29); the UT202T's starts at 999.9Ω.
-            ohm: [
-                r("99.99Ω", "Ω"),
-                r("999.9Ω", "Ω"),
-                r("9.999kΩ", "kΩ"),
-                r("99.99kΩ", "kΩ"),
-                r("999.9kΩ", "kΩ"),
-                r("9.999MΩ", "MΩ"),
-                r("99.99MΩ", "MΩ"),
-            ],
-            // The top rung is printed "99.9mF" in both manuals; the asset
-            // says 105mF.
-            capacitance: [
-                r("99.99nF", "nF"),
-                r("999.9nF", "nF"),
-                r("9.999µF", "µF"),
-                r("99.99µF", "µF"),
-                r("999.9µF", "µF"),
-                r("9.999mF", "mF"),
-                r("99.9mF", "mF"),
-            ],
-            // The asset's rungs, MHz for its "mHz". The manual prints no
-            // frequency table: frequency is on the auxiliary display in AC V
-            // and AC A. [UNVERIFIED]
-            hz: [
-                r("99.99Hz", "Hz"),
-                r("999.9Hz", "Hz"),
-                r("9.999kHz", "kHz"),
-                r("99.99kHz", "kHz"),
-                r("999.9kHz", "kHz"),
-                r("9.999MHz", "MHz"),
-            ],
-            // The manual prints one 999.9Ω range; the asset lists it at
-            // range bytes 0 and 1.
-            continuity: [r("999.9Ω", "Ω"), r("999.9Ω", "Ω")],
-            // The asset lists °C at range byte 1 and °F at byte 0; the
-            // labels are the manual's spans (P17/31).
-            temp_c: [GAP, r("-40~1000°C", "°C")],
-            temp_f: [r("-40~1832°F", "°F")],
-        }
-    }
-}
+static DC_V: [RangeInfo; 3] = [r("9.999V", "V"), r("99.99V", "V"), r("600.0V", "V")];
+static AC_V: [RangeInfo; 3] = [r("9.999V", "V"), r("99.99V", "V"), r("600.0V", "V")];
 
-impl Default for Ut202btTable {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Listed at range byte 2 only, by the asset and the manual alike.
+static LPF_V: [RangeInfo; 3] = [GAP, GAP, r("600.0V", "V")];
 
-impl DeviceTable for Ut202btTable {
-    fn model_name(&self) -> &'static str {
-        "UNI-T UT202BT"
-    }
+static AC_A: [RangeInfo; 3] = [r("9.999A", "A"), r("99.99A", "A"), r("600.0A", "A")];
+static LPF_A: [RangeInfo; 3] = [GAP, GAP, r("600.0A", "A")];
 
-    /// Of the commands here, the only ones UNI-T's app sends this meter
-    /// (family spec §6.5). Its other bytes, 0x31-0x37, have no command here;
-    /// Peak stays off until 0x37 or 0x4D is known to start it.
-    fn commands(&self) -> &'static [&'static str] {
-        &["hold", "range"]
-    }
+// The manual's inrush table has 99.99A and 600A; rung 0 is the
+// asset's alone. [UNVERIFIED]
+static INRUSH: [RangeInfo; 3] = [r("9.999A", "A"), r("99.99A", "A"), r("600.0A", "A")];
 
-    /// UNI-T's app asks the name first, and a UT60BT is reported to need it
-    /// (family spec §6.4).
-    fn name_before_stream(&self) -> bool {
-        true
-    }
+// The UT202BT's own table (P16/29); the UT202T's starts at 999.9Ω.
+static OHM: [RangeInfo; 7] = [
+    r("99.99Ω", "Ω"),
+    r("999.9Ω", "Ω"),
+    r("9.999kΩ", "kΩ"),
+    r("99.99kΩ", "kΩ"),
+    r("999.9kΩ", "kΩ"),
+    r("9.999MΩ", "MΩ"),
+    r("99.99MΩ", "MΩ"),
+];
 
-    /// Frequency beside AC V and AC A, °F beside °C (family spec §2.3).
-    fn has_secondary_display(&self) -> bool {
-        true
-    }
+// The top rung is printed "99.9mF" in both manuals; the asset
+// says 105mF.
+static CAPACITANCE: [RangeInfo; 7] = [
+    r("99.99nF", "nF"),
+    r("999.9nF", "nF"),
+    r("9.999µF", "µF"),
+    r("99.99µF", "µF"),
+    r("999.9µF", "µF"),
+    r("9.999mF", "mF"),
+    r("99.9mF", "mF"),
+];
 
-    fn modes(&self) -> &'static [Mode] {
-        &[
-            Mode::AcV,
-            Mode::DcV,
-            Mode::Hz,
-            Mode::Ohm,
-            Mode::Continuity,
-            Mode::Capacitance,
-            Mode::TempC,
-            Mode::TempF,
-            Mode::AcA,
-            Mode::Ncv,
-            Mode::ClampAcA,
-            Mode::LpfV,
-            Mode::ClampLpfA,
-            Mode::Inrush,
-        ]
-    }
+// The asset's rungs, MHz for its "mHz". The manual prints no
+// frequency table: frequency is on the auxiliary display in AC V
+// and AC A. [UNVERIFIED]
+static HZ: [RangeInfo; 6] = [
+    r("99.99Hz", "Hz"),
+    r("999.9Hz", "Hz"),
+    r("9.999kHz", "kHz"),
+    r("99.99kHz", "kHz"),
+    r("999.9kHz", "kHz"),
+    r("9.999MHz", "MHz"),
+];
 
-    fn peak_modes(&self) -> &'static [Mode] {
-        PEAK_MODES
-    }
+// The manual prints one 999.9Ω range; the asset lists it at
+// range bytes 0 and 1.
+static CONTINUITY: [RangeInfo; 2] = [r("999.9Ω", "Ω"), r("999.9Ω", "Ω")];
 
-    /// No dial and colour-coded buttons: a list of its own.
-    fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
-        Some(capture_steps())
-    }
+// The asset lists °C at range byte 1 and °F at byte 0; the
+// labels are the manual's spans (P17/31).
+static TEMP_C: [RangeInfo; 2] = [GAP, r("-40~1000°C", "°C")];
+static TEMP_F: [RangeInfo; 1] = [r("-40~1832°F", "°F")];
 
-    fn entry(&self, mode: Mode) -> Option<&[RangeInfo]> {
-        Some(match mode {
-            Mode::DcV => &self.dc_v,
-            Mode::AcV => &self.ac_v,
-            Mode::LpfV => &self.lpf_v,
-            Mode::AcA | Mode::ClampAcA => &self.ac_a,
-            Mode::ClampLpfA => &self.lpf_a,
-            Mode::Inrush => &self.inrush,
-            Mode::Ohm => &self.ohm,
-            Mode::Capacitance => &self.capacitance,
-            Mode::Hz => &self.hz,
-            Mode::Continuity => &self.continuity,
-            Mode::TempC => &self.temp_c,
-            Mode::TempF => &self.temp_f,
-            // NCV has no ranges; the rest are not on this meter.
-            Mode::Ncv
-            | Mode::AcMv
-            | Mode::DcMv
-            | Mode::DutyCycle
-            | Mode::Diode
-            | Mode::DcUa
-            | Mode::AcUa
-            | Mode::DcMa
-            | Mode::AcMa
-            | Mode::DcA
-            | Mode::Hfe
-            | Mode::Live
-            | Mode::LozV
-            | Mode::ClampDcA
-            | Mode::AcDcV
-            | Mode::LpfA
-            | Mode::AcDcA
-            | Mode::ClampAcDcA => return None,
-        })
-    }
+fn entry(mode: Mode) -> Option<&'static [RangeInfo]> {
+    Some(match mode {
+        Mode::DcV => &DC_V,
+        Mode::AcV => &AC_V,
+        Mode::LpfV => &LPF_V,
+        Mode::AcA | Mode::ClampAcA => &AC_A,
+        Mode::ClampLpfA => &LPF_A,
+        Mode::Inrush => &INRUSH,
+        Mode::Ohm => &OHM,
+        Mode::Capacitance => &CAPACITANCE,
+        Mode::Hz => &HZ,
+        Mode::Continuity => &CONTINUITY,
+        Mode::TempC => &TEMP_C,
+        Mode::TempF => &TEMP_F,
+        // NCV has no ranges; the rest are not on this meter.
+        Mode::Ncv
+        | Mode::AcMv
+        | Mode::DcMv
+        | Mode::DutyCycle
+        | Mode::Diode
+        | Mode::DcUa
+        | Mode::AcUa
+        | Mode::DcMa
+        | Mode::AcMa
+        | Mode::DcA
+        | Mode::Hfe
+        | Mode::Live
+        | Mode::LozV
+        | Mode::ClampDcA
+        | Mode::AcDcV
+        | Mode::LpfA
+        | Mode::AcDcA
+        | Mode::ClampAcDcA => return None,
+    })
 }
 
 /// The UT202BT's capture steps, from its manual's button table (P7/12,
@@ -309,46 +272,42 @@ mod tests {
     use super::*;
     use crate::protocol::ut61eplus::tables::range_ladder;
 
-    fn table() -> Ut202btTable {
-        Ut202btTable::new()
-    }
-
     fn label(mode: Mode, range: u8) -> Option<&'static str> {
-        table().range_info(mode, range).map(|r| r.label)
+        UT202BT.range_info(mode, range).map(|r| r.label)
     }
 
     #[test]
     fn model_name() {
-        assert_eq!(table().model_name(), "UNI-T UT202BT");
+        assert_eq!(UT202BT.name, "UNI-T UT202BT");
     }
 
     /// LPF and °C exist only above range byte 0; the bytes below read as no
     /// range, and no ladder is offered over them.
     #[test]
     fn sparse_rows_read_only_their_listed_range_bytes() {
-        let t = table();
+        let t = &UT202BT;
         for (mode, unit) in [(Mode::LpfV, "V"), (Mode::ClampLpfA, "A")] {
             assert_eq!(label(mode, 0), None, "{mode:?}");
             assert_eq!(label(mode, 1), None, "{mode:?}");
             assert_eq!(t.range_info(mode, 2).unwrap().unit, unit, "{mode:?}");
-            assert!(range_ladder(&t, mode).is_empty(), "{mode:?}");
+            assert!(range_ladder(t, mode).is_empty(), "{mode:?}");
         }
         assert_eq!(label(Mode::TempC, 0), None);
         assert_eq!(label(Mode::TempC, 1), Some("-40~1000°C"));
         assert_eq!(label(Mode::TempF, 0), Some("-40~1832°F"));
-        assert!(range_ladder(&t, Mode::TempC).is_empty());
+        assert!(range_ladder(t, Mode::TempC).is_empty());
     }
 
     /// Peak capture is AC V and AC A only (manual P8/13), so a frame with
     /// P-MAX or P-MIN set there is expected, not unrecognised.
     #[test]
     fn peak_is_ac_volts_and_amps_only() {
-        let t = table();
+        let t = &UT202BT;
         for mode in [Mode::AcV, Mode::AcA, Mode::ClampAcA] {
-            assert!(t.peak_modes().contains(&mode), "{mode:?}");
+            assert!(t.peak_modes.contains(&mode), "{mode:?}");
         }
         for mode in [Mode::DcV, Mode::LpfV, Mode::ClampLpfA, Mode::Inrush] {
-            assert!(!t.peak_modes().contains(&mode), "{mode:?}");
+            assert!(!t.peak_modes.contains(&mode), "{mode:?}");
         }
     }
 }

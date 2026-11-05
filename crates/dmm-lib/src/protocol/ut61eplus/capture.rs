@@ -1,17 +1,17 @@
 //! The UT61+/UT161 family's capture steps, one list for every model.
 
 use super::mode::Mode;
-use super::tables::DeviceTable;
+use super::tables::ModelTable;
 use crate::flags::Flag;
 use crate::protocol::steps::{self, Ohms, Volts};
 use crate::protocol::{
     CaptureStep, DeviceProfile, Expect, Need, RangeExpect, Stability, ValueExpect,
 };
 
-pub(super) fn steps(table: &dyn DeviceTable, profile: &DeviceProfile) -> Vec<CaptureStep> {
+pub(super) fn steps(table: &ModelTable, profile: &DeviceProfile) -> Vec<CaptureStep> {
     // A model whose buttons the family list does not describe.
-    if let Some(steps) = table.capture_steps() {
-        return steps;
+    if let Some(steps) = table.capture_steps {
+        return steps();
     }
 
     // The list is shared by the whole UT61+/UT161 family; the UT61E+, the
@@ -145,7 +145,7 @@ pub(super) fn steps(table: &dyn DeviceTable, profile: &DeviceProfile) -> Vec<Cap
             .expect(Expect::mode("LoZ V")),
     ];
     // A model whose dial differs words those steps its own way.
-    for (id, instruction) in table.step_instructions() {
+    for (id, instruction) in table.step_instructions {
         if let Some(step) = steps.iter_mut().find(|s| s.id == *id) {
             step.instruction = instruction;
         }
@@ -154,9 +154,9 @@ pub(super) fn steps(table: &dyn DeviceTable, profile: &DeviceProfile) -> Vec<Cap
     // which it reaches (spec §2.1: temperature and LoZ are UT61D+/UT161D
     // positions), so the others are not asked for. A table without a
     // dial lists its modes instead.
-    let dial = table.dial_positions();
+    let dial = table.dial;
     let reached: Vec<Mode> = if dial.is_empty() {
-        table.modes().to_vec()
+        table.modes.to_vec()
     } else {
         dial.iter()
             .flat_map(|p| p.modes())

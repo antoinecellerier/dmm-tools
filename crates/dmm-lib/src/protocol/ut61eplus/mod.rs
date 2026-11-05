@@ -23,7 +23,7 @@ use mode::Mode;
 use specs::SpecModel;
 use std::borrow::Cow;
 use std::time::{Duration, Instant};
-use tables::DeviceTable;
+use tables::ModelTable;
 
 /// The commands the family takes; the mock, a UT61E+, offers the same.
 pub(crate) const UT61EPLUS_COMMANDS: &[&str] = &[
@@ -45,7 +45,7 @@ const UT61EPLUS_MEASUREMENT_PAYLOAD_LEN: usize = 14;
 
 /// Protocol implementation for the UT61E+/UT61B+/UT61D+/UT161 family.
 pub(crate) struct Ut61PlusProtocol {
-    table: Box<dyn DeviceTable>,
+    table: &'static ModelTable,
     /// The model's manual spec tables.
     specs: SpecModel,
     rx_buf: Vec<u8>,
@@ -85,7 +85,7 @@ impl Ut61PlusProtocol {
     /// UT161E would introduce itself as a verified UT61E+.
     pub(crate) fn for_model(id: &str) -> Self {
         // (table, the entry's registry id, stability, manual spec tables)
-        let (table, id, stability, specs): (Box<dyn DeviceTable>, _, _, _) = match id {
+        let (table, id, stability, specs) = match id {
             // Verified by two captures reported in issue #7 (@frixit,
             // CP2110), both 2026-10-21: its frames carried the UT61E+'s
             // mode, range and flag bytes except after one AC+DC V range
@@ -93,7 +93,7 @@ impl Ut61PlusProtocol {
             // gate and drove every command. What is left open on this
             // model is in `docs/research/ut61-family/verification.md`.
             "ut161e" => (
-                Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
+                &tables::ut61e_plus::UT61E_PLUS,
                 "ut161e",
                 Stability::Verified,
                 SpecModel::Ut161e,
@@ -105,44 +105,44 @@ impl Ut61PlusProtocol {
             // walked the Ω and DC V ladders. What is left open on this
             // model is in `docs/research/ut61-family/verification.md`.
             "ut61b+" => (
-                Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
+                &tables::ut61b_plus::UT61B_PLUS,
                 "ut61b+",
                 Stability::Verified,
                 SpecModel::Ut61bPlus,
             ),
             "ut161b" => (
-                Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
+                &tables::ut61b_plus::UT61B_PLUS,
                 "ut161b",
                 Stability::Experimental,
                 SpecModel::Ut161b,
             ),
             "ut61d+" => (
-                Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
+                &tables::ut61d_plus::UT61D_PLUS,
                 "ut61d+",
                 Stability::Experimental,
                 SpecModel::Ut61dPlus,
             ),
             "ut161d" => (
-                Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
+                &tables::ut61d_plus::UT61D_PLUS,
                 "ut161d",
                 Stability::Experimental,
                 SpecModel::Ut161d,
             ),
             "ut60bt" => (
-                Box::new(tables::ut60bt::Ut60btTable::new()),
+                &tables::ut60bt::UT60BT,
                 "ut60bt",
                 Stability::Experimental,
                 SpecModel::Untranscribed,
             ),
             "ut202bt" => (
-                Box::new(tables::ut202bt::Ut202btTable::new()),
+                &tables::ut202bt::UT202BT,
                 "ut202bt",
                 Stability::Experimental,
                 SpecModel::Untranscribed,
             ),
             // "ut61eplus", and any id outside the family.
             _ => (
-                Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
+                &tables::ut61e_plus::UT61E_PLUS,
                 FALLBACK_ID,
                 Stability::Verified,
                 SpecModel::Ut61ePlus,
@@ -152,7 +152,7 @@ impl Ut61PlusProtocol {
     }
 
     fn with_profile(
-        table: Box<dyn DeviceTable>,
+        table: &'static ModelTable,
         id: &'static str,
         stability: Stability,
         specs: SpecModel,
@@ -160,7 +160,7 @@ impl Ut61PlusProtocol {
         // One sub-value each: a model's secondary display (family spec §2.3),
         // and the AC component of AC+DC V on a model whose dial reaches it
         // (see `parse_measurement`).
-        let max_aux_values = usize::from(table.has_secondary_display())
+        let max_aux_values = usize::from(table.secondary_display)
             + usize::from(table.range_info(Mode::AcDcV, 0).is_some());
         // The family issue stays on every model but the UT61E+, verified or
         // not: the UT61B+ is decoded correctly everywhere it was looked at,
@@ -172,7 +172,7 @@ impl Ut61PlusProtocol {
             "ut202bt" => Some(27),
             _ => Some(7),
         };
-        let supported_commands = table.commands();
+        let supported_commands = table.commands;
         Self {
             table,
             specs,
@@ -237,15 +237,15 @@ impl Ut61PlusProtocol {
     /// returned as one. On any other model the frame's mode byte is unknown,
     /// as it has always been.
     fn take_reading(&mut self, payload: &[u8]) -> Option<Result<Measurement>> {
-        if self.table.has_secondary_display() && is_secondary(payload) {
+        if self.table.secondary_display && is_secondary(payload) {
             // An unrecognised one clears the held value too: it is older
             // than what the meter now shows beside the next reading.
-            self.secondary = parse_secondary(self.profile.id, payload, self.table.as_ref());
+            self.secondary = parse_secondary(self.profile.id, payload, self.table);
             return None;
         }
         let secondary = self.secondary.take();
         Some(
-            parse_measurement(self.profile.id, payload, self.table.as_ref()).map(|mut m| {
+            parse_measurement(self.profile.id, payload, self.table).map(|mut m| {
                 m.aux_values.extend(secondary);
                 m
             }),
@@ -365,12 +365,12 @@ impl Protocol for Ut61PlusProtocol {
         };
         // The stream is the only place the meter states its mode, so every
         // reading is what keeps the dial position current.
-        self.dial.observe(self.table.dial_positions(), m.mode_raw);
+        self.dial.observe(self.table.dial, m.mode_raw);
         Ok(m)
     }
 
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
-        parse_measurement(self.profile.id, payload, self.table.as_ref())
+        parse_measurement(self.profile.id, payload, self.table)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
@@ -418,7 +418,7 @@ impl Protocol for Ut61PlusProtocol {
     /// is reported to ignore 0x5D until it has answered 0x5F (family spec
     /// §6.4). The wait is `get_name`'s, a few frames of at most 2 s each.
     fn name_before_init(&self, transport: &dyn Transport) -> bool {
-        transport.link() == Some(Link::Bluetooth) && self.table.name_before_stream()
+        transport.link() == Some(Link::Bluetooth) && self.table.name_before_stream
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -446,7 +446,7 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
-        capture::steps(self.table.as_ref(), &self.profile)
+        capture::steps(self.table, &self.profile)
     }
 }
 
@@ -693,7 +693,7 @@ const MINMAX_DEAD: &[Mode] = &[
 
 impl cycle::CycleMeter for Ut61PlusProtocol {
     fn dial_positions(&self) -> &'static [cycle::DialPosition] {
-        self.table.dial_positions()
+        self.table.dial
     }
 
     fn dial_state(&self) -> &cycle::DialState {
@@ -751,7 +751,7 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
             return Vec::new();
         }
         match u8::try_from(mode).map(Mode::from_byte) {
-            Ok(Ok(mode)) => tables::range_ladder(self.table.as_ref(), mode),
+            Ok(Ok(mode)) => tables::range_ladder(self.table, mode),
             // A mode byte this family's parser cannot name has no table.
             _ => Vec::new(),
         }
@@ -797,7 +797,7 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
             // No AVG: the UT61E+ reports none over USB.
             cycle::FlagSetting::MinMax => &[0, 1, 2],
             cycle::FlagSetting::Peak => match named {
-                Ok(Ok(mode)) if self.table.peak_modes().contains(&mode) => &[0, 1, 2],
+                Ok(Ok(mode)) if self.table.peak_modes.contains(&mode) => &[0, 1, 2],
                 _ => &[],
             },
         }
@@ -888,22 +888,19 @@ fn report_unrecognised_fields(
     payload: &[u8],
     mode: Mode,
     has_range: bool,
-    table: &dyn DeviceTable,
+    table: &ModelTable,
 ) {
     let mode_byte = payload[0];
     // Family §3.1: the model's dial lists every mode it reaches, and every
     // mode the captures show is on it. A decodable byte off it is another
     // model's mode or one of §2.5's speculative ones. An empty dial is a
     // table that does not describe one.
-    let dial = table.dial_positions();
+    let dial = table.dial;
     if !dial.is_empty() && !dial.iter().any(|p| p.contains(u16::from(mode_byte))) {
         report_unknown(
             id,
             "mode byte",
-            format_args!(
-                "{mode_byte:#04x} ({mode}), not on the {} dial",
-                table.model_name()
-            ),
+            format_args!("{mode_byte:#04x} ({mode}), not on the {} dial", table.name),
         );
     } else if !has_range && mode != Mode::Ncv {
         // Family §5 and §6.2: NCV is the one mode without a range table;
@@ -918,7 +915,7 @@ fn report_unrecognised_fields(
     let flags = &payload[11..14];
     // Family §4: a model without Peak never sets P-MIN or P-MAX (flag3
     // bits 1-2).
-    if payload[13] & 0x06 != 0 && table.peak_modes().is_empty() {
+    if payload[13] & 0x06 != 0 && table.peak_modes.is_empty() {
         report_unknown(
             id,
             "flag bits",
@@ -981,7 +978,7 @@ fn is_secondary(payload: &[u8]) -> bool {
 /// display. Its bar graph and flag bytes are not read: UNI-T's app ignores
 /// them, and what they hold is unknown. The unit comes from the model's own
 /// table for that function, as a main reading's does.
-fn parse_secondary(id: &'static str, payload: &[u8], table: &dyn DeviceTable) -> Option<AuxValue> {
+fn parse_secondary(id: &'static str, payload: &[u8], table: &ModelTable) -> Option<AuxValue> {
     let frame = &payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN];
     let range_byte = payload[1] & 0x0F;
     let Some((mode, range)) = Mode::from_byte(payload[0] & !SECONDARY)
@@ -1022,7 +1019,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     {
         let protocol = Ut61PlusProtocol::for_model(device.id);
         let by = protocol.profile.id;
-        let table = protocol.table.as_ref();
+        let table = protocol.table;
         for &mode in Mode::ALL {
             out.add(TextKind::Mode, mode.as_static_str(), by);
             // The parser masks the range byte to its low nibble.
@@ -1031,7 +1028,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
                     continue;
                 };
                 out.add(TextKind::Range, info.label, by);
-                if table.has_secondary_display() {
+                if table.secondary_display {
                     out.add(TextKind::Aux, secondary_label(mode), by);
                 }
                 if mode == Mode::AcDcV {
@@ -1061,7 +1058,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 pub(crate) fn parse_measurement(
     id: &'static str,
     payload: &[u8],
-    table: &dyn DeviceTable,
+    table: &ModelTable,
 ) -> Result<Measurement> {
     check_len("ut61eplus", payload, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN)?;
     // §2.4: the measurement payload is 14 bytes; the rest is ignored.
@@ -1219,9 +1216,8 @@ pub fn make_test_measurement(
     progress: (u8, u8),
     flags: (u8, u8, u8),
 ) -> Measurement {
-    let table = tables::ut61e_plus::Ut61ePlusTable::new();
     let payload = make_payload(mode, range, display, progress, flags);
-    parse_measurement(FALLBACK_ID, &payload, &table).unwrap()
+    parse_measurement(FALLBACK_ID, &payload, &tables::ut61e_plus::UT61E_PLUS).unwrap()
 }
 
 #[cfg(test)]
@@ -1232,7 +1228,7 @@ mod tests {
 
     /// [`super::parse_measurement`] as the UT61E+ entry reads: what these
     /// tests check is the decoding, whichever model's table they pass.
-    fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Measurement> {
+    fn parse_measurement(payload: &[u8], table: &ModelTable) -> Result<Measurement> {
         super::parse_measurement(FALLBACK_ID, payload, table)
     }
 
@@ -1415,10 +1411,10 @@ mod tests {
         for id in ["dcv", "ohm", "hold", "range", "lpfv", "inrush", "ncv"] {
             assert!(ids.contains(&id), "{id} missing on the UT202BT");
         }
-        let modes = tables::ut202bt::Ut202btTable::new();
+        let modes = tables::ut202bt::UT202BT.modes;
         for label in steps.iter().filter_map(|s| s.expect.and_then(|e| e.mode)) {
             assert!(
-                modes.modes().iter().any(|m| m.as_static_str() == label),
+                modes.iter().any(|m| m.as_static_str() == label),
                 "{label} is not a UT202BT mode"
             );
         }
@@ -1512,7 +1508,7 @@ mod tests {
         assert_eq!(e_plus.flag_states(FlagSetting::Peak, acv), [0, 1, 2]);
         assert!(!e_plus.range_ladder(dcv).is_empty());
     }
-    use tables::ut61e_plus::Ut61ePlusTable;
+    use tables::ut61e_plus::UT61E_PLUS;
 
     // --- Remote mode selection (protocol::cycle) --------------------------
     //
@@ -1773,11 +1769,11 @@ mod tests {
     /// the AC frame carries only its component.
     #[test]
     fn ac_dc_v_splits_its_components() {
-        let table = super::tables::ut61e_plus::Ut61ePlusTable::new();
+        let table = &super::tables::ut61e_plus::UT61E_PLUS;
         let dc = [
             0x19, 0x30, 0x20, 0x31, 0x2E, 0x36, 0x31, 0x31, 0x33, 0x00, 0x00, 0x30, 0x30, 0x31,
         ];
-        let m = parse_measurement(&dc, &table).unwrap();
+        let m = parse_measurement(&dc, table).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if v == 1.6113));
         assert!(m.flags.dc);
         assert!(m.aux_values.is_empty());
@@ -1787,7 +1783,7 @@ mod tests {
         let ac = [
             0x19, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x39,
         ];
-        let m = parse_measurement(&ac, &table).unwrap();
+        let m = parse_measurement(&ac, table).unwrap();
         assert!(matches!(m.value, MeasuredValue::Absent));
         assert_eq!(m.display_raw, None);
         assert_eq!((m.mode.as_ref(), m.unit.as_ref()), ("AC+DC V", "V"));
@@ -1811,11 +1807,11 @@ mod tests {
     /// over-range reading.
     #[test]
     fn an_over_range_ac_component_is_an_over_range_sub_value() {
-        let table = super::tables::ut61e_plus::Ut61ePlusTable::new();
+        let table = &super::tables::ut61e_plus::UT61E_PLUS;
         let ac_ol = [
             0x19, 0x30, 0x20, 0x20, 0x20, 0x4F, 0x4C, 0x20, 0x20, 0x00, 0x00, 0x30, 0x30, 0x38,
         ];
-        let m = parse_measurement(&ac_ol, &table).unwrap();
+        let m = parse_measurement(&ac_ol, table).unwrap();
         assert!(matches!(m.value, MeasuredValue::Absent));
         assert!(matches!(m.aux_values[0].value, MeasuredValue::Overload));
     }
@@ -2618,9 +2614,9 @@ mod tests {
     /// DC V on the second rung, with bar-graph digits reading 26.
     #[test]
     fn parse_dc_voltage() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = make_payload(0x02, 0x01, b" 12.345", (0x02, 0x06), (0x00, 0x00, 0x00));
-        let m = parse_measurement(&payload, &table).unwrap();
+        let m = parse_measurement(&payload, table).unwrap();
         assert_eq!(
             snapshot(&m),
             r#"mode=DC V
@@ -2640,9 +2636,9 @@ raw_payload=14"#
     /// "OL" in the digits is an overload, whatever the digits parse to.
     #[test]
     fn parse_overload() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = make_payload(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let m = parse_measurement(&payload, &table).unwrap();
+        let m = parse_measurement(&payload, table).unwrap();
         assert_eq!(
             snapshot(&m),
             r#"mode=Ω
@@ -2662,9 +2658,9 @@ raw_payload=14"#
     /// Flag nibble 1 bit 1 is HOLD; REL (bit 0) stays clear and AUTO is on.
     #[test]
     fn parse_with_hold_flag() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = make_payload(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x02, 0x00, 0x00));
-        let m = parse_measurement(&payload, &table).unwrap();
+        let m = parse_measurement(&payload, table).unwrap();
         assert!(m.flags.hold);
         assert!(m.flags.auto_range);
         assert!(!m.flags.rel);
@@ -2673,24 +2669,24 @@ raw_payload=14"#
     /// The meter puts a space between the sign and the digits.
     #[test]
     fn parse_negative_with_space() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = make_payload(0x03, 0x00, b"- 55.79", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let m = parse_measurement(&payload, &table).unwrap();
+        let m = parse_measurement(&payload, table).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-55.79)).abs() < 1e-6));
     }
 
     #[test]
     fn parse_payload_too_short() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = vec![0x30; 10];
-        assert!(parse_measurement(&payload, &table).is_err());
+        assert!(parse_measurement(&payload, table).is_err());
     }
 
     #[test]
     fn display_format() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = make_payload(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x02, 0x00, 0x00));
-        let m = parse_measurement(&payload, &table).unwrap();
+        let m = parse_measurement(&payload, table).unwrap();
         let s = m.to_string();
         assert!(s.contains("5.678"));
         assert!(s.contains("V"));
@@ -2704,10 +2700,10 @@ raw_payload=14"#
     /// swallowed a corrupt display just as quietly.
     #[test]
     fn overload_is_read_wherever_the_decimal_point_lands() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         for display in [b" .OL   ", b"  O.L  ", b"  OL.  ", b"    OL "] {
             let payload = make_payload(0x06, 0x00, display, (0x00, 0x00), (0x00, 0x00, 0x00));
-            let m = parse_measurement(&payload, &table).unwrap();
+            let m = parse_measurement(&payload, table).unwrap();
             assert!(
                 matches!(m.value, MeasuredValue::Overload),
                 "display {:?}: {:?}",
@@ -2717,7 +2713,7 @@ raw_payload=14"#
         }
         // A reading that merely contains the letters is still a reading.
         let payload = make_payload(0x06, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let m = parse_measurement(&payload, &table).unwrap();
+        let m = parse_measurement(&payload, table).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(_)), "{:?}", m.value);
     }
 
@@ -2728,9 +2724,9 @@ raw_payload=14"#
     /// 2026-09-12, which made a hand-built payload look like a captured one.
     #[test]
     fn parse_ncv_numeric_fallback() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = make_payload(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let m = parse_measurement(&payload, &table).unwrap();
+        let m = parse_measurement(&payload, table).unwrap();
         assert_eq!(m.mode, "NCV");
         assert!(matches!(m.value, MeasuredValue::NcvLevel(3)));
     }
@@ -2739,10 +2735,10 @@ raw_payload=14"#
     /// dash have been seen on hardware; two dashes follow our counting rule.
     #[test]
     fn parse_ncv_dash_levels() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         for (display, level) in [(b"   EF  ", 0u8), (b"     - ", 1), (b"    -- ", 2)] {
             let payload = make_payload(0x14, 0x00, display, (0x00, 0x00), (0x00, 0x00, 0x00));
-            let m = parse_measurement(&payload, &table).unwrap();
+            let m = parse_measurement(&payload, table).unwrap();
             assert!(
                 matches!(m.value, MeasuredValue::NcvLevel(l) if l == level),
                 "display {display:?}: {:?}",
@@ -2765,10 +2761,10 @@ raw_payload=14"#
     /// meter shows — still reads as OL, and is reported; the idle "EF" is not.
     #[test]
     fn unrecognised_display_text_is_reported() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let parse = |mode, display: &[u8; 7]| {
             let payload = make_payload(mode, 0x00, display, (0x00, 0x00), (0x00, 0x00, 0x00));
-            crate::protocol::capture_reports(|| parse_measurement(&payload, &table).unwrap())
+            crate::protocol::capture_reports(|| parse_measurement(&payload, table).unwrap())
         };
 
         let (m, reports) = parse(0x06, b"  CUT  ");
@@ -2795,13 +2791,13 @@ raw_payload=14"#
     /// low; the other modes were already right and must stay so.
     #[test]
     fn parse_ut61b_plus_capture_frames() {
-        let table = tables::ut61b_plus::Ut61bPlusTable::new();
+        let table = &tables::ut61b_plus::UT61B_PLUS;
 
         let dcv = [
             0x02, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
         ];
         assert_eq!(
-            snapshot(&parse_measurement(&dcv, &table).unwrap()),
+            snapshot(&parse_measurement(&dcv, table).unwrap()),
             r#"mode=DC V
 mode_raw=0x02
 range_raw=0x00
@@ -2819,7 +2815,7 @@ raw_payload=14"#
             0x00, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x33, 0x37, 0x00, 0x00, 0x30, 0x30, 0x30,
         ];
         assert_eq!(
-            snapshot(&parse_measurement(&acv, &table).unwrap()),
+            snapshot(&parse_measurement(&acv, table).unwrap()),
             r#"mode=AC V
 mode_raw=0x00
 range_raw=0x00
@@ -2837,7 +2833,7 @@ raw_payload=14"#
         let ohm = [
             0x06, 0x35, 0x20, 0x20, 0x20, 0x4F, 0x2E, 0x4C, 0x20, 0x03, 0x00, 0x30, 0x30, 0x30,
         ];
-        let m = parse_measurement(&ohm, &table).unwrap();
+        let m = parse_measurement(&ohm, table).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
         assert_eq!((m.unit.as_ref(), m.range_label.as_ref()), ("MΩ", "60MΩ"));
         assert_eq!(m.progress, Some(30));
@@ -2845,7 +2841,7 @@ raw_payload=14"#
         let dcma = [
             0x0E, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
         ];
-        let m = parse_measurement(&dcma, &table).unwrap();
+        let m = parse_measurement(&dcma, table).unwrap();
         assert_eq!((m.unit.as_ref(), m.range_label.as_ref()), ("mA", "60mA"));
     }
 
@@ -3008,15 +3004,12 @@ raw_payload=14"#
     // --- Unrecognised data (protocol::unrecognised) -----------------------
 
     use crate::protocol::capture_reports;
-    use tables::RangeInfo;
-    use tables::ut61b_plus::Ut61bPlusTable;
-    use tables::ut61d_plus::Ut61dPlusTable;
+    use tables::ut61b_plus::UT61B_PLUS;
+    use tables::ut61d_plus::UT61D_PLUS;
+    use tables::{BASE, RangeInfo};
 
     /// Parse `payload` with `table`, keeping what it reported.
-    fn parse_reporting(
-        payload: &[u8],
-        table: &dyn DeviceTable,
-    ) -> (Result<Measurement>, Vec<String>) {
+    fn parse_reporting(payload: &[u8], table: &ModelTable) -> (Result<Measurement>, Vec<String>) {
         capture_reports(|| parse_measurement(payload, table))
     }
 
@@ -3176,12 +3169,8 @@ raw_payload=14"#
     #[test]
     fn captured_frames_report_nothing() {
         for (model, table, frames) in [
-            (
-                "UT61E+",
-                &Ut61ePlusTable::new() as &dyn DeviceTable,
-                E_PLUS_FRAMES,
-            ),
-            ("UT61B+", &Ut61bPlusTable::new(), B_PLUS_FRAMES),
+            ("UT61E+", &UT61E_PLUS, E_PLUS_FRAMES),
+            ("UT61B+", &UT61B_PLUS, B_PLUS_FRAMES),
         ] {
             for frame in frames {
                 let (m, reports) = parse_reporting(frame, table);
@@ -3194,13 +3183,13 @@ raw_payload=14"#
     #[test]
     fn an_unknown_mode_byte_is_reported_and_still_rejected() {
         let payload = make_payload(0x1F, 0x00, b"  0.000", (0, 0), (0, 0, 0));
-        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
         assert!(matches!(m, Err(Error::UnknownMode(0x1F))), "{m:?}");
         assert_eq!(reports, ["ut61eplus: unrecognised mode byte: 0x1f"]);
 
         // Bit 7 over a function nobody decodes is no secondary display.
         let payload = make_payload(0x9F, 0x00, b"  0.000", (0, 0), (0, 0, 0));
-        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
         assert!(matches!(m, Err(Error::UnknownMode(0x9F))), "{m:?}");
         assert_eq!(reports, ["ut61eplus: unrecognised mode byte: 0x9f"]);
     }
@@ -3209,36 +3198,30 @@ raw_payload=14"#
     #[test]
     fn a_mode_off_the_model_s_dial_is_reported() {
         let payload = make_payload(0x0A, 0x00, b"   23.4", (0, 0), (0, 0, 0));
-        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
         assert_eq!(m.unwrap().mode, "°C");
         assert_eq!(
             reports,
             ["ut61eplus: unrecognised mode byte: 0x0a (°C), not on the UNI-T UT61E+ dial"]
         );
 
-        let (_, reports) = parse_reporting(&payload, &Ut61dPlusTable::new());
+        let (_, reports) = parse_reporting(&payload, &UT61D_PLUS);
         assert!(reports.is_empty(), "{reports:?}");
     }
 
     /// A table that describes no dial, with a rung for every mode.
-    struct NoDial;
+    static NO_DIAL: ModelTable = ModelTable {
+        name: "no dial",
+        entry: |_| Some(&ANY_RUNG),
+        ..BASE
+    };
 
     static ANY_RUNG: [RangeInfo; 1] = [tables::r("any", "V")];
-
-    impl DeviceTable for NoDial {
-        fn model_name(&self) -> &'static str {
-            "no dial"
-        }
-
-        fn entry(&self, _mode: Mode) -> Option<&[RangeInfo]> {
-            Some(&ANY_RUNG)
-        }
-    }
 
     #[test]
     fn a_table_without_a_dial_takes_any_mode() {
         let payload = make_payload(0x13, 0x00, b"  0.000", (0, 0), (0, 0, 0));
-        let (m, reports) = parse_reporting(&payload, &NoDial);
+        let (m, reports) = parse_reporting(&payload, &NO_DIAL);
         assert_eq!(m.unwrap().mode, "Live");
         assert!(reports.is_empty(), "{reports:?}");
     }
@@ -3247,9 +3230,9 @@ raw_payload=14"#
     /// nothing about it.
     #[test]
     fn a_range_byte_past_the_table_is_reported() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         let payload = make_payload(0x02, 0x04, b" 12.345", (0, 0), (0, 0, 0));
-        let (m, reports) = parse_reporting(&payload, &table);
+        let (m, reports) = parse_reporting(&payload, table);
         assert_eq!(m.unwrap().range_label, "");
         assert_eq!(
             reports,
@@ -3257,7 +3240,7 @@ raw_payload=14"#
         );
 
         let payload = make_payload(0x14, 0x00, b"   EF  ", (0, 0), (0, 0, 0));
-        let (_, reports) = parse_reporting(&payload, &table);
+        let (_, reports) = parse_reporting(&payload, table);
         assert!(reports.is_empty(), "{reports:?}");
     }
 
@@ -3266,7 +3249,7 @@ raw_payload=14"#
     #[test]
     fn the_apo_flag_bit_is_not_reported() {
         let payload = make_payload(0x02, 0x01, b" 12.345", (0, 0), (0, 0x08, 0));
-        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
         assert!(m.unwrap().flags.auto_range);
         assert!(reports.is_empty(), "{reports:?}");
     }
@@ -3276,7 +3259,7 @@ raw_payload=14"#
         let mut payload = make_payload(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
         payload[1] = 0x01;
         payload[12] = 0x00;
-        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
         assert_eq!(m.unwrap().range_label, "22V");
         assert_eq!(
             reports,
@@ -3292,20 +3275,20 @@ raw_payload=14"#
     #[test]
     fn peak_bits_on_a_model_without_peak_are_reported() {
         let payload = make_payload(0x00, 0x00, b"  0.037", (0, 0), (0, 0, F_PEAK_MAX));
-        let (m, reports) = parse_reporting(&payload, &Ut61bPlusTable::new());
+        let (m, reports) = parse_reporting(&payload, &UT61B_PLUS);
         assert!(m.unwrap().flags.peak_max);
         assert_eq!(
             reports,
             ["ut61eplus: unrecognised flag bits: [30, 30, 34], Peak on a model without it"]
         );
 
-        let (_, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let (_, reports) = parse_reporting(&payload, &UT61E_PLUS);
         assert!(reports.is_empty(), "{reports:?}");
 
-        let ut202bt = tables::ut202bt::Ut202btTable::new();
+        let ut202bt = &tables::ut202bt::UT202BT;
         for mode in [0x11, 0x16] {
             let payload = make_payload(mode, 0x02, b"  123  ", (0, 0), (0, 0, F_PEAK_MIN));
-            let (m, reports) = parse_reporting(&payload, &ut202bt);
+            let (m, reports) = parse_reporting(&payload, ut202bt);
             assert!(m.unwrap().flags.peak_min, "{mode:#04x}");
             assert!(reports.is_empty(), "{mode:#04x}: {reports:?}");
         }
@@ -3313,14 +3296,14 @@ raw_payload=14"#
 
     #[test]
     fn a_bar_graph_past_46_segments_is_reported() {
-        let table = Ut61ePlusTable::new();
+        let table = &UT61E_PLUS;
         for (bar, progress, report) in [
             ((4, 7), 47, Some("[04, 07]")),
             ((0, 10), 10, Some("[00, 0A]")),
             ((4, 6), 46, None),
         ] {
             let payload = make_payload(0x02, 0x01, b" 12.345", bar, (0, 0, 0));
-            let (m, reports) = parse_reporting(&payload, &table);
+            let (m, reports) = parse_reporting(&payload, table);
             assert_eq!(m.unwrap().progress, Some(progress));
             let want: Vec<String> = report
                 .map(|r| format!("ut61eplus: unrecognised bar graph: {r}"))
@@ -3334,7 +3317,7 @@ raw_payload=14"#
     fn a_payload_past_14_bytes_is_reported() {
         let mut payload = make_payload(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
         payload.push(0x00);
-        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
         let value = m.unwrap().value;
         assert!(
             matches!(value, MeasuredValue::Normal(v) if (v - 12.345).abs() < 1e-9),
@@ -3446,9 +3429,9 @@ raw_payload=14"#
                     continue;
                 };
                 let frame = main_frame(mode as u8, 0x30 | range, b"  0.000");
-                let m = super::parse_measurement(by, &frame, protocol.table.as_ref()).unwrap();
+                let m = super::parse_measurement(by, &frame, protocol.table).unwrap();
                 crate::text::assert_listed(all, &protocol, &m, by);
-                if protocol.table.has_secondary_display() {
+                if protocol.table.secondary_display {
                     let label = secondary_label(mode);
                     assert!(all.contains(TextKind::Aux, label), "{model} {label}");
                 }
