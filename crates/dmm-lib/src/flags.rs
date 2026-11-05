@@ -212,6 +212,7 @@ impl std::fmt::Display for StatusFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     /// Every flag set through `set` reads back through `get`, and no other.
     #[test]
@@ -317,6 +318,30 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), total, "duplicate flag names in Flag::ALL");
+    }
+
+    /// Every variant, as an exhaustive match and as an array, so a new
+    /// variant fails to compile here until it is listed.
+    macro_rules! every_flag {
+        ($($flag:ident),* $(,)?) => {{
+            let _exhaustive = |f: Flag| match f {
+                $(Flag::$flag)|* => {}
+            };
+            [$(Flag::$flag),*]
+        }};
+    }
+
+    /// [`Flag::ALL`] is kept by hand; a flag it leaves out would vanish from
+    /// JSON exports, capture reports and the golden fixtures' checks.
+    #[test]
+    fn all_lists_every_flag() {
+        let every = every_flag!(
+            Hold, Rel, AutoRange, Min, Max, Avg, LowBattery, HvWarning, PeakMax, PeakMin,
+            LeadError, Comp, Record, LoZ, Void, Dc,
+        );
+        let all: HashSet<Flag> = Flag::ALL.into_iter().collect();
+        assert_eq!(all.len(), Flag::ALL.len(), "ALL repeats a flag");
+        assert_eq!(all, every.into_iter().collect());
     }
 
     #[test]
