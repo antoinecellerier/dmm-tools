@@ -1524,26 +1524,14 @@ raw_payload=32"#
     }
 
     /// A normal-format frame with COMP active carries the two limits as
-    /// sub-values.
+    /// sub-values: INNER, PASS, high 10.0 and low 1.0, with the limits'
+    /// digits in the low nibble as spec §5.4 has them, `0x04` as captured
+    /// on V DC.
     #[test]
     fn parse_comp_extension() {
-        let mbytes = 0x3111u16.to_le_bytes();
-        let mut payload = vec![
-            0x02, // type
-            0x00, // misc: normal format
-            0x11, // misc2: auto_range + COMP (bit 4)
-            mbytes[0], mbytes[1], 0x00, // range
-        ];
-        // Main value
-        payload.extend_from_slice(&full_value(5.0, 0x30, b"VDC\0\0\0\0\0"));
-        // COMP extension: INNER mode, PASS, precision 0x30, high=10.0, low=1.0
-        payload.push(0x00); // comp_mode = INNER
-        payload.push(0x00); // result = PASS
-        payload.push(0x30); // precision
-        payload.extend_from_slice(&10.0f32.to_le_bytes()); // high limit
-        payload.extend_from_slice(&1.0f32.to_le_bytes()); // low limit
-
-        let m = parse_measurement(&payload).unwrap();
+        let (m, reports) = parse_reporting(&comp_payload(0, 0, 0x04, 10.0, Some(1.0)));
+        assert!(reports.is_empty(), "{reports:?}");
+        let m = m.unwrap();
         assert_eq!(
             snapshot(&m),
             r#"mode=V DC
@@ -1555,8 +1543,8 @@ range_label=Auto
 display_raw=Some("5.000")
 flags=auto_range,comp
 aux=2
-aux1=COMP High value=Normal(10.0) unit=V display_raw=Some("10") elapsed_secs=None
-aux2=COMP Low value=Normal(1.0) unit=V display_raw=Some("1") elapsed_secs=None
+aux1=COMP High value=Normal(10.0) unit=V display_raw=Some("10.0000") elapsed_secs=None
+aux2=COMP Low value=Normal(1.0) unit=V display_raw=Some("1.0000") elapsed_secs=None
 raw_payload=30"#
         );
     }
