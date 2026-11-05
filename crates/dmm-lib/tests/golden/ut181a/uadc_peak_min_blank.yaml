@@ -11,3 +11,4 @@ aux:
   - label: Peak Min
     value: "----"
     unit: µA
+main_label: "Peak Max"

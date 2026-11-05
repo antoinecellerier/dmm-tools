@@ -7,3 +7,4 @@ range_label: ""
 resolution: 0.1°C
 flags:
   auto_range: true
+main_label: "T1"

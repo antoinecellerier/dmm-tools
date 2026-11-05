@@ -13,3 +13,4 @@ aux:
   - label: Absolute
     value: "-0.0012"
     unit: V
+main_label: "Relative"

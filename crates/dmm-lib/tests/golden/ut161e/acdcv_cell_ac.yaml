@@ -11,3 +11,4 @@ aux:
   - label: "AC"
     value: "0.0610"
     unit: "V"
+main_label: "DC"

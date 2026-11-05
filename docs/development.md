@@ -167,8 +167,9 @@ Golden file tests verify measurement parsing against known-good byte sequences.
 Each subdirectory of `crates/dmm-lib/tests/golden/` is named after a registry
 device id (`ut61eplus`, `ut804`, …), and its `.yaml` files are parsed by that
 device's `Protocol::parse_payload`. They use the same format as capture YAML
-samples (`raw_hex`, `mode`, `value`, `unit`, `range_label`, `flags`), so you can
-copy a sample directly from a capture report into a golden file.
+samples (`raw_hex`, `mode`, `value`, `unit`, `range_label`, `flags`, `aux`,
+`main_label`), so you can copy a sample directly from a capture report into a
+golden file; `golden_tests.rs` says which fields are optional.
 
 To add a golden test:
 

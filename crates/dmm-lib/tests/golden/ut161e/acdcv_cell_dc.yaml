@@ -9,3 +9,4 @@ flags:
   auto_range: true
   dc: true
 aux: []
+main_label: "DC"

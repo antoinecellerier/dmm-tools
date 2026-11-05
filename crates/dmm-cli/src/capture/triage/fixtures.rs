@@ -88,8 +88,9 @@ fn file_name(id: &str) -> String {
         .collect()
 }
 
-/// The fixture's fields, the flags that are set and the sub-values, listed
-/// even when there are none if `with_aux`.
+/// The fixture's fields, the flags that are set, the sub-values, listed
+/// even when there are none if `with_aux`, and the main label if any: the
+/// golden test reads a missing one as none.
 fn fixture(s: &SampleData, with_aux: bool) -> String {
     let mut out = format!(
         "raw_hex: {:?}\nmode: {:?}\nvalue: {:?}\nunit: {:?}\nrange_label: {:?}\n",
@@ -117,6 +118,9 @@ fn fixture(s: &SampleData, with_aux: bool) -> String {
                 a.label, a.value, a.unit
             ));
         }
+    }
+    if let Some(label) = &s.main_label {
+        out.push_str(&format!("main_label: {label:?}\n"));
     }
     out
 }
@@ -148,6 +152,21 @@ mod tests {
             ),
             "{text}"
         );
+    }
+
+    /// A labelled reading's fixture carries its label, which the golden
+    /// test checks; an unlabelled one has no line.
+    #[test]
+    fn a_fixture_carries_the_main_label() {
+        let ut61eplus = find_device("ut61eplus").unwrap();
+        // AC+DC V, its DC part labelled beside the AC sub-value.
+        let acdc = (ut61eplus.new_protocol)()
+            .parse_payload(b"\x19\x30 0.0010\x00\x00001")
+            .unwrap();
+        let text = fixture(&SampleData::from_measurement(&acdc), true);
+        assert!(text.ends_with("main_label: \"DC\"\n"), "{text}");
+        let text = fixture(&dcv(b" 0.0001"), false);
+        assert!(!text.contains("main_label"), "{text}");
     }
 
     #[test]

@@ -18,3 +18,4 @@ flags:
   peak_min: false
   peak_max: false
 aux: []
+main_label: "DC"

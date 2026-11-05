@@ -21,6 +21,10 @@
 //! `label`, `value` (the display form), and `unit` resolved against the
 //! reading's.
 //!
+//! `main_label`, when present, is the reading's own name beside sub-values of
+//! the same quantity ([`MainLabel::as_str`]: `DC`, `T1`, `Peak Max`, …); a
+//! fixture that omits it expects none.
+//!
 //! `resolution`, when present, is the resolution of the manual row
 //! [`Protocol::spec_info`] finds for the reading.
 //!
@@ -30,7 +34,7 @@
 //! test rather than being ignored, so a typo can't silently check nothing.
 
 use dmm_lib::flags::Flag;
-use dmm_lib::measurement::Measurement;
+use dmm_lib::measurement::{MainLabel, Measurement};
 use dmm_lib::protocol::registry::resolve_device;
 use dmm_lib::protocol::{Protocol, capture_reports};
 use serde::Deserialize;
@@ -55,6 +59,9 @@ struct GoldenTestCase {
     /// The reading's sub-values, checked when given.
     #[serde(default)]
     aux: Option<Vec<GoldenAux>>,
+    /// The reading's own label beside its sub-values; omitted means none.
+    #[serde(default)]
+    main_label: Option<String>,
 }
 
 /// One expected sub-value, in the capture report's shape.
@@ -170,6 +177,11 @@ fn check_reading(protocol: &dyn Protocol, stem: &str, case: &GoldenTestCase) -> 
     assert_eq!(
         measurement.range_label, case.range_label,
         "golden {stem}: range_label mismatch"
+    );
+    assert_eq!(
+        measurement.main_label.map(MainLabel::as_str),
+        case.main_label.as_deref(),
+        "golden {stem}: main_label mismatch"
     );
 
     // Driven by `as_pairs`, so a flag added to `StatusFlags` is checked by
