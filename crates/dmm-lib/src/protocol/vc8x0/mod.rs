@@ -339,31 +339,40 @@ pub(crate) fn common_flags(status: &[u8]) -> (StatusFlags, bool) {
     (flags, ol1)
 }
 
-/// Whether the main display carries no reading: the overload bit, or the
-/// text the meter puts there instead (vc880 spec §4, "Display values").
+/// Whether the main display says overload: the overload bit, or the text the
+/// meter puts there (vc880 spec §4, "Display values").
 pub(crate) fn overloaded(ol1: bool, trimmed: &str) -> bool {
-    ol1 || spells_ol(trimmed) || trimmed.contains("---")
+    ol1 || spells_ol(trimmed)
+}
+
+/// Whether the main display is all dashes, wherever a decimal point lands among
+/// them: no reading, distinct from overload (vc880 spec §4, "Display values").
+fn dashes(trimmed: &str) -> bool {
+    let mut marks = trimmed.bytes().filter(|&b| b != b'.');
+    marks.clone().count() >= 3 && marks.all(|b| b == b'-')
 }
 
 /// Turn the decoded main display into a `MeasuredValue`.
 ///
 /// `trimmed` is the whitespace-stripped display. `setup` says the meter is on
-/// its setup screen, whose words are not a reading and are not reported.
+/// its setup screen: whatever that shows is the menu, so it is neither a
+/// reading nor an overload, and is not reported.
 pub(crate) fn parse_value(
     family: &'static str,
     ol1: bool,
     trimmed: &str,
     setup: bool,
 ) -> MeasuredValue {
+    if setup {
+        return MeasuredValue::NoReading("SETUP");
+    }
     if overloaded(ol1, trimmed) {
         return MeasuredValue::Overload;
     }
-    // The sign is in the ASCII string itself (leading '-').
-    if setup {
-        return trimmed
-            .parse()
-            .map_or(MeasuredValue::Overload, MeasuredValue::Normal);
+    if dashes(trimmed) {
+        return MeasuredValue::NoReading("---");
     }
+    // The sign is in the ASCII string itself (leading '-').
     display_number(family, trimmed)
 }
 
@@ -854,7 +863,7 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(
 ///
 /// `display` is the whitespace-stripped main display; `setup` says the meter
 /// shows its setup screen, whose words are not a reading, and `overload` that
-/// it shows no reading at all.
+/// it shows an overload.
 fn report_unrecognised_fields<M: Vc8x0Model>(
     id: &'static str,
     function: u8,
@@ -1544,13 +1553,31 @@ pub(crate) mod test_support {
         let (_, reports) = parse_capturing::<M>(&payload);
         assert!(reports.is_empty(), "{reports:?}");
 
-        // An overload has no digits to sign, however it is marked.
-        for display in [b"     OL", b"  -----"] {
-            let payload = make_payload::<M>(0x00, 0x30, display, &status);
+        // An overload has no digits to sign, however it is marked, and
+        // neither do dashes.
+        let payload = make_payload::<M>(0x00, 0x30, b"     OL", &status);
+        let (m, reports) = parse_capturing::<M>(&payload);
+        assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+        assert!(reports.is_empty(), "{reports:?}");
+        let payload = make_payload::<M>(0x00, 0x30, b"  -----", &status);
+        let (m, reports) = parse_capturing::<M>(&payload);
+        assert!(matches!(m.unwrap().value, MeasuredValue::NoReading("---")));
+        assert!(reports.is_empty(), "{reports:?}");
+        // A point among the dashes changes nothing.
+        for display in [b"   .---", b"   ---.", b"  -.---"] {
+            let payload = make_payload::<M>(0x00, 0x30, display, &zero_status::<M>());
             let (m, reports) = parse_capturing::<M>(&payload);
-            assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+            assert!(
+                matches!(m.unwrap().value, MeasuredValue::NoReading("---")),
+                "{display:?}"
+            );
             assert!(reports.is_empty(), "{display:?}: {reports:?}");
         }
+        // Too few are not dashes.
+        let payload = make_payload::<M>(0x00, 0x30, b"    .--", &zero_status::<M>());
+        let (m, reports) = parse_capturing::<M>(&payload);
+        assert!(matches!(m.unwrap().value, MeasuredValue::NoReading("?")));
+        assert_eq!(reports.len(), 1, "{reports:?}");
         let mut ol_status = status;
         ol_status[2] = 0x04;
         let payload = make_payload::<M>(0x00, 0x30, b"  1.234", &ol_status);

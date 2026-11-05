@@ -21,6 +21,10 @@ yet: every item waits on a first report.
 - The 66-byte frame and its seven display fields ([Live Data Frame](reverse-engineered-protocol.md#live-data-frame-66-bytes----vendor))
   — decides the parser's offsets and whether sub-displays become aux
   values. Needs the mode steps, LCD noted. (#14)
+- What an overload or a blank reading sends: the [VC-880's item](../vc880/verification.md), which the shared `parse_value` follows.
+- What the frame sends in the SETUP menu, whose status bytes name no Setup bit
+  — decides whether a menu number needs an arm in `parse_value`, where it now
+  reads as a measurement. Needs the menu open, LCD noted. (#14)
 - The inbound BE16 checksum, inferred ([Frame Format](reverse-engineered-protocol.md#frame-format----vendor))
   — every frame failing it means another scheme. Needs any capture. (#14)
 - The remapped function codes and the 6/60/600 ranges ([Function Codes](reverse-engineered-protocol.md#function-codes----vendor))

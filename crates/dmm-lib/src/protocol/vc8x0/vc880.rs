@@ -527,6 +527,33 @@ mod tests {
         assert!(m.flags.low_battery);
     }
 
+    /// Whatever the setup screen shows is the menu: a number is no reading,
+    /// and neither `OL`, dashes nor the OL1 bit make it an overload.
+    #[test]
+    fn the_setup_screen_is_no_reading() {
+        for (display, ol1) in [
+            (b"  1.234", false),
+            (b"     OL", false),
+            (b"    ---", false),
+            (b"  Err  ", false),
+            (b"    nan", false),
+            (b"  1.234", true),
+        ] {
+            let mut status = zero_status();
+            status[6] = 0x02; // Setup bit
+            if ol1 {
+                status[2] = 0x04;
+            }
+            let payload = make_payload(0x00, 0x30, display, status);
+            let (m, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload));
+            assert!(
+                matches!(m.unwrap().value, MeasuredValue::NoReading("SETUP")),
+                "{display:?}"
+            );
+            assert!(reports.is_empty(), "{display:?}: {reports:?}");
+        }
+    }
+
     /// Words on the main display are reported, except on the setup screen,
     /// where they are the menu rather than a reading.
     #[test]
@@ -730,7 +757,7 @@ mod tests {
         shared::assert_command_frame(0x47); // autorange
     }
 
-    /// Every status byte 0xFF: the OL1 bit forces Overload, the manual-range
+    /// Every status byte 0xFF: the Setup bit outranks OL1, the manual-range
     /// bit clears AUTO, and hold/rel/min/max/avg/HV/low-battery all light.
     #[test]
     fn snapshot_every_status_bit_set() {
@@ -739,7 +766,7 @@ mod tests {
             r#"mode=DC V
 mode_raw=0x00
 range_raw=0x31
-value=Overload
+value=NoReading("SETUP")
 unit=V
 range_label=40V
 display_raw=Some("-1.2345")
@@ -786,7 +813,7 @@ raw_payload=34"#
         );
     }
 
-    /// The meter's "---" blank-reading form also reads as overload.
+    /// The meter's "---" blank-reading form is no reading, not an overload.
     #[test]
     fn snapshot_dashes_display() {
         assert_eq!(
@@ -794,7 +821,7 @@ raw_payload=34"#
             r#"mode=Ω
 mode_raw=0x06
 range_raw=0x30
-value=Overload
+value=NoReading("---")
 unit=Ω
 range_label=400Ω
 display_raw=Some("    ---")

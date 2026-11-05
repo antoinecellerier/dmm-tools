@@ -45,7 +45,13 @@ has been read yet: every item waits on a first report.
   decides whether the voltage table labels it (`LOW_PASS`). Needs `lpf`. (#13)
 - The main display against the LCD, and what an overload or a blank reading
   sends: `OL`, dashes, OL1 ([§4](reverse-engineered-protocol.md#4-live-data-payload-type-0x01-39-bytes----vendor))
-  — decides `parse_value`'s fallbacks. Needs `ohm` with the leads open. (#13)
+  — decides `parse_value`'s OL and dashes arms. Needs `ohm` with the leads open. (#13)
+- What the main display sends while Setup (status byte 6 bit 1, §4.3) is set
+  — decides `parse_value`'s setup arm, which shows no reading. Needs the setup
+  screen open, LCD noted. (#13)
+- What a VC650BT sends while mF capacitance shows `dsc`, as its manual says it
+  sometimes does — decides whether the word gets its own arm; until then it is
+  reported and shows `?`. Needs a VC650BT and a mF capacitor. (#13)
 - Sub values 1 and 2 and the 3-byte bar (§4): format and content, a guess
   in the [cross-reference](reverse-engineering-approach.md#cross-reference-against-pylablib-phase-3)
   — decides whether they become sub-values. Needs MAX/MIN, REL. (#13)

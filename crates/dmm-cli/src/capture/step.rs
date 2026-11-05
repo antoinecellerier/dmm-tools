@@ -110,8 +110,7 @@ pub(crate) fn capture_samples(
 /// change. A UT181A has no reading for six or seven 100 ms frames after any
 /// range, mode or dial change, and for up to 20 on some positions (its
 /// research spec, §5.2); a capacitance range with nothing connected never
-/// gets one, so the wait is bounded. Every other meter's first reading
-/// ends it.
+/// gets one, so the wait is bounded. On any meter, the first reading ends it.
 const BLANK_READS: usize = 25;
 
 /// Whether the display shows no reading.

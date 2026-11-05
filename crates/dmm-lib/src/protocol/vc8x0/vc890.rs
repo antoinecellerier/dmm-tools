@@ -856,7 +856,7 @@ raw_payload=61"#
         );
     }
 
-    /// The meter's "---" blank-reading form also reads as overload.
+    /// The meter's "---" blank-reading form is no reading, not an overload.
     #[test]
     fn snapshot_dashes_display() {
         assert_eq!(
@@ -864,7 +864,7 @@ raw_payload=61"#
             r#"mode=Ω
 mode_raw=0x07
 range_raw=0x30
-value=Overload
+value=NoReading("---")
 unit=Ω
 range_label=600Ω
 display_raw=Some("    ---")
