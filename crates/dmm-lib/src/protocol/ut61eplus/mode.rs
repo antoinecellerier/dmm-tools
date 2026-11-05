@@ -47,9 +47,8 @@ pub(crate) enum Mode {
 }
 
 impl Mode {
-    /// Every mode, in protocol byte order, for the tests and the label list
-    /// that walk the whole table rather than decode one byte.
-    #[cfg(any(test, feature = "test-support"))]
+    /// Every mode, indexed by its mode byte: this is the decode table, so
+    /// its order must match the discriminants.
     pub(crate) const ALL: &'static [Mode] = &[
         Mode::AcV,
         Mode::AcMv,
@@ -85,40 +84,10 @@ impl Mode {
     ];
 
     pub(crate) fn from_byte(b: u8) -> Result<Self, Error> {
-        match b {
-            0x00 => Ok(Mode::AcV),
-            0x01 => Ok(Mode::AcMv),
-            0x02 => Ok(Mode::DcV),
-            0x03 => Ok(Mode::DcMv),
-            0x04 => Ok(Mode::Hz),
-            0x05 => Ok(Mode::DutyCycle),
-            0x06 => Ok(Mode::Ohm),
-            0x07 => Ok(Mode::Continuity),
-            0x08 => Ok(Mode::Diode),
-            0x09 => Ok(Mode::Capacitance),
-            0x0A => Ok(Mode::TempC),
-            0x0B => Ok(Mode::TempF),
-            0x0C => Ok(Mode::DcUa),
-            0x0D => Ok(Mode::AcUa),
-            0x0E => Ok(Mode::DcMa),
-            0x0F => Ok(Mode::AcMa),
-            0x10 => Ok(Mode::DcA),
-            0x11 => Ok(Mode::AcA),
-            0x12 => Ok(Mode::Hfe),
-            0x13 => Ok(Mode::Live),
-            0x14 => Ok(Mode::Ncv),
-            0x15 => Ok(Mode::LozV),
-            0x16 => Ok(Mode::ClampAcA),
-            0x17 => Ok(Mode::ClampDcA),
-            0x18 => Ok(Mode::LpfV),
-            0x19 => Ok(Mode::AcDcV),
-            0x1A => Ok(Mode::LpfA),
-            0x1B => Ok(Mode::AcDcA),
-            0x1C => Ok(Mode::ClampLpfA),
-            0x1D => Ok(Mode::ClampAcDcA),
-            0x1E => Ok(Mode::Inrush),
-            _ => Err(Error::UnknownMode(b)),
-        }
+        Self::ALL
+            .get(usize::from(b))
+            .copied()
+            .ok_or(Error::UnknownMode(b))
     }
 }
 
@@ -221,16 +190,16 @@ mod tests {
 
     #[test]
     fn from_byte_roundtrip_via_repr() {
-        // Verify that from_byte(variant as u8) == variant for all variants
+        // `from_byte` indexes `ALL` by the byte, so this is what ties each
+        // position in `ALL` to its variant's discriminant.
         for mode in Mode::ALL {
             let byte = *mode as u8;
             assert_eq!(Mode::from_byte(byte).unwrap(), *mode);
         }
     }
 
-    /// `ALL` is written out by hand next to the enum, so pin it to the
-    /// bytes `from_byte` accepts: a variant added to one and not the other
-    /// would drop out of — or duplicate itself in — the specs dump.
+    /// The bytes `from_byte` accepts are exactly `ALL`, in order: the specs
+    /// dump walks `ALL`, so it covers every mode a frame can carry, once.
     #[test]
     fn all_holds_every_decodable_mode_in_byte_order() {
         let decoded: Vec<Mode> = (u8::MIN..=u8::MAX)
