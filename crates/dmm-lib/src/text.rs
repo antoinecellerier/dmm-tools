@@ -35,7 +35,8 @@ pub enum TextKind {
     /// A meter key's name in words, on a remote button or in a list of keys
     /// ("Capacitance"). A name printed on the key isn't translated.
     Key,
-    /// How the meter's keypad does what a remote button does, as its hover.
+    /// What a remote button does, or how the meter's keypad does it, as its
+    /// hover.
     KeyHover,
     /// A model name with words in it, not just a part number ("Mock UT61E+").
     Model,
@@ -352,6 +353,7 @@ mod list {
                 "NCV",
                 "Hz/Duty",
                 "Hz/%",
+                "SAVE",
                 "MIN/MAX/AVG",
                 "SHIFT",
                 "MODE",

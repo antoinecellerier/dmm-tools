@@ -394,7 +394,8 @@ impl App {
 
             // The meter's context keys (ZOTEK's ZERO in capacitance, the
             // 121GW's 1kHz in AC, OWON's Hz/Duty, the CM2100B's ZERO and the
-            // UT61+'s Hz/%), each only while the reading is one it applies to.
+            // UT61+'s Hz/%, the UT181A's SAVE), each only while the reading is
+            // one it applies to.
             let reading = self.last_measurement.as_ref();
             for key in keys.context {
                 if !reading.is_some_and(|m| (key.applies)(m)) {
@@ -853,6 +854,17 @@ mod tests {
         }
     }
 
+    /// The UT181A's SAVE, whatever the reading, names what it does.
+    #[test]
+    fn the_ut181a_offers_save() {
+        assert!(buttons_of(&mut connected_to("ut181a")).contains(&"SAVE".to_string()));
+        let keys = connected_to("ut181a").connection.meter_keys();
+        assert_eq!(
+            super::context_key_hover(&crate::l10n::english(), &keys.context[0]),
+            "Save the reading to the meter's memory"
+        );
+    }
+
     /// A context key's tooltip names the key to press, or says how the
     /// meter does it when no key carries its label.
     #[test]
@@ -894,7 +906,6 @@ mod tests {
     /// Keys with no control yet. Every keypress is to reach the GUI, so this
     /// only shrinks, and goes when it is empty.
     const NOT_YET: &[(DeviceFamily, &str)] = &[
-        (DeviceFamily::Ut181a, "save"),
         (DeviceFamily::Owon, "lpf"),
         (DeviceFamily::Owon, "inrush"),
         (DeviceFamily::Owon, "compare"),

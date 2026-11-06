@@ -40,8 +40,8 @@ use crate::protocol::cycle::FlagSetting;
 use crate::protocol::framing::{self, FrameErrorRecovery, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    AUTO_RANGE_ID, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing,
-    Protocol, Setting, Stability, unsupported_setting,
+    AUTO_RANGE_ID, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol,
+    Setting, Stability, unsupported_setting,
 };
 use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
@@ -92,7 +92,7 @@ impl Ut181aProtocol {
                 // aux1 + aux2 + COMP High + COMP Low.
                 max_aux_values: 4,
                 verification_issue: Some(5),
-                meter_keys: MeterKeys::NONE,
+                meter_keys: command::METER_KEYS,
             },
         }
     }

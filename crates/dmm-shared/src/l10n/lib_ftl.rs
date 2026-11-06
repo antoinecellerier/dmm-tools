@@ -76,8 +76,8 @@ to a number."
 not listed here: it stays as printed."
         }
         TextKind::KeyHover => {
-            "Meter key hovers: how to do on the meter what a remote button does.
-Keep the meter's key names as it prints them."
+            "Meter key hovers: what a remote button does, or how to do it on the
+meter. Keep the meter's key names as it prints them."
         }
         TextKind::Model => {
             "Model names with words in them: the simulated meters. Keep the part

@@ -55,6 +55,10 @@ checks that span families are in the [verification backlog](../../verification-b
 - HOLD as bare `[0x12]` ([§4.2](reverse-engineered-protocol.md#42-commands-host---device))
   — only `12 5A` has been sent; settles the HOLD row. Needs a hidapi script or
   dev build. (#5)
+- SAVE_MEAS ([§4.2](reverse-engineered-protocol.md#42-commands-host---device))
+  — never sent to a meter, and the vendor app sends it from its Max/Min dialog;
+  that it answers OK and the saved count grows outside MAX/MIN too decides the
+  SAVE button and its every-function rule. Needs `dmm-cli command save`. (#5)
 
 ## Capture
 

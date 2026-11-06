@@ -372,9 +372,9 @@ pub struct MeterKey {
     /// it. Only such a label is translated: a printed one is what the user
     /// looks for on the meter.
     pub in_words: bool,
-    /// How the meter's own keypad does it, when that is not a short press
-    /// of a key named `label` (a long press, or a key named otherwise), for
-    /// a tooltip; `None` when it is.
+    /// What a tooltip says when "press the key named `label`" wouldn't be
+    /// true: how the meter's own keypad does it (a long press, or a key named
+    /// otherwise), or what the press does. `None` when it would.
     pub hover: Option<&'static str>,
     /// In [`MeterKeys::functions`], whether the reading shows this key's
     /// function; in [`MeterKeys::context`], whether the key is offered

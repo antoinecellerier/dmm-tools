@@ -475,8 +475,8 @@ key-current = Current
 # Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
 key-diode-continuity = Diode / continuity
 
-## Meter key hovers: how to do on the meter what a remote button does.
-## Keep the meter's key names as it prints them.
+## Meter key hovers: what a remote button does, or how to do it on the
+## meter. Keep the meter's key names as it prints them.
 
 # Used by: 121GW
 key-hover-hold-the-meter-s-rel-key = Hold the meter's REL key (1 kHz low-pass filter)
@@ -484,6 +484,8 @@ key-hover-hold-the-meter-s-rel-key = Hold the meter's REL key (1 kHz low-pass fi
 key-hover-press-the-meter-s-hz-duty = Press the meter's Hz/Duty△/ᛒ key briefly
 # Used by: CM2100B
 key-hover-press-the-meter-s-zero-key = Press the meter's ZERO/ᛒ key briefly
+# Used by: UT181A
+key-hover-save-the-reading-to-the-meter = Save the reading to the meter's memory
 
 ## Model names with words in them: the simulated meters. Keep the part
 ## number as it is.

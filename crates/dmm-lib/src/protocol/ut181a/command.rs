@@ -9,7 +9,7 @@ use crate::error::{Rejected, Result, Sent, Unsupported};
 use crate::protocol::cycle::{self, FlagSetting};
 use crate::protocol::framing::{self, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
-use crate::protocol::{Protocol, command, unsupported_setting};
+use crate::protocol::{MeterKey, MeterKeys, Protocol, command, unsupported_setting};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
@@ -25,6 +25,23 @@ pub(super) const UT181A_COMMANDS: &[&str] = &[
     "monitor",
     "save",
 ];
+
+/// SAVE_MEAS (opcode `0x06`, spec §4.2): what the Save item under the meter's
+/// SAVE softkey does, "record the current measuring data for once" (manual
+/// p.58). The manual names no function it is limited to, so it is offered in
+/// all of them. The reading doesn't show the result: only a refusal does.
+static SAVE: MeterKey = MeterKey {
+    command: "save",
+    label: "SAVE",
+    in_words: false,
+    hover: Some("Save the reading to the meter's memory"),
+    applies: |_| true,
+};
+
+pub(super) const METER_KEYS: MeterKeys = MeterKeys {
+    context: std::slice::from_ref(&SAVE),
+    ..MeterKeys::NONE
+};
 
 /// SET_MONITOR (opcode `0x05`, enable = 1): the meter is silent until it
 /// arrives, then streams measurement frames
