@@ -478,6 +478,8 @@ key-diode-continuity = Diode / continuity
 ## Meter key hovers: what a remote button does, or how to do it on the
 ## meter. Keep the meter's key names as it prints them.
 
+# Used by: VC891, VC915
+key-hover-1-khz-low-pass-filter = 1 kHz low-pass filter
 # Used by: 121GW
 key-hover-capture-1-ms-peaks-in-ac = Capture 1 ms peaks in AC V
 # Used by: OW67B, VC871
@@ -514,6 +516,8 @@ key-hover-step-through-hold-and-autohold = Step through HOLD and AutoHOLD
 key-hover-swap-hz-pct-and-voltage = Swap Hz/% and voltage
 # Used by: VC925 PV
 key-hover-swap-the-main-and-second-displays = Swap the main and second displays
+# Used by: OW69B
+key-hover-switch-the-low-pass-filter-on = Switch the low-pass filter on or off
 # Used by: OW18B/OW16B, OW18E
 key-hover-toggle-the-backlight-and-an-ow18 = Toggle the backlight and an OW18's flashlight
 # Used by: VC871, VC891, VC915, VC925 PV

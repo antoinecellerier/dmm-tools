@@ -409,14 +409,41 @@ const VC925_DISPLAY: MeterKey = MeterKey {
     ..POWER_DISPLAY
 };
 
+/// The OW69B's Lo, F1, is for AC and AC+DC, on the V and mV positions, and F1
+/// again leaves it; its manual gives no cutoff (OW69-UM p.28/23-29/24). A status
+/// bit carries it (spec §6.6).
+const OW69_LO: MeterKey = MeterKey {
+    command: "lpf",
+    label: "Lo",
+    in_words: false,
+    hover: Some("Switch the low-pass filter on or off"),
+    applies: |m| function_in(m, &[function::AC_V, code::AC_DC_V]),
+};
+
+/// The VC891's Lo is "only in ACV mode", a 1 kHz filter from the 6 V range up
+/// (VC891-UM p.65, p.93).
+const VC891_LO: MeterKey = MeterKey {
+    hover: Some("1 kHz low-pass filter"),
+    applies: |m| function_in(m, &[function::AC_V]) && m.unit == "V",
+    ..OW69_LO
+};
+
+/// The VC915 names it LPF, from AC V's menu, from the 2 V range up (VC915-UM
+/// p.74, p.105).
+const VC915_LPF: MeterKey = MeterKey {
+    label: "LPF",
+    ..VC891_LO
+};
+
 pub(super) const OW67_METER_KEYS: MeterKeys = MeterKeys {
     context: &[POWER_DISPLAY, OW_CURRENT_LOOP],
     ..MeterKeys::NONE
 };
 
-/// The OW69B's keys: the B series' Hz/Duty, in the same functions, and 4-20mA.
+/// The OW69B's keys: the B series' Hz/Duty, in the same functions, Lo and
+/// 4-20mA.
 pub(super) const OW69_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[B_HZ_DUTY, OW_CURRENT_LOOP],
+    context: &[B_HZ_DUTY, OW69_LO, OW_CURRENT_LOOP],
     ..MeterKeys::NONE
 };
 
@@ -435,16 +462,16 @@ pub(super) const VC871_METER_KEYS: MeterKeys = MeterKeys {
     ..MeterKeys::NONE
 };
 
-/// The VC891's keys: the B series' Hz/Duty, 4-20mA, and REL as on the other
+/// The VC891's keys: the B series' Hz/Duty, Lo, 4-20mA, and REL as on the other
 /// Voltcraft meters.
 pub(super) const VC891_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[B_HZ_DUTY, CURRENT_LOOP_KEY],
+    context: &[B_HZ_DUTY, VC891_LO, CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
 
 pub(super) const VC915_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[VC915_DISPLAY, CURRENT_LOOP_KEY],
+    context: &[VC915_DISPLAY, VC915_LPF, CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
@@ -784,6 +811,34 @@ mod tests {
                 assert!(!has(model, function), "{} {function}", model.id);
             }
         }
+    }
+
+    /// Lo and LPF in AC V, under each model's own name. The OW69B's in AC+DC
+    /// and AC mV too, which its manual has and the VC891's and VC915's don't.
+    #[test]
+    fn the_low_pass_key_is_offered_in_ac_v() {
+        let has = |model, label, function| offered(model, function, 4).contains(&label);
+        assert!(has(&entry::OW69B, "Lo", 1));
+        assert!(has(&entry::OW69B, "Lo", 23));
+        assert!(has(&entry::VC891, "Lo", 1));
+        assert!(!has(&entry::VC891, "Lo", 23));
+        assert!(has(&entry::VC915, "LPF", 1));
+        assert!(!has(&entry::VC915, "LPF", 23));
+        for (model, label) in [
+            (&entry::OW69B, "Lo"),
+            (&entry::VC891, "Lo"),
+            (&entry::VC915, "LPF"),
+        ] {
+            for function in [0, 2, 3, 6] {
+                assert!(!has(model, label, function), "{} {function}", model.id);
+            }
+        }
+        assert!(offered(&entry::OW69B, 1, 3).contains(&"Lo"));
+        assert!(!offered(&entry::VC891, 1, 3).contains(&"Lo"));
+        assert!(!offered(&entry::VC915, 1, 3).contains(&"LPF"));
+        // A frame with the status bit set offers it still.
+        let lpf_on = reading_frame(g24(1, 4, 1, false), 125, 0, 0, 1 << 9);
+        assert!(offered_for(&entry::OW69B, &lpf_on).contains(&"Lo"));
     }
 
     #[test]

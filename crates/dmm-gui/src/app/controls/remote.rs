@@ -1047,7 +1047,6 @@ mod tests {
     /// Keys with no control yet. Every keypress is to reach the GUI, so this
     /// only shrinks, and goes when it is empty.
     const NOT_YET: &[(DeviceFamily, &str)] = &[
-        (DeviceFamily::Owon, "lpf"),
         (DeviceFamily::Owon, "compare"),
         (DeviceFamily::Owon, "ac_dc"),
         (DeviceFamily::Owon, "motor"),

@@ -885,7 +885,11 @@ and VC871 (OW67-UM p.27/22 on; VC871-UM p.85-88). On the VC915 it swaps Hz/% and
 voltage in AC V, F3 on its menu page (VC915-UM p.72, p.74). The VC925 PV does the
 same with F1 (VC925-UM p.75); its symbol table has Display switch the primary and
 secondary displays, with no limit (p.71), and its PV screen shows the softkey
-(p.69).
+(p.69). Lo is "only in ACV mode" on the VC871
+and VC891, a 1 kHz filter from 6 V up on the VC891 (VC871-UM p.71; VC891-UM p.65,
+p.93), and for AC and AC+DC on the OW69, where F1 enters and leaves it and the V
+and mV positions both have it (OW69-UM p.28/23-29/24); the VC915 names it LPF, in
+AC V's menu, from 2 V up (VC915-UM p.74, p.105).
 
 ## 10. The 15-byte frame
 

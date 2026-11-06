@@ -618,7 +618,7 @@ own keys.
 | `exit_minmax` | Long Max/Min: leaves Max/Min |
 | `zero` | ZERO key: zeroes DC A, relative in capacitance and voltage |
 | `peak` | Peak key |
-| `lpf` | LPF key: low-pass filter |
+| `lpf` | LPF or Lo key: low-pass filter |
 | `inrush` | Inrush key; AC A |
 | `current_loop` | 4~20mA key: a 4-20 mA loop as a percentage |
 | `display` | Display key: changes what the main and second displays show |

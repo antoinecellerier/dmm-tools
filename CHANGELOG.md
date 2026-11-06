@@ -19,7 +19,7 @@
 - **The Voltcraft VC-880, VC650BT and VC-890 get RANGE, AUTO and MAX/MIN/AVG buttons**
 - **The UT61+ and UT161 meters get a Hz/% button**
 - **The UT181A gets a SAVE button**
-- **More OWON and Voltcraft keys get buttons** — Inrush, 4-20mA and Display, and an x on the Voltcraft REL.
+- **More OWON and Voltcraft keys get buttons** — Inrush, 4-20mA, Display and Lo or LPF, and an x on the Voltcraft REL.
 - **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
