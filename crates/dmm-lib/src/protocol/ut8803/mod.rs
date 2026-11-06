@@ -109,7 +109,8 @@ fn display_unit(mode_byte: u8, range_idx: u8) -> &'static str {
             3..=5 => "µF",
             _ => "mF",
         },
-        0x11 => "",
+        // hFE: unit type 8, β (spec §4.4; programming manual, "unit is β").
+        0x11 => "β",
         0x13 => "°C",
         0x14 => "°F",
         0x15 => match range_idx {
@@ -595,6 +596,40 @@ raw_payload=17"#
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "Ω");
         assert_eq!(m.unit, "kΩ");
+    }
+
+    /// Every mode's unit on every range the vendor accepts (spec §2.3, §5).
+    #[test]
+    fn display_unit_per_mode_and_range() {
+        let ohm = ["Ω", "kΩ", "kΩ", "kΩ", "MΩ", "MΩ", "Ω"];
+        let rows: [(&[u8], [&str; 7]); 15] = [
+            (&[0x00, 0x01], ["mV", "V", "V", "V", "V", "V", "V"]),
+            (&[0x02, 0x05], ["µA"; 7]),
+            (&[0x03, 0x06], ["mA"; 7]),
+            (&[0x04, 0x07], ["A"; 7]),
+            (&[0x08, 0x09, 0x0D, 0x10], ohm),
+            (&[0x0A, 0x12], ["V"; 7]),
+            (&[0x0B], ["µH", "mH", "mH", "mH", "H", "H", "H"]),
+            (&[0x0C, 0x0F], [""; 7]),
+            (&[0x0E], ["nF", "nF", "nF", "µF", "µF", "µF", "mF"]),
+            (&[0x11], ["β"; 7]),
+            (&[0x13], ["°C"; 7]),
+            (&[0x14], ["°F"; 7]),
+            (&[0x15], ["Hz", "kHz", "kHz", "kHz", "MHz", "MHz", "Hz"]),
+            (&[0x16], ["%"; 7]),
+            (&[0x17, 0xFF], [""; 7]),
+        ];
+        for (modes, units) in rows {
+            for &mode in modes {
+                for (range, unit) in units.iter().enumerate() {
+                    assert_eq!(
+                        display_unit(mode, range as u8),
+                        *unit,
+                        "{mode:#04x} {range}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

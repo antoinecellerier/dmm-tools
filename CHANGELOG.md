@@ -79,6 +79,7 @@
 - **A dmm-gui replay shows no remote buttons or dropdowns** — every click was refused.
 - **The EEVblog 121GW's min/max button stays lit in AVG, with its ×** — it went dark, and leaving meant going to the meter.
 - **CMS and UT217 MaxMin labels its second reading Max** — it carried the mode's name, such as `DC V`.
+- **The UT8803 and UT8802 show hFE with its unit, β**
 - **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
 - **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.
 - **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.

@@ -73,7 +73,7 @@ const POSITION_TABLE: &[(u8, &str, &str, &str)] = &[
     (0x22, "Duty %", "%", ""),
     (0x23, "Diode", "V", ""),
     (0x24, "Continuity", "Ω", ""),
-    (0x25, "hFE", "", ""),
+    (0x25, "hFE", "β", ""),
     (0x27, "Capacitance", "nF", ""),
     (0x28, "Capacitance", "µF", ""),
     (0x29, "Capacitance", "mF", ""),
@@ -611,7 +611,7 @@ raw_payload=7"#
             (0x22, "%"),  // duty
             (0x23, "V"),  // diode
             (0x24, "Ω"),  // continuity
-            (0x25, ""),   // hFE
+            (0x25, "β"),  // hFE
             (0x2B, "Hz"), // Hz
         ] {
             let payload = make_payload(position, [0, 0, 1, 0, 0], 1, 0x00, 0x00, 0x00);
