@@ -79,7 +79,11 @@ fn fixture(dir_name: &str, text: &str) -> std::result::Result<Replay, String> {
     // our own.
     let mut recording = replay::header(device.id, &recorded, None, None);
     recording.push_str(&replay::sample_line(Duration::ZERO, &payload));
-    Replay::parse(&recording).map_err(|e| e.to_string())
+    let mut recording = Replay::parse(&recording).map_err(|e| e.to_string())?;
+    // A fixture doesn't record its link. Left alone, it would read as a cable
+    // recording, as a replay file with no `# link:` line does.
+    recording.link = None;
+    Ok(recording)
 }
 
 /// `value` without one pair of surrounding YAML quotes.
@@ -161,6 +165,12 @@ value: \"1.6109\"
         assert_eq!(m.mode, "DC V");
         assert_eq!(m.value.to_string(), "1.6109");
         assert_eq!(m.raw_payload, FRAME);
+    }
+
+    /// A Bluetooth meter's fixture said "USB cable" in the top bar.
+    #[test]
+    fn a_fixture_names_no_link() {
+        assert_eq!(fixture("ut61eplus", FIXTURE).expect("a fixture").link, None);
     }
 
     /// The golden test takes `raw_hex` with or without spaces, so a fixture
