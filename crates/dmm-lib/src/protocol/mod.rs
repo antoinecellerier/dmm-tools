@@ -667,6 +667,14 @@ impl Setting {
         Setting::Peak,
     ];
 
+    /// The choice id the reading's flags put this setting in, by the same rule
+    /// `choices` marks the current one: the first of its states whose badge is
+    /// lit, and off when none is. `None` for [`Setting::Mode`] and
+    /// [`Setting::Range`], which a reading reports as fields of their own.
+    pub fn state_shown(self, flags: &crate::flags::StatusFlags) -> Option<u16> {
+        cycle::FlagSetting::of(self).map(|setting| setting.state(flags))
+    }
+
     /// The lowercase word the CLI takes and prints for this setting.
     pub fn name(self) -> &'static str {
         match self {
@@ -931,6 +939,52 @@ mod tests {
                 (d.id, proto.profile().stability, proto.capture_steps())
             })
             .collect()
+    }
+
+    #[test]
+    fn a_flag_settings_state_follows_setting_numbering() {
+        use crate::flags::StatusFlags;
+        let shown = |setting: Setting, flags: StatusFlags| setting.state_shown(&flags);
+        let off = StatusFlags::default();
+        for setting in [Setting::Hold, Setting::Rel, Setting::MinMax, Setting::Peak] {
+            assert_eq!(shown(setting, off), Some(0), "{setting}");
+        }
+        for (setting, id, flags) in [
+            (Setting::Hold, 1, StatusFlags { hold: true, ..off }),
+            (Setting::Rel, 1, StatusFlags { rel: true, ..off }),
+            (Setting::MinMax, 1, StatusFlags { max: true, ..off }),
+            (Setting::MinMax, 2, StatusFlags { min: true, ..off }),
+            (Setting::MinMax, 3, StatusFlags { avg: true, ..off }),
+            (
+                Setting::Peak,
+                1,
+                StatusFlags {
+                    peak_max: true,
+                    ..off
+                },
+            ),
+            (
+                Setting::Peak,
+                2,
+                StatusFlags {
+                    peak_min: true,
+                    ..off
+                },
+            ),
+        ] {
+            assert_eq!(shown(setting, flags), Some(id), "{setting} {id}");
+        }
+        // Several badges lit read as the first: the UT181A lights MIN and MAX
+        // together for its one "on".
+        let both = StatusFlags {
+            min: true,
+            max: true,
+            ..off
+        };
+        assert_eq!(shown(Setting::MinMax, both), Some(1));
+        // The reading says these in fields of their own.
+        assert_eq!(shown(Setting::Mode, both), None);
+        assert_eq!(shown(Setting::Range, both), None);
     }
 
     /// A family declares the commands it takes in its profile and accepts

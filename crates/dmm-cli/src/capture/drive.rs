@@ -16,6 +16,7 @@ use super::{
     read_past_blank, samples_after_switch, save_report,
 };
 use console::style;
+use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::{Setting, command as cmd};
 use dmm_lib::text::TextKind;
@@ -216,8 +217,9 @@ fn sub_step_instruction(setting: Setting, label: &str) -> String {
 
 /// Whether the sample shows the setting actually took the value asked for.
 ///
-/// Choice ids follow `Setting`'s own numbering: 0 is auto range or off, and
-/// MIN/MAX and Peak number their active states from one.
+/// Choice ids follow `Setting`'s own numbering: 0 is auto range or off. The
+/// library reads a flag setting's state from the flags, as it does to mark the
+/// current choice, so with several badges lit only the first counts as shown.
 fn shows_target(setting: Setting, id: u16, label: &str, s: &SampleData) -> bool {
     let f = &s.flags;
     match setting {
@@ -225,23 +227,10 @@ fn shows_target(setting: Setting, id: u16, label: &str, s: &SampleData) -> bool 
         // the UT61+ reports the rung auto picked, and says AUTO in a flag.
         Setting::Range if id == RESET_ID => f.auto_range,
         Setting::Range => !f.auto_range && s.range_label == label,
-        Setting::Hold => f.hold == (id != RESET_ID),
-        Setting::Rel => f.rel == (id != RESET_ID),
-        Setting::MinMax => match id {
-            0 => !f.min && !f.max && !f.avg,
-            1 => f.max,
-            2 => f.min,
-            3 => f.avg,
-            _ => false,
-        },
-        Setting::Peak => match id {
-            0 => !f.peak_max && !f.peak_min,
-            1 => f.peak_max,
-            2 => f.peak_min,
-            _ => false,
-        },
-        // Never swept, so nothing to check against.
-        Setting::Mode => false,
+        // Mode, never swept, has no state to check against.
+        Setting::Hold | Setting::Rel | Setting::MinMax | Setting::Peak | Setting::Mode => {
+            setting.state_shown(&StatusFlags::from(f)) == Some(id)
+        }
     }
 }
 
@@ -758,7 +747,14 @@ mod tests {
         assert!(shows_target(Setting::Hold, 0, "Off", &clear));
         assert!(shows_target(Setting::Rel, 1, "On", &set));
         assert!(shows_target(Setting::MinMax, 1, "MAX", &set));
-        assert!(shows_target(Setting::MinMax, 2, "MIN", &set));
+        // MIN beside MAX reads as MAX, as the library marks it.
+        assert!(!shows_target(Setting::MinMax, 2, "MIN", &set));
+        assert!(shows_target(
+            Setting::MinMax,
+            2,
+            "MIN",
+            &sample((0x04, 0x04, 0x00))
+        ));
         assert!(shows_target(Setting::MinMax, 0, "Off", &clear));
         assert!(shows_target(Setting::Peak, 0, "Off", &clear));
         assert!(!shows_target(Setting::Peak, 1, "P-MAX", &clear));
