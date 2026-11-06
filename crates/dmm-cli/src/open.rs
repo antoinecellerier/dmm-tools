@@ -12,7 +12,7 @@ use console::style;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::text::TextKind;
-use dmm_shared::help::{ConnectedAdapters, LinksSearched};
+use dmm_shared::help::LinksSearched;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
 use std::borrow::Cow;
@@ -552,11 +552,9 @@ fn open_error_help(
             let l = crate::l10n::get();
             let detail = l.adapter_named(&error).unwrap_or_default();
             eprintln!("{} {}", error_label(), l.error(&error));
-            // Only a real list is worth setting apart and worth a hint —
-            // "nothing is connected" and "couldn't look" are complete on
-            // their own.
+            // Only a real list is worth setting apart and worth a hint.
             let adapters = dmm_shared::help::connected_adapters();
-            let listed = matches!(adapters, ConnectedAdapters::Listed(_));
+            let listed = adapters.offers_choice();
             if listed {
                 eprintln!();
             }

@@ -7,7 +7,7 @@ use dmm_lib::protocol::registry;
 use dmm_lib::text::TextKind;
 use dmm_lib::transport::Link;
 use dmm_shared::export::escape_controls;
-use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
+use dmm_shared::help::{LinksSearched, SetupSection, connected_adapters};
 use dmm_shared::l10n::{Localizer, link_key};
 use dmm_shared::reopen::SeveralCables;
 use dmm_shared::tr;
@@ -282,9 +282,7 @@ fn adapter_not_found_help(l10n: &Localizer, selector: &str) -> String {
     let mut msg = tr!(l10n, "connection-adapter-not-matched", selector = selector).into_owned();
     msg.push_str("\n\n");
     msg.push_str(&l10n.help().adapter_lines(&adapters).join("\n"));
-    // An empty bus is a complete answer on its own; the other two leave the
-    // user with a choice to make.
-    if !matches!(adapters, ConnectedAdapters::None) {
+    if adapters.offers_choice() {
         msg.push_str("\n\n");
         msg.push_str(&tr!(l10n, "connection-adapter-restart"));
     }

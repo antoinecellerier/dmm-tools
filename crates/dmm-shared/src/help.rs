@@ -685,9 +685,9 @@ impl LinksSearched<'_> {
 
 /// What the bus held when an `--adapter` selector matched nothing.
 ///
-/// Both binaries print the same lines ([`Help::adapter_lines`]) but only
-/// attach their "pick another adapter" hint when devices were actually
-/// listed. Naming the three answers keeps that decision off a line count.
+/// Both binaries print the same lines ([`Help::adapter_lines`]), and attach
+/// their "pick another adapter" hint on [`Self::offers_choice`]. Naming the
+/// three answers keeps that decision off a line count.
 pub enum ConnectedAdapters {
     /// Nothing is plugged in.
     None,
@@ -695,6 +695,14 @@ pub enum ConnectedAdapters {
     Listed(Vec<String>),
     /// HID enumeration itself failed, so there is nothing to list.
     Unavailable,
+}
+
+impl ConnectedAdapters {
+    /// Whether there is a list to pick another adapter from. "Nothing is
+    /// connected" and "couldn't look" are complete on their own.
+    pub fn offers_choice(&self) -> bool {
+        matches!(self, Self::Listed(_))
+    }
 }
 
 /// What is on the bus, for the "adapter not found" error both binaries print.
@@ -874,6 +882,13 @@ mod tests {
         );
         assert!(help.contains("\n  UNI-T\n"), "{help}");
         assert!(help.contains("    ut217a        UT217A"), "{help}");
+    }
+
+    #[test]
+    fn only_a_list_offers_a_choice_of_adapter() {
+        assert!(ConnectedAdapters::Listed(vec!["  [0] one".into()]).offers_choice());
+        assert!(!ConnectedAdapters::None.offers_choice());
+        assert!(!ConnectedAdapters::Unavailable.offers_choice());
     }
 
     /// Both binaries render these lines verbatim, so the header and the empty
