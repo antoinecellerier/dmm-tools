@@ -15,7 +15,7 @@
 //! Reference: docs/research/uci-bench-family/reverse-engineered-protocol.md §4
 
 use crate::error::{Error, Result};
-use crate::transport::{Link, Transport};
+use crate::transport::{Link, Transport, open};
 use hidapi::HidDevice;
 use log::{debug, trace, warn};
 use std::cell::Cell;
@@ -80,6 +80,8 @@ impl Startup {
 /// CH9325 HID transport wrapping a `HidDevice`.
 pub(crate) struct Ch9325 {
     device: HidDevice,
+    /// What [`Transport::cable_serial`] reports, read while opening.
+    serial: Option<String>,
     startup: Startup,
     /// The rate the last feature report set, which the bridge is left at: a
     /// protocol's `init` may change the one start-up chose (the UT803's,
@@ -93,6 +95,7 @@ impl Ch9325 {
     pub(crate) fn open(device: HidDevice) -> Result<Self> {
         let startup = start_up(&device)?;
         Ok(Self {
+            serial: open::cable_serial(&device),
             device,
             startup,
             baud: Cell::new(startup.baud),
@@ -277,6 +280,10 @@ impl Transport for Ch9325 {
 
     fn link(&self) -> Option<Link> {
         Some(Link::UsbCable)
+    }
+
+    fn cable_serial(&self) -> Option<&str> {
+        self.serial.as_deref()
     }
 }
 

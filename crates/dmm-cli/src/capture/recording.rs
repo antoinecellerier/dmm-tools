@@ -196,6 +196,10 @@ impl Transport for RecordingTransport {
         self.inner.bluetooth_selector()
     }
 
+    fn cable_serial(&self) -> Option<&str> {
+        self.inner.cable_serial()
+    }
+
     fn advertised_name(&self) -> Option<&str> {
         self.inner.advertised_name()
     }
@@ -262,6 +266,10 @@ mod tests {
             Some("12:34:56:78:9A:BC")
         }
 
+        fn cable_serial(&self) -> Option<&str> {
+            Some("SERIAL01")
+        }
+
         fn advertised_name(&self) -> Option<&str> {
             Some("UT60BT")
         }
@@ -286,6 +294,7 @@ mod tests {
         assert_eq!(t.link(), Some(Link::Bluetooth));
         assert_eq!(t.transport_name(), "Bluetooth");
         assert_eq!(t.bluetooth_selector(), Some("12:34:56:78:9A:BC"));
+        assert_eq!(t.cable_serial(), Some("SERIAL01"));
         assert_eq!(t.advertised_name(), Some("UT60BT"));
         assert_eq!(t.info_characteristic(), Some(&[0x29, 0xFF][..]));
         assert_eq!(t.late_readings(), Some(LateReadings { command: None }));

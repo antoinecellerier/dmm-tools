@@ -76,6 +76,15 @@ pub trait Transport: Send {
         None
     }
 
+    /// For a USB cable, its serial number as the [`crate::list_devices`]
+    /// listing spells it, which [`crate::OpenOptions::adapter`] opens again
+    /// across a replug, where a HID path is renumbered. `None` for a cable
+    /// with none, and for every other link. Kept out of
+    /// [`transport_info`](Self::transport_info), which capture reports carry.
+    fn cable_serial(&self) -> Option<&str> {
+        None
+    }
+
     /// For a Bluetooth link, the name the peer goes by, as the open found
     /// it: what it advertises, or the host's alias for it. `None` for every
     /// other link, and for a peer opened by address that no name was heard
@@ -259,6 +268,10 @@ impl Transport for Box<dyn Transport> {
 
     fn bluetooth_selector(&self) -> Option<&str> {
         (**self).bluetooth_selector()
+    }
+
+    fn cable_serial(&self) -> Option<&str> {
+        (**self).cable_serial()
     }
 
     fn advertised_name(&self) -> Option<&str> {

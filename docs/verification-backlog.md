@@ -136,6 +136,14 @@ each step settles is in the family's file.
 - The CP2110, CH9325 and BU-86X on macOS: only the CH9329 has run there (a
   UT181A on its UT-D09, [PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8), [#2](https://github.com/antoinecellerier/dmm-tools/issues/2)).
   Plain HID or not decides `docs/setup.md`. Needs any meter on one of them.
+- Cable serial numbers, which decide whether a reopen can pin to one
+  (`dmm_shared::reopen`). Open: whether CP2110 cables differ (our one has a serial a
+  replug on another port keeps; the datasheet's default is unique, and a vendor can
+  reprogram it); whether more CH9329s differ (two reporters' did, in 4 of 12
+  characters, [#5](https://github.com/antoinecellerier/dmm-tools/issues/5), [#17](https://github.com/antoinecellerier/dmm-tools/issues/17)); whether other CH9325s also have none
+  ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)'s lists none, which falls back to the count); what a BU-86X has. Needs `dmm-cli list`, per cable.
+- Whether a cable lists one path per HID collection on Windows, and so looks like
+  two to the several-cables check. Needs `dmm-cli list` with one cable, on Windows.
 - The byte order of CP2110 report 0x42's FIFO counts: SLABHIDtoUART.dll reads
   them big-endian, `Cp2110::uart_status` little-endian (UT171 spec §8); idle
   reads give 0. Decides `uart_status`. Needs a read with bytes queued.

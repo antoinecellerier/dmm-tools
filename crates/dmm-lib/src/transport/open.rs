@@ -286,6 +286,22 @@ fn open_hid_transport(
     Ok(((kt.init)(device)?, kt.name))
 }
 
+/// The serial number of a cable just opened, for
+/// [`Transport::cable_serial`].
+pub(crate) fn cable_serial(device: &hidapi::HidDevice) -> Option<String> {
+    device
+        .get_serial_number_string()
+        .ok()
+        .flatten()
+        .filter(|serial| can_pin(serial))
+}
+
+/// Whether `serial` can name its cable on [`crate::OpenOptions::adapter`]:
+/// [`open_links`] takes one shaped like a Bluetooth address for the radio.
+fn can_pin(serial: &str) -> bool {
+    !serial.is_empty() && !ble::is_bluetooth_selector(serial)
+}
+
 /// Open a specific adapter identified by serial number or HID path.
 ///
 /// Tries serial number matching first (most common), then falls back to
@@ -390,6 +406,16 @@ pub(crate) fn list_usb() -> Result<Vec<DeviceInfo>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A cable with no serial has nothing to reopen it by, and one shaped
+    /// like a Bluetooth address would be sent to the radio.
+    #[test]
+    fn only_a_serial_an_open_would_take_for_a_cable_can_pin_one() {
+        assert!(can_pin("SERIAL01"));
+        assert!(!can_pin(""));
+        // A build with no radio has nothing to send it to.
+        assert_eq!(can_pin("12:34:56:78:9A:BC"), !cfg!(feature = "bluetooth"));
+    }
 
     /// A typo in an entry's `links` would silently degrade to the old fixed
     /// order rather than failing to build.

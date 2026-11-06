@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::transport::{Link, Transport};
+use crate::transport::{Link, Transport, open};
 use hidapi::HidDevice;
 use log::{debug, trace};
 
@@ -39,6 +39,8 @@ fn output_report(data: &[u8]) -> Result<[u8; HID_REPORT_SIZE]> {
 /// - Bytes 2..2+len: UART payload
 pub(crate) struct Ch9329 {
     device: HidDevice,
+    /// What [`Transport::cable_serial`] reports, read while opening.
+    serial: Option<String>,
 }
 
 impl Ch9329 {
@@ -49,7 +51,10 @@ impl Ch9329 {
         debug!("{NAME}: opening device (VID={VID:#06x} PID={PID:#06x})");
         debug!("{NAME}: skipping config init (assumed pre-configured at 9600 baud)");
         debug!("{NAME}: if data doesn't flow, try RUST_LOG=dmm_lib=trace to see raw HID reports");
-        Ok(Self { device })
+        Ok(Self {
+            serial: open::cable_serial(&device),
+            device,
+        })
     }
 
     /// Read the CH9329 configuration (128 bytes in 4 chunks).
@@ -141,6 +146,10 @@ impl Transport for Ch9329 {
 
     fn link(&self) -> Option<Link> {
         Some(Link::UsbCable)
+    }
+
+    fn cable_serial(&self) -> Option<&str> {
+        self.serial.as_deref()
     }
 }
 

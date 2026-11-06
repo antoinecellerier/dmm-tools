@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::transport::{Link, Transport};
+use crate::transport::{Link, Transport, open};
 use hidapi::HidDevice;
 use log::{debug, trace};
 
@@ -86,6 +86,8 @@ fn parse_uart_status(buf: &[u8; 7]) -> UartStatus {
 /// CP2110 HID transport wrapping a `HidDevice`.
 pub(crate) struct Cp2110 {
     device: HidDevice,
+    /// What [`Transport::cable_serial`] reports, read while opening.
+    serial: Option<String>,
 }
 
 impl Cp2110 {
@@ -95,7 +97,10 @@ impl Cp2110 {
     /// 2. Configure 9600 baud, 8N1 (report 0x50)
     /// 3. Purge receive FIFO (report 0x43)
     pub(crate) fn open(device: HidDevice) -> Result<Self> {
-        let cp = Self { device };
+        let cp = Self {
+            serial: open::cable_serial(&device),
+            device,
+        };
         debug!("{NAME}: enabling UART");
         cp.send_feature_report(&[0x41, 0x01])?;
 
@@ -242,6 +247,10 @@ impl Transport for Cp2110 {
 
     fn link(&self) -> Option<Link> {
         Some(Link::UsbCable)
+    }
+
+    fn cable_serial(&self) -> Option<&str> {
+        self.serial.as_deref()
     }
 }
 

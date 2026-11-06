@@ -10,7 +10,7 @@
 //! (`protocol::bm86x`).
 
 use crate::error::{Error, Result, Unsupported};
-use crate::transport::{Link, Transport};
+use crate::transport::{Link, Transport, open};
 use hidapi::HidDevice;
 use log::{debug, trace};
 
@@ -67,6 +67,8 @@ fn firmware(release: u16) -> String {
 /// The BU-86X cable, opened.
 pub(crate) struct Bu86x {
     device: HidDevice,
+    /// What [`Transport::cable_serial`] reports, read while opening.
+    serial: Option<String>,
     /// The USB release number, the cable's firmware version (spec §2).
     release: Option<u16>,
 }
@@ -77,6 +79,7 @@ impl Bu86x {
     /// the first request is the protocol's.
     pub(crate) fn open(device: HidDevice) -> Result<Self> {
         let mut cable = Self {
+            serial: open::cable_serial(&device),
             device,
             release: None,
         };
@@ -130,6 +133,10 @@ impl Transport for Bu86x {
 
     fn link(&self) -> Option<Link> {
         Some(Link::UsbCable)
+    }
+
+    fn cable_serial(&self) -> Option<&str> {
+        self.serial.as_deref()
     }
 }
 
