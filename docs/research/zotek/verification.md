@@ -115,6 +115,11 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 - Whether types 1, 3 and 4 answer a key press with cmd `FD`, as a ZT-5B
   does (§8.2) — decides whether the stream could confirm a key. Needs any
   `key_*` step. (#28–#30)
+- The first MAX/MIN press on a ZT-300AB, whose manual only says it toggles: MAX
+  or MIN — decides whether the GUI's MAX/MIN fits it. Needs `max_min`. (#28)
+- A second MAX/MIN press on a ZT-5566SE: whether it steps between MAX and MIN,
+  which the manual doesn't say and the frame's separate bits allow — decides
+  its tooltip. Needs `key_minmax`. (#29)
 - Whether a type-4 meter needs or acts on the clock set, cmd `04` (§8.3; the
   app side only, §11.2) — decides whether the driver sends it; it never does.
   Needs a ZT-5566/SE; no capture step sends it. (#29)

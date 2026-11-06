@@ -9,7 +9,7 @@ use super::frame::xor_key;
 use super::layout::{Coupling, Function, Layout, Showing, Unit};
 use crate::error::{Rejected, Result, Unsupported};
 use crate::measurement::MeasuredValue;
-use crate::protocol::{MeterKey, MeterKeys, command as cmd};
+use crate::protocol::{ButtonLabel, MeterKey, MeterKeys, command as cmd};
 
 /// Every key, in the order `dmm-cli command` lists them (spec §8.2). `minmax`
 /// and `hold` keep the names the other families give those keys; AUTO picks
@@ -75,6 +75,14 @@ const TYPE3_KEYS: &[&str] = &[
     "temp_unit",
     "zero",
 ];
+
+/// Type 4's manual says only that MAX/MIN records both and a long press leaves
+/// (ZT-5566SE manual p.12), so its tooltip promises no cycle.
+const TYPE4_BUTTON_LABELS: &[ButtonLabel] = &[ButtonLabel {
+    command: cmd::MINMAX,
+    label: None,
+    hover: Some("Record maximum and minimum readings"),
+}];
 
 /// The keys `layout`'s registry entry offers.
 pub(super) fn commands(layout: &Layout) -> &'static [&'static str] {
@@ -220,7 +228,10 @@ pub(super) fn meter_keys(layout: &Layout) -> MeterKeys {
             _ => EVERY_FUNCTION_KEY,
         },
         context: &[ZERO],
-        ..MeterKeys::NONE
+        button_labels: match layout.type_byte {
+            4 => TYPE4_BUTTON_LABELS,
+            _ => &[],
+        },
     }
 }
 

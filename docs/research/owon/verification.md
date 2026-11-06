@@ -157,6 +157,12 @@ and each still wants a capture of our own.
   as `hz_duty`, so it steps Hz/Duty instead (§7.3). Needs one sent `rel` there.
 - Max/Min (key 6) on a B33, which has no such key (§7.3) — settles §7.3.
   Needs a B33.
+- What Select does on a CMS in V,DC; no key on the meter carries that name, and
+  `01 01` changed nothing in scope mode (§10.8) — decides the SELECT tooltip
+  and whether the button stays. Needs `key_select`. (#45)
+- The first Max/Min press on a B35T+, B41T+, VC871, VC891, VC915 and VC925 PV,
+  whose manuals give no order: MAX or MIN — decides whether the GUI's MAX/MIN
+  fits them. Needs one press from off, reading the screen.
 - Whether the FFF2 read fails on any model or host (`dmm-cli info`: "device
   information: not read"), keys then going out unchecked — decides whether
   they stay on without a model code. Needs `dmm-cli info` per model and OS.
@@ -242,8 +248,9 @@ and each still wants a capture of our own.
   the power steps on a VC871 and an OW67B.
 - Status bits 6-18 per mode on a 15-byte meter (§6.6, §10.6; AC and DC
   bits seen on a VC871, §14.4; Inrush on a UT217A, §10.6): LoZ, LPF and
-  Peak — decides their names and the mode names they add. Needs `loz`,
-  `acv_lpf`, `acv_peak` and `minmax_hold`.
+  Peak — decides their names and the mode names they add, and whether the
+  PEAK button can light on the OW67B, OW69B, VC871 and VC891, whose frames may
+  carry MAX or MIN with it. Needs `loz`, `acv_lpf`, `acv_peak` and `minmax_hold`.
 - Status bit 16 as the wrong-socket warning (§10.6; set after a VC871's
   dial moved from mA to A, §14.4) — settles the lead-error flag. Needs
   `check_input` on a VC871 or VC891.

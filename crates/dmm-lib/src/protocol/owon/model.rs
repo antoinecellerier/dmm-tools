@@ -186,7 +186,7 @@ pub(super) static CMS101: Model = Model {
     keys: &keys::CMS,
     commands: &keys::CMS_COMMANDS,
     bluetooth_key: None,
-    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    meter_keys: keys::CMS_METER_KEYS,
     sub_follows_main: false,
     cms_readings: true,
 };
@@ -201,7 +201,7 @@ pub(super) static CMS061: Model = Model {
     keys: &keys::CMS,
     commands: &keys::CMS_COMMANDS,
     bluetooth_key: None,
-    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    meter_keys: keys::CMS_METER_KEYS,
     sub_follows_main: false,
     cms_readings: true,
 };

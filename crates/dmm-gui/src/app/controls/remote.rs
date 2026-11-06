@@ -747,6 +747,8 @@ mod tests {
                 &["RANGE", "MIN/MAX/AVG", "MODE"],
                 &["MAX/MIN", "SELECT"],
             ),
+            ("121gw", &["HOLD/AutoHOLD", "1ms PEAK"], &["HOLD", "PEAK"]),
+            ("cms101", &["MAX/MIN", "SELECT", "HOLD"], &["MaxMin"]),
             (
                 "ut61eplus",
                 &["MAX/MIN", "SELECT"],
@@ -952,6 +954,9 @@ mod tests {
         assert!(hover("121gw").contains("average"));
         assert!(hover("ut181a").contains("average"));
         assert!(!hover("ut181a").contains("cycle"));
+        assert!(!hover("cms101").contains("cycle"));
+        assert!(!hover("zt5566se").contains("cycle"));
+        assert!(hover("zt300ab").contains("cycle"));
     }
 
     /// A context key's tooltip names the key to press, or says how the

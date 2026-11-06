@@ -98,9 +98,15 @@ fn key_frame(code: u8) -> [u8; 5] {
 }
 
 /// What the shared buttons do here. The key printed MIN/MAX also steps to AVG
-/// (manual p.33, p.58), and the one that steps the dial's functions is MODE
-/// (manual p.33).
-const BUTTON_LABELS: [ButtonLabel; 2] = [
+/// (manual p.33, p.58), the one that steps the dial's functions is MODE (manual
+/// p.33), HOLD's second press is the AutoHOLD printed over it (manual p.31,
+/// p.56), and PEAK's key is 1ms PEAK, for AC V only (manual p.33, p.36).
+const BUTTON_LABELS: [ButtonLabel; 4] = [
+    ButtonLabel {
+        command: command::HOLD,
+        label: Some("HOLD/AutoHOLD"),
+        hover: Some("Step through HOLD and AutoHOLD"),
+    },
     ButtonLabel {
         command: command::MINMAX,
         label: Some("MIN/MAX/AVG"),
@@ -110,6 +116,11 @@ const BUTTON_LABELS: [ButtonLabel; 2] = [
         command: command::SELECT,
         label: Some("MODE"),
         hover: None,
+    },
+    ButtonLabel {
+        command: command::PEAK,
+        label: Some("1ms PEAK"),
+        hover: Some("Capture 1 ms peaks in AC V"),
     },
 ];
 

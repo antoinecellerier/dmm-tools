@@ -15,7 +15,7 @@
 //! inferred from a label (spec §10.8).
 
 use super::decode::function;
-use crate::protocol::{MeterKey, MeterKeys, command};
+use crate::protocol::{ButtonLabel, MeterKey, MeterKeys, command};
 
 /// A short press.
 const SHORT: u8 = 0x01;
@@ -311,8 +311,26 @@ static CM2100_ZERO: MeterKey = MeterKey {
     },
 };
 
+/// REL is one key with Hz/Duty, code 5: a step of Hz/Duty in AC V, AC A and Hz%,
+/// REL where it has it elsewhere (OW18-UM p.22/17). Held, ☀/H is the backlight,
+/// and on an OW18 the flashlight too (OW18-UM p.11/6; OW16-UM p.11/6 has no
+/// flashlight, and one entry may be either).
+const OW_BUTTON_LABELS: &[ButtonLabel] = &[
+    ButtonLabel {
+        command: command::REL,
+        label: None,
+        hover: Some("REL; in AC and Hz, steps Hz/Duty"),
+    },
+    ButtonLabel {
+        command: command::LIGHT,
+        label: None,
+        hover: Some("Toggle the backlight and an OW18's flashlight"),
+    },
+];
+
 pub(super) const OW_METER_KEYS: MeterKeys = MeterKeys {
     context: std::slice::from_ref(&OW_HZ_DUTY),
+    button_labels: OW_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
 
@@ -329,6 +347,29 @@ pub(super) const CM2100_METER_KEYS: MeterKeys = MeterKeys {
 /// The 15-byte meters with a Hz/Duty key (spec §10.8): the B series'
 /// button, in the same functions.
 pub(super) const HZ_DUTY_METER_KEYS: MeterKeys = B_METER_KEYS;
+
+/// On the CMS, MaxMin is entered with one press and left with another
+/// (CMS101-UM p.27/22). OWON's app sends Select, but no key on the meter carries
+/// that name and what it does is open (spec §10.8).
+const CMS_BUTTON_LABELS: &[ButtonLabel] = &[
+    ButtonLabel {
+        command: command::MINMAX,
+        label: None,
+        hover: Some("Enter MAX/MIN; click again to leave it"),
+    },
+    ButtonLabel {
+        command: command::SELECT,
+        label: None,
+        hover: Some("Send Select; effect on this meter unknown"),
+    },
+];
+
+/// The CMS101 and CMS061: [`HZ_DUTY_METER_KEYS`]' key, and what their shared
+/// buttons do.
+pub(super) const CMS_METER_KEYS: MeterKeys = MeterKeys {
+    button_labels: CMS_BUTTON_LABELS,
+    ..HZ_DUTY_METER_KEYS
+};
 
 #[cfg(test)]
 mod tests {

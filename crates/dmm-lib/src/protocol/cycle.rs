@@ -279,8 +279,8 @@ pub(crate) trait CycleMeter {
     }
 
     /// Put the meter back in auto-range: its own command on every family
-    /// here, as it is its own button on every front panel. Never a press —
-    /// walking the ladder cannot reach auto.
+    /// here, a button of its own on some panels and a long RANGE on others.
+    /// Never a short press — walking the ladder cannot reach auto.
     fn set_auto_range(&mut self, _transport: &dyn Transport) -> Result<()> {
         Err(crate::protocol::unsupported_setting(
             crate::protocol::Setting::Range,

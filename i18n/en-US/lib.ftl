@@ -479,11 +479,19 @@ key-diode-continuity = Diode / continuity
 ## meter. Keep the meter's key names as it prints them.
 
 # Used by: 121GW
+key-hover-capture-1-ms-peaks-in-ac = Capture 1 ms peaks in AC V
+# Used by: CMS061, CMS101
+key-hover-enter-max-min-click-again-to = Enter MAX/MIN; click again to leave it
+# Used by: 121GW
 key-hover-hold-the-meter-s-rel-key = Hold the meter's REL key (1 kHz low-pass filter)
 # Used by: OW18B/OW16B, OW18E
 key-hover-press-the-meter-s-hz-duty = Press the meter's Hz/Duty△/ᛒ key briefly
 # Used by: CM2100B
 key-hover-press-the-meter-s-zero-key = Press the meter's ZERO/ᛒ key briefly
+# Used by: OW18B/OW16B, OW18E
+key-hover-rel-in-ac-and-hz-steps = REL; in AC and Hz, steps Hz/Duty
+# Used by: ZT-5566SE
+key-hover-record-maximum-and-minimum-readings = Record maximum and minimum readings
 # Used by: UT181A
 key-hover-record-maximum-average-and-minimum-readings = Record maximum, average and minimum readings — × to exit
 # Used by: VC-880, VC-890, VC650BT
@@ -492,6 +500,12 @@ key-hover-record-maximum-minimum-and-average-readings = Record maximum, minimum,
 key-hover-record-minimum-maximum-and-average-readings = Record minimum, maximum, and average readings — click to cycle, × to exit
 # Used by: UT181A
 key-hover-save-the-reading-to-the-meter = Save the reading to the meter's memory
+# Used by: CMS061, CMS101
+key-hover-send-select-effect-on-this-meter = Send Select; effect on this meter unknown
+# Used by: 121GW
+key-hover-step-through-hold-and-autohold = Step through HOLD and AutoHOLD
+# Used by: OW18B/OW16B, OW18E
+key-hover-toggle-the-backlight-and-an-ow18 = Toggle the backlight and an OW18's flashlight
 
 ## Model names with words in them: the simulated meters. Keep the part
 ## number as it is.
