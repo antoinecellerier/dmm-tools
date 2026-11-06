@@ -272,7 +272,7 @@ impl App {
             let rel = flags.is_some_and(|f| f.rel);
             let manual_range = flags.is_some_and(|f| !f.auto_range);
             let auto = flags.is_some_and(|f| f.auto_range);
-            let min_max = flags.is_some_and(|f| f.min || f.max);
+            let min_max = flags.is_some_and(|f| f.min || f.max || f.avg);
             let peak = flags.is_some_and(|f| f.peak_min || f.peak_max);
 
             // Simple toggle commands: label, active flag, command, tooltip.
@@ -619,6 +619,11 @@ mod tests {
             functions: &[],
             context: ZERO_IN_FARADS,
         };
+        buttons_of(&mut app)
+    }
+
+    /// The labels of the buttons `app`'s reading column draws.
+    fn buttons_of(app: &mut App) -> Vec<String> {
         let ctx = crate::app::styled_context();
         ctx.enable_accesskit();
         let out = headless_frame(&ctx, None, None, vec![], |ui| {
@@ -632,6 +637,24 @@ mod tests {
             .filter(|(_, n)| n.role() == egui::accesskit::Role::Button)
             .filter_map(|(_, n)| n.label().map(str::to_string))
             .collect()
+    }
+
+    /// AVG is one of the states the MIN/MAX key steps through, so the
+    /// button stays on in it and keeps its way out.
+    #[test]
+    fn min_max_stays_on_while_the_meter_shows_avg() {
+        let mut app = connected_app(&["minmax", "exit_minmax"], "V");
+        let exit = "Exit MIN/MAX mode".to_string();
+        assert!(!buttons_of(&mut app).contains(&exit));
+        app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
+            dmm_lib::measurement::MeasuredValue::Normal(1.234),
+            "V",
+            dmm_lib::flags::StatusFlags {
+                avg: true,
+                ..Default::default()
+            },
+        ));
+        assert!(buttons_of(&mut app).contains(&exit));
     }
 
     /// A context key joins the meter's buttons only while it applies to the
