@@ -32,7 +32,8 @@ pub enum TextKind {
     Aux,
     /// An on/off state of a meter setting offered as a choice ("on").
     Toggle,
-    /// A meter key's name on a remote button ("SEL").
+    /// A meter key's name in words, on a remote button or in a list of keys
+    /// ("Capacitance"). A name printed on the key isn't translated.
     Key,
     /// How the meter's keypad does what a remote button does, as its hover.
     KeyHover,
@@ -196,7 +197,9 @@ mod list {
             let protocol = (device.new_protocol)();
             let keys = protocol.profile().meter_keys;
             for key in keys.functions.iter().chain(keys.context) {
-                out.add(TextKind::Key, key.label, id);
+                if key.in_words {
+                    out.add(TextKind::Key, key.label, id);
+                }
                 if let Some(hover) = key.hover {
                     out.add(TextKind::KeyHover, hover, id);
                 }
@@ -342,6 +345,11 @@ mod list {
                 );
             }
             assert!(all.contains(TextKind::Model, "Mock UT61E+"));
+            // A key's words are translated, what's printed on one isn't.
+            assert!(all.contains(TextKind::Key, "Capacitance"));
+            for printed in ["ZERO", "NCV", "Hz/Duty", "MIN/MAX/AVG", "SHIFT", "MODE"] {
+                assert!(!all.contains(TextKind::Key, printed), "{printed}");
+            }
             let kinds: BTreeSet<TextKind> = all.entries().map(|(k, _, _)| k).collect();
             for kind in [
                 TextKind::Activation,

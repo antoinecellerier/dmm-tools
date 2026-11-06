@@ -368,6 +368,10 @@ pub struct MeterKey {
     pub command: &'static str,
     /// What a menu entry or button shows.
     pub label: &'static str,
+    /// `label` says in words what the key does, rather than what's printed on
+    /// it. Only such a label is translated: a printed one is what the user
+    /// looks for on the meter.
+    pub in_words: bool,
     /// How the meter's own keypad does it, when that is not a short press
     /// of a key named `label` (a long press, or a key named otherwise), for
     /// a tooltip; `None` when it is.

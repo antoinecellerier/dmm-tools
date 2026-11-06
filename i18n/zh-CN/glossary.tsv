@@ -70,7 +70,7 @@ AVG (flag) / average	AVG / 平均值	n.	flag-avg, reading-spoken-avg, aux-averag
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	UT61E+ CN PDF p.8L (p.13) “短按 SELECT 键”	Keep; «SELECT 键», no quotes (STYLE §7).
 secondary function	第二功能	n.	remote-select hover	UT8806 CN PDF p.18 “测量信号频率或信号周期(第二功能)”	Also «复合功能» (UT181A CN PDF p.8 (p.4) “短按选择档位的复合功能”) and «附加功能» (UT71 CN PDF p.11).
 backlight / LIGHT	背光 / LIGHT	n.	remote-light hover	UT71 CN PDF p.11 “LIGHT 背光开关键”; UT61E+ CN PDF p.7R (p.12) “开启/关闭背光功能”	Keep the key name LIGHT.
-ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	partial: UT8806 CN PDF p.37 “自动归零”	Keep the key name. The action: «清零» (no source).
+ZERO (key)	ZERO	—	error-rejected-zero-needs-capacitance	partial: UT8806 CN PDF p.37 “自动归零”	Keep the key name. The action: «清零» (no source).
 overload / OL	超量程 / OL	n.	reading-spoken-overload, graph-hover-overload, graph legends	UT71 CN PDF p.13 “OL 超量程提示符”; UT61E+ CN PDF p.14R (p.26) “过量程提示：显示OL”	For the reading the meter shows as OL, use «超量程», as every manual does. Keep «过载» for overload protection (row). Keep «OL» where the English writes OL.
 over range	超量程	n.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	UT71 CN PDF p.13; UT8805A CN PDF p.18 “所有的档位允许超量程20%”	currently over range. → «当前超量程。»
 LOW BAT (flag)	LOW BAT	—	flag-low-battery	UT61E+ CN PDF p.14L (p.25) “电池欠压符号”; PDF p.6R (p.10) “电池电量不足提示符”	Keep (fr ruling). Spoken: «电池电量不足».

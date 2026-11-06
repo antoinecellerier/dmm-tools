@@ -70,7 +70,7 @@ AVG (flag) / average	AVG / média	s. f.	flag-avg, reading-spoken-avg, aux-averag
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	Minipa ET-1649BT PDF p.13 «tecla “SEL”»; PDF p.20 «Pressione brevemente “SELECT”»	
 secondary function	função secundária	s. f.	remote-select hover	no approved source found	Minipa ET-2587 PDF p.9 describes SHIFT as «mudança de função» without naming the result.
 backlight / LIGHT	luz de fundo / LIGHT	s. f.	remote-light hover	Minipa ET-1649BT PDF p.12 «ligar a luz de fundo»; Minipa ET-2587 PDF p.9 «Botão de Luz de Fundo»	
-ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	Minipa ET-1649BT PDF p.17 «zerar o valor residual» (the action)	Key name kept as printed.
+ZERO (key)	ZERO	—	error-rejected-zero-needs-capacitance	Minipa ET-1649BT PDF p.17 «zerar o valor residual» (the action)	Key name kept as printed.
 overload / OL	sobrecarga / OL	s. f.	reading-spoken-overload, graph-hover-overload, graph legends	MS-T «overload» → «sobrecarga» (fem.); Minipa ET-1649BT PDF p.15 «proteger o equipamento contra sobrecargas»	"Minipa explains OL as over range («Indicação de Sobrefaixa: … “OL”», ET-1649BT PDF p.23); the app's ""overload"" stays «sobrecarga»."
 over range	acima da faixa	loc.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	Minipa ET-1649BT PDF p.23 «Indicação de Sobrefaixa»; PDF p.14 «indica que a faixa foi excedida»	«sobrefaixa» is Minipa's spec-sheet word; for text read aloud, «acima da faixa» says the same in plain words.
 LOW BAT (flag)	LOW BAT	—	flag-low-battery	Minipa ET-1649BT PDF p.10 «Indicador de Bateria Fraca» (the icon's name)	Flag kept; spoken «bateria fraca».

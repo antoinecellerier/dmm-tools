@@ -70,7 +70,7 @@ AVG (flag) / average	AVG / moyenne	n. f.	flag-avg, reading-spoken-avg, aux-avera
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	Voltcraft VC831 FR PDF p.103 «La touche SELECT permet de passer à une sous-fonction»	Keep.
 secondary function	sous-fonction	n. f.	remote-select hover	Voltcraft VC831 FR PDF p.103; VC925 FR PDF p.124 «SELECT Passe au sous-mode»	
 backlight / LIGHT	rétroéclairage / LIGHT	n. m.	remote-light hover	Voltcraft VC915 FR PDF p.141 «11.10 Rétroéclairage»; UNI-T UT197 FR PDF p.13	VC880 FR PDF p.86 has «Éclairage de l'écran». Keep the key name LIGHT.
-ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	Voltcraft VC925 FR PDF p.141 «la mesure est remise à zéro» (action)	Keep the key name.
+ZERO (key)	ZERO	—	error-rejected-zero-needs-capacitance	Voltcraft VC925 FR PDF p.141 «la mesure est remise à zéro» (action)	Keep the key name.
 overload / OL	surcharge / OL	n. f.	reading-spoken-overload, graph-hover-overload, graph legends	Voltcraft VC891 FR PDF p.114 «OL Overload = Surcharge ; la plage de mesure a été dépassée»	VC880/VC920 FR (PDF p.73 / p.71) say «dépassement». Keep «OL» where the English writes OL.
 over range	hors plage / dépassement de plage	loc.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	Voltcraft VC880 FR PDF p.74 «vous avez dépassé la plage de mesure»	currently over range. → «actuellement hors plage.»
 LOW BAT (flag)	LOW BAT	—	flag-low-battery	Voltcraft VC920 FR PDF p.71 «Symbole de remplacement des piles»	Decided: keep since it stands for the battery icon. Spoken: «pile faible» (UT197 PDF p.10 «sous-tension des piles»).

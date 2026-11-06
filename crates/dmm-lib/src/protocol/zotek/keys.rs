@@ -92,6 +92,7 @@ pub(super) fn commands(layout: &Layout) -> &'static [&'static str] {
 const VOLTS: MeterKey = MeterKey {
     command: "volts",
     label: "V",
+    in_words: false,
     hover: None,
     applies: |m| Function::Volts.shown_in(m),
 };
@@ -100,42 +101,49 @@ const VOLTS: MeterKey = MeterKey {
 const MILLIVOLTS: MeterKey = MeterKey {
     command: "millivolts",
     label: "mV",
+    in_words: false,
     hover: None,
     applies: |m| Function::Millivolts.shown_in(m),
 };
 const OHMS: MeterKey = MeterKey {
     command: "ohms",
     label: "Ω",
+    in_words: false,
     hover: None,
     applies: |m| Function::Ohms.shown_in(m),
 };
 const CAPACITANCE: MeterKey = MeterKey {
     command: "capacitance",
     label: "Capacitance",
+    in_words: true,
     hover: None,
     applies: |m| Function::Capacitance.shown_in(m),
 };
 const HZ: MeterKey = MeterKey {
     command: "hz",
     label: "Hz",
+    in_words: false,
     hover: None,
     applies: |m| Function::Frequency.shown_in(m),
 };
 const DIODE_CONTINUITY: MeterKey = MeterKey {
     command: "diode_continuity",
     label: "Diode / continuity",
+    in_words: true,
     hover: None,
     applies: |m| Function::Diode.shown_in(m) || Function::Continuity.shown_in(m),
 };
 const NCV: MeterKey = MeterKey {
     command: "ncv",
     label: "NCV",
+    in_words: false,
     hover: None,
     applies: |m| Function::Ncv.shown_in(m),
 };
 const CURRENT: MeterKey = MeterKey {
     command: "current",
     label: "Current",
+    in_words: true,
     hover: None,
     applies: |m| {
         [Function::Amps, Function::Milliamps, Function::Microamps]
@@ -146,6 +154,7 @@ const CURRENT: MeterKey = MeterKey {
 const TEMP_UNIT: MeterKey = MeterKey {
     command: "temp_unit",
     label: "°C / °F",
+    in_words: false,
     hover: None,
     applies: |m| Function::Celsius.shown_in(m) || Function::Fahrenheit.shown_in(m),
 };
@@ -154,6 +163,7 @@ const TEMP_UNIT: MeterKey = MeterKey {
 const AUTO_FUNCTION: MeterKey = MeterKey {
     command: "auto_function",
     label: "Auto function",
+    in_words: true,
     hover: None,
     applies: |m| Function::None.shown_in(m) && matches!(m.value, MeasuredValue::NoReading(_)),
 };
@@ -161,6 +171,7 @@ const AUTO_FUNCTION: MeterKey = MeterKey {
 const ZERO: MeterKey = MeterKey {
     command: "zero",
     label: "ZERO",
+    in_words: false,
     hover: None,
     applies: |m| Function::Capacitance.shown_in(m),
 };

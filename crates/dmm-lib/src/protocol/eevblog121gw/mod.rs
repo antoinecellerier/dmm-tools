@@ -116,6 +116,7 @@ const BUTTON_LABELS: [ButtonLabel; 2] = [
 static LPF_KEY: MeterKey = MeterKey {
     command: "lpf",
     label: "1kHz",
+    in_words: false,
     // A long REL, not a key of its own (manual p.33).
     hover: Some("Hold the meter's REL key (1 kHz low-pass filter)"),
     applies: |m| {

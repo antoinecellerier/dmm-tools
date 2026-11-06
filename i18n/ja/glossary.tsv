@@ -70,7 +70,7 @@ AVG (flag) / average	AVG / 平均値	n.	flag-avg, reading-spoken-avg, aux-averag
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	KEW1062 JP PDF p.22 “SELECT (PRINT)キー”; Sanwa PM3 JP PDF p.1 “SELECT（セレクト）スイッチ”	Keep.
 secondary function	サブ機能	n.	remote-select hover	Fluke 289 JP PDF p.24 “主要な測定機能 (ロータリー･スイッチの位置) には、サブ機能や…”; KEW1062 JP PDF p.23 “1）の測定ポジションで別の測定機能を選択”	
 backlight / LIGHT	バックライト / LIGHT	n.	remote-light hover	Sanwa CD772 JP PDF p.3 “4－04 バックライト”; KEW1062 JP PDF p.9	Keep the key name LIGHT.
-ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	KEW1062 JP PDF p.9 “ゼロ調整（Ω /CAP）” (action)	Keep the key name.
+ZERO (key)	ZERO	—	error-rejected-zero-needs-capacitance	KEW1062 JP PDF p.9 “ゼロ調整（Ω /CAP）” (action)	Keep the key name.
 overload / OL	オーバーレンジ / OL	n.	reading-spoken-overload, graph-hover-overload, graph legends	KEW1062 JP PDF p.11 “オーバーレンジ表示 …「 ＯＬ 」表示”; Sanwa PC7000 JP PDF p.33 “レンジオーバーに対し、数字部に「OL」を表示”	What OL means. «過負荷» is for overload protection only. Keep «OL» where the English writes OL.
 over range	オーバーレンジ	n.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	KEW1062 JP PDF p.11; KEW1052 JP PDF p.8	currently over range. → «現在オーバーレンジです。»
 LOW BAT (flag)	LOW BAT	—	flag-low-battery	Sanwa CD772 JP PDF p.3 “4－08 電池消耗警告表示”	Keep: it stands for the battery icon. Spoken: «電池消耗».

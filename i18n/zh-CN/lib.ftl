@@ -463,8 +463,8 @@ toggle-off = 关
 # Used by: 13 meters
 toggle-on = 开
 
-## Meter keys: the remote panel's buttons, named after the meter's keys.
-## Keep a name the meter prints on its key (SEL, ZERO) as it is.
+## Meter keys named in words for what they do. A name printed on a key is
+## not listed here: it stays as printed.
 
 # Used by: Mock ZT-5B, ZT-5566SE, ZT-5B, ZT-5BQ
 key-auto-function = 自动功能
@@ -474,12 +474,6 @@ key-capacitance = 电容
 key-current = 电流
 # Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
 key-diode-continuity = 二极管/通断
-# Used by: 9 meters
-key-hz-duty = Hz/Duty
-# Used by: Mock ZT-5B, ZT-5566SE, ZT-5B, ZT-5BQ
-key-ncv = NCV
-# Used by: CM2100B, Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
-key-zero = ZERO
 
 ## Meter key hovers: how to do on the meter what a remote button does.
 ## Keep the meter's key names as it prints them.

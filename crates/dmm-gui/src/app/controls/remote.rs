@@ -649,6 +649,7 @@ mod tests {
     const ZERO_IN_FARADS: &[dmm_lib::protocol::MeterKey] = &[dmm_lib::protocol::MeterKey {
         command: "zero",
         label: "ZERO",
+        in_words: false,
         hover: None,
         applies: |m| m.unit.ends_with('F'),
     }];

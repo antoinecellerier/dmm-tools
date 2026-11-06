@@ -1613,7 +1613,7 @@ mod tests {
             locale: "fr",
             path: "lib.ftl",
             source: "mode-v-dc = V CC\nqualifier-mode-rel = { $mode } RÉL\n\
-                     aux-max = Maxi\nkey-zero = ZÉRO\n",
+                     aux-max = Maxi\nkey-current = COURANT\n",
         };
         let names = Resource {
             locale: "fr",
@@ -1668,9 +1668,10 @@ mod tests {
         use dmm_lib::flags::StatusFlags;
         use dmm_lib::measurement::{AuxValue, MainLabel, MeasuredValue};
         use dmm_lib::protocol::{MeterKey, MeterKeys};
-        const ZERO: &[MeterKey] = &[MeterKey {
+        const CURRENT: &[MeterKey] = &[MeterKey {
             command: "zero",
-            label: "ZERO",
+            label: "Current",
+            in_words: true,
             hover: None,
             applies: |_| true,
         }];
@@ -1685,7 +1686,7 @@ mod tests {
         app.connection.meter = Some(ConnectedMeter {
             supported_commands: vec!["hold".to_string(), "zero".to_string()],
             meter_keys: MeterKeys {
-                context: ZERO,
+                context: CURRENT,
                 ..MeterKeys::NONE
             },
             ..ConnectedMeter::test_fixture(None)
@@ -1712,7 +1713,7 @@ mod tests {
 
         let out = last_frame(&mut app);
         let texts = drawn_texts(&out);
-        for drawn in ["V CC RÉL", "MAINTIEN", "Maxi", "ZÉRO", "6V"] {
+        for drawn in ["V CC RÉL", "MAINTIEN", "Maxi", "COURANT", "6V"] {
             assert!(texts.contains(drawn), "no {drawn:?} in {texts:#?}");
         }
         assert!(
@@ -1720,7 +1721,7 @@ mod tests {
             "no main reading named CC in {texts:#?}"
         );
         // HOLD stays: the remote button is the app's own key symbol.
-        for english in ["V DC REL", "Max", "ZERO", "DC"] {
+        for english in ["V DC REL", "Max", "Current", "DC"] {
             assert!(!texts.contains(english), "{english:?} drawn in {texts:#?}");
         }
         let chip = a11y(&out)

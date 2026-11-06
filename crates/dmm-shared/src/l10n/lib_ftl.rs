@@ -72,8 +72,8 @@ to a number."
         }
         TextKind::Toggle => "On and off, for a meter setting offered as a choice.",
         TextKind::Key => {
-            "Meter keys: the remote panel's buttons, named after the meter's keys.
-Keep a name the meter prints on its key (SEL, ZERO) as it is."
+            "Meter keys named in words for what they do. A name printed on a key is
+not listed here: it stays as printed."
         }
         TextKind::KeyHover => {
             "Meter key hovers: how to do on the meter what a remote button does.

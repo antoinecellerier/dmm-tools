@@ -70,7 +70,7 @@ AVG (flag) / average	AVG / promedio	s. m.	flag-avg, reading-spoken-avg, aux-aver
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	UNI-T UT197 PDF p.12 «Mantenga presionado SELECT»; Amprobe AM-500 PDF p.50 «Botón SELECT»	Keep.
 secondary function	función secundaria	s. f.	remote-select hover	no approved source found; Fluke 3000 FC PDF p.11 «ajustar el Producto en una función de medición distinta» (the yellow button's role)	
 backlight / LIGHT	luz de fondo / LIGHT	s. f.	remote-light hover	Fluke 287/289 PDF p.4 «Control de la luz de fondo»; Fluke 3000 FC PDF p.11; Truper MUT-202 PDF p.5 «Función de luz de fondo»	Fluke 117 PDF p.3 and UT197 PDF p.5 say «retroiluminación». Keep the key name LIGHT.
-ZERO (key)	ZERO	—	key-zero, error-rejected-zero-needs-capacitance	no approved source found	Keep the key name.
+ZERO (key)	ZERO	—	error-rejected-zero-needs-capacitance	no approved source found	Keep the key name.
 overload / OL	sobrecarga / OL	s. f.	reading-spoken-overload, graph-hover-overload, graph legends	Fluke 117 PDF p.5 «una sobrecarga de tensión (OL)»	Keep «OL» where the English writes OL.
 over range	fuera de rango	loc.	graph-plot-a11y-over-range, graph-histogram-a11y-over-range	Amprobe AM-500 PDF p.56 «la medición está fuera de rango»; Fluke 287/289 PDF p.38 «excede el rango actual»	currently over range. → «actualmente fuera de rango.»
 LOW BAT (flag)	LOW BAT	—	flag-low-battery	Truper MUT-202 PDF p.4 «Batería baja»; Amprobe AM-500 PDF p.51 «Indicador de batería con poca carga»	Keep, since it stands for the battery icon. Spoken: «batería baja».

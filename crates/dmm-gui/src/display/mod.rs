@@ -2387,12 +2387,14 @@ mod tests {
         MeterKey {
             command: "volts",
             label: "V",
+            in_words: false,
             hover: None,
             applies: |m| m.unit == "V",
         },
         MeterKey {
             command: "ohms",
             label: "Ω",
+            in_words: false,
             hover: None,
             applies: |m| m.unit == "Ω",
         },

@@ -276,6 +276,7 @@ fn hz_duty_applies(m: &crate::measurement::Measurement) -> bool {
 static B_HZ_DUTY: MeterKey = MeterKey {
     command: "hz_duty",
     label: "Hz/Duty",
+    in_words: false,
     hover: None,
     applies: hz_duty_applies,
 };
@@ -285,6 +286,7 @@ static B_HZ_DUTY: MeterKey = MeterKey {
 static OW_HZ_DUTY: MeterKey = MeterKey {
     command: "hz_duty",
     label: "Hz/Duty",
+    in_words: false,
     hover: Some("Press the meter's Hz/Duty△/ᛒ key briefly"),
     applies: hz_duty_applies,
 };
@@ -294,6 +296,7 @@ static OW_HZ_DUTY: MeterKey = MeterKey {
 static CM2100_ZERO: MeterKey = MeterKey {
     command: "zero",
     label: "ZERO",
+    in_words: false,
     hover: Some("Press the meter's ZERO/ᛒ key briefly"),
     applies: |m| {
         function_in(
