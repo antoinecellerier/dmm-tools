@@ -3563,6 +3563,7 @@ raw_payload=11"#
             let mut read = std::collections::BTreeSet::new();
             for (_, m) in readings {
                 crate::protocol::assert_units_walked(&m);
+                crate::protocol::assert_digits_spell_value(&m);
                 read.insert((TextKind::Mode, m.mode.to_string()));
                 if !m.range_label.is_empty() {
                     read.insert((TextKind::Range, m.range_label.to_string()));

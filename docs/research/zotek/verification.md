@@ -61,6 +61,9 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
   `inrush` on a ZT-5BQ / ST207. (#30)
 - What two DP bits in one packet mean, never seen (§6.2) — decides which point
   `glyph::read` keeps. Needs a capture that shows one. (#28–#31)
+- A blank digit beside lit digits, never seen (§6.1): an app counts a bare one
+  as 0 and shows one carrying the point as OL — decides what `glyph::read` reads
+  them as. Needs a capture that shows one. (#28–#31)
 - Which prefixes a meter sets per unit (§7.5), and type 3's m and µ
   capacitance bits (§11.3 D4) — decides the layouts' prefix bits. Needs
   10-100 µF on a ZT-300AB / AN9002: byte 8 `A0`. (#28)

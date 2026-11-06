@@ -1219,7 +1219,9 @@ mod tests {
     fn quiet(packet: &[u8]) -> Measurement {
         let (m, reports) = capture_reports(|| decode(packet));
         assert!(reports.is_empty(), "{packet:02X?}: {reports:?}");
-        m.unwrap()
+        let m = m.unwrap();
+        crate::protocol::assert_digits_spell_value(&m);
+        m
     }
 
     /// Decode, returning what was reported.
@@ -1387,7 +1389,8 @@ mod tests {
     }
 
     /// `10`: a blank digit carrying the sign or a point (spec
-    /// Implementation Notes) reads as a blank with its sign or point.
+    /// Implementation Notes). The sign's stays a blank; the point's counts as
+    /// 0 and is written as one ([`glyph::read`]).
     #[test]
     fn a_blank_carrying_a_sign_or_point() {
         let m = quiet(&split_packet(3, " 123", None, true, T3_DCV));
@@ -1396,8 +1399,9 @@ mod tests {
         assert_eq!(m.raw_payload[3], 0x10);
 
         let m = quiet(&t3("1 23", Some(1), T3_DCV));
-        assert_eq!(m.display_raw.as_deref(), Some("1. 23"));
+        assert_eq!(m.display_raw.as_deref(), Some("1.023"));
         assert!((value(&m) - 1.023).abs() < 1e-9);
+        assert_eq!(m.value_export_str(), "1.023");
     }
 
     /// Two points: reported, and the leftmost kept (spec §6.2).

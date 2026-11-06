@@ -158,6 +158,33 @@ pub(crate) fn assert_units_walked(m: &crate::measurement::Measurement) {
     }
 }
 
+/// Panic unless the digits reading `m` exports spell its value, to within half
+/// their last digit (a float-based family's text is its f32 rounded). The
+/// exports write those digits as the value, so they have to be the same number.
+#[cfg(test)]
+pub(crate) fn assert_digits_spell_value(m: &crate::measurement::Measurement) {
+    use crate::measurement::MeasuredValue;
+    let check = |value: &MeasuredValue, exported: &str| {
+        let MeasuredValue::Normal(value) = value else {
+            return;
+        };
+        let shown: f64 = exported
+            .parse()
+            .unwrap_or_else(|_| panic!("{:?}: the digits {exported:?} are not a number", m.mode));
+        let decimals = crate::transform::decimals_of(exported) as i32;
+        let half_step = 0.5 * 10f64.powi(-decimals) * (1.0 + 1e-9);
+        assert!(
+            (shown - value).abs() <= half_step,
+            "{:?}: the digits {exported:?} do not spell the value {value}",
+            m.mode
+        );
+    };
+    check(&m.value, &m.value_export_str());
+    for aux in &m.aux_values {
+        check(&aux.value, &aux.value_export_str());
+    }
+}
+
 /// Whether `mode` is the `Unknown(0x..)` fallback a parser writes for a mode
 /// code its family's table doesn't list.
 pub fn is_unknown_mode(mode: &str) -> bool {

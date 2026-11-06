@@ -86,7 +86,8 @@ impl Glyph {
     }
 
     /// How the glyph reads in `display_raw`: a blank is a space, as the
-    /// character-display families pad theirs.
+    /// character-display families pad theirs, unless [`read`] counts it as a
+    /// digit of the number.
     fn char(self) -> char {
         match self {
             Glyph::Digit(d) => char::from(b'0' + d),
@@ -141,9 +142,15 @@ pub(super) struct Readout {
 
 /// Read a row of cells, `negative` being its minus sign.
 ///
-/// A blank counts as 0 in the number (spec §6.1). Only one decimal point is
-/// expected; with two the meaning is open (spec §6.2;
-/// `docs/research/zotek/verification.md`), so it is reported and the
+/// A blank counts as 0 in the number (spec §6.1), and after a digit or the
+/// point the text writes it as one, so the text is the number. No capture
+/// shows a blank there; a leading blank stays one, as captures show it. A
+/// blank carrying the point counts as 0 too, though one of the vendor's apps
+/// shows that as OL (spec Implementation Notes): a ZT-5B's minus on a blank
+/// shows that rule is not the meter's.
+///
+/// Only one decimal point is expected; with two the meaning is open (spec
+/// §6.2; `docs/research/zotek/verification.md`), so it is reported and the
 /// leftmost kept.
 pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -> Readout {
     let mut points = cells
@@ -156,22 +163,31 @@ pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -
         unrecognised.report("decimal points");
     }
 
-    let mut text = String::with_capacity(cells.len() + 2);
-    if negative {
-        text.push('-');
-    }
-    for (i, cell) in cells.iter().enumerate() {
-        if dp_at == Some(i) {
-            text.push('.');
-        }
-        text.push(cell.glyph.char());
-    }
-
     let lit: Vec<Glyph> = cells
         .iter()
         .map(|c| c.glyph)
         .filter(|g| *g != Glyph::Blank)
         .collect();
+    let digits = lit.iter().all(|g| matches!(g, Glyph::Digit(_)));
+
+    let mut text = String::with_capacity(cells.len() + 2);
+    if negative {
+        text.push('-');
+    }
+    let mut started = false;
+    for (i, cell) in cells.iter().enumerate() {
+        if dp_at == Some(i) {
+            text.push('.');
+            started = true;
+        }
+        if digits && started && cell.glyph == Glyph::Blank {
+            text.push('0');
+        } else {
+            text.push(cell.glyph.char());
+        }
+        started |= matches!(cell.glyph, Glyph::Digit(_));
+    }
+
     let shown = if lit.iter().any(|g| matches!(g, Glyph::Unknown(_))) {
         unrecognised.report("digit glyph");
         Shown::Unrecognised
@@ -183,8 +199,8 @@ pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -
         Shown::Ef
     } else if !lit.is_empty() && lit.iter().all(|g| *g == Glyph::Dash) {
         Shown::Dashes(lit.len() as u8)
-    } else if lit.iter().all(|g| matches!(g, Glyph::Digit(_))) {
-        number(cells, dp_at, negative)
+    } else if digits {
+        number(&text)
     } else {
         unrecognised.report("display text");
         Shown::Unrecognised
@@ -192,25 +208,12 @@ pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -
     Readout { shown, text }
 }
 
-/// The number a row of digits and blanks shows.
-fn number(cells: &[Cell], dp_at: Option<usize>, negative: bool) -> Shown {
-    // A leading 0 so a point before the first digit still parses.
-    let mut s = String::with_capacity(cells.len() + 3);
-    if negative {
-        s.push('-');
-    }
-    s.push('0');
-    for (i, cell) in cells.iter().enumerate() {
-        if dp_at == Some(i) {
-            s.push('.');
-        }
-        s.push(match cell.glyph {
-            Glyph::Digit(d) => char::from(b'0' + d),
-            _ => '0',
-        });
-    }
-    // Digits, a point and a sign always parse.
-    s.parse().map_or(Shown::Unrecognised, Shown::Number)
+/// The number a row of digits shows: its text, without the blanks a sign or
+/// padding leaves. A row with nothing lit never gets here: both callers refuse
+/// it first.
+fn number(text: &str) -> Shown {
+    let spelled: String = text.chars().filter(|c| *c != ' ').collect();
+    spelled.parse().map_or(Shown::Unrecognised, Shown::Number)
 }
 
 #[cfg(test)]
@@ -325,8 +328,27 @@ pub(super) mod tests {
     #[test]
     fn a_point_on_a_blank_still_places_the_point() {
         let r = read_quietly(" 123", Some(0), false);
-        assert_eq!(r.text, ". 123");
+        assert_eq!(r.text, ".0123");
         assert_eq!(r.shown, Shown::Number(0.0123));
+    }
+
+    /// A blank counted as 0 is written as one, so the text spells the number:
+    /// a blank beside digits, on either side of the point or at the end. One
+    /// before the first digit stays a blank.
+    #[test]
+    fn the_text_spells_the_number_a_blank_counts_in() {
+        for (glyphs, dp_at, text, number) in [
+            ("1 23", None, "1023", 1023.0),
+            ("123 ", None, "1230", 1230.0),
+            ("1 23", Some(1), "1.023", 1.023),
+            ("12 3", Some(2), "12.03", 12.03),
+            (" 123", None, " 123", 123.0),
+            ("  12", Some(2), "  .12", 0.12),
+        ] {
+            let r = read_quietly(glyphs, dp_at, false);
+            assert_eq!(r.text, text, "{glyphs:?}");
+            assert_eq!(r.shown, Shown::Number(number), "{glyphs:?}");
+        }
     }
 
     /// Two points: reported, and the leftmost kept.

@@ -286,6 +286,7 @@ mod list {
         use crate::flags::Flag;
         use crate::protocol::Setting;
         crate::protocol::assert_units_walked(m);
+        crate::protocol::assert_digits_spell_value(m);
         let check = |kind: TextKind, text: &str| {
             if text.trim().is_empty() {
                 return;
