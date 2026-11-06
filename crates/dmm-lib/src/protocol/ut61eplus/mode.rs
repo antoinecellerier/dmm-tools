@@ -1,4 +1,3 @@
-use crate::error::Error;
 use std::fmt;
 
 /// Measurement modes reported by the UT61+/UT161 family.
@@ -83,11 +82,8 @@ impl Mode {
         Mode::Inrush,
     ];
 
-    pub(crate) fn from_byte(b: u8) -> Result<Self, Error> {
-        Self::ALL
-            .get(usize::from(b))
-            .copied()
-            .ok_or(Error::UnknownMode(b))
+    pub(crate) fn from_byte(b: u8) -> Option<Self> {
+        Self::ALL.get(usize::from(b)).copied()
     }
 }
 
@@ -142,7 +138,6 @@ impl fmt::Display for Mode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Error;
 
     #[test]
     fn from_byte_all_valid_modes() {
@@ -202,26 +197,15 @@ mod tests {
     /// dump walks `ALL`, so it covers every mode a frame can carry, once.
     #[test]
     fn all_holds_every_decodable_mode_in_byte_order() {
-        let decoded: Vec<Mode> = (u8::MIN..=u8::MAX)
-            .filter_map(|b| Mode::from_byte(b).ok())
-            .collect();
+        let decoded: Vec<Mode> = (u8::MIN..=u8::MAX).filter_map(Mode::from_byte).collect();
         assert_eq!(Mode::ALL, decoded.as_slice());
     }
 
     #[test]
     fn from_byte_invalid() {
-        assert!(matches!(
-            Mode::from_byte(0x1F),
-            Err(Error::UnknownMode(0x1F))
-        ));
-        assert!(matches!(
-            Mode::from_byte(0xFF),
-            Err(Error::UnknownMode(0xFF))
-        ));
-        assert!(matches!(
-            Mode::from_byte(0x20),
-            Err(Error::UnknownMode(0x20))
-        ));
+        for byte in [0x1F, 0xFF, 0x20] {
+            assert_eq!(Mode::from_byte(byte), None, "{byte:#04x}");
+        }
     }
 
     #[test]
@@ -267,14 +251,14 @@ mod tests {
         // All valid mode bytes should be in range 0x00..=0x1E
         for b in 0x00..=0x1E_u8 {
             assert!(
-                Mode::from_byte(b).is_ok(),
+                Mode::from_byte(b).is_some(),
                 "byte {b:#04x} should be a valid mode"
             );
         }
         // 0x30-prefixed versions should fail (they'd be 0x30..=0x4E)
         for b in 0x30..=0x4E_u8 {
             assert!(
-                Mode::from_byte(b).is_err(),
+                Mode::from_byte(b).is_none(),
                 "byte {b:#04x} (0x30-prefixed) should not be valid"
             );
         }

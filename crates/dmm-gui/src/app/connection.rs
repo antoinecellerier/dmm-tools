@@ -587,11 +587,11 @@ where
             }
             Err(e) if e.kind() == ErrorKind::Protocol => {
                 // A frame we couldn't parse is not a dead link. Either line
-                // noise corrupted a checksum, or the meter is in a dial
-                // position this family's tables don't cover — and reconnecting
-                // fixes neither. It costs a 2 s stall plus an audible
-                // identification beep, and for an unknown mode byte it flaps
-                // forever: connect, read, fail, repeat.
+                // noise corrupted a checksum, or the meter sends something no
+                // parser reads — and reconnecting fixes neither. It costs a
+                // 2 s stall plus an audible identification beep, and for a
+                // frame the meter keeps sending it flaps forever: connect,
+                // read, fail, repeat.
                 //
                 // Report it and keep reading. The next good frame clears the
                 // message (`DmmMessage::Measurement` resets `last_error`), so

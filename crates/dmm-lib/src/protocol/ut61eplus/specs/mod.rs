@@ -54,7 +54,7 @@ impl SpecModel {
     /// The manual table for reading `m`, which its mode byte picks. `None`
     /// for a mode the manual gives this model no table for.
     pub(crate) fn table(self, m: &Measurement) -> Option<&'static ModeSpecs> {
-        let mode = Mode::from_byte(u8::try_from(m.mode_raw).ok()?).ok()?;
+        let mode = Mode::from_byte(u8::try_from(m.mode_raw).ok()?)?;
         let table = match self {
             SpecModel::Ut61ePlus | SpecModel::Ut161e => ut61e_plus::table(mode),
             SpecModel::Ut61bPlus | SpecModel::Ut161b => ut61bd_plus::ut61b_plus(mode),

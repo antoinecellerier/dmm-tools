@@ -210,7 +210,7 @@ pub(crate) struct StepResult {
     #[serde(skip_serializing_if = "is_zero", default)]
     pub frames_dropped: u64,
     /// Read errors seen while sampling that left the link up — checksum
-    /// mismatches, unknown modes, malformed responses.
+    /// mismatches, malformed responses.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub diagnostics: Vec<String>,
     /// The step decoded incompletely: unknown mode, a parse rejection, or

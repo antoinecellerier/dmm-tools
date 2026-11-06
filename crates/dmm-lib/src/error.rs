@@ -36,9 +36,6 @@ pub enum Error {
     #[error("timeout waiting for response")]
     Timeout,
 
-    #[error("unknown mode: {0:#04x}")]
-    UnknownMode(u8),
-
     /// A command the meter, the link or the dial position cannot carry out,
     /// refused before anything is sent.
     #[error("unsupported command: {0}")]
@@ -299,8 +296,8 @@ pub enum ErrorKind {
     Transport,
     /// Meter didn't respond in time.
     Timeout,
-    /// Response arrived but couldn't be parsed (checksum, invalid response,
-    /// unknown mode byte). Reconnect alone won't help if the protocol is wrong.
+    /// Response arrived but couldn't be parsed (checksum, invalid response).
+    /// Reconnect alone won't help if the protocol is wrong.
     Protocol,
     /// Something only the user can fix (unknown device ID, bad adapter
     /// selector, unsupported command, a command the meter refused).
@@ -331,8 +328,7 @@ impl Error {
             Self::Timeout | Self::DeviceNotIdentified { .. } => ErrorKind::Timeout,
             Self::InvalidResponse { .. }
             | Self::WrongMeter { .. }
-            | Self::ChecksumMismatch { .. }
-            | Self::UnknownMode(_) => ErrorKind::Protocol,
+            | Self::ChecksumMismatch { .. } => ErrorKind::Protocol,
             Self::UnknownDevice(_)
             | Self::NotSimulated(_)
             | Self::AdapterNotFound(_)
@@ -500,7 +496,6 @@ mod tests {
             .kind(),
             ErrorKind::Protocol
         );
-        assert_eq!(Error::UnknownMode(0xFF).kind(), ErrorKind::Protocol);
         let other_series = WrongMeter::OtherSeries {
             found: "Brymen BM82x",
             opened: "Brymen BM86x",

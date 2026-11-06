@@ -27,9 +27,6 @@ error-wrong-meter = 無効な応答: { $reason }
 # hexadecimal numbers, e.g. 0x01a3.
 error-checksum-mismatch = チェックサムが一致しません: 期待値 { $expected }、受信値 { $actual }
 error-timeout = 応答待ちがタイムアウトしました
-# The meter reports a mode this tool does not know. $code is a hexadecimal
-# number, e.g. 0x1f.
-error-unknown-mode = 不明なモード: { $code }
 # $reason is one of the "Refused before it was sent" sentences below.
 error-unsupported-command = 対応していないコマンド: { $reason }
 # $reason is one of the "The meter did not do it" sentences below.

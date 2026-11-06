@@ -1151,19 +1151,22 @@ mod tests {
         let mut app = app("ut61eplus");
         let issue = ConnectionIssue::from_error(
             &crate::l10n::english(),
-            &dmm_lib::error::Error::UnknownMode(0x1f),
+            &dmm_lib::error::Error::ChecksumMismatch {
+                expected: 0x01a3,
+                actual: 0x0003,
+            },
             None,
             None,
         );
         assert_eq!(
             issue,
-            ConnectionIssue::BadData("unknown mode: 0x1f".to_string())
+            ConnectionIssue::BadData("checksum mismatch: expected 0x01a3, got 0x0003".to_string())
         );
         app.connection.state = ConnectionState::Connected;
         let n = notice_for(&mut app, issue);
         assert_eq!(n.kind, NoticeKind::BadData);
         assert_eq!(n.title, "Meter sent data that could not be read");
-        assert_eq!(n.body, "unknown mode: 0x1f");
+        assert_eq!(n.body, "checksum mismatch: expected 0x01a3, got 0x0003");
         assert!(n.sections.is_empty());
     }
 
@@ -1175,12 +1178,12 @@ mod tests {
         app.connection.state = ConnectionState::Disconnected;
         let n = notice_for(
             &mut app,
-            ConnectionIssue::BadData("unknown mode: 0x1f".to_string()),
+            ConnectionIssue::BadData("checksum mismatch: expected 0x01a3, got 0x0003".to_string()),
         );
         assert_eq!(n.kind, NoticeKind::BadData);
         assert_eq!(
             n.body,
-            "unknown mode: 0x1f\n\nClick \"Connect\" after resolving the issue."
+            "checksum mismatch: expected 0x01a3, got 0x0003\n\nClick \"Connect\" after resolving the issue."
         );
     }
 

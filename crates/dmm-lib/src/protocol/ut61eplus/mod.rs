@@ -281,8 +281,7 @@ impl Ut61PlusProtocol {
     /// A measurement-sized payload as a reading, or `None` for a
     /// secondary-display frame (family spec §2.3) on a model that has the
     /// display, which is held for the next main reading instead of being
-    /// returned as one. On any other model the frame's mode byte is unknown,
-    /// as it has always been.
+    /// returned as one. On any other model [`parse_measurement`] refuses it.
     fn take_reading(&mut self, payload: &[u8]) -> Option<Result<Measurement>> {
         if self.table.secondary_display && is_secondary(payload) {
             // An unrecognised one clears the held value too: it is older
@@ -771,8 +770,8 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     fn mode_label(&self, mode: u16) -> Cow<'static, str> {
         match u8::try_from(mode) {
             Ok(byte) => match Mode::from_byte(byte) {
-                Ok(m) => Cow::Borrowed(m.as_static_str()),
-                Err(_) => unknown_mode(byte),
+                Some(m) => Cow::Borrowed(m.as_static_str()),
+                None => unknown_mode(byte),
             },
             // This family's mode field is one byte wide; anything wider than
             // that never came from a meter.
@@ -797,10 +796,10 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
         if !self.profile.supported_commands.contains(&cmd::AUTO) {
             return Vec::new();
         }
-        match u8::try_from(mode).map(Mode::from_byte) {
-            Ok(Ok(mode)) => tables::range_ladder(self.table, mode),
+        match u8::try_from(mode).ok().and_then(Mode::from_byte) {
+            Some(mode) => tables::range_ladder(self.table, mode),
             // A mode byte this family's parser cannot name has no table.
-            _ => Vec::new(),
+            None => Vec::new(),
         }
     }
 
@@ -833,8 +832,8 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
         if !self.profile.supported_commands.contains(&command) {
             return &[];
         }
-        let named = u8::try_from(mode).map(Mode::from_byte);
-        let dead = |modes: &[Mode]| matches!(named, Ok(Ok(m)) if modes.contains(&m));
+        let named = u8::try_from(mode).ok().and_then(Mode::from_byte);
+        let dead = |modes: &[Mode]| named.is_some_and(|m| modes.contains(&m));
         match setting {
             cycle::FlagSetting::Hold if dead(HOLD_DEAD) => &[],
             cycle::FlagSetting::Rel if dead(REL_DEAD) => &[],
@@ -844,7 +843,7 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
             // No AVG: the UT61E+ reports none over USB.
             cycle::FlagSetting::MinMax => &[0, 1, 2],
             cycle::FlagSetting::Peak => match named {
-                Ok(Ok(mode)) if self.table.peak_modes.contains(&mode) => &[0, 1, 2],
+                Some(mode) if self.table.peak_modes.contains(&mode) => &[0, 1, 2],
                 _ => &[],
             },
         }
@@ -892,9 +891,9 @@ fn ncv_level(display_compact: &str) -> Option<u8> {
 ///
 /// `dc` marks the DC component of an AC+DC reading, which alternates frames
 /// between its two components: flag3 bit 3 is set on the AC one (§2.7).
-/// Elsewhere the mode says AC or DC, and `dc` stays clear.
-fn parse_flags(mode: Mode, flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
-    let ac_dc = matches!(mode, Mode::AcDcV | Mode::AcDcA | Mode::ClampAcDcA);
+/// Elsewhere the mode says AC or DC, and `dc` stays clear. `ac_dc` is whether
+/// the mode is an AC+DC one.
+fn parse_flags(ac_dc: bool, flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
     StatusFlags {
         rel: flag1 & 0x01 != 0,
         hold: flag1 & 0x02 != 0,
@@ -913,38 +912,41 @@ fn parse_flags(mode: Mode, flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
 }
 
 /// Report what a measurement payload carries outside the spec and our UT61E+
-/// and UT61B+ captures. The reading is parsed the same either way.
+/// and UT61B+ captures. The reading is parsed the same either way. `mode` is
+/// `None` for a mode byte no table lists, already reported.
 ///
 /// Sections are `docs/research/ut61eplus/reverse-engineered-protocol.md`;
 /// "family" is `docs/research/ut61-family/reverse-engineered-protocol.md`.
 fn report_unrecognised_fields(
     id: &'static str,
     payload: &[u8],
-    mode: Mode,
+    mode: Option<Mode>,
     has_range: bool,
     table: &ModelTable,
 ) {
-    let mode_byte = payload[0];
-    // Family §3.1: the model's dial lists every mode it reaches, and every
-    // mode the captures show is on it. A decodable byte off it is another
-    // model's mode or one of §2.5's speculative ones. An empty dial is a
-    // table that does not describe one.
-    let dial = table.dial;
-    if !dial.is_empty() && !dial.iter().any(|p| p.contains(u16::from(mode_byte))) {
-        report_unknown(
-            id,
-            "mode byte",
-            format_args!("{mode_byte:#04x} ({mode}), not on the {} dial", table.name),
-        );
-    } else if !has_range && mode != Mode::Ncv {
-        // Family §5 and §6.2: NCV is the one mode without a range table;
-        // every other has at least one rung, and the captures stay inside
-        // them. A mode off the dial was reported above.
-        report_unknown(
-            id,
-            "range byte",
-            format_args!("mode {mode_byte:#04x} range {}", payload[1] & 0x0F),
-        );
+    if let Some(mode) = mode {
+        let mode_byte = payload[0];
+        // Family §3.1: the model's dial lists every mode it reaches, and every
+        // mode the captures show is on it. A decodable byte off it is another
+        // model's mode or one of §2.5's speculative ones. An empty dial is a
+        // table that does not describe one.
+        let dial = table.dial;
+        if !dial.is_empty() && !dial.iter().any(|p| p.contains(u16::from(mode_byte))) {
+            report_unknown(
+                id,
+                "mode byte",
+                format_args!("{mode_byte:#04x} ({mode}), not on the {} dial", table.name),
+            );
+        } else if !has_range && mode != Mode::Ncv {
+            // Family §5 and §6.2: NCV is the one mode without a range table;
+            // every other has at least one rung, and the captures stay inside
+            // them. A mode off the dial was reported above.
+            report_unknown(
+                id,
+                "range byte",
+                format_args!("mode {mode_byte:#04x} range {}", payload[1] & 0x0F),
+            );
+        }
     }
     let flags = &payload[11..14];
     // Family §4: a model without Peak never sets P-MIN or P-MAX (flag3
@@ -956,8 +958,7 @@ fn report_unrecognised_fields(
             format_args!("{flags:02X?}, Peak on a model without it"),
         );
     }
-    // §2.6 (range byte) and §2.7 (flag bytes): a 0x30 high nibble.
-    for i in [1, 11, 12, 13] {
+    for i in PREFIXED_BYTES {
         if payload[i] & 0xF0 != 0x30 {
             report_unknown(
                 id,
@@ -983,7 +984,7 @@ fn report_unrecognised_fields(
 fn report_unknown_mode(id: &'static str, payload: &[u8]) {
     let mode_byte = payload[0];
     match Mode::from_byte(mode_byte & !SECONDARY) {
-        Ok(function) if mode_byte & SECONDARY != 0 => report_unknown(
+        Some(function) if mode_byte & SECONDARY != 0 => report_unknown(
             id,
             "mode byte",
             format_args!(
@@ -994,6 +995,16 @@ fn report_unknown_mode(id: &'static str, payload: &[u8]) {
         ),
         _ => report_unknown(id, "mode byte", format_args!("{mode_byte:#04x}")),
     }
+}
+
+/// §2.6 (range byte) and §2.7 (flag bytes): these have a 0x30 high nibble.
+const PREFIXED_BYTES: [usize; 4] = [1, 11, 12, 13];
+
+/// Whether a payload has a measurement's length and prefixes (§2.4), which
+/// is all a frame with an unlisted mode byte has to say it is a reading.
+fn shaped_as_a_reading(payload: &[u8]) -> bool {
+    payload.len() == UT61EPLUS_MEASUREMENT_PAYLOAD_LEN
+        && PREFIXED_BYTES.iter().all(|&i| payload[i] & 0xF0 == 0x30)
 }
 
 /// Bit 7 of the mode byte marks a secondary-display frame (family spec §2.3).
@@ -1016,7 +1027,6 @@ fn parse_secondary(id: &'static str, payload: &[u8], table: &ModelTable) -> Opti
     let frame = &payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN];
     let range_byte = payload[1] & 0x0F;
     let Some((mode, range)) = Mode::from_byte(payload[0] & !SECONDARY)
-        .ok()
         .and_then(|mode| Some((mode, table.range_info(mode, range_byte)?)))
     else {
         report_unknown(id, "secondary display", format_args!("{frame:02X?}"));
@@ -1025,7 +1035,7 @@ fn parse_secondary(id: &'static str, payload: &[u8], table: &ModelTable) -> Opti
     let display_raw = String::from_utf8_lossy(&payload[2..9]).to_string();
     Some(AuxValue {
         label: Cow::Borrowed(secondary_label(mode)),
-        value: display_value(id, mode, &display_raw),
+        value: display_value(id, Some(mode), &display_raw),
         unit: Cow::Borrowed(range.unit),
         display_raw: Some(display_raw),
         elapsed_secs: None,
@@ -1118,21 +1128,38 @@ pub(crate) fn parse_measurement(
     let flag2 = payload[12] & 0x0F;
     let flag3 = payload[13] & 0x0F;
 
-    // §2.5 lists no mode byte past 0x1E.
-    let mode = Mode::from_byte(mode_byte).inspect_err(|_| report_unknown_mode(id, payload))?;
+    // §2.5 lists no mode byte past 0x1E. Other bytes still read, unnamed and
+    // with no unit, in a frame shaped as a reading. Not one with bit 7, which
+    // marks a secondary display (family spec §2.3): those come between main
+    // readings, and as readings would change the mode every other frame. Nor
+    // any other long frame, such as a Get Name reply (§2.3).
+    let mode = Mode::from_byte(mode_byte);
+    if mode.is_none() {
+        report_unknown_mode(id, payload);
+        if is_secondary(payload) || !shaped_as_a_reading(payload) {
+            return Err(Error::invalid_response(
+                format!("{id} frame with mode byte {mode_byte:#04x} is no main reading"),
+                &payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN],
+            ));
+        }
+    }
     let display_raw = String::from_utf8_lossy(display_bytes).to_string();
     let progress = bar_hi * 10 + bar_lo;
-    let flags = parse_flags(mode, flag1, flag2, flag3);
+    let ac_dc = matches!(mode, Some(Mode::AcDcV | Mode::AcDcA | Mode::ClampAcDcA));
+    let flags = parse_flags(ac_dc, flag1, flag2, flag3);
 
     // Look up range info from device table
-    let range_info = table.range_info(mode, range_byte);
+    let range_info = mode.and_then(|mode| table.range_info(mode, range_byte));
     report_unrecognised_fields(id, payload, mode, range_info.is_some(), table);
     let unit = range_info.map(|r| r.unit).unwrap_or("");
     let range_label = range_info.map(|r| r.label).unwrap_or("");
 
     let value = display_value(id, mode, &display_raw);
     let m = Measurement {
-        mode: Cow::Borrowed(mode.as_static_str()),
+        mode: mode.map_or_else(
+            || unknown_mode(mode_byte),
+            |mode| Cow::Borrowed(mode.as_static_str()),
+        ),
         mode_raw: mode_byte as u16,
         range_raw: range_byte,
         value,
@@ -1151,7 +1178,7 @@ pub(crate) fn parse_measurement(
     // its own time and frame. Only where the model's dial reaches the mode:
     // the deck's AC+DC current modes have no ranges, and nothing has shown
     // how they send.
-    if mode != Mode::AcDcV || range_info.is_none() {
+    if mode != Some(Mode::AcDcV) || range_info.is_none() {
         return Ok(m);
     }
     let m = Measurement {
@@ -1181,10 +1208,11 @@ pub(crate) fn parse_measurement(
 const AC_COMPONENT_LABEL: &str = "AC";
 
 /// The value a 7-char display field shows in `mode`, the same for a main
-/// and a secondary display (UT61E+ spec §2.4).
-fn display_value(id: &'static str, mode: Mode, display_raw: &str) -> MeasuredValue {
+/// and a secondary display (UT61E+ spec §2.4). `None` for a mode no table
+/// lists.
+fn display_value(id: &'static str, mode: Option<Mode>, display_raw: &str) -> MeasuredValue {
     let display_compact: String = display_raw.trim().chars().filter(|c| *c != ' ').collect();
-    if mode == Mode::Ncv {
+    if mode == Some(Mode::Ncv) {
         let level = ncv_level(&display_compact).unwrap_or_else(|| {
             report_unknown(
                 id,
@@ -1289,7 +1317,7 @@ mod tests {
     #[test]
     fn parse_no_flags_auto_on() {
         // All zero → AUTO is on (inverted logic), everything else off
-        let flags = parse_flags(Mode::DcV, 0x00, 0x00, 0x00);
+        let flags = parse_flags(false, 0x00, 0x00, 0x00);
         assert!(!flags.hold);
         assert!(!flags.rel);
         assert!(flags.auto_range); // inverted: bit clear = auto ON
@@ -1301,7 +1329,7 @@ mod tests {
     #[test]
     fn parse_hold_with_auto() {
         // flag1=0x02 (HOLD), flag2=0x00 (AUTO on)
-        let flags = parse_flags(Mode::DcV, 0x02, 0x00, 0x00);
+        let flags = parse_flags(false, 0x02, 0x00, 0x00);
         assert!(flags.hold);
         assert!(!flags.rel);
         assert!(flags.auto_range);
@@ -1310,14 +1338,14 @@ mod tests {
     #[test]
     fn parse_manual_range() {
         // flag2=0x04 → AUTO bit set → auto_range OFF
-        let flags = parse_flags(Mode::DcV, 0x00, 0x04, 0x00);
+        let flags = parse_flags(false, 0x00, 0x04, 0x00);
         assert!(!flags.auto_range);
     }
 
     #[test]
     fn parse_low_battery() {
         // flag2=0x02 → LOW BAT
-        let flags = parse_flags(Mode::DcV, 0x00, 0x02, 0x00);
+        let flags = parse_flags(false, 0x00, 0x02, 0x00);
         assert!(flags.low_battery);
         assert!(flags.auto_range); // AUTO still on (bit2 is clear)
     }
@@ -1325,7 +1353,7 @@ mod tests {
     #[test]
     fn parse_min_max() {
         // flag1: bit2=MIN, bit3=MAX
-        let flags = parse_flags(Mode::DcV, 0x0C, 0x00, 0x00);
+        let flags = parse_flags(false, 0x0C, 0x00, 0x00);
         assert!(flags.min);
         assert!(flags.max);
     }
@@ -1333,7 +1361,7 @@ mod tests {
     #[test]
     fn parse_all_flag1() {
         // flag1=0x0F: REL + HOLD + MIN + MAX
-        let flags = parse_flags(Mode::DcV, 0x0F, 0x00, 0x00);
+        let flags = parse_flags(false, 0x0F, 0x00, 0x00);
         assert!(flags.rel);
         assert!(flags.hold);
         assert!(flags.min);
@@ -1344,16 +1372,16 @@ mod tests {
     /// reading 1.61 V carry flag3 bit 3 clear, the 0.0000 V ones set.
     #[test]
     fn parse_dc_flag() {
-        assert!(parse_flags(Mode::AcDcV, 0x00, 0x00, 0x01).dc);
-        assert!(!parse_flags(Mode::AcDcV, 0x00, 0x00, 0x09).dc);
-        assert!(!parse_flags(Mode::DcV, 0x00, 0x00, 0x00).dc);
+        assert!(parse_flags(true, 0x00, 0x00, 0x01).dc);
+        assert!(!parse_flags(true, 0x00, 0x00, 0x09).dc);
+        assert!(!parse_flags(false, 0x00, 0x00, 0x00).dc);
     }
 
     #[test]
     fn parse_real_device_hold() {
         // Real capture: meter on DC V with HOLD active
         // flag bytes (masked): 0x02, 0x00, 0x01
-        let flags = parse_flags(Mode::DcV, 0x02, 0x00, 0x01);
+        let flags = parse_flags(false, 0x02, 0x00, 0x01);
         assert!(flags.hold);
         assert!(!flags.rel);
         assert!(flags.auto_range);
@@ -1951,17 +1979,17 @@ mod tests {
         assert_eq!(reading(&mut p).aux_summary(), "Frequency 49.98 Hz");
     }
 
-    /// A model with no secondary display rejects the frame as an unknown
-    /// mode, as it always has. The report says what the frame looks like and
-    /// carries it whole, so a second meter that sends one shows up.
+    /// A model with no secondary display refuses the frame: a reading would
+    /// change the mode every other frame. The report says what the frame looks
+    /// like and carries it whole, so a second meter that sends one shows up.
     #[test]
-    fn a_secondary_frame_on_a_model_without_one_is_an_unknown_mode() {
+    fn a_secondary_frame_on_a_model_without_one_is_refused() {
         for model in ["ut61eplus", "ut60bt"] {
             let mut p = Ut61PlusProtocol::for_model(model);
             let frame = secondary(0x04, 0x00, b"  50.02");
             let (reading, reports) = capture_reports(|| p.take_reading(&frame));
             assert!(
-                matches!(reading, Some(Err(Error::UnknownMode(0x84)))),
+                matches!(reading, Some(Err(Error::InvalidResponse { .. }))),
                 "{model}: {reading:?}"
             );
             assert_eq!(
@@ -3261,17 +3289,112 @@ raw_payload=14"#
     }
 
     #[test]
-    fn an_unknown_mode_byte_is_reported_and_still_rejected() {
-        let payload = make_payload(0x1F, 0x00, b"  0.000", (0, 0), (0, 0, 0));
+    fn an_unknown_mode_byte_is_reported_and_reads_unnamed() {
+        let payload = make_payload(0x1F, 0x00, b"  1.234", (0, 0), (0, 0, 0));
         let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
-        assert!(matches!(m, Err(Error::UnknownMode(0x1F))), "{m:?}");
+        let m = m.unwrap();
+        assert_eq!(
+            (
+                m.mode.as_ref(),
+                m.mode_raw,
+                m.unit.as_ref(),
+                m.range_label.as_ref()
+            ),
+            ("Unknown(0x1f)", 0x1F, "", "")
+        );
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if v == 1.234));
         assert_eq!(reports, ["ut61eplus: unrecognised mode byte: 0x1f"]);
+    }
 
-        // Bit 7 over a function nobody decodes is no secondary display.
+    /// Whichever mode it is, the display can say OL.
+    #[test]
+    fn an_unknown_mode_byte_reads_its_overload() {
+        let payload = make_payload(0x1F, 0x00, b"   OL  ", (0, 0), (0, 0, 0));
+        let (m, _) = parse_reporting(&payload, &UT61E_PLUS);
+        let m = m.unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.unit, "");
+    }
+
+    /// Bit 7 marks a secondary-display frame whether or not we know its
+    /// function, so the frame is refused either way.
+    #[test]
+    fn bit_7_over_an_unknown_function_is_refused() {
         let payload = make_payload(0x9F, 0x00, b"  0.000", (0, 0), (0, 0, 0));
         let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
-        assert!(matches!(m, Err(Error::UnknownMode(0x9F))), "{m:?}");
+        assert!(matches!(m, Err(Error::InvalidResponse { .. })), "{m:?}");
         assert_eq!(reports, ["ut61eplus: unrecognised mode byte: 0x9f"]);
+    }
+
+    /// A replay reaches the parser with no secondary-display handling, and
+    /// a frame with bit 7 is no reading there either.
+    #[test]
+    fn a_replayed_secondary_frame_is_refused() {
+        let p = ut202bt();
+        let frame = secondary(0x04, 0x00, b"  50.02");
+        let (m, _) = capture_reports(|| p.parse_payload(&frame));
+        assert!(matches!(m, Err(Error::InvalidResponse { .. })), "{m:?}");
+    }
+
+    /// Any other long frame is no reading, a Get Name reply among them, and
+    /// its first byte would read as a mode no table lists.
+    #[test]
+    fn a_long_frame_that_is_no_reading_is_refused() {
+        let mut no_prefixes = make_payload(0x1F, 0x00, b"  1.234", (0, 0), (0, 0, 0));
+        no_prefixes[11] = 0x00;
+        for frame in [
+            &b"UNI-T UT61E+ 1234"[..],
+            &b"UNI-T UT61E+ X"[..],
+            &no_prefixes,
+        ] {
+            let (m, reports) = parse_reporting(frame, &UT61E_PLUS);
+            assert!(
+                matches!(m, Err(Error::InvalidResponse { .. })),
+                "{frame:?}: {m:?}"
+            );
+            assert!(
+                reports.iter().any(|r| r.contains("unrecognised mode byte")),
+                "{reports:?}"
+            );
+        }
+    }
+
+    /// An unnamed mode keeps the checks that don't rest on one.
+    #[test]
+    fn an_unknown_mode_still_reports_a_bad_bar_graph() {
+        let payload = make_payload(0x1F, 0x00, b"  1.234", (9, 9), (0, 0, 0));
+        let (m, reports) = parse_reporting(&payload, &UT61E_PLUS);
+        assert_eq!(m.unwrap().mode, "Unknown(0x1f)");
+        assert_eq!(
+            reports,
+            [
+                "ut61eplus: unrecognised mode byte: 0x1f",
+                "ut61eplus: unrecognised bar graph: [09, 09]",
+            ]
+        );
+    }
+
+    /// Through the driver: a reading, with nothing offered that needs a mode.
+    #[test]
+    fn the_driver_reads_an_unknown_mode() {
+        let mock = MockTransport::new(vec![frame_in(0x1F)]);
+        let mut p = Ut61PlusProtocol::for_model("ut61eplus");
+        let m = p.request_measurement(&mock).unwrap();
+        assert_eq!((m.mode.as_ref(), m.mode_raw), ("Unknown(0x1f)", 0x1F));
+        assert!(p.range_ladder(0x1F).is_empty());
+        assert_eq!(p.mode_label(0x1F), "Unknown(0x1f)");
+    }
+
+    /// A value held from a secondary frame stays with the next reading,
+    /// whatever its mode.
+    #[test]
+    fn an_unknown_mode_carries_the_held_secondary() {
+        let mut p = ut202bt();
+        assert!(p.take_reading(&secondary(0x04, 0x00, b"  50.02")).is_none());
+        let reading = p.take_reading(&main_frame(0x1F, 0x00, b"   1.23"));
+        let m = reading.unwrap().unwrap();
+        assert_eq!(m.mode, "Unknown(0x1f)");
+        assert_eq!(m.aux_summary(), "Frequency 50.02 Hz");
     }
 
     /// Temperature is a UT61D+ position (family spec §3.1), not a UT61E+ one.

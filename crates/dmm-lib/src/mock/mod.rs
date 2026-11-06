@@ -247,9 +247,7 @@ impl MockProtocol {
 
     /// A scenario's mode byte as the UT61E+ table knows it.
     fn table_mode(mode_raw: u16) -> Option<Mode> {
-        u8::try_from(mode_raw)
-            .ok()
-            .and_then(|b| Mode::from_byte(b).ok())
+        u8::try_from(mode_raw).ok().and_then(Mode::from_byte)
     }
 
     /// The range byte the meter reports: the rung RANGE was stepped to, or

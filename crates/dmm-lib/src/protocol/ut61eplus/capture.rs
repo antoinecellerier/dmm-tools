@@ -160,7 +160,7 @@ pub(super) fn steps(table: &ModelTable, profile: &DeviceProfile) -> Vec<CaptureS
     } else {
         dial.iter()
             .flat_map(|p| p.modes())
-            .filter_map(|m| Mode::from_byte(u8::try_from(m).ok()?).ok())
+            .filter_map(|m| Mode::from_byte(u8::try_from(m).ok()?))
             .collect()
     };
     steps.retain(|step| {

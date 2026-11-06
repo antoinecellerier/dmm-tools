@@ -80,7 +80,7 @@ pub(crate) struct ModelTable {
 
     /// Whether the model has a secondary display, sent in frames of its own
     /// (family spec §2.3) and carried as a reading's one sub-value.
-    /// Default: no, and such a frame is an unknown mode.
+    /// Default: no, and such a frame is refused.
     pub secondary_display: bool,
 
     /// Whether the meter wants Get Name answered before it starts streaming
@@ -180,9 +180,9 @@ mod tests {
     ];
 
     fn label(mode: u16) -> Cow<'static, str> {
-        match u8::try_from(mode).map(Mode::from_byte) {
-            Ok(Ok(mode)) => Cow::Borrowed(mode.as_static_str()),
-            _ => Cow::Owned(format!("Unknown({mode:#04x})")),
+        match u8::try_from(mode).ok().and_then(Mode::from_byte) {
+            Some(mode) => Cow::Borrowed(mode.as_static_str()),
+            None => Cow::Owned(format!("Unknown({mode:#04x})")),
         }
     }
 
@@ -219,7 +219,7 @@ mod tests {
             for mode in all_modes(positions) {
                 let byte = u8::try_from(mode).unwrap_or_else(|_| panic!("{model}: {mode:#06x}"));
                 let parsed = Mode::from_byte(byte)
-                    .unwrap_or_else(|_| panic!("{model}: {byte:#04x} is not a mode"));
+                    .unwrap_or_else(|| panic!("{model}: {byte:#04x} is not a mode"));
                 assert_eq!(m(parsed), mode, "{model}");
             }
         }

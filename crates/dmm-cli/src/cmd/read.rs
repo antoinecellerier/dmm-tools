@@ -1102,9 +1102,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 // capture even though the next request would have succeeded.
                 // Report it and carry on, as `debug` does.
                 //
-                // Throttled: a meter parked in a mode this family's tables
-                // don't cover fails on every sample, and an unattended run
-                // would otherwise fill stderr with identical lines.
+                // Throttled: a meter parked on something no parser reads
+                // fails on every sample, and an unattended run would
+                // otherwise fill stderr with identical lines.
                 log::warn!("protocol error: {e}");
                 protocol_errors += 1;
                 if protocol_errors == 1 || protocol_errors.is_multiple_of(100) {

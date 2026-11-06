@@ -27,9 +27,6 @@ error-wrong-meter = 响应无效: { $reason }
 # hexadecimal numbers, e.g. 0x01a3.
 error-checksum-mismatch = 校验和不匹配: 应为 { $expected }，实际为 { $actual }
 error-timeout = 等待响应超时
-# The meter reports a mode this tool does not know. $code is a hexadecimal
-# number, e.g. 0x1f.
-error-unknown-mode = 未知模式: { $code }
 # $reason is one of the "Refused before it was sent" sentences below.
 error-unsupported-command = 不支持的命令: { $reason }
 # $reason is one of the "The meter did not do it" sentences below.

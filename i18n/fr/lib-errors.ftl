@@ -27,9 +27,6 @@ error-wrong-meter = réponse non valide : { $reason }
 # hexadecimal numbers, e.g. 0x01a3.
 error-checksum-mismatch = somme de contrôle incorrecte : attendu { $expected }, reçu { $actual }
 error-timeout = délai d’attente de la réponse dépassé
-# The meter reports a mode this tool does not know. $code is a hexadecimal
-# number, e.g. 0x1f.
-error-unknown-mode = mode inconnu : { $code }
 # $reason is one of the "Refused before it was sent" sentences below.
 error-unsupported-command = commande non prise en charge : { $reason }
 # $reason is one of the "The meter did not do it" sentences below.

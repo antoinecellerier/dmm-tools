@@ -49,9 +49,6 @@ impl Localizer {
                 actual = word(*actual)
             ),
             Error::Timeout => tr!(self, "error-timeout"),
-            Error::UnknownMode(code) => {
-                tr!(self, "error-unknown-mode", code = format!("{code:#04x}"))
-            }
             Error::UnsupportedCommand(reason) => tr!(
                 self,
                 "error-unsupported-command",
@@ -806,8 +803,7 @@ mod tests {
                 actual: 0x0003,
             }],
             Some(Error::ChecksumMismatch { .. }) => vec![Error::Timeout],
-            Some(Error::Timeout) => vec![Error::UnknownMode(0x1f)],
-            Some(Error::UnknownMode(_)) => unsupported().into_iter().map(Error::from).collect(),
+            Some(Error::Timeout) => unsupported().into_iter().map(Error::from).collect(),
             Some(Error::UnsupportedCommand(_)) => rejected().into_iter().map(Error::from).collect(),
             Some(Error::CommandRejected(_)) => vec![Error::UnknownDevice("ut99".into())],
             Some(Error::UnknownDevice(_)) => vec![Error::NotSimulated("ut61eplus")],

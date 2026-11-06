@@ -1193,8 +1193,15 @@ mod tests {
         let mut errors = ErrorLog::default();
         assert!(triage(Error::Timeout, &mut errors).is_ok());
         assert!(triage(Error::cable_pulled(), &mut errors).is_err_and(|e| link_gone(&e)));
-        assert!(triage(Error::UnknownMode(0x7f), &mut errors).is_ok());
-        assert_eq!(errors.into_diagnostics(), ["unknown mode: 0x7f"]);
+        let bad_frame = Error::ChecksumMismatch {
+            expected: 0x01a3,
+            actual: 0x0003,
+        };
+        assert!(triage(bad_frame, &mut errors).is_ok());
+        assert_eq!(
+            errors.into_diagnostics(),
+            ["checksum mismatch: expected 0x01a3, got 0x0003"]
+        );
     }
 
     /// A lost link used to be recorded as a parse rejection and polled
