@@ -1492,10 +1492,7 @@ mod tests {
         }
 
         fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> dmm_lib::error::Result<usize> {
-            match self.queue.read_timeout(buf, timeout_ms)? {
-                0 => Err(dmm_lib::error::Error::LinkLost),
-                n => Ok(n),
-            }
+            self.queue.read_timeout(buf, timeout_ms)
         }
 
         fn link(&self) -> Option<dmm_lib::transport::Link> {
@@ -1527,7 +1524,8 @@ mod tests {
         let device = registry::find_device("ut61eplus").expect("a registry device");
         dmm_lib::Dmm::new(
             Unplugs {
-                queue: dmm_lib::transport::mock::MockTransport::new(vec![frame; readings]),
+                queue: dmm_lib::transport::mock::MockTransport::new(vec![frame; readings])
+                    .fail_after(readings, || dmm_lib::error::Error::LinkLost),
                 dropped: Arc::clone(dropped),
             },
             (device.new_protocol)(),

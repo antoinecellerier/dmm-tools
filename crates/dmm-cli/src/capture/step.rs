@@ -1153,42 +1153,17 @@ mod tests {
         assert!(errors.into_diagnostics().is_empty(), "no parse rejection");
     }
 
-    /// A cable pulled once the baseline is read: the command's write fails.
-    struct PulledBeforeCommand {
-        frames: std::cell::RefCell<std::collections::VecDeque<Vec<u8>>>,
-    }
-
-    impl dmm_lib::transport::Transport for PulledBeforeCommand {
-        fn link(&self) -> Option<dmm_lib::transport::Link> {
-            None
-        }
-
-        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
-            if self.frames.borrow().is_empty() {
-                return Err(Error::cable_pulled());
-            }
-            Ok(())
-        }
-
-        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
-            let Some(next) = self.frames.borrow_mut().pop_front() else {
-                return Ok(0);
-            };
-            let n = next.len().min(buf.len());
-            buf[..n].copy_from_slice(&next[..n]);
-            Ok(n)
-        }
-    }
-
     /// A lost link at the command's press used to file the step as an error,
     /// as though the meter had refused it; the run now ends there instead.
     #[test]
     fn a_lost_link_at_the_command_ends_the_run_without_filing_the_step() {
         let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
         let dmm = dmm_lib::Dmm::new(
-            Box::new(PulledBeforeCommand {
-                frames: std::cell::RefCell::new(vec![measurement_frame(); STABLE_FRAMES].into()),
-            }) as Box<dyn dmm_lib::transport::Transport>,
+            // Pulled once the baseline is read: the command's write fails.
+            Box::new(
+                MockTransport::new(vec![measurement_frame(); STABLE_FRAMES])
+                    .fail_after(STABLE_FRAMES, Error::cable_pulled),
+            ) as Box<dyn dmm_lib::transport::Transport>,
             (device.new_protocol)(),
         )
         .unwrap();

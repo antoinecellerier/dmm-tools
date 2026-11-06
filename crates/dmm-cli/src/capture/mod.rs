@@ -431,40 +431,16 @@ fn write_no_response_report(
 mod tests {
     use super::*;
     use dmm_lib::transport::Transport;
-    use std::cell::RefCell;
-
-    /// Hands up `chunks` one read at a time, then nothing — at once rather
-    /// than after a USB poll, so the framing's empty-read guard ends the wait
-    /// instead of its 2 s deadline.
-    struct Chunks(RefCell<Vec<Vec<u8>>>);
-
-    impl Transport for Chunks {
-        fn link(&self) -> Option<dmm_lib::transport::Link> {
-            None
-        }
-
-        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
-            Ok(())
-        }
-
-        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
-            let mut chunks = self.0.borrow_mut();
-            if chunks.is_empty() {
-                return Ok(0);
-            }
-            let chunk = chunks.remove(0);
-            buf[..chunk.len()].copy_from_slice(&chunk);
-            Ok(chunk.len())
-        }
-    }
+    use dmm_lib::transport::mock::MockTransport;
 
     /// A capture run on a UT804 whose cable delivers `wire`, writing to
     /// `output`: the run's error, which must come at the meter check.
     fn capture_on_ut804(wire: Vec<Vec<u8>>, output: &std::path::Path) -> String {
         let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
-        let (transport, recorder) = crate::capture::recording::RecordingTransport::new(Box::new(
-            Chunks(RefCell::new(wire)),
-        ));
+        // The mock's silence comes at once rather than after a USB poll, so
+        // the framing's empty-read guard ends the wait, not its 2 s deadline.
+        let (transport, recorder) =
+            crate::capture::recording::RecordingTransport::new(Box::new(MockTransport::new(wire)));
         let dmm = dmm_lib::Dmm::new(
             Box::new(transport) as Box<dyn Transport>,
             (device.new_protocol)(),

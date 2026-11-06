@@ -686,20 +686,9 @@ mod tests {
 
     #[test]
     fn a_lost_link_during_the_discard_is_the_answer() {
-        struct Lost;
-        impl Transport for Lost {
-            fn write(&self, _data: &[u8]) -> Result<()> {
-                Ok(())
-            }
-            fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
-                Err(Error::LinkLost)
-            }
-            fn link(&self) -> Option<transport::Link> {
-                None
-            }
-        }
         let clock = Clock::manual();
-        let mut dmm = Dmm::new(Lost, Box::new(ByteMeter(protocol::Delivery::Streamed)))
+        let lost = MockTransport::new(Vec::new()).fail_after(0, || Error::LinkLost);
+        let mut dmm = Dmm::new(lost, Box::new(ByteMeter(protocol::Delivery::Streamed)))
             .unwrap()
             .with_clock(clock.clone());
         clock.advance(Duration::from_secs(1));

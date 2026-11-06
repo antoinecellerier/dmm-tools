@@ -463,7 +463,8 @@ mod tests {
 #[cfg(any(test, feature = "test-support"))]
 pub mod mock {
     use super::*;
-    use std::cell::RefCell;
+    use crate::error::Error;
+    use std::cell::{Cell, RefCell};
 
     /// A mock transport that replays pre-recorded responses.
     pub struct MockTransport {
@@ -473,6 +474,9 @@ pub mod mock {
         pub written: RefCell<Vec<Vec<u8>>>,
         /// The rates `set_baud` was asked for, in order.
         pub bauds: RefCell<Vec<u32>>,
+        /// See [`fail_after`](Self::fail_after).
+        reads_left: Cell<usize>,
+        failure: Option<fn() -> Error>,
     }
 
     impl MockTransport {
@@ -491,7 +495,25 @@ pub mod mock {
                 replies: RefCell::new(Vec::new()),
                 written: RefCell::new(Vec::new()),
                 bauds: RefCell::new(Vec::new()),
+                reads_left: Cell::new(0),
+                failure: None,
             }
+        }
+
+        /// Fail like a link that went away: `reads` reads go as usual, then
+        /// every call returns `error()`. A constructor, as a pulled
+        /// cable keeps failing and an [`Error`] can't be cloned.
+        pub fn fail_after(mut self, reads: usize, error: fn() -> Error) -> Self {
+            self.reads_left.set(reads);
+            self.failure = Some(error);
+            self
+        }
+
+        /// The error the link has failed with, once it has.
+        fn failed(&self) -> Option<Error> {
+            self.failure
+                .filter(|_| self.reads_left.get() == 0)
+                .map(|error| error())
         }
 
         /// Queue another response after the mock has gone silent.
@@ -509,6 +531,9 @@ pub mod mock {
 
     impl Transport for MockTransport {
         fn write(&self, data: &[u8]) -> Result<()> {
+            if let Some(error) = self.failed() {
+                return Err(error);
+            }
             self.written.borrow_mut().push(data.to_vec());
             let replies = std::mem::take(&mut *self.replies.borrow_mut());
             self.responses.borrow_mut().extend(replies);
@@ -516,6 +541,10 @@ pub mod mock {
         }
 
         fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            if let Some(error) = self.failed() {
+                return Err(error);
+            }
+            self.reads_left.set(self.reads_left.get().saturating_sub(1));
             let mut responses = self.responses.borrow_mut();
             if responses.is_empty() {
                 return Ok(0);
@@ -532,6 +561,9 @@ pub mod mock {
         }
 
         fn set_baud(&self, baud: u32) -> Result<()> {
+            if let Some(error) = self.failed() {
+                return Err(error);
+            }
             self.bauds.borrow_mut().push(baud);
             Ok(())
         }
@@ -552,6 +584,46 @@ pub mod mock {
         fn a_response_longer_than_the_read_is_refused() {
             let mock = MockTransport::new(vec![vec![0; 5]]);
             let _ = mock.read_timeout(&mut [0; 4], 0);
+        }
+
+        /// The reads before the failure go as usual, silent ones included,
+        /// and from then on nothing gets through in either direction.
+        #[test]
+        fn a_failing_link_keeps_failing_once_its_reads_are_spent() {
+            let mock = MockTransport::new(vec![vec![1]]).fail_after(2, Error::cable_pulled);
+            let mut buf = [0; 4];
+            mock.write(&[9]).unwrap();
+            assert_eq!(mock.read_timeout(&mut buf, 0).unwrap(), 1);
+            assert_eq!(mock.read_timeout(&mut buf, 0).unwrap(), 0);
+            for _ in 0..2 {
+                assert!(matches!(mock.write(&[9]), Err(Error::Hid(_))));
+                assert!(matches!(mock.read_timeout(&mut buf, 0), Err(Error::Hid(_))));
+                assert!(matches!(mock.set_baud(9600), Err(Error::Hid(_))));
+            }
+            assert!(mock.bauds.borrow().is_empty());
+            assert_eq!(
+                mock.written.borrow().len(),
+                1,
+                "a failed write goes nowhere"
+            );
+        }
+
+        /// A link that is already gone has nothing to give.
+        #[test]
+        fn a_link_can_fail_from_the_start() {
+            let mock = MockTransport::new(vec![vec![1]]).fail_after(0, || Error::LinkLost);
+            assert!(matches!(
+                mock.read_timeout(&mut [0; 4], 0),
+                Err(Error::LinkLost)
+            ));
+        }
+
+        /// Without `fail_after`, a mock with nothing left stays silent.
+        #[test]
+        fn a_mock_that_was_not_told_to_fail_never_does() {
+            let mock = MockTransport::new(Vec::new());
+            assert_eq!(mock.read_timeout(&mut [0; 4], 0).unwrap(), 0);
+            mock.write(&[9]).unwrap();
         }
     }
 }
