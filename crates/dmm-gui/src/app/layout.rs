@@ -144,14 +144,10 @@ impl App {
     pub(crate) fn big_meter_toggle_width(ui: &Ui) -> f32 {
         // Both icons are the same glyph width; measure the one shown when
         // the toggle sits on the controls row.
-        let galley = egui::WidgetText::from(Self::big_meter_toggle_icon(BigMeterMode::Off))
-            .into_galley(
-                ui,
-                Some(egui::TextWrapMode::Extend),
-                f32::INFINITY,
-                egui::TextStyle::Button,
-            );
-        galley.size().x + 2.0 * ui.spacing().button_padding.x
+        crate::app::controls::remote::button_width(
+            ui,
+            Self::big_meter_toggle_icon(BigMeterMode::Off),
+        )
     }
 
     /// Icon of the big-meter toggle in `mode`.

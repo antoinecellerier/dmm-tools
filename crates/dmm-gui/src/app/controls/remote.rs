@@ -33,6 +33,35 @@ pub(in crate::app) const SCALE_RULE_WIDTH: f32 = 6.0;
 const FOLDED: &str = "\u{25B8}";
 const OPEN: &str = "\u{25BE}";
 
+/// Width of a button showing `text`, so a row can tell before placing it
+/// whether it fits on the line.
+pub(in crate::app) fn button_width(ui: &Ui, text: RichText) -> f32 {
+    egui::WidgetText::from(text)
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Button,
+        )
+        .size()
+        .x
+        + 2.0 * ui.spacing().button_padding.x
+}
+
+/// The corners of a button and of the one `joined` to it, drawn as one shape:
+/// square where they meet across [`SPLIT_GAP`].
+fn split_corners(ui: &Ui, joined: bool) -> (egui::CornerRadius, egui::CornerRadius) {
+    let r = ui.visuals().widgets.inactive.corner_radius;
+    if joined {
+        (
+            egui::CornerRadius { ne: 0, se: 0, ..r },
+            egui::CornerRadius { nw: 0, sw: 0, ..r },
+        )
+    } else {
+        (r, r)
+    }
+}
+
 /// One of the app's own chips beside the meter's buttons (**Scale**,
 /// **Alarm**): a body that switches the feature on or off, joined to a caret
 /// that shows or hides its row of fields.
@@ -81,21 +110,9 @@ impl SplitChip<'_> {
     /// Width the chip takes, so the button row can tell before placing the
     /// app's own chips whether they fit on the line.
     pub(in crate::app) fn width(&self, ui: &Ui, font_size: f32) -> f32 {
-        let width = |text: RichText| {
-            egui::WidgetText::from(text)
-                .into_galley(
-                    ui,
-                    Some(egui::TextWrapMode::Extend),
-                    f32::INFINITY,
-                    egui::TextStyle::Button,
-                )
-                .size()
-                .x
-                + 2.0 * ui.spacing().button_padding.x
-        };
-        width(self.body_label(font_size))
+        button_width(ui, self.body_label(font_size))
             + self.open.map_or(0.0, |open| {
-                SPLIT_GAP + width(Self::caret_label(open, font_size))
+                SPLIT_GAP + button_width(ui, Self::caret_label(open, font_size))
             })
     }
 
@@ -104,15 +121,7 @@ impl SplitChip<'_> {
     /// Spoken as two controls: the body by its name, `active` as selected,
     /// and the caret by its `fields_name`, expanded or collapsed.
     pub(in crate::app) fn show(&self, ui: &mut Ui, font_size: f32) -> ChipClick {
-        let r = ui.visuals().widgets.inactive.corner_radius;
-        let (body_radius, caret_radius) = if self.open.is_some() {
-            (
-                egui::CornerRadius { ne: 0, se: 0, ..r },
-                egui::CornerRadius { nw: 0, sw: 0, ..r },
-            )
-        } else {
-            (r, r)
-        };
+        let (body_radius, caret_radius) = split_corners(ui, self.open.is_some());
         // egui spaces each widget from the one after it by the spacing in
         // force as it is placed: the body takes the hairline only when the
         // caret follows it, and the caret, last, the row's own gap.
@@ -156,7 +165,8 @@ impl SplitChip<'_> {
     }
 }
 
-/// The hairline between a split chip's body and its caret.
+/// The hairline between a split chip's body and its caret, and between a
+/// MIN/MAX or PEAK button and its "x".
 const SPLIT_GAP: f32 = 1.0;
 
 /// Width of each field in a split chip's row, in points before zoom.
@@ -254,8 +264,6 @@ impl App {
                 .iter()
                 .any(|c| c == cmd)
         };
-        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-        let active_color = tc.accent();
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
         // What a shared button shows: the model's own word, or the generic one.
@@ -310,8 +318,8 @@ impl App {
             }
 
             // MIN/MAX and Peak: clicking always cycles (never exits), matching
-            // the real device's short-press behavior. A separate "x" button
-            // exits the mode (like the real device's long-press).
+            // the real device's short-press behavior. An "x" joined to the
+            // button exits the mode (like the real device's long-press).
             for (label, active, cycle_cmd, exit_cmd, tooltip) in [
                 (
                     "MIN/MAX",
@@ -332,23 +340,52 @@ impl App {
                     continue;
                 }
                 let label = shown(cycle_cmd, label);
-                let text = RichText::new(label).font(egui::FontId::proportional(font_size));
+                let font = egui::FontId::proportional(font_size);
+                let body = RichText::new(label).font(font.clone());
+                let exit = RichText::new("x").font(font);
+                let joined = active && has_cmd(exit_cmd);
+                // The two wrap as one: a joined "x" alone on a line would read
+                // as belonging to nothing. Wider than a whole line, a new line
+                // wouldn't help, and would leave an empty one above them.
+                if joined {
+                    let width =
+                        button_width(ui, body.clone()) + SPLIT_GAP + button_width(ui, exit.clone());
+                    if width > ui.available_size_before_wrap().x && width <= ui.max_rect().width() {
+                        ui.end_row();
+                    }
+                }
+                let (body_radius, exit_radius) = split_corners(ui, joined);
+                // As in `SplitChip::show`: the hairline only when the "x"
+                // follows, and the "x", last, takes the row's own gap.
+                let gap = ui.spacing().item_spacing.x;
+                if joined {
+                    ui.spacing_mut().item_spacing.x = SPLIT_GAP;
+                }
                 let resp = ui
-                    .add(egui::Button::new(text).selected(active))
+                    .add(
+                        egui::Button::new(body)
+                            .selected(active)
+                            .corner_radius(body_radius),
+                    )
                     .on_hover_text(tooltip);
                 placed = true;
                 if resp.clicked() {
                     self.send_command(cycle_cmd);
                 }
-                if active && has_cmd(exit_cmd) {
-                    let x_text = RichText::new("x")
-                        .font(egui::FontId::proportional(font_size * 0.8))
-                        .color(active_color);
-                    let x_btn = egui::Button::new(x_text).min_size(egui::Vec2::ZERO);
+                if joined {
+                    ui.spacing_mut().item_spacing.x = gap;
                     let x_resp = ui
-                        .add(x_btn)
+                        .add(
+                            egui::Button::new(exit)
+                                .selected(true)
+                                .corner_radius(exit_radius),
+                        )
                         .on_hover_text(tr!(l10n, "remote-exit.hover", mode = label))
                         .a11y_label(&tr!(l10n, "remote-exit.a11y", mode = label));
+                    // `selected` is for the shared fill: this is an action, not
+                    // a toggle that a screen reader should call pressed.
+                    ui.ctx()
+                        .accesskit_node_builder(x_resp.id, |builder| builder.clear_toggled());
                     if x_resp.clicked() {
                         self.send_command(exit_cmd);
                     }
@@ -683,6 +720,54 @@ mod tests {
             for label in absent {
                 assert!(!buttons.iter().any(|b| b == label), "{id}: {buttons:?}");
             }
+        }
+    }
+
+    /// The × is one shape with its button, wherever the row wraps: on the
+    /// button's line, a hairline from it.
+    #[test]
+    fn the_exit_button_stays_joined_to_its_button() {
+        let rects = |width: f32| {
+            let mut app = connected_to("121gw");
+            app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
+                dmm_lib::measurement::MeasuredValue::Normal(1.234),
+                "V",
+                dmm_lib::flags::StatusFlags {
+                    avg: true,
+                    ..Default::default()
+                },
+            ));
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 600.0));
+            let out = headless_frame(&ctx, Some(screen), None, vec![], |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    app.show_reading_column(ui, crate::app::layout::ContentLayout::Wide);
+                });
+            });
+            let (nodes, _) = a11y(&out);
+            let exit = nodes
+                .iter()
+                .find(|(_, n)| n.label() == Some("Exit MIN/MAX/AVG mode"));
+            if let Some((_, exit)) = exit {
+                assert_eq!(exit.toggled(), None, "the x is an action");
+            }
+            let rect = |label: &str| node_rect(&nodes, |n| n.label() == Some(label));
+            (
+                rect("MIN/MAX/AVG").expect("the button"),
+                rect("Exit MIN/MAX/AVG mode"),
+            )
+        };
+        for width in (200..=500).step_by(10) {
+            let width = width as f32;
+            let (body, exit) = rects(width);
+            let exit = exit.unwrap_or_else(|| panic!("the x at {width}"));
+            assert_eq!(body.min.y, exit.min.y, "the x wrapped at {width}");
+            assert_eq!(body.height(), exit.height(), "at {width}");
+            assert!(
+                (exit.min.x - body.max.x - super::SPLIT_GAP).abs() < 0.5,
+                "at {width}"
+            );
         }
     }
 
