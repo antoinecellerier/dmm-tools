@@ -492,6 +492,8 @@ key-hover-press-the-meter-s-hz-duty = Press the meter's Hz/Duty△/ᛒ key brief
 key-hover-press-the-meter-s-zero-key = Press the meter's ZERO/ᛒ key briefly
 # Used by: OW18B/OW16B, OW18E
 key-hover-rel-in-ac-and-hz-steps = REL; in AC and Hz, steps Hz/Duty
+# Used by: OW67B, OW69B, VC871, VC891, VC915, VC925 PV
+key-hover-read-a-4-20-ma-loop = Read a 4-20 mA loop as a percentage
 # Used by: ZT-5566SE
 key-hover-record-maximum-and-minimum-readings = Record maximum and minimum readings
 # Used by: UT181A

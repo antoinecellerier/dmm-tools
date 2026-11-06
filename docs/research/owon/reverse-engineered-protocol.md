@@ -877,7 +877,10 @@ VC915) return to auto or leave the function (VC871-UM p.88-91; VC915-UM
 p.86-90; VC925-UM p.86-87).
 
 **Where the softkeys act.** Inrush is on the CMS's second menu page in AC A,
-F3 entering and leaving it (CMS101-UM p.15/10, p.18/13).
+F3 entering and leaving it (CMS101-UM p.15/10, p.18/13). 4-20mA is "only in
+the DC mA range" (VC871-UM p.71; VC891-UM p.65; VC915-UM p.68, p.79; VC925-UM
+p.71, p.79); on the OW67 and OW69 it is "When measuring mA current", with < or >
+(OW67-UM p.26/21; OW69-UM p.25/20).
 
 ## 10. The 15-byte frame
 

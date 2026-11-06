@@ -15,6 +15,7 @@
 //! inferred from a label (spec §10.8).
 
 use super::decode::function;
+use super::decode15::code;
 use crate::protocol::{ButtonLabel, MeterKey, MeterKeys, command};
 
 /// A short press.
@@ -344,8 +345,39 @@ pub(super) const CM2100_METER_KEYS: MeterKeys = MeterKeys {
     ..MeterKeys::NONE
 };
 
-/// The OW69B's keys: the B series' Hz/Duty, in the same functions.
-pub(super) const OW69_METER_KEYS: MeterKeys = B_METER_KEYS;
+/// 4-20mA is "only in the DC mA range" (VC871-UM p.71; VC891-UM p.65; VC915-UM
+/// p.68, p.79; VC925-UM p.71, p.79), and offered in the function it lands on
+/// too, so a second click can try to leave. Its unit is % (spec §10.5).
+const CURRENT_LOOP_KEY: MeterKey = MeterKey {
+    command: "current_loop",
+    label: "4-20mA",
+    in_words: false,
+    hover: Some("Read a 4-20 mA loop as a percentage"),
+    applies: |m| {
+        (function_in(m, &[function::DC_A]) && m.unit == "mA") || function_in(m, &[code::LOOP])
+    },
+};
+
+/// The OW67B's and OW69B's manuals say "When measuring mA current", with no DC
+/// in it (OW67-UM p.26/21; OW69-UM p.25/20).
+const OW_CURRENT_LOOP: MeterKey = MeterKey {
+    applies: |m| {
+        (function_in(m, &[function::DC_A, function::AC_A]) && m.unit == "mA")
+            || function_in(m, &[code::LOOP])
+    },
+    ..CURRENT_LOOP_KEY
+};
+
+pub(super) const OW67_METER_KEYS: MeterKeys = MeterKeys {
+    context: &[OW_CURRENT_LOOP],
+    ..MeterKeys::NONE
+};
+
+/// The OW69B's keys: the B series' Hz/Duty, in the same functions, and 4-20mA.
+pub(super) const OW69_METER_KEYS: MeterKeys = MeterKeys {
+    context: &[B_HZ_DUTY, OW_CURRENT_LOOP],
+    ..MeterKeys::NONE
+};
 
 /// On the Voltcraft meters REL sets the reading to zero; held, or by changing
 /// function, it is left (VC871-UM p.89; VC891-UM p.79; VC915-UM p.86;
@@ -357,23 +389,27 @@ const VC_BUTTON_LABELS: &[ButtonLabel] = &[ButtonLabel {
 }];
 
 pub(super) const VC871_METER_KEYS: MeterKeys = MeterKeys {
+    context: &[CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
 
-/// The VC891's keys: the B series' Hz/Duty, and REL as on the other Voltcraft
-/// meters.
+/// The VC891's keys: the B series' Hz/Duty, 4-20mA, and REL as on the other
+/// Voltcraft meters.
 pub(super) const VC891_METER_KEYS: MeterKeys = MeterKeys {
+    context: &[B_HZ_DUTY, CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
-    ..B_METER_KEYS
+    ..MeterKeys::NONE
 };
 
 pub(super) const VC915_METER_KEYS: MeterKeys = MeterKeys {
+    context: &[CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
 
 pub(super) const VC925_METER_KEYS: MeterKeys = MeterKeys {
+    context: &[CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
@@ -416,7 +452,7 @@ pub(super) const CMS_METER_KEYS: MeterKeys = MeterKeys {
 mod tests {
     use super::super::decode15::decode;
     use super::super::decode15::tests::{frame as reading_frame, g24};
-    use super::super::model::{CMS061, CMS101, MODELS, Model};
+    use super::super::model::{self as entry, MODELS, Model};
     use super::*;
 
     /// A long press of the key that carries ᛒ switches Bluetooth (spec
@@ -639,7 +675,7 @@ mod tests {
     /// the golden `cms061/inrush.yaml`).
     #[test]
     fn inrush_is_offered_in_ac_a() {
-        for model in [&CMS101, &CMS061] {
+        for model in [&entry::CMS101, &entry::CMS061] {
             assert_eq!(offered(model, 3, 4), ["Hz/Duty", "Inrush"]);
             assert_eq!(offered(model, 2, 4), [""; 0]);
             assert_eq!(offered(model, 6, 4), ["Hz/Duty"]);
@@ -648,7 +684,37 @@ mod tests {
             0xE2, 0x00, 0xF0, 0x00, 0x00, 0x00, 0xA2, 0x01, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x02,
         ];
-        assert_eq!(offered_for(&CMS061, &inrush), ["Hz/Duty", "Inrush"]);
+        assert_eq!(offered_for(&entry::CMS061, &inrush), ["Hz/Duty", "Inrush"]);
+    }
+
+    /// 4-20mA in DC mA, by the unit a frame's prefix gives, and in the loop
+    /// function; not in DC µA or A. In AC mA only on the OW67B and OW69B, whose
+    /// manuals don't say DC.
+    #[test]
+    fn four_to_twenty_ma_is_offered_in_dc_ma() {
+        let has = |model, function, prefix| offered(model, function, prefix).contains(&"4-20mA");
+        for model in [
+            &entry::OW67B,
+            &entry::OW69B,
+            &entry::VC871,
+            &entry::VC891,
+            &entry::VC915,
+            &entry::VC925PV,
+        ] {
+            assert!(has(model, 2, 3), "{} DC mA", model.id);
+            assert!(has(model, 17, 4), "{} loop", model.id);
+            assert!(!has(model, 2, 2), "{} DC µA", model.id);
+            assert!(!has(model, 2, 4), "{} DC A", model.id);
+            assert_eq!(
+                has(model, 3, 3),
+                matches!(model.id, "ow67b" | "ow69b"),
+                "{} AC mA",
+                model.id
+            );
+        }
+        for model in [&entry::OW65B, &entry::CMS061, &entry::CMS101] {
+            assert!(!has(model, 2, 3), "{}", model.id);
+        }
     }
 
     #[test]

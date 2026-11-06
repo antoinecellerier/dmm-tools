@@ -233,7 +233,7 @@ pub(super) static OW67B: Model = Model {
     keys: &keys::OW67,
     commands: &keys::OW67_COMMANDS,
     bluetooth_key: None,
-    meter_keys: MeterKeys::NONE,
+    meter_keys: keys::OW67_METER_KEYS,
     sub_follows_main: false,
     cms_readings: false,
 };

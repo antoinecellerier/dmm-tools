@@ -29,23 +29,23 @@ use log::debug;
 use std::borrow::Cow;
 
 /// The function codes above the 6-byte frame's (spec §10.5, §6.2).
-mod code {
-    pub(super) const POWER_W: u8 = 14;
-    pub(super) const POWER_VA: u8 = 15;
-    pub(super) const POWER_FACTOR: u8 = 16;
-    pub(super) const LOOP: u8 = 17;
-    pub(super) const POWER_AH: u8 = 18;
-    pub(super) const TIME: u8 = 19;
-    pub(super) const POWER_WH: u8 = 20;
-    pub(super) const POWER_V: u8 = 21;
-    pub(super) const POWER_A: u8 = 22;
-    pub(super) const AC_DC_V: u8 = 23;
-    pub(super) const MOTOR: u8 = 24;
-    pub(super) const SOLAR: u8 = 25;
-    pub(super) const ANGLE: u8 = 26;
-    pub(super) const COMPASS: u8 = 27;
-    pub(super) const HV_DC: u8 = 28;
-    pub(super) const HV_AC: u8 = 29;
+pub(super) mod code {
+    pub(crate) const POWER_W: u8 = 14;
+    pub(crate) const POWER_VA: u8 = 15;
+    pub(crate) const POWER_FACTOR: u8 = 16;
+    pub(crate) const LOOP: u8 = 17;
+    pub(crate) const POWER_AH: u8 = 18;
+    pub(crate) const TIME: u8 = 19;
+    pub(crate) const POWER_WH: u8 = 20;
+    pub(crate) const POWER_V: u8 = 21;
+    pub(crate) const POWER_A: u8 = 22;
+    pub(crate) const AC_DC_V: u8 = 23;
+    pub(crate) const MOTOR: u8 = 24;
+    pub(crate) const SOLAR: u8 = 25;
+    pub(crate) const ANGLE: u8 = 26;
+    pub(crate) const COMPASS: u8 = 27;
+    pub(crate) const HV_DC: u8 = 28;
+    pub(crate) const HV_AC: u8 = 29;
 }
 
 /// Each prefixed unit of this frame's functions, by prefix code (spec
