@@ -104,6 +104,13 @@ no-meter-answered = No meter answered
 # The meter picked or found has stopped answering. A notice title in the
 # GUI; dmm-cli starts a sentence with it (cli/connect.ftl).
 no-response = No response from meter
+# Why a dropped link is not reconnected. $count (2 or more) USB cables the
+# meter can use are plugged in, with no serial number of their own to tell
+# them apart. Each binary follows it with what to do.
+several-cables = { $count } USB cables this meter can use are plugged in and can't be told apart, and a reconnect could open another meter's.
+# While a dropped link is being reopened: its cable has gone and another is
+# plugged in. Each binary follows it with how to use that other cable.
+waiting-for-own-cable = Another USB cable is plugged in, but this session is waiting for the one it opened.
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Look for Bluetooth devices

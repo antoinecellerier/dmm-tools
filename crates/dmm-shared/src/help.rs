@@ -13,6 +13,7 @@
 //! binary's.
 
 use crate::l10n::{Localizer, Resource};
+use crate::reopen::SeveralCables;
 use crate::tr;
 use dmm_lib::list_devices;
 use dmm_lib::mock::MockMode;
@@ -408,6 +409,18 @@ impl<'a> Help<'a> {
     /// The title for a meter that was picked or found and is not answering.
     pub fn no_response(self) -> Cow<'a, str> {
         tr!(self.0, "no-response")
+    }
+
+    /// Why a lost link can't be reopened; each binary follows it with what
+    /// to do about it.
+    pub fn several_cables(self, several: SeveralCables) -> Cow<'a, str> {
+        tr!(self.0, "several-cables", count = several.count)
+    }
+
+    /// Why a reopen is still waiting with another cable plugged in; each
+    /// binary follows it with how to switch to that cable.
+    pub fn waiting_for_own_cable(self) -> Cow<'a, str> {
+        tr!(self.0, "waiting-for-own-cable")
     }
 
     /// The sentence both binaries use to say a protocol is not fully

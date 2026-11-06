@@ -386,6 +386,7 @@ Protocol families are in [protocol.md](protocol.md); each family's internals are
 | `export/read_error.rs` | Why an export or a recording's header did not read |
 | `replay.rs` | What `--replay` opens |
 | `help.rs` | Help and version text both binaries print |
+| `reopen.rs` | What a lost link may come back on |
 | `input.rs` | Why a typed number was refused, worded once for both binaries |
 | `l10n/` | `Localizer`, the `tr!` macro, which language to speak, the pseudo-locale, the library-text lookup and `lib.ftl`'s generator, the `--help` walker, clap's help layout and command-line errors in the user's language |
 | `logging.rs` | The logger both binaries install |

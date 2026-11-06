@@ -98,10 +98,12 @@ read-unreadable-frame = { $error } (skipped { $count } so far)
 read-link-lost = link to the meter lost ({ $error }); reconnecting, Ctrl+C ends the run
 # After "Note:". The link is back and the readings resume.
 read-reconnected = reconnected; readings resume
-# After "Warning:", at the start of a run given no --adapter. $count (2 or
-# more) USB cables the meter can use are plugged in, so a reconnect could
-# open another meter's: a dropped link ends this run instead.
-read-no-reconnect-several-cables = { $count } USB cables this meter can use are plugged in, so a dropped link ends the run. Start read with --adapter to reconnect to this one.
+# After "Warning:" and shared.ftl's several-cables: what lets a dropped link
+# reconnect. At the start of a run, or when a run waiting for its link gives up.
+read-several-cables-action = Start read again with only this meter's cable plugged in to reconnect.
+# After "Warning:" and shared.ftl's waiting-for-own-cable, once while the run
+# waits for a dropped link: how to use the other cable instead.
+read-own-cable-action = Press Ctrl+C and start read again to use the other cable.
 # After "Error:" (common.ftl), ending a --format replay run: a reading came
 # with no frame from the meter behind it, which a replay can't hold. $mode is
 # the reading's mode name (lib.ftl), e.g. DC V.

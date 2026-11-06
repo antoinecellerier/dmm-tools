@@ -301,11 +301,12 @@ one comparable series. Auto-range crossing a decade (mV → V, Ω → kΩ) carri
 them on, each figure in one of the ranges the meter showed.
 
 When the link to a meter drops — a cable pulled, a Bluetooth adapter switched
-off — the run waits for it and reopens the meter it first opened, even under
-auto-detect, carrying on into the same output; the integral leaves the gap
-out, and Ctrl+C ends the run meanwhile. `--no-reconnect` ends the run instead,
-as does a run started with several USB cables the meter can use plugged in and
-no `--adapter` naming its cable: a reconnect could open another meter.
+off — the run waits for it and reopens the meter it first opened on the same
+link, even under auto-detect, carrying on into the same output; the integral
+leaves the gap out, and Ctrl+C ends the run meanwhile. A USB cable with a serial
+number of its own comes back by it, so using a different cable takes a new run.
+`--no-reconnect` ends the run instead, as do several USB cables the meter can
+use that their serial numbers can't tell apart.
 
 **Examples:**
 

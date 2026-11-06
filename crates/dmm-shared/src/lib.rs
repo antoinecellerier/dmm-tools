@@ -19,7 +19,7 @@
 //! [`Localizer`](l10n::Localizer) and resources both speak; [`input`], why a
 //! typed number was refused; [`logging`], the log
 //! levels both start with; [`RECONNECT_INTERVAL`], how often both retry
-//! a lost link; and [`stat_figure`], how both write a figure of the
+//! a lost link, and [`reopen`], what it may come back on; and [`stat_figure`], how both write a figure of the
 //! statistics and the integral. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`, or from
@@ -38,6 +38,7 @@ pub mod help;
 pub mod input;
 pub mod l10n;
 pub mod logging;
+pub mod reopen;
 pub mod replay;
 
 use dmm_lib::stats::ShownDigits;

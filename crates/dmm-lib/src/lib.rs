@@ -486,9 +486,10 @@ pub fn devices_on_bridge(bridge: &str) -> Vec<&'static SelectableDevice> {
 }
 
 /// The kinds of cable ([`DeviceInfo::transport`]) an open of `device` with
-/// no adapter named may take, in the order it tries them.
-pub fn cable_kinds(device: &SelectableDevice) -> Vec<&'static str> {
-    open::cable_kinds(device.links)
+/// no adapter named may take, in the order it tries them: every kind for an
+/// open with no meter named.
+pub fn cable_kinds(device: Option<&SelectableDevice>) -> Vec<&'static str> {
+    open::cable_kinds(device.map_or(&[], |device| device.links))
 }
 
 /// Whether `device` is a hardware meter reachable over `bridge`: the test

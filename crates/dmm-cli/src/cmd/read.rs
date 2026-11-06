@@ -19,6 +19,7 @@ use dmm_lib::stream::{MeasurementStream, NO_RESPONSE_TIMEOUTS, StreamEvent};
 use dmm_lib::text::TextKind;
 use dmm_lib::transform::Transform;
 use dmm_shared::l10n::Localizer;
+use dmm_shared::reopen::{Attempt, ReopenPin, SeveralCables, listed_cables, reopen_pin};
 use dmm_shared::tr;
 use log::info;
 use std::borrow::Cow;
@@ -250,50 +251,31 @@ fn read_meter(
             },
         );
         // Reopened as the meter first opened, even under Auto-detect: the
-        // CSV layout and the file's name are that meter's. A Bluetooth link
-        // goes back to its own adapter, by address, as dmm-gui's does. A
-        // cable has nothing to pin it by — its path is renumbered on replug,
-        // and cables often share a serial or have none — so with several the
-        // open could take and no --adapter, a reopen could land on another
-        // meter's and write its readings on as this one's: no reconnect.
-        // Counted once, here: a count at the reopen would see only the other
-        // meter's cable while this one's is out, and let it through. A
-        // second cable plugged in mid-run goes unseen.
-        let adapter = opts
-            .adapter
-            .or(dmm.transport().bluetooth_selector())
-            .map(str::to_owned);
-        let mut reconnect = options.reconnect;
-        if reconnect && adapter.is_none() {
-            let kinds = dmm_lib::cable_kinds(device);
-            // A listing that fails counts none: the run reconnects as asked.
-            let cables = count_cables(&dmm_lib::list_devices().unwrap_or_default(), &kinds);
-            if cables > 1 {
-                reconnect = false;
-                eprintln!(
-                    "{} {}",
-                    warning_label(),
-                    tr!(
-                        crate::l10n::get(),
-                        "read-no-reconnect-several-cables",
-                        count = cables
-                    )
-                );
-            }
-        }
-        let reopen = reconnect.then(|| {
-            let bluetooth = opts.bluetooth;
-            Box::new(move || {
-                dmm_lib::open_device(
-                    device,
-                    dmm_lib::OpenOptions {
-                        adapter: adapter.as_deref(),
-                        bluetooth,
-                        stop: None,
-                    },
-                )
-            }) as Reopen<_>
+        // CSV layout and the file's name are that meter's. `reopen_pin` says
+        // on which link; chosen here, with this meter's cable still listed.
+        let pin = options.reconnect.then(|| {
+            reopen_pin(
+                Some(device),
+                opts.adapter,
+                opts.bluetooth,
+                link,
+                dmm.transport().bluetooth_selector(),
+                dmm.transport().cable_serial(),
+                listed_cables,
+            )
         });
+        let reopen = match pin {
+            Some(Ok(pin)) => Some(Reopen {
+                pin,
+                listed: Box::new(listed_cables),
+                open: Box::new(move |pin| dmm_lib::open_device(device, pin.options(None))),
+            }),
+            Some(Err(several)) => {
+                warn_several_cables(several);
+                None
+            }
+            None => None,
+        };
         info!("connected, starting measurement loop");
         run_read_loop(
             setup_ctrlc()?,
@@ -981,24 +963,44 @@ fn next_marker_number(numbers: impl Iterator<Item = u32>) -> u32 {
     numbers.max().map_or(1, |n| n + 1)
 }
 
-/// How many of the cables `listed` are of the `kinds` an open may take.
-fn count_cables(listed: &[dmm_lib::DeviceInfo], kinds: &[&str]) -> usize {
-    listed
-        .iter()
-        .filter(|cable| kinds.contains(&cable.transport))
-        .count()
+/// Say that a dropped link won't be reconnected, and what would let it.
+fn warn_several_cables(several: SeveralCables) {
+    let l = crate::l10n::get();
+    eprintln!(
+        "{} {} {}",
+        warning_label(),
+        l.help().several_cables(several),
+        tr!(l, "read-several-cables-action")
+    );
 }
 
-/// Opens a meter's link again after it drops.
-type Reopen<T> = Box<dyn Fn() -> dmm_lib::error::Result<dmm_lib::Dmm<T>>>;
+/// Opens a link as its pin says.
+type OpenPinned<D> = Box<dyn Fn(&ReopenPin) -> dmm_lib::error::Result<D>>;
+
+/// How a meter's link is opened again after it drops; `D` is the open meter.
+struct Reopen<D> {
+    pin: ReopenPin,
+    /// What is plugged in, for each attempt to look at.
+    listed: Box<dyn Fn() -> Vec<dmm_lib::DeviceInfo>>,
+    open: OpenPinned<D>,
+}
+
+/// How a wait for a lost link ended.
+#[derive(Debug, PartialEq)]
+enum Reconnect<D> {
+    Reopened(D),
+    /// Ctrl+C.
+    Stopped,
+    Refused(SeveralCables),
+}
 
 /// What a run on a real meter has that the mock and a recording don't.
 struct Meter<T: dmm_lib::transport::Transport> {
     /// The meter opened: a quiet one is shown its activation steps.
     device: &'static SelectableDevice,
-    /// Brings a lost link back; `None` with `--no-reconnect`, when a lost
-    /// link ends the run.
-    reopen: Option<Reopen<T>>,
+    /// Brings a lost link back; `None` with `--no-reconnect` or with several
+    /// cables that can't be told apart, when a lost link ends the run.
+    reopen: Option<Reopen<dmm_lib::Dmm<T>>>,
     /// The wait before each attempt to reopen the link.
     interval: Duration,
 }
@@ -1023,7 +1025,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     markers: Vec<dmm_lib::replay::ReplayMarker>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let count = options.count;
-    let (device, reopen) = match meter {
+    let (device, mut reopen) = match meter {
         Some(Meter {
             device,
             reopen,
@@ -1104,7 +1106,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 }
             }
             Err(e) => {
-                let Some((reopen, interval)) = &reopen else {
+                let Some((reopen, interval)) = &mut reopen else {
                     fatal = Some(e);
                     break;
                 };
@@ -1128,10 +1130,15 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 // after the reopen that would cut the link just brought back
                 // up on the same adapter.
                 drop(dmm);
-                let Some(reopened) = reconnect(reopen, &running, *interval) else {
-                    break;
+                dmm = match reconnect(reopen, &running, *interval) {
+                    Reconnect::Reopened(reopened) => reopened,
+                    Reconnect::Stopped => break,
+                    Reconnect::Refused(several) => {
+                        warn_several_cables(several);
+                        fatal = Some(e);
+                        break;
+                    }
                 };
-                dmm = reopened;
                 eprintln!("{} {}", note_label(), tr!(l, "read-reconnected"));
                 stream = stream_over(&mut dmm, tick, &running);
             }
@@ -1155,20 +1162,18 @@ fn stream_over<'a, T: dmm_lib::transport::Transport>(
 /// How often the wait between reconnect attempts looks at the Ctrl+C flag.
 const RECONNECT_POLL: Duration = Duration::from_millis(50);
 
-/// Call `reopen` every `interval` until it succeeds, or return `None` once
-/// Ctrl+C clears `running`. Every failure is retried, whatever its kind: an
-/// adapter that doesn't answer yet is what the wait is for.
-fn reconnect<D>(
-    reopen: impl Fn() -> dmm_lib::error::Result<D>,
-    running: &AtomicBool,
-    interval: Duration,
-) -> Option<D> {
+/// Open `reopen`'s link every `interval` until it succeeds, Ctrl+C clears
+/// `running`, or what is plugged in refuses it. Every failed open is retried,
+/// whatever its kind: an adapter that doesn't answer yet is what the wait is
+/// for.
+fn reconnect<D>(reopen: &mut Reopen<D>, running: &AtomicBool, interval: Duration) -> Reconnect<D> {
     let mut attempt: u32 = 0;
+    let mut told_waiting = false;
     loop {
         let until = Instant::now() + interval;
         loop {
             if !running.load(Ordering::SeqCst) {
-                return None;
+                return Reconnect::Stopped;
             }
             let left = until.saturating_duration_since(Instant::now());
             if left.is_zero() {
@@ -1177,12 +1182,32 @@ fn reconnect<D>(
             std::thread::sleep(left.min(RECONNECT_POLL));
         }
         attempt = attempt.saturating_add(1);
-        match reopen() {
+        match reopen.pin.check(&reopen.listed) {
+            Attempt::Open => {}
+            Attempt::Hold => continue,
+            Attempt::WaitForOwnCable => {
+                if !std::mem::replace(&mut told_waiting, true) {
+                    let l = crate::l10n::get();
+                    eprintln!(
+                        "{} {} {}",
+                        warning_label(),
+                        l.help().waiting_for_own_cable(),
+                        tr!(l, "read-own-cable-action")
+                    );
+                }
+                continue;
+            }
+            Attempt::Refuse(several) => return Reconnect::Refused(several),
+        }
+        match (reopen.open)(&reopen.pin) {
             Ok(reopened) => {
                 info!("reconnected on attempt {attempt}");
-                return Some(reopened);
+                return Reconnect::Reopened(reopened);
             }
-            Err(e) => log::warn!("reconnect attempt {attempt} failed: {e}"),
+            Err(e) => {
+                let e = reopen.pin.open_error(e);
+                log::warn!("reconnect attempt {attempt} failed: {e}");
+            }
         }
     }
 }
@@ -1286,17 +1311,6 @@ mod tests {
             transport,
             not_heard: false,
         }
-    }
-
-    /// The cables counted are every kind the open falls back to, not only
-    /// the meter's own: a UT61E+ opens on another meter's CH9329 too, but
-    /// not on a Brymen BU-86X.
-    #[test]
-    fn the_cables_counted_are_the_ones_the_open_may_take() {
-        let kinds = dmm_lib::cable_kinds(registry::find_device("ut61eplus").unwrap());
-        assert_eq!(count_cables(&[cable("CP2110")], &kinds), 1);
-        assert_eq!(count_cables(&[cable("CP2110"), cable("BU-86X")], &kinds), 1);
-        assert_eq!(count_cables(&[cable("CP2110"), cable("CH9329")], &kinds), 2);
     }
 
     /// `max` is a clock that waits for nothing: an hour slept is an hour of
@@ -1447,36 +1461,88 @@ mod tests {
         );
     }
 
+    /// A reopen with nothing pinned and nothing listed, opening with `open`.
+    fn reopen_with<D>(open: impl Fn() -> dmm_lib::error::Result<D> + 'static) -> Reopen<D> {
+        Reopen {
+            pin: reopen_pin(None, None, true, None, None, None, Vec::new).unwrap(),
+            listed: Box::new(Vec::new),
+            open: Box::new(move |_| open()),
+        }
+    }
+
     /// A lost link is retried until it opens, each failure whatever its kind.
     #[test]
     fn a_lost_link_is_retried_until_it_opens() {
         let attempts = std::cell::Cell::new(0);
         let running = AtomicBool::new(true);
-        let reopened = reconnect(
-            || {
-                attempts.set(attempts.get() + 1);
-                match attempts.get() {
-                    1 => Err(dmm_lib::error::Error::Timeout),
-                    2 => Err(dmm_lib::error::Error::AdapterNotFound("gone".into())),
-                    n => Ok(n),
-                }
-            },
-            &running,
-            Duration::from_millis(1),
-        );
-        assert_eq!(reopened, Some(3));
+        let mut reopen = reopen_with(move || {
+            attempts.set(attempts.get() + 1);
+            match attempts.get() {
+                1 => Err(dmm_lib::error::Error::Timeout),
+                2 => Err(dmm_lib::error::Error::AdapterNotFound("gone".into())),
+                n => Ok(n),
+            }
+        });
+        let reopened = reconnect(&mut reopen, &running, Duration::from_millis(1));
+        assert_eq!(reopened, Reconnect::Reopened(3));
     }
 
     /// Ctrl+C ends the wait for a link that never comes back.
     #[test]
     fn ctrl_c_ends_the_wait_for_a_link() {
         let running = AtomicBool::new(false);
-        let reopened = reconnect(
-            || -> dmm_lib::error::Result<()> { panic!("no attempt after Ctrl+C") },
-            &running,
-            Duration::from_millis(1),
-        );
-        assert_eq!(reopened, None);
+        let mut reopen =
+            reopen_with(|| -> dmm_lib::error::Result<()> { panic!("no attempt after Ctrl+C") });
+        let reopened = reconnect(&mut reopen, &running, Duration::from_millis(1));
+        assert_eq!(reopened, Reconnect::Stopped);
+    }
+
+    /// A second cable found while waiting holds the attempt back, and in a
+    /// row ends the wait, with nothing opened that could be the other meter.
+    #[test]
+    fn several_cables_at_the_reopen_refuse_it_without_opening() {
+        let running = AtomicBool::new(true);
+        let mut reopen = reopen_with(|| -> dmm_lib::error::Result<()> {
+            panic!("no open with several cables listed")
+        });
+        reopen.listed = Box::new(|| vec![cable("CP2110"), cable("CH9329")]);
+        let reopened = reconnect(&mut reopen, &running, Duration::from_millis(1));
+        assert_eq!(reopened, Reconnect::Refused(SeveralCables { count: 2 }));
+    }
+
+    /// With its own cable gone and another plugged in, the wait opens nothing
+    /// and goes on until its serial is back.
+    #[test]
+    fn a_pinned_run_waits_for_its_own_cable() {
+        let serial = |transport, serial: &str| dmm_lib::DeviceInfo {
+            serial: Some(serial.to_owned()),
+            ..cable(transport)
+        };
+        let listings = std::cell::Cell::new(0);
+        let running = AtomicBool::new(true);
+        let pin = reopen_pin(
+            None,
+            None,
+            true,
+            Some(dmm_lib::transport::Link::UsbCable),
+            None,
+            Some("OURS"),
+            || vec![serial("CP2110", "OURS")],
+        )
+        .unwrap();
+        let mut reopen = Reopen {
+            pin,
+            listed: Box::new(move || {
+                listings.set(listings.get() + 1);
+                match listings.get() {
+                    1 | 2 => vec![serial("CH9329", "OTHER")],
+                    _ => vec![serial("CP2110", "OURS")],
+                }
+            }),
+            open: Box::new(|pin| Ok(pin.options(None).adapter.map(str::to_owned))),
+        };
+        let reopened = reconnect(&mut reopen, &running, Duration::from_millis(1));
+        assert_eq!(reopened, Reconnect::Reopened(Some("OURS".to_owned())));
     }
 
     /// A UT61E+ link that answers with its frames, then fails as a pulled
@@ -1538,7 +1604,7 @@ mod tests {
         dmm: dmm_lib::Dmm<Unplugs>,
         count: usize,
         running: Arc<AtomicBool>,
-        reopen: Reopen<Unplugs>,
+        reopen: Reopen<dmm_lib::Dmm<Unplugs>>,
     ) -> String {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("readings.csv");
@@ -1585,7 +1651,7 @@ mod tests {
         let first_dropped = Arc::new(AtomicBool::new(false));
         let dmm = unplugging_meter(1, &first_dropped).unwrap();
         let reopens = std::rc::Rc::new(std::cell::Cell::new(0));
-        let reopen: Reopen<Unplugs> = Box::new({
+        let reopen = reopen_with({
             let first_dropped = Arc::clone(&first_dropped);
             let reopens = std::rc::Rc::clone(&reopens);
             move || {
@@ -1609,7 +1675,7 @@ mod tests {
     fn ctrl_c_while_the_link_is_down_ends_the_run_cleanly() {
         let dmm = unplugging_meter(1, &Arc::new(AtomicBool::new(false))).unwrap();
         let running = Arc::new(AtomicBool::new(true));
-        let reopen: Reopen<Unplugs> = Box::new({
+        let reopen = reopen_with({
             let running = Arc::clone(&running);
             move || {
                 running.store(false, Ordering::SeqCst);
