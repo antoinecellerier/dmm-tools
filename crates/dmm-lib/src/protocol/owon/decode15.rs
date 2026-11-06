@@ -252,7 +252,7 @@ fn unit_of(function: Option<&Function>, prefix: u8) -> &'static str {
     match function.map(|f| &f.unit) {
         Some(Unit::Prefixed(units)) => units[usize::from(prefix)],
         Some(Unit::Bare(unit)) => unit,
-        Some(Unit::Unknown) | None => "",
+        None => "",
     }
 }
 

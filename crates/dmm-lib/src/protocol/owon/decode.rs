@@ -53,8 +53,6 @@ pub(super) enum Unit {
     /// With none: OWON's app forces prefix code 4 and leaves it out
     /// (spec §6.3), so any other code is reported.
     Bare(&'static str),
-    /// A function no spec section covers, already reported.
-    Unknown,
 }
 
 /// The strings `unit` can be, for [`crate::protocol::all_units`].
@@ -65,7 +63,6 @@ pub(super) fn add_units(unit: &Unit, out: &mut crate::protocol::Units) {
         Unit::Bare(unit) => {
             out.insert(unit);
         }
-        Unit::Unknown => {}
     }
 }
 
@@ -165,21 +162,17 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
     let code = ((gear >> 6) & 0x0F) as u8;
 
     let (mode, unit) = match function_of(code, model) {
-        Some((mode, unit)) => (Cow::Borrowed(mode), unit),
-        None => {
-            report("function code");
-            (unknown_mode(code), Unit::Unknown)
-        }
-    };
-    let unit = match unit {
-        Unit::Prefixed(units) => units[usize::from(prefix)],
-        Unit::Bare(unit) => {
+        Some((mode, Unit::Prefixed(units))) => (Cow::Borrowed(mode), units[usize::from(prefix)]),
+        Some((mode, Unit::Bare(unit))) => {
             if prefix != NO_PREFIX {
                 report("prefix");
             }
-            unit
+            (Cow::Borrowed(mode), unit)
         }
-        Unit::Unknown => "",
+        None => {
+            report("function code");
+            (unknown_mode(code), "")
+        }
     };
 
     // Status word (spec §6.6).
