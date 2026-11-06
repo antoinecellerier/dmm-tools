@@ -13,11 +13,15 @@
 //! whose `--help` and reference the tables describe. The table is repository
 //! markdown, not terminal help, so it is rendered here rather than in
 //! `dmm_shared::help`; the tags come from there, shared with `--help`.
+//!
+//! The reference's `dmm-cli command` tables stay hand-written, as their
+//! descriptions are, and are only checked against what each family advertises.
 
 mod common;
 
 use common::{repo_root, unified_diff};
 use dmm_lib::protocol::{DeviceFamily, registry};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 const START: &str = "<!-- devices:start -->";
@@ -237,4 +241,76 @@ fn cli_reference_description_links_every_command_section() {
         .filter_map(|rest| rest.split(')').next())
         .collect();
     assert_eq!(linked, sections);
+}
+
+/// The heading of the `dmm-cli command` table that lists `family`'s commands;
+/// `None` for a family that takes none, and for the mock, whose commands are
+/// the meter's it stands in for.
+fn command_table(family: DeviceFamily) -> Option<&'static str> {
+    match family {
+        DeviceFamily::Ut61EPlus => Some("UT61E+ commands"),
+        DeviceFamily::Ut181a => Some("UT181A commands"),
+        DeviceFamily::Ut171 => Some("UT171 commands"),
+        DeviceFamily::Vc880 | DeviceFamily::Vc890 => Some("VC-880 / VC650BT / VC-890 commands"),
+        DeviceFamily::Zotek => Some("ZOTEK commands"),
+        DeviceFamily::Eevblog121gw => Some("EEVblog 121GW commands"),
+        DeviceFamily::Owon => Some("OWON and Voltcraft VC871 / VC891 / VC915 / VC925 PV commands"),
+        DeviceFamily::Ut8802
+        | DeviceFamily::Ut8803
+        | DeviceFamily::Ut80x
+        | DeviceFamily::Bm78xbt
+        | DeviceFamily::Bm86x
+        | DeviceFamily::Bm82x
+        | DeviceFamily::Bm52x
+        | DeviceFamily::Mock => None,
+    }
+}
+
+/// Each `#### ... commands` table of the `dmm-cli command` section, by heading:
+/// the words in its first column.
+fn documented_commands(reference: &str) -> BTreeMap<&str, BTreeSet<&str>> {
+    let section = reference
+        .split("### dmm-cli command\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n### ").next())
+        .expect("the `dmm-cli command` section");
+    let mut tables: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    let mut heading = None;
+    for line in section.lines() {
+        if let Some(title) = line.strip_prefix("#### ") {
+            heading = title.ends_with(" commands").then_some(title);
+        } else if let Some(title) = heading
+            && let Some(row) = line.strip_prefix("| `")
+            && let Some((word, _)) = row.split_once('`')
+        {
+            tables.entry(title).or_default().insert(word);
+        }
+    }
+    tables
+}
+
+/// Each family's table lists what its models advertise, together, and a family
+/// with no table advertises nothing, so a command added to a profile can't go
+/// undocumented and a table can't name one nobody takes.
+#[test]
+fn cli_reference_command_tables_match_the_profiles() {
+    let text = std::fs::read_to_string(repo_root().join("docs/cli-reference.md")).unwrap();
+    let mut advertised: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    for device in registry::DEVICES {
+        let protocol = (device.new_protocol)();
+        let commands = protocol.profile().supported_commands;
+        match command_table(device.family) {
+            Some(heading) => advertised
+                .entry(heading)
+                .or_default()
+                .extend(commands.iter().copied()),
+            None if device.family == DeviceFamily::Mock => {}
+            None => assert!(
+                commands.is_empty(),
+                "{} advertises {commands:?} but its family has no table",
+                device.id
+            ),
+        }
+    }
+    assert_eq!(documented_commands(&text), advertised);
 }
