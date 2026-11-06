@@ -81,10 +81,6 @@ remote-range =
 # AUTO: the meter picks its range itself again.
 remote-auto =
     .hover = Voltar o multímetro à faixa automática
-# MIN/MAX: a click steps through the meter's minimum, maximum and average
-# readings; the small × button beside it while it is on leaves the mode.
-remote-min-max =
-    .hover = Registrar as leituras mínima, máxima e média: clique para alternar entre elas, × para sair
 # PEAK: the same for the fastest peaks the meter catches.
 remote-peak =
     .hover = Capturar os picos mínimo e máximo: clique para alternar entre eles, × para sair

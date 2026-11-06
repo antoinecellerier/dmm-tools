@@ -64,7 +64,7 @@ auto range / auto-ranging	オートレンジ	n.	reading-spoken-auto-range, remot
 manual range	マニュアルレンジ	n.	settings-switched [range], remote-range	Sanwa CD800a JP PDF p.1 “オートレンジあるいはマニュアルレンジ”; Sanwa PC773 JP PDF p.10	Fluke writes «手動レンジ» (289 JP PDF p.23).
 range	レンジ	n.	reading-range, range menu, CLI settings, errors	Sanwa CD772 JP PDF p.24 “レンジ切り換え オート及びマニュアル”; KEW1062 JP PDF p.24; Fluke 289 JP PDF p.18 “レンジ表示”	"Every maker says «レンジ». MS-T range => 範囲 is the generic sense: keep «範囲» for value ranges (""Y axis 0 to 5"")."
 RANGE (key)	RANGE	—	remote-range hover, errors	KEW1062 JP PDF p.24 “RANGE キーを 1 秒以上押して”; Sanwa CD800a JP PDF p.1 “RANGE ボタンを押すと”	Keep.
-MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	Sanwa CD800a JP PDF p.1 “MAX/MIN ボタン”; KEW1062 JP PDF p.24 “表示部に“MIN” “MAX” “AVG”が表示されます”	Keep.
+MIN/MAX	MIN/MAX	—	flags, remote-min-max-exit, CLI minmax	Sanwa CD800a JP PDF p.1 “MAX/MIN ボタン”; KEW1062 JP PDF p.24 “表示部に“MIN” “MAX” “AVG”が表示されます”	Keep.
 minimum / maximum (spoken)	最小値 / 最大値	n.	reading-spoken-min/max, stats	Sanwa PC7000 JP PDF p.2 “4-12 最大値 / 最小値 / 平均値レコード機能”; KEW1062 JP PDF p.9	
 AVG (flag) / average	AVG / 平均値	n.	flag-avg, reading-spoken-avg, aux-average	Sanwa PC7000 JP PDF p.2; Fluke 80V JP PDF p.8 “AVG （平均）”	Keep AVG on the display; spoken «平均値».
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	KEW1062 JP PDF p.22 “SELECT (PRINT)キー”; Sanwa PM3 JP PDF p.1 “SELECT（セレクト）スイッチ”	Keep.

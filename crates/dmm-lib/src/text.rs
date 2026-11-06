@@ -205,6 +205,9 @@ mod list {
                     out.add(TextKind::KeyHover, hover, id);
                 }
             }
+            for hover in keys.button_labels.iter().filter_map(|button| button.hover) {
+                out.add(TextKind::KeyHover, hover, id);
+            }
             for table in protocol.spec_sheet() {
                 out.add(TextKind::Table, table.name, id);
                 let mode = table.mode;

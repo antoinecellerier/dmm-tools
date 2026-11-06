@@ -397,14 +397,20 @@ impl Eq for MeterKey {}
 /// words where a source gives them (`MODE` for SELECT), and naming a state
 /// the generic word would hide (`AVG`). It names nothing a command can't reach:
 /// `SHIFT` for a key printed SHIFT/SETUP whose long press has no command. A
-/// model no source covers has none.
+/// model no source covers has none. The generic MAX/MIN is one to replace on a
+/// meter that prints or steps MIN first.
 /// Shown as written in every language, as the generic words are.
+///
+/// The same goes for the tooltip, where the generic one isn't true of this
+/// model: that one is translated, as [`crate::text::TextKind::KeyHover`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ButtonLabel {
     /// The shared button; always one of the profile's `supported_commands`.
     pub command: &'static str,
-    /// What the button shows.
-    pub label: &'static str,
+    /// What the button shows; `None` for the generic word.
+    pub label: Option<&'static str>,
+    /// What its tooltip says; `None` for the generic one.
+    pub hover: Option<&'static str>,
 }
 
 /// What a family lists for a GUI to draw by data rather than by command name:
@@ -435,7 +441,16 @@ impl MeterKeys {
         self.button_labels
             .iter()
             .find(|button| button.command == command)
-            .map(|button| button.label)
+            .and_then(|button| button.label)
+    }
+
+    /// What this model's tooltip says of the shared button `command`, when
+    /// the generic one isn't true of it.
+    pub fn button_hover(&self, command: &str) -> Option<&'static str> {
+        self.button_labels
+            .iter()
+            .find(|button| button.command == command)
+            .and_then(|button| button.hover)
     }
 }
 

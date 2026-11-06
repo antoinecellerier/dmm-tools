@@ -64,7 +64,7 @@ auto range / auto-ranging	自动量程	n.	reading-spoken-auto-range, remote-auto
 manual range	手动量程	n.	settings-switched [range], remote-range	UT61E+ CN PDF p.7R (p.12) “短按进入手动量程切换”; UT8805A CN PDF p.17	
 range	量程	n.	reading-range, range menu, CLI settings, errors	UT61E+ CN PDF p.15R (p.28) table header “量程”; UT8805A CN PDF p.17 “量程的选择有自动和手动两种方式”	Every manual agrees. MS-T range => 范围 is the generic sense: use «范围» only for ranges that are not the meter's (time, Bluetooth reach).
 RANGE (key)	RANGE	—	remote-range hover, errors	UT71 CN PDF p.11 “RANGE 量程切换键”; UT61E+ CN PDF p.7R (p.12)	Keep.
-MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	UT181A CN PDF p.8 (p.4) “开始 MIN MAX (最小值最大值) 记录”	Keep.
+MIN/MAX	MIN/MAX	—	flags, remote-min-max-exit, CLI minmax	UT181A CN PDF p.8 (p.4) “开始 MIN MAX (最小值最大值) 记录”	Keep.
 minimum / maximum (spoken)	最小值 / 最大值	n.	reading-spoken-min/max, stats	UT181A CN PDF p.22 (p.18) “16.最大值最小值”; UT8805A CN PDF p.42	MS-SG p.7 «上限/下限» is for limits, not for statistics.
 AVG (flag) / average	AVG / 平均值	n.	flag-avg, reading-spoken-avg, aux-average	UT171 CN PDF p.5R (p.6) “MIN/AVG/MAX 最小值/平均值/最大值测量提示符”	Keep AVG on the display; spoken «平均值».
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	UT61E+ CN PDF p.8L (p.13) “短按 SELECT 键”	Keep; «SELECT 键», no quotes (STYLE §7).

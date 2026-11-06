@@ -103,11 +103,13 @@ fn key_frame(code: u8) -> [u8; 5] {
 const BUTTON_LABELS: [ButtonLabel; 2] = [
     ButtonLabel {
         command: command::MINMAX,
-        label: "MIN/MAX/AVG",
+        label: Some("MIN/MAX/AVG"),
+        hover: Some("Record minimum, maximum, and average readings — click to cycle, × to exit"),
     },
     ButtonLabel {
         command: command::SELECT,
-        label: "MODE",
+        label: Some("MODE"),
+        hover: None,
     },
 ];
 

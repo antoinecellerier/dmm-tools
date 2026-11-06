@@ -81,10 +81,6 @@ remote-range =
 # AUTO: the meter picks its range itself again.
 remote-auto =
     .hover = 让万用表恢复自动量程
-# MIN/MAX: a click steps through the meter's minimum, maximum and average
-# readings; the small × button beside it while it is on leaves the mode.
-remote-min-max =
-    .hover = 记录最小值、最大值和平均值: 单击循环切换，单击 × 退出
 # PEAK: the same for the fastest peaks the meter catches.
 remote-peak =
     .hover = 捕捉峰值最小值和峰值最大值: 单击循环切换，单击 × 退出

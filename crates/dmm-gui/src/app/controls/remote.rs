@@ -10,9 +10,8 @@ use crate::a11y::ResponseA11yExt;
 
 use crate::app::App;
 
-/// A context key's tooltip: like every remote button's, it promises a press
-/// and nothing more — the key's own words when the meter has no key of that
-/// name to press.
+/// A context key's tooltip: a press of the key, or the key's own words when
+/// that wouldn't be true.
 fn context_key_hover(l10n: &Localizer, key: &dmm_lib::protocol::MeterKey) -> String {
     match key.hover {
         Some(hover) => l10n.label(TextKind::KeyHover, hover).into_owned(),
@@ -22,6 +21,38 @@ fn context_key_hover(l10n: &Localizer, key: &dmm_lib::protocol::MeterKey) -> Str
             key = l10n.label(TextKind::Key, key.label)
         )
         .into_owned(),
+    }
+}
+
+/// A shared button's tooltip: the model's own where the generic one isn't true
+/// of it.
+fn shared_hover<'a>(
+    l10n: &'a Localizer,
+    keys: &dmm_lib::protocol::MeterKeys,
+    command: &str,
+    generic: Cow<'a, str>,
+) -> Cow<'a, str> {
+    match keys.button_hover(command) {
+        Some(hover) => l10n.label(TextKind::KeyHover, hover),
+        None => generic,
+    }
+}
+
+/// MAX/MIN's generic tooltip: it promises the × only on a model that has one.
+fn min_max_hover(l10n: &Localizer, has_exit: bool) -> Cow<'_, str> {
+    if has_exit {
+        tr!(l10n, "remote-min-max-exit.hover")
+    } else {
+        tr!(l10n, "remote-min-max-no-exit.hover")
+    }
+}
+
+/// PEAK's generic tooltip, as [`min_max_hover`]'s.
+fn peak_hover(l10n: &Localizer, has_exit: bool) -> Cow<'_, str> {
+    if has_exit {
+        tr!(l10n, "remote-peak.hover")
+    } else {
+        tr!(l10n, "remote-peak-no-exit.hover")
     }
 }
 
@@ -287,8 +318,8 @@ impl App {
             let peak = flags.is_some_and(|f| f.peak_min || f.peak_max);
 
             // Simple toggle commands: label, active flag, command, tooltip.
-            // Tooltips are phrased to be device-agnostic — they describe
-            // the generic DMM behavior, not model-specific details.
+            // A tooltip here describes the generic DMM behavior; a model it
+            // isn't true of says so in its `ButtonLabel`.
             for (label, active, cmd, tooltip) in [
                 ("HOLD", hold, command::HOLD, tr!(l10n, "remote-hold.hover")),
                 ("REL", rel, command::REL, tr!(l10n, "remote-rel.hover")),
@@ -310,31 +341,31 @@ impl App {
                     RichText::new(shown(cmd, label)).font(egui::FontId::proportional(font_size));
                 let resp = ui
                     .add(egui::Button::new(text).selected(active))
-                    .on_hover_text(tooltip);
+                    .on_hover_text(shared_hover(l10n, &keys, cmd, tooltip));
                 placed = true;
                 if resp.clicked() {
                     self.send_command(cmd);
                 }
             }
 
-            // MAX/MIN and Peak: clicking always cycles (never exits), matching
-            // the real device's short-press behavior. An "x" joined to the
-            // button exits the mode (like the real device's long-press). MAX
-            // comes first, as on the meters with no label of their own.
+            // MAX/MIN and Peak: a click sends the key's short press, which
+            // cycles on most meters and never exits there. An "x" joined to
+            // the button exits the mode (like the real device's long-press).
+            // MAX comes first, as on the meters with no label of their own.
             for (label, active, cycle_cmd, exit_cmd, tooltip) in [
                 (
                     "MAX/MIN",
                     min_max,
                     command::MINMAX,
                     command::EXIT_MINMAX,
-                    tr!(l10n, "remote-min-max.hover"),
+                    min_max_hover(l10n, has_cmd(command::EXIT_MINMAX)),
                 ),
                 (
                     "PEAK",
                     peak,
                     command::PEAK,
                     command::EXIT_PEAK,
-                    tr!(l10n, "remote-peak.hover"),
+                    peak_hover(l10n, has_cmd(command::EXIT_PEAK)),
                 ),
             ] {
                 if !has_cmd(cycle_cmd) {
@@ -368,7 +399,7 @@ impl App {
                             .selected(active)
                             .corner_radius(body_radius),
                     )
-                    .on_hover_text(tooltip);
+                    .on_hover_text(shared_hover(l10n, &keys, cycle_cmd, tooltip));
                 placed = true;
                 if resp.clicked() {
                     self.send_command(cycle_cmd);
@@ -426,7 +457,7 @@ impl App {
                     RichText::new(shown(cmd, label)).font(egui::FontId::proportional(font_size));
                 if ui
                     .add(egui::Button::new(text))
-                    .on_hover_text(tooltip)
+                    .on_hover_text(shared_hover(l10n, &keys, cmd, tooltip))
                     .clicked()
                 {
                     self.send_command(cmd);
@@ -864,6 +895,40 @@ mod tests {
             super::context_key_hover(&crate::l10n::english(), &keys.context[0]),
             "Save the reading to the meter's memory"
         );
+    }
+
+    /// A tooltip promises the × only where the model has one, and the average
+    /// only where the meter reports one: on every model, its own words or not.
+    #[test]
+    fn a_hover_promises_only_what_the_model_does() {
+        let l10n = crate::l10n::english();
+        type Generic = for<'a> fn(&'a Localizer, bool) -> Cow<'a, str>;
+        let rows: [(&str, &str, Generic); 2] = [
+            (command::MINMAX, command::EXIT_MINMAX, min_max_hover),
+            (command::PEAK, command::EXIT_PEAK, peak_hover),
+        ];
+        for device in registry::DEVICES {
+            let protocol = (device.new_protocol)();
+            let profile = protocol.profile();
+            let has = |command: &str| profile.supported_commands.contains(&command);
+            for (cycle, exit, generic) in rows {
+                if !has(cycle) {
+                    continue;
+                }
+                let hover =
+                    shared_hover(&l10n, &profile.meter_keys, cycle, generic(&l10n, has(exit)));
+                assert_eq!(hover.contains('×'), has(exit), "{}: {hover}", device.id);
+            }
+        }
+        let hover = |id: &str| {
+            let keys = connected_to(id).connection.meter_keys();
+            shared_hover(&l10n, &keys, command::MINMAX, min_max_hover(&l10n, true)).into_owned()
+        };
+        assert!(!hover("ut61eplus").contains("average"));
+        assert!(hover("vc880").contains("average"));
+        assert!(hover("121gw").contains("average"));
+        assert!(hover("ut181a").contains("average"));
+        assert!(!hover("ut181a").contains("cycle"));
     }
 
     /// A context key's tooltip names the key to press, or says how the

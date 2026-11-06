@@ -485,6 +485,12 @@ key-hover-press-the-meter-s-hz-duty = Press the meter's Hz/Duty△/ᛒ key brief
 # Used by: CM2100B
 key-hover-press-the-meter-s-zero-key = Press the meter's ZERO/ᛒ key briefly
 # Used by: UT181A
+key-hover-record-maximum-average-and-minimum-readings = Record maximum, average and minimum readings — × to exit
+# Used by: VC-880, VC-890, VC650BT
+key-hover-record-maximum-minimum-and-average-readings = Record maximum, minimum, and average readings — click to cycle, × to exit
+# Used by: 121GW
+key-hover-record-minimum-maximum-and-average-readings = Record minimum, maximum, and average readings — click to cycle, × to exit
+# Used by: UT181A
 key-hover-save-the-reading-to-the-meter = Save the reading to the meter's memory
 
 ## Model names with words in them: the simulated meters. Keep the part

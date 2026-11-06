@@ -85,11 +85,13 @@ pub(crate) const MAX_MIN_AVG_BUTTON_NAME: &str = "MAX/MIN/AVG";
 pub(crate) const BUTTON_LABELS: &[ButtonLabel] = &[
     ButtonLabel {
         command: cmd::MINMAX,
-        label: MAX_MIN_AVG_BUTTON_NAME,
+        label: Some(MAX_MIN_AVG_BUTTON_NAME),
+        hover: Some("Record maximum, minimum, and average readings — click to cycle, × to exit"),
     },
     ButtonLabel {
         command: cmd::SELECT,
-        label: SHIFT_BUTTON_NAME,
+        label: Some(SHIFT_BUTTON_NAME),
+        hover: None,
     },
 ];
 

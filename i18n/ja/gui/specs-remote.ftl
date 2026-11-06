@@ -81,10 +81,6 @@ remote-range =
 # AUTO: the meter picks its range itself again.
 remote-auto =
     .hover = マルチメーターをオートレンジに戻す
-# MIN/MAX: a click steps through the meter's minimum, maximum and average
-# readings; the small × button beside it while it is on leaves the mode.
-remote-min-max =
-    .hover = 最小値、最大値、平均値を記録する (クリックで切り替え、× で終了)
 # PEAK: the same for the fastest peaks the meter catches.
 remote-peak =
     .hover = ピーク最小値とピーク最大値を取得する (クリックで切り替え、× で終了)

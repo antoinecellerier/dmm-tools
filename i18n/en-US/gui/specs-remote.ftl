@@ -81,13 +81,19 @@ remote-range =
 # AUTO: the meter picks its range itself again.
 remote-auto =
     .hover = Return the meter to auto-range
-# MAX/MIN: a click steps through the meter's minimum, maximum and average
-# readings; the small × button beside it while it is on leaves the mode.
-remote-min-max =
-    .hover = Record minimum, maximum, and average readings — click to cycle, × to exit
+# MAX/MIN: a click steps between the meter's highest and lowest readings; the
+# small × button beside it while it is on leaves the mode.
+remote-min-max-exit =
+    .hover = Record maximum and minimum readings — click to cycle, × to exit
+# The same on a meter with no × beside the button.
+remote-min-max-no-exit =
+    .hover = Record maximum and minimum readings — click to cycle
 # PEAK: the same for the fastest peaks the meter catches.
 remote-peak =
     .hover = Capture peak minimum and maximum — click to cycle, × to exit
+# PEAK on a meter with no × beside the button.
+remote-peak-no-exit =
+    .hover = Capture peak readings
 # The small × button after MAX/MIN or PEAK while that mode is on: it leaves
 # the mode. $mode is the name on the button beside it, such as MAX/MIN,
 # MIN/MAX/AVG or PEAK. The hover, and its name for a screen reader.

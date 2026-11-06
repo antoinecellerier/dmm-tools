@@ -9,7 +9,7 @@ use crate::error::{Rejected, Result, Sent, Unsupported};
 use crate::protocol::cycle::{self, FlagSetting};
 use crate::protocol::framing::{self, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
-use crate::protocol::{MeterKey, MeterKeys, Protocol, command, unsupported_setting};
+use crate::protocol::{ButtonLabel, MeterKey, MeterKeys, Protocol, command, unsupported_setting};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
@@ -38,8 +38,17 @@ static SAVE: MeterKey = MeterKey {
     applies: |_| true,
 };
 
+/// SET_MIN_MAX enters and leaves, and shows maximum, average and minimum
+/// together (manual p.56): there is no state to cycle to.
+static MIN_MAX: ButtonLabel = ButtonLabel {
+    command: command::MINMAX,
+    label: None,
+    hover: Some("Record maximum, average and minimum readings — × to exit"),
+};
+
 pub(super) const METER_KEYS: MeterKeys = MeterKeys {
     context: std::slice::from_ref(&SAVE),
+    button_labels: std::slice::from_ref(&MIN_MAX),
     ..MeterKeys::NONE
 };
 

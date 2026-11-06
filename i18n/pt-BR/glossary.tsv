@@ -64,7 +64,7 @@ auto range / auto-ranging	faixa automática	s. f.	reading-spoken-auto-range, rem
 manual range	faixa manual	s. f.	settings-switched [range], remote-range	Minipa ET-1649BT PDF p.12 «modo de faixa manual»	
 range	faixa	s. f.	reading-range, range menu, CLI settings, errors	Minipa ET-1649BT PDF p.24 table heading «Faixa»; PDF p.6 «a função e a faixa apropriados»	MS-T gives «intervalo» (a data range) and «alcance» (radio range); for the meter's range only «faixa». Glossary entry is «faixa», not «faixa de medição»: Minipa uses the bare word throughout.
 RANGE (key)	RANGE	—	remote-range hover, errors	Minipa ET-1649BT PDF p.14 «pressione a tecla “RANGE”»	
-MIN/MAX	MIN/MAX	—	flags, remote-min-max, CLI minmax	Minipa ET-2587 PDF p.8 «Botão MIN/MAX»	
+MIN/MAX	MIN/MAX	—	flags, remote-min-max-exit, CLI minmax	Minipa ET-2587 PDF p.8 «Botão MIN/MAX»	
 minimum / maximum (spoken)	mínimo / máximo	s. m.	reading-spoken-min/max, stats	Minipa ET-2990 PDF p.23 «MAXIMUM (máximo), MINIMUM (mínimo)»	
 AVG (flag) / average	AVG / média	s. f.	flag-avg, reading-spoken-avg, aux-average	Minipa ET-2517A/2615A PDF p.13 «A leitura AVG* (Média)»; Minipa ET-2990 PDF p.23 «AVERAGE (média)»	
 SELECT / SEL (key)	SELECT / SEL	—	remote-select, activation steps, notes	Minipa ET-1649BT PDF p.13 «tecla “SEL”»; PDF p.20 «Pressione brevemente “SELECT”»	
