@@ -264,10 +264,9 @@ and each still wants a capture of our own.
 - Whether a meter streams and keeps its clock with no `#TIMEsync` written
   (§10.8) — decides whether a client may skip it. Needs an OW67B/69B or a
   VC871/891/915/925.
-- What main function 15 names in the CMS's scope mode, read as VA while a
-  UT217A showed A ([§9.4](reverse-engineered-protocol.md#94-the-15-byte-meters))
-  — decides the scope readings' unit. Needs `scope` from DC V on a battery
-  and from AC A, the LCD noted, on a CMS101 or CMS061.
+- Whether a CMS's scope frames carry a reading: 0 so far, at LCD readings up to 00.1 A ([§9.4](reverse-engineered-protocol.md#94-the-15-byte-meters)) — decides
+  the no reading shown, and whether the sub word carries Freq; a number is reported as
+  unrecognised. Needs `scope` on a DC source and a clamped AC current, Rms and Freq noted.
 - Which of Min, Max and Avg the CMS's MaxMin sends as its sub-value (§9.4;
   39.36 V beside a live 39.30 V on a UT217A) — decides the sub-value's
   label. Needs `maxmin` with the three values on the LCD noted.

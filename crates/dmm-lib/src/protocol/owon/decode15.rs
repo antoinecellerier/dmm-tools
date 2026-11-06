@@ -10,7 +10,8 @@
 //! marker, reading bit 19, status bits 11 and 19-23, functions 30-31 and 13
 //! on a model without NCV, decimal-point code 5, an NCV level or Motor value
 //! off its table, and a sub-display word without its marker. Values the
-//! spec documents stay silent.
+//! spec documents stay silent. A CMS's scope shows no reading, and reports a
+//! number if one ever comes (spec §9.4).
 
 use super::decode::{
     self, AMP_UNITS, AUTO, DP_5, DP_OL, DP_UL, HOLD, LOW_BATTERY, MAX, MIN, REL, Unit, VOLT_UNITS,
@@ -113,6 +114,9 @@ fn function_of(f: u8, model: &Model) -> Option<Function> {
             label: mode,
             unit,
         }),
+        // The CMS measures no power: its scope sends these (spec §9.4).
+        code::POWER_W if model.cms_readings => named("Scope", "V", Prefixed(&VOLT_UNITS)),
+        code::POWER_VA if model.cms_readings => named("Scope", "A", Prefixed(&AMP_UNITS)),
         code::POWER_W => named("Power W", "W", Prefixed(&WATT_UNITS)),
         code::POWER_VA => named("Power VA", "VA", Prefixed(&VA_UNITS)),
         code::POWER_FACTOR => named("Power factor", "PF", Bare("")),
@@ -284,18 +288,24 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
         report("status bits");
     }
 
-    let (value, display_raw) = if main.is_none() && gear.function > code::HV_AC {
-        // The app's lookup throws: no reading (spec §10.5).
+    // Zero in every scope frame whatever the LCD read, and the sub word only
+    // repeats the mode before (spec §9.4), so a CMS's scope shows no number.
+    let scope = model.cms_readings && status & OSC != 0;
+    if scope && u24(&p[3..6]) & MAGNITUDE != 0 {
+        report("scope reading");
+    }
+    let (value, display_raw) = if scope || (main.is_none() && gear.function > code::HV_AC) {
+        // Otherwise the app's lookup throws: no reading (spec §10.5).
         (MeasuredValue::NoReading("----"), None)
     } else {
         reading(u24(&p[3..6]), gear.function, gear.dp, model, &report)
     };
-    let mode = mode(main.as_ref(), gear.function, &value, status);
+    let mode = mode(main.as_ref(), gear.function, &value, status, model);
     let unit = unit_of(main.as_ref(), gear.prefix);
 
     // The sub-display, only when the main word says so; otherwise its
     // bytes hold stale words (spec §10.3, §14.4).
-    let aux_values = if word & SUB_PRESENT != 0 {
+    let aux_values = if word & SUB_PRESENT != 0 && !scope {
         if p[8] != MARKER {
             report("sub-display word");
         }
@@ -338,6 +348,7 @@ fn mode(
     function: u8,
     value: &MeasuredValue,
     status: u32,
+    model: &Model,
 ) -> Cow<'static, str> {
     let Some(main) = main else {
         return unknown_mode(function);
@@ -346,7 +357,7 @@ fn mode(
         "Scope"
     } else if status & INRUSH != 0 {
         "Inrush"
-    } else if let Some(power) = power_mode(function, status) {
+    } else if let Some(power) = power_mode(function, status).filter(|_| !model.cms_readings) {
         power
     } else if function == code::MOTOR {
         match value {
@@ -456,7 +467,11 @@ pub(super) fn all_labels(model: &Model, out: &mut crate::text::Labels) {
         };
         for status in statuses.clone() {
             for value in values {
-                out.add(TextKind::Mode, mode(Some(&main), f, value, status), by);
+                out.add(
+                    TextKind::Mode,
+                    mode(Some(&main), f, value, status, model),
+                    by,
+                );
             }
         }
         for sub in codes.clone() {
@@ -776,7 +791,9 @@ pub(crate) mod tests {
                 .mode
                 .into_owned()
         };
-        assert_eq!(at(OSC, &CMS101), "Scope");
+        // A scope frame's value is 0: a number would be reported.
+        let scope = frame(g24(1, 4, 1, false), 0, 0, 0, OSC);
+        assert_eq!(quiet(&scope, &CMS101).mode, "Scope");
         assert_eq!(at(INRUSH, &CMS101), "Inrush");
         assert_eq!(at(LPF, &OW69B), "LPF AC V");
         assert_eq!(at(PEAK, &OW69B), "Peak AC V");
@@ -846,6 +863,54 @@ pub(crate) mod tests {
             assert_eq!(value(&m.value), "NoReading(\"----\")");
             assert_eq!(value(&m.aux_values[0].value), "NoReading(\"----\")");
         }
+    }
+
+    /// #45, a UT217A's frames: its scope sends function 15 for the current
+    /// and 14 for the voltage. Zero came with LCD readings of 00.04 A and
+    /// 00.1 A, so neither word counts as a reading, and HOLD still shows.
+    #[test]
+    fn a_cms_scope_shows_its_unit_and_no_reading() {
+        let hex = |s: &str| -> Vec<u8> {
+            s.split(' ')
+                .map(|b| u8::from_str_radix(b, 16).unwrap())
+                .collect()
+        };
+        for (frame, unit, hold) in [
+            ("E2 03 F0 00 00 00 A2 01 F0 00 00 00 00 00 04", "A", false),
+            ("A2 03 F0 00 00 00 A2 01 F0 00 00 00 00 00 04", "V", false),
+            // Entered from Hz/A: bit 12 set, the sub word still AC A's.
+            ("E2 13 F0 00 00 00 E2 10 F0 00 00 00 00 00 04", "A", false),
+            ("E2 13 F0 00 00 00 E2 10 F0 00 00 00 01 00 04", "A", true),
+        ] {
+            for model in [&CMS061, &CMS101] {
+                let m = quiet(&hex(frame), model);
+                assert_eq!(m.mode, "Scope", "{frame}");
+                assert_eq!(m.unit, unit, "{frame}");
+                assert_eq!(value(&m.value), value(&MeasuredValue::NoReading("----")));
+                assert!(m.aux_values.is_empty(), "{frame}");
+                assert_eq!(m.flags.hold, hold, "{frame}");
+            }
+        }
+    }
+
+    /// A number in a CMS's scope frame would show the frames carry the Rms
+    /// after all: it stays blank, but is reported, not lost to the display.
+    #[test]
+    fn a_number_in_a_cms_scope_frame_is_reported() {
+        let (m, reports) = reported(&frame(g24(14, 4, 2, false), 3930, 0, 0, OSC), &CMS061);
+        assert_eq!(value(&m.value), value(&MeasuredValue::NoReading("----")));
+        assert_eq!(reports.len(), 1, "{reports:?}");
+    }
+
+    /// Elsewhere 14 and 15 stay power, and the status word's scope bit alone
+    /// doesn't blank a meter with power functions.
+    #[test]
+    fn functions_14_and_15_stay_power_off_the_cms() {
+        let w = quiet(&frame(g24(14, 4, 1, false), 1234, 0, 0, 0), &VC871);
+        assert_eq!((w.mode.as_ref(), w.unit.as_ref()), ("Power W", "W"));
+        let va = quiet(&frame(g24(15, 4, 1, false), 1234, 0, 0, OSC), &VC871);
+        assert_eq!((va.mode.as_ref(), va.unit.as_ref()), ("Scope", "VA"));
+        assert!(matches!(va.value, MeasuredValue::Normal(_)));
     }
 
     /// Under REL, MAX or MIN the VC871's sub-display takes the main

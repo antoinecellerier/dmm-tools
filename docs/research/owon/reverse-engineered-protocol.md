@@ -44,7 +44,9 @@ Citation keys:
   **R2W** = `imeter_base/protocol_parser/r2w_protocol_parser.dart`,
   **R10W** = `imeter_base/protocol_parser/r10w_protocol_parser.dart`,
   **OFF** = `imeter_base/protocol_parser/offline_data_parse_helper.dart`,
-  **AUTH** = `imeter_base/utils/auth_tool.dart`
+  **AUTH** = `imeter_base/utils/auth_tool.dart`,
+  **DLN** = `owon_imeter/pages/device_list_page/widget_provider/device_list_normal_widget_provider.dart`,
+  **DCVM** = `owon_imeter/pages/device_control_page/device_control_view_model.dart`
 - **pc `path:lines`** — `references/owon/pc/win7/src/`, the source bundle
   `com.owon.pc.multimeter.source_1.4.4.jar` unpacked. Short forms:
   **MC** = `model/MultimeterClient.java`, **BC** = `kernal/BleClient.java`,
@@ -797,11 +799,21 @@ VC915-UM p.88, VC925-UM p.94. Also [KNOWN]:
 - **CMS scope mode.** The power key toggles DMM and oscilloscope; the scope
   is one channel, 5 MSa/s (CMS101-UM p.30/25-33/28, p.37/32). Whether
   Bluetooth streams in scope mode is not stated; the ᛒ icon is part of the
-  scope's status bar (p.31/26). A UT217A keeps streaming in scope mode,
-  each frame with OSC (§10.6) set and main function 15 at prefix 4, decimal
-  code 2, G24 bit 12 clear (bytes 6-8 hold the stale Hz word other modes
-  carry), while its LCD showed "00.04A --- Hz" [HARDWARE]; what function 15
-  names there is [UNVERIFIED].
+  scope's status bar (p.31/26). A UT217A keeps streaming in scope mode, each
+  frame with OSC (§10.6) set at prefix 4, decimal code 2: main function 15
+  while its LCD showed the current ("Rms: 00.1A"), and 14 while it showed the
+  voltage ("Rms: 0.00V") [HARDWARE]. Those are the power functions' codes,
+  which the CMS has no other use for. The main reading is 0 in all 727 scope
+  frames of two captures, including at LCD readings of 00.04 A and 00.1 A
+  [HARDWARE]; whether it ever carries the Rms is [UNVERIFIED]. G24 bit 12 is
+  clear (bytes 6-8 hold the stale Hz word other modes carry), but entered from
+  Hz/A it is set, and the sub word repeats Hz/A's AC A word, also 0 [HARDWARE].
+  OWON's app treats these frames as no reading to show: the device list's row
+  becomes "OSC State" with no value (DLN:762-795, :2169-2578), and the control
+  page closes on the first one (DCVM:1034-1054;
+  `device_control_page_large.dart:4982-5035`) [VENDOR, app]. It names 14 and
+  15 Power W and VA on every model (PE:487-520, :4425-4481), and holds no
+  waveform read or scope screen: no such strings in its listing, 2026-11-06.
 - **VC925 PV adaptor.** The VC925 PV searches for and connects to its
   LX-925 irradiance adaptor over Bluetooth, "Default adaptor name: "PV adaptor VC92"", from
   the PV position's Find page (VC925-UM p.89-90, p.92). In VAPP, F2 (APPS) or
@@ -994,10 +1006,14 @@ main function 23, a DC V or AC V sub-display is labelled "DC" or "AC"
 | 18 | 0x40000 | OSC |
 
 PE:3534-3917. Each set bit's name is shown as a chip on the control page
-(`device_control_page.dart:2798-3100`); no bit is gated by model, on either
-frame (PE:3447-3533). With OSC set, the app neither charts the reading nor
-keeps it in record lists (PE:6334-6393, :6505-6554;
-`data_logger_client.dart:44-113`) [VENDOR, app].
+(`device_control_page.dart:2798-3100`), bit 17's as "INRUSH", and in the
+device list's status text (PE:6087-6218); no bit is gated by model, on either
+frame (PE:3447-3533). OSC is the exception on screen: the list shows "OSC
+State" and the control page closes (§9.4). With OSC set the app does not chart
+the reading, and its chart, table and read-file views filter it out of the
+record lists (PE:6334-6393, :6505-6554; `data_logger_client.dart:44-113`), while
+its logger takes it (`home_page.dart:1121`), with no OSC check found in
+`realtime_data_logger.dart`, 2026-11-06 [VENDOR, app].
 
 A UT217A sets bit 17 in its Inrush mode and bit 18 in scope mode
 (§9.4) [HARDWARE].

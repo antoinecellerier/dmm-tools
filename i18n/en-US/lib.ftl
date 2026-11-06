@@ -49,17 +49,17 @@ mode-ac-ma = AC mA
 mode-ac-mv = AC mV
 # Used by: 121GW
 mode-ac-mva = AC mVA
-# Used by: 9 meters
+# Used by: 7 meters
 mode-ac-power-a = AC power A
-# Used by: 9 meters
+# Used by: 7 meters
 mode-ac-power-ah = AC power Ah
-# Used by: 9 meters
+# Used by: 7 meters
 mode-ac-power-v = AC power V
-# Used by: 9 meters
+# Used by: 7 meters
 mode-ac-power-va = AC power VA
-# Used by: 9 meters
+# Used by: 7 meters
 mode-ac-power-w = AC power W
-# Used by: 9 meters
+# Used by: 7 meters
 mode-ac-power-wh = AC power Wh
 # Used by: 26 meters
 mode-ac-ua = AC µA
@@ -117,17 +117,17 @@ mode-dc-ma = DC mA
 mode-dc-mv = DC mV
 # Used by: 121GW
 mode-dc-mva = DC mVA
-# Used by: 9 meters
+# Used by: 7 meters
 mode-dc-power-a = DC power A
-# Used by: 9 meters
+# Used by: 7 meters
 mode-dc-power-ah = DC power Ah
-# Used by: 9 meters
+# Used by: 7 meters
 mode-dc-power-v = DC power V
-# Used by: 9 meters
+# Used by: 7 meters
 mode-dc-power-va = DC power VA
-# Used by: 9 meters
+# Used by: 7 meters
 mode-dc-power-w = DC power W
-# Used by: 9 meters
+# Used by: 7 meters
 mode-dc-power-wh = DC power Wh
 # Used by: 27 meters
 mode-dc-ua = DC µA
@@ -191,9 +191,9 @@ mode-power-a = Power A
 mode-power-ah = Power Ah
 # Used by: 9 meters
 mode-power-v = Power V
-# Used by: 9 meters
+# Used by: 7 meters
 mode-power-va = Power VA
-# Used by: 9 meters
+# Used by: 7 meters
 mode-power-w = Power W
 # Used by: 9 meters
 mode-power-wh = Power Wh
@@ -229,17 +229,17 @@ mode-temp-degc-t2-t1 = Temp °C T2-T1
 mode-temperature = Temperature
 # Used by: 9 meters
 mode-time = Time
-# Used by: 9 meters
+# Used by: 7 meters
 mode-usb-power-a = USB power A
-# Used by: 9 meters
+# Used by: 7 meters
 mode-usb-power-ah = USB power Ah
-# Used by: 9 meters
+# Used by: 7 meters
 mode-usb-power-v = USB power V
-# Used by: 9 meters
+# Used by: 7 meters
 mode-usb-power-va = USB power VA
-# Used by: 9 meters
+# Used by: 7 meters
 mode-usb-power-w = USB power W
-# Used by: 9 meters
+# Used by: 7 meters
 mode-usb-power-wh = USB power Wh
 # Used by: UT171A/B/C, UT181A
 mode-v-ac = V AC

@@ -1248,7 +1248,8 @@ fn cms(code: u8) -> Vec<CaptureStep> {
              switches the meter off), then Enter. This step records whether readings keep \
              coming; none is fine. Press the power key briefly again afterwards.",
         )
-        .wait_for_enter(),
+        .wait_for_enter()
+        .expect(Expect::mode("Scope").value(ValueExpect::NoReading)),
     ]);
     if code == 61 {
         for step in &mut steps {
@@ -2806,6 +2807,23 @@ mod tests {
         assert!(starts("key_inrush", &ac_a));
         assert!(!starts("key_inrush", &hz));
         assert!(!starts("key_inrush", &scope));
+    }
+
+    /// A CMS's scope shows no reading, which the step has to expect: a step
+    /// that doesn't reads past a blank, for seconds and into the next mode.
+    #[test]
+    fn the_cms_scope_step_expects_no_reading() {
+        use crate::protocol::owon::decode15::decode;
+        use crate::protocol::owon::model::CMS061;
+        let frame = [
+            0xE2, 0x03, 0xF0, 0, 0, 0, 0xA2, 0x01, 0xF0, 0, 0, 0, 0, 0, 0x04,
+        ];
+        let reading = decode(&frame, &CMS061).unwrap();
+        let steps = steps(61);
+        let scope = steps.iter().find(|s| s.id == "scope").unwrap();
+        let expect = scope.expect.unwrap();
+        assert_eq!(expect.value, Some(ValueExpect::NoReading));
+        assert!(expect.check(&reading).is_ok());
     }
 
     /// Other families' keys send at once until a CMS run has proven the wait.

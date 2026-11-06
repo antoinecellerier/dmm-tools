@@ -75,6 +75,10 @@ pub(super) struct Model {
     /// Whether the sub-display takes the main display's function under
     /// REL, MAX or MIN: the VC871 alone (spec §10.7).
     pub(super) sub_follows_main: bool,
+    /// The CMS's own readings: the CMS061 and, by its shared manual, the
+    /// CMS101 (spec §9.4). In its scope, functions 14 and 15 are volts and
+    /// amps, and no frame has carried a reading so far.
+    pub(super) cms_readings: bool,
 }
 
 /// Code 18, the OW18B: OWON's PC software names it `OW18_16`, the one
@@ -91,6 +95,7 @@ pub(super) static OW18B: Model = Model {
     bluetooth_key: Some(keys::OW_BLUETOOTH_KEY),
     meter_keys: keys::OW_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static OW18E: Model = Model {
@@ -105,6 +110,7 @@ pub(super) static OW18E: Model = Model {
     bluetooth_key: Some(keys::OW_BLUETOOTH_KEY),
     meter_keys: keys::OW_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static B33: Model = Model {
@@ -119,6 +125,7 @@ pub(super) static B33: Model = Model {
     bluetooth_key: Some(keys::B_BLUETOOTH_KEY),
     meter_keys: keys::B_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static B35: Model = Model {
@@ -133,6 +140,7 @@ pub(super) static B35: Model = Model {
     bluetooth_key: Some(keys::B_BLUETOOTH_KEY),
     meter_keys: keys::B_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static B41: Model = Model {
@@ -147,6 +155,7 @@ pub(super) static B41: Model = Model {
     bluetooth_key: Some(keys::B_BLUETOOTH_KEY),
     meter_keys: keys::B_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 /// Code 21 is in OWON's app only (spec §1).
@@ -162,6 +171,7 @@ pub(super) static CM2100B: Model = Model {
     bluetooth_key: Some(keys::CM2100_BLUETOOTH_KEY),
     meter_keys: keys::CM2100_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 /// The CMS101 and CMS061, clamp meters with an oscilloscope mode and NCV
@@ -178,6 +188,7 @@ pub(super) static CMS101: Model = Model {
     bluetooth_key: None,
     meter_keys: keys::HZ_DUTY_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: true,
 };
 
 pub(super) static CMS061: Model = Model {
@@ -192,6 +203,7 @@ pub(super) static CMS061: Model = Model {
     bluetooth_key: None,
     meter_keys: keys::HZ_DUTY_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: true,
 };
 
 pub(super) static OW65B: Model = Model {
@@ -206,6 +218,7 @@ pub(super) static OW65B: Model = Model {
     bluetooth_key: None,
     meter_keys: MeterKeys::NONE,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 /// The OW67B is the VC871's twin by its manual (spec §9.4), but the app
@@ -222,6 +235,7 @@ pub(super) static OW67B: Model = Model {
     bluetooth_key: None,
     meter_keys: MeterKeys::NONE,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static OW69B: Model = Model {
@@ -236,6 +250,7 @@ pub(super) static OW69B: Model = Model {
     bluetooth_key: None,
     meter_keys: keys::HZ_DUTY_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static VC871: Model = Model {
@@ -250,6 +265,7 @@ pub(super) static VC871: Model = Model {
     bluetooth_key: None,
     meter_keys: MeterKeys::NONE,
     sub_follows_main: true,
+    cms_readings: false,
 };
 
 pub(super) static VC891: Model = Model {
@@ -264,6 +280,7 @@ pub(super) static VC891: Model = Model {
     bluetooth_key: None,
     meter_keys: keys::HZ_DUTY_METER_KEYS,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static VC915: Model = Model {
@@ -278,6 +295,7 @@ pub(super) static VC915: Model = Model {
     bluetooth_key: None,
     meter_keys: MeterKeys::NONE,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 pub(super) static VC925PV: Model = Model {
@@ -292,6 +310,7 @@ pub(super) static VC925PV: Model = Model {
     bluetooth_key: None,
     meter_keys: MeterKeys::NONE,
     sub_follows_main: false,
+    cms_readings: false,
 };
 
 /// Every model, in registry order.
@@ -517,6 +536,12 @@ mod tests {
             assert_eq!(model.bluetooth_key.is_none(), fifteen, "{}", model.id);
             assert_eq!(model.frame.max_aux_values(), usize::from(fifteen));
             assert_eq!(model.sub_follows_main, model.code == 87, "{}", model.id);
+            assert_eq!(
+                model.cms_readings,
+                matches!(model.code, 61 | 101),
+                "{}",
+                model.id
+            );
         }
         let ncv: Vec<&str> = MODELS
             .iter()
