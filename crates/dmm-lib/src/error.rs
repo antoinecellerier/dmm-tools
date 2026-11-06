@@ -253,6 +253,16 @@ impl Error {
         }
     }
 
+    /// What hidapi's hidraw backend reports when a cable is pulled mid-read,
+    /// for tests that fake one. Its text names a timeout, as the real one
+    /// does, for code that has to go by the variant rather than the message.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn cable_pulled() -> Self {
+        Self::Hid(hidapi::HidError::HidApiError {
+            message: "hid_read_timeout: unexpected poll error (device disconnected)".to_string(),
+        })
+    }
+
     /// True when the underlying cause is an interrupted system call (EINTR),
     /// which typically means a signal (e.g. Ctrl-C) arrived mid-read.
     pub fn is_interrupted(&self) -> bool {

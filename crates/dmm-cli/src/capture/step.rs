@@ -1086,10 +1086,7 @@ mod tests {
                 return Ok(0);
             }
             self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Err(hidapi::HidError::HidApiError {
-                message: "device disconnected".into(),
-            }
-            .into())
+            Err(Error::cable_pulled())
         }
     }
 
@@ -1113,10 +1110,7 @@ mod tests {
     fn triage_skips_timeouts_ends_on_a_lost_link_and_records_the_rest() {
         let mut errors = ErrorLog::default();
         assert!(triage(Error::Timeout, &mut errors).is_ok());
-        let gone = Error::from(hidapi::HidError::HidApiError {
-            message: "device disconnected".into(),
-        });
-        assert!(triage(gone, &mut errors).is_err_and(|e| link_gone(&e)));
+        assert!(triage(Error::cable_pulled(), &mut errors).is_err_and(|e| link_gone(&e)));
         assert!(triage(Error::UnknownMode(0x7f), &mut errors).is_ok());
         assert_eq!(errors.into_diagnostics(), ["unknown mode: 0x7f"]);
     }
@@ -1171,10 +1165,7 @@ mod tests {
 
         fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
             if self.frames.borrow().is_empty() {
-                return Err(hidapi::HidError::HidApiError {
-                    message: "device disconnected".into(),
-                }
-                .into());
+                return Err(Error::cable_pulled());
             }
             Ok(())
         }

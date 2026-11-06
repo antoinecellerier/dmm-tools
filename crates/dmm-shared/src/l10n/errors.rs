@@ -789,9 +789,7 @@ mod tests {
 
     fn errors() -> Vec<Error> {
         chain(|last: Option<&Error>| match last {
-            None => vec![Error::Hid(hidapi::HidError::HidApiError {
-                message: "hid_read_timeout: device disconnected".into(),
-            })],
+            None => vec![Error::cable_pulled()],
             Some(Error::Hid(_)) => vec![Error::InvalidResponse {
                 message: "frame too short".into(),
                 raw: vec![0xAB],

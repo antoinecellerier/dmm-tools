@@ -1209,10 +1209,7 @@ mod tests {
                     Ok(())
                 }
                 Failure::Silent => Err(Error::Timeout),
-                Failure::LinkLost => Err(hidapi::HidError::HidApiError {
-                    message: "device disconnected".into(),
-                }
-                .into()),
+                Failure::LinkLost => Err(Error::cable_pulled()),
                 Failure::RefusedIntoAnotherMode if id == RESET_ID => {
                     Err(Unsupported::Setting(setting).into())
                 }

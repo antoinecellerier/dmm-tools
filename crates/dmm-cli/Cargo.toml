@@ -28,9 +28,6 @@ fluent-syntax = "0.12.0" # the capture instruction files; already in the tree fo
 [dev-dependencies]
 dmm-shared = { path = "../dmm-shared", features = ["test-support"] }
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
-# Only to build the HID error a pulled cable raises, in a test; no features
-# beyond the ones dmm-lib already enables.
-hidapi = { version = "2.6", default-features = false }
 tempfile.workspace = true
 
 [lints]

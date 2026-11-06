@@ -425,11 +425,9 @@ mod tests {
         use dmm_lib::error::Error;
         let boxed = |e: Error| -> Box<dyn std::error::Error> { Box::new(e) };
         assert!(meter_went_quiet(&*boxed(Error::Timeout)));
-        // What hidapi's hidraw backend reports when the cable is pulled
-        // mid-read.
-        let pulled = Error::Hid(hidapi::HidError::HidApiError {
-            message: "hid_read_timeout: unexpected poll error (device disconnected)".to_string(),
-        });
+        // Its text names a timeout, which the variant match has to see past.
+        let pulled = Error::cable_pulled();
+        assert!(pulled.to_string().contains("timeout"), "{pulled}");
         assert!(!meter_went_quiet(&*boxed(pulled)));
         let echoed: Box<dyn std::error::Error> = "unknown range: timeout".into();
         assert!(!meter_went_quiet(&*echoed));

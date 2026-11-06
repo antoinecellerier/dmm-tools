@@ -23,7 +23,6 @@ unic-langid = "0.9.6"
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
-hidapi = { version = "2.6", default-features = false } # builds an `Error::Hid` for the error tests
 intl_pluralrules = "7.0.2" # the plural forms a translation must have; fluent-bundle already selects with it
 tempfile.workspace = true
 
