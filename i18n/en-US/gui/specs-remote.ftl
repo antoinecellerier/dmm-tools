@@ -94,8 +94,8 @@ remote-peak =
 # PEAK on a meter with no × beside the button.
 remote-peak-no-exit =
     .hover = Capture peak readings
-# The small × button after MAX/MIN or PEAK while that mode is on: it leaves
-# the mode. $mode is the name on the button beside it, such as MAX/MIN,
+# The small × button after REL, MAX/MIN or PEAK while that mode is on: it leaves
+# the mode. $mode is the name on the button beside it, such as REL, MAX/MIN,
 # MIN/MAX/AVG or PEAK. The hover, and its name for a screen reader.
 remote-exit =
     .hover = Exit { $mode } mode

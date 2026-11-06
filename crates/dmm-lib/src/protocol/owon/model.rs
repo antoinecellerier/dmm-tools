@@ -248,7 +248,7 @@ pub(super) static OW69B: Model = Model {
     keys: &keys::OW69,
     commands: &keys::OW69_COMMANDS,
     bluetooth_key: None,
-    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    meter_keys: keys::OW69_METER_KEYS,
     sub_follows_main: false,
     cms_readings: false,
 };
@@ -263,7 +263,7 @@ pub(super) static VC871: Model = Model {
     keys: &keys::VC871,
     commands: &keys::VC871_COMMANDS,
     bluetooth_key: None,
-    meter_keys: MeterKeys::NONE,
+    meter_keys: keys::VC871_METER_KEYS,
     sub_follows_main: true,
     cms_readings: false,
 };
@@ -278,7 +278,7 @@ pub(super) static VC891: Model = Model {
     keys: &keys::VC891,
     commands: &keys::VC891_COMMANDS,
     bluetooth_key: None,
-    meter_keys: keys::HZ_DUTY_METER_KEYS,
+    meter_keys: keys::VC891_METER_KEYS,
     sub_follows_main: false,
     cms_readings: false,
 };
@@ -293,7 +293,7 @@ pub(super) static VC915: Model = Model {
     keys: &keys::VC915,
     commands: &keys::VC915_COMMANDS,
     bluetooth_key: None,
-    meter_keys: MeterKeys::NONE,
+    meter_keys: keys::VC915_METER_KEYS,
     sub_follows_main: false,
     cms_readings: false,
 };
@@ -308,7 +308,7 @@ pub(super) static VC925PV: Model = Model {
     keys: &keys::VC925,
     commands: &keys::VC925_COMMANDS,
     bluetooth_key: None,
-    meter_keys: MeterKeys::NONE,
+    meter_keys: keys::VC925_METER_KEYS,
     sub_follows_main: false,
     cms_readings: false,
 };

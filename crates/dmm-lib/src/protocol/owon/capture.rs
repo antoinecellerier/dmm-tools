@@ -2307,7 +2307,8 @@ fn vc_keys(vc: Vc) -> Vec<CaptureStep> {
             command::REL,
         )
         .expect(Expect::mode("DC V").flags(REL_ON)),
-        key("key_exit_rel", exit_rel, "exit_rel").expect(Expect::mode("DC V").flags(REL_OFF)),
+        key("key_exit_rel", exit_rel, command::EXIT_REL)
+            .expect(Expect::mode("DC V").flags(REL_OFF)),
         key(
             "key_range",
             "DC V, AUTO showing: we will send Range (AUTO should go off).",

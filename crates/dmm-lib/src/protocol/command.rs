@@ -9,6 +9,7 @@
 
 pub const HOLD: &str = "hold";
 pub const REL: &str = "rel";
+pub const EXIT_REL: &str = "exit_rel";
 pub const RANGE: &str = "range";
 pub const AUTO: &str = "auto";
 pub const MINMAX: &str = "minmax";

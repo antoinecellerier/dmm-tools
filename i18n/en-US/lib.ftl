@@ -506,6 +506,8 @@ key-hover-send-select-effect-on-this-meter = Send Select; effect on this meter u
 key-hover-step-through-hold-and-autohold = Step through HOLD and AutoHOLD
 # Used by: OW18B/OW16B, OW18E
 key-hover-toggle-the-backlight-and-an-ow18 = Toggle the backlight and an OW18's flashlight
+# Used by: VC871, VC891, VC915, VC925 PV
+key-hover-zero-the-reading-to-exit = Zero the reading — × to exit
 
 ## Model names with words in them: the simulated meters. Keep the part
 ## number as it is.

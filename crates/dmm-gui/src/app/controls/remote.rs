@@ -317,94 +317,95 @@ impl App {
             let min_max = flags.is_some_and(|f| f.min || f.max || f.avg);
             let peak = flags.is_some_and(|f| f.peak_min || f.peak_max);
 
-            // Simple toggle commands: label, active flag, command, tooltip.
+            // The buttons that light with their state: label, active flag,
+            // command, the command of the "x" that leaves the state, tooltip.
             // A tooltip here describes the generic DMM behavior; a model it
-            // isn't true of says so in its `ButtonLabel`.
-            for (label, active, cmd, tooltip) in [
-                ("HOLD", hold, command::HOLD, tr!(l10n, "remote-hold.hover")),
-                ("REL", rel, command::REL, tr!(l10n, "remote-rel.hover")),
+            // isn't true of says so in its `ButtonLabel`. The MAX/MIN word
+            // puts MAX first, as on the meters with no label of their own.
+            //
+            // A click sends the key's short press, which on MAX/MIN and Peak
+            // cycles on most meters and never exits there, and on the Voltcraft
+            // meters' REL sets a new zero. The "x" joined to the button exits
+            // the mode (like the real device's long-press).
+            for (label, active, cmd, exit_cmd, tooltip) in [
+                (
+                    "HOLD",
+                    hold,
+                    command::HOLD,
+                    None,
+                    tr!(l10n, "remote-hold.hover"),
+                ),
+                (
+                    "REL",
+                    rel,
+                    command::REL,
+                    Some(command::EXIT_REL),
+                    tr!(l10n, "remote-rel.hover"),
+                ),
                 (
                     "RANGE",
                     manual_range,
                     command::RANGE,
+                    None,
                     tr!(l10n, "remote-range.hover"),
                 ),
-                ("AUTO", auto, command::AUTO, tr!(l10n, "remote-auto.hover")),
-            ] {
-                if !has_cmd(cmd) {
-                    continue;
-                }
-                // `selected` announces the state and paints the selected fill
-                // when on; the button keeps its frame when off so it still
-                // reads as actionable, unlike `Button::selectable`.
-                let text =
-                    RichText::new(shown(cmd, label)).font(egui::FontId::proportional(font_size));
-                let resp = ui
-                    .add(egui::Button::new(text).selected(active))
-                    .on_hover_text(shared_hover(l10n, &keys, cmd, tooltip));
-                placed = true;
-                if resp.clicked() {
-                    self.send_command(cmd);
-                }
-            }
-
-            // MAX/MIN and Peak: a click sends the key's short press, which
-            // cycles on most meters and never exits there. An "x" joined to
-            // the button exits the mode (like the real device's long-press).
-            // MAX comes first, as on the meters with no label of their own.
-            for (label, active, cycle_cmd, exit_cmd, tooltip) in [
+                (
+                    "AUTO",
+                    auto,
+                    command::AUTO,
+                    None,
+                    tr!(l10n, "remote-auto.hover"),
+                ),
                 (
                     "MAX/MIN",
                     min_max,
                     command::MINMAX,
-                    command::EXIT_MINMAX,
+                    Some(command::EXIT_MINMAX),
                     min_max_hover(l10n, has_cmd(command::EXIT_MINMAX)),
                 ),
                 (
                     "PEAK",
                     peak,
                     command::PEAK,
-                    command::EXIT_PEAK,
+                    Some(command::EXIT_PEAK),
                     peak_hover(l10n, has_cmd(command::EXIT_PEAK)),
                 ),
             ] {
-                if !has_cmd(cycle_cmd) {
+                if !has_cmd(cmd) {
                     continue;
                 }
-                let label = shown(cycle_cmd, label);
+                let label = shown(cmd, label);
                 let font = egui::FontId::proportional(font_size);
                 let body = RichText::new(label).font(font.clone());
                 let exit = RichText::new("x").font(font);
-                let joined = active && has_cmd(exit_cmd);
-                // The two wrap as one: a joined "x" alone on a line would read
-                // as belonging to nothing. Wider than a whole line, a new line
-                // wouldn't help, and would leave an empty one above them.
-                if joined {
-                    let width =
-                        button_width(ui, body.clone()) + SPLIT_GAP + button_width(ui, exit.clone());
+                let joined_to = exit_cmd.filter(|&exit_cmd| active && has_cmd(exit_cmd));
+                // `selected` announces the state and paints the selected fill
+                // when on; the button keeps its frame when off so it still
+                // reads as actionable, unlike `Button::selectable`.
+                let mut button = egui::Button::new(body.clone()).selected(active);
+                let gap = ui.spacing().item_spacing.x;
+                let (body_radius, exit_radius) = split_corners(ui, true);
+                if joined_to.is_some() {
+                    // The two wrap as one: a joined "x" alone on a line would read
+                    // as belonging to nothing. Wider than a whole line, a new line
+                    // wouldn't help, and would leave an empty one above them.
+                    let width = button_width(ui, body) + SPLIT_GAP + button_width(ui, exit.clone());
                     if width > ui.available_size_before_wrap().x && width <= ui.max_rect().width() {
                         ui.end_row();
                     }
-                }
-                let (body_radius, exit_radius) = split_corners(ui, joined);
-                // As in `SplitChip::show`: the hairline only when the "x"
-                // follows, and the "x", last, takes the row's own gap.
-                let gap = ui.spacing().item_spacing.x;
-                if joined {
+                    button = button.corner_radius(body_radius);
+                    // As in `SplitChip::show`: the hairline only when the "x"
+                    // follows, and the "x", last, takes the row's own gap.
                     ui.spacing_mut().item_spacing.x = SPLIT_GAP;
                 }
                 let resp = ui
-                    .add(
-                        egui::Button::new(body)
-                            .selected(active)
-                            .corner_radius(body_radius),
-                    )
-                    .on_hover_text(shared_hover(l10n, &keys, cycle_cmd, tooltip));
+                    .add(button)
+                    .on_hover_text(shared_hover(l10n, &keys, cmd, tooltip));
                 placed = true;
                 if resp.clicked() {
-                    self.send_command(cycle_cmd);
+                    self.send_command(cmd);
                 }
-                if joined {
+                if let Some(exit_cmd) = joined_to {
                     ui.spacing_mut().item_spacing.x = gap;
                     let x_resp = ui
                         .add(
@@ -834,6 +835,46 @@ mod tests {
         );
     }
 
+    /// The Voltcraft meters leave REL only with a long press, so theirs has
+    /// an x, on its line, while REL is on. The other OWON meters leave it
+    /// with a second press.
+    #[test]
+    fn rel_has_an_x_only_where_a_long_press_leaves_it() {
+        let rel_on = |id: &str| {
+            let mut app = connected_to(id);
+            app.last_measurement = Some(Measurement::test_fixture(
+                MeasuredValue::Normal(1.234),
+                "V",
+                StatusFlags {
+                    rel: true,
+                    ..Default::default()
+                },
+            ));
+            app
+        };
+        let exit = "Exit REL mode".to_string();
+        for id in ["vc871", "vc891", "vc915", "vc925pv"] {
+            assert!(!buttons_of(&mut connected_to(id)).contains(&exit), "{id}");
+            assert!(buttons_of(&mut rel_on(id)).contains(&exit), "{id}");
+        }
+        for id in ["ow65b", "ow67b", "ow69b", "cms061", "b35t+", "ut61eplus"] {
+            assert!(!buttons_of(&mut rel_on(id)).contains(&exit), "{id}");
+        }
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let mut app = rel_on("vc915");
+        let out = headless_frame(&ctx, None, None, vec![], |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                app.show_reading_column(ui, crate::app::layout::ContentLayout::Wide);
+            });
+        });
+        let (nodes, _) = a11y(&out);
+        let rect = |label: &str| node_rect(&nodes, |n| n.label() == Some(label)).expect(label);
+        let (body, x) = (rect("REL"), rect("Exit REL mode"));
+        assert_eq!(body.min.y, x.min.y);
+        assert!((x.min.x - body.max.x - SPLIT_GAP).abs() < 0.5);
+    }
+
     /// AVG is one of the states the MAX/MIN key steps through, so the
     /// button stays on in it and keeps its way out.
     #[test]
@@ -930,7 +971,11 @@ mod tests {
     fn a_hover_promises_only_what_the_model_does() {
         let l10n = crate::l10n::english();
         type Generic = for<'a> fn(&'a Localizer, bool) -> Cow<'a, str>;
-        let rows: [(&str, &str, Generic); 2] = [
+        fn rel_hover(l10n: &Localizer, _has_exit: bool) -> Cow<'_, str> {
+            tr!(l10n, "remote-rel.hover")
+        }
+        let rows: [(&str, &str, Generic); 3] = [
+            (command::REL, command::EXIT_REL, rel_hover),
             (command::MINMAX, command::EXIT_MINMAX, min_max_hover),
             (command::PEAK, command::EXIT_PEAK, peak_hover),
         ];
@@ -1009,13 +1054,19 @@ mod tests {
         (DeviceFamily::Owon, "motor"),
         (DeviceFamily::Owon, "display"),
         (DeviceFamily::Owon, "current_loop"),
-        (DeviceFamily::Owon, "exit_rel"),
     ];
 
     /// The × that leaves a mode, drawn only with its button and the mode on:
     /// the button's command, and the flags that light it.
     fn parent_of_exit(command: &str) -> Option<(&'static str, StatusFlags)> {
         match command {
+            command::EXIT_REL => Some((
+                command::REL,
+                StatusFlags {
+                    rel: true,
+                    ..Default::default()
+                },
+            )),
             command::EXIT_MINMAX => Some((
                 command::MINMAX,
                 StatusFlags {

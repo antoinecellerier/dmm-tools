@@ -143,7 +143,7 @@ const HOLD_TAP: Key = key(command::HOLD, 0x03, SHORT);
 /// REL held (about 1 s) leaves REL on the Voltcraft meters (VC871-UM p.89;
 /// VC891-UM p.79; VC915-UM p.86; VC925-UM p.87).
 const EXIT_REL: Key = Key {
-    command: "exit_rel",
+    command: command::EXIT_REL,
     code: 0x04,
     press: LONG,
     needs_confirmed: true,
@@ -344,9 +344,39 @@ pub(super) const CM2100_METER_KEYS: MeterKeys = MeterKeys {
     ..MeterKeys::NONE
 };
 
-/// The 15-byte meters with a Hz/Duty key (spec §10.8): the B series'
-/// button, in the same functions.
-pub(super) const HZ_DUTY_METER_KEYS: MeterKeys = B_METER_KEYS;
+/// The OW69B's keys: the B series' Hz/Duty, in the same functions.
+pub(super) const OW69_METER_KEYS: MeterKeys = B_METER_KEYS;
+
+/// On the Voltcraft meters REL sets the reading to zero; held, or by changing
+/// function, it is left (VC871-UM p.89; VC891-UM p.79; VC915-UM p.86;
+/// VC925-UM p.87).
+const VC_BUTTON_LABELS: &[ButtonLabel] = &[ButtonLabel {
+    command: command::REL,
+    label: None,
+    hover: Some("Zero the reading — × to exit"),
+}];
+
+pub(super) const VC871_METER_KEYS: MeterKeys = MeterKeys {
+    button_labels: VC_BUTTON_LABELS,
+    ..MeterKeys::NONE
+};
+
+/// The VC891's keys: the B series' Hz/Duty, and REL as on the other Voltcraft
+/// meters.
+pub(super) const VC891_METER_KEYS: MeterKeys = MeterKeys {
+    button_labels: VC_BUTTON_LABELS,
+    ..B_METER_KEYS
+};
+
+pub(super) const VC915_METER_KEYS: MeterKeys = MeterKeys {
+    button_labels: VC_BUTTON_LABELS,
+    ..MeterKeys::NONE
+};
+
+pub(super) const VC925_METER_KEYS: MeterKeys = MeterKeys {
+    button_labels: VC_BUTTON_LABELS,
+    ..MeterKeys::NONE
+};
 
 /// On the CMS, MaxMin is entered with one press and left with another
 /// (CMS101-UM p.27/22). OWON's app sends Select, but no key on the meter carries
@@ -364,11 +394,11 @@ const CMS_BUTTON_LABELS: &[ButtonLabel] = &[
     },
 ];
 
-/// The CMS101 and CMS061: [`HZ_DUTY_METER_KEYS`]' key, and what their shared
+/// The CMS101 and CMS061: the B series' Hz/Duty, and what their shared
 /// buttons do.
 pub(super) const CMS_METER_KEYS: MeterKeys = MeterKeys {
     button_labels: CMS_BUTTON_LABELS,
-    ..HZ_DUTY_METER_KEYS
+    ..B_METER_KEYS
 };
 
 #[cfg(test)]
