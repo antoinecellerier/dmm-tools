@@ -21,6 +21,9 @@ spec, [`../ut8803/`](../ut8803/reverse-engineered-protocol.md).
 
 ## Positions and units
 
+- Whether the meter sends a position outside the table during a dial turn,
+  power-up or power-down — decides whether two in a row is enough for
+  `request_measurement`'s report. Needs a trace across a dial turn. (#12)
 - Each dial position's code against the 35 in [§3.3](reverse-engineered-protocol.md#33-position-code-table----known--vendor)
   — decides `POSITION_TABLE` and the extractor's valid codes. Needs every
   capture step, and each manual range stepped through on V, A and Ω. (#12)

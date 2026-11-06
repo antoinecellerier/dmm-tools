@@ -25,6 +25,7 @@ use crate::protocol::{
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
+use std::cell::Cell;
 
 /// UT8802 position code table: (code, mode_name, unit, range_label).
 ///
@@ -110,6 +111,8 @@ const UT8802_COMMANDS: &[&str] = &[];
 pub(crate) struct Ut8802Protocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
+    /// The unlisted position of the last frame refused, since a good one.
+    last_unlisted: Cell<Option<u8>>,
 }
 
 impl Default for Ut8802Protocol {
@@ -122,6 +125,7 @@ impl Ut8802Protocol {
     pub(crate) fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
+            last_unlisted: Cell::new(None),
             profile: DeviceProfile {
                 family_name: "UT8802",
                 id: "ut8802",
@@ -154,18 +158,45 @@ impl Protocol for Ut8802Protocol {
         Ok(())
     }
 
+    /// A meter sending a position outside the table (spec §3.3) would look
+    /// dead: the extractor refuses each frame, and with no checksum it can't
+    /// tell a real one from a false `0xAC` while syncing, so it reports nothing.
+    /// A read that got no frame can tell, having seen the same position twice
+    /// in a row, here or in the read before: no source gives the frame rate.
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        let payload = framing::read_frame(
+        let last = &self.last_unlisted;
+        let repeated = Cell::new(None);
+        let read = framing::read_frame(
             &mut self.rx_buf,
             transport,
-            frame::extract_frame_ut8802,
+            |buf: &[u8]| {
+                let position = frame::unlisted_position(buf);
+                if position.is_some() {
+                    if last.get() == position {
+                        repeated.set(position);
+                    }
+                    last.set(position);
+                }
+                frame::extract_frame_ut8802(buf)
+            },
             |_| true,
             FrameErrorRecovery::SkipAndRetry {
                 header: &frame::UT8802_HEADER,
             },
             "ut8802",
-        )?;
-        parse_measurement(&payload)
+        );
+        match read {
+            Ok(payload) => {
+                self.last_unlisted.set(None);
+                parse_measurement(&payload)
+            }
+            Err(e) => {
+                if let (Error::Timeout, Some(position)) = (&e, repeated.get()) {
+                    report_position(position);
+                }
+                Err(e)
+            }
+        }
     }
 
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
@@ -252,6 +283,11 @@ fn bcd_to_char(nibble: u8) -> char {
     }
 }
 
+/// Report a position code the table (spec §3.3) doesn't list.
+fn report_position(position: u8) {
+    report_unknown("ut8802", "position code", format_args!("{position:#04x}"));
+}
+
 /// Parse a UT8802 measurement payload (7 bytes = frame bytes 1..8).
 ///
 /// Layout (spec §3.1; payload index =
@@ -308,7 +344,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         if let Some((m, u, r)) = lookup_position(position) {
             (Cow::Borrowed(m), u, r)
         } else {
-            debug!("ut8802: unknown position code {position:#04x}");
+            report_position(position);
             (unknown_mode(position), "", "")
         };
 
@@ -507,7 +543,9 @@ pub(crate) fn all_units(out: &mut crate::protocol::Units) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::capture_reports;
     use crate::protocol::test_support::snapshot;
+    use crate::transport::mock::MockTransport;
 
     /// Build a 7-byte UT8802 payload from components.
     fn make_payload(
@@ -918,6 +956,176 @@ raw_payload=7"#
         let (m, reports) = crate::protocol::capture_reports(|| parse_measurement(payload).unwrap());
         assert_eq!(snapshot(&m), snapshot(&parse_measurement(clean).unwrap()));
         reports
+    }
+
+    /// Read through the driver, one response per read, and what it reported.
+    fn read_reporting(responses: Vec<Vec<u8>>) -> (Result<Measurement>, Vec<String>) {
+        let mock = MockTransport::new(responses);
+        let mut protocol = Ut8802Protocol::new();
+        capture_reports(|| protocol.request_measurement(&mock))
+    }
+
+    /// Frames at position 0x07, a gap in the table (spec §3.3).
+    fn unlisted_stream(frames: usize) -> Vec<u8> {
+        frame::test_frame_ut8802(0x07, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00).repeat(frames)
+    }
+
+    /// A meter on a position outside the table says so once a read has failed,
+    /// however the cable hands the bytes up: a CP2110 gives about one per read.
+    #[test]
+    fn an_unlisted_position_is_reported_when_the_read_fails() {
+        let stream = unlisted_stream(5);
+        for responses in [
+            vec![stream.clone()],
+            stream.chunks(1).map(<[u8]>::to_vec).collect(),
+        ] {
+            let (m, reports) = read_reporting(responses);
+            assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+            assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
+        }
+    }
+
+    /// A pulled cable is what the read ends on, whatever came before it.
+    #[test]
+    fn a_lost_link_is_not_an_unlisted_position() {
+        let mock = MockTransport::new(vec![unlisted_stream(5)]).fail_after(1, Error::cable_pulled);
+        let mut protocol = Ut8802Protocol::new();
+        let (m, reports) = capture_reports(|| protocol.request_measurement(&mock));
+        assert!(m.is_err_and(|e| !matches!(e, Error::Timeout)));
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A slow meter may send one frame per read.
+    #[test]
+    fn an_unlisted_position_is_reported_across_reads() {
+        let mut protocol = Ut8802Protocol::new();
+        let mock = MockTransport::new(vec![unlisted_stream(1)]);
+        let (m, reports) = capture_reports(|| protocol.request_measurement(&mock));
+        assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+        assert!(reports.is_empty(), "{reports:?}");
+        let mock = MockTransport::new(vec![unlisted_stream(1)]);
+        let (m, reports) = capture_reports(|| protocol.request_measurement(&mock));
+        assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+        assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
+    }
+
+    /// A position outside the table is where a display that isn't a number
+    /// is likeliest: blanks here, in digits the extractor would refuse too.
+    #[test]
+    fn an_unlisted_position_with_an_unreadable_display_is_reported() {
+        let stream = frame::test_frame_ut8802(0x07, [0x0F, 0x0F, 0x0F, 0x0F, 0x0F], 1, 0, 0, 0);
+        let (m, reports) = read_reporting(vec![stream.repeat(5)]);
+        assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+        assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
+    }
+
+    /// A sign byte of 0xAC reads each frame's header as a position between
+    /// its real ones, and that must not break the run.
+    #[test]
+    fn a_sign_byte_of_0xac_does_not_hide_an_unlisted_position() {
+        let frame = frame::test_frame_ut8802(0x07, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0xAC);
+        let (_, reports) = read_reporting(vec![frame.repeat(5)]);
+        assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
+    }
+
+    /// A run past what one read examines still ends in the report.
+    #[test]
+    fn a_long_run_of_unlisted_positions_is_reported_once() {
+        let stream = unlisted_stream(70);
+        let (m, reports) = read_reporting(stream.chunks(64).map(<[u8]>::to_vec).collect());
+        assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+        assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
+    }
+
+    /// Only a read that fails says anything.
+    #[test]
+    fn a_good_frame_after_unlisted_positions_is_not_reported() {
+        let mut stream = unlisted_stream(3);
+        stream.extend(frame::test_frame_ut8802(
+            0x05,
+            [1, 2, 3, 4, 5],
+            1,
+            0x02,
+            0x00,
+            0x00,
+        ));
+        let (m, reports) = read_reporting(vec![stream]);
+        assert!(m.is_ok(), "{m:?}");
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A good frame starts the count again.
+    #[test]
+    fn a_good_frame_resets_the_repeat() {
+        let good = frame::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let mock = MockTransport::new(vec![
+            [unlisted_stream(1), good].concat(),
+            unlisted_stream(1),
+        ]);
+        let mut protocol = Ut8802Protocol::new();
+        let (m, _) = capture_reports(|| protocol.request_measurement(&mock));
+        assert!(m.is_ok(), "{m:?}");
+        let (m, reports) = capture_reports(|| protocol.request_measurement(&mock));
+        assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// Positions that keep changing are as likely noise.
+    #[test]
+    fn changing_unlisted_positions_are_not_reported() {
+        let frame = |position| frame::test_frame_ut8802(position, [1, 2, 3, 4, 5], 1, 0, 0, 0);
+        let stream = [frame(0x07), frame(0x08), frame(0x07), frame(0x08)].concat();
+        let (m, reports) = read_reporting(vec![stream]);
+        assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// One bad frame is as likely a false `0xAC`, with no checksum to say.
+    #[test]
+    fn one_unlisted_position_is_not_reported() {
+        let (m, reports) = read_reporting(vec![unlisted_stream(1)]);
+        assert!(matches!(m, Err(Error::Timeout)), "{m:?}");
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A sign byte of 0xAC reads as a header when a stream is joined just
+    /// before the real one, and the header then as a position. Any frame that
+    /// reads ends the question.
+    #[test]
+    fn a_stream_joined_mid_frame_is_not_reported() {
+        let good = frame::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0xAC);
+        for joined_at in 1..good.len() {
+            let mut stream = good[joined_at..].to_vec();
+            stream.extend_from_slice(&good.repeat(3));
+            for responses in [
+                vec![stream.clone()],
+                stream.chunks(1).map(<[u8]>::to_vec).collect(),
+            ] {
+                let (m, reports) = read_reporting(responses);
+                assert!(m.is_ok(), "joined at {joined_at}: {m:?}");
+                assert!(reports.is_empty(), "joined at {joined_at}: {reports:?}");
+            }
+        }
+    }
+
+    /// Replay and golden fixtures reach the parser without the extractor.
+    #[test]
+    fn an_unlisted_position_in_a_payload_is_reported() {
+        let payload = make_payload(0x07, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let (m, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload));
+        assert_eq!(m.unwrap().mode, "Unknown(0x07)");
+        assert_eq!(reports, ["ut8802: unrecognised position code: 0x07"]);
+    }
+
+    /// Detection scans every meter's bytes, and another family's are not this
+    /// meter's unknown position.
+    #[test]
+    fn detection_reports_nothing() {
+        let stream = unlisted_stream(5);
+        let (found, reports) =
+            crate::protocol::capture_reports(|| recognise(&stream, &Probing::default()));
+        assert_eq!(found, None);
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     /// Frame byte 4's high nibble is never read (spec §3.2).

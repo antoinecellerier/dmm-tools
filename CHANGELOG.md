@@ -88,6 +88,7 @@
 - **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
 - **dmm-gui refuses a theme file whose text can't be read on the top bar, and says why** — its Theme chips in Settings were unreadable.
 - **A reading with an unrecognised scale shows no unit** — the VC-880, VC650BT, VC-890, UT8803, BM788BT and BM787BT showed a unit far off.
+- **`dmm-cli` reports a UT8802 position outside the manual's table** — reads only timed out.
 
 ## v0.9.0 — Graph Analysis and Alarms
 

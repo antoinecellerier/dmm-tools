@@ -107,6 +107,17 @@ pub(super) fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)
     Ok(Some((payload, consumed)))
 }
 
+/// The position code of the buffer's first whole frame, when the table doesn't
+/// list it and the frame's decimal point is one the vendor accepts (spec §3.2,
+/// §3.3). Not a header byte: a sign byte of `0xAC` ahead of a frame reads that
+/// frame's header as its position.
+pub(super) fn unlisted_position(buf: &[u8]) -> Option<u8> {
+    let (_, frame) = locate(buf, &UT8802_HEADER, UT8802_FRAME_LEN)?;
+    let (position, dp_pos) = (frame[1], frame[5] & 0x0F);
+    (!is_valid_ut8802_position(position) && position != UT8802_HEADER[0] && dp_pos <= 4)
+        .then_some(position)
+}
+
 /// Build a valid UT8802 frame from components. `digits` is MSD-first; on
 /// the wire d1 is byte 4's low nibble, d2/d3 byte 3's high/low and d4/d5
 /// byte 2's high/low (spec §3.2).
