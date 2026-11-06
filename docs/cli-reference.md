@@ -522,8 +522,8 @@ dmm-cli command <ACTION>          # send a command
 | `select` | Select button: steps to the dial position's next function |
 | `select2` | Select2 / Hz button: steps to the dial position's next function |
 | `light` | Toggle backlight |
-| `peak` | Enter Peak Min/Max mode |
-| `exit_peak` | Exit Peak Min/Max mode |
+| `peak` | Enter Peak Min/Max mode (not on the UT61B+ and UT161B) |
+| `exit_peak` | Exit Peak Min/Max mode (not on the UT61B+ and UT161B) |
 
 #### UT181A commands
 

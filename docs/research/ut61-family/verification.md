@@ -36,9 +36,9 @@ families are in the [verification backlog](../../verification-backlog.md).
 - REL and MIN/MAX in hFE, refused on a UT161E with the socket empty (`0 β`,
   [§6.2][s62]) — decides `REL_DEAD` and `MINMAX_DEAD`. Needs a transistor in
   the socket, then `set rel on` and `set minmax max`. (#7)
-- 0x4D on a UT61B+, which has no Peak: ignored or answered with an error
-  ([§6][s6]) — confirms `choices` offering none there. Needs `dmm-cli
-  --device ut61b+ command peak` under `RUST_LOG=dmm_lib=debug`. (#7)
+- 0x4D on a UT61B+, whose manual gives it no Peak: ignored, answered with an
+  error or acted on ([§6][s6]) — decides whether it gets PEAK back. Needs `dmm-cli
+  --device ut61eplus command peak` under `RUST_LOG=dmm_lib=debug`. (#7)
 - The UT61D+'s Peak modes, offered as the E+'s, and its refusals, [DEDUCED]
   from [§6.2][s62] — decide `AC_PEAK_MODES` and the dead lists for it. Needs
   a UT61D+ `capture --unverified`. (#7)

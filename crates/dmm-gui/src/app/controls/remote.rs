@@ -749,6 +749,8 @@ mod tests {
             ),
             ("121gw", &["HOLD/AutoHOLD", "1ms PEAK"], &["HOLD", "PEAK"]),
             ("cms101", &["MAX/MIN", "SELECT", "HOLD"], &["MaxMin"]),
+            ("ut61b+", &["MAX/MIN", "SELECT"], &["PEAK"]),
+            ("ut161b", &["MAX/MIN", "SELECT"], &["PEAK"]),
             (
                 "ut61eplus",
                 &["MAX/MIN", "SELECT"],

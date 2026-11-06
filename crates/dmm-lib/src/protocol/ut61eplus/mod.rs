@@ -41,6 +41,20 @@ pub(crate) const UT61EPLUS_COMMANDS: &[&str] = &[
     cmd::EXIT_PEAK,
 ];
 
+/// The UT61B+ and UT161B's commands: the family's, less Peak, which their
+/// manual doesn't give them (UT61+ manual p.10; family spec §6).
+pub(crate) const UT61BPLUS_COMMANDS: &[&str] = &[
+    cmd::HOLD,
+    cmd::MINMAX,
+    cmd::EXIT_MINMAX,
+    cmd::RANGE,
+    cmd::AUTO,
+    cmd::REL,
+    "select2",
+    cmd::SELECT,
+    cmd::LIGHT,
+];
+
 /// The modes on a Hz/% ring, the same on every dial here (family spec §3.1):
 /// the key does nothing in any other.
 const HZ_PERCENT_RING: [u16; 7] = [
@@ -1486,8 +1500,9 @@ mod tests {
     }
 
     /// Each model offers the commands its buttons take: the whole family
-    /// list on the models that have always had it, and on the UT60BT and
-    /// UT202BT what UNI-T's app sends them (family spec §6.5). A capture step
+    /// list on the models that have always had it, less Peak on the UT61B+ and
+    /// UT161B, and on the UT60BT and UT202BT what UNI-T's app sends them
+    /// (family spec §6.5). A capture step
     /// never sends one the model does not offer.
     #[test]
     fn each_model_offers_the_commands_its_buttons_take() {
@@ -1496,16 +1511,18 @@ mod tests {
                 .profile
                 .supported_commands
         };
-        for model in [
-            "ut61eplus",
-            "ut161e",
-            "ut61b+",
-            "ut161b",
-            "ut61d+",
-            "ut161d",
-        ] {
+        for model in ["ut61eplus", "ut161e", "ut61d+", "ut161d"] {
             assert_eq!(commands(model), UT61EPLUS_COMMANDS, "{model}");
         }
+        for model in ["ut61b+", "ut161b"] {
+            assert_eq!(commands(model), UT61BPLUS_COMMANDS, "{model}");
+        }
+        let without_peak: Vec<&str> = UT61EPLUS_COMMANDS
+            .iter()
+            .copied()
+            .filter(|c| ![cmd::PEAK, cmd::EXIT_PEAK].contains(c))
+            .collect();
+        assert_eq!(UT61BPLUS_COMMANDS, without_peak);
         assert_eq!(
             commands("ut60bt"),
             ["hold", "range", "auto", "rel", "select"]

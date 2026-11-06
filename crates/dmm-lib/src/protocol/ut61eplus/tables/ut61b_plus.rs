@@ -23,6 +23,7 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// - A: 6A + 10A vs 20A + 20A
 /// - No temperature, no hFE, no LoZ, no LPF, no AC+DC, no Peak
 pub(crate) static UT61B_PLUS: ModelTable = ModelTable {
+    commands: crate::protocol::ut61eplus::UT61BPLUS_COMMANDS,
     name: "UNI-T UT61B+",
     entry,
     dial: DIAL,
