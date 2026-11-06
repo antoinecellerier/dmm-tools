@@ -270,6 +270,8 @@ and each still wants a capture of our own.
 - The CMS's MaxMin sub-value against the LCD's Max: the frames show the signed
   running maximum (§9.4) — settles the "Max" label. Needs `maxmin` with the
   three values on the LCD noted.
+- A duty other than 0 on a CMS (§9.4) — settles duty's scale. Needs
+  `capture --steps duty` on a square wave.
 - On the CMS, which reading is the large digits in Hz/A: the frames make
   Hz the main reading, as in Hz/V, whose LCD showed the frequency (§9.4) —
   decides whether the decoder swaps them. Needs `aca_hz` with an LCD photo.

@@ -1209,8 +1209,10 @@ fn cms(code: u8) -> Vec<CaptureStep> {
         CaptureStep::basic(
             "ncv_ef",
             "Press Tab⇌ briefly until the first menu page shows, then F4 until NCV shows; \
-             remove the test leads and keep the clamp away from any wiring (EF shows)",
+             remove the test leads and keep the clamp away from any wiring (EF shows), then \
+             Enter.",
         )
+        .wait_for_enter()
         .expect(Expect::mode("NCV")),
         CaptureStep::basic(
             "ncv",
@@ -1262,12 +1264,15 @@ fn cms(code: u8) -> Vec<CaptureStep> {
 /// The steps a UT217A (the CMS061) confirmed, #45: the readings decoded as
 /// its LCD showed them. Its OL was sampled mid-autorange, but its frames
 /// settle at OL MΩ, as the LCD showed. Hz and duty rest on the same LCD
-/// text, Hz first: only the hz step decodes in that order. Its negative
-/// DC V, MaxMin's sub-value, duty, Hz/A, NCV and the scope wait for a second
-/// capture.
+/// text, Hz first: only the hz step decodes in that order; duty's main and
+/// sub order is confirmed, its scale not, as every duty so far is 0. EF
+/// rests on the first capture's frames: its second run's step filed before
+/// the leads could move. MaxMin's Max label, Hz/A, the scope and the keys
+/// wait for a run from the states their steps ask for.
 const CMS061_VERIFIED: &[&str] = &[
     "dcv",
     "dcv_short",
+    "dcv_negative",
     "ohm_ol",
     "ohm_body",
     "ohm_short",
@@ -1284,6 +1289,9 @@ const CMS061_VERIFIED: &[&str] = &[
     "diode",
     "cap",
     "hz",
+    "duty",
+    "ncv_ef",
+    "ncv",
     "dca",
     "dca_zero",
     "aca",

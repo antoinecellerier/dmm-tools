@@ -1,0 +1,11 @@
+# DC V with the leads reversed on a 39 V source: the sign bit set
+# Captured 2026-11-06 from a UNI-T UT217A (the CMS061) over Bluetooth (issue #45, @jkay-png, 0.10.0-dev 5bd31dcf report, step dcv_negative).
+raw_hex: "22 00 F0 4E 0F 80 20 00 F0 00 00 00 04 00 00"
+mode: "DC V"
+value: "-39.18"
+unit: "V"
+range_label: ""
+flags:
+  auto_range: true
+  dc: true
+aux: []

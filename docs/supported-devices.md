@@ -268,9 +268,9 @@ Voltcraft meters, until the Bluetooth symbol shows.
 | VC915 | 20000 | 🧪 Experimental ([#49](https://github.com/antoinecellerier/dmm-tools/issues/49)) | AC+DC V, low-pass, motor rotation; LoZ, 4-20 mA; second display as a sub-value |
 | VC925 PV | 20000 | 🧪 Experimental ([#49](https://github.com/antoinecellerier/dmm-tools/issues/49)) | solar with its LX-925 adapter; 2 kV DC, 1.5 kV AC; no A position; second display as a sub-value |
 
-A UT217A has run the CMS061's main modes and auto-detection
-([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)); its
-remote keys, NCV, negative DC V and oscilloscope readings are still to confirm. No other
+A UT217A has run the CMS061's main modes, NCV, negative DC V and auto-detection
+([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)); oscilloscope
+mode shows no reading, and its remote keys are still to confirm. No other
 model has run yet: their decoding and remote keys come from OWON's and
 Voltcraft's apps, OWON's PC software and the manuals. The meter reports its
 model when it connects, which picks its entry; the OW16B opens as the

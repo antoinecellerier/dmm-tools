@@ -857,7 +857,9 @@ two captures, through a rise from -39.19 V to -28.59 V and a dip to -39.23 V
 under a -39.19 V sub-value [HARDWARE]. The frame sends no Min or Avg, and OWON's
 app shows the sub-value unlabelled (PE:5952-6085) [VENDOR, app]. Its match
 with the LCD's Max is [UNVERIFIED]. In Hz it sends Hz as the main reading and
-duty as the sub-value, and in duty the two swapped [HARDWARE]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
+duty as the sub-value, and in duty the two swapped, its LCD showing both with
+the selected one in the large digits [HARDWARE]. Its duty was 0 in all 670
+frames carrying one, so duty's scale is [UNVERIFIED]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
 or Hz on the power functions; VAC or VDC beside AC+DC (VC915-UM p.73); the
 voltage in Motor (p.76); irradiance or temperature in PV mode (VC925-UM
 p.69). Cites: OW65-UM p.26/21-27/22; OW67-UM p.14/9, p.27/22-32/27;
@@ -1019,7 +1021,8 @@ its logger takes it (`home_page.dart:1121`), with no OSC check found in
 `realtime_data_logger.dart`, 2026-11-06 [VENDOR, app].
 
 A UT217A sets bit 17 in its Inrush mode and bit 18 in scope mode
-(§9.4) [HARDWARE].
+(§9.4) [HARDWARE]. Its Inrush status was 0x20000 entered by F3 and 0x20004,
+AUTO set, by a remote `0D 01` from MaxMin (§10.8) [HARDWARE].
 
 ### 10.7 VC871 (code 87)
 
@@ -1064,6 +1067,13 @@ the app show other sets: Select, Range, H/light, Rel, Hz/Duty, Max/Min on
 the OW65, plus Peak on the OW67 and LPF and Peak on the OW69 (OW65-UM
 p.31/26; OW67-UM p.36/31; OW69-UM p.33/28); VC-APP, for the VC871/891,
 the `_c871AndOw67Keys` set (p.17). Whether `05 01` does anything on an OW65 or OW67 is [UNVERIFIED].
+
+On a UT217A over Bluetooth (#45, @jkay-png), the first frame after each write showed
+[HARDWARE]: `03 01` set HOLD in scope mode, `04 01` set REL in AC A, `06 01` set
+MaxMin in AC A, and `0D 01` entered Inrush and left MaxMin. `01 01` changed nothing
+in scope mode and `05 01` nothing in AC A's MaxMin. `02 01` in AC A under REL left
+REL with AUTO set, at decimal code 1 for 7 frames and then 2. None ran from the
+DC V or Hz the keys' effects are named for.
 
 ### 10.9 Offline words
 
