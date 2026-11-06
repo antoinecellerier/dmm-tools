@@ -166,7 +166,7 @@ impl SplitChip<'_> {
 }
 
 /// The hairline between a split chip's body and its caret, and between a
-/// MIN/MAX or PEAK button and its "x".
+/// MAX/MIN or PEAK button and its "x".
 const SPLIT_GAP: f32 = 1.0;
 
 /// Width of each field in a split chip's row, in points before zoom.
@@ -317,12 +317,13 @@ impl App {
                 }
             }
 
-            // MIN/MAX and Peak: clicking always cycles (never exits), matching
+            // MAX/MIN and Peak: clicking always cycles (never exits), matching
             // the real device's short-press behavior. An "x" joined to the
-            // button exits the mode (like the real device's long-press).
+            // button exits the mode (like the real device's long-press). MAX
+            // comes first, as on the meters with no label of their own.
             for (label, active, cycle_cmd, exit_cmd, tooltip) in [
                 (
-                    "MIN/MAX",
+                    "MAX/MIN",
                     min_max,
                     command::MINMAX,
                     command::EXIT_MINMAX,
@@ -696,27 +697,27 @@ mod tests {
             (
                 "vc880",
                 ["RANGE", "AUTO", "MAX/MIN/AVG", "SHIFT"].as_slice(),
-                ["MIN/MAX", "SELECT"].as_slice(),
+                ["MAX/MIN", "SELECT"].as_slice(),
             ),
             (
                 "vc890",
                 &["RANGE", "AUTO", "MAX/MIN/AVG", "SHIFT"],
-                &["MIN/MAX", "SELECT"],
+                &["MAX/MIN", "SELECT"],
             ),
             (
                 "vc650bt",
                 &["RANGE", "AUTO", "MAX/MIN/AVG", "SHIFT"],
-                &["MIN/MAX", "SELECT"],
+                &["MAX/MIN", "SELECT"],
             ),
             (
                 "121gw",
                 &["RANGE", "MIN/MAX/AVG", "MODE"],
-                &["MIN/MAX", "SELECT"],
+                &["MAX/MIN", "SELECT"],
             ),
             (
                 "ut61eplus",
-                &["MIN/MAX", "SELECT"],
-                &["MAX/MIN/AVG", "MODE"],
+                &["MAX/MIN", "SELECT"],
+                &["MIN/MAX", "MAX/MIN/AVG", "MODE"],
             ),
         ] {
             let buttons = buttons_of(&mut connected_to(id));
@@ -796,12 +797,12 @@ mod tests {
         );
     }
 
-    /// AVG is one of the states the MIN/MAX key steps through, so the
+    /// AVG is one of the states the MAX/MIN key steps through, so the
     /// button stays on in it and keeps its way out.
     #[test]
     fn min_max_stays_on_while_the_meter_shows_avg() {
         let mut app = connected_app(&["minmax", "exit_minmax"], "V");
-        let exit = "Exit MIN/MAX mode".to_string();
+        let exit = "Exit MAX/MIN mode".to_string();
         assert!(!buttons_of(&mut app).contains(&exit));
         app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
             dmm_lib::measurement::MeasuredValue::Normal(1.234),

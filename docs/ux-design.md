@@ -114,7 +114,7 @@ marked key too, since a key can cycle within its function.
 panel and send a raw press, so their labels and tooltips promise no more;
 naming a destination is the readout dropdowns' job. A model whose key goes by
 another name, or does more than the generic word says, shows that instead: an
-AVG state can't be found behind a button that says MIN/MAX. A label names only
+AVG state can't be found behind a button that says MAX/MIN. A label names only
 what the remote can send: SHIFT, not the printed SHIFT/SETUP, when no command
 reaches the long press.
 

@@ -9,7 +9,7 @@
 ### The figures (0.1mV, ±(0.05%+5), 45Hz~1kHz), the input impedance and
 ### the notes under them come from the meter's manual through the library
 ### and are not in this file; these messages are the words the app puts
-### around them. The buttons' own names (HOLD, REL, RANGE, MIN/MAX…) are
+### around them. The buttons' own names (HOLD, REL, RANGE, MAX/MIN…) are
 ### the meter's and stay as the meter prints them.
 
 ## The Specifications panel, in a wide window: a heading that folds the
@@ -64,7 +64,7 @@ specs-inline-resolution = Resolution { $resolution }
 specs-inline-accuracy = Accuracy { $accuracy }
 
 ## The hovers of the meter's buttons under the reading, in the order they
-## show: HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the meter's own keys, then
+## show: HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, the meter's own keys, then
 ## SELECT and LIGHT. A click sends that button's press to the meter. Each
 ## describes what multimeters generally do on that button, not one model.
 
@@ -81,16 +81,16 @@ remote-range =
 # AUTO: the meter picks its range itself again.
 remote-auto =
     .hover = Return the meter to auto-range
-# MIN/MAX: a click steps through the meter's minimum, maximum and average
+# MAX/MIN: a click steps through the meter's minimum, maximum and average
 # readings; the small × button beside it while it is on leaves the mode.
 remote-min-max =
     .hover = Record minimum, maximum, and average readings — click to cycle, × to exit
 # PEAK: the same for the fastest peaks the meter catches.
 remote-peak =
     .hover = Capture peak minimum and maximum — click to cycle, × to exit
-# The small × button after MIN/MAX or PEAK while that mode is on: it leaves
-# the mode. $mode is the name on the button beside it, such as MIN/MAX,
-# MAX/MIN/AVG or PEAK. The hover, and its name for a screen reader.
+# The small × button after MAX/MIN or PEAK while that mode is on: it leaves
+# the mode. $mode is the name on the button beside it, such as MAX/MIN,
+# MIN/MAX/AVG or PEAK. The hover, and its name for a screen reader.
 remote-exit =
     .hover = Exit { $mode } mode
     .a11y = Exit { $mode } mode
