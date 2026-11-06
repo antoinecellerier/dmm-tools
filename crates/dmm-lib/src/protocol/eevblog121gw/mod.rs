@@ -23,8 +23,8 @@ use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKey, MeterKeys, Probing,
-    Protocol, Stability, command,
+    ButtonLabel, CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKey,
+    MeterKeys, Probing, Protocol, Stability, command,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -97,6 +97,20 @@ fn key_frame(code: u8) -> [u8; 5] {
     [0xF4, hi, lo, hi, lo]
 }
 
+/// What the shared buttons do here. The key printed MIN/MAX also steps to AVG
+/// (manual p.33, p.58), and the one that steps the dial's functions is MODE
+/// (manual p.33).
+const BUTTON_LABELS: [ButtonLabel; 2] = [
+    ButtonLabel {
+        command: command::MINMAX,
+        label: "MIN/MAX/AVG",
+    },
+    ButtonLabel {
+        command: command::SELECT,
+        label: "MODE",
+    },
+];
+
 /// The 1 kHz filter key, offered while the reading is in an AC mode the
 /// manual names it for.
 static LPF_KEY: MeterKey = MeterKey {
@@ -133,6 +147,7 @@ impl Eevblog121gwProtocol {
                 meter_keys: MeterKeys {
                     functions: &[],
                     context: std::slice::from_ref(&LPF_KEY),
+                    button_labels: &BUTTON_LABELS,
                 },
             },
         }

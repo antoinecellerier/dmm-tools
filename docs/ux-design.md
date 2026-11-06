@@ -112,7 +112,11 @@ marked key too, since a key can cycle within its function.
 
 **A button promises a press.** The remote buttons mirror the meter's front
 panel and send a raw press, so their labels and tooltips promise no more;
-naming a destination is the readout dropdowns' job.
+naming a destination is the readout dropdowns' job. A model whose key goes by
+another name, or does more than the generic word says, shows that instead: an
+AVG state can't be found behind a button that says MIN/MAX. A label names only
+what the remote can send: SHIFT, not the printed SHIFT/SETUP, when no command
+reaches the long press.
 
 **SCALE comes last.** Its badge follows the meter's own: it is the app's
 state, not the meter's, and among the reported flags it would be misattributed.

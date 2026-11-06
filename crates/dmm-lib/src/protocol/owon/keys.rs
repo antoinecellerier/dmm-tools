@@ -309,18 +309,18 @@ static CM2100_ZERO: MeterKey = MeterKey {
 };
 
 pub(super) const OW_METER_KEYS: MeterKeys = MeterKeys {
-    functions: &[],
     context: std::slice::from_ref(&OW_HZ_DUTY),
+    ..MeterKeys::NONE
 };
 
 pub(super) const B_METER_KEYS: MeterKeys = MeterKeys {
-    functions: &[],
     context: std::slice::from_ref(&B_HZ_DUTY),
+    ..MeterKeys::NONE
 };
 
 pub(super) const CM2100_METER_KEYS: MeterKeys = MeterKeys {
-    functions: &[],
     context: std::slice::from_ref(&CM2100_ZERO),
+    ..MeterKeys::NONE
 };
 
 /// The 15-byte meters with a Hz/Duty key (spec §10.8): the B series'

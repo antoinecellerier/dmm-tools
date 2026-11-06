@@ -74,7 +74,7 @@ yet: every item waits on a first report.
 - The press order the manual never gives: `set mode "<label>"` per entry
   under `RUST_LOG=dmm_lib=debug` (its `cycle:` lines), or `command select`
   then `read --count 3` round each position. Settles the table's order. (#14)
-- `SHIFT/SETUP did nothing` while the display did change — decides `SETTLE`
+- `SHIFT did nothing` while the display did change — decides `SETTLE`
   (no delay, two reads, untuned). Needs the mode and the meter's delay. (#14)
 
 ## Ranges
@@ -99,11 +99,11 @@ yet: every item waits on a first report.
 
 ## Commands
 
-- Whether `command range`, `auto`, `minmax` and `exit_minmax`, which are
-  dmm-gui's RANGE, AUTO, MIN/MAX and × buttons, act as the meter's own keys
-  do, and what the AUTO flag says in a function with no ranges — decides the
-  buttons' lit states and the `range` row in the CLI reference. Needs each
-  command with the LCD noted. (#14)
+- Whether `command range`, `auto`, `minmax` and `exit_minmax` (dmm-gui's RANGE,
+  AUTO, MAX/MIN/AVG and ×) act as the meter's own keys do — decides those
+  buttons and the CLI reference's `range` row. Needs the LCD noted. (#14)
+- What the AUTO flag says in a function with one range — decides which of RANGE
+  and AUTO lights there. Needs that function and `read --count 1`. (#14)
 
 ## Detection
 

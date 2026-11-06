@@ -353,8 +353,9 @@ pub struct DeviceProfile {
     pub max_aux_values: usize,
     /// GitHub issue number for verification tracking (e.g. `Some(3)` → issue #3).
     pub verification_issue: Option<u16>,
-    /// Keys that pick a function or apply to one, beyond the buttons every
-    /// family names alike (HOLD, MIN/MAX, …); [`MeterKeys::NONE`] for most.
+    /// Keys that pick a function or apply to one, beyond the shared buttons
+    /// of [`command`], and what this meter calls those buttons where the
+    /// generic word would mislead; [`MeterKeys::NONE`] for most.
     pub meter_keys: MeterKeys,
 }
 
@@ -387,8 +388,23 @@ impl PartialEq for MeterKey {
 
 impl Eq for MeterKey {}
 
-/// The keys a family lists for a GUI to draw by data rather than by
-/// command name.
+/// What a model shows on one of the shared buttons of [`command`] in place
+/// of the GUI's generic word: what a command does there, in the meter's own
+/// words where a source gives them (`MODE` for SELECT), and naming a state
+/// the generic word would hide (`AVG`). It names nothing a command can't reach:
+/// `SHIFT` for a key printed SHIFT/SETUP whose long press has no command. A
+/// model no source covers has none.
+/// Shown as written in every language, as the generic words are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ButtonLabel {
+    /// The shared button; always one of the profile's `supported_commands`.
+    pub command: &'static str,
+    /// What the button shows.
+    pub label: &'static str,
+}
+
+/// What a family lists for a GUI to draw by data rather than by command name:
+/// its own keys, and what it shows on the shared buttons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MeterKeys {
     /// Keys that each switch the meter to a function, in the order a menu
@@ -397,6 +413,8 @@ pub struct MeterKeys {
     pub functions: &'static [MeterKey],
     /// Keys offered only while their `applies` holds for the reading.
     pub context: &'static [MeterKey],
+    /// The shared buttons this model names itself.
+    pub button_labels: &'static [ButtonLabel],
 }
 
 impl MeterKeys {
@@ -404,7 +422,17 @@ impl MeterKeys {
     pub const NONE: MeterKeys = MeterKeys {
         functions: &[],
         context: &[],
+        button_labels: &[],
     };
+
+    /// What this model shows on the shared button `command`, when it names
+    /// that button itself.
+    pub fn button_label(&self, command: &str) -> Option<&'static str> {
+        self.button_labels
+            .iter()
+            .find(|button| button.command == command)
+            .map(|button| button.label)
+    }
 }
 
 const REPO_ISSUES_URL: &str = "https://github.com/antoinecellerier/dmm-tools/issues";
@@ -934,12 +962,17 @@ mod tests {
         for device in registry::DEVICES {
             let profile = *(device.new_protocol)().profile();
             let keys = profile.meter_keys;
-            for key in keys.functions.iter().chain(keys.context) {
+            let commands = keys
+                .functions
+                .iter()
+                .chain(keys.context)
+                .map(|key| key.command)
+                .chain(keys.button_labels.iter().map(|button| button.command));
+            for command in commands {
                 assert!(
-                    profile.supported_commands.contains(&key.command),
-                    "{} lists key {:?} it does not advertise",
-                    device.id,
-                    key.command
+                    profile.supported_commands.contains(&command),
+                    "{} lists key {command:?} it does not advertise",
+                    device.id
                 );
             }
         }

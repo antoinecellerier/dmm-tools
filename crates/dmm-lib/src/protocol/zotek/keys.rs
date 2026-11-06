@@ -209,6 +209,7 @@ pub(super) fn meter_keys(layout: &Layout) -> MeterKeys {
             _ => EVERY_FUNCTION_KEY,
         },
         context: &[ZERO],
+        ..MeterKeys::NONE
     }
 }
 

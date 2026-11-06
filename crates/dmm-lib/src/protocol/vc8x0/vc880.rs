@@ -15,7 +15,9 @@
 //!
 //! See docs/research/vc880/reverse-engineered-protocol.md
 
-use super::{COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol, build_command, re, read_live};
+use super::{
+    BUTTON_LABELS, COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol, build_command, re, read_live,
+};
 use crate::error::Result;
 use crate::flags::StatusFlags;
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring, Settle};
@@ -297,7 +299,10 @@ impl Vc8x0Model for Vc880Model {
             supported_commands: COMMANDS,
             max_aux_values: 0,
             verification_issue: Some(13),
-            meter_keys: MeterKeys::NONE,
+            meter_keys: MeterKeys {
+                button_labels: BUTTON_LABELS,
+                ..MeterKeys::NONE
+            },
         }
     }
 

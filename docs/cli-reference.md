@@ -477,7 +477,7 @@ prints it (`Meter now in AC+DC V`). A refused or unconfirmed switch exits
 non-zero: check the dial position, and for a range that the input is within it.
 
 On the UT61+/UT161 and the VC-880, VC650BT and VC-890 a switch is a burst
-of button presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
+of button presses (SELECT, Hz/% or RANGE; SHIFT), each read back until the target
 shows, so it is slower than a single command and audible on the meter. A
 switch on a UT61+/UT161 in HOLD turns HOLD off.
 
@@ -556,7 +556,7 @@ dmm-cli command <ACTION>          # send a command
 | `auto` | Return to auto-range; also `range_auto` |
 | `range` | Switch to manual ranging; also `range_manual` |
 | `light` | Toggle backlight |
-| `select` | SHIFT/SETUP button: steps to the dial position's next function |
+| `select` | Short press of SHIFT/SETUP, or SHIFT/SLEEP on the VC650BT: steps to the dial position's next function |
 
 #### ZOTEK commands
 

@@ -27,8 +27,8 @@ use crate::protocol::cycle::{
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol,
-    Setting, check_len, command as cmd, display_number, spells_ol, unknown_mode,
+    ButtonLabel, CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing,
+    Protocol, Setting, check_len, command as cmd, display_number, spells_ol, unknown_mode,
     unsupported_setting,
 };
 use crate::transport::Transport;
@@ -42,12 +42,15 @@ pub(crate) const fn build_command(cmd: u8) -> [u8; 6] {
 }
 
 /// The button the command table calls `Select` (spec §5, "SELECT button (cycle
-/// sub-function)"). Both meters' front panel labels it SHIFT/SETUP, and it is
-/// what steps a dial position through its sub-functions.
+/// sub-function)"). The VC-880's and VC-890's front panels label it SHIFT/SETUP,
+/// the VC650BT's SHIFT/SLEEP, and it is what steps a dial position through its
+/// sub-functions.
 pub(crate) const CMD_SELECT: u8 = 0x4C;
 
-/// What the front panel calls [`CMD_SELECT`], for messages the user reads.
-pub(crate) const SELECT_BUTTON_NAME: &str = "SHIFT/SETUP";
+/// What the remote row and the messages call [`CMD_SELECT`]: the half of the
+/// printed key that a command reaches. Holding the key (SHIFT mode and SETUP,
+/// or the VC650BT's sleep) has no command in the spec's table.
+pub(crate) const SHIFT_BUTTON_NAME: &str = "SHIFT";
 
 /// The RANGE button: one press steps the manual range ladder (spec §5,
 /// "RANGE button"). Whether repeated presses really step it one rung at a
@@ -70,10 +73,25 @@ pub(crate) const CMD_EXIT_MAX_MIN_AVG: u8 = 0x43;
 /// The backlight toggle (spec §5).
 pub(crate) const CMD_LIGHT: u8 = 0x4B;
 
-/// What the front panels call the buttons the flag-backed settings press.
+/// What messages call the buttons the flag-backed settings press.
 pub(crate) const HOLD_BUTTON_NAME: &str = "HOLD";
 pub(crate) const REL_BUTTON_NAME: &str = "REL";
+/// The key printed MAX/MIN (VC-880 manual p.38, VC-890 manual §3), named by
+/// the states it walks: MAX, MIN, then AVG (VC-880 manual p.52, VC-890 manual
+/// §15, VC650BT instructions §15).
 pub(crate) const MAX_MIN_AVG_BUTTON_NAME: &str = "MAX/MIN/AVG";
+
+/// What the three meters show on the shared buttons.
+pub(crate) const BUTTON_LABELS: &[ButtonLabel] = &[
+    ButtonLabel {
+        command: cmd::MINMAX,
+        label: MAX_MIN_AVG_BUTTON_NAME,
+    },
+    ButtonLabel {
+        command: cmd::SELECT,
+        label: SHIFT_BUTTON_NAME,
+    },
+];
 
 /// The command byte one press of `button` sends, or `None` for a button
 /// neither Voltcraft meter has.
@@ -90,10 +108,10 @@ pub(crate) fn press_command(button: cycle::CycleButton) -> Option<u8> {
     })
 }
 
-/// What the front panel calls `button`, for the messages the user reads.
+/// What the messages the user reads call `button`.
 pub(crate) fn button_name(button: cycle::CycleButton) -> &'static str {
     match button {
-        cycle::CycleButton::Select => SELECT_BUTTON_NAME,
+        cycle::CycleButton::Select => SHIFT_BUTTON_NAME,
         cycle::CycleButton::Range => RANGE_BUTTON_NAME,
         cycle::CycleButton::Hold => HOLD_BUTTON_NAME,
         cycle::CycleButton::Rel => REL_BUTTON_NAME,

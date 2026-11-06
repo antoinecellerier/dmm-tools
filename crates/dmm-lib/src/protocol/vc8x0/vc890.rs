@@ -16,9 +16,9 @@
 //! See docs/research/vc890/reverse-engineered-protocol.md
 
 use super::{
-    CMD_EXIT_MAX_MIN_AVG, CMD_HOLD, CMD_LIGHT, CMD_MAX_MIN_AVG, CMD_RANGE_AUTO, CMD_RANGE_MANUAL,
-    CMD_REL, CMD_SELECT, COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol, build_command, re,
-    read_live, resolve_range,
+    BUTTON_LABELS, CMD_EXIT_MAX_MIN_AVG, CMD_HOLD, CMD_LIGHT, CMD_MAX_MIN_AVG, CMD_RANGE_AUTO,
+    CMD_RANGE_MANUAL, CMD_REL, CMD_SELECT, COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol,
+    build_command, re, read_live, resolve_range,
 };
 use crate::error::Result;
 use crate::flags::StatusFlags;
@@ -336,7 +336,10 @@ impl Vc8x0Model for Vc890Model {
             supported_commands: COMMANDS,
             max_aux_values: 0,
             verification_issue: Some(14),
-            meter_keys: MeterKeys::NONE,
+            meter_keys: MeterKeys {
+                button_labels: BUTTON_LABELS,
+                ..MeterKeys::NONE
+            },
         }
     }
 

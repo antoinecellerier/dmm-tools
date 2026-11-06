@@ -16,7 +16,7 @@
 - **The graph hover lists every series and tags the height per axis** — it showed one value without a right axis, and no height with one.
 - **The graph, statistics and integral carry on when the meter auto-ranges** — they restarted at each decade step; figures keep the meter's ranges, as 31.300 MΩ beside 0.04 Ω. The graph menu's Copy now includes the unit.
 - **The Specifications panel covers the Brymen BM820s and BM520s series** — the Minipa ET-2517A and ET-2615A, which share their entries, show the same figures.
-- **The Voltcraft VC-880, VC650BT and VC-890 get range and min/max buttons**
+- **The Voltcraft VC-880, VC650BT and VC-890 get RANGE, AUTO and MAX/MIN/AVG buttons**
 - **The integral takes a readable prefix** — `12.340 nAh`, not `0.0000 mAh`.
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.

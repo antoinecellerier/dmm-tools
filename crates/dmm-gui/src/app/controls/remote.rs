@@ -247,6 +247,7 @@ impl App {
             return;
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
+        let keys = self.connection.meter_keys();
         let has_cmd = |cmd: &str| {
             self.connection
                 .supported_commands()
@@ -257,6 +258,8 @@ impl App {
         let active_color = tc.accent();
         let l10n = self.l10n.clone();
         let l10n = l10n.as_ref();
+        // What a shared button shows: the model's own word, or the generic one.
+        let shown = |cmd: &str, generic: &'static str| keys.button_label(cmd).unwrap_or(generic);
 
         // Collected rather than acted on inside the closure, which holds
         // `has_cmd`'s borrow of `self`.
@@ -295,7 +298,8 @@ impl App {
                 // `selected` announces the state and paints the selected fill
                 // when on; the button keeps its frame when off so it still
                 // reads as actionable, unlike `Button::selectable`.
-                let text = RichText::new(label).font(egui::FontId::proportional(font_size));
+                let text =
+                    RichText::new(shown(cmd, label)).font(egui::FontId::proportional(font_size));
                 let resp = ui
                     .add(egui::Button::new(text).selected(active))
                     .on_hover_text(tooltip);
@@ -327,6 +331,7 @@ impl App {
                 if !has_cmd(cycle_cmd) {
                     continue;
                 }
+                let label = shown(cycle_cmd, label);
                 let text = RichText::new(label).font(egui::FontId::proportional(font_size));
                 let resp = ui
                     .add(egui::Button::new(text).selected(active))
@@ -354,7 +359,7 @@ impl App {
             // 121GW's 1kHz in AC, OWON's Hz/Duty, and the CM2100B's ZERO),
             // each only while the reading is one it applies to.
             let reading = self.last_measurement.as_ref();
-            for key in self.connection.meter_keys().context {
+            for key in keys.context {
                 if !reading.is_some_and(|m| (key.applies)(m)) {
                     continue;
                 }
@@ -378,7 +383,8 @@ impl App {
                 if !has_cmd(cmd) {
                     continue;
                 }
-                let text = RichText::new(label).font(egui::FontId::proportional(font_size));
+                let text =
+                    RichText::new(shown(cmd, label)).font(egui::FontId::proportional(font_size));
                 if ui
                     .add(egui::Button::new(text))
                     .on_hover_text(tooltip)
@@ -616,8 +622,8 @@ mod tests {
         let mut app = connected_app(&["hold", "zero"], unit);
         let meter = app.connection.meter.as_mut().expect("a connected meter");
         meter.meter_keys = dmm_lib::protocol::MeterKeys {
-            functions: &[],
             context: ZERO_IN_FARADS,
+            ..dmm_lib::protocol::MeterKeys::NONE
         };
         buttons_of(&mut app)
     }
@@ -639,15 +645,64 @@ mod tests {
             .collect()
     }
 
-    /// The VC-880's and VC-890's range and min/max keys reach the row.
+    /// A model that names a shared button shows that instead of the generic
+    /// word; the rest keep it.
     #[test]
-    fn the_voltcraft_range_and_min_max_keys_are_drawn() {
-        for id in ["vc880", "vc650bt", "vc890"] {
+    fn a_shared_button_shows_what_the_model_calls_it() {
+        for (id, shown, absent) in [
+            (
+                "vc880",
+                ["RANGE", "AUTO", "MAX/MIN/AVG", "SHIFT"].as_slice(),
+                ["MIN/MAX", "SELECT"].as_slice(),
+            ),
+            (
+                "vc890",
+                &["RANGE", "AUTO", "MAX/MIN/AVG", "SHIFT"],
+                &["MIN/MAX", "SELECT"],
+            ),
+            (
+                "vc650bt",
+                &["RANGE", "AUTO", "MAX/MIN/AVG", "SHIFT"],
+                &["MIN/MAX", "SELECT"],
+            ),
+            (
+                "121gw",
+                &["RANGE", "MIN/MAX/AVG", "MODE"],
+                &["MIN/MAX", "SELECT"],
+            ),
+            (
+                "ut61eplus",
+                &["MIN/MAX", "SELECT"],
+                &["MAX/MIN/AVG", "MODE"],
+            ),
+        ] {
             let buttons = buttons_of(&mut connected_to(id));
-            for label in ["RANGE", "AUTO", "MIN/MAX"] {
+            for label in shown {
                 assert!(buttons.iter().any(|b| b == label), "{id}: {buttons:?}");
             }
+            for label in absent {
+                assert!(!buttons.iter().any(|b| b == label), "{id}: {buttons:?}");
+            }
         }
+    }
+
+    /// The × names the mode by the label beside it.
+    #[test]
+    fn the_exit_button_names_the_models_label() {
+        let mut app = connected_to("vc880");
+        app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
+            dmm_lib::measurement::MeasuredValue::Normal(1.234),
+            "V",
+            dmm_lib::flags::StatusFlags {
+                avg: true,
+                ..Default::default()
+            },
+        ));
+        let buttons = buttons_of(&mut app);
+        assert!(
+            buttons.iter().any(|b| b == "Exit MAX/MIN/AVG mode"),
+            "{buttons:?}"
+        );
     }
 
     /// AVG is one of the states the MIN/MAX key steps through, so the

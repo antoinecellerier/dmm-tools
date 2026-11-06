@@ -1685,8 +1685,8 @@ mod tests {
         app.connection.meter = Some(ConnectedMeter {
             supported_commands: vec!["hold".to_string(), "zero".to_string()],
             meter_keys: MeterKeys {
-                functions: &[],
                 context: ZERO,
+                ..MeterKeys::NONE
             },
             ..ConnectedMeter::test_fixture(None)
         });

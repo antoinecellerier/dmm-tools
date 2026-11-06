@@ -83,7 +83,7 @@ has been read yet: every item waits on a first report.
 - Whether V⎓ below 400 mV reports 0x02, DC mV (§4.4) — decides the 0x02
   overlap between two positions. Needs V⎓ with a small DC input and
   `read --count 1` or `debug`. (#13)
-- The settle budget, untuned: `SHIFT/SETUP did nothing in <mode>` while the
+- The settle budget, untuned: `SHIFT did nothing in <mode>` while the
   display did change means it is too tight — decides `SETTLE`. Needs
   `set mode`; report the mode. (#13)
 
@@ -101,6 +101,9 @@ has been read yet: every item waits on a first report.
 - The order 0x49 walks MAX, MIN and AVG, and 0x43 leaving them (§5) —
   decides `flag_states`' order. Needs `set minmax max`, `min`, `avg` and
   `off`, each with the LCD's badge. (#13)
+- Which bits the first press sets (manuals: MINMAX over the live value, before
+  MAX) — decides whether dmm-gui's MAX/MIN/AVG lights there and offers its ×.
+  Needs `command minmax` from off, with the LCD noted. (#13)
 - Whether every mode takes HOLD and REL — decides which modes offer them.
   Needs `set hold on`/`off` and `set rel on`/`off` on two or three
   positions, under `RUST_LOG=dmm_lib=debug`. (#13)
@@ -112,11 +115,14 @@ has been read yet: every item waits on a first report.
 
 - Whether `light` (0x4B) toggles the backlight (§5) — decides the command.
   Needs `dmm-cli --device vc880 command light`. (#13)
-- Whether `command range`, `auto`, `minmax` and `exit_minmax`, which are
-  dmm-gui's RANGE, AUTO, MIN/MAX and × buttons, act as the meter's own keys
-  do, and what the AUTO flag says in a function with no ranges — decides the
-  buttons' lit states and the `range` row in the CLI reference. Needs each
-  command with the LCD noted. (#13)
+- Whether `command range`, `auto`, `minmax` and `exit_minmax` (dmm-gui's RANGE,
+  AUTO, MAX/MIN/AVG and ×) act as the meter's own keys do — decides those
+  buttons and the CLI reference's `range` row. Needs the LCD noted. (#13)
+- Whether a reading follows `command range` as promptly as `set range`: unlike
+  a walk, a command neither drains the queue nor checks the Result frame —
+  decides whether commands go through `write_button`. Needs both. (#13)
+- What the AUTO flag says in a function with one range — decides which of RANGE
+  and AUTO lights there. Needs that function and `read --count 1`. (#13)
 
 ## Detection and the capture list
 

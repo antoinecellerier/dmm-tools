@@ -157,9 +157,10 @@ absolute command sends it. A family that can only press buttons goes through the
 choice list that works on it works on hardware. `choices` and `select` default to unsupported, and
 the CLI and GUI hide a setting whose list has fewer than two entries.
 
-A profile can also list keys for a GUI to draw by data rather than by command name
-(`DeviceProfile::meter_keys`): function keys that pick a function, and context keys offered while
-they apply to the reading. Each is one of the profile's commands, sent through `send_command()`.
+A profile can also list what a GUI draws by data rather than by command name
+(`DeviceProfile::meter_keys`): function keys that pick a function, context keys offered while they
+apply to the reading, and what the model shows on a shared button where the generic word would
+mislead. Each names one of the profile's commands, sent through `send_command()`.
 
 Code: `protocol/mod.rs` (`Setting`, `Choice`, `MeterKeys`), `protocol/cycle.rs`.
 

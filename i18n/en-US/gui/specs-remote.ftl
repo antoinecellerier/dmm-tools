@@ -89,8 +89,8 @@ remote-min-max =
 remote-peak =
     .hover = Capture peak minimum and maximum — click to cycle, × to exit
 # The small × button after MIN/MAX or PEAK while that mode is on: it leaves
-# the mode. $mode is the button's name as the meter prints it, MIN/MAX or
-# PEAK. The hover, and its name for a screen reader.
+# the mode. $mode is the name on the button beside it, such as MIN/MAX,
+# MAX/MIN/AVG or PEAK. The hover, and its name for a screen reader.
 remote-exit =
     .hover = Exit { $mode } mode
     .a11y = Exit { $mode } mode
