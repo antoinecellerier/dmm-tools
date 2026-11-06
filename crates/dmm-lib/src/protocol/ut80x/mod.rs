@@ -587,17 +587,20 @@ impl Ut803Fields {
     }
 }
 
-/// Mode name, unit and decimal point position, falling back to an unnamed
-/// mode when the (mode, range) pair is absent from the per-model table.
+/// Mode name, unit and decimal point position, with no name when the (mode,
+/// range) pair is absent from the per-model table.
 fn mode_info_or_unknown(
     unrecognised: Unrecognised,
     info: Option<(&'static str, &'static str, u8)>,
-) -> (&'static str, &'static str, u8) {
-    info.unwrap_or_else(|| {
-        // The tables hold every pair the spec gives (§7.4 items 4 and 7).
-        unrecognised.report("mode/range pair");
-        ("?", "", 3)
-    })
+) -> (Option<&'static str>, &'static str, u8) {
+    match info {
+        Some((name, unit, dp_pos)) => (Some(name), unit, dp_pos),
+        None => {
+            // The tables hold every pair the spec gives (§7.4 items 4 and 7).
+            unrecognised.report("mode/range pair");
+            (None, "", 3)
+        }
+    }
 }
 
 /// The mode a UT804-layout reading names in frequency mode with the sign
@@ -639,12 +642,8 @@ fn ut804_mode_name(name: &'static str, coupling: Option<Coupling>) -> &'static s
 }
 
 /// The vendor app's overload text, signed when the sign bit is set.
-fn overload_display(negative: bool) -> Option<String> {
-    Some(if negative {
-        "-0L".to_string()
-    } else {
-        "0L".to_string()
-    })
+fn overload_display(negative: bool) -> &'static str {
+    if negative { "-0L" } else { "0L" }
 }
 
 /// What a UT804's LCD shows for a packet whose digit 1 is blank — an
@@ -719,15 +718,12 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
 
     let (mode, negative, dp_pos, unit): (Cow<'static, str>, bool, u8, &'static str) = if f.duty() {
         (Cow::Borrowed(DUTY_MODE), false, 2, "%")
-    } else if mode_name == "?" {
-        (unknown_mode(f.mode), sign_bit, dp_pos, unit)
     } else {
-        (
-            Cow::Borrowed(ut804_mode_name(mode_name, coupling)),
-            sign_bit,
-            dp_pos,
-            unit,
-        )
+        let mode = match mode_name {
+            Some(name) => Cow::Borrowed(ut804_mode_name(name, coupling)),
+            None => unknown_mode(f.mode),
+        };
+        (mode, sign_bit, dp_pos, unit)
     };
     // Duty has no range of its own (spec §3.7).
     let range_label = match info {
@@ -756,12 +752,12 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
         if nibbles[1] == 0xC {
             (
                 MeasuredValue::NoReading("LO"),
-                lcd.or_else(|| Some("L0".to_string())),
+                Some(lcd.unwrap_or_else(|| "L0".to_string())),
             )
         } else {
             (
                 MeasuredValue::Overload,
-                lcd.or_else(|| overload_display(negative)),
+                Some(lcd.unwrap_or_else(|| overload_display(negative).to_string())),
             )
         }
     } else if nibbles[3] == 0xB {
@@ -876,21 +872,25 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
     let (mode_name, unit, dp_pos) =
         mode_info_or_unknown(unrecognised, ut803_mode_info(f.mode, f.range, alt));
 
-    let mode: Cow<'static, str> = if mode_name == "?" {
-        unknown_mode(f.mode)
-    } else {
-        // Volts are DC or AC: both bits is AC+DC, open on the UT803 (§5),
-        // and neither is undocumented.
-        if matches!(mode_name, "V" | "mV")
-            && !matches!(f.coupling(), Some(Coupling::Dc | Coupling::Ac))
-        {
-            unrecognised.report("ac/dc bits");
+    let mode: Cow<'static, str> = match mode_name {
+        Some(name) => {
+            // Volts are DC or AC: both bits is AC+DC, open on the UT803 (§5),
+            // and neither is undocumented.
+            if matches!(name, "V" | "mV")
+                && !matches!(f.coupling(), Some(Coupling::Dc | Coupling::Ac))
+            {
+                unrecognised.report("ac/dc bits");
+            }
+            Cow::Borrowed(ut803_mode_name(name, dc))
         }
-        Cow::Borrowed(ut803_mode_name(mode_name, dc))
+        None => unknown_mode(f.mode),
     };
 
     let (value, display_raw) = if overload {
-        (MeasuredValue::Overload, overload_display(negative))
+        (
+            MeasuredValue::Overload,
+            Some(overload_display(negative).to_string()),
+        )
     } else {
         // The spec documents no UT803 blank digit (§7.4 item 4).
         let (display, v) = assemble_value(unrecognised, &nibbles[2..6], None, dp_pos, negative)?;
