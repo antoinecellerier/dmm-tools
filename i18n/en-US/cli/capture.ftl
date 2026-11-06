@@ -142,6 +142,11 @@ capture-command-failed = Command failed: { $error }
 # meter didn't change. $command is the button's name as the tool sends it,
 # e.g. hold; $reading what the meter shows, e.g. 5.5687 V [AUTO].
 capture-did-nothing-shows = { $command } did nothing; the meter still shows { $reading }
+# Yellow: the tool pressed a button on the meter by remote control and the
+# meter changed, but not to what the step waits for. $command is the button's
+# name as the tool sends it, e.g. hold; $reading what the meter shows, e.g.
+# 0.00 VA [HOLD].
+capture-command-missed = { $command } did not bring the state this step waits for; the meter now shows { $reading }
 # $command is the button's name as the tool sends it, e.g. hold.
 capture-did-nothing-silent = { $command } did nothing; the meter sent no reading
 # Yellow: the meter changed function while the step was reading it, so the

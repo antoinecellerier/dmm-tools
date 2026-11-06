@@ -8,7 +8,7 @@ use super::report::{
     needs_attention, upsert_step,
 };
 use super::session::CaptureRun;
-use super::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
+use super::watch::{Baseline, STABLE_FRAMES, State, StateWatcher, Verdict, enter_only};
 use crate::open::BoxedDmm;
 use console::{Key, style};
 use dmm_lib::error::{Error, ErrorKind};
@@ -433,18 +433,36 @@ fn mismatch_line(l: &Localizer, mismatch: &Mismatch) -> String {
     .into_owned()
 }
 
-/// The wording for a command the meter ignored, in the terms `cycle.rs` uses
-/// for the same failure: in `l`'s language on the terminal, in English in
-/// the report.
-fn did_nothing(l: &Localizer, command: &str, last: Option<&Measurement>) -> String {
-    match last {
-        Some(m) => tr!(
+/// The wording for a command that didn't bring the state its step waits for,
+/// in `l`'s language on the terminal, in English in the report. A meter still
+/// in a state from `before` ignored it, in the terms `cycle.rs` uses for the
+/// same failure. Any other state is only what the meter now shows: it need not
+/// be the command's doing, as an autorange step changes the state too.
+fn command_missed(
+    l: &Localizer,
+    command: &str,
+    before: &[Measurement],
+    last: Option<&Measurement>,
+) -> String {
+    let Some(m) = last else {
+        return tr!(l, "capture-did-nothing-silent", command = command).into_owned();
+    };
+    let reading = SampleData::from_measurement(m).summary();
+    let same = |b: &Measurement| State::of(b) == State::of(m);
+    if before.is_empty() || before.iter().any(same) {
+        tr!(
             l,
             "capture-did-nothing-shows",
             command = command,
-            reading = SampleData::from_measurement(m).summary(),
-        ),
-        None => tr!(l, "capture-did-nothing-silent", command = command),
+            reading = reading,
+        )
+    } else {
+        tr!(
+            l,
+            "capture-command-missed",
+            command = command,
+            reading = reading,
+        )
     }
     .into_owned()
 }
@@ -748,8 +766,9 @@ impl CaptureRun {
                     Watched::TimedOut(last) => {
                         // No samples: filing pre-command frames as the step's result
                         // is what made a dead command look like a captured state.
-                        let error = did_nothing(crate::l10n::english(), cmd, last.as_ref());
-                        eprintln!("  {}", style(did_nothing(l, cmd, last.as_ref())).yellow());
+                        let say = |l| command_missed(l, cmd, &before, last.as_ref());
+                        let error = say(crate::l10n::english());
+                        eprintln!("  {}", style(say(l)).yellow());
                         let mut result = empty_result(step, StepStatus::Error, Some(error));
                         result.diagnostics = errors.into_diagnostics();
                         self.finish_failed_step(result);
@@ -1253,16 +1272,32 @@ mod tests {
     }
 
     /// A command the meter ignored has to say what it is still showing, or
-    /// the report reads as though the step never ran.
+    /// the report reads as though the step never ran. One followed by another
+    /// state must not say it did nothing: #45's "hold did nothing; the meter
+    /// still shows 0.00 VA [HOLD]" came with HOLD just lit, in the wrong mode.
     #[test]
-    fn a_dead_command_names_what_the_meter_still_shows() {
-        let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
+    fn a_missed_command_says_what_the_meter_shows() {
+        let reading = |mode: u8| make_test_measurement(mode, 0x01, b"  5.678", (0, 0), (0, 0, 0));
+        let l = crate::l10n::english();
+        let (dc_v, ohms) = (reading(0x02), reading(0x06));
+        let before = std::slice::from_ref(&dc_v);
         assert_eq!(
-            did_nothing(crate::l10n::english(), "hold", Some(&m)),
+            command_missed(l, "hold", before, Some(&dc_v)),
             "hold did nothing; the meter still shows 5.678 V [AUTO]"
         );
+        let shown = SampleData::from_measurement(&ohms).summary();
         assert_eq!(
-            did_nothing(crate::l10n::english(), "hold", None),
+            command_missed(l, "hold", before, Some(&ohms)),
+            format!(
+                "hold did not bring the state this step waits for; the meter now shows {shown}"
+            )
+        );
+        assert_eq!(
+            command_missed(l, "hold", &[], Some(&ohms)),
+            format!("hold did nothing; the meter still shows {shown}")
+        );
+        assert_eq!(
+            command_missed(l, "hold", before, None),
             "hold did nothing; the meter sent no reading"
         );
     }
