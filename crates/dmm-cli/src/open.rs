@@ -528,6 +528,10 @@ fn open_error_help(
             for (instructions, names) in
                 dmm_shared::help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
             {
+                let names: Vec<Cow<'_, str>> = names
+                    .into_iter()
+                    .map(|name| l.label(TextKind::Model, name))
+                    .collect();
                 eprintln!("\n{}", style(names.join(", ")).yellow());
                 for line in l.label(TextKind::Activation, instructions).lines() {
                     eprintln!("{}", style(format!("  {line}")).dim());
