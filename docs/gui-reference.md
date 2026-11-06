@@ -157,6 +157,9 @@ A row of buttons shown when connected and receiving data (visible in the
 | **4-20mA** | Read a 4-20 mA loop as a percentage (OWON OW67B and OW69B, shown in DC mA, AC mA and the loop reading; Voltcraft VC871, VC891, VC915 and VC925 PV, shown in DC mA and the loop reading) |
 | **Display** | Change what the displays show (OWON OW67B and Voltcraft VC871, shown in power readings only; Voltcraft VC915, shown in AC V, Hz and duty only; Voltcraft VC925 PV) |
 | **Lo** | Low-pass filter (OWON OW69B, shown in AC V, AC mV and AC+DC V only; Voltcraft VC891, shown in AC V only). Reads **LPF** on the Voltcraft VC915, shown in AC V only. |
+| **COMP** | Compare the reading with the limits set on the meter (Voltcraft VC925 PV, and the VC915 outside Motor) |
+| **AC/DC** | Show VAC or VDC on the second display (Voltcraft VC915, shown in AC+DC V only) |
+| **MOTOR** | Show 3-phase rotation direction (Voltcraft VC915, shown in AC V and Motor only) |
 
 Buttons highlight blue when the corresponding flag is active in the current
 measurement. LIGHT and the buttons below it in this table do not highlight. On the

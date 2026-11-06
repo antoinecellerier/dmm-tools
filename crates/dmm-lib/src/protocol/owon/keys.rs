@@ -435,6 +435,45 @@ const VC915_LPF: MeterKey = MeterKey {
     ..VC891_LO
 };
 
+/// COMP: the VC925 PV's manual doesn't limit it, though some softkeys grey out
+/// in some functions without saying which (VC925-UM p.86, p.88). First in its
+/// list, as it stays.
+const COMP: MeterKey = MeterKey {
+    command: "compare",
+    label: "COMP",
+    in_words: false,
+    hover: Some("Compare the reading with the set limits"),
+    applies: |_| true,
+};
+
+/// The VC915's is the same, but for Motor, whose softkeys show only HOLD
+/// (VC915-UM p.75-76, p.86, p.89).
+const VC915_COMP: MeterKey = MeterKey {
+    applies: |m| !function_in(m, &[code::MOTOR]),
+    ..COMP
+};
+
+/// AC/DC, F1 in AC+DC V, picks what the sub-display shows (VC915-UM p.73).
+const VC915_AC_DC: MeterKey = MeterKey {
+    command: "ac_dc",
+    label: "AC/DC",
+    in_words: false,
+    hover: Some("Show VAC or VDC on the second display"),
+    applies: |m| function_in(m, &[code::AC_DC_V]),
+};
+
+/// MOTOR is in the V~ position's AC menu, and offered in the Motor it lands on,
+/// though that screen's softkeys show only HOLD (VC915-UM p.75-76).
+const VC915_MOTOR: MeterKey = MeterKey {
+    command: "motor",
+    label: "MOTOR",
+    in_words: false,
+    hover: Some("Show 3-phase rotation direction"),
+    applies: |m| {
+        (function_in(m, &[function::AC_V]) && m.unit == "V") || function_in(m, &[code::MOTOR])
+    },
+};
+
 pub(super) const OW67_METER_KEYS: MeterKeys = MeterKeys {
     context: &[POWER_DISPLAY, OW_CURRENT_LOOP],
     ..MeterKeys::NONE
@@ -471,13 +510,20 @@ pub(super) const VC891_METER_KEYS: MeterKeys = MeterKeys {
 };
 
 pub(super) const VC915_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[VC915_DISPLAY, VC915_LPF, CURRENT_LOOP_KEY],
+    context: &[
+        VC915_COMP,
+        VC915_DISPLAY,
+        VC915_LPF,
+        VC915_MOTOR,
+        VC915_AC_DC,
+        CURRENT_LOOP_KEY,
+    ],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
 
 pub(super) const VC925_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[VC925_DISPLAY, CURRENT_LOOP_KEY],
+    context: &[COMP, VC925_DISPLAY, CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
@@ -839,6 +885,33 @@ mod tests {
         // A frame with the status bit set offers it still.
         let lpf_on = reading_frame(g24(1, 4, 1, false), 125, 0, 0, 1 << 9);
         assert!(offered_for(&entry::OW69B, &lpf_on).contains(&"Lo"));
+    }
+
+    /// What the VC915 and VC925 PV offer, in the order drawn: COMP first, as
+    /// it stays, except in the VC915's Motor.
+    #[test]
+    fn the_vc915_and_vc925_offer_their_own_keys() {
+        for (function, prefix, labels) in [
+            (0, 4, ["COMP"].as_slice()),
+            (1, 4, &["COMP", "Display", "LPF", "MOTOR"]),
+            (2, 3, &["COMP", "4-20mA"]),
+            (17, 4, &["COMP", "4-20mA"]),
+            (23, 4, &["COMP", "AC/DC"]),
+            (1, 3, &["COMP", "Display"]),
+            (24, 4, &["MOTOR"]),
+            (6, 4, &["COMP", "Display"]),
+        ] {
+            assert_eq!(
+                offered(&entry::VC915, function, prefix),
+                labels,
+                "{function}"
+            );
+        }
+        assert_eq!(offered(&entry::VC925PV, 0, 4), ["COMP", "Display"]);
+        assert_eq!(
+            offered(&entry::VC925PV, 2, 3),
+            ["COMP", "Display", "4-20mA"]
+        );
     }
 
     #[test]

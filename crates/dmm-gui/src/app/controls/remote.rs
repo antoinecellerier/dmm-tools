@@ -446,11 +446,11 @@ impl App {
             }
 
             // The meter's context keys (ZOTEK's ZERO in capacitance, the
-            // 121GW's 1kHz in AC, OWON's Hz/Duty, the CM2100B's ZERO and the
-            // UT61+'s Hz/%, the UT181A's SAVE), each only while the reading is
-            // one it applies to. Last, as they come and go with the mode: a
-            // SELECT press that brings one in leaves SELECT where it was, for
-            // the next press.
+            // 121GW's 1kHz in AC, OWON's Hz/Duty, Inrush and the rest, the
+            // CM2100B's ZERO, the UT61+'s Hz/%, the UT181A's SAVE), each only
+            // while the reading is one it applies to. Last, as they come and
+            // go with the mode: a SELECT press that brings one in leaves SELECT
+            // where it was, for the next press.
             let reading = self.last_measurement.as_ref();
             for key in keys.context {
                 if !reading.is_some_and(|m| (key.applies)(m)) {
@@ -1044,14 +1044,6 @@ mod tests {
         ),
     ];
 
-    /// Keys with no control yet. Every keypress is to reach the GUI, so this
-    /// only shrinks, and goes when it is empty.
-    const NOT_YET: &[(DeviceFamily, &str)] = &[
-        (DeviceFamily::Owon, "compare"),
-        (DeviceFamily::Owon, "ac_dc"),
-        (DeviceFamily::Owon, "motor"),
-    ];
-
     /// The × that leaves a mode, drawn only with its button and the mode on:
     /// the button's command, and the flags that light it.
     fn parent_of_exit(command: &str) -> Option<(&'static str, StatusFlags)> {
@@ -1160,7 +1152,6 @@ mod tests {
             NOT_A_BUTTON
                 .iter()
                 .any(|&(f, c, _)| (f, c) == (family, command))
-                || NOT_YET.iter().any(|&(f, c)| (f, c) == (family, command))
         };
         let mut gaps = Vec::new();
         let mut seen = Vec::new();
@@ -1182,18 +1173,13 @@ mod tests {
                 }
             }
         }
-        let entries = NOT_A_BUTTON
-            .iter()
-            .map(|&(family, command, _)| (family, command))
-            .chain(NOT_YET.iter().copied());
-        for (family, command) in entries {
+        for &(family, command, _) in NOT_A_BUTTON {
             if !seen.contains(&(family, command)) {
                 gaps.push(format!(
                     "{family:?} lists {command}, which nothing advertises"
                 ));
             }
         }
-        println!("no control yet: {NOT_YET:?}");
         assert!(gaps.is_empty(), "{gaps:#?}");
     }
 }

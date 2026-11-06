@@ -484,6 +484,8 @@ key-hover-1-khz-low-pass-filter = 1 kHz low-pass filter
 key-hover-capture-1-ms-peaks-in-ac = Capture 1 ms peaks in AC V
 # Used by: OW67B, VC871
 key-hover-change-what-the-displays-show = Change what the displays show
+# Used by: VC915, VC925 PV
+key-hover-compare-the-reading-with-the-set = Compare the reading with the set limits
 # Used by: CMS061, CMS101
 key-hover-enter-max-min-click-again-to = Enter MAX/MIN; click again to leave it
 # Used by: 121GW
@@ -510,6 +512,10 @@ key-hover-record-minimum-maximum-and-average-readings = Record minimum, maximum,
 key-hover-save-the-reading-to-the-meter = Save the reading to the meter's memory
 # Used by: CMS061, CMS101
 key-hover-send-select-effect-on-this-meter = Send Select; effect on this meter unknown
+# Used by: VC915
+key-hover-show-3-phase-rotation-direction = Show 3-phase rotation direction
+# Used by: VC915
+key-hover-show-vac-or-vdc-on-the = Show VAC or VDC on the second display
 # Used by: 121GW
 key-hover-step-through-hold-and-autohold = Step through HOLD and AutoHOLD
 # Used by: VC915

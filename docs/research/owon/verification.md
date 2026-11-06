@@ -263,6 +263,17 @@ and each still wants a capture of our own.
 - The 15-byte keys' taps and Voltcraft long presses (§10.8) — decides the
   key tables and whether a long REL is safe to send. Needs `key_*` per
   model, and `key_exit_rel` with FFF2 read on a VC871/891/915/925 PV.
+- Where each 15-byte softkey acts (§9.4): 4-20mA, Display, Lo or LPF, AC/DC,
+  MOTOR and Inrush outside the functions their manuals name — decides each key's
+  `applies` in `owon/keys.rs`. Needs `key_*` per model, noting any no-effect press.
+- Whether a second press leaves what a key entered: Inrush, Lo, MOTOR, 4-20mA, the
+  VC915's Hz/% — decides whether each stays offered in the function it lands on.
+  Needs the key sent twice, per key, on a meter that has it.
+- Where COMP greys out on a VC915 or VC925 PV (§9.4) — decides its `applies`,
+  every function today. Needs `key_compare` in several functions.
+- The OW67B's and OW69B's long F2 leaving PEAK (OW67-UM p.32/27; OW69-UM p.29/24),
+  which the app's list doesn't send — decides whether `exit_peak`, `08 00`, is
+  offered there. Needs a dev build.
 - Which code the 15-byte meters' BLE key is, and what its long press does
   sent remotely (§10.8) — decides whether any further long press may be
   offered. Needs each key code held remotely, the ᛒ icon noted.

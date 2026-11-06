@@ -889,7 +889,10 @@ secondary displays, with no limit (p.71), and its PV screen shows the softkey
 and VC891, a 1 kHz filter from 6 V up on the VC891 (VC871-UM p.71; VC891-UM p.65,
 p.93), and for AC and AC+DC on the OW69, where F1 enters and leaves it and the V
 and mV positions both have it (OW69-UM p.28/23-29/24); the VC915 names it LPF, in
-AC V's menu, from 2 V up (VC915-UM p.74, p.105).
+AC V's menu, from 2 V up (VC915-UM p.74, p.105). AC/DC, F1 in AC+DC V, picks VAC or VDC for the sub-display
+(VC915-UM p.73). MOTOR is in AC V's menu, and the Motor screen's softkeys show only
+HOLD (VC915-UM p.75-76). Neither manual otherwise limits COMP, though some softkeys grey
+out in some functions without saying which (VC915-UM p.86, p.89; VC925-UM p.86, p.88).
 
 ## 10. The 15-byte frame
 
