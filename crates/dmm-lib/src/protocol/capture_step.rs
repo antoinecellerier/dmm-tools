@@ -95,6 +95,10 @@ pub struct CaptureStep {
     /// Only the operator's Enter captures: the instruction is a sequence of
     /// presses, and the meter reports the state each one leaves.
     pub wait_for_enter: bool,
+    /// A command step's starting state: the command goes out once the meter
+    /// shows it, so the operator has time to do what the instruction asks
+    /// first. `None` sends at once, for a step the one before sets up.
+    pub starts_from: Option<Expect>,
 }
 
 impl CaptureStep {
@@ -111,6 +115,7 @@ impl CaptureStep {
             expect: None,
             needs: &[],
             wait_for_enter: false,
+            starts_from: None,
         }
     }
 
@@ -132,6 +137,7 @@ impl CaptureStep {
             expect: None,
             needs: &[],
             wait_for_enter: false,
+            starts_from: None,
         }
     }
 
@@ -178,6 +184,12 @@ impl CaptureStep {
     /// the first press's, or the previous step's clean-up.
     pub const fn wait_for_enter(mut self) -> Self {
         self.wait_for_enter = true;
+        self
+    }
+
+    /// Hold the step's command until the meter shows this state.
+    pub const fn starts_from(mut self, state: Expect) -> Self {
+        self.starts_from = Some(state);
         self
     }
 }

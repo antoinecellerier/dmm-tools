@@ -128,6 +128,10 @@ capture-already-captured = { $step } already captured, skipping
 # Dim, once the tool has waited a while. $skip and $quit are the keys: s and
 # q.
 capture-press-enter = Press Enter when the meter is ready ({ $skip }=skip, { $quit }=finish)
+# Dim: a step that presses a button on the meter by remote control holds it
+# until the meter shows the state the instruction asks for. $skip and $quit
+# are the keys: s and q.
+capture-wait-start = Set the meter up as above: the key goes out once it is (Enter=send now, { $skip }=skip, { $quit }=finish)
 # When the terminal can't be read key by key. $skip and $quit are the keys:
 # s and q.
 capture-any-key = any key=capture, { $skip }=skip, { $quit }=finish:

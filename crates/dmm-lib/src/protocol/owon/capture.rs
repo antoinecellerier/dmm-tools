@@ -63,6 +63,13 @@ const AUTO_RANGE: &[(Flag, bool)] = &[(Flag::AutoRange, true)];
 const MAX_ON: &[(Flag, bool)] = &[(Flag::Max, true), (Flag::Min, false)];
 const MIN_ON: &[(Flag, bool)] = &[(Flag::Min, true), (Flag::Max, false)];
 const MAX_MIN_OFF: &[(Flag, bool)] = &[(Flag::Max, false), (Flag::Min, false)];
+const HOLD_OFF: &[(Flag, bool)] = &[(Flag::Hold, false)];
+const HOLD_REL_OFF: &[(Flag, bool)] = &[(Flag::Hold, false), (Flag::Rel, false)];
+const HOLD_REL_OFF_AUTO: &[(Flag, bool)] = &[
+    (Flag::Hold, false),
+    (Flag::Rel, false),
+    (Flag::AutoRange, true),
+];
 
 /// A remote key step: the key goes out, five samples follow.
 const fn key(id: &'static str, instruction: &'static str, command: &'static str) -> CaptureStep {
@@ -1285,20 +1292,27 @@ const CMS061_VERIFIED: &[&str] = &[
 /// The CMS entries' keys: Select, Range, Hold, Rel, Hz/Duty, Max/Min and
 /// Inrush, all taps (spec §10.8). The CMS has no SELECT key and no key
 /// named Hz/Duty, so those steps expect nothing.
+///
+/// Each step's instruction has the operator set the meter up, or undo the
+/// step before, so each starts from a state: #45's run sent all seven within
+/// 22 s, from the scope and AC A. "DC V" also matches mV,DC and "Hz" the Hz/A
+/// and Hz/V views, where a press still exercises the key.
 fn cms_keys() -> Vec<CaptureStep> {
     vec![
         key(
             "key_select",
             "Press the power key briefly if the oscilloscope shows, Tab⇌ briefly until the \
              first menu page shows, then F2 until V,DC shows, leads open: we will send Select, \
-             which the CMS has no key for.",
+             which the CMS has no key for, so no change on the screen is a valid result.",
             "select",
-        ),
+        )
+        .starts_from(Expect::mode("DC V")),
         key(
             "key_hold",
             "V,DC: we will send Hold (HOLD should show). Press HOLD briefly afterwards.",
             "hold",
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_OFF))
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
         key(
             "key_rel",
@@ -1306,33 +1320,38 @@ fn cms_keys() -> Vec<CaptureStep> {
              second menu page, F2 (Rel) to leave it, then A if Manu shows.",
             "rel",
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_REL_OFF))
         .expect(Expect::mode("DC V").flags(REL_ON)),
         key(
             "key_range",
             "V,DC, Auto showing: we will send Range (Manu should show). Press A afterwards.",
             "range",
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_REL_OFF_AUTO))
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
         key(
             "key_minmax",
             "V,DC: we will send Max/Min (Min, Max and Avg should show). Afterwards press Tab⇌ \
-             briefly for the second menu page and F1 (MaxMin) to leave it.",
+             briefly until the second menu page shows, then F1 (MaxMin) to leave it.",
             "minmax",
-        ),
+        )
+        .starts_from(Expect::mode("DC V").flags(AUTO_RANGE)),
         key(
             "key_hz_duty",
             "Press Tab⇌ briefly until the first menu page shows, then F4 until Freq shows, \
              leads open: we will send Hz/Duty. If % shows afterwards, press Tab⇌ briefly for \
              the second menu page and F4.",
             "hz_duty",
-        ),
+        )
+        .starts_from(Expect::mode("Hz")),
         key(
             "key_inrush",
             "Press Tab⇌ briefly until the first menu page shows, then F1 until A,AC shows, \
              nothing in the jaws: we will send Inrush (INRUSH should show). Afterwards press \
              Tab⇌ briefly for the second menu page and F3 (Inrush) to leave it.",
             "inrush",
-        ),
+        )
+        .starts_from(Expect::mode("AC A").flags(AUTO_RANGE)),
     ]
 }
 
@@ -2739,6 +2758,70 @@ fn vc925pv_keys() -> Vec<CaptureStep> {
 mod tests {
     use super::*;
     use crate::protocol::owon::model::MODELS;
+
+    /// The CMS key steps' starting states, against frames a UT217A sent (#45):
+    /// each state can be reached, and the state the step before leaves, or the
+    /// scope, holds the key back.
+    #[test]
+    fn the_cms_key_steps_start_from_states_the_meter_shows() {
+        use crate::protocol::owon::decode15::decode;
+        use crate::protocol::owon::model::CMS061;
+        let reading = |hex: &str| {
+            let bytes: Vec<u8> = hex
+                .split(' ')
+                .map(|b| u8::from_str_radix(b, 16).unwrap())
+                .collect();
+            decode(&bytes, &CMS061).unwrap()
+        };
+        let dc_v = reading("22 00 F0 4E 0F 80 20 00 F0 00 00 00 04 00 00");
+        let hold = reading("24 00 F0 03 00 00 20 00 F0 00 00 00 01 00 00");
+        let rel = reading("22 10 F0 00 00 00 22 10 F0 5A 0F 00 02 00 00");
+        let maxmin = reading("22 10 F0 2C 0B 80 22 10 F0 2C 0B 80 20 00 00");
+        let hz = reading("A3 11 F0 00 00 00 E1 11 F0 00 00 00 04 00 00");
+        let ac_a = reading("E2 00 F0 00 00 00 A2 01 F0 00 00 00 04 00 00");
+        let scope = reading("E2 13 F0 00 00 00 E2 10 F0 00 00 00 00 00 04");
+
+        let steps = steps(61);
+        let starts = |id: &str, m: &crate::measurement::Measurement| {
+            let step = steps.iter().find(|s| s.id == id).unwrap();
+            step.starts_from.unwrap().check(m).is_ok()
+        };
+        for id in [
+            "key_select",
+            "key_hold",
+            "key_rel",
+            "key_range",
+            "key_minmax",
+        ] {
+            assert!(starts(id, &dc_v), "{id}");
+            assert!(!starts(id, &scope), "{id}");
+        }
+        assert!(!starts("key_hold", &hold));
+        assert!(!starts("key_rel", &hold));
+        assert!(!starts("key_rel", &rel));
+        assert!(!starts("key_range", &rel));
+        assert!(!starts("key_minmax", &maxmin));
+        assert!(starts("key_hz_duty", &hz));
+        assert!(!starts("key_hz_duty", &dc_v));
+        assert!(starts("key_inrush", &ac_a));
+        assert!(!starts("key_inrush", &hz));
+        assert!(!starts("key_inrush", &scope));
+    }
+
+    /// Other families' keys send at once until a CMS run has proven the wait.
+    #[test]
+    fn only_the_cms_key_steps_start_from_a_state() {
+        for (code, _) in entries() {
+            for step in steps(code) {
+                assert_eq!(
+                    step.starts_from.is_some(),
+                    matches!(code, 61 | 101) && step.id.starts_with("key_"),
+                    "{code} {}",
+                    step.id
+                );
+            }
+        }
+    }
 
     /// Every entry's model code and the remote commands it offers.
     fn entries() -> impl Iterator<Item = (u8, &'static [&'static str])> {

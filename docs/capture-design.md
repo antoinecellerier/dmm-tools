@@ -49,6 +49,14 @@ and a flicker would read as the command's effect. A command whose only effect is
 such as ZERO, says so in its `expect`; an `expect` the frames before already met cannot show
 the command working, so the step waits for a new state that still meets it.
 
+A command step whose instruction asks the operator to set the meter up, or to undo the step
+before, declares `starts_from`: the command goes out once the meter shows that state, with no
+keypress, so a healthy run loses only the frames that show it. Enter sends anyway, since our
+reading of the state may be what is wrong, and a step given up on keeps its frames. Where the run
+reads no parse only Enter ends the wait, and a piped run sends at once. A passing step cannot stand
+in for this: it says the last key worked, not that the meter is ready for the next one. Only the
+CMS entries' keys declare it so far (#45).
+
 `--settle MS` waits before every sample, for readings that take seconds to come down after a
 change, such as a UT61E+'s top two Ω rungs after a RANGE press. It is off by default. Waiting
 for the digits themselves to hold still would never finish on leads with nothing stable across
@@ -196,7 +204,7 @@ does not.
 ## E. Per-step verification status
 
 Each `CaptureStep` says whether hardware has confirmed it (`verified`), beside `gate`, `expect`,
-`needs` and `wait_for_enter`. Around that flag:
+`needs`, `wait_for_enter` and `starts_from`. Around that flag:
 
 - `dmm-cli capture --unverified` runs only unverified steps plus the freeform pass. This is the
   one-line ask in every device verification issue. With `--steps` the two intersect.

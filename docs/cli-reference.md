@@ -697,7 +697,9 @@ Steps advance on the meter, not on a keypress: the tool captures once the
 meter settles into the state the instruction asks for; a step the readings
 cannot tell from the one before waits for Enter. Enter captures now, `s`
 skips, `q` finishes and saves. A meter settled in something else is
-reported once and the step keeps waiting. Leave the meter in the step's mode
+reported once and the step keeps waiting. A step that sends a key by remote
+control may hold it until the meter is set up as its instruction says; Enter
+sends it now. Leave the meter in the step's mode
 until the samples are printed: leaving it retakes the step. Each sample is
 then read back for you to check against the screen: Enter accepts it, `n`
 asks what the meter showed instead, `r` retakes the step.

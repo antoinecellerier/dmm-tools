@@ -599,6 +599,7 @@ mod tests {
             gate,
             needs: &[],
             wait_for_enter: false,
+            starts_from: None,
         }
     }
 

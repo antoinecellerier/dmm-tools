@@ -843,6 +843,7 @@ mod tests {
             gate: false,
             needs: &[],
             wait_for_enter: false,
+            starts_from: None,
         };
         let dir = tempfile::tempdir().unwrap();
         run.output_path = dir
@@ -981,6 +982,7 @@ mod tests {
             gate: false,
             needs: &[],
             wait_for_enter: false,
+            starts_from: None,
         }
     }
 

@@ -597,6 +597,49 @@ impl CaptureRun {
         }
     }
 
+    /// Hold a command step until the meter shows the state it starts from, with
+    /// Enter to send anyway: our reading of the state may be what is wrong.
+    /// Where the run does not read the parse, only Enter can end the wait.
+    fn wait_for_start(
+        &mut self,
+        state: dmm_lib::protocol::Expect,
+        errors: &mut ErrorLog,
+    ) -> Result<Watched, Box<dyn std::error::Error>> {
+        let l = crate::l10n::get();
+        let (mut watcher, timeout) = if self.trust.reads_parse() {
+            eprintln!(
+                "  {}",
+                style(tr!(l, "capture-wait-start", skip = "s", quit = "q")).dim()
+            );
+            (
+                StateWatcher::for_step(Some(state), None, true),
+                STEP_TIMEOUT,
+            )
+        } else {
+            (StateWatcher::for_step(None, None, false), Duration::ZERO)
+        };
+        watch_for_state(
+            &mut self.dmm,
+            &self.input,
+            &mut watcher,
+            timeout,
+            OnTimeout::OfferKeys,
+            errors,
+        )
+    }
+
+    /// File a step the operator gave up on while it waited to start, with its
+    /// frames: they show the state it never saw.
+    fn skip_from_wait(&mut self, step: &CaptureStep, errors: ErrorLog, quit: bool) -> StepOutcome {
+        let mut result = empty_result(step, StepStatus::Skipped, None);
+        result.diagnostics = errors.into_diagnostics();
+        file_step(&mut self.report, &self.recorder, result, Frames::Drained);
+        StepOutcome {
+            quit,
+            ..StepOutcome::nothing()
+        }
+    }
+
     /// Run one capture step, and say what it left behind for the next.
     pub(super) fn capture_step(
         &mut self,
@@ -650,9 +693,28 @@ impl CaptureRun {
             // A retake re-samples; it does not press the button again, which on a
             // toggle like HOLD would undo the state the first press reached.
             if let Some(cmd) = step.command.filter(|_| attempt == 1) {
+                // A piped run has no one to wait for: it sends at once.
+                if interactive
+                    && self.input.is_tty()
+                    && let Some(state) = step.starts_from
+                {
+                    match self.wait_for_start(state, &mut errors)? {
+                        Watched::Skip => return Ok(self.skip_from_wait(step, errors, false)),
+                        Watched::Quit => return Ok(self.skip_from_wait(step, errors, true)),
+                        Watched::Ready(_) | Watched::TimedOut(_) => {}
+                    }
+                }
+
                 // What the meter shows before the button is pressed, so a command
                 // that changes nothing can be told from one that works.
                 let before = capture_samples(&mut self.dmm, STABLE_FRAMES, &mut errors)?;
+
+                // An Enter pressed twice at the wait must not end the wait for
+                // the command's effect as well, which would file the frames
+                // from before it took hold.
+                if step.starts_from.is_some() {
+                    self.input.drain_keys();
+                }
 
                 match self.dmm.send_command(cmd) {
                     Ok(()) => {}
@@ -884,6 +946,7 @@ pub(super) fn cli_step(id: &'static str, verified: bool, gate: bool) -> CaptureS
         gate,
         needs: &[],
         wait_for_enter: false,
+        starts_from: None,
     }
 }
 
@@ -892,7 +955,7 @@ mod tests {
     use super::*;
     use dmm_lib::protocol::make_test_measurement;
     use dmm_lib::transport::mock::MockTransport;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     /// A UT61E+ frame: AB CD, length, payload, 16-bit BE sum.
     fn frame(payload: &[u8]) -> Vec<u8> {
@@ -1177,6 +1240,7 @@ mod tests {
             gate: false,
             needs: &[],
             wait_for_enter: false,
+            starts_from: None,
         };
         let mut run = run_on(dmm);
         let err = run
@@ -1455,6 +1519,7 @@ mod tests {
             gate: false,
             needs: &[],
             wait_for_enter: false,
+            starts_from: None,
         };
 
         let filed = |settle: Duration| {
@@ -1696,6 +1761,233 @@ mod tests {
             .map(|s| s.flags.rel)
             .collect();
         assert_eq!(rel, [true; 5]);
+    }
+
+    /// A meter on the bench for the starting-state tests: it answers a command
+    /// with an ack and then its `after` frames, as sending drops whatever was
+    /// already waiting. It logs how many frames had gone out at each command,
+    /// and has keys typed as a given frame goes out.
+    struct Bench {
+        queue: MockTransport,
+        after: Mutex<Vec<Vec<u8>>>,
+        request: Mutex<Option<Vec<u8>>>,
+        frames: Arc<Mutex<usize>>,
+        commands: Arc<Mutex<Vec<usize>>>,
+        keys: Vec<(usize, Key)>,
+        typed: Mutex<std::sync::mpsc::Sender<Key>>,
+    }
+
+    impl dmm_lib::transport::Transport for Bench {
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            self.queue.link()
+        }
+
+        fn write(&self, data: &[u8]) -> dmm_lib::error::Result<()> {
+            // The first write of each test is a reading request.
+            let mut request = self.request.lock().unwrap();
+            if request.get_or_insert_with(|| data.to_vec()) != data {
+                self.commands
+                    .lock()
+                    .unwrap()
+                    .push(*self.frames.lock().unwrap());
+                self.queue.push_response(frame(&[0xFF, 0x00])); // the ack
+                for f in self.after.lock().unwrap().drain(..) {
+                    self.queue.push_response(f);
+                }
+            }
+            self.queue.write(data)
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            let mut frames = self.frames.lock().unwrap();
+            for (at, key) in &self.keys {
+                if at == &*frames {
+                    self.typed.lock().unwrap().send(key.clone()).unwrap();
+                }
+            }
+            let n = self.queue.read_timeout(buf, timeout_ms)?;
+            if n > 0 {
+                *frames += 1;
+            }
+            Ok(n)
+        }
+
+        fn set_baud(&self, baud: u32) -> dmm_lib::error::Result<()> {
+            self.queue.set_baud(baud)
+        }
+    }
+
+    /// A step's run on a [`Bench`], with its frames recorded.
+    struct BenchRun {
+        run: CaptureRun,
+        frames: Arc<Mutex<usize>>,
+        commands: Arc<Mutex<Vec<usize>>>,
+    }
+
+    impl BenchRun {
+        fn new(before: Vec<Vec<u8>>, after: Vec<Vec<u8>>, keys: Vec<(usize, Key)>) -> Self {
+            let (typed, input) = Input::typed();
+            let frames = Arc::new(Mutex::new(0));
+            let commands = Arc::new(Mutex::new(Vec::new()));
+            let bench = Bench {
+                queue: MockTransport::new(before),
+                after: Mutex::new(after),
+                request: Mutex::new(None),
+                frames: Arc::clone(&frames),
+                commands: Arc::clone(&commands),
+                keys,
+                typed: Mutex::new(typed),
+            };
+            let (recording, recorder) =
+                crate::capture::recording::RecordingTransport::new(Box::new(bench));
+            let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
+            let dmm = dmm_lib::Dmm::new(
+                Box::new(recording) as Box<dyn dmm_lib::transport::Transport>,
+                (device.new_protocol)(),
+            )
+            .unwrap();
+            let run = CaptureRun {
+                input,
+                ..CaptureRun::on(dmm, recorder)
+            };
+            Self {
+                run,
+                frames,
+                commands,
+            }
+        }
+
+        fn capture(&mut self, step: &CaptureStep) -> StepOutcome {
+            self.run
+                .capture_step(step, true, &PrevState::default())
+                .unwrap()
+        }
+
+        /// How many frames had gone out at each command sent.
+        fn commands(&self) -> Vec<usize> {
+            self.commands.lock().unwrap().clone()
+        }
+    }
+
+    /// `n` readings in Ω, away from the DC V the steps below start from.
+    fn ohms(n: usize) -> Vec<Vec<u8>> {
+        let f = frame(&[
+            0x06, 0x30, b' ', b' ', b'5', b'.', b'6', b'7', b'8', 0, 0, 0x30, 0x30, 0x30,
+        ]);
+        vec![f; n]
+    }
+
+    /// `n` readings in Ω with REL on, which the REL steps below expect.
+    fn ohms_rel(n: usize) -> Vec<Vec<u8>> {
+        let f = frame(&[
+            0x06, 0x30, b' ', b' ', b'5', b'.', b'6', b'7', b'8', 0, 0, 0x31, 0x30, 0x30,
+        ]);
+        vec![f; n]
+    }
+
+    /// `n` readings in DC V with REL `on`.
+    fn volts(n: usize, on: bool) -> Vec<Vec<u8>> {
+        let rel = if on { 0x31 } else { 0x30 };
+        let f = frame(&[
+            0x02, 0x30, b' ', b' ', b'5', b'.', b'6', b'7', b'8', 0, 0, rel, 0x30, 0x30,
+        ]);
+        vec![f; n]
+    }
+
+    /// A REL step that starts from DC V, as a CMS key step does.
+    fn rel_from_dc_v() -> CaptureStep {
+        use dmm_lib::flags::Flag;
+        CaptureStep::with_command("rel", "set up DC V: we will send REL", "rel", 3)
+            .starts_from(dmm_lib::protocol::Expect::mode("DC V"))
+            .expect(dmm_lib::protocol::Expect::new().flags(&[(Flag::Rel, true)]))
+    }
+
+    /// #45: the keys went out while the meter sat in the scope, before the
+    /// operator could set it up. Nothing is sent until the state has held.
+    #[test]
+    fn a_command_waits_for_the_state_it_starts_from() {
+        // 5 elsewhere, 3 to settle, 3 for the frames before the command.
+        let before = [ohms(5), volts(6, false)].concat();
+        let mut bench = BenchRun::new(before, volts(12, true), Vec::new());
+        bench.capture(&rel_from_dc_v());
+        assert_eq!(bench.commands(), [11]);
+        let step = &bench.run.report.steps[0];
+        assert_eq!(step.status, StepStatus::Captured);
+        assert!(step.samples.iter().all(|s| s.flags.rel));
+    }
+
+    /// The fast path: a meter already there costs only the frames that show it.
+    #[test]
+    fn a_command_goes_out_at_once_from_its_starting_state() {
+        let mut bench = BenchRun::new(volts(6, false), volts(12, true), Vec::new());
+        bench.capture(&rel_from_dc_v());
+        assert_eq!(bench.commands(), [6]);
+    }
+
+    /// Enter sends though the state never came, as our reading of it may be
+    /// what is wrong; a second Enter must not end the wait for the command's
+    /// effect too, or the frames from before it took hold are filed.
+    #[test]
+    fn enter_sends_anyway_and_a_second_one_is_dropped() {
+        // Enter on the third frame, then 3 frames before the command, with
+        // another Enter among them.
+        let keys = vec![(2, Key::Enter), (4, Key::Enter)];
+        // 2 frames before the command takes hold.
+        let after = [ohms(2), ohms_rel(12)].concat();
+        let mut bench = BenchRun::new(ohms(6), after, keys);
+        bench.capture(&rel_from_dc_v());
+        assert_eq!(bench.commands(), [6]);
+        let step = &bench.run.report.steps[0];
+        assert_eq!(step.status, StepStatus::Captured);
+        assert!(step.samples.iter().all(|s| s.flags.rel));
+    }
+
+    /// Giving up on a state that never came keeps the frames, which show what
+    /// the meter did instead, and nothing is sent.
+    #[test]
+    fn skipping_the_wait_files_its_frames_and_sends_nothing() {
+        for (key, quits) in [('s', false), ('q', true)] {
+            let keys = vec![(3, Key::Char(key))];
+            let mut bench = BenchRun::new(ohms(8), Vec::new(), keys);
+            let outcome = bench.capture(&rel_from_dc_v());
+            assert_eq!(outcome.quit, quits);
+            assert!(bench.commands().is_empty());
+            let step = &bench.run.report.steps[0];
+            assert_eq!(step.status, StepStatus::Skipped);
+            assert!(!step.frames.is_empty(), "{key}: its frames were dropped");
+        }
+    }
+
+    /// A piped run has no one to wait for, and a step that declares no state
+    /// is set up by the one before: both send after the frames before it.
+    #[test]
+    fn with_no_one_to_wait_for_or_no_state_the_command_goes_out_at_once() {
+        let mut piped = BenchRun::new(ohms(3), ohms_rel(12), Vec::new());
+        piped.run.input = Input::piped();
+        piped.capture(&rel_from_dc_v());
+        assert_eq!(piped.commands(), [3]);
+
+        let mut no_state = BenchRun::new(ohms(3), ohms_rel(12), Vec::new());
+        no_state.capture(&CaptureStep {
+            starts_from: None,
+            ..rel_from_dc_v()
+        });
+        assert_eq!(no_state.commands(), [3]);
+    }
+
+    /// Where the run doesn't read the parse, the state can't be seen: a meter
+    /// already showing it still waits for Enter.
+    #[test]
+    fn a_run_that_cannot_read_the_state_waits_for_enter() {
+        let mut bench = BenchRun::new(volts(8, false), Vec::new(), vec![(5, Key::Enter)]);
+        bench.run.trust = crate::capture::report::Trust::new(true, false, &[]);
+        let state = dmm_lib::protocol::Expect::mode("DC V");
+        let watched = bench
+            .run
+            .wait_for_start(state, &mut ErrorLog::default())
+            .unwrap();
+        assert!(matches!(watched, Watched::Ready(None)));
+        assert_eq!(*bench.frames.lock().unwrap(), 6);
     }
 
     /// Only the mode is compared, and only once the first sample is in it: a

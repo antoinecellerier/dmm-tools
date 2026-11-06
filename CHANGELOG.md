@@ -34,6 +34,7 @@
 - **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.
 - **`capture` asks before running on a meter that reports another model** — such as a UT217A opened as the UT217B, which only a warning flagged.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
+- **`capture` holds CMS and UT217 keys until the meter is ready** — they went out at once, whatever the meter showed.
 
 ### Bug fixes
 

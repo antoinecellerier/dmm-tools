@@ -122,6 +122,7 @@ impl PlanStep {
             gate: false,
             needs: leak_slice(needs),
             wait_for_enter: false,
+            starts_from: None,
         })
     }
 }
