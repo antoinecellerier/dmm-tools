@@ -368,8 +368,49 @@ const OW_CURRENT_LOOP: MeterKey = MeterKey {
     ..CURRENT_LOOP_KEY
 };
 
+/// Display, F1, changes the readings in AC, DC and USB power (VC871-UM p.85-88;
+/// OW67-UM p.27/22 on), whose main reading moves among these functions (spec
+/// §14 D11).
+const POWER_DISPLAY: MeterKey = MeterKey {
+    command: "display",
+    label: "Display",
+    in_words: false,
+    hover: Some("Change what the displays show"),
+    applies: |m| {
+        function_in(
+            m,
+            &[
+                code::POWER_W,
+                code::POWER_VA,
+                code::POWER_FACTOR,
+                code::POWER_AH,
+                code::TIME,
+                code::POWER_WH,
+                code::POWER_V,
+                code::POWER_A,
+            ],
+        )
+    },
+};
+
+/// The VC915's DISPLAY swaps Hz/% and voltage in AC V (VC915-UM p.72, p.74),
+/// and is offered in the Hz and duty it lands on.
+const VC915_DISPLAY: MeterKey = MeterKey {
+    hover: Some("Swap Hz/% and voltage"),
+    applies: |m| function_in(m, &[function::AC_V, function::HZ, function::DUTY]),
+    ..POWER_DISPLAY
+};
+
+/// The VC925 PV's symbol table gives Display no limit (VC925-UM p.71), and
+/// AC V and PV mode both have it (VC925-UM p.69, p.75).
+const VC925_DISPLAY: MeterKey = MeterKey {
+    hover: Some("Swap the main and second displays"),
+    applies: |_| true,
+    ..POWER_DISPLAY
+};
+
 pub(super) const OW67_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[OW_CURRENT_LOOP],
+    context: &[POWER_DISPLAY, OW_CURRENT_LOOP],
     ..MeterKeys::NONE
 };
 
@@ -389,7 +430,7 @@ const VC_BUTTON_LABELS: &[ButtonLabel] = &[ButtonLabel {
 }];
 
 pub(super) const VC871_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[CURRENT_LOOP_KEY],
+    context: &[POWER_DISPLAY, CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
@@ -403,13 +444,13 @@ pub(super) const VC891_METER_KEYS: MeterKeys = MeterKeys {
 };
 
 pub(super) const VC915_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[CURRENT_LOOP_KEY],
+    context: &[VC915_DISPLAY, CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
 
 pub(super) const VC925_METER_KEYS: MeterKeys = MeterKeys {
-    context: &[CURRENT_LOOP_KEY],
+    context: &[VC925_DISPLAY, CURRENT_LOOP_KEY],
     button_labels: VC_BUTTON_LABELS,
     ..MeterKeys::NONE
 };
@@ -714,6 +755,34 @@ mod tests {
         }
         for model in [&entry::OW65B, &entry::CMS061, &entry::CMS101] {
             assert!(!has(model, 2, 3), "{}", model.id);
+        }
+    }
+
+    /// Display on each model's own functions.
+    #[test]
+    fn display_is_offered_where_each_manual_uses_it() {
+        let has = |model, function| offered(model, function, 4).contains(&"Display");
+        for model in [&entry::OW67B, &entry::VC871] {
+            for function in [14, 15, 16, 18, 19, 20, 21, 22] {
+                assert!(has(model, function), "{} {function}", model.id);
+            }
+            for function in [0, 1, 2, 3, 4, 6, 17] {
+                assert!(!has(model, function), "{} {function}", model.id);
+            }
+        }
+        for function in [1, 6, 7] {
+            assert!(has(&entry::VC915, function), "{function}");
+        }
+        for function in [0, 2, 3, 4, 17, 23, 24] {
+            assert!(!has(&entry::VC915, function), "{function}");
+        }
+        for function in [0, 1, 2, 6, 17, 25, 26, 28, 29] {
+            assert!(has(&entry::VC925PV, function), "{function}");
+        }
+        for model in [&entry::OW65B, &entry::OW69B, &entry::VC891, &entry::CMS061] {
+            for function in [1, 14] {
+                assert!(!has(model, function), "{} {function}", model.id);
+            }
         }
     }
 

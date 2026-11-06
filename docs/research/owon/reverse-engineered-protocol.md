@@ -880,7 +880,12 @@ p.86-90; VC925-UM p.86-87).
 F3 entering and leaving it (CMS101-UM p.15/10, p.18/13). 4-20mA is "only in
 the DC mA range" (VC871-UM p.71; VC891-UM p.65; VC915-UM p.68, p.79; VC925-UM
 p.71, p.79); on the OW67 and OW69 it is "When measuring mA current", with < or >
-(OW67-UM p.26/21; OW69-UM p.25/20).
+(OW67-UM p.26/21; OW69-UM p.25/20). Display, F1, changes the readings in AC, DC and USB power on the OW67
+and VC871 (OW67-UM p.27/22 on; VC871-UM p.85-88). On the VC915 it swaps Hz/% and
+voltage in AC V, F3 on its menu page (VC915-UM p.72, p.74). The VC925 PV does the
+same with F1 (VC925-UM p.75); its symbol table has Display switch the primary and
+secondary displays, with no limit (p.71), and its PV screen shows the softkey
+(p.69).
 
 ## 10. The 15-byte frame
 

@@ -1051,7 +1051,6 @@ mod tests {
         (DeviceFamily::Owon, "compare"),
         (DeviceFamily::Owon, "ac_dc"),
         (DeviceFamily::Owon, "motor"),
-        (DeviceFamily::Owon, "display"),
     ];
 
     /// The × that leaves a mode, drawn only with its button and the mode on:

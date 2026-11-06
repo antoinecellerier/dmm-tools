@@ -155,6 +155,7 @@ A row of buttons shown when connected and receiving data (visible in the
 | **SAVE** | Save the reading to the meter's memory (UT181A) |
 | **Inrush** | Measure inrush current (OWON CMS101 and CMS061, UNI-T UT217A and UT217B, shown in AC A only) |
 | **4-20mA** | Read a 4-20 mA loop as a percentage (OWON OW67B and OW69B, shown in DC mA, AC mA and the loop reading; Voltcraft VC871, VC891, VC915 and VC925 PV, shown in DC mA and the loop reading) |
+| **Display** | Change what the displays show (OWON OW67B and Voltcraft VC871, shown in power readings only; Voltcraft VC915, shown in AC V, Hz and duty only; Voltcraft VC925 PV) |
 
 Buttons highlight blue when the corresponding flag is active in the current
 measurement. LIGHT and the buttons below it in this table do not highlight. On the

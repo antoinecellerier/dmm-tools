@@ -480,6 +480,8 @@ key-diode-continuity = Diode / continuity
 
 # Used by: 121GW
 key-hover-capture-1-ms-peaks-in-ac = Capture 1 ms peaks in AC V
+# Used by: OW67B, VC871
+key-hover-change-what-the-displays-show = Change what the displays show
 # Used by: CMS061, CMS101
 key-hover-enter-max-min-click-again-to = Enter MAX/MIN; click again to leave it
 # Used by: 121GW
@@ -508,6 +510,10 @@ key-hover-save-the-reading-to-the-meter = Save the reading to the meter's memory
 key-hover-send-select-effect-on-this-meter = Send Select; effect on this meter unknown
 # Used by: 121GW
 key-hover-step-through-hold-and-autohold = Step through HOLD and AutoHOLD
+# Used by: VC915
+key-hover-swap-hz-pct-and-voltage = Swap Hz/% and voltage
+# Used by: VC925 PV
+key-hover-swap-the-main-and-second-displays = Swap the main and second displays
 # Used by: OW18B/OW16B, OW18E
 key-hover-toggle-the-backlight-and-an-ow18 = Toggle the backlight and an OW18's flashlight
 # Used by: VC871, VC891, VC915, VC925 PV
