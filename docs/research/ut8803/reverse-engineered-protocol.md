@@ -353,7 +353,8 @@ into the status word's AC/DC field and the reading's unit. [VENDOR]
   for the IndR/CapR ESR sub-modes, the default 0xF (no unit) for
   IndQ/CapD.
 - `FUN_1001cdc0` (lines 23644-23700), the magnitude prefix per (mode,
-  range): 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M.
+  range): 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M. It gives none for the Ω and Hz
+  modes at range 6 as at range 0, and m for capacitance above range 5.
 
 #### Inductance Test Frequency
 

@@ -22,7 +22,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol, Stability,
-    check_len, display_number, spells_ol, unknown_mode,
+    check_len, display_number, spells_ol, unknown_mode, unknown_scale,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -73,7 +73,9 @@ const UT8803_COMMANDS: &[&str] = &[];
 /// mode from the vendor's base-unit lookup (spec §2.3: 2=Ω also
 /// for IndR/CapR ESR sub-modes, default 0xF=no unit for IndQ/CapD);
 /// prefixes per (mode, range) from its prefix lookup (spec §2.3:
-/// 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M).
+/// 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M). That lookup gives no prefix for Ω and Hz
+/// at range 6 as at range 0, and milli for capacitance above range 5.
+/// `range_idx` is 0 to 6, all the vendor accepts.
 fn display_unit(mode_byte: u8, range_idx: u8) -> &'static str {
     match mode_byte {
         // V: range 0 = mV, others V
@@ -107,8 +109,7 @@ fn display_unit(mode_byte: u8, range_idx: u8) -> &'static str {
         0x0E => match range_idx {
             0..=2 => "nF",
             3..=5 => "µF",
-            6 => "mF",
-            _ => "F",
+            _ => "mF",
         },
         0x11 => "",
         0x13 => "°C",
@@ -305,14 +306,16 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let range_raw = payload[3];
     // The vendor rejects a range byte outside 0x30-0x36: it subtracts 0x30
     // with wrap-around and requires at most 6
-    // (docs/research/ut8803/reverse-engineered-protocol.md §2.3).
-    if !(0x30..=0x36).contains(&range_raw) {
+    // (docs/research/ut8803/reverse-engineered-protocol.md §2.3). Here, and
+    // not beside the other fields, so a bad display byte can't hide the report.
+    let unit = if (0x30..=0x36).contains(&range_raw) {
+        display_unit(mode_byte, range_raw - 0x30)
+    } else if (1..=6).all(|range| display_unit(mode_byte, range) == display_unit(mode_byte, 0)) {
+        // The range can't change this mode's unit, so nothing is in doubt.
         report_unknown("ut8803", "range byte", format_args!("{range_raw:#04x}"));
-    }
-    let range_idx = if range_raw >= 0x30 {
-        range_raw - 0x30
+        display_unit(mode_byte, 0)
     } else {
-        range_raw
+        unknown_scale("ut8803", "range byte", format_args!("{range_raw:#04x}"))
     };
     let display_bytes = &payload[5..10];
 
@@ -419,8 +422,6 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         ..Default::default()
     };
 
-    let unit = display_unit(mode_byte, range_idx);
-
     // A zero for the `O` is a precaution: what this field holds is unverified,
     // and the display check above lets digits, `O` and `L` through.
     let spelled_ol = display_trimmed.contains('L') && spells_ol(&display_trimmed.replace('0', "O"));
@@ -506,7 +507,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
 #[cfg(test)]
 pub(crate) fn all_units(out: &mut crate::protocol::Units) {
     for mode in 0..=u8::MAX {
-        for range in 0..=u8::MAX {
+        for range in 0..=6 {
             out.insert(display_unit(mode, range));
         }
     }
@@ -838,21 +839,64 @@ raw_payload=17"#
         assert_eq!(reports, ["ut8803: unrecognised mode byte: 0x17"]);
     }
 
-    /// A range byte outside 0x30-0x36 is reported and parsed as before.
+    /// A range byte outside 0x30-0x36 is reported, and the digits' scale is
+    /// unknown, so the reading has no unit.
     #[test]
     fn range_byte_outside_the_prefixed_range_is_reported() {
-        for (range, index) in [(0x37, 7), (0x2F, 0x2F), (0x05, 5)] {
+        for range in [0x37, 0x2F, 0x05] {
             let mut payload = make_payload(0x0E, 0x00, b" 1.23", 0, 0, 0);
             payload[3] = range;
             let (m, reports) = parse_capturing(&payload);
             let m = m.unwrap();
             assert_eq!(m.range_raw, range);
-            assert_eq!(m.unit, display_unit(0x0E, index));
+            assert_eq!(m.unit, "");
             assert_eq!(
                 reports,
                 [format!("ut8803: unrecognised range byte: {range:#04x}")]
             );
         }
+    }
+
+    /// A mode whose rows all have one unit keeps it, reported: the range byte
+    /// can't change its scale. A mode whose rows change the unit has none.
+    #[test]
+    fn a_range_byte_outside_the_band_keeps_a_unit_it_cannot_change() {
+        for (mode, unit) in [
+            (0x07, "A"),
+            (0x13, "°C"),
+            (0x16, "%"),
+            (0x00, ""),
+            (0x08, ""),
+        ] {
+            let mut payload = make_payload(mode, 0x00, b" 1.23", 0, 0, 0);
+            payload[3] = 0x37;
+            let (m, reports) = parse_capturing(&payload);
+            assert_eq!(m.unwrap().unit, unit, "{mode:#04x}");
+            assert_eq!(reports, ["ut8803: unrecognised range byte: 0x37"]);
+        }
+    }
+
+    /// Range byte 0x36 is one the vendor accepts, with no prefix on Ω and Hz.
+    #[test]
+    fn the_last_range_byte_is_silent_on_its_base_unit() {
+        for (mode, unit) in [(0x08, "Ω"), (0x15, "Hz")] {
+            let mut payload = make_payload(mode, 0x00, b" 1.23", 0, 0, 0);
+            payload[3] = 0x36;
+            let (m, reports) = parse_capturing(&payload);
+            assert_eq!(m.unwrap().unit, unit);
+            assert!(reports.is_empty(), "{reports:?}");
+        }
+    }
+
+    /// A bad display byte errors, and its bad range byte is still reported.
+    #[test]
+    fn a_bad_display_byte_does_not_hide_a_bad_range_byte() {
+        let mut payload = make_payload(0x0E, 0x00, b" 1.23", 0, 0, 0);
+        payload[3] = 0x37;
+        payload[5] = 0xFF;
+        let (m, reports) = parse_capturing(&payload);
+        assert!(m.is_err());
+        assert_eq!(reports[0], "ut8803: unrecognised range byte: 0x37");
     }
 
     /// A display byte outside the allowed set is reported and still errors.
