@@ -274,17 +274,41 @@ pub(crate) fn open_with_help(
 ) -> Result<(BoxedDmm, &'static SelectableDevice), Box<dyn std::error::Error>> {
     let (dmm, device) = match selection {
         Selection::Auto => {
-            let (dmm, detected) =
-                dmm_lib::open_auto(opts).map_err(|e| open_error_help(selection, e))?;
+            let (dmm, detected) = unless_stopped(dmm_lib::open_auto(opts), opts.stop)
+                .map_err(|e| open_error_help(selection, e))?;
             (dmm, note_detected(detected).device)
         }
         Selection::Device(device) => (
-            dmm_lib::open_device(device, opts).map_err(|e| open_error_help(selection, e))?,
+            unless_stopped(dmm_lib::open_device(device, opts), opts.stop)
+                .map_err(|e| open_error_help(selection, e))?,
             device,
         ),
     };
     warn_if_experimental(device, dmm.profile());
     Ok((dmm, device))
+}
+
+/// An open `stop` overtook comes to [`Error::Cancelled`], whatever it came to
+/// by itself: a USB open and the detection after it run to their end, and what
+/// a stopped run does next is close, with no help or note for anything found.
+/// With a flag to raise, a read the signal cut short counts too: the handler
+/// raises it on a thread of its own, which may not have run yet.
+///
+/// [`Error::Cancelled`]: dmm_lib::error::Error::Cancelled
+fn unless_stopped<T>(
+    opened: dmm_lib::error::Result<T>,
+    stop: Option<&std::sync::atomic::AtomicBool>,
+) -> dmm_lib::error::Result<T> {
+    let Some(stop) = stop else {
+        return opened;
+    };
+    match opened {
+        _ if stop.load(std::sync::atomic::Ordering::SeqCst) => {
+            Err(dmm_lib::error::Error::Cancelled)
+        }
+        Err(e) if e.is_interrupted() => Err(dmm_lib::error::Error::Cancelled),
+        opened => opened,
+    }
 }
 
 /// A meter opened for `capture`: the handle, its wire recorder, the entry it
@@ -609,6 +633,45 @@ pub(crate) fn open_mock_device(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A raised flag settles any open: one that got through, and one that
+    /// failed with help of its own, end alike and say nothing. Down or absent,
+    /// the open's own result goes through.
+    #[test]
+    fn a_raised_stop_flag_overtakes_any_open() {
+        use dmm_lib::error::Error;
+        use std::sync::atomic::AtomicBool;
+        let (raised, down) = (AtomicBool::new(true), AtomicBool::new(false));
+        assert!(matches!(
+            unless_stopped(Ok(1), Some(&raised)),
+            Err(Error::Cancelled)
+        ));
+        assert!(matches!(
+            unless_stopped::<()>(Err(Error::Timeout), Some(&raised)),
+            Err(Error::Cancelled)
+        ));
+        assert!(matches!(unless_stopped(Ok(1), Some(&down)), Ok(1)));
+        // The signal's read error can come before its handler has run.
+        assert!(matches!(
+            unless_stopped::<()>(Err(Error::interrupted()), Some(&down)),
+            Err(Error::Cancelled)
+        ));
+        assert!(matches!(
+            unless_stopped::<()>(Err(Error::interrupted()), None),
+            Err(Error::Hid(_))
+        ));
+        assert!(matches!(unless_stopped(Ok(1), None), Ok(1)));
+        assert!(matches!(
+            unless_stopped::<()>(Err(Error::Timeout), None),
+            Err(Error::Timeout)
+        ));
+        // Reaches its caller boxed as it left, so the command can tell.
+        let boxed = open_error_help(Selection::Auto, Error::Cancelled);
+        assert!(matches!(
+            boxed.downcast_ref::<Error>(),
+            Some(Error::Cancelled)
+        ));
+    }
 
     /// The line names the meter by the name it was picked by, and says
     /// where: a pick saved by dmm-gui is the one a user forgets.

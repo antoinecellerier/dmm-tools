@@ -153,6 +153,10 @@ each step settles is in the family's file.
 - Ctrl-C mid-sleep in a paced `read`, untimed — decides whether the
   cancellable sleep needs a shorter slice. Needs any polled meter at
   `read --interval-ms` 2000 or more.
+- Ctrl+C during `read`'s or `debug`'s detection with the meter silent, on Windows and
+  macOS: on Linux the signal cuts the read short, 0.7 s at most, but neither may
+  interrupt it, which would leave up to the full detection (2.7 s). Decides whether
+  a second press should exit. Needs any cable with its meter off.
 - A UT181A regression read under the continuous stream, and `set hold` /
   `set rel` after a GUI Pause — confirms the resync, whose other checks ran on
   our UT61E+ behind a UT-D07B. Needs the UT181A. (#5)

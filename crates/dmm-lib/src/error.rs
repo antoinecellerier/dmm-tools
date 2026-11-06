@@ -263,6 +263,14 @@ impl Error {
         })
     }
 
+    /// What a HID read returns when a signal cuts it short, for tests.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn interrupted() -> Self {
+        Self::Hid(hidapi::HidError::IoError {
+            error: std::io::Error::from(std::io::ErrorKind::Interrupted),
+        })
+    }
+
     /// True when the underlying cause is an interrupted system call (EINTR),
     /// which typically means a signal (e.g. Ctrl-C) arrived mid-read.
     pub fn is_interrupted(&self) -> bool {

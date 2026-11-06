@@ -71,6 +71,7 @@
 - **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.
 - **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.
 - **dmm-gui imports or replays a file whose saved view lies far past its readings** — it crashed.
+- **`dmm-cli debug` calls off a Bluetooth search on Ctrl+C at once** — it waited for the search to end.
 - **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
 - **dmm-gui refuses a theme file whose text can't be read on the top bar, and says why** — its Theme chips in Settings were unreadable.
 

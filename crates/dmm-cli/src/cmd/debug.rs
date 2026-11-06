@@ -3,7 +3,7 @@
 //! The frame lines on stdout are the dump itself and stay as they are; the
 //! labels and errors on stderr are in the run's language (`cli/debug.ftl`).
 
-use super::setup_ctrlc;
+use super::{called_off, setup_ctrlc};
 use crate::open::open_with_help;
 use console::style;
 use dmm_lib::protocol::registry::Selection;
@@ -18,10 +18,17 @@ pub(crate) fn cmd_debug(
     count: usize,
     interval_ms: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let running = setup_ctrlc()?;
+    let stop = setup_ctrlc()?;
     let l = crate::l10n::get();
 
-    let (mut dmm, _device) = open_with_help(selection, opts)?;
+    let opts = dmm_lib::OpenOptions {
+        stop: Some(&stop),
+        ..opts
+    };
+    let (mut dmm, _device) = match open_with_help(selection, opts) {
+        Err(e) if called_off(&*e) => return Ok(()),
+        opened => opened?,
+    };
 
     // Show transport info before entering measurement loop
     eprintln!(
@@ -38,11 +45,11 @@ pub(crate) fn cmd_debug(
 
     let tick = Duration::from_millis(interval_ms);
     let mut i = 0;
-    let cancel = running.clone();
+    let cancel = stop.clone();
     let mut stream =
-        MeasurementStream::new(&mut dmm, tick).with_cancel(move || !cancel.load(Ordering::SeqCst));
+        MeasurementStream::new(&mut dmm, tick).with_cancel(move || cancel.load(Ordering::SeqCst));
 
-    while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
+    while !stop.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
                 // A frame without a main reading has its digits on the
@@ -83,6 +90,8 @@ pub(crate) fn cmd_debug(
                     style(tr!(l, "debug-timeout")).red()
                 );
             }
+            // A read Ctrl+C cut short: the flag it raises ends the run.
+            Err(e) if e.is_interrupted() => break,
             Err(e) => {
                 eprintln!(
                     "{} {}",
