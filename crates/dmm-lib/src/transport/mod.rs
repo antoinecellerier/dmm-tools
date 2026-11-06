@@ -481,6 +481,10 @@ pub mod mock {
         /// An empty entry models an HID report that carried no UART payload
         /// (an idle poll); once the queue is exhausted the mock stays silent,
         /// which is what a real timeout looks like.
+        ///
+        /// A read hands over one whole entry, so an entry longer than the
+        /// reader's buffer panics rather than losing its tail: queue it in
+        /// pieces, as the link would deliver them.
         pub fn new(responses: Vec<Vec<u8>>) -> Self {
             Self {
                 responses: RefCell::new(responses),
@@ -517,9 +521,14 @@ pub mod mock {
                 return Ok(0);
             }
             let response = responses.remove(0);
-            let len = response.len().min(buf.len());
-            buf[..len].copy_from_slice(&response[..len]);
-            Ok(len)
+            assert!(
+                response.len() <= buf.len(),
+                "a {}-byte response into a {}-byte read: queue it in pieces",
+                response.len(),
+                buf.len()
+            );
+            buf[..response.len()].copy_from_slice(&response);
+            Ok(response.len())
         }
 
         fn set_baud(&self, baud: u32) -> Result<()> {
@@ -529,6 +538,20 @@ pub mod mock {
 
         fn link(&self) -> Option<Link> {
             None
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// What a test feeds is what the code under test reads: a long entry
+        /// used to lose its tail without a word.
+        #[test]
+        #[should_panic(expected = "a 5-byte response into a 4-byte read")]
+        fn a_response_longer_than_the_read_is_refused() {
+            let mock = MockTransport::new(vec![vec![0; 5]]);
+            let _ = mock.read_timeout(&mut [0; 4], 0);
         }
     }
 }

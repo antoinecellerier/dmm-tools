@@ -623,7 +623,7 @@ mod tests {
         let ascii = [
             0x2B, 0x33, 0x36, 0x32, 0x33, 0x20, 0x34, 0x31, 0x00, 0x40, 0x80, 0x24, 0x0D, 0x0A,
         ];
-        let mock = MockTransport::new(vec![ascii.repeat(8)]);
+        let mock = MockTransport::new(pieces(&ascii.repeat(8), 64));
         let mut proto = proto(&model::B35);
         let (read, reports) = capture_reports(|| proto.request_measurement(&mock));
         match read {
@@ -1062,8 +1062,8 @@ mod tests {
     /// which reads them.
     #[test]
     fn auto_detect_on_a_vc871_reads_it() {
-        let stream = VC871_STREAM.concat();
-        let meter = Meter::new(Some(&info(87)), vec![stream.clone(), stream]);
+        let stream = VC871_STREAM.concat().repeat(2);
+        let meter = Meter::new(Some(&info(87)), pieces(&stream, 64));
         let detected = crate::detect::detect_device(&meter, crate::BLUETOOTH).unwrap();
         assert_eq!(detected.device.id, "vc871");
         assert_eq!(detected.reported_name.as_deref(), Some("VC871"));

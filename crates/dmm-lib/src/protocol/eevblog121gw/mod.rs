@@ -327,7 +327,7 @@ mod tests {
     fn older_firmware_says_to_update_it() {
         let mut stream = ascii_stream();
         stream.extend(ascii_stream());
-        let mock = MockTransport::new(vec![stream]);
+        let mock = MockTransport::new(stream.chunks(64).map(<[u8]>::to_vec).collect());
         let mut proto = proto();
         let (result, reports) = capture_reports(|| proto.request_measurement(&mock));
         let err = result.unwrap_err();

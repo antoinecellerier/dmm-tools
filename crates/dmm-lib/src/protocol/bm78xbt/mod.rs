@@ -201,13 +201,12 @@ mod tests {
         bytes.chunks(size).map(<[u8]>::to_vec).collect()
     }
 
-    /// Whole notifications, and the same split into 5-, 20- and 64-byte
-    /// pieces (a small MTU, the transport's reads), give their readings,
-    /// in the order they were queued.
+    /// Notifications split into 5-, 20- and 64-byte pieces (a small MTU, the
+    /// transport's reads) give their readings, in the order they were queued.
     #[test]
     fn notifications_in_any_pieces_give_their_readings() {
         let later = notification(&example_info(), &second_reading());
-        for size in [152, 5, 20, 64] {
+        for size in [5, 20, 64] {
             let mock = MockTransport::new(pieces(&example_notification(), size));
             let mut proto = proto();
             let (first, reports) = capture_reports(|| proto.request_measurement(&mock));
