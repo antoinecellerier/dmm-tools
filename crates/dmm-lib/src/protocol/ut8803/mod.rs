@@ -96,14 +96,12 @@ fn display_unit(mode_byte: u8, range_idx: u8) -> &'static str {
             _ => "Ω",
         },
         0x0A | 0x12 => "V",
-        // Inductance: ranges 0-3 = mH, above = H
-        0x0B => {
-            if range_idx < 4 {
-                "mH"
-            } else {
-                "H"
-            }
-        }
+        // Inductance: 600µH, then 6-600mH, then 6-100H (spec §2.3, §5).
+        0x0B => match range_idx {
+            0 => "µH",
+            1..=3 => "mH",
+            _ => "H",
+        },
         // Inductance Q / Capacitance D: dimensionless
         0x0C | 0x0F => "",
         0x0E => match range_idx {
@@ -610,7 +608,8 @@ raw_payload=17"#
         assert_eq!(display_unit(0x10, 0), "Ω"); // Capacitance R = ESR in Ω
         assert_eq!(display_unit(0x0C, 0), ""); // Inductance Q: unitless
         assert_eq!(display_unit(0x0F, 0), ""); // Capacitance D: unitless
-        assert_eq!(display_unit(0x0B, 0), "mH");
+        assert_eq!(display_unit(0x0B, 0), "µH");
+        assert_eq!(display_unit(0x0B, 1), "mH");
         assert_eq!(display_unit(0x0B, 4), "H");
         assert_eq!(display_unit(0x0E, 0), "nF");
         assert_eq!(display_unit(0x0E, 3), "µF");

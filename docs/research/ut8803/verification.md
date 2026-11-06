@@ -31,10 +31,12 @@ read yet: everything below comes from UNI-T's uci.dll and manuals.
 - Each dial position's mode byte against the 23 codes of
   [§4.2](reverse-engineered-protocol.md#42-ut8803ut8803n-position-coding-high-d8-d15)
   — decides `POSITION_TABLE`. Needs every capture step. (#3)
-- The range byte, `0x30`-`0x36`, per mode and range (§2.3, §5) — decides
-  `display_unit`'s prefixes, range 6 on Ω and Hz with none, and a byte outside
-  the band reading with no unit. Needs readings on several ranges of each
-  function, noting the LCD's unit. (#3)
+- The range byte, `0x30`-`0x36`, per mode and range (§2.3, §5), inductance's µH
+  at range 0 first — decides `display_unit`'s prefixes. Needs readings on
+  several ranges of each function, noting the LCD's unit. (#3)
+- Inductance R and capacitance R at range 1, kΩ in the lookup where the manual's
+  rows run 60 Ω, 600 Ω, 6 kΩ, and µA on every range where its rows cross to 6 mA
+  (§2.3, §5) — decides `display_unit`'s arms. Needs those functions. (#3)
 
 ## Display
 

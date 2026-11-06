@@ -11,7 +11,8 @@ official, publicly available sources:
    `UCI_Programming_Manual_V1.1_zh.pdf`, added 2026-09-18), whose field
    names the spec follows where the English translation differs
 3. **UT8803E Data Sheet** (from UNI-T, `UT8803E_DataSheet.pdf`)
-4. **UNI-T SDK V2.3** (from UNI-T, `UNI-T_SDK_V2.3.zip`)
+4. **UNI-T SDK V2.3** (from UNI-T, `UNI-T_SDK_V2.3.zip`), including the later
+   `uci.dll` under `examples/UCI/VC/UCIDEMO/Unicode/`, read 2026-11-06
 5. **UT8803E Software V1.1** (from UNI-T, `UT8803E_Software_V1.1.rar`)
 6. **CP2110 Datasheet** (from Silicon Labs)
 7. **AN434: CP2110/4 Interface Specification** (from Silicon Labs)
@@ -562,6 +563,7 @@ Consulted after the vendor analysis above, for validation only.
 | Streaming model | Ghidra (read-only loop, no trigger: spec §1.3) | Continuous read | N/A | ✓ |
 | Alternating-byte checksum | Ghidra | "Weighted checksum" | N/A | To verify² |
 | Mode/range tables | Programming manual + Ghidra | Empirical tables | N/A | To verify |
+| Inductance at range 0 (read 2026-11-06) | µH: SDK V2.3's lookup and the manual's rows | `µH`, then `mH` ×3, `H` ×3 | N/A | ✓ |
 | UT8802 different format | Ghidra (0xAC header, 8-byte) | N/A | N/A | — |
 | UT632/803/804 same protocol | Programming manual | Listed as compatible | N/A | ✓ |
 

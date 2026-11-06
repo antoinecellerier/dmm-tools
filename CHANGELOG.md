@@ -58,6 +58,7 @@
 - **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
 - **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
 - **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
+- **The UT8803 reads its lowest inductance range in µH** — it showed mH, a thousand times too large.
 - **Alarms and scaling use base units on every prefixed reading** — on H, Wh, Ah, W/m², ° and RPM, a range step idled the alarm and put a scale 1000× off.
 - **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.

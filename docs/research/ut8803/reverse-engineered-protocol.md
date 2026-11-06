@@ -354,7 +354,11 @@ into the status word's AC/DC field and the reading's unit. [VENDOR]
   IndQ/CapD.
 - `FUN_1001cdc0` (lines 23644-23700), the magnitude prefix per (mode,
   range): 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M. It gives none for the Ω and Hz
-  modes at range 6 as at range 0, and m for capacitance above range 5.
+  modes at range 6 as at range 0, and m for capacitance above range 5. For
+  inductance, the SDK's `lib/C/Unicode/uci.dll` (2018-12-28, MD5 222d86f1) gives
+  m below range 4 and none above; its later
+  `examples/UCI/VC/UCIDEMO/Unicode/uci.dll` (2020-12-14, MD5 68263e15; handler at
+  VA `0x105280e7`) gives µ at range 0 and m at 1-3, as the 600 µH row of §5 reads.
 
 #### Inductance Test Frequency
 
