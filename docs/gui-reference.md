@@ -153,9 +153,10 @@ A row of buttons shown when connected and receiving data (visible in the
 | **Hz/Duty** | Step through frequency and duty (OWON meters and the Voltcraft VC891 with a Hz/Duty key, shown in AC V, AC A, Hz and duty only) |
 | **Hz/%** | Step through frequency and duty (UT61+ and UT161 series, shown in AC V, AC mV, AC µA, AC mA, AC A, Hz and duty only) |
 | **SAVE** | Save the reading to the meter's memory (UT181A) |
+| **Inrush** | Measure inrush current (OWON CMS101 and CMS061, UNI-T UT217A and UT217B, shown in AC A only) |
 
 Buttons highlight blue when the corresponding flag is active in the current
-measurement. LIGHT has no protocol feedback, so it does not highlight. On the
+measurement. LIGHT and the buttons below it in this table do not highlight. On the
 mock, the buttons respond to toggle flags and SELECT or Hz/%, or a pick in the
 mode dropdown, moves to the next scenario.
 

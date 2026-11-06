@@ -273,7 +273,7 @@ fn hz_duty_applies(m: &crate::measurement::Measurement) -> bool {
 }
 
 /// The B series' Hz/Duty key.
-static B_HZ_DUTY: MeterKey = MeterKey {
+const B_HZ_DUTY: MeterKey = MeterKey {
     command: "hz_duty",
     label: "Hz/Duty",
     in_words: false,
@@ -335,7 +335,7 @@ pub(super) const OW_METER_KEYS: MeterKeys = MeterKeys {
 };
 
 pub(super) const B_METER_KEYS: MeterKeys = MeterKeys {
-    context: std::slice::from_ref(&B_HZ_DUTY),
+    context: &[B_HZ_DUTY],
     ..MeterKeys::NONE
 };
 
@@ -394,16 +394,29 @@ const CMS_BUTTON_LABELS: &[ButtonLabel] = &[
     },
 ];
 
-/// The CMS101 and CMS061: the B series' Hz/Duty, and what their shared
+/// Inrush is AC A's, F3 on the menu's second page, and F3 again leaves it; the
+/// function stays AC A in it (CMS101-UM p.15/10, p.18/13; spec §10.6).
+const CMS_INRUSH: MeterKey = MeterKey {
+    command: "inrush",
+    label: "Inrush",
+    in_words: false,
+    hover: Some("Measure inrush current; click again to leave it"),
+    applies: |m| function_in(m, &[function::AC_A]),
+};
+
+/// The CMS101 and CMS061: the B series' Hz/Duty, Inrush, and what their shared
 /// buttons do.
 pub(super) const CMS_METER_KEYS: MeterKeys = MeterKeys {
+    context: &[B_HZ_DUTY, CMS_INRUSH],
     button_labels: CMS_BUTTON_LABELS,
-    ..B_METER_KEYS
+    ..MeterKeys::NONE
 };
 
 #[cfg(test)]
 mod tests {
-    use super::super::model::MODELS;
+    use super::super::decode15::decode;
+    use super::super::decode15::tests::{frame as reading_frame, g24};
+    use super::super::model::{CMS061, CMS101, MODELS, Model};
     use super::*;
 
     /// A long press of the key that carries ᛒ switches Bluetooth (spec
@@ -601,6 +614,41 @@ mod tests {
             assert_eq!(code(keys, "exit_rel"), [0x04, 0x00]);
         }
         assert_eq!(code(&VC925, "exit_minmax"), [0x06, 0x00]);
+    }
+
+    /// The labels `model` offers for a frame of `function` at `prefix`.
+    fn offered(model: &Model, function: u8, prefix: u8) -> Vec<&'static str> {
+        offered_for(
+            model,
+            &reading_frame(g24(function, prefix, 1, false), 125, 0, 0, 0),
+        )
+    }
+
+    fn offered_for(model: &Model, frame: &[u8]) -> Vec<&'static str> {
+        let reading = decode(frame, model).unwrap();
+        model
+            .meter_keys
+            .context
+            .iter()
+            .filter(|key| (key.applies)(&reading))
+            .map(|key| key.label)
+            .collect()
+    }
+
+    /// Inrush in AC A, and still in the frame a UT217A sent from Inrush (#45;
+    /// the golden `cms061/inrush.yaml`).
+    #[test]
+    fn inrush_is_offered_in_ac_a() {
+        for model in [&CMS101, &CMS061] {
+            assert_eq!(offered(model, 3, 4), ["Hz/Duty", "Inrush"]);
+            assert_eq!(offered(model, 2, 4), [""; 0]);
+            assert_eq!(offered(model, 6, 4), ["Hz/Duty"]);
+        }
+        let inrush = [
+            0xE2, 0x00, 0xF0, 0x00, 0x00, 0x00, 0xA2, 0x01, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x02,
+        ];
+        assert_eq!(offered_for(&CMS061, &inrush), ["Hz/Duty", "Inrush"]);
     }
 
     #[test]

@@ -484,6 +484,8 @@ key-hover-capture-1-ms-peaks-in-ac = Capture 1 ms peaks in AC V
 key-hover-enter-max-min-click-again-to = Enter MAX/MIN; click again to leave it
 # Used by: 121GW
 key-hover-hold-the-meter-s-rel-key = Hold the meter's REL key (1 kHz low-pass filter)
+# Used by: CMS061, CMS101
+key-hover-measure-inrush-current-click-again-to = Measure inrush current; click again to leave it
 # Used by: OW18B/OW16B, OW18E
 key-hover-press-the-meter-s-hz-duty = Press the meter's Hz/Duty△/ᛒ key briefly
 # Used by: CM2100B
