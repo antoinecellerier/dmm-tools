@@ -56,6 +56,7 @@
 - **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
 - **UT8802 and UT8803 overloads read OL in `capture` and JSON exports** — they showed stray digits, such as `0 Ω`.
 - **A scaled CSV imported and exported again keeps Raw in its own column** — dmm-cli and dmm-gui moved it into the meter's sub-value columns.
+- **UT181A and UT171 JSON exports write values in the meter's digits** — one read 12.345000267028809 where the CSV said 12.345.
 - **dmm-cli and dmm-gui exports name the meter the same way** — such as `UNI-T UT61E+`, which dmm-gui wrote as `UT61E+`.
 - **dmm-gui names and saves the meter swapped in during an Auto-detect session** — it kept the first meter's name, specifications and saved device.
 - **`capture`'s report shows where each sweep left the meter** — a HOLD or manual range it couldn't undo showed only on the terminal.

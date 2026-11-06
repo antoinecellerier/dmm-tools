@@ -95,7 +95,10 @@ pub fn write_measurement_json<W: std::io::Write + ?Sized>(
     marker: Option<(u32, &str)>,
 ) -> std::io::Result<()> {
     let value = match &m.value {
-        MeasuredValue::Normal(v) => Value::from(*v),
+        // The digits the CSV cell and the sub-values here carry: a float-based
+        // family's f64 is its f32 widened, which printed 12.345000267028809.
+        // The reading in memory stays widened for the stats.
+        MeasuredValue::Normal(v) => Value::from(m.value_export_str().parse().unwrap_or(*v)),
         MeasuredValue::Overload => json!("OL"),
         MeasuredValue::NcvLevel(l) => json!({"ncv_level": l}),
         // Null rather than a missing key or the word: every line keeps its
@@ -631,13 +634,14 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(21.5), "°C", StatusFlags::default());
         m.mode = "Temp °C".into();
         m.range_label = "".into();
+        m.display_raw = Some("21.5".to_string());
         m.aux_values = vec![aux(MeasuredValue::Normal(3.3), "µA", Some("3.3"))];
         rows.push(Shape::new(
             "°C and µA",
             m,
             "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\
             \"mode\":\"Temp °C\",\"value\":21.5,\"unit\":\"°C\",\"range\":\"\",\
-            \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+            \"display_raw\":\"21.5\",\"progress\":0,\"experimental\":false,\
             \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
             \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
             \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
@@ -649,12 +653,13 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(1.234), "kΩ", StatusFlags::default());
         m.mode = "Ω".into();
         m.range_label = "2.2kΩ".into();
+        m.display_raw = Some("1.234".to_string());
         rows.push(Shape::new(
             "Ω",
             m,
             "{\"timestamp\":\"2026-09-15T14:30:05.123456789+02:00\",\"mode\":\"Ω\",\
             \"value\":1.234,\"unit\":\"kΩ\",\"range\":\"2.2kΩ\",\
-            \"display_raw\":\"  5.678\",\"progress\":0,\"experimental\":false,\
+            \"display_raw\":\"1.234\",\"progress\":0,\"experimental\":false,\
             \"flags\":{\"hold\":false,\"rel\":false,\"auto_range\":false,\
             \"min\":false,\"max\":false,\"avg\":false,\"low_battery\":false,\
             \"hv_warning\":false,\"peak_max\":false,\"peak_min\":false,\
@@ -700,6 +705,55 @@ mod tests {
             metadata_line("UNI-T UT61E+", None),
             "{\"_metadata\":{\"device\":\"UNI-T UT61E+\"}}"
         );
+    }
+
+    /// The main value is the number the CSV cell has: not the widened f32 of a
+    /// float-based family, and no more digits than the reading shows. Its
+    /// trailing zeros stay in "display_raw".
+    #[test]
+    fn the_main_value_is_the_digits_the_csv_has() {
+        for (value, digits, expected) in [
+            (f64::from(12.345f32), "12.345", "12.345"),
+            (f64::from(25.366f32), "25.4", "25.4"),
+            (5.0, "5.0000", "5.0"),
+            (-55.79, "- 55.79", "-55.79"),
+            (-0.0002, "-0.000", "-0.0"),
+        ] {
+            let mut m = reading(MeasuredValue::Normal(value));
+            m.display_raw = Some(digits.to_string());
+            let line = line(&m, "ts", false, None, None);
+            assert!(line.contains(&format!("\"value\":{expected},")), "{line}");
+        }
+    }
+
+    /// With no digits, or text that is no number, the reading's own value is
+    /// what there is to write.
+    #[test]
+    fn a_main_value_without_digits_is_the_readings_own() {
+        for digits in [None, Some(".")] {
+            let mut m = reading(MeasuredValue::Normal(1.5));
+            m.display_raw = digits.map(str::to_string);
+            assert_eq!(
+                parsed(&line(&m, "ts", false, None, None))["value"],
+                json!(1.5)
+            );
+        }
+    }
+
+    /// A value written as the digits reads back as them, the digits kept.
+    #[test]
+    fn a_main_value_reads_back_with_its_digits() {
+        let mut m = reading(MeasuredValue::Normal(f64::from(12.345f32)));
+        m.display_raw = Some("12.3450".to_string());
+        let text = format!(
+            "{}\n{}\n",
+            metadata_line("UNI-T UT181A", None),
+            line(&m, "2026-09-15T14:30:05+02:00", false, None, None)
+        );
+        let imported = read_json(&text).expect("a JSON export");
+        let reading = &imported.readings[0];
+        assert!(matches!(reading.value, MeasuredValue::Normal(v) if v == 12.345));
+        assert_eq!(reading.display_raw.as_deref(), Some("12.3450"));
     }
 
     /// A word the meter shows instead of a reading exports a null value, the

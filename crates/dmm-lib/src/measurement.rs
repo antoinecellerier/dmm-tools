@@ -325,8 +325,8 @@ impl Measurement {
     /// how the reading looks on the meter. Overload, NCV, and protocols that
     /// provide no digits fall back to the parsed value's canonical string.
     ///
-    /// For CSV use [`Measurement::value_export_str`], which applies the same
-    /// rules but strips that inner space so the column stays numeric.
+    /// For exports use [`Measurement::value_export_str`], which applies the
+    /// same rules but strips that inner space so the column stays numeric.
     pub fn value_display_str(&self) -> Cow<'_, str> {
         match (&self.value, self.display_raw.as_deref()) {
             (MeasuredValue::Normal(_), Some(raw)) => Cow::Borrowed(raw.trim()),
@@ -334,14 +334,15 @@ impl Measurement {
         }
     }
 
-    /// The measured value formatted for machine-readable export (CSV).
+    /// The measured value formatted for machine-readable export: the CSV cell,
+    /// and as a number the JSON value.
     ///
     /// Prefers the meter's own display digits so the exported precision
     /// matches what the meter showed ("5.0000", not "5"), but strips the
     /// spaces some protocols place between the sign and the digits — the
     /// UT61E+ sends `"- 55.79"` on some ranges, which would make the whole
-    /// column parse as text. The result is the same string the protocol
-    /// parsed the value from, so it always reads back as a number.
+    /// column parse as text. The digits spell the value to within half their
+    /// last digit, which every parser sweep's check holds a family to.
     ///
     /// For display use [`Measurement::value_display_str`] instead, which
     /// keeps the space after the sign and trims the padding.
