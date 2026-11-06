@@ -496,6 +496,14 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     None
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    out.insert("");
+    out.extend(POSITION_TABLE.iter().map(|&(_, _, unit, _)| unit));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,8 +1,8 @@
 use super::*;
 use crate::protocol::Protocol;
-use crate::protocol::test_support::unit_family;
 use crate::protocol::ut61eplus::{Ut61PlusProtocol, make_payload};
 use crate::specs::SpecSheetRow;
+use crate::transform::si_prefix;
 use std::collections::{HashMap, HashSet};
 
 /// Each model, with the id its protocol is built from.
@@ -280,8 +280,8 @@ fn rows_resolve_in_the_readings_unit() {
                 .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
             let unit = unit.split('~').next().unwrap_or(unit);
             assert_eq!(
-                unit_family(unit),
-                unit_family(&m.unit),
+                si_prefix(unit).0,
+                si_prefix(&m.unit).0,
                 "{id} {:?}: row {} resolves in {}",
                 mode_of(&m),
                 row.label,

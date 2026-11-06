@@ -321,6 +321,20 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     }
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    out.insert("");
+    for code in 0..=u8::MAX {
+        for prefix in std::iter::once(None).chain((0..7).map(Some)) {
+            if let Some(unit) = tables::unit(code, prefix) {
+                out.insert(unit);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::packet::tests::{example_info, example_reading, sealed};

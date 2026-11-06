@@ -402,6 +402,24 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     }
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    // The temperature modes read their unit off the frame.
+    out.extend(["", "°C", "°F"]);
+    for mode in &tables::MODES {
+        out.extend(mode.ranges.iter().map(|range| range.unit));
+    }
+    for code in 0..=u8::MAX {
+        for k in [false, true] {
+            if let Secondary::Value(_, unit) = classify(code, k) {
+                out.insert(unit);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::packet::tests::{COMMUNITY, EXAMPLES, sealed};

@@ -879,6 +879,14 @@ fn parse_peak(payload: &[u8]) -> Result<Parsed> {
     })
 }
 
+/// Every unit the UT181A's spec lists, for [`crate::protocol::all_units`]. Any
+/// other text on the wire is rewritten as it comes, so there is no list of it.
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    out.insert("");
+    out.extend(SPEC_UNITS.iter().map(|&(_, unit)| unit));
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

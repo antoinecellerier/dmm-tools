@@ -1124,6 +1124,26 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     })
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    // A code off the tables reads with no unit, and duty is a percentage.
+    out.extend(["", "%"]);
+    for mode in 0..=u8::MAX {
+        for range in 0..=u8::MAX {
+            if let Some((_, unit, ..)) = ut804_mode_info(mode, range) {
+                out.insert(unit);
+            }
+            for alt in [false, true] {
+                if let Some((_, unit, _)) = ut803_mode_info(mode, range, alt) {
+                    out.insert(unit);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3161,7 +3181,7 @@ raw_payload=11"#
     /// another unit.
     #[test]
     fn ut803_rows_resolve_in_the_readings_unit() {
-        use crate::protocol::test_support::unit_family;
+        use crate::transform::si_prefix;
         let proto = Ut80xProtocol::new_ut803();
         for (p, m) in ut803_accepted_readings() {
             let Some(row) = proto.spec_row(&m) else {
@@ -3172,8 +3192,8 @@ raw_payload=11"#
                 .resolution
                 .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
             assert_eq!(
-                unit_family(unit),
-                unit_family(&m.unit),
+                si_prefix(unit).0,
+                si_prefix(&m.unit).0,
                 "{} {p:02X?}: row {} resolves in {}",
                 m.mode,
                 row.label,
@@ -3389,7 +3409,7 @@ raw_payload=11"#
     /// another unit.
     #[test]
     fn ut804_rows_resolve_in_the_readings_unit() {
-        use crate::protocol::test_support::unit_family;
+        use crate::transform::si_prefix;
         let proto = Ut80xProtocol::new_ut804();
         for (p, m) in ut804_accepted_readings() {
             let Some(row) = proto.spec_row(&m) else {
@@ -3400,8 +3420,8 @@ raw_payload=11"#
                 .resolution
                 .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
             assert_eq!(
-                unit_family(unit),
-                unit_family(&m.unit),
+                si_prefix(unit).0,
+                si_prefix(&m.unit).0,
                 "{} {p:02X?}: row {} resolves in {}",
                 m.mode,
                 row.label,
@@ -3542,6 +3562,7 @@ raw_payload=11"#
             };
             let mut read = std::collections::BTreeSet::new();
             for (_, m) in readings {
+                crate::protocol::assert_units_walked(&m);
                 read.insert((TextKind::Mode, m.mode.to_string()));
                 if !m.range_label.is_empty() {
                     read.insert((TextKind::Range, m.range_label.to_string()));

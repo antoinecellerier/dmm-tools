@@ -704,12 +704,13 @@ static TEMPERATURE: ModeSpecs = ModeSpecs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::Protocol;
     use crate::protocol::capture_reports;
     use crate::protocol::zotek::ZotekProtocol;
     use crate::protocol::zotek::frame::tests::EXAMPLES;
     use crate::protocol::zotek::glyph::{Cell, Glyph};
     use crate::protocol::zotek::layout::{self, Meaning, Prefix, Unit, ZT5B};
-    use crate::protocol::{Protocol, test_support::unit_family};
+    use crate::transform::si_prefix;
     use std::collections::HashSet;
 
     /// Why a reading has no row or no spec, and which readings that is.
@@ -992,8 +993,8 @@ mod tests {
                 .resolution
                 .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
             assert_eq!(
-                unit_family(unit),
-                unit_family(&m.unit),
+                si_prefix(unit).0,
+                si_prefix(&m.unit).0,
                 "{}: row {} resolves in {}",
                 what(&m),
                 row.label,

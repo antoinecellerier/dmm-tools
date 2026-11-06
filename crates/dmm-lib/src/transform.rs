@@ -1162,6 +1162,56 @@ mod tests {
         }
     }
 
+    /// Units no prefix is read off.
+    const NO_PREFIX: &[&str] = &["", "%", "°C", "°F", "β", "s", "ms", "dBm", "dBV"];
+
+    /// Of those, the ones bm78xbt's table also forms under every prefix ("m%",
+    /// "k°C"; its spec §6.4). They stay whole too.
+    const FORMED_WITH_A_PREFIX: &[&str] = &["%", "°C", "°F"];
+
+    /// `unit` with a leading prefix letter taken off, whatever follows it.
+    fn after_prefix(unit: &str) -> Option<&str> {
+        let mut chars = unit.chars();
+        let first = chars.next()?;
+        SI_PREFIXES
+            .iter()
+            .any(|(prefix, _)| *prefix == first)
+            .then_some(chars.as_str())
+    }
+
+    /// BASE_UNITS is kept by hand and drifted once: a family's mH, mWh and
+    /// kRPM looked like a new quantity at every range step. Every unit a
+    /// family's tables can produce now has to split, or be listed as one that
+    /// doesn't.
+    #[test]
+    fn every_unit_a_family_emits_is_in_the_grammar() {
+        let units = crate::protocol::all_units();
+        for unit in units {
+            let (base, _) = si_prefix(unit);
+            assert!(
+                BASE_UNITS.contains(&base)
+                    || NO_PREFIX.contains(unit)
+                    || after_prefix(unit).is_some_and(|rest| FORMED_WITH_A_PREFIX.contains(&rest)),
+                "{unit:?} neither splits to a base unit nor is on NO_PREFIX"
+            );
+        }
+        for listed in NO_PREFIX {
+            assert!(
+                units.contains(listed),
+                "{listed:?} is listed but nothing emits it"
+            );
+        }
+        // V·s is the integrals', which no reading carries.
+        for base in BASE_UNITS.iter().filter(|&&base| base != "V·s") {
+            assert!(
+                units
+                    .iter()
+                    .any(|&unit| unit == *base || after_prefix(unit) == Some(base)),
+                "{base:?} is a base but nothing emits it"
+            );
+        }
+    }
+
     /// A step between two prefixes of these keeps one quantity: the reason
     /// each is a base unit.
     #[test]

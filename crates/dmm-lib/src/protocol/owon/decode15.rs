@@ -232,6 +232,16 @@ fn reading(v: u32, function: u8, dp: u8, model: &Model, report: &dyn Fn(&'static
     }
 }
 
+/// Every unit a fifteen-byte frame can carry on `model`.
+#[cfg(test)]
+pub(super) fn all_units(model: &Model, out: &mut crate::protocol::Units) {
+    for function in 0..=u8::MAX {
+        if let Some(function) = function_of(function, model) {
+            decode::add_units(&function.unit, out);
+        }
+    }
+}
+
 /// The unit of `function` with `prefix`: the no-prefix functions leave it
 /// out (spec §6.3, §10.5).
 fn unit_of(function: Option<&Function>, prefix: u8) -> &'static str {
@@ -899,6 +909,7 @@ pub(crate) mod tests {
     fn the_listed_labels_are_the_quiet_frames() {
         use crate::text::TextKind;
         let all = crate::text::listed();
+        crate::text::assert_golden_listed(all, "cms061");
         let protocol = |model: &Model| {
             let entry = crate::protocol::registry::find_device(model.id).unwrap();
             (entry.new_protocol)()

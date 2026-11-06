@@ -501,6 +501,17 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     None
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    for mode in 0..=u8::MAX {
+        for range in 0..=u8::MAX {
+            out.insert(display_unit(mode, range));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

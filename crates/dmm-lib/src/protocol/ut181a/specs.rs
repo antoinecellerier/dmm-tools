@@ -1597,7 +1597,7 @@ mod tests {
     /// another unit. Pulse width's resolution is a span, read up to its `~`.
     #[test]
     fn rows_resolve_in_the_readings_unit() {
-        use crate::protocol::test_support::unit_family;
+        use crate::transform::si_prefix;
         let proto = Ut181aProtocol::new();
         for (word, range) in known_readings() {
             let Some(spec) = proto.spec_info(&reading(word, range)) else {
@@ -1608,7 +1608,7 @@ mod tests {
                 .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ' ');
             let unit = unit.split('~').next().unwrap_or(unit);
             assert_eq!(
-                unit_family(unit),
+                si_prefix(unit).0,
                 word_unit(word),
                 "{word:#06x} range {range}: resolution {}",
                 spec.resolution

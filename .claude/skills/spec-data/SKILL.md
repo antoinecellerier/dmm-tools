@@ -111,7 +111,7 @@ Delegate to an Opus agent, one meter per commit (`lib: <model> readings carry th
   - coverage: every accepted reading resolves to a row, to mode spec only, or to `NO_SPEC`, and every table and list entry is reached;
   - the exact range label, or the full scale;
   - the AC/DC/AC+DC table against the reading's coupling;
-  - the resolution unit (`protocol::test_support::unit_family`);
+  - the resolution unit (`transform::si_prefix`);
   - golden `resolution` fields;
   - one replay through `Dmm::request_measurement`.
 - **Docs:** the coverage line in `docs/gui-reference.md`, the sources in the research approach doc, and a CHANGELOG GUI entry ("The Specifications panel covers the …"). The tables need no hardware check of their own (`.claude/rules/protocol.md` exempts them), but a newly added meter gets them only after its first hardware capture (`docs/adding-devices.md`, Specification data).

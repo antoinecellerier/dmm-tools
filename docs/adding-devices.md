@@ -193,6 +193,7 @@ The protocol code lives in `crates/dmm-lib/src/protocol/<family>/`. The CLI and 
 - Where the parser meets data its spec doesn't cover — display text, a mode or range code, an undefined bit, a frame type — call `protocol::unrecognised::report_unknown` with the registry id of the entry being read (its report command passes it to `--device`), which asks the user for a report once per session; documented values, benign or not, stay silent
 - Write unit tests using `MockTransport` with byte sequences from the RE phase. Golden files wait for a hardware capture ([Golden file tests](development.md#golden-file-tests))
 - List every label the parser can build in the family's `all_labels`, a word it puts around other modes as one qualifier pattern (`crates/dmm-lib/src/text.rs` says what goes there), then regenerate `i18n/en-US/lib.ftl` with `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and commit it ([Translations](development.md#translations))
+- List every unit the parser can emit in the family's `all_units`. A prefixed unit's base goes in `BASE_UNITS` (`crates/dmm-lib/src/transform.rs`), so a range step stays one quantity; a unit that takes no prefix goes on the `NO_PREFIX` list in its test
 
 ### Specification data
 

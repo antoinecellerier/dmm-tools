@@ -496,6 +496,19 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     }
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    out.insert("");
+    for model in model::MODELS {
+        match model.frame {
+            FrameKind::Six => decode::all_units(model, out),
+            FrameKind::Fifteen => decode15::all_units(model, out),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

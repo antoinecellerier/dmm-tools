@@ -269,6 +269,9 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 }
 
 #[cfg(test)]
+pub(crate) use layout::all_units;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::error::Error;

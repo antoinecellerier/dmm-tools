@@ -810,6 +810,15 @@ pub fn open_simulated(
     }
 }
 
+/// Every unit a mock reading can carry, for [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    for scenario in &SCENARIOS {
+        out.insert(scenario.unit);
+        out.extend(scenario.aux.iter().map(|aux| aux.unit));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

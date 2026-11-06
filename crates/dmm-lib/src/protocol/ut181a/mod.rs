@@ -427,6 +427,9 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 }
 
 #[cfg(test)]
+pub(crate) use parse::all_units;
+
+#[cfg(test)]
 mod tests {
     use super::parse::tests::{make_payload, make_relative_payload, minmax_payload};
     use super::*;

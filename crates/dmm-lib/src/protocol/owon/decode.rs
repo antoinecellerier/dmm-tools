@@ -57,6 +57,28 @@ pub(super) enum Unit {
     Unknown,
 }
 
+/// The strings `unit` can be, for [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(super) fn add_units(unit: &Unit, out: &mut crate::protocol::Units) {
+    match unit {
+        Unit::Prefixed(units) => out.extend(units.iter().copied()),
+        Unit::Bare(unit) => {
+            out.insert(unit);
+        }
+        Unit::Unknown => {}
+    }
+}
+
+/// Every unit a six-byte frame can carry on `model`.
+#[cfg(test)]
+pub(super) fn all_units(model: &Model, out: &mut crate::protocol::Units) {
+    for function in 0..=u8::MAX {
+        if let Some((_, unit)) = function_of(function, model) {
+            add_units(&unit, out);
+        }
+    }
+}
+
 /// The mode name and unit of `function` on `model` (spec §6.2), or `None`
 /// for one no spec section covers on it.
 pub(super) fn function_of(function: u8, model: &Model) -> Option<(&'static str, Unit)> {

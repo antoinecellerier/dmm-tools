@@ -844,6 +844,40 @@ pub(super) const MODES: [&str; 35] = [
     "AC+DC A",
 ];
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    use Prefix::{Kilo, Mega, Micro, Milli, Nano};
+    out.insert("");
+    for base in [
+        Base::Volt,
+        Base::Amp,
+        Base::Ohm,
+        Base::Farad,
+        Base::Hertz,
+        Base::Siemens,
+        Base::Percent,
+        Base::Dbm,
+        Base::Celsius,
+        Base::Fahrenheit,
+    ] {
+        out.insert(base.bare());
+        for prefix in [
+            None,
+            Some(Nano),
+            Some(Micro),
+            Some(Milli),
+            Some(Kilo),
+            Some(Mega),
+        ] {
+            if let Some(unit) = unit(base, prefix) {
+                out.insert(unit);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 pub(super) mod tests {
     use super::super::glyph::tests::cells as glyph_cells;

@@ -113,6 +113,51 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     crate::mock::all_labels(out);
 }
 
+/// Unit strings, for [`all_units`].
+#[cfg(test)]
+pub(crate) type Units = std::collections::BTreeSet<&'static str>;
+
+/// Every unit each family's tables can produce, for
+/// the grammar check in `transform.rs`. [`assert_units_walked`] holds the walk
+/// to what the parsers really produce. UT181A's free-form unit text is the one
+/// source a table can't cover.
+#[cfg(test)]
+pub(crate) fn all_units() -> &'static Units {
+    static UNITS: std::sync::OnceLock<Units> = std::sync::OnceLock::new();
+    UNITS.get_or_init(|| {
+        let mut out = Units::new();
+        ut61eplus::all_units(&mut out);
+        ut171::all_units(&mut out);
+        ut181a::all_units(&mut out);
+        ut8802::all_units(&mut out);
+        ut8803::all_units(&mut out);
+        ut80x::all_units(&mut out);
+        vc8x0::all_units(&mut out);
+        eevblog121gw::all_units(&mut out);
+        bm78xbt::all_units(&mut out);
+        zotek::all_units(&mut out);
+        owon::all_units(&mut out);
+        bm86x::all_units(&mut out);
+        crate::mock::all_units(&mut out);
+        out
+    })
+}
+
+/// Panic unless the units of reading `m` are ones [`all_units`] walked, so a
+/// sweep catches a unit a parser emits and no family lists.
+#[cfg(test)]
+pub(crate) fn assert_units_walked(m: &crate::measurement::Measurement) {
+    let units = all_units();
+    let aux = m.aux_values.iter().map(|aux| aux.unit.as_ref());
+    for unit in std::iter::once(m.unit.as_ref()).chain(aux) {
+        assert!(
+            units.contains(unit),
+            "unit {unit:?} of {:?} is in no family's all_units",
+            m.mode
+        );
+    }
+}
+
 /// Whether `mode` is the `Unknown(0x..)` fallback a parser writes for a mode
 /// code its family's table doesn't list.
 pub fn is_unknown_mode(mode: &str) -> bool {
@@ -141,18 +186,6 @@ pub(crate) mod test_support {
             .step_by(2)
             .map(|i| u8::from_str_radix(&clean[i..i + 2], 16).expect("valid hex"))
             .collect()
-    }
-
-    /// `unit` without its SI prefix: "kHz" is "Hz", "°C" stays "°C". The
-    /// spec tests compare a row's resolution with the reading's unit by it.
-    pub(crate) fn unit_family(unit: &str) -> &str {
-        let mut chars = unit.chars();
-        match chars.next() {
-            Some('p' | 'n' | 'µ' | 'm' | 'k' | 'M') if !chars.as_str().is_empty() => {
-                chars.as_str()
-            }
-            _ => unit,
-        }
     }
 
     /// Render a parsed [`Measurement`] as deterministic `key=value` lines.

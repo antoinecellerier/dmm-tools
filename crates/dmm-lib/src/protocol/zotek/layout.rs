@@ -1142,6 +1142,36 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
     Ok((reading, showing))
 }
 
+/// Every unit a ZOTEK reading can carry, over all the layouts, for
+/// [`crate::protocol::all_units`]: each unit with each prefix, including pairs
+/// no layout's prefix groups reach.
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    use Prefix::{Kilo, Mega, Micro, Milli, Nano};
+    out.insert("");
+    for unit in [
+        Unit::Volt,
+        Unit::Amp,
+        Unit::Ohm,
+        Unit::Farad,
+        Unit::Hertz,
+        Unit::Percent,
+        Unit::Celsius,
+        Unit::Fahrenheit,
+    ] {
+        for prefix in [
+            None,
+            Some(Nano),
+            Some(Micro),
+            Some(Milli),
+            Some(Kilo),
+            Some(Mega),
+        ] {
+            out.insert(unit_str(prefix, unit));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

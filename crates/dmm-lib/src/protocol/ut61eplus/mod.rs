@@ -1207,6 +1207,26 @@ pub fn make_test_measurement(
     parse_measurement(FALLBACK_ID, &payload, &tables::ut61e_plus::UT61E_PLUS).unwrap()
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    out.insert("");
+    for device in DEVICES
+        .iter()
+        .filter(|d| d.family == DeviceFamily::Ut61EPlus)
+    {
+        let table = Ut61PlusProtocol::for_model(device.id).table;
+        for &mode in Mode::ALL {
+            for range in 0..=0x0F {
+                if let Some(info) = table.range_info(mode, range) {
+                    out.insert(info.unit);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

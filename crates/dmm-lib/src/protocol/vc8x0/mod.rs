@@ -968,6 +968,27 @@ fn recognise_live<M: Vc8x0Model>(buf: &[u8]) -> Option<Evidence> {
     None
 }
 
+/// Every unit a reading of this family can carry, for
+/// [`crate::protocol::all_units`].
+#[cfg(test)]
+pub(crate) fn all_units(out: &mut crate::protocol::Units) {
+    out.insert("");
+    units_of::<vc880::Vc880Model>(out);
+    units_of::<vc890::Vc890Model>(out);
+}
+
+#[cfg(test)]
+fn units_of<M: Vc8x0Model>(out: &mut crate::protocol::Units) {
+    out.extend(M::FUNCTION_TABLE.iter().map(|&(_, _, unit)| unit));
+    for function in 0..=u8::MAX {
+        for range_idx in 0..=u8::MAX {
+            if let Some((unit, _)) = M::lookup_range(function, range_idx) {
+                out.insert(unit);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

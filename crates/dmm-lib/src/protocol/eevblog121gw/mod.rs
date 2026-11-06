@@ -32,6 +32,8 @@ use log::debug;
 /// The registry id, which the report hint names as `--device`.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use decode::all_labels;
+#[cfg(test)]
+pub(crate) use decode::all_units;
 
 pub(super) const ID: &str = "121gw";
 
