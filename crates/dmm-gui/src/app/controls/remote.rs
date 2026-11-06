@@ -485,6 +485,10 @@ mod tests {
     use crate::app::test_support::{
         a11y, click_frames, connected_app, connected_to, headless_frame, node_rect, test_app,
     };
+    use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::{MeasuredValue, Measurement};
+    use dmm_lib::protocol::{DeviceFamily, DeviceProfile, registry};
+    use std::collections::BTreeMap;
 
     /// The carets draw from the bundled fonts, not as the replacement box
     /// (`Fonts::has_glyph` can't tell; see `.claude/rules/gui.md`).
@@ -837,5 +841,179 @@ mod tests {
             super::context_key_hover(&crate::l10n::english(), &long_press),
             "Hold the meter's REL key"
         );
+    }
+
+    /// What a family advertises that is no keypress on the meter, so no button
+    /// presses it, and why.
+    const NOT_A_BUTTON: &[(DeviceFamily, &str, &str)] = &[
+        (
+            DeviceFamily::Ut181a,
+            "monitor",
+            "SET_MONITOR switches the stream on, and goes out at open",
+        ),
+        (
+            DeviceFamily::Ut171,
+            "connect",
+            "starts the stream, and goes out at open",
+        ),
+        (
+            DeviceFamily::Ut171,
+            "pause",
+            "stops the stream the app reads",
+        ),
+    ];
+
+    /// Keys with no control yet. Every keypress is to reach the GUI, so this
+    /// only shrinks, and goes when it is empty.
+    const NOT_YET: &[(DeviceFamily, &str)] = &[
+        (DeviceFamily::Ut61EPlus, "select2"),
+        (DeviceFamily::Mock, "select2"),
+        (DeviceFamily::Ut181a, "save"),
+        (DeviceFamily::Owon, "lpf"),
+        (DeviceFamily::Owon, "inrush"),
+        (DeviceFamily::Owon, "compare"),
+        (DeviceFamily::Owon, "ac_dc"),
+        (DeviceFamily::Owon, "motor"),
+        (DeviceFamily::Owon, "display"),
+        (DeviceFamily::Owon, "current_loop"),
+        (DeviceFamily::Owon, "exit_rel"),
+    ];
+
+    /// The × that leaves a mode, drawn only with its button and the mode on:
+    /// the button's command, and the flags that light it.
+    fn parent_of_exit(command: &str) -> Option<(&'static str, StatusFlags)> {
+        match command {
+            command::EXIT_MINMAX => Some((
+                command::MINMAX,
+                StatusFlags {
+                    max: true,
+                    ..Default::default()
+                },
+            )),
+            command::EXIT_PEAK => Some((
+                command::PEAK,
+                StatusFlags {
+                    peak_max: true,
+                    ..Default::default()
+                },
+            )),
+            _ => None,
+        }
+    }
+
+    /// Every button drawn for `commands`, the app's own included.
+    fn row_buttons_for(commands: &[&str], flags: StatusFlags) -> Vec<String> {
+        let mut app = connected_app(commands, "V");
+        app.last_measurement = Some(Measurement::test_fixture(
+            MeasuredValue::Normal(1.234),
+            "V",
+            flags,
+        ));
+        buttons_of(&mut app)
+    }
+
+    /// Whether `key`'s `applies` holds for any reading: a context key that
+    /// never applies is never drawn.
+    fn applies_to_some_reading(key: &dmm_lib::protocol::MeterKey) -> bool {
+        let units = ["V", "mV", "A", "mA", "F", "nF", "Hz", "%", "Ω", "°C"];
+        (0..=u16::from(u8::MAX)).any(|mode_raw| {
+            units.iter().any(|unit| {
+                let mut reading = Measurement::test_fixture(
+                    MeasuredValue::Normal(1.234),
+                    unit,
+                    StatusFlags::default(),
+                );
+                reading.mode_raw = mode_raw;
+                (key.applies)(&reading)
+            })
+        })
+    }
+
+    /// Why `command`, advertised by `profile`, has no way onto the screen;
+    /// `None` when it has one. `row_only` is what the row alone draws for a
+    /// lone command, past the buttons it draws for none.
+    fn gap(
+        profile: &DeviceProfile,
+        command: &str,
+        row_only: &mut impl FnMut(&str) -> usize,
+    ) -> Option<String> {
+        let keys = profile.meter_keys;
+        // A function key is drawn in the mode dropdown, unless the family also
+        // offers mode choices: none that lists these keys does.
+        if keys.functions.iter().any(|k| k.command == command) {
+            return None;
+        }
+        if let Some(key) = keys.context.iter().find(|k| k.command == command) {
+            return (!applies_to_some_reading(key)).then(|| "its key never applies".to_string());
+        }
+        if let Some((parent, flags)) = parent_of_exit(command) {
+            if !profile.supported_commands.contains(&parent) {
+                return Some(format!("{parent} isn't advertised, so no x is drawn"));
+            }
+            let exit_drawn = row_buttons_for(&[parent, command], flags)
+                .iter()
+                .any(|label| label.starts_with("Exit "));
+            return (!exit_drawn).then(|| "no x is drawn".to_string());
+        }
+        match row_only(command) {
+            1 => None,
+            0 => Some("no button or key".to_string()),
+            n => Some(format!("{n} buttons for one command")),
+        }
+    }
+
+    /// Every keypress a model advertises reaches the GUI. Each command is a
+    /// key the family lists, a button the row draws, the × of one, or on a
+    /// list here; an entry on a list that no longer needs it fails too.
+    #[test]
+    fn every_advertised_command_reaches_the_gui() {
+        let none = row_buttons_for(&["no_such_command"], StatusFlags::default()).len();
+        let mut drawn: BTreeMap<String, usize> = BTreeMap::new();
+        let mut row_only = |command: &str| {
+            *drawn.entry(command.to_string()).or_insert_with(|| {
+                row_buttons_for(&[command], StatusFlags::default())
+                    .len()
+                    .saturating_sub(none)
+            })
+        };
+        let listed = |family: DeviceFamily, command: &str| {
+            NOT_A_BUTTON
+                .iter()
+                .any(|&(f, c, _)| (f, c) == (family, command))
+                || NOT_YET.iter().any(|&(f, c)| (f, c) == (family, command))
+        };
+        let mut gaps = Vec::new();
+        let mut seen = Vec::new();
+        for device in registry::DEVICES {
+            let protocol = (device.new_protocol)();
+            let profile = protocol.profile();
+            for &command in profile.supported_commands {
+                let gap = gap(profile, command, &mut row_only);
+                if listed(device.family, command) {
+                    seen.push((device.family, command));
+                    if gap.is_none() {
+                        gaps.push(format!(
+                            "{}: {command} is listed, but has a way onto the screen",
+                            device.id
+                        ));
+                    }
+                } else if let Some(gap) = gap {
+                    gaps.push(format!("{}: {command}: {gap}", device.id));
+                }
+            }
+        }
+        let entries = NOT_A_BUTTON
+            .iter()
+            .map(|&(family, command, _)| (family, command))
+            .chain(NOT_YET.iter().copied());
+        for (family, command) in entries {
+            if !seen.contains(&(family, command)) {
+                gaps.push(format!(
+                    "{family:?} lists {command}, which nothing advertises"
+                ));
+            }
+        }
+        println!("no control yet: {NOT_YET:?}");
+        assert!(gaps.is_empty(), "{gaps:#?}");
     }
 }
