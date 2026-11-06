@@ -851,9 +851,12 @@ p.71).
 **Sub-display.** MAX/MIN shows the live value and REL the reference on
 the OW65, OW67 and VC871, while the CMS's MaxMin row shows Min, Max and Avg
 (CMS101-UM p.27/22). A UT217A sends REL's reference as its sub-value, and
-in MaxMin the live value as the main reading, status bit 5 (MAX) and one
-DC V sub-value, 39.36 V beside a live 39.30 V [HARDWARE]; which of Min, Max
-and Avg that is, is [UNVERIFIED]. In Hz it sends Hz as the main reading and
+in MaxMin the live value as the main reading, status bit 5 (MAX) and the
+signed running maximum as the sub-value: it held in all 384 MaxMin frames of
+two captures, through a rise from -39.19 V to -28.59 V and a dip to -39.23 V
+under a -39.19 V sub-value [HARDWARE]. The frame sends no Min or Avg, and OWON's
+app shows the sub-value unlabelled (PE:5952-6085) [VENDOR, app]. Its match
+with the LCD's Max is [UNVERIFIED]. In Hz it sends Hz as the main reading and
 duty as the sub-value, and in duty the two swapped [HARDWARE]. Also the frequency or duty beside AC V and Hz; W with VA, V, A, PF
 or Hz on the power functions; VAC or VDC beside AC+DC (VC915-UM p.73); the
 voltage in Motor (p.76); irradiance or temperature in PV mode (VC925-UM

@@ -384,7 +384,7 @@ const PEAK_MODE: &str = "Peak {mode}";
 /// The sub-display (spec §10.2-10.5, §10.7). On the VC871 under REL, MAX or
 /// MIN it shows the main display's function, with its own prefix and
 /// point: the reference under REL and the live reading under MAX/MIN (spec
-/// §9.4).
+/// §9.4). A CMS's under MAX is the running maximum of its live main reading.
 fn sub_value(
     p: &[u8],
     main_function: u8,
@@ -404,6 +404,10 @@ fn sub_value(
     let label: Cow<'static, str> = match &sub {
         _ if follows && rel => Cow::Borrowed("Reference"),
         _ if follows => Cow::Borrowed("Live"),
+        // The running maximum beside a live main reading (spec §9.4).
+        _ if model.cms_readings && function == main_function && status & u32::from(MAX) != 0 => {
+            Cow::Borrowed("Max")
+        }
         // AC+DC V with its DC or AC part (spec §10.5).
         Some(_) if main_function == code::AC_DC_V && function == function::DC_V => {
             Cow::Borrowed("DC")
@@ -932,6 +936,28 @@ pub(crate) mod tests {
         // Without them, the VC871's sub-display is its own.
         let p = frame(g24(0, 4, 3, true), 1234, g24(6, 3, 1, false), 5000, 0x04);
         assert_eq!(quiet(&p, &VC871).aux_values[0].label, "Hz");
+    }
+
+    /// #45, a UT217A's MaxMin: the sub word is the signed running maximum.
+    /// Here main has dropped to -39.23 V, and the maximum stays at -39.19 V.
+    #[test]
+    fn a_cms_labels_its_maxmin_sub_value_max() {
+        let p = [
+            0x22, 0x10, 0xF0, 0x53, 0x0F, 0x80, 0x22, 0x10, 0xF0, 0x4F, 0x0F, 0x80, 0x20, 0, 0,
+        ];
+        for model in [&CMS061, &CMS101] {
+            let m = quiet(&p, model);
+            assert_eq!(m.display_raw.as_deref(), Some("-39.23"));
+            assert!(m.flags.max);
+            let aux = &m.aux_values[0];
+            assert_eq!(aux.label, "Max");
+            assert_eq!(aux.display_raw.as_deref(), Some("-39.19"));
+        }
+        // Another meter's sub-display keeps its function's name.
+        assert_eq!(quiet(&p, &OW69B).aux_values[0].label, "DC V");
+        // A sub word of another function isn't the main reading's maximum.
+        let hz = frame(g24(0, 4, 2, true), 3919, g24(6, 4, 2, false), 100, 0x20);
+        assert_eq!(quiet(&hz, &CMS061).aux_values[0].label, "Hz");
     }
 
     /// Bit 12 clear: the sub bytes are ignored, whatever they hold (spec

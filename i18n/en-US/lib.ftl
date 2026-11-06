@@ -425,7 +425,7 @@ aux-internal-temperature = Internal temperature
 aux-lpf-v = LPF V
 # Used by: VC871
 aux-live = Live
-# Used by: UT181A
+# Used by: CMS061, CMS101, UT181A
 aux-max = Max
 # Used by: UT181A
 aux-min = Min
