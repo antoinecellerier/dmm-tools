@@ -118,6 +118,10 @@ AVG state can't be found behind a button that says MAX/MIN. A label names only
 what the remote can send: SHIFT, not the printed SHIFT/SETUP, when no command
 reaches the long press.
 
+**Keys that come and go sit after the ones that stay.** A key offered in some
+modes only follows SELECT and LIGHT, so a SELECT press that brings one in leaves
+SELECT where it was.
+
 **SCALE comes last.** Its badge follows the meter's own: it is the app's
 state, not the meter's, and among the reported flags it would be misattributed.
 

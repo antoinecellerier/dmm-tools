@@ -424,27 +424,6 @@ impl App {
                 }
             }
 
-            // The meter's context keys (ZOTEK's ZERO in capacitance, the
-            // 121GW's 1kHz in AC, OWON's Hz/Duty, the CM2100B's ZERO and the
-            // UT61+'s Hz/%, the UT181A's SAVE), each only while the reading is
-            // one it applies to.
-            let reading = self.last_measurement.as_ref();
-            for key in keys.context {
-                if !reading.is_some_and(|m| (key.applies)(m)) {
-                    continue;
-                }
-                let text = RichText::new(l10n.label(TextKind::Key, key.label))
-                    .font(egui::FontId::proportional(font_size));
-                if ui
-                    .add(egui::Button::new(text))
-                    .on_hover_text(context_key_hover(l10n, key))
-                    .clicked()
-                {
-                    self.send_command(key.command);
-                }
-                placed = true;
-            }
-
             // Non-toggle commands
             for (label, cmd, tooltip) in [
                 ("SELECT", command::SELECT, tr!(l10n, "remote-select.hover")),
@@ -461,6 +440,29 @@ impl App {
                     .clicked()
                 {
                     self.send_command(cmd);
+                }
+                placed = true;
+            }
+
+            // The meter's context keys (ZOTEK's ZERO in capacitance, the
+            // 121GW's 1kHz in AC, OWON's Hz/Duty, the CM2100B's ZERO and the
+            // UT61+'s Hz/%, the UT181A's SAVE), each only while the reading is
+            // one it applies to. Last, as they come and go with the mode: a
+            // SELECT press that brings one in leaves SELECT where it was, for
+            // the next press.
+            let reading = self.last_measurement.as_ref();
+            for key in keys.context {
+                if !reading.is_some_and(|m| (key.applies)(m)) {
+                    continue;
+                }
+                let text = RichText::new(l10n.label(TextKind::Key, key.label))
+                    .font(egui::FontId::proportional(font_size));
+                if ui
+                    .add(egui::Button::new(text))
+                    .on_hover_text(context_key_hover(l10n, key))
+                    .clicked()
+                {
+                    self.send_command(key.command);
                 }
                 placed = true;
             }
@@ -884,6 +886,27 @@ mod tests {
         for id in ["ut60bt", "ut202bt"] {
             assert!(!at(id, ac_v).contains(&label), "{id} takes no select2");
         }
+    }
+
+    /// SELECT stays where it was when the mode it picks brings a key in, so a
+    /// second press presses SELECT again.
+    #[test]
+    fn a_context_key_coming_in_leaves_select_where_it_was() {
+        let select_at = |mode_raw: u16| {
+            let mut app = connected_to("ut61eplus");
+            let reading = app.last_measurement.as_mut().expect("a reading");
+            reading.mode_raw = mode_raw;
+            let ctx = crate::app::styled_context();
+            ctx.enable_accesskit();
+            let out = headless_frame(&ctx, None, None, vec![], |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    app.show_reading_column(ui, crate::app::layout::ContentLayout::Wide);
+                });
+            });
+            node_rect(&a11y(&out).0, |n| n.label() == Some("SELECT")).expect("SELECT")
+        };
+        let (dc_mv, ac_mv) = (0x03, 0x01);
+        assert_eq!(select_at(dc_mv), select_at(ac_mv));
     }
 
     /// The UT181A's SAVE, whatever the reading, names what it does.

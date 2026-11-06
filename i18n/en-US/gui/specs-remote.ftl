@@ -64,8 +64,8 @@ specs-inline-resolution = Resolution { $resolution }
 specs-inline-accuracy = Accuracy { $accuracy }
 
 ## The hovers of the meter's buttons under the reading, in the order they
-## show: HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, the meter's own keys, then
-## SELECT and LIGHT. A click sends that button's press to the meter. Each
+## show: HOLD, REL, RANGE, AUTO, MAX/MIN, PEAK, SELECT and LIGHT, then the
+## meter's own keys. A click sends that button's press to the meter. Each
 ## describes what multimeters generally do on that button, not one model.
 
 # HOLD: the meter keeps showing the reading it had.
