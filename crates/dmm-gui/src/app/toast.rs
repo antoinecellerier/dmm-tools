@@ -18,6 +18,10 @@ use crate::a11y::{ResponseA11yExt, UiA11yExt};
 /// How long a toast stays up unless the user closes it first.
 const TOAST_DURATION: Duration = Duration::from_secs(8);
 
+/// How long a caution stays up: it is longer to read, and nothing on screen
+/// explains it.
+const CAUTION_DURATION: Duration = Duration::from_secs(15);
+
 /// Widest a toast box gets (logical points). Long export paths would
 /// otherwise stretch it across the whole window.
 const TOAST_MAX_WIDTH: f32 = 420.0;
@@ -41,6 +45,7 @@ const TOAST_STROKE_WIDTH: f32 = 1.5;
 /// glyph for the light one and draw a box — `the_glyphs_have_fonts` below
 /// keeps it that way.
 const OK_GLYPH: &str = "\u{2714}";
+const CAUTION_GLYPH: &str = "\u{2139}";
 pub(super) const ERROR_GLYPH: &str = "\u{26A0}";
 
 /// The × that closes a notice, a toast or one drawn in a panel: whether it
@@ -56,12 +61,21 @@ pub(super) fn dismiss_button(ui: &mut egui::Ui, l10n: &Localizer) -> bool {
 /// already repaints at while connected.
 const TOAST_REPAINT_INTERVAL: Duration = Duration::from_millis(100);
 
-/// A transient status message: what it says, whether it is bad news, and
+/// What kind of news a toast is, which its colour and glyph say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ToastKind {
+    Ok,
+    /// Nothing went wrong, but something the user may want to act on.
+    Caution,
+    Error,
+}
+
+/// A transient status message: what it says, what kind of news it is, and
 /// when it went up. Timed on real time, not the session clock — it is UI
 /// cadence, and a scaled mock clock must not hold one on screen for hours.
 pub(super) struct Toast {
     pub(super) message: String,
-    pub(super) is_error: bool,
+    pub(super) kind: ToastKind,
     /// When it was first drawn. A toast raised while the window is hidden
     /// (readings drain from `App::logic` then) has its clock start when the
     /// window comes back, so it is not gone before anyone could read it.
@@ -71,26 +85,45 @@ pub(super) struct Toast {
 impl Toast {
     /// Good or neutral news, up for its full time from its first frame.
     pub(super) fn info(message: impl Into<String>) -> Self {
-        Self::new(message.into(), false)
+        Self::new(message.into(), ToastKind::Ok)
+    }
+
+    /// Worth knowing, with nothing gone wrong yet: up for its full time from
+    /// its first frame.
+    pub(super) fn caution(message: impl Into<String>) -> Self {
+        Self::new(message.into(), ToastKind::Caution)
     }
 
     /// A failure, up for its full time from its first frame.
     pub(super) fn error(message: impl Into<String>) -> Self {
-        Self::new(message.into(), true)
+        Self::new(message.into(), ToastKind::Error)
     }
 
-    fn new(message: String, is_error: bool) -> Self {
+    fn new(message: String, kind: ToastKind) -> Self {
         Self {
             message,
-            is_error,
+            kind,
             shown_at: None,
+        }
+    }
+
+    /// Whether it is a failure.
+    pub(super) fn is_error(&self) -> bool {
+        self.kind == ToastKind::Error
+    }
+
+    /// How long it stays up from its first frame.
+    fn duration(&self) -> Duration {
+        match self.kind {
+            ToastKind::Caution => CAUTION_DURATION,
+            ToastKind::Ok | ToastKind::Error => TOAST_DURATION,
         }
     }
 
     /// How long it has left on screen: all of it until it is first drawn.
     fn remaining(&self) -> Duration {
-        self.shown_at.map_or(TOAST_DURATION, |at| {
-            TOAST_DURATION.saturating_sub(at.elapsed())
+        self.shown_at.map_or(self.duration(), |at| {
+            self.duration().saturating_sub(at.elapsed())
         })
     }
 
@@ -138,10 +171,10 @@ impl App {
                 // otherwise wrap to whatever the last message needed.
                 ui.set_max_width(max_width);
                 let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                let (color, glyph) = if toast.is_error {
-                    (tc.status_error(), ERROR_GLYPH)
-                } else {
-                    (tc.status_ok(), OK_GLYPH)
+                let (color, glyph) = match toast.kind {
+                    ToastKind::Ok => (tc.status_ok(), OK_GLYPH),
+                    ToastKind::Caution => (tc.status_warning(), CAUTION_GLYPH),
+                    ToastKind::Error => (tc.status_error(), ERROR_GLYPH),
                 };
                 egui::Frame::popup(ui.style())
                     .inner_margin(TOAST_PADDING)
@@ -513,7 +546,7 @@ mod tests {
         };
         headless_frame(&ctx, None, None, vec![], |ui| {
             let replacement = atlas_rect(ui, "\u{25FB}");
-            for glyph in [OK_GLYPH, ERROR_GLYPH] {
+            for glyph in [OK_GLYPH, CAUTION_GLYPH, ERROR_GLYPH] {
                 assert_ne!(
                     atlas_rect(ui, glyph),
                     replacement,

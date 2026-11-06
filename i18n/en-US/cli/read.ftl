@@ -100,7 +100,7 @@ read-link-lost = link to the meter lost ({ $error }); reconnecting, Ctrl+C ends 
 read-reconnected = reconnected; readings resume
 # After "Warning:" and shared.ftl's several-cables: what lets a dropped link
 # reconnect. At the start of a run, or when a run waiting for its link gives up.
-read-several-cables-action = Start read again with only this meter's cable plugged in to reconnect.
+read-several-cables-action = Start read again with only this meter's cable plugged in, or with --adapter and its path, to reconnect.
 # After "Warning:" and shared.ftl's waiting-for-own-cable, once while the run
 # waits for a dropped link: how to use the other cable instead.
 read-own-cable-action = Press Ctrl+C and start read again to use the other cable.

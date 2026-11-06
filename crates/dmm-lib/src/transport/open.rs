@@ -347,26 +347,24 @@ fn open_first_match(
     preferred: &[&'static str],
 ) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
     let candidates = usb_candidates(KNOWN_TRANSPORTS, preferred);
-    let match_count: usize = api
+    // By path: hidapi lists a record per usage pair, so one cable can list
+    // several times.
+    let cables = api
         .device_list()
         .filter(|dev| candidates.iter().any(|kt| kt.matches(dev)))
-        .count();
-
-    if match_count > 1 {
-        // Nothing to prefer when the meter is still unknown — the probe runs
-        // on whichever bridge opens first.
-        let preference = if preferred.is_empty() {
-            ""
-        } else {
-            " Preferring the cable this meter uses."
-        };
-        warn!(
-            "Multiple USB cables found ({match_count} devices).{preference} Pass --adapter to pick one."
-        );
-    }
+        .map(|dev| dev.path())
+        .collect::<std::collections::HashSet<_>>()
+        .len();
 
     for &kt in &candidates {
         if let Ok(device) = api.open(kt.vid, kt.pid) {
+            if cables > 1 {
+                // The words of dmm-gui's `connection-cables-at-open`, which
+                // says this on screen.
+                warn!(
+                    "{cables} USB cables this session could open are plugged in. It took the first it found. Pass --adapter to pick another."
+                );
+            }
             return Ok((device, kt));
         }
     }

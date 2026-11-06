@@ -1113,7 +1113,10 @@ mod tests {
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
         assert_eq!(
-            app.toast.take().map(|t| (t.message, t.is_error)),
+            app.toast.take().map(|t| {
+                let is_error = t.is_error();
+                (t.message, is_error)
+            }),
             Some(("Export failed: boom".to_string(), true))
         );
 
@@ -1122,7 +1125,7 @@ mod tests {
         app.poll_export(&ctx);
         assert!(!app.capture.recording.is_pinned());
         assert!(app.export.is_none());
-        assert!(app.toast.is_some_and(|t| t.is_error));
+        assert!(app.toast.is_some_and(|t| t.is_error()));
     }
 
     /// A writer gone without an answer ends the export with an error, so
@@ -1135,7 +1138,7 @@ mod tests {
         app.export = Some(PendingExport::Writing(writer));
         app.poll_export(&crate::app::styled_context());
         assert!(app.export.is_none());
-        assert!(app.toast.take().is_some_and(|t| t.is_error));
+        assert!(app.toast.take().is_some_and(|t| t.is_error()));
         assert!(begin(&mut app, ExportFormat::Csv).is_ok());
     }
 
@@ -1170,7 +1173,9 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.capture.recording.unexported_count(), 0);
         assert_eq!(
-            app.toast.as_ref().map(|t| (t.message.as_str(), t.is_error)),
+            app.toast
+                .as_ref()
+                .map(|t| (t.message.as_str(), t.is_error())),
             Some(("Exported 3 samples to out.csv", false))
         );
     }
@@ -1209,7 +1214,9 @@ mod tests {
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.capture.recording.unexported_count(), 2);
         assert_eq!(
-            app.toast.as_ref().map(|t| (t.message.as_str(), t.is_error)),
+            app.toast
+                .as_ref()
+                .map(|t| (t.message.as_str(), t.is_error())),
             Some(("Export failed: disk full", true))
         );
     }

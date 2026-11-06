@@ -27,9 +27,10 @@ use dmm_lib::{DeviceInfo, OpenOptions};
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 
-/// Why a lost link can't be reopened: `count` USB cables could answer, and
-/// nothing says which is this meter's. Held as data, and worded where it is
-/// shown ([`Help::several_cables`](crate::help::Help::several_cables)).
+/// `count` USB cables a session could open. From [`reopen_pin`] or
+/// [`ReopenPin::check`], why a lost link can't be reopened, as nothing says
+/// which is this meter's. Held as data, and worded where it is shown
+/// ([`Help::several_cables`](crate::help::Help::several_cables)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SeveralCables {
     pub count: usize,
@@ -71,6 +72,8 @@ pub struct ReopenPin {
     kinds: Vec<&'static str>,
     /// The last check found the listing ambiguous.
     held: bool,
+    /// See [`beside_others`](Self::beside_others).
+    beside: Option<SeveralCables>,
 }
 
 /// Choose how a session opened on `first_link` reopens it. `device` is the
@@ -95,6 +98,7 @@ pub fn reopen_pin(
         pinned,
         kinds: kinds.clone(),
         held: false,
+        beside: None,
     };
     if let Some(selector) = bluetooth_selector {
         return Ok(pin(Some(selector), Pinned::ByName));
@@ -102,7 +106,11 @@ pub fn reopen_pin(
     let listed = listed();
     // Over a flag: `--adapter` may be a path, and this is the cable it opened.
     if let Some(serial) = cable_serial.filter(|serial| paths_of_serial(&listed, serial) == 1) {
-        return Ok(pin(Some(serial), Pinned::BySerial));
+        let count = cables_of(&listed, &kinds);
+        return Ok(ReopenPin {
+            beside: (adapter_flag.is_none() && count >= 2).then_some(SeveralCables { count }),
+            ..pin(Some(serial), Pinned::BySerial)
+        });
     }
     // A flag naming a serial two cables carry opens whichever comes first.
     if let Some(adapter) = adapter_flag.filter(|flag| paths_of_serial(&listed, flag) < 2) {
@@ -115,6 +123,13 @@ pub fn reopen_pin(
 }
 
 impl ReopenPin {
+    /// The other cables the first open could have taken, with nothing naming
+    /// the one it did: it reconnects to that one, which may not be the meter
+    /// the user meant.
+    pub fn beside_others(&self) -> Option<SeveralCables> {
+        self.beside
+    }
+
     /// The options for this reopen's open.
     pub fn options<'a>(&'a self, stop: Option<&'a AtomicBool>) -> OpenOptions<'a> {
         OpenOptions {
@@ -286,6 +301,32 @@ mod tests {
         let pin = on_cable(Some("S1"), &listed).unwrap();
         assert_eq!(adapter(&pin), Some("S1".into()));
         assert!(!pin.options(None).bluetooth);
+    }
+
+    /// It says when others were there to take instead, unless the user named
+    /// this one, and not for a cable of another kind or one on its own.
+    #[test]
+    fn a_pinned_cable_says_when_others_were_there_to_take() {
+        let two = [cp2110("a", Some("S1")), cp2110("b", Some("S2"))];
+        let others = on_cable(Some("S1"), &two).unwrap().beside_others();
+        assert_eq!(others, Some(SeveralCables { count: 2 }));
+
+        let named = reopen_pin(
+            ut61eplus(),
+            Some("S1"),
+            true,
+            Some(Link::UsbCable),
+            None,
+            Some("S1"),
+            || two.to_vec(),
+        );
+        assert_eq!(named.unwrap().beside_others(), None);
+
+        let other_kind = [cp2110("a", Some("S1")), cable("b", "BU-86X", Some("S2"))];
+        let pin = on_cable(Some("S1"), &other_kind).unwrap();
+        assert_eq!(pin.beside_others(), None);
+        let alone = [cp2110("a", Some("S1"))];
+        assert_eq!(on_cable(Some("S1"), &alone).unwrap().beside_others(), None);
     }
 
     /// No serial, a shared serial, and a serial the listing spells otherwise

@@ -201,6 +201,13 @@ pub(crate) enum DmmMessage {
     /// A lost link can't be reopened: nothing says which cable is this
     /// meter's. The thread has ended.
     SeveralCables(SeveralCables),
+    /// The first open found other cables it could have taken, and nothing
+    /// named the one it did. `reconnects` says whether a lost link would come
+    /// back to this one, or end the session.
+    CablesAtOpen {
+        several: SeveralCables,
+        reconnects: bool,
+    },
     /// A library failure, carried whole rather than pre-formatted: the UI
     /// classifies it by [`ErrorKind`] and by variant, which a message string
     /// can only be string-matched back into.
@@ -488,6 +495,20 @@ where
     // What a reconnect goes back to, chosen now while this meter's cable is
     // still listed, or why it can't.
     let mut pin = reopen.as_ref().map(|source| source.pin(&dmm)).transpose();
+    let at_open = match &pin {
+        Ok(pin) => pin
+            .as_ref()
+            .and_then(ReopenPin::beside_others)
+            .map(|several| (several, true)),
+        Err(several) => Some((*several, false)),
+    };
+    if let Some((several, reconnects)) = at_open {
+        let _ = msg_tx.send(DmmMessage::CablesAtOpen {
+            several,
+            reconnects,
+        });
+        ctx.request_repaint();
+    }
     let mut stream = new_stream(&mut dmm, tick, simulated, &stop_flag);
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
@@ -1505,6 +1526,61 @@ mod tests {
             messages.extend(msg_rx.try_iter());
             (seen, messages)
         }
+    }
+
+    fn at_open(messages: &[DmmMessage]) -> Option<(SeveralCables, bool)> {
+        messages.iter().find_map(|m| match m {
+            DmmMessage::CablesAtOpen {
+                several,
+                reconnects,
+            } => Some((*several, *reconnects)),
+            _ => None,
+        })
+    }
+
+    /// The first open says what it found beside it, once, either way: a
+    /// reopen isn't a new choice of cable.
+    #[test]
+    fn the_first_open_says_when_other_cables_were_there_to_take() {
+        let two = SeveralCables { count: 2 };
+        let nameless = vec![vec![cable("a", None), cable("b", None)]];
+        let (_, messages) = Session::on_cable(None, nameless).run();
+        assert_eq!(at_open(&messages), Some((two, false)));
+
+        let session = Session {
+            reopens: 2,
+            reopened: |_| Ok(Some("S1")),
+            ..Session::on_cable(
+                Some("S1"),
+                vec![vec![cable("a", Some("S1")), cable("b", Some("S2"))]],
+            )
+        };
+        let (_, messages) = session.run();
+        assert_eq!(at_open(&messages), Some((two, true)));
+        let said = messages
+            .iter()
+            .filter(|m| matches!(m, DmmMessage::CablesAtOpen { .. }))
+            .count();
+        assert_eq!(said, 1, "said again at a reopen");
+    }
+
+    /// One cable, or one the user named, has nothing to say.
+    #[test]
+    fn a_lone_or_named_cable_says_nothing_at_the_first_open() {
+        let session = Session {
+            reopens: 1,
+            ..Session::on_cable(Some("S1"), vec![vec![cable("a", Some("S1"))]])
+        };
+        assert_eq!(at_open(&session.run().1), None);
+        let session = Session {
+            adapter: Some("S1"),
+            reopens: 1,
+            ..Session::on_cable(
+                Some("S1"),
+                vec![vec![cable("a", Some("S1")), cable("b", Some("S2"))]],
+            )
+        };
+        assert_eq!(at_open(&session.run().1), None);
     }
 
     fn refused(messages: &[DmmMessage]) -> Option<SeveralCables> {

@@ -266,7 +266,7 @@ mod tests {
             app.settings.theme_colors(false).accent(),
             Color32::from_rgb(0x7A, 0x00, 0x62)
         );
-        assert!(app.toast.as_ref().is_some_and(|t| !t.is_error));
+        assert!(app.toast.as_ref().is_some_and(|t| !t.is_error()));
     }
 
     #[test]
@@ -296,7 +296,7 @@ mod tests {
         app.settings.named_theme = None;
         app.settings.color_overrides.light.accent = Some(HexColor(Color32::from_rgb(1, 2, 3)));
         app.save_theme(folder.0.join("PLUM.json"), false, Some(&folder.0));
-        assert!(app.toast.as_ref().is_some_and(|t| t.is_error));
+        assert!(app.toast.as_ref().is_some_and(|t| t.is_error()));
         // Listed rather than probed: on a case-insensitive file system
         // (Windows, macOS) `PLUM.json` names `plum.json`.
         let files: Vec<_> = std::fs::read_dir(&folder.0)
@@ -342,6 +342,6 @@ mod tests {
         app.settings.color_overrides.light.accent = Some(HexColor(Color32::from_rgb(1, 2, 3)));
         app.save_theme(folder.0.join("plum"), false, Some(&folder.0));
         assert_eq!(std::fs::read(folder.0.join("plum.json")).unwrap(), saved);
-        assert!(app.toast.as_ref().is_some_and(|t| t.is_error));
+        assert!(app.toast.as_ref().is_some_and(|t| t.is_error()));
     }
 }

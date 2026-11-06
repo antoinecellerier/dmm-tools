@@ -202,7 +202,7 @@ impl App {
         if self
             .toast
             .as_ref()
-            .is_some_and(|t| t.is_error && !t.expired())
+            .is_some_and(|t| t.is_error() && !t.expired())
         {
             return;
         }
@@ -228,6 +228,19 @@ impl App {
             count = count,
             kept = format_sample_count(count)
         )));
+    }
+
+    /// A caution, giving way to a failure still on screen. News still on
+    /// screen stays beside it: "detected, and saved as your device" names the
+    /// meter the caution's arbitrary cable turned out to carry.
+    fn caution_toast(&mut self, message: String) {
+        let message = match &self.toast {
+            Some(toast) if toast.expired() => message,
+            Some(toast) if toast.is_error() => return,
+            Some(toast) => format!("{} {message}", toast.message),
+            None => message,
+        };
+        self.toast = Some(Toast::caution(message));
     }
 
     /// Say that the recording stopped because it filled the buffer, at the
@@ -571,6 +584,23 @@ impl App {
                         )));
                     }
                     clear_channel = true;
+                }
+                DmmMessage::CablesAtOpen {
+                    several,
+                    reconnects,
+                } => {
+                    let opened = tr!(
+                        self.l10n,
+                        "connection-cables-at-open",
+                        count = several.count
+                    );
+                    let message = if reconnects {
+                        opened.into_owned()
+                    } else {
+                        let no_reconnect = tr!(self.l10n, "connection-cables-no-reconnect");
+                        format!("{opened} {no_reconnect}")
+                    };
+                    self.caution_toast(message);
                 }
                 DmmMessage::Measurement(m) => breaches.extend(self.on_measurement(m)),
                 DmmMessage::Disconnected(err) => {
@@ -944,6 +974,7 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    use super::super::toast::ToastKind;
     use super::*;
     use crate::app::connection::ConnectedMeter;
     use crate::app::test_support::test_app;
@@ -1003,6 +1034,52 @@ mod tests {
         assert_eq!(notice.kind, NoticeKind::SeveralCables);
         assert!(notice.body.starts_with("2 USB cables"), "{}", notice.body);
         assert!(notice.body.ends_with("then Connect."), "{}", notice.body);
+    }
+
+    /// What the first open found beside it is said once connected, as a
+    /// caution, in either form: the pick was arbitrary, and how to make another.
+    #[test]
+    fn other_cables_at_the_first_open_are_a_caution() {
+        let several = dmm_shared::reopen::SeveralCables { count: 2 };
+        let mut app = app("ut61eplus", false);
+        for reconnects in [false, true] {
+            app.deliver(DmmMessage::CablesAtOpen {
+                several,
+                reconnects,
+            });
+            let toast = app.toast.take().expect("a toast");
+            assert_eq!(toast.kind, ToastKind::Caution);
+            let text = toast.message;
+            assert!(text.starts_with("2 USB cables"), "{text}");
+            assert!(text.contains("took the first it found"), "{text}");
+            assert!(text.contains("--adapter"), "{text}");
+            assert_eq!(text.contains("can't be told apart"), !reconnects, "{text}");
+            assert_eq!(text.contains("a cable's path"), !reconnects, "{text}");
+        }
+    }
+
+    /// News already up stays with it, and a failure outranks it.
+    #[test]
+    fn a_caution_keeps_the_news_and_gives_way_to_a_failure() {
+        let several = dmm_shared::reopen::SeveralCables { count: 2 };
+        let message = DmmMessage::CablesAtOpen {
+            several,
+            reconnects: true,
+        };
+        let mut app = app("ut61eplus", false);
+        app.toast = Some(Toast::info("Detected the UT61E+"));
+        app.deliver(message);
+        let toast = app.toast.take().expect("a toast");
+        assert_eq!(toast.kind, ToastKind::Caution);
+        assert!(toast.message.starts_with("Detected the UT61E+ 2 USB"));
+
+        app.toast = Some(Toast::error("the meter reports another model"));
+        app.deliver(DmmMessage::CablesAtOpen {
+            several,
+            reconnects: true,
+        });
+        let kept = app.toast.as_ref().expect("the error stays");
+        assert!(kept.is_error());
     }
 
     /// With no recording running, nothing has to stop and no toast says so.

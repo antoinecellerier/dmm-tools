@@ -97,6 +97,15 @@ connection-no-response-auto =
 # The meter answered, but with data that could not be read: a corrupt
 # frame, or a mode this tool does not know. The error itself follows.
 connection-bad-data = Meter sent data that could not be read
+# A toast once connected, when other cables were there to open and the session
+# took the first, with --adapter a command-line option kept as it is. $count is
+# 2 or more.
+connection-cables-at-open =
+    { $count ->
+       *[other] { $count } USB cables this session could open are plugged in. It took the first it found. Pass --adapter to pick another.
+    }
+# Follows connection-cables-at-open when nothing tells those cables apart.
+connection-cables-no-reconnect = These cables can't be told apart, so a dropped link will end this session unless --adapter names a cable's path.
 # A dropped link that was not reconnected. shared.ftl's several-cables
 # follows, then connection-several-cables-action. "Connect" is the top bar's
 # button.

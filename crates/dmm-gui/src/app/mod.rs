@@ -1284,7 +1284,7 @@ mod tests {
             let mut app = App::from_settings(settings, dmm_lib::Clock::real());
             app.settings_load_toast();
             let toast = app.toast.take().expect("no toast");
-            assert!(toast.is_error);
+            assert!(toast.is_error());
             assert_eq!(toast.message, expected);
             app.settings_load_toast();
             assert!(app.toast.is_none(), "raised twice");

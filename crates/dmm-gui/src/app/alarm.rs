@@ -512,7 +512,7 @@ mod tests {
         let m = reading(&app, 6.0, "V");
         assert!(app.check_alarm(&m, false).is_none());
         let toast = app.toast.as_ref().expect("a toast");
-        assert!(toast.is_error, "past a limit, like the badge");
+        assert!(toast.is_error(), "past a limit, like the badge");
         assert!(
             toast.message.starts_with("Already above high limit 5 V"),
             "{}",
@@ -620,7 +620,7 @@ mod tests {
         app.set_limit_from_graph(LimitSide::Low, Some(6.0));
         assert_eq!(app.alarm.as_ref().unwrap().limits().low, None);
         let toast = app.toast.as_ref().expect("a toast");
-        assert!(toast.is_error);
+        assert!(toast.is_error());
         assert!(
             toast.message.contains("low limit must be below"),
             "{}",

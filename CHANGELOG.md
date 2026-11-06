@@ -20,6 +20,7 @@
 - **The Device list shows each brand's own model names, in name order** — the UNI-T UT217A, Minipa, ANENG and BSIDE meters under their brand; ANENG's were listed beside ZOTEK's.
 - **A meter picked by another brand's name keeps that name** — a UT217A shows as the UNI-T UT217A, in the top bar, messages and exports.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
+- **dmm-gui says when it took the first of several USB cables** — unless `--adapter` named it.
 
 ### CLI
 
