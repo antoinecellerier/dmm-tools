@@ -29,7 +29,7 @@ use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     ButtonLabel, CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing,
     Protocol, Setting, check_len, command as cmd, display_number, spells_ol, unknown_mode,
-    unsupported_setting,
+    unknown_scale, unsupported_setting,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -841,13 +841,7 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(
 
     let (mode, base_unit) = resolve_function(M::FUNCTION_TABLE, function_code, M::LOG);
 
-    // Decode the range byte (0x30-based ASCII).
-    let range_idx = range_raw.wrapping_sub(0x30);
-    let (unit, range_label) = match M::lookup_range(function_code, range_idx) {
-        Some((u, r)) => (u, r),
-        // Single-range function or unknown range — use the base unit.
-        None => (base_unit, ""),
-    };
+    let (unit, range_label) = unit_and_range::<M>(id, function_code, range_raw, base_unit);
 
     let (display_str, display_trimmed) = main_display(main_bytes);
 
@@ -858,7 +852,6 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(
     report_unrecognised_fields::<M>(
         id,
         function_code,
-        range_raw,
         &display_trimmed,
         status_bytes,
         setup,
@@ -880,9 +873,46 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(
     })
 }
 
+/// The unit and range label `range_raw` names in `function`, whose unit with
+/// no range is `base_unit`.
+///
+/// vc880 spec §4.2, vc890 spec "Range Tables": the range byte is 0x30 plus an
+/// index into the function's table. Past the table, only a table whose rows
+/// change the unit leaves the scale unknown. The specs describe no range byte
+/// for a single-range function (an empty table), and the vendor never reads
+/// LPF's, so neither is reported.
+fn unit_and_range<M: Vc8x0Model>(
+    id: &'static str,
+    function: u8,
+    range_raw: u8,
+    base_unit: &'static str,
+) -> (&'static str, &'static str) {
+    if let Some(found) = M::lookup_range(function, range_raw.wrapping_sub(0x30)) {
+        return found;
+    }
+    let table = M::range_table(function);
+    let unit = if table.iter().any(|row| !row.unit_override.is_empty()) {
+        unknown_scale(
+            id,
+            "range byte",
+            format_args!("{range_raw:#04x} for function {function:#04x}"),
+        )
+    } else {
+        if function != M::LOW_PASS && !table.is_empty() {
+            report_unknown(
+                id,
+                "range byte",
+                format_args!("{range_raw:#04x} for function {function:#04x}"),
+            );
+        }
+        base_unit
+    };
+    (unit, "")
+}
+
 /// Report what in a live-data payload the spec does not document: the
-/// function code, the range byte, the sign bit against the display, and the
-/// status bits. Nothing here changes the reading.
+/// function code, the sign bit against the display, and the status bits.
+/// Nothing here changes the reading.
 ///
 /// `display` is the whitespace-stripped main display; `setup` says the meter
 /// shows its setup screen, whose words are not a reading, and `overload` that
@@ -890,7 +920,6 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(
 fn report_unrecognised_fields<M: Vc8x0Model>(
     id: &'static str,
     function: u8,
-    range_raw: u8,
     display: &str,
     status: &[u8],
     setup: bool,
@@ -899,19 +928,6 @@ fn report_unrecognised_fields<M: Vc8x0Model>(
     // vc880 spec §4.1, vc890 spec "Function Codes".
     if function > LAST_FUNCTION {
         report_unknown(id, "function code", format_args!("{function:#04x}"));
-    }
-    // vc880 spec §4.2, vc890 spec "Range Tables": the range byte is 0x30
-    // plus an index into the function's table. The specs describe no range
-    // byte for a single-range function (an empty table), and the vendor
-    // never reads LPF's.
-    let table = M::range_table(function);
-    let range_idx = range_raw.wrapping_sub(0x30);
-    if function != M::LOW_PASS && !table.is_empty() && usize::from(range_idx) >= table.len() {
-        report_unknown(
-            id,
-            "range byte",
-            format_args!("{range_raw:#04x} for function {function:#04x}"),
-        );
     }
     // vc880 spec §4.3, vc890 spec byte 56: Sign1 is the main display's sign.
     // The reading is the display text as sent (vc880 spec §4, "Display
@@ -1559,8 +1575,29 @@ pub(crate) mod test_support {
         assert!(reports.is_empty(), "{reports:?}");
     }
 
+    /// Past a table whose rows change the unit, `functions` read with no
+    /// unit, reported: the base unit could be off by 10⁹.
+    pub(crate) fn assert_unknown_scale_has_no_unit<M: Vc8x0Model>(functions: &[u8]) {
+        for &function in functions {
+            for range in [0x2F, 0x39] {
+                let payload = make_payload::<M>(function, range, b"  1.234", &zero_status::<M>());
+                let (m, reports) = parse_capturing::<M>(&payload);
+                let m = m.unwrap();
+                assert!(matches!(m.value, MeasuredValue::Normal(v) if v == 1.234));
+                assert_eq!((m.unit.as_ref(), m.range_label.as_ref()), ("", ""));
+                assert_eq!(
+                    reports,
+                    [report::<M>(
+                        "range byte",
+                        &format!("{range:#04x} for function {function:#04x}")
+                    )]
+                );
+            }
+        }
+    }
+
     /// A range byte past `volts`' four-rung table, or below 0x30, is
-    /// reported, and the reading still falls back to the base unit.
+    /// reported. Every row is in volts, so the reading keeps its unit.
     pub(crate) fn assert_range_past_the_table_reported<M: Vc8x0Model>(volts: u8) {
         for range in [0x34, 0x2F] {
             let payload = make_payload::<M>(volts, range, b"  1.234", &zero_status::<M>());
@@ -1577,14 +1614,16 @@ pub(crate) mod test_support {
         }
     }
 
-    /// Nothing is reported for the range byte of `functions`, which have no
+    /// Nothing is reported for the range byte of `functions`, and they keep
+    /// their unit: they have no
     /// range table or whose range byte the vendor never reads.
     pub(crate) fn assert_unread_range_bytes_are_silent<M: Vc8x0Model>(functions: &[u8]) {
         for &function in functions {
             for range in [0x2F, 0x31, 0x39, 0xFF] {
                 let payload = make_payload::<M>(function, range, b"  1.234", &zero_status::<M>());
                 let (m, reports) = parse_capturing::<M>(&payload);
-                m.unwrap();
+                let base = M::FUNCTION_TABLE.iter().find(|row| row.0 == function);
+                assert_eq!(m.unwrap().unit, base.unwrap().2, "{function:#04x}");
                 assert!(
                     reports.is_empty(),
                     "function {function:#04x} range {range:#04x}: {reports:?}"

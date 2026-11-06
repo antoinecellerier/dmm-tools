@@ -28,7 +28,8 @@ yet: every item waits on a first report.
 - The inbound BE16 checksum, inferred ([Frame Format](reverse-engineered-protocol.md#frame-format----vendor))
   — every frame failing it means another scheme. Needs any capture. (#14)
 - The remapped function codes and the 6/60/600 ranges ([Function Codes](reverse-engineered-protocol.md#function-codes----vendor))
-  — decides `FUNCTION_TABLE` and `range_table`. Needs every mode step. (#14)
+  — decides `FUNCTION_TABLE` and `range_table`, and so which bytes read with no
+  unit. Needs every mode step. (#14)
 - The range byte in ACV LPF, which the vendor never reads ([Range Tables](reverse-engineered-protocol.md#range-tables----vendor))
   — decides whether `lookup_range` keeps 1000 V fixed. Needs `lpf`. (#14)
 

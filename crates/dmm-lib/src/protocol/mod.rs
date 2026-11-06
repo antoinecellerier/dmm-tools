@@ -96,6 +96,18 @@ pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
     Cow::Owned(format!("Unknown({code:#06x})"))
 }
 
+/// The unit of a reading whose scale rests on a code no table lists, such as
+/// a range or a metric prefix: reported, and no unit. Never the base unit,
+/// which would pass for a reading off by powers of a thousand.
+pub(crate) fn unknown_scale(
+    device_id: &'static str,
+    what: &'static str,
+    value: std::fmt::Arguments,
+) -> &'static str {
+    unrecognised::report_unknown(device_id, what, value);
+    ""
+}
+
 /// Every label each family can produce, for [`crate::text::all_texts`].
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) fn all_labels(out: &mut crate::text::Labels) {

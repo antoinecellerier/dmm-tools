@@ -40,7 +40,8 @@ has been read yet: every item waits on a first report.
   — decides `FUNCTION_TABLE`'s labels against the LCD. Needs every mode
   step. (#13)
 - The range byte per function, 0x30 plus an index ([§4.2](reverse-engineered-protocol.md#42-range-tables-byte-5----vendor--known))
-  — decides the range tables. Needs the mode steps' range sub-steps. (#13)
+  — decides the range tables, and so which bytes read with no unit. Needs the
+  mode steps' range sub-steps. (#13)
 - The range byte in ACV low-pass, which the vendor never reads (§4.2) —
   decides whether the voltage table labels it (`LOW_PASS`). Needs `lpf`. (#13)
 - The main display against the LCD, and what an overload or a blank reading

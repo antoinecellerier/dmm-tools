@@ -85,6 +85,7 @@
 - **`dmm-cli debug` calls off a Bluetooth search on Ctrl+C at once** — it waited for the search to end.
 - **Control characters in a replay file or capture report print as text** — in errors and `triage` output, where they could rewrite the screen or clipboard.
 - **dmm-gui refuses a theme file whose text can't be read on the top bar, and says why** — its Theme chips in Settings were unreadable.
+- **A reading with an unrecognised scale shows no unit** — the VC-880, VC650BT and VC-890 showed a unit far off.
 
 ## v0.9.0 — Graph Analysis and Alarms
 

@@ -646,6 +646,12 @@ mod tests {
         shared::assert_range_past_the_table_reported::<Vc890Model>(0x02);
     }
 
+    /// Frequency, resistance and capacitance.
+    #[test]
+    fn a_range_byte_past_a_scale_table_gives_no_unit() {
+        shared::assert_unknown_scale_has_no_unit::<Vc890Model>(&[0x05, 0x07, 0x0A]);
+    }
+
     /// Duty cycle, continuity and diode have no range table, and ACV LPF's
     /// range byte is never read.
     #[test]
