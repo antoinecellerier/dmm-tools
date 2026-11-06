@@ -13,7 +13,7 @@ use super::{ID, report};
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
-use crate::protocol::unknown_mode16;
+use crate::protocol::{unknown_mode16, unknown_scale};
 use std::borrow::Cow;
 
 /// Decode a payload as the stream delivers it and a replay file stores it:
@@ -146,7 +146,7 @@ fn decode_reading(r: &[u8]) -> Result<Measurement> {
     // The unit and the scaling fields describe a number; while the display
     // shows a word, r4 gives them no meaning, so they are not checked.
     let numeric = !ascii || overload;
-    let (unit, decimals) = scaling(r, numeric);
+    let (unit, decimals) = scaling(r, numeric, !ascii && !overload);
     let (value, display_raw, lead_error) = if overload {
         // "Device Reading [2] ~ [0] can be ignored" (spec §6.3).
         (MeasuredValue::Overload, None, false)
@@ -179,16 +179,27 @@ fn decode_reading(r: &[u8]) -> Result<Measurement> {
 const MAX_DECIMALS: u32 = 9;
 
 /// The reading's unit, with its prefix, and the digits after its decimal
-/// point (spec §6.3, §6.4). `check` reports the fields r4 does not cover.
-fn scaling(r: &[u8], check: bool) -> (&'static str, u32) {
+/// point (spec §6.3, §6.4). `check` reports the fields r4 does not cover, and
+/// `number` says the frame carries a number, which an unknown prefix would
+/// leave at an unknown scale. A word or an overload keeps the unprefixed unit.
+fn scaling(r: &[u8], check: bool, number: bool) -> (&'static str, u32) {
     let (point, prefix_byte, unit_code, digits) = (r[24], r[25], r[26], r[27]);
-    let prefix = tables::prefix_index(prefix_byte);
-    let unit = tables::unit(unit_code, prefix);
-    if check {
-        if prefix.is_none() {
-            report(r, "metric prefix");
+    let unit = match tables::prefix_index(prefix_byte) {
+        Some(prefix) => tables::unit(unit_code, prefix),
+        None if number => Some(unknown_scale(
+            ID,
+            "metric prefix",
+            format_args!("packet {r:02X?}"),
+        )),
+        None => {
+            if check {
+                report(r, "metric prefix");
+            }
+            tables::unit(unit_code, tables::NO_PREFIX)
         }
-        if unit.is_none() {
+    };
+    if check {
+        if tables::unit(unit_code, tables::NO_PREFIX).is_none() {
             report(r, "function unit");
         }
         // r4 lists 3 to 6 digits (spec §6.2).
@@ -327,7 +338,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
 pub(crate) fn all_units(out: &mut crate::protocol::Units) {
     out.insert("");
     for code in 0..=u8::MAX {
-        for prefix in std::iter::once(None).chain((0..7).map(Some)) {
+        for prefix in 0..7 {
             if let Some(unit) = tables::unit(code, prefix) {
                 out.insert(unit);
             }
@@ -772,9 +783,32 @@ mod tests {
             assert_eq!(m.display_raw.as_deref(), Some("1234"), "{digits}");
         }
         let m = reported(&with(0x03, 0x01, 1, |r| r[25] = 0x0C), "metric prefix");
-        assert_eq!(m.unit, "V");
+        assert_eq!(m.unit, "");
+        let m = reported(&with(0x03, 0x01, 1, |r| r[25] = 0x01), "metric prefix");
+        assert_eq!(m.unit, "");
         let m = reported(&with(0x03, 0x01, 1, |r| r[26] = 0x07), "function unit");
         assert_eq!(m.unit, "");
+        let (m, reports) = decoded(&with(0x03, 0x01, 1, |r| {
+            r[25] = 0x0C;
+            r[26] = 0x07;
+        }));
+        assert_eq!(m.unit, "");
+        assert_eq!(reports.len(), 2, "{reports:?}");
+        // An overload has no number to scale.
+        let m = reported(
+            &with(0x03, 0x01, 1, |r| {
+                r[15] = OL;
+                r[25] = 0x0C;
+            }),
+            "metric prefix",
+        );
+        assert_eq!(m.unit, "V");
+        // While the display shows a word, the prefix has no number to scale.
+        let m = quiet(&with(0x03, 0x01, 2, |r| {
+            r[14] |= ASCII;
+            r[25] = 0x0C;
+        }));
+        assert_eq!(m.unit, "V");
         reported(
             &with(0x03, 0x01, -1, |_| {}),
             "negative count without the sign flag",

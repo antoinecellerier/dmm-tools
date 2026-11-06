@@ -197,7 +197,7 @@ macro_rules! prefixed {
 }
 
 /// The index into [`UNITS`]' rows that has no prefix.
-const NO_PREFIX: usize = 3;
+pub(super) const NO_PREFIX: usize = 3;
 
 /// r4's ten function units, `[26]`, each with every prefix (spec §6.4).
 /// µ is U+00B5 and Ω U+03A9, the characters `transform::si_prefix` reads.
@@ -223,10 +223,10 @@ pub(super) fn prefix_index(byte: u8) -> Option<usize> {
 }
 
 /// The unit `[26]` names with the prefix at `prefix` (from [`prefix_index`],
-/// or the unprefixed one). `None` for a unit code r4 does not list.
-pub(super) fn unit(code: u8, prefix: Option<usize>) -> Option<&'static str> {
+/// or [`NO_PREFIX`]). `None` for a unit code r4 does not list.
+pub(super) fn unit(code: u8, prefix: usize) -> Option<&'static str> {
     let (_, row) = UNITS.iter().find(|(c, _)| *c == code)?;
-    Some(row[prefix.unwrap_or(NO_PREFIX)])
+    Some(row[prefix])
 }
 
 /// What an ASCII reading's count shows (spec §6.7), when Flag0 bit 2 is set.
@@ -378,7 +378,8 @@ mod tests {
             (0x06, "MV"),
             (0x09, "GV"),
         ] {
-            assert_eq!(unit(0x02, prefix_index(byte)), Some(shown), "{byte:#04x}");
+            let prefix = prefix_index(byte).unwrap();
+            assert_eq!(unit(0x02, prefix), Some(shown), "{byte:#04x}");
         }
         for byte in [0x01, 0x02, 0x0C, 0xF4, 0xFE, 0x80, 0x7F] {
             assert_eq!(prefix_index(byte), None, "{byte:#04x}");
@@ -387,16 +388,17 @@ mod tests {
 
     #[test]
     fn units_use_the_characters_si_prefix_reads() {
-        assert_eq!(unit(0x05, prefix_index(0xF7)), Some("nS"));
-        assert_eq!(unit(0x03, prefix_index(0xFA)), Some("\u{00B5}A"));
-        assert_eq!(unit(0x04, prefix_index(0x03)), Some("k\u{03A9}"));
-        assert_eq!(unit(0x06, prefix_index(0xFA)), Some("µF"));
-        assert_eq!(unit(0x08, prefix_index(0x03)), Some("kHz"));
+        let at = |byte| prefix_index(byte).unwrap();
+        assert_eq!(unit(0x05, at(0xF7)), Some("nS"));
+        assert_eq!(unit(0x03, at(0xFA)), Some("\u{00B5}A"));
+        assert_eq!(unit(0x04, at(0x03)), Some("k\u{03A9}"));
+        assert_eq!(unit(0x06, at(0xFA)), Some("µF"));
+        assert_eq!(unit(0x08, at(0x03)), Some("kHz"));
         for (code, shown) in [(0x0A, "%"), (0x14, "°C"), (0x15, "°F"), (0x4F, "%")] {
-            assert_eq!(unit(code, prefix_index(0)), Some(shown));
+            assert_eq!(unit(code, NO_PREFIX), Some(shown));
         }
         for code in [0x00, 0x01, 0x07, 0x09, 0x0B, 0x16, 0x4E, 0xFF] {
-            assert_eq!(unit(code, None), None, "{code:#04x}");
+            assert_eq!(unit(code, NO_PREFIX), None, "{code:#04x}");
         }
     }
 
