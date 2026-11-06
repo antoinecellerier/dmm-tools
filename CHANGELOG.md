@@ -45,6 +45,8 @@
 - **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
 - **`capture` stops on a pulled cable or lost link, saying how to resume** — it spun at full CPU and filed empty steps.
 - **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
+- **dmm-gui reconnects to the same USB cable** — with several plugged in, a dropped link could carry on with another meter's readings; cables it can't tell apart end the session.
+- **dmm-gui keeps a cable session on the cable** — a reconnect could come back over Bluetooth.
 - **`capture` asks before replacing a report it can't read** — one an editor re-saved as UTF-16 was overwritten without a prompt.
 - **A REL reading under a scale with an offset takes the scale alone** — ×1.8 + 32 turned a +2.0 °C REL difference into 35.6 °F instead of 3.6 °F.
 - **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.

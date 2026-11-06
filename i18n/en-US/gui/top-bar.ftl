@@ -39,6 +39,9 @@ top-bar-reconnecting-hover = Retrying the connection automatically — click Dis
 top-bar-reconnecting-hover-error =
     Retrying the connection automatically — click Disconnect to stop.
     Last error: { $error }
+# After shared.ftl's waiting-for-own-cable. "Disconnect" and "Connect" are the
+# top bar's button.
+top-bar-own-cable-action = Click Disconnect, then Connect, to use the other cable.
 top-bar-stop-retrying = Disconnect
     .hover = Stop retrying and close the connection ({ $keys })
 

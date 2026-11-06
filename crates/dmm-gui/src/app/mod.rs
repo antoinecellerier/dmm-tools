@@ -283,6 +283,8 @@ pub(super) struct Connection {
     pub(super) reconnect_attempt: u32,
     /// Last reconnect failure message, if any, worded as it arrived.
     pub(super) reconnect_last_error: Option<String>,
+    /// The last reconnect attempt found another cable, not this session's.
+    pub(super) waiting_for_own_cable: bool,
     /// The acquisition thread's channels; `None` while none runs.
     worker: Option<Worker>,
     /// The message channel of the last thread stopped, which may still be
@@ -348,6 +350,7 @@ impl Default for Connection {
             waiting_timeouts: 0,
             reconnect_attempt: 0,
             reconnect_last_error: None,
+            waiting_for_own_cable: false,
             worker: None,
             stopping: None,
             needs_reconnect: false,

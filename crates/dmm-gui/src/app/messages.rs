@@ -4,6 +4,7 @@
 
 use dmm_lib::protocol::registry;
 use dmm_shared::l10n::Localizer;
+use dmm_shared::reopen::ReopenPin;
 use dmm_shared::tr;
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
@@ -13,8 +14,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 use super::alarm::PendingBreach;
 use super::connection::{
-    self, ConnectedMeter, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext,
-    spawn_acquisition,
+    self, ConnectedMeter, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ReopenSource,
+    ThreadContext, spawn_acquisition,
 };
 use super::connection_issue::{ConnectionIssue, NoticeKind};
 use super::toast::{ERROR_GLYPH, Toast, dismiss_button};
@@ -343,6 +344,7 @@ impl App {
             simulated: false,
             reconnect_interval: RECONNECT_INTERVAL,
             stop_flag,
+            reopen: None,
             after: self.connection.stopping.take(),
         };
 
@@ -421,17 +423,24 @@ impl App {
             // A Bluetooth open can take seconds; stopping the thread calls it
             // off, so Disconnect and quit don't wait for it.
             let stop = Arc::clone(&thread_ctx.stop_flag);
+            thread_ctx.reopen = Some(ReopenSource {
+                device: device_entry,
+                adapter: adapter.clone(),
+                bluetooth,
+                listed: Box::new(dmm_shared::reopen::listed_cables),
+            });
             spawn_acquisition(
                 // Re-run on every reconnect, detection included: a meter that
                 // comes back is identified again rather than assumed to be the
-                // one that left. `reopen_at` is the Bluetooth adapter a lost
-                // link was on, opened by address like `--adapter`, which wins
-                // if given.
-                move |reopen_at| {
-                    let opts = dmm_lib::OpenOptions {
-                        adapter: adapter.as_deref().or(reopen_at),
-                        bluetooth,
-                        stop: Some(&stop),
+                // one that left. The pin says what a reconnect may open.
+                move |pin: Option<&ReopenPin>| {
+                    let opts = match pin {
+                        Some(pin) => pin.options(Some(&stop)),
+                        None => dmm_lib::OpenOptions {
+                            adapter: adapter.as_deref(),
+                            bluetooth,
+                            stop: Some(&stop),
+                        },
                     };
                     match device_entry {
                         Some(device) => dmm_lib::open_device(device, opts).map(|dmm| (dmm, None)),
@@ -543,9 +552,25 @@ impl App {
                 DmmMessage::Reconnecting {
                     attempt,
                     last_error,
+                    waiting_for_own_cable,
                 } => {
                     self.connection.reconnect_attempt = attempt;
                     self.connection.reconnect_last_error = last_error.map(|e| self.l10n.error(&e));
+                    self.connection.waiting_for_own_cable = waiting_for_own_cable;
+                }
+                DmmMessage::SeveralCables(several) => {
+                    warn!("UI: no reconnect: {} USB cables", several.count);
+                    self.connection.last_error = Some(ConnectionIssue::SeveralCables(several));
+                    // A next Connect could open the other meter's cable, and
+                    // what it reads must not join this recording.
+                    if self.capture.recording.is_active() {
+                        self.apply_recording_toggle();
+                        self.toast = Some(Toast::error(tr!(
+                            self.l10n,
+                            "connection-several-cables-recording"
+                        )));
+                    }
+                    clear_channel = true;
                 }
                 DmmMessage::Measurement(m) => breaches.extend(self.on_measurement(m)),
                 DmmMessage::Disconnected(err) => {
@@ -712,6 +737,7 @@ impl App {
         self.connection.last_error = None;
         self.connection.reconnect_attempt = 0;
         self.connection.reconnect_last_error = None;
+        self.connection.waiting_for_own_cable = false;
         if let Some(meter) = &self.connection.meter {
             info!(
                 "UI: connected to {} (meter reports {:?})",
@@ -944,6 +970,51 @@ mod tests {
 
     fn toast_text(app: &App) -> Option<&str> {
         app.toast.as_ref().map(|t| t.message.as_str())
+    }
+
+    /// A link nothing can reopen ends the session with its reason on screen,
+    /// and the recording with it: the next Connect could open the other
+    /// meter's cable. What was recorded stays.
+    #[test]
+    fn several_cables_end_the_session_and_the_recording() {
+        let mut app = app("ut61eplus", false);
+        app.capture.recording.toggle(app.clock.now());
+        app.connection.state = ConnectionState::Connected;
+        let reading = Measurement::test_fixture(
+            MeasuredValue::Normal(1.0),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        );
+        app.deliver(DmmMessage::Measurement(reading));
+        assert_eq!(app.capture.recording.export_samples().len(), 1);
+        app.deliver(DmmMessage::Disconnected(dmm_lib::error::Error::LinkLost));
+        assert_eq!(app.connection.state, ConnectionState::Reconnecting);
+        let several = dmm_shared::reopen::SeveralCables { count: 2 };
+        app.deliver(DmmMessage::SeveralCables(several));
+        assert_eq!(app.connection.state, ConnectionState::Disconnected);
+        assert_eq!(
+            app.connection.last_error,
+            Some(ConnectionIssue::SeveralCables(several))
+        );
+        assert!(!app.capture.recording.is_active());
+        assert_eq!(app.capture.recording.export_samples().len(), 1);
+        assert!(app.toast.is_some(), "the recording stopping is said");
+        let notice = app.connection_notice().expect("the reason is on screen");
+        assert_eq!(notice.kind, NoticeKind::SeveralCables);
+        assert!(notice.body.starts_with("2 USB cables"), "{}", notice.body);
+        assert!(notice.body.ends_with("then Connect."), "{}", notice.body);
+    }
+
+    /// With no recording running, nothing has to stop and no toast says so.
+    #[test]
+    fn several_cables_with_no_recording_only_show_the_notice() {
+        let mut app = app("ut61eplus", false);
+        let several = dmm_shared::reopen::SeveralCables { count: 3 };
+        app.deliver(DmmMessage::SeveralCables(several));
+        assert!(app.toast.is_none());
+        assert!(!app.capture.recording.is_active());
+        let notice = app.connection_notice().expect("the reason is on screen");
+        assert!(notice.body.starts_with("3 USB cables"), "{}", notice.body);
     }
 
     /// The notice for readings arriving in pairs stays until the link goes:
@@ -1307,7 +1378,7 @@ mod tests {
         });
         let (opening_tx, opening_rx) = mpsc::channel();
         let stop = Arc::clone(&stop_flag);
-        let open_fn = move |_: Option<&str>| -> Opened {
+        let open_fn = move |_: Option<&ReopenPin>| -> Opened {
             let _ = opening_tx.send(());
             while !stop.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_millis(10));
@@ -1327,6 +1398,7 @@ mod tests {
                 simulated: false,
                 reconnect_interval: RECONNECT_INTERVAL,
                 stop_flag,
+                reopen: None,
                 after: None,
             },
         );

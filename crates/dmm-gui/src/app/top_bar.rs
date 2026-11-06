@@ -306,9 +306,17 @@ impl App {
             }
             ConnectionState::Reconnecting => {
                 let label = self.reconnecting_label();
-                let hover = match &self.connection.reconnect_last_error {
-                    Some(err) => tr!(l10n, "top-bar-reconnecting-hover-error", error = err),
-                    None => tr!(l10n, "top-bar-reconnecting-hover"),
+                let hover = if self.connection.waiting_for_own_cable {
+                    Cow::Owned(format!(
+                        "{} {}",
+                        l10n.help().waiting_for_own_cable(),
+                        tr!(l10n, "top-bar-own-cable-action")
+                    ))
+                } else {
+                    match &self.connection.reconnect_last_error {
+                        Some(err) => tr!(l10n, "top-bar-reconnecting-hover-error", error = err),
+                        None => tr!(l10n, "top-bar-reconnecting-hover"),
+                    }
                 };
                 ui.add_enabled(false, egui::Button::new(label))
                     .on_disabled_hover_text(hover);

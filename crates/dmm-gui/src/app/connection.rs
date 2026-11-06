@@ -6,6 +6,7 @@ use dmm_lib::protocol::{Choice, MeterKeys, Setting, Stability};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Link;
 use dmm_lib::transport::Transport;
+use dmm_shared::reopen::{Attempt, ReopenPin, SeveralCables, reopen_pin};
 use eframe::egui;
 use log::{error, info, warn};
 use std::borrow::Cow;
@@ -193,7 +194,13 @@ pub(crate) enum DmmMessage {
     Reconnecting {
         attempt: u32,
         last_error: Option<dmm_lib::error::Error>,
+        /// The last attempt found another cable plugged in and not this
+        /// session's, which it goes on waiting for.
+        waiting_for_own_cable: bool,
     },
+    /// A lost link can't be reopened: nothing says which cable is this
+    /// meter's. The thread has ended.
+    SeveralCables(SeveralCables),
     /// A library failure, carried whole rather than pre-formatted: the UI
     /// classifies it by [`ErrorKind`] and by variant, which a message string
     /// can only be string-matched back into.
@@ -297,11 +304,42 @@ pub(super) struct ThreadContext {
     /// [`RECONNECT_INTERVAL`] outside the tests, which have no meter to wait for.
     pub reconnect_interval: Duration,
     pub stop_flag: Arc<AtomicBool>,
+    /// What a real meter's reopen goes by; `None` for the mock and a replay,
+    /// which reopen as they opened.
+    pub reopen: Option<ReopenSource>,
     /// The message channel of the thread stopped before this one, which
     /// closes once that thread has dropped its link. Nothing opens until
     /// then: a Bluetooth transport disconnects its peripheral on drop, and
     /// an earlier thread still finishing an open would cut this one's link.
     pub after: Option<mpsc::Receiver<DmmMessage>>,
+}
+
+/// What the acquisition thread chooses a session's [`ReopenPin`] from, once
+/// its first open has said which link it is on.
+pub(super) struct ReopenSource {
+    /// The entry the reopen opens, `None` when it detects the meter again.
+    pub device: Option<&'static registry::SelectableDevice>,
+    /// `--adapter`.
+    pub adapter: Option<String>,
+    /// The **Look for Bluetooth devices** setting.
+    pub bluetooth: bool,
+    /// The USB cables plugged in now.
+    pub listed: Box<dyn Fn() -> Vec<dmm_lib::DeviceInfo> + Send>,
+}
+
+impl ReopenSource {
+    fn pin<T: Transport>(&self, dmm: &dmm_lib::Dmm<T>) -> Result<ReopenPin, SeveralCables> {
+        let transport = dmm.transport();
+        reopen_pin(
+            self.device,
+            self.adapter.as_deref(),
+            self.bluetooth,
+            transport.link(),
+            transport.bluetooth_selector(),
+            transport.cable_serial(),
+            &self.listed,
+        )
+    }
 }
 
 /// The settings the acquisition thread lists for the readout dropdowns, in
@@ -389,7 +427,7 @@ fn invalidate(keys: &mut ListedKeys, setting: Setting) {
 pub(super) fn run_device_thread<T, F>(open_fn: F, thread_ctx: ThreadContext)
 where
     T: Transport + Send + 'static,
-    F: Fn(Option<&str>) -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)>
+    F: Fn(Option<&ReopenPin>) -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)>
         + Send
         + 'static,
 {
@@ -404,6 +442,7 @@ where
         simulated,
         reconnect_interval,
         stop_flag,
+        reopen,
         after,
     } = thread_ctx;
 
@@ -446,9 +485,9 @@ where
     const PROTOCOL_ERROR_REPORT_INTERVAL: u32 = 20;
 
     let mut tick = interval_tick(sample_interval_ms);
-    // The Bluetooth adapter this session is on, which a reconnect goes back
-    // to by address rather than scanning for one again.
-    let mut reopen_at = bluetooth_selector(&dmm);
+    // What a reconnect goes back to, chosen now while this meter's cable is
+    // still listed, or why it can't.
+    let mut pin = reopen.as_ref().map(|source| source.pin(&dmm)).transpose();
     let mut stream = new_stream(&mut dmm, tick, simulated, &stop_flag);
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
@@ -559,15 +598,28 @@ where
                 // after the reopen that would cut the link just brought back
                 // up on the same adapter.
                 drop(dmm);
+                let refuse = |several| {
+                    let _ = msg_tx.send(DmmMessage::SeveralCables(several));
+                    ctx.request_repaint();
+                };
+                let mut pin = match &mut pin {
+                    Ok(pin) => pin.as_mut(),
+                    Err(several) => {
+                        refuse(*several);
+                        return;
+                    }
+                };
                 let mut attempt: u32 = 0;
                 // Each failure goes out with the next attempt's message, which
                 // the UI keeps until the one after.
                 let mut last_error: Option<dmm_lib::error::Error> = None;
+                let mut waiting_for_own_cable = false;
                 loop {
                     attempt += 1;
                     let _ = msg_tx.send(DmmMessage::Reconnecting {
                         attempt,
                         last_error: last_error.take(),
+                        waiting_for_own_cable,
                     });
                     ctx.request_repaint();
 
@@ -582,23 +634,35 @@ where
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
 
+                    let check = match (pin.as_deref_mut(), &reopen) {
+                        (Some(pin), Some(source)) => pin.check(&source.listed),
+                        _ => Attempt::Open,
+                    };
+                    waiting_for_own_cable = check == Attempt::WaitForOwnCable;
+                    match check {
+                        Attempt::Open => {}
+                        Attempt::Hold | Attempt::WaitForOwnCable => continue,
+                        Attempt::Refuse(several) => {
+                            refuse(several);
+                            return;
+                        }
+                    }
+
                     // Re-runs the opener whole, detection included: under
                     // Auto the meter that comes back is identified again
-                    // rather than assumed to be the one that went away. A
-                    // Bluetooth session goes back to its own adapter, by
-                    // address: a new one is the user's Disconnect/Connect.
-                    // Every failure here is retried, whatever its kind — an
-                    // adapter that does not answer yet is the case this loop
-                    // waits out, so it only updates the Reconnecting notice.
-                    // A UT-D07B switched off and on came back on the third
-                    // attempt, under BlueZ and Windows 11 (#25).
-                    match open_fn(reopen_at.as_deref()) {
+                    // rather than assumed to be the one that went away. What
+                    // it may open is the pin's to say. Every failure here is
+                    // retried, whatever its kind — an adapter that does not
+                    // answer yet is the case this loop waits out, so it only
+                    // updates the Reconnecting notice. A UT-D07B switched off
+                    // and on came back on the third attempt, under BlueZ and
+                    // Windows 11 (#25).
+                    match open_fn(pin.as_deref()) {
                         // Stopped as it ended: as for the first open, the
                         // link is dropped unasked and unreported.
                         Ok(_) if stop_flag.load(Ordering::Relaxed) => return,
                         Ok((mut d, detected)) => {
                             info!("background thread: reconnected on attempt {attempt}");
-                            reopen_at = bluetooth_selector(&d);
                             establish_connection(
                                 &mut d, detected, selected, query_name, &msg_tx, &ctx,
                             );
@@ -608,6 +672,10 @@ where
                         // Called off by the stop flag: not a failed attempt.
                         Err(_) if stop_flag.load(Ordering::Relaxed) => return,
                         Err(err) => {
+                            let err = match pin.as_deref() {
+                                Some(pin) => pin.open_error(err),
+                                None => err,
+                            };
                             warn!("background thread: reconnect attempt {attempt} failed: {err}");
                             last_error = Some(err);
                         }
@@ -664,18 +732,12 @@ fn new_stream<'a, T: Transport>(
     MeasurementStream::new(dmm, tick).with_cancel(move || stop.load(Ordering::Relaxed))
 }
 
-/// The address that reopens this session's Bluetooth adapter, `None` on
-/// any other link.
-fn bluetooth_selector<T: Transport>(dmm: &dmm_lib::Dmm<T>) -> Option<String> {
-    dmm.transport().bluetooth_selector().map(str::to_owned)
-}
-
 /// Run [`run_device_thread`] on a thread of its own, turning a panic in it
 /// into an error message for the UI rather than a silently dead channel.
 pub(super) fn spawn_acquisition<T, F>(open_fn: F, thread_ctx: ThreadContext)
 where
     T: Transport + Send + 'static,
-    F: Fn(Option<&str>) -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)>
+    F: Fn(Option<&ReopenPin>) -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)>
         + Send
         + 'static,
 {
@@ -974,26 +1036,49 @@ mod tests {
         assert!(waited < tick, "waited out the interval: {waited:?}");
     }
 
-    /// A link that drops on the first read, counting how many are open. With
-    /// a selector it is a Bluetooth link on that adapter.
-    struct Dropout(Arc<std::sync::atomic::AtomicUsize>, Option<&'static str>);
+    /// A link that drops on the first read, counting how many are open.
+    struct Dropout {
+        live: Arc<std::sync::atomic::AtomicUsize>,
+        link: Option<Link>,
+        selector: Option<&'static str>,
+        serial: Option<&'static str>,
+    }
 
     impl Dropout {
         fn open(live: &Arc<std::sync::atomic::AtomicUsize>) -> Self {
             live.fetch_add(1, Ordering::SeqCst);
-            Self(Arc::clone(live), None)
+            Self {
+                live: Arc::clone(live),
+                link: None,
+                selector: None,
+                serial: None,
+            }
+        }
+
+        /// On `link`, with the address or serial it reopens by.
+        fn on(
+            live: &Arc<std::sync::atomic::AtomicUsize>,
+            link: Link,
+            selector: Option<&'static str>,
+            serial: Option<&'static str>,
+        ) -> Self {
+            let mut dropout = Self::open(live);
+            dropout.link = Some(link);
+            dropout.selector = selector;
+            dropout.serial = serial;
+            dropout
         }
     }
 
     impl Drop for Dropout {
         fn drop(&mut self) {
-            self.0.fetch_sub(1, Ordering::SeqCst);
+            self.live.fetch_sub(1, Ordering::SeqCst);
         }
     }
 
     impl Transport for Dropout {
         fn link(&self) -> Option<Link> {
-            self.1.map(|_| Link::Bluetooth)
+            self.link
         }
 
         fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
@@ -1003,7 +1088,11 @@ mod tests {
             Err(dmm_lib::error::Error::LinkLost)
         }
         fn bluetooth_selector(&self) -> Option<&str> {
-            self.1
+            self.selector
+        }
+
+        fn cable_serial(&self) -> Option<&str> {
+            self.serial
         }
     }
 
@@ -1023,6 +1112,7 @@ mod tests {
             simulated: false,
             reconnect_interval: Duration::from_millis(10),
             stop_flag: Arc::new(AtomicBool::new(false)),
+            reopen: None,
             after: None,
         }
     }
@@ -1041,7 +1131,7 @@ mod tests {
         let opens = std::sync::atomic::AtomicUsize::new(0);
         let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
         let open_live = Arc::clone(&live);
-        let open_fn = move |_: Option<&str>| {
+        let open_fn = move |_: Option<&ReopenPin>| {
             if opens.fetch_add(1, Ordering::SeqCst) > 0 {
                 let _ = seen_tx.send(open_live.load(Ordering::SeqCst));
                 return Err(dmm_lib::error::Error::Timeout);
@@ -1239,17 +1329,20 @@ mod tests {
             ))
         };
         assert_eq!(timeout().kind(), ErrorKind::Configuration);
-        let open_fn = move |reopen_at: Option<&str>| {
+        let open_fn = move |pin: Option<&ReopenPin>| {
             if opens.fetch_add(1, Ordering::SeqCst) > 0 {
-                let _ = seen_tx.send(reopen_at.map(str::to_owned));
+                let adapter = pin.and_then(|pin| pin.options(None).adapter.map(str::to_owned));
+                let _ = seen_tx.send(adapter);
                 return Err(timeout());
             }
-            let link = Dropout(Arc::clone(&live), Some(ADDRESS));
+            let link = Dropout::on(&live, Link::Bluetooth, Some(ADDRESS), None);
             dmm_lib::Dmm::new(link, (entry.new_protocol)()).map(|d| (d, None))
         };
-        let thread = std::thread::spawn(move || {
-            run_device_thread(open_fn, thread_context(msg_tx, ctrl_rx, cmd_rx))
-        });
+        let mut thread_ctx = thread_context(msg_tx, ctrl_rx, cmd_rx);
+        thread_ctx.reopen = Some(reopen_source(Some(entry), || {
+            panic!("nothing to count over Bluetooth")
+        }));
+        let thread = std::thread::spawn(move || run_device_thread(open_fn, thread_ctx));
         let reopens: Vec<Option<String>> = (0..2)
             .map(|_| {
                 seen_rx
@@ -1272,8 +1365,295 @@ mod tests {
             m,
             DmmMessage::Reconnecting {
                 attempt: 2,
-                last_error: Some(_)
+                last_error: Some(_),
+                waiting_for_own_cable: false,
             }
         )));
+    }
+
+    /// A reopen source with no flag on a machine where `listed` is plugged in.
+    fn reopen_source(
+        device: Option<&'static registry::SelectableDevice>,
+        listed: impl Fn() -> Vec<dmm_lib::DeviceInfo> + Send + 'static,
+    ) -> ReopenSource {
+        ReopenSource {
+            device,
+            adapter: None,
+            bluetooth: true,
+            listed: Box::new(listed),
+        }
+    }
+
+    fn cable(path: &str, serial: Option<&str>) -> dmm_lib::DeviceInfo {
+        dmm_lib::DeviceInfo {
+            path: path.to_owned(),
+            product: None,
+            serial: serial.map(str::to_owned),
+            transport: "CP2110",
+            not_heard: false,
+        }
+    }
+
+    /// A session on a cable whose link drops at the first read. [`run`](Self::run).
+    struct Session {
+        serial: Option<&'static str>,
+        adapter: Option<&'static str>,
+        /// What is plugged in at each look, the first being the first open's;
+        /// the last repeats.
+        looks: Vec<Vec<dmm_lib::DeviceInfo>>,
+        /// The reopens to see before hanging up; with none, the session has to
+        /// end by itself.
+        reopens: usize,
+        /// What reopen `n` does: a link with this serial, or a failure.
+        reopened: fn(usize) -> dmm_lib::error::Result<Option<&'static str>>,
+    }
+
+    /// What one reopen was asked to open.
+    #[derive(Debug, PartialEq)]
+    struct Reopened {
+        adapter: Option<String>,
+        bluetooth: bool,
+        /// How many looks at the bus came before it.
+        looks: usize,
+    }
+
+    impl Session {
+        fn on_cable(serial: Option<&'static str>, looks: Vec<Vec<dmm_lib::DeviceInfo>>) -> Self {
+            Self {
+                serial,
+                adapter: None,
+                looks,
+                reopens: 0,
+                reopened: |_| Err(dmm_lib::error::Error::Timeout),
+            }
+        }
+
+        /// Run it until it refuses or has reopened enough: the reopens and the
+        /// messages it sent.
+        fn run(self) -> (Vec<Reopened>, Vec<DmmMessage>) {
+            let Self {
+                serial,
+                adapter,
+                looks,
+                reopens,
+                reopened,
+            } = self;
+            let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let (seen_tx, seen_rx) = mpsc::channel();
+            let (msg_tx, msg_rx) = mpsc::channel();
+            let (ctrl_tx, ctrl_rx) = mpsc::channel();
+            let (_cmd_tx, cmd_rx) = mpsc::channel();
+            let opens = std::sync::atomic::AtomicUsize::new(0);
+            let looked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let entry = registry::find_device("ut61eplus").expect("registry");
+            let looked_at_open = Arc::clone(&looked);
+            let open_fn = move |pin: Option<&ReopenPin>| {
+                let link_serial = match opens.fetch_add(1, Ordering::SeqCst).checked_sub(1) {
+                    None => serial,
+                    Some(reopen) => {
+                        let options = pin.expect("a reopen has a pin").options(None);
+                        let _ = seen_tx.send(Reopened {
+                            adapter: options.adapter.map(str::to_owned),
+                            bluetooth: options.bluetooth,
+                            looks: looked_at_open.load(Ordering::SeqCst),
+                        });
+                        reopened(reopen)?
+                    }
+                };
+                let link = Dropout::on(&live, Link::UsbCable, None, link_serial);
+                dmm_lib::Dmm::new(link, (entry.new_protocol)()).map(|d| (d, None))
+            };
+            let mut thread_ctx = thread_context(msg_tx, ctrl_rx, cmd_rx);
+            let last = std::sync::Mutex::new(Vec::new());
+            let looks = std::sync::Mutex::new(looks.into_iter());
+            let mut source = reopen_source(Some(entry), move || {
+                looked.fetch_add(1, Ordering::SeqCst);
+                let mut last = last.lock().unwrap();
+                if let Some(next) = looks.lock().unwrap().next() {
+                    *last = next;
+                }
+                last.clone()
+            });
+            source.adapter = adapter.map(str::to_owned);
+            thread_ctx.reopen = Some(source);
+            let thread = std::thread::spawn(move || run_device_thread(open_fn, thread_ctx));
+
+            // One deadline: messages keep coming every reconnect interval, so a
+            // session that never refuses would outrun a per-message timeout.
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            let left = || {
+                deadline
+                    .checked_duration_since(std::time::Instant::now())
+                    .unwrap_or_default()
+            };
+            let mut seen = Vec::new();
+            while seen.len() < reopens {
+                match seen_rx.recv_timeout(left()) {
+                    Ok(reopen) => seen.push(reopen),
+                    Err(_) => panic!("{} of {reopens} reopens came", seen.len()),
+                }
+            }
+            let mut messages = Vec::new();
+            // With no reopen to wait for, the thread ends by itself: hanging up
+            // first would stop it before its link dropped.
+            while reopens == 0 && refused(&messages).is_none() {
+                messages.push(msg_rx.recv_timeout(left()).expect("the session refuses"));
+            }
+            drop(ctrl_tx);
+            thread.join().unwrap();
+            seen.extend(seen_rx.try_iter());
+            messages.extend(msg_rx.try_iter());
+            (seen, messages)
+        }
+    }
+
+    fn refused(messages: &[DmmMessage]) -> Option<SeveralCables> {
+        messages.iter().find_map(|m| match m {
+            DmmMessage::SeveralCables(several) => Some(*several),
+            _ => None,
+        })
+    }
+
+    /// Two cables that can't be told apart at the first open: the session
+    /// ends with its link, with no reopen that could be the other meter.
+    #[test]
+    fn a_session_opened_beside_a_cable_it_cant_be_told_from_ends_with_its_link() {
+        let two = vec![vec![cable("a", None), cable("b", None)]];
+        let (reopens, messages) = Session::on_cable(None, two).run();
+        assert_eq!(reopens, []);
+        assert_eq!(refused(&messages), Some(SeveralCables { count: 2 }));
+        assert!(
+            messages
+                .iter()
+                .any(|m| matches!(m, DmmMessage::Disconnected(_))),
+            "the link's loss is marked as for any other"
+        );
+    }
+
+    /// A serial of its own brings the cable back by it, beside any other, and
+    /// a cable session stays off the radio.
+    #[test]
+    fn a_cable_with_a_serial_of_its_own_reopens_by_it_and_off_the_radio() {
+        let two = vec![vec![cable("a", Some("S1")), cable("b", Some("S2"))]];
+        let session = Session {
+            reopens: 2,
+            ..Session::on_cable(Some("S1"), two)
+        };
+        let (reopens, messages) = session.run();
+        assert_eq!(reopens[0].adapter.as_deref(), Some("S1"));
+        assert!(!reopens[0].bluetooth);
+        assert_eq!(refused(&messages), None);
+    }
+
+    /// A lone cable with no serial reopens on what's there, off the radio.
+    #[test]
+    fn a_lone_cable_with_no_serial_reopens_unpinned() {
+        let session = Session {
+            reopens: 1,
+            ..Session::on_cable(None, vec![vec![cable("a", None)]])
+        };
+        let (reopens, _) = session.run();
+        assert_eq!(reopens[0].adapter, None);
+        assert!(!reopens[0].bluetooth);
+    }
+
+    /// The pin is the first open's for the whole session: the cable a reopen
+    /// lands on doesn't choose another.
+    #[test]
+    fn a_session_keeps_its_pin_across_reopens() {
+        let session = Session {
+            reopens: 2,
+            reopened: |reopen| match reopen {
+                0 => Ok(Some("S2")),
+                _ => Err(dmm_lib::error::Error::Timeout),
+            },
+            ..Session::on_cable(None, vec![vec![cable("a", Some("S2"))]])
+        };
+        let (reopens, messages) = session.run();
+        assert_eq!(reopens[0].adapter, None);
+        assert_eq!(reopens[1].adapter, None, "chose a pin at the reopen");
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|m| matches!(m, DmmMessage::Connected(_)))
+                .count(),
+            2,
+            "the reopen connected"
+        );
+    }
+
+    /// Its cable out, a pinned session's error reads as the cable being out:
+    /// the user named no adapter, and shouldn't be shown a serial for one.
+    #[test]
+    fn a_pinned_cable_out_is_shown_as_the_cable_being_out() {
+        let session = Session {
+            reopens: 2,
+            reopened: |_| Err(dmm_lib::error::Error::AdapterNotFound("S1".to_owned())),
+            ..Session::on_cable(Some("S1"), vec![vec![cable("a", Some("S1"))]])
+        };
+        let (_, messages) = session.run();
+        let shown = messages.iter().find_map(|m| match m {
+            DmmMessage::Reconnecting {
+                last_error: Some(error),
+                ..
+            } => Some(error),
+            _ => None,
+        });
+        assert!(
+            matches!(shown, Some(dmm_lib::error::Error::NoTransportFound { .. })),
+            "{shown:?}"
+        );
+    }
+
+    /// A second cable found mid-session holds the attempt, with no open that
+    /// could take it, and ends the session on the next.
+    #[test]
+    fn a_second_cable_found_at_the_reopen_ends_the_session_without_opening() {
+        let looks = vec![
+            vec![cable("a", None)],
+            vec![cable("a", None), cable("b", None)],
+        ];
+        let (reopens, messages) = Session::on_cable(None, looks).run();
+        assert_eq!(reopens, []);
+        assert_eq!(refused(&messages), Some(SeveralCables { count: 2 }));
+    }
+
+    /// A replacement cable isn't opened: the session says it's waiting, and
+    /// opens again only when its own is back.
+    #[test]
+    fn a_replacement_cable_waits_without_opening_it() {
+        let looks = vec![
+            vec![cable("a", Some("S1"))],
+            vec![cable("b", Some("S2"))],
+            vec![cable("b", Some("S2"))],
+            vec![cable("c", Some("S1")), cable("b", Some("S2"))],
+        ];
+        let session = Session {
+            reopens: 1,
+            ..Session::on_cable(Some("S1"), looks)
+        };
+        let (reopens, messages) = session.run();
+        assert_eq!(reopens[0].adapter.as_deref(), Some("S1"));
+        assert_eq!(reopens[0].looks, 4, "opened on a look without its cable");
+        assert!(messages.iter().any(|m| matches!(
+            m,
+            DmmMessage::Reconnecting {
+                waiting_for_own_cable: true,
+                ..
+            }
+        )));
+    }
+
+    /// The user's `--adapter` is taken at its word beside other cables.
+    #[test]
+    fn a_session_with_an_adapter_setting_is_not_refused() {
+        let session = Session {
+            adapter: Some("/dev/hidraw3"),
+            reopens: 1,
+            ..Session::on_cable(None, vec![vec![cable("a", None), cable("b", None)]])
+        };
+        let (reopens, messages) = session.run();
+        assert_eq!(reopens[0].adapter.as_deref(), Some("/dev/hidraw3"));
+        assert_eq!(refused(&messages), None);
     }
 }

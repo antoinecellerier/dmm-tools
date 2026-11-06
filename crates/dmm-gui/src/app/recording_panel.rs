@@ -274,7 +274,7 @@ impl App {
     /// the buffer (it only schedules a reconnect, and neither connect nor
     /// disconnect clears the samples), so reading it later labelled the file
     /// with whatever meter happened to be picked last.
-    fn apply_recording_toggle(&mut self) {
+    pub(super) fn apply_recording_toggle(&mut self) {
         self.capture.recording.toggle(self.clock.now());
         if self.capture.recording.is_active() {
             self.capture.recording_layout = CaptureLayout::new(

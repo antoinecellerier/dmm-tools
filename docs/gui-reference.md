@@ -61,9 +61,12 @@ While a meter is being opened, the status reads **Connectingâ€¦** (**Detectingâ€
 under Auto-detect) and **Cancel** (or `Ctrl+O`) stops the attempt; the
 **Device** row waits until it is done.
 
-Auto-reconnection retries every 2 seconds after a disconnect; over Bluetooth it
-retries the same adapter. Click **Disconnect** (or press `Ctrl+O`) while it is
-retrying to stop the loop, then **Connect** to look for another adapter.
+Auto-reconnection retries every 2 seconds after a disconnect, on the same link:
+over Bluetooth the same adapter, and a USB cable with a serial number of its own
+by that number. Several USB cables the meter can use that their serial numbers
+can't tell apart end the session with a notice instead, and stop a running
+recording. Click **Disconnect** (or press `Ctrl+O`) while it is retrying to stop
+the loop, then **Connect** to look for another adapter or cable.
 
 ## Top Bar
 

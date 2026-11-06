@@ -97,6 +97,14 @@ connection-no-response-auto =
 # The meter answered, but with data that could not be read: a corrupt
 # frame, or a mode this tool does not know. The error itself follows.
 connection-bad-data = Meter sent data that could not be read
+# A dropped link that was not reconnected. shared.ftl's several-cables
+# follows, then connection-several-cables-action. "Connect" is the top bar's
+# button.
+connection-several-cables = Link lost
+connection-several-cables-action = Leave only this meter's cable plugged in, then Connect.
+# A toast, when that notice ends a running recording. What it holds can still
+# be exported.
+connection-several-cables-recording = Recording stopped: the link dropped and this meter's USB cable can't be told from the others
 # Any other failure to connect or to keep reading. The error itself
 # follows, then connection-click-connect.
 connection-failed = Connection failed

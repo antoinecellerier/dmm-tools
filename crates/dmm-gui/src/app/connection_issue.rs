@@ -9,6 +9,7 @@ use dmm_lib::transport::Link;
 use dmm_shared::export::escape_controls;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use dmm_shared::l10n::{Localizer, link_key};
+use dmm_shared::reopen::SeveralCables;
 use dmm_shared::tr;
 
 use super::{App, ConnectionState};
@@ -71,6 +72,9 @@ pub(crate) enum ConnectionIssue {
     /// mid-session, under a live reading: nothing to switch on, nothing to
     /// reconnect.
     BadData(String),
+    /// A lost link with nothing to say which cable is this meter's. Held as
+    /// the reason, and worded where it is drawn.
+    SeveralCables(SeveralCables),
     /// Anything else — a cable that cannot carry the meter, a permission
     /// error, a stopped thread — with its text, which is all the user has to
     /// go on.
@@ -106,6 +110,8 @@ pub(super) enum NoticeKind {
     NoResponse,
     /// The meter answered with data that could not be read.
     BadData,
+    /// A lost link that nothing says which cable to reopen on.
+    SeveralCables,
     /// Any other failure: a fixed title, the error itself in the body.
     Failed,
 }
@@ -533,6 +539,15 @@ impl App {
                     body,
                 )
             }
+            ConnectionIssue::SeveralCables(several) => notice(
+                NoticeKind::SeveralCables,
+                tr!(l10n, "connection-several-cables").into_owned(),
+                format!(
+                    "{} {}",
+                    l10n.help().several_cables(*several),
+                    tr!(l10n, "connection-several-cables-action")
+                ),
+            ),
             ConnectionIssue::Other(error) => notice(
                 NoticeKind::Failed,
                 tr!(l10n, "connection-failed").into_owned(),
