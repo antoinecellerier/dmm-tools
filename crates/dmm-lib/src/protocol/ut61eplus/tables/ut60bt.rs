@@ -1,4 +1,5 @@
 use super::{BASE, ModelTable, RangeInfo, r};
+use crate::protocol::command;
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT60BT, a handheld with Bluetooth built in.
@@ -45,7 +46,13 @@ pub(crate) static UT60BT: ModelTable = ModelTable {
     // The bytes UNI-T's app sends this meter (family spec §6.5): HOLD,
     // RANGE and its long press, REL and SELECT. It disables MAX/MIN, and
     // sends no Peak, SELECT2 or backlight.
-    commands: &["hold", "range", "auto", "rel", "select"],
+    commands: &[
+        command::HOLD,
+        command::RANGE,
+        command::AUTO,
+        command::REL,
+        command::SELECT,
+    ],
     // UNI-T's app asks the name first, and a UT60BT is reported to need it
     // (family spec §6.4).
     name_before_stream: true,

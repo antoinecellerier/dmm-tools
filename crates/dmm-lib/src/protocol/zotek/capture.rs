@@ -9,7 +9,7 @@
 use super::layout::Layout;
 use crate::flags::Flag;
 use crate::protocol::steps::{self, Ohms, Volts};
-use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
+use crate::protocol::{CaptureStep, Expect, Need, ValueExpect, command};
 
 pub(super) fn steps(layout: &Layout) -> Vec<CaptureStep> {
     let (mut steps, keys) = match layout.type_byte {
@@ -590,7 +590,7 @@ fn zt300ab_keys() -> Vec<CaptureStep> {
             "key_minmax",
             "Dial at V, SEL until DC shows, leads open: we will send MAX/MIN. Hold MAX/MIN \
              for 2 s afterwards.",
-            "minmax",
+            command::MINMAX,
         ),
     ]
 }
@@ -648,11 +648,15 @@ fn zt5566se_keys() -> Vec<CaptureStep> {
             "key_minmax",
             "Leads open, DC V showing (V~/⎓ Hz button): we will send MAX/MIN. Long-press \
              MAX/MIN afterwards.",
-            "minmax",
+            command::MINMAX,
         ),
-        key("key_hold", "DC V showing: we will send HOLD.", "hold")
-            .expect(Expect::new().flags(HOLD_ON)),
-        key("key_hold_off", "We will send HOLD again.", "hold")
+        key(
+            "key_hold",
+            "DC V showing: we will send HOLD.",
+            command::HOLD,
+        )
+        .expect(Expect::new().flags(HOLD_ON)),
+        key("key_hold_off", "We will send HOLD again.", command::HOLD)
             .expect(Expect::new().flags(HOLD_OFF)),
     ]
 }
@@ -726,10 +730,10 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
         key(
             "key_hold",
             "Leads on a DC source above 0.8 V (DC V shows): we will send HOLD.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::new().flags(HOLD_ON)),
-        key("key_hold_off", "We will send HOLD again.", "hold")
+        key("key_hold_off", "We will send HOLD again.", command::HOLD)
             .expect(Expect::new().flags(HOLD_OFF)),
     ]
 }
@@ -808,11 +812,11 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "key_hold",
             "Leads on a DC source above 0.8 V (DC V shows; SEL once from °F for Auto): we \
              will send HOLD.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::new().flags(HOLD_ON))
         .verified(),
-        key("key_hold_off", "We will send HOLD again.", "hold")
+        key("key_hold_off", "We will send HOLD again.", command::HOLD)
             .expect(Expect::new().flags(HOLD_OFF))
             .verified(),
     ]

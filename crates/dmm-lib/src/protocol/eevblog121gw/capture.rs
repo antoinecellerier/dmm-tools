@@ -14,7 +14,7 @@
 
 use crate::flags::Flag;
 use crate::protocol::steps::{self, Ohms, Volts};
-use crate::protocol::{CaptureStep, Expect, Need, RangeExpect};
+use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, command};
 
 const HOLD_ON: &[(Flag, bool)] = &[(Flag::Hold, true)];
 const REL_ON: &[(Flag, bool)] = &[(Flag::Rel, true)];
@@ -108,28 +108,28 @@ pub(super) fn steps() -> Vec<CaptureStep> {
         key(
             "key_hold",
             "DC V: we will send HOLD. Press HOLD until A- and HOLD are gone afterwards.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::new().flags(HOLD_ON)),
         key(
             "key_rel",
             "DC V: we will send REL. Press REL again afterwards.",
-            "rel",
+            command::REL,
         )
         .expect(Expect::new().flags(REL_ON)),
-        key("key_minmax", "DC V: we will send MIN/MAX.", "minmax"),
+        key("key_minmax", "DC V: we will send MIN/MAX.", command::MINMAX),
         key(
             "key_exit_minmax",
             "DC V with MIN, MAX or AVG showing (press MIN/MAX if none does): we will send a long \
              MIN/MAX to leave it.",
-            "exit_minmax",
+            command::EXIT_MINMAX,
         )
         .expect(Expect::new().flags(MIN_MAX_OFF)),
         key(
             "key_light",
             "DC V: we will send a long MODE (backlight). Hold MODE afterwards to switch the \
              backlight back.",
-            "light",
+            command::LIGHT,
         ),
         CaptureStep::basic("manual_range", "DC V: press RANGE, then Enter.")
             .wait_for_enter()
@@ -137,7 +137,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
         key(
             "key_range",
             "DC V, manual range: we will send RANGE.",
-            "range",
+            command::RANGE,
         )
         .expect(Expect::mode("DC V").range(RangeExpect::Manual)),
         // The manual says how to leave auto-ranging (RANGE, p.33) but not
@@ -151,7 +151,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
         key(
             "key_select",
             "DC V: we will send MODE (AC should show).",
-            "select",
+            command::SELECT,
         )
         .expect(Expect::mode("AC V")),
         CaptureStep::basic("acv", "V position: press MODE until AC shows, leads open")
@@ -167,7 +167,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
             "key_peak",
             "AC V: we will send a short 1ms PEAK. Afterwards press 1ms PEAK briefly, again if \
              needed, until 1ms is gone.",
-            "peak",
+            command::PEAK,
         )
         .expect(Expect::mode("AC V").flags(PEAK_ON)),
         CaptureStep::basic(

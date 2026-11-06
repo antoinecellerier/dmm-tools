@@ -9,14 +9,14 @@ use super::frame::xor_key;
 use super::layout::{Coupling, Function, Layout, Showing, Unit};
 use crate::error::{Rejected, Result, Unsupported};
 use crate::measurement::MeasuredValue;
-use crate::protocol::{MeterKey, MeterKeys};
+use crate::protocol::{MeterKey, MeterKeys, command as cmd};
 
 /// Every key, in the order `dmm-cli command` lists them (spec §8.2). `minmax`
 /// and `hold` keep the names the other families give those keys; AUTO picks
 /// the function, not the range, so it is `auto_function`, not `auto`.
 const EVERY_KEY: &[&str] = &[
-    "hold",
-    "minmax",
+    cmd::HOLD,
+    cmd::MINMAX,
     "auto_function",
     "volts",
     "millivolts",
@@ -33,7 +33,7 @@ const EVERY_KEY: &[&str] = &[
 /// Types 1 and 2 have no MAX or MIN bit (spec §7.2, §7.3), so MAX/MIN would
 /// change nothing a reading shows; a V05B ignores it (§11).
 const TYPE1_KEYS: &[&str] = &[
-    "hold",
+    cmd::HOLD,
     "auto_function",
     "volts",
     "millivolts",
@@ -53,7 +53,7 @@ const TYPE1_KEYS: &[&str] = &[
 /// jack too, and a ZT-5B neither acknowledged nor acted on their codes
 /// (issue #31).
 const TYPE2_KEYS: &[&str] = &[
-    "hold",
+    cmd::HOLD,
     "auto_function",
     "capacitance",
     "hz",
@@ -66,7 +66,7 @@ const TYPE2_KEYS: &[&str] = &[
 /// Type 3's: the app greys out capacitance, NCV, Hz and HOLD and locks AUTO
 /// on (spec §8.2), so those five are not offered.
 const TYPE3_KEYS: &[&str] = &[
-    "minmax",
+    cmd::MINMAX,
     "volts",
     "millivolts",
     "ohms",
@@ -222,8 +222,8 @@ pub(super) fn follows_display(command: &str) -> bool {
 /// layout's [`commands`].
 pub(super) fn code(type_byte: u8, command: &str, showing: Showing) -> Result<u8> {
     Ok(match command {
-        "hold" => 0xB4,
-        "minmax" => 0xD1,
+        cmd::HOLD => 0xB4,
+        cmd::MINMAX => 0xD1,
         "auto_function" => 0xB8,
         "volts" => 0xC4,
         "millivolts" => 0xC6,

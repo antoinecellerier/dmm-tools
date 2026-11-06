@@ -15,7 +15,7 @@
 //! inferred from a label (spec §10.8).
 
 use super::decode::function;
-use crate::protocol::{MeterKey, MeterKeys};
+use crate::protocol::{MeterKey, MeterKeys, command};
 
 /// A short press.
 const SHORT: u8 = 0x01;
@@ -61,13 +61,13 @@ const fn commands<const N: usize>(keys: &[Key; N]) -> [&'static str; N] {
 
 /// SELECT steps through a position's functions; RANGE held over 2 s goes
 /// back to autorange (B35-UM p.14/9; OW18-UM p.14/9; B33-UM p.13/8).
-const SELECT: Key = key("select", 0x01, SHORT);
-const RANGE: Key = key("range", 0x02, SHORT);
-const AUTO: Key = key("auto", 0x02, LONG);
+const SELECT: Key = key(command::SELECT, 0x01, SHORT);
+const RANGE: Key = key(command::RANGE, 0x02, SHORT);
+const AUTO: Key = key(command::AUTO, 0x02, LONG);
 /// HOLD, and held over 2 s the backlight (and the OW18's flashlight,
 /// OW18-UM p.11/6) (B35-UM p.12/7, p.14/9; CM2100-UM p.9/6).
-const HOLD: Key = key("hold", 0x03, SHORT);
-const LIGHT: Key = key("light", 0x03, LONG);
+const HOLD: Key = key(command::HOLD, 0x03, SHORT);
+const LIGHT: Key = key(command::LIGHT, 0x03, LONG);
 
 /// The OW16 and OW18: Select, Range, Hold/Light and one △/Hz/Duty key,
 /// code 5 (spec §7.3). That key is REL in the DC functions and Hz/Duty in
@@ -80,7 +80,7 @@ pub(super) static OW: [Key; 7] = [
     AUTO,
     HOLD,
     LIGHT,
-    key("rel", 0x05, SHORT),
+    key(command::REL, 0x05, SHORT),
     key("hz_duty", 0x05, SHORT),
 ];
 pub(super) static OW_COMMANDS: [&str; 7] = commands(&OW);
@@ -95,7 +95,7 @@ pub(super) static B33: [Key; 6] = [
     RANGE,
     AUTO,
     HOLD,
-    key("rel", 0x04, SHORT),
+    key(command::REL, 0x04, SHORT),
     key("hz_duty", 0x05, SHORT),
 ];
 pub(super) static B33_COMMANDS: [&str; 6] = commands(&B33);
@@ -108,10 +108,10 @@ pub(super) static B35_B41: [Key; 9] = [
     AUTO,
     HOLD,
     LIGHT,
-    key("rel", 0x04, SHORT),
+    key(command::REL, 0x04, SHORT),
     key("hz_duty", 0x05, SHORT),
-    key("minmax", 0x06, SHORT),
-    key("exit_minmax", 0x06, LONG),
+    key(command::MINMAX, 0x06, SHORT),
+    key(command::EXIT_MINMAX, 0x06, LONG),
 ];
 pub(super) static B35_B41_COMMANDS: [&str; 9] = commands(&B35_B41);
 /// △/ᛒ on the B series (spec §9.1).
@@ -126,11 +126,11 @@ pub(super) static CM2100_COMMANDS: [&str; 4] = commands(&CM2100);
 pub(super) const CM2100_BLUETOOTH_KEY: u8 = 0x04;
 
 /// The 15-byte meters' key codes beyond §7.1's (spec §10.8).
-const REL: Key = key("rel", 0x04, SHORT);
+const REL: Key = key(command::REL, 0x04, SHORT);
 const HZ_DUTY: Key = key("hz_duty", 0x05, SHORT);
-const MINMAX: Key = key("minmax", 0x06, SHORT);
+const MINMAX: Key = key(command::MINMAX, 0x06, SHORT);
 const LPF: Key = key("lpf", 0x07, SHORT);
-const PEAK: Key = key("peak", 0x08, SHORT);
+const PEAK: Key = key(command::PEAK, 0x08, SHORT);
 const CURRENT_LOOP: Key = key("current_loop", 0x0A, SHORT);
 const DISPLAY: Key = key("display", 0x0C, SHORT);
 const INRUSH: Key = key("inrush", 0x0D, SHORT);
@@ -138,7 +138,7 @@ const COMPARE: Key = key("compare", 0x0F, SHORT);
 const AC_DC: Key = key("ac_dc", 0x10, SHORT);
 const MOTOR: Key = key("motor", 0x11, SHORT);
 /// The 15-byte meters' Hold/Light and Hold, as a tap (spec §10.8).
-const HOLD_TAP: Key = key("hold", 0x03, SHORT);
+const HOLD_TAP: Key = key(command::HOLD, 0x03, SHORT);
 
 /// REL held (about 1 s) leaves REL on the Voltcraft meters (VC871-UM p.89;
 /// VC891-UM p.79; VC915-UM p.86; VC925-UM p.87).
@@ -250,7 +250,7 @@ pub(super) static VC925: [Key; 11] = [
     REL,
     EXIT_REL,
     MINMAX,
-    key("exit_minmax", 0x06, LONG),
+    key(command::EXIT_MINMAX, 0x06, LONG),
     COMPARE,
     CURRENT_LOOP,
     DISPLAY,

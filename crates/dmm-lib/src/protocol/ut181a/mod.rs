@@ -35,6 +35,7 @@ mod specs;
 
 use crate::error::{Result, Sent, Unsupported};
 use crate::measurement::Measurement;
+use crate::protocol::command as cmd;
 use crate::protocol::cycle::FlagSetting;
 use crate::protocol::framing::{self, FrameErrorRecovery, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
@@ -165,7 +166,7 @@ impl Protocol for Ut181aProtocol {
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         // A Peak variant answers ER to auto range and to MIN/MAX (spec §4.2),
         // so neither is sent there, as `choices` offers neither.
-        if matches!(command, "auto" | "minmax")
+        if matches!(command, cmd::AUTO | cmd::MINMAX)
             && let Some(current) = self.last_mode_raw.filter(|&m| mode::is_peak(m))
         {
             return Err(Unsupported::RefusedInPeak {
@@ -179,11 +180,11 @@ impl Protocol for Ut181aProtocol {
             // 0x12 = button-press command, 0x5A = HOLD button code, the two
             // bytes the vendor app sends and a real meter toggles HOLD on
             // (spec §4.2). Bare [0x12] is untested.
-            "hold" => build_abcd_le16(&[0x12, 0x5A]),
+            cmd::HOLD => build_abcd_le16(&[0x12, 0x5A]),
             // REL is not its own opcode: it is SET_MODE with nibble 0 flipped
             // between 1 (plain) and 2 (relative), which is also how it turns
             // back off (research spec §6.1).
-            "rel" => {
+            cmd::REL => {
                 let current = self.require_last_mode(transport)?;
                 if !mode::rel_supported(current) {
                     return Err(Unsupported::NoRel {
@@ -196,7 +197,7 @@ impl Protocol for Ut181aProtocol {
             }
             // Step the dial's manual range ladder from wherever the meter
             // reported it, wrapping back to the first manual range.
-            "range" => {
+            cmd::RANGE => {
                 let current = self.require_last_mode(transport)?;
                 let last = self.last_range_raw.unwrap_or(0);
                 let Some(next) = mode::next_manual_range(current, last) else {
@@ -208,11 +209,11 @@ impl Protocol for Ut181aProtocol {
                 };
                 build_abcd_le16(&[0x02, next])
             }
-            "auto" => build_abcd_le16(&[0x02, 0x00]),
+            cmd::AUTO => build_abcd_le16(&[0x02, 0x00]),
             // SET_MIN_MAX takes a single argument byte, as the vendor app
             // sends it (spec §4.2).
-            "minmax" => build_abcd_le16(&[0x04, 0x01]),
-            "exit_minmax" => build_abcd_le16(&[0x04, 0x00]),
+            cmd::MINMAX => build_abcd_le16(&[0x04, 0x01]),
+            cmd::EXIT_MINMAX => build_abcd_le16(&[0x04, 0x00]),
             "monitor" => build_abcd_le16(&[0x05, 0x01]),
             "save" => build_abcd_le16(&[0x06]),
             _ => return Err(Unsupported::Command(command.to_string()).into()),

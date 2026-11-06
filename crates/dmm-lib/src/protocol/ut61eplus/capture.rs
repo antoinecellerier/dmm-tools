@@ -5,7 +5,7 @@ use super::tables::ModelTable;
 use crate::flags::Flag;
 use crate::protocol::steps::{self, Ohms, Volts};
 use crate::protocol::{
-    CaptureStep, DeviceProfile, Expect, Need, RangeExpect, Stability, ValueExpect,
+    CaptureStep, DeviceProfile, Expect, Need, RangeExpect, Stability, ValueExpect, command,
 };
 
 pub(super) fn steps(table: &ModelTable, profile: &DeviceProfile) -> Vec<CaptureStep> {
@@ -187,31 +187,42 @@ pub(super) fn command_steps(hw: bool) -> [CaptureStep; 8] {
         CaptureStep::with_command(
             "hold",
             "DC V mode: press HOLD on the meter, or we will send the command.",
-            "hold",
+            command::HOLD,
             3,
         )
         .verified_if(hw)
         .expect(Expect::new().flags(&[(Flag::Hold, true)])),
-        CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3)
-            .verified_if(hw)
-            .expect(Expect::new().flags(&[(Flag::Hold, false)])),
-        CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3)
+        CaptureStep::with_command(
+            "hold_off",
+            "Press HOLD again to turn it off.",
+            command::HOLD,
+            3,
+        )
+        .verified_if(hw)
+        .expect(Expect::new().flags(&[(Flag::Hold, false)])),
+        CaptureStep::with_command("rel", "DC V mode: we will send REL.", command::REL, 3)
             .verified_if(hw)
             .expect(Expect::new().flags(&[(Flag::Rel, true)])),
         CaptureStep::with_command(
             "rel_off",
             "We will send REL again to turn it off.",
-            "rel",
+            command::REL,
             3,
         )
         .verified_if(hw)
         .expect(Expect::new().flags(&[(Flag::Rel, false)])),
         // Which of MIN and MAX the first press lands on is the meter's
         // own cycle, so only the exit is asserted.
-        CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3).verified_if(hw),
-        CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3)
-            .verified_if(hw)
-            .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
+        CaptureStep::with_command("minmax", "We will send MIN/MAX.", command::MINMAX, 3)
+            .verified_if(hw),
+        CaptureStep::with_command(
+            "minmax_off",
+            "We will exit MIN/MAX.",
+            command::EXIT_MINMAX,
+            3,
+        )
+        .verified_if(hw)
+        .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
         // A single RANGE press, not a sweep: the capture walks the ladder
         // itself through `choices(Range)`, reading back each rung. A blind
         // six-press sweep was tried and removed: it filed indices 0, 2, 0,
@@ -220,7 +231,7 @@ pub(super) fn command_steps(hw: bool) -> [CaptureStep; 8] {
         CaptureStep::with_command(
             "range",
             "We will send RANGE to switch to manual.",
-            "range",
+            command::RANGE,
             3,
         )
         .verified_if(hw)
@@ -228,7 +239,7 @@ pub(super) fn command_steps(hw: bool) -> [CaptureStep; 8] {
         CaptureStep::with_command(
             "auto",
             "We will send AUTO to return to auto-range.",
-            "auto",
+            command::AUTO,
             3,
         )
         .verified_if(hw)

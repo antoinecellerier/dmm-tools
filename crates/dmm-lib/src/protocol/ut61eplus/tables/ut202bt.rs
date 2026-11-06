@@ -2,7 +2,7 @@ use super::{BASE, GAP, ModelTable, RangeInfo, r};
 use crate::protocol::steps::{self, Ohms, Volts};
 use crate::protocol::ut61eplus::capture::command_steps;
 use crate::protocol::ut61eplus::mode::Mode;
-use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
+use crate::protocol::{CaptureStep, Expect, Need, ValueExpect, command};
 
 /// Where peak capture works: "P-MAX and P-MIN (Only for ACV/ACA)" in the
 /// manual's button table (P8/13), and its AC V (P8/14) and AC A (P11/20)
@@ -54,7 +54,7 @@ pub(crate) static UT202BT: ModelTable = ModelTable {
     // Of the commands here, the only ones UNI-T's app sends this meter
     // (family spec §6.5). Its other bytes, 0x31-0x37, have no command here;
     // Peak stays off until 0x37 or 0x4D is known to start it.
-    commands: &["hold", "range"],
+    commands: &[command::HOLD, command::RANGE],
     // Frequency beside AC V and AC A, °F beside °C (family spec §2.3).
     secondary_display: true,
     // UNI-T's app asks the name first, and a UT60BT is reported to need it

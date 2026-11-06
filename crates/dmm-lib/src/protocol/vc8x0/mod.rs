@@ -28,7 +28,8 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol,
-    Setting, check_len, display_number, spells_ol, unknown_mode, unsupported_setting,
+    Setting, check_len, command as cmd, display_number, spells_ol, unknown_mode,
+    unsupported_setting,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -120,14 +121,14 @@ pub(crate) fn flag_states(setting: cycle::FlagSetting) -> &'static [u16] {
 /// Command bytes are identical for VC-880 and VC-890.
 pub(crate) fn command_byte(command: &str) -> Result<u8> {
     match command {
-        "hold" => Ok(CMD_HOLD),
-        "rel" => Ok(CMD_REL),
+        cmd::HOLD => Ok(CMD_HOLD),
+        cmd::REL => Ok(CMD_REL),
         "max_min_avg" => Ok(CMD_MAX_MIN_AVG),
         "exit_max_min_avg" => Ok(CMD_EXIT_MAX_MIN_AVG),
         "range_auto" => Ok(CMD_RANGE_AUTO),
         "range_manual" => Ok(CMD_RANGE_MANUAL),
-        "light" => Ok(CMD_LIGHT),
-        "select" => Ok(CMD_SELECT),
+        cmd::LIGHT => Ok(CMD_LIGHT),
+        cmd::SELECT => Ok(CMD_SELECT),
         _ => Err(Unsupported::Command(command.to_string()).into()),
     }
 }
@@ -174,14 +175,14 @@ pub(crate) fn read_device_name(
 
 /// Button commands, identical on both meters.
 pub(crate) const COMMANDS: &[&str] = &[
-    "hold",
-    "rel",
+    cmd::HOLD,
+    cmd::REL,
     "max_min_avg",
     "exit_max_min_avg",
     "range_auto",
     "range_manual",
-    "light",
-    "select",
+    cmd::LIGHT,
+    cmd::SELECT,
 ];
 
 /// Capture steps shared by the VC-880 and VC-890.

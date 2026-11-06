@@ -1,6 +1,7 @@
 pub(crate) mod bm78xbt;
 pub(crate) mod bm86x;
 mod capture_step;
+pub mod command;
 pub(crate) mod cycle;
 pub(crate) mod eevblog121gw;
 mod expect;

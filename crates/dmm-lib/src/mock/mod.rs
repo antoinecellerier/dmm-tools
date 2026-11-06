@@ -32,7 +32,8 @@ use crate::protocol::ut61eplus::specs::SpecModel;
 use crate::protocol::ut61eplus::tables::{self, ut61e_plus::UT61E_PLUS};
 use crate::protocol::zotek;
 use crate::protocol::{
-    Choice, DeviceProfile, MeterKeys, Protocol, Setting, Stability, unsupported_setting,
+    Choice, DeviceProfile, MeterKeys, Protocol, Setting, Stability, command as cmd,
+    unsupported_setting,
 };
 use crate::transport::{NullTransport, Transport};
 use scenarios::{AuxSpec, SCENARIOS, Scenario};
@@ -507,42 +508,42 @@ impl Protocol for MockProtocol {
         let elapsed = self.elapsed_secs();
         let scenario = self.current_scenario();
         match command {
-            "hold" => {
+            cmd::HOLD => {
                 let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
                 self.state.press_hold(value, elapsed);
             }
             // Under HOLD the UT61E+ drops REL and Hz/%, and SELECT, RANGE and
             // AUTO land and release it (ut61-family spec §6.3).
-            "rel" if self.state.held() => {}
-            "rel" => {
+            cmd::REL if self.state.held() => {}
+            cmd::REL => {
                 let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
                 self.state.press_rel(value);
             }
-            "range" => {
+            cmd::RANGE => {
                 self.state.release_hold();
                 let ladder = self.range_ladder(scenario.mode_raw);
                 self.state.press_range(ladder.len(), scenario.range_raw);
             }
-            "auto" => {
+            cmd::AUTO => {
                 self.state.release_hold();
                 self.state.set_auto_range();
             }
-            "minmax" => self.state.press_minmax(),
-            "exit_minmax" => self.state.exit_minmax(),
-            "peak" => {
+            cmd::MINMAX => self.state.press_minmax(),
+            cmd::EXIT_MINMAX => self.state.exit_minmax(),
+            cmd::PEAK => {
                 // The meter reacts to Peak only where the mode has one, and
                 // silently ignores the press elsewhere.
                 if scenario.peak_applies() {
                     self.state.press_peak();
                 }
             }
-            "exit_peak" => self.state.exit_peak(),
+            cmd::EXIT_PEAK => self.state.exit_peak(),
             "select2" if self.state.held() => {}
-            "select" | "select2" => {
+            cmd::SELECT | "select2" => {
                 self.state.release_hold();
                 self.advance_scenario();
             }
-            "light" => { /* no-op */ }
+            cmd::LIGHT => { /* no-op */ }
             _ => return Err(Unsupported::Command(command.to_string()).into()),
         }
         Ok(())
@@ -638,13 +639,13 @@ impl CycleMeter for MockProtocol {
     /// The button's own command — the one `dmm-cli command` sends.
     fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
         let command = match button {
-            CycleButton::Select => "select",
+            CycleButton::Select => cmd::SELECT,
             CycleButton::Hz => "select2",
-            CycleButton::Range => "range",
-            CycleButton::Hold => "hold",
-            CycleButton::Rel => "rel",
-            CycleButton::MinMax => "minmax",
-            CycleButton::Peak => "peak",
+            CycleButton::Range => cmd::RANGE,
+            CycleButton::Hold => cmd::HOLD,
+            CycleButton::Rel => cmd::REL,
+            CycleButton::MinMax => cmd::MINMAX,
+            CycleButton::Peak => cmd::PEAK,
         };
         self.send_command(transport, command)
     }
@@ -687,7 +688,7 @@ impl CycleMeter for MockProtocol {
     }
 
     fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
-        self.send_command(transport, "auto")
+        self.send_command(transport, cmd::AUTO)
     }
 
     /// Each flag only where the live scenario reacts to it — offering one
@@ -711,8 +712,8 @@ impl CycleMeter for MockProtocol {
 
     fn exit_flag(&mut self, transport: &dyn Transport, setting: FlagSetting) -> Result<()> {
         match setting {
-            FlagSetting::MinMax => self.send_command(transport, "exit_minmax"),
-            FlagSetting::Peak => self.send_command(transport, "exit_peak"),
+            FlagSetting::MinMax => self.send_command(transport, cmd::EXIT_MINMAX),
+            FlagSetting::Peak => self.send_command(transport, cmd::EXIT_PEAK),
             // HOLD and REL press their own button back off, so the driver
             // never asks this of them.
             other => Err(unsupported_setting(other.setting())),

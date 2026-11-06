@@ -24,7 +24,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKey, MeterKeys, Probing,
-    Protocol, Stability,
+    Protocol, Stability, command,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -62,17 +62,17 @@ const OLDER_FIRMWARE: &str = "the 121GW sends the data format of older firmware,
 /// menus, long RANGE and HOLD (`81`, `82`) do nothing the manual names,
 /// and the buzzer (`09`) is UEi's alone.
 const KEYS: [(&str, u8); 9] = [
-    ("range", 0x01),
-    ("hold", 0x02),
-    ("rel", 0x03),
-    ("select", 0x05),
-    ("minmax", 0x06),
+    (command::RANGE, 0x01),
+    (command::HOLD, 0x02),
+    (command::REL, 0x03),
+    (command::SELECT, 0x05),
+    (command::MINMAX, 0x06),
     // Long MIN/MAX leaves MIN/MAX (manual p.58).
-    ("exit_minmax", 0x86),
+    (command::EXIT_MINMAX, 0x86),
     // Short 1ms PEAK: 1 ms peak capture in AC V (manual p.33).
-    ("peak", 0x04),
+    (command::PEAK, 0x04),
     // Long MODE: the backlight (manual p.33).
-    ("light", 0x85),
+    (command::LIGHT, 0x85),
     // Long REL in an AC mode: the 1 kHz low-pass filter (manual p.33).
     ("lpf", 0x83),
 ];

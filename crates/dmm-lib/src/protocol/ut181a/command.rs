@@ -9,19 +9,19 @@ use crate::error::{Rejected, Result, Sent, Unsupported};
 use crate::protocol::cycle::{self, FlagSetting};
 use crate::protocol::framing::{self, build_abcd_le16};
 use crate::protocol::unrecognised::report_unknown;
-use crate::protocol::{Protocol, unsupported_setting};
+use crate::protocol::{Protocol, command, unsupported_setting};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
 use std::time::{Duration, Instant};
 
 pub(super) const UT181A_COMMANDS: &[&str] = &[
-    "hold",
-    "range",
-    "auto",
-    "rel",
-    "minmax",
-    "exit_minmax",
+    command::HOLD,
+    command::RANGE,
+    command::AUTO,
+    command::REL,
+    command::MINMAX,
+    command::EXIT_MINMAX,
     "monitor",
     "save",
 ];

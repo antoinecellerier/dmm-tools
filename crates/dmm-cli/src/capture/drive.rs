@@ -17,7 +17,7 @@ use super::{
 };
 use console::style;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
-use dmm_lib::protocol::Setting;
+use dmm_lib::protocol::{Setting, command as cmd};
 use dmm_lib::text::TextKind;
 use dmm_shared::tr;
 use serde::{Deserialize, Serialize};
@@ -135,11 +135,11 @@ impl Driver {
     /// a sweep hit: REL refused on the next mode is then that mode's doing.
     pub(crate) fn prove_command(&mut self, command: &str) {
         let setting = match command {
-            "hold" => Setting::Hold,
-            "rel" => Setting::Rel,
-            "minmax" | "exit_minmax" => Setting::MinMax,
-            "range" | "auto" => Setting::Range,
-            "peak" | "exit_peak" => Setting::Peak,
+            cmd::HOLD => Setting::Hold,
+            cmd::REL => Setting::Rel,
+            cmd::MINMAX | cmd::EXIT_MINMAX => Setting::MinMax,
+            cmd::RANGE | cmd::AUTO => Setting::Range,
+            cmd::PEAK | cmd::EXIT_PEAK => Setting::Peak,
             _ => return,
         };
         self.prove(setting);

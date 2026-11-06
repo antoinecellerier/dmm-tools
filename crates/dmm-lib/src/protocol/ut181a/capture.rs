@@ -2,7 +2,7 @@
 
 use crate::flags::Flag;
 use crate::protocol::steps::{self, Ohms, Volts};
-use crate::protocol::{CaptureStep, Expect, Need, RangeExpect};
+use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, command};
 
 pub(super) fn steps() -> Vec<CaptureStep> {
     // A real meter has run every step (issue #5, 2026-09-27) but
@@ -239,29 +239,34 @@ pub(super) fn steps() -> Vec<CaptureStep> {
         CaptureStep::with_command(
             "manual_range",
             "V DC mode: we will switch to a manual range.",
-            "range",
+            command::RANGE,
             3,
         )
         .expect(Expect::new().range(RangeExpect::Manual)),
-        CaptureStep::with_command("auto", "We will set auto-range.", "auto", 3)
+        CaptureStep::with_command("auto", "We will set auto-range.", command::AUTO, 3)
             .expect(Expect::new().range(RangeExpect::Auto)),
-        CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", "hold", 3)
+        CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", command::HOLD, 3)
             .verified()
             .expect(Expect::new().flags(&[(Flag::Hold, true)])),
         CaptureStep::with_command(
             "hold_off",
             "We will send HOLD again to turn it off.",
-            "hold",
+            command::HOLD,
             3,
         )
         .verified()
         .expect(Expect::new().flags(&[(Flag::Hold, false)])),
-        CaptureStep::with_command("minmax", "We will enable MIN/MAX.", "minmax", 3)
+        CaptureStep::with_command("minmax", "We will enable MIN/MAX.", command::MINMAX, 3)
             .verified()
             .expect(Expect::new().flags(&[(Flag::Min, true), (Flag::Max, true)])),
-        CaptureStep::with_command("minmax_off", "We will disable MIN/MAX.", "exit_minmax", 3)
-            .verified()
-            .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
+        CaptureStep::with_command(
+            "minmax_off",
+            "We will disable MIN/MAX.",
+            command::EXIT_MINMAX,
+            3,
+        )
+        .verified()
+        .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
         CaptureStep::basic(
             "peak",
             "V AC mode: enable Peak mode (FUNC button). \

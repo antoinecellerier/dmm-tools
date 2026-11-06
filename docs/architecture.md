@@ -13,7 +13,7 @@ detection, the acquisition loop and the session clock. It has no UI code and no 
 config files or export names. It stays self-contained: only `hidapi`, `thiserror`, `log`, and,
 behind the `bluetooth` feature, `btleplug` with the `tokio` and `futures` its API needs, plus on
 Windows the `windows` crate for the one WinRT call btleplug cannot make. No external utility crates.
-Protocol internals are `pub(crate)`: consumers use `Dmm` and the registry.
+Protocol internals are `pub(crate)`: consumers use `Dmm`, the registry and the shared command names.
 
 **`dmm-shared`** holds what the two binaries must agree on and `dmm-lib` must not carry: the
 settings file, durable writes, what an export holds and is called, what `--replay` opens, the help

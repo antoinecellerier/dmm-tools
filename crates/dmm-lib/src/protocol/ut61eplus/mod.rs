@@ -8,6 +8,7 @@ pub(crate) mod tables;
 use crate::error::{Error, Result, Unsupported};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
+use crate::protocol::command as cmd;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::registry::{DEVICES, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
@@ -27,17 +28,17 @@ use tables::ModelTable;
 
 /// The commands the family takes; the mock, a UT61E+, offers the same.
 pub(crate) const UT61EPLUS_COMMANDS: &[&str] = &[
-    "hold",
-    "minmax",
-    "exit_minmax",
-    "range",
-    "auto",
-    "rel",
+    cmd::HOLD,
+    cmd::MINMAX,
+    cmd::EXIT_MINMAX,
+    cmd::RANGE,
+    cmd::AUTO,
+    cmd::REL,
     "select2",
-    "select",
-    "light",
-    "peak",
-    "exit_peak",
+    cmd::SELECT,
+    cmd::LIGHT,
+    cmd::PEAK,
+    cmd::EXIT_PEAK,
 ];
 
 /// Expected payload length for a UT61E+ measurement response.
@@ -298,17 +299,17 @@ impl Ut61PlusProtocol {
 
     fn command_from_name(name: &str) -> Result<Command> {
         match name {
-            "hold" => Ok(Command::Hold),
-            "minmax" => Ok(Command::MinMax),
-            "exit_minmax" => Ok(Command::ExitMinMax),
-            "range" => Ok(Command::Range),
-            "auto" => Ok(Command::Auto),
-            "rel" => Ok(Command::Rel),
+            cmd::HOLD => Ok(Command::Hold),
+            cmd::MINMAX => Ok(Command::MinMax),
+            cmd::EXIT_MINMAX => Ok(Command::ExitMinMax),
+            cmd::RANGE => Ok(Command::Range),
+            cmd::AUTO => Ok(Command::Auto),
+            cmd::REL => Ok(Command::Rel),
             "select2" => Ok(Command::Select2),
-            "select" => Ok(Command::Select),
-            "light" => Ok(Command::Light),
-            "peak" => Ok(Command::PeakMinMax),
-            "exit_peak" => Ok(Command::ExitPeak),
+            cmd::SELECT => Ok(Command::Select),
+            cmd::LIGHT => Ok(Command::Light),
+            cmd::PEAK => Ok(Command::PeakMinMax),
+            cmd::EXIT_PEAK => Ok(Command::ExitPeak),
             _ => Err(Unsupported::Command(name.to_string()).into()),
         }
     }
@@ -747,7 +748,7 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
         // The ladder comes with an Auto rung, which AUTO sets: a model that
         // does not take it has no way back from a manual rung (family spec
         // §6.5), so it is offered none.
-        if !self.profile.supported_commands.contains(&"auto") {
+        if !self.profile.supported_commands.contains(&cmd::AUTO) {
             return Vec::new();
         }
         match u8::try_from(mode).map(Mode::from_byte) {
@@ -778,10 +779,10 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     fn flag_states(&self, setting: cycle::FlagSetting, mode: u16) -> &'static [u16] {
         // A flag whose button the model does not have (family spec §6.5).
         let command = match setting {
-            cycle::FlagSetting::Hold => "hold",
-            cycle::FlagSetting::Rel => "rel",
-            cycle::FlagSetting::MinMax => "minmax",
-            cycle::FlagSetting::Peak => "peak",
+            cycle::FlagSetting::Hold => cmd::HOLD,
+            cycle::FlagSetting::Rel => cmd::REL,
+            cycle::FlagSetting::MinMax => cmd::MINMAX,
+            cycle::FlagSetting::Peak => cmd::PEAK,
         };
         if !self.profile.supported_commands.contains(&command) {
             return &[];

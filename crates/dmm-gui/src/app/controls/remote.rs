@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use dmm_lib::protocol::command;
 use dmm_lib::text::TextKind;
 use dmm_shared::l10n::Localizer;
 use dmm_shared::tr;
@@ -278,15 +279,15 @@ impl App {
             // Tooltips are phrased to be device-agnostic — they describe
             // the generic DMM behavior, not model-specific details.
             for (label, active, cmd, tooltip) in [
-                ("HOLD", hold, "hold", tr!(l10n, "remote-hold.hover")),
-                ("REL", rel, "rel", tr!(l10n, "remote-rel.hover")),
+                ("HOLD", hold, command::HOLD, tr!(l10n, "remote-hold.hover")),
+                ("REL", rel, command::REL, tr!(l10n, "remote-rel.hover")),
                 (
                     "RANGE",
                     manual_range,
-                    "range",
+                    command::RANGE,
                     tr!(l10n, "remote-range.hover"),
                 ),
-                ("AUTO", auto, "auto", tr!(l10n, "remote-auto.hover")),
+                ("AUTO", auto, command::AUTO, tr!(l10n, "remote-auto.hover")),
             ] {
                 if !has_cmd(cmd) {
                     continue;
@@ -311,15 +312,15 @@ impl App {
                 (
                     "MIN/MAX",
                     min_max,
-                    "minmax",
-                    "exit_minmax",
+                    command::MINMAX,
+                    command::EXIT_MINMAX,
                     tr!(l10n, "remote-min-max.hover"),
                 ),
                 (
                     "PEAK",
                     peak,
-                    "peak",
-                    "exit_peak",
+                    command::PEAK,
+                    command::EXIT_PEAK,
                     tr!(l10n, "remote-peak.hover"),
                 ),
             ] {
@@ -371,8 +372,8 @@ impl App {
 
             // Non-toggle commands
             for (label, cmd, tooltip) in [
-                ("SELECT", "select", tr!(l10n, "remote-select.hover")),
-                ("LIGHT", "light", tr!(l10n, "remote-light.hover")),
+                ("SELECT", command::SELECT, tr!(l10n, "remote-select.hover")),
+                ("LIGHT", command::LIGHT, tr!(l10n, "remote-light.hover")),
             ] {
                 if !has_cmd(cmd) {
                     continue;

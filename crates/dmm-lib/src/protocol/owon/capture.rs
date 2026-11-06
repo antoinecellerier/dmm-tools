@@ -24,7 +24,7 @@
 
 use crate::flags::Flag;
 use crate::protocol::steps::{self, Ohms, Volts};
-use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
+use crate::protocol::{CaptureStep, Expect, Need, ValueExpect, command};
 
 pub(super) fn steps(code: u8) -> Vec<CaptureStep> {
     let (mut steps, keys) = match code {
@@ -346,7 +346,7 @@ fn b35_b41_keys() -> Vec<CaptureStep> {
             "key_select",
             "Set the dial to ≈V and move the red lead back to VΩ→|, leads open, DC showing \
              (press Select if AC shows): we will send Select (AC should show).",
-            "select",
+            command::SELECT,
         )
         .expect(Expect::mode("AC V")),
         key(
@@ -359,7 +359,7 @@ fn b35_b41_keys() -> Vec<CaptureStep> {
         key(
             "key_hold",
             "DC V: we will send ☀/H (H should show). Press ☀/H briefly afterwards.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
         key(
@@ -367,39 +367,39 @@ fn b35_b41_keys() -> Vec<CaptureStep> {
             "DC V: we will send a short △/ᛒ press (△ should show). Afterwards press △/ᛒ \
              briefly (don't hold it: holding it is the Bluetooth key), then, if AUTO is off, \
              hold Range for more than 2 seconds (AUTO shows).",
-            "rel",
+            command::REL,
         )
         .expect(Expect::mode("DC V").flags(REL_ON)),
         key(
             "key_range",
             "DC V, AUTO showing: we will send Range (AUTO should go off).",
-            "range",
+            command::RANGE,
         )
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
         key(
             "key_auto",
             "DC V, AUTO off (press Range if it shows): we will send a long Range (AUTO should \
              show).",
-            "auto",
+            command::AUTO,
         )
         .expect(Expect::mode("DC V").flags(AUTO_RANGE)),
         key(
             "key_minmax",
             "DC V: we will send Max/Min (MAX or MIN should show).",
-            "minmax",
+            command::MINMAX,
         ),
         key(
             "key_exit_minmax",
             "DC V, MAX or MIN showing (press Max/Min if neither does): we will send a long \
              Max/Min to leave it. Afterwards, if AUTO is off, hold Range for more than 2 \
              seconds (AUTO shows).",
-            "exit_minmax",
+            command::EXIT_MINMAX,
         )
         .expect(Expect::mode("DC V").flags(MAX_MIN_OFF)),
         key(
             "key_light",
             "DC V: we will send a long ☀/H (the backlight, which lasts one minute).",
-            "light",
+            command::LIGHT,
         ),
     ]
 }
@@ -546,7 +546,7 @@ fn b33_keys() -> Vec<CaptureStep> {
             "key_select",
             "Set the dial to ≈V and move the red lead back to VΩ→|, leads open, DC showing \
              (press Select if AC shows): we will send Select (AC should show).",
-            "select",
+            command::SELECT,
         )
         .expect(Expect::mode("AC V")),
         key(
@@ -559,7 +559,7 @@ fn b33_keys() -> Vec<CaptureStep> {
         key(
             "key_hold",
             "DC V: we will send Hold (H should show). Press Hold afterwards.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
         key(
@@ -567,20 +567,20 @@ fn b33_keys() -> Vec<CaptureStep> {
             "DC V: we will send a short △/ᛒ press (△ should show). Afterwards press △/ᛒ \
              briefly (holding it switches Bluetooth), then, if AUTO is off, hold Range for more \
              than 2 seconds (AUTO shows).",
-            "rel",
+            command::REL,
         )
         .expect(Expect::mode("DC V").flags(REL_ON)),
         key(
             "key_range",
             "DC V, AUTO showing: we will send Range (AUTO should go off).",
-            "range",
+            command::RANGE,
         )
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
         key(
             "key_auto",
             "DC V, AUTO off (press Range if it shows): we will send a long Range (AUTO should \
              show).",
-            "auto",
+            command::AUTO,
         )
         .expect(Expect::mode("DC V").flags(AUTO_RANGE)),
     ]
@@ -884,7 +884,7 @@ fn ow_keys(hold: &'static str) -> Vec<CaptureStep> {
             "key_select",
             "Set the dial to ≈V and move the red lead back to the VΩ jack, leads open, DC \
              showing (press Select if AC shows): we will send Select (AC should show).",
-            "select",
+            command::SELECT,
         )
         .expect(Expect::mode("AC V")),
         key(
@@ -895,33 +895,33 @@ fn ow_keys(hold: &'static str) -> Vec<CaptureStep> {
             "hz_duty",
         )
         .expect(Expect::mode("Hz")),
-        key("key_hold", hold, "hold").expect(Expect::mode("DC V").flags(HOLD_ON)),
+        key("key_hold", hold, command::HOLD).expect(Expect::mode("DC V").flags(HOLD_ON)),
         key(
             "key_rel",
             "DC V: we will send a short Hz/Duty△/ᛒ press (REL should show). Afterwards press \
              Hz/Duty△/ᛒ briefly (don't hold it: holding it is the Bluetooth key), then, if \
              AUTO is off, hold Range for more than 2 seconds (AUTO shows).",
-            "rel",
+            command::REL,
         )
         .expect(Expect::mode("DC V").flags(REL_ON)),
         key(
             "key_range",
             "DC V, AUTO showing: we will send Range (AUTO should go off).",
-            "range",
+            command::RANGE,
         )
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
         key(
             "key_auto",
             "DC V, AUTO off (press Range if it shows): we will send a long Range (AUTO should \
              show).",
-            "auto",
+            command::AUTO,
         )
         .expect(Expect::mode("DC V").flags(AUTO_RANGE)),
         key(
             "key_light",
             "DC V: we will send a long ☀/H (the backlight, and the flashlight on an OW18). \
              Hold ☀/H for more than 2 seconds afterwards to switch them off.",
-            "light",
+            command::LIGHT,
         ),
     ]
 }
@@ -1076,21 +1076,21 @@ fn cm2100b_keys() -> Vec<CaptureStep> {
             "key_select",
             "Set the dial to V≃, leads open, DC showing (press SELECT if not): we will send \
              SELECT (AC should show).",
-            "select",
+            command::SELECT,
         )
         .expect(Expect::mode("AC V")),
         key(
             "key_hold",
             "V≃ position, DC showing (press SELECT if not): we will send HOLD (H should \
              show). Press HOLD briefly afterwards.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
         key(
             "key_light",
             "V≃ position: we will send a long HOLD (backlight). Hold HOLD for about 2 seconds \
              afterwards to switch the backlight off.",
-            "light",
+            command::LIGHT,
         ),
         key(
             "key_zero",
@@ -1313,13 +1313,13 @@ fn cms_keys() -> Vec<CaptureStep> {
             "Press the power key briefly if the oscilloscope shows, Tab⇌ briefly until the \
              first menu page shows, then F2 until V,DC shows, leads open: we will send Select, \
              which the CMS has no key for, so no change on the screen is a valid result.",
-            "select",
+            command::SELECT,
         )
         .starts_from(Expect::mode("DC V")),
         key(
             "key_hold",
             "V,DC: we will send Hold (HOLD should show). Press HOLD briefly afterwards.",
-            "hold",
+            command::HOLD,
         )
         .starts_from(Expect::mode("DC V").flags(HOLD_OFF))
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
@@ -1327,14 +1327,14 @@ fn cms_keys() -> Vec<CaptureStep> {
             "key_rel",
             "V,DC: we will send Rel (△ should show). Afterwards press Tab⇌ briefly for the \
              second menu page, F2 (Rel) to leave it, then A if Manu shows.",
-            "rel",
+            command::REL,
         )
         .starts_from(Expect::mode("DC V").flags(HOLD_REL_OFF))
         .expect(Expect::mode("DC V").flags(REL_ON)),
         key(
             "key_range",
             "V,DC, Auto showing: we will send Range (Manu should show). Press A afterwards.",
-            "range",
+            command::RANGE,
         )
         .starts_from(Expect::mode("DC V").flags(HOLD_REL_OFF_AUTO))
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
@@ -1342,7 +1342,7 @@ fn cms_keys() -> Vec<CaptureStep> {
             "key_minmax",
             "V,DC: we will send Max/Min (Min, Max and Avg should show). Afterwards press Tab⇌ \
              briefly until the second menu page shows, then F1 (MaxMin) to leave it.",
-            "minmax",
+            command::MINMAX,
         )
         .starts_from(Expect::mode("DC V").flags(AUTO_RANGE)),
         key(
@@ -1538,33 +1538,33 @@ fn ow65b_keys() -> Vec<CaptureStep> {
             "key_select",
             "Set the dial to V≅ and move the red lead back to VΩ, leads open, ⎓ showing (press \
              SELECT if ~ shows): we will send Select (~ should show).",
-            "select",
+            command::SELECT,
         )
         .expect(Expect::mode("AC V")),
         key(
             "key_hold",
             "Press SELECT for DC: we will send Hold (HOLD should show). Press F4 afterwards.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
         key(
             "key_rel",
             "DC V: we will send Rel (Rel should show). Press F3 afterwards.",
-            "rel",
+            command::REL,
         )
         .expect(Expect::mode("DC V").flags(REL_ON)),
         key(
             "key_range",
             "DC V: we will send Range (manual range). Afterwards turn the dial to mV≅ and back \
              to V≅.",
-            "range",
+            command::RANGE,
         )
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
         key(
             "key_minmax",
             "DC V: we will send Max/Min (MAX should show). Afterwards turn the dial to mV≅ and \
              back to V≅.",
-            "minmax",
+            command::MINMAX,
         )
         .expect(Expect::mode("DC V").flags(MAX_ON)),
     ]
@@ -1825,7 +1825,7 @@ fn ow67b_keys() -> Vec<CaptureStep> {
             "key_peak",
             "V≅ position, ~ showing (press SELECT if ⎓ shows): we will send Peak. Afterwards \
              press < or > briefly until the first menu page shows, and hold F2 if PEAK is on.",
-            "peak",
+            command::PEAK,
         ),
         key(
             "key_current_loop",
@@ -1852,35 +1852,35 @@ fn ow6x_keys() -> Vec<CaptureStep> {
             "key_select",
             "Set the dial to V≅ with the leads in COM and VΩ, leads open, ⎓ showing (press \
              SELECT if ~ shows): we will send Select (~ should show).",
-            "select",
+            command::SELECT,
         )
         .expect(Expect::mode("AC V")),
         key(
             "key_hold",
             "Press SELECT for DC: we will send Hold (HOLD should show). Press F4 on the first \
              menu page afterwards.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
         key(
             "key_rel",
             "DC V: we will send Rel (Rel should show). Press F3 on the first menu page \
              afterwards.",
-            "rel",
+            command::REL,
         )
         .expect(Expect::mode("DC V").flags(REL_ON)),
         key(
             "key_range",
             "DC V: we will send Range (manual range). Afterwards turn the dial to mV≅ and back \
              to V≅.",
-            "range",
+            command::RANGE,
         )
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
         key(
             "key_minmax",
             "DC V: we will send Max/Min (MAX should show). Afterwards turn the dial to mV≅ and \
              back to V≅.",
-            "minmax",
+            command::MINMAX,
         )
         .expect(Expect::mode("DC V").flags(MAX_ON)),
     ]
@@ -1954,7 +1954,7 @@ fn ow69b_keys() -> Vec<CaptureStep> {
             "key_peak",
             "AC V: we will send Peak. Afterwards press < or > briefly until the first menu page \
              shows, and hold F2 if PEAK is on.",
-            "peak",
+            command::PEAK,
         ),
         key(
             "key_current_loop",
@@ -2293,31 +2293,35 @@ fn vc_keys(vc: Vc) -> Vec<CaptureStep> {
         Vc::Vc925 => "DC V: we will send Max/Min (MAX or MIN should show).",
     };
     vec![
-        key("key_select", select, "select").expect(Expect::mode("AC V")),
+        key("key_select", select, command::SELECT).expect(Expect::mode("AC V")),
         key(
             "key_hold",
             "Press SELECT until ⎓ shows: we will send Hold (HOLD should show). Press HOLD \
              afterwards.",
-            "hold",
+            command::HOLD,
         )
         .expect(Expect::mode("DC V").flags(HOLD_ON)),
-        key("key_rel", "DC V: we will send Rel (Δ should show).", "rel")
-            .expect(Expect::mode("DC V").flags(REL_ON)),
+        key(
+            "key_rel",
+            "DC V: we will send Rel (Δ should show).",
+            command::REL,
+        )
+        .expect(Expect::mode("DC V").flags(REL_ON)),
         key("key_exit_rel", exit_rel, "exit_rel").expect(Expect::mode("DC V").flags(REL_OFF)),
         key(
             "key_range",
             "DC V, AUTO showing: we will send Range (AUTO should go off).",
-            "range",
+            command::RANGE,
         )
         .expect(Expect::mode("DC V").flags(MANUAL_RANGE)),
         key(
             "key_auto",
             "DC V, AUTO off (press RANGE if it shows): we will send a long RANGE (AUTO should \
              show).",
-            "auto",
+            command::AUTO,
         )
         .expect(Expect::mode("DC V").flags(AUTO_RANGE)),
-        key("key_minmax", minmax, "minmax"),
+        key("key_minmax", minmax, command::MINMAX),
     ]
 }
 
@@ -2333,7 +2337,7 @@ fn vc871_keys() -> Vec<CaptureStep> {
              if PEAK is on, leave it (the manual gives no way: press < or > briefly until PEAK \
              shows over an F key and try holding that key, else turn the dial to mV≅ and back \
              to V≅).",
-            "peak",
+            command::PEAK,
         ),
         key(
             "key_current_loop",
@@ -2415,7 +2419,7 @@ fn vc891_keys() -> Vec<CaptureStep> {
             "AC V: we will send Peak. Afterwards, if PEAK is on, leave it (the manual gives no \
              way: press < or > briefly until PEAK shows over an F key and try holding that key, \
              else turn the dial to mV≅ and back to V≅).",
-            "peak",
+            command::PEAK,
         ),
         key(
             "key_current_loop",
@@ -2737,7 +2741,7 @@ fn vc925pv_keys() -> Vec<CaptureStep> {
             "key_exit_minmax",
             "DC V, MAX or MIN showing (press MAX/MIN if neither does): we will send a long \
              MAX/MIN to leave it (AUTO should show).",
-            "exit_minmax",
+            command::EXIT_MINMAX,
         )
         .expect(Expect::mode("DC V").flags(MAX_MIN_OFF)),
         key(
