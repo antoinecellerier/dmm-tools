@@ -501,6 +501,8 @@ fn open_error_help(
             activation,
             miss: dmm_lib::error::BluetoothOnlyMiss::NotInRange,
         } => {
+            // The error names the maker's entry; the user asked for the pick.
+            let model = opened_device(selection).map_or(model, meter_name);
             print_not_found_help(LinksSearched::BluetoothOnly { model, activation });
             print_experimental_note(selection);
             OpenFailed::NotFound.into()

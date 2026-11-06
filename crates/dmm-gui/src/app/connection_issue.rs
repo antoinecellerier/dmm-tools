@@ -766,6 +766,26 @@ mod tests {
         ));
     }
 
+    /// The search names the meter asked for, not the maker's entry it opens as.
+    #[test]
+    fn a_bluetooth_only_notice_names_the_picked_meter() {
+        use dmm_lib::error::{BluetoothOnlyMiss, Error};
+        let cms061 = registry::find_device("cms061").expect("registry entry");
+        let pick = registry::resolve_listing("ut217a").expect("a sold-as row");
+        let issue = ConnectionIssue::from_error(
+            &crate::l10n::english(),
+            &Error::BluetoothOnly {
+                model: cms061.display_name(),
+                activation: cms061.activation_instructions,
+                miss: BluetoothOnlyMiss::NotInRange,
+            },
+            None,
+            Some(pick),
+        );
+        let n = notice_for(&mut app("ut217a"), issue);
+        assert_eq!(n.title, "No UNI-T UT217A found over Bluetooth");
+    }
+
     /// A meter with the radio built in is answered on the radio alone, with
     /// its own steps, whichever way the open failed — never with the cable
     /// help. A meter behind an adapter keeps the bare stack error.
