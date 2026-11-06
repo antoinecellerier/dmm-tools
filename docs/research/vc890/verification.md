@@ -97,6 +97,14 @@ yet: every item waits on a first report.
 - Which buttons a held meter drops — decides whether a walk needs its
   HOLD-off retry here. Needs `set hold on`, then `set mode` or `set range`. (#14)
 
+## Commands
+
+- Whether `command range`, `auto`, `minmax` and `exit_minmax`, which are
+  dmm-gui's RANGE, AUTO, MIN/MAX and × buttons, act as the meter's own keys
+  do, and what the AUTO flag says in a function with no ranges — decides the
+  buttons' lit states and the `range` row in the CLI reference. Needs each
+  command with the LCD noted. (#14)
+
 ## Detection
 
 - What detection's probes do to a VC-890, whether it answers `0x5E` on the

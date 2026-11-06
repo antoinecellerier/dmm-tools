@@ -440,7 +440,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::test_support::{
-        a11y, click_frames, connected_app, headless_frame, node_rect, test_app,
+        a11y, click_frames, connected_app, connected_to, headless_frame, node_rect, test_app,
     };
 
     /// The carets draw from the bundled fonts, not as the replacement box
@@ -637,6 +637,17 @@ mod tests {
             .filter(|(_, n)| n.role() == egui::accesskit::Role::Button)
             .filter_map(|(_, n)| n.label().map(str::to_string))
             .collect()
+    }
+
+    /// The VC-880's and VC-890's range and min/max keys reach the row.
+    #[test]
+    fn the_voltcraft_range_and_min_max_keys_are_drawn() {
+        for id in ["vc880", "vc650bt", "vc890"] {
+            let buttons = buttons_of(&mut connected_to(id));
+            for label in ["RANGE", "AUTO", "MIN/MAX"] {
+                assert!(buttons.iter().any(|b| b == label), "{id}: {buttons:?}");
+            }
+        }
     }
 
     /// AVG is one of the states the MIN/MAX key steps through, so the

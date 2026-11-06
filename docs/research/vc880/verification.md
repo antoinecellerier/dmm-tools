@@ -112,6 +112,11 @@ has been read yet: every item waits on a first report.
 
 - Whether `light` (0x4B) toggles the backlight (§5) — decides the command.
   Needs `dmm-cli --device vc880 command light`. (#13)
+- Whether `command range`, `auto`, `minmax` and `exit_minmax`, which are
+  dmm-gui's RANGE, AUTO, MIN/MAX and × buttons, act as the meter's own keys
+  do, and what the AUTO flag says in a function with no ranges — decides the
+  buttons' lit states and the `range` row in the CLI reference. Needs each
+  command with the LCD noted. (#13)
 
 ## Detection and the capture list
 

@@ -551,10 +551,10 @@ dmm-cli command <ACTION>          # send a command
 |---|---|
 | `hold` | Toggle Hold mode |
 | `rel` | Toggle relative (REL) mode |
-| `max_min_avg` | Cycle Max/Min/Avg recording |
-| `exit_max_min_avg` | Exit Max/Min/Avg recording |
-| `range_manual` | Switch to manual ranging |
-| `range_auto` | Return to auto-range |
+| `minmax` | Cycle Max/Min/Avg recording; also `max_min_avg` |
+| `exit_minmax` | Exit Max/Min/Avg recording; also `exit_max_min_avg` |
+| `auto` | Return to auto-range; also `range_auto` |
+| `range` | Switch to manual ranging; also `range_manual` |
 | `light` | Toggle backlight |
 | `select` | SHIFT/SETUP button: steps to the dial position's next function |
 

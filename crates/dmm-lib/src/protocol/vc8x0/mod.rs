@@ -118,15 +118,17 @@ pub(crate) fn flag_states(setting: cycle::FlagSetting) -> &'static [u16] {
 
 /// Map a command name to its byte value.
 ///
-/// Command bytes are identical for VC-880 and VC-890.
+/// Command bytes are identical for VC-880 and VC-890. The names these meters
+/// listed before they took the shared ones stay accepted, unlisted, for the
+/// scripts that type them.
 pub(crate) fn command_byte(command: &str) -> Result<u8> {
     match command {
         cmd::HOLD => Ok(CMD_HOLD),
         cmd::REL => Ok(CMD_REL),
-        "max_min_avg" => Ok(CMD_MAX_MIN_AVG),
-        "exit_max_min_avg" => Ok(CMD_EXIT_MAX_MIN_AVG),
-        "range_auto" => Ok(CMD_RANGE_AUTO),
-        "range_manual" => Ok(CMD_RANGE_MANUAL),
+        cmd::MINMAX | "max_min_avg" => Ok(CMD_MAX_MIN_AVG),
+        cmd::EXIT_MINMAX | "exit_max_min_avg" => Ok(CMD_EXIT_MAX_MIN_AVG),
+        cmd::AUTO | "range_auto" => Ok(CMD_RANGE_AUTO),
+        cmd::RANGE | "range_manual" => Ok(CMD_RANGE_MANUAL),
         cmd::LIGHT => Ok(CMD_LIGHT),
         cmd::SELECT => Ok(CMD_SELECT),
         _ => Err(Unsupported::Command(command.to_string()).into()),
@@ -177,10 +179,10 @@ pub(crate) fn read_device_name(
 pub(crate) const COMMANDS: &[&str] = &[
     cmd::HOLD,
     cmd::REL,
-    "max_min_avg",
-    "exit_max_min_avg",
-    "range_auto",
-    "range_manual",
+    cmd::MINMAX,
+    cmd::EXIT_MINMAX,
+    cmd::AUTO,
+    cmd::RANGE,
     cmd::LIGHT,
     cmd::SELECT,
 ];
@@ -1058,22 +1060,39 @@ mod tests {
         assert_eq!(frame[5], (sum & 0xFF) as u8);
     }
 
+    /// A script written against the names these meters listed first keeps
+    /// pressing the same keys, and the list stays the shared names alone.
+    #[test]
+    fn the_first_names_still_press_their_keys() {
+        for (first, shared) in [
+            ("max_min_avg", "minmax"),
+            ("exit_max_min_avg", "exit_minmax"),
+            ("range_auto", "auto"),
+            ("range_manual", "range"),
+        ] {
+            assert_eq!(
+                command_byte(first).unwrap(),
+                command_byte(shared).unwrap(),
+                "{first}"
+            );
+            assert!(!COMMANDS.contains(&first), "{first}");
+            assert!(COMMANDS.contains(&shared), "{shared}");
+        }
+    }
+
     #[test]
     fn command_byte_known() {
-        // The range driver presses the same byte "range_manual" sends.
-        assert_eq!(command_byte("range_manual").unwrap(), CMD_RANGE_MANUAL);
-        assert_eq!(command_byte("range_auto").unwrap(), CMD_RANGE_AUTO);
+        // The range driver presses the same byte "range" sends.
+        assert_eq!(command_byte("range").unwrap(), CMD_RANGE_MANUAL);
+        assert_eq!(command_byte("auto").unwrap(), CMD_RANGE_AUTO);
         assert_eq!(command_byte("hold").unwrap(), 0x4A);
         assert_eq!(command_byte("rel").unwrap(), 0x48);
         // The flag-setting driver presses the same bytes.
         assert_eq!(press_command(cycle::CycleButton::Hold), Some(0x4A));
         assert_eq!(press_command(cycle::CycleButton::Rel), Some(0x48));
         assert_eq!(press_command(cycle::CycleButton::MinMax), Some(0x49));
-        assert_eq!(command_byte("max_min_avg").unwrap(), CMD_MAX_MIN_AVG);
-        assert_eq!(
-            command_byte("exit_max_min_avg").unwrap(),
-            CMD_EXIT_MAX_MIN_AVG
-        );
+        assert_eq!(command_byte("minmax").unwrap(), CMD_MAX_MIN_AVG);
+        assert_eq!(command_byte("exit_minmax").unwrap(), CMD_EXIT_MAX_MIN_AVG);
         // Neither meter has these two.
         assert_eq!(press_command(cycle::CycleButton::Hz), None);
         assert_eq!(press_command(cycle::CycleButton::Peak), None);

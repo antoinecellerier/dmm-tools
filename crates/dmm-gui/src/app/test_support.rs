@@ -36,6 +36,20 @@ pub(crate) fn connected_app(commands: &[&str], unit: &'static str) -> App {
     app
 }
 
+/// [`connected_app`] on the registry entry `id`: its commands and its keys,
+/// a reading in volts on screen.
+pub(crate) fn connected_to(id: &str) -> App {
+    let device = dmm_lib::protocol::registry::find_device(id).expect("a registry id");
+    let profile = *(device.new_protocol)().profile();
+    let mut app = connected_app(profile.supported_commands, "V");
+    app.connection
+        .meter
+        .as_mut()
+        .expect("a connected meter")
+        .meter_keys = profile.meter_keys;
+    app
+}
+
 impl App {
     /// Hand the app one message from the acquisition thread. The sender is
     /// never dropped, so neither this drain nor a later frame's takes the
