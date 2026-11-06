@@ -290,6 +290,16 @@ Hardware-confirmed 2026-09-27 (issue #5):
   first reading lands. The capture never showed both bits with any
   other float.
 
+**The float can carry more digits than the decimal places show.**
+[HARDWARE] (issue #5, CH9329 / UT-D09, @diego351, 2026-09-27 and -28): V DC
+sent -1.3550254 V shown as -1.3550, Ω 578.39087 kΩ shown as 578.39, and °C
+both 27.072842 and 27.126976 shown as 27.1, so these digits move with the
+reading. In V AC, mV AC, Hz, LPF and the REL variants the float was the shown
+number (0.6246). The digits are resolution, not accuracy: on the 6 V DC range
+the manual's 0.025%+5 is about ±0.00084 V at that reading, against a last shown
+digit of 0.0001 V. Whether they are stable enough for trends or averaging is
+[UNVERIFIED]: neither capture had a controlled signal.
+
 ### 5.3 Measurement Variants
 
 **Normal (format 0x00)** -- after 5-byte header:

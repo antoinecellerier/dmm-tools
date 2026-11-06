@@ -46,6 +46,9 @@ checks that span families are in the [verification backlog](../../verification-b
 - COMP OUTER, BELOW and ABOVE, and a PASS result ([§5.4](reverse-engineered-protocol.md#54-comp-mode-extension))
   — only INNER/FAIL has come from a meter; decides parse.rs's COMP decoding.
   Needs COMP set on the meter in each. (#5)
+- The float's digits past the shown ones ([§5.2](reverse-engineered-protocol.md#52-value-encoding))
+  — how stable they are; decides whether anything should offer them for trends
+  or averaging. Needs a steady source on V DC or Ω over a few minutes. (#5)
 
 ## Commands
 

@@ -97,7 +97,8 @@ pub fn write_measurement_json<W: std::io::Write + ?Sized>(
     let value = match &m.value {
         // The digits the CSV cell and the sub-values here carry: a float-based
         // family's f64 is its f32 widened, which printed 12.345000267028809.
-        // The reading in memory stays widened for the stats.
+        // The reading in memory stays widened for the stats, and a `.replay`
+        // keeps the float as sent, with any digits past the shown ones.
         MeasuredValue::Normal(v) => Value::from(m.value_export_str().parse().unwrap_or(*v)),
         MeasuredValue::Overload => json!("OL"),
         MeasuredValue::NcvLevel(l) => json!({"ncv_level": l}),
