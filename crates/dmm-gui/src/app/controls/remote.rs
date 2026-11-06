@@ -393,8 +393,8 @@ impl App {
             }
 
             // The meter's context keys (ZOTEK's ZERO in capacitance, the
-            // 121GW's 1kHz in AC, OWON's Hz/Duty, and the CM2100B's ZERO),
-            // each only while the reading is one it applies to.
+            // 121GW's 1kHz in AC, OWON's Hz/Duty, the CM2100B's ZERO and the
+            // UT61+'s Hz/%), each only while the reading is one it applies to.
             let reading = self.last_measurement.as_ref();
             for key in keys.context {
                 if !reading.is_some_and(|m| (key.applies)(m)) {
@@ -825,6 +825,34 @@ mod tests {
         assert!(!volts.iter().any(|l| l == "ZERO"), "{volts:?}");
     }
 
+    /// The UT61+'s Hz/% shows where the key does something: AC V, not DC V.
+    #[test]
+    fn the_hz_percent_key_follows_the_mode() {
+        let at = |id: &str, mode_raw: u16| {
+            let mut app = connected_to(id);
+            let reading = app.last_measurement.as_mut().expect("a reading");
+            reading.mode_raw = mode_raw;
+            buttons_of(&mut app)
+        };
+        let (ac_v, dc_v) = (0x00, 0x02);
+        let label = "Hz/%".to_string();
+        for id in [
+            "ut61eplus",
+            "ut61b+",
+            "ut61d+",
+            "ut161b",
+            "ut161d",
+            "ut161e",
+            "mock",
+        ] {
+            assert!(at(id, ac_v).contains(&label), "{id} in AC V");
+            assert!(!at(id, dc_v).contains(&label), "{id} in DC V");
+        }
+        for id in ["ut60bt", "ut202bt"] {
+            assert!(!at(id, ac_v).contains(&label), "{id} takes no select2");
+        }
+    }
+
     /// A context key's tooltip names the key to press, or says how the
     /// meter does it when no key carries its label.
     #[test]
@@ -866,8 +894,6 @@ mod tests {
     /// Keys with no control yet. Every keypress is to reach the GUI, so this
     /// only shrinks, and goes when it is empty.
     const NOT_YET: &[(DeviceFamily, &str)] = &[
-        (DeviceFamily::Ut61EPlus, "select2"),
-        (DeviceFamily::Mock, "select2"),
         (DeviceFamily::Ut181a, "save"),
         (DeviceFamily::Owon, "lpf"),
         (DeviceFamily::Owon, "inrush"),

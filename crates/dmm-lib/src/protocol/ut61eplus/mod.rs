@@ -13,9 +13,9 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::registry::{DEVICES, SelectableDevice};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol,
-    Setting, Stability, check_len, cycle, display_number, spells_ol, unknown_mode, unknown_mode16,
-    unsupported_setting,
+    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKey, MeterKeys, Probing,
+    Protocol, Setting, Stability, check_len, cycle, display_number, spells_ol, unknown_mode,
+    unknown_mode16, unsupported_setting,
 };
 use crate::transport::{Link, Transport};
 use command::Command;
@@ -40,6 +40,34 @@ pub(crate) const UT61EPLUS_COMMANDS: &[&str] = &[
     cmd::PEAK,
     cmd::EXIT_PEAK,
 ];
+
+/// The modes on a Hz/% ring, the same on every dial here (family spec §3.1):
+/// the key does nothing in any other.
+const HZ_PERCENT_RING: [u16; 7] = [
+    tables::m(Mode::AcV),
+    tables::m(Mode::AcMv),
+    tables::m(Mode::AcUa),
+    tables::m(Mode::AcMa),
+    tables::m(Mode::AcA),
+    tables::m(Mode::Hz),
+    tables::m(Mode::DutyCycle),
+];
+
+/// The Hz/% key, printed Hz% over USB (UT61+ manual p.10): its short press, as
+/// no command reaches the long one.
+static HZ_PERCENT: MeterKey = MeterKey {
+    command: "select2",
+    label: "Hz/%",
+    in_words: false,
+    hover: None,
+    applies: |m| HZ_PERCENT_RING.contains(&m.mode_raw),
+};
+
+/// The keys of a model that takes `select2`.
+pub(crate) const METER_KEYS: MeterKeys = MeterKeys {
+    context: std::slice::from_ref(&HZ_PERCENT),
+    ..MeterKeys::NONE
+};
 
 /// Expected payload length for a UT61E+ measurement response.
 const UT61EPLUS_MEASUREMENT_PAYLOAD_LEN: usize = 14;
@@ -188,7 +216,11 @@ impl Ut61PlusProtocol {
                 supported_commands,
                 max_aux_values,
                 verification_issue,
-                meter_keys: MeterKeys::NONE,
+                meter_keys: if table.commands.contains(&"select2") {
+                    METER_KEYS
+                } else {
+                    MeterKeys::NONE
+                },
             },
         }
     }
@@ -1425,6 +1457,31 @@ mod tests {
                 modes.iter().any(|m| m.as_static_str() == label),
                 "{label} is not a UT202BT mode"
             );
+        }
+    }
+
+    /// The modes the Hz/% key is offered in are the Hz/% rings of every dial
+    /// described here.
+    #[test]
+    fn the_hz_percent_ring_is_every_dials() {
+        use crate::protocol::cycle::CycleButton;
+        for table in [
+            &tables::ut61e_plus::UT61E_PLUS,
+            &tables::ut61b_plus::UT61B_PLUS,
+            &tables::ut61d_plus::UT61D_PLUS,
+        ] {
+            let mut ring: Vec<u16> = table
+                .dial
+                .iter()
+                .flat_map(|position| position.rings)
+                .filter(|ring| ring.button == CycleButton::Hz)
+                .flat_map(|ring| ring.modes.iter().copied())
+                .collect();
+            ring.sort_unstable();
+            ring.dedup();
+            let mut expected = HZ_PERCENT_RING;
+            expected.sort_unstable();
+            assert_eq!(ring, expected, "{}", table.name);
         }
     }
 

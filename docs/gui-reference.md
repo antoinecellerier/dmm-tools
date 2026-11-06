@@ -149,13 +149,14 @@ A row of buttons shown when connected and receiving data (visible in the
 | **ZERO** | Zero the reading (shown in capacitance on ZOTEK meters, and in DC A, capacitance and voltage on the OWON CM2100B) |
 | **1kHz** | Switch the 1 kHz low-pass filter on or off (121GW, shown in AC modes only) |
 | **Hz/Duty** | Step through frequency and duty (OWON meters and the Voltcraft VC891 with a Hz/Duty key, shown in AC V, AC A, Hz and duty only) |
+| **Hz/%** | Step through frequency and duty (UT61+ and UT161 series, shown in AC V, AC mV, AC µA, AC mA, AC A, Hz and duty only) |
 | **SELECT** | Cycle sub-modes. Reads **SHIFT** on the VC-880, VC650BT and VC-890 and **MODE** on the 121GW. |
 | **LIGHT** | Toggle backlight |
 
 Buttons highlight blue when the corresponding flag is active in the current
 measurement. LIGHT has no protocol feedback, so it does not highlight. On the
-mock, the buttons respond to toggle flags and SELECT, or a pick in the mode
-dropdown, moves to the next scenario.
+mock, the buttons respond to toggle flags and SELECT or Hz/%, or a pick in the
+mode dropdown, moves to the next scenario.
 
 ## Graph
 

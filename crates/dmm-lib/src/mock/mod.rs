@@ -24,16 +24,15 @@ use crate::error::{Error, Rejected, Result, Unsupported};
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::cycle::{self, CycleButton, CycleMeter, FlagSetting};
 use crate::protocol::registry::SelectableDevice;
-use crate::protocol::ut61eplus::UT61EPLUS_COMMANDS;
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::specs::SpecModel;
+use crate::protocol::ut61eplus::{METER_KEYS, UT61EPLUS_COMMANDS};
 // The mock stands in for a UT61E+, so it labels its ranges from the UT61E+
 // table rather than carrying a second copy that can drift.
 use crate::protocol::ut61eplus::tables::{self, ut61e_plus::UT61E_PLUS};
 use crate::protocol::zotek;
 use crate::protocol::{
-    Choice, DeviceProfile, MeterKeys, Protocol, Setting, Stability, command as cmd,
-    unsupported_setting,
+    Choice, DeviceProfile, Protocol, Setting, Stability, command as cmd, unsupported_setting,
 };
 use crate::transport::{NullTransport, Transport};
 use scenarios::{AuxSpec, SCENARIOS, Scenario};
@@ -206,7 +205,7 @@ impl MockProtocol {
                 supported_commands: UT61EPLUS_COMMANDS,
                 max_aux_values: 2,
                 verification_issue: None,
-                meter_keys: MeterKeys::NONE,
+                meter_keys: METER_KEYS,
             },
         }
     }

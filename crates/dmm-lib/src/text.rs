@@ -347,7 +347,15 @@ mod list {
             assert!(all.contains(TextKind::Model, "Mock UT61E+"));
             // A key's words are translated, what's printed on one isn't.
             assert!(all.contains(TextKind::Key, "Capacitance"));
-            for printed in ["ZERO", "NCV", "Hz/Duty", "MIN/MAX/AVG", "SHIFT", "MODE"] {
+            for printed in [
+                "ZERO",
+                "NCV",
+                "Hz/Duty",
+                "Hz/%",
+                "MIN/MAX/AVG",
+                "SHIFT",
+                "MODE",
+            ] {
                 assert!(!all.contains(TextKind::Key, printed), "{printed}");
             }
             let kinds: BTreeSet<TextKind> = all.entries().map(|(k, _, _)| k).collect();
