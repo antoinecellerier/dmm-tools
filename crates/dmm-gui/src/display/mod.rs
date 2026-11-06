@@ -255,7 +255,7 @@ fn show_reading_line_with_selector(
         let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
         // This line has never carried a range label, so a meter with no rung
         // to pick keeps the line it has: mode, then the badges.
-        let range = show_range_readout(ui, l10n, m, mode_size, choices.range, RangeAtRest::Nothing);
+        let range = show_range_readout(ui, l10n, m, mode_size, choices, RangeAtRest::Nothing);
         show_flags(ui, cx, m, mode_size);
         mode.or(range)
     })
@@ -525,8 +525,7 @@ fn show_reading_sized(
                 let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
                 // The range has always been a label on this line, so it stays
                 // one on a meter that lists no rung to pick.
-                let range =
-                    show_range_readout(ui, l10n, m, mode_size, choices.range, RangeAtRest::Label);
+                let range = show_range_readout(ui, l10n, m, mode_size, choices, RangeAtRest::Label);
                 show_flags(ui, cx, m, mode_size);
                 mode.or(range)
             })
@@ -719,8 +718,7 @@ fn show_reading_beside(
             // value spaces them.
             ui.spacing_mut().item_spacing.x = one_row_spacing(mode_size);
             let mode = show_mode_readout(ui, l10n, m, mode_size, choices);
-            let range =
-                show_range_readout(ui, l10n, m, mode_size, choices.range, RangeAtRest::Nothing);
+            let range = show_range_readout(ui, l10n, m, mode_size, choices, RangeAtRest::Nothing);
             show_flags(ui, cx, m, mode_size);
             // The row is the line's height unless the grid made it taller; then
             // the value is, as the selectors centred beside it are no taller.
@@ -1502,6 +1500,7 @@ mod tests {
             mode: choices,
             range: &[],
             keys: &[],
+            plain: false,
         }
     }
 
@@ -1511,6 +1510,7 @@ mod tests {
             mode: &[],
             range: choices,
             keys: &[],
+            plain: false,
         }
     }
 
@@ -2054,6 +2054,7 @@ mod tests {
             mode: &modes,
             range: &ranges,
             keys: &[],
+            plain: false,
         };
         for layout in LAYOUTS {
             let ctx = crate::app::styled_context();
@@ -2076,6 +2077,7 @@ mod tests {
             mode: &modes,
             range: &ranges,
             keys: &[],
+            plain: false,
         };
         let ctx = crate::app::styled_context();
         let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, both);
@@ -2405,6 +2407,7 @@ mod tests {
             mode: &[],
             range: &[],
             keys,
+            plain: false,
         }
     }
 

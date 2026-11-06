@@ -189,7 +189,8 @@ tests, so a family has no golden directory until its first hardware run.
 To see how the apps show a fixture's frame, open it as a recording:
 `dmm-gui --replay crates/dmm-lib/tests/golden/<id>/<case>.yaml` (or
 `dmm-cli read --replay …`) plays that one frame from the meter the directory
-names, so a meter nobody here owns can still be looked at.
+names, so a meter nobody here owns can still be looked at. For its buttons and
+dropdowns, add [`--replay-draws-keys`](#hidden-flags).
 
 ## Generated doc tables
 
@@ -330,6 +331,11 @@ change. The burst is spent once per process, so a reconnect does not replay
 it. `dmm-cli read` takes the same two flags, with `--device mock` spelled out.
 `--replay <FILE>` takes them in place of `--mock-mode`, and opens the
 recording at the instant the preseed names.
+
+**Buttons during a replay.** A `dmm-gui --replay` session draws no remote row,
+and its mode and range stay plain labels, as a click would only be refused. `--replay-draws-keys`
+keeps them, for the doc screenshots and for a look at the buttons of a meter
+nobody here owns, from a golden fixture.
 
 **Replay without waiting.** `dmm-cli read --replay <FILE> --mock-clock-scale
 max` plays every frame at its recorded timestamp as fast as it decodes, and

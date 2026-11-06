@@ -388,6 +388,7 @@ impl Connection {
             mode: &self.choices.mode,
             range: &self.choices.range,
             keys: self.meter_keys().functions,
+            plain: false,
         }
     }
 
@@ -672,6 +673,22 @@ impl App {
         }
     }
 
+    /// Whether the session draws the meter's buttons and dropdowns. A recording
+    /// refuses every press, so it draws none, unless a contributor asked to see
+    /// them (`--replay-draws-keys`), when a press is refused all the same.
+    pub(super) fn draws_meter_controls(&self) -> bool {
+        self.source.replay.as_ref().is_none_or(|r| r.draws_keys)
+    }
+
+    /// The readouts' lists: what the meter offers, shown as plain labels where
+    /// the session draws no controls.
+    pub(super) fn readouts(&self) -> display::ReadoutChoices<'_> {
+        display::ReadoutChoices {
+            plain: !self.draws_meter_controls(),
+            ..self.connection.readouts()
+        }
+    }
+
     pub(super) fn send_command(&self, cmd: &str) {
         if let Some(worker) = &self.connection.worker {
             let _ = worker.cmd_tx.send(RemoteCommand::Named(cmd.to_string()));
@@ -870,7 +887,7 @@ impl App {
                         l10n: &self.l10n,
                         tc: &tc,
                         state: self.reading_state(),
-                        choices: self.connection.readouts(),
+                        choices: self.readouts(),
                     };
                     let (scale, measured_ratios, picked) = display::show_reading_large(
                         ui,
@@ -1871,6 +1888,7 @@ mod tests {
                 replay: Some(crate::ReplaySource {
                     replay: Arc::new(replay),
                     path: std::path::PathBuf::from("dcv-steps.replay"),
+                    draws_keys: false,
                     recorded: std::time::SystemTime::UNIX_EPOCH,
                 }),
                 ..crate::CliOverrides::none()

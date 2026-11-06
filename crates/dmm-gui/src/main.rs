@@ -100,6 +100,12 @@ struct Args {
     #[arg(long, hide = true, value_name = "SECS")]
     mock_clock_preseed: Option<f64>,
 
+    /// Draw the meter's buttons and dropdowns during a --replay, where a click
+    /// is only refused. Hidden: a contributor tool for doc screenshots and for
+    /// a look at the buttons of a meter nobody here owns.
+    #[arg(long, hide = true, requires = "replay")]
+    replay_draws_keys: bool,
+
     /// Show the update notice for TAG (`v0.8.0` or `dev-<hash>`) without
     /// asking GitHub or saving anything. Hidden: a contributor tool for
     /// screenshots, documented in docs/development.md.
@@ -282,6 +288,9 @@ impl CliOverrides {
 pub struct ReplaySource {
     pub replay: Arc<Replay>,
     pub path: PathBuf,
+    /// `--replay-draws-keys`: the recording's meter keeps its buttons and
+    /// dropdowns on screen.
+    pub draws_keys: bool,
     /// Wall time the recording started at, which the first Connect makes this
     /// session's zero.
     pub recorded: SystemTime,
@@ -303,6 +312,7 @@ impl ReplaySource {
                 .expect("a well-formed recording"),
             ),
             path: PathBuf::from("bench.replay"),
+            draws_keys: false,
             // The `# recorded:` line above, as the loader would parse it.
             recorded: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_788_343_200),
         }
@@ -314,12 +324,13 @@ impl ReplaySource {
 ///
 /// A file that will not load is a bad flag value, reported the way a bad
 /// `--device` is: at the command line, before a window exists to show it in.
-fn load_replay(path: PathBuf, l: &Localizer) -> Result<ReplaySource, String> {
+fn load_replay(path: PathBuf, draws_keys: bool, l: &Localizer) -> Result<ReplaySource, String> {
     let replay = dmm_shared::replay::load(&path).map_err(|e| l.error(&e))?;
     let recorded = dmm_shared::replay::recorded_at(&replay).map_err(|e| l.read_error(&e))?;
     Ok(ReplaySource {
         replay: Arc::new(replay),
         path,
+        draws_keys,
         recorded: recorded.into(),
     })
 }
@@ -466,7 +477,7 @@ fn parse_args(l: &Localizer) -> CliOverrides {
 
     let replay = args.replay.map(|path| {
         let typed = path.display().to_string();
-        load_replay(path, l)
+        load_replay(path, args.replay_draws_keys, l)
             .unwrap_or_else(|reason| refuse(refused(&cmd, "replay", &typed, reason)))
     });
 

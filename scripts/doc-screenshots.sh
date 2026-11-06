@@ -281,7 +281,7 @@ launch() {
 launch_file() {
 	local path="$1" preseed="$2"
 	shift 2
-	"$GUI" run --replay "$path" \
+	"$GUI" run --replay "$path" --replay-draws-keys \
 		--mock-clock-preseed "$preseed" --mock-clock-scale "$CLOCK_SCALE" "$@" >/dev/null
 }
 

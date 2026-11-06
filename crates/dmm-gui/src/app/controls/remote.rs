@@ -267,10 +267,12 @@ impl App {
         let font_size = 12.0 * scale;
         let spacing = 3.0 * scale;
 
-        // Only show controls when connected with measurement data and supported commands
+        // Only show controls when connected with measurement data and supported
+        // commands, in a session that draws them.
         if self.connection.state != ConnectionState::Connected
             || self.last_measurement.is_none()
             || self.connection.supported_commands().is_empty()
+            || !self.draws_meter_controls()
         {
             // No button row to join: the app's chips keep their own, so an
             // active scale or alarm can still be turned off while
@@ -721,6 +723,86 @@ mod tests {
             .filter(|(_, n)| n.role() == egui::accesskit::Role::Button)
             .filter_map(|(_, n)| n.label().map(str::to_string))
             .collect()
+    }
+
+    /// What can be clicked in `app`'s single-line reading column, buttons and
+    /// dropdowns, and its plain text.
+    fn narrow_column(app: &mut App) -> (Vec<String>, Vec<String>) {
+        let ctx = crate::app::styled_context();
+        ctx.enable_accesskit();
+        let out = headless_frame(&ctx, None, None, vec![], |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                app.show_reading_column(ui, crate::app::layout::ContentLayout::Narrow);
+            });
+        });
+        let nodes = a11y(&out).0;
+        use egui::accesskit::Role;
+        let of = |roles: &[Role]| -> Vec<String> {
+            nodes
+                .iter()
+                .filter(|(_, n)| roles.contains(&n.role()))
+                .filter_map(|(_, n)| n.label().or(n.value()).map(str::to_string))
+                .collect()
+        };
+        (of(&[Role::Button, Role::ComboBox]), of(&[Role::Label]))
+    }
+
+    /// A replay refuses every press, so it draws none of the meter's buttons or
+    /// dropdowns: the mode and range stay as text where they were, and the
+    /// app's chips stay. The contributor flag brings them back; a live meter
+    /// never loses them.
+    #[test]
+    fn a_replay_draws_no_meter_controls_unless_asked() {
+        use dmm_lib::protocol::{Choice, Setting};
+        let choices = |n: &[(&'static str, bool)]| -> Vec<Choice> {
+            n.iter()
+                .enumerate()
+                .map(|(id, &(label, current))| Choice {
+                    id: id as u16,
+                    label: label.into(),
+                    current,
+                })
+                .collect()
+        };
+        let app_with_lists = || {
+            let mut app = connected_to("ut61eplus");
+            app.connection
+                .choices
+                .set(Setting::Mode, choices(&[("DC V", true), ("AC V", false)]));
+            app.connection
+                .choices
+                .set(Setting::Range, choices(&[("Auto", true), ("22V", false)]));
+            let reading = app.last_measurement.as_mut().expect("a reading");
+            reading.mode = "DC V".into();
+            reading.range_label = "22V".into();
+            app
+        };
+        let has = |list: &[String], text: &str| list.iter().any(|l| l.contains(text));
+
+        let (buttons, _) = narrow_column(&mut app_with_lists());
+        assert!(has(&buttons, "HOLD"), "{buttons:?}");
+        assert!(has(&buttons, "Range"), "{buttons:?}");
+
+        let mut replay = app_with_lists();
+        replay.source.replay = Some(crate::ReplaySource::fixture());
+        let (buttons, labels) = narrow_column(&mut replay);
+        for gone in ["HOLD", "Range", "Mode"] {
+            assert!(!has(&buttons, gone), "{gone}: {buttons:?}");
+        }
+        for kept in ["Scale", "Alarm"] {
+            assert!(has(&buttons, kept), "{kept}: {buttons:?}");
+        }
+        for text in ["22V", "DC V"] {
+            assert!(has(&labels, text), "{text}: {labels:?}");
+        }
+
+        replay.source.replay = Some(crate::ReplaySource {
+            draws_keys: true,
+            ..crate::ReplaySource::fixture()
+        });
+        let (buttons, _) = narrow_column(&mut replay);
+        assert!(has(&buttons, "HOLD"), "{buttons:?}");
+        assert!(has(&buttons, "Range"), "{buttons:?}");
     }
 
     /// A model that names a shared button shows that instead of the generic

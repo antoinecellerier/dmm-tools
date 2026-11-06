@@ -113,10 +113,12 @@ top-right corner in every layout and expire on their own.
   VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
   what the meter offers from the current dial position, with the live entry
   marked `●`. Picking an entry switches the meter. Dial positions with a
-  single mode, modes with a fixed range, and other meters keep the plain label.
+  single mode, modes with a fixed range, a replay and other meters keep the plain
+  label.
 - On ZOTEK meters the mode label is a dropdown of the meter's function keys,
   the key for the function shown marked `●`. Picking one presses that key,
   the marked one too, which switches between diode and continuity or °C and °F.
+  A replay keeps the plain label.
 - Active flags shown as colored badges, in this order:
   - **HV!** — high voltage warning (red)
   - **HOLD** — display frozen on meter
@@ -136,7 +138,7 @@ top-right corner in every layout and expire on their own.
 ## Remote Control
 
 A row of buttons shown when connected and receiving data (visible in the
-[reading display screenshot above](#reading-display)):
+[reading display screenshot above](#reading-display)), except during a replay:
 
 | Button | Description |
 |---|---|

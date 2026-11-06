@@ -70,7 +70,7 @@ impl App {
             l10n: &self.l10n,
             tc: &tc,
             state: self.reading_state(),
-            choices: self.connection.readouts(),
+            choices: self.readouts(),
         };
         let measurement = self.last_measurement.as_ref();
         let picked = match layout {

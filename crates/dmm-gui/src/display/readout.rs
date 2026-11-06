@@ -25,6 +25,9 @@ pub struct ReadoutChoices<'a> {
     /// The meter's function keys, from its profile: the mode readout lists
     /// them when `mode` has nothing to pick.
     pub keys: &'a [MeterKey],
+    /// Draw what these lists would offer as plain labels, in the same places:
+    /// the session can't press the meter.
+    pub plain: bool,
 }
 
 impl ReadoutChoices<'_> {
@@ -153,6 +156,9 @@ pub(super) fn show_mode_readout(
     size: f32,
     choices: ReadoutChoices<'_>,
 ) -> Option<ReadoutPick> {
+    if choices.plain {
+        return show_choice_readout(ui, l10n, &MODE_READOUT, &m.mode, size, &[]);
+    }
     if mode_switch_offered(choices.mode) || choices.keys.is_empty() {
         return show_choice_readout(ui, l10n, &MODE_READOUT, &m.mode, size, choices.mode);
     }
@@ -188,7 +194,7 @@ pub(super) fn show_range_readout(
     l10n: &Localizer,
     m: &Measurement,
     size: f32,
-    choices: &[Choice],
+    choices: ReadoutChoices<'_>,
     at_rest: RangeAtRest,
 ) -> Option<ReadoutPick> {
     // A meter that reports no range at all has nothing to label, in any
@@ -196,10 +202,11 @@ pub(super) fn show_range_readout(
     if m.range_label.is_empty() {
         return None;
     }
-    if at_rest == RangeAtRest::Nothing && !mode_switch_offered(choices) {
+    if at_rest == RangeAtRest::Nothing && !mode_switch_offered(choices.range) {
         return None;
     }
-    show_choice_readout(ui, l10n, &RANGE_READOUT, &m.range_label, size, choices)
+    let list = if choices.plain { &[] } else { choices.range };
+    show_choice_readout(ui, l10n, &RANGE_READOUT, &m.range_label, size, list)
 }
 
 /// A readout under the reading: a plain label, or — when the meter lists more
