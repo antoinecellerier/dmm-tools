@@ -65,7 +65,7 @@
 - **The UT8802 follows UNI-T's software for sign, OL and status flags**
 - **The UT171's protocol now follows UNI-T's software** — the earlier decoding misread most of each frame.
 - **Alarms and scaling use base units on every prefixed reading** — on H, Wh, Ah, W/m² and °, a range step idled the alarm and put a scale 1000× off.
-- **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
+- **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960, and HI on the UT804, read as no reading** — the graph, statistics and exports took LO as 0 % and HI as OL.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **Dashes on the VC-880, VC650BT and VC-890 read as no reading** — they showed OL, and a number on a VC-880 or VC650BT setup screen counted as a measurement.
 - **Display text that can't be read shows `?` instead of OL** — on UT61+, UT8802, UT8803, VC-880, VC650BT, VC-890 and ZOTEK meters.

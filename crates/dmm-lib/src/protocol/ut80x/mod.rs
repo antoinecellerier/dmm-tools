@@ -732,32 +732,34 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
 
     let dc = matches!(coupling, Some(Coupling::Dc | Coupling::AcDc));
 
-    // Overload frames: digit 1 = 0xA. Digit 2 == 0xC is LO, anything else
-    // an overload (possibly negative); digits 3-5 are ignored (spec §7.4
+    // Overload frames: digit 1 = 0xA, digit 2 picks the pattern: A an
+    // overload (possibly negative), C LO; digits 3-5 are ignored (spec §7.4
     // item 6). The vendor reads LO as 0.0, but the LCD shows LO with no
-    // number (spec §3.3), so it is no reading here: a 0 would pass for a
-    // real 4 mA. An idle frame (digit 4 == 0xB) shows all zeros.
+    // number (spec §3.3), so it is no reading here: a 0 would pass for a real
+    // 4 mA. On the UT804, F is the "HI" pattern of the §8 cross-reference,
+    // and the manual names HI beside LO; what the LCD draws for it is
+    // unknown (§3.2), so it carries no digits. The vendor takes any other
+    // pattern as an overload; nothing says the meter shows OL for it, so it
+    // is reported and read as `?`. An idle frame (digit 4 == 0xB) shows all
+    // zeros.
     let (value, display_raw) = if nibbles[0] == 0xA {
-        // Digit 2 is A (overload), C ("L0") or F ("HI") in the known
-        // overload patterns (§8).
-        if !matches!(nibbles[1], 0xA | 0xC | 0xF) {
-            unrecognised.report("overload pattern");
-        }
         // The LCD's own text for the patterns it has been seen to draw,
         // the vendor's fixed "L0" / "0L" for the rest.
-        let lcd = matches!(nibbles[1], 0xA | 0xC)
-            .then(|| ut804_lcd_text(&nibbles[0..5], dp_pos, negative))
-            .flatten();
-        if nibbles[1] == 0xC {
-            (
-                MeasuredValue::NoReading("LO"),
-                Some(lcd.unwrap_or_else(|| "L0".to_string())),
-            )
-        } else {
-            (
+        let lcd = || ut804_lcd_text(&nibbles[0..5], dp_pos, negative);
+        match nibbles[1] {
+            0xA => (
                 MeasuredValue::Overload,
-                Some(lcd.unwrap_or_else(|| overload_display(negative).to_string())),
-            )
+                Some(lcd().unwrap_or_else(|| overload_display(negative).to_string())),
+            ),
+            0xC => (
+                MeasuredValue::NoReading("LO"),
+                Some(lcd().unwrap_or_else(|| "L0".to_string())),
+            ),
+            0xF if model == Model::Ut804 => (MeasuredValue::NoReading("HI"), None),
+            _ => {
+                unrecognised.report("overload pattern");
+                (MeasuredValue::UNRECOGNISED, None)
+            }
         }
     } else if nibbles[3] == 0xB {
         (MeasuredValue::Normal(0.0), Some("0".to_string()))
@@ -1796,13 +1798,13 @@ mod tests {
 
     #[test]
     fn ut804_overload_nibble1() {
-        // Digit1 = 0xA + any digit2 but 0xC → overload.
-        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x4, 0, 0x0);
+        // Digit 1 = 0xA and digit 2 = 0xA → overload.
+        let p = ut804_payload(&[0xA, 0xA, 0xE, 0, 0], 1, 0x4, 0, 0x0);
         let m = parse_measurement_ut804(&p).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
 
         // Negative overload via status bit 2.
-        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x1, 2, 0x4);
+        let p = ut804_payload(&[0xA, 0xA, 0xE, 0, 0], 1, 0x1, 2, 0x4);
         let m = parse_measurement_ut804(&p).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
         assert_eq!(m.display_raw.as_deref(), Some("-0L"));
@@ -2145,10 +2147,11 @@ raw_payload=11"#
         );
     }
 
-    /// Overload: digit 1 = 0xA and digit 2 anything but 0xC.
+    /// Overload: digit 1 and digit 2 = 0xA. A digit the LCD has not been
+    /// seen to draw leaves the vendor's fixed "0L".
     #[test]
     fn ut804_snapshot_overload_positive() {
-        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x4, 0, 0x0);
+        let p = ut804_payload(&[0xA, 0xA, 0xE, 0, 0], 1, 0x4, 0, 0x0);
         let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(
             snapshot(&m),
@@ -2168,7 +2171,7 @@ raw_payload=11"#
     /// The same overload with the sign bit: the digits read "-0L".
     #[test]
     fn ut804_snapshot_overload_negative() {
-        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x1, 2, 0x4);
+        let p = ut804_payload(&[0xA, 0xA, 0xE, 0, 0], 1, 0x1, 2, 0x4);
         let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(
             snapshot(&m),
@@ -2706,11 +2709,12 @@ raw_payload=11"#
             ut804_payload(&[0, 0, 0, 0xB, 0], 1, 0x1, 2, 0x0),
             ut804_payload(&[1, 2, 3, 4, 5], 2, 0x1, 2, 0x0),
             ut804_payload(&[0xA, 0xC, 2, 3, 4], 1, 0x1, 2, 0x0),
-            // Overload, "L0" and "HI" (spec §8).
+            // Overload and "L0" (spec §8).
             ut804_payload(&[0xA, 0xA, 0, 0xC, 0xA], 3, 0x4, 0, 0x1),
             ut804_payload(&[0xA, 0xC, 0, 0xA, 0xA], 0, 0xF, 0, 0x0),
-            ut804_payload(&[0xA, 0xF, 1, 0xA, 0xA], 0, 0xF, 0, 0x0),
         ];
+        // "HI" (spec §8), the UT804's alone.
+        let hi = ut804_payload(&[0xA, 0xF, 1, 0xA, 0xA], 0, 0xF, 0, 0x0);
         for acdc in 0..=3 {
             ut804.push(ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x1, acdc, 0x0));
         }
@@ -2731,6 +2735,7 @@ raw_payload=11"#
         ];
         let cases = ut804
             .iter()
+            .chain([&hi])
             .map(|p| (parse_measurement_ut804 as fn(&[u8]) -> _, p))
             .chain(
                 ut803
@@ -2868,19 +2873,44 @@ raw_payload=11"#
         }
     }
 
-    /// Digit 1 blank with digit 2 other than A, C or F still reads as an
-    /// overload.
+    /// Digit 1 blank with digit 2 other than A, C or F is no pattern the
+    /// meter is known to send: reported, and read as `?`, not OL.
     #[test]
     fn ut804_undocumented_overload_pattern_is_reported() {
         let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x4, 0, 0x0);
         let (m, reports) = parse_reported(parse_measurement_ut804, &p);
         let m = m.unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
-        assert_eq!(m.display_raw.as_deref(), Some("0L"));
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
+        assert_eq!(m.display_raw, None);
         assert_eq!(
             reports,
             ["ut804: unrecognised overload pattern: nibbles A10001400"]
         );
+    }
+
+    /// Digit 2 = F on the UT804 is HI (§8, the manual's HI): a word, silent,
+    /// not OL. Those sources are the UT804's alone, so on a UT71 it is an
+    /// unknown pattern.
+    #[test]
+    fn ut804_hi_is_a_word() {
+        let p = ut804_payload(&[0xA, 0xF, 0, 0xA, 0xA], 0, 0xF, 0, 0x0);
+        let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+        let m = m.unwrap();
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("HI")),
+            "{:?}",
+            m.value
+        );
+        assert_eq!(m.display_raw, None);
+        assert!(reports.is_empty(), "{reports:?}");
+
+        let (m, reports) = parse_reported(|p| parse_ut804_layout(Model::Ut71Cde, p), &p);
+        assert!(matches!(m.unwrap().value, MeasuredValue::NoReading("?")));
+        assert_eq!(reports.len(), 1, "{reports:?}");
     }
 
     /// A blank inside a UT804 reading still renders as a gap; digit 5 blank
