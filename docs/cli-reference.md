@@ -247,10 +247,10 @@ after it.
 
 Meters with more than one display (the UT181A's thermocouples, frequency and
 period, AC and DC parts, dB's voltage, REL, MIN/MAX and Peak; the UT171's
-frequency) report those **sub-values** indented under the reading in text
+frequency, duty, period, REL reference, AC and DC parts) report those **sub-values** indented under the reading in text
 output and in an `aux` array in JSON. CSV adds one
 `auxN_label,auxN_value,auxN_unit` group per sub-value the meter family can
-send (four for the UT181A, one for the UT171 and the UT61E+), left empty when
+send (four for the UT181A, two for the UT171, one for the UT61E+), left empty when
 a reading uses fewer, so every row lines up.
 Single-display meters keep the six base columns. With `--integrate`, the
 `integral` columns come before the aux groups.

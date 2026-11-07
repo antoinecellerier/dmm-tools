@@ -1459,12 +1459,12 @@ mod tests {
     ///   lose coverage. Each fix needs that family's own dial order and a
     ///   hardware run — tracked in `docs/verification-backlog.md`, "Capture
     ///   tool".
-    /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut71ab`, `ut71cde`, `vc920`,
-    ///   `ut171` declare no `choices`, so nothing is swept whatever the order
-    ///   and they cost nothing.
+    /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut71ab`, `ut71cde`, `vc920`
+    ///   declare no `choices`, so nothing is swept whatever the order and
+    ///   they cost nothing.
     const SPLIT_GATE: &[&str] = &[
-        "ut8802", "ut8803", "ut803", "ut804", "ut71ab", "ut71cde", "vc920", "ut171", "vc880",
-        "vc650bt", "vc890",
+        "ut8802", "ut8803", "ut803", "ut804", "ut71ab", "ut71cde", "vc920", "vc880", "vc650bt",
+        "vc890",
     ];
 
     #[test]

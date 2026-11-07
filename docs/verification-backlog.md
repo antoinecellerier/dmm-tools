@@ -45,7 +45,7 @@ with, and how well that probe is backed:
 | UT61D+, UT161B/D | same | same, the name being the model | Unverified; no report has named one of these meters |
 | UT60BT, UT202BT | same, over their built-in Bluetooth | same, the name being `UT60BT` or `UT202BT` | Unverified; a community UT60BT's `UT60BT` reply is on record (ut61-family approach doc), nothing for the UT202BT |
 | UT181A | `AB CD 04 00 05 01 0A 00` (SET_MONITOR) | 2-byte-LE frames, type `0x02`, payload ≥ 31 bytes | Reply verified on hardware ([PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8), [#5](https://github.com/antoinecellerier/dmm-tools/issues/5)), never through the detector |
-| UT171 | `AB CD 04 00 0A 01 0F 00` (connect) | 2-byte-LE frames, type `0x02`, 16- or 22-byte payload | Deduced from the vendor traces, unverified |
+| UT171 | `AB CD 04 00 0A 01 0F 00` (connect) | 2-byte-LE frames, type `0x02`, 11- to 23-byte payload | Deduced from the vendor traces, unverified |
 | UT8802 | nothing — the meter streams | two `0xAC` frames exactly 8 bytes apart | Deduced from the vendor traces, unverified |
 | UT8803 | nothing — the meter streams | `AB CD` frame, byte 3 `0x02`, 21-byte checksum | Deduced from the vendor traces, unverified |
 | UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, taken as a UT804; a UT803 (19200 baud) is not detected | Verified by @clazie on a UT804 over the UT-D04 (CH9325, [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)); the UT803 is undetectable by design |
@@ -88,7 +88,7 @@ with, and how well that probe is backed:
 ### Replies and names
 
 - The UT181A/UT171 payload overlap (19 bytes without aux or bargraph, against
-  16/22): a short frame goes to whichever probe went out last. Splitting them
+  11 to 23): a short frame goes to whichever probe went out last. Splitting them
   by parse needs UT171 hardware. (#4)
 - A UT181A reply after its ~600 ms window, read as a UT171 once `0x0A` (UT181A
   start recording) is out, and whether a UT181A ever starts recording under `auto`

@@ -66,8 +66,8 @@ maps). That one shipped: the CLI's `--scale --offset --unit` and the GUI's
 and [Scale](gui-reference.md#scale). The entries below are the survey's other
 candidates.
 
-A software REL is left out on purpose: every supported family but the UT171
-does REL in firmware and flags it in its readings, and the UT61E+ family,
+A software REL is left out on purpose: every supported family does REL in
+firmware and flags it in its readings, and the UT61E+ family,
 VC880/VC890 and UT181A take it as a remote command, so a client-side duplicate
 would confuse more than it adds.
 

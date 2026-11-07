@@ -29,10 +29,18 @@ The manual defines all **application-layer semantics**:
 - **Ranges**: Complete per-mode range tables with accuracy specs
   (pages 28-34)
 - **Bar graph**: 21 pointers (UT171A), 31 pointers (UT171B/C)
-- **Data logging**: Up to 9,999 records
+- **Data logging**: manual and timed storage, recall, delete; no record
+  capacity found (storage section and page 4, renders, 2026-11-07)
 - **Update rate**: 4-5 times per second
+- **Keys and display words**: what each key does, the LCD symbol table,
+  NCV's `EF` and dash segments, the square-wave output
 - **Settings**: USB communication on/off, backlight, buzzer, auto power
   off, RTC date/time (UT171C)
+
+PDF pages 16-19, the specification tables, have no text layer, and the
+2026-11-07 key and display reading
+(`references/ut171/manual-keys-2026-11-07.md`) was done from page renders
+only.
 
 ### UT171C PC Software
 
@@ -93,6 +101,10 @@ Key findings:
 - `"First Query Data Count,Please!"` -- data logging sequence
 - VID/PID strings: `L"10C4"`, `L"EA80"`
 
+`strings -el` drops characters outside ASCII, so the Ω and µ rows came out
+as ` Range 1: 0 to 600 ` with no unit; the first reading took them for
+unlabelled rows and missed the resistance table.
+
 ### 4. Ghidra headless decompilation
 
 ```sh
@@ -104,24 +116,74 @@ Key findings:
     > ut171c_decompiled.txt 2>&1
 ```
 
-The decompilation produced 881,179 lines (28,745 functions). The
-application is a Delphi/DevExpress GUI with protocol code embedded
-in compiled virtual method tables.
+The decompilation produced 881,179 lines (28,745 functions). It stops at
+VA 0xBB2318 and skips almost all of the main form unit
+(0xBB6D08–0xBC3400): the receive handler, the frame timer and every frame
+handler are missing from it.
 
-Key functions identified:
-- `FUN_0065478e` (line 297968) -- frame header validator (`!= 0xabcd`)
-- `FUN_00755400` (line 397440) -- command frame builder (AB CD
-  framing, length selection, payload encoding)
-- `FUN_0075425c` (line 396673) -- USB HID initialization (LoadLibrary
-  SLABHIDtoUART.dll, VID/PID matching, UART configuration)
+Functions the first reading identified, and what they turned out to be:
 - `FUN_00755228` (line 397330) -- reader thread (polling HidUart_Read,
-  SendMessage to main thread with received data)
-- `FUN_00630e0b` (line 267638) -- mode transition command table
-  (maps mode pairs to command codes)
-- `FUN_00630d5c` (line 267600) -- mode byte grouping for AC/complex
-  measurement modes
-- `FUN_00630dd4` (line 267624) -- mode byte grouping for
-  resistance/voltage/diode modes
+  SendMessage to main thread with received data). Holds.
+- `FUN_0075425c` (line 396673) -- USB HID initialization (LoadLibrary
+  SLABHIDtoUART.dll, VID/PID matching, UART configuration). Holds.
+- `FUN_00755400` (line 397440) -- taken for the command frame builder. It
+  is the published method `TCP2110.SendCommand`, with no caller in `.text`.
+- `FUN_0065478e` (line 297968) -- taken for the frame header validator. It
+  parses the app's Midas/ClientDataSet packets, as do `FUN_0065492d` and
+  `FUN_00654bf5`.
+- `FUN_00630e0b`, `FUN_00630d5c`, `FUN_00630dd4`, `FUN_00630c1e`,
+  `FUN_0064081c`, `FUN_006405b1` -- taken for the mode transition table,
+  the mode groups and the mode encoders. They are field-type code in the
+  statically linked Midas/DBClient dataset engine.
+
+### 5. Disassembly re-read (2026-11-06 and 2026-11-07)
+
+Asked by the user while planning the UT171 rework: two blind reads of
+UT171C.exe, each by a separate subagent that saw no other's notes, the
+second also without the spec's earlier conclusions until its own reading
+was done. Their findings agree except on the captions of the °C and °F
+buttons (stale "OHM" in the first, the degree signs in the second), so the
+spec cites those buttons' handler names. The second is more complete on
+commands, replies and status bits.
+
+- `objdump -d -M intel` of UT171C.exe, cited by VA, for the main form unit
+  the decompile lacks.
+- TMainFrm's RTTI tables: the published method table for method names and
+  addresses, the extended field table for field names and offsets
+  (`FMeasure_Code` at +0x670 and so on).
+- The TMainFrm DFM resource for button names, captions and default label
+  text.
+- A direct-call search over all of `.text` for each function the spec
+  cited, and a scan of all 35 loads of the status-array pointer for the
+  readers of bytes 5 and 6.
+- The manual's keys, dial, display words, NCV and square wave, read from
+  page renders (2026-11-07).
+
+The reports are in `references/review-2026-11-04/arch/vendor-audit-2026-11-06/`
+(`ut171.md`, `second-read/ut171.md`) and
+`references/ut171/manual-keys-2026-11-07.md`.
+
+## What Misled the First Reading
+
+- The decompile has none of the app's frame code (technique 4), so the
+  first reading searched it for anything that looked like a parser and
+  found the Midas/DBClient dataset engine: its packet magic `0xBDE01996`,
+  its field-type switch and its type-size table. The header check, the
+  flag bits, the frame type in byte 6, the 26-entry mode table, the mode
+  groups, the transition commands and the square-wave pseudo-mode 0x1007
+  all came from there. None of those functions has a caller outside the
+  engine.
+- `TCP2110.SendCommand` writes a 1-byte length and was taken for the
+  command builder; the commands 0x01, 0x51, 0x52 and 0xFF came from it.
+  Every send site writes constant 2-byte-length templates instead.
+- `strings -el` hid the Ω and µ range rows (technique 3).
+- gulux's parser was taken for capture-driven; the 2026-11-06 read found
+  no capture in it, so the "USB confirmed" mode bytes and the 0x40/0x20
+  "DC/AC" byte rested on its two test frames and its code.
+
+How it was settled: the disassembly by VA, the RTTI field and method
+tables and the DFM captions name what each address does, and the two blind
+reads came to the same map. The spec's §3.3, §4, §5 and §6 now carry it.
 
 ## What Was Determined
 
@@ -131,10 +193,12 @@ Key functions identified:
 |---------|------------|--------|
 | UT171A: 40,000 counts; UT171B/C: 60,000 counts | **[KNOWN]** | Manual page 3 |
 | All measurement ranges and accuracy specs | **[KNOWN]** | Manual pages 28-34 |
-| Data logging: 9,999 records | **[KNOWN]** | Manual page 4 |
+| Data logging: STORE, timed storage (1–240 s interval), recall, delete | **[KNOWN]** | Manual page 9 |
 | K-type thermocouple (UT171B/C only) | **[KNOWN]** | Manual page 20 |
 | Square wave output (UT171C only) | **[KNOWN]** | Manual page 25 |
 | 600A current clamp (UT171C only) | **[KNOWN]** | Manual page 23 |
+| NCV: `EF`, then 1–5 dash segments | **[KNOWN]** | Manual page 24 |
+| Lightning bolt: "Alarm for high voltage" | **[KNOWN]** | Manual page 6 |
 | Update rate: 4-5 times/second | **[KNOWN]** | Manual page 4 |
 | CAT III 1000V / CAT IV 600V | **[KNOWN]** | Manual page 2 |
 
@@ -145,64 +209,58 @@ Key functions identified:
 | Uses SLABHIDtoUART.dll (HidUart API) | **[VENDOR]** | String extraction + decompilation |
 | VID 0x10C4, PID 0xEA80 (CP2110) | **[VENDOR]** | Decompilation: L"10C4", L"EA80" |
 | Baud rate index 6 = 9600 | **[VENDOR]** | Decompilation: FUN_00754560 |
-| Frame header: 0xABCD | **[VENDOR]** | Decompilation: FUN_0065478e |
-| Command frame builder | **[VENDOR]** | Decompilation: FUN_00755400 |
-| Command lengths: 0x03, 0x04, 0x0A, 0x12 | **[VENDOR]** | Decompilation: command builder switch |
-| Data logging command 0x01 (multi-field) | **[VENDOR]** | Decompilation: semicolon-separated fields |
-| Data logging commands 0x51, 0x52 | **[VENDOR]** | Decompilation: length 0x0A branch |
-| Mode transition command table | **[VENDOR]** | Decompilation: FUN_00630e0b |
-| Mode byte groups (AC: 0x05-0x1d; R/V: 0x02-0x24) | **[VENDOR]** | Decompilation: FUN_00630d5c/dd4 |
-| 26 mode bytes mapped (via encoding/decoding/size functions) | **[VENDOR]** | Decompilation: FUN_0064081c, FUN_006405b1, FUN_00630c1e |
-| NCV = mode byte 0x24 (transitions to/from VDC, OHM) | **[VENDOR]** | Decompilation: mode transition table + string "NCV" |
-| AUTO flag: bit 6 inverted (clear = active) | **[VENDOR]** | Decompilation: FUN_00980070 |
-| HOLD flag: bit 7; LowBat: bit 2 | **[VENDOR]** | Decompilation: FUN_0065492d + USB captures |
-| Frame type byte (offset 6): 0x01=standard, 0x03=extended | **[VENDOR]** | Decompilation: FUN_00654bf5 |
-| Range byte: raw 1-based index (no masking) | **[VENDOR]** | Decompilation + chart range strings |
 | Reader thread: 70ms polling, SendMessage dispatch | **[VENDOR]** | Decompilation: FUN_00755228 |
 | UART: 500ms timeout, 100ms read interval | **[VENDOR]** | Decompilation: FUN_00754560 |
+| Frame check: header, LE16 length, LE16 checksum | **[VENDOR]** | Disassembly: `tmr1Timer`, VA 0xBB978C |
+| Command table, all on the 2-byte framing | **[VENDOR]** | Disassembly: send sites, `.data` templates 0xBE1D9C |
+| Measurement layout, byte 13, unit codes, no scaling | **[VENDOR]** | Disassembly: `HandleMeasurement`, VA 0xBBFBF0 |
+| Status bits of bytes 5 and 6, with every reader | **[VENDOR]** | Disassembly: status-array scan |
+| Range rows per mode | **[VENDOR]** | Disassembly: range builder, VA 0xBBD330 |
+| Mode map 0x01–0x1F | **[VENDOR]** | Disassembly: function commands, DFM captions, ribbon groups |
+| Stored record, replies 0x01 and 0x72 | **[VENDOR]** | Disassembly: VA 0xBC159C, 0xBBF9E0, 0xBC2800 |
 | Complete CP2110 feature report map (20 reports) | **[VENDOR]** | Ghidra: SLABHIDtoUART.dll decompilation |
 | UART config report 0x50 byte layout confirmed | **[VENDOR]** | Ghidra: SLABHIDtoUART.dll |
 | UART status FIFO counts are big-endian | **[VENDOR]** | Ghidra: SLABHIDtoUART.dll report 0x42 |
-| Complete function list (28 modes) | **[VENDOR]** | Software manual UI screenshots |
 
-### Resolved by Deep Decompilation Analysis (Phase 2)
+### Retracted
 
-The initial decompilation pass identified key functions. A second pass
-with targeted agents resolved most gaps:
-
-| Previously unverified | Resolution | Source |
-|-----------------------|------------|--------|
-| Mode byte assignments (13 of 28+) | **26 modes now mapped** via FUN_0064081c (mode→encoding), FUN_006405b1 (encoding→mode), FUN_00630c1e (mode→storage size) | [VENDOR] |
-| Flag byte bit positions | **AUTO (bit 6, inverted), HOLD (bit 7), LowBat (bit 2), extended-frame (bit 1), conditional MIN/MAX (bit 3 gated by bit 0)** from FUN_00980070 and FUN_0065492d | [VENDOR] |
-| Range byte decoding | **Raw 1-based index** (no masking), per-mode range tables from chart strings | [VENDOR] |
-| Data logging commands | **0x01=start-save (3 fields), 0x51/0x52=read ops, 0xFF=delete** with byte-level frame layouts | [VENDOR] |
-| SLABHIDtoUART.dll internals | **Complete CP2110 feature report map (20 IDs)**, UART config byte layout, open sequence | [VENDOR] |
+| First reading | What it was | Source of the correction |
+|---------------|-------------|--------------------------|
+| Mode bytes from FUN_0064081c, FUN_006405b1, FUN_00630c1e | Dataset field-type codes | Second read, callers only inside the engine |
+| Flag bits: AUTO bit 6 inverted, HOLD bit 7, LowBat bit 2, extended frame bit 1, MIN/MAX bit 3 gated by bit 0 (FUN_00980070, FUN_0065492d + "USB captures") | HOLD bit 7 holds; the rest are §5.3's readings; bit 2 has no reader, and the "captures" were gulux's code | Status-array scan, both reads |
+| Frame type in byte 6 (FUN_00654bf5) | Status bits | Both reads |
+| Header check in FUN_0065478e | Dataset packet parser; the real check is VA 0xBB978C | Both reads |
+| Command builder FUN_00755400, lengths 0x03/0x04/0x0A/0x12, commands 0x01/0x51/0x52/0xFF | Uncalled `SendCommand` | Direct-call search |
+| Mode transition table, square-wave 0x1007 with 0xE0/0xE1 (FUN_00630e0b) | Field-type conversion | Second read |
+| NCV = 0x24 | NCV = 0x1A; 0x24 is not in the app | Both reads |
 
 ### What Still Requires Device Verification
 
 The open checks are in [verification.md](verification.md).
 
+## Sources Used and Avoided
+
+| Source | Status | Date |
+|--------|--------|------|
+| UT171A/B/C manual, UT171C software and installation instruction, Silicon Labs DLLs | Used | From the start (2026-06); re-read 2026-11-06/07 |
+| gulux/Uni-T-CP2110 (GPL-3.0): `README.md`, `UT171A.py`, `UTHID.py`, `testing/UTTest.py` | Used for cross-reference only, after the vendor reads | Fetched 2026-11-06, at the user's request |
+| Other community UT171 code | Not consulted for this spec (the UT-D07B docs cite libreble for the adapter only) | — |
+
+The two blind vendor reads opened no community code and read the spec's
+cross-reference sections only as claims to test. gulux's frames stay out
+of the repo by the user's ruling: the spec says they decode under its
+layout without reproducing them.
+
 ## Cross-Reference with Community Sources
 
-### gulux/Uni-T-CP2110 (Python, USB sniffing)
+### gulux/Uni-T-CP2110 (Python, UT171A)
 
-| Finding | Our RE | gulux | Agreement |
-|---------|--------|-------|:---------:|
-| Frame header AB CD | Ghidra: `!= 0xabcd` | Same | ✓ |
-| 16-bit LE checksum | Ghidra: endian conversion functions | Verified against captures | ✓ |
-| LE float32 values | Ghidra: float references in parsers | Same | ✓ |
-| Mode byte at offset 7 | Ghidra: mode transition table | 13 modes confirmed | ✓ |
-| Connect cmd: AB CD 04 00 0A 01 | Ghidra: command builder, length 0x03 for default | Same | ✓ |
-| VID 0x10C4, PID 0xEA80 | Ghidra: string extraction | Same | ✓ |
-| 9600 baud | Ghidra: baud index 6 | Same | ✓ |
-| Streaming communication model | Ghidra: reader thread polls continuously | Same | ✓ |
-| Data logging commands | Ghidra: 0x01, 0x51, 0x52, 0xFF | Not in gulux | New |
-| 13 additional mode bytes | Ghidra: FUN_0064081c/006405b1 | Not in gulux | New |
-| AUTO flag (bit 6, inverted) | Ghidra: FUN_00980070 | Not in gulux | New |
-| Frame type byte (offset 6) | Ghidra: FUN_00654bf5 | Not in gulux | New |
-| Range byte: raw 1-based | Ghidra + chart strings | Not in gulux | New |
-| Command length variants | Ghidra: 4 different lengths | Not in gulux | New |
-| CP2110 feature report map | Ghidra: SLABHIDtoUART.dll | Not in gulux | New |
+Compared in the spec's
+[cross-reference table](reverse-engineered-protocol.md#cross-reference-with-community-sources),
+2026-11-07. It agrees on the framing, the float, HOLD and twelve mode
+bytes, and its two test frames decode under the app's layout; it reads
+0x0B as diode against the app's capacitance, and byte 5 bit 2 as low
+battery, which the app does not read.
 
 ## File Inventory
 
@@ -213,5 +271,7 @@ The open checks are in [verification.md](verification.md).
 | UNI-T | `references/ut171/vendor-software/SLABHIDtoUART.dll` | CP2110 UART library |
 | UNI-T | `references/ut171/vendor-software/SLABHIDDevice.dll` | CP2110 HID library |
 | UNI-T | `references/ut171/vendor-software/sys.ini` | Default config |
-| Analysis | `references/ut171/vendor-software/ut171c_decompiled.txt` | Ghidra decompilation (881K lines) |
+| Analysis | `references/ut171/vendor-software/ut171c_decompiled.txt` | Ghidra decompilation (881K lines), without the main form unit |
+| Analysis | `references/review-2026-11-04/arch/vendor-audit-2026-11-06/ut171.md`, `second-read/ut171.md` | The two disassembly reads |
+| Analysis | `references/ut171/manual-keys-2026-11-07.md` | The manual's keys and display words, from renders |
 | UNI-T | `references/ut171/vendor-software/UT171B_Software.zip` | Original download |

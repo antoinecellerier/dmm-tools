@@ -120,7 +120,7 @@ USB families:
 - [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) — Python implementation (UT61E+, most complete)
 - [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — Go implementation (UT61E+)
 - [philpagel/ut8803e](https://github.com/philpagel/ut8803e) and [hskim7639/UNI-T](https://github.com/hskim7639/UNI-T) — UT8803 (its approach doc)
-- [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110) — UT171 captures and parser (UT171 spec)
+- [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110) — UT171A parser (UT171 spec)
 - [antage/ut181a](https://github.com/antage/ut181a) and [libsigrok `uni-t-ut181a`](https://github.com/sigrokproject/libsigrok/tree/master/src/hardware/uni-t-ut181a) — UT181A protocol (its approach doc)
 - [pylablib](https://github.com/AlexShkarin/pyLabLib) — Python implementation (VC-880)
 - [sigrok libsigrok](https://github.com/sigrokproject/libsigrok) — C; UT71x parser and CH9325 set-up (UT803/UT804 spec §8, UCI bench spec §9)

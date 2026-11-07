@@ -1,206 +1,54 @@
 //! UT171A/B/C protocol.
 //!
-//! Streaming protocol: user must manually enable "Communication ON" on the meter.
-//! No trigger byte needed — device streams 21-byte or 27-byte measurement frames.
+//! Streaming protocol: user must manually enable communication ("Usb" in
+//! the meter's setup) on the meter. Once the connect frame goes out, the
+//! meter streams measurement frames.
 //!
 //! Frame format: AB CD len_lo len_hi payload chk_lo chk_hi. The LE16 length
 //! counts payload + checksum, as on the UT181A.
 //! Checksum = 16-bit LE sum of the length bytes + payload bytes.
 //!
-//! Values are IEEE 754 float32 (LE). 26 measurement modes.
+//! What each byte means is how UNI-T's UT171C software reads it; no UT171
+//! has been read yet (`docs/research/ut171/verification.md`). The parser is
+//! in [`parse`].
 //!
 //! See docs/research/ut171/reverse-engineered-protocol.md
 
 pub(crate) mod devices;
+mod parse;
 
 use crate::error::{Result, Unsupported};
-use crate::flags::StatusFlags;
-use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol, Stability,
-    check_len, unknown_mode,
 };
 use crate::transport::Transport;
 use log::{debug, warn};
-use std::borrow::Cow;
+use parse::{MAX_MEASUREMENT_PAYLOAD, RESPONSE_MEASUREMENT, parse_measurement};
 use std::ops::RangeInclusive;
+
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use parse::all_labels;
+#[cfg(test)]
+pub(crate) use parse::all_units;
 
 /// Family label for [`report_unknown`].
 const FAMILY: &str = "ut171";
 
-/// Look up the human-readable range label for a (mode, range) pair.
-///
-/// Spec §5.4 lists the vendor software's range tables.
-/// Range byte is raw and 1-based (`0` = auto-range, no specific label).
-/// Only the modes whose range tables are explicitly documented in the spec
-/// are returned here; others get `None` and fall through to an empty label,
-/// so we never fabricate range bounds that the vendor string dump did not
-/// prove. AC variants of mADC/uADC/ADC share the same magnitudes as the DC
-/// tables per §5.4; AC+DC variants are not documented and intentionally
-/// return `None`.
-fn lookup_range(mode_byte: u8, range_byte: u8) -> Option<&'static str> {
-    if range_byte == 0 {
-        return None;
-    }
-    match (mode_byte, range_byte) {
-        // 0x08 Continuity (BEEP)
-        (0x08, 1) => Some("600Ω"),
-        // 0x09 Capacitance — continuous indexing nF/µF/mF
-        (0x09, 1) => Some("6nF"),
-        (0x09, 2) => Some("60nF"),
-        (0x09, 3) => Some("600nF"),
-        (0x09, 4) => Some("6µF"),
-        (0x09, 5) => Some("60µF"),
-        (0x09, 6) => Some("600µF"),
-        (0x09, 7) => Some("6mF"),
-        (0x09, 8) => Some("60mF"),
-        // 0x0E Conductance (nS)
-        (0x0E, 1) => Some("60nS"),
-        // 0x0F Frequency — continuous indexing Hz/kHz/MHz
-        (0x0F, 1) => Some("60Hz"),
-        (0x0F, 2) => Some("600Hz"),
-        (0x0F, 3) => Some("6kHz"),
-        (0x0F, 4) => Some("60kHz"),
-        (0x0F, 5) => Some("600kHz"),
-        (0x0F, 6) => Some("6MHz"),
-        (0x0F, 7) => Some("60MHz"),
-        // 0x11 µA DC, 0x12 µA AC (same magnitudes per §5.4)
-        (0x11 | 0x12, 1) => Some("600µA"),
-        (0x11 | 0x12, 2) => Some("6000µA"),
-        // 0x14 mA DC, 0x15 mA AC
-        (0x14 | 0x15, 1) => Some("60mA"),
-        (0x14 | 0x15, 2) => Some("600mA"),
-        // 0x17 A DC
-        (0x17, 1) => Some("6A"),
-        (0x17, 2) => Some("20A"),
-        _ => None,
-    }
-}
-
-/// Look up mode name and unit from mode byte.
-/// Returns `(Cow::Borrowed(name), unit)` for known modes,
-/// or `(Cow::Owned("Unknown(0xNN)"), "")` for unknown bytes.
-///
-/// Mode byte values: spec §6.
-fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
-    match known_mode(byte) {
-        Some((name, unit)) => (Cow::Borrowed(name), unit),
-        None => {
-            // §6 lists no other byte. Only the parser calls this.
-            report_unknown(FAMILY, "mode byte", format_args!("{byte:#04x}"));
-            (unknown_mode(byte), "")
-        }
-    }
-}
-
-/// Mode name and unit of a mode byte §6 lists, `None` for any other.
-fn known_mode(byte: u8) -> Option<(&'static str, &'static str)> {
-    match byte {
-        0x01 => Some(("LoZ V~", "V")),
-        0x02 => Some(("V DC", "V")),
-        0x03 => Some(("V AC", "V")),
-        0x04 => Some(("V AC+DC", "V")),
-        0x05 => Some(("mV DC", "mV")),
-        0x06 => Some(("mV AC", "mV")),
-        0x07 => Some(("mV AC+DC", "mV")),
-        0x08 => Some(("Continuity", "Ω")),
-        0x09 => Some(("Capacitance", "F")),
-        0x0A => Some(("Ω", "Ω")),
-        0x0B => Some(("Diode", "V")),
-        0x0C => Some(("°C", "°C")),
-        0x0D => Some(("°F", "°F")),
-        0x0E => Some(("nS", "nS")),
-        0x0F => Some(("Hz", "Hz")),
-        0x10 => Some(("Duty %", "%")),
-        0x11 => Some(("µA DC", "µA")),
-        0x12 => Some(("µA AC", "µA")),
-        0x13 => Some(("µA AC+DC", "µA")),
-        0x14 => Some(("mA DC", "mA")),
-        0x15 => Some(("mA AC", "mA")),
-        0x16 => Some(("mA AC+DC", "mA")),
-        0x17 => Some(("A DC", "A")),
-        0x18 => Some(("A AC", "A")),
-        0x19 => Some(("A AC+DC", "A")),
-        0x1A => Some(("VFC", "V")),
-        0x1B => Some(("% 4-20mA", "%")),
-        0x1C => Some(("600A DC", "A")),
-        0x1D => Some(("600A AC", "A")),
-        0x24 => Some(("NCV", "")),
-        _ => None,
-    }
-}
-
-/// Whether the aux float is the frequency: on V AC (0x03) and mV AC (0x06).
-fn aux_is_frequency(mode_byte: u8) -> bool {
-    matches!(mode_byte, 0x03 | 0x06)
-}
-
-/// Label and unit of a non-zero aux float in `mode_byte`.
-fn aux_label_unit(mode_byte: u8) -> (&'static str, &'static str) {
-    if aux_is_frequency(mode_byte) {
-        ("Frequency", "kHz")
-    } else {
-        ("Aux", "")
-    }
-}
-
-/// Every label the parser produces: each mode §6 lists, its range labels
-/// and its aux value's label.
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) fn all_labels(out: &mut crate::text::Labels) {
-    use crate::text::TextKind;
-    let by = devices::UT171.id;
-    for mode in 0..=u8::MAX {
-        let Some((name, _)) = known_mode(mode) else {
-            continue;
-        };
-        out.add(TextKind::Mode, name, by);
-        out.add(TextKind::Aux, aux_label_unit(mode).0, by);
-        for range in 0..=u8::MAX {
-            out.add(TextKind::Range, lookup_range(mode, range).unwrap_or(""), by);
-        }
-    }
-}
-
-/// Display unit for a (mode, range) pair.
-///
-/// The resistance float is range-relative: ranges 2-4 read in kΩ and 5-6
-/// in MΩ (spec §5.1, `[UNVERIFIED]` on our hardware). We keep the wire
-/// value and put the magnitude in the unit instead. Scaling for other modes
-/// (capacitance, conductance) is `[UNVERIFIED]`; they keep the base unit.
-fn display_unit(mode_byte: u8, range_byte: u8, base_unit: &'static str) -> &'static str {
-    match (mode_byte, range_byte) {
-        (0x0A, 2..=4) => "kΩ",
-        (0x0A, r) if r >= 5 => "MΩ",
-        _ => base_unit,
-    }
-}
-
 const UT171_COMMANDS: &[&str] = &["connect", "pause"];
 
-/// Response type of a measurement frame; the meter's short replies share it
-/// (lengths 4-8, spec §10 Cross-Reference, `[UNVERIFIED]`), which is why the
-/// stream filter asks for a measurement-sized payload as well
-/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4).
-const RESPONSE_MEASUREMENT: u8 = 0x02;
-
-/// Payload of a standard measurement frame: length field `0x11` = 17 = 15
-/// payload bytes + the 2-byte checksum
-/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4, §5.1).
-const STANDARD_PAYLOAD: usize = 15;
-
-/// Payload lengths of the short replies [`RESPONSE_MEASUREMENT`] mentions.
+/// Payload lengths of the short replies of the measurement type that spec
+/// §10's cross-reference records (`[UNVERIFIED]`).
 /// "Lengths 4-8" may count the payload or the length field (payload +
 /// checksum), so both readings are covered.
 const SHORT_REPLY_PAYLOAD: RangeInclusive<usize> = 2..=8;
 
-/// Longest measurement payload this meter can send: the extended frame, whose
-/// length field is `0x17` = 23 = 21 payload bytes + the 2-byte checksum
-/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4, §5.2). Anything
-/// longer is some other family's frame — the UT181A's, on this framing.
-const MAX_MEASUREMENT_PAYLOAD: usize = 21;
+/// The other frame types the meter sends (spec §5.10–5.11): `0x01` OK, ER or NO in
+/// answer to a command, `0x72` the count, memory and device-information
+/// replies, `0x03` a stored record. The stream skips them quietly.
+const OTHER_REPLIES: [u8; 3] = [0x01, 0x72, 0x03];
 
 /// Connect (command 0x0A, 1 = start streaming), in the UT181A's framing
 /// (`docs/research/ut171/reverse-engineered-protocol.md` §4.3).
@@ -236,7 +84,8 @@ impl Ut171Protocol {
                 id: "ut171",
                 stability: Stability::Experimental,
                 supported_commands: UT171_COMMANDS,
-                max_aux_values: 1,
+                // The square wave's duty and width (spec §5.9).
+                max_aux_values: 2,
                 verification_issue: Some(4),
                 meter_keys: MeterKeys::NONE,
             },
@@ -256,7 +105,7 @@ impl Protocol for Ut171Protocol {
 
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
         // Send connect command to start streaming.
-        // User must also enable "Communication ON" on the meter.
+        // User must also enable communication on the meter.
         debug!("ut171: sending connect command");
         transport.write(&connect_frame())?;
         Ok(())
@@ -301,7 +150,7 @@ impl Protocol for Ut171Protocol {
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         use crate::protocol::steps::{self, Ohms, Volts};
-        use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
+        use crate::protocol::{CaptureStep, Expect, Need};
 
         let [vdc, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
             Volts::VDc,
@@ -313,17 +162,39 @@ impl Protocol for Ut171Protocol {
             ),
         );
 
-        // All UT171 modes (0x01-0x24)
+        // The flag steps assert only the mode: which bit each key sets rests
+        // on UNI-T's software alone (spec §5.3), so the raw frames are the
+        // answer.
+        let key_step = |id, instruction| {
+            CaptureStep::basic(id, instruction)
+                .wait_for_enter()
+                .expect(Expect::mode("V DC"))
+        };
+
         vec![
             vdc,
             dcv_short,
             dcv_negative,
+            ohm,
+            ohm_body,
+            ohm_short,
+            // Capacitance and diode join the gate: 0x0B and 0x0D rest on
+            // UNI-T's software alone, and spec §10 records a reading of 0x0B
+            // as diode (spec §6). The operator confirms them at the step,
+            // before the tool trusts the mode table enough to switch modes
+            // by it.
+            CaptureStep::basic("cap", "Set meter to Capacitance")
+                .gate()
+                .expect(Expect::mode("Capacitance")),
+            CaptureStep::basic("diode", "Set meter to Diode")
+                .gate()
+                .expect(Expect::mode("Diode")),
             CaptureStep::basic("vac", "Set meter to V AC").expect(Expect::mode("V AC")),
             // Spec §6: the manual reaches the V-to-frequency converter by
-            // long-pressing in AC V mode.
+            // long-pressing SELECT in AC V.
             CaptureStep::basic(
                 "vfc",
-                "V AC mode: long-press for VFC (V\u{2192}Hz converter)",
+                "V AC mode: long-press SELECT for VFC (V\u{2192}Hz converter)",
             )
             .expect(Expect::mode("VFC")),
             CaptureStep::basic("vacdc", "Set meter to V AC+DC").expect(Expect::mode("V AC+DC")),
@@ -334,12 +205,6 @@ impl Protocol for Ut171Protocol {
             CaptureStep::basic("mvacdc", "Set meter to mV AC+DC").expect(Expect::mode("mV AC+DC")),
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
-            CaptureStep::basic("cap", "Set meter to Capacitance")
-                .expect(Expect::mode("Capacitance")),
-            ohm,
-            ohm_body,
-            ohm_short,
-            CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
             CaptureStep::basic("tempc", "Set meter to Temperature C (if available)")
                 .needs(&[Need::Thermocouple])
                 .expect(Expect::mode("°C")),
@@ -349,27 +214,56 @@ impl Protocol for Ut171Protocol {
             CaptureStep::basic("ns", "Set meter to Conductance nS (if available)")
                 .expect(Expect::mode("nS")),
             CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Hz")),
-            CaptureStep::basic("duty", "Set meter to Duty Cycle (%)")
-                .expect(Expect::mode("Duty %")),
+            // Duty has no mode byte of its own: the Hz% key steps the unit.
+            CaptureStep::basic("duty", "Frequency (Hz): press Hz% for duty cycle (%)")
+                .expect(Expect::mode("Hz")),
             CaptureStep::basic("uadc", "Set meter to µA DC").expect(Expect::mode("µA DC")),
             CaptureStep::basic("uaac", "Set meter to µA AC").expect(Expect::mode("µA AC")),
             CaptureStep::basic("uaacdc", "Set meter to µA AC+DC").expect(Expect::mode("µA AC+DC")),
             CaptureStep::basic("madc", "Set meter to mA DC").expect(Expect::mode("mA DC")),
             CaptureStep::basic("maac", "Set meter to mA AC").expect(Expect::mode("mA AC")),
             CaptureStep::basic("maacdc", "Set meter to mA AC+DC").expect(Expect::mode("mA AC+DC")),
-            CaptureStep::basic("ma420", "Set meter to % (4-20 mA loop)")
+            CaptureStep::basic("ma420", "mA: long-press SELECT for % (4-20 mA loop)")
                 .expect(Expect::mode("% 4-20mA")),
             CaptureStep::basic("adc", "Set meter to A DC").expect(Expect::mode("A DC")),
             CaptureStep::basic("aac", "Set meter to A AC").expect(Expect::mode("A AC")),
             CaptureStep::basic("aacdc", "Set meter to A AC+DC").expect(Expect::mode("A AC+DC")),
-            // The 600 A clamp positions are UT171C-only (spec §1.1).
+            // The 600 A clamp and the square wave are UT171C-only (spec §1.1).
             CaptureStep::basic("a600dc", "Set meter to 600A DC (clamp, UT171C only)")
                 .expect(Expect::mode("600A DC")),
             CaptureStep::basic("a600ac", "Set meter to 600A AC (clamp, UT171C only)")
                 .expect(Expect::mode("600A AC")),
+            CaptureStep::basic(
+                "square_wave",
+                "µA: long-press SELECT for the square-wave output (UT171C only)",
+            )
+            .expect(Expect::mode("Square wave")),
+            // What an NCV frame carries past the mode is unknown (spec §5.8).
             CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .needs(&[Need::LiveWire])
-                .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected)),
+                .expect(Expect::mode("NCV")),
+            key_step(
+                "hold",
+                "V DC: press HOLD, then Enter. Press HOLD again afterwards.",
+            ),
+            key_step(
+                "rel",
+                "V DC: press REL, then Enter. Long-press REL afterwards to leave it.",
+            ),
+            key_step(
+                "max_min",
+                "V DC: press MAX MIN three times (MAX, AVG, MIN), then Enter. Long-press it afterwards.",
+            ),
+            key_step(
+                "manual_range",
+                "V DC: press RANGE, then Enter. Long-press RANGE afterwards for auto.",
+            ),
+            CaptureStep::basic(
+                "peak",
+                "V AC: long-press MAX MIN for Peak, then Enter. Long-press it again afterwards.",
+            )
+            .wait_for_enter()
+            .expect(Expect::mode("V AC")),
         ]
     }
 }
@@ -377,17 +271,17 @@ impl Protocol for Ut171Protocol {
 /// The stream filter: whether `payload` is a measurement frame, the one
 /// shape [`parse_measurement`] reads.
 ///
-/// A measurement frame has type [`RESPONSE_MEASUREMENT`] and at least a
-/// standard frame's payload; the parser judges a longer one. The short
-/// replies that share the type are skipped quietly. Anything else — its
-/// checksum already held, so it is the meter's — is reported: §5 documents
-/// no other frame from the meter, and the driver sends nothing but connect
-/// and pause (`docs/research/ut171/reverse-engineered-protocol.md`).
+/// The meter's other frames (spec §5.10–5.11) and the short replies of the
+/// measurement type are skipped quietly. Anything else — its checksum
+/// already held, so it is the meter's — is reported.
 fn is_measurement_frame(payload: &[u8]) -> bool {
+    if parse::is_measurement(payload) {
+        return true;
+    }
     let len = payload.len();
     match payload.first() {
-        Some(&RESPONSE_MEASUREMENT) if len >= STANDARD_PAYLOAD => return true,
         Some(&RESPONSE_MEASUREMENT) if SHORT_REPLY_PAYLOAD.contains(&len) => {}
+        Some(kind) if OTHER_REPLIES.contains(kind) => {}
         Some(kind) => report_unknown(
             FAMILY,
             "frame",
@@ -396,199 +290,6 @@ fn is_measurement_frame(payload: &[u8]) -> bool {
         None => report_unknown(FAMILY, "frame", format_args!("{len} bytes")),
     }
     false
-}
-
-/// Report what a measurement payload carries outside the spec. No UT171
-/// capture is in the repo, so every check rests on the spec alone; the
-/// reading is parsed the same either way.
-///
-/// Sections are `docs/research/ut171/reverse-engineered-protocol.md`.
-fn report_unrecognised_fields(payload: &[u8]) {
-    let len = payload.len();
-    let (flags, frame_type, mode_byte, range_byte) =
-        (payload[1], payload[2], payload[3], payload[4]);
-    // §3.4, §5.1-5.2: a standard frame (type 0x01) carries 15 payload bytes,
-    // an extended one (type 0x03) 21.
-    if !matches!(
-        (frame_type, len),
-        (0x01, STANDARD_PAYLOAD) | (0x03, MAX_MEASUREMENT_PAYLOAD)
-    ) {
-        report_unknown(
-            FAMILY,
-            "frame",
-            format_args!("frame type {frame_type:#04x}, {len} bytes"),
-        );
-    }
-    // §5.4: a mode with a range table sends its indices or 0 (auto). Every
-    // table starts at 1, so a label for 1 is what says the mode has one.
-    if range_byte != 0
-        && lookup_range(mode_byte, range_byte).is_none()
-        && lookup_range(mode_byte, 1).is_some()
-    {
-        report_unknown(
-            FAMILY,
-            "range byte",
-            format_args!("mode {mode_byte:#04x} range {range_byte}"),
-        );
-    }
-    // §5.3: the vendor app reads no bit 4 or 5, and the reading of bits 0
-    // and 3 lost its evidence (`docs/research/ut171/verification.md`, Flags).
-    if flags & (0x30 | 0x08 | 0x01) != 0 {
-        report_unknown(FAMILY, "flag bits", format_args!("{flags:#04x}"));
-    }
-    // Bit 1 marks an extended frame (spec §5.3, unverified).
-    if (flags & 0x02 != 0) != (len == MAX_MEASUREMENT_PAYLOAD) {
-        report_unknown(
-            FAMILY,
-            "flag bits",
-            format_args!("{flags:#04x} on a {len}-byte payload"),
-        );
-    }
-    // §5.1: status2 (wire offset 13) holds 0x40 (DC) and 0x20 (AC); the
-    // byte after it has been seen as 0x00 and 0x01.
-    if payload[9] & !0x60 != 0 {
-        report_unknown(
-            FAMILY,
-            "status byte",
-            format_args!("payload[9] = {:#04x}", payload[9]),
-        );
-    }
-    if payload[10] > 1 {
-        report_unknown(
-            FAMILY,
-            "status byte",
-            format_args!("payload[10] = {:#04x}", payload[10]),
-        );
-    }
-}
-
-/// Report a float slot holding what the spec does not describe.
-fn report_float(what: &'static str, bytes: [u8; 4], mode_byte: u8) {
-    report_unknown(
-        FAMILY,
-        what,
-        format_args!(
-            "{bytes:02X?} = {} in mode {mode_byte:#04x}",
-            f32::from_le_bytes(bytes)
-        ),
-    );
-}
-
-/// Parse a UT171 measurement payload (pure function).
-///
-/// Payload from the 2-byte-LE-length extractor (standard frame: 21 bytes
-/// on the wire → 15-byte payload; extended: 27 → 21). Offsets relative to
-/// the payload (= wire frame offset − 4):
-/// - byte 0:   type (0x02 = measurement)
-/// - byte 1:   flags byte
-/// - byte 2:   frame type (0x01=standard, 0x03=extended)
-/// - byte 3:   mode byte
-/// - byte 4:   range byte (raw, 1-based)
-/// - bytes 5-8: main value (float32 LE)
-/// - byte 9:   status2 (0x40=DC, 0x20=AC — capture-deduced, `[UNVERIFIED]`)
-/// - byte 10:  unknown
-/// - bytes 11-14: aux value (float32 LE)
-/// - extended frames continue with a third float at bytes 17-20 (unparsed)
-pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    check_len("ut171", payload, STANDARD_PAYLOAD)?;
-
-    let flags_byte = payload[1];
-    let mode_byte = payload[3];
-    let range_byte = payload[4];
-
-    let (mode, base_unit) = lookup_mode(mode_byte);
-    report_unrecognised_fields(payload);
-    let range_label = lookup_range(mode_byte, range_byte).unwrap_or("");
-    let unit = display_unit(mode_byte, range_byte, base_unit);
-
-    // Parse IEEE 754 float32 LE main value
-    let main_bytes: [u8; 4] = [payload[5], payload[6], payload[7], payload[8]];
-    let main_float = f32::from_le_bytes(main_bytes);
-
-    // Parse flags
-    let hold = flags_byte & 0x80 != 0;
-    let auto_range = flags_byte & 0x40 == 0; // inverted: clear = AUTO active
-    let low_battery = flags_byte & 0x04 != 0;
-
-    let flags = StatusFlags {
-        hold,
-        auto_range,
-        low_battery,
-        ..Default::default()
-    };
-
-    let value = if main_float.is_nan() || main_float.is_infinite() {
-        // §5.1 gives the main value as a float and says nothing of how an
-        // overload is sent: a non-finite one is our guess.
-        report_float("float", main_bytes, mode_byte);
-        MeasuredValue::Overload
-    } else if mode == "NCV" {
-        // §6 names the NCV mode but not its value; a level is a whole number
-        // that fits the u8 it becomes.
-        if !(0.0..=255.0).contains(&main_float) || main_float.fract() != 0.0 {
-            report_float("float", main_bytes, mode_byte);
-        }
-        MeasuredValue::NcvLevel(main_float as u8)
-    } else {
-        MeasuredValue::Normal(main_float as f64)
-    };
-
-    // The wire value is an f32. `Normal` keeps it widened to f64 so arithmetic
-    // (stats, integration) works on the exact value the meter sent, but every
-    // formatter falls back to that f64 when `display_raw` is None — and
-    // `12.345f32 as f64` is 12.345000267028809, so a 60000-count meter printed
-    // 17 digits of binary-to-decimal artefact in the CLI, the CSV and the GUI.
-    //
-    // f32's Display prints the shortest decimal that round-trips to the same
-    // f32, so this is the wire value exactly, with no invented precision: the
-    // frame carries no decimal-places field (spec §5.1 offset 14 is [UNVERIFIED]),
-    // so we must not pad to a resolution the protocol never told us.
-    let display_raw = match value {
-        MeasuredValue::Normal(_) => Some(format!("{main_float}")),
-        MeasuredValue::Overload
-        | MeasuredValue::NcvLevel(_)
-        | MeasuredValue::NoReading(_)
-        | MeasuredValue::Absent => None,
-    };
-
-    // Aux float32 at payload[11..15]: the frequency in kHz on the AC voltage
-    // modes (spec §5.1, [UNVERIFIED]); other modes' aux semantics are
-    // unknown, so they get a neutral label and no unit.
-    // Gate on finite + non-zero so static-layout modes that never use the
-    // aux slot don't emit a spurious "Aux: 0" entry.
-    let aux_bytes: [u8; 4] = [payload[11], payload[12], payload[13], payload[14]];
-    let aux_float = f32::from_le_bytes(aux_bytes);
-    let aux_is_frequency = aux_is_frequency(mode_byte);
-    // §5.1 describes the aux float only as the frequency on those two modes:
-    // a non-zero one elsewhere, or a non-finite one anywhere, is new.
-    if !aux_float.is_finite() || (aux_float != 0.0 && !aux_is_frequency) {
-        report_float("aux value", aux_bytes, mode_byte);
-    }
-    let mut aux_values = Vec::new();
-    if aux_float.is_finite() && aux_float != 0.0 {
-        let (aux_label, aux_unit) = aux_label_unit(mode_byte);
-        aux_values.push(AuxValue {
-            label: Cow::Borrowed(aux_label),
-            value: MeasuredValue::Normal(aux_float as f64),
-            unit: Cow::Borrowed(aux_unit),
-            // Same f32-widening artefact as the main value above.
-            display_raw: Some(format!("{aux_float}")),
-            elapsed_secs: None,
-        });
-    }
-
-    Ok(Measurement {
-        mode,
-        mode_raw: mode_byte as u16,
-        range_raw: range_byte,
-        value,
-        unit: Cow::Borrowed(unit),
-        range_label: Cow::Borrowed(range_label),
-        display_raw,
-        flags,
-        aux_values,
-        ..Measurement::from_payload(payload)
-    })
 }
 
 /// Detection for the UT171.
@@ -626,7 +327,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
         let Ok(Some((payload, _))) = framing::extract_frame_abcd_2byte_le16(&buf[start..]) else {
             continue;
         };
-        if payload.first() != Some(&RESPONSE_MEASUREMENT) {
+        if !parse::is_measurement(&payload) {
             continue;
         }
         if payload.len() > MAX_MEASUREMENT_PAYLOAD {
@@ -659,363 +360,16 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
     None
 }
 
-/// Every unit a reading of this family can carry, for
-/// [`crate::protocol::all_units`].
-#[cfg(test)]
-pub(crate) fn all_units(out: &mut crate::protocol::Units) {
-    out.insert("");
-    for mode in 0..=u8::MAX {
-        out.insert(aux_label_unit(mode).1);
-        if let Some((_, base)) = known_mode(mode) {
-            for range in 0..=u8::MAX {
-                out.insert(display_unit(mode, range, base));
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::parse::tests::{payload, with_aux};
     use super::*;
-    use crate::protocol::test_support::snapshot;
+    use crate::protocol::capture_reports;
+    use crate::transport::mock::MockTransport;
 
-    fn make_payload(mode: u8, range: u8, value: f32, flags: u8) -> Vec<u8> {
-        make_payload_with_aux(mode, range, value, flags, 0.0)
-    }
-
-    fn make_payload_with_aux(mode: u8, range: u8, value: f32, flags: u8, aux: f32) -> Vec<u8> {
-        let vbytes = value.to_le_bytes();
-        let abytes = aux.to_le_bytes();
-        // Payload as produced by the 2-byte-LE-length extractor: starts at
-        // the type byte (wire frame offset 4).
-        vec![
-            0x02,  // type = measurement
-            flags, // flags byte
-            0x01,  // frame type = standard
-            mode,  // mode
-            range, // range
-            vbytes[0], vbytes[1], vbytes[2], vbytes[3], // main value
-            0x00,      // status2
-            0x00,      // unknown
-            abytes[0], abytes[1], abytes[2], abytes[3], // aux value
-        ]
-    }
-
-    /// The one payload whose every parsed field is pinned: an ordinary
-    /// auto-ranging V DC reading.
-    #[test]
-    fn parse_vdc() {
-        // Flags bit 6 clear = AUTO.
-        let payload = make_payload(0x02, 0x01, 12.345, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(
-            snapshot(&m),
-            r#"mode=V DC
-mode_raw=0x02
-range_raw=0x01
-value=Normal(12.345000267028809)
-unit=V
-range_label=
-display_raw=Some("12.345")
-flags=auto_range
-aux=0
-raw_payload=15"#
-        );
-    }
-
-    /// The wire float is an f32; widening it to f64 and formatting that
-    /// printed 12.345000267028809 for a meter showing 12.345. Every consumer
-    /// (CLI stdout, CSV `value`, the GUI reading) went through that fallback.
-    #[test]
-    fn value_prints_the_wire_float_not_its_widening_artefact() {
-        for v in [12.345f32, 5.999, -55.79, 0.1] {
-            let payload = make_payload(0x02, 0x01, v, 0x00);
-            let m = parse_measurement(&payload).unwrap();
-            let expected = v.to_string();
-            assert_eq!(m.display_raw.as_deref(), Some(expected.as_str()));
-            assert_eq!(m.value_export_str(), expected);
-            assert!(
-                m.to_string().starts_with(&expected),
-                "Display should show {expected}, got {m}"
-            );
-        }
-    }
-
-    /// The exported string must still parse back to the same f32 the meter
-    /// sent — shortest-round-trip formatting, not truncation.
-    #[test]
-    fn exported_value_round_trips_to_the_wire_float() {
-        for v in [12.345f32, 5.999, -55.79, 1234.5, 0.001] {
-            let payload = make_payload(0x02, 0x01, v, 0x00);
-            let m = parse_measurement(&payload).unwrap();
-            let parsed: f32 = m.value_export_str().parse().unwrap();
-            assert_eq!(parsed, v, "round trip failed for {v}");
-        }
-    }
-
-    /// Overload and NCV carry no digits of their own — leaving a stale
-    /// display string there is what made overloads render as numbers.
-    #[test]
-    fn overload_and_ncv_carry_no_display_string() {
-        let payload = make_payload(0x02, 0x01, f32::NAN, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
-        assert!(m.display_raw.is_none());
-    }
-
-    #[test]
-    fn parse_ohm() {
-        // Range 1 reads in Ω; ranges 2-4 are range-relative kΩ and 5-6 MΩ
-        // (spec §5.1).
-        let payload = make_payload(0x0A, 0x01, 470.5, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "Ω");
-        assert_eq!(m.unit, "Ω");
-
-        let payload = make_payload(0x0A, 0x02, 4.705, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.unit, "kΩ");
-
-        let payload = make_payload(0x0A, 0x05, 5.99, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.unit, "MΩ");
-    }
-
-    #[test]
-    fn parse_hold_flag() {
-        // Flags bit 7 = HOLD; bit 6 still clear, so AUTO stays on.
-        let payload = make_payload(0x02, 0x01, 1.0, 0x80);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.hold);
-        assert!(m.flags.auto_range);
-    }
-
-    #[test]
-    fn parse_manual_range() {
-        // Flags bit 6 set = manual range.
-        let payload = make_payload(0x02, 0x01, 1.0, 0x40);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.auto_range);
-    }
-
-    #[test]
-    fn parse_low_battery() {
-        let payload = make_payload(0x02, 0x01, 1.0, 0x04);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.low_battery);
-    }
-
-    #[test]
-    fn parse_unknown_mode_permissive() {
-        let payload = make_payload(0x30, 0x01, 1.0, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(
-            snapshot(&m),
-            r#"mode=Unknown(0x30)
-mode_raw=0x30
-range_raw=0x01
-value=Normal(1.0)
-unit=
-range_label=
-display_raw=Some("1")
-flags=auto_range
-aux=0
-raw_payload=15"#
-        );
-    }
-
-    #[test]
-    fn parse_nan_overload() {
-        let payload = make_payload(0x0A, 0x01, f32::NAN, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(
-            snapshot(&m),
-            r#"mode=Ω
-mode_raw=0x0a
-range_raw=0x01
-value=Overload
-unit=Ω
-range_label=
-display_raw=None
-flags=auto_range
-aux=0
-raw_payload=15"#
-        );
-    }
-
-    #[test]
-    fn parse_inf_overload() {
-        let payload = make_payload(0x0A, 0x01, f32::INFINITY, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(
-            snapshot(&m),
-            r#"mode=Ω
-mode_raw=0x0a
-range_raw=0x01
-value=Overload
-unit=Ω
-range_label=
-display_raw=None
-flags=auto_range
-aux=0
-raw_payload=15"#
-        );
-    }
-
-    #[test]
-    fn parse_ncv() {
-        let payload = make_payload(0x24, 0x00, 3.0, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "NCV");
-        assert!(matches!(m.value, MeasuredValue::NcvLevel(3)));
-    }
-
-    #[test]
-    fn parse_payload_too_short() {
-        let payload = vec![0x00; 10];
-        assert!(parse_measurement(&payload).is_err());
-    }
-
-    #[test]
-    fn mode_raw_preserved() {
-        let payload = make_payload(0x0F, 0x01, 50.0, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode_raw, 0x0F);
-        assert_eq!(m.mode, "Hz");
-    }
-
-    #[test]
-    fn range_label_capacitance() {
-        // 0x09 capacitance spans 8 continuous indices nF→µF→mF
-        for (r, expected) in [
-            (1, "6nF"),
-            (2, "60nF"),
-            (3, "600nF"),
-            (4, "6µF"),
-            (5, "60µF"),
-            (6, "600µF"),
-            (7, "6mF"),
-            (8, "60mF"),
-        ] {
-            let payload = make_payload(0x09, r, 0.0, 0x00);
-            let m = parse_measurement(&payload).unwrap();
-            assert_eq!(m.range_label, expected, "cap range {r}");
-            assert_eq!(m.range_raw, r);
-        }
-    }
-
-    #[test]
-    fn range_label_frequency() {
-        // 0x0F Hz continuous 1-7 across Hz/kHz/MHz
-        for (r, expected) in [
-            (1, "60Hz"),
-            (2, "600Hz"),
-            (3, "6kHz"),
-            (4, "60kHz"),
-            (5, "600kHz"),
-            (6, "6MHz"),
-            (7, "60MHz"),
-        ] {
-            let payload = make_payload(0x0F, r, 0.0, 0x00);
-            let m = parse_measurement(&payload).unwrap();
-            assert_eq!(m.range_label, expected, "Hz range {r}");
-        }
-    }
-
-    #[test]
-    fn range_label_current() {
-        // µA DC (0x11) and µA AC (0x12) share the same magnitudes per §5.4.
-        let payload = make_payload(0x11, 1, 0.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "600µA");
-        let payload = make_payload(0x12, 2, 0.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "6000µA");
-        // mA DC (0x14) / mA AC (0x15)
-        let payload = make_payload(0x14, 1, 0.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "60mA");
-        let payload = make_payload(0x15, 2, 0.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "600mA");
-        // A DC (0x17)
-        let payload = make_payload(0x17, 1, 0.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "6A");
-        let payload = make_payload(0x17, 2, 0.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "20A");
-    }
-
-    #[test]
-    fn range_label_auto_is_empty() {
-        // Range byte 0 = auto-range, no specific label.
-        let payload = make_payload(0x0F, 0, 50.0, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.range_label, "");
-        assert_eq!(m.range_raw, 0);
-    }
-
-    #[test]
-    fn aux_value_populated_when_nonzero() {
-        // V AC (0x03): aux is the frequency readout in kHz per spec §5.1.
-        let payload = make_payload_with_aux(0x03, 0x00, 230.0, 0x00, 50.0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(
-            snapshot(&m),
-            r#"mode=V AC
-mode_raw=0x03
-range_raw=0x00
-value=Normal(230.0)
-unit=V
-range_label=
-display_raw=Some("230")
-flags=auto_range
-aux=1
-aux1=Frequency value=Normal(50.0) unit=kHz display_raw=Some("50") elapsed_secs=None
-raw_payload=15"#
-        );
-    }
-
-    #[test]
-    fn aux_value_empty_when_zero() {
-        // Modes that don't use the aux slot send 0.0; don't surface a spurious entry.
-        let payload = make_payload_with_aux(0x02, 0x00, 12.345, 0x00, 0.0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.aux_values.is_empty());
-    }
-
-    #[test]
-    fn aux_value_skipped_when_nan() {
-        let payload = make_payload_with_aux(0x03, 0x00, 230.0, 0x00, f32::NAN);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.aux_values.is_empty());
-    }
-
-    #[test]
-    fn range_label_undocumented_mode_is_empty() {
-        // Voltage modes have no range table in spec §5.4 — label stays empty
-        // rather than fabricated.
-        let payload = make_payload(0x02, 1, 12.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "");
-        let payload = make_payload(0x0A, 2, 470.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "");
-        // AC+DC variants (0x13, 0x16, 0x19) also absent from §5.4 — empty.
-        let payload = make_payload(0x13, 1, 100.0, 0x00);
-        assert_eq!(parse_measurement(&payload).unwrap().range_label, "");
-    }
-
-    #[test]
-    fn all_known_modes_parse() {
-        // Every mode byte in spec §6
-        let known_modes: &[u8] = &[
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
-            0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C,
-            0x1D, 0x24,
-        ];
-        for &code in known_modes {
-            let payload = make_payload(code, 0x01, 1.0, 0x00);
-            let m = parse_measurement(&payload).unwrap();
-            assert!(
-                !m.mode.starts_with("Unknown"),
-                "mode {:#04x} should be known",
-                code
-            );
-        }
+    /// An ordinary V DC reading's payload.
+    fn vdc() -> Vec<u8> {
+        payload(0x02, 1, 1.2345, 0x40, 0x00)
     }
 
     // --- Detection (crate::detect) ---------------------------------------
@@ -1024,45 +378,45 @@ raw_payload=15"#
         (FINGERPRINT.recognise)(buf, probing)
     }
 
+    const UT171: Option<Evidence> = Some(Evidence::Model {
+        id: "ut171",
+        reported_name: None,
+    });
+
     /// A measurement frame short enough for either family is a UT171 once the
     /// connect frame has gone out: SET_MONITOR went out before it and a
-    /// UT181A would have answered that one.
+    /// UT181A would have answered that one. The longest UT171 frame and a
+    /// four-byte NCV frame are as well.
     #[test]
     fn a_measurement_frame_after_the_connect_is_a_ut171() {
-        let frame = framing::build_abcd_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
         let probing = Probing {
             sent: vec![DeviceFamily::Ut171],
             ..Probing::default()
         };
-        assert_eq!(
-            recognised(&frame, &probing),
-            Some(Evidence::Model {
-                id: "ut171",
-                reported_name: None,
-            })
-        );
+        let mut longest = with_aux(vdc(), 1.0, 0x10, 0x12);
+        longest[1] |= 0x0A;
+        longest.extend_from_slice(&[0; 6]);
+        assert_eq!(longest.len(), MAX_MEASUREMENT_PAYLOAD);
+        for payload in [vdc(), longest, vec![RESPONSE_MEASUREMENT, 0, 0, 0x1A]] {
+            let frame = framing::build_abcd_le16(&payload);
+            assert_eq!(recognised(&frame, &probing), UT171, "{payload:02X?}");
+        }
     }
 
     /// The same frame before any trigger: a UT171 left connected is the
     /// likelier source than a UT181A left streaming, and the engine warns.
     #[test]
     fn a_measurement_frame_before_any_trigger_is_still_a_ut171() {
-        let frame = framing::build_abcd_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
-        assert_eq!(
-            recognised(&frame, &Probing::default()),
-            Some(Evidence::Model {
-                id: "ut171",
-                reported_name: None,
-            })
-        );
+        let frame = framing::build_abcd_le16(&vdc());
+        assert_eq!(recognised(&frame, &Probing::default()), UT171);
     }
 
-    /// Past the extended frame's 21 payload bytes (§3.4/§5.2) no UT171 frame
-    /// exists — that length belongs to the UT181A, whose framing is the same.
+    /// Past the longest UT171 payload (§3.4) no UT171 frame exists — that
+    /// length belongs to the UT181A, whose framing is the same.
     #[test]
-    fn a_payload_longer_than_the_extended_frame_is_not_a_ut171() {
-        let mut payload = make_payload(0x01, 0x01, 1.0, 0x00);
-        payload.resize(MAX_MEASUREMENT_PAYLOAD + 4, 0);
+    fn a_payload_longer_than_the_longest_frame_is_not_a_ut171() {
+        let mut payload = vdc();
+        payload.resize(MAX_MEASUREMENT_PAYLOAD + 1, 0);
         let frame = framing::build_abcd_le16(&payload);
         for probing in [
             Probing::default(),
@@ -1079,7 +433,7 @@ raw_payload=15"#
     /// sent: the frame it asked for is its own.
     #[test]
     fn a_measurement_frame_right_after_set_monitor_is_not_a_ut171() {
-        let frame = framing::build_abcd_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
+        let frame = framing::build_abcd_le16(&vdc());
         let probing = Probing {
             sent: vec![DeviceFamily::Ut181a],
             ..Probing::default()
@@ -1087,13 +441,18 @@ raw_payload=15"#
         assert_eq!(recognised(&frame, &probing), None);
     }
 
-    /// The meter's short replies share the measurement type byte, so they
-    /// would be claimed here too — they name no model either way, and the
-    /// stream filter is what keeps them out of the parser.
+    /// Replies and short frames name no model: detection takes the shapes
+    /// the stream filter takes.
     #[test]
-    fn a_frame_of_another_type_identifies_nothing() {
-        let frame = framing::build_abcd_le16(&[0x01, 0x00, 0x00, 0x00]);
-        assert_eq!(recognised(&frame, &Probing::default()), None);
+    fn a_frame_that_is_no_measurement_identifies_nothing() {
+        for payload in [
+            vec![0x01, b'O', b'K'],
+            vec![RESPONSE_MEASUREMENT, 0x00, 0x00, 0x00],
+            vdc()[..10].to_vec(),
+        ] {
+            let frame = framing::build_abcd_le16(&payload);
+            assert_eq!(recognised(&frame, &Probing::default()), None);
+        }
     }
 
     /// The command frames are the captured bytes (spec §4.3).
@@ -1109,115 +468,40 @@ raw_payload=15"#
         );
     }
 
-    // --- Unrecognised data (protocol::unrecognised) -----------------------
+    // --- The stream filter -------------------------------------------------
 
-    use crate::protocol::capture_reports;
-    use crate::transport::mock::MockTransport;
-
-    /// Parse `payload`, keeping what it reported.
-    fn parse_reporting(payload: &[u8]) -> (Result<Measurement>, Vec<String>) {
-        capture_reports(|| parse_measurement(payload))
-    }
-
-    /// An extended frame (§5.2): flags bit 1, frame type 0x03, then the two
-    /// extra-flag bytes and the third float.
-    fn make_extended_payload(mode: u8, value: f32, flags: u8, third: f32) -> Vec<u8> {
-        let mut payload = make_payload(mode, 0x00, value, flags | 0x02);
-        payload[2] = 0x03;
-        payload.extend_from_slice(&[0x00, 0x00]);
-        payload.extend_from_slice(&third.to_le_bytes());
-        payload
-    }
-
-    /// The payloads the tests above parse cleanly, and the forms §5 documents:
-    /// every flag bit it reads, both status2 values, byte 10 at 1, the aux
-    /// frequency, an extended frame.
-    fn documented_payloads() -> Vec<Vec<u8>> {
-        let mut payloads = vec![
-            make_payload(0x02, 0x01, 12.345, 0x00),
-            make_payload(0x0A, 0x01, 470.5, 0x00),
-            make_payload(0x0A, 0x02, 4.705, 0x00),
-            make_payload(0x0A, 0x05, 5.99, 0x00),
-            make_payload(0x02, 0x01, 1.0, 0x80),
-            make_payload(0x02, 0x01, 1.0, 0x40),
-            make_payload(0x02, 0x01, 1.0, 0x04),
-            make_payload(0x02, 0x01, 1.0, 0xC4),
-            make_payload(0x24, 0x00, 3.0, 0x00),
-            make_payload(0x24, 0x00, 0.0, 0x00),
-            make_payload(0x24, 0x00, 255.0, 0x00),
-            make_payload(0x0F, 0x01, 50.0, 0x00),
-            make_payload(0x0F, 0x00, 50.0, 0x00),
-            make_payload(0x13, 0x01, 100.0, 0x00),
-            make_payload_with_aux(0x03, 0x00, 230.0, 0x00, 50.0),
-            make_payload_with_aux(0x06, 0x00, 12.5, 0x00, 1.25),
-            make_payload_with_aux(0x02, 0x00, 12.345, 0x00, 0.0),
-            make_extended_payload(0x03, 230.0, 0x00, 230.1),
-            make_extended_payload(0x04, 230.0, 0x80, 230.1),
-        ];
-        for (status2, byte10) in [(0x40, 0x00), (0x20, 0x01), (0x60, 0x00)] {
-            let mut payload = make_payload(0x02, 0x01, 1.5, 0x00);
-            payload[9] = status2;
-            payload[10] = byte10;
-            payloads.push(payload);
-        }
-        for (mode, ranges) in [
-            (0x08, 1),
-            (0x09, 8),
-            (0x0E, 1),
-            (0x0F, 7),
-            (0x11, 2),
-            (0x12, 2),
-            (0x14, 2),
-            (0x15, 2),
-            (0x17, 2),
-        ] {
-            for range in 1..=ranges {
-                payloads.push(make_payload(mode, range, 0.0, 0x00));
-            }
-        }
-        for mode in (0x01..=0x1D).chain([0x24]) {
-            payloads.push(make_payload(mode, 0x01, 1.0, 0x00));
-        }
-        payloads
-    }
-
+    /// Short replies of the measurement type and the meter's documented
+    /// replies are skipped on the way to a reading without a word.
     #[test]
-    fn documented_payloads_report_nothing() {
-        for payload in documented_payloads() {
-            let (m, reports) = parse_reporting(&payload);
-            assert!(m.is_ok(), "{payload:02X?}: {m:?}");
-            assert!(reports.is_empty(), "{payload:02X?}: {reports:?}");
-        }
-    }
-
-    /// Short replies of the measurement type (the note on
-    /// [`RESPONSE_MEASUREMENT`]) are skipped on the way to a reading without
-    /// a word, whichever way their length is counted.
-    #[test]
-    fn short_replies_on_the_stream_report_nothing() {
+    fn replies_on_the_stream_report_nothing() {
         let mut proto = Ut171Protocol::new();
         let mut frames: Vec<Vec<u8>> = SHORT_REPLY_PAYLOAD
             .map(|len| {
                 let mut reply = vec![0x00; len];
                 reply[0] = RESPONSE_MEASUREMENT;
+                // Not the NCV mode, which makes a four-byte measurement.
+                if len > 3 {
+                    reply[3] = 0x02;
+                }
                 framing::build_abcd_le16(&reply)
             })
             .collect();
-        frames.push(framing::build_abcd_le16(&make_payload(
-            0x02, 0x01, 12.345, 0x00,
-        )));
+        for reply in [
+            vec![0x01, b'O', b'K'],
+            vec![0x01, b'E', b'R'],
+            vec![0x01, b'N', b'O'],
+            vec![0x72, 0x11, 0x00, 0x05],
+            vec![0x03; 25],
+        ] {
+            frames.push(framing::build_abcd_le16(&reply));
+        }
+        frames.push(framing::build_abcd_le16(&vdc()));
         let mock = MockTransport::new(frames);
         let (first, reports) = capture_reports(|| {
             proto.init(&mock).unwrap();
             proto.request_measurement(&mock)
         });
         assert_eq!(first.unwrap().mode, "V DC");
-        assert!(reports.is_empty(), "{reports:?}");
-        mock.push_response(framing::build_abcd_le16(&make_extended_payload(
-            0x03, 230.0, 0x00, 230.1,
-        )));
-        let (second, reports) = capture_reports(|| proto.request_measurement(&mock));
-        assert_eq!(second.unwrap().mode, "V AC");
         assert!(reports.is_empty(), "{reports:?}");
     }
 
@@ -1226,220 +510,54 @@ raw_payload=15"#
     #[test]
     fn unknown_frames_on_the_stream_are_reported() {
         let mut proto = Ut171Protocol::new();
-        let mut short = vec![0x00; 12];
+        let mut short = vec![0x00; 10];
         short[0] = RESPONSE_MEASUREMENT;
         let mock = MockTransport::new(vec![
-            framing::build_abcd_le16(&[0x01, 0x4F, 0x4B, 0x00]),
+            framing::build_abcd_le16(&[0x04, 0x00]),
             framing::build_abcd_le16(&short),
-            framing::build_abcd_le16(&[RESPONSE_MEASUREMENT]),
             framing::build_abcd_le16(&[]),
-            framing::build_abcd_le16(&make_payload(0x02, 0x01, 12.345, 0x00)),
+            framing::build_abcd_le16(&vdc()),
         ]);
         let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
-        assert_eq!(m.unwrap().display_raw.as_deref(), Some("12.345"));
+        assert_eq!(m.unwrap().display_raw.as_deref(), Some("1.2345"));
         assert_eq!(
             reports,
             [
-                "ut171: unrecognised frame: type 0x01, 4 bytes",
-                "ut171: unrecognised frame: type 0x02, 12 bytes",
-                "ut171: unrecognised frame: type 0x02, 1 bytes",
+                "ut171: unrecognised frame: type 0x04, 2 bytes",
+                "ut171: unrecognised frame: type 0x02, 10 bytes",
                 "ut171: unrecognised frame: 0 bytes",
             ]
         );
     }
 
-    /// §3.4 and §5.1-5.2 pair frame type 0x01 with 15 payload bytes and 0x03
-    /// with 21.
-    #[test]
-    fn a_payload_of_neither_frame_shape_is_reported() {
-        let mut long_standard = make_extended_payload(0x02, 1.5, 0x00, 0.0);
-        long_standard[2] = 0x01;
-        let mut short_extended = make_payload(0x02, 0x01, 1.5, 0x00);
-        short_extended[2] = 0x03;
-        let mut sixteen = make_payload(0x02, 0x01, 1.5, 0x00);
-        sixteen.push(0x00);
-        let mut type_two = make_payload(0x02, 0x01, 1.5, 0x00);
-        type_two[2] = 0x02;
-        for (payload, report) in [
-            (long_standard, "frame type 0x01, 21 bytes"),
-            (short_extended, "frame type 0x03, 15 bytes"),
-            (sixteen, "frame type 0x01, 16 bytes"),
-            (type_two, "frame type 0x02, 15 bytes"),
-        ] {
-            let (m, reports) = parse_reporting(&payload);
-            assert_eq!(m.unwrap().display_raw.as_deref(), Some("1.5"));
-            assert_eq!(reports, [format!("ut171: unrecognised frame: {report}")]);
+    /// Every mode the table lists, at each of its rows, with an aux value:
+    /// none of it is reported, and every label is in the catalog.
+    fn documented_payloads() -> Vec<Vec<u8>> {
+        let mut payloads = Vec::new();
+        for mode in (0x01..=0x0F)
+            .chain(0x11..=0x19)
+            .chain([0x1B, 0x1C, 0x1E, 0x1F])
+        {
+            let rows = parse::range_rows(mode).len().max(1) as u8;
+            for range in 1..=rows {
+                payloads.push(payload(mode, range, 1.5, 0x10, 0x00));
+                payloads.push(with_aux(
+                    payload(mode, range, 1.5, 0x10, 0x01),
+                    0.05,
+                    0x30,
+                    0x13,
+                ));
+            }
         }
+        payloads
     }
 
     #[test]
-    fn an_unknown_mode_byte_is_reported() {
-        for mode in [0x00u8, 0x1E, 0x23, 0x25, 0x30] {
-            let payload = make_payload(mode, 0x01, 1.0, 0x00);
-            let (m, reports) = parse_reporting(&payload);
-            assert_eq!(m.unwrap().mode, format!("Unknown({mode:#04x})"));
-            assert_eq!(
-                reports,
-                [format!("ut171: unrecognised mode byte: {mode:#04x}")]
-            );
-        }
-    }
-
-    /// The first index past each §5.4 table is reported; auto (0) and modes
-    /// without a table are not.
-    #[test]
-    fn a_range_past_the_mode_s_table_is_reported() {
-        for (mode, last) in [
-            (0x08u8, 1u8),
-            (0x09, 8),
-            (0x0E, 1),
-            (0x0F, 7),
-            (0x11, 2),
-            (0x12, 2),
-            (0x14, 2),
-            (0x15, 2),
-            (0x17, 2),
-        ] {
-            let (m, reports) = parse_reporting(&make_payload(mode, last + 1, 1.0, 0x00));
-            let m = m.unwrap();
-            assert_eq!(m.range_label, "", "mode {mode:#04x}");
-            assert_eq!(m.range_raw, last + 1);
-            assert_eq!(
-                reports,
-                [format!(
-                    "ut171: unrecognised range byte: mode {mode:#04x} range {}",
-                    last + 1
-                )]
-            );
-            let (_, reports) = parse_reporting(&make_payload(mode, 0x00, 1.0, 0x00));
-            assert!(reports.is_empty(), "mode {mode:#04x}: {reports:?}");
-        }
-        for mode in [0x02, 0x0A, 0x13, 0x18] {
-            let (_, reports) = parse_reporting(&make_payload(mode, 9, 1.0, 0x00));
-            assert!(reports.is_empty(), "mode {mode:#04x}: {reports:?}");
-        }
-    }
-
-    /// §5.3 leaves bits 4-5 unread, and bits 0 and 3 have no evidence left.
-    #[test]
-    fn undefined_flag_bits_are_reported() {
-        for (flags, report) in [
-            (0x01, "0x01"),
-            (0x08, "0x08"),
-            (0x10, "0x10"),
-            (0x20, "0x20"),
-            (0x89, "0x89"),
-        ] {
-            let (m, reports) = parse_reporting(&make_payload(0x02, 0x01, 1.0, flags));
-            let m = m.unwrap();
-            assert_eq!(m.flags.hold, flags & 0x80 != 0);
-            assert!(m.flags.auto_range);
-            assert_eq!(
-                reports,
-                [format!("ut171: unrecognised flag bits: {report}")]
-            );
-        }
-    }
-
-    /// §5.3: bit 1 marks an extended frame.
-    #[test]
-    fn flag_bit_1_disagreeing_with_the_frame_size_is_reported() {
-        let (m, reports) = parse_reporting(&make_payload(0x02, 0x01, 1.0, 0x02));
-        assert!(m.unwrap().flags.auto_range);
-        assert_eq!(
-            reports,
-            ["ut171: unrecognised flag bits: 0x02 on a 15-byte payload"]
-        );
-
-        let mut payload = make_extended_payload(0x03, 230.0, 0x00, 230.1);
-        payload[1] = 0x00;
-        let (m, reports) = parse_reporting(&payload);
-        assert_eq!(m.unwrap().mode, "V AC");
-        assert_eq!(
-            reports,
-            ["ut171: unrecognised flag bits: 0x00 on a 21-byte payload"]
-        );
-    }
-
-    /// §5.1: status2 holds 0x40 and 0x20; the byte after it 0x00 or 0x01.
-    #[test]
-    fn undocumented_status_bytes_are_reported() {
-        for (offset, byte, report) in [
-            (9, 0x80, "payload[9] = 0x80"),
-            (9, 0x41, "payload[9] = 0x41"),
-            (10, 0x02, "payload[10] = 0x02"),
-            (10, 0xFF, "payload[10] = 0xff"),
-        ] {
-            let mut payload = make_payload(0x02, 0x01, 1.5, 0x00);
-            payload[offset] = byte;
-            let (m, reports) = parse_reporting(&payload);
-            assert_eq!(m.unwrap().display_raw.as_deref(), Some("1.5"));
-            assert_eq!(
-                reports,
-                [format!("ut171: unrecognised status byte: {report}")]
-            );
-        }
-    }
-
-    /// §5.1 says nothing of how an overload is sent: it still reads as OL.
-    #[test]
-    fn a_non_finite_main_value_is_reported_and_still_overload() {
-        for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
-            let (m, reports) = parse_reporting(&make_payload(0x0A, 0x01, value, 0x00));
-            assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
-            assert_eq!(
-                reports,
-                [format!(
-                    "ut171: unrecognised float: {:02X?} = {value} in mode 0x0a",
-                    value.to_le_bytes()
-                )]
-            );
-        }
-    }
-
-    #[test]
-    fn an_ncv_level_that_is_not_a_whole_byte_is_reported() {
-        for (value, level) in [(3.5f32, 3u8), (256.0, 255), (-1.0, 0)] {
-            let (m, reports) = parse_reporting(&make_payload(0x24, 0x00, value, 0x00));
-            assert!(
-                matches!(m.as_ref().unwrap().value, MeasuredValue::NcvLevel(l) if l == level),
-                "{m:?}"
-            );
-            assert_eq!(
-                reports,
-                [format!(
-                    "ut171: unrecognised float: {:02X?} = {value} in mode 0x24",
-                    value.to_le_bytes()
-                )]
-            );
-        }
-    }
-
-    /// §5.1 has the aux float only as V AC / mV AC's frequency.
-    #[test]
-    fn an_aux_value_outside_the_ac_voltage_modes_is_reported() {
-        let (m, reports) = parse_reporting(&make_payload_with_aux(0x02, 0x01, 1.5, 0x00, 2.5));
-        let m = m.unwrap();
-        assert_eq!(m.aux_values.len(), 1);
-        assert_eq!(m.aux_values[0].label, "Aux");
-        assert_eq!(
-            reports,
-            [format!(
-                "ut171: unrecognised aux value: {:02X?} = 2.5 in mode 0x02",
-                2.5f32.to_le_bytes()
-            )]
-        );
-
-        for (mode, aux) in [(0x03, f32::NAN), (0x02, f32::INFINITY)] {
-            let (m, reports) = parse_reporting(&make_payload_with_aux(mode, 0x00, 1.5, 0x00, aux));
-            assert!(m.unwrap().aux_values.is_empty());
-            assert_eq!(
-                reports,
-                [format!(
-                    "ut171: unrecognised aux value: {:02X?} = {aux} in mode {mode:#04x}",
-                    aux.to_le_bytes()
-                )]
-            );
+    fn documented_payloads_report_nothing() {
+        for payload in documented_payloads() {
+            let (m, reports) = capture_reports(|| parse_measurement(&payload));
+            assert!(m.is_ok(), "{payload:02X?}: {m:?}");
+            assert!(reports.is_empty(), "{payload:02X?}: {reports:?}");
         }
     }
 

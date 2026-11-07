@@ -34,8 +34,8 @@ assumed, the sections below state what holds today.
   recording* ([ut181 §10.1](research/ut181/reverse-engineered-protocol.md)). Sending it is
   safe only because a UT181A with Communication ON is identified in the step before; with
   Communication OFF it ignores everything anyway.
-- UT181A and UT171 frame lengths overlap (UT181A normal format 19 bytes without aux or
-  bargraph, UT171 16 or 22): length alone cannot split them.
+- UT181A and UT171 payload lengths overlap (UT181A normal format 19 bytes without aux or
+  bargraph, UT171 measurements 11 to 23): length alone cannot split them.
 
 ## The cascade
 
@@ -107,7 +107,7 @@ The overlaps the ranking arbitrates, each rule declining what is not its own:
 - `ut181a` and `ut171` — the 2-byte-LE pair: identical framing and measurement type byte, and
   payload lengths that overlap. The UT181A takes a payload only it can send and anything its own
   trigger elicited. The UT171 declines exactly those two: such a payload is longer than its own
-  extended frame ([ut171 §3.4/§5.2](research/ut171/reverse-engineered-protocol.md)), and a frame
+  longest measurement ([ut171 §3.4](research/ut171/reverse-engineered-protocol.md#34-valid-frame-sizes----vendor)), and a frame
   arriving right after SET_MONITOR is the one that command asked for. It takes the rest, with a
   WARN when the frame came before its connect frame went out. OK/ER replies are ignored. Neither
   rule can fire on the other families: a UT61+ name frame reads a length of `0x5508`, a VC-880

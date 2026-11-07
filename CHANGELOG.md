@@ -61,6 +61,7 @@
 - **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
 - **The UT8803 reads its lowest inductance range in µH** — it showed mH, a thousand times too large.
 - **The UT8802 follows UNI-T's software for sign, OL and status flags**
+- **The UT171's protocol now follows UNI-T's software** — the earlier decoding misread most of each frame.
 - **Alarms and scaling use base units on every prefixed reading** — on H, Wh, Ah, W/m² and °, a range step idled the alarm and put a scale 1000× off.
 - **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.

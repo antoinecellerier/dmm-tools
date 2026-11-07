@@ -397,7 +397,7 @@ pub(crate) fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usi
 /// Longest length field [`extract_frame_abcd_2byte_le16`] accepts: a UT181A
 /// recording-data reply carrying the most samples (UT181A spec §10.3: the
 /// type byte, a count byte and 250 samples of 9 bytes, plus the 2-byte
-/// checksum). The UT171's longest frame has length 0x17 (UT171 spec §3.4).
+/// checksum). The UT171's longest frame has length 0x19 (UT171 spec §3.4).
 const MAX_LE16_LEN: usize = 1 + 1 + 250 * 9 + 2;
 const _: () = assert!(MAX_LE16_LEN + 4 <= MAX_RX_BUF);
 

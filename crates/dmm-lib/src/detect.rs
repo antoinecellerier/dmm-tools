@@ -630,13 +630,12 @@ mod tests {
         }
     }
 
-    /// A LE16 measurement payload of `len` bytes, shaped like the UT171's
-    /// standard response: type 0x02, flags, frame type, mode, range, then
-    /// little-endian float fields.
+    /// A LE16 measurement payload of `len` bytes, shaped like a UT171 or
+    /// UT181A reading: type 0x02, two status bytes, the mode, then zeros.
     fn le16_measurement_payload(len: usize) -> Vec<u8> {
         let mut payload = vec![0u8; len];
         payload[0] = 0x02; // response type = measurement
-        payload[2] = 0x01; // frame type = standard
+        payload[2] = 0x01; // auto range, on either family
         payload
     }
 

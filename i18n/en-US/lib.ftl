@@ -135,7 +135,7 @@ mode-dc-uva = DC µVA
 mode-diode = Diode
 # Used by: UT181A
 mode-diode-alarm = Diode Alarm
-# Used by: 44 meters
+# Used by: 43 meters
 mode-duty-pct = Duty %
 # Used by: BM829s/BM827s/BM822s/BM821s
 mode-ef = EF
@@ -207,6 +207,8 @@ mode-scr = SCR
 mode-scope = Scope
 # Used by: 9 meters
 mode-solar = Solar
+# Used by: UT171A/B/C
+mode-square-wave = Square wave
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 mode-t1 = T1
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
@@ -359,7 +361,7 @@ range-temp = Temp
 ## in the graph's legend and in the statistics. Keep them short: each sits next
 ## to a number.
 
-# Used by: 15 meters
+# Used by: 16 meters
 aux-ac = AC
 # Used by: 10 meters
 aux-ac-a = AC A
@@ -395,7 +397,7 @@ aux-compass = Compass
 aux-continuity = Continuity
 # Used by: 121GW
 aux-current = Current
-# Used by: 12 meters
+# Used by: 13 meters
 aux-dc = DC
 # Used by: 9 meters
 aux-dc-a = DC A
@@ -403,7 +405,7 @@ aux-dc-a = DC A
 aux-dc-v = DC V
 # Used by: 9 meters
 aux-diode = Diode
-# Used by: 10 meters
+# Used by: 11 meters
 aux-duty = Duty
 # Used by: 9 meters
 aux-frequency = Frequency
@@ -433,9 +435,11 @@ aux-ncv = NCV
 aux-pf = PF
 # Used by: UT181A
 aux-peak-min = Peak Min
-# Used by: Mock UT61E+, UT181A
+# Used by: Mock UT61E+, UT171A/B/C, UT181A
 aux-period = Period
-# Used by: UT181A, VC871
+# Used by: UT171A/B/C
+aux-pulse-width = Pulse Width
+# Used by: UT171A/B/C, UT181A, VC871
 aux-reference = Reference
 # Used by: 9 meters
 aux-solar = Solar

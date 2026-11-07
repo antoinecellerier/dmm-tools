@@ -19,7 +19,7 @@ pub(super) const RESPONSE_MEASUREMENT: u8 = 0x02;
 
 /// A measurement payload this long can only be a UT181A: its normal format
 /// passes 31 bytes as soon as it carries an aux value or a bargraph (§5.3),
-/// while the UT171's longest measurement response is 21 payload bytes
+/// while the UT171's longest measurement response is 23 payload bytes
 /// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4). Below it the
 /// two families are told apart by which trigger elicited the frame.
 pub(super) const EXCLUSIVE_PAYLOAD_MIN: usize = 31;
