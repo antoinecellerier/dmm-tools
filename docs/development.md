@@ -43,7 +43,33 @@ The lints every crate shares (no `unsafe`, no `unwrap()` outside tests, a
 reason on every `allow`) are in the root `Cargo.toml`'s `[workspace.lints]`
 and in `clippy.toml`.
 
-## Build artifacts & disk usage
+## Build speed & disk usage
+
+Dependencies build without debuginfo and at `opt-level = 1`
+(`[profile.dev.package."*"]` in the root `Cargo.toml`): that takes about a
+third off `target/` and takes the test run from about 20 s to under 10 s,
+mostly in the GUI tests, for about 4 more minutes whenever the dependencies
+rebuild. Our own crates keep debuginfo and stay unoptimised. A local
+`--release` build is incremental, so after a change to `dmm-lib` it
+rebuilds `dmm-cli` in about 5 s instead of about 60 s, for slightly slower
+code. Published binaries keep release's full settings: CI's Build step in
+`build-matrix.yml` turns incremental off and asks for 16 codegen units.
+Comparing behaviour across commits needs no optimisation; a debug build
+gives the same output.
+
+Dependencies only rebuild when `Cargo.lock`, a feature or the toolchain
+changes, but cargo keeps a separate build of them per profile and per
+feature set. `-p dmm-cli` and `--workspace` turn on different features of
+shared crates, so each command shape builds its own copy once. A new
+checkout, such as a git worktree, starts with an empty `target/` and pays
+every copy again (about 15 minutes of builds for one agent's usual commands).
+Keep worktrees and their `target/` for reuse rather than recreating them.
+Don't point two checkouts of this repo at the same target or build
+directory: cargo names our crates by their path inside the workspace and
+judges them fresh by file times, so one checkout can silently link the
+other's code. [Sharing one build directory between
+checkouts](future-improvements-ruled-out.md#sharing-one-build-directory-between-checkouts)
+has the measurements.
 
 Cargo does not garbage-collect `target/` — old hash-suffixed artifacts in
 `target/debug/deps` accumulate indefinitely. To reclaim space, run:

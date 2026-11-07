@@ -167,6 +167,10 @@ jobs:
       - name: Build
         env:
           DMM_PUBLISHED_BUILD: ${{ inputs.published && '1' || '' }}
+          # Release's usual settings for every binary CI builds; the
+          # workspace's release profile is incremental for local rebuilds.
+          CARGO_PROFILE_RELEASE_INCREMENTAL: "false"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
         run: >
           cargo build --workspace --release --target ${{ matrix.target }}
           ${{ matrix.also_target && format('--target {0}', matrix.also_target) || '' }}

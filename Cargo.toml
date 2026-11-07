@@ -33,3 +33,20 @@ unsafe_code = "deny"
 [workspace.lints.clippy]
 unwrap_used = "warn"
 allow_attributes_without_reason = "warn"
+
+# Dependencies without debuginfo, which takes about a third off target/; our
+# own crates keep full debuginfo for backtraces and debuggers. opt-level 1
+# runs egui and the other dependencies fast enough to take the test run
+# from about 20 s to under 10 s; it costs about 4 more minutes per cold
+# build of them. opt-level 2 gained nothing over 1.
+[profile.dev.package."*"]
+debug = false
+opt-level = 1
+
+# Incremental locally, which also brings cargo's default of 256 codegen
+# units: after an edit --release rebuilds dmm-cli in about 5 s instead of
+# about 60 s, for slightly slower code. Published binaries are built without
+# it: the Build step in .github/workflows/build-matrix.yml turns incremental
+# off and asks for 16 units, release's usual settings.
+[profile.release]
+incremental = true
