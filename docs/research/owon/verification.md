@@ -128,17 +128,17 @@ and each still wants a capture of our own.
   bits are named. Needs captures across modes and keys, OL among them.
 - RMR, bit 7, "Current value (only B41 model)" in the manuals (§6.6) —
   settles its meaning. Needs a B41T.
-- Function 13 on a B-series meter (NCV or "ADP"), and functions 14-15
-  (Power W/VA or nothing) ([§6.2](reverse-engineered-protocol.md#62-function-codes);
-  14-15 are W and VA on a 15-byte VC871, §14.5) — decides those codes' names.
-  Needs a B35 or B41T in every position.
+- Function 13 on a B-series meter (NCV, or "ADP", a PC word no manual uses), and
+  functions 14-15 (Power W/VA or nothing) ([§6.2](reverse-engineered-protocol.md#62-function-codes);
+  the app's full-scale tables prove neither; W and VA on a VC871, §14.5) —
+  decides those codes' names. Needs a B35 or B41T in every position.
 - NCV levels 0-4 and the decimal code sent with them
   ([§6.7](reverse-engineered-protocol.md#67-ncv); OW18B word 0xF360, values
   0-4, §14.2) — settles §6.7. Needs NCV near a live conductor on an OW16B,
   OW18B/E or CM2100B.
-- Function 9 on an OW18E: whether the count is in ℉ or, as one project
-  says, in ℃ (§6.2, §14.3 D10) — decides the ℉ decode. Needs an OW18E at ℉
-  against its LCD.
+- Function 9 on an OW18E: whether the count is in ℉, as every vendor source
+  takes it, or, as one project says, in ℃ (§6.2, §14.3 D10) — decides the ℉
+  decode. Needs an OW18E at ℉ against its LCD.
 
 ## Commands and keys
 
@@ -254,9 +254,9 @@ and each still wants a capture of our own.
 - Status bit 16 as the wrong-socket warning (§10.6; set after a VC871's
   dial moved from mA to A, §14.4) — settles the lead-error flag. Needs
   `check_input` on a VC871 or VC891.
-- Functions 16, 17, 19 and 23-29 as sent (§10.4, §10.5) — settles their rules.
-  Needs `power_usb_module`, `usb_timer`, `power_ac_pf`, `motor`, `loop`,
-  `loop_live`, `acdcv`, `hv_dc`, `hv_ac` and `pv` where the model has them.
+- Functions 16, 17, 19 and 23-29 as sent, Motor's 0 and 1 as its lock sequence
+  (§10.4, §10.5) — settles their rules. Needs `power_usb_module`, `usb_timer`, `power_ac_pf`,
+  `motor`, `loop`, `loop_live`, `acdcv`, `hv_dc`, `hv_ac` and `pv` where the model has them.
 - Hz/Duty `05 01` on an OW65B or OW67B, whose app lists lack it while their
   manuals' screenshots show it ([§10.8](reverse-engineered-protocol.md#108-commands))
   — decides those key sets. Needs a dev build that sends `05 01`.

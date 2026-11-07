@@ -41,12 +41,15 @@ Citation keys:
   **BM** = `imeter_base/device_basics/ble_multimeter.dart`,
   **PE** = `imeter_base/protocol_parser/protocol_element.dart`,
   **MD** = `imeter_base/device_basics/type_inf/multimeter_device.dart`,
+  **MF** = `imeter_base/device_basics/type_inf/multimeter_fs.dart`,
   **R2W** = `imeter_base/protocol_parser/r2w_protocol_parser.dart`,
   **R10W** = `imeter_base/protocol_parser/r10w_protocol_parser.dart`,
   **OFF** = `imeter_base/protocol_parser/offline_data_parse_helper.dart`,
   **AUTH** = `imeter_base/utils/auth_tool.dart`,
   **DLN** = `owon_imeter/pages/device_list_page/widget_provider/device_list_normal_widget_provider.dart`,
-  **DCVM** = `owon_imeter/pages/device_control_page/device_control_view_model.dart`
+  **DCVM** = `owon_imeter/pages/device_control_page/device_control_view_model.dart`,
+  **TTS** = `owon_imeter/tts/tts_helper.dart` (speech),
+  **MSG** = `owon_imeter/generated/intl/messages_en.dart`
 - **pc `path:lines`** — `references/owon/pc/win7/src/`, the source bundle
   `com.owon.pc.multimeter.source_1.4.4.jar` unpacked. Short forms:
   **MC** = `model/MultimeterClient.java`, **BC** = `kernal/BleClient.java`,
@@ -365,19 +368,25 @@ every live frame carries it is [UNVERIFIED] (cross-reference §14).
 | 10 | DIODE, V | DIODE, V |
 | 11 | CONT, Ω | CONT, Ω |
 | 12 | hFE, no unit | hFE, unit string "hFE" |
-| 13 | NCV, no unit (every model) | "NCV" on series 18, 20, 55; "ADP" on every other (unit string the same, unit type empty) |
-| 14 | Power, W | "Null" |
-| 15 | Power, VA | "Null" |
+| 13 | NCV, no unit (every model) | "NCV" on series 18, 20, 55; "ADP" on every other (unit string the same, unit type empty); offline records: "ADP" on every series |
+| 14 | Power, W | "Null"; offline records: "?" |
+| 15 | Power, VA | "Null"; offline records: "?" |
 
-Codes 0-12 agree [VENDOR, both]. The manuals' app screens list the
-function codes DC, AC, RES, CONT, DIODE, CAP, Hz, DUTY, TEMP and **POWER**
+The PC's offline column is ODM:255-312. Codes 0-12 agree [VENDOR, both].
+The app's table serves the 15-byte frame too (§10.5), and is not gated by
+model: `getGearUnitByCode` takes the code alone, from both parsers
+(PE:4425-4481; R2W:621, R10W:1009) [VENDOR, app]. The manuals' app screens
+list the function codes DC, AC, RES, CONT, DIODE, CAP, Hz, DUTY, TEMP and **POWER**
 ("Power measurement") (B35-UM p.27/22-28/23; the same screens in OW18-UM
 p.25/20-26/21) [KNOWN]. Disagreements, all [UNVERIFIED]:
 
 - **13**: NCV in the app on every model, "ADP" in the PC on the B-series. No
   NCV and no ADP position is on the B33, B35 or B41T dials (§9.2), while the
-  OW16, OW18 and CM2100 have NCV [KNOWN]. What a B-series meter sends as 13,
-  if anything, is open (cross-reference §14).
+  OW16, OW18 and CM2100 have NCV [KNOWN]. The PC's offline records call 13
+  "ADP" on every series, the OW series included (ODM:307-309) [VENDOR, PC].
+  "ADP": none found in the OWON, Voltcraft and UNI-T manuals (text search),
+  2026-11-06. What a B-series meter sends as 13, if anything,
+  is open (cross-reference §14).
 - **14-15**: the app's Power W and Power VA against the PC's nothing. No
   dial in these manuals has a power position; the B35 LCD carries an
   unexplained "RPM" segment and a lightning bolt, and its app screen the
@@ -386,6 +395,39 @@ p.25/20-26/21) [KNOWN]. Disagreements, all [UNVERIFIED]:
   (PE:4425-4481), which only the 15-byte frame can reach (§10.5) [VENDOR,
   app].
 
+**Per-model full-scale tables.** The app also keeps a full-scale table per
+model code (`_mNNFullScale`, keyed at MF:815-1217) [VENDOR, app]. They
+serve its bar graph and chart pages: neither parser reads them, and a
+function or model missing from them falls back to a default (MF:144-149,
+:256-260). So they do not show which functions a meter has. Every table lists 13 with
+the full scale "4", the B33's, B35's and B41's (MF:11982, :13013, :10834)
+and the OW65's, OW67/VC871's and OW69/VC891's (MF:14219, :15429, :17683)
+included, whose dials have no NCV (§9.2, §9.4); only `_m87` (OW67, VC871)
+and `_m89` (OW69, VC891) list 14 and 15, and `_m89` also 17 and 18
+(MF:17919, :17860) [VENDOR, app]; the second read, 2026-11-07, also found
+17 and 18 in `_m87` (MF:15665, :15606), which the first did not report;
+no power function found in the OW69 and VC891 manuals (text search),
+2026-11-06. The OW18E's table (code 20) gives 8 the full scale "400.0" and
+9 "752.0" (MF:7849-7918), 752 ℉ being 400 ℃: the app takes 9's count as ℉,
+as the PC does by scaling it like any other function (MC:1494-1498)
+[VENDOR, both]. The OW18 manual gives the ℉ range as −58 ℉ to 752 ℉
+(OW18-UM p.46/41) [KNOWN]. What an OW18E sends is [UNVERIFIED]
+(cross-reference §14, D10).
+
+**Unlisted values** [VENDOR, per column]:
+
+| Input | App | PC, live (6-byte) | PC, offline records |
+|---|---|---|---|
+| Function 30, 31 (15-byte only) | throws (PE:4425-4481), main word or sub word, before any value is built (§10.5) | unreachable, 4 bits | unreachable |
+| Function 14, 15 on a 6-byte frame | Power W or VA, with the number | "Null" as function and unit, with the number (MC:1522-1524) | "?", with the number (ODM:310-312) |
+| Prefix | all eight codes listed (§6.3) | `default` "?" (MC:1442-1445), unreachable on 3 bits | the same (ODM:248-251) |
+| NCV value other than 0-4 | throws (`transformNCVValue`, PE:3976-4032) | the number, kept as text: the switch has no default (MC:1608-1625) | no NCV path |
+| Motor value other than 0-3 (§10.4) | throws (`transformMotorValue`, PE:3919-3975) | no 15-byte parser | — |
+
+What a throw does past the parser is [INFERRED]: the parsing call is not
+awaited and no handler was found on its path, so the frame, and the rest of
+that notification, are lost.
+
 ### 6.3 Prefix
 
 | Code | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
@@ -393,8 +435,11 @@ p.25/20-26/21) [KNOWN]. Disagreements, all [UNVERIFIED]:
 | Prefix | p | n | µ | m | none | k | M | G |
 
 App PE:1008-1200 (multipliers 1e-12 … 1e9); PC MC:1417-1446 ("K" for k)
-[VENDOR, both]. For duty, ℃, ℉, hFE and NCV (7, 8, 9, 12, 13) the app forces
-the prefix to 4 and leaves it out of the value and unit (PE:871-947,
+[VENDOR, both]. No per-model full-scale table of the app (§6.2) uses
+prefix 0 or 7: their prefix type has values for n, µ, m, none, k and M
+only (`objs.txt` of the blutter output, :30795-30833) [VENDOR, app].
+Whether a meter sends 0 is [UNVERIFIED] (cross-reference §14, D5). For
+duty, ℃, ℉, hFE and NCV (7, 8, 9, 12, 13) the app forces the prefix to 4 and leaves it out of the value and unit (PE:871-947,
 :5798-5873); the PC leaves it out for duty, hFE and 13 but prefixes ℃ and ℉
 (MC:1489-1498) [VENDOR, both]. What the meter sends in bits 3-5 for those
 functions is [UNVERIFIED]; 4 is [INFERRED] from the app forcing it
@@ -500,7 +545,7 @@ agrees with the enum's codes, for words below 0x4000].
 App PE:4033-4115 (other values throw, so no reading); PC MC:1608-1625 on
 series 18, 20 and 55, switched on the scaled value truncated to an integer
 (MC:1393, :1609), so the count-to-text table holds as given only for decimal
-code 0 [VENDOR, both]. The CM2100 shows "EF" below
+code 0, and any other value stays a number (no default case) [VENDOR, both]. The CM2100 shows "EF" below
 90 V and one to four dashes above, by field strength (CM2100-UM p.13/10)
 [KNOWN]. The OW16 and OW18 signal NCV with an LED and a beep and name no
 display word (OW18-UM p.19/14-20/15) [KNOWN] (cross-reference §14).
@@ -996,6 +1041,16 @@ digits is no reading; NCV (13) uses §6.7's texts; Time (19) is seconds shown
 3 "3-2-1" (PE:1318-1393; other values throw); decimal codes 6 and 7 give
 "UL" and "OL".
 
+- **Motor's meanings** come from the app's speech, which tells 0 and 1
+  apart although their display text is the same: 0 "Phase locking in
+  progress", 1 "Phase lock", 2 "Clockwise", 3 "Counter-clockwise", under
+  "three-phase motor" (`_buildMotorValueStr`, TTS:2202-2305; strings
+  MSG:2886-3052) [VENDOR, app].
+- **Time** has an empty unit string in the app's table (PE:604-614); its
+  speech names the unit "second" (TTS:28, :109) [VENDOR, app; the branch
+  table's index-to-word mapping INFERRED, and the same table gives "watt"
+  to 12, 13, 14 and 16].
+
 ### 10.5 Function codes 16-31
 
 | Code | Label, unit |
@@ -1014,11 +1069,18 @@ digits is no reading; NCV (13) uses §6.7's texts; Time (19) is seconds shown
 | 27 | Compass, ° |
 | 28 | DC_HV, V |
 | 29 | AC_HV, V |
-| 30, 31 | no entry: the lookup throws, dropping the rest of that notification [INFERRED] |
+| 30, 31 | no entry: the lookup throws, for the main word (R10W:46) and for the sub word (R10W:119), so a 30 or 31 in either loses the frame; that it drops the rest of that notification is [INFERRED] (§6.2, unlisted values) |
 
-PE:122-869, :4425-4481. Codes 16, 17, 19 and 24 also take no prefix (PE:871-947). With
+PE:122-869, :4425-4481. Codes 16, 17, 19 and 24 also take no prefix (PE:871-947);
+the no-prefix set is exactly 7, 8, 9, 12, 13, 16, 17, 19 and 24. With
 main function 23, a DC V or AC V sub-display is labelled "DC" or "AC"
 (PE:5952-6085).
+
+UNI-T's UT217 app (approach, source 9) has a different function table:
+keys 0-24, 28 and 29, with no entry for 25, 26 or 27. Which label and unit
+each key carries was not read; the strings Solar, Angle and Compass are
+absent from the build [VENDOR, UNI-T; read by a scan of its `libapp.so`,
+not a decompile].
 
 ### 10.6 Status bits 16-18
 
@@ -1264,7 +1326,10 @@ advertise FFF0, is contradicted by captures (D1); it keeps its tag and
 points here. A second read on 2026-10-02, after the 15-byte meters' vendor
 text was committed (`ca23ba9d`), covered those meters under the same rule;
 only the VC871 has hardware data, and one [INFERRED] mapping of §9.4 is
-contradicted (D11). Sources and the boundary:
+contradicted (D11). On 2026-11-06, after a vendor re-read of function codes
+13-15, 19, 30-31, Motor and prefix 0 (§6.2, §6.3, §10.4, §10.5), a check
+against the VC871 captures added nothing: they carry functions 14-22
+(§14.2, §14.5); the 6-byte captures were not re-checked. Sources and the boundary:
 `reverse-engineering-approach.md`.
 
 DeanCording's B35T+ work (2018) is the root of most later 6-byte clients
@@ -1339,12 +1404,12 @@ error.
 | D2 | §6.6 bit 6: AVG (app), OL (PC) | jtcash, pjpa365, MartMet and webspiderteam name it OL, from the PC's enum. At OL the B35T+ and B41T+ send decimal code 7 with bit 6 clear (pjpa365 §3: "bit 6 was not observed to be set"); no 6-byte capture sets any of bits 6-15 | The PC's OL text comes from the decimal code (MC:1594-1598); its enum is names only | community naming copied from the PC; OL is carried by the decimal code; bits 6-15 stay open | Captures with MAX/MIN and REL held, and a B41T for RMR |
 | D3 | §6.4 code 6 = UL | likeablob: 6 = overload (`utils/owon-b41t-plus.ts:90`) | Both: 6 UL, 7 OL | community error: the constant dates from when its "decimal" read bits 3-5 (prefix 6, M, at Ω OL), fixed in `ff9e0e5` without the constant | settled |
 | D4 | §6.5 magnitude bits 0-14 | JayTee42, kwasmich: bits 0-13, bit 14 "unused" | Both `& 0x7FFF` | community error: seen on a 5999-count OW18B; the OW18E's 19999 needs bit 14 | A reading above 16383 on an OW18E or B41T |
-| D5 | §6.3 prefix 0 = p | jtcash, pjpa365: 0 = "%" (×0.01) | Both p (1e-12 in the app) | community guess: no capture sends prefix 0 | Unseen |
+| D5 | §6.3 prefix 0 = p | jtcash, pjpa365: 0 = "%" (×0.01) | Both p (1e-12 in the app); no per-model full-scale table of the app uses 0 (§6.3, re-read 2026-11-06) | community guess: no capture sends prefix 0 | Unseen |
 | D6 | §7.1, §7.3 key 5 = Hz/Duty on OW meters | MartMet (and JAQUBA) send `04 01` for Hz/Duty and `04 00` for Bluetooth on an OW18B, no result stated | App `_owSeriesKeys` (MD:5989): code 5; PC OW panel: `hzPress` (5), `frame/MainFrame.java:330-348` | unsettled; both vendor programs say 5 | `04 01` and `05 01` on an OW18B/E, the LCD noted |
 | D7 | §8.3 bytes 12-15: record count (app) | The payload's byte count, 2 × (1 + readings): 42 for a range word and 20 readings (DeanCording), 12, 22, 42 and 8 for 5, 10, 20 and 3 readings (pjpa365 §6.3-6.4); jtcash sizes the read-back as value / 2 − 1 and gets the same value from `*READlen?` | The app stores it in `OfflineRecordConfig.recordLen` (built at the end of PE:4482-5107; key at PE:5518-5762) and never bounds the parse with it (R2W:687-1017 walks the payload); the PC logs it as "length" | OWON's label vs meter: the captures. "Record count" is the app's label; the meter sends bytes, which also fits the manuals' "22 bytes" (1 + 10 words) and "48 bytes" (§7.2) | Settled for the B35T+ and B41T+; a range change mid-recording stays in §8.3's open item |
 | D8 | §8.2 the closing 20 `FF` | pjpa365 §6.2: "there isn't one — no `0xFFFF` terminator" | Both expect it | community error: its own streams end in 20 `FF` (`_OPEN_CIRCUIT_FULL_STREAM`, `_VOLTAGE_FULL_STREAM`), and its 86- and 116-byte totals include them | settled |
 | D9 | §7.2 `*RECOrd,` interval in s | DeanCording's README example: `40 16 40 00` (4 200 000) with count `10 27 00 00` (10 000) | Both seconds; PC "Sec" | unexplained example: DeanCording's code, jtcash and pjpa365 send seconds, and pjpa365's headers echo 1, 2 and 3 | settled |
-| D10 | §6.2 function 9 = ℉ | kwasmich: at ℉ the OW18E sends 9 "(value is in °C)" (`ow18e.txt`) | Both label 9 ℉ and show the count as sent | unsettled: a note, no capture | An OW18E at ℉ against its LCD |
+| D10 | §6.2 function 9 = ℉ | kwasmich: at ℉ the OW18E sends 9 "(value is in °C)" (`ow18e.txt`) | Both label 9 ℉ and show the count as sent; the app's OW18E full-scale table scales 9 as ℉, 752.0 against 400.0 for 8 (§6.2, re-read 2026-11-06) | unsettled: a note, no capture; every vendor source takes the count as ℉ | An OW18E at ℉ against its LCD |
 | D11 | §9.4's functions table: 18-22 as the OW67B/VC871's USB power [INFERRED by name] | VC871: 21 (V) and 22 (A) also come in AC power (status bit 13: 21 with sub 3, A AC) and DC power (bit 14: 14 with sub 22, 21 with sub 22); 18 (mAh) and 20 (Wh) with sub 19 under bit 15 (USB) | The app labels 21 "Power, V" and 22 "Power, A", with no USB tie (PE:122-869) | our inference vs meter: the captures | Settled for the VC871 |
 | D12 | §10.1, §10.3 | libreble: "VC800 / R2W meters use a SEPARATE 6-byte protocol" (`docs/protocols/voltcraft.md:27`); "the real meter sends [the sub block] zero with bit 12 cleared" (`:65`); functions above 13 rejected (`:41-47`); "redundant AC/DC state bits 13/14" (`:88`). fakemeter: big-endian words (`docs/voltcraft-measurement-protocol.md:17`, `:36`), prefixes only p-m (`:228-231`) | Codes 87 and 89 are 15-byte (§10.1); bits 13/14 are the app's AC and DC chips (§6.6) | community errors, none from hardware: the VC871 sends 15 bytes, functions 14-22, sub words filled with bit 12 clear (§14.4), bits 13/14 only in power modes, and prefixes k and M, little-endian | settled |
 

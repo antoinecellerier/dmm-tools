@@ -126,7 +126,12 @@ The hashes of the product pages and datasheets are in `SOURCE.txt`.
    by package, signer and strings only, not decompiled: it is signed with
    the same OWON certificate (SHA-256 `94790743…8a955`), is built from the
    same `owon_imeter` Dart package, and carries the FFF0 service and
-   `_cms101Keys`.
+   `_cms101Keys`. On 2026-11-06 its function table's keys were read
+   (spec §10.5), still without a decompile: `lib/arm64-v8a/libapp.so` was
+   scanned in memory for the table's map-store calls, the keys taken from
+   their constants, and the scan was checked on OWON's and Voltcraft's
+   `libapp.so`, whose blutter listings give the answer. Nothing was executed;
+   which label belongs to which key was not read.
 
 | Source | File (under `references/owon/`) | SHA-256 |
 |---|---|---|
@@ -339,6 +344,17 @@ without one is tagged [UNVERIFIED].
     keys, the speech text for LPF, the tags on Dart-runtime readings, and
     the manuals' screenshot key lists), and a narrow re-check of the fixed
     rows.
+11. **Function-code re-read** (2026-11-06). Two readers, the second blind
+    to the first, re-read the app listing, the PC source and the manuals for
+    function codes 13-15, 19 and 30-31, Motor's values, unlisted codes and
+    prefix 0, and scanned the UT217 app (source 9). Neither opened the
+    cross-reference findings, the capture notes or community code; community
+    claims reached them only through spec §14 (the second read its
+    open-decision table alone). Only what both readings support went into
+    spec §6.2, §6.3, §6.7, §10.4 and §10.5; where they differed (how far a
+    throw's effect is read rather than inferred) the spec keeps [INFERRED].
+    Reports:
+    `references/review-2026-11-04/arch/vendor-audit-2026-11-06/`.
 
 Resolved disagreements (`findings/adjudication.md`, and drafting):
 
@@ -351,7 +367,9 @@ Resolved disagreements (`findings/adjudication.md`, and drafting):
    meanings open.
 4. **Function 13**: NCV (app, every model) against "ADP" (PC, B-series). The
    manuals give NCV only to the OW16, OW18 and CM2100 and neither to the
-   B-series; open for the B-series.
+   B-series; open for the B-series. The PC's offline path says "ADP" on
+   every series, and the app's per-model full-scale tables, which list NCV
+   for every model, are display data, not evidence (2026-11-06).
 5. **Functions 14-15**: Power W / VA (app) against nothing (PC); no dial has
    them, the B35 LCD has unexplained RPM and bolt segments; open.
 6. **Decimal code 5**: ÷10⁵ (app) against "err point" (PC); open.
