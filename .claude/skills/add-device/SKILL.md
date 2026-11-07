@@ -64,7 +64,7 @@ Each brief carries the decisions plus:
 - instruction text from this model's manual, never a sibling's;
 - placeholder Bluetooth addresses and serials in tests and docs, never the user's;
 - every label the parser builds listed in the family's `all_labels`, and `i18n/en-US/lib.ftl` regenerated with `UPDATE_L10N=1 cargo test -p dmm-shared lib_ftl` and committed;
-- its own `CARGO_TARGET_DIR=~/.cache/dmm-<task>`, deleted when done;
+- its own lane (CLAUDE.md, Build & test), kept for the next task;
 - review fixes as `--fixup` commits on the commit they fix, then `git rebase -x 'cargo check --workspace --all-targets' <base>` over the series before handing back — replayed picks skip the hook, which still gates the tip.
 
 ### 7. Reviews (standing)
@@ -84,4 +84,3 @@ Work through `docs/adding-devices.md` Phase 7. Draft the issues per `verificatio
 - Leak check before asking to push: `git log -p origin/main..` for `([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}` (Bluetooth addresses) and `/home/`.
 - Ask for the push (CLAUDE.md, Commit discipline). The issues point at the newest nightly dev build, which won't carry the device until the next night; offer `gh workflow run dev-build.yml` if the user wants it sooner.
 - `docs/research/<family>/verification.md` lists what waits on reporters, including the spec tables.
-- `du -sh ~/.cache/dmm-* 2>/dev/null`; delete the dirs no agent is still building in.

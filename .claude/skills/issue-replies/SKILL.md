@@ -27,7 +27,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
 
 - Draft in the scratchpad, never as a file in the repo — the posted comment is the record.
 - Re-read the thread (`gh issue view N --comments`) before drafting and again before posting. The user often posts their own reply, and reporters' messages cross ours: build on what is already there, never repeat it.
-- A fix for a reporter to test ships on its own: when `git log origin/main..main` holds unrelated work, build it on a branch from `origin/main` in a scratchpad worktree (`CARGO_TARGET_DIR` under `~/.cache`), then push `<branch>:main` on the user's OK.
+- A fix for a reporter to test ships on its own: when `git log origin/main..main` holds unrelated work, build it on a branch from `origin/main` in a lane (CLAUDE.md, Build & test), then push `<branch>:main` on the user's OK.
 - A reply that sends the reporter to a fix needs the build to exist first: push → `gh workflow run dev-build.yml` → `gh release view dev-<short-sha>` lists the archives → post. Ask for the push and the build run before posting — "post it" authorizes the comment, not the push (`CLAUDE.md`, Commit discipline).
 - Post via `gh` only when told to; the user often posts themselves. Re-read the draft file first — the user may have edited it.
 - End every reply with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.

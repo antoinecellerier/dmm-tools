@@ -15,6 +15,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets -- -D warnings` (must pass clean)
 - `cargo fmt --check`
+- Outside the main checkout, build only in a seeded worktree kept for reuse (`worktrees/lane-N`, one agent each) or one Claude Code creates (seeded by a hook); compare behaviour across commits with debug builds. How and why: "Build speed & disk usage" in `docs/development.md`.
 
 A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite on every commit; a commit-msg hook (`git-hooks/commit-msg`) rejects a `Claude-Session:` trailer. Fix failures; never bypass with `--no-verify`.
 

@@ -64,13 +64,34 @@ Dependencies only rebuild when `Cargo.lock`, a feature or the toolchain
 changes, but cargo keeps a separate build of them per profile and per
 feature set. `-p dmm-cli` and `--workspace` turn on different features of
 shared crates, so each command shape builds its own copy once. A new
-checkout, such as a git worktree, starts with an empty `target/` and pays
-every copy again (about 15 minutes of builds for one agent's usual commands).
-Keep worktrees and their `target/` for reuse rather than recreating them.
-Don't point two checkouts of this repo at the same target or build
-directory: cargo names our crates by their path inside the workspace and
-judges them fresh by file times, so one checkout can silently link the
-other's code. [Sharing one build directory between
+checkout, such as a git worktree, starts with an empty `target/` and would
+pay every copy again (about 15 minutes of builds for one agent's usual
+commands). Start it from the main checkout's build instead:
+
+```sh
+git worktree add --detach worktrees/<name> main
+mkdir -p worktrees/<name>/target
+cp -a target/CACHEDIR.TAG target/debug worktrees/<name>/target/
+cd worktrees/<name>
+cargo clean --workspace
+```
+
+The dependencies are reused as they are, and our four crates rebuild from
+the new checkout's own sources, about a minute in all. Keep the worktree
+for the next task rather than making a new one: `git checkout --detach
+<base>` in it rebuilds only what changed. Builds with changed flags
+(`RUSTFLAGS`, `cargo fix`) belong in a worktree of their own, as they
+rebuild everything in place. Claude Code's own worktrees (`--worktree`,
+`EnterWorktree`, isolated subagents) are seeded the same way by
+`.claude/hooks/worktree-create.sh`, one at a time, so a large fan-out
+leaves the later ones unseeded; it also drops any crate only the main
+checkout has.
+
+The `cargo clean` matters: don't point two checkouts of this repo at the
+same target or build directory, or copy our crates' builds between them.
+Cargo names our crates by their path inside the workspace and judges them
+fresh by file times, so one checkout can silently link the other's code.
+[Sharing one build directory between
 checkouts](future-improvements-ruled-out.md#sharing-one-build-directory-between-checkouts)
 has the measurements.
 
