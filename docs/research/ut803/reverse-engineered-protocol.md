@@ -654,7 +654,10 @@ rendered (2026-06 review, each result re-derived by a second pass).
    overload comparand `"-0@"` at 0x55a434; ut804-decompiled.txt:224244-224374.
    UT803: nibble 8 bit 2 (ut803-decompiled.txt:224458-224469). HOLD on
    the UT803 is nibble 9 bit 3 (`LCDHold`, ut803-decompiled.txt:225086),
-   and its nibble 9 bits 2-1 light two indicators of their own, unlabelled.
+   and its nibble 9 bits 2 and 1 light `lcdMax` and `lcdMin`, captioned
+   `MAX` and `MIN` (2026-11-06, -07); nibble 8 bit 1 lights `LCDBATT`, the
+   battery glyph. The manual says Max Min "cannot output to the computer"
+   (p.37), so whether the meter sets bits 2-1 is [UNVERIFIED].
    HOLD's wire encoding on the UT804 appears in **neither** parser; the
    meter sends nothing while HOLD is on (§4.2).
 3. **Nibbles 12-14 are never read.** The frame arrives as a Delphi string
@@ -674,11 +677,11 @@ rendered (2026-06 review, each result re-derived by a second pass).
    Position 2 is the range, positions 3-6 the digits and position 7 the
    mode code, with meanings of its own (§3.4). Position 9 is read at
    ut803-decompiled.txt:225083-225112: bit 3 HOLD (widget 0x37c), bits 2-1
-   the two indicators of item 2 (0x5b0, 0x5b4); bit 0 has no known
+   MAX and MIN of item 2 (0x5b0, 0x5b4); bit 0 has no known
    meaning. By the 2026-06 review, as the code records it: position 8
    bit 3 an alternate (°C for temperature; RPM for frequency in a table
    the app then overwrites, §3.4), bit 2 the
-   sign, bit 0 overload and bit 1 no known meaning; position 10 bit 3 DC,
+   sign, bit 0 overload and bit 1 low battery (item 2); position 10 bit 3 DC,
    bit 2 AC and bit 1 AUTO.
 5. **Decimal positions count from the left** (point after digit
    `pos+1`), per the display assembly at ut804-decompiled.txt:

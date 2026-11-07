@@ -34,9 +34,9 @@ every capture step; no UT803 has been read.
 - Frequency range 0 as whole hertz, as UT803.exe draws it, and whether
   position 8 bit 3 ever sets on frequency, which the app shows as Hz
   ([§3.4][s34]) — decide that row and the bit's report. Needs `hz`. (#15)
-- What nibble 9 bits 2-1 light (MAX MIN, REL?) — the parser leaves them
-  silent ([§7.4][s74] item 2). Needs MAX MIN and REL pressed under a trace;
-  no step asks for them. (#15)
+- Whether nibble 9 bits 2-1 set for MAX and MIN, which the manual keeps off
+  the wire, and nibble 8 bit 1 on a low battery ([§7.4][s74] item 2) —
+  decides those flags. Needs `debug` with MAX MIN pressed, and a low battery. (#15)
 - Both coupling bits (AC+DC), which the manual keeps off the wire
   ([§5][s5]) — decides the `ac/dc bits` report. Needs `acdcv`. (#15)
 - Whether hFE reaches the wire as code E, which the manual says it doesn't

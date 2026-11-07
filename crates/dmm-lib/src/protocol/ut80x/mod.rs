@@ -32,8 +32,8 @@
 //! - positions 3-6: digits 1-4 (MSD first)
 //! - position 7: mode code (different meanings from UT804!)
 //! - position 8: bit 3 = alt-mode (°C over °F), bit 2 = **negative
-//!   sign**, bit 1 = unknown, bit 0 = overload
-//! - position 9: bit 3 = HOLD, bits 2-1 = unknown indicators
+//!   sign**, bit 1 = low battery, bit 0 = overload
+//! - position 9: bit 3 = HOLD, bit 2 = MAX, bit 1 = MIN
 //! - position 10: bit 3 = DC, bit 2 = AC, bit 1 = AUTO (else MANU)
 //! - positions 1, 11: the fixed 0xA and 0xD, never read by the parser
 //!
@@ -842,16 +842,17 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
     let alt = f.alt();
     let negative = f.nib8 & 0x4 != 0;
     let overload = f.nib8 & 0x1 != 0;
-    // HOLD lights the LCDHold widget from char 9 bit 3
-    // (spec §7.4 item 2); bits 2-1 drive unlabeled indicators.
+    // Nibble 8 bit 1 lights the battery glyph, and nibble 9 bits 3, 2 and 1
+    // HOLD, MAX and MIN (spec §7.4 item 2).
+    let low_battery = f.nib8 & 0x2 != 0;
     let hold = f.nib9 & 0x8 != 0;
+    let max = f.nib9 & 0x4 != 0;
+    let min = f.nib9 & 0x2 != 0;
     let dc = f.nib10 & 0x8 != 0;
     let auto_range = f.nib10 & 0x2 != 0;
-    // Nibble 8 bit 1 and nibble 9 bit 0 have no known meaning, and the alt
-    // bit only picks °C (§5, §7.4 items 2 and 4; bit map in the module
-    // doc). Nibble 9 bits 2-1 are left out: the vendor lights indicators
-    // from them, so the meter sets them in ordinary use.
-    if f.nib8 & 0x2 != 0 || f.nib9 & 0x1 != 0 || (alt && f.mode != 0x4) {
+    // Nibble 9 bit 0 has no known meaning, and the alt bit only picks °C
+    // (§7.4 items 2 and 4; bit map in the module doc).
+    if f.nib9 & 0x1 != 0 || (alt && f.mode != 0x4) {
         unrecognised.report("status bits");
     }
 
@@ -885,6 +886,9 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
 
     let flags = StatusFlags {
         hold,
+        max,
+        min,
+        low_battery,
         auto_range,
         dc,
         ..Default::default()
@@ -2920,12 +2924,8 @@ raw_payload=11"#
 
     #[test]
     fn ut803_undefined_status_bits_are_reported() {
-        // Nibble 8 bit 1, nibble 9 bit 0, and the alt bit on volts.
-        for (nib8, nib9, nibbles) in [
-            (0x2, 0x0, "11234B208"),
-            (0x0, 0x1, "11234B018"),
-            (0x8, 0x0, "11234B808"),
-        ] {
+        // Nibble 9 bit 0, and the alt bit on volts.
+        for (nib8, nib9, nibbles) in [(0x0, 0x1, "11234B018"), (0x8, 0x0, "11234B808")] {
             let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, nib8, nib9, 0x8);
             let (m, reports) = parse_reported(parse_measurement_ut803, &p);
             assert_eq!(m.unwrap().mode, "DC V");
@@ -2938,16 +2938,26 @@ raw_payload=11"#
         }
     }
 
-    /// Nibble 9 bits 2-1 light indicators of their own (§7.4 item 2), so the
-    /// meter sets them in ordinary use and they are no cause to ask for a
-    /// report.
+    /// Nibble 8 bit 1 lights the battery glyph, nibble 9 bits 2 and 1 MAX
+    /// and MIN (§7.4 item 2), silently.
     #[test]
-    fn ut803_indicator_bits_stay_silent() {
-        for nib9 in [0x2, 0x4, 0x6] {
-            let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x0, nib9, 0x8);
+    fn ut803_battery_max_and_min_bits() {
+        for (nib8, nib9, battery, max, min) in [
+            (0x2, 0x0, true, false, false),
+            (0x0, 0x4, false, true, false),
+            (0x0, 0x2, false, false, true),
+            (0x2, 0x6, true, true, true),
+        ] {
+            let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, nib8, nib9, 0x8);
             let (m, reports) = parse_reported(parse_measurement_ut803, &p);
-            assert_eq!(m.unwrap().mode, "DC V");
-            assert!(reports.is_empty(), "nibble 9 = {nib9:#x}: {reports:?}");
+            let m = m.unwrap();
+            assert_eq!(m.mode, "DC V");
+            assert_eq!(
+                (m.flags.low_battery, m.flags.max, m.flags.min),
+                (battery, max, min),
+                "nibbles 8, 9 = {nib8:#x}, {nib9:#x}"
+            );
+            assert!(reports.is_empty(), "{reports:?}");
         }
     }
 
