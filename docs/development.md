@@ -39,9 +39,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-The lints every crate shares (no `unsafe`, no `unwrap()` outside tests, a
-reason on every `allow`) are in the root `Cargo.toml`'s `[workspace.lints]`
-and in `clippy.toml`.
+The lints every crate shares (warnings are errors in every build, no
+`unsafe`, no `unwrap()` outside tests, a reason on every `allow`) are in the
+root `Cargo.toml`'s `[workspace.lints]` and in `clippy.toml`. Keep them out
+of rustflags in a `.cargo/config.toml`: rustflags change every
+dependency's build too, and a worktree inside the checkout would read the
+flags twice.
 
 ## Build speed & disk usage
 

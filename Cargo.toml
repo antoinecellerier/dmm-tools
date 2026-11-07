@@ -28,6 +28,11 @@ tempfile = "3"
 # The coding rules in CLAUDE.md, enforced by the compiler; clippy.toml lets
 # tests unwrap.
 [workspace.lints.rust]
+# Warnings fail every build, test and clippy run of our crates. Set here
+# rather than as rustflags in .cargo/config.toml, which reached dependencies
+# too and doubled in a worktree nested in the checkout (cargo appends each
+# config's flags), so no worktree could reuse another's dependency builds.
+warnings = "deny"
 unsafe_code = "deny"
 
 [workspace.lints.clippy]
