@@ -92,16 +92,18 @@ static AC_UA: [RangeInfo; 2] = [r("600µA", "µA"), r("6000µA", "µA")];
 static DC_MA: [RangeInfo; 2] = [r("60mA", "mA"), r("600mA", "mA")];
 static AC_MA: [RangeInfo; 2] = [r("60mA", "mA"), r("600mA", "mA")];
 
-// A: 6A and 20A, the manual's 6.000A and 20.00A rows, kept over
-// the protocol deck's 10A at byte 1 (family spec §5.5). The order
+// A: 6A and 20A, the manual's 6.000A and 20.00A rows and the app's
+// UT61D+ asset, kept over the 10A at byte 1 of the protocol deck
+// and the vendor PC software (family spec §5.5). The order
 // is [DEDUCED] from the UT61B+, whose 6A and 10A sit at 0 and 1
 // (issue #19); unconfirmed on a UT61D+ — issue #7.
 static DC_A: [RangeInfo; 2] = [r("6A", "A"), r("20A", "A")];
 static AC_A: [RangeInfo; 2] = [r("6A", "A"), r("20A", "A")];
 
 // LoZ ACV (0x15): 600V and 1000V ranges (UT61D+ only). The 0x16
-// beside it is a clamp's AC A in the protocol deck, not a second
-// LoZ, so ClampAcA stays without ranges.
+// beside it is a clamp's AC A in the protocol deck and the app,
+// Hz in the vendor PC software (family spec §3), so ClampAcA stays
+// without ranges.
 static LOZ_V: [RangeInfo; 2] = [r("600V", "V"), r("1000V", "V")];
 
 /// Dial positions of the UT61D+/UT161D — `[MANUAL]`, UT61+ Series User Manual

@@ -59,26 +59,30 @@ families are in the [verification backlog](../../verification-backlog.md).
 
 ## Range tables
 
-- UT61B+ AC V rungs 1 (60V) and 3 (1000V), pinned between rungs 0 and 2
+- UT61B+ AC V rungs 1 (60V) and 3 (1000V), the vendor sources' order only
   ([§5.1][s51]) — only `range_label` rides on them, the unit being V. Needs
   `capture --steps acv`, leads open. (#7)
-- UT61B+ capacitance rungs 1-4 and 6, pinned between rungs 0 and 5
+- UT61B+ capacitance rungs 1-4 and 6, the vendor sources' order only
   ([§5.4][s54]) — the unit changes along the ladder, so a wrong rung is a 1000x
   error. Needs a capacitor per decade: RANGE does nothing there. (#7)
-- The Hz rungs above 1 ([§5.9][s59]), the deck's labels, none seen on a
-  meter — the MHz ones most (E+ bytes 5-7, 6,000-count byte 5). Needs a
-  signal generator reaching each. (#6, #7)
+- The Hz rungs above 1 ([§5.9][s59]), the deck's, V2.02's and iDMM2.0's labels,
+  none seen on a meter — the MHz ones most (E+ bytes 5-7, 6,000-count byte 5).
+  Needs a signal generator reaching each. (#6, #7)
 - Frequency from the UT61B+'s V~ position, `0.0` at index 0 ([§5.9][s59]) —
   whether index 0 holds above 99.99 Hz, labelling a kHz reading Hz. Needs
   Hz/% on V~ with a ~1 kHz signal. (#7)
-- UT61D+ A rungs, 6A at byte 0 and 20A at byte 1 where the deck gives 10A
+- UT61D+ A byte 1: 20A by the manual and iDMM2.0, 10A by the deck and V2.02
   ([§5.5][s55]) — decides `ut61d_plus.rs`'s current tables. Needs a D+ frame
   in each A range. (#7)
-- UT61E+ A range byte 0, never sent ([§5.5][s55]) — decides the placeholder
-  `20A` at index 0 of `ut61e_plus.rs`'s current tables. Needs any A frame
-  with byte 0. (#6)
-- The UT61D+ and UT161D tables, [DEDUCED] from the shapes in [§9][s9] — a
-  first `capture --unverified` confirms them. Needs a UT61D+ or a UT161D. (#7)
+- UT61E+ A range byte 0, never sent, whose `20A` placeholder no source backs
+  (V2.02 has 2 A, the deck and iDMM2.0 none; [§5.5][s55]) — decides index 0 of
+  `ut61e_plus.rs`'s current tables. Needs any A frame with byte 0. (#6)
+- The UT61D+ and UT161D tables ([§9][s9]), on which V2.02, the deck and
+  iDMM2.0 agree but for A byte 1 — a first `capture --unverified` confirms
+  them. Needs a UT61D+ or a UT161D. (#7)
+- NCV range byte 1, which V2.02 lists beside byte 0 ([§5.7][s57]) — decides
+  whether NCV needs a range table. Needs step `ncv` at each level a field
+  reaches, on any UT61+, our UT61E+ first. (#6)
 
 ## Readings with a signal
 
@@ -93,14 +97,14 @@ families are in the [verification backlog](../../verification-backlog.md).
 
 ## The UT61D+
 
-- LoZ V, 0x15 by the deck ([§3][s3]) — decides `Mode::LozV`'s byte. Needs step
-  `loz`. (#7)
+- LoZ V, 0x15 by V2.02, the deck and iDMM2.0 ([§3][s3]) — decides
+  `Mode::LozV`'s byte. Needs step `loz`. (#7)
 - LoZ's Hz and duty, which the manual (printed p.14) gives a short press of
-  Hz%/USB and the dial table lacks — decides their bytes and the LoZ ring.
-  Needs steps `loz_hz`, `loz_duty`. (#7)
-- Temperature: how °C and °F fill the display field, and the deck's range
-  bytes 0 and 1 ([§5.6][s56]) — decides `temp_c`/`temp_f`. Needs a K-type
-  thermocouple, steps `temp` and `tempf`. (#7)
+  Hz%/USB: 0x04/0x05, or V2.02's FREQ/Duty Cycle at 0x16/0x17 ([§3][s3]) —
+  decides their bytes and the LoZ ring. Needs steps `loz_hz`, `loz_duty`. (#7)
+- Temperature: how °C and °F fill the display field, and range bytes 0 and
+  1, on which the vendor sources agree ([§5.6][s56]) — decides
+  `temp_c`/`temp_f`. Needs a K-type thermocouple, steps `temp` and `tempf`. (#7)
 
 ## The UT161E
 
@@ -116,8 +120,11 @@ families are in the [verification backlog](../../verification-backlog.md).
 - The range tables, the app asset's rungs under the manuals' labels, and
   where the two disagree ([§9][s9] notes) — decides each label. Needs
   `capture --unverified`. (#26, #27)
-- UT202BT AC A as 0x11 or 0x16 ([§9][s9]) — decides which code the table
-  keeps; the `aca` step asserts neither. (#27)
+- UT202BT AC A as 0x11 or 0x16, the deck's naming pointing to 0x16 ([§9][s9])
+  — decides which code the table keeps; the `aca` step asserts neither. (#27)
+- The UT60BT's A position: mA range byte 1, as the range asset gives it, or
+  DC/AC A (0x10/0x11), which the app's button config lists ([§9][s9]) —
+  decides `ut60bt.rs`'s A rows. Needs a reading there. (#26)
 - UT202BT LPF V and LPF A off range byte 2, °C off byte 1 ([§9][s9]) — a frame
   there reports an unrecognised range. Needs steps `lpfv`, `lpfa`, `temp`. (#27)
 - The UT202BT secondary display ([§2.3][s23]): which modes send it, before or
@@ -165,12 +172,9 @@ a later manual or UNI-T's word.
 
 ## Vendor sources
 
-- The UT61B+ and UT61D+ PC software UNI-T uploaded 2023-02-03 — hash-compare
-  it with Software V2.02, as the UT61E+ one was ([approach
-  doc](reverse-engineering-approach.md)); decides whether V2.02 covers them.
-- iDMM2.0's UT202BT table against the deck's UT202S one — only the Ω ladder
-  is compared, and differs ([§9 UT202BT](reverse-engineered-protocol.md#ut202bt-9999-counts));
-  decides how far the deck backs `ut202bt.rs`.
+- The UT61B+/D+ PC software UNI-T uploaded 2023-02-03, hash-compared with
+  V2.02 ([approach doc](reverse-engineering-approach.md)) — decides whether a
+  B+/D+ model name picks V2.02's 6,000-count list. Takes the download. (#7)
 
 ## Detection
 
@@ -189,6 +193,7 @@ a later manual or UNI-T's word.
 [s54]: reverse-engineered-protocol.md#54-capacitance
 [s55]: reverse-engineered-protocol.md#55-current
 [s56]: reverse-engineered-protocol.md#56-temperature-ut61d--ut161d-only--manual
+[s57]: reverse-engineered-protocol.md#57-other-modes
 [s59]: reverse-engineered-protocol.md#59-frequency--vendor-doc
 [s6]: reverse-engineered-protocol.md#6-commands--vendor
 [s61]: reverse-engineered-protocol.md#61-range-and-auto-semantics--verified-ut61e-2026-09-07

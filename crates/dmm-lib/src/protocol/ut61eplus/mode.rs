@@ -33,7 +33,10 @@ pub(crate) enum Mode {
     Ncv = 0x14,
     LozV = 0x15,
     // 0x16-0x1E: clamp functions and current variants no UT61+ dial
-    // position reaches, named after the protocol deck.
+    // position is known to send, named after the protocol deck. The
+    // vendor PC software's table has Hz and duty at 0x16/0x17 instead
+    // (ut61eplus spec §2.5). The app names two more, dBV (0x1F) and
+    // dBm (0x20), with no unit or range anywhere, so they stay out.
     ClampAcA = 0x16,
     ClampDcA = 0x17,
     LpfV = 0x18,

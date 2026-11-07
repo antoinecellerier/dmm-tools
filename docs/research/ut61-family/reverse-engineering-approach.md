@@ -9,8 +9,9 @@ reverse-engineered). Use only official, publicly available sources.
 ## Key Finding
 
 **All six models use the identical wire protocol.** The same vendor
-software binary (`Software V2.02`) serves all models with zero
-model-specific protocol logic. The only differences are at the
+software binary (`Software V2.02`) serves all models with no
+model-specific framing or commands; one model check picks which of two
+range lists it reads frames against. The only differences are at the
 application layer: display count, available measurement modes, range
 tables, and bar graph segment count.
 
@@ -27,7 +28,8 @@ tables, and bar graph segment count.
    the UT61+ manual: its spec pages differ only in the fuses of the
    current ranges (PDF p. 17)
 3. **UNI-T UT61E+ Software V2.02** — previously decompiled for the
-   UT61E+ analysis (see `docs/research/ut61eplus/`)
+   UT61E+ analysis (see `docs/research/ut61eplus/`); its table builders
+   disassembled again 2026-11-06 and 2026-11-07 (findings 2 and 3 below)
 4. **UT161E Software** — downloaded and binary-compared against V2.02
 5. **CP2110 Datasheet** and **AN434** (Silicon Labs) — transport layer
 6. **UNI-T protocol deck "UT61+系列通讯协议"** — a 9-slide `.pptx` titled
@@ -56,7 +58,9 @@ tables, and bar graph segment count.
    UT-D07B, over the same ISSC service (`BleManager`), and differ only in
    their range tables, the APK assets `funOl1_UT60BT.json` and
    `funOl1_UT202BT.json`, which share the UT61+ assets' schema. No UT202S
-   table found in the APK (2026-09-25)
+   table found in the APK (2026-09-25). Read again 2026-11-06 and
+   2026-11-07 for its mode names past 0x1E and what it does with a byte
+   its tables lack (family spec §3)
 9. **UT60BT manual** (English, 2 pages, from its Chinese product page,
    read 2026-09-25): wireless mode P1 §VIII and P2 §11, dial P1, ranges P2 §X
 10. **UT202T/UT202BT manual** (English, and the Chinese UT202S/UT202BT one
@@ -83,20 +87,39 @@ model-specific protocol logic:
 
 **Findings:**
 
-1. **No model conditionals in protocol code.** Frame builder
+1. **No model conditionals in framing or commands.** Frame builder
    (`FUN_10002460`), frame parser (`FUN_10002540`), response parser
    (`FUN_10007d50`), mode/range lookup (`FUN_100023f0`), and command
-   construction all have zero model parameters or model-name checks.
+   construction take no model parameter; the lookup walks whichever list
+   finding 2 selected.
 
-2. **Single flat mode/range table.** The table builder (`FUN_100027e0`
-   in CustomDmm.dll, `FUN_00413f30` in DMM.exe) constructs one table
-   containing ALL mode/range entries for ALL models. No model
-   filtering — the meter firmware determines which modes are sent.
+2. **Two mode/range lists, picked by model name.** Re-read 2026-11-06 and
+   2026-11-07 from the disassembly of the table builders (`FUN_100027e0`
+   in CustomDmm.dll, `FUN_00413f30` in DMM.exe), which Ghidra does not
+   decompile; an earlier reading took them for one flat table. Each builds
+   136 rows, the same in both binaries, into two lists: a 6,000-count one (63 rows, modes
+   0x00-0x17) and a 22,000-count one (73 rows, adding LPF 0x18 and AC+DC
+   0x19). The model setter (`FUN_10008680`, `FUN_00419de0`) lowercases the
+   model name and takes the 22,000-count list when it contains `"e"`, the
+   6,000-count one otherwise. The lookup matches mode and raw range byte
+   exactly; a pair the active list lacks gives no reading (family spec §3).
+   The binaries differ in one name: the first list's 0x0B rows read
+   "Fahrenheit" in DMM.exe, "Celsius" in the DLL.
 
-3. **Model name is cosmetic.** The string `"UT61B+"` is hardcoded as
-   a default in the constructor. `options.xml` overrides it (e.g.,
-   `<Model>UT61D+</Model>`). The value affects only the window title
-   and export headers.
+3. **Which list a meter gets — the two reads differ.** Both found one
+   direct setter call, in the constructor, with `"UT61B+"`, and that the
+   `options.xml` reader skips `<Model>` (it is written, never read back).
+   The first read found nothing else and left which list a real meter gets
+   unknown, the decompile pointing to the 6,000-count one. The second found
+   one further, virtual call in DMM.exe whose argument is the name the main
+   window sets at start-up, the compiled-in `"UT61E+"`: on DMM.exe any
+   meter is read against the 22,000-count list, and a UT161E's DMM.exe,
+   whose name string is `"UT161E"`, gives the same. DMM.exe holds its own
+   copy of the table, imports no plugin loader and names no
+   `CustomDmm`; nothing found loads the DLL (static reading only). The
+   name the meter reports never reaches the setter. No UT61B+ or UT61D+
+   build is held, so whether one ships with a name that picks the
+   6,000-count list is unknown.
 
 4. **One UI-only model check** (DMM.exe lines 3625-3639): two menu
    actions are hidden when the model name contains `"B"` (for
@@ -111,17 +134,20 @@ The UT161E installer (43,129,397 bytes) was downloaded and extracted:
   installer, including all protocol-critical binaries:
   `CustomDmm.dll`, `CP2110.dll`, `DeviceSelector.dll`,
   `SLABHIDtoUART.dll`
-- **`DMM.exe`**: 8 bytes differ — only the model name string
-  (`"UT161E"` vs `"UT61E+"`)
+- **`DMM.exe`**: 8 bytes differ — four in the model name string
+  (`"UT161E"` vs `"UT61E+"`), four elsewhere (offsets 289-290 and
+  291077-291078) not inspected
 - **`options.xml`**: Only the `<Model>` tag differs
 - **`uninst.exe`**: NSIS build nonces only
 
 All three UT161 variants (B, D, E) serve the same zip from
-meters.uni-trend.com. The model customization is purely cosmetic.
+meters.uni-trend.com. The name string is the only change, and both
+`"UT61E+"` and `"UT161E"` pick the 22,000-count list (second read,
+finding 3).
 
 Note: The UT61E+ installer's `options.xml` says `<Model>UT61D+</Model>`
-(not UT61E+), confirming UNI-T treats the model string as a UI label
-with no protocol significance.
+(not UT61E+); the reader skips that tag (finding 3), so it changes
+nothing.
 
 ### UT61E+ 2023-02-03 package — [VENDOR]
 
@@ -130,38 +156,26 @@ manual as loose PDFs. Its installer unpacks to the same 69 files as the
 V2.02 one, every one byte-identical (sha256, 2026-09-19): a repackaging,
 not a new build.
 
-### LoZ mode disambiguation — [VENDOR]
+### Modes 0x15-0x18 — [VENDOR]
 
-The vendor software mode table has two entries both labeled "LozV":
-mode 0x15 and mode 0x16. Code analysis found they are treated
-differently:
+The table builders give 0x15 `LozV` (600 and 1000 V), 0x16 `FREQ` (six
+rungs, 99 Hz to 9 MHz, in both lists), 0x17 `Duty Cycle` (one row) and
+0x18 `LPF` (2, 22, 220 and 1000 V, 22,000-count list only). The response
+parser agrees: 0x16 joins Hz in the SI-prefix group, 0x17 joins Duty in
+the group that shows "-" in place of the full-scale value, and 0x15 and
+0x18 get no branch of their own.
 
-- **Mode 0x16**: SI prefix multiplication applied (like Ohm/Cap/Hz
-  modes). In CustomDmm.dll line 1519: `cVar1 == '\x16'` is in the
-  multiplier group.
-- **Mode 0x15**: No SI prefix multiplication (like voltage modes).
-  Not in the multiplier group.
-- Both show numeric bar graph (neither in the "bar graph = dash"
-  group).
-- Both share the same "LozV" display name string.
+An earlier reading made 0x16 a second "LozV" and 0x17 "LPF", and left a
+gap at 0x18, by counting positions in CustomDmm.dll's string pool (file
+offset 0xD324), which holds each name once, in first-use order. FREQ and
+Duty Cycle were already in it, so they added nothing at 0x16/0x17 and the
+later names slid along. Its "0x16 alone takes an SI prefix, as a clamp's
+AC A would" had it backwards: the group holds modes whose rows carry
+K/M/n/u prefixes.
 
-That left open which byte the UT61D+ sends for its single LoZ dial
-position.
-
-**Settled by the protocol deck** — [VENDOR-DOC]: 0x15 is LoZ (low-impedance
-AC voltage) and 0x16 is a clamp meter's AC A, which fits the SI prefix
-the software applies to 0x16 alone.
-
-### Mode 0x17 (LPF) behavior — [VENDOR]
-
-Mode 0x17 appears in the "bar graph = dash" group (line 1600:
-`cVar1 == '\x17'`) but not in the SI multiplier group. This means LPF
-mode displays "-" for bar graph and uses raw display values — consistent
-with a voltage measurement mode. Mode 0x18 has no special handling
-anywhere in the code.
-
-The protocol deck makes 0x17 a clamp meter's DC A and puts LPF at 0x18,
-the byte the UT61E+ sends for LPF V — see the UT61E+ spec §2.5.
+The protocol deck and iDMM2.0 make 0x16 and 0x17 a clamp meter's AC A and
+DC A instead (UT61E+ spec §2.5). All three sources put LoZ at 0x15 and LPF
+V at 0x18, the byte the UT61E+ sends for it.
 
 ## Commands Reference
 
@@ -211,11 +225,12 @@ Consulted after the vendor analysis above, for validation only.
 | UT60BT over Bluetooth | Not investigated | Yes (BT serial support) | N/A | — |
 | 6000-count range tables | From manual | Per-model tables in code | N/A | To verify |
 | Mode byte values 0x00-0x14 | Vendor software table | Same values | Same values | ✓ |
-| LoZ mode 0x15/0x16 | 0x15 (protocol deck; 0x16 is a clamp's AC A) | Uses 0x15 only | N/A | ✓ |
+| LoZ mode 0x15/0x16 | 0x15 (V2.02, protocol deck, iDMM2.0) | Uses 0x15 only | N/A | ✓ |
 
 **Former discrepancy**: ljakob's implementation uses only mode 0x15 for
-LoZ, while the vendor software has entries for both 0x15 and 0x16 with
-different display value handling. The protocol deck sides with 0x15.
+LoZ, while our earlier reading of the vendor software put a second LoZ at
+0x16. That reading was wrong ("Modes 0x15-0x18" above): V2.02 has LoZ at
+0x15 alone.
 
 Reference implementations:
 
@@ -295,3 +310,18 @@ to check it before tables are written. Working note:
 2026-09-22 note above excludes. It was compared only; nothing was taken from
 it. It is an older copy of the same vendor asset — same units, different
 bounds. QtDMM's tables derive from that file.
+
+### 2026-11-06: mode bytes 0x16, 0x17 and past 0x1E
+
+Opened again after two independent vendor re-reads (V2.02's table
+builders, iDMM2.0's parser and assets, the deck; 2026-11-06 and
+2026-11-07, no community source opened during them), for one question:
+what community decoders call the bytes the vendor sources disagree on. All
+[COMMUNITY]; results in UT61E+ spec §7:
+
+- [libreble/multimeter](https://github.com/libreble/multimeter)
+  `docs/protocols/uni-t.md` (main)
+- [QtDMM](https://github.com/qtdmm/QtDMM) `src/device/decoders/unit_idmm.cpp`
+  (master)
+- [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy)
+  `adapters/ut61xp.py` (main) — names neither 0x16 nor 0x17

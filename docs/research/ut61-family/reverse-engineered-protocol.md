@@ -38,8 +38,10 @@ that all six models share a single protocol.
 
 ## 1. Protocol is Identical Across All Models — [VENDOR + VENDOR-DOC]
 
-The vendor software contains **zero model-specific protocol logic**.
-All transport, framing, command, and response formats are shared. See
+The vendor software has **no model-specific framing or command logic**.
+All transport, framing, command, and response formats are shared; its one
+model check that touches readings picks which of two range lists (6,000 or
+22,000 counts) it reads frames against (§3). See
 `reverse-engineering-approach.md` for evidence.
 
 The protocol deck says the same outright: it is one "Bluetooth
@@ -106,9 +108,11 @@ differ only in the input fuses: 600mA 1000V Φ6x32mm and 11A 1000V
 Binary comparison of the UT161E installer vs UT61E+ Software V2.02:
 
 - 67/69 files byte-identical (including all protocol binaries)
-- DMM.exe: 8 bytes differ (model name string only)
-- options.xml: `<Model>` tag differs
-- No functional difference whatsoever
+- DMM.exe: 8 bytes differ, four of them in the model name string
+  (`UT161E` for `UT61E+`), four elsewhere not inspected
+- options.xml: `<Model>` tag differs (the software never reads it back)
+- No functional difference found: both names contain "e", the letter that
+  picks the 22,000-count list (approach doc)
 
 On the wire the UT161E matches the UT61E+ [VERIFIED] (issue #7, CP2110,
 @frixit, two runs on 2026-10-21): Get Name answers `UT161E`, and its frames
@@ -172,12 +176,28 @@ flag bytes hold, and how "CUT" is sent are unknown.
 
 ## 3. Available Modes Per Model — [MANUAL + VENDOR + VENDOR-DOC]
 
-The mode/range table in the vendor software contains entries for ALL
-modes (0x00-0x19). The meter firmware determines which modes are
-accessible via the physical dial. The PC software accepts any mode byte.
-The protocol deck's mode table runs to 0x1E and names 0x16, 0x17 and
+The meter firmware determines which modes are accessible via the physical
+dial. The protocol deck's mode table runs to 0x1E and names 0x16, 0x17 and
 0x1A-0x1E as clamp functions and current variants, none of them on a
-UT61+ dial (UT61E+ spec §2.5).
+UT61+ dial (UT61E+ spec §2.5); iDMM2.0 names two more, 0x1F and 0x20.
+
+What UNI-T's software does with a byte its tables lack — [VENDOR]:
+
+- **Software V2.02** holds two mode/range lists, a 6,000-count one
+  (0x00-0x17) and a 22,000-count one (0x00-0x19), picked by model name
+  (approach doc). It looks the frame's mode and raw range byte up in the
+  active list and drops the frame, with no reading and no error, when the
+  pair is not there; the 22,000-count list, for one, lacks the 6,000-count
+  models' second mV rung. Its lists also give rows to modes no dial of a
+  model has (temperature, LoZ and hFE are in both), so a row is no sign
+  that a model has the function.
+- **iDMM2.0** drops nothing. A function its model's asset has no row for
+  keeps the name its list gives (`dBV`, `dBm`, or empty past 0x20) and
+  shows the value with the unit and range label the previous frame left.
+  A range byte the row lacks falls back to the row's key one below its
+  count — the top rung of a contiguous row — and where that key is missing
+  too, as on the UT61E+'s A rows (key 1 only) and the UT202BT's LPF rows
+  (key 2 only), only the value updates.
 
 | Byte | Mode | B+/161B | D+/161D | E+/161E |
 |------|------|:-------:|:-------:|:-------:|
@@ -211,10 +231,15 @@ UT61+ dial (UT61E+ spec §2.5).
 "—" for Live (0x13) is the manual's dial, which lists no such function on
 any of the three models; no capture has shown the byte.
 
-**LoZ is 0x15** — [VENDOR-DOC]: V2.02 labels both 0x15 and 0x16 "LozV"
-(and applies an SI prefix to 0x16 only), which left open which byte the
-UT61D+ sends. The protocol deck settles it: 0x15 is low-impedance AC
-voltage, 0x16 a clamp meter's AC A. No UT61D+ has confirmed it.
+**LoZ is 0x15** — [VENDOR + VENDOR-DOC]: V2.02's lists (`LozV`, 600 and
+1000 V), the protocol deck and iDMM2.0 all put it there. 0x16 and 0x17 are
+FREQ and Duty Cycle in V2.02's lists, a clamp meter's AC A and DC A in the
+deck and iDMM2.0 (UT61E+ spec §2.5); which bytes LoZ's Hz/% sends (§3.1)
+no source states. Every other position sends Hz/% as 0x04/0x05, but
+V2.02's FREQ and Duty Cycle rows sit right after `LozV` and keep the
+6,000-count Hz ladder even in the 22,000-count list, which would fit the
+6,000-count UT61D+'s LoZ Hz/% at 0x16/0x17 [DEDUCED]. No UT61D+ has
+confirmed any of it.
 
 **The UT61B+ column** — [VERIFIED]: every byte it marks has come from a
 UT61B+ and decoded correctly (issue #19, CH9329, @ChrisTheExpie, 2026-09-09
@@ -318,8 +343,8 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
 
 This model combines AC and DC volts on one position (§2.1) and has no hFE,
 no LPF and no AC+DC. Both ring contents and ring order are **[UNVERIFIED]** —
-no UT61D+ has been connected. The LoZ position sends 0x15 per the protocol
-deck (§3).
+no UT61D+ has been connected. The LoZ position sends 0x15 per V2.02, the
+protocol deck and iDMM2.0 (§3).
 
 #### UT61B+ / UT161B
 
@@ -425,7 +450,8 @@ The UT61B+ works the same way. Its wire indices are 0=6V, 1=60V, 2=600V,
 loses one decimal per rung (`  0.001`, `   0.00`, `    0.0`, `     0 `). In
 AC V, index 0 is [VERIFIED] by the 2026-09-09 capture (`  0.037` with the
 screen reading volts) and index 2 by 236.6 V of mains on 2026-09-11; indices
-1 and 3 stay [DEDUCED]. 60 mV and 600 mV are the mV modes on their own dial
+1 and 3 are the order V2.02's 6,000-count list, the deck and iDMM2.0's
+UT61B+ asset all give [VENDOR], unseen on a meter. 60 mV and 600 mV are the mV modes on their own dial
 position; rung 0 of both is [VERIFIED] at 60.00 mV full scale (`1.43` in DC
 mV, `11.72` in AC mV, two decimals each; issue #19, CH9329, @ChrisTheExpie),
 rung 1 stays [DEDUCED].
@@ -488,7 +514,8 @@ before its reading came into range.
 | 7 | — | 220.00 mF (10 µF) |
 
 Rung 5 is [VERIFIED] on a UT61B+ at 4.514 mF on 2026-09-11; with rung 0 above,
-that leaves 1-4 and 6 [DEDUCED].
+that leaves 1-4 and 6 unseen on a meter, in the order V2.02's 6,000-count
+list, the deck and iDMM2.0's UT61B+ asset all give [VENDOR].
 
 ### 5.5 Current
 
@@ -510,16 +537,20 @@ that leaves 1-4 and 6 [DEDUCED].
 
 | Range | UT61B+ | UT61D+ | UT61E+ |
 |-------|--------|--------|--------|
-| 0 | 6.000 A (1 mA) | 6.000 A (1 mA) [VENDOR-DOC] | [UNVERIFIED] |
+| 0 | 6.000 A (1 mA) | 6.000 A (1 mA) [VENDOR + VENDOR-DOC] | [UNVERIFIED] |
 | 1 | 10.00 A (10 mA) | 20.00 A (10 mA) [UNVERIFIED] | 20.000 A (1 mA) |
 
 The UT61E+ manual prints one A range, and the captures show range 1 — the
 only byte the protocol deck's UT61E+ table gives (as "10A"); byte 0 has not
-been seen. The UT61D+ order follows the UT61B+'s, which issue #19 verified,
-and the deck's joint UT61B+/UT61D+ table puts 6A at byte 0 [VENDOR-DOC]. The
-two sources conflict on byte 1: the deck gives 10A for both models, the
-manual gives the UT61D+ 20.00 A (the table's value). No UT61D+ has confirmed
-either — issue #7.
+been seen. No source gives the UT61E+ a 20A rung at byte 0: V2.02's
+22,000-count list has 2 A there (and 22 A at byte 1), the deck nothing, and
+iDMM2.0's UT61E+ asset lists its A rows at byte 1 only [VENDOR]. The UT61D+
+order follows the UT61B+'s, which issue #19 verified; V2.02's 6,000-count
+list, the deck's joint UT61B+/UT61D+ table and iDMM2.0's UT61D+ asset all
+put 6A at byte 0. The sources split on byte 1: 10A in V2.02's 6,000-count
+list and the deck, both shared by the two models; 20A in the manual and in
+iDMM2.0's per-model UT61D+ asset, whose UT61B+ asset has 10A. No UT61D+ has
+confirmed either — issue #7.
 
 [VERIFIED] values: in DC µA our UT61E+ read 59 µA through 56 kΩ where a
 PPK2 read about 61 µA, and in DC mA it auto-ranged 10 mA onto 22mA and
@@ -539,9 +570,9 @@ its six current ladders to both (2026-09-10, issue #19, CH9329,
 | 572 to 1832 °F | 2 °F | ±(1.0%+6 °F) |
 
 K-type thermocouple only. Uses mode bytes 0x0A (°C) and 0x0B (°F), each
-with two range bytes in the protocol deck [VENDOR-DOC]: 0 for -40~300 °C
-(-40~572 °F) and 1 for 300~1000 °C (572~1832 °F), the split where the
-resolution changes. How the display field carries a °C or °F reading is
+with two range bytes in the protocol deck [VENDOR-DOC], V2.02's lists and
+iDMM2.0's UT61D+ asset [VENDOR]: 0 for -40~300 °C (-40~572 °F) and 1 for
+300~1000 °C (572~1832 °F), the split where the resolution changes. How the display field carries a °C or °F reading is
 [UNVERIFIED]: no UT61D+ has sent one.
 
 ### 5.7 Other Modes
@@ -550,6 +581,10 @@ Same across all models:
 - **Continuity**: 600 Ω range, 0.1 Ω resolution, beep < 50 Ω
 - **Diode**: ~3 V open circuit, 0.001 V resolution
 - **Duty cycle**: 0.1%-99.9%, 0.1% resolution
+- **NCV** (0x14): no rungs in the manual or the deck. V2.02 lists it at
+  range bytes 0 and 1, with no unit, in both lists [VENDOR]; what byte 1
+  stands for is [UNVERIFIED]: the UT61E+, UT161E and UT61B+ NCV frames
+  captured, the B+'s at level 4 included, all carry byte 0.
 
 ---
 
@@ -814,7 +849,7 @@ have confirmed is tagged [VERIFIED] where sections 3-6 and 9 state it.
 
 | Aspect | Status | Source |
 |--------|--------|--------|
-| Identical protocol across all 6 models | **VENDOR** | Zero model conditionals in code |
+| Identical protocol across all 6 models | **VENDOR** | No model conditionals in framing or commands; the model name picks one of two range lists (§3) |
 | UT161 = UT61+ (binary-identical software) | **VENDOR** | 67/69 files match |
 | UT161E frames = UT61E+ frames | **VERIFIED** | Issue #7 captures, 20 modes; one AC+DC V range byte differs (§2.2) |
 | Shared VID/PID/baud/framing | **VENDOR** | Shared CP2110.dll |
@@ -823,9 +858,9 @@ have confirmed is tagged [VERIFIED] where sections 3-6 and 9 state it.
 | 31 vs 46 bar graph segments | **MANUAL** | UT61+ Series manual |
 | Mode availability per model | **MANUAL** | Function dial tables |
 | Range tables per count type | **MANUAL** | Specifications pages |
-| LoZ modes 0x15 vs 0x16 behavior | **VENDOR** | SI multiplier code paths differ |
-| LoZ mode byte sent by UT61D+ | **VENDOR-DOC** (0x15) | Protocol deck; no UT61D+ capture |
-| Temperature mode bytes (0x0A, 0x0B) | **DEDUCED** | Vendor mode table |
+| Modes 0x16, 0x17 | **VENDOR** FREQ, Duty Cycle; **VENDOR-DOC** clamp AC A, DC A | V2.02 table builder; deck and iDMM2.0 (UT61E+ spec §2.5) |
+| LoZ mode byte sent by UT61D+ | **VENDOR + VENDOR-DOC** (0x15) | V2.02, deck, iDMM2.0; no UT61D+ capture |
+| Temperature mode bytes (0x0A, 0x0B) and range bytes | **VENDOR + VENDOR-DOC** | V2.02, deck and iDMM2.0's UT61D+ asset agree (§5.6) |
 | Range index → full-scale mapping | **DEDUCED** (E+ V, AC+DC V and Ω, B+ Ω and DC V **VERIFIED**) | Ascending order; the ladders walked with RANGE on the device (section 5), the rest pinned between measured rungs or assumed |
 | Commands beyond 0x5E/0x4A/0x46 | **VENDOR-DOC** | Protocol deck; per-model effects in §6 |
 
@@ -909,7 +944,16 @@ neither the range byte nor the AUTO annunciator). Only index 0 (220mV) has
 ever been seen there, and the protocol deck's UT61E+ table has that rung
 alone.
 
-Index 0 of `dc_a`/`ac_a` has not been seen on the UT61E+ (§5.5).
+Index 0 of `dc_a`/`ac_a` has not been seen on the UT61E+, and no source
+gives it 20A (§5.5).
+
+`temp_c`/`temp_f` follow no source [UNVERIFIED]: the UT61E+ has no
+temperature function, V2.02 and iDMM2.0's UT61E+ asset give °C and °F the
+UT61D+'s two rungs each, the deck has no temperature column for the E+,
+and the 1200 and 2192 bounds appear in none of them. The `hfe` label is the
+manual's alone (1000β): V2.02's hFE row carries 6000 with no unit, the
+figure it gives hFE, Live and NCV alike, and iDMM2.0's asset has no hFE
+row.
 
 ### UT61B+ (6,000 counts)
 
@@ -1023,8 +1067,9 @@ Source: `ut61d_plus.rs` (52 ranges).
 | `loz_v` | LozV | 0 | 600V | V | 600 | -600 |
 | `loz_v` | LozV | 1 | 1000V | V | 1000 | -1000 |
 
-The `dc_a`/`ac_a` rows are the manual's values in the UT61B+'s order; the
-deck gives 10A at index 1, and no UT61D+ has confirmed either (§5.5).
+The `dc_a`/`ac_a` rows are the manual's values in the UT61B+'s order, with
+iDMM2.0's UT61D+ asset; the deck and V2.02 give 10A at index 1, and no
+UT61D+ has confirmed either (§5.5).
 
 ### UT60BT (9,999 counts)
 
@@ -1089,8 +1134,10 @@ stops at 9.999mF and prints frequency as one "99.99Hz~9.999MHz" row. The
 asset labels its Hz rungs with a fifth digit ("9.9990Hz") and MHz as "mHz";
 the labels above follow its bounds. Ω rung 4 is "9.99MΩ" in the asset, over
 a 9.999 bound. The A rung is range byte 1 of the mA modes: the manual's A
-mA position reads past 999.9mA on the same terminal. The asset lists DC A and
-AC A with no rungs.
+mA position reads past 999.9mA on the same terminal. `funOl1_UT60BT.json`
+has no DC A or AC A row; the app's button config, `anjian_config.json`,
+lists both for the UT60BT (`range: true`), which says nothing of rungs and
+leaves 0x10/0x11 possible.
 
 ### UT202BT (9,999 counts)
 
@@ -1143,13 +1190,35 @@ tables, P14/26 to P17/31) where it prints the rung.
 
 LPF V, LPF A and °C are listed at the range bytes shown and no others. AC A
 is under both 0x11 and 0x16, the two codes the app names "ACA"; which one the
-meter sends is unknown. Inrush rung 0 and continuity rung 1 are the asset's
+meter sends is unknown. The deck calls 0x11 a multimeter's 10 A AC range
+and 0x16 a clamp's AC current, and the asset's other UT202BT clamp rows
+sit on clamp codes (LPF A 0x1C, inrush 0x1E), which points to 0x16
+[DEDUCED]. Inrush rung 0 and continuity rung 1 are the asset's
 alone. The capacitance top rung is printed "99.9mF" in the manual and "105mF"
-in the asset. The Ω ladder is not the protocol deck's UT202S one: the
-manual and the asset start at 99.99Ω with 7 rungs, the deck's UT202S table at
-999.9Ω with 6. The manual has no frequency table: frequency shows on the
-auxiliary display in AC V and AC A. The asset's °F bounds (590, −58) do not
-match its own label.
+in the asset. The manual has no frequency table: frequency shows on the
+auxiliary display in AC V and AC A.
+
+Against the protocol deck's UT202S table [VENDOR-DOC] (slide 7, compared
+2026-11-06 and 2026-11-07), the asset agrees on DC V, AC V, LPF V (byte 2
+only), AC A, LPF A byte 2, capacitance bytes 0-5 and Hz bytes 0-2. It
+differs on:
+
+- LPF A bytes 0 and 1: 9.999A and 99.99A in the deck, none in the asset
+  or the manual.
+- Ω: the deck starts at 999.9Ω with 6 rungs, the manual and the asset at
+  99.99Ω with 7.
+- The capacitance top rung: 99.99mF in the deck.
+- °C and °F: the deck splits each at bytes 0 and 1 (-40~300 °C,
+  300~1000 °C; -40~572 °F, 572~1832 °F), the asset has one °C row at
+  byte 1 and one °F row at byte 0.
+
+Hz bytes 3-5, inrush and continuity are the asset's alone. The deck's
+table is not the UT202S manual's either: the Chinese UT202S/UT202BT manual
+(P15/27-28) ends the UT202S's Ω at 6.000MΩ and tags LPF A as UT202BT-only, so
+the deck does not overrule the UT202BT manual. The asset's °F bounds (590,
+−58) do not match its own label; they are the UT61 assets' °F byte-0
+bounds, and its °C bounds (1010, −50) sit beside their °C byte-1 ones
+(1020, −50), which fits a row cut down from a split table [DEDUCED].
 
 ---
 

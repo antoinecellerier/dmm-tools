@@ -26,7 +26,8 @@ const PEAK_MODES: &[Mode] = &[Mode::AcV, Mode::AcA, Mode::ClampAcA];
 /// - Peak capture (P-MAX, P-MIN) in AC V and AC A only
 ///
 /// AC A is listed under both 0x11 and 0x16, the two codes the app names
-/// "ACA"; which one the meter sends is unknown. The app's LPF, LPF A and
+/// "ACA"; which one the meter sends is unknown, though the deck's naming
+/// points to 0x16 (family spec §9). The app's LPF, LPF A and
 /// °C rows start above range byte 0, and the missing bytes are [`GAP`]s.
 ///
 /// The meter's secondary display (frequency in AC V and AC A, °F beside °C)
@@ -72,6 +73,8 @@ static AC_V: [RangeInfo; 3] = [r("9.999V", "V"), r("99.99V", "V"), r("600.0V", "
 static LPF_V: [RangeInfo; 3] = [GAP, GAP, r("600.0V", "V")];
 
 static AC_A: [RangeInfo; 3] = [r("9.999A", "A"), r("99.99A", "A"), r("600.0A", "A")];
+// The asset and the manual; the deck's UT202S table also has
+// 9.999A and 99.99A at bytes 0 and 1 (family spec §9).
 static LPF_A: [RangeInfo; 3] = [GAP, GAP, r("600.0A", "A")];
 
 // The manual's inrush table has 99.99A and 600A; rung 0 is the
@@ -103,7 +106,7 @@ static CAPACITANCE: [RangeInfo; 7] = [
 
 // The asset's rungs, MHz for its "mHz". The manual prints no
 // frequency table: frequency is on the auxiliary display in AC V
-// and AC A. [UNVERIFIED]
+// and AC A. The deck's UT202S table stops at 9.999kHz. [UNVERIFIED]
 static HZ: [RangeInfo; 6] = [
     r("99.99Hz", "Hz"),
     r("999.9Hz", "Hz"),
@@ -118,7 +121,8 @@ static HZ: [RangeInfo; 6] = [
 static CONTINUITY: [RangeInfo; 2] = [r("999.9Ω", "Ω"), r("999.9Ω", "Ω")];
 
 // The asset lists °C at range byte 1 and °F at byte 0; the
-// labels are the manual's spans (P17/31).
+// labels are the manual's spans (P17/31). The deck's UT202S table
+// splits each at bytes 0 and 1 instead (family spec §9). [UNVERIFIED]
 static TEMP_C: [RangeInfo; 2] = [GAP, r("-40~1000°C", "°C")];
 static TEMP_F: [RangeInfo; 1] = [r("-40~1832°F", "°F")];
 

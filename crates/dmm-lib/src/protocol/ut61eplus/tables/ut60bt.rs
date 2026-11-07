@@ -169,8 +169,9 @@ fn entry(mode: Mode) -> Option<&'static [RangeInfo]> {
         Mode::AcUa => &AC_UA,
         Mode::DcMa => &DC_MA,
         Mode::AcMa => &AC_MA,
-        // NCV has no ranges; the asset lists DC A and AC A without any
-        // and the manual has no A position of their own.
+        // NCV has no ranges; the range asset has no DC A or AC A row
+        // (the app's button config lists both) and the manual has no A
+        // position of their own (family spec §9).
         Mode::Ncv
         | Mode::DcA
         | Mode::AcA

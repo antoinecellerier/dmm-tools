@@ -12,9 +12,10 @@ pub(crate) static UT61E_PLUS: ModelTable = ModelTable {
 };
 
 // Four ranges, verified on a real UT61E+ (2026-03-21): the
-// meter never sends a fifth. The vendor software listed a
-// 220mV entry here, but 220 mV is the separate DC mV mode
-// (0x03) on its own dial position, not a range of mode 0x02.
+// meter never sends a fifth. The vendor software's 22,000-count
+// list has these four too (2, 22, 220, 1000 V); 220 mV is the
+// separate DC mV mode (0x03) on its own dial position, not a
+// range of mode 0x02 (ut61-family spec §5.1).
 static DC_V: [RangeInfo; 4] = [
     r("2.2V", "V"),
     r("22V", "V"),
@@ -80,6 +81,8 @@ static HZ: [RangeInfo; 8] = [
 ];
 
 static DUTY_CYCLE: [RangeInfo; 1] = [r("Duty", "%")];
+// No temperature on this model; no vendor source has these one-rung
+// rows, theirs being the UT61D+'s two (ut61-family spec §9).
 static TEMP_C: [RangeInfo; 1] = [r("Temp", "°C")];
 static TEMP_F: [RangeInfo; 1] = [r("Temp", "°F")];
 static DIODE: [RangeInfo; 1] = [r("Diode", "V")];
@@ -90,13 +93,17 @@ static DC_MA: [RangeInfo; 2] = [r("22mA", "mA"), r("220mA", "mA")];
 static AC_MA: [RangeInfo; 2] = [r("22mA", "mA"), r("220mA", "mA")];
 
 static DC_A: [RangeInfo; 2] = [
-    // Range 0x00 unknown — may not be used. Placeholder.
+    // Range 0x00 unknown — may not be used. Placeholder no source
+    // backs: the vendor software gives 2 A there, the deck and the
+    // app nothing (ut61-family spec §5.5).
     r("20A", "A"),
     // Range 0x01 verified: 20A range (confirmed with bench PSU at 100mA)
     r("20A", "A"),
 ];
 
 static AC_A: [RangeInfo; 2] = [r("20A", "A"), r("20A", "A")];
+// The manual's 1000β; no vendor table gives this rung (ut61-family
+// spec §9).
 static HFE: [RangeInfo; 1] = [r("1000\u{03B2}", "\u{03B2}")];
 
 /// Dial positions of the UT61E+/UT161E — `[MANUAL]`, UT61+ Series User Manual

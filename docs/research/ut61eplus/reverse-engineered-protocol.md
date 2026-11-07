@@ -377,36 +377,37 @@ spec). The decompilation's `-` check for
 
 ### 2.5 Mode Byte Values — [VENDOR]
 
-From the mode string lookup table at 0xD324 in CustomDmm.dll, and
-confirmed by the mode-specific code paths in FUN_10007d50:
+Display names are the rows V2.02's table builder gives each byte (§2.6;
+both lists, family approach doc), and "Confirmed By" names the branch of
+the response parser (FUN_10007d50) that also singles the byte out:
 
 | Byte | Mode | Display Name | Confirmed By | UT61E+ Hardware |
 |------|------|-------------|--------------|-----------------|
-| 0x00 | AC Voltage | ACV | String table position | **[VERIFIED]** |
-| 0x01 | AC Millivolt | ACmV | String table position | **[VERIFIED]** |
-| 0x02 | DC Voltage | DCV | String table position | **[VERIFIED]** |
-| 0x03 | DC Millivolt | DCmV | String table position | **[VERIFIED]** (mV dial, mode byte capture) |
+| 0x00 | AC Voltage | ACV | Table builder | **[VERIFIED]** |
+| 0x01 | AC Millivolt | ACmV | Table builder | **[VERIFIED]** |
+| 0x02 | DC Voltage | DCV | Table builder | **[VERIFIED]** |
+| 0x03 | DC Millivolt | DCmV | Table builder | **[VERIFIED]** (mV dial, mode byte capture) |
 | 0x04 | Frequency | FREQ | Multiplier check `cVar1 == '\x04'` | **[VERIFIED]** (V~ and mA via SELECT2) |
 | 0x05 | Duty Cycle | Duty Cycle | Bar graph "-" check `cVar1 == '\x05'` | **[VERIFIED]** (mA via SELECT2) |
 | 0x06 | Resistance | RES | Multiplier check `cVar1 == '\x06'` | **[VERIFIED]** |
 | 0x07 | Continuity | Short-Circuit | Multiplier check `cVar1 == '\a'` (0x07) | **[VERIFIED]** |
-| 0x08 | Diode | Diode | String table position | **[VERIFIED]** |
+| 0x08 | Diode | Diode | Table builder | **[VERIFIED]** |
 | 0x09 | Capacitance | CAP | Multiplier check `cVar1 == '\t'` (0x09) | **[VERIFIED]** |
 | 0x0A | Temperature °C | Celsius | Special handling `cVar1 == '\n'` (0x0A) | — (not on UT61E+) |
 | 0x0B | Temperature °F | Fahrenheit | Special handling `cVar1 == '\v'` (0x0B) | — (not on UT61E+) |
-| 0x0C | DC µA | DCuA | String table position | **[VERIFIED]** |
-| 0x0D | AC µA | ACuA | String table position | **[VERIFIED]** (µA + SELECT, mode byte capture) |
-| 0x0E | DC mA | DCmA | String table position | **[VERIFIED]** |
-| 0x0F | AC mA | ACmA | String table position | **[VERIFIED]** (mA + SELECT, mode byte capture) |
-| 0x10 | DC A | DCA | String table position | **[VERIFIED]** (A⎓ dial) |
-| 0x11 | AC A | ACA | String table position | **[VERIFIED]** (A⎓ + SELECT) |
+| 0x0C | DC µA | DCuA | Table builder | **[VERIFIED]** |
+| 0x0D | AC µA | ACuA | Table builder | **[VERIFIED]** (µA + SELECT, mode byte capture) |
+| 0x0E | DC mA | DCmA | Table builder | **[VERIFIED]** |
+| 0x0F | AC mA | ACmA | Table builder | **[VERIFIED]** (mA + SELECT, mode byte capture) |
+| 0x10 | DC A | DCA | Table builder | **[VERIFIED]** (A⎓ dial) |
+| 0x11 | AC A | ACA | Table builder | **[VERIFIED]** (A⎓ + SELECT) |
 | 0x12 | hFE | hFE | Multiplier check `cVar1 == '\x12'` | **[VERIFIED]** |
 | 0x13 | Live (contact live/neutral wire check, [VENDOR-DOC]) | Live | Bar graph "-" check `cVar1 == '\x13'` | — (not on UT61E+) |
 | 0x14 | NCV | NCV | Multiplier/"-" checks `cVar1 == '\x14'` | **[VERIFIED]** |
-| 0x15 | LoZ Voltage (low-impedance AC V, [VENDOR-DOC]) | LozV | String table position | — (not on UT61E+) |
-| 0x16 | Clamp AC A ([VENDOR-DOC]) | LozV | Multiplier check `cVar1 == '\x16'` | — (not on UT61E+) |
-| 0x17 | Clamp DC A ([VENDOR-DOC]) | LPF | Bar graph "-" check `cVar1 == '\x17'` | — (not on UT61E+) |
-| 0x18 | LPF V | | Gap in string table | **[VERIFIED]** (V~ + SELECT; no signal needed) |
+| 0x15 | LoZ Voltage (low-impedance AC V, [VENDOR-DOC]) | LozV | Table builder | — (not on UT61E+) |
+| 0x16 | Clamp AC A ([VENDOR-DOC]; FREQ in V2.02, below) | FREQ | Multiplier check `cVar1 == '\x16'`, with Hz | — (not on UT61E+) |
+| 0x17 | Clamp DC A ([VENDOR-DOC]; Duty Cycle in V2.02, below) | Duty Cycle | Bar graph "-" check `cVar1 == '\x17'`, with Duty | — (not on UT61E+) |
+| 0x18 | LPF V | LPF | Table builder, 22,000-count list only | **[VERIFIED]** (V~ + SELECT; no signal needed) |
 | 0x19 | AC+DC V | AC+DC | AC/DC flag check `cVar1 == '\x19'` | **[VERIFIED]** (V⎓ + SELECT; no signal needed) |
 
 Hardware-verified entries come from driving the real UT61E+ through each
@@ -420,16 +421,20 @@ scale.
 **[VENDOR]**: DC A (0x10), hFE (0x12) and NCV (0x14) share nothing with AC V
 (0x00), DC V (0x02) or Hz (0x04).
 
-**0x16 and 0x17 — the software and the deck disagree.** V2.02's display
-names make 0x16 a second "LozV" and 0x17 "LPF". The protocol deck, whose
-mode table spans the family's meters and clamps, makes them a clamp
-meter's AC A and DC A, and puts LPF at 0x18, where the E+ sends LPF V
-**[VERIFIED]**. No UT61+ model reaches either byte (family spec §3.1), so
-no meter has confirmed either reading of 0x16/0x17.
+**0x16 and 0x17 — the vendor sources disagree.** V2.02's table builder
+gives 0x16 six FREQ rows (99 Hz to 9 MHz, the 6,000-count Hz ladder, in
+both lists) and 0x17 one Duty Cycle row, and its code branches agree: 0x16
+takes the SI prefix with Hz, 0x17 the "-" with Duty. The protocol deck,
+whose mode table spans the family's meters and clamps, and iDMM2.0's
+function names (`ACA`, `DCA`) make them a clamp meter's AC A and DC A. All
+three put LPF at 0x18, where the E+ sends LPF V **[VERIFIED]**. No UT61+
+dial position is known to send either byte (family spec §3.1), so no meter
+has confirmed either reading. An earlier, wrong reading of these bytes is
+in the family's approach doc
+([Modes 0x15-0x18](../ut61-family/reverse-engineering-approach.md#modes-0x15-0x18--vendor)).
 
-**Mode bytes 0x1A-0x1E — [VENDOR-DOC]:** not in the vendor software's
-mode string table (which ends at 0x19) and never observed from a UT61+
-meter. The protocol deck names them:
+**Mode bytes 0x1A-0x1E — [VENDOR-DOC]:** not in V2.02's lists (which end at
+0x19) and never observed from a UT61+ meter. The protocol deck names them:
 
 | Byte | Mode (deck) | Hardware Status |
 |------|-------------|-----------------|
@@ -440,6 +445,15 @@ meter. The protocol deck names them:
 | 0x1E | Inrush, clamp current | — (clamp) |
 
 The deck gives no ranges for the current variants 0x1A/0x1B.
+
+**Mode bytes 0x1F and 0x20 — [VENDOR]:** iDMM2.0's function-name list runs
+two past the deck's, to `dBV` (0x1F) and `dBm` (0x20); any later byte gets
+an empty name. That list is the only source: none of the app's range assets
+or button config has a row for either, the deck stops at 0x1E, V2.02 at
+0x19, and neither is in the UT61+ and UT161 manuals' text or on the UT60BT
+manual's and the UT202 manuals' spec pages (searched 2026-11-06 and
+2026-11-07). Their unit, ranges and which meter sends them
+are unknown.
 
 **Bit 7** of the mode byte marks a clamp meter's secondary-display frame,
 the function in the low seven bits (family spec §2.3). No UT61+ capture
@@ -709,7 +723,8 @@ What is still open is in [verification.md](verification.md), not here.
 | Flags1 at byte[14]: REL/HOLD/MIN/MAX | **VENDOR** | `FUN_10007d50` bit operations |
 | Flags3 at byte[16]: P-MIN, P-MAX, AC/DC | **VENDOR** | `FUN_10007d50` bit operations |
 | Byte16 bit3 set = AC component in AC+DC V | **VERIFIED** | 1.6 V cell, 2026-09-19; the deck's AC_DC flag |
-| Mode values 0x00-0x19 | **VENDOR** | String table + code path checks |
+| Mode values 0x00-0x19 | **VENDOR** | Table builder rows + code path checks |
+| Mode names 0x1F dBV, 0x20 dBm | **VENDOR** | iDMM2.0 function names only; no unit, range or model |
 | SI prefix table (T/G/M/k/m/µ/n/p) | **VENDOR** | `FUN_10001000` initializer |
 | CP2110 HID report format | **KNOWN** | AN434 |
 | UART config report format | **KNOWN** | AN434 |
@@ -803,3 +818,9 @@ streamed rate for this family over an adapter.
 display, two bargraph bytes, three flag bytes, 16-bit big-endian sum) and
 libreble's table agree with §2.4 and §2.7 field for field, including
 `auto` being the *inverse* of flags-B bit 2 and the AC/DC bit in flags C.
+
+**Mode bytes 0x16 and 0x17 (read 2026-11-06).** [libreble/multimeter](https://github.com/libreble/multimeter)
+and [QtDMM](https://github.com/qtdmm/QtDMM) name them ACA and DCA, as the
+deck and iDMM2.0 do, against V2.02's FREQ and Duty Cycle (§2.5); libreble
+marks its codes 22-30 unverified on hardware. Neither names 0x1F or 0x20,
+which stay iDMM2.0's `dBV` and `dBm` alone.

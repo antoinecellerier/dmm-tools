@@ -182,7 +182,9 @@ Key functions identified in DMM.exe:
   byte in the table is 0x30 + range_index (e.g., 0x30, 0x31, 0x32...).
 - Mode bytes are raw (0x00, 0x01, 0x02...) with no prefix.
 - The complete table was extracted with all mode/range combinations and
-  their bar graph full-scale values.
+  their bar graph full-scale values. It is two lists picked by model name,
+  not one, as the family approach doc records from the 2026-11-06 and
+  2026-11-07 re-reads.
 
 **5. Configuration file analysis**:
 - `options.xml` contains: Model ("UT61D+"), Version ("2.02"),
@@ -458,7 +460,7 @@ grep -n -C 3 'FUN_0040d3a0' DMM_decompiled.txt
 | Flag byte 15 bit 1 | UI widget indicator (likely LowBat) | DMM.exe UI code |
 | Flag byte 15 bits 0, 3 | Stored, never displayed by vendor UI | DMM.exe exhaustive search |
 | Flag bit layout (byte 16) | bit1=P-MIN, bit2=P-MAX, bit3=DC | Ghidra decompilation: response parser |
-| Mode values | 0x00-0x19 table (26 modes) | String table + code path checks |
+| Mode values | 0x00-0x19 table (26 modes) | Table builder rows + code path checks (re-read 2026-11-07; see the family approach doc) |
 | SI prefix table | T/G/M/k/K/space/empty/m/µ/n/p | Ghidra decompilation: static initializer |
 | Complete mode/range table | All entries with bar graph ranges | Ghidra disassembly: table builder |
 | Vendor command set | Only 3 commands (0x5E, 0x4A, 0x46) | Exhaustive search of all 4 binaries |
