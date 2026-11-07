@@ -106,7 +106,8 @@ fn range_table(function: u8) -> &'static [RangeEntry] {
     const MILLIVOLTS: &[RangeEntry] = &[re("", "400mV")];
 
     match function {
-        // DCV, ACV, AC+DC V, ACV LPF — all share voltage ranges
+        // DCV, ACV, AC+DC V, ACV LPF — all share voltage ranges; no source
+        // gives LPF's range byte (spec §4.2)
         0x00 | 0x01 | 0x05 | 0x12 => VOLTAGE,
         // DC mV
         0x02 => MILLIVOLTS,
@@ -122,7 +123,7 @@ fn range_table(function: u8) -> &'static [RangeEntry] {
         0x0E | 0x0F => MILLIAMPS,
         // DC/AC A
         0x10 | 0x11 => AMPS,
-        // Single-range functions (duty, diode, continuity, temp, LPF)
+        // Single-range functions (duty, diode, continuity, temperature)
         _ => &[],
     }
 }
@@ -138,8 +139,9 @@ fn range_table(function: u8) -> &'static [RangeEntry] {
 /// §4.4, which also records where the manual's own text disagrees with its
 /// figure.
 ///
-/// Function 0x02 is the only code on two positions — the V position reports
-/// it for its 400 mV auto range (§4.2). The two share nothing else, so a
+/// Function 0x02 is the only code on two positions — the V position may
+/// report it for a 400 mV auto range, which no source says (§4.4). The two
+/// share nothing else, so a
 /// bare 0x02 puts the dial nowhere (`cycle::DialState::observe`) and offers
 /// no switch until a reading has named one of the positions.
 const DIAL: &[DialPosition] = &[
@@ -150,7 +152,7 @@ const DIAL: &[DialPosition] = &[
             modes: &[0x02, 0x03, 0x04],
         }],
     },
-    // V⎓ (red AC+DC): DC V, AC+DC V, and DC mV on the 400 mV auto range
+    // V⎓ (red AC+DC): DC V, AC+DC V, and DC mV if it auto-ranges to 400 mV
     DialPosition {
         rings: &[Ring {
             button: CycleButton::Select,
@@ -285,8 +287,8 @@ impl Vc8x0Model for Vc880Model {
     const DIAL: &'static [DialPosition] = DIAL;
     const SETTLE: Settle = SETTLE;
     const FUNCTION_TABLE: &'static [(u8, &'static str, &'static str)] = FUNCTION_TABLE;
-    // Spec §4.2: the vendor fixes ACV LPF at 1000 V without reading the
-    // range byte. The voltage table still labels it.
+    // Spec §4.2: no source gives ACV LPF's range byte, and the vendor fixes
+    // it at 1000 V without reading the byte. The voltage table still labels it.
     const LOW_PASS: u8 = 0x12;
     // Spec §4.3: bits 0-3 of frame bytes 30-35, bits 0-5 of byte 36.
     const NAMED_STATUS_BITS: &'static [u8] = &[0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x3F];
@@ -633,7 +635,7 @@ mod tests {
     }
 
     /// Bits 6-7 of frame bytes 30-36; bits 4-5 of bytes 30-35 are left out
-    /// as a possible ASCII prefix, and byte 36 names them.
+    /// as their documented 0x30 prefix (spec §4.3), and byte 36 names them.
     #[test]
     fn undefined_status_bits_are_reported() {
         shared::assert_undefined_status_bits_reported::<Vc880Model>(30, &[0xC0; 7]);

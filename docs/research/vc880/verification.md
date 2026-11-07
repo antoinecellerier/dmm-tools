@@ -15,9 +15,15 @@ has been read yet: every item waits on a first report.
 
 ## The VC650BT
 
-- A VC650BT's capture, its installer identical to the VC-880's ([approach doc §1](reverse-engineering-approach.md#1-voltsoft-installer-conrad-item-124609124411))
+- A VC650BT's capture, Voltsoft treating it as a VC-880 ([approach doc §1](reverse-engineering-approach.md#1-voltsoft-installer-conrad-item-124609124411))
   — decides whether it stays on the VC-880 parser. Needs a VC650BT and
   `dmm-cli --device vc650bt capture --unverified`. (#13)
+- Its top ranges: what 0x33 means on its 600 V voltage functions and
+  low-pass, and whether capacitance ever sends 0x36 ([§4.2](reverse-engineered-protocol.md#42-range-tables-byte-5----vendor--known))
+  — decides its range labels and ladder. Needs `set range` on V⎓ and ⊣⊢. (#13)
+- Its dial: Lo under V~, °C/°F under mV, Hz % its own position ([§4.4](reverse-engineered-protocol.md#44-rotary-positions-and-shiftsetup-sub-functions----manual))
+  — decides whether it needs its own `DIAL`. Needs `get mode` on each
+  position. (#13)
 
 ## Link and streaming
 
@@ -27,23 +33,24 @@ has been read yet: every item waits on a first report.
 - Frames per second against the manual's 2-3 ([§4](reverse-engineered-protocol.md#4-live-data-payload-type-0x01-39-bytes----vendor))
   — decides the settle budget, which counts reads (`SETTLE` in `vc880.rs`).
   Needs a few seconds of `debug`. (#13)
-- The vendor's parity 2, even by [ut171 §2.3](../ut171/reverse-engineered-protocol.md#23-uart-config-report-0x50-layout----vendor), none by [§1](reverse-engineered-protocol.md#1-transport-layer----vendor)
-  — decides whether `Cp2110::open`'s 8N1 fits a VC-880. Needs Rev 2.4's
-  line settings, or a capture with the bridge set to 8E1. (#13)
 
 ## Frames and display
 
-- 39-byte LiveData frames, AB CD and a BE16 sum ([§2](reverse-engineered-protocol.md#2-frame-format----vendor),
-  [§3](reverse-engineered-protocol.md#3-message-types----vendor))
-  — decides the frame reader. Needs any capture. (#13)
+- 39-byte LiveData frames, AB CD and a BE16 sum, read at Rev 2.4's 8N1 ([§1](reverse-engineered-protocol.md#1-transport-layer----vendor)-[§3](reverse-engineered-protocol.md#3-message-types----vendor))
+  — decides the frame reader and `Cp2110::open`'s 8N1 against Voltsoft's
+  parity 2. Needs any capture. (#13)
 - The function byte per mode, 0x00-0x12 ([§4.1](reverse-engineered-protocol.md#41-function-codes-byte-4----vendor))
   — decides `FUNCTION_TABLE`'s labels against the LCD. Needs every mode
   step. (#13)
 - The range byte per function, 0x30 plus an index ([§4.2](reverse-engineered-protocol.md#42-range-tables-byte-5----vendor--known))
   — decides the range tables, and so which bytes read with no unit. Needs the
   mode steps' range sub-steps. (#13)
-- The range byte in ACV low-pass, which the vendor never reads (§4.2) —
-  decides whether the voltage table labels it (`LOW_PASS`). Needs `lpf`. (#13)
+- The range byte in ACV low-pass, which no source gives and the vendor never
+  reads (§4.2) — decides whether the voltage table labels it (`LOW_PASS`).
+  Needs `lpf`. (#13)
+- Display 1's digits on capacitance 0x32, Rev 2.4's "4000 nF" (§4.2):
+  `4000.0` would read 1000× high under the table's µF — decides that row's
+  unit. Needs `cap` on a 1-4 µF capacitor, LCD noted. (#13)
 - The main display against the LCD, and what an overload or a blank reading
   sends: `OL`, dashes, OL1 ([§4](reverse-engineered-protocol.md#4-live-data-payload-type-0x01-39-bytes----vendor))
   — decides `parse_value`'s OL and dashes arms. Needs `ohm` with the leads open. (#13)
@@ -53,18 +60,21 @@ has been read yet: every item waits on a first report.
 - What a VC650BT sends while mF capacitance shows `dsc`, as its manual says it
   sometimes does — decides whether the word gets its own arm; until then it is
   reported and shows `?`. Needs a VC650BT and a mF capacitor. (#13)
-- Sub values 1 and 2 and the 3-byte bar (§4): format and content, a guess
-  in the [cross-reference](reverse-engineering-approach.md#cross-reference-against-pylablib-phase-3)
+- Displays 2 and 3 and the bar, Display 4 (§4): format and content, a guess
+  in the [cross-reference](reverse-engineered-protocol.md#8-cross-reference-with-community-sources-community)
   — decides whether they become sub-values. Needs MAX/MIN, REL. (#13)
+- Which display holds the held value in MAX, MIN, AVG and REL: Display 2 by
+  Rev 2.4, the main display by the manual (§4.3) — decides whether Display 1
+  is the reading there. Needs `set minmax max` and `set rel on`, LCD noted. (#13)
 
 ## Flags
 
 - Every named bit of status bytes 30-36 ([§4.3](reverse-engineered-protocol.md#43-status-flag-bytes----vendor))
   — decides the flags reported. Needs HOLD, REL, MAX/MIN/AVG, manual range
   and low battery. (#13)
-- Whether bytes 30-35 carry a 0x30 prefix like the range byte — decides
-  `POSSIBLE_ASCII_PREFIX` and which bits report as unrecognised. Needs any
-  capture's raw frames. (#13)
+- Bytes 30-35's 0x30 prefix, which Rev 2.4 documents (§4.3), in real
+  frames — decides `POSSIBLE_ASCII_PREFIX` and which bits report as
+  unrecognised. Needs any capture's raw frames. (#13)
 - Sign1, byte 30 bit 2, against the display's `-` (§4.3) — decides where the
   sign comes from; a mismatch is reported. Needs `dcv_negative`. (#13)
 - AVG, byte 31 bit 1, lit only on the AVG step (§4.3) — decides the AVG
@@ -81,8 +91,8 @@ has been read yet: every item waits on a first report.
 - Whether SHIFT/SETUP on V~ switches anything, the manual's §8b text
   against its figure (§4.4) — decides whether AC V keeps its own position
   in `DIAL`. Needs the V~ position. (#13)
-- Whether V⎓ below 400 mV reports 0x02, DC mV (§4.4) — decides the 0x02
-  overlap between two positions. Needs V⎓ with a small DC input and
+- Whether V⎓ below 400 mV reports 0x02, DC mV, which no source says (§4.4)
+  — decides the 0x02 overlap between two positions. Needs V⎓ with a small DC input and
   `read --count 1` or `debug`. (#13)
 - The settle budget, untuned: `SHIFT did nothing in <mode>` while the
   display did change means it is too tight — decides `SETTLE`. Needs
@@ -131,9 +141,3 @@ has been read yet: every item waits on a first report.
   row: [Device auto-detection](../../verification-backlog.md#device-auto-detection).
 - The VC-880 capture list's gate steps, still split by other steps:
   [Capture tool](../../verification-backlog.md#capture-tool).
-
-## Vendor sources
-
-- Conrad's VC880 Protocol Rev 2.4 (`references/vc880/protocol/`), read from
-  rendered pages, its text layer broken — into the spec as [VENDOR-DOC];
-  decides which Voltsoft-only [VENDOR] and [INFERRED] rows hold, parity too.

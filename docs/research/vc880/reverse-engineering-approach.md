@@ -10,7 +10,8 @@ using a Silicon Labs CP2110 HID-to-UART bridge.
 
 All findings derive from official vendor sources. Community
 implementations (pylablib) were consulted only after independent
-analysis was complete (Phase 3 cross-reference).
+analysis was complete (Phase 3 cross-reference), and again on 2026-11-06,
+after a second vendor audit, at the user's request (spec §8).
 
 ### 1. Voltsoft Installer (Conrad item 124609/124411)
 
@@ -19,7 +20,10 @@ the Voltsoft application suite.
 
 **Key finding**: The VC-880 (item 124609) and VC650BT (item 124411)
 installers are **byte-identical** (MD5: `4b955a1e8a51e7c89338c0c852e1c469`),
-confirming both devices use the same software and protocol.
+so both devices use the same software. That alone does not show a shared
+protocol, since the same installer carries the VC-890's code too. What
+does is that Voltsoft opens both through the one VC-880 class with no
+model test, and that Conrad files Rev 2.4 under both items (§5).
 
 **Extraction**:
 ```sh
@@ -60,10 +64,27 @@ English section pages 35-65. Provides:
 
 ### 4. VC890 Installer (Conrad item 124600)
 
-Also downloaded. Different MD5 (`52891ed3c724f430c74fdb0a0ad50a8e`) —
-the VC-890 uses different software. The decompiled `DMSShare.dll`
-contains a separate `VC890Obj`/`VC890Reading` class hierarchy,
-confirming VC-890 has a different protocol from VC-880/VC650BT.
+Also downloaded. Different MD5 (`52891ed3c724f430c74fdb0a0ad50a8e`); not
+unpacked, so whether its own `DMSShare.dll` differs is unknown. The
+decompiled `DMSShare.dll`, from the VC-880 installer, contains a separate
+`VC890Obj`/`VC890Reading` class hierarchy, confirming VC-890 has a
+different protocol from VC-880/VC650BT.
+
+### 5. VC880 Protocol Rev 2.4 (Conrad item 124609/124411)
+
+Conrad's protocol document, 9 pages, filed under both the VC-880 and the
+VC650BT (`references/vc880/protocol/`, `SOURCE.txt` there; the two copies
+render the same). Its text layer is broken, so every value was read from
+rendered pages, 2026-11-06 and 2026-11-07, in two independent reads.
+Tagged [VENDOR-DOC] in the spec: line settings, message types and
+layouts, function and range tables, status bit names and descriptions,
+commands.
+
+### 6. VC650BT user manual and datasheet (Conrad item 124411)
+
+English section of the manual, and the datasheet; range tables read from
+rendered pages. The source of the spec's VC650BT ranges (§4.2) and dial
+(§4.4). Printed page = PDF page − 1 in the manual.
 
 ## Analysis Techniques
 
@@ -96,11 +117,11 @@ Functions analyzed:
 
 ### Installer Binary Comparison
 
-The VC-880 and VC650BT installers are byte-identical, confirming shared
-protocol. The VC-890 installer differs, and its `DMSShare.dll` contains
-a separate `VC890Reading` class with a different measurement mapping
-(38 entries but different function codes and range tables), confirming
-VC-890 requires independent implementation.
+The VC-880 and VC650BT installers are byte-identical, so they share
+software (§1). The VC-890 installer differs. The `DMSShare.dll` we
+decompiled contains a separate `VC890Reading` class with a different
+measurement mapping (38 entries but different function codes and range
+tables), confirming VC-890 requires independent implementation.
 
 ## What Each Source Provides
 
@@ -112,8 +133,8 @@ VC-890 requires independent implementation.
 | 2-3 measurements/second | Manual page 62 |
 | CAT III 1000V / CAT IV 600V | Manual page 62 |
 | DCV ranges: 400mV / 4V / 40V / 400V / 1000V | Manual page 62 |
-| ACV ranges: 4V / 40V / 400V / 1000V | Manual page 62-63 |
-| AC+DC V ranges: 4V / 40V / 400V / 1000V | Manual page 63 |
+| ACV ranges: 4V / 40V / 400V / 1000V | Manual page 63 |
+| AC+DC V ranges: 4V / 40V / 400V / 1000V | Manual page 64 |
 | Impedance ranges: 400Ω / 4kΩ / 40kΩ / 400kΩ / 4MΩ / 40MΩ | Manual page 64 |
 | Capacitance ranges: 40nF / 400nF / 4µF / 40µF / 400µF / 4000µF / 40mF | Manual page 64 |
 | Frequency range: 10Hz - 40MHz (+ 400MHz unspecified) | Manual page 64 |
@@ -128,7 +149,7 @@ VC-890 requires independent implementation.
 
 | Finding | Confidence | Source |
 |---------|------------|--------|
-| CP2110 bridge at 9600 baud, stop=SHORT; parity=2 read as NONE, [UNVERIFIED]: the config report reads 2 as even ([ut171 spec §2.3](../ut171/reverse-engineered-protocol.md#23-uart-config-report-0x50-layout----vendor); [check](verification.md#link-and-streaming)) | [VENDOR] | `VC880Obj.OpenDevice()` line 21228 |
+| CP2110 bridge at 9600 baud, stop=SHORT; parity=2, even by the config report's numbering ([ut171 spec §2.3](../ut171/reverse-engineered-protocol.md#23-uart-config-report-0x50-layout----vendor)), against Rev 2.4's "No parity" ([spec §1](reverse-engineered-protocol.md#1-transport-layer----vendor)) | [VENDOR] | `VC880Obj.OpenDevice()` line 21228 |
 | Frame header: 0xAB 0xCD | [VENDOR] | `_header = { 171, 205 }` line 21061 |
 | Frame format: header + length + command + data + checksum_BE16 | [VENDOR] | `WriteCommand()` lines 21238-21263 |
 | Length byte = data.length + 3 | [VENDOR] | `WriteCommand()` line 21269 |
@@ -147,7 +168,7 @@ VC-890 requires independent implementation.
 | 38 measurement mapping entries | [VENDOR] | `_MeasurementMapping` lines 15610-16030 |
 | Display values are ASCII strings (Encoding.ASCII.GetString) | [VENDOR] | `GetValue()` line 17117 |
 | Frame recovery: scan for 0xAB 0xCD, skip non-matching bytes | [VENDOR] | `GetOneMessage()` line 21557 |
-| VC880 and VC650BT share identical software (byte-identical installer) | [VENDOR] | MD5 comparison |
+| VC880 and VC650BT share identical software (byte-identical installer), and one class with no model test | [VENDOR] | MD5 comparison; `VC880Reading` |
 | VC890 has a separate protocol (different VC890Reading class) | [VENDOR] | DMSShare.dll class hierarchy |
 
 ### Deduced ([INFERRED])
@@ -200,5 +221,7 @@ Performed **after** independent analysis above.
 | Conrad | `references/vc880/vendor-software/download-124411-*.zip` | Voltsoft installer (VC650BT, byte-identical) |
 | Conrad | `references/vc880/vendor-software/download-124600-*.zip` | Voltsoft installer (VC890, different) |
 | Analysis | `references/vc880/vendor-software/DMSShare_decompiled.cs` | ILSpy C# decompilation (26,600 lines) |
+| Conrad | `references/vc880/protocol/vc880-protocol-rev2.4-*.pdf` | VC880 Protocol Rev 2.4, filed under 124609 and 124411 |
 | Conrad | `references/vc880/manuals/manual-124609-*.pdf` | VC880 user manual (specs pages 62-65) |
+| Conrad | `references/vc880/manuals/user-safety-instructions-124411-*.pdf` | VC650BT user manual (specs printed pages 68-73) |
 | Conrad | `references/vc880/manuals/datasheet-124411-*.pdf` | VC650BT datasheet |
