@@ -144,12 +144,6 @@ pub(super) fn steps(table: &ModelTable, profile: &DeviceProfile) -> Vec<CaptureS
             .samples(3)
             .expect(Expect::mode("LoZ V")),
     ];
-    // A model whose dial differs words those steps its own way.
-    for (id, instruction) in table.step_instructions {
-        if let Some(step) = steps.iter_mut().find(|s| s.id == *id) {
-            step.instruction = instruction;
-        }
-    }
     // The list names every mode in the family; a model's dial table says
     // which it reaches (spec §2.1: temperature and LoZ are UT61D+/UT161D
     // positions), so the others are not asked for. A table without a
@@ -169,6 +163,32 @@ pub(super) fn steps(table: &ModelTable, profile: &DeviceProfile) -> Vec<CaptureS
         };
         reached.iter().any(|mode| mode.as_static_str() == label)
     });
+    // LoZ's Hz/% ring, in the UT61D+ and UT161D manuals but not in the dial
+    // table: which mode byte it sends is unknown, so the steps assert
+    // nothing.
+    if reached.contains(&Mode::LozV) {
+        steps.push(
+            CaptureStep::basic(
+                "loz_hz",
+                "LoZ: short-press Hz%/USB for frequency, then Enter.",
+            )
+            .wait_for_enter(),
+        );
+        steps.push(
+            CaptureStep::basic(
+                "loz_duty",
+                "LoZ: short-press Hz%/USB again for duty ratio, then Enter. \
+                 Press it until LoZ volts show again afterwards.",
+            )
+            .wait_for_enter(),
+        );
+    }
+    // A model whose dial differs words those steps its own way.
+    for (id, instruction) in table.step_instructions {
+        if let Some(step) = steps.iter_mut().find(|s| s.id == *id) {
+            step.instruction = instruction;
+        }
+    }
     // Nor is a command the model's buttons do not take (family spec §6.5).
     let commands = profile.supported_commands;
     steps.retain(|step| step.command.is_none_or(|c| commands.contains(&c)));

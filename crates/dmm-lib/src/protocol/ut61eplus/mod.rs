@@ -1401,11 +1401,11 @@ mod tests {
         };
         let e_plus = ids("ut61eplus");
         assert!(e_plus.contains(&"acua"));
-        for id in ["temp", "tempf", "loz"] {
+        for id in ["temp", "tempf", "loz", "loz_hz", "loz_duty"] {
             assert!(!e_plus.contains(&id), "{id} asked for on the E+");
         }
         let d_plus = ids("ut61d+");
-        for id in ["temp", "tempf", "loz"] {
+        for id in ["temp", "tempf", "loz", "loz_hz", "loz_duty"] {
             assert!(d_plus.contains(&id), "{id} missing on the D+");
         }
         // No dial described: the table's own mode list decides.

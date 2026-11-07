@@ -310,7 +310,7 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
 | mV | DC mV, AC mV | AC mV, Hz, Duty % |
 | Ω | Ω, Continuity, Diode, Capacitance | — |
 | °C/°F | °C, °F | — |
-| LoZ | LoZ V | — |
+| LoZ | LoZ V | Hz, Duty % (manual printed p.14; bytes [UNVERIFIED]) |
 | µA | DC µA, AC µA | AC µA, Hz, Duty % |
 | mA | DC mA, AC mA | AC mA, Hz, Duty % |
 | A | DC A, AC A | AC A, Hz, Duty % |

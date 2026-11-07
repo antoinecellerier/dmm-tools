@@ -95,6 +95,9 @@ families are in the [verification backlog](../../verification-backlog.md).
 
 - LoZ V, 0x15 by the deck ([§3][s3]) — decides `Mode::LozV`'s byte. Needs step
   `loz`. (#7)
+- LoZ's Hz and duty, which the manual (printed p.14) gives a short press of
+  Hz%/USB and the dial table lacks — decides their bytes and the LoZ ring.
+  Needs steps `loz_hz`, `loz_duty`. (#7)
 - Temperature: how °C and °F fill the display field, and the deck's range
   bytes 0 and 1 ([§5.6][s56]) — decides `temp_c`/`temp_f`. Needs a K-type
   thermocouple, steps `temp` and `tempf`. (#7)
