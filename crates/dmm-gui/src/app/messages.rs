@@ -909,6 +909,24 @@ impl App {
         }
     }
 
+    /// A muted line under a reading the meter shows on its own screen only,
+    /// as a CMS's oscilloscope: the readout's dashes alone read as a fault.
+    pub(super) fn show_screen_only_note(&self, ui: &mut Ui) {
+        if !self
+            .last_measurement
+            .as_ref()
+            .is_some_and(|m| m.screen_only)
+        {
+            return;
+        }
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new(self.l10n.help().screen_only_reading())
+                .small()
+                .color(ui.visuals().weak_text_color()),
+        );
+    }
+
     /// Draw the whole notice under the reading: title, steps, and the
     /// support-level feedback link where there is one.
     ///

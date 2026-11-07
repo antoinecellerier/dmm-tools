@@ -53,7 +53,7 @@
 - **dmm-gui keeps its Light or Dark theme when the system's theme changes** — it switched with the system's and lost its custom colours.
 - **The UT181A and UT171 keep reading after joining the stream mid-frame** — readings could stop for tens of seconds, and a refused UT181A command look accepted.
 - **OWON's and Voltcraft's 15-byte meters read when their model code went unread** — a backlog of readings could get the meter refused as sending 6-byte frames.
-- **CMS and UT217 oscilloscope mode shows V or A with no reading** — it showed `0.00 W` or `0.00 VA`, whatever the meter's screen read.
+- **CMS and UT217 oscilloscope mode points to the meter's screen for readings** — it showed `0.00 W` or `0.00 VA`, whatever the screen read.
 - **`capture` stops on a pulled cable or lost link, saying how to resume** — it spun at full CPU and filed empty steps.
 - **dmm-gui keeps a Bluetooth link opened right after Disconnect or Cancel** — the abandoned attempt, still opening, cut the new link when it finished.
 - **dmm-gui reconnects to the same USB cable** — with several plugged in, a dropped link could carry on with another meter's readings; cables it can't tell apart end the session.

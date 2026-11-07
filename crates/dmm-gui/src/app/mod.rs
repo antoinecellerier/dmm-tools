@@ -918,6 +918,7 @@ impl App {
                         // already in the readout, and the help drawn under a
                         // window-filling reading would land off-screen.
                         self.show_connection_help(ui);
+                        self.show_screen_only_note(ui);
                         self.show_late_readings(ui);
                         self.show_specs_section_inline(ui, scale);
 

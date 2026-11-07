@@ -423,6 +423,12 @@ impl<'a> Help<'a> {
         tr!(self.0, "waiting-for-own-cable")
     }
 
+    /// What both binaries say under a reading the meter shows on its own
+    /// screen only (`Measurement::screen_only`).
+    pub fn screen_only_reading(self) -> Cow<'a, str> {
+        tr!(self.0, "screen-only-reading")
+    }
+
     /// The sentence both binaries use to say a protocol is not fully
     /// verified.
     ///

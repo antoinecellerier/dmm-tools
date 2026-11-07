@@ -92,6 +92,7 @@ impl App {
         self.show_transform_editor(ui, 1.0);
         self.show_alarm_editor(ui, 1.0);
         self.show_connection_help(ui);
+        self.show_screen_only_note(ui);
         self.show_late_readings(ui);
 
         match layout {

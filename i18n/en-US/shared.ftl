@@ -114,6 +114,9 @@ several-cables =
 # While a dropped link is being reopened: its cable has gone and another is
 # plugged in. Each binary follows it with how to use that other cable.
 waiting-for-own-cable = Another USB cable is plugged in, but this session is waiting for the one it opened.
+# Under a reading the meter shows on its own screen only, its frames carrying
+# none: a CMS or UT217's oscilloscope mode.
+screen-only-reading = See the meter's screen for oscilloscope readings
 # The GUI checkbox that lets a connection search over Bluetooth. The CLI
 # reads the same setting, so its help names the checkbox too.
 bluetooth-setting = Look for Bluetooth devices

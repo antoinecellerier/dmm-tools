@@ -216,6 +216,7 @@ impl ImportedReading {
             raw_payload: Vec::new(),
             spec: None,
             mode_spec: None,
+            screen_only: false,
         }
     }
 }

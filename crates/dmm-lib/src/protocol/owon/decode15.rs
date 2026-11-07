@@ -334,6 +334,7 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
             ..StatusFlags::default()
         },
         aux_values,
+        screen_only: scope,
         ..Measurement::from_payload(p, value)
     })
 }
@@ -894,8 +895,12 @@ pub(crate) mod tests {
                 assert_eq!(value(&m.value), value(&MeasuredValue::NoReading("----")));
                 assert!(m.aux_values.is_empty(), "{frame}");
                 assert_eq!(m.flags.hold, hold, "{frame}");
+                assert!(m.screen_only, "{frame}");
             }
         }
+        // The scope's own readings are the screen's; the multimeter's aren't.
+        let dcv = frame(g24(0, 4, 2, false), 2861, 0, 0, 0x04);
+        assert!(!quiet(&dcv, &CMS061).screen_only);
     }
 
     /// Elsewhere 14 and 15 stay power, and the status word's scope bit alone

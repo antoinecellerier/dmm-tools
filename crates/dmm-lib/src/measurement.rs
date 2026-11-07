@@ -317,6 +317,9 @@ pub struct Measurement {
     pub spec: Option<&'static SpecInfo>,
     /// Per-mode input impedance and notes, if the protocol provides specs.
     pub mode_spec: Option<&'static ModeSpecInfo>,
+    /// The meter shows this mode's readings on its own screen only: the
+    /// frames carry none, as in a CMS's oscilloscope. `value` says no reading.
+    pub screen_only: bool,
 }
 
 impl Measurement {
@@ -348,6 +351,7 @@ impl Measurement {
             raw_payload: payload.to_vec(),
             spec: None,
             mode_spec: None,
+            screen_only: false,
         }
     }
 
@@ -457,6 +461,7 @@ impl Measurement {
             raw_payload: vec![],
             spec: None,
             mode_spec: None,
+            screen_only: false,
         }
     }
 }

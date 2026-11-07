@@ -1064,6 +1064,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
+    let mut told_screen_only = false;
     let mut fatal = None;
     let mut stream = stream_over(&mut dmm, tick, &stop);
 
@@ -1076,6 +1077,12 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                         .is_some_and(|at| at <= m.timestamp)
                 });
                 let marker = if due { markers.pop_front() } else { None };
+                // Once per run: the dashes on every line say the rest.
+                if m.screen_only && !told_screen_only {
+                    told_screen_only = true;
+                    let l = crate::l10n::get();
+                    eprintln!("{} {}", note_label(), l.help().screen_only_reading());
+                }
                 run.take(m, 0, marker.as_ref().map(|k| (k.number, k.note.as_str())))?;
                 i += 1;
             }
