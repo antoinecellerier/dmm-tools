@@ -41,23 +41,27 @@ every capture step; no UT803 has been read.
   ([§5][s5]) — decides the `ac/dc bits` report. Needs `acdcv`. (#15)
 - Whether hFE reaches the wire as code E, which the manual says it doesn't
   ([§3.4][s34]) — decides that row's `hFE`, β. Needs `hfe`. (#15)
+- Continuity's digit 4, which the app hides while its record keeps it
+  ([§3.4][s34]) — decides `ut803_mode_info`'s whole-ohm scale, ten times the
+  LCD if it holds tenths. Needs `cont` across a known resistor, LCD noted. (#15)
 
 ## UT804 functions
 
-- The °F packets, code D ([§3.4][s34]) — decides `ut804_mode_info`'s 0xD
-  row. Needs the °C °F position with SELECT for °F; no step asks. (#16)
-- AC mV: coupling 1 or 3 on code 3 ([§3.5][s35]), taken without a report, or
-  code 0, the sheet's `AC_mV`, an unknown mode ([§3.4][s34]) — decides both.
-  Needs the mV position with the AC/AC+DC button pressed; no step asks. (#16)
+- The °F packets, code D, where sheet, manual and app agree ([§3.4][s34]) —
+  decides `ut804_mode_info`'s 0xD row. Needs the °C °F position with SELECT
+  for °F; no step asks. (#16)
+- Whether AC/AC+DC, an AC-mode button by the manual, acts on mV: coupling 1
+  or 3 on code 3 ([§3.5][s35]), or code 0, `AC_mV`, with no point in any
+  source ([§3.4][s34]) — decides both. Needs mV with the button pressed. (#16)
 
 ## UT804 status and digits
 
 - Where low battery shows, if at all — status bit 3, the sheet's sign, was
   never set ([§3.6][s36]); decides a `low_battery` flag. Needs a UT804 with
   its battery symbol lit and a `debug` trace. The last item on #16. (#16)
-- Digit nibbles `B` and `D`-`F` ([§3.2][s32]): the vendor zeroes a `B` in
-  nibble 4; `F` is in the 4-20 mA "HI" pattern ([§8][s8]). Decides
-  `parse_ut804_layout`. Needs `ma_percent` above 20 mA, the LCD noted. (#16)
+- Digits `B`, `D`-`F` ([§3.2][s32]): the vendor zeroes `B` in nibble 4, `F` is
+  in the "HI" pattern ([§8][s8]), the manual names only HI, LO. Decides
+  `parse_ut804_layout`. Needs `ma_percent` above 20 mA, LCD noted. (#16)
 
 ## CH9325 bridge
 

@@ -61,6 +61,15 @@ source carry URLs, sizes and MD5s.
    §1-7 and `references/ut800/ut804/` (UT804.exe V2.00, its annotated
    `LcdDisplay71A`), for the instruction-level comparison.
 
+8. **Voltcraft's 2005 VC920/960 app** — `vc920_960.exe` ("Ver: 0.01",
+   built 2005-06-24, MD5 5f6b1bcc…), carved from the MSI inside
+   "VC920_960 Setup.exe" in the USB adapter 120317's software zip
+   (`references/vc920/other/usb-adapter-120317-software-DL00.zip`); the
+   executable itself is not kept. Read 2026-11-06 and 2026-11-07 by two
+   independent static passes, `objdump` only, nothing run. Tagged [VENDOR]
+   (spec §4.3). The 2012 V3.00 app (`vc920-940-960-software-123296DL01.zip`)
+   was not read: its InstallShield stub yields no MSI without running it.
+
 ### Avoided (clean-room boundary)
 
 - **No community source was read for this analysis:** not sigrok's
@@ -117,6 +126,12 @@ and status logic and the duty override are the UT804's (spec §2, §3).
   name; the Voltcraft manuals name no UNI-T model. VC920 ≈ UT71C,
   VC960 ≈ UT71D, VC940 ≈ UT71E from the dial layouts, counts and power
   function [DEDUCED] (spec §4.2).
+- **The 2005 VC920/960 app is an older parser.** It has no case for code
+  E, no duty override, `%` for code F, AUTO for any non-zero status bits
+  1:0, no default coupling label and no LO branch (spec §4.3).
+- **No app has a decimal point for an unlisted code.** Each draws what a
+  register left by its caller says, so the UT71 apps and UT804.exe differ
+  (spec §3.6).
 
 ## Methodology
 
@@ -155,6 +170,12 @@ and status logic and the duty override are the UT804's (spec §2, §3).
 6. **Reconciliation.** Each sheet field was checked against what the app
    does with it and what the manuals say the meter has; disagreements
    are stated with their sources, not resolved by choice.
+
+7. **Vendor re-reads (2026-11-06, 2026-11-07).** Two independent passes,
+   the second without the first's report, walked every function and range
+   code through the UT71 apps', UT804.exe's and the 2005 VC app's jump
+   tables, read from the raw dwords, and followed the point register back
+   into each caller. Manual and sheet pages were read rendered.
 
 ## Confidence Assessment
 

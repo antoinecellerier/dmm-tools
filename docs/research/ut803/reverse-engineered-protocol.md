@@ -378,17 +378,23 @@ given (issue #16, 2026-09-18):
 | E (14) | Power (`../ut71/reverse-engineered-protocol.md` §3.2) | W | none | [VENDOR] |
 | F (15) | 4-20 mA loop current as % | % (vendor string `mA%`) | mA %, SELECT | [HARDWARE] |
 
-Code E is power [DEDUCED]: UNI-T's UT71 apps, which run this same
-parser, draw the unit W with the point after digit 4, and the UT71E has a
-power position (`../ut71/reverse-engineered-protocol.md` §3.2). The UT804 has no power,
+Code E is power [DEDUCED]: UT804.exe lights its `W` annunciator and
+draws the unit W with the point after digit 4 [VENDOR], as UNI-T's UT71
+apps, which run this same parser, do, and the UT71E has a power position
+(`../ut71/reverse-engineered-protocol.md` §3.2). The UT804 has no power,
 ADP, logic, AC mV or tachometer position (Table 2-1), and its reporter
 found none: code E is in the vendor app only. *Corrected 2026-09-21;
-earlier revisions called E an unknown glyph, possibly hFE.*
+earlier revisions called E an unknown glyph, possibly hFE. Corrected
+2026-11-07: earlier revisions said UT804.exe had no glyph for E.*
 
 **[VENDOR-DOC]** The UT804 sheet's function table agrees on codes 1-D and
 F. It names code A `Fm` (likely 蜂鸣, buzzer: the meter sends it on
 continuity) and code F `%(4-20mA)`, and leaves code E blank. It adds code 0,
-`AC_mV`, which no UT804 dial position reaches.
+`AC_mV`, `Range 0: 400mV`, which no UT804 dial position reaches: the
+manual has no AC mV position or range (Table 2-1, Table 2-3). UT804.exe
+has no case for code 0 and sets neither unit nor point (§3.8); coupling 0
+gives it the record label "DC" (§3.5). No vendor source gives code 0 a
+decimal point, 2026-11-06 (§8 has a community reading): unknown.
 
 #### UT803 — Modes [DEDUCED]
 
@@ -409,30 +415,43 @@ UT804's scheme*). Unit strings found in UT803.exe binary:
   revisions read them as diode and continuity
 
 Code E is hFE: the app lights its `hFE` indicator and `LCDBT`, whose `(`
-caption draws β in the app's UNIT-A2 font, with no point and no unit
+caption draws β in the UNIT-A2 font, with no point and no unit
 string; the manual's dial has an hFE position and gives a resolution of
-1β (p.48) [VENDOR]. The manual says "+DC, hFE and β cannot output to the
+1β (p.48) [VENDOR]. The glyph was rendered from the UT71 apps' copy of
+UNIT-A2, the only one on disk; the manual's LCD figure (p.13) shows a β. The manual says "+DC, hFE and β cannot output to the
 computer" (p.37), so whether the meter ever sends code E is [UNVERIFIED].
 The only `ADP` in UT803.exe sits inside an instruction's bytes, not a
-string. Exact mode list [UNVERIFIED] without hardware.
+string.
+
+On continuity (code 5) the app lights the beeper glyph `&`, not Ω, hides
+digit 4 on its LCD and sets no point, so the LCD shows three digits as
+whole ohms; its record text keeps all four digits, also with no point
+[VENDOR]. The manual gives continuity a 600 Ω range (PDF p.24) at 1 Ω
+resolution (p.45), which fits three digits. What digit 4 carries is
+[UNVERIFIED]. Diode (code 1) also hides digit 4, with the point after
+digit 1, at the manual's 10 mV resolution (p.45).
+
+Exact mode list [UNVERIFIED] without hardware.
 
 ### 3.5 AC/DC Indicator (Nibble 8) — [VENDOR]
 
 | Value | Meaning | Display string (UT804) | Seen on a UT804 (#16) |
 |-------|---------|------------------------|-----------------------|
-| 0 | Default (mode-dependent) | "DC" for V, mV, µA, mA and A; blank for others | DC V, mV, µA, mA and A, and every mode without coupling |
+| 0 | Default (mode-dependent) | "DC" for codes 0, 1 (DC V), 3 (mV), 7, 8 and 9 (µA, mA, A); blank for 2 (AC V) and the others | DC V, mV, µA, mA and A, and every mode without coupling |
 | 1 | AC | "AC" | AC V, µA, mA and A |
 | 2 | DC (explicit) | "DC" | never |
 | 3 | AC+DC | "AC+DC" | V and µA |
 
 The "AC+DC" string at value 3 was found as a literal in UT804.exe
 (line 224240 in decompilation). The modes that value 0 labels "DC" come
-from ut804-decompiled.txt:224195-224215. On the meter, value 3 comes from
+from the jump table at VA 0x5596D0 (ut804-decompiled.txt:224195-224215).
+*Corrected 2026-11-07: earlier revisions gave AC V the "DC" label too.*
+On the meter, value 3 comes from
 the AC/AC+DC button, pressed in an AC mode (UT804 manual Table 2-2, p.17).
 
 **[VENDOR-DOC]** The UT804 sheet gives the same four values and names 0
 `OFF`. The meter sends 0 on its DC readings and never 2, so the "DC" that
-value 0 gets on V, mV and the currents is the app's default.
+value 0 gets on DC V, mV and the currents is the app's default.
 
 ### 3.6 Status Flags (Nibble 9) — [VENDOR]
 
@@ -526,6 +545,25 @@ Neither moves a decimal point: a 750 V range keeps the point after the
 fourth digit, as 1000 V has it (`1000.0`), and the A position has one range. The sheet gives no full scale for continuity,
 diode or the 4-20 mA %, and 400 mV for code 0 (AC mV).
 
+### 3.8 Unlisted Modes and Ranges — [VENDOR]
+
+What the apps do with a mode or range code their tables lack, from
+static reads of UT804.exe and UT803.exe (2026-11-06, 2026-11-07). Neither
+rejects the packet, warns or marks the reading: it shows what its mode
+case set before the range lookup failed.
+
+| Case | UT804.exe | UT803.exe |
+|---|---|---|
+| Unlisted mode | Code 0: no unit, no point | Codes 0, 7, 8, A, C: no unit, no point, no annunciator |
+| Unlisted range | The mode's base unit, no prefix: V (1, 2), Ω (4), F (5), A (7 and 8, so a µA or mA reading is labelled A), Hz (C) | V (B), µA (D), mA (F), Ω (3); only the Hz or F annunciator on 2 and 6 |
+| Point on either | None: the parser never sets it, and the register it reads holds a pointer from both callers | None |
+| Range nibble `A`-`F` | The integer parse fails on every packet, before the mode is read | Fails on the modes that read the range: B, D, F, 3, 2, 6 |
+
+Modes with a fixed point (§3.7, "any code") take every range code. What
+the user sees after a failed parse was not traced. The UT71 apps and
+Voltcraft's 2005 VC920/960 app run the UT804's parser with the same units;
+their point differs (`../ut71/reverse-engineered-protocol.md` §3.6).
+
 ---
 
 ## 4. Transport Initialization — [VENDOR]
@@ -601,11 +639,12 @@ unit_372.ttf) where ASCII characters map to measurement symbols:
 *Corrected 2026-06 from the rendered fonts (§7.4 item 7). Earlier
 revisions, from string extraction and the mode detection logic alone,
 gave `#` as diode, `?` as continuity, `@` as the AC indicator and `&` and
-`$` as unknown. The `W` row is theirs; §7.4 item 7 does not cover it.*
+`$` as unknown. The `W` row is theirs; §7.4 item 7 has covered it since 2026-11-07.*
 
 *Corrected 2026-09-21: the `W` row read "Unknown (ADP mode unit)"; the
 UT71 apps, which share this parser, draw it as the power unit
-(`../ut71/reverse-engineered-protocol.md` §3.2).*
+(`../ut71/reverse-engineered-protocol.md` §3.2), and so does UT804.exe
+(§3.4, 2026-11-07).*
 
 ---
 
@@ -697,9 +736,10 @@ rendered (2026-06 review, each result re-derived by a second pass).
    glyphs (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω, `@`='L',
    `$`=battery): 6=Temp °C, 7=µA, 8=mA, 9=A, A=Continuity, B=Diode,
    C=Frequency (duty-% via nibble 9 bit 2, reused since negative frequency
-   is impossible; ut804-decompiled.txt:224271-224283), D=Temp °F, E: no glyph
-   in UT804.exe; power by the UT71 apps [DEDUCED] (§3.4), F="mA%" (4-20 mA
-   loop).
+   is impossible; ut804-decompiled.txt:224271-224283), D=Temp °F, E="W",
+   the `lcdW` annunciator, point after digit 4 (VA 0x5595EE), power by the
+   UT71 dials [DEDUCED] (§3.4), F="mA%" (4-20 mA loop). *Corrected
+   2026-11-07: this item said E had no glyph in UT804.exe.*
    Frequency unit boundaries: ranges 0-1 Hz, 2-4 kHz, 5-7 MHz; Ω:
    range 1 Ω, 2-4 kΩ, 5-6 MΩ. The unit strings are appended at
    ut804-decompiled.txt:224075-224184, and the range switches are at
@@ -729,6 +769,7 @@ libsigrok's code unless it says "wiki".
 | Line format | 2400 baud; the app opens its port at 8N1 but reads only low nibbles, except CR (§1.2) | 2400 7O1 | 2400 7O1 | ✓ rate; 7O1 new |
 | Payload layout | Nibbles 1-11 = bytes 1-11 (§2.1, §3.1) | Bytes 0-4 digits, 5 range, 6 function, 7 coupling, 8 flags, 9-10 CR LF | Same | ✓² |
 | Function codes | 1-F (§3.4); E is power [DEDUCED], F 4-20 mA % | 0-15, 14 = power, 15 = loop current | 1-9, `:` continuity, `;` diode, `<` Hz, `=` °F, `?` 4-20 mA %; no power on the UT804 | ✓; 1 = V DC, 2 = V AC new |
+| Function 0 | The sheet's `AC_mV`; no app or manual gives it a point (§3.4) | AC mV, point after digit 3 | — | ✓ name; the point has no vendor source (2026-11-06) |
 | Range tables | §3.7 | — | Per function | ✓ (log) |
 | Coupling (nibble 8) | 0 = per mode, 1 AC, 2 DC, 3 AC+DC (§3.5) | Bit 0 AC, bit 1 DC | Same | ✓ |
 | Status (nibble 9) | Bit 0 AUTO, bit 1 manual range [VENDOR-DOC], bit 2 sign, bit 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 set by RANGE (§3.6) |
@@ -786,7 +827,11 @@ Reference implementations:
 - Both executables, 2026-09-16 — Ghidra 12.1.3 decompilation of the form's
   published methods and the handlers they install, seeded from the Delphi
   RTTI; disassembly of the conditions; the form resources
-- UT803 operating manual — RS232 settings and RS232 button (p.36)
+- Both executables, 2026-11-06 and 2026-11-07 — two independent static
+  reads of the LCD routines, their jump tables walked for every mode and
+  range code (§3.4, §3.5, §3.8)
+- UT803 operating manual — RS232 settings and RS232 button (p.36),
+  continuity and diode (p.24, p.45)
 - UT804 operating manual — display counts; Table 2-1 rotary switch (p.14),
   Table 2-2 buttons (p.15-17), Table 2-3 ranges (p.18-19), MAX MIN (p.24)
 - Issue #16 — a UT804's CH9325 reports under dmm-tools 0.6.0 and 0.7.0-dev

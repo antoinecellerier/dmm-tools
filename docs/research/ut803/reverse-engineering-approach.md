@@ -127,6 +127,14 @@ chart. UT803.exe has no 7-segment decoder
    the form code, following direct calls, found what the apps send. The `*-gap-decompiled.txt`
    files from the first pass held only Ghidra logs.
 
+6. **Vendor re-reads (2026-11-06, 2026-11-07).** Two independent reads,
+   the second without the first's report, of both apps' LCD routines in
+   `objdump` disassembly, with the jump tables read from the raw dwords
+   and every mode and range code walked; nothing was run. Manual and
+   datasheet pages were read rendered. They settled the UT803's frequency,
+   hFE and MAX/MIN reading, UT804.exe's `W` and coupling-0 labels, and what
+   each app does with an unlisted code (spec §3.4, §3.5, §3.8).
+
 ## Confidence Assessment
 
 - **Packet format (11 bytes ending CR LF, low nibbles):** HIGH — both

@@ -199,7 +199,12 @@ fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u
 }
 
 /// UT804 modes whose AC/DC nibble value 0 defaults to a DC label
-/// (vendor applies "DC" to V/mV/µA/mA/A, spec §3.5).
+/// (vendor applies "DC" to DC V/mV/µA/mA/A, spec §3.5).
+///
+/// Mode 2, AC V, is listed although the vendor gives it no label at 0
+/// (spec §3.5; ut71 spec §3.3): this list also says which modes take
+/// couplings 1-3 in [`ut804_acdc_documented`], and AC V sends 1 and 3. No
+/// meter has sent mode 2 with coupling 0 (#16).
 fn ut804_default_dc(mode: u8) -> bool {
     matches!(mode, 0x1 | 0x2 | 0x3 | 0x7 | 0x8 | 0x9)
 }
@@ -209,7 +214,8 @@ fn ut804_default_dc(mode: u8) -> bool {
 /// scales, with 1000V still on top. Each is the full scale both the A/B
 /// vendor app and the UT71 manual's A/B ranges give
 /// (docs/research/ut71/reverse-engineered-protocol.md §3.5). Neither gives
-/// continuity or diode a range, so they have no label, nor, as on the
+/// continuity or diode a range (the app gives them only chart scales), so
+/// they have no label, nor, as on the
 /// UT804, do temperature, power and the 4-20 mA %.
 fn ut71ab_range_label(mode: u8, range: u8) -> &'static str {
     match (mode, range) {
@@ -300,6 +306,8 @@ fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'st
                 ("Temperature", "°F", 3)
             }
         }
+        // All four digits as whole ohms, where the vendor app's LCD hides
+        // digit 4; which is right is open (spec §3.4).
         0x5 => ("Continuity", "Ω", 3),
         0x1 => ("Diode", "V", 0), // 5.999
         0x6 => match range {
@@ -583,6 +591,11 @@ fn mode_info_or_unknown(
         Some((name, unit, dp_pos)) => (Some(name), unit, dp_pos),
         None => {
             // The tables hold every pair the spec gives (§7.4 items 4 and 7).
+            // Position 3 is past the UT803's four digits, so no point, as its
+            // vendor app draws; on the UT804 layout it puts one after digit
+            // 4, which neither the UT804's app nor the 2005 VC920/960 app
+            // does; the UT71 apps' point comes from a leftover register
+            // (spec §3.8, ut71 spec §3.6).
             unrecognised.report("mode/range pair");
             (None, "", 3)
         }

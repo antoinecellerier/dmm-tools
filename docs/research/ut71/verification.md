@@ -29,11 +29,12 @@ packet has been seen, so every item waits on a first report.
 - Code E packets from a UT71E or VC940: their point, after digit 4 in the app
   (§3.2; community sources differ, [§7][xref]), VA and cos φ (§3.1), the blue
   key on W (§3.2) — decides the Power mode. Needs `power`. (#22, #23)
-- That code 0 (AC mV) is never sent (§3.2) — decides whether it stays an
-  unknown mode in `ut804_mode_info`. Needs every function swept. (#22, #23)
-- The duty-cycle sign bit, and duty's point, after digit 3 in the app (§3.4;
-  community sources differ, [§7][xref]) — decides the duty override. Needs
-  `duty`. (#22, #23)
+- That code 0 (AC mV) is never sent; no app or manual gives it a unit, point
+  or dial position (§3.2) — decides whether it stays an unknown mode in
+  `ut804_mode_info`. Needs every function swept. (#22, #23)
+- The duty-cycle sign bit and point, after digit 3 in the UT71 apps (§3.4;
+  [§7][xref] differs); the 2005 VC app has no duty case (§4.3) — decides the
+  override per model. Needs `duty`, and on a VC920/960 the code sent. (#22, #23)
 - Continuity's point, after digit 3 in the app (§3.5; community sources
   differ, [§7][xref]) — decides the continuity row. Needs `cont`. (#22, #23)
 
@@ -53,17 +54,18 @@ packet has been seen, so every item waits on a first report.
 
 ## Status and coupling
 
-- Coupling on DC readings, 0 or 2 (§3.3) — settles §3.3; both read as DC.
-  Needs `dcv`, `dcmv`, `dcua`, `dcma`, `dca`. (#22, #23)
-- Status bit 3, and the AUTO/Manual field's values (§3.4) — decides the
-  status-bits report and `auto_range`. Needs `dcv_negative`, `manual_range`,
-  `auto_range`, and a single-range mode such as `diode`. (#22, #23)
+- Coupling on DC readings, 0 or 2 (§3.3); the 2005 VC app labels 0 nothing
+  (§4.3) — settles §3.3; both read as DC. Needs `dcv`, `dcmv`, `dcua`, `dcma`,
+  `dca`. (#22, #23)
+- Status bit 3 and the AUTO/Manual values (§3.4; the 2005 VC app shows AUTO
+  for any, §4.3) — decides the status-bits report and `auto_range`. Needs
+  `dcv_negative`, `manual_range`, `auto_range`, `diode`. (#22, #23)
 
 ## Digits and overload
 
-- Digit values `B` and `D`-`F`, and overload and LO packets beyond the two
-  patterns in [§7][xref], against the LCD (§3.1) — decides the overload read.
-  Needs `ohm_ol`, and `ma_percent` with no loop current (LO). (#22, #23)
+- Digits `B`, `D`-`F`, overload and LO beyond [§7][xref]'s two patterns, and
+  HI, against the LCD (§3.1; the 2005 VC app has no LO, §4.3) — decides the
+  overload read. Needs `ohm_ol`, `ma_percent` at 0 and >20 mA. (#22, #23)
 
 ## Buttons
 
@@ -76,9 +78,9 @@ packet has been seen, so every item waits on a first report.
 
 ## Capture steps
 
-- Whether a VC9x0 of the 2009 manual ranges manually on its RANGE/SETUP key,
-  as the 2005-2006 manuals say (§4.2) — decides the VC920's `manual_range`,
-  `max_min` and `auto_range` steps. Needs a VC9x0. (#23)
+- Whether a VC9x0 of the 2009 manual ranges manually on RANGE/SETUP, as the
+  2005-2006 manuals say; the 2007 calibration calls it RANGE (§4.2) — decides
+  the VC920's `manual_range`, `max_min`, `auto_range` steps. Needs a VC9x0. (#23)
 
 ## Spec data
 

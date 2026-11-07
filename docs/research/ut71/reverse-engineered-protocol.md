@@ -28,6 +28,8 @@ Based on:
 - Ghidra decompilation of UNI-T's UT71A_B.exe and UT71C_D_E.exe V3.00,
   compared instruction for instruction with UT804.exe V2.00
   (`references/ut71/software-notes.md`)
+- Voltcraft's 2005 VC920/960 app from the USB adapter 120317's software,
+  read statically (§4.3)
 
 Confidence levels:
 - **[VENDOR-DOC]** — stated in UNI-T's UT71 sheet; Conrad's sheets are
@@ -170,7 +172,7 @@ p.42) [KNOWN].
 
 | Code | Sheet | App unit; point | Dial position | Models |
 |---|---|---|---|---|
-| 0 | `AC_mV` | none: the app sets neither unit nor point | none in any UT71 or Voltcraft manual | none; whether ever sent [UNVERIFIED] |
+| 0 | `AC_mV` | none: the apps set neither unit nor point; the A/B app sets only a chart scale of 200 | none in any UT71 or Voltcraft manual | none; whether ever sent [UNVERIFIED] |
 | 1 | `DCV` | V; by range | V DC (A-D); V≂ (E; blue key toggles AC) | all |
 | 2 | `ACV` | V; by range. Coupling 3 = AC+DC (§3.3) | V AC (A-D); V≂ + blue (E) | all |
 | 3 | `DC_mV` | mV; after digit 3 | mV DC: own position (A, E); shared with Hz/% (B-D) | all |
@@ -189,7 +191,8 @@ p.42) [KNOWN].
 
 - Code 0 (AC mV) is on the sheet only: no UT71 or Voltcraft document has
   an AC mV function (EN p.59-69; VC09 p.58-60), and the app's case for it
-  is empty. Coupling 0 on codes 0, 1, 3, 7, 8, 9 gets the app's "DC" record
+  is empty. Every sheet gives it `Range 0: 400mV` and no point; no vendor
+  source gives one, 2026-11-06 (§7 has a community reading). Coupling 0 on codes 0, 1, 3, 7, 8, 9 gets the app's "DC" record
   label (§3.3).
 - Code A `Fm` (likely 蜂鸣, buzzer) is continuity: the app lights the
   beeper and Ω annunciators [VENDOR].
@@ -234,7 +237,8 @@ a value `A`-`F` (bit 3 with bit 1 or 2) would fail; if the app works, the
 meter keeps byte 8 within `0`-`9` [DEDUCED].
 
 Duty cycle: code C with the sign bit set is duty in %, point after
-digit 3 [VENDOR]. HOLD, REL, MAX MIN, PEAK and low battery have no bit
+digit 3 [VENDOR]; Voltcraft's 2005 VC920/960 app has no duty case, and
+shows AUTO for any non-zero bits 1:0 (§4.3). HOLD, REL, MAX MIN, PEAK and low battery have no bit
 the app reads; the manuals do not say whether they change what is sent
 [UNVERIFIED]. On the UT804, HOLD stops the output and REL sends the
 relative reading with Manual set (UT804 spec §3.6, §4.2).
@@ -257,8 +261,8 @@ model; what differs is the full scale a code stands for.
 | µA (7) | 0: 400 µA, 1: 4000 µA | 200, 2000 µA | as C/D/E |
 | mA (8) | 0: 40 mA, 1: 400 mA | 20, 200 mA | as C/D/E |
 | A (9) | 0: 10 A | 10 A | 10 A |
-| Continuity (A) | 0, no full scale on the sheet; point after digit 3 | — | — |
-| Diode (B) | 0, no full scale; point after digit 1 | — | — |
+| Continuity (A) | 0, no full scale on the sheet; point after digit 3 | app chart 1000 | — |
+| Diode (B) | 0, no full scale; point after digit 1 | app chart 20 | — |
 | Hz (C) | 0: 40 Hz, 1: 400 Hz, 2: 4 kHz, 3: 40 kHz, 4: 400 kHz, 5: 4 MHz, 6: 40 MHz, 7: 400 MHz | 20 Hz … 200 MHz | manual lists 4 kHz-400 MHz only |
 | °F (D) | 0: 1832 °F | B: 1832 °F | °F exists (blue key), no spec row |
 | W (E) | not on the sheet; 2500 W (E); point after digit 4 | — | 2500 W (VC940) |
@@ -276,9 +280,29 @@ model; what differs is the full scale a code stands for.
   point positions. So range code 1 on DC V reads `1.9999` on a UT71A/B
   and `3.9999` on a UT71C/D/E, with the same bytes. The range codes
   themselves have not been seen from a UT71A/B [UNVERIFIED].
+- **AC mA.** The manual's Table 2-3 (EN p.22) gives AC mA's full ranges
+  as 400 and 4000, the µA figures; its AC current table (EN p.64) gives
+  40 mA and 400 mA, as the sheet does. The UT804 manual has the same
+  misprint (UT804 spec §3.7).
 - **10 A** is range 0 on the sheet; the UT804 sends 1 (UT804 spec §3.7).
   The point is after digit 2 for any code.
 - The codes a UT71 sends in its 4000-count modes are [UNVERIFIED].
+
+### 3.6 Unlisted Functions and Ranges — [VENDOR]
+
+The UT71 apps and the 2005 VC920/960 app (§4.3) treat a code their
+tables lack as UT804.exe does (UT804 spec §3.8): no warning, no marker;
+code 0 gets no unit, and an unlisted range keeps the function's base unit
+without its prefix (an unlisted µA or mA range reads A). The 2005 app
+also treats code E as unlisted. Only the decimal point differs. The parser
+never sets it for an unlisted pair and reads whatever a register holds
+from its caller, so it depends on the app and the cable:
+
+| App | Point on an unlisted pair (digits `12345`) |
+|---|---|
+| UT804.exe, 2005 VC920/960 app | None: `12345` |
+| UT71 apps over USB | After digit 1: `1.2345`, if the HID report length the handler gets is non-zero (not read) |
+| UT71 apps over RS232 | After digit 2-4 or none, by how many bytes, CR included, were left in the current read |
 
 ---
 
@@ -336,8 +360,30 @@ features]: VC920 ≈ UT71C, VC960 ≈ UT71D, VC940 ≈ UT71E.
 | Resistance | 40000 counts; 4000 with RANGE at power-on | 4000 counts, fixed (VC09 p.46, p.59) |
 | Memory | 100 / 9999 / 100 | 10 / 10000 / 10 (VC09 p.34, p.39, p.54) |
 | Cable | USB (IR) | RS232 optical; USB adapter optional (§1.1) |
-| RANGE key | RANGE: manual ranging; held, SETUP (EN p.16 Table 2-2) | VC09 names it SETUP, held long (p.45), with no range function (keys p.43-44); the 07/05 and 12/05 DE manuals (p.10) and VC06 (p.7-8) give RANGE manual ranging, VC06 setup by holding it (p.16) |
+| RANGE key | RANGE: manual ranging; held, SETUP (EN p.16 Table 2-2) | VC09 names it SETUP, held long (p.45), with no range function (keys p.43-44); the 07/05 and 12/05 DE manuals (p.10) and VC06 (p.7-8) give RANGE manual ranging, VC06 setup by holding it (p.16), as does the 2007 calibration instruction (123296ML02 p.2) |
 | SEND, auto power-off | as §4.1 | same (VC09 p.43, p.52, p.54) |
+
+### 4.3 Voltcraft's 2005 VC920/960 App — [VENDOR]
+
+The USB adapter 120317's software download (120317DL00) installs
+`vc920_960.exe`, "vc920/960 Interface Program _Ver: 0.01", built
+2005-06-24. It names no VC940. It runs the UT804's parser and receive
+paths at 2400 baud, with the same CH9325 feature report, and differs from
+the UT71 apps and UT804.exe in what it draws:
+
+| | 2005 VC920/960 app | UT71 apps, UT804.exe |
+|---|---|---|
+| Code E | No case: no unit, no point (§3.6) | W, after digit 4 |
+| Code F | `%`, after digit 3 | `mA%`, after digit 3 |
+| Duty | None: code C with the sign bit is a negative frequency | Code C with the sign bit is duty %, after digit 3 (§3.4) |
+| Status bits 1:0 | Any non-zero value shows AUTO | Only `01` |
+| Coupling 0 | No label | The function's default (§3.3) |
+| Byte 0 = `A` | Always an overload: no LO | Byte 1 = `C` is LO (§3.1) |
+
+The VC920 and VC960 have no W position (§4.2), so the missing code E fits
+their dials. Duty does not: the 07/05 German manual lists duty cycle in %
+on the blue key, and Conrad's 2006 sheet names code 13 "Duty Cycle"
+(§3.2). How a VC920/960 of 2005 sends duty is [UNVERIFIED].
 
 ---
 
@@ -389,7 +435,7 @@ settle.
 | Digits, 4000 counts | `0`-`9`; byte 4 = `A` is the blank fifth digit of a 4000-count display (§3.1) | Bytes 0-4 must be digits; byte 4 = `:` is "4000 count mode", value × 10 | ✓ |
 | Overload, LO | Byte 0 = `A`: byte 1 = `C` is LO, anything else an overload; the apps ignore bytes 2-4 (§3.1) | Only `::0<:` (A A 0 C A, over limit) and `:<0::` (A C 0 A A, under limit); other non-digits rejected | ✓ on those two; other byte-0 `A` packets unknown |
 | Functions 1-9, B-D, F | §3.2 | Same meanings; F is loop current in % | ✓ |
-| Function 0 | `AC_mV`, sheet only: no dial position, the apps set no unit or point (§3.2) | AC mV, point after digit 3 | ✓ meaning; ever sent? |
+| Function 0 | `AC_mV`, sheet only: no dial position, the apps set no unit or point (§3.2) | AC mV, point after digit 3 | ✓ meaning; the point has no vendor source (2026-11-06); ever sent? |
 | Function A | Continuity, point after digit 3 (§3.2, §3.5) | Continuity, exponent −1: point after digit 4 | ✗ point |
 | Function E | Power in W, point after digit 4, UT71E and VC940 [DEDUCED] (§3.2) | Power in W, "Only available on UT71E (range 0-2500W)", exponent 0: no point | ✓ meaning; ✗ point |
 | Coupling | 0 OFF, 1 AC, 2 DC, 3 AC+DC (§3.3) | Bit 0 AC, bit 1 DC | ✓ |
@@ -461,6 +507,9 @@ Reference implementation:
   (`references/vc920/manuals/SOURCE.txt`)
 - USB interface adapter 120317 operating instructions, Version 03/09
   (120317ML03) — driver and ComSetup (p.3); its software zip 120317DL00
-  lists "VC920_960 Setup.exe" (not opened)
+  holds "VC920_960 Setup.exe", whose MSI installs `vc920_960.exe` (md5
+  5f6b1bcc…, 2005) — read statically 2026-11-06 and 2026-11-07 (§3.6, §4.3)
+- Voltcraft VC920/VC960 calibration instruction 123296ML02 (2007) — the
+  setup key (p.2)
 - "VC920/VC940/VC960 Computer Interface Software" (123298IN01, 2005) —
   RS232C cable, COMSetup and USB Connect (p.3)
