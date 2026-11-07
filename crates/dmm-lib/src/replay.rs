@@ -333,6 +333,8 @@ impl Transport for ReplayTransport {
 /// as a cable recording, which every file written before the line existed
 /// was. `recorded_rfc3339` is the first reading's wall time, which playback
 /// pins the clock's wall origin to, so every writer must pass that one.
+/// `model` is the meter's own name; a line break in it is written as a
+/// space.
 ///
 /// Callers append [`sample_line`]s to this.
 pub fn header(
@@ -344,7 +346,7 @@ pub fn header(
     let mut out = format!("{MAGIC}\n# device: {device_id}\n# recorded: {recorded_rfc3339}\n");
     if let Some(model) = model {
         out.push_str("# model: ");
-        out.push_str(model);
+        out.push_str(&one_line(model));
         out.push('\n');
     }
     if let Some(link) = link {
@@ -360,21 +362,18 @@ pub fn header(
 /// break in it is written as a space.
 pub fn marker_line(offset: Duration, number: u32, note: &str) -> String {
     let ms = u64::try_from(offset.as_millis()).unwrap_or(u64::MAX);
-    let note: String = note
-        .chars()
-        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
-        .collect();
-    format!("# marker: {ms} {number} {note}\n")
+    format!("# marker: {ms} {number} {}\n", one_line(note))
 }
 
 /// The line saving the viewer's view of the recording, `view` being its
 /// one-line text; a line break in it is written as a space.
 pub fn view_line(view: &str) -> String {
-    let view: String = view
-        .chars()
-        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
-        .collect();
-    format!("# view: {view}\n")
+    format!("# view: {}\n", one_line(view))
+}
+
+/// `text` with each line break written as a space, for a header line.
+fn one_line(text: &str) -> String {
+    text.replace(['\r', '\n'], " ")
 }
 
 /// One sample line: the offset in milliseconds, then the payload as
@@ -818,6 +817,17 @@ mod tests {
         // A marker line trimmed of its trailing space still has an empty note.
         let bare = text.replace("# marker: 250 2 \n", "# marker: 250 2\n");
         assert_eq!(parsed(&bare).markers[0], marker(250, 2, ""));
+    }
+
+    /// A meter name with a line break in it stays one model line, and adds
+    /// no sample.
+    #[test]
+    fn a_model_with_a_line_break_stays_one_line() {
+        let mut text = header("ut61eplus", RECORDED, Some("X\n0 00\r"), None);
+        text.push_str(&format!("0 {DCV_BATTERY}\n"));
+        let replay = parsed(&text);
+        assert_eq!(replay.model.as_deref(), Some("X 0 00"));
+        assert_eq!(replay.samples.len(), 1);
     }
 
     /// The view line is kept as written, for the viewer to read.
