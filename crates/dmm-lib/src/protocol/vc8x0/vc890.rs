@@ -81,9 +81,6 @@ pub(crate) fn request_live(transport: &dyn Transport) -> Result<()> {
 ///   bar(2) + status(8) = 61 bytes.
 const LIVE_DATA_PAYLOAD_LEN: usize = 61;
 
-/// The last misplug warning value the spec gives (byte 63: 3 = V input).
-const MISPLUG_V_ERROR: u8 = 3;
-
 /// Every command byte this driver sends besides the ack and GetDeviceID,
 /// whose types the spec's message list already has: the bytes of
 /// [`COMMANDS`], and the poll.
@@ -301,8 +298,8 @@ const SETTLE: Settle = Settle {
 /// payload[57]    = status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
 /// payload[58]    = status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
 /// payload[59]    = battery level (low nibble)
-/// payload[60]    = misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
-///   3=V err; spec, Live Data Frame byte 63)
+/// payload[60]    = misplug warning (bits 1-0: 0=none, 1=mA err, 2=A err,
+///   3=V err) and Memory_Overwrite (bit 2); spec, Live Data Frame byte 63
 /// ```
 pub(crate) struct Vc890Model;
 
@@ -319,9 +316,11 @@ impl Vc8x0Model for Vc890Model {
     // Spec "Range Tables": the vendor fixes ACV LPF at 1000 V without
     // reading the range byte.
     const LOW_PASS: u8 = 0x01;
-    // Spec "Live Data Frame": bits 0-3 of frame bytes 56-61. Bytes 62 and 63
-    // hold the battery and misplug nibbles.
+    // Spec "Live Data Frame": bits 0-3 of frame bytes 56-61. Byte 62 holds
+    // the battery gear and byte 63 the misplug and Memory_Overwrite bits.
     const NAMED_STATUS_BITS: &'static [u8] = &[0x0F; 6];
+    /// SETUP Data Transfer (spec, Frame types).
+    const DOCUMENTED_FRAME_TYPES: &'static [u8] = &[0x05];
     // Spec "Communication Model": the vendor waits for a frame of the
     // command's own type after a button command. The poll is sent the same
     // way, and its answer is read as a live frame, which leaves open whether
@@ -376,12 +375,12 @@ impl Vc8x0Model for Vc890Model {
     }
 
     fn report_unrecognised_status(id: &'static str, status: &[u8]) {
-        // Spec byte 63: the misplug warning is the low nibble, 0 (none) to
-        // 3 (V input). The high nibble is not described.
-        if status[7] & 0x0F > MISPLUG_V_ERROR {
+        // Spec byte 63: bits 1-0 the misplug warning and bit 2
+        // Memory_Overwrite; the document gives bit 3 as 0.
+        if status[7] & 0x08 != 0 {
             report_unknown(
                 id,
-                "misplug nibble",
+                "status bits",
                 format_args!("frame byte 63 = {:#04x}", status[7]),
             );
         }
@@ -676,11 +675,11 @@ mod tests {
         shared::assert_frame_length_reported::<Vc890Model>();
     }
 
-    /// A misplug nibble past 3 is reported whatever the high nibble holds,
-    /// and changes nothing in the reading.
+    /// Byte 63's bit 3, which the document gives as 0, is reported whatever
+    /// the high nibble holds, and changes nothing in the reading.
     #[test]
-    fn a_misplug_value_past_3_is_reported() {
-        for value in [0x04, 0x0F, 0x34] {
+    fn byte_63_bit_3_is_reported() {
+        for value in [0x08, 0x0F, 0x38] {
             let mut status = zero_status();
             status[7] = value;
             let (m, reports) = shared::parse_capturing::<Vc890Model>(&make_payload(
@@ -693,7 +692,7 @@ mod tests {
             assert_eq!(
                 reports,
                 [format!(
-                    "vc890: unrecognised misplug nibble: frame byte 63 = {value:#04x}"
+                    "vc890: unrecognised status bits: frame byte 63 = {value:#04x}"
                 )]
             );
         }
@@ -702,8 +701,8 @@ mod tests {
     #[test]
     fn an_unlisted_frame_type_is_reported() {
         assert_eq!(
-            shared::frame_type_reports::<Vc890Model>(&[0x05]),
-            ["vc890: unrecognised frame type: 0x05, 2 payload bytes"]
+            shared::frame_type_reports::<Vc890Model>(&[0x06]),
+            ["vc890: unrecognised frame type: 0x06, 2 payload bytes"]
         );
     }
 
@@ -735,14 +734,14 @@ mod tests {
                 for high in [0x00, 0x30, 0xF0] {
                     let mut status = zero_status();
                     status[6] = nibble | high;
-                    status[7] = (nibble & 0x03) | high;
+                    status[7] = (nibble & 0x07) | high;
                     parse_measurement(&make_payload(0x02, 0x30, b"  1.234", status)).unwrap();
                 }
             }
         });
         assert!(reports.is_empty(), "{reports:?}");
 
-        let mut types = vec![0x00, 0x02, 0x03, 0x04, 0xFF];
+        let mut types = vec![0x00, 0x02, 0x03, 0x04, 0x05, 0xFF];
         types.extend(ECHOED_COMMANDS);
         let reports = shared::frame_type_reports::<Vc890Model>(&types);
         assert!(reports.is_empty(), "{reports:?}");

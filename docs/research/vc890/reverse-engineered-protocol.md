@@ -37,6 +37,22 @@ Host frames use the same AB CD + BE16 framing as VC-880 and UT61E+.
 Voltsoft checks no checksum on a frame the meter sends: that inbound frames
 carry the BE16 sum is inferred from its host-side builder, [UNVERIFIED].
 
+**Frame types** [VENDOR-DOC] (Rev 1.3 p.2 says "there are 9 types of
+messages" and tabulates these 7; the other two are named nowhere):
+
+| Type | Name | Layout |
+|------|------|--------|
+| 0x00 | Device ID | p.2 |
+| 0x01 | Live Data | pp.3-7 |
+| 0x02 | Comp Data | p.7 |
+| 0x03 | NOCOMP Data Transfer | p.7 |
+| 0x04 | COMP Data Transfer | pp.7-8 |
+| 0x05 | SETUP Data Transfer | pp.8-9 |
+| 0xFF | Result | p.9 |
+
+Voltsoft asks for 0x05 with command 0x03 and waits for a frame of that
+type [VENDOR].
+
 ## Communication Model -- [VENDOR]
 
 **Polled**: Host sends measurement request (0x5E), meter responds with
@@ -126,9 +142,9 @@ Offset  Size  Field
 61      1     Status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
 62      1     Battery level (low nibble, raw 0-15 — see note below;
               0x30-0x33 = gear 0-3 [VENDOR-DOC] p.6)
-63      1     Misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
-              3=V err — DMSShare_decompiled.cs:23649-23665; bit 2
-              Memory_Overwrite [VENDOR-DOC] p.6)
+63      1     Misplug warning (bits 1-0: 0=none, 1=mA err, 2=A err,
+              3=V err — DMSShare_decompiled.cs:23649-23665); bit 2
+              Memory_Overwrite [VENDOR-DOC] pp.6-7
 64-65   2     Checksum (BE16)
 ```
 
@@ -140,8 +156,12 @@ bit 0, `log_A_flag` ("the continuous memory function is on or not"). Byte
 62's bits are `bat_grade3_flag` to `bat_grade0_flag`, and "Msg[62].bytes =
 0x30, the battery quantum show 0 gear" through 0x33, 3 gear. Byte 63's
 bit 2 is `Memory_Overwrite_flag`, bits 1 and 0 `misplug_warning_flag2` and
-`flag1`, read as "Msg[63].bytes&0x34 = 0x30; misplug NO EEROR" and
-"&0x34 = 0x31; misplug EEROR ON mA INPUT" as printed; the page ends there.
+`flag1`, read as "Msg[63].bytes&0x34 = 0x30; misplug NO EEROR" through
+"= 0x33; misplug EEROR ON V INPUT" as printed, the last two at the top of
+p.7, where `Memory_Overwrite_flag` is "Memory Type: Overwrite". The
+printed mask `&0x34` cannot give 0x31-0x33; `&0x33` fits the four values.
+Voltsoft reads `msg[63] & 0xF` and has no arm for 4-15, so with bit 2 set
+it keeps its last misplug text [VENDOR].
 
 **Battery level (byte 62, low nibble)**: The DLL stores the raw 0–15
 value (`DMSShare_decompiled.cs:23648`, `battery_flag = msg[62] & 0xF`)

@@ -460,7 +460,8 @@ pub(crate) fn read_live<M: Vc8x0Model>(
 fn report_frame_type<M: Vc8x0Model>(id: &'static str, frame_type: u8, len: usize) {
     // vc880 spec §3: DeviceID 0x00, LiveData 0x01, CompData 0x02, the two
     // log transfers 0x03/0x04 and Result 0xFF.
-    let listed = matches!(frame_type, 0x00..=0x04 | 0xFF);
+    let listed =
+        matches!(frame_type, 0x00..=0x04 | 0xFF) || M::DOCUMENTED_FRAME_TYPES.contains(&frame_type);
     if !listed && !M::ECHOED_COMMANDS.contains(&frame_type) {
         report_unknown(
             id,
@@ -525,6 +526,10 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     /// spec's message list: none on a meter that answers with a Result
     /// frame.
     const ECHOED_COMMANDS: &'static [u8] = &[];
+
+    /// Frame types this meter's own protocol document lists beyond the
+    /// shared message list.
+    const DOCUMENTED_FRAME_TYPES: &'static [u8] = &[];
 
     /// The profile a driver for this meter reports.
     fn profile() -> DeviceProfile;

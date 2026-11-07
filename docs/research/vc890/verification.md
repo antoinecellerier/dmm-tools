@@ -43,9 +43,9 @@ yet: every item waits on a first report.
 - Which battery gear, `0x30`-`0x33` (byte 62), goes with the meter's
   low-battery symbol — decides `low_battery`, set on gear 0 alone. Needs the
   `battery` step with a fresh pack and with one the meter flags as low. (#14)
-- Byte 63's misplug values past mA input, and Memory_Overwrite (bit 2), which
-  the `0-3` nibble reading counts in — decides the misplug mask. Needs each
-  misplug warning the meter gives, leads unconnected. (#14)
+- Byte 63's misplug values, and whether Memory_Overwrite (bit 2) follows the
+  memory-type setting or a full memory — decides the misplug mask and an
+  overwrite flag. Needs each misplug warning, and memory set to overwrite. (#14)
 
 ## VOID with a live reading
 

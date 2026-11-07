@@ -85,6 +85,7 @@
 - **The UT8803 and UT8802 show hFE with its unit, β**
 - **The UT803 shows low battery, MAX and MIN** — a low battery raised an unrecognised-data warning.
 - **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
+- **The VC-890 reads without a warning when its memory-overwrite flag is set** — it asked for a bug report.
 - **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.
 - **dmm-gui stays responsive when a dashed or dotted line runs far off the graph** — a spike just out of view could stall it with Min/Max or sub-values shown.
 - **dmm-gui imports or replays a file whose saved view lies far past its readings** — it crashed.
