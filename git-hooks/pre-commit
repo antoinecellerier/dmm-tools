@@ -3,6 +3,15 @@
 
 set -e
 
+# The assistant's instructions (.claude/, CLAUDE.md) can't change what the
+# code does: nothing the build or the tests read lives there. --no-renames
+# lists both paths of a move, so moving code into .claude/ still checks.
+staged=$(git diff --cached --name-only --no-renames)
+if [ -n "$staged" ] && ! printf '%s\n' "$staged" | grep -qvE '^(\.claude/|CLAUDE\.md$)'; then
+    echo "pre-commit: only .claude/ or CLAUDE.md staged; skipping the checks."
+    exit 0
+fi
+
 echo "pre-commit: checking formatting..."
 cargo fmt --check
 echo "pre-commit: running clippy..."
