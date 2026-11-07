@@ -331,7 +331,7 @@ mode-ua-dc-peak = µA DC Peak
 # Used by: 9 meters
 # $mode is the mode, already translated.
 qualifier-lpf-mode = LPF { $mode }
-# Used by: 9 meters
+# Used by: 10 meters
 # $mode is the mode, already translated.
 qualifier-peak-mode = Peak { $mode }
 # Used by: UT181A

@@ -285,8 +285,10 @@ impl Protocol for Ut171Protocol {
                 (Flag::Min, false),
             ])),
             CaptureStep::with_command("peak", "V AC: we will enter Peak hold.", command::PEAK, 3)
-                .starts_from(Expect::mode("V AC")),
-            CaptureStep::with_command("peak_off", "We will leave Peak hold.", command::PEAK, 3),
+                .starts_from(Expect::mode("V AC"))
+                .expect(Expect::mode("Peak V AC")),
+            CaptureStep::with_command("peak_off", "We will leave Peak hold.", command::PEAK, 3)
+                .expect(Expect::mode("V AC")),
             CaptureStep::with_command(
                 "hz_key",
                 "V AC: we will press Hz% to step the second display.",

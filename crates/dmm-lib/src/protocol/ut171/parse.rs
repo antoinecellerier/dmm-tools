@@ -10,6 +10,7 @@ use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{check_len, unknown_mode, unknown_scale};
+use crate::text::qualify;
 use std::borrow::Cow;
 
 /// Response type of a measurement frame (§5.1).
@@ -60,10 +61,15 @@ const STATUS_B_DOCUMENTED: u8 =
     AUTO_RANGE | HIGH_VOLTAGE | NOT_LOGGED | AGGREGATE_BIT5 | AGGREGATE_BIT6;
 
 /// Whether Peak is on: byte 5 bit 6 (§5.3). It says neither P-MAX nor P-MIN,
-/// so it sets no flag; the Peak key's command follows it.
+/// so it sets no flag: the mode's name says Peak instead, and the Peak key's
+/// command follows it.
 pub(super) fn peak_on(payload: &[u8]) -> bool {
     payload.get(1).is_some_and(|status| status & PEAK != 0)
 }
+
+/// What Peak puts around the mode's name ([`crate::text::TextKind::Qualifier`]),
+/// as on the OWON meters.
+const PEAK_MODE: &str = "Peak {mode}";
 
 /// The payload length status byte A announces (§3.4): the fixed part, plus
 /// the aux block, the bar float and the auto-save minutes it flags.
@@ -377,7 +383,10 @@ fn aux(
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     check_len(FAMILY, payload, NCV_PAYLOAD_MIN)?;
     let (status_a, status_b, mode_byte) = (payload[1], payload[2], payload[3]);
-    let mode = mode_name(mode_byte);
+    let mode = match mode_name(mode_byte) {
+        name if status_a & PEAK != 0 => Cow::Owned(qualify(PEAK_MODE, &name)),
+        name => name,
+    };
     let flags = flags(status_a, status_b);
     let base = Measurement {
         mode,
@@ -504,6 +513,7 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
     for (_, label) in UNITS {
         out.add(TextKind::Aux, label, by);
     }
+    out.add(TextKind::Qualifier, PEAK_MODE, by);
     for label in ["Aux", "Duty", "Pulse Width", "Reference"] {
         out.add(TextKind::Aux, label, by);
     }
@@ -864,8 +874,8 @@ raw_payload=11"#
         let f = flagged(0, AGGREGATE_BIT5 | AGGREGATE_BIT6);
         assert!(!f.max && !f.avg && f.min);
         // Documented bits that set no flag: MAX/MIN active, Peak (which says
-        // neither P-MAX nor P-MIN), byte 6 bit 2.
-        assert_eq!(flagged(0x20 | 0x40, 0x04), StatusFlags::default());
+        // neither P-MAX nor P-MIN, and goes into the mode's name), byte 6 bit 2.
+        assert_eq!(flagged(0x20 | PEAK, 0x04), StatusFlags::default());
     }
 
     #[test]
@@ -1167,5 +1177,16 @@ raw_payload=18"#
     fn a_negative_reading() {
         let m = quiet(&payload(0x02, 1, -1.6093, 0x40, 0x00));
         assert_eq!(m.display_raw.as_deref(), Some("-1.6093"));
+    }
+
+    /// Peak is in the mode's name: on, but neither P-MAX nor P-MIN.
+    #[test]
+    fn peak_qualifies_the_mode() {
+        let mut p = payload(0x03, 2, 230.08, 0x20, 0x01);
+        p[1] |= PEAK;
+        let m = quiet(&p);
+        assert_eq!(m.mode, "Peak V AC");
+        assert_eq!(m.mode_raw, 0x03);
+        assert!(!m.flags.peak_max && !m.flags.peak_min);
     }
 }

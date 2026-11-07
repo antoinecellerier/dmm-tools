@@ -99,8 +99,9 @@ None of these has been sent to a meter. Each decides whether its button stays.
 - REL as `04 01` with the reading's own float: does the meter zero on it as on
   its key, and `04 00` leave (§4.7) — decides the REL button. Needs `rel`, `rel_off`. (#4)
 - Peak as `06 01`/`06 00`, chosen by byte 5 bit 6, and which bit tells P-Max
-  from P-Min (§4.7, §5.3) — decides the PEAK button and a Peak flag. Needs
-  `peak`, `peak_off`. (#4)
+  from P-Min, perhaps byte 6 bits 5–6 (§4.7, §5.3) — decides the PEAK button,
+  and P-MAX/P-MIN flags in place of the mode's `Peak` qualifier. Needs `peak`,
+  `peak_off` and a short MAX MIN press in Peak. (#4)
 - The reply: OK, ER or NO within 300 ms, and the connect frame's own reply, if
   any, which the first key's wait may take for its own
   ([§5.11](reverse-engineered-protocol.md#511-replies-types-0x01-and-0x72)) —
