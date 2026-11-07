@@ -96,12 +96,7 @@ pub(super) fn row(m: &Measurement) -> Option<&'static RangeSpec> {
     let (part, true) = table(m)? else {
         return None;
     };
-    let MeasuredValue::Normal(_) = m.value else {
-        return None;
-    };
-    let shown = m.display_raw.as_deref()?;
-    let decimals = shown.split_once('.').map_or(0, |(_, after)| after.len());
-    part.row(u8::try_from(decimals).ok()?)
+    part.row(u8::try_from(m.decimals()?).ok()?)
 }
 
 /// Every table, in manual order, the parts of one table together.
@@ -704,6 +699,7 @@ static TEMPERATURE: ModeSpecs = ModeSpecs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::measurement::decimals_in;
     use crate::protocol::Protocol;
     use crate::protocol::capture_reports;
     use crate::protocol::zotek::ZotekProtocol;
@@ -745,8 +741,7 @@ mod tests {
     }
 
     fn decimals(m: &Measurement) -> usize {
-        let shown = m.display_raw.as_deref().unwrap();
-        shown.split_once('.').map_or(0, |(_, after)| after.len())
+        m.decimals().expect("a number's digits")
     }
 
     fn number(m: &Measurement) -> bool {
@@ -943,9 +938,7 @@ mod tests {
             let unit = row
                 .label
                 .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
-            let shown = row.label[..row.label.len() - unit.len()]
-                .split_once('.')
-                .map_or(0, |(_, after)| after.len());
+            let shown = decimals_in(&row.label[..row.label.len() - unit.len()]);
             assert_eq!(unit, m.unit, "{}: row {}", what(&m), row.label);
             assert_eq!(shown, decimals(&m), "{}: row {}", what(&m), row.label);
         }

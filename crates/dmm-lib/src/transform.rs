@@ -14,7 +14,7 @@
 //! beneath it — so the graph selector, the CSV aux columns and the status line
 //! show both without any of them learning about transforms.
 
-use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MeasuredValue, Measurement, decimals_in};
 use std::borrow::Cow;
 
 /// Label of the sub-value carrying the meter's untransformed reading.
@@ -273,6 +273,8 @@ impl Transform {
 
         let raw_value = m.value.clone();
         let raw_unit = m.unit.clone();
+        // Before the digits move out of the reading below.
+        let raw_decimals = m.decimals();
         let raw_display = m.display_raw.take();
         let (base, mult) = si_prefix(&raw_unit);
 
@@ -283,8 +285,7 @@ impl Transform {
         let main_offset = if m.flags.rel { 0.0 } else { offset };
         match &raw_value {
             MeasuredValue::Normal(x) => {
-                (m.value, m.display_raw) =
-                    scaled(*x, mult, scale, main_offset, raw_display.as_deref());
+                (m.value, m.display_raw) = scaled(*x, mult, scale, main_offset, raw_decimals);
             }
             // Overload, NCV, a no-reading word and a frame without a main
             // reading have no digits to scale (`display_raw` is only
@@ -333,8 +334,7 @@ impl Transform {
             // Overload and NCV have no digits to scale, exactly as on the main
             // path; they still take the output unit so the pair stays readable.
             if let MeasuredValue::Normal(x) = aux.value {
-                (aux.value, aux.display_raw) =
-                    scaled(x, aux_mult, scale, offset, aux.display_raw.as_deref());
+                (aux.value, aux.display_raw) = scaled(x, aux_mult, scale, offset, aux.decimals());
             }
             // An empty unit is left empty so the sub-value keeps inheriting
             // the main reading's — now transformed — unit.
@@ -380,7 +380,7 @@ impl Transform {
 /// The linear arithmetic for one value, and the digits it is shown with.
 ///
 /// `x` is a reading in a unit whose multiplier to its base is `mult`;
-/// `raw_display` is the meter's own digit string for it. Returns
+/// `raw_decimals` is the decimals the meter shows it with. Returns
 /// `scale * x_base + offset` and its display string, or no reading and no
 /// digits when the result overflows. Shared by the main reading and by the
 /// sub-values transformed alongside it, so neither the decimals rule nor the
@@ -390,10 +390,10 @@ fn scaled(
     mult: f64,
     scale: f64,
     offset: f64,
-    raw_display: Option<&str>,
+    raw_decimals: Option<usize>,
 ) -> (MeasuredValue, Option<String>) {
     let y = scale * (x * mult) + offset;
-    let decimals = scaled_decimals(raw_display, x, scale * mult);
+    let decimals = scaled_decimals(raw_decimals, x, scale * mult);
     // Re-format rather than reusing the meter's digits: `{y}` on the bare f64
     // would print binary artefacts like "0.5678000000000001" everywhere
     // `display_raw` is None.
@@ -415,13 +415,10 @@ fn scaled(
 /// moves the decimal point, so the output needs `gain`'s decade subtracted.
 /// That holds the physical resolution steady across an auto-range switch —
 /// 123.4 mV and 0.1234 V both print "12.34" through a ×100 clamp factor.
-fn scaled_decimals(raw_display: Option<&str>, value: f64, gain: f64) -> usize {
-    let raw_decimals = match raw_display {
-        Some(raw) => decimals_of(raw),
-        // No meter digits: fall back to the float's own rendering, capped so a
-        // binary artefact ("0.5678000000000001") can't ask for 16 places.
-        None => decimals_of(&format!("{value}")).min(6),
-    };
+fn scaled_decimals(raw_decimals: Option<usize>, value: f64, gain: f64) -> usize {
+    // No meter digits: fall back to the float's own rendering, capped so a
+    // binary artefact ("0.5678000000000001") can't ask for 16 places.
+    let raw_decimals = raw_decimals.unwrap_or_else(|| decimals_in(&format!("{value}")).min(6));
     // A zero or non-finite gain has no decade. Leaving the shift at 0 keeps
     // `log10(0.0)` — negative infinity — out of the subtraction below.
     let shift = if gain.is_finite() && gain != 0.0 {
@@ -430,17 +427,6 @@ fn scaled_decimals(raw_display: Option<&str>, value: f64, gain: f64) -> usize {
         0.0
     };
     (raw_decimals as f64 - shift).clamp(0.0, 9.0) as usize
-}
-
-/// Digits after the decimal point in a meter display string.
-///
-/// Counts digits rather than characters, so the UT61E+'s sign-space form
-/// ("- 55.79") and any padding are measured correctly.
-pub(crate) fn decimals_of(display: &str) -> usize {
-    match display.split_once('.') {
-        Some((_, frac)) => frac.chars().filter(char::is_ascii_digit).count(),
-        None => 0,
-    }
 }
 
 #[cfg(test)]

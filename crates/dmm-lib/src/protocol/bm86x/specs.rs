@@ -23,7 +23,7 @@
 use super::decode::LABEL_AC;
 use super::map::{self, Ann, Lit};
 use super::reply::REPLY_LEN;
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::Measurement;
 use crate::specs::{AccuracyBand, ModeSpecInfo, ModeSpecs, RangeSpec, SpecInfo};
 
 /// A table's parts, each with the unit it answers. Where two parts share a
@@ -81,14 +81,14 @@ static AUDIBLE_CONTINUITY: Parts = &[("Ω", &CONTINUITY)];
 static DECIBELS: Parts = &[("dBm", &DBM)];
 static FIELD_DETECTION: Parts = &[("", &EF)];
 
-/// The table part for reading `m`, and the number whose digits after the
-/// point pick its row: `None` where no row answers, as for OL or a unit no
+/// The table part for reading `m`, and the digits shown after the point
+/// that pick its row: `None` where no row answers, as for OL or a unit no
 /// part has. `None` for no table: T1-T2, AutoCheck's word, Recall, a word
 /// with no function lit, and Hz beside anything but its AC reading.
-pub(super) fn table(m: &Measurement) -> Option<(&'static ModeSpecs, Option<&str>)> {
+pub(super) fn table(m: &Measurement) -> Option<(&'static ModeSpecs, Option<usize>)> {
     let ac = beside_ac(m);
-    let main = (m.unit.as_ref(), number(&m.value, m.display_raw.as_deref()));
-    let (parts, (unit, digits)): (Parts, (&str, Option<&str>)) = match m.mode.as_ref() {
+    let main = (m.unit.as_ref(), m.decimals());
+    let (parts, (unit, digits)): (Parts, (&str, Option<usize>)) = match m.mode.as_ref() {
         "DC V" | "DC mV" if ac => (DC_AC_VOLTAGE, main),
         "DC V" | "DC mV" => (DC_VOLTAGE, main),
         "AC+DC V" | "AC+DC mV" => (DC_AC_VOLTAGE, main),
@@ -109,10 +109,7 @@ pub(super) fn table(m: &Measurement) -> Option<(&'static ModeSpecs, Option<&str>
         // dial position is drawn showing: at A and µA, Hz goes on the
         // secondary display (BM820s manual p.12).
         "Hz" if ac => match m.aux_values.first() {
-            Some(aux) => {
-                let shown = number(&aux.value, aux.display_raw.as_deref());
-                (LINE_LEVEL, (aux.unit.as_ref(), main.1.and(shown)))
-            }
+            Some(aux) => (LINE_LEVEL, (aux.unit.as_ref(), main.1.and(aux.decimals()))),
             // Dashes: the unit lit beside them picks the part.
             None => (LINE_LEVEL, (secondary_unit(m), None)),
         },
@@ -128,7 +125,7 @@ pub(super) fn table(m: &Measurement) -> Option<(&'static ModeSpecs, Option<&str>
     let mut same_unit = parts.iter().filter(|(u, _)| *u == unit);
     let with_row = same_unit
         .clone()
-        .find(|(_, part)| digits.is_some_and(|shown| part.row(decimals(shown)).is_some()));
+        .find(|(_, part)| digits.is_some_and(|shown| part.row(row_key(shown)).is_some()));
     Some(match with_row.or_else(|| same_unit.next()) {
         Some((_, part)) => (part, digits),
         None => (parts[0].1, None),
@@ -141,20 +138,12 @@ pub(super) fn row(m: &Measurement) -> Option<&'static RangeSpec> {
     let (part, Some(shown)) = table(m)? else {
         return None;
     };
-    part.row(decimals(shown))
+    part.row(row_key(shown))
 }
 
 /// The digits after the point, as a row's `range` counts them.
-fn decimals(shown: &str) -> u8 {
-    let after = shown.split_once('.').map_or(0, |(_, after)| after.len());
-    u8::try_from(after).unwrap_or(u8::MAX)
-}
-
-/// A reading's digits, where it shows a number.
-fn number<'a>(value: &MeasuredValue, shown: Option<&'a str>) -> Option<&'a str> {
-    matches!(value, MeasuredValue::Normal(_))
-        .then_some(shown)
-        .flatten()
+fn row_key(decimals: usize) -> u8 {
+    u8::try_from(decimals).unwrap_or(u8::MAX)
 }
 
 /// Whether the secondary display shows the AC component: a reading labelled
@@ -1730,6 +1719,7 @@ mod tests {
     use super::super::reply::tests::ScriptedCable;
     use super::super::{Bm86xProtocol, Series, reply};
     use super::*;
+    use crate::measurement::{MeasuredValue, decimals_in};
     use crate::protocol::test_support::hex;
     use crate::protocol::{Protocol, capture_reports, is_unknown_mode, registry};
     use Ann::*;
@@ -1789,21 +1779,15 @@ mod tests {
             && !(m.mode == "Hz" && !m.aux_values.is_empty() && !beside_ac(m))
     }
 
-    /// The text whose digits pick the row: line level's AC reading, else
-    /// the main one.
-    fn keyed(m: &Measurement) -> Option<(&str, &str)> {
+    /// The unit and the decimals that pick the row: line level's AC
+    /// reading, else the main one.
+    fn keyed(m: &Measurement) -> Option<(&str, usize)> {
         if line_level(m) {
             let aux = m.aux_values.first()?;
-            matches!(aux.value, MeasuredValue::Normal(_))
-                .then(|| Some((aux.unit.as_ref(), aux.display_raw.as_deref()?)))
-                .flatten()
+            Some((aux.unit.as_ref(), aux.decimals()?))
         } else {
-            Some((m.unit.as_ref(), m.display_raw.as_deref()?))
+            Some((m.unit.as_ref(), m.decimals()?))
         }
-    }
-
-    fn decimals(shown: &str) -> usize {
-        shown.split_once('.').map_or(0, |(_, after)| after.len())
     }
 
     /// The digits after the point the manual's range labels give, by mode
@@ -1879,7 +1863,7 @@ mod tests {
                 ranged(m)
                     && number_shown(m)
                     && keyed(m).is_some_and(|(unit, shown)| {
-                        decimals_printed(m, unit).is_some_and(|d| !d.contains(&decimals(shown)))
+                        decimals_printed(m, unit).is_some_and(|d| !d.contains(&shown))
                     })
             },
         ),
@@ -2107,8 +2091,8 @@ mod tests {
                 let digits = &label[..label.len() - label_unit.len()];
                 assert_eq!(label_unit, unit, "{}: row {}", what(&m), row.label);
                 assert_eq!(
-                    decimals(digits),
-                    decimals(shown),
+                    decimals_in(digits),
+                    shown,
                     "{}: row {}",
                     what(&m),
                     row.label

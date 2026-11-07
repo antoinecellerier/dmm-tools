@@ -114,12 +114,9 @@ impl Hysteresis {
 /// shown in V is 0.001 V. Zero when the meter's digits are unknown, which
 /// leaves [`Hysteresis::Auto`] with no band.
 fn count_size(m: &Measurement, mult: f64) -> f64 {
-    let Some(display) = m.display_raw.as_deref() else {
+    let Some(decimals) = m.decimals() else {
         return 0.0;
     };
-    let decimals = display.split_once('.').map_or(0, |(_, frac)| {
-        frac.chars().take_while(char::is_ascii_digit).count()
-    });
     // `decimals` is a handful of digits, far inside i32.
     10f64.powi(-(decimals as i32)) * mult
 }

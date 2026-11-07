@@ -184,7 +184,7 @@ pub(crate) fn assert_digits_spell_value(m: &crate::measurement::Measurement) {
         let shown: f64 = exported
             .parse()
             .unwrap_or_else(|_| panic!("{:?}: the digits {exported:?} are not a number", m.mode));
-        let decimals = crate::transform::decimals_of(exported) as i32;
+        let decimals = crate::measurement::decimals_in(exported) as i32;
         let half_step = 0.5 * 10f64.powi(-decimals) * (1.0 + 1e-9);
         assert!(
             (shown - value).abs() <= half_step,

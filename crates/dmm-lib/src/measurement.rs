@@ -96,6 +96,28 @@ fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) 
     }
 }
 
+/// Digits after the decimal point in a meter's digit string.
+///
+/// Counts digits rather than characters, so the UT61E+'s sign-space form
+/// ("- 55.79") and any padding are measured correctly. The one rule for
+/// every count of shown decimals: [`Measurement::decimals`] and
+/// [`AuxValue::decimals`] apply it to a reading's own digits.
+pub(crate) fn decimals_in(display: &str) -> usize {
+    match display.split_once('.') {
+        Some((_, frac)) => frac.chars().filter(char::is_ascii_digit).count(),
+        None => 0,
+    }
+}
+
+/// The decimals `display_raw` shows, for a number: `None` for anything else,
+/// or when the meter sent no digits.
+fn shown_decimals(value: &MeasuredValue, display_raw: Option<&str>) -> Option<usize> {
+    match value {
+        MeasuredValue::Normal(_) => display_raw.map(decimals_in),
+        _ => None,
+    }
+}
+
 /// Render sub-values as one `", "`-joined line, each entry reading
 /// `"{label} {value}"` plus `" {unit}"` when the sub-value has a unit
 /// (unitless modes like NCV would otherwise trail a space) and `" @{n}s"`
@@ -148,6 +170,12 @@ pub struct AuxValue {
 }
 
 impl AuxValue {
+    /// Digits shown after the point, for a number with its digits:
+    /// the meter's, or a transform's. `None` otherwise.
+    pub(crate) fn decimals(&self) -> Option<usize> {
+        shown_decimals(&self.value, self.display_raw.as_deref())
+    }
+
     /// The sub-value formatted for display.
     ///
     /// The export form ([`AuxValue::value_export_str`]) except for a
@@ -316,6 +344,12 @@ impl Measurement {
             spec: None,
             mode_spec: None,
         }
+    }
+
+    /// Digits shown after the point, for a number with its digits:
+    /// the meter's, or a transform's. `None` otherwise.
+    pub(crate) fn decimals(&self) -> Option<usize> {
+        shown_decimals(&self.value, self.display_raw.as_deref())
     }
 
     /// The measured value formatted for on-screen display.
@@ -688,5 +722,50 @@ mod tests {
         let s = m.to_string();
         assert!(s.contains("HOLD"));
         assert!(s.contains("AUTO"));
+    }
+
+    /// One rule for the decimals shown: digits after the point, so a sign
+    /// space or padding doesn't count, and only for a number with digits.
+    #[test]
+    fn decimals_count_the_digits_a_number_shows() {
+        let with = |value, display: Option<&str>| Measurement {
+            display_raw: display.map(str::to_string),
+            ..Measurement::test_fixture(value, "V", StatusFlags::default())
+        };
+        assert_eq!(
+            with(MeasuredValue::Normal(5.678), Some("  5.678")).decimals(),
+            Some(3)
+        );
+        assert_eq!(
+            with(MeasuredValue::Normal(-55.79), Some("- 55.79")).decimals(),
+            Some(2)
+        );
+        assert_eq!(
+            with(MeasuredValue::Normal(12.0), Some("12")).decimals(),
+            Some(0)
+        );
+        assert_eq!(
+            with(MeasuredValue::Normal(1.5), Some("1.5 ")).decimals(),
+            Some(1)
+        );
+        assert_eq!(with(MeasuredValue::Normal(1.5), None).decimals(), None);
+        assert_eq!(with(MeasuredValue::Overload, Some(" 0.L")).decimals(), None);
+        assert_eq!(
+            with(MeasuredValue::NoReading("----"), Some("----")).decimals(),
+            None
+        );
+
+        let aux = |value, display: &str| AuxValue {
+            label: Cow::Borrowed("Max"),
+            value,
+            unit: Cow::Borrowed(""),
+            display_raw: Some(display.to_string()),
+            elapsed_secs: None,
+        };
+        assert_eq!(
+            aux(MeasuredValue::Normal(0.12), "0.120").decimals(),
+            Some(3)
+        );
+        assert_eq!(aux(MeasuredValue::Overload, "OL").decimals(), None);
     }
 }

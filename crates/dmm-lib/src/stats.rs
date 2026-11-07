@@ -1,7 +1,5 @@
-use crate::measurement::{MeasuredValue, Measurement};
-use crate::transform::{
-    PrefixRatio, decimals_of, prefix_power, prefix_ratio, re_express, si_prefix,
-};
+use crate::measurement::{MeasuredValue, Measurement, decimals_in};
+use crate::transform::{PrefixRatio, prefix_power, prefix_ratio, re_express, si_prefix};
 use log::debug;
 use std::time::{Duration, Instant};
 
@@ -318,7 +316,7 @@ impl ShownDigits {
         let Ok(shown) = number.parse::<f64>() else {
             return;
         };
-        let decimals = decimals_of(&number);
+        let decimals = decimals_in(&number);
         // Within half the last digit shown: a float-based family's text is
         // its f32 rounded, the value that f32 widened.
         let half_step = 0.5 * 10f64.powi(-(decimals as i32));
