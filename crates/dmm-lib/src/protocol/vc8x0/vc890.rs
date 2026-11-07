@@ -32,7 +32,7 @@ use std::time::Duration;
 
 /// Ack frame sent as both a pre-clear (before each command) and a
 /// post-confirm (after each received frame): command = `0xFF`, data =
-/// `[0x00]`, header `0xAB 0xCD`, length byte `0x04` (= 2 + cmd + 1 data),
+/// `[0x00]`, header `0xAB 0xCD`, length byte `0x04` (= cmd + 1 data + 2 checksum),
 /// checksum `0xAB + 0xCD + 0x04 + 0xFF + 0x00 = 0x027B` (BE). Spec,
 /// Communication Model, "Ack protocol".
 ///
@@ -283,14 +283,14 @@ const SETTLE: Settle = Settle {
 /// payload[0]     = type byte (0x01)
 /// payload[1]     = function code (0x00-0x12)
 /// payload[2]     = range byte (0x30-based)
-/// payload[3..10] = value 1: main display (7 ASCII bytes)
-/// payload[10..18]= value 2: sub display (8 ASCII bytes)
-/// payload[18..28]= value 3: (10 bytes)
-/// payload[28..36]= value 4: (8 bytes)
-/// payload[36..44]= value 5: (8 bytes)
-/// payload[44..47]= second freq unit (3 bytes)
-/// payload[47..51]= value 6: (4 bytes)
-/// payload[51..53]= bar graph (2 bytes)
+/// payload[3..10] = display 1: main value (7 ASCII bytes)
+/// payload[10..18]= display 2: time (8 ASCII bytes)
+/// payload[18..28]= display 3: date (10 ASCII bytes)
+/// payload[28..36]= display 4 (8 ASCII bytes)
+/// payload[36..44]= display 5 (8 ASCII bytes)
+/// payload[44..47]= second freq unit (3 ASCII bytes)
+/// payload[47..51]= display 6 (4 ASCII bytes)
+/// payload[51..53]= bar: tens digit, units digit
 /// payload[53]    = status 0: COMP_Max(0), COMP_Min(1), Sign1(2), Sign2(3)
 /// payload[54]    = status 1: Rel(0), Avg(1), Min(2), Max(3)
 /// payload[55]    = status 2: Hold(0), Manual(1), OL1(2), OL2(3)
@@ -321,10 +321,10 @@ impl Vc8x0Model for Vc890Model {
     const NAMED_STATUS_BITS: &'static [u8] = &[0x0F; 6];
     /// SETUP Data Transfer (spec, Frame types).
     const DOCUMENTED_FRAME_TYPES: &'static [u8] = &[0x05];
-    // Spec "Communication Model": the vendor waits for a frame of the
-    // command's own type after a button command. The poll is sent the same
-    // way, and its answer is read as a live frame, which leaves open whether
-    // an echo comes first.
+    // Spec "Communication Model": the vendor waits for a Result (0xFF) after
+    // a command, and no source gives a frame of the command's own type. This
+    // keeps such a frame, after a button command or ahead of the poll's live
+    // frame, from being reported should one come.
     const ECHOED_COMMANDS: &'static [u8] = &ECHOED_COMMANDS;
 
     fn profile() -> DeviceProfile {
@@ -363,13 +363,13 @@ impl Vc8x0Model for Vc890Model {
         // flags of their own (spec, Live Data Frame).
         flags.loz = status[3] & 0x04 != 0;
         flags.void = status[3] & 0x08 != 0;
-        // Battery level is the low nibble of status[6]. The vendor library
-        // stores the raw 0-15 value and does not threshold it (spec, Live
-        // Data Frame) — the VoltSoft application, not examined, decides
-        // what counts as "low". Without that threshold the previous guess of
-        // `>= 3 == low` was as likely to cry wolf as to help, so we report
-        // low_battery only for a fully-empty nibble. The raw level stays
-        // available in raw_payload for consumers that want the gauge.
+        // Battery level is the low nibble of status[6], gears 0-3. No vendor
+        // source calls a gear low: the vendor software only picks one of
+        // four icons, empty at 0 (spec, Live Data Frame, "Battery level").
+        // The previous guess of `>= 3 == low` was as likely to cry wolf as
+        // to help, so we report low_battery only for the empty gear. The raw
+        // level stays available in raw_payload for consumers that want the
+        // gauge.
         let battery_level = status[6] & 0x0F;
         flags.low_battery = battery_level == 0;
     }

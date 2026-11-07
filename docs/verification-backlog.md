@@ -63,9 +63,9 @@ with, and how well that probe is backed:
 
 ### Probes on the wrong meter
 
-- What `0x5F` (Get Name) does to a VC-880, VC-890, UT171 or UT181A, which
-  step 1 sends to whatever is on the cable, and what a UT181A answers to the
-  VC-890's `0x5E` (ut181 spec §11.1). Needs each meter watched under `auto`.
+- What step 1's bare `0x5F` (the UT61E+'s Get Name; the VC-890's Set Time
+  VALUE, sent with data) does to a VC-880, VC-890, UT171 or UT181A, and what
+  a UT181A answers to `0x5E` (ut181 spec §11.1). Needs each meter under `auto`.
 - What SET_MONITOR (`0x05`) does to a UT171, which receives it before its own
   connect frame. Needs a UT171 watched under `auto`. (#4)
 - The UT61+, UT181A and UT171 probes on a ZOTEK meter: they go out before its

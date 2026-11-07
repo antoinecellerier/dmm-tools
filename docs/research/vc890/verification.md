@@ -18,24 +18,31 @@ yet: every item waits on a first report.
 
 ## Frames
 
-- The 66-byte frame and its seven display fields ([Live Data Frame](reverse-engineered-protocol.md#live-data-frame-66-bytes----vendor))
-  — decides the parser's offsets and whether sub-displays become aux
-  values. Needs the mode steps, LCD noted. (#14)
+- The 66-byte frame's offsets, and what Displays 4-6 and the second frequency
+  unit hold outside COMP ([Live Data Frame](reverse-engineered-protocol.md#live-data-frame-66-bytes----vendor))
+  — decides the offsets and any aux values. Needs the mode steps, LCD noted. (#14)
 - What an overload or a blank reading sends: the [VC-880's item](../vc880/verification.md), which the shared `parse_value` follows.
 - What the frame sends in the SETUP menu, whose status bytes name no Setup bit
   — decides whether a menu number needs an arm in `parse_value`, where it now
   reads as a measurement. Needs the menu open, LCD noted. (#14)
-- The inbound BE16 checksum, inferred ([Frame Format](reverse-engineered-protocol.md#frame-format----vendor))
-  — every frame failing it means another scheme. Needs any capture. (#14)
+- The inbound checksum's byte order, which Rev 1.3 omits ([Frame Format](reverse-engineered-protocol.md#frame-format----vendor))
+  — every frame failing BE16 means another order or scheme. Needs any
+  capture. (#14)
 - The remapped function codes and the 6/60/600 ranges ([Function Codes](reverse-engineered-protocol.md#function-codes----vendor))
   — decides `FUNCTION_TABLE` and `range_table`, and so which bytes read with no
   unit. Needs every mode step. (#14)
-- The range byte in ACV LPF, which the vendor never reads ([Range Tables](reverse-engineered-protocol.md#range-tables----vendor))
-  — decides whether `lookup_range` keeps 1000 V fixed. Needs `lpf`. (#14)
+- The range byte in ACV LPF, which the vendor never reads and the manual gives
+  four ranges ([Range Tables](reverse-engineered-protocol.md#range-tables----vendor))
+  — decides whether `lookup_range` keeps 1000 V fixed. Needs `lpf` at two voltages a decade apart. (#14)
+- Display 1's digits at capacitance range `0x32` (6 µF; Rev 1.3's "6000 nF"),
+  `6.0000` or `6000.0`, which our µF reads 1000× high — decides `range_table`'s
+  unit there. Needs `cap` on a 1-6 µF capacitor, LCD noted. (#14)
+- Whether frequency ever sends range `0x37` (600 MHz, the vendor software's
+  alone) — decides `range_table`'s top rung. Needs `hz` and `set range 600MHz`. (#14)
 
 ## Status bytes
 
-- Every bit of bytes 56-61, and whether 56-58 share 59-61's `0x30` prefix
+- Every bit of bytes 56-61 and their `0x30` prefix, both Rev 1.3's
   ([Live Data Frame](reverse-engineered-protocol.md#live-data-frame-66-bytes----vendor))
   — decides the bits read and reported. Needs the mode steps. (#14)
 - Sign1 (byte 56 bit 2) against the display's `-` — decides whether the sign
@@ -60,9 +67,9 @@ yet: every item waits on a first report.
 - Whether the meter needs the ack burst or only takes it ([Communication Model](reverse-engineered-protocol.md#communication-model----vendor))
   — decides whether every exchange keeps it. Needs a hidapi script or dev
   build without it. (#14)
-- A frame of the command's own type after a button press, and one ahead of
-  the poll's live frame — decides `ECHOED_COMMANDS` and whether
-  `write_button` waits. Needs a raw trace around a press. (#14)
+- What answers a button command, a Result (`0xFF`) as Voltsoft waits for or a frame
+  of its own type, and any frame ahead of the poll's live frame — decides
+  `ECHOED_COMMANDS` and whether `write_button` waits. Needs a raw trace around a press. (#14)
 - One GetDeviceID exchange returning the name, where the vendor tries up to
   10 times — decides whether `get_name` retries. Needs a connect under
   `RUST_LOG=dmm_lib=debug`, its `device name` line. (#14)
@@ -111,11 +118,3 @@ yet: every item waits on a first report.
 - What detection's probes do to a VC-890, whether it answers `0x5E` on the
   first attempt, and the VC-890 detection row:
   [Device auto-detection](../../verification-backlog.md#device-auto-detection).
-
-## Vendor sources
-
-- Conrad's VC890 Protocol Rev 1.3: p.6 read 2026-09-30; the frame layouts on
-  pp.3-5 and 7-8 still to read, from rendered pages — decides any [VENDOR]
-  [Live Data Frame](reverse-engineered-protocol.md#live-data-frame-66-bytes----vendor) row they contradict.
-- The VoltSoft GUI (`VoltSoft System.exe` / `DeviceClient`), not decompiled
-  — holds which battery gear Voltsoft calls low; decides `low_battery`.
