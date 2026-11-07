@@ -8,12 +8,10 @@ use super::parse::decode_mode_word;
 use crate::error::{Rejected, Result, Sent, Unsupported};
 use crate::protocol::cycle::{self, FlagSetting};
 use crate::protocol::framing::{self, build_abcd_le16};
-use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{ButtonLabel, MeterKey, MeterKeys, Protocol, command, unsupported_setting};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
-use std::time::{Duration, Instant};
 
 pub(super) const UT181A_COMMANDS: &[&str] = &[
     command::HOLD,
@@ -80,70 +78,21 @@ pub(super) fn build_set_mode(word: u16) -> Vec<u8> {
 }
 
 impl Ut181aProtocol {
-    /// Write a command frame, then wait for the meter's reply code.
-    ///
-    /// The meter answers a command with a type-0x01 packet carrying "OK" or
-    /// "ER" (spec §4.1). "ER" is the only signal that a mode or range the dial
-    /// doesn't allow was refused, so it becomes an error the caller can show;
-    /// without it a rejected command looked exactly like an accepted one.
-    ///
-    /// Measurement frames that arrive while we wait are dropped — the meter
-    /// keeps streaming through a command. Whatever follows the reply stays in
-    /// `rx_buf`, so the next `request_measurement` resumes mid-stream instead
-    /// of losing the bytes a blind drain used to throw away.
+    /// Write a command frame, then wait for the meter's reply code: a
+    /// type-0x01 packet carrying "OK" or "ER" (spec §4.1). Anything else is
+    /// reported and taken as acceptance: a real meter has only ever sent
+    /// those two. The refusal names no cause: the meter refuses a range or
+    /// MIN/MAX in Peak with the dial where it belongs (spec §4.2), and
+    /// `dmm-cli set` adds its own hint.
     ///
     /// A real meter answers within about 70 ms (research spec §4.1, issue #5).
-    /// Silence is still treated as success: a meter that answers nothing must
-    /// not fail every command.
     pub(super) fn send_frame(
         &mut self,
         transport: &dyn Transport,
         frame: &[u8],
         what: &Sent,
     ) -> Result<()> {
-        /// How long to wait for the reply before assuming the meter is not
-        /// going to send one.
-        const REPLY_TIMEOUT: Duration = Duration::from_millis(300);
-
-        debug!("ut181a: sending {what}: {frame:02X?}");
-        transport.write(frame)?;
-
-        let deadline = Instant::now() + REPLY_TIMEOUT;
-        let mut tmp = [0u8; 64];
-        loop {
-            match framing::extract_frame_abcd_2byte_le16(&self.rx_buf) {
-                Ok(Some((payload, consumed))) => {
-                    self.rx_buf.drain(..consumed);
-                    // Reply code packets are type 0x01; anything else is the
-                    // measurement stream running underneath us.
-                    if payload.first() == Some(&0x01) {
-                        return reply_result(&payload, what);
-                    }
-                    super::report_unknown_frame_type(&payload);
-                    debug!(
-                        "ut181a: dropping a {} byte frame while waiting for the {what} reply",
-                        payload.len()
-                    );
-                    continue;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    // Resync on the next header, as `request_measurement`
-                    // does: the reply may already sit behind the bad one.
-                    // Per bad frame, so at debug like `read_frame`'s skip.
-                    debug!("ut181a: frame error waiting for the {what} reply: {e}, skipping");
-                    framing::skip_past_header(&mut self.rx_buf, &framing::HEADER);
-                    continue;
-                }
-            }
-
-            let n = framing::read_uart_bytes(transport, &mut tmp, deadline)?;
-            if n == 0 {
-                debug!("ut181a: no reply to {what} within {REPLY_TIMEOUT:?}, assuming accepted");
-                return Ok(());
-            }
-            self.rx_buf.extend_from_slice(&tmp[..n]);
-        }
+        framing::send_le16_command(&mut self.rx_buf, transport, frame, what, &REPLY_WAIT)
     }
 
     /// The states `setting` offers in `mode`, [`cycle::OFF_STATE`] first.
@@ -280,33 +229,13 @@ impl Ut181aProtocol {
     }
 }
 
-/// Turn a type-0x01 reply packet into a result.
-///
-/// Payload is `[0x01, 'O', 'K']` or `[0x01, 'E', 'R']` (spec §4.1). Anything
-/// else is reported and treated as acceptance: a real meter has only ever
-/// sent those two, so an unrecognised answer is more likely our gap than a
-/// refusal.
-///
-/// The refusal names no cause: the meter refuses a range or MIN/MAX in Peak
-/// with the dial where it belongs (spec §4.2). `dmm-cli set` adds its own
-/// hint.
-fn reply_result(payload: &[u8], what: &Sent) -> Result<()> {
-    match &payload[1..] {
-        [b'O', b'K', ..] => {
-            debug!("ut181a: {what} acknowledged");
-            Ok(())
-        }
-        [b'E', b'R', ..] => Err(Rejected::ByMeter(what.clone()).into()),
-        other => {
-            report_unknown(
-                "ut181a",
-                "command reply",
-                format_args!("{other:02X?} to {what}, taken as accepted"),
-            );
-            Ok(())
-        }
-    }
-}
+/// The reply wait SET commands take: OK or ER, and the measurement stream
+/// running underneath (`super::report_unknown_frame_type`).
+const REPLY_WAIT: framing::ReplyWait = framing::ReplyWait {
+    family: "ut181a",
+    on_other: super::report_unknown_frame_type,
+    refusals: &[*b"ER"],
+};
 
 #[cfg(test)]
 mod tests {

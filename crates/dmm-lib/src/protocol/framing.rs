@@ -401,6 +401,103 @@ pub(crate) fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usi
 const MAX_LE16_LEN: usize = 1 + 1 + 250 * 9 + 2;
 const _: () = assert!(MAX_LE16_LEN + 4 <= MAX_RX_BUF);
 
+/// How a family on the LE16 framing waits for the reply to a command.
+pub(crate) struct ReplyWait {
+    /// Family label for the logs and reports.
+    pub(crate) family: &'static str,
+    /// Called on each frame that is not the reply as it is dropped: the
+    /// family's own check of what else may arrive.
+    pub(crate) on_other: fn(&[u8]),
+    /// The two-letter reply words that refuse the command; `OK` accepts it.
+    pub(crate) refusals: &'static [[u8; 2]],
+}
+
+/// Write `frame`, then wait for the type-0x01 packet that answers it.
+///
+/// A refusal becomes [`Rejected::ByMeter`](crate::error::Rejected::ByMeter),
+/// the only signal that the meter refused what the dial doesn't allow;
+/// without it a refused command looked exactly like an accepted one.
+///
+/// Frames that arrive while we wait are handed to `on_other` and dropped —
+/// the meter keeps streaming through a command. Whatever follows the reply
+/// stays in `rx_buf`, so the next read resumes mid-stream instead of losing
+/// the bytes a blind drain used to throw away.
+///
+/// Silence is treated as success: a meter that answers nothing must not
+/// fail every command.
+pub(crate) fn send_le16_command(
+    rx_buf: &mut Vec<u8>,
+    transport: &dyn Transport,
+    frame: &[u8],
+    what: &crate::error::Sent,
+    wait: &ReplyWait,
+) -> Result<()> {
+    /// How long to wait for the reply before assuming the meter is not
+    /// going to send one.
+    const REPLY_TIMEOUT: Duration = Duration::from_millis(300);
+    let family = wait.family;
+
+    debug!("{family}: sending {what}: {frame:02X?}");
+    transport.write(frame)?;
+
+    let deadline = Instant::now() + REPLY_TIMEOUT;
+    let mut tmp = [0u8; 64];
+    loop {
+        match extract_frame_abcd_2byte_le16(rx_buf) {
+            Ok(Some((payload, consumed))) => {
+                rx_buf.drain(..consumed);
+                if payload.first() == Some(&0x01) {
+                    return reply_result(&payload, what, wait);
+                }
+                (wait.on_other)(&payload);
+                debug!(
+                    "{family}: dropping a {} byte frame while waiting for the {what} reply",
+                    payload.len()
+                );
+                continue;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                // Resync on the next header, as a read does: the reply may
+                // already sit behind the bad one. Per bad frame, so at debug.
+                debug!("{family}: frame error waiting for the {what} reply: {e}, skipping");
+                skip_past_header(rx_buf, &HEADER);
+                continue;
+            }
+        }
+
+        let n = read_uart_bytes(transport, &mut tmp, deadline)?;
+        if n == 0 {
+            debug!("{family}: no reply to {what} within {REPLY_TIMEOUT:?}, assuming accepted");
+            return Ok(());
+        }
+        rx_buf.extend_from_slice(&tmp[..n]);
+    }
+}
+
+/// Turn a type-0x01 reply packet into a result. Anything but `OK` or a
+/// refusal word is reported and taken as acceptance: an unrecognised answer
+/// is more likely our gap than a refusal.
+fn reply_result(payload: &[u8], what: &crate::error::Sent, wait: &ReplyWait) -> Result<()> {
+    match &payload[1..] {
+        [b'O', b'K', ..] => {
+            debug!("{}: {what} acknowledged", wait.family);
+            Ok(())
+        }
+        [a, b, ..] if wait.refusals.contains(&[*a, *b]) => {
+            Err(crate::error::Rejected::ByMeter(what.clone()).into())
+        }
+        other => {
+            crate::protocol::unrecognised::report_unknown(
+                wait.family,
+                "command reply",
+                format_args!("{other:02X?} to {what}, taken as accepted"),
+            );
+            Ok(())
+        }
+    }
+}
+
 /// Extract a frame using UT181A format: AB CD len_lo len_hi payload chk_lo chk_hi.
 ///
 /// Length is 2-byte LE uint16 = payload_size + 2 (includes checksum bytes).
