@@ -77,8 +77,6 @@ mode-ac-plus-dc-mv = AC+DC mV
 mode-ac-plus-dc-ua = AC+DC µA
 # Used by: VC-880, VC-890, VC650BT
 mode-acv-lpf = ACV LPF
-# Used by: UT803
-mode-adp = ADP
 # Used by: 9 meters
 mode-angle = Angle
 # Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
@@ -267,7 +265,7 @@ mode-vfd-ac-v = VFD AC V
 mode-vfd-hz = VFD Hz
 # Used by: BM525s/BM521s, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 mode-dbm-reference = dBm reference
-# Used by: 25 meters
+# Used by: 26 meters
 mode-hfe = hFE
 # Used by: UT171A/B/C, UT181A
 mode-ma-ac = mA AC

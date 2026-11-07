@@ -313,8 +313,8 @@ fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'st
             7 => ("Capacitance", "mF", 1),
             _ => return None,
         },
-        // Two indicators, no unit, possibly hFE.
-        0xE => ("ADP", "", 3),
+        // The hFE and β indicators, no point (spec §3.4).
+        0xE => ("hFE", "β", 3),
         _ => return None,
     })
 }
@@ -1356,7 +1356,7 @@ mod tests {
         assert_eq!(expected(&ut804, "acdcv"), Some("AC+DC V"));
     }
 
-    /// The UT804 has no AC mV or ADP position (its manual's Table 2-1), and
+    /// The UT804 has no AC mV or hFE position (its manual's Table 2-1), and
     /// the reporter walking it in #16 found none: its list asks for neither,
     /// and adds RANGE, MAX MIN and REL before HOLD. The UT803's manual has no
     /// duty, tachometer or 4-20 mA position.
@@ -1367,7 +1367,7 @@ mod tests {
         };
 
         let ut804 = ids(Ut80xProtocol::new_ut804());
-        for id in ["acmv", "adp"] {
+        for id in ["acmv", "hfe"] {
             assert!(!ut804.contains(&id), "the UT804 is asked for {id}");
         }
         let ut803 = ids(Ut80xProtocol::new_ut803());
@@ -1433,7 +1433,7 @@ mod tests {
                 "acma",
                 "dca",
                 "aca",
-                "adp",
+                "hfe",
                 "hold",
             ]
         );
@@ -2986,7 +2986,6 @@ raw_payload=11"#
         ("capacitance range 7 (60mF): the manual stops at 6mF", |f| {
             f.mode == 0x6 && f.range == 7
         }),
-        ("ADP: that it is hFE is only a guess", |f| f.mode == 0xE),
         ("current with both or neither coupling bit", |f| {
             matches!(f.mode, 0x9 | 0xD | 0xF)
                 && !matches!(f.coupling(), Some(Coupling::Dc | Coupling::Ac))
@@ -3047,9 +3046,8 @@ raw_payload=11"#
         }
         for table in specs_ut803::ALL {
             for row in table.ranges {
-                assert_eq!(
+                assert!(
                     rows_reached.contains(&std::ptr::from_ref(row)),
-                    table.name != "K. Transistor",
                     "{} / {}",
                     table.name,
                     row.label

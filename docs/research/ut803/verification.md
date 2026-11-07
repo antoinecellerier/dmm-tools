@@ -39,7 +39,8 @@ every capture step; no UT803 has been read.
   no step asks for them. (#15)
 - Both coupling bits (AC+DC), which the manual keeps off the wire
   ([§5][s5]) — decides the `ac/dc bits` report. Needs `acdcv`. (#15)
-- Code E, read as `ADP` with no unit — decides that row. Needs `adp`. (#15)
+- Whether hFE reaches the wire as code E, which the manual says it doesn't
+  ([§3.4][s34]) — decides that row's `hFE`, β. Needs `hfe`. (#15)
 
 ## UT804 functions
 

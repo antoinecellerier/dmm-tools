@@ -49,7 +49,7 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
     );
 
     // Which models' dial or buttons reach a step. The UT804 has no AC mV
-    // or ADP position (its manual's Table 2-1, #16); RANGE,
+    // or hFE position (its manual's Table 2-1, #16); RANGE,
     // MAX MIN and REL are asked of the UT804 and the handhelds. On the
     // handhelds the blue button steps resistance to continuity and
     // diode, and Hz follows mV, whose position the UT71B/C/D and
@@ -293,12 +293,21 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
                 for_model(Some("AC A"), Some("A")),
             ),
         ),
-        // Mode 14 "ADP / Logic" is named by the vendor binaries alone
-        // (spec §3.4). Mode 15 is the mA position's 4-20 mA loop reading
-        // in %, whose mode keeps the vendor's name "mA%".
+        // Mode 14 is hFE on the UT803 (spec §3.4), whose manual says hFE
+        // is not sent to the computer: no response is a result too. The
+        // transistor gates the step on Enter. Mode 15
+        // is the UT804's mA position's 4-20 mA loop reading in %, whose mode
+        // keeps the vendor's name "mA%".
         on(
             &[Ut803],
-            CaptureStep::basic("adp", "Set meter to ADP / logic").expect(Expect::mode("ADP")),
+            CaptureStep::basic(
+                "hfe",
+                "Set meter to hFE, with a transistor in the socket, then Enter. \
+                 If the meter sends nothing, that is a valid result. Turn the dial \
+                 back to V⎓ afterwards.",
+            )
+            .needs(&[Need::Transistor])
+            .expect(Expect::mode("hFE")),
         ),
         on(
             &[Ut804],

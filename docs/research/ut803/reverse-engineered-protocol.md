@@ -408,8 +408,13 @@ UT804's scheme*). Unit strings found in UT803.exe binary:
 - `#`, `?` — °C and °F by the 2026-06 font rendering (§6); earlier
   revisions read them as diode and continuity
 
-The UT803 likely has fewer than 15 modes (no ADP/Logic mode). Exact mode
-list [UNVERIFIED] without hardware.
+Code E is hFE: the app lights its `hFE` indicator and `LCDBT`, whose `(`
+caption draws β in the app's UNIT-A2 font, with no point and no unit
+string; the manual's dial has an hFE position and gives a resolution of
+1β (p.48) [VENDOR]. The manual says "+DC, hFE and β cannot output to the
+computer" (p.37), so whether the meter ever sends code E is [UNVERIFIED].
+The only `ADP` in UT803.exe sits inside an instruction's bytes, not a
+string. Exact mode list [UNVERIFIED] without hardware.
 
 ### 3.5 AC/DC Indicator (Nibble 8) — [VENDOR]
 
@@ -563,7 +568,7 @@ command [VENDOR-DOC].
 | Display count | 6000 (3¾ digit, max 5999) | 40000 (4¾ digit), 4000 when RANGE is held at power-on [KNOWN] (UT804 manual) |
 | Mode count | V, mV, µA, mA and A (DC and AC), Ω, continuity, diode, capacitance, Hz, °C, °F, hFE [KNOWN] (UT803 manual PDF p.11) | 15 codes, 14 on the dial (§3.4) |
 | RPM mode | No: no dial position (manual PDF p.11), and the app shows code 2 as Hz (§3.4) | No (manual Table 2-1) [HARDWARE] |
-| ADP/Logic mode | Not seen | No dial position (§3.4) [HARDWARE]; code 14, in the app only, is power |
+| Code E (14) | hFE, by the app; the manual says it isn't sent (§3.4) | No dial position (§3.4) [HARDWARE]; in the app only, power |
 | Temperature | Yes, °C and °F [KNOWN] (UT803 manual p.48) | Yes (modes 6 and D) |
 | AC+DC mode | On the meter, not on the wire: "+DC, hFE and β cannot output to the computer" [KNOWN] (UT803 manual p.37) | Yes (nibble 8 = 3) [HARDWARE] |
 | Data output on | RS232 button (UT803 manual p.36) | SEND button (§4.2) [HARDWARE] |

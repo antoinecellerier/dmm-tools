@@ -38,9 +38,8 @@ pub(super) static ALL: &[&ModeSpecs] = &[
 /// The table for a reading with mode code `mode`, range byte `range`, the
 /// alt bit and the coupling bits (`Ut803Fields`).
 ///
-/// `None` where the manual has no table: ADP (mode 0xE), and volts or
-/// current without exactly one
-/// coupling bit. The manual documents AC+DC, but it never reaches the
+/// `None` where the manual has no table: volts or current without exactly
+/// one coupling bit. The manual documents AC+DC, but it never reaches the
 /// computer: "+DC, hFE and β cannot output to the computer" ("RS232
 /// Button", PDF p. 37).
 pub(super) fn table(
@@ -68,6 +67,7 @@ pub(super) fn table(
         (0x2, _) => &FREQUENCY,
         (0x4, _) if alt => &TEMP_C,
         (0x4, _) => &TEMP_F,
+        (0xE, _) => &TRANSISTOR,
         _ => return None,
     })
 }
@@ -900,9 +900,9 @@ static TEMP_F: ModeSpecs = ModeSpecs {
 
 // ── K. Transistor (manual PDF page 48) ───────────────────────────────────
 
-// No reading reaches this table: the manual says hFE is not sent to the
-// computer ("RS232 Button", PDF p. 37), and mode 0xE (ADP) being hFE is
-// only a guess. No accuracy column.
+// Mode 0xE. The manual says hFE is not sent to the computer ("RS232
+// Button", PDF p. 37), so no reading may reach this table. No accuracy
+// column.
 static TRANSISTOR: ModeSpecs = ModeSpecs {
     name: "K. Transistor",
     page: 48,

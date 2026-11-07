@@ -77,8 +77,6 @@ mode-ac-plus-dc-mv = AC+DC mV
 mode-ac-plus-dc-ua = AC+DC µA
 # Used by: VC-880, VC-890, VC650BT
 mode-acv-lpf = ACV LPF
-# Used by: UT803
-mode-adp = ADP
 # Used by: 9 meters
 mode-angle = Ângulo
 # Used by: Mock ZT-5B, ZT-300AB, ZT-5566SE, ZT-5B, ZT-5BQ
