@@ -296,8 +296,10 @@ fn position_is_dc(position: u8) -> bool {
 /// Convert a BCD nibble to its display character.
 ///
 /// - 0x0-0x9 → '0'-'9'
-/// - 0x0A → '0' and 0x0C → 'L' (overload), kept defensively: the vendor
-///   gives neither a meaning, adding 0x30 to every nibble (spec §3.2)
+/// - 0x0A → '0', kept defensively: the vendor gives it no meaning, adding
+///   0x30 to every nibble (spec §3.2)
+/// - 0x0C → '?': read as an `L` once, but OL is frame byte 6 bit 6 alone
+///   (spec §3.2), so the text is unrecognised and reported
 ///
 /// Other values should be rejected by the frame extractor's validation,
 /// but we handle them defensively with '?'.
@@ -305,7 +307,6 @@ fn bcd_to_char(nibble: u8) -> char {
     match nibble {
         0x00..=0x09 => (b'0' + nibble) as char,
         0x0A => '0',
-        0x0C => 'L',
         _ => '?',
     }
 }
@@ -447,7 +448,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
 /// The display string from the five digit nibbles — leading zeros blanked,
 /// then the decimal point and the sign, both left off on overload — and
-/// whether the reading is over range (`status` bit 6, or an 'L' digit).
+/// whether the reading is over range (`status` bit 6).
 /// `status` is frame byte 6. `dp_pos` must be 0-4.
 fn display_text(payload: &[u8], dp_pos: u8, status: u8) -> (String, bool) {
     debug_assert!(dp_pos <= 4, "parse_measurement rejects dp_pos {dp_pos}");
@@ -464,23 +465,12 @@ fn display_text(payload: &[u8], dp_pos: u8, status: u8) -> (String, bool) {
         payload[1] & 0x0F,
     ];
 
-    // The vendor's only overload mechanism is frame byte 6 bit 6: it skips the
-    // atof and substitutes a sentinel plus the literal display "  0L "
-    // (spec §3.2). The digit-nibble 0x0C ('L')
-    // check below is kept as a defensive secondary — the vendor never
-    // validates digit nibbles.
-    //
-    // On either source the digits are not what the meter shows, so
+    // The only overload mechanism is frame byte 6 bit 6: the vendor skips
+    // the atof and substitutes a sentinel plus the literal display "  0L "
+    // (spec §3.2). The digits are then not what the meter shows, so
     // `parse_measurement` drops them; the point and sign are left off too.
-    let mut overload = status & 0x40 != 0;
-    let mut chars: Vec<char> = Vec::with_capacity(6); // 5 digits + possible decimal point
-    for &n in &nibbles {
-        let ch = bcd_to_char(n);
-        if ch == 'L' {
-            overload = true;
-        }
-        chars.push(ch);
-    }
+    let overload = status & 0x40 != 0;
+    let mut chars: Vec<char> = nibbles.iter().map(|&n| bcd_to_char(n)).collect();
 
     // Blank leading zeros up to the units digit (the one left of the
     // decimal point, or the last when dp_pos=0); the vendor blanks only the
@@ -694,8 +684,8 @@ raw_payload=7"#
 
     #[test]
     fn parse_overload() {
-        // Digit with 0x0C nibble → overload
-        let payload = make_payload(0x01, [0, 0, 0x0C, 0, 0], 0, 0x00, 0x00, 0x00);
+        // Frame byte 6 bit 6 → overload
+        let payload = make_payload(0x01, [0, 0, 0, 0, 0], 0, 0x00, 0x40, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(
             snapshot(&m),
@@ -710,6 +700,21 @@ flags=auto_range,dc
 aux=0
 raw_payload=7"#
         );
+    }
+
+    /// A 0x0C digit nibble is no overload: bit 6 is the only one (spec
+    /// §3.2), so the digits are text nothing recognises, reported, `?`.
+    #[test]
+    fn a_0c_nibble_is_not_an_overload() {
+        let payload = make_payload(0x01, [0, 0, 0x0C, 0, 0], 0, 0x00, 0x00, 0x00);
+        let (m, reports) =
+            crate::protocol::capture_reports(|| parse_measurement(&payload).unwrap());
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
+        assert_eq!(reports.len(), 1, "{reports:?}");
     }
 
     #[test]
@@ -1235,10 +1240,7 @@ raw_payload=7"#
                     }
                 }
             }
-            for nibble in [0x0A, 0x0C] {
-                let payload = make_payload(0x05, [nibble, 1, 2, 3, 4], 0, 0, 0, 0);
-                parse_measurement(&payload).unwrap();
-            }
+            parse_measurement(&make_payload(0x05, [0x0A, 1, 2, 3, 4], 0, 0, 0, 0)).unwrap();
             for status in 0..=0xFF {
                 for error in [0x00, 0x80] {
                     parse_measurement(&make_payload(0x05, [0; 5], 1, 0, status, error)).unwrap();

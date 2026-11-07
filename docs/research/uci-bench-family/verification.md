@@ -38,7 +38,7 @@ spec, [`../ut8803/`](../ut8803/reverse-engineered-protocol.md).
   distinct digits, noting the LCD. (#12)
 - Overload: byte 6 bit 6, 0x0C nibbles, both or neither, and when bit 5
   (over-range) sets (§3.2, [§3.5](reverse-engineered-protocol.md#35-byte-6-status-flags----vendor))
-  — decides whether the 0x0C digit check stays. Needs `ohm` with leads open. (#12)
+  — decides whether a 0x0C nibble means OL. Needs `ohm` with leads open. (#12)
 - Which nibble a blank leading digit sends, 0x0 or another (§3.2) — decides
   `bcd_to_char` and the extractor's valid nibbles. Needs a reading under
   10000 counts. (#12)

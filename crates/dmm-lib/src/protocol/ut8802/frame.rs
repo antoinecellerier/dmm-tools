@@ -11,7 +11,8 @@ pub(super) const UT8802_HEADER: [u8; 1] = [0xAC];
 /// Fixed frame length for UT8802: header(1) + position(1) + digits(3) + dp and direction(1) + status(1) + error(1) = 8.
 pub(super) const UT8802_FRAME_LEN: usize = 8;
 
-/// Valid BCD nibble values: 0x0-0x9 (digits), 0x0A (treated as zero), 0x0C (overload 'L').
+/// Valid BCD nibble values: 0x0-0x9 (digits), 0x0A (treated as zero), and
+/// 0x0C, once taken for an overload `L`: passed on so the parser reports it.
 fn is_valid_bcd_nibble(nibble: u8) -> bool {
     nibble <= 0x0A || nibble == 0x0C
 }
@@ -215,8 +216,8 @@ mod tests {
     }
 
     #[test]
-    fn ut8802_overload_nibble_accepted() {
-        // 0x0C is a valid BCD nibble (overload indicator 'L')
+    fn ut8802_nibble_0c_accepted() {
+        // 0x0C reaches the parser, which reports it
         let frame = test_frame_ut8802(0x01, [0, 0, 0, 0x0C, 0], 0, 0x00, 0x00, 0x00);
         let result = extract_frame_ut8802(&frame).unwrap();
         assert!(result.is_some());
