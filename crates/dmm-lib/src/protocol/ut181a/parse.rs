@@ -365,7 +365,7 @@ fn report_unrecognised_value(float: f32, precision: u8) {
             "ut181a",
             "float",
             format_args!(
-                "{float} ({:#010x}) without an overload bit, shown as OL",
+                "{float} ({:#010x}) without an overload bit, shown as no reading",
                 float.to_bits()
             ),
         );
@@ -540,8 +540,12 @@ fn read_value(float: f32, precision: u8) -> (MeasuredValue, Option<String>) {
     let is_overload = precision & 0x03 != 0;
     let dp = ((precision >> 4) & 0x0F) as usize;
 
-    if is_overload || float.is_nan() || float.is_infinite() {
+    if is_overload {
         (MeasuredValue::Overload, None)
+    } else if !float.is_finite() {
+        // OL is the bits' to say: a NaN or an infinity without one is no
+        // number the meter measured, and nothing says it shows OL.
+        (MeasuredValue::UNRECOGNISED, None)
     } else {
         let v = float as f64;
         (MeasuredValue::Normal(v), Some(format!("{v:.dp$}")))
@@ -1210,7 +1214,7 @@ raw_payload=57"#
     }
 
     #[test]
-    fn parse_nan_overload() {
+    fn parse_nan_is_no_reading() {
         let payload = make_payload(0x5111, f32::NAN, 0x00, b"~\0\0\0\0\0\0\0", 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(
@@ -1218,7 +1222,7 @@ raw_payload=57"#
             r#"mode=Ω
 mode_raw=0x5111
 range_raw=0x00
-value=Overload
+value=NoReading("?")
 unit=Ω
 range_label=Auto
 display_raw=None
@@ -1780,7 +1784,7 @@ raw_payload=30"#
         );
     }
 
-    /// NaN or infinity with neither overload bit still reads as OL.
+    /// NaN or infinity with neither overload bit is no reading, reported.
     #[test]
     fn a_non_finite_value_without_an_overload_bit_is_reported() {
         for bits in [0x7FC0_0000u32, 0x7F80_0000, 0xFF80_0000] {
@@ -1788,13 +1792,13 @@ raw_payload=30"#
             let p = make_payload(0x5111, value, 0x20, b"~\0\0\0\0\0\0\0", 0, 1);
             let (m, reports) = parse_reporting(&p);
             let m = m.unwrap();
-            assert!(matches!(m.value, MeasuredValue::Overload), "{m:?}");
+            assert!(matches!(m.value, MeasuredValue::NoReading("?")), "{m:?}");
             assert_eq!(m.display_raw, None);
             assert_eq!(
                 reports,
                 [format!(
                     "ut181a: unrecognised float: {value} ({bits:#010x}) without an overload bit, \
-                     shown as OL"
+                     shown as no reading"
                 )]
             );
         }
@@ -1803,10 +1807,12 @@ raw_payload=30"#
         let mut p = minmax_payload(0x3111);
         p[6..10].copy_from_slice(&0x7FC0_0000u32.to_le_bytes());
         let (m, reports) = parse_reporting(&p);
-        assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+        assert!(matches!(m.unwrap().value, MeasuredValue::NoReading("?")));
         assert_eq!(
             reports,
-            ["ut181a: unrecognised float: NaN (0x7fc00000) without an overload bit, shown as OL"]
+            [
+                "ut181a: unrecognised float: NaN (0x7fc00000) without an overload bit, shown as no reading"
+            ]
         );
     }
 
