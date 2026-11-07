@@ -23,7 +23,8 @@ use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
+    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Setting,
+    Stability,
 };
 use crate::transport::Transport;
 use log::{debug, warn};
@@ -141,6 +142,14 @@ impl Protocol for Ut171Protocol {
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         self.send_key(transport, command)
+    }
+
+    fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
+        self.setting_choices(setting, current)
+    }
+
+    fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
+        self.select_setting(transport, setting, id)
     }
 
     fn profile(&self) -> &DeviceProfile {

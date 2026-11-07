@@ -495,6 +495,8 @@ pub(crate) fn all_labels(out: &mut crate::text::Labels) {
         };
         out.add(TextKind::Mode, name, by);
         out.add(TextKind::Range, "", by);
+        // The range select's first choice.
+        out.add(TextKind::Range, crate::protocol::AUTO_RANGE_LABEL, by);
         for &label in range_rows(mode) {
             out.add(TextKind::Range, label, by);
         }

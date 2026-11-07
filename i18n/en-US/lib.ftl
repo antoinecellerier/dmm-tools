@@ -346,7 +346,7 @@ qualifier-mode-peak = { $mode } peak
 
 # Used by: UT161E, UT61E+
 range-1000beta = 1000β
-# Used by: 12 meters
+# Used by: 13 meters
 range-auto = Auto
 # Used by: 7 meters
 range-cont = Cont

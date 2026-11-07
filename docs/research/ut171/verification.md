@@ -88,10 +88,14 @@ None of these has been sent to a meter. Each decides whether its button stays.
 - HOLD `07 5A`, AUTO `02 00`, MAX/MIN `05 01`/`05 00`, Hz% `03 5A` and STORE
   `0B 5A` ([§4.7](reverse-engineered-protocol.md#47-function-range-and-key-commands----vendor)):
   does the meter act as on its own key? Needs the `hold`, `auto`, `minmax`,
-  `hz_key` steps and a STORE press. (#4)
+  `hz_key` steps, and `dmm-cli --device ut171 command save` for STORE. (#4)
+- Hz% in VFC: the manual names it in V~, I~ and Hz, not in VFC, which we
+  offer it in as a V~ function (§4.7) — decides VFC's Hz/% button. Needs
+  `dmm-cli command hz` in VFC. (#4)
 - RANGE as `02 <row>`: the current row from auto, the next one in manual, and
-  whether the meter refuses it where the manual has no RANGE (continuity,
-  diode, temperature) (§4.7) — decides the stepping. Needs `manual_range`. (#4)
+  whether the meter refuses it where the manual has no RANGE (continuity and
+  temperature, which have a row in UNI-T's software) (§4.7) — decides the
+  stepping. Needs `manual_range`, and `dmm-cli command range` in those. (#4)
 - REL as `04 01` with the reading's own float: does the meter zero on it as on
   its key, and `04 00` leave (§4.7) — decides the REL button. Needs `rel`, `rel_off`. (#4)
 - Peak as `06 01`/`06 00`, chosen by byte 5 bit 6, and which bit tells P-Max
@@ -101,8 +105,23 @@ None of these has been sent to a meter. Each decides whether its button stays.
   any, which the first key's wait may take for its own
   ([§5.11](reverse-engineered-protocol.md#511-replies-types-0x01-and-0x72)) —
   decides the reply wait. Needs any key step. (#4)
+- Function select `01 MM` within a dial position's functions, and range
+  select `02 NN`, against the meter's own SELECT and RANGE (§4.7, §6) —
+  decides the function and range dropdowns. Needs `capture`'s mode and range
+  walks. (#4)
 - MAX/MIN while REL or Peak is on: UNI-T's software sends nothing then, and we
-  send it (§4.7) — decides whether to hold it back. Needs `minmax` under REL. (#4)
+  send it (§4.7) — decides whether to hold it back. Needs `dmm-cli command
+  minmax` with REL on. (#4)
+- The square wave's dial position: the manual's text reaches it "in uA gear",
+  its Fig 13 shows a ⎍OUT stop, and UNI-T's software lights its button with
+  the clamp's (§6) — decides the function list it sits in. Needs a UT171C. (#4)
+- What MAX/MIN, REL and Hz% (`05 01`, `04 01`, `03 5A`) do in the square
+  wave, where the manual gives those keys the frequency and duty (§4.7, §5.9)
+  — decides those buttons' hovers there. Needs a UT171C on `square_wave`. (#4)
+- On a UT171A, which lacks nS, temperature, the square wave and the clamp
+  (§1.1), and % 4-20mA (the manual's SELECT list, B/C only): what the
+  function select's `01 MM` does to one (§6) — decides whether the A's list
+  drops them. Needs a UT171A and `dmm-cli set mode`. (#4)
 
 ## Detection and the adapter
 

@@ -721,7 +721,7 @@ end for review; if any is corrected or skipped, every later step keeps asking.
 
 On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock),
 each mode step is followed by an automatic walk through hold, REL, MIN/MAX,
-Peak and every range, and the meter is left on auto range (or its starting
+Peak and every range (on the UT171, every range), and the meter is left on auto range (or its starting
 range, where the mode has no auto, as a UT181A's Peak) with its flags off.
 `--no-drive` turns this off.
 

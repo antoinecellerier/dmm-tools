@@ -9,7 +9,10 @@ use super::{Ut171Protocol, parse};
 use crate::error::{Rejected, Result, Sent, Unsupported};
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, build_abcd_le16};
-use crate::protocol::{ButtonLabel, MeterKey, MeterKeys, Protocol, command, unknown_mode};
+use crate::protocol::{
+    AUTO_RANGE_ID, AUTO_RANGE_LABEL, ButtonLabel, Choice, MeterKey, MeterKeys, Protocol, Setting,
+    command, unknown_mode, unsupported_setting,
+};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
@@ -31,7 +34,8 @@ pub(super) const UT171_COMMANDS: &[&str] = &[
 
 /// The functions the Hz% key works in: "V~, I~, Hz/% only" (manual p.11),
 /// and the AC+DC pages, where it steps the aux display through AC, DC and
-/// frequency (manual pp.12, 21). LoZ V~ and VFC are V~ functions.
+/// frequency (manual pp.12, 21). LoZ V~ is named there; VFC, a V~ function
+/// on the AC V position, is not, so its Hz% is a verification item.
 const HZ_PERCENT_MODES: [u16; 14] = [
     0x01, 0x03, 0x04, 0x06, 0x07, 0x1E, 0x12, 0x13, 0x15, 0x16, 0x18, 0x19, 0x1C, 0x0F,
 ];
@@ -108,11 +112,18 @@ pub(super) struct Shown {
     reference: Option<[u8; 4]>,
 }
 
+/// The name of mode byte `mode`, for a choice or a refusal; an unknown one
+/// was reported when it was read, so it is not reported again.
+fn mode_name(mode: u8) -> Cow<'static, str> {
+    parse::known_mode(mode).map_or_else(|| unknown_mode(mode), Cow::Borrowed)
+}
+
 impl Shown {
     pub(super) fn of(m: &Measurement) -> Self {
         let p = &m.raw_payload;
         Shown {
-            mode: p.get(3).copied().unwrap_or(0),
+            // The parser's mode is the payload's mode byte.
+            mode: u8::try_from(m.mode_raw).unwrap_or(0),
             range: m.range_raw,
             auto: m.flags.auto_range,
             rel: m.flags.rel,
@@ -124,9 +135,8 @@ impl Shown {
         }
     }
 
-    /// The mode's name, for a refusal; not reported again.
     fn mode_name(self) -> Cow<'static, str> {
-        parse::known_mode(self.mode).map_or_else(|| unknown_mode(self.mode), Cow::Borrowed)
+        mode_name(self.mode)
     }
 }
 
@@ -156,18 +166,27 @@ impl Ut171Protocol {
         Ok(Shown::of(&self.request_measurement(transport)?))
     }
 
+    /// Send `frame` and wait for the meter's answer. Whatever it answers,
+    /// the state the last reading showed may be gone, so the next command
+    /// that depends on it reads the meter again: two quick PEAK presses
+    /// would otherwise both enter.
+    fn send(&mut self, transport: &dyn Transport, frame: &[u8], what: &Sent) -> Result<()> {
+        self.last = None;
+        framing::send_le16_command(&mut self.rx_buf, transport, frame, what, &REPLY_WAIT)
+    }
+
+    /// The stream's own switch (spec §4.3), written as it always was.
+    fn write_stream_switch(transport: &dyn Transport, command: &str, frame: &[u8]) -> Result<()> {
+        debug!("ut171: sending command {command}: {frame:02X?}");
+        transport.write(frame)
+    }
+
     pub(super) fn send_key(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let frame = match command {
-            // The stream's own switch (spec §4.3), written as it always was.
-            "connect" | "pause" => {
-                let frame = if command == "connect" {
-                    super::connect_frame()
-                } else {
-                    super::pause_frame()
-                };
-                debug!("ut171: sending command {command}: {frame:02X?}");
-                return transport.write(&frame);
+            "connect" => {
+                return Self::write_stream_switch(transport, command, &super::connect_frame());
             }
+            "pause" => return Self::write_stream_switch(transport, command, &super::pause_frame()),
             command::HOLD => build_abcd_le16(&[0x07, 0x5A]),
             command::RANGE => {
                 let shown = self.require_shown(transport)?;
@@ -203,13 +222,132 @@ impl Ut171Protocol {
             "save" => build_abcd_le16(&[0x0B, 0x5A]),
             _ => return Err(Unsupported::Command(command.to_string()).into()),
         };
-        framing::send_le16_command(
-            &mut self.rx_buf,
-            transport,
-            &frame,
-            &Sent::Command(command.to_string()),
-            &REPLY_WAIT,
-        )
+        self.send(transport, &frame, &Sent::Command(command.to_string()))
+    }
+}
+
+/// The functions of each dial position: the function buttons UNI-T's
+/// software lights together, and the manual's long-press SELECT list
+/// (spec §6). The square wave is on the µA position, as the manual reaches
+/// it "in uA gear"; the software's µA bar carries its button, though it
+/// lights it with the clamp's.
+const POSITIONS: [&[u8]; 10] = [
+    &[0x01],
+    &[0x03, 0x1E],
+    &[0x02, 0x04],
+    &[0x05, 0x06, 0x07, 0x08, 0x09],
+    &[0x0A, 0x0B, 0x0C, 0x0D, 0x0E],
+    &[0x0F],
+    &[0x11, 0x12, 0x13, 0x1D],
+    &[0x14, 0x15, 0x16],
+    &[0x17, 0x18, 0x19],
+    &[0x1B, 0x1C],
+];
+
+/// The functions the function select may send from `mode`. % 4-20mA, which
+/// no button of the software sends, is reached from mA and offers mA's.
+/// NCV and an unknown mode offer nothing.
+fn position(mode: u8) -> &'static [u8] {
+    let mode = if mode == 0x1F { 0x14 } else { mode };
+    POSITIONS
+        .iter()
+        .find(|functions| functions.contains(&mode))
+        .copied()
+        .unwrap_or(&[])
+}
+
+/// The mode's ranges to choose from: Auto, then its rows, when every row
+/// has a label; none otherwise.
+fn range_choices(shown: Shown) -> Vec<Choice> {
+    let rows = parse::range_rows(shown.mode);
+    if rows.is_empty() || rows.iter().any(|label| label.is_empty()) {
+        return Vec::new();
+    }
+    let auto = Choice {
+        id: AUTO_RANGE_ID,
+        label: Cow::Borrowed(AUTO_RANGE_LABEL),
+        current: shown.auto,
+    };
+    let rows = (1u16..).zip(rows).map(|(id, &label)| Choice {
+        id,
+        label: Cow::Borrowed(label),
+        current: !shown.auto && id == u16::from(shown.range),
+    });
+    std::iter::once(auto).chain(rows).collect()
+}
+
+impl Ut171Protocol {
+    pub(super) fn setting_choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
+        let shown = Shown::of(current);
+        match setting {
+            Setting::Mode => position(shown.mode)
+                .iter()
+                .map(|&mode| Choice {
+                    id: u16::from(mode),
+                    label: mode_name(mode),
+                    current: mode == shown.mode,
+                })
+                .collect(),
+            Setting::Range => range_choices(shown),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Function select sends `01 MM` and range select `02 NN` (spec §4.7).
+    /// Only the functions of the dial position the reading is on go out, as
+    /// the software's buttons do; what the meter does with another is
+    /// untested.
+    pub(super) fn select_setting(
+        &mut self,
+        transport: &dyn Transport,
+        setting: Setting,
+        id: u16,
+    ) -> Result<()> {
+        if !matches!(setting, Setting::Mode | Setting::Range) {
+            return Err(unsupported_setting(setting));
+        }
+        let shown = self.require_shown(transport)?;
+        let (frame, what) = match setting {
+            Setting::Mode => {
+                let target = u8::try_from(id)
+                    .ok()
+                    .filter(|m| position(shown.mode).contains(m));
+                let Some(target) = target else {
+                    return Err(Unsupported::ModeUnreachable {
+                        target: u8::try_from(id)
+                            .map_or_else(|_| Cow::Owned(format!("{id:#06x}")), mode_name),
+                        from: shown.mode_name(),
+                    }
+                    .into());
+                };
+                (
+                    build_abcd_le16(&[0x01, target]),
+                    Sent::Mode(mode_name(target)),
+                )
+            }
+            Setting::Range => {
+                let choices = range_choices(shown);
+                if choices.is_empty() {
+                    return Err(Unsupported::NoRanges {
+                        mode: shown.mode_name(),
+                    }
+                    .into());
+                }
+                let Some(choice) = choices.into_iter().find(|c| c.id == id) else {
+                    return Err(Unsupported::NoSuchRange {
+                        id,
+                        count: parse::range_rows(shown.mode).len(),
+                        mode: shown.mode_name(),
+                    }
+                    .into());
+                };
+                // The id came from the rows, at most eight: it fits the byte.
+                let row = u8::try_from(choice.id).unwrap_or(0);
+                (build_abcd_le16(&[0x02, row]), Sent::Range(choice.label))
+            }
+            other => return Err(unsupported_setting(other)),
+        };
+        self.send(transport, &frame, &what)
     }
 }
 
@@ -381,5 +519,146 @@ mod tests {
             ]
         );
         assert!((0x01..=0x1F).all(|m| applies(&STORE, m)));
+    }
+
+    #[test]
+    fn mode_choices_are_the_dial_position_s() {
+        let proto = Ut171Protocol::new();
+        let ids = |mode| {
+            let m = parse::parse_measurement(&payload(mode, 1, 1.0, 0x10, 0x00)).unwrap();
+            let choices = proto.setting_choices(Setting::Mode, &m);
+            assert!(choices.iter().filter(|c| c.current).count() <= 1);
+            choices.iter().map(|c| c.id).collect::<Vec<_>>()
+        };
+        assert_eq!(ids(0x0B), [0x0A, 0x0B, 0x0C, 0x0D, 0x0E]);
+        assert_eq!(ids(0x03), [0x03, 0x1E]);
+        assert_eq!(ids(0x12), [0x11, 0x12, 0x13, 0x1D]);
+        assert_eq!(ids(0x1F), [0x14, 0x15, 0x16]);
+        assert_eq!(ids(0x01), [0x01]);
+        let ncv = parse::parse_measurement(&[0x02, 0x00, 0x00, 0x1A]).unwrap();
+        assert!(proto.setting_choices(Setting::Mode, &ncv).is_empty());
+    }
+
+    #[test]
+    fn selecting_a_function_sends_its_mode_byte() {
+        let (mut proto, mock) = proto_after(payload(0x0A, 1, 1.0, 0x20, 0x0F));
+        proto.select(&mock, Setting::Mode, 0x0B).unwrap();
+        assert_eq!(mock.written.borrow()[0], build_abcd_le16(&[0x01, 0x0B]));
+    }
+
+    #[test]
+    fn a_function_of_another_position_is_refused_unsent() {
+        let (mut proto, mock) = proto_after(payload(0x0A, 1, 1.0, 0x20, 0x0F));
+        let err = proto.select(&mock, Setting::Mode, 0x02).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(Unsupported::ModeUnreachable { from, .. }) if from == "Ω"),
+            "{err:?}"
+        );
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    #[test]
+    fn range_choices_are_auto_and_the_rows() {
+        let proto = Ut171Protocol::new();
+        let choices = |p: Vec<u8>| {
+            let m = parse::parse_measurement(&p).unwrap();
+            proto
+                .setting_choices(Setting::Range, &m)
+                .into_iter()
+                .map(|c| (c.label.into_owned(), c.current))
+                .collect::<Vec<_>>()
+        };
+        let mut manual = payload(0x17, 2, 1.0, 0x30, 0x0C);
+        manual[2] = 0x00;
+        assert_eq!(
+            choices(manual),
+            [
+                ("Auto".into(), false),
+                ("6A".into(), false),
+                ("20A".into(), true)
+            ]
+        );
+        let auto = choices(payload(0x17, 2, 1.0, 0x30, 0x0C));
+        assert_eq!(auto[0], ("Auto".into(), true));
+        assert!(auto[1..].iter().all(|(_, current)| !current));
+        // Rows with no label offer nothing, nor does a mode with no rows.
+        assert!(choices(payload(0x08, 1, 21.5, 0x10, 0x19)).is_empty());
+        assert!(choices(payload(0x0D, 0, 0.5, 0x40, 0x1B)).is_empty());
+    }
+
+    #[test]
+    fn selecting_a_range_sends_its_row() {
+        let (mut proto, mock) = proto_after(payload(0x0A, 1, 1.0, 0x20, 0x0F));
+        proto.select(&mock, Setting::Range, 4).unwrap();
+        // The select forgot the reading: the next one reads the meter.
+        mock.push_response(build_abcd_le16(&payload(0x0A, 4, 1.0, 0x20, 0x10)));
+        mock.push_reply(reply(b"OK"));
+        proto.select(&mock, Setting::Range, AUTO_RANGE_ID).unwrap();
+        let written = mock.written.borrow();
+        assert_eq!(written[0], build_abcd_le16(&[0x02, 4]));
+        assert_eq!(written[1], build_abcd_le16(&[0x02, 0]));
+    }
+
+    #[test]
+    fn a_range_off_the_rows_is_refused_unsent() {
+        let (mut proto, mock) = proto_after(payload(0x0A, 1, 1.0, 0x20, 0x0F));
+        let err = proto.select(&mock, Setting::Range, 7).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::UnsupportedCommand(Unsupported::NoSuchRange {
+                    id: 7,
+                    count: 6,
+                    ..
+                })
+            ),
+            "{err:?}"
+        );
+        let (mut proto, mock) = proto_after(payload(0x0D, 0, 0.5, 0x40, 0x1B));
+        let err = proto.select(&mock, Setting::Range, 1).unwrap_err();
+        assert!(
+            matches!(err, Error::UnsupportedCommand(Unsupported::NoRanges { .. })),
+            "{err:?}"
+        );
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    /// A press forgets what the last reading showed: a second PEAK before
+    /// the next reading is parsed reads the meter, and leaves.
+    #[test]
+    fn a_second_press_reads_the_meter_again() {
+        let vac = || payload(0x03, 2, 230.08, 0x20, 0x01);
+        let (mut proto, mock) = proto_after(vac());
+        proto.send_command(&mock, command::PEAK).unwrap();
+        let mut peak = vac();
+        peak[1] |= 0x40;
+        mock.push_response(build_abcd_le16(&peak));
+        mock.push_reply(reply(b"OK"));
+        proto.send_command(&mock, command::PEAK).unwrap();
+        let written = mock.written.borrow();
+        assert_eq!(written[0], build_abcd_le16(&[0x06, 0x01]));
+        assert_eq!(written[1], build_abcd_le16(&[0x06, 0x00]));
+    }
+
+    /// A setting the UT171 has no command for is refused before any read.
+    #[test]
+    fn an_unsupported_setting_is_refused_without_a_read() {
+        let mock = MockTransport::new(Vec::new());
+        let mut proto = Ut171Protocol::new();
+        let err = proto.select(&mock, Setting::Hold, 1).unwrap_err();
+        assert!(
+            matches!(err, Error::UnsupportedCommand(Unsupported::Setting(_))),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn a_refused_function_is_named() {
+        let (mut proto, mock) = proto_after(payload(0x0A, 1, 1.0, 0x20, 0x0F));
+        let err = proto.select(&mock, Setting::Mode, 0x02).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(Unsupported::ModeUnreachable { target, .. }) if target == "V DC"),
+            "{err:?}"
+        );
     }
 }

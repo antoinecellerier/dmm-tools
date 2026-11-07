@@ -109,8 +109,8 @@ top-right corner in every layout and expire on their own.
   line; in a wide big-meter window they sit beside the reading. In AC+DC V the
   reading itself is captioned **DC**.
 - Mode and range label below in smaller text
-- On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
-  VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
+- On meters that can switch function over USB (UT61+/UT161, UT171, UT181A,
+  VC-880, VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
   what the meter offers from the current dial position, with the live entry
   marked `●`. Picking an entry switches the meter. Dial positions with a
   single mode, modes with a fixed range, a replay and other meters keep the plain
