@@ -68,7 +68,8 @@ Provenance — URL, date, SHA-256, signer — is in
    page). Brymen-branded; read against source 5 page by page. Tagged [KNOWN],
    cited `BM787BT manual p.N (printed M)`.
 7. **BM788BT catalogue sheet** (`BM788BT_Catalog.pdf`, 4 pages), from
-   http://www.brymen.com/PD02BM788BT_catalogDL.html: fetched, not analysed.
+   http://www.brymen.com/PD02BM788BT_catalogDL.html: fetched; p.3-4 read in
+   the vendor re-audit (Methodology 8), and nothing in the spec cites it.
 8. **General platform references**, for statements tagged [INFERRED] with
    this basis in the spec: the Bluetooth Core Specification's AD format (the
    flags byte, the company identifier low byte first) and ATT notification
@@ -202,6 +203,16 @@ above.
    it was applied: chiefly exact quotes and cites, evidence labels ("author"
    against "SDK"), the body's pointers cut to bare references to §12, and
    absences rephrased as dated search results.
+8. **Vendor re-audit** (2026-11-06, second read 2026-11-07). Two fresh
+   readers, the second blind to the first, re-read r4, r2, both manuals and
+   the app for what each range sends (reports in
+   `references/review-2026-11-04/arch/vendor-audit-2026-11-06/`, `bm78xbt.md`
+   and `second-read/bm78xbt.md`). Neither found a source that gives a
+   range's bytes. What both established went into the spec: the charts'
+   scaling by 10^[25], `reUnitTable` and the out-of-table prefix (§6.3), the
+   app's name for [19] (§6.2), the manual's %4-20mA percentage (§6.4) and the
+   range labels (§9.6). Findings only one reader made were left out. One
+   community note from the same date is in §12.4.
 
 Resolved disagreements:
 
@@ -219,7 +230,8 @@ Resolved disagreements:
    formatter.
 5. **Decimal point**: [24] counts integer digits, from r4's tables and the
    app's arithmetic.
-6. **Prefix encoding**: a signed byte, from the app; r4 gives only the values.
+6. **Prefix encoding**: a signed byte, from the app, which reads it so in a
+   reading and keys `reUnitTable` by the same bytes; r4 gives only the values.
 7. **Response channel**: the app reads CDD4; r4's flowchart order fits it.
    Whether the meter also notifies responses stays open.
 8. **Left open, both sides cited** (`verification.md`): the five

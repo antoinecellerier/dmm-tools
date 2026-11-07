@@ -211,7 +211,8 @@ const UNITS: [(u8, [&str; 7]); 10] = [
     (0x0A, prefixed!("%")),
     (0x14, prefixed!("°C")),
     (0x15, prefixed!("°F")),
-    // r4's "%4~20mA": the reading is a percentage (spec §6.4).
+    // r4's "%4~20mA", which the manual shows as a percentage of the
+    // 4-20 mA span (spec §6.4); what the meter sends there is open.
     (0x4F, prefixed!("%")),
 ];
 

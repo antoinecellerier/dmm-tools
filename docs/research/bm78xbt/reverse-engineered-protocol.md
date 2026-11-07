@@ -340,7 +340,7 @@ r4 p.10 (identical on r2 p.9) [KNOWN]; the app's reading from BC:5575-7417
 | 14-16 | Device Status Flag0-2 | §6.6 | one 24-bit little-endian word (BC:6178-6289) |
 | 17 | Device Type | `01`, "0: Sensor; 1: Meter" | selects the name tables (§6.5) |
 | 18 | Main-Function ID | §6.5 | |
-| 19 | Reserved | `00` | read, not used |
+| 19 | Reserved | `00` | stored as `MainFuncRangeID` and round-tripped in the max/min JSON; no other reader found in the app, 2026-11-06 (BC:6365-6412; `max_min_models.dart`:528-534, :1283-1314) |
 | 20 | Sub-Function ID | §6.5 | |
 | 21-23 | Device Reading0-2 | "Device Reading [2] ~ [0]: Signed bytes e.g.: 0x008000 = 32768 0xFF8000 = -32768" | §6.3 |
 | 24 | Reading Decimal Point | §6.3 | |
@@ -349,6 +349,10 @@ r4 p.10 (identical on r2 p.9) [KNOWN]; the app's reading from BC:5575-7417
 | 27 | Display Digit Number | "3:XXX; 4:"XXXX"; 5:"XXXXX"; 6:"XXXXXX"" | |
 | 28-29 | Checksum0-1 | "CRC calculation of Index [2]~[27] bytes" | |
 | 30-31 | EndByte0-1 | `FF 03` | |
+
+The app's name for [19] suggests a range number under the main function
+[INFERRED from the name only]; r4 calls it Reserved and prints `00`, and
+whether a meter sends anything else is [UNVERIFIED].
 
 ### 6.3 Value, decimal point, prefix, sign
 
@@ -370,14 +374,26 @@ r4 p.10 (identical on r2 p.9) [KNOWN]; the app's reading from BC:5575-7417
   to any [27] [VENDOR].
 - **Prefix [25]** is a power of ten, −9 to 9 in steps of 3 (r4 p.10)
   [KNOWN]; its byte encoding is not stated in r4. The app reads a signed byte
-  (so −3 is `FD`) and also knows 12 = "T" (BC:6580-6616, :11232-11332); it
-  shows the prefix in the unit string and does not scale the number by it
-  (BC:7273-7408) [VENDOR]. The value is then count × 10^−([27] − [24]) when
-  [24] is not 0, the count itself when [24] is 0, in both cases × 10^[25] in
-  unit [26] [INFERRED].
+  (so −3 is `FD`) and also knows 12 = "T" (BC:6580-6616, :11232-11332). Its
+  settings code has a second table, `reUnitTable`, keyed by the raw byte:
+  `F7` n, `FA` μ, `FD` m, then 0, 3, 6, 9, 12 (`devicefunction.dart`:599-697);
+  it serves byte [27] of the 0x0021 reply (§7.3), not readings
+  (`0x0021_GetOffsetRelativeAdjustment.dart`:127-130,
+  :172-199) [VENDOR]: the same two's-complement encoding, a second time.
+  Parsing and the readout join the prefix to the unit string and leave the
+  number unscaled (BC:20-571, :7273-7408); the live chart and the
+  file-manager chart both plot the number × 10^[25] (`data_view.dart`:859-897;
+  `file_manager_real_time_live_chart_controller.dart`:1263-1320) [VENDOR]. A
+  [25] outside `UnitTable` gives an empty prefix: the readout shows the
+  unprefixed unit and the unscaled number, while the charts still scale by
+  10^[25] (BC:7296-7316; `data_view.dart`:859-866) [VENDOR]. The value is
+  then count × 10^−([27] − [24]) when [24] is not 0, the count itself when
+  [24] is 0, in both cases × 10^[25] in unit [26] [INFERRED from r4's prefix
+  letters; the app's charts compute the same, [VENDOR]].
 - **Digits.** The display is "4-5/6 digits 60000 counts" (BM788BT manual p.4
   (printed 3); BM787BT manual p.4 (printed 3)) [KNOWN]. Which [27], [24] and
-  [25] a given range sends is not stated in r4 [UNVERIFIED].
+  [25] a given range sends: none found in r4, r2, the manuals or the app,
+  2026-11-06 [UNVERIFIED]; the manuals' range labels are in §9.6.
 - **Sign.** The count is signed (r4 p.10), and Flag1 bit 6 is "Sign", set
   when the "Display reading is Negative" (r4 p.12) [KNOWN]. r4 does not say
   whether both are always set together. The app shows the magnitude and takes
@@ -413,7 +429,12 @@ kWh, mVAh, `11`-`13` dB, dBm, sec, `16`-`1A` °K, %RH, PSI, Pa, bar, `30`-`35`
 dB, %, %, sec, min, Hr, `45` oz, `46` lbs, `4E` VAR; every other code is an
 empty string [VENDOR]. r4's ten codes are the units the manuals' functions
 need (§9.5) [INFERRED]. The app names main 0x06 sub 0x08 "%4-20mA" but has no
-unit for `4F`; what the meter sends there is [UNVERIFIED].
+unit for `4F`. The manual shows that function as a percentage of the loop
+current: "4mA = 0% (zero)", "20mA = 100% (span)", "Resolution: 0.01%"
+(BM788BT manual p.28 (printed 27)), and its figure reads `75.10` under a
+`%4-20mA` annunciator of its own (p.15 (printed 14)) [KNOWN]. What the meter
+sends there, `4F` or another code, and with which prefix and digits, is
+[UNVERIFIED].
 
 ### 6.5 Function IDs
 
@@ -743,6 +764,35 @@ manual p.12 (printed 11), "Temperature T1 (N/A for Model 785) & T2 (Models
 the Flag0/Flag1 bits of §6.6 [INFERRED by name]; SELECT toggles °C/°F when
 both are enabled (p.12 (printed 11)), which fits units `14`/`15` [INFERRED].
 
+### 9.6 Range labels
+
+The manuals' specification tables, BM788BT manual p.24-29 (printed 23-28)
+and BM787BT manual p.23-29 (printed 22-28), agree in every row [KNOWN].
+They print LCD text, not byte values.
+
+| Function | Labels | Ladder |
+|---|---|---|
+| DC V, AC V, AC+DC V | 600.00mV, 6.0000V, 60.000V, 600.00V, 1000.0V | complete |
+| VFD AC V | 600.00V, 1000.0V | complete |
+| AutoV LoZ, DC and AC | 6.0000V, 60.000V, 600.00V, 1000.0V | complete |
+| Ω | 600.00Ω, 6.0000kΩ, 60.000kΩ, 600.00kΩ, 6.0000MΩ, 60.000MΩ | complete |
+| nS | 99.99nS | one range |
+| Diode | 3.0000V | one range |
+| Continuity | none; a threshold only | — |
+| DC, AC, AC+DC current | 600.00µA, 6000.0µA, 60.000mA, 600.00mA, 6.0000A, 10.000A | complete |
+| %4-20mA | none; "Resolution: 0.01%" (§6.4) | — |
+| Capacitance | 10.00nF; 100.0nF~1000nF; 10.00µF~1.000mF; 10.00mF | endpoints only in the middle two rows |
+| Temperature | -200.0°C~1090°C; -328.0°F~1994°F | endpoints only |
+| Logic Hz | 5.000Hz~1.0000MHz | endpoints only |
+| Duty | 0.10%~99.99%, 1.00%~99.00%, 20.00%~80.00% | endpoints of three spans |
+| Line Hz | 10Hz~50kHz and narrower, per input range | endpoints only |
+| EF | bar graph, no number | — |
+
+CREST: "Resolution: 6000 counts" (BM788BT manual p.30 (printed 29)) [KNOWN].
+Every label fits r4's 4- or 5-digit point tables (§6.3), so none needs
+[27] = 3 or 6 [INFERRED]; line Hz's labels give no resolution. Which [24],
+[25] and [27] each range sends is [UNVERIFIED] (§6.3).
+
 ---
 
 ## 10. Worked examples
@@ -899,6 +949,7 @@ fail [INFERRED]. The SDK does not drop a packet whose CRC fails; it flags it
 | 0x0010 timing (§7.1) | "The meter echoes the calibration command immediately, but its RTC needs a moment to register" — about 0.5 s — and "doesn't preserve sub-second precision" (`brymenble/tools/probe.py:144-148`, `:176-179`) | author |
 | Connections (§2) | "a BM78xBT accepts a single connection" (`brymenble/README.md:106-110`). "The BM78xBT only advertises while NOT connected (protocol design flowchart)" (`scanner.py:22-30`) is a reading of r4 p.15, whose flowchart states no such rule [KNOWN, r4 p.15] | author |
 | Function selection | "The meter's function **cannot be switched over BLE/TestController.**" (`brymenble-tc-bridge/README.md:121`); r4's command table has no such command | author |
+| Unknown prefix (§6.3) | the SDK shows "?" for a prefix outside its table (`parsers.py:423`), where Brymen's app shows none; read 2026-11-06 | a decoder's choice, not a meter fact |
 
 Not answered by the community sources: the sign, the scaling fields, the
 unit, function and display-word questions, the "x" bits, the information

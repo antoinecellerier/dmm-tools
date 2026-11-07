@@ -76,11 +76,14 @@ What real meters have confirmed is tagged `[HARDWARE]` in the
 - The sign: a negative count, a magnitude with Flag1 bit 6, or both (§6.3,
   §12.3 D2) — decides whether `decode::number` keeps reporting a negative
   count without the flag. Needs `dcv_negative`. (#33)
-- [27], [24] and [25] per range, the point with 3 or 6 digits, and the
-  prefix byte (§6.3) — decides `decode::scaling`'s reports and unit, and a
-  range label, empty today. Needs `manual_range` and each function's steps.
-  (#33)
-- `4F` for %4~20mA, which the app lacks (§6.4) — decides the "%" unit in
+- [27], [24] and [25] per range against §9.6's labels, any [27] of 3 or 6,
+  the prefix byte (§6.3) — decides `decode::scaling`'s reports and unit.
+  Needs each function's steps. (#33)
+- Reading [19] other than `00`, which the app names `MainFuncRangeID` (§6.2)
+  — decides whether `decode` reports it or reads the range label, empty
+  today, from it. Needs `manual_range` and each function's steps. (#33)
+- `4F` for %4~20mA, which the app lacks, and its prefix and digits; the
+  manual shows 0-100 % at 0.01 % (§6.4) — decides the "%" unit in
   `tables::UNITS`. Needs `ma420` on a BM788BT. (#33)
 - AutoCheck sub `03` AUTO (r4) or `02` OHM (the app) (§6.5) — decides which
   `tables::MAINS` keeps. Needs the `autov` steps. (#33)

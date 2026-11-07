@@ -158,7 +158,8 @@ fn decode_reading(r: &[u8]) -> Result<Measurement> {
         (MeasuredValue::Normal(value), Some(digits), false)
     };
 
-    // The packet names no range (spec §6.2), so the range label stays empty.
+    // r4 names no range field: [19] is Reserved, though Brymen's app calls it
+    // a range ID (spec §6.2), so the range label stays empty.
     Ok(Measurement {
         mode,
         mode_raw,
