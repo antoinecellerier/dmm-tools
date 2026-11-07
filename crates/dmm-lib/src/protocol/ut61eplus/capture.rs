@@ -201,17 +201,17 @@ pub(super) fn steps(table: &ModelTable, profile: &DeviceProfile) -> Vec<CaptureS
 /// Flags & commands run wherever the dial is, so they sit on DC V: at the end
 /// of the list the dial was on DC A, a single range where RANGE and AUTO have
 /// nothing to do (`auto did nothing` on hardware, 2026-09-07); DC V has four
-/// rungs.
+/// rungs. HOLD, REL and RANGE wait for DC V, HOLD and REL with their flag
+/// off, as a key sent before the meter is set up proves nothing (#45); the
+/// steps that undo them follow on at once. RANGE doesn't wait for auto
+/// range: MIN/MAX before it can leave the range locked (family spec §6.1),
+/// and from a manual range the press still shows as a new rung.
 pub(super) fn command_steps(hw: bool) -> [CaptureStep; 8] {
     [
-        CaptureStep::with_command(
-            "hold",
-            "DC V mode: press HOLD on the meter, or we will send the command.",
-            command::HOLD,
-            3,
-        )
-        .verified_if(hw)
-        .expect(Expect::new().flags(&[(Flag::Hold, true)])),
+        CaptureStep::with_command("hold", "DC V mode: we will send HOLD.", command::HOLD, 3)
+            .starts_from(Expect::mode("DC V").flags(&[(Flag::Hold, false)]))
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Hold, true)])),
         CaptureStep::with_command(
             "hold_off",
             "Press HOLD again to turn it off.",
@@ -221,6 +221,7 @@ pub(super) fn command_steps(hw: bool) -> [CaptureStep; 8] {
         .verified_if(hw)
         .expect(Expect::new().flags(&[(Flag::Hold, false)])),
         CaptureStep::with_command("rel", "DC V mode: we will send REL.", command::REL, 3)
+            .starts_from(Expect::mode("DC V").flags(&[(Flag::Hold, false), (Flag::Rel, false)]))
             .verified_if(hw)
             .expect(Expect::new().flags(&[(Flag::Rel, true)])),
         CaptureStep::with_command(
@@ -250,10 +251,11 @@ pub(super) fn command_steps(hw: bool) -> [CaptureStep; 8] {
         // never seen to cause (ut61-family spec §6.1).
         CaptureStep::with_command(
             "range",
-            "We will send RANGE to switch to manual.",
+            "DC V mode: we will send RANGE to switch to manual.",
             command::RANGE,
             3,
         )
+        .starts_from(Expect::mode("DC V"))
         .verified_if(hw)
         .expect(Expect::new().range(RangeExpect::Manual)),
         CaptureStep::with_command(

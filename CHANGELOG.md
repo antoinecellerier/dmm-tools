@@ -41,7 +41,7 @@
 - **`info`, `capture` and connection errors name the selected meter, and whether dmm-gui saved it** — a wrong saved device showed only as a meter that never answered.
 - **`capture` asks before running on a meter that reports another model** — such as a UT217A opened as the UT217B, which only a warning flagged.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
-- **`capture` holds CMS and UT217 keys until the meter is ready** — they went out at once, whatever the meter showed.
+- **`capture` holds each remote key until the meter is ready** — they went out at once, whatever the meter showed.
 - **`capture` asks a UT803 only for positions its dial has, hFE included** — it asked for tachometer, duty, 4-20 mA and ADP.
 
 ### Bug fixes
