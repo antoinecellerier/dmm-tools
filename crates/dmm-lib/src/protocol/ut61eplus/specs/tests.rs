@@ -27,8 +27,13 @@ const UT161: &[(SpecModel, SpecModel)] = &[
 /// it, and whether the parser reported anything in it.
 fn parse(id: &str, mode: u8, range: u8) -> (Option<Measurement>, bool) {
     let proto = Ut61PlusProtocol::for_model(id);
-    // "3" reads as a number, and in NCV as a level.
-    let payload = make_payload(mode, range, b"      3", (0, 0), (0, 0, 0));
+    // "3" reads as a number; NCV draws its idle word instead.
+    let display = if mode == Mode::Ncv as u8 {
+        b"   EF  "
+    } else {
+        b"      3"
+    };
+    let payload = make_payload(mode, range, display, (0, 0), (0, 0, 0));
     let (m, reports) = crate::protocol::capture_reports(|| proto.parse_payload(&payload));
     (m.ok(), !reports.is_empty())
 }

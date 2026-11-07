@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn sample_data_from_ncv() {
-        let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let m = make_test_measurement(0x14, 0x00, b"   --- ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let s = SampleData::from_measurement(&m);
         assert_eq!(s.value, "NCV:3");
         assert_eq!(s.mode, "NCV");

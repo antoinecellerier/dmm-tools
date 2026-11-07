@@ -279,7 +279,7 @@ fn ascii_reading(r: &[u8], in_ef: bool) -> (MeasuredValue, bool) {
         }
         Shown::Unknown => {
             report(r, "display word");
-            MeasuredValue::NoReading("?")
+            MeasuredValue::UNRECOGNISED
         }
     };
     (value, code == tables::INPUT_ERROR)

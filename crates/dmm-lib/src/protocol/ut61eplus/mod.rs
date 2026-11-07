@@ -867,16 +867,16 @@ const NCV_IDLE: &str = "EF";
 ///
 /// The level is drawn as "-" segments, not a digit: "EF" while no field is
 /// detected, one more "-" per level as it grows (manual §13; "   EF  " and
-/// "     - " observed on 2026-09-07). A numeric display is still accepted in
-/// case some firmware sends one.
+/// "     - " observed on 2026-09-07). Dashes mixed with anything else, or a
+/// number, are none of its forms.
 fn ncv_level(display_compact: &str) -> Option<u8> {
-    let dashes = display_compact.chars().filter(|c| *c == '-').count() as u8;
-    if dashes > 0 {
-        Some(dashes)
-    } else if display_compact == NCV_IDLE {
+    if display_compact == NCV_IDLE {
         Some(0)
+    } else if !display_compact.is_empty() && display_compact.chars().all(|c| c == '-') {
+        // A 7-character field: at most 7 dashes.
+        u8::try_from(display_compact.len()).ok()
     } else {
-        display_compact.parse::<u8>().ok()
+        None
     }
 }
 
@@ -1212,15 +1212,17 @@ const AC_COMPONENT_LABEL: &str = "AC";
 fn display_value(id: &'static str, mode: Option<Mode>, display_raw: &str) -> MeasuredValue {
     let display_compact: String = display_raw.trim().chars().filter(|c| *c != ' ').collect();
     if mode == Some(Mode::Ncv) {
-        let level = ncv_level(&display_compact).unwrap_or_else(|| {
-            report_unknown(
-                id,
-                "NCV display text",
-                format_args!("{display_compact:?}, shown as level 0"),
-            );
-            0
-        });
-        MeasuredValue::NcvLevel(level)
+        match ncv_level(&display_compact) {
+            Some(level) => MeasuredValue::NcvLevel(level),
+            None => {
+                report_unknown(
+                    id,
+                    "NCV display text",
+                    format_args!("{display_compact:?}, shown as no reading"),
+                );
+                MeasuredValue::UNRECOGNISED
+            }
+        }
     } else if spells_ol(&display_compact) {
         MeasuredValue::Overload
     } else {
@@ -2824,18 +2826,21 @@ raw_payload=14"#
         assert!(matches!(m.value, MeasuredValue::Normal(_)), "{:?}", m.value);
     }
 
-    /// The numeric branch of the NCV level, which **no meter has been seen to
-    /// use**: both a UT61E+ and a UT61B+ draw the level as "-" segments. The
-    /// branch is a guess at other firmware, so it is tested here and nowhere
-    /// else — there was a `ncv_3` golden fixture asserting this frame until
-    /// 2026-09-12, which made a hand-built payload look like a captured one.
+    /// A number in NCV is none of its forms (no meter has been seen to send
+    /// one: a UT61E+ and a UT61B+ draw "-" segments), so it is no reading.
     #[test]
-    fn parse_ncv_numeric_fallback() {
+    fn parse_ncv_number_is_no_reading() {
         let table = &UT61E_PLUS;
         let payload = make_payload(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let m = parse_measurement(&payload, table).unwrap();
+        let (m, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload, table));
+        let m = m.unwrap();
         assert_eq!(m.mode, "NCV");
-        assert!(matches!(m.value, MeasuredValue::NcvLevel(3)));
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
+        assert_eq!(reports.len(), 1, "{reports:?}");
     }
 
     /// NCV level from the "-" segments (manual §13). Only "EF" and a single
@@ -2859,7 +2864,8 @@ raw_payload=14"#
         assert_eq!(ncv_level("EF"), Some(0));
         assert_eq!(ncv_level("-"), Some(1));
         assert_eq!(ncv_level("----"), Some(4));
-        assert_eq!(ncv_level("3"), Some(3));
+        assert_eq!(ncv_level("3"), None);
+        assert_eq!(ncv_level("-?"), None);
         assert_eq!(ncv_level("CUT"), None);
         assert_eq!(ncv_level(""), None);
     }
@@ -2882,10 +2888,14 @@ raw_payload=14"#
         );
 
         let (m, reports) = parse(0x14, b"  ?!   ");
-        assert!(matches!(m.value, MeasuredValue::NcvLevel(0)));
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
         assert_eq!(
             reports,
-            ["ut61eplus: unrecognised NCV display text: \"?!\", shown as level 0"]
+            ["ut61eplus: unrecognised NCV display text: \"?!\", shown as no reading"]
         );
 
         let (_, reports) = parse(0x14, b"   EF  ");

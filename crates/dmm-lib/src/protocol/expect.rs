@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn ncv_level_is_not_a_finite_reading() {
         // NCV level 2: not a number the value classes accept.
-        let ncv = make_test_measurement(0x14, 0x00, b"      2", (0, 0), (0, 0, 0));
+        let ncv = make_test_measurement(0x14, 0x00, b"     --", (0, 0), (0, 0, 0));
         assert!(matches!(ncv.value, MeasuredValue::NcvLevel(2)));
         assert_eq!(
             reason(Expect::new().value(ValueExpect::Finite).check(&ncv)),

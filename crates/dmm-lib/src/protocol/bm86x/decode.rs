@@ -117,7 +117,8 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
         Shown::Number(v, text) => (MeasuredValue::Normal(v), Some(text)),
         Shown::Overload => (MeasuredValue::Overload, None),
         Shown::Field(level) => (MeasuredValue::NcvLevel(level), None),
-        Shown::Word(word) | Shown::Unread(word) => (MeasuredValue::NoReading(word), None),
+        Shown::Word(word) => (MeasuredValue::NoReading(word), None),
+        Shown::Unread => (MeasuredValue::UNRECOGNISED, None),
         Shown::Pending => (MeasuredValue::NoReading("---"), None),
     };
     Ok(Measurement {
@@ -190,7 +191,7 @@ enum Shown {
     /// Dashes beside a unit: nothing measured yet (spec §7.3).
     Pending,
     /// Something no source shows, already reported.
-    Unread(&'static str),
+    Unread,
 }
 
 impl Shown {
@@ -227,7 +228,7 @@ fn main_shown(
         return Shown::Number(v, main.text.clone());
     }
     if main.odd == Some("blank digit") {
-        return Shown::Unread("?");
+        return Shown::Unread;
     }
     let dashes = !word.is_empty() && word.chars().all(|c| c == '-');
     match word {
@@ -267,7 +268,7 @@ fn main_shown(
                 } else {
                     "display text"
                 });
-                Shown::Unread("?")
+                Shown::Unread
             }
         },
     }

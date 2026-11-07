@@ -998,13 +998,13 @@ mod tests {
 
     #[test]
     fn format_csv_ncv() {
-        let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let m = make_test_measurement(0x14, 0x00, b"   --- ", (0x00, 0x00), (0x00, 0x00, 0x00));
         assert!(csv_of(&m).contains("NCV:3"));
     }
 
     #[test]
     fn format_json_ncv() {
-        let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let m = make_test_measurement(0x14, 0x00, b"   --- ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let parsed = json_of(&m, false);
         assert_eq!(parsed["value"]["ncv_level"], 3);
         assert_eq!(parsed["mode"], "NCV");
