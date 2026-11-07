@@ -54,8 +54,11 @@ before, declares `starts_from`: the command goes out once the meter shows that s
 keypress, so a healthy run loses only the frames that show it. Enter sends anyway, since our
 reading of the state may be what is wrong, and a step given up on keeps its frames. Where the run
 reads no parse only Enter ends the wait, and a piped run sends at once. A passing step cannot stand
-in for this: it says the last key worked, not that the meter is ready for the next one. Only the
-CMS entries' keys declare it so far (#45).
+in for this: it says the last key worked, not that the meter is ready for the next one (#45). Its
+flags are the opposite of those the key sets, so neither the state before nor a cleanup still under
+way passes for the key's effect. A key that acts from anywhere waits only for what the step before
+must have cleared, one that undoes the step before for the state that step left, and one with
+neither goes out at once.
 
 `--settle MS` waits before every sample, for readings that take seconds to come down after a
 change, such as a UT61E+'s top two Ω rungs after a RANGE press. It is off by default. Waiting

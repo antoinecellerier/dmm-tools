@@ -247,7 +247,7 @@ impl Protocol for Ut171Protocol {
             // §4.7, §5.3). RANGE comes before REL, which forces manual range
             // (manual p.10).
             CaptureStep::with_command("hold", "V DC: we will send HOLD.", command::HOLD, 3)
-                .starts_from(Expect::mode("V DC"))
+                .starts_from(Expect::mode("V DC").flags(&[(Flag::Hold, false)]))
                 .expect(Expect::new().flags(&[(Flag::Hold, true)])),
             CaptureStep::with_command(
                 "hold_off",
@@ -267,7 +267,7 @@ impl Protocol for Ut171Protocol {
             CaptureStep::with_command("auto", "We will set auto-range.", command::AUTO, 3)
                 .expect(Expect::new().range(RangeExpect::Auto)),
             CaptureStep::with_command("rel", "V DC: we will send REL.", command::REL, 3)
-                .starts_from(Expect::mode("V DC"))
+                .starts_from(Expect::mode("V DC").flags(&[(Flag::Hold, false), (Flag::Rel, false)]))
                 .expect(Expect::new().flags(&[(Flag::Rel, true)])),
             CaptureStep::with_command("rel_off", "We will leave REL.", command::EXIT_REL, 3)
                 .expect(Expect::new().flags(&[(Flag::Rel, false)])),

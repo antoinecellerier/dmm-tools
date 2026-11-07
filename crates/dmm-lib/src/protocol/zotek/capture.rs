@@ -4,7 +4,10 @@
 //! Nothing here has run on a meter. The keys are the manuals'
 //! (`docs/research/zotek/reverse-engineered-protocol.md` §1 lists them).
 //! After them come the remote keys the layout's entry offers (spec §8.2),
-//! each sent once from a state it would change.
+//! each sent once from a state it would change. A key whose instruction, or
+//! the step before, names that state waits for it, so neither a key sent
+//! before the meter is set up (#45) nor the step before's cleanup passes for
+//! its effect; one that acts from anywhere goes out at once.
 
 use super::layout::Layout;
 use crate::flags::Flag;
@@ -28,6 +31,9 @@ pub(super) fn steps(layout: &Layout) -> Vec<CaptureStep> {
 const HOLD_ON: &[(Flag, bool)] = &[(Flag::Hold, true)];
 const HOLD_OFF: &[(Flag, bool)] = &[(Flag::Hold, false)];
 const REL_ON: &[(Flag, bool)] = &[(Flag::Rel, true)];
+const MAX_MIN_OFF: &[(Flag, bool)] = &[(Flag::Max, false), (Flag::Min, false)];
+const HOLD_MAX_MIN_OFF: &[(Flag, bool)] =
+    &[(Flag::Hold, false), (Flag::Max, false), (Flag::Min, false)];
 
 /// The ZT-300AB's dial runs OFF, AUTO, V, mV, Ω, Hz %, A, mA, µA; SEL steps
 /// AC/DC and each position's other functions, and a long press enters NCV
@@ -579,19 +585,22 @@ fn zt300ab_keys() -> Vec<CaptureStep> {
              send °C/°F.",
             "temp_unit",
         )
+        .starts_from(Expect::mode("°C"))
         .needs(&[Need::Thermocouple]),
         key(
             "key_zero",
             "Dial at Ω, SEL until capacitance shows, leads open: we will send ZERO.",
             "zero",
         )
+        .starts_from(Expect::mode("Capacitance"))
         .expect(ZERO_DONE),
         key(
             "key_minmax",
             "Dial at V, SEL until DC shows, leads open: we will send MAX/MIN. Hold MAX/MIN \
              for 2 s afterwards.",
             command::MINMAX,
-        ),
+        )
+        .starts_from(Expect::mode("DC V").flags(MAX_MIN_OFF)),
     ]
 }
 
@@ -608,12 +617,14 @@ fn zt5566se_keys() -> Vec<CaptureStep> {
             "Leads open, DC V showing (V~/⎓ Hz button): we will send the capacitance key.",
             "capacitance",
         )
+        .starts_from(Expect::mode("DC V"))
         .expect(Expect::mode("Capacitance")),
         key(
             "key_zero",
             "Capacitance showing (capacitance button if not), leads open: we will send ZERO.",
             "zero",
         )
+        .starts_from(Expect::mode("Capacitance"))
         .expect(ZERO_DONE),
         key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
         key(
@@ -649,12 +660,14 @@ fn zt5566se_keys() -> Vec<CaptureStep> {
             "Leads open, DC V showing (V~/⎓ Hz button): we will send MAX/MIN. Long-press \
              MAX/MIN afterwards.",
             command::MINMAX,
-        ),
+        )
+        .starts_from(Expect::mode("DC V").flags(MAX_MIN_OFF)),
         key(
             "key_hold",
             "DC V showing: we will send HOLD.",
             command::HOLD,
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_MAX_MIN_OFF))
         .expect(Expect::new().flags(HOLD_ON)),
         key("key_hold_off", "We will send HOLD again.", command::HOLD)
             .expect(Expect::new().flags(HOLD_OFF)),
@@ -673,6 +686,7 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
             "Leads open, meter showing Auto: we will send the capacitance key.",
             "capacitance",
         )
+        .starts_from(Expect::new().value(ValueExpect::NoReading))
         .expect(Expect::mode("Capacitance")),
         key(
             "key_zero",
@@ -680,6 +694,7 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
              will send ZERO.",
             "zero",
         )
+        .starts_from(Expect::mode("Capacitance"))
         .expect(ZERO_DONE),
         key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
         key(
@@ -718,6 +733,7 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
              will send °C/°F.",
             "temp_unit",
         )
+        .starts_from(Expect::mode("°C"))
         .needs(&[Need::Thermocouple])
         .expect(Expect::mode("°F")),
         key(
@@ -725,6 +741,7 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
             "Temperature showing °F: we will send °C/°F again.",
             "temp_unit",
         )
+        .starts_from(Expect::mode("°F"))
         .needs(&[Need::Thermocouple])
         .expect(Expect::mode("°C")),
         key(
@@ -732,6 +749,7 @@ fn zt5bq_keys() -> Vec<CaptureStep> {
             "Leads on a DC source above 0.8 V (DC V shows): we will send HOLD.",
             command::HOLD,
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_OFF))
         .expect(Expect::new().flags(HOLD_ON)),
         key("key_hold_off", "We will send HOLD again.", command::HOLD)
             .expect(Expect::new().flags(HOLD_OFF)),
@@ -754,6 +772,7 @@ fn zt5b_keys() -> Vec<CaptureStep> {
              does): we will send the capacitance key.",
             "capacitance",
         )
+        .starts_from(Expect::new().value(ValueExpect::NoReading))
         .expect(Expect::mode("Capacitance"))
         .verified(),
         key(
@@ -761,6 +780,7 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "Capacitance showing (SEL twice from Auto if not), leads open: we will send ZERO.",
             "zero",
         )
+        .starts_from(Expect::mode("Capacitance"))
         .expect(ZERO_DONE)
         .verified(),
         key("key_hz", "Leads open: we will send the Hz key.", "hz")
@@ -805,6 +825,7 @@ fn zt5b_keys() -> Vec<CaptureStep> {
             "Temperature showing °C: we will send °C/°F again.",
             "temp_unit",
         )
+        .starts_from(Expect::mode("°C"))
         .needs(&[Need::Thermocouple])
         .expect(Expect::mode("°F"))
         .verified(),
@@ -814,6 +835,7 @@ fn zt5b_keys() -> Vec<CaptureStep> {
              will send HOLD.",
             command::HOLD,
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_OFF))
         .expect(Expect::new().flags(HOLD_ON))
         .verified(),
         key("key_hold_off", "We will send HOLD again.", command::HOLD)

@@ -972,6 +972,23 @@ mod tests {
             .collect()
     }
 
+    /// A key step's start state names a mode another step of the same device
+    /// expects: a label nothing reaches would hold the key until Enter.
+    #[test]
+    fn every_start_state_names_a_mode_a_step_expects() {
+        for (id, _, steps) in all_steps() {
+            let expected: Vec<&str> = steps
+                .iter()
+                .filter_map(|s| s.expect.and_then(|e| e.mode))
+                .collect();
+            for step in &steps {
+                if let Some(mode) = step.starts_from.and_then(|e| e.mode) {
+                    assert!(expected.contains(&mode), "{id} {}: {mode}", step.id);
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_flag_settings_state_follows_setting_numbering() {
         use crate::flags::StatusFlags;

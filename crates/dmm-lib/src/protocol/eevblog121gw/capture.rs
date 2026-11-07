@@ -9,7 +9,9 @@
 //! p.33, p.41, p.53), so those steps ask rather than expect. Current goes
 //! in mA µA or A 500mA (p.34, p.40). The gate first, then the dial one way
 //! round from Low Z; the remote keys (spec §11.1) sit in the V steps they
-//! act in. Held, 1ms PEAK switches Bluetooth off (p.33), so no step holds
+//! act in, each waiting for the state its instruction names, flags opposite
+//! what it sets, so the step before's cleanup can't pass for its effect
+//! (#45). Held, 1ms PEAK switches Bluetooth off (p.33), so no step holds
 //! it.
 
 use crate::flags::Flag;
@@ -22,6 +24,17 @@ const RECORD_ON: &[(Flag, bool)] = &[(Flag::Record, true)];
 const PEAK_ON: &[(Flag, bool)] = &[(Flag::PeakMax, true)];
 const MIN_MAX_ALL: &[(Flag, bool)] = &[(Flag::Min, true), (Flag::Max, true), (Flag::Avg, true)];
 const MIN_MAX_OFF: &[(Flag, bool)] = &[(Flag::Min, false), (Flag::Max, false), (Flag::Avg, false)];
+const HOLD_OFF: &[(Flag, bool)] = &[(Flag::Hold, false)];
+const HOLD_REL_OFF: &[(Flag, bool)] = &[(Flag::Hold, false), (Flag::Rel, false)];
+const HOLD_REL_MIN_MAX_OFF: &[(Flag, bool)] = &[
+    (Flag::Hold, false),
+    (Flag::Rel, false),
+    (Flag::Min, false),
+    (Flag::Max, false),
+    (Flag::Avg, false),
+];
+/// 1ms lit sets either peak flag.
+const PEAK_OFF: &[(Flag, bool)] = &[(Flag::PeakMax, false), (Flag::PeakMin, false)];
 
 /// A remote key step: the key goes out, five samples follow.
 const fn key(id: &'static str, instruction: &'static str, command: &'static str) -> CaptureStep {
@@ -110,27 +123,32 @@ pub(super) fn steps() -> Vec<CaptureStep> {
             "DC V: we will send HOLD. Press HOLD until A- and HOLD are gone afterwards.",
             command::HOLD,
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_OFF))
         .expect(Expect::new().flags(HOLD_ON)),
         key(
             "key_rel",
             "DC V: we will send REL. Press REL again afterwards.",
             command::REL,
         )
+        .starts_from(Expect::mode("DC V").flags(HOLD_REL_OFF))
         .expect(Expect::new().flags(REL_ON)),
-        key("key_minmax", "DC V: we will send MIN/MAX.", command::MINMAX),
+        key("key_minmax", "DC V: we will send MIN/MAX.", command::MINMAX)
+            .starts_from(Expect::mode("DC V").flags(HOLD_REL_MIN_MAX_OFF)),
         key(
             "key_exit_minmax",
             "DC V with MIN, MAX or AVG showing (press MIN/MAX if none does): we will send a long \
              MIN/MAX to leave it.",
             command::EXIT_MINMAX,
         )
+        .starts_from(Expect::mode("DC V"))
         .expect(Expect::new().flags(MIN_MAX_OFF)),
         key(
             "key_light",
             "DC V: we will send a long MODE (backlight). Hold MODE afterwards to switch the \
              backlight back.",
             command::LIGHT,
-        ),
+        )
+        .starts_from(Expect::mode("DC V")),
         CaptureStep::basic("manual_range", "DC V: press RANGE, then Enter.")
             .wait_for_enter()
             .expect(Expect::mode("DC V").range(RangeExpect::Manual)),
@@ -139,6 +157,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
             "DC V, manual range: we will send RANGE.",
             command::RANGE,
         )
+        .starts_from(Expect::mode("DC V").range(RangeExpect::Manual))
         .expect(Expect::mode("DC V").range(RangeExpect::Manual)),
         // The manual says how to leave auto-ranging (RANGE, p.33) but not
         // how to come back to it, so this step only asks.
@@ -153,6 +172,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
             "DC V: we will send MODE (AC should show).",
             command::SELECT,
         )
+        .starts_from(Expect::mode("DC V"))
         .expect(Expect::mode("AC V")),
         CaptureStep::basic("acv", "V position: press MODE until AC shows, leads open")
             .expect(Expect::mode("AC V")),
@@ -169,6 +189,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
              needed, until 1ms is gone.",
             command::PEAK,
         )
+        .starts_from(Expect::mode("AC V").flags(PEAK_OFF))
         .expect(Expect::mode("AC V").flags(PEAK_ON)),
         CaptureStep::basic(
             "lpf",
@@ -183,6 +204,7 @@ pub(super) fn steps() -> Vec<CaptureStep> {
              afterwards.",
             "lpf",
         )
+        .starts_from(Expect::mode("AC V").flags(PEAK_OFF))
         .expect(Expect::mode("LPF V")),
         CaptureStep::basic(
             "dbm",

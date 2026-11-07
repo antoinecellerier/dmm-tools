@@ -242,10 +242,14 @@ pub(super) fn steps() -> Vec<CaptureStep> {
             command::RANGE,
             3,
         )
+        // Waits for the meter to be set up; "V DC" alone is REL off, as REL
+        // names its own mode (#45).
+        .starts_from(Expect::mode("V DC"))
         .expect(Expect::new().range(RangeExpect::Manual)),
         CaptureStep::with_command("auto", "We will set auto-range.", command::AUTO, 3)
             .expect(Expect::new().range(RangeExpect::Auto)),
         CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", command::HOLD, 3)
+            .starts_from(Expect::mode("V DC").flags(&[(Flag::Hold, false)]))
             .verified()
             .expect(Expect::new().flags(&[(Flag::Hold, true)])),
         CaptureStep::with_command(
