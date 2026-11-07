@@ -120,8 +120,9 @@ pub(super) struct Cell {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(super) enum Shown {
     Number(f64),
-    /// Any `L` in the row: `0L` with the point where the range puts it
-    /// (spec §6.4, §11.4).
+    /// `0` `L` and nothing else, with the point where the range puts it
+    /// (spec §6.4, §11.4). Any other row with an `L` is not one the spec
+    /// gives, so it is unrecognised, not OL.
     Overload,
     /// `E` `F`, the NCV idle word (spec §6.4).
     Ef,
@@ -191,7 +192,7 @@ pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -
     let shown = if lit.iter().any(|g| matches!(g, Glyph::Unknown(_))) {
         unrecognised.report("digit glyph");
         Shown::Unrecognised
-    } else if lit.contains(&Glyph::L) {
+    } else if lit == [Glyph::Digit(0), Glyph::L] {
         Shown::Overload
     } else if lit == [Glyph::A, Glyph::U, Glyph::T, Glyph::O] {
         Shown::Auto
@@ -200,7 +201,7 @@ pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -
     } else if !lit.is_empty() && lit.iter().all(|g| *g == Glyph::Dash) {
         Shown::Dashes(lit.len() as u8)
     } else if digits {
-        number(&text)
+        number(unrecognised, &text)
     } else {
         unrecognised.report("display text");
         Shown::Unrecognised
@@ -211,9 +212,15 @@ pub(super) fn read(unrecognised: Unrecognised, cells: &[Cell], negative: bool) -
 /// The number a row of digits shows: its text, without the blanks a sign or
 /// padding leaves. A row with nothing lit never gets here: both callers refuse
 /// it first.
-fn number(text: &str) -> Shown {
+fn number(unrecognised: Unrecognised, text: &str) -> Shown {
     let spelled: String = text.chars().filter(|c| *c != ' ').collect();
-    spelled.parse().map_or(Shown::Unrecognised, Shown::Number)
+    spelled.parse().map_or_else(
+        |_| {
+            unrecognised.report("display text");
+            Shown::Unrecognised
+        },
+        Shown::Number,
+    )
 }
 
 #[cfg(test)]

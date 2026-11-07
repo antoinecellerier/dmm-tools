@@ -16,7 +16,7 @@
 //! per unit, and a row's `range` stands for the digits the display shows
 //! after the point on that range: 3 on 4.000V, 0 on 600V.
 
-use super::layout::{Coupling, Function};
+use super::layout::{AUTO_WORD, Coupling, Function};
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::specs::{AccuracyBand, ModeSpecInfo, ModeSpecs, RangeSpec, SpecInfo};
 
@@ -80,7 +80,9 @@ pub(super) fn table(m: &Measurement) -> Option<(&'static ModeSpecs, bool)> {
     let &(function, _, parts) = TABLES
         .iter()
         .find(|(f, c, _)| f.shown_in(m) && c.is_none_or(|c| c == coupling))?;
-    if function == Function::None && !matches!(m.value, MeasuredValue::NoReading(_)) {
+    if function == Function::None
+        && !matches!(m.value, MeasuredValue::NoReading(w) if w == AUTO_WORD)
+    {
         return None;
     }
     Some(match parts.iter().find(|(unit, _)| *unit == m.unit) {

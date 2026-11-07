@@ -962,12 +962,16 @@ fn secondary(
         return None;
     }
     let readout = glyph::read(unrecognised, row.cells(), row.negative);
+    // OL only for `0L`: one of the vendor's apps shows OL for anything
+    // else, but that is the app's, not the meter's.
     let value = match readout.shown {
         Shown::Number(v) => MeasuredValue::Normal(v),
-        Shown::Overload | Shown::Unrecognised => MeasuredValue::Overload,
+        Shown::Overload => MeasuredValue::Overload,
+        // Reported by the reader.
+        Shown::Unrecognised => MeasuredValue::UNRECOGNISED,
         Shown::Auto | Shown::Ef | Shown::Dashes(_) => {
             unrecognised.report("secondary display text");
-            MeasuredValue::Overload
+            MeasuredValue::UNRECOGNISED
         }
     };
     Some(AuxValue {
@@ -980,6 +984,9 @@ fn secondary(
 }
 
 /// The word `n` dashes spell.
+/// Auto's idle word, the one no-reading Auto mode shows (spec §6.4).
+pub(super) const AUTO_WORD: &str = "Auto";
+
 fn dashes(n: u8) -> &'static str {
     match n {
         1 => "-",
@@ -1065,14 +1072,14 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
     let (value, function) = match readout.shown {
         Shown::Number(v) => (MeasuredValue::Normal(v), shown_function),
         Shown::Overload => (MeasuredValue::Overload, shown_function),
-        Shown::Auto => (MeasuredValue::NoReading("Auto"), shown_function),
+        Shown::Auto => (MeasuredValue::NoReading(AUTO_WORD), shown_function),
         // NCV, as both apps take it while no function is lit (spec §6.4).
         Shown::Ef if shown_function == Function::None => {
             (MeasuredValue::NcvLevel(0), Function::Ncv)
         }
         Shown::Ef => {
             unrecognised.report("display text");
-            (MeasuredValue::Overload, shown_function)
+            (MeasuredValue::UNRECOGNISED, shown_function)
         }
         // With INRUSH lit, the dashes are the wait for a current to catch
         // (spec §11.3 D3).
@@ -1084,21 +1091,25 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
         Shown::Dashes(n) if shown_function == Function::None => {
             (MeasuredValue::NcvLevel(n), Function::Ncv)
         }
+        // Dashes beside any other function are no word the spec gives.
         Shown::Dashes(_) => {
             unrecognised.report("display text");
-            (MeasuredValue::Overload, shown_function)
+            (MeasuredValue::UNRECOGNISED, shown_function)
         }
-        // Reported by the reader; shown as OL.
-        Shown::Unrecognised => (MeasuredValue::Overload, shown_function),
+        // Reported by the reader. One of the vendor's apps shows OL for
+        // anything it can't read; OL here is only the meter's `0L`.
+        Shown::Unrecognised => (MeasuredValue::UNRECOGNISED, shown_function),
     };
 
     let coupling = lit.coupling();
     if !coupling_documented(function, coupling) {
         unrecognised.report("ac/dc annunciators");
     }
-    let mode: Cow<'static, str> = match (function, &value) {
-        (Function::None, MeasuredValue::NoReading(_)) => Cow::Borrowed(function.mode(coupling)),
-        (Function::None, _) => {
+    let mode: Cow<'static, str> = match function {
+        // Auto's own word; anything else with nothing lit has no mode to
+        // show.
+        Function::None if readout.shown == Shown::Auto => Cow::Borrowed(function.mode(coupling)),
+        Function::None => {
             unrecognised.report("function annunciators");
             unknown_mode(Function::None as u8)
         }
@@ -1418,20 +1429,60 @@ mod tests {
     }
 
     #[test]
-    fn an_unlisted_glyph_is_reported_and_shown_as_ol() {
+    fn an_unlisted_glyph_is_reported_and_shown_as_no_reading() {
         let mut packet = t3("1234", None, T3_DCV);
         packet[5] = (packet[5] & 0xF0) | 0x01;
         packet[4] &= 0x0F;
         let (m, reports) = reported(&packet);
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
         assert_eq!(reports.len(), 1, "{reports:?}");
+    }
+
+    /// OL is `0L` alone (spec §11.4): another row with an `L` is not one the
+    /// spec gives, so it is reported and shows `?`.
+    #[test]
+    fn an_l_other_than_0l_is_not_ol() {
+        for row in [" 1L ", " L  ", "0L0 "] {
+            let (m, reports) = reported(&t3(row, None, T3_DCV));
+            assert!(
+                matches!(m.value, MeasuredValue::NoReading("?")),
+                "{row:?}: {:?}",
+                m.value
+            );
+            assert_eq!(m.mode, "DC V", "{row:?}");
+            assert_eq!(reports.len(), 1, "{row:?}: {reports:?}");
+        }
+    }
+
+    /// Unreadable text with nothing lit is not Auto: the mode is unknown,
+    /// and both the text and the annunciators are reported.
+    #[test]
+    fn unreadable_text_with_no_function_has_no_mode() {
+        let (m, reports) = reported(&t3(" 1L ", None, &[]));
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
+        assert_eq!(m.mode, "Unknown(0x00)");
+        assert_eq!(reports.len(), 2, "{reports:?}");
+        // Nor does it take Auto's notes.
+        assert!(crate::protocol::zotek::specs::table(&m).is_none());
     }
 
     /// EF is NCV only while no function is lit (spec §6.4).
     #[test]
     fn ef_with_a_function_lit_is_reported() {
         let (m, reports) = reported(&t3(" EF ", None, T3_DCV));
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
         assert_eq!(reports.len(), 1, "{reports:?}");
     }
 
@@ -1439,7 +1490,11 @@ mod tests {
     #[test]
     fn dashes_with_a_function_lit_are_reported() {
         let (m, reports) = reported(&t3("--  ", None, T3_DCV));
-        assert!(matches!(m.value, MeasuredValue::Overload), "{:?}", m.value);
+        assert!(
+            matches!(m.value, MeasuredValue::NoReading("?")),
+            "{:?}",
+            m.value
+        );
         assert_eq!(m.mode, "DC V");
         assert_eq!(reports.len(), 1, "{reports:?}");
     }

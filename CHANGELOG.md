@@ -68,7 +68,7 @@
 - **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **Dashes on the VC-880, VC650BT and VC-890 read as no reading** — they showed OL, and a number on a VC-880 or VC650BT setup screen counted as a measurement.
-- **Display text that can't be read shows `?` instead of OL** — on UT61+, UT8802, UT8803, VC-880, VC650BT and VC-890 meters.
+- **Display text that can't be read shows `?` instead of OL** — on UT61+, UT8802, UT8803, VC-880, VC650BT, VC-890 and ZOTEK meters.
 - **NCV on the OWON CMS101 and CMS061 (UNI-T UT217B and UT217A) reads as EF and dashes** — four dashes read as 0.4, with a warning ([#45](https://github.com/antoinecellerier/dmm-tools/issues/45)).
 - **UT8802 and UT8803 overloads read OL in `capture` and JSON exports** — they showed stray digits, such as `0 Ω`.
 - **A scaled CSV imported and exported again keeps Raw in its own column** — dmm-cli and dmm-gui moved it into the meter's sub-value columns.

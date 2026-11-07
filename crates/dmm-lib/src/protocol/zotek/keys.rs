@@ -6,7 +6,7 @@
 //! them are the vendor app's, and which keys a meter acts on is open.
 
 use super::frame::xor_key;
-use super::layout::{Coupling, Function, Layout, Showing, Unit};
+use super::layout::{AUTO_WORD, Coupling, Function, Layout, Showing, Unit};
 use crate::error::{Rejected, Result, Unsupported};
 use crate::measurement::MeasuredValue;
 use crate::protocol::{ButtonLabel, MeterKey, MeterKeys, command as cmd};
@@ -173,7 +173,10 @@ const AUTO_FUNCTION: MeterKey = MeterKey {
     label: "Auto function",
     in_words: true,
     hover: None,
-    applies: |m| Function::None.shown_in(m) && matches!(m.value, MeasuredValue::NoReading(_)),
+    applies: |m| {
+        Function::None.shown_in(m)
+            && matches!(m.value, MeasuredValue::NoReading(w) if w == AUTO_WORD)
+    },
 };
 /// ZERO, offered where `code` sends it: in capacitance.
 const ZERO: MeterKey = MeterKey {
