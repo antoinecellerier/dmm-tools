@@ -777,12 +777,11 @@ fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
         mode,
         mode_raw: f.mode as u16,
         range_raw: f.range,
-        value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
         display_raw,
         flags,
-        ..Measurement::from_payload(packet)
+        ..Measurement::from_payload(packet, value)
     })
 }
 
@@ -911,11 +910,10 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
         mode,
         mode_raw: f.mode as u16,
         range_raw: f.range,
-        value,
         unit: Cow::Borrowed(unit),
         display_raw,
         flags,
-        ..Measurement::from_payload(packet)
+        ..Measurement::from_payload(packet, value)
     })
 }
 

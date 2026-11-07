@@ -1162,13 +1162,12 @@ pub(crate) fn parse_measurement(
         ),
         mode_raw: mode_byte as u16,
         range_raw: range_byte,
-        value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
         progress: Some(progress),
         display_raw: Some(display_raw),
         flags,
-        ..Measurement::from_payload(&payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN])
+        ..Measurement::from_payload(&payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN], value)
     };
 
     // §2.7: in AC+DC V the meter sends its DC and AC components in frames of

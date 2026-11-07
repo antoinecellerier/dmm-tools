@@ -388,12 +388,13 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         name => name,
     };
     let flags = flags(status_a, status_b);
-    let base = Measurement {
+    // The fields every mode shares, completed by each mode's value.
+    let base = |value| Measurement {
         mode,
         mode_raw: u16::from(mode_byte),
         range_raw: payload.get(4).copied().unwrap_or(0),
         flags,
-        ..Measurement::from_payload(payload)
+        ..Measurement::from_payload(payload, value)
     };
     match mode_byte {
         MODE_NCV => Ok(ncv(payload, base)),
@@ -405,27 +406,21 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 /// NCV (§5.8): the software reads nothing past the mode, and the meter
 /// shows EF or dash segments, never a number. What the rest of the frame
 /// holds is undocumented, so it is reported and the reading is `?`.
-fn ncv(payload: &[u8], base: Measurement) -> Measurement {
+fn ncv(payload: &[u8], base: impl FnOnce(MeasuredValue) -> Measurement) -> Measurement {
     report_unknown(FAMILY, "NCV frame", format_args!("{:02X?}", &payload[4..]));
-    Measurement {
-        value: MeasuredValue::UNRECOGNISED,
-        ..base
-    }
+    base(MeasuredValue::UNRECOGNISED)
 }
 
 /// The UT171C's square-wave output (§5.9): frequency, duty and width as
 /// floats, the width's decimal count after them. The range byte is unread.
-fn square_wave(payload: &[u8], base: Measurement) -> Measurement {
+fn square_wave(payload: &[u8], base: impl FnOnce(MeasuredValue) -> Measurement) -> Measurement {
     if payload.len() < SQUARE_WAVE_PAYLOAD {
         report_unknown(
             FAMILY,
             "frame",
             format_args!("square wave, {} bytes", payload.len()),
         );
-        return Measurement {
-            value: MeasuredValue::UNRECOGNISED,
-            ..base
-        };
+        return base(MeasuredValue::UNRECOGNISED);
     }
     let one_place = |at| number(f32_at(payload, at), Some(1), MODE_SQUARE_WAVE);
     // The software formats the width with as many places as byte 21 says,
@@ -442,20 +437,19 @@ fn square_wave(payload: &[u8], base: Measurement) -> Measurement {
     let width = number(f32_at(payload, 13), Some(width_places), MODE_SQUARE_WAVE);
     let (value, display_raw) = one_place(5);
     Measurement {
-        value,
         display_raw,
         unit: Cow::Borrowed("Hz"),
         aux_values: vec![
             aux("Duty", "%", one_place(9)),
             aux("Pulse Width", "ms", width),
         ],
-        ..base
+        ..base(value)
     }
 }
 
 /// Every other mode (§5.1): the float, its display byte and its unit code,
 /// then the blocks status byte A announces.
-fn general(payload: &[u8], base: Measurement) -> Result<Measurement> {
+fn general(payload: &[u8], base: impl FnOnce(MeasuredValue) -> Measurement) -> Result<Measurement> {
     check_len(FAMILY, payload, BASE_PAYLOAD)?;
     let (status_a, mode_byte, range_byte) = (payload[1], payload[3], payload[4]);
     let len = payload.len();
@@ -483,12 +477,11 @@ fn general(payload: &[u8], base: Measurement) -> Result<Measurement> {
         aux_values.push(aux(label, aux_unit, shown));
     }
     Ok(Measurement {
-        value,
         display_raw,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label(mode_byte, range_byte)),
         aux_values,
-        ..base
+        ..base(value)
     })
 }
 

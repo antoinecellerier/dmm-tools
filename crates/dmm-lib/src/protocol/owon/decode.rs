@@ -228,7 +228,6 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
         mode,
         mode_raw: u16::from(code),
         range_raw: (gear & 0x3F) as u8,
-        value,
         unit: Cow::Borrowed(unit),
         display_raw,
         flags: StatusFlags {
@@ -241,7 +240,7 @@ pub(super) fn decode(p: &[u8], model: &Model) -> Result<Measurement> {
             dc: matches!(code, function::DC_V | function::DC_A),
             ..StatusFlags::default()
         },
-        ..Measurement::from_payload(p)
+        ..Measurement::from_payload(p, value)
     })
 }
 

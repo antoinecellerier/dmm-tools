@@ -58,10 +58,9 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
         return Ok(Measurement {
             mode: Cow::Borrowed(MODE_RECALL),
             mode_raw,
-            value: MeasuredValue::NoReading(RECALL),
             unit: Cow::Borrowed(""),
             display_raw: None,
-            ..Measurement::from_payload(data)
+            ..Measurement::from_payload(data, MeasuredValue::NoReading(RECALL))
         });
     }
 
@@ -124,7 +123,6 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
     Ok(Measurement {
         mode,
         mode_raw,
-        value,
         unit: Cow::Borrowed(unit),
         display_raw,
         flags: StatusFlags {
@@ -134,7 +132,7 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
         },
         aux_values: aux.into_iter().collect(),
         main_label,
-        ..Measurement::from_payload(data)
+        ..Measurement::from_payload(data, value)
     })
 }
 

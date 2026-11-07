@@ -597,7 +597,7 @@ mod tests {
     fn coupling_and_peak_bits_do_not_hide_the_function() {
         let with = |mode_raw| Measurement {
             mode_raw,
-            ..Measurement::from_payload(&[])
+            ..Measurement::from_payload(&[], MeasuredValue::Overload)
         };
         for (mode_raw, marked) in [
             (0x11, &["volts"][..]),

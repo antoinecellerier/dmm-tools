@@ -456,13 +456,12 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         // Unmasked (0x31 for range 1), like vc8x0's; nothing reads it as an
         // index until a UT8803 spec table does.
         range_raw,
-        value,
         unit: Cow::Borrowed(unit),
         display_raw,
         flags,
         // `range_label` keeps the default empty string: labelling a UT8803
         // range would need the full range table, which we don't have.
-        ..Measurement::from_payload(payload)
+        ..Measurement::from_payload(payload, value)
     })
 }
 

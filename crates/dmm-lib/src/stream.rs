@@ -478,6 +478,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::measurement::MeasuredValue;
     use crate::protocol::ut61eplus::Ut61PlusProtocol;
     use crate::transport::mock::MockTransport;
 
@@ -653,7 +654,10 @@ mod tests {
             if self.corrupt.contains(&k) {
                 return Err(Error::invalid_response_msg("corrupt frame"));
             }
-            Ok(Measurement::from_payload(&(k as u32).to_le_bytes()))
+            Ok(Measurement::from_payload(
+                &(k as u32).to_le_bytes(),
+                MeasuredValue::Overload,
+            ))
         }
         fn delivery(&self) -> Delivery {
             Delivery::Streamed
@@ -662,7 +666,7 @@ mod tests {
             Ok(())
         }
         fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
-            Ok(Measurement::from_payload(payload))
+            Ok(Measurement::from_payload(payload, MeasuredValue::Overload))
         }
         fn profile(&self) -> &crate::protocol::DeviceProfile {
             &TIMED_METER

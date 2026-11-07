@@ -916,10 +916,10 @@ mod tests {
 
     #[test]
     fn context_keys_follow_the_function() {
-        use crate::measurement::Measurement;
+        use crate::measurement::{MeasuredValue, Measurement};
         let at = |function: u8| Measurement {
             mode_raw: u16::from(function),
-            ..Measurement::from_payload(&[])
+            ..Measurement::from_payload(&[], MeasuredValue::Overload)
         };
         let hz_duty = OW_METER_KEYS.context[0];
         for f in [1, 3, 6, 7] {

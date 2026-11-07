@@ -1390,7 +1390,7 @@ mod tests {
     use super::super::mode::{self, is_known_range, known_words, plain_word};
     use super::super::parse::lookup_range_label;
     use super::*;
-    use crate::measurement::Measurement;
+    use crate::measurement::{MeasuredValue, Measurement};
     use crate::protocol::Protocol;
     use std::collections::HashSet;
 
@@ -1398,7 +1398,7 @@ mod tests {
         Measurement {
             mode_raw: word,
             range_raw: range,
-            ..Measurement::from_payload(&[])
+            ..Measurement::from_payload(&[], MeasuredValue::Overload)
         }
     }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::measurement::MeasuredValue;
 use crate::protocol::Protocol;
 use crate::protocol::ut61eplus::{Ut61PlusProtocol, make_payload};
 use crate::specs::SpecSheetRow;
@@ -130,7 +131,7 @@ fn lookups_stay_in_the_model() {
         for &mode in Mode::ALL {
             let m = Measurement {
                 mode_raw: mode as u16,
-                ..Measurement::from_payload(&[])
+                ..Measurement::from_payload(&[], MeasuredValue::Overload)
             };
             if let Some(table) = model.table(&m) {
                 assert!(
@@ -480,7 +481,7 @@ fn temperature_is_the_ut61d_plus_only() {
         for (mode, row) in [(Mode::TempC, "-40~1000°C"), (Mode::TempF, "-40~1832°F")] {
             let m = Measurement {
                 mode_raw: mode as u16,
-                ..Measurement::from_payload(&[])
+                ..Measurement::from_payload(&[], MeasuredValue::Overload)
             };
             let label = model.row(&m).map(|r| r.label);
             let want = matches!(model, SpecModel::Ut61dPlus | SpecModel::Ut161d).then_some(row);

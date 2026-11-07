@@ -86,13 +86,12 @@ pub(super) fn decode(p: &[u8]) -> Result<Measurement> {
         mode,
         mode_raw: u16::from(mode_raw),
         range_raw,
-        value,
         unit,
         range_label,
         display_raw,
         flags: flags(p, coupling),
         aux_values: secondary(p, mode_raw),
-        ..Measurement::from_payload(p)
+        ..Measurement::from_payload(p, value)
     })
 }
 

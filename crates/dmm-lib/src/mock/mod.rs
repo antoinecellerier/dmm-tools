@@ -283,7 +283,8 @@ impl MockProtocol {
             mode_raw: self.current_scenario().mode_raw,
             range_raw: self.reported_range(),
             flags: self.state.flags(),
-            ..Measurement::from_payload(&[])
+            // The driver reads no value.
+            ..Measurement::from_payload(&[], MeasuredValue::Absent)
         }
     }
 
@@ -472,12 +473,11 @@ impl Protocol for MockProtocol {
             unit: Cow::Borrowed(scenario.unit),
             display_raw: Self::format_display(&value),
             progress: Self::compute_progress(&value, scenario.range_max),
-            value,
             flags: self.state.flags(),
             aux_values,
             main_label: scenario.main_label,
             // The mock has no wire bytes to report.
-            ..Measurement::from_payload(&[])
+            ..Measurement::from_payload(&[], value)
         };
         // Every reading the cycle driver takes is one of these, so record the
         // mode from here as the hardware families do from their parser.

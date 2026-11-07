@@ -590,7 +590,10 @@ mod tests {
             let mut buf = [0u8; 1];
             match t.read_timeout(&mut buf, 0)? {
                 0 => Err(Error::Timeout),
-                _ => Ok(measurement::Measurement::from_payload(&buf)),
+                _ => Ok(measurement::Measurement::from_payload(
+                    &buf,
+                    measurement::MeasuredValue::Overload,
+                )),
             }
         }
         fn delivery(&self) -> protocol::Delivery {
@@ -600,7 +603,10 @@ mod tests {
             protocol::framing::discard_queued(t)
         }
         fn parse_payload(&self, payload: &[u8]) -> Result<measurement::Measurement> {
-            Ok(measurement::Measurement::from_payload(payload))
+            Ok(measurement::Measurement::from_payload(
+                payload,
+                measurement::MeasuredValue::Overload,
+            ))
         }
         fn profile(&self) -> &protocol::DeviceProfile {
             &BYTE_METER

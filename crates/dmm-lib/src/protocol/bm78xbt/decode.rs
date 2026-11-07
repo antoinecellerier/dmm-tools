@@ -163,7 +163,6 @@ fn decode_reading(r: &[u8]) -> Result<Measurement> {
     Ok(Measurement {
         mode,
         mode_raw,
-        value,
         unit: Cow::Borrowed(unit),
         display_raw,
         flags: StatusFlags {
@@ -172,7 +171,7 @@ fn decode_reading(r: &[u8]) -> Result<Measurement> {
             loz: main == tables::AUTO_CHECK,
             ..flags(r, flag0, flag1)
         },
-        ..Measurement::from_payload(r)
+        ..Measurement::from_payload(r, value)
     })
 }
 

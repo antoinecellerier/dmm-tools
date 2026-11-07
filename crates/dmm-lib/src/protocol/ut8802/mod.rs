@@ -434,7 +434,6 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         mode,
         mode_raw: position as u16,
         range_raw: position, // UT8802 combines mode+range in position code
-        value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
         // On overload the vendor shows "  0L " whatever the digits say
@@ -442,7 +441,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         // every renderer falls back to OL.
         display_raw: (!overload).then_some(display_str),
         flags,
-        ..Measurement::from_payload(payload)
+        ..Measurement::from_payload(payload, value)
     })
 }
 

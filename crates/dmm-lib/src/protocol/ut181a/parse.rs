@@ -689,14 +689,13 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         mode,
         mode_raw: mode_word,
         range_raw: range,
-        value,
         unit,
         range_label: Cow::Borrowed(lookup_range_label(mode_word, range)),
         display_raw,
         flags,
         aux_values,
         main_label: main_label(format_type, mode_word),
-        ..Measurement::from_payload(payload)
+        ..Measurement::from_payload(payload, value)
     })
 }
 

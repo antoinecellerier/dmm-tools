@@ -287,23 +287,24 @@ pub struct Measurement {
 }
 
 impl Measurement {
-    /// A reading with only the wire bytes filled in, for parsers to complete
-    /// with struct-update syntax:
-    /// `Measurement { mode, mode_raw, .., ..Measurement::from_payload(payload) }`.
+    /// A reading of `value` with the wire bytes filled in, for parsers to
+    /// complete with struct-update syntax:
+    /// `Measurement { mode, mode_raw, .., ..Measurement::from_payload(payload, value) }`.
     ///
-    /// Timestamp is now; mode/unit/range_label empty; value
-    /// [`MeasuredValue::Overload`]; flags default; progress/display_raw/spec/
-    /// mode_spec `None`; no sub-values. Every field a parser leaves out is one
-    /// it would otherwise have spelled out identically, so the nine per-family
-    /// literals only name what the wire actually decided.
-    pub(crate) fn from_payload(payload: &[u8]) -> Self {
+    /// Timestamp is now; mode/unit/range_label empty; mode_raw/range_raw 0;
+    /// flags default; progress/display_raw/main_label/spec/mode_spec `None`;
+    /// no sub-values. Every field a parser leaves out is one it would
+    /// otherwise have spelled out identically, so the per-family literals
+    /// only name what the wire decided. The value is an argument rather than
+    /// a default, so no parser can forget it and report a plausible OL.
+    pub(crate) fn from_payload(payload: &[u8], value: MeasuredValue) -> Self {
         Measurement {
             timestamp: Instant::now(),
             wall_time: SystemTime::now(),
             mode: Cow::Borrowed(""),
             mode_raw: 0,
             range_raw: 0,
-            value: MeasuredValue::Overload,
+            value,
             unit: Cow::Borrowed(""),
             range_label: Cow::Borrowed(""),
             progress: None,

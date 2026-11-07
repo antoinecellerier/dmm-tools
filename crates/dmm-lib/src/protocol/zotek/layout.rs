@@ -1130,14 +1130,13 @@ pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
     let reading = Measurement {
         mode,
         mode_raw: function.mode_raw(coupling) | peak_bit,
-        value,
         unit: Cow::Borrowed(unit_text),
         display_raw: Some(readout.text),
         flags,
         aux_values: secondary(layout, &lit, unrecognised, packet)
             .into_iter()
             .collect(),
-        ..Measurement::from_payload(packet)
+        ..Measurement::from_payload(packet, value)
     };
     Ok((reading, showing))
 }

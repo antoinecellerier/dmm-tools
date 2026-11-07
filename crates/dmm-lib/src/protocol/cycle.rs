@@ -1252,6 +1252,7 @@ fn check_table(
 mod tests {
     use super::*;
     use crate::flags::StatusFlags;
+    use crate::measurement::MeasuredValue;
     use crate::transport::NullTransport;
 
     /// The reason a refused walk gives.
@@ -1372,7 +1373,7 @@ mod tests {
         Measurement {
             mode: label(mode),
             mode_raw: mode,
-            ..Measurement::from_payload(&[])
+            ..Measurement::from_payload(&[], MeasuredValue::Overload)
         }
     }
 

@@ -869,12 +869,11 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(
         mode,
         mode_raw: function_code as u16,
         range_raw,
-        value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
         display_raw: Some(display_str),
         flags,
-        ..Measurement::from_payload(payload)
+        ..Measurement::from_payload(payload, value)
     })
 }
 
