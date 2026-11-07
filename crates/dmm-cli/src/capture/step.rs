@@ -711,21 +711,35 @@ impl CaptureRun {
             // A retake re-samples; it does not press the button again, which on a
             // toggle like HOLD would undo the state the first press reached.
             if let Some(cmd) = step.command.filter(|_| attempt == 1) {
-                // A piped run has no one to wait for: it sends at once.
-                if interactive
-                    && self.input.is_tty()
-                    && let Some(state) = step.starts_from
-                {
-                    match self.wait_for_start(state, &mut errors)? {
-                        Watched::Skip => return Ok(self.skip_from_wait(step, errors, false)),
-                        Watched::Quit => return Ok(self.skip_from_wait(step, errors, true)),
-                        Watched::Ready(_) | Watched::TimedOut(_) => {}
+                let before = loop {
+                    // The state the wait saw, unless Enter ended it: the
+                    // operator's Enter sends whatever shows.
+                    let mut seen = None;
+                    // A piped run has no one to wait for: it sends at once.
+                    if interactive
+                        && self.input.is_tty()
+                        && let Some(state) = step.starts_from
+                    {
+                        match self.wait_for_start(state, &mut errors)? {
+                            Watched::Skip => return Ok(self.skip_from_wait(step, errors, false)),
+                            Watched::Quit => return Ok(self.skip_from_wait(step, errors, true)),
+                            Watched::Ready(Some(_)) => seen = Some(state),
+                            Watched::Ready(None) | Watched::TimedOut(_) => {}
+                        }
                     }
-                }
 
-                // What the meter shows before the button is pressed, so a command
-                // that changes nothing can be told from one that works.
-                let before = capture_samples(&mut self.dmm, STABLE_FRAMES, &mut errors)?;
+                    // What the meter shows before the button is pressed, so a
+                    // command that changes nothing can be told from one that works.
+                    let before = capture_samples(&mut self.dmm, STABLE_FRAMES, &mut errors)?;
+                    // #45: a UT217A passed through mV,DC on its way to V,DC, and
+                    // the key went out once the screen had moved on to mV,AC.
+                    match seen {
+                        Some(state) if !before.iter().all(|m| state.check(m).is_ok()) => {
+                            eprintln!("  {}", style(tr!(l, "capture-wait-moved")).dim());
+                        }
+                        _ => break before,
+                    }
+                };
 
                 // An Enter pressed twice at the wait must not end the wait for
                 // the command's effect as well, which would file the frames
@@ -1964,6 +1978,21 @@ mod tests {
         let mut bench = BenchRun::new(volts(6, false), volts(12, true), Vec::new());
         bench.capture(&rel_from_dc_v());
         assert_eq!(bench.commands(), [6]);
+    }
+
+    /// #45: a state passed through on the way to another is not the one to
+    /// press the key in. The screen moving on while the frames before the
+    /// command are read sends the step back to waiting.
+    #[test]
+    fn a_state_left_before_the_command_is_waited_for_again() {
+        // 3 to settle, 3 elsewhere instead of the frames before the
+        // command, then 3 to settle and 3 before it again.
+        let before = [ohms(2), volts(3, false), ohms(3), volts(6, false)].concat();
+        let mut bench = BenchRun::new(before, volts(12, true), Vec::new());
+        bench.capture(&rel_from_dc_v());
+        assert_eq!(bench.commands(), [14]);
+        let step = &bench.run.report.steps[0];
+        assert_eq!(step.status, StepStatus::Captured);
     }
 
     /// Enter sends though the state never came, as our reading of it may be

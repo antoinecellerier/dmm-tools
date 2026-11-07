@@ -132,6 +132,9 @@ capture-press-enter = Press Enter when the meter is ready ({ $skip }=skip, { $qu
 # until the meter shows the state the instruction asks for. $skip and $quit
 # are the keys: s and q.
 capture-wait-start = Set the meter up as above: the key goes out once it is (Enter=send now, { $skip }=skip, { $quit }=finish)
+# Dim: the meter left the state the step starts from just before the key
+# went out, so the step waits for it again.
+capture-wait-moved = The meter moved on before the key went out: waiting for it again
 # When the terminal can't be read key by key. $skip and $quit are the keys:
 # s and q.
 capture-any-key = any key=capture, { $skip }=skip, { $quit }=finish:
