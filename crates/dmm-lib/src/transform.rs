@@ -45,7 +45,7 @@ const SI_PREFIXES: &[(char, f64)] = &[
 /// ("s" is not a base here), and "°C", "°F", "%", "dBm" and "dBV" carry no
 /// prefix at all.
 const BASE_UNITS: &[&str] = &[
-    "V", "A", "Ω", "F", "Hz", "S", "W", "VA", "H", "Wh", "Ah", "W/m²", "°", "RPM", "V·s",
+    "V", "A", "Ω", "F", "Hz", "S", "W", "VA", "H", "Wh", "Ah", "W/m²", "°", "V·s",
 ];
 
 /// Split a meter unit into its base unit and the multiplier to that base:
@@ -1069,9 +1069,6 @@ mod tests {
             ("kW/m²", "W/m²", 1e3),
             ("°", "°", 1.0),
             ("m°", "°", 1e-3),
-            ("RPM", "RPM", 1.0),
-            ("kRPM", "RPM", 1e3),
-            ("MRPM", "RPM", 1e6),
             ("V·s", "V·s", 1.0),
             ("mV·s", "V·s", 1e-3),
         ] {
@@ -1179,8 +1176,8 @@ mod tests {
             .then_some(chars.as_str())
     }
 
-    /// BASE_UNITS is kept by hand and drifted once: a family's mH, mWh and
-    /// kRPM looked like a new quantity at every range step. Every unit a
+    /// BASE_UNITS is kept by hand and drifted once: a family's mH and mWh
+    /// looked like a new quantity at every range step. Every unit a
     /// family's tables can produce now has to split, or be listed as one that
     /// doesn't.
     #[test]
@@ -1223,7 +1220,6 @@ mod tests {
             ("mAh", "Ah"),
             ("mW/m²", "W/m²"),
             ("m°", "°"),
-            ("RPM", "kRPM"),
             ("mV·s", "V·s"),
         ] {
             let ratio = prefix_ratio(from, to).expect(from);

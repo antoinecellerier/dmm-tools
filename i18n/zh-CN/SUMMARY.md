@@ -45,7 +45,7 @@ Draft of 2026-11-01, no native reviewer yet: every answer below is the drafter's
 | Live (live-wire detection mode) | 火线 | — |
 | Bluetooth link (built-in) | 蓝牙链路 | 内置蓝牙 |
 | 4–20 mA loop current | 4-20 mA 环路电流 | 4-20 mA 电流环 |
-| others | internal temperature 内部温度, inductance 电感, logic level 逻辑电平, sensitivity 灵敏度, nominal 标称, in Bluetooth range 在蓝牙范围内, identify 识别, crosshair 十字线, data gap 间断, Visible 可见部分, weak text 次要文本, Solar/Tachometer/Compass/Angle/Scope 太阳能/转速表/指南针/角度/示波器 | |
+| others | internal temperature 内部温度, inductance 电感, logic level 逻辑电平, sensitivity 灵敏度, nominal 标称, in Bluetooth range 在蓝牙范围内, identify 识别, crosshair 十字线, data gap 间断, Visible 可见部分, weak text 次要文本, Solar/Compass/Angle/Scope 太阳能/指南针/角度/示波器 | |
 
 ## Also open
 

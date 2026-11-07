@@ -94,7 +94,6 @@ fn a_step_in_any_prefixed_unit_keeps_the_trace() {
         ("mAh", "Ah"),
         ("mW/m²", "W/m²"),
         ("m°", "°"),
-        ("RPM", "kRPM"),
     ] {
         let mut g = Graph::new();
         let t0 = Instant::now();

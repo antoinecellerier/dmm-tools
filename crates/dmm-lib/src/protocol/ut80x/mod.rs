@@ -31,7 +31,7 @@
 //! - position 2: range
 //! - positions 3-6: digits 1-4 (MSD first)
 //! - position 7: mode code (different meanings from UT804!)
-//! - position 8: bit 3 = alt-mode (RPM / °C-vs-°F), bit 2 = **negative
+//! - position 8: bit 3 = alt-mode (°C over °F), bit 2 = **negative
 //!   sign**, bit 1 = unknown, bit 0 = overload
 //! - position 9: bit 3 = HOLD, bits 2-1 = unknown indicators
 //! - position 10: bit 3 = DC, bit 2 = AC, bit 1 = AUTO (else MANU)
@@ -250,8 +250,8 @@ fn ut71ab_range_label(mode: u8, range: u8) -> &'static str {
 
 /// UT803 per-(mode, range) display info, same convention as
 /// [`ut804_mode_info`] but with 4 digits and the UT803's own mode codes
-/// (spec §7.4 item 4). `alt` is position 8 bit 3 (selects RPM for
-/// frequency, °C vs °F for temperature).
+/// (spec §7.4 item 4). `alt` is position 8 bit 3, which picks °C over °F
+/// for temperature.
 fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'static str, u8)> {
     Some(match mode {
         0xB => match range {
@@ -282,30 +282,17 @@ fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'st
             5 => ("Ω", "MΩ", 1),
             _ => return None,
         },
-        0x2 => {
-            // Frequency, or tachometer RPM when the alt bit is set.
-            // Range 0's decimal position is [UNVERIFIED] (the vendor
-            // handler for it is ambiguous); treat as integer Hz.
-            let (name, unit) = if alt {
-                ("Tachometer", "RPM")
-            } else {
-                ("Frequency", "Hz")
-            };
-            match (range, alt) {
-                (0, _) => (name, unit, 3),
-                (1, false) => (name, "kHz", 1),
-                (2, false) => (name, "kHz", 2),
-                (3, false) => (name, "MHz", 0),
-                (4, false) => (name, "MHz", 1),
-                (5, false) => (name, "MHz", 2),
-                (1, true) => (name, "kRPM", 1),
-                (2, true) => (name, "kRPM", 2),
-                (3, true) => (name, "MRPM", 0),
-                (4, true) => (name, "MRPM", 1),
-                (5, true) => (name, "MRPM", 2),
-                _ => return None,
-            }
-        }
+        // Frequency whatever the alt bit says, as the vendor app shows it;
+        // range 0 is whole hertz (spec §3.4).
+        0x2 => match range {
+            0 => ("Frequency", "Hz", 3),
+            1 => ("Frequency", "kHz", 1),
+            2 => ("Frequency", "kHz", 2),
+            3 => ("Frequency", "MHz", 0),
+            4 => ("Frequency", "MHz", 1),
+            5 => ("Frequency", "MHz", 2),
+            _ => return None,
+        },
         0x4 => {
             if alt {
                 ("Temperature", "°C", 3)
@@ -569,8 +556,7 @@ impl Ut803Fields {
         })
     }
 
-    /// Position 8 bit 3: RPM for frequency, °C for temperature (spec §7.4
-    /// item 4).
+    /// Position 8 bit 3: °C for temperature (spec §7.4 item 4).
     fn alt(&self) -> bool {
         self.nib8 & 0x8 != 0
     }
@@ -862,10 +848,10 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
     let dc = f.nib10 & 0x8 != 0;
     let auto_range = f.nib10 & 0x2 != 0;
     // Nibble 8 bit 1 and nibble 9 bit 0 have no known meaning, and the alt
-    // bit only picks RPM or °C (§5, §7.4 items 2 and 4; bit map in the
-    // module doc). Nibble 9 bits 2-1 are left out: the vendor lights
-    // indicators from them, so the meter sets them in ordinary use.
-    if f.nib8 & 0x2 != 0 || f.nib9 & 0x1 != 0 || (alt && !matches!(f.mode, 0x2 | 0x4)) {
+    // bit only picks °C (§5, §7.4 items 2 and 4; bit map in the module
+    // doc). Nibble 9 bits 2-1 are left out: the vendor lights indicators
+    // from them, so the meter sets them in ordinary use.
+    if f.nib8 & 0x2 != 0 || f.nib9 & 0x1 != 0 || (alt && f.mode != 0x4) {
         unrecognised.report("status bits");
     }
 
@@ -1357,11 +1343,12 @@ mod tests {
         assert_eq!(expected(&ut803, "dcua"), Some("µA"));
         assert_eq!(expected(&ut803, "acma"), Some("mA"));
         assert_eq!(expected(&ut803, "dca"), Some("A"));
-        assert_eq!(expected(&ut803, "rpm"), Some("Tachometer"));
         // Modes the UT803 parser has no label for at all.
-        for id in ["duty", "ma_percent", "acdcv"] {
-            assert_eq!(expected(&ut803, id), None, "{id} asserted on the UT803");
-        }
+        assert_eq!(
+            expected(&ut803, "acdcv"),
+            None,
+            "AC+DC asserted on the UT803"
+        );
 
         let ut804 = Ut80xProtocol::new_ut804();
         assert_eq!(expected(&ut804, "dcua"), Some("DC µA"));
@@ -1369,9 +1356,10 @@ mod tests {
         assert_eq!(expected(&ut804, "acdcv"), Some("AC+DC V"));
     }
 
-    /// The UT804 has no tachometer, AC mV or ADP position (its manual's
-    /// Table 2-1), and the reporter walking it in #16 found none: its list
-    /// asks for none of them, and adds RANGE, MAX MIN and REL before HOLD.
+    /// The UT804 has no AC mV or ADP position (its manual's Table 2-1), and
+    /// the reporter walking it in #16 found none: its list asks for neither,
+    /// and adds RANGE, MAX MIN and REL before HOLD. The UT803's manual has no
+    /// duty, tachometer or 4-20 mA position.
     #[test]
     fn each_model_is_asked_only_for_what_it_has() {
         let ids = |proto: Ut80xProtocol| -> Vec<&'static str> {
@@ -1379,8 +1367,12 @@ mod tests {
         };
 
         let ut804 = ids(Ut80xProtocol::new_ut804());
-        for id in ["rpm", "acmv", "adp"] {
+        for id in ["acmv", "adp"] {
             assert!(!ut804.contains(&id), "the UT804 is asked for {id}");
+        }
+        let ut803 = ids(Ut80xProtocol::new_ut803());
+        for id in ["rpm", "duty", "ma_percent"] {
+            assert!(!ut803.contains(&id), "the UT803 is asked for {id}");
         }
         let hold = ut804.iter().position(|&id| id == "hold");
         for id in ["manual_range", "max_min", "rel"] {
@@ -1432,8 +1424,6 @@ mod tests {
                 "ohm_short",
                 "cap",
                 "hz",
-                "duty",
-                "rpm",
                 "diode",
                 "cont",
                 "temp",
@@ -1444,7 +1434,6 @@ mod tests {
                 "dca",
                 "aca",
                 "adp",
-                "ma_percent",
                 "hold",
             ]
         );
@@ -2067,12 +2056,19 @@ raw_payload=11"#
         assert_eq!(m.unit, "°F");
     }
 
+    /// The vendor app shows the alt bit on frequency as frequency (spec §5),
+    /// and reports it: nothing documents the bit there.
     #[test]
-    fn ut803_tachometer_alt_bit() {
+    fn ut803_alt_bit_on_frequency_reads_hz_and_is_reported() {
+        let clean = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x0, 0x0, 0x0);
         let p = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0);
-        let m = parse_measurement_ut803(&p).unwrap();
-        assert_eq!(m.mode, "Tachometer");
-        assert_eq!(m.unit, "kRPM");
+        let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+        assert_eq!(
+            snapshot(&m.unwrap()),
+            snapshot(&parse_measurement_ut803(&clean).unwrap())
+        );
+        assert_eq!(reports.len(), 1, "{reports:?}");
+        assert!(reports[0].contains("status bits"), "{reports:?}");
     }
 
     #[test]
@@ -2576,7 +2572,7 @@ raw_payload=11"#
         );
     }
 
-    /// Mode 2 with the alt bit clear is a frequency.
+    /// Mode 2 is a frequency.
     #[test]
     fn ut803_snapshot_frequency_alt_clear() {
         let p = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x0, 0x0, 0x0);
@@ -2588,26 +2584,6 @@ mode_raw=0x02
 range_raw=0x01
 value=Normal(12.34)
 unit=kHz
-range_label=
-display_raw=Some("12.34")
-flags=
-aux=0
-raw_payload=11"#
-        );
-    }
-
-    /// The same frame with the alt bit set is a tachometer reading in RPM.
-    #[test]
-    fn ut803_snapshot_tachometer_alt_set() {
-        let p = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0);
-        let m = parse_measurement_ut803(&p).unwrap();
-        assert_eq!(
-            snapshot(&m),
-            r#"mode=Tachometer
-mode_raw=0x02
-range_raw=0x01
-value=Normal(12.34)
-unit=kRPM
 range_label=
 display_raw=Some("12.34")
 flags=
@@ -2735,7 +2711,6 @@ raw_payload=11"#
             ut803_payload(&[5, 9, 9, 9], 4, 0x3, 0x0, 0x0, 0x0),
             ut803_payload(&[0, 0, 2, 5], 0, 0x4, 0x8, 0x0, 0x0),
             ut803_payload(&[0, 0, 7, 7], 0, 0x4, 0x0, 0x0, 0x0),
-            ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0),
             ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x0, 0x0, 0x0),
             ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x0, 0x8, 0xA),
         ];
@@ -3004,12 +2979,9 @@ raw_payload=11"#
 
     /// UT803 readings the parser accepts that have no spec in the manual.
     const UT803_NO_SPEC: &[NoSpec] = &[
-        ("the tachometer: the manual gives RPM no spec", |f| {
-            f.mode == 0x2 && f.alt()
-        }),
         (
             "frequency range 5 (600MHz): the manual stops at 60MHz",
-            |f| f.mode == 0x2 && !f.alt() && f.range == 5,
+            |f| f.mode == 0x2 && f.range == 5,
         ),
         ("capacitance range 7 (60mF): the manual stops at 6mF", |f| {
             f.mode == 0x6 && f.range == 7
@@ -3225,12 +3197,13 @@ raw_payload=11"#
         assert_eq!(ut803_spec(&ac).unwrap().accuracy[0].accuracy, "1.0%+5");
     }
 
+    /// The alt bit leaves a frequency a frequency (spec §3.4).
     #[test]
-    fn ut803_rpm_has_no_spec_and_hz_has() {
-        let hz = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x0, 0x0, 0x0);
-        let rpm = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0);
-        assert_eq!(ut803_spec(&hz).unwrap().resolution, "0.01kHz");
-        assert_eq!(ut803_table_name(&rpm), None);
+    fn ut803_hz_has_its_spec_whatever_the_alt_bit() {
+        for alt in [0x0, 0x8] {
+            let hz = ut803_payload(&[1, 2, 3, 4], 1, 0x2, alt, 0x0, 0x0);
+            assert_eq!(ut803_spec(&hz).unwrap().resolution, "0.01kHz");
+        }
     }
 
     #[test]

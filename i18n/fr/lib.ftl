@@ -215,8 +215,6 @@ mode-t1 = T1
 mode-t1-t2 = T1-T2
 # Used by: BM525s/BM521s, BM788BT/BM787BT, BM829s/BM827s/BM822s/BM821s, BM869s/BM867s
 mode-t2 = T2
-# Used by: UT803
-mode-tachometer = Tachymètre
 # Used by: Mock UT61E+
 mode-temp-degc = Temp °C
 # Used by: Mock UT61E+

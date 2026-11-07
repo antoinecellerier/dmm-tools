@@ -49,7 +49,7 @@ burden voltage	chute de tension	n. f.	aux-burden-voltage, note-burden-voltage-*	
 clamp	pince	n. f.	mode-clamp-*, aux-clamp-*	UNI-T UT197 FR PDF p.38 «la pince multimètre»	Clamp AC A → «Pince AC A».
 power (mains) line	secteur	n. m.	mode-line-hz, table-line-level-frequency-hz	Voltcraft VC925 FR PDF p.114 «distribution secteur»	Line Hz → «Hz secteur».
 logic level	niveau logique	n. m.	mode-logic-hz, table-logic-level-*	no approved source found	Logic Hz → «Hz logique».
-Motor / Solar / Tachometer / Compass / Angle / Time / Scope	Moteur / Solaire / Tachymètre / Boussole / Angle / Temps / Oscilloscope	n. m. (Boussole f.)	mode-motor, mode-solar, mode-tachometer, mode-compass, mode-angle, mode-time, mode-scope	no approved source found (VC925 is a PV meter: «Icône PV» PDF p.123)	Plain French; check each against the meter when it is reviewed.
+Motor / Solar / Compass / Angle / Time / Scope	Moteur / Solaire / Boussole / Angle / Temps / Oscilloscope	n. m. (Boussole f.)	mode-motor, mode-solar, mode-compass, mode-angle, mode-time, mode-scope	no approved source found (VC925 is a PV meter: «Icône PV» PDF p.123)	Plain French; check each against the meter when it is reviewed.
 Live (mode: live-wire detection)	Phase	n. f.	mode-live, aux-live	no approved source found	Decided: French electricians say «phase» for the live wire; no manual seen. Not the graph's LIVE chip.
 Recall	Lecture mémoire	n. f.	mode-recall	"Voltcraft VC920 FR PDF p.72 «RCL ""Recall"" Lecture de la mémoire des valeurs de mesure»"	
 Battery (sub-value)	Pile	n. f.	aux-battery	Voltcraft VC880 FR PDF p.66 «Piles et batteries»	«Batterie» only for rechargeable packs (VC925 Li-ion).

@@ -48,8 +48,8 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
         ),
     );
 
-    // Which models' dial or buttons reach a step. The UT804 has no AC mV,
-    // tachometer or ADP position (its manual's Table 2-1, #16); RANGE,
+    // Which models' dial or buttons reach a step. The UT804 has no AC mV
+    // or ADP position (its manual's Table 2-1, #16); RANGE,
     // MAX MIN and REL are asked of the UT804 and the handhelds. On the
     // handhelds the blue button steps resistance to continuity and
     // diode, and Hz follows mV, whose position the UT71B/C/D and
@@ -176,21 +176,15 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
             CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
                 .expect(Expect::mode("Frequency")),
         ),
+        // The UT803's manual has no duty, tachometer or 4-20 mA position
+        // (its rotary switch table), so it is asked for none of them.
         on(
-            BENCH,
-            named(
-                CaptureStep::basic(
-                    "duty",
-                    "Frequency mode: switch the display to Duty Cycle (%)",
-                ),
-                for_model(Some("Duty %"), None),
-            ),
-        ),
-        // Frequency with the alt bit set (spec §5).
-        on(
-            &[Ut803],
-            CaptureStep::basic("rpm", "Set meter to Tachometer / RPM")
-                .expect(Expect::mode("Tachometer")),
+            &[Ut804],
+            CaptureStep::basic(
+                "duty",
+                "Frequency mode: switch the display to Duty Cycle (%)",
+            )
+            .expect(Expect::mode("Duty %")),
         ),
         on(
             BENCH,
@@ -307,11 +301,9 @@ pub(super) fn steps(model: Model) -> Vec<CaptureStep> {
             CaptureStep::basic("adp", "Set meter to ADP / logic").expect(Expect::mode("ADP")),
         ),
         on(
-            BENCH,
-            named(
-                CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)"),
-                for_model(Some("mA%"), None),
-            ),
+            &[Ut804],
+            CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)")
+                .expect(Expect::mode("mA%")),
         ),
         // RANGE sets status bit 1 (Manual), MAX MIN puts nothing on the
         // wire, and REL sends the relative reading with bit 1 set (spec

@@ -49,7 +49,7 @@ burden voltage	バーデン電圧	n.	aux-burden-voltage, note-burden-voltage-*	n
 clamp	クランプ	n.	mode-clamp-*, aux-clamp-*	Sanwa CD772 JP PDF p.24 “クランププローブ”; KEW MATE 2000A JP PDF p.1 “クランプセンサー”	Clamp AC A → «クランプ AC A».
 power (mains) line	ライン	n.	mode-line-hz, table-line-level-frequency-hz	Sanwa PC7000 JP PDF p.3 “Hz：ライン周波数”	Line Hz → «ライン Hz».
 logic level	ロジックレベル	n.	mode-logic-hz, table-logic-level-*	Sanwa PC7000 JP PDF p.33 “ロジック・レベル周波数(Hz)”; PDF p.2 “ロジック周波数”	Logic Hz → «ロジック Hz».
-Motor / Solar / Tachometer / Compass / Angle / Time / Scope	モーター / ソーラー / 回転計 / コンパス / 角度 / 時間 / オシロスコープ	n.	mode-motor, mode-solar, mode-tachometer, mode-compass, mode-angle, mode-time, mode-scope	partial: Fluke 80V JP PDF p.15 “モーター･ドライブ” (motor); others no approved source found	Long vowel on «モーター» per MS-SG p.35 (-or); Sanwa writes «モータ» (CD772 JP PDF p.4). Check each against the meter when it is reviewed.
+Motor / Solar / Compass / Angle / Time / Scope	モーター / ソーラー / コンパス / 角度 / 時間 / オシロスコープ	n.	mode-motor, mode-solar, mode-compass, mode-angle, mode-time, mode-scope	partial: Fluke 80V JP PDF p.15 “モーター･ドライブ” (motor); others no approved source found	Long vowel on «モーター» per MS-SG p.35 (-or); Sanwa writes «モータ» (CD772 JP PDF p.4). Check each against the meter when it is reviewed.
 Live (mode: live-wire detection)	活線	n.	mode-live, aux-live	no approved source found	Not «ライブ»: that is the graph's LIVE chip. Alternative: «充電部».
 Recall	データ呼び出し	n.	mode-recall	Sanwa PC720M JP PDF p.11 “（Recall）するとデータ呼び出し”	
 Battery (sub-value)	電池	n.	aux-battery	Sanwa CD772 JP PDF p.3 “電池、ヒューズの交換”; KEW1062 JP PDF p.4	«バッテリー» (MS-T) only for a rechargeable pack.

@@ -518,7 +518,6 @@ mod tests {
     /// reads best.
     #[test]
     fn a_prefixed_reading_takes_a_readable_prefix() {
-        assert_eq!(figure(1500.0, "RPM"), "1.5000 kRPM");
         assert_eq!(figure(0.0123, "H"), "12.300 mH");
         assert_eq!(figure(0.0123, "Wh"), "12.300 mWh");
         assert_eq!(figure(1500.0, "W/m²"), "1.5000 kW/m²");

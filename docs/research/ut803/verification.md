@@ -31,8 +31,9 @@ every capture step; no UT803 has been read.
 - The mode codes and range tables ([§3.4][s34], [§7.4][s74] item 4) —
   decides `ut803_mode_info`, and whether it gets range labels as the
   UT804's do. Needs every mode step. (#15)
-- Frequency range 0's decimal point, a guess in `ut803_mode_info`, and
-  tachometer (RPM) packets — decide those rows. Needs `hz` and `rpm`. (#15)
+- Frequency range 0 as whole hertz, as UT803.exe draws it, and whether
+  position 8 bit 3 ever sets on frequency, which the app shows as Hz
+  ([§3.4][s34]) — decide that row and the bit's report. Needs `hz`. (#15)
 - What nibble 9 bits 2-1 light (MAX MIN, REL?) — the parser leaves them
   silent ([§7.4][s74] item 2). Needs MAX MIN and REL pressed under a trace;
   no step asks for them. (#15)

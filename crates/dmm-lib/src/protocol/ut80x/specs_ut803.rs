@@ -38,8 +38,8 @@ pub(super) static ALL: &[&ModeSpecs] = &[
 /// The table for a reading with mode code `mode`, range byte `range`, the
 /// alt bit and the coupling bits (`Ut803Fields`).
 ///
-/// `None` where the manual has no table: the tachometer (frequency with the
-/// alt bit), ADP (mode 0xE), and volts or current without exactly one
+/// `None` where the manual has no table: ADP (mode 0xE), and volts or
+/// current without exactly one
 /// coupling bit. The manual documents AC+DC, but it never reaches the
 /// computer: "+DC, hFE and β cannot output to the computer" ("RS232
 /// Button", PDF p. 37).
@@ -65,7 +65,7 @@ pub(super) fn table(
         (0x5, _) => &CONTINUITY,
         (0x1, _) => &DIODE,
         (0x6, _) => &CAPACITANCE,
-        (0x2, _) if !alt => &FREQUENCY,
+        (0x2, _) => &FREQUENCY,
         (0x4, _) if alt => &TEMP_C,
         (0x4, _) => &TEMP_F,
         _ => return None,
@@ -750,8 +750,7 @@ static CAPACITANCE: ModeSpecs = ModeSpecs {
 
 // ── I. Frequency (manual PDF page 47) ────────────────────────────────────
 
-// Range bytes 0-4, frequency only (alt bit clear): the manual gives the
-// tachometer no spec. The parser also knows range 5 (600MHz), which the
+// Range bytes 0-4. The parser also knows range 5 (600MHz), which the
 // manual does not list.
 static FREQUENCY: ModeSpecs = ModeSpecs {
     name: "I. Frequency",

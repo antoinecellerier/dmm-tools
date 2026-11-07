@@ -1078,7 +1078,6 @@ mod tests {
             ("Power Ah", "mAh", "Ah"),
             ("Solar", "mW/m²", "W/m²"),
             ("Angle", "m°", "°"),
-            ("RPM", "RPM", "kRPM"),
         ] {
             let mut s = SeriesStats::new(false);
             let mut before = reading(mode, low, 900.0, t0);

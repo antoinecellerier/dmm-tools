@@ -46,7 +46,7 @@ Draft of 2026-11-02. No native reviewer has read it, so every answer below is th
 | COMP High / Low | COMP 上 / COMP 下 | COMP ハイ / ロー |
 | Colorblind (preset) | 色覚サポート | 色覚多様性 |
 | Plus / Minus key names | プラス / マイナス | + / - |
-| others | internal temperature 内部温度, inductance インダクタンス, apparent power 皮相電力 (VA), power factor 力率, absolute 絶対値, for reference only 参考値, in Bluetooth range 通信範囲内, identify 識別, verified/partly verified/experimental 検証済み/一部検証済み/試験的, time window 時間幅, crosshair 十字線, data gap 欠落, statistics 統計, Visible 表示範囲, hysteresis ヒステリシス, weak text 補助テキスト, volt-ampere ボルトアンペア, henry ヘンリー, Tachometer/Compass/Scope 回転計/コンパス/オシロスコープ | |
+| others | internal temperature 内部温度, inductance インダクタンス, apparent power 皮相電力 (VA), power factor 力率, absolute 絶対値, for reference only 参考値, in Bluetooth range 通信範囲内, identify 識別, verified/partly verified/experimental 検証済み/一部検証済み/試験的, time window 時間幅, crosshair 十字線, data gap 欠落, statistics 統計, Visible 表示範囲, hysteresis ヒステリシス, weak text 補助テキスト, volt-ampere ボルトアンペア, henry ヘンリー, Compass/Scope コンパス/オシロスコープ | |
 
 ## Also open
 

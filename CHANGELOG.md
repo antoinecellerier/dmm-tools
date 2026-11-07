@@ -40,6 +40,7 @@
 - **`capture` asks before running on a meter that reports another model** — such as a UT217A opened as the UT217B, which only a warning flagged.
 - **Default export file names carry the model alone** — such as `measurements-B41T+-…`, without `OWON`.
 - **`capture` holds CMS and UT217 keys until the meter is ready** — they went out at once, whatever the meter showed.
+- **`capture` asks a UT803 only for positions its dial has** — it asked for tachometer, duty and 4-20 mA.
 
 ### Bug fixes
 
@@ -60,7 +61,7 @@
 - **Negative UT8803 readings keep their minus sign** — the reading and exports showed them positive.
 - **The UT8803 reads its lowest inductance range in µH** — it showed mH, a thousand times too large.
 - **The UT8802 follows UNI-T's software for sign, OL and status flags**
-- **Alarms and scaling use base units on every prefixed reading** — on H, Wh, Ah, W/m², ° and RPM, a range step idled the alarm and put a scale 1000× off.
+- **Alarms and scaling use base units on every prefixed reading** — on H, Wh, Ah, W/m² and °, a range step idled the alarm and put a scale 1000× off.
 - **4-20 mA LO on the UT804, UT71 and VC920/VC940/VC960 reads as no reading** — the graph, statistics and exports took it as 0 %.
 - **Dashes, or a lone decimal point, on a Brymen display read as no reading** — a BM82x showed an EF level after a range or function change, and other models showed a warning.
 - **Dashes on the VC-880, VC650BT and VC-890 read as no reading** — they showed OL, and a number on a VC-880 or VC650BT setup screen counted as a measurement.
@@ -80,6 +81,7 @@
 - **A dmm-gui replay shows no remote buttons or dropdowns** — every click was refused.
 - **The EEVblog 121GW's min/max button stays lit in AVG, with its ×** — it went dark, and leaving meant going to the meter.
 - **CMS and UT217 MaxMin labels its second reading Max** — it carried the mode's name, such as `DC V`.
+- **The UT803 reads frequency as Hz whatever its alt bit says** — it showed RPM.
 - **The UT8803 and UT8802 show hFE with its unit, β**
 - **The unrecognised-data warning's report command names the selected meter** — a UT60BT, UT202BT or UT61B+ was told to rerun as a UT61E+.
 - **`capture` says why it refused a meter's answer, such as the `--device` to choose** — it said to enable data transmission.

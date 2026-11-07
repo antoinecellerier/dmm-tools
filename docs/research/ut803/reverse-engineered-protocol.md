@@ -400,7 +400,11 @@ UT804's scheme*). Unit strings found in UT803.exe binary:
 - `*`, `k*`, `M*` — resistance (Ω, kΩ, MΩ in custom font)
 - `Hz`, `kHz`, `MHz` — frequency
 - `nF`, `uF`, `mF` — capacitance
-- `kRPM` — tachometer/RPM (unique to UT803)
+- `kRPM` — in a table no packet reaches: the app sets it for code 2 with
+  position 8 bit 3 set, then redraws every code-2 packet as frequency,
+  `Hz` for range 0 with no point and the `kHz`/`MHz` rows above it
+  (UT803.exe's LCD routine, read 2026-11-06 and 2026-11-07). The manual's
+  rotary switch table (PDF p.11) has no tachometer, duty or 4-20 mA position.
 - `#`, `?` — °C and °F by the 2026-06 font rendering (§6); earlier
   revisions read them as diode and continuity
 
@@ -557,8 +561,8 @@ command [VENDOR-DOC].
 | Feature | UT803 | UT804 |
 |---------|-------|-------|
 | Display count | 6000 (3¾ digit, max 5999) | 40000 (4¾ digit), 4000 when RANGE is held at power-on [KNOWN] (UT804 manual) |
-| Mode count | V, mV, µA, mA and A (DC and AC), Ω, continuity, diode, capacitance, Hz, °C, °F, hFE, tachometer, ADP [KNOWN] (UT803 manual) | 15 codes, 14 on the dial (§3.4) |
-| RPM mode | Yes (`kRPM` unit string) | No (manual Table 2-1) [HARDWARE] |
+| Mode count | V, mV, µA, mA and A (DC and AC), Ω, continuity, diode, capacitance, Hz, °C, °F, hFE [KNOWN] (UT803 manual PDF p.11) | 15 codes, 14 on the dial (§3.4) |
+| RPM mode | No: no dial position (manual PDF p.11), and the app shows code 2 as Hz (§3.4) | No (manual Table 2-1) [HARDWARE] |
 | ADP/Logic mode | Not seen | No dial position (§3.4) [HARDWARE]; code 14, in the app only, is power |
 | Temperature | Yes, °C and °F [KNOWN] (UT803 manual p.48) | Yes (modes 6 and D) |
 | AC+DC mode | On the meter, not on the wire: "+DC, hFE and β cannot output to the computer" [KNOWN] (UT803 manual p.37) | Yes (nibble 8 = 3) [HARDWARE] |
@@ -667,7 +671,8 @@ rendered (2026-06 review, each result re-derived by a second pass).
    ut803-decompiled.txt:225083-225112: bit 3 HOLD (widget 0x37c), bits 2-1
    the two indicators of item 2 (0x5b0, 0x5b4); bit 0 has no known
    meaning. By the 2026-06 review, as the code records it: position 8
-   bit 3 an alternate (RPM for frequency, °C for temperature), bit 2 the
+   bit 3 an alternate (°C for temperature; RPM for frequency in a table
+   the app then overwrites, §3.4), bit 2 the
    sign, bit 0 overload and bit 1 no known meaning; position 10 bit 3 DC,
    bit 2 AC and bit 1 AUTO.
 5. **Decimal positions count from the left** (point after digit
